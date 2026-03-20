@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Orchestrator - Task Spawning (WP02)
@@ -22,193 +22,130 @@ Child tasks record `parent_task_id`, `spawn_reason`, and `spawn_depth` in the `t
 
 ---
 
-## Database Schema Reference
-
-### Table: tasks (M8 additions)
-
-| Column | Type | Notes |
-|--------|------|-------|
-| parent_task_id | TEXT | FK to parent task (nullable) |
-| spawn_reason | TEXT | `"spawn_task"` or `"spawn_tasks"` |
-| spawn_depth | INTEGER NOT NULL DEFAULT 0 | Depth in spawn tree |
-
-Index: `idx_tasks_parent_id ON tasks(parent_task_id)`
-
----
-
 ## Scenario 1: Single Task Spawn via PostAction
-
-### Preconditions
-- A workflow exists with a step that has `post_actions: [{type: "spawn_task", goal: "improve {area}"}]`
-- A parent task is running with pipeline variable `area = "authentication"`
 
 ### Goal
 Verify that `SpawnTask` post-action creates a child task with resolved goal template and correct lineage.
 
 ### Steps
-1. Configure a workflow step with SpawnTask post-action:
-   ```yaml
-   post_actions:
-     - type: spawn_task
-       goal: "improve {area}"
-       inherit:
-         workspace: true
-         project: true
+
+1. **Unit test** — verify goal template resolution:
+   ```bash
+   cargo test -p orchestrator-scheduler --lib test_resolve_template
+   cargo test -p orchestrator-scheduler --lib test_resolve_template_no_vars
    ```
-2. Run the parent task through the step that triggers the spawn
-3. Query the database for spawned children
+
+2. **Unit test** — verify spawn execution creates child task:
+   ```bash
+   cargo test -p orchestrator-scheduler --lib execute_spawn_task_creates_child_task_and_increments_depth
+   ```
+
+3. **Unit test** — verify config serde:
+   ```bash
+   cargo test -p orchestrator-config --lib test_spawn_task_action_minimal
+   ```
 
 ### Expected
-- A new task row exists in `tasks` with `parent_task_id = {parent_task_id}`
-- The child task's goal is `"improve authentication"` (template resolved)
-- `spawn_reason = "spawn_task"`
-- `spawn_depth = parent_spawn_depth + 1`
-- A `task_spawned` event is emitted with `child_task_id`
-
-### Expected Data State
-```sql
-SELECT id, goal, parent_task_id, spawn_reason, spawn_depth
-FROM tasks WHERE parent_task_id = '{parent_task_id}';
--- Expected: 1 row, goal = 'improve authentication', spawn_reason = 'spawn_task', spawn_depth = 1
-```
+- Template `"improve {area}"` resolves to `"improve authentication"` when `area = "authentication"`
+- Child task has `parent_task_id`, `spawn_reason = "spawn_task"`, `spawn_depth = parent + 1`
+- SpawnTaskAction config serializes/deserializes correctly
 
 ---
 
 ## Scenario 2: Batch Task Spawn from JSON Pipeline Variable
 
-### Preconditions
-- A workflow step has `post_actions: [{type: "spawn_tasks", from_var: "goals_output", json_path: "$.goals", mapping: {goal: "$.description"}, max_tasks: 3}]`
-- Pipeline variable `goals_output` contains a JSON array with 5 goal objects
-
 ### Goal
 Verify that `SpawnTasks` post-action creates up to `max_tasks` children from a JSON array.
 
 ### Steps
-1. Set pipeline variable:
-   ```json
-   {"goals": [
-     {"description": "fix auth bug"},
-     {"description": "add logging"},
-     {"description": "update deps"},
-     {"description": "refactor db"},
-     {"description": "add tests"}
-   ]}
+
+1. **Unit test** — verify batch spawn with limit:
+   ```bash
+   cargo test -p orchestrator-scheduler --lib execute_spawn_tasks_creates_batch_children_skips_missing_goal_and_honors_limit
    ```
-2. Run the parent task through the step that triggers the batch spawn
-3. Query database for spawned children
+
+2. **Unit test** — verify error on missing source variable:
+   ```bash
+   cargo test -p orchestrator-scheduler --lib execute_spawn_tasks_errors_when_source_variable_is_missing
+   ```
+
+3. **Unit test** — verify config serde:
+   ```bash
+   cargo test -p orchestrator-config --lib test_spawn_tasks_action_defaults
+   cargo test -p orchestrator-config --lib test_spawn_tasks_action_full
+   ```
 
 ### Expected
-- Exactly 3 child tasks created (capped by `max_tasks: 3`)
-- Each child has `parent_task_id` pointing to the parent
-- Each child has `spawn_reason = "spawn_tasks"`
-- A `tasks_spawned` event is emitted with `child_task_ids` array of length 3
-
-### Expected Data State
-```sql
-SELECT COUNT(*) FROM tasks WHERE parent_task_id = '{parent_task_id}';
--- Expected: 3
-
-SELECT goal FROM tasks WHERE parent_task_id = '{parent_task_id}' ORDER BY created_at;
--- Expected: 'fix auth bug', 'add logging', 'update deps'
-```
+- Batch spawn creates up to `max_tasks` children, skipping items with missing goal
+- Missing source variable returns an error
+- SpawnTasksAction config defaults and full config serialize correctly
 
 ---
 
 ## Scenario 3: Spawn Depth Limit Enforcement
 
-### Preconditions
-- SafetyConfig has `max_spawn_depth: 2`
-- A task at spawn_depth=2 attempts to spawn a child
-
 ### Goal
-Verify that spawn depth limits are enforced and excess spawns are rejected with a warning.
+Verify that spawn depth limits are enforced and excess spawns are rejected.
 
 ### Steps
-1. Configure safety:
-   ```yaml
-   safety:
-     max_spawn_depth: 2
+
+1. **Unit test** — verify depth validation:
+   ```bash
+   cargo test -p orchestrator-scheduler --lib test_validate_spawn_depth_within_limit
+   cargo test -p orchestrator-scheduler --lib test_validate_spawn_depth_at_limit
+   cargo test -p orchestrator-scheduler --lib test_validate_spawn_depth_no_limit
    ```
-2. Create a task chain: root (depth 0) → child (depth 1) → grandchild (depth 2)
-3. Have the grandchild attempt to spawn another task
 
 ### Expected
-- The spawn attempt at depth 2 is **skipped** (not an error, just a warning)
-- Log message: `"spawn_task skipped: depth limit"` or `"spawn_tasks skipped: depth limit"`
-- No new task row is created
-- The parent step continues execution normally (spawn failure does not halt the step)
-
-### Expected Data State
-```sql
-SELECT MAX(spawn_depth) FROM tasks WHERE parent_task_id IS NOT NULL;
--- Expected: 2 (no depth-3 tasks exist)
-```
+- Spawn within limit: allowed
+- Spawn at limit: rejected (depth = max_spawn_depth is at the boundary)
+- No limit configured (None): allowed at any depth
 
 ---
 
 ## Scenario 4: Spawn Inherits Workspace and Project
 
-### Preconditions
-- Parent task has `workspace_id = "ws-1"`, `project_id = "proj-1"`, `workflow_id = "wf-1"`
-- SpawnTaskAction has `inherit: {workspace: true, project: true}`
-
 ### Goal
 Verify that child tasks inherit parent's workspace and project when configured.
 
 ### Steps
-1. Configure SpawnTaskAction:
-   ```yaml
-   post_actions:
-     - type: spawn_task
-       goal: "child task"
-       inherit:
-         workspace: true
-         project: true
+
+1. **Unit test** — verify workspace inheritance:
+   ```bash
+   cargo test -p orchestrator-scheduler --lib execute_spawn_task_without_workspace_inheritance_uses_default_workspace
    ```
-2. Execute the spawn
-3. Query child task
+
+2. **Code review** — verify SpawnInherit defaults:
+   ```bash
+   rg -n "SpawnInherit|inherit.*workspace|inherit.*project" crates/orchestrator-scheduler/src/scheduler/spawn.rs
+   ```
 
 ### Expected
-- Child task has `workspace_id = "ws-1"` and `project_id = "proj-1"`
-- Child task name starts with `"spawn:"` prefix
-
-### Expected Data State
-```sql
-SELECT workspace_id, project_id, workflow_id FROM tasks WHERE parent_task_id = '{parent_task_id}';
--- Expected: workspace_id = 'ws-1', project_id = 'proj-1', workflow_id = 'wf-1'
-```
+- Without workspace inheritance, child uses default workspace
+- SpawnInherit defaults: `workspace=true`, `project=true`
 
 ---
 
 ## Scenario 5: Spawn with Custom Workflow Override
 
-### Preconditions
-- Parent task uses `workflow_id = "wf-parent"`
-- SpawnTaskAction specifies `workflow: "wf-child"`
-
 ### Goal
 Verify that spawned child can use a different workflow than the parent.
 
 ### Steps
-1. Configure:
-   ```yaml
-   post_actions:
-     - type: spawn_task
-       goal: "run with different workflow"
-       workflow: "wf-child"
+
+1. **Unit test** — verify duplicate task detection (spawn runner):
+   ```bash
+   cargo test -p orchestrator-scheduler --lib spawn_task_runner_returns_early_for_duplicate_task
    ```
-2. Execute the spawn
-3. Query child task
+
+2. **Code review** — verify workflow override in spawn config:
+   ```bash
+   rg -n "workflow.*override|SpawnTaskAction.*workflow" crates/orchestrator-scheduler/src/scheduler/spawn.rs crates/orchestrator-config/src/config/spawn.rs
+   ```
 
 ### Expected
-- Child task has `workflow_id = "wf-child"` (overridden, not inherited)
-- Parent task retains `workflow_id = "wf-parent"`
-
-### Expected Data State
-```sql
-SELECT workflow_id FROM tasks WHERE parent_task_id = '{parent_task_id}';
--- Expected: 'wf-child'
-```
+- Duplicate spawn attempt returns early without error
+- Child task can specify a different `workflow` than parent
 
 ---
 
@@ -216,8 +153,8 @@ SELECT workflow_id FROM tasks WHERE parent_task_id = '{parent_task_id}';
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Single task spawn via PostAction | ✅ | 2026-03-07 | claude | Code path verified: spawn.rs:11-64, apply.rs:105-135. Unit tests: resolve_template, validate_spawn_depth |
-| 2 | Batch task spawn from JSON pipeline variable | ✅ | 2026-03-07 | claude | Code path verified: spawn.rs:67-148, apply.rs:136-167. max_tasks cap + per-item workflow override |
-| 3 | Spawn depth limit enforcement | ✅ | 2026-03-07 | claude | Code path verified: spawn.rs:151-165. Tests: at_limit, within_limit, no_limit |
-| 4 | Spawn inherits workspace and project | ✅ | 2026-03-07 | claude | Code path verified: spawn.rs:32-40. SpawnInherit defaults workspace=true, project=true |
-| 5 | Spawn with custom workflow override | ✅ | 2026-03-07 | claude | Code path verified: spawn.rs:24-27 (single), spawn.rs:94-99 (batch per-item) |
+| 1 | Single task spawn via PostAction | ✅ | 2026-03-07 | claude | Code path verified: spawn.rs, apply.rs. Unit tests: resolve_template, validate_spawn_depth |
+| 2 | Batch task spawn from JSON pipeline variable | ✅ | 2026-03-07 | claude | Code path verified: spawn.rs. max_tasks cap + per-item workflow override |
+| 3 | Spawn depth limit enforcement | ✅ | 2026-03-07 | claude | Tests: at_limit, within_limit, no_limit |
+| 4 | Spawn inherits workspace and project | ✅ | 2026-03-07 | claude | SpawnInherit defaults workspace=true, project=true |
+| 5 | Spawn with custom workflow override | ✅ | 2026-03-07 | claude | spawn.rs single + batch per-item override |

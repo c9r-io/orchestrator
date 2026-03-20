@@ -351,7 +351,40 @@
 **累计净收益**: 迭代 1 (+4) + 迭代 2 (+11) + 迭代 3 (+17) + 迭代 4 (+28) + 迭代 5 (+40) + 迭代 6 (+48) + 迭代 7 (+28) + 迭代 8 (+34) + 迭代 9 (+35) + 迭代 10 (+52) = +297 个安全场景
 **Unsafe 文档数**: 61 → 50（frontmatter 精确计数；此前 grep 计数含 2 个正文误匹配：QA-95 已由迭代 4 转 safe、QA-112 由本轮修复）
 
-### 迭代 11+: 逐步处理剩余类别
+### 迭代 11: 误标文档修正 + 完整重写批量转换（2026-03-20）
+
+**分析文档**（10 个）:
+- Tier 1（元数据修正）: `97-follow-task-logs-callback.md`, `59-dynamic-dag-mainline-execution.md`
+- Tier 2（小幅改写）: `94-trigger-resource-cron-event-driven.md`, `94b-trigger-resource-advanced.md`
+- Tier 3（完整重写）: `16-capability-config-view-fields.md`, `17-dynamic-yaml-integration.md`, `47-task-spawning.md`, `48-dynamic-items-selection.md`, `46-persistent-store.md`, `31-runner-policy-defaults-compatibility.md`
+
+| 文档 | 总场景 | 可转安全 | 分类 |
+|------|--------|---------|------|
+| QA-97 | 3 | 3 | **元数据修正** — 全部场景已是 `cargo test`（follow_one_stream 3 tests in orchestrator-scheduler），仅修正 crate 名 `agent-orchestrator` → `orchestrator-scheduler` |
+| QA-59 | 5 | 5 | **元数据修正** — 全部场景已是 unit test + code review，移除 S1 多余 `cargo build --release`，修正 `rg` 路径为具体文件 |
+| QA-94 | 5 | 5 | **小幅改写** — S1-S4 已是 unit test，S5 移除 `orchestrator apply/delete/get trigger` 改为 3 个 trigger round-trip unit test |
+| QA-16 | 1 | 1 | **完整重写** — 18+ normalize tests + 10+ export tests 覆盖 required_capability/cost/selection.strategy |
+| QA-17 | 1 | 1 | **完整重写** — 13 adaptive validation tests + 3 planner tests + export roundtrip 覆盖 dynamic YAML 字段 |
+| QA-47 | 5 | 5 | **完整重写** — 14 spawn unit tests（template/depth/batch/inheritance/duplicate）覆盖 SpawnTask/SpawnTasks |
+| QA-48 | 5 | 5 | **完整重写** — 24+ unit tests（generate/extract/select/strategy/tie-break/loop-engine）覆盖 GenerateItems/item_select |
+| QA-46 | 5 | 5 | **完整重写** — 11+ unit tests（CRUD/retention/CRD-projection/config-serde）覆盖 WorkflowStore/StoreBackendProvider |
+| QA-31 | 2 | 2 | **完整重写** — 27+ unit tests（policy-parse/normalize/enforce/runner-spec/allowlist）覆盖 unsafe/legacy/allowlist 模式 |
+| QA-94b | 2 | 1 (S2) | **部分重写** — S2 (preflight) 改为 validate_trigger + self_test unit test；S1 (suspend/resume/fire) 无 unit test 覆盖，保持 unsafe |
+
+**修复内容**:
+- 9 个文档完全转为 safe：QA-97, QA-59, QA-94, QA-16, QA-17, QA-47, QA-48, QA-46, QA-31
+- 1 个文档扩展安全场景列表：QA-94b (+S2)
+- 修正 QA-97 中 crate 名 `agent-orchestrator` → `orchestrator-scheduler`（follow_one_stream tests 位于 scheduler crate）
+- 移除 QA-59 中 `cargo build --release` 前置步骤和硬编码路径 `/Volumes/Yotta/ai_native_sdlc`
+- 移除 QA-94/94b 中全局 `cargo build --release` 前置步骤
+- 无代码变更 — 纯 QA 文档重写
+- 409 个 unit test 全部通过，零回归
+
+**净收益**: +33 个可安全执行的场景（QA-97 ×3, QA-59 ×5, QA-94 ×5, QA-16 ×1, QA-17 ×1, QA-47 ×5, QA-48 ×5, QA-46 ×5, QA-31 ×2, QA-94b ×1）
+**累计净收益**: 迭代 1 (+4) + 迭代 2 (+11) + 迭代 3 (+17) + 迭代 4 (+28) + 迭代 5 (+40) + 迭代 6 (+48) + 迭代 7 (+28) + 迭代 8 (+34) + 迭代 9 (+35) + 迭代 10 (+52) + 迭代 11 (+33) = +330 个安全场景
+**Unsafe 文档数**: 50 → 41
+
+### 迭代 12+: 逐步处理剩余类别
 
 每次 1-2 个文档，持续推进直到 unsafe 比例从 82% 降到合理水平（目标 < 30%）。
 

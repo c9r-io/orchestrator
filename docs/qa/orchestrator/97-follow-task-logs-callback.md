@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Orchestrator - follow_task_logs Callback
@@ -28,7 +28,7 @@ Entry point: `orchestrator task logs --follow <task-id>` (CLI) or gRPC `TaskFoll
 **Covered by unit test**: `follow_one_stream_uses_callback_for_stdout`
 
 ```bash
-cargo test -p agent-orchestrator --lib follow_one_stream_uses_callback_for_stdout
+cargo test -p orchestrator-scheduler --lib follow_one_stream_uses_callback_for_stdout
 ```
 
 **Expected**: Test passes; callback receives file content with `is_stderr=false`
@@ -42,7 +42,7 @@ cargo test -p agent-orchestrator --lib follow_one_stream_uses_callback_for_stdou
 **Covered by unit test**: `follow_one_stream_uses_callback_for_stderr`
 
 ```bash
-cargo test -p agent-orchestrator --lib follow_one_stream_uses_callback_for_stderr
+cargo test -p orchestrator-scheduler --lib follow_one_stream_uses_callback_for_stderr
 ```
 
 **Expected**: Test passes; callback receives file content with `is_stderr=true`
@@ -56,7 +56,7 @@ cargo test -p agent-orchestrator --lib follow_one_stream_uses_callback_for_stder
 **Covered by unit test**: `follow_one_stream_callback_incremental_read`
 
 ```bash
-cargo test -p agent-orchestrator --lib follow_one_stream_callback_incremental_read
+cargo test -p orchestrator-scheduler --lib follow_one_stream_callback_incremental_read
 ```
 
 **Expected**: Test passes; first call delivers initial content, second call delivers only appended content

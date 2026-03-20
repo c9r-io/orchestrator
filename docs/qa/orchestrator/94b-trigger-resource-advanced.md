@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S2]
 ---
 
 # QA 94b: Trigger Resource — Advanced (Suspend/Resume & Preflight)
@@ -10,15 +11,7 @@ self_referential_safe: false
 
 ---
 
-## Preconditions (all scenarios)
-
-```bash
-cd core && cargo build --release && cd ..
-```
-
----
-
-## Scenario 1: Trigger suspend/resume (手动验证)
+## Scenario 1: Trigger suspend/resume (手动验证，天然不安全)
 
 **步骤**:
 ```bash
@@ -57,29 +50,34 @@ orchestrator trigger fire test-cron
 
 ---
 
-## Scenario 2: Preflight check validates trigger references
+## Scenario 2: Preflight / validation checks for trigger references
 
 **步骤**:
-```bash
-cat <<'EOF' > /tmp/bad-trigger.yaml
-apiVersion: orchestrator.dev/v2
-kind: Trigger
-metadata:
-  name: bad-ref
-spec:
-  cron:
-    schedule: "0 0 * * * *"
-  action:
-    workflow: nonexistent-workflow
-    workspace: nonexistent-workspace
-EOF
 
-orchestrator apply -f /tmp/bad-trigger.yaml
-orchestrator check
-```
+1. Code review — 验证 trigger validation 拒绝无效引用:
+   ```bash
+   rg -n "validate_trigger|trigger_workflow_ref|trigger_workspace_ref" core/src/config_load/validate/tests.rs core/src/service/resource.rs
+   ```
+
+2. Unit test — preflight sandbox 检查:
+   ```bash
+   cargo test -p agent-orchestrator --lib test_sandbox_backend_preflight_issues_reports_macos_allowlist_gap
+   ```
+
+3. Unit test — manifest validate 在 self-test 中可用:
+   ```bash
+   cargo test -p orchestrator-scheduler --lib test_execute_self_test_step_success_with_manifest_validate
+   ```
+
+4. Unit test — trigger 验证覆盖:
+   ```bash
+   cargo test --package agent-orchestrator --lib validate_trigger
+   ```
 
 **预期**:
-- `orchestrator check` 输出包含 trigger_workflow_ref 和 trigger_workspace_ref 错误，指出引用不存在的 workflow/workspace
+- Trigger validation 逻辑拒绝引用不存在的 workflow/workspace
+- Preflight / self-test pipeline 在 trigger 引用无效时报告错误
+- 所有 unit test 通过
 
 ---
 

@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Orchestrator - Dynamic DAG Mainline Execution
@@ -27,25 +27,17 @@ This QA document focuses on deterministic, reproducible verification using unit 
 
 ## Scenario 1: Static Workflow Steps Materialize Into A Mainline Graph
 
-### Preconditions
-- Repository root is `/Volumes/Yotta/ai_native_sdlc`
-- Latest code is compiled
-
 ### Goal
 Verify static workflow steps can be converted into a runtime execution graph while excluding `init_once` and guard steps from the business DAG.
 
 ### Steps
-1. Rebuild the core crate:
+1. Run the focused graph materialization regression:
    ```bash
-   cd core && cargo build --release
+   cargo test -p agent-orchestrator --lib build_static_execution_graph_skips_init_and_guard
    ```
-2. Run the focused graph materialization regression:
+2. Inspect the runtime graph model definitions:
    ```bash
-   cargo test -p agent-orchestrator build_static_execution_graph_skips_init_and_guard -- --nocapture
-   ```
-3. Inspect the runtime graph model definitions:
-   ```bash
-   rg -n "WorkflowExecutionMode|EffectiveExecutionGraph|build_static_execution_graph" core/src
+   rg -n "WorkflowExecutionMode|EffectiveExecutionGraph|build_static_execution_graph" core/src/dynamic_orchestration/graph.rs
    ```
 
 ### Expected
@@ -59,20 +51,17 @@ Verify static workflow steps can be converted into a runtime execution graph whi
 
 ## Scenario 2: Invalid Dynamic Step Triggers Fail CEL Validation
 
-### Preconditions
-- Latest code is compiled
-
 ### Goal
 Verify `dynamic_steps.trigger` uses CEL validation instead of legacy string matching.
 
 ### Steps
 1. Run the focused validation regression:
    ```bash
-   cargo test -p agent-orchestrator validate_workflow_config_rejects_invalid_dynamic_step_trigger_cel -- --nocapture
+   cargo test -p agent-orchestrator --lib validate_workflow_config_rejects_invalid_dynamic_step_trigger_cel
    ```
 2. Inspect trigger evaluation wiring:
    ```bash
-   rg -n "evaluate_trigger_condition|validate_workflow_config_rejects_invalid_dynamic_step_trigger_cel|dynamic_steps" core/src
+   rg -n "evaluate_trigger_condition|dynamic_steps" core/src/config_load/validate/tests.rs
    ```
 
 ### Expected
@@ -85,20 +74,17 @@ Verify `dynamic_steps.trigger` uses CEL validation instead of legacy string matc
 
 ## Scenario 3: Task Trace Captures Graph Runs And Dynamic Events
 
-### Preconditions
-- Latest code is compiled
-
 ### Goal
 Verify the trace builder emits graph-level execution information for dynamic DAG runs.
 
 ### Steps
 1. Run the focused trace regression:
    ```bash
-   cargo test -p orchestrator-scheduler build_trace_includes_dynamic_graph_events -- --nocapture
+   cargo test -p orchestrator-scheduler --lib build_trace_includes_dynamic_graph_events
    ```
 2. Inspect trace model fields:
    ```bash
-   rg -n "graph_runs|GraphTrace|dynamic_plan_materialized|dynamic_edge_taken" core/src/scheduler/trace core/src/scheduler/loop_engine
+   rg -n "graph_runs|GraphTrace|dynamic_plan_materialized|dynamic_edge_taken" crates/orchestrator-scheduler/src/scheduler/trace/tests.rs
    ```
 
 ### Expected
@@ -111,24 +97,21 @@ Verify the trace builder emits graph-level execution information for dynamic DAG
 
 ## Scenario 4: Task Info Exposes Persisted Graph Debug Bundles
 
-### Preconditions
-- Latest code is compiled
-
 ### Goal
 Verify task detail queries can return persisted graph debug bundles without reconstructing everything from trace events.
 
 ### Steps
 1. Run the focused repository regression:
    ```bash
-   cargo test -p agent-orchestrator load_task_detail_rows_includes_graph_debug_bundles -- --nocapture
+   cargo test -p agent-orchestrator --lib load_task_detail_rows_includes_graph_debug_bundles
    ```
 2. Run the service-level detail regression:
    ```bash
-   cargo test -p orchestrator-scheduler get_task_details_impl_returns_items_and_empty_runs -- --nocapture
+   cargo test -p orchestrator-scheduler --lib get_task_details_impl_returns_items_and_empty_runs
    ```
 3. Inspect the query and proto wiring:
    ```bash
-   rg -n "task_graph_runs|task_graph_snapshots|graph_debug|TaskGraphDebugBundle" core/src crates proto
+   rg -n "task_graph_runs|task_graph_snapshots|graph_debug|TaskGraphDebugBundle" core/src/task_repository/tests/queries_tests.rs
    ```
 
 ### Expected
@@ -141,24 +124,21 @@ Verify task detail queries can return persisted graph debug bundles without reco
 
 ## Scenario 5: DAG Debug View And Workspace Compile Validation
 
-### Preconditions
-- Repository has no unresolved local compile breakage unrelated to this feature
-
 ### Goal
 Verify the implementation integrates cleanly across config, runtime, scheduler, trace, task query, and CLI debug surfaces.
 
 ### Steps
-1. Run a package-wide compile-only validation:
+1. Run a workspace-wide compile-only validation:
    ```bash
-   cargo test -p agent-orchestrator --no-run
+   cargo test --workspace --lib --no-run
    ```
 2. Run the DAG debug regression:
    ```bash
-   cargo test -p agent-orchestrator debug_info_covers_known_and_unknown_components -- --nocapture
+   cargo test -p agent-orchestrator --lib debug_info_covers_known_and_unknown_components
    ```
 3. Inspect the loop-engine dispatch split and debug surface:
    ```bash
-   rg -n "StaticSegment|DynamicDag|execute_cycle_graph|FallbackToStaticSegment|debug_dag_info" core/src/scheduler/loop_engine core/src/config core/src/service
+   rg -n "StaticSegment|DynamicDag|execute_cycle_graph|FallbackToStaticSegment" crates/orchestrator-scheduler/src/scheduler/loop_engine/tests.rs
    ```
 
 ### Expected

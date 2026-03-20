@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # QA 94: Trigger Resource — Cron & Event-Driven Task Creation
@@ -7,14 +7,6 @@ self_referential_safe: false
 **关联 FR**: FR-039
 **关联 Design Doc**: `docs/design_doc/orchestrator/51-trigger-resource-cron-event-driven-task-creation.md`
 **日期**: 2026-03-14
-
----
-
-## Preconditions (all scenarios)
-
-```bash
-cd core && cargo build --release && cd ..
-```
 
 ---
 
@@ -81,35 +73,19 @@ cargo test 2>&1 | grep "^test result:"
 
 ---
 
-## Scenario 5: Trigger manifest apply (手动验证)
+## Scenario 5: Trigger manifest apply/get/delete round-trip (unit test)
 
 **步骤**:
 ```bash
-cat <<'EOF' > /tmp/test-trigger.yaml
-apiVersion: orchestrator.dev/v2
-kind: Trigger
-metadata:
-  name: test-cron
-spec:
-  cron:
-    schedule: "0 0 2 * * *"
-    timezone: "Asia/Shanghai"
-  action:
-    workflow: default
-    workspace: default
-  concurrencyPolicy: Forbid
-  suspend: false
-EOF
-
-orchestrator apply -f /tmp/test-trigger.yaml
-orchestrator get trigger
-orchestrator delete trigger/test-cron --force
+cargo test --package agent-orchestrator --lib trigger_apply_and_get
+cargo test --package agent-orchestrator --lib trigger_delete_removes
+cargo test --package agent-orchestrator --lib trigger_yaml_roundtrip_cron
 ```
 
 **预期**:
-- apply 成功，显示 `trigger / test-cron: created`
-- get 输出包含 test-cron 的信息
-- delete 成功移除
+- `trigger_apply_and_get`: apply 后可通过 get 取回 trigger 资源
+- `trigger_delete_removes`: delete 后资源不可再 get
+- `trigger_yaml_roundtrip_cron`: cron trigger YAML 序列化/反序列化一致
 
 ---
 

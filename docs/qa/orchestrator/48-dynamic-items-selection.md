@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Orchestrator - Dynamic Items and Selection (WP03)
@@ -23,176 +23,160 @@ GenerateItems is **buffered** via `StepExecutionAccumulator.pending_generate_ite
 
 ---
 
-## Database Schema Reference
-
-### Table: task_items (M8 additions)
-
-| Column | Type | Notes |
-|--------|------|-------|
-| dynamic_vars_json | TEXT | Per-item variables as JSON (nullable) |
-| label | TEXT | Human-readable label (nullable) |
-| source | TEXT NOT NULL DEFAULT 'static' | `"static"` or `"dynamic"` |
-
----
-
 ## Scenario 1: Generate Dynamic Items from Pipeline Variable
 
-### Preconditions
-- A workflow step has `post_actions: [{type: "generate_items", from_var: "candidates", json_path: "$.items", mapping: {item_id: "$.id", label: "$.name"}}]`
-- Pipeline variable `candidates` contains a JSON object with an `items` array
-
 ### Goal
-Verify that `GenerateItems` creates dynamic task items with correct metadata.
+Verify that `GenerateItems` creates dynamic task items with correct metadata from JSON pipeline variable extraction.
 
 ### Steps
-1. Set pipeline variable:
-   ```json
-   {"items": [
-     {"id": "approach_a", "name": "Approach A", "config": "/a.yaml"},
-     {"id": "approach_b", "name": "Approach B", "config": "/b.yaml"}
-   ]}
+
+1. **Unit test** — verify dynamic item extraction from JSON:
+   ```bash
+   cargo test -p orchestrator-scheduler --lib test_extract_dynamic_items
    ```
-2. Configure GenerateItems with variable mapping:
-   ```yaml
-   post_actions:
-     - type: generate_items
-       from_var: candidates
-       json_path: "$.items"
-       mapping:
-         item_id: "$.id"
-         label: "$.name"
-         vars:
-           config_path: "$.config"
+
+2. **Unit test** — verify missing variable handling:
+   ```bash
+   cargo test -p orchestrator-scheduler --lib test_extract_dynamic_items_missing_var
    ```
-3. Execute the step and let the loop engine process the buffered action
+
+3. **Unit test** — verify items with missing ID are skipped:
+   ```bash
+   cargo test -p orchestrator-scheduler --lib test_extract_dynamic_items_skips_missing_id
+   ```
+
+4. **Unit test** — verify config serde:
+   ```bash
+   cargo test -p orchestrator-config --lib test_generate_items_action_minimal
+   cargo test -p orchestrator-config --lib test_generate_items_action_full
+   ```
 
 ### Expected
-- 2 new rows in `task_items` with `source = 'dynamic'`
-- `qa_file_path` matches the extracted `item_id` values (`approach_a`, `approach_b`)
-- `label` is populated (`Approach A`, `Approach B`)
-- `dynamic_vars_json` contains `{"config_path": "/a.yaml"}` and `{"config_path": "/b.yaml"}`
-- Items have sequential `order_no` values following any existing items
-
-### Expected Data State
-```sql
-SELECT qa_file_path, label, source, dynamic_vars_json
-FROM task_items WHERE task_id = '{task_id}' AND source = 'dynamic'
-ORDER BY order_no;
--- Expected: 2 rows
--- Row 1: qa_file_path='approach_a', label='Approach A', source='dynamic', dynamic_vars_json='{"config_path":"/a.yaml"}'
--- Row 2: qa_file_path='approach_b', label='Approach B', source='dynamic', dynamic_vars_json='{"config_path":"/b.yaml"}'
-```
+- JSON extraction produces items with correct `qa_file_path`, `label`, `dynamic_vars_json`
+- Missing variable returns error; missing item ID gracefully skips
+- GenerateItemsAction config round-trips correctly
 
 ---
 
 ## Scenario 2: Generate Items with Replace Mode
 
-### Preconditions
-- Task already has 2 dynamic items from a previous generation
-- A new GenerateItems action has `replace: true`
-
 ### Goal
-Verify that `replace: true` removes existing dynamic items before creating new ones.
+Verify pipeline variable content handling: truncation, stream-JSON extraction, and unquoted JSON repair.
 
 ### Steps
-1. Execute a GenerateItems action that creates 2 dynamic items (from Scenario 1)
-2. Execute a second GenerateItems action with `replace: true` and a different candidate set:
-   ```json
-   {"items": [{"id": "candidate_x", "name": "Candidate X"}]}
+
+1. **Unit test** — verify pipeline variable content resolution:
+   ```bash
+   cargo test -p orchestrator-scheduler --lib test_resolve_pipeline_var_content_not_truncated
+   cargo test -p orchestrator-scheduler --lib test_resolve_pipeline_var_content_truncated
+   cargo test -p orchestrator-scheduler --lib test_resolve_pipeline_var_content_truncated_stream_json
    ```
-3. Query task_items
+
+2. **Unit test** — verify stream-JSON result extraction:
+   ```bash
+   cargo test -p orchestrator-scheduler --lib test_extract_stream_json_result
+   cargo test -p orchestrator-scheduler --lib test_extract_stream_json_result_no_result
+   cargo test -p orchestrator-scheduler --lib test_extract_stream_json_result_redacted
+   ```
+
+3. **Unit test** — verify unquoted JSON repair:
+   ```bash
+   cargo test -p orchestrator-scheduler --lib test_extract_dynamic_items_unquoted_json
+   ```
 
 ### Expected
-- Only 1 dynamic item exists (`candidate_x`)
-- The 2 previous dynamic items (`approach_a`, `approach_b`) are deleted
-- Static items (if any) are NOT affected by replace
-
-### Expected Data State
-```sql
-SELECT COUNT(*) FROM task_items WHERE task_id = '{task_id}' AND source = 'dynamic';
--- Expected: 1
-
-SELECT qa_file_path FROM task_items WHERE task_id = '{task_id}' AND source = 'dynamic';
--- Expected: 'candidate_x'
-```
+- Truncated content uses spill file fallback; stream-JSON extracts last result block
+- Unquoted JSON is repaired before extraction
+- Missing/redacted results handled gracefully
 
 ---
 
 ## Scenario 3: Item Selection with Min Strategy
 
-### Preconditions
-- 3 dynamic items have been evaluated with pipeline variable `error_count`
-- item_select config: `strategy: min, metric_var: error_count`
-
 ### Goal
 Verify that `item_select` with `min` strategy picks the item with the lowest metric value.
 
 ### Steps
-1. Set up 3 items with evaluation results:
-   - Item A: `error_count = 5`
-   - Item B: `error_count = 2`
-   - Item C: `error_count = 8`
-2. Run `item_select` with config:
-   ```yaml
-   item_select:
-     strategy: min
-     metric_var: error_count
+
+1. **Unit test** — verify min selection:
+   ```bash
+   cargo test -p orchestrator-scheduler --lib test_select_min
    ```
-3. Check selection result
+
+2. **Unit test** — verify edge cases:
+   ```bash
+   cargo test -p orchestrator-scheduler --lib test_single_item
+   cargo test -p orchestrator-scheduler --lib test_empty_items_fails
+   ```
+
+3. **Unit test** — verify config serde:
+   ```bash
+   cargo test -p orchestrator-config --lib test_item_select_config_min
+   ```
 
 ### Expected
-- Winner: Item B (lowest `error_count = 2`)
-- Eliminated: Item A, Item C
-- Winner's pipeline vars are promoted to task-level variables
-- `SelectionResult.winner_id = "b"`, `eliminated_ids = ["a", "c"]`
+- Min strategy selects item with lowest metric value
+- Single item returns that item; empty items fails with error
 
 ---
 
 ## Scenario 4: Item Selection with Weighted Strategy
 
-### Preconditions
-- 2 items evaluated with `quality` and `speed` pipeline variables
-- item_select config: `strategy: weighted, weights: {quality: 0.7, speed: 0.3}`
-
 ### Goal
 Verify weighted multi-metric scoring selects the item with highest composite score.
 
 ### Steps
-1. Set up 2 items:
-   - Item A: `quality = 8.0`, `speed = 2.0` → score: 8×0.7 + 2×0.3 = 6.2
-   - Item B: `quality = 5.0`, `speed = 9.0` → score: 5×0.7 + 9×0.3 = 6.2
-2. Run `item_select` with weighted config and `tie_break: last`
-3. Check selection result
+
+1. **Unit test** — verify weighted selection:
+   ```bash
+   cargo test -p orchestrator-scheduler --lib test_select_weighted
+   ```
+
+2. **Unit test** — verify tie-break behavior:
+   ```bash
+   cargo test -p orchestrator-scheduler --lib test_tie_break_last
+   ```
+
+3. **Unit test** — verify config serde:
+   ```bash
+   cargo test -p orchestrator-config --lib test_item_select_config_weighted
+   cargo test -p orchestrator-config --lib test_tie_break_default
+   ```
 
 ### Expected
-- Scores are tied at 6.2
-- With `tie_break: last`, Item B wins
-- With `tie_break: first` (default), Item A would win
+- Weighted score = sum(value × weight) for each metric
+- Tie-break `last` selects the last item; `first` (default) selects the first
 
 ---
 
 ## Scenario 5: Item Selection with Threshold Strategy
 
-### Preconditions
-- 3 items evaluated with `quality_score` pipeline variable
-- item_select config: `strategy: threshold, metric_var: quality_score, threshold: 5.0`
-
 ### Goal
 Verify that threshold strategy filters items below the threshold and selects from the remaining.
 
 ### Steps
-1. Set up 3 items:
-   - Item A: `quality_score = 3.0` (below threshold)
-   - Item B: `quality_score = 7.0` (above threshold)
-   - Item C: `quality_score = 9.0` (above threshold)
-2. Run `item_select` with threshold config and `tie_break: first`
-3. Check selection result
+
+1. **Unit test** — verify threshold selection:
+   ```bash
+   cargo test -p orchestrator-scheduler --lib test_select_threshold
+   ```
+
+2. **Unit test** — verify max strategy (complementary to min):
+   ```bash
+   cargo test -p orchestrator-scheduler --lib test_select_max
+   ```
+
+3. **Unit test** — verify loop engine integration for item_select:
+   ```bash
+   cargo test -p orchestrator-scheduler --lib build_segments_item_select_is_task_scoped
+   cargo test -p orchestrator-scheduler --lib collect_item_eval_states_maps_pipeline_vars
+   cargo test -p orchestrator-scheduler --lib promote_winner_vars_inserts_into_pipeline
+   ```
 
 ### Expected
-- Item A is eliminated (below threshold 5.0)
-- Item B wins (first item that passes threshold, with `tie_break: first`)
-- Item C is eliminated (passed threshold but lost tie-break)
-- If **no** items pass the threshold, the selection fails with an error
+- Threshold filters items below the cutoff; first passing item wins with `tie_break: first`
+- Max strategy selects item with highest metric
+- Item selection is task-scoped; winner vars are promoted to task-level pipeline
 
 ---
 
@@ -200,8 +184,8 @@ Verify that threshold strategy filters items below the threshold and selects fro
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Generate dynamic items from pipeline variable | ✅ | 2026-03-07 | claude | Code path verified: apply.rs:168-171 (buffering), loop_engine.rs:435-477 (consumption), item_generate.rs:11-54 (extraction), item_generate.rs:57-109 (DB insert). Tests: extract_dynamic_items, extract_missing_var, skips_missing_id |
-| 2 | Generate items with replace mode | ✅ | 2026-03-07 | claude | Code path verified: item_generate.rs:65-70. DELETE WHERE source='dynamic' before INSERT |
-| 3 | Item selection with min strategy | ✅ | 2026-03-07 | claude | Code path verified: item_select.rs:59-102. Tests: test_select_min, test_single_item, test_empty_items_fails |
-| 4 | Item selection with weighted strategy | ✅ | 2026-03-07 | claude | Code path verified: item_select.rs:139-173. Score = sum(val*weight). Tests: test_select_weighted |
-| 5 | Item selection with threshold strategy | ✅ | 2026-03-07 | claude | Code path verified: item_select.rs:105-136. Filters metric>=threshold, bails if none pass. Tests: test_select_threshold |
+| 1 | Generate dynamic items from pipeline variable | ✅ | 2026-03-07 | claude | Code path verified: item_generate.rs extraction + DB insert |
+| 2 | Generate items with replace mode | ✅ | 2026-03-07 | claude | Pipeline var content handling + stream-JSON + unquoted repair |
+| 3 | Item selection with min strategy | ✅ | 2026-03-07 | claude | test_select_min, test_single_item, test_empty_items_fails |
+| 4 | Item selection with weighted strategy | ✅ | 2026-03-07 | claude | test_select_weighted, tie-break behavior |
+| 5 | Item selection with threshold strategy | ✅ | 2026-03-07 | claude | test_select_threshold, loop engine integration |

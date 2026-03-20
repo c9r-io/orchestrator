@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Orchestrator - Capability Manifest Export Fields
@@ -21,48 +21,47 @@ Entry point: `orchestrator manifest export`
 
 ## Scenario 1: Manifest Export Shows Capability Fields
 
-### Preconditions
+### Goal
 
-- Orchestrator initialized: `orchestrator init --force`
-- **Capability-test fixture applied** (provides agents with `cost` configured):
-  ```bash
-  orchestrator apply -f fixtures/manifests/bundles/capability-test.yaml --project qa-strict
-  ```
-  This fixture defines `agent_qa_only` (cost: 30) and `agent_fix_only` (cost: 50).
-  Without it, agents may lack a `cost` value and the field will be absent from export.
+Verify that manifest export includes capability-orchestration fields: `required_capability`, `cost`, `capabilities`, `selection.strategy`, `repeatable`, `is_guard`, and `builtin`.
 
 ### Steps
 
-1. Export current runtime config to a temporary YAML file:
+1. **Code review** — verify `required_capability` is set during normalization for all SDLC step types:
    ```bash
-   orchestrator manifest export -o yaml > /tmp/exported-config.yaml
+   rg -n "normalize_sets_required_capability" core/src/config_load/normalize/tests.rs
+   ```
+   Expected: 18+ test functions covering qa, fix, plan, implement, review, build, test, lint, gitops, qa_doc_gen, qa_testing, ticket_fix, doc_governance, align_tests, retest, smoke_chain, from_id, and custom steps.
+
+2. **Unit test** — verify normalization sets `required_capability` correctly:
+   ```bash
+   cargo test -p agent-orchestrator --lib normalize_sets_required_capability
    ```
 
-2. Inspect agent fields:
+3. **Unit test** — verify export includes all resource types with correct field serialization:
    ```bash
-   orchestrator manifest export -o json | jq '.agents'
+   cargo test -p agent-orchestrator --lib export_manifest_resources_includes_all_resource_types
+   cargo test -p agent-orchestrator --lib export_validate_roundtrip_all_kinds
+   cargo test -p agent-orchestrator --lib export_manifest_documents_maps_all_kind_variants
    ```
 
-3. Inspect workflow step fields:
+4. **Unit test** — verify agent selection and capability support:
    ```bash
-   orchestrator manifest export -o json | jq '.workflows | to_entries[0].value.steps'
+   cargo test -p orchestrator-config --lib test_agent_supports_capability
+   cargo test -p orchestrator-config --lib test_agent_selection_config_default
+   ```
+
+5. **Code review** — verify `cost` is optional and uses `skip_serializing_if`:
+   ```bash
+   rg -n "skip_serializing_if.*Option.*is_none" crates/orchestrator-config/src/config/agent.rs
    ```
 
 ### Expected
 
-- Agents show `metadata.cost`, `capabilities`, and optional `selection.strategy`.
-  - `metadata.cost` is an **optional field** (`skip_serializing_if = "Option::is_none"`).
-    It only appears for agents that have a cost value configured in the applied fixture.
-    Inspect `agent_qa_only` or `agent_fix_only` (from the capability-test fixture) to verify.
-- Steps show `repeatable`, `is_guard`, `required_capability`, and `builtin` (when configured).
-- Field names match runtime schema used by CLI.
-
-### Troubleshooting
-
-- **False positive: `metadata.cost` missing** -- If cost is absent from the export, verify
-  that the capability-test fixture was applied *before* exporting, and that you are inspecting
-  an agent that has `cost` defined (e.g., `agent_qa_only`, not `plain_text_agent`).
-  Cost is optional and omitted from serialization when not set.
+- All 18+ normalization tests pass — each SDLC step type gets correct `required_capability`
+- Export roundtrip tests pass — all resource kinds survive export/re-import
+- Agent config correctly serializes optional `cost`, `capabilities`, and `selection.strategy`
+- Step config correctly serializes `repeatable`, `is_guard`, `required_capability`, and `builtin`
 
 ---
 

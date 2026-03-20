@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Orchestrator - Runner Policy Defaults and Compatibility
@@ -18,155 +18,92 @@ This document covers the compatibility-focused policy checks split from `docs/qa
 - Explicit `unsafe` mode must continue to work when intentionally selected
 - Legacy `policy: legacy` manifests must remain backward-compatible and normalize to `unsafe`
 
-Entry point: `orchestrator`
-
 ---
 
 ## Scenario 1: Explicit Unsafe Mode Remains Functional
 
-### Preconditions
-
-- CLI built from latest source.
-- Runtime initialized.
-
 ### Goal
 
-Ensure that explicitly setting `policy: unsafe` is accepted, applied, and the task can execute under unsafe mode.
+Ensure that explicitly setting `policy: unsafe` is accepted, serialized correctly, and enforcement rules are applied.
 
 ### Steps
 
-1. Apply config with explicit unsafe policy:
+1. **Unit test** — verify `unsafe` serialization:
    ```bash
-   QA_PROJECT="qa-unsafe-explicit"
-   orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
-   rm -rf "workspace/${QA_PROJECT}"
-   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
-   cat > /tmp/runner-unsafe-explicit.yaml << 'YAML'
-   runner:
-     policy: unsafe
-     executor: shell
-     shell: /bin/bash
-     shell_arg: -lc
-   resume:
-     auto: false
-   defaults:
-     workspace: default
-     workflow: qa_only
-   workspaces:
-     default:
-       root_path: .
-       qa_targets: [docs/qa]
-       ticket_dir: fixtures/ticket
-   agents:
-     mock:
-       metadata:
-         name: mock
-       capabilities: [qa]
-       templates:
-         qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[]}'"
-   workflows:
-     qa_only:
-       steps:
-         - id: qa
-           required_capability: qa
-           enabled: true
-       loop:
-         mode: once
-         guard:
-           enabled: false
-           stop_when_no_unresolved: true
-       finalize:
-         rules: []
-   YAML
-   orchestrator apply --project "${QA_PROJECT}" -f /tmp/runner-unsafe-explicit.yaml
+   cargo test -p orchestrator-config --lib test_unsafe_serializes_as_unsafe
    ```
-2. Verify policy applied:
+
+2. **Unit test** — verify runner policy dispatch and kind:
    ```bash
-   orchestrator manifest export -f /tmp/unsafe-export.yaml
-   cat /tmp/unsafe-export.yaml | grep 'policy:'
+   cargo test -p agent-orchestrator --lib runtime_policy_dispatch_and_kind
    ```
-3. Create and run task:
+
+3. **Unit test** — verify unsafe policy runner spec:
    ```bash
-   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --name "unsafe-mode-test" --goal "unsafe mode" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   orchestrator task start "${TASK_ID}" || true
-   orchestrator task info "${TASK_ID}" -o json
+   cargo test -p agent-orchestrator --lib runner_spec_unsafe_policy
+   ```
+
+4. **Unit test** — verify unsafe mode skips allowlist enforcement:
+   ```bash
+   cargo test -p agent-orchestrator --lib validate_accepts_unsafe_with_empty_lists
+   ```
+
+5. **Unit test** — verify runner config serde:
+   ```bash
+   cargo test -p orchestrator-config --lib test_runner_config_serde_round_trip
+   cargo test -p orchestrator-config --lib test_runner_config_deserialize_minimal
+   ```
+
+6. **Unit test** — verify runner policy enforcement allows valid commands:
+   ```bash
+   cargo test -p agent-orchestrator --lib test_enforce_runner_policy_allows_valid_command
+   cargo test -p agent-orchestrator --lib test_enforce_runner_policy_allows_newline_in_command
    ```
 
 ### Expected
 
-- Exported policy is `unsafe`.
-- Task executes successfully under unsafe mode (no shell/arg allowlist enforcement).
+- `unsafe` serializes as `"unsafe"` in YAML output
+- Runtime policy dispatches correctly for unsafe kind
+- Unsafe runner spec has no shell/arg allowlist enforcement
+- Runner config round-trips with correct defaults
+- Valid commands pass enforcement; newlines are allowed
 
 ---
 
 ## Scenario 2: Legacy Alias Backward Compatibility
 
-### Preconditions
-
-- CLI built from latest source.
-- Runtime initialized.
-
 ### Goal
 
-Ensure that `policy: legacy` in YAML manifests is accepted as a backward-compatible alias for `unsafe` and correctly applied.
+Ensure that `policy: legacy` in YAML manifests is accepted as a backward-compatible alias for `unsafe` and correctly normalized.
 
 ### Steps
 
-1. Apply config using the legacy alias:
+1. **Unit test** — verify legacy normalizes to unsafe:
    ```bash
-   QA_PROJECT="qa-legacy-alias"
-   orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
-   rm -rf "workspace/${QA_PROJECT}"
-   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
-   cat > /tmp/runner-legacy-alias.yaml << 'YAML'
-   runner:
-     policy: legacy
-     executor: shell
-     shell: /bin/bash
-     shell_arg: -lc
-   resume:
-     auto: false
-   defaults:
-     workspace: default
-     workflow: qa_only
-   workspaces:
-     default:
-       root_path: .
-       qa_targets: [docs/qa]
-       ticket_dir: fixtures/ticket
-   agents:
-     mock:
-       metadata:
-         name: mock
-       capabilities: [qa]
-       templates:
-         qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[]}'"
-   workflows:
-     qa_only:
-       steps:
-         - id: qa
-           required_capability: qa
-           enabled: true
-       loop:
-         mode: once
-         guard:
-           enabled: false
-           stop_when_no_unresolved: true
-       finalize:
-         rules: []
-   YAML
-   orchestrator apply --project "${QA_PROJECT}" -f /tmp/runner-legacy-alias.yaml
+   cargo test -p agent-orchestrator --lib runner_spec_legacy_policy_normalizes_to_unsafe
    ```
-2. Verify the policy is normalized to `unsafe` on re-export:
+
+2. **Unit test** — verify unknown policy falls back to allowlist:
    ```bash
-   orchestrator manifest export -f /tmp/legacy-alias-export.yaml
-   cat /tmp/legacy-alias-export.yaml | grep 'policy:'
+   cargo test -p agent-orchestrator --lib runner_spec_unknown_policy_falls_back_to_allowlist
+   ```
+
+3. **Unit test** — verify default runner spec produces allowlist policy:
+   ```bash
+   cargo test -p agent-orchestrator --lib default_runner_spec_produces_allowlist
+   ```
+
+4. **Code review** — verify legacy alias handling in deserialization:
+   ```bash
+   rg -n "legacy|Legacy|normalize.*policy" core/src/resource/runtime_policy.rs crates/orchestrator-config/src/config/runner.rs
    ```
 
 ### Expected
 
-- `apply` succeeds without errors.
-- Re-exported manifest shows `policy: unsafe` (normalized from `legacy` input).
+- `policy: legacy` is accepted and normalized to `unsafe` on re-export
+- Unknown policy strings fall back to `allowlist` (safe default)
+- Default runner produces `allowlist` policy (not unsafe)
+- Legacy alias handling is in the deserialization path, not a runtime check
 
 ---
 
