@@ -21,7 +21,7 @@ sha2 = "0.10"
 tokio = { version = "1.44", features = ["fs", "io-util", "macros", "process", "rt-multi-thread", "signal", "sync", "time"] }
 tonic = { version = "0.14", features = ["tls-native-roots", "tls-ring"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["fmt", "ansi"] }
+tracing-subscriber = { version = "0.3", features = ["fmt", "ansi", "env-filter", "json"] }
 x509-parser = "0.18"
 serde_json = "1.0"
 serde_yml = "0.0.12"

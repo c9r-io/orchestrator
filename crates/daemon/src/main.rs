@@ -119,12 +119,42 @@ fn main() -> Result<()> {
         false
     };
 
-    let subscriber = tracing_subscriber::fmt()
-        .with_target(false)
-        .with_ansi(use_ansi)
-        .finish();
-    tracing::subscriber::set_global_default(subscriber)
-        .context("failed to set tracing subscriber")?;
+    // Build log filter: ORCHESTRATOR_LOG > RUST_LOG > default "info"
+    let filter = if let Ok(level_str) = std::env::var("ORCHESTRATOR_LOG") {
+        let level = agent_orchestrator::config::LogLevel::parse(&level_str).unwrap_or_default();
+        tracing_subscriber::EnvFilter::new(level.as_tracing_level().to_string())
+    } else {
+        tracing_subscriber::EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"))
+    };
+
+    // Build subscriber: ORCHESTRATOR_LOG_FORMAT controls output format
+    let format = std::env::var("ORCHESTRATOR_LOG_FORMAT")
+        .ok()
+        .and_then(|f| agent_orchestrator::config::LoggingFormat::parse(&f))
+        .unwrap_or_default();
+
+    match format {
+        agent_orchestrator::config::LoggingFormat::Json => {
+            let subscriber = tracing_subscriber::fmt()
+                .json()
+                .with_target(false)
+                .with_ansi(false)
+                .with_env_filter(filter)
+                .finish();
+            tracing::subscriber::set_global_default(subscriber)
+                .context("failed to set tracing subscriber")?;
+        }
+        agent_orchestrator::config::LoggingFormat::Pretty => {
+            let subscriber = tracing_subscriber::fmt()
+                .with_target(false)
+                .with_ansi(use_ansi)
+                .with_env_filter(filter)
+                .finish();
+            tracing::subscriber::set_global_default(subscriber)
+                .context("failed to set tracing subscriber")?;
+        }
+    }
 
     // Install panic hook that appends to data/daemon_crash.log before the default hook.
     {
