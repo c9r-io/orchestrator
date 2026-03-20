@@ -31,6 +31,7 @@ use util::detect_sandbox_violation;
 use validate::validate_phase_output_stage;
 use wait::wait_for_process;
 
+#[allow(clippy::too_many_arguments)]
 fn render_step_template_prompt(
     prompt: &str,
     rel_path: &str,

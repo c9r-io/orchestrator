@@ -65,6 +65,8 @@
 - S6: `core/src/prehook/tests.rs::test_prehook_pipeline_var_json_array_not_in`
 - S7: `core/src/prehook/tests.rs::test_prehook_pipeline_var_truncated_skipped`
 - S8: `core/src/prehook/tests.rs::test_prehook_pipeline_var_builtin_takes_precedence`
+- S9: 无直接单测 — `StepPrehookContext.vars` 的合并由调用方（scheduler）负责，合并正确性通过 S1-S8 间接覆盖
+- S10: 无显式单测 — 现有 S1-S8 测试中 `vars: Default::default()` 即为空 vars 场景，行为不变性已隐式验证
 
 ---
 
@@ -72,4 +74,4 @@
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☑ | 10/10 PASS — tested 2026-03-18 |
+| 1 | All scenarios verified | ☑ | S1-S8: unit test PASS; S9-S10: 通过现有测试间接覆盖（见自动化覆盖说明） |

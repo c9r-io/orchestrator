@@ -187,8 +187,8 @@ Ensure config defaults and CLI override precedence for structured logging remain
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Release Build Includes Logging Surface | ☐ | | | Code review + unit test (`-p orchestrator-config`) |
-| 2 | `init` Preserves stdout Contract | ☐ | | | Code review + unit test (`-p orchestrator-config`) |
-| 3 | JSON Console Logging Works Via Environment Variable | ☐ | | | Code review + unit test (`-p orchestrator-config`) |
-| 4 | Daemon Log File Is Written | ✅ | 2026-03-18 | Claude | verified data/daemon.log exists with ISO 8601 timestamps |
-| 5 | Logging Config Resolution Unit Tests Pass | ☐ | | | 4 tests in `orchestrator-config` crate |
+| 1 | Release Build Includes Logging Surface | ⚠️ | 2026-03-20 | Claude | CLI `-v` flag works; `ORCHESTRATOR_LOG`/`RUST_LOG` env vars not implemented |
+| 2 | `init` Preserves stdout Contract | ✅ | 2026-03-20 | Claude | CLI uses println!/eprintln! correctly; observability tests pass |
+| 3 | JSON Console Logging Works Via Environment Variable | ⚠️ | 2026-03-20 | Claude | `LoggingFormat::parse("json")` works; `ORCHESTRATOR_LOG_FORMAT` env var not implemented |
+| 4 | Daemon Log File Is Written | ⚠️ | 2026-03-20 | Claude | data/daemon.log exists but contains CLI help text, not structured logs |
+| 5 | Logging Config Resolution Unit Tests Pass | ✅ | 2026-03-20 | Claude | All 4 observability tests pass |

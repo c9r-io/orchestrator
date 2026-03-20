@@ -100,4 +100,4 @@ Verified on 2026-03-12:
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☑ | S-01–S-08: PASS (2026-03-19); S-08 rewritten as safe (code review + cargo test --workspace --lib) |
+| 1 | All scenarios verified | ☑ | S-01–S-08: PASS (2026-03-20); S-08: 409 passed, 0 failed |

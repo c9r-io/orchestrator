@@ -102,3 +102,4 @@ All scenarios verified. FR-047 is closed.
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
 | 1 | All scenarios verified | ☑ | 2026-03-18: S-01–S-08 all PASS |
+| 2 | Re-verified | ☑ | 2026-03-20: S-01–S-08 all PASS (133+2 tests orchestrator-config; 409 tests workspace; 46 extension trait tests) |

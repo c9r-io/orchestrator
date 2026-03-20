@@ -186,8 +186,8 @@ Verify that `check_invariants()` in `loop_engine.rs` correctly halts execution a
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | store_inputs injects pipeline variables | ❌ N/A | 2026-03-19 | claude | Feature gap: `resolve_store_inputs()`, `StoreInputConfig` not implemented. Referenced code paths (dispatch.rs:839) do not exist |
-| 2 | store_inputs required key missing — step fails | ❌ N/A | 2026-03-19 | claude | Feature gap: same as S1 |
-| 3 | store_outputs writes pipeline variables | ❌ N/A | 2026-03-19 | claude | Feature gap: `process_store_outputs()`, `StoreOutputConfig` not implemented |
-| 4 | PostAction::StorePut writes to store | ❌ N/A | 2026-03-19 | claude | Feature gap: `PostAction::StorePut` not implemented |
-| 5 | Invariant checkpoints halt execution | ☐ | | | Invariant runtime exists in `crates/orchestrator-scheduler/src/scheduler/invariant.rs`; `check_invariants_returns_none_for_empty_invariants` passes |
+| 1 | store_inputs injects pipeline variables | ✅ PASS | 2026-03-20 | claude | Code exists in dispatch.rs:1519. Tested with qa50-store-inputs-optional workflow. Optional key correctly injected. |
+| 2 | store_inputs required key missing — step fails | ✅ PASS | 2026-03-20 | claude | Tested with qa50-store-inputs-required workflow. Task failed with 0 runs (step never dispatched). |
+| 3 | store_outputs writes pipeline variables | ❌ FAIL | 2026-03-20 | claude | Feature gap: `from_var` cannot be populated from step output JSON. No capture mechanism exists. Ticket: docs/ticket/qa50_s3_store_outputs_fromvar_20260320_085730.md |
+| 4 | PostAction::StorePut writes to store | ❌ FAIL | 2026-03-20 | claude | Same issue as S3 - `from_var` must exist in pipeline_vars but step output fields are not extracted. Ticket: docs/ticket/qa50_s3_store_outputs_fromvar_20260320_085730.md |
+| 5 | Invariant checkpoints halt execution | ✅ PASS | 2026-03-20 | claude | Tested with qa50-invariant-halt workflow. Task failed with `invariant_violated` event at before_complete checkpoint. Unit test `check_invariants_returns_none_for_empty_invariants` passes. |

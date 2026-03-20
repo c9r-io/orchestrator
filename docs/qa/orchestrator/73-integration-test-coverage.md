@@ -70,6 +70,6 @@ cargo test -p orchestrator-integration-tests --test workflow_loop workflow_preho
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☐ | |
+| 1 | All scenarios verified | ✅ | 2026-03-20 |
 
 See also: `docs/qa/orchestrator/73b-integration-test-coverage-advanced.md` for multi-cycle loop, gRPC compat, and full regression.

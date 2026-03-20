@@ -238,8 +238,8 @@ WHERE id = '{task_id}';
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Strict Validation Rejects Non-JSON QA Output | ☐ | | | Code review + unit test (strict_phase, exit_code validation) |
-| 2 | Structured Output Persists Into command_runs | ☐ | | | Code review + unit test (AgentOutput, captures, insert_command_run) |
-| 3 | Scheduler Publishes Phase Output Events | ☐ | | | Code review + unit test (build_trace, event extraction) |
-| 4 | Detach Mode Enqueues Tasks | ☐ | | | UNSAFE — daemon queue lifecycle |
-| 5 | Worker Start/Stop and Queue Consumption | ☐ | | | UNSAFE — daemon worker lifecycle (start/kill) |
+| 1 | Strict Validation Rejects Non-JSON QA Output | PASS | 2026-03-20 | Claude | Code review + unit test (strict_phase, exit_code validation) |
+| 2 | Structured Output Persists Into command_runs | PASS | 2026-03-20 | Claude | Code review + unit test (AgentOutput, captures, insert_command_run) |
+| 3 | Scheduler Publishes Phase Output Events | PASS | 2026-03-20 | Claude | Code review + unit test (build_trace, event extraction) |
+| 4 | Detach Mode Enqueues Tasks | SKIP | | | UNSAFE — daemon queue lifecycle (self-referential mode) |
+| 5 | Worker Start/Stop and Queue Consumption | SKIP | | | UNSAFE — daemon worker lifecycle (start/kill) (self-referential mode) |

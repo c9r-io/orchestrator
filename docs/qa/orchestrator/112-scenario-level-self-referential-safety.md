@@ -1,3 +1,7 @@
+---
+self_referential_safe: true
+---
+
 # QA 112: Scenario-Level Self-Referential Safety
 
 **Scope**: 验证 FR-058 场景级安全分级机制的正确性，确认 prehook 过滤、CEL 变量、frontmatter 解析均按预期工作。
@@ -95,4 +99,4 @@
 | 2 | Frontmatter 解析 — 无场景白名单 | PASS | 2026-03-18 | | test_parse_qa_doc_safe_scenarios_absent passed |
 | 3 | CEL 变量 — 非空场景列表允许通过 | PASS | 2026-03-18 | | test_self_referential_safe_scenarios_non_empty passed |
 | 4 | CEL 变量 — 空场景列表被跳过 | PASS | 2026-03-18 | | test_self_referential_safe_scenarios_empty passed |
-| 5 | 覆盖率统计验证 | PASS | 2026-03-20 | | Doc-level: 78 ≥ 25; Scenario-level: 9 ≥ 8; Total: 87 ≥ 55; Coverage: 89.7% ≥ 40% |
+| 5 | 覆盖率统计验证 | PASS | 2026-03-20 | Claude | Doc-level: 87 ≥ 25; Scenario-level: 9 ≥ 8; Total: 96 ≥ 55; Coverage: 96/139 = 69.1% ≥ 40% |

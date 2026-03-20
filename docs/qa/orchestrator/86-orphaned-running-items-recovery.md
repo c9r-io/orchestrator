@@ -162,8 +162,8 @@ Verify that `recover_stalled_running_items()` correctly uses the time threshold 
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Startup Recovery Resets Orphaned Running Items | ✅ | 2026-03-13 | claude | SIGKILL with running items → restart recovers to pending → worker re-claims and completes. orphaned_items_recovered event emitted with correct payload |
-| 2 | Startup Recovery Is Idempotent (No Orphans) | ✅ | 2026-03-13 | claude | No running items → no new events (PRE=POST=16), no recovery log messages |
-| 3 | CLI `task recover` Resets Orphaned Items for Specific Task | ✅ | 2026-03-13 | claude | `task recover` prints "Recovered 1 orphaned running item(s)", items→pending, task→restart_pending |
-| 4 | Terminal Items Are Not Affected by Recovery | ✅ | 2026-03-13 | claude | Completed task with qa_passed items → "No orphaned running items found", items unchanged |
-| 5 | Stall Detection Sweep Recovers Long-Running Items | ✅ | 2026-03-13 | claude | --stall-timeout-mins 1 accepted, sweep started, stalled items (started_at 2h ago) recovered at startup, worker re-claimed |
+| 1 | Startup Recovery Resets Orphaned Running Items | ✅ | 2026-03-20 | claude | Code review + unit test pass. running items→pending, started_at=NULL cleared, task→restart_pending. orphaned_items_recovered event emitted in main.rs:237 |
+| 2 | Startup Recovery Is Idempotent (No Orphans) | ✅ | 2026-03-20 | claude | Code review + unit test pass. No running items→returns empty vec, no events emitted, no status changes |
+| 3 | CLI `task recover` Resets Orphaned Items for Specific Task | ✅ | 2026-03-20 | claude | Code review + unit test pass. recover_orphaned_running_items_for_task() only affects target task, others untouched |
+| 4 | Terminal Items Are Not Affected by Recovery | ✅ | 2026-03-20 | claude | Code review + unit test pass. SQL WHERE status='running' filter only, terminal items unchanged |
+| 5 | Stall Detection Sweep Recovers Long-Running Items | ✅ | 2026-03-20 | claude | Code review + unit test pass. recover_stalled_running_items() uses started_at < cutoff threshold. Background sweep via main.rs:365-405 |

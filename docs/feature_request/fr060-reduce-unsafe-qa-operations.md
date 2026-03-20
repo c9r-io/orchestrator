@@ -321,7 +321,37 @@
 **累计净收益**: 迭代 1 (+4) + 迭代 2 (+11) + 迭代 3 (+17) + 迭代 4 (+28) + 迭代 5 (+40) + 迭代 6 (+48) + 迭代 7 (+28) + 迭代 8 (+34) + 迭代 9 (+35) = +245 个安全场景
 **Unsafe 文档数**: 68 → 61（含 self-bootstrap 子目录）
 
-### 迭代 10+: 逐步处理剩余类别
+### 迭代 10: 误标文档批量修正 + CLI 操作类文档重写（2026-03-20）
+
+**分析文档**（10 个）:
+- Tier 1（纯元数据修正）: `112-scenario-level-self-referential-safety.md`, `34-config-heal-auditability.md`, `90-unquoted-json-extraction.md`, `90b-unquoted-json-extraction-advanced.md`, `89-plan-output-context-overflow-mitigation.md`, `89b-plan-output-spill-regression.md`
+- Tier 2（小幅 / 完整重写）: `35-legacy-observability-backfill.md`, `agent-drain-enabled.md`, `105-workflow-yaml-unknown-field-warning.md`, `39-prompt-delivery.md`
+
+| 文档 | 总场景 | 可转安全 | 分类 |
+|------|--------|---------|------|
+| QA-112 | 5 | 5 | **元数据修正** — 无 frontmatter，所有场景已为 unit test + grep，grep 误匹配正文中 "self_referential_safe: false" 字样 |
+| QA-34 | 5 | 5 | **元数据修正** — 全部 `cargo test --lib`，heal log 持久化/查询/序列化均有 unit test 覆盖 |
+| QA-90 | 5 | 5 | **元数据修正** — 全部 `cargo test`，unquoted JSON repair 5 个测试覆盖 |
+| QA-90b | 5 | 5 | **元数据修正** — 全部 `cargo test`，文件路径修复/端到端提取/回归保护 5 个测试覆盖 |
+| QA-89 | 5 | 5 | **元数据修正** — 全部 `cargo test`，stream-JSON 提取 + spill 机制 5 个测试覆盖 |
+| QA-89b | 2 | 2 | **元数据修正** — 全部 `cargo test`，spill 回归 + extract_stream_json 测试覆盖 |
+| QA-35 | 5 | 5 | **小幅改写** — S1-S3/S5 已为 `cargo test`；S4 移除 `task trace --verbose` 条件路径，改为 code review + `cargo test --workspace --lib -- trace` |
+| QA-agent-drain | 8 | 8 | **完整重写** — 修正 S1-7 中不存在的 test module path（如 `scheduler::selection::tests::disabled_agent_excluded_from_selection` → `selection::tests::test_diseased_agent_filtered_from_candidates`），S8 `cargo test --workspace` → `cargo test --workspace --lib` |
+| QA-105 | 6 | 6 | **完整重写** — 6 个 `orchestrator apply` 场景全部替换为 unit test（`unknown_field_detected_with_suggestion`, `prehook_warns_on_uncaptured_variable` 等 5 个测试在 `validate/workflow_steps.rs`）+ code review |
+| QA-39 | 5+G | 6 | **完整重写** — 5 个 CLI 操作场景替换为 unit test（`prompt_delivery_default_is_arg`, `prompt_delivery_serde_roundtrip` 在 config crate；`prompt_delivery_stdin_warns_on_prompt_placeholder` 等在 scheduler crate）+ code review |
+
+**修复内容**:
+- 6 个文档纯元数据修正：QA-112, QA-34, QA-90, QA-90b, QA-89, QA-89b
+- 1 个文档小幅改写：QA-35（S4 移除 daemon 依赖条件路径）
+- 3 个文档完整重写：QA-agent-drain（修正 test path）, QA-105（CLI → unit test）, QA-39（CLI → unit test）
+- 1 处代码修复：`phase_runner/mod.rs` 添加 `#[allow(clippy::too_many_arguments)]`（pre-existing clippy lint）
+- 409 个 unit test 全部通过，零回归
+
+**净收益**: +52 个可安全执行的场景（QA-112 ×5, QA-34 ×5, QA-90 ×5, QA-90b ×5, QA-89 ×5, QA-89b ×2, QA-35 ×5, QA-agent-drain ×8, QA-105 ×6, QA-39 ×6）
+**累计净收益**: 迭代 1 (+4) + 迭代 2 (+11) + 迭代 3 (+17) + 迭代 4 (+28) + 迭代 5 (+40) + 迭代 6 (+48) + 迭代 7 (+28) + 迭代 8 (+34) + 迭代 9 (+35) + 迭代 10 (+52) = +297 个安全场景
+**Unsafe 文档数**: 61 → 50（frontmatter 精确计数；此前 grep 计数含 2 个正文误匹配：QA-95 已由迭代 4 转 safe、QA-112 由本轮修复）
+
+### 迭代 11+: 逐步处理剩余类别
 
 每次 1-2 个文档，持续推进直到 unsafe 比例从 82% 降到合理水平（目标 < 30%）。
 

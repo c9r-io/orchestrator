@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Orchestrator - Prompt Delivery Abstraction
@@ -26,219 +26,107 @@ The mode is threaded through agent selection → phase runner → spawn.
 
 ## Scenario 1: Default Prompt Delivery Is Arg
 
-### Preconditions
-- Orchestrator binary is built
-- A workspace and workflow exist in config
-
 ### Goal
-Verify that agents without an explicit `promptDelivery` field default to `arg` mode and receive the prompt via `{prompt}` substitution as before.
+Verify that agents without an explicit `promptDelivery` field default to `arg` mode.
 
 ### Steps
-1. Apply a manifest with no `promptDelivery` field:
-   ```yaml
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: default-delivery-agent
-   spec:
-     command: echo "{prompt}"
-     capabilities: ["qa"]
-   ```
-2. Run:
+1. **Unit test** — 运行默认值测试：
    ```bash
-   orchestrator get agent default-delivery-agent -o yaml
-   ```
-3. Verify that the output does **not** contain a `promptDelivery` field (skipped when default).
-4. Run:
-   ```bash
-   orchestrator manifest export -o yaml | grep -A5 "default-delivery-agent"
+   cargo test -p orchestrator-config -- agent::tests::prompt_delivery_default_is_arg --nocapture
    ```
 
 ### Expected
-- Agent is created successfully
-- YAML output omits `promptDelivery` entirely (serialization skip when default `arg`)
-- The agent command template retains `{prompt}` placeholder
+- `PromptDelivery::default()` 返回 `Arg`
+- 测试通过
 
 ---
 
-## Scenario 2: Explicit Stdin Delivery Mode
-
-### Preconditions
-- Orchestrator binary is built
-- A workspace and workflow exist in config
+## Scenario 2: Serde Round-Trip Preserves Delivery Mode
 
 ### Goal
-Verify that an agent with `promptDelivery: stdin` is stored correctly, round-trips through export, and the selection function returns `Stdin` delivery mode.
+Verify that all four `promptDelivery` modes correctly serialize and deserialize through YAML/JSON.
 
 ### Steps
-1. Apply a manifest with `promptDelivery: stdin`:
-   ```yaml
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: stdin-agent
-   spec:
-     command: cat
-     capabilities: ["qa"]
-     promptDelivery: stdin
-   ```
-2. Run:
+1. **Unit test** — 运行 serde round-trip 测试：
    ```bash
-   orchestrator get agent stdin-agent -o yaml
+   cargo test -p orchestrator-config -- agent::tests::prompt_delivery_serde_roundtrip --nocapture
    ```
-3. Verify the output contains `promptDelivery: stdin`.
-4. Export and re-apply:
+2. **Unit test** — 运行 skip-serializing-default 测试：
    ```bash
-   orchestrator manifest export -o yaml > /tmp/qa-pd-export.yaml
-   grep "promptDelivery" /tmp/qa-pd-export.yaml
+   cargo test -p orchestrator-config -- agent::tests::prompt_delivery_skip_serializing_default --nocapture
    ```
 
 ### Expected
-- Agent stored with `promptDelivery: stdin`
-- YAML export includes `promptDelivery: stdin` for this agent
-- Round-trip preserves the delivery mode
+- `stdin`/`file`/`env` 模式经序列化-反序列化后保持不变
+- 默认 `arg` 模式在序列化时被省略（`skip_serializing_if`）
 
 ---
 
-## Scenario 3: File Delivery Mode with Prompt File Placeholder
-
-### Preconditions
-- Orchestrator binary is built
-- A workspace and workflow exist in config
+## Scenario 3: Preflight Warns on Stdin with Prompt Placeholder
 
 ### Goal
-Verify that an agent with `promptDelivery: file` is stored correctly and preflight check does not warn when command contains `{prompt_file}`.
+Verify that the preflight check system warns when `promptDelivery: stdin` but command contains `{prompt}`.
 
 ### Steps
-1. Apply a manifest:
-   ```yaml
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: file-agent
-   spec:
-     command: cat {prompt_file}
-     capabilities: ["qa"]
-     promptDelivery: file
-   ```
-2. Run:
+1. **Unit test** — 运行 stdin 冲突 warning 测试：
    ```bash
-   orchestrator get agent file-agent -o yaml
-   ```
-3. Run preflight check:
-   ```bash
-   orchestrator check all 2>&1
+   cargo test -p orchestrator-scheduler -- check::tests::prompt_delivery_stdin_warns_on_prompt_placeholder --nocapture
    ```
 
 ### Expected
-- Agent stored with `promptDelivery: file`
-- Command template contains `{prompt_file}`
-- Preflight check produces no warnings for this agent's delivery configuration
+- Warning 指出 `{prompt}` placeholder 在 stdin 模式下不被替换
+- Warning 为 informational，不阻止 apply
 
 ---
 
-## Scenario 4: Preflight Warns on Misconfigured Delivery
-
-### Preconditions
-- Orchestrator binary is built
-- A workspace and workflow exist in config
+## Scenario 4: Preflight Warns on File Without Prompt File Placeholder
 
 ### Goal
-Verify that the preflight check system warns on misconfigured prompt delivery combinations.
+Verify that the preflight check warns when `promptDelivery: file` but command lacks `{prompt_file}`.
 
 ### Steps
-1. Apply a manifest with stdin delivery but `{prompt}` in command:
-   ```yaml
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: misconfig-stdin-agent
-   spec:
-     command: echo "{prompt}"
-     capabilities: ["qa"]
-     promptDelivery: stdin
-   ```
-2. Apply a manifest with file delivery but no `{prompt_file}`:
-   ```yaml
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: misconfig-file-agent
-   spec:
-     command: echo "no-placeholder"
-     capabilities: ["qa"]
-     promptDelivery: file
-   ```
-3. Run preflight check:
+1. **Unit test** — 运行 file 缺失 placeholder warning 测试：
    ```bash
-   orchestrator check all 2>&1
+   cargo test -p orchestrator-scheduler -- check::tests::prompt_delivery_file_warns_missing_prompt_file_placeholder --nocapture
    ```
 
 ### Expected
-- Warning for `misconfig-stdin-agent`: prompt delivery is `stdin` but command contains `{prompt}` placeholder (placeholder will be ignored)
-- Warning for `misconfig-file-agent`: prompt delivery is `file` but command does not contain `{prompt_file}` placeholder
-- Both warnings are informational (check does not fail, just warns)
+- Warning 指出 command 缺少 `{prompt_file}` placeholder
+- Warning 为 informational，不阻止 apply
 
 ---
 
-## Scenario 5: Env Delivery Mode Serde Round-Trip
-
-### Preconditions
-- Orchestrator binary is built
-- A workspace and workflow exist in config
+## Scenario 5: Arg Mode Shell-Escapes Full Prompt
 
 ### Goal
-Verify that `promptDelivery: env` is correctly serialized, deserialized, and round-trips through export/apply.
+Verify that `apply_prompt_delivery` in arg mode correctly shell-escapes the full prompt text to prevent injection.
 
 ### Steps
-1. Apply a manifest:
-   ```yaml
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: env-agent
-   spec:
-     command: printenv ORCH_PROMPT
-     capabilities: ["qa"]
-     promptDelivery: env
-   ```
-2. Run:
+1. **Unit test** — 运行 shell 转义测试：
    ```bash
-   orchestrator get agent env-agent -o yaml
+   cargo test -p orchestrator-scheduler -- phase_runner::tests::cases::apply_prompt_delivery_arg_shell_escapes_full_prompt --nocapture
    ```
-3. Verify `promptDelivery: env` in output.
-4. Delete and re-apply from export:
+2. **Code review** — 确认 `apply_prompt_delivery` 函数存在且对 `Arg` 模式执行 shell-safe 转义：
    ```bash
-   orchestrator manifest export -o yaml > /tmp/qa-pd-env.yaml
-   orchestrator delete agent env-agent
-   orchestrator apply -f /tmp/qa-pd-env.yaml
-   orchestrator get agent env-agent -o yaml
+   rg -n "fn apply_prompt_delivery" crates/orchestrator-scheduler/src/scheduler/phase_runner/mod.rs
    ```
 
 ### Expected
-- Agent created with `promptDelivery: env`
-- Export YAML contains `promptDelivery: env`
-- After delete + re-apply from export, agent still has `promptDelivery: env`
+- Prompt 中的反引号、`$()` 等 shell 元字符被正确转义
+- 测试通过
 
 ---
 
-## Unit Test Verification
+## General: Preflight Arg Mode No Warning
 
 ### Steps
-1. Run unit tests:
+1. **Unit test** — 运行 arg 模式无 warning 测试：
    ```bash
-   cd core && cargo test --lib 2>&1 | tail -5
-   ```
-2. Run specific prompt-delivery-related tests:
-   ```bash
-   cd core && cargo test prompt_delivery 2>&1
-   cd core && cargo test check_prompt_delivery 2>&1
+   cargo test -p orchestrator-scheduler -- check::tests::prompt_delivery_arg_no_warning --nocapture
    ```
 
 ### Expected
-- All unit tests pass
-- Tests for `prompt_delivery_default_is_arg`, `prompt_delivery_serde_roundtrip`, `prompt_delivery_skip_serializing_default` pass
-- Tests for `check_prompt_delivery_warns_stdin_with_placeholder`, `check_prompt_delivery_warns_file_without_prompt_file`, `check_prompt_delivery_warns_file_with_arg_placeholder` pass
+- `promptDelivery: arg` 配合 `{prompt}` placeholder 时不产生 warning
 
 ---
 
@@ -246,9 +134,9 @@ Verify that `promptDelivery: env` is correctly serialized, deserialized, and rou
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Default prompt delivery is arg | ☐ | | | |
-| 2 | Explicit stdin delivery mode | ☐ | | | |
-| 3 | File delivery mode with prompt_file | ☐ | | | |
-| 4 | Preflight warns on misconfigured delivery | ☐ | | | |
-| 5 | Env delivery mode serde round-trip | ☐ | | | |
-| G | Unit test coverage verification | ☐ | | | |
+| 1 | Default prompt delivery is arg | ✅ | 2026-03-20 | Claude | |
+| 2 | Serde round-trip preserves delivery mode | ✅ | 2026-03-20 | Claude | |
+| 3 | Preflight warns on stdin with prompt placeholder | ✅ | 2026-03-20 | Claude | |
+| 4 | Preflight warns on file without prompt_file | ✅ | 2026-03-20 | Claude | |
+| 5 | Arg mode shell-escapes full prompt | ✅ | 2026-03-20 | Claude | shell_escape called at line 78 |
+| G | Arg mode no warning | ✅ | 2026-03-20 | Claude | |

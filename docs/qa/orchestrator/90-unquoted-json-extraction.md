@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # QA: generate_items 对 LLM 非标准 JSON 输出的容错解析 (FR-031)
@@ -63,6 +63,6 @@ self_referential_safe: false
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☐ | |
+| 1 | All scenarios verified | ☑ | 2026-03-20: S1-S5 all passed |
 
 See also: `docs/qa/orchestrator/90b-unquoted-json-extraction-advanced.md` for file path repair, e2e extraction, and regression tests.

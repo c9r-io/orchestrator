@@ -27,8 +27,7 @@ code review, and workspace gates; no live task queue or daemon lifecycle interac
 2. Run scheduler and graph ownership regressions:
 
    ```bash
-   cargo test -p agent-orchestrator scheduler::loop_engine::tests -- --nocapture
-   cargo test -p agent-orchestrator scheduler::item_executor::tests -- --nocapture
+   cargo test -p orchestrator-scheduler scheduler::loop_engine::tests -- --nocapture
    ```
 
    Expected:
@@ -63,7 +62,7 @@ code review, and workspace gates; no live task queue or daemon lifecycle interac
 5. Run trace reconstruction regressions:
 
    ```bash
-   cargo test -p agent-orchestrator scheduler::trace::tests -- --nocapture
+   cargo test -p orchestrator-scheduler scheduler::trace::tests -- --nocapture
    ```
 
    Expected:

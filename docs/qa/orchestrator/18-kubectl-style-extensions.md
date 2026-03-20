@@ -126,4 +126,4 @@ Verify that YAML content piped via stdin is correctly parsed into typed manifest
 |---|----------|--------|-----------|--------|-------|
 | 1 | List-Style Get | ✅ PASS | 2026-03-18 | Claude | `-o table` falls back to JSON (documented); json/yaml produce correct encodings |
 | 2 | Label Selector on Get List | ✅ PASS | 2026-03-18 | Claude | List queries succeed with selectors; single-resource with `-l` exits 1 with clear error |
-| 3 | Stdin Apply Parsing and Routing | ☐ | | | Rewritten for safe mode: unit test + code review |
+| 3 | Stdin Apply Parsing and Routing | ✅ PASS | 2026-03-20 | Claude | 5 parse_manifests_from_yaml + 6 apply_to_project tests pass; code review confirms stdin/file apply share same YAML parsing path |

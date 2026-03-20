@@ -72,9 +72,9 @@ self_referential_safe: true
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☐ | S2/S4/S5 rewritten for safe mode: code review + unit test |
+| 1 | All scenarios verified | ☑ | S2/S4/S5: code review + unit test all passed |
 | 2 | S1: UDS preferred | ☑ | CLI connects via UDS when socket exists, no env vars |
-| 3 | S2: --control-plane-config priority | ☐ | Rewritten: unit test + code review of priority logic |
+| 3 | S2: --control-plane-config priority | ☑ | Unit test passed; priority chain confirmed in code review |
 | 4 | S3: ORCHESTRATOR_SOCKET env priority | ☑ | Env var takes highest priority |
-| 5 | S4: Fallback to home-dir config | ☐ | Rewritten: unit test + code review of fallback chain |
-| 6 | S5: Error with hint | ☐ | Rewritten: unit test + code review of error path |
+| 5 | S4: Fallback to home-dir config | ☑ | Unit test passed; fallback chain confirmed in code review |
+| 6 | S5: Error with hint | ☑ | Unit test passed; error path confirmed in code review |

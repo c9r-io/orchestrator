@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # QA-105: Workflow YAML 步骤定义未知字段警告
@@ -11,34 +11,86 @@ self_referential_safe: false
 ## 场景
 
 ### S1: capture 写在 step 层级时收到 warning
-- **前置**: YAML step 包含 `capture:` 字段（与 `behavior:` 同级）
-- **操作**: `orchestrator apply -f workflow.yaml`
-- **预期**: 输出 `Warning: ... contains unknown field 'capture' (did you mean 'behavior.captures'?)`，apply 仍成功
+
+**目标**: 验证 `capture` 作为 step 层级未知字段时，`did_you_mean` 提供建议 `behavior.captures`。
+
+**步骤**:
+1. **Code review** — 确认 `did_you_mean()` 在 `core/src/config_load/validate/workflow_steps.rs` 中为 `"capture"` 返回建议：
+   ```bash
+   rg -n "capture.*behavior.captures" core/src/config_load/validate/workflow_steps.rs
+   ```
+2. **Unit test** — 运行检测带建议的未知字段测试：
+   ```bash
+   cargo test -p agent-orchestrator -- validate::workflow_steps::tests::unknown_field_detected_with_suggestion --nocapture
+   ```
+
+**预期**:
+- `did_you_mean("capture")` 返回 `Some("behavior.captures")`
+- 测试验证 warning 消息包含 `"did you mean"`
 
 ### S2: 未知字段无建议时仅报字段名
-- **前置**: YAML step 包含 `foobar:` 未知字段
-- **操作**: `orchestrator apply -f workflow.yaml`
-- **预期**: 输出 `Warning: ... contains unknown field 'foobar'`，不含 "did you mean"
+
+**步骤**:
+1. **Unit test** — 运行检测无建议的未知字段测试：
+   ```bash
+   cargo test -p agent-orchestrator -- validate::workflow_steps::tests::unknown_field_detected_without_suggestion --nocapture
+   ```
+
+**预期**:
+- 对于不在建议映射中的字段（如 `"foobar"`），warning 不含 "did you mean"
+- 仅报告字段名
 
 ### S3: 正确 YAML 无 warning
-- **前置**: 所有 capture 正确写在 `behavior.captures` 下
-- **操作**: `orchestrator apply -f workflow.yaml`
-- **预期**: 无任何 Warning 输出
+
+**步骤**:
+1. **Code review** — 确认 `validate_workflow_steps` 对合法字段不发出 warning：
+   ```bash
+   rg -n "fn validate_workflow_steps" core/src/config_load/validate/workflow_steps.rs
+   ```
+2. **Unit test** — 运行 YAML round-trip 测试确认合法配置无 warning：
+   ```bash
+   cargo test -p agent-orchestrator -- validate::workflow_steps::tests::yaml_round_trip_captures_unknown_fields --nocapture
+   ```
+
+**预期**:
+- 合法 step 定义（capture 在 `behavior.captures` 下）不触发 warning
 
 ### S4: prehook 引用未声明 capture 变量时收到 warning
-- **前置**: step A 无 capture，step B prehook 引用 `regression_target_ids`
-- **操作**: `orchestrator apply -f workflow.yaml`
-- **预期**: 输出 `Warning: ... step 'B' prehook references 'regression_target_ids' but no prior step captures this variable`
+
+**步骤**:
+1. **Unit test** — 运行 prehook 未声明变量 warning 测试：
+   ```bash
+   cargo test -p agent-orchestrator -- validate::workflow_steps::tests::prehook_warns_on_uncaptured_variable --nocapture
+   ```
+
+**预期**:
+- step B 的 prehook 引用了未被任何前序 step 声明的 capture 变量时，产生 warning
 
 ### S5: prehook 引用已声明 capture 变量时无 warning
-- **前置**: step A 声明 `behavior.captures[].var: regression_target_ids`，step B prehook 引用该变量
-- **操作**: `orchestrator apply -f workflow.yaml`
-- **预期**: 无 Warning
+
+**步骤**:
+1. **Unit test** — 运行 prehook 已声明变量测试：
+   ```bash
+   cargo test -p agent-orchestrator -- validate::workflow_steps::tests::prehook_no_warning_when_variable_captured --nocapture
+   ```
+
+**预期**:
+- step A 声明了 `behavior.captures[].var: regression_target_ids`，step B prehook 引用该变量时无 warning
 
 ### S6: warning 不影响退出码
-- **前置**: YAML 包含未知字段，其余配置合法
-- **操作**: `orchestrator apply -f workflow.yaml; echo $?`
-- **预期**: 退出码为 0（warning 不阻止 apply）
+
+**步骤**:
+1. **Code review** — 确认 `validate_workflow_steps` 仅 push warning 到 `notices` 集合，不返回 `Err`：
+   ```bash
+   rg -n "notices.push|warnings.push" core/src/config_load/validate/workflow_steps.rs
+   ```
+2. **Unit test** — 运行全部 workflow_steps 验证测试确认无 panic：
+   ```bash
+   cargo test -p agent-orchestrator -- validate::workflow_steps::tests --nocapture
+   ```
+
+**预期**:
+- Warning 仅追加到 notice 列表，不影响 apply 成功或退出码
 
 ---
 

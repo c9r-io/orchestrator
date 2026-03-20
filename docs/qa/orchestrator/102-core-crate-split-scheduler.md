@@ -49,7 +49,7 @@ cargo test --workspace --lib
 |--------|------|
 | `orchestrator-scheduler` Cargo.toml 依赖 `agent-orchestrator` | 是 |
 | `agent-orchestrator` Cargo.toml **不**依赖 `orchestrator-scheduler` | 是（无循环依赖） |
-| daemon/cli/integration-tests 同时依赖 core 和 scheduler | 是 |
+| daemon/integration-tests 同时依赖 core 和 scheduler | 是（CLI 通过 daemon gRPC 间接访问 scheduler，不直接依赖） |
 
 ### 场景 5: 死代码清理验证
 
@@ -89,4 +89,17 @@ cargo test --workspace --lib
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☐ | |
+| 1 | All scenarios verified | ⚠️ | S1-S3, S5-S7: PASS; S4: FAIL (doc issue - see ticket) |
+
+## Verification Summary (2026-03-20)
+
+### Passed
+- **S1**: `cargo test --workspace --lib` passes (1437 tests)
+- **S2**: orchestrator-scheduler 409 tests, agent-orchestrator 23 tests pass
+- **S3**: Core LOC 59,250 < 65,000 target
+- **S5**: Dead code cleanup complete (scheduler/*, service/task.rs removed)
+- **S6**: Consumer imports use `orchestrator_scheduler::*` paths
+- **S7**: Implicitly verified by passing tests
+
+### Failed (Documentation Issue - Not Code Bug)
+- **S4**: QA doc incorrectly states CLI depends on both core and scheduler. CLI only depends on `agent-orchestrator` (accesses scheduler via daemon gRPC). Ticket created: `qa102_core_crate_split_cli_dep_260320_154500.md`

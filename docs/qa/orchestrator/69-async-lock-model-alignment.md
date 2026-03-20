@@ -106,9 +106,9 @@ governance script only; no scenario requires daemon restart, task creation, or m
 
 | # | Scenario | Status | Notes |
 |---|----------|--------|-------|
-| 1 | State and config runtime contract tests | ☐ | |
-| 2 | Health and phase-runner regressions | ☐ | |
-| 3 | Scheduler/runtime and store/log regressions | ☐ | |
-| 4 | Documented synchronous exceptions remain deliberate | ☐ | |
-| 5 | Governance gate | ☐ | |
-| 6 | Workspace verification | ☐ | |
+| 1 | State and config runtime contract tests | ✅ | 9 tests passed |
+| 2 | Health and phase-runner regressions | ✅ | 129 tests passed (16 health + 41 phase_runner + 72 item_executor) |
+| 3 | Scheduler/runtime and store/log regressions | ✅ | 31 tests passed (11 runtime + 2 store + 18 log_stream) |
+| 4 | Documented synchronous exceptions remain deliberate | ✅ | 5 tests passed (1 poisoned_event_sink + 4 protection) |
+| 5 | Governance gate | ✅ | Passed - only documented exceptions present |
+| 6 | Workspace verification | ✅ | 409 lib tests + clippy + fmt all passed |

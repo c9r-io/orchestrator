@@ -222,8 +222,8 @@ Verify trace reconstruction is independent of the active config validity — the
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Basic Trace Output | ☐ | | | Rewritten for safe mode: unit test verification |
+| 1 | Basic Trace Output | PASS | 2026-03-20 | Claude | single_cycle_with_steps and multi_cycle_trace unit tests pass; code review confirms TRACE TIMELINE output format with cycle_started/step_started events |
 | 2 | JSON Output | PASS | 2026-03-19 | Claude | Re-verified: task-scoped (1f136876): 4 steps, scope=task with anchor_item_id, wall_time_secs=0.115, no anomalies; item-scoped (9f1713ad): 2 steps, scope=item with item_id, wall_time_secs=0.042, no anomalies; top-level keys verified: task_id, status, cycles, graph_runs, anomalies, summary; no overlapping_cycles; all cycles have non-null ended_at |
 | 3 | Verbose Mode Shows Scope And Binding | PASS | 2026-03-19 | Claude | Re-verified: verbose=29 events vs non-verbose=9 events; text format uses same timestamp/event_type/step=/item= format; JSON scope bindings verified: task-scoped shows scope=task with anchor_item_id, item-scoped shows scope=item with item_id |
-| 4 | Anomaly Detection - Real Failure vs False Overlap | ☐ | | | Rewritten for safe mode: 63 trace + anomaly unit tests |
-| 5 | Trace Availability and Config Independence | ☐ | | | Rewritten for safe mode: unit test + code review |
+| 4 | Anomaly Detection - Real Failure vs False Overlap | PASS | 2026-03-20 | Claude | 58 trace + 17 anomaly unit tests all pass; detect_nonzero_exit_anomaly, detect_low_output_step_anomaly, quiet_heartbeat_does_not_create_low_output_anomaly, two_cycle_completed_task_closes_first_cycle_without_overlap, detect_overlapping_cycles_anomaly all verified |
+| 5 | Trace Availability and Config Independence | PASS | 2026-03-20 | Claude | 58 trace unit tests pass; code review confirms build_trace reads events/command_runs DTOs directly with no active config dependency; detect_low_output_step_anomaly and quiet_heartbeat_does_not_create_low_output_anomaly pass |

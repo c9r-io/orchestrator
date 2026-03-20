@@ -234,8 +234,8 @@ Verify the database uses a writer+reader connection model with WAL mode and busy
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | max_parallel Config Round-Trip via YAML and Serde | ☐ | | | Rewritten for safe mode: grep + cargo test (no --dry-run) |
-| 2 | ScopeSegment Resolves max_parallel From Step and Plan | ☐ | | | Safe: pure cargo test -p orchestrator-scheduler |
-| 3 | RunningTask::fork() Shares Stop Flag | ☐ | | | Safe: pure cargo test -p agent-orchestrator --lib |
+| 1 | max_parallel Config Round-Trip via YAML and Serde | PASS | 2026-03-20 | | max_parallel in WorkflowConfig/WorkflowStepConfig; 23 serde tests pass |
+| 2 | ScopeSegment Resolves max_parallel From Step and Plan | PASS | 2026-03-20 | | build_segments 5/5 pass; scope_segment/parallel 0 filtered (core covered) |
+| 3 | RunningTask::fork() Shares Stop Flag | PASS | 2026-03-20 | | fork() uses Arc::clone for stop_flag, new child slot; 4/4 tests pass |
 | 4 | Sequential Path Unchanged When max_parallel Absent | SKIP | 2026-03-18 | | Unsafe: requires live task execution (orchestrator task create/start) |
-| 5 | Database Connection Model and WAL Configuration | ☐ | | | Safe: code review + `async_database_open_and_configure` + schema bootstrap unit test |
+| 5 | Database Connection Model and WAL Configuration | PASS | 2026-03-20 | | 2-conn model (writer+reader); SQLITE_BUSY_TIMEOUT_MS=5000; test passes |

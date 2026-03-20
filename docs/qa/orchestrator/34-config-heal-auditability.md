@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Orchestrator - Config Self-Heal Auditability
@@ -183,8 +183,8 @@ Verify that `ConfigSelfHealRule` has stable Display and Serialize representation
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Heal Log Persisted During Self-Heal | ☐ | | | |
-| 2 | Heal Log Query Backend - Table Output | ☐ | | | |
-| 3 | Heal Log Query Backend - JSON Serialization | ☐ | | | |
-| 4 | Check Command Shows Persisted Heal Warning | ☐ | | | |
-| 5 | ConfigSelfHealRule Display and Serialize Stability | ☐ | | | |
+| 1 | Heal Log Persisted During Self-Heal | ✅ PASS | 2026-03-20 | Claude | Both tests passed |
+| 2 | Heal Log Query Backend - Table Output | ✅ PASS | 2026-03-20 | Claude | 2 tests passed, DESC order confirmed |
+| 3 | Heal Log Query Backend - JSON Serialization | ✅ PASS | 2026-03-20 | Claude | 2 tests passed, field serialization confirmed |
+| 4 | Check Command Shows Persisted Heal Warning | ✅ PASS | 2026-03-20 | Claude | 3 tests passed (empty, matching, non-matching versions) |
+| 5 | ConfigSelfHealRule Display and Serialize Stability | ✅ PASS | 2026-03-20 | Claude | 3 tests passed (display, serialize, as_label) |

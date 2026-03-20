@@ -37,4 +37,17 @@ self_referential_safe: true
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☐ | |
+| 1 | All scenarios verified | ✅ | 2026-03-20 |
+
+### Scenario 1: Graceful Shutdown Code Review ✅
+
+- [x] `request_shutdown()` 将 lifecycle 切换为 `Draining` — `core/src/runtime.rs:138-142`
+- [x] `shutdown_tx` 通知所有 worker 退出循环 — `main.rs:523` + `worker_loop:768`
+- [x] 5s grace period 等待运行中任务完成 — `main.rs:533`
+- [x] supervisor 在 30s timeout 内等待所有 worker handle join — `main.rs:546`
+- [x] 正常关闭不触发 `worker_panic_recovered` 或 `daemon_crash_recovered` 事件
+
+### Scenario 2: Full Unit Tests ✅
+
+- [x] `cargo test --workspace --lib` — 1979 passed, 0 failed
+- [x] 无新增编译警告

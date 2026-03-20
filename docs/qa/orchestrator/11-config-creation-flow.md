@@ -139,7 +139,7 @@ Code review + unit test verification.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | 创建 Workspace (dry-run) | PASS | 2026-03-19 | Claude | 2/2 tests passed |
-| 2 | 创建 Workspace (实际) | PASS | 2026-03-19 | Claude | 3/3 tests passed |
-| 3 | 创建完整的最小配置 | PASS | 2026-03-19 | Claude | 6/6 tests passed |
-| 4 | 资源存在时 apply (更新) | PASS | 2026-03-19 | Claude | 5/5 tests passed |
+| 1 | 创建 Workspace (dry-run) | PASS | 2026-03-20 | Claude | 2/2 tests passed |
+| 2 | 创建 Workspace (实际) | PASS | 2026-03-20 | Claude | 3/3 tests passed |
+| 3 | 创建完整的最小配置 | PASS | 2026-03-20 | Claude | 6/6 tests passed |
+| 4 | 资源存在时 apply (更新) | PASS | 2026-03-20 | Claude | 5/5 tests passed |
