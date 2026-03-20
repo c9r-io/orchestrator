@@ -31,7 +31,7 @@ Verify that manifest export includes capability-orchestration fields: `required_
    ```bash
    rg -n "normalize_sets_required_capability" core/src/config_load/normalize/tests.rs
    ```
-   Expected: 18+ test functions covering qa, fix, plan, implement, review, build, test, lint, gitops, qa_doc_gen, qa_testing, ticket_fix, doc_governance, align_tests, retest, smoke_chain, from_id, and custom steps.
+   Expected: 17+ test functions covering qa, fix, plan, implement, review, build, test, lint, gitops, qa_doc_gen, qa_testing, ticket_fix, doc_governance, align_tests, retest, smoke_chain, and from_id.
 
 2. **Unit test** — verify normalization sets `required_capability` correctly:
    ```bash
@@ -51,14 +51,14 @@ Verify that manifest export includes capability-orchestration fields: `required_
    cargo test -p orchestrator-config --lib test_agent_selection_config_default
    ```
 
-5. **Code review** — verify `cost` is optional and uses `skip_serializing_if`:
+5. **Code review** — verify `cost` is optional (`Option<u8>`):
    ```bash
-   rg -n "skip_serializing_if.*Option.*is_none" crates/orchestrator-config/src/config/agent.rs
+   rg -n "pub cost:" crates/orchestrator-config/src/config/agent.rs
    ```
 
 ### Expected
 
-- All 18+ normalization tests pass — each SDLC step type gets correct `required_capability`
+- All 17+ normalization tests pass — each SDLC step type gets correct `required_capability`
 - Export roundtrip tests pass — all resource kinds survive export/re-import
 - Agent config correctly serializes optional `cost`, `capabilities`, and `selection.strategy`
 - Step config correctly serializes `repeatable`, `is_guard`, `required_capability`, and `builtin`

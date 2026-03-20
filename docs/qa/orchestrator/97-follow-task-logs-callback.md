@@ -67,4 +67,4 @@ cargo test -p orchestrator-scheduler --lib follow_one_stream_callback_incrementa
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☐ | |
+| 1 | All scenarios verified | ✔ | S1: ok, S2: ok, S3: ok |

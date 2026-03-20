@@ -92,8 +92,8 @@ clippy, fmt, or code-review gate and does not rely on daemon control-plane inter
 
 | # | Scenario | Status | Notes |
 |---|----------|--------|-------|
-| 1 | Scheduler chain-step and fan-out regressions | ✅ | Chain children now reuse the live task context and parallel fan-out avoids a redundant pipeline-vars clone |
-| 2 | Graph materialization and replay regressions | ✅ | Borrowed node-id queueing and iterator-based edge traversal preserve replay and trace behavior |
-| 3 | Db-write ownership regressions | ✅ | `DbWriteCoordinator` owned fast-paths preserve command-run and event persistence behavior |
-| 4 | Export and secret-key lifecycle regressions | ✅ | Shared metadata and audit builders keep manifest and key lifecycle output stable |
-| 5 | Workspace verification | ✅ | Workspace tests, clippy, and fmt remain green after the follow-up cleanup |
+| 1 | Scheduler chain-step and fan-out regressions | ✅ PASS | 72 scheduler + 20 step_pool + 8 adaptive tests passed |
+| 2 | Graph materialization and replay regressions | ✅ PASS | 22 DAG + 2 graph + 58 trace tests passed |
+| 3 | Db-write ownership regressions | ✅ PASS | 44 db_write tests passed |
+| 4 | Export and secret-key lifecycle regressions | ✅ PASS | 10 export + 6 secret_key_lifecycle tests passed |
+| 5 | Workspace verification | ✅ PASS | 1979 workspace tests + clippy + fmt green |

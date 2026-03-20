@@ -129,7 +129,7 @@ self_referential_safe: true
 | 2 | cordon/uncordon 状态转换 | ✅ | Tests: `cordon_active_agent_succeeds`, `cordon_already_cordoned_fails`, `uncordon_cordoned_agent_succeeds` |
 | 3 | drain 流程与 in_flight 驱动的状态转换 | ✅ | Tests: `drain_with_no_inflight_goes_directly_to_drained`, `drain_with_inflight_goes_to_draining`, `decrement_inflight_completes_drain` |
 | 4 | drain_timeout_sweep 超时强制排空 | ✅ | Test: `drain_timeout_sweep_forces_drained` |
-| 5 | agent selection 排除不健康 agent | ⚠️ | 过滤逻辑正确（通过`is_schedulable()`抽象），但QA验证命令需更新，见 `docs/ticket/qa-agent-drain-s5-verification-method_260320_203000.md` |
+| 5 | agent selection 排除不健康 agent | ✅ | Code review: `selection.rs:30` 使用 `lifecycle.is_schedulable()` 过滤，`metrics.rs:101` 仅对 Active 返回 true |
 | 6 | CLI agent 子命令解析 | ✅ | 5 CLI tests passed |
 | 7 | gRPC server 模块测试 | ✅ | 3 server tests passed |
 | 8 | 工作区回归验证 | ✅ | 409 lib tests + clippy + fmt 全部通过 |

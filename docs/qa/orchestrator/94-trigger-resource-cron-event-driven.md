@@ -35,13 +35,13 @@ cargo test --package agent-orchestrator trigger -- --include-ignored
 ```
 
 **预期**:
-- `dispatch_trigger_manifest`: Trigger manifest 正确分派为 TriggerResource
-- `validate_trigger_cron_ok`: 合法 cron trigger 验证通过
-- `validate_trigger_event_ok`: 合法 event trigger 验证通过
-- `validate_trigger_both_cron_and_event_rejected`: cron + event 同时设置被拒绝
-- `validate_trigger_neither_cron_nor_event_rejected`: 两者都不设置被拒绝
-- `trigger_apply_and_get`: apply 后可通过 get 取回
-- `trigger_delete_removes`: delete 后不可再 get
+- `trigger_dispatch_and_kind`: Trigger manifest 正确分派为 TriggerResource
+- `trigger_validate_accepts_valid_cron`: 合法 cron trigger 验证通过
+- `trigger_validate_accepts_valid_event`: 合法 event trigger 验证通过
+- `trigger_validate_rejects_both_cron_and_event`: cron + event 同时设置被拒绝
+- `trigger_validate_rejects_neither_cron_nor_event`: 两者都不设置被拒绝
+- `trigger_apply_created_then_unchanged`: apply 创建后再次 apply 为 unchanged
+- `trigger_get_from_and_delete_from`: get 取回后 delete 移除
 - `trigger_yaml_roundtrip_cron`: cron trigger YAML 序列化/反序列化一致
 - `trigger_yaml_roundtrip_event`: event trigger YAML 序列化/反序列化一致
 
@@ -51,13 +51,12 @@ cargo test --package agent-orchestrator trigger -- --include-ignored
 
 **步骤**:
 ```bash
-cargo test --package agent-orchestrator resource_registry_has_expected_count
-cargo test --package agent-orchestrator migration_count_matches
+cargo test --package agent-orchestrator --lib returns_eleven_definitions
 ```
 
 **预期**:
-- Registry count = 10（含 Trigger）
-- Migration count = 18（含 m0018_trigger_state）
+- Builtin CRD count = 11（含 Trigger、WorkflowStore、StoreBackendProvider）
+- Migration 存在由 `m0018_trigger_state` 负责的 trigger 状态表
 
 ---
 
@@ -77,14 +76,14 @@ cargo test 2>&1 | grep "^test result:"
 
 **步骤**:
 ```bash
-cargo test --package agent-orchestrator --lib trigger_apply_and_get
-cargo test --package agent-orchestrator --lib trigger_delete_removes
+cargo test --package agent-orchestrator --lib trigger_apply_created_then_unchanged
+cargo test --package agent-orchestrator --lib trigger_get_from_and_delete_from
 cargo test --package agent-orchestrator --lib trigger_yaml_roundtrip_cron
 ```
 
 **预期**:
-- `trigger_apply_and_get`: apply 后可通过 get 取回 trigger 资源
-- `trigger_delete_removes`: delete 后资源不可再 get
+- `trigger_apply_created_then_unchanged`: apply 创建后再次 apply 为 unchanged
+- `trigger_get_from_and_delete_from`: get 取回后 delete 成功移除
 - `trigger_yaml_roundtrip_cron`: cron trigger YAML 序列化/反序列化一致
 
 ---

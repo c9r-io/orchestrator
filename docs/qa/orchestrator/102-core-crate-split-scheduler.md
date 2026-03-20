@@ -101,5 +101,5 @@ cargo test --workspace --lib
 - **S6**: Consumer imports use `orchestrator_scheduler::*` paths
 - **S7**: Implicitly verified by passing tests
 
-### Failed (Documentation Issue - Not Code Bug)
-- **S4**: QA doc incorrectly states CLI depends on both core and scheduler. CLI only depends on `agent-orchestrator` (accesses scheduler via daemon gRPC). Ticket created: `qa102_core_crate_split_cli_dep_260320_154500.md`
+### Notes
+- **S4**: Daemon does depend on both `agent-orchestrator` and `orchestrator-scheduler` as expected. Integration tests depend on `orchestrator-scheduler` only. CLI accesses scheduler indirectly via daemon gRPC.

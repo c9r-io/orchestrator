@@ -318,8 +318,8 @@ Verify resource apply (from file and stdin), store CRUD, and project-scoped reso
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Daemon Startup and Shutdown | ⏭ SKIPPED (S1 unsafe in self-referential mode) | 2026-03-19 | Claude | Skipped per self_referential_safe_scenarios |
-| 2 | CLI-to-Daemon gRPC Communication | ✅ | 2026-03-19 | Claude | version, get workspaces/agents/workflows, debug config, check all pass via gRPC |
-| 3 | Task Lifecycle via gRPC | ✅ | 2026-03-19 | Claude | create(workflow explicit)→list→info→start→completed(126/126)→logs→delete |
-| 4 | Embedded Worker Queue Consumption | ✅ | 2026-03-19 | Claude | 6 batch tasks: pending→running→completed(126/126 each, 0 failed) |
-| 5 | Resource Management and Project Isolation via gRPC | ✅ | 2026-03-19 | Claude | apply file/stdin/dry-run + store CRUD + --project isolation + delete project |
+| 1 | Daemon Startup and Shutdown | ⏭ SKIPPED (S1 unsafe in self-referential mode) | 2026-03-20 | Claude | Skipped per self_referential_safe_scenarios |
+| 2 | CLI-to-Daemon gRPC Communication | ✅ | 2026-03-20 | Claude | version, get workspaces/agents/workflows, debug config, check all pass via gRPC |
+| 3 | Task Lifecycle via gRPC | ✅ | 2026-03-20 | Claude | create(workflow explicit)→list→info→start→qa_passed(128 items)→logs→delete |
+| 4 | Embedded Worker Queue Consumption | ✅ | 2026-03-20 | Claude | 6 batch tasks: created→pending→completed(128 items each, 0 failed) |
+| 5 | Resource Management and Project Isolation via gRPC | ✅ | 2026-03-20 | Claude | apply file/stdin/dry-run + store CRUD + --project isolation + delete project |

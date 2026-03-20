@@ -57,5 +57,5 @@ Verify that the prehook evaluation logic correctly distinguishes safe vs unsafe 
 |---|-------|--------|-------|
 | 1 | All scenarios verified | ✅ | Safe QA doc runs normally in self-referential mode |
 | 2 | `parse_qa_doc_self_referential_safe()` unit tests pass (7 tests) | ✅ | All pass |
-| 3 | Prehook CEL evaluation exposes `self_referential_safe` flag | ✅ | All pass (7 CEL tests) |
+| 3 | Prehook CEL evaluation exposes `self_referential_safe` flag | ✅ | All pass (175 prehook tests, 7 dedicated) |
 | 4 | Policy tests pass (57 tests) | ✅ | All pass |

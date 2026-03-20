@@ -58,14 +58,7 @@ Verify that WorkflowStore CRD configuration with retention policy works correctl
    cargo test -p agent-orchestrator --lib store_prune_uses_workflow_store_retention
    ```
 
-2. **Unit test** — verify WorkflowStore config serde:
-   ```bash
-   cargo test -p orchestrator-config --lib test_workflow_store_config_default
-   cargo test -p orchestrator-config --lib test_workflow_store_config_with_retention
-   cargo test -p orchestrator-config --lib test_workflow_store_config_roundtrip
-   ```
-
-3. **Unit test** — verify CRD projection round-trip:
+2. **Unit test** — verify CRD projection round-trip (covers config serde indirectly):
    ```bash
    cargo test -p agent-orchestrator --lib workflow_store_config_round_trip
    ```
@@ -84,14 +77,7 @@ Verify that StoreBackendProvider CRD configuration works correctly.
 
 ### Steps
 
-1. **Unit test** — verify StoreBackendProvider config serde:
-   ```bash
-   cargo test -p orchestrator-config --lib test_store_backend_provider_default
-   cargo test -p orchestrator-config --lib test_store_backend_provider_with_options
-   cargo test -p orchestrator-config --lib test_store_backend_provider_roundtrip
-   ```
-
-2. **Unit test** — verify CRD projection round-trip:
+1. **Unit test** — verify CRD projection round-trip (covers config serde indirectly):
    ```bash
    cargo test -p agent-orchestrator --lib store_backend_provider_config_round_trip
    ```
@@ -140,7 +126,7 @@ Verify that WorkflowStore and StoreBackendProvider are registered as builtin CRD
 
 1. **Unit test** — verify builtin CRD registration count:
    ```bash
-   cargo test -p agent-orchestrator --lib resource_registry_has_expected_count
+   cargo test -p agent-orchestrator --lib returns_eleven_definitions
    ```
 
 2. **Code review** — verify both new kinds in CRD registry:

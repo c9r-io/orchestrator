@@ -97,4 +97,4 @@ self_referential_safe_scenarios: [S1, S2, S3, S4]
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☑ | S1-S4 PASS (2026-03-19); S3/S4 rewritten as safe (unit test verification). S5 remains unsafe (daemon restart). |
+| 1 | All scenarios verified | ☑ | S1-S4 PASS (2026-03-20); S3/S4 verified via unit tests. S5 skipped (daemon restart unsafe). |

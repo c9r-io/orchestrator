@@ -184,8 +184,8 @@ Verify that threshold strategy filters items below the threshold and selects fro
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Generate dynamic items from pipeline variable | ✅ | 2026-03-07 | claude | Code path verified: item_generate.rs extraction + DB insert |
-| 2 | Generate items with replace mode | ✅ | 2026-03-07 | claude | Pipeline var content handling + stream-JSON + unquoted repair |
-| 3 | Item selection with min strategy | ✅ | 2026-03-07 | claude | test_select_min, test_single_item, test_empty_items_fails |
-| 4 | Item selection with weighted strategy | ✅ | 2026-03-07 | claude | test_select_weighted, tie-break behavior |
-| 5 | Item selection with threshold strategy | ✅ | 2026-03-07 | claude | test_select_threshold, loop engine integration |
+| 1 | Generate dynamic items from pipeline variable | ✅ | 2026-03-20 | claude | All 5 unit tests pass: test_extract_dynamic_items, test_extract_dynamic_items_missing_var, test_extract_dynamic_items_skips_missing_id, test_generate_items_action_minimal, test_generate_items_action_full |
+| 2 | Generate items with replace mode | ✅ | 2026-03-20 | claude | All 7 unit tests pass: pipeline var content handling, stream-JSON extraction, unquoted JSON repair |
+| 3 | Item selection with min strategy | ✅ | 2026-03-20 | claude | All 4 unit tests pass: test_select_min, test_single_item, test_empty_items_fails, test_item_select_config_min |
+| 4 | Item selection with weighted strategy | ✅ | 2026-03-20 | claude | All 4 unit tests pass: test_select_weighted, test_tie_break_last, test_item_select_config_weighted, test_tie_break_default |
+| 5 | Item selection with threshold strategy | ✅ | 2026-03-20 | claude | All 6 unit tests pass: test_select_threshold, test_select_max, build_segments_item_select_is_task_scoped, collect_item_eval_states_maps_pipeline_vars, promote_winner_vars_inserts_into_pipeline |

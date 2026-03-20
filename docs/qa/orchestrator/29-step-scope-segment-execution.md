@@ -247,9 +247,9 @@ cargo test --workspace --lib -- build_segments resolved_scope 2>&1 | grep "test 
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Task-Scoped Steps Run Once With Multiple Items | ✅ PASS | 2026-03-19 | Claude | Code review: step.rs:349 correct scope mapping; loop_engine/mod.rs:500,524 dispatch; unit test ok |
-| 2 | Item-Scoped Steps Fan Out Per QA File | ✅ PASS | 2026-03-19 | Claude | DB task d3df2824[*]: 3 distinct task_item_ids, qa_testing ×3, all qa_passed |
-| 3 | Pipeline Variables Propagate From Task to Item Segments | ✅ PASS | 2026-03-19 | Claude | Code review: promote_winner_vars@segment.rs:670, propagate@tests.rs:1148; 3 unit tests pass |
-| 4 | Default Scope Classification Matches SDLC Intent | ✅ PASS | 2026-03-19 | Claude | Unit tests confirm step.rs:352-354 maps qa/qa_testing/ticket_fix/ticket_scan/fix/retest→Item, rest→Task |
-| 5 | Segment Grouping With Mixed Scope Steps | ✅ PASS | 2026-03-19 | Claude | 6 tests pass: resolved_scope, 5 build_segments variants |
+| 1 | Task-Scoped Steps Run Once With Multiple Items | ✅ PASS | 2026-03-20 | Claude | Code review: step.rs:349 correct scope mapping; loop_engine/mod.rs:500,524 dispatch; unit test ok |
+| 2 | Item-Scoped Steps Fan Out Per QA File | ✅ PASS | 2026-03-20 | Claude | DB task c3229e16[*]: 139 distinct task_item_ids with qa_testing events, each item gets own execution |
+| 3 | Pipeline Variables Propagate From Task to Item Segments | ✅ PASS | 2026-03-20 | Claude | Code review: promote_winner_vars@isolation.rs, propagate@tests.rs; 3 unit tests pass |
+| 4 | Default Scope Classification Matches SDLC Intent | ✅ PASS | 2026-03-20 | Claude | Unit tests confirm step.rs:352-354 maps qa/qa_testing/ticket_fix/ticket_scan/fix/retest→Item, rest→Task |
+| 5 | Segment Grouping With Mixed Scope Steps | ✅ PASS | 2026-03-20 | Claude | 6 tests pass: resolved_scope, 5 build_segments variants |
 | * | Doc drift fix: corrected Key Files paths (`core/src/...` → `crates/...`), loop_engine.rs → loop_engine/mod.rs | — | 2026-03-19 | Claude | File paths in Key Files table + S1-S3 step commands updated to match actual layout |

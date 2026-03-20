@@ -24,4 +24,4 @@ rg -n '#\[allow\(missing_docs\)\]' crates/cli crates/daemon core || true
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☑ | S1: PASS — No legacy missing_docs exemptions found |
+| 1 | All scenarios verified | ✅ | S1: PASS — No legacy missing_docs exemptions found |

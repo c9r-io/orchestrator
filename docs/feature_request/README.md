@@ -49,6 +49,8 @@
 | FR-060 | 减少 QA 场景中的不安全操作 | P1 | In Progress |
 | FR-061 | Daemon 日志环境变量覆盖 | P2 | Closed |
 | FR-062 | Agent Health 状态可观测性 | P2 | Closed |
+| FR-063 | GUI 架构设计 — Tauri + gRPC 安全客户端 | P1 | Proposed |
+| FR-064 | GUI 用户界面设计 — 许愿池 + 进度观察 | P1 | Proposed |
 
 ## 说明
 

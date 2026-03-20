@@ -6,11 +6,10 @@
 **Priority**: High
 **self_referential_safe**: false
 
-> **Note**: All 5 scenarios are **pending implementation**. The functions
-> `snapshot_binary` and `restore_binary_snapshot` referenced in
-> `core/src/scheduler/safety.rs` do not exist in the current codebase. The
-> module path does not exist either. These scenarios should not be executed
-> until the binary snapshot functionality is implemented.
+> **Note**: The functions `snapshot_binary` and `restore_binary_snapshot` are
+> implemented in `crates/orchestrator-scheduler/src/scheduler/safety/snapshot.rs`
+> with comprehensive unit test coverage (20+ tests in `safety/tests.rs`).
+> This doc is marked `self_referential_safe: false` because it involves binary operations.
 
 ---
 
@@ -18,10 +17,10 @@
 
 The binary snapshot functions provide a safety mechanism to backup and restore the release binary. This document tests the unit behavior of:
 
-- `snapshot_binary(workspace_root: &Path) -> Result<PathBuf>` - copies release binary to `.stable`
+- `snapshot_binary(workspace_root: &Path, task_id: &str, cycle: u32) -> Result<PathBuf>` - copies release binary to `.stable`
 - `restore_binary_snapshot(workspace_root: &Path) -> Result<()>` - restores `.stable` back to release binary path
 
-Module: `core/src/scheduler/safety.rs`
+Module: `crates/orchestrator-scheduler/src/scheduler/safety/snapshot.rs`
 
 ---
 

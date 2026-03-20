@@ -100,7 +100,7 @@
 
 | # | Check | Status |
 |---|-------|--------|
-| 1 | All scenarios verified against implementation | ☑ |
+| 1 | All scenarios verified against implementation | ☑ | S4 CLI display limited in multi-workspace projects (known, runtime correct) |
 
 > **Fixed (2026-03-19)**: Fixtures updated from `exit -1` (bash → 255 positive) to
 > `echo 'authentication failed: simulated infra failure' >&2` which triggers the

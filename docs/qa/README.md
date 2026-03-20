@@ -214,6 +214,8 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/110b-agent-health-policy-advanced.md` | 2 | FR-056: capability threshold and check output (split from doc 110) |
 | orchestrator | `docs/qa/orchestrator/111-daemon-proper-daemonize.md` | - | FR-057: proper Unix daemonization, SIGHUP survival, daemon stop/status CLI |
 | orchestrator | `docs/qa/orchestrator/112-scenario-level-self-referential-safety.md` | 5 | Scenario-level self-referential safety: prehook filter, agent isolation, workspace binding |
+| orchestrator | `docs/qa/orchestrator/113-logging-env-var-override.md` | 5 | FR-061: ORCHESTRATOR_LOG/RUST_LOG/ORCHESTRATOR_LOG_FORMAT env var override |
+| orchestrator | `docs/qa/orchestrator/114-agent-health-state-observability.md` | 5 | FR-062: agent health state CLI observability via `agent list` and `task info` |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |

@@ -162,8 +162,8 @@ Verify that `recover_stalled_running_items()` correctly uses the time threshold 
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Startup Recovery Resets Orphaned Running Items | ✅ | 2026-03-20 | claude | Code review + unit test pass. running items→pending, started_at=NULL cleared, task→restart_pending. orphaned_items_recovered event emitted in main.rs:237 |
+| 1 | Startup Recovery Resets Orphaned Running Items | ✅ | 2026-03-20 | claude | Code review + unit test pass. running items→pending, started_at=NULL cleared, task→restart_pending. orphaned_items_recovered event emitted in main.rs:267 |
 | 2 | Startup Recovery Is Idempotent (No Orphans) | ✅ | 2026-03-20 | claude | Code review + unit test pass. No running items→returns empty vec, no events emitted, no status changes |
 | 3 | CLI `task recover` Resets Orphaned Items for Specific Task | ✅ | 2026-03-20 | claude | Code review + unit test pass. recover_orphaned_running_items_for_task() only affects target task, others untouched |
 | 4 | Terminal Items Are Not Affected by Recovery | ✅ | 2026-03-20 | claude | Code review + unit test pass. SQL WHERE status='running' filter only, terminal items unchanged |
-| 5 | Stall Detection Sweep Recovers Long-Running Items | ✅ | 2026-03-20 | claude | Code review + unit test pass. recover_stalled_running_items() uses started_at < cutoff threshold. Background sweep via main.rs:365-405 |
+| 5 | Stall Detection Sweep Recovers Long-Running Items | ✅ | 2026-03-20 | claude | Code review + unit test pass. recover_stalled_running_items() uses started_at < cutoff threshold. Background sweep via main.rs:396-404 |

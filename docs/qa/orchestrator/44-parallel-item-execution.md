@@ -29,7 +29,7 @@ When `max_parallel <= 1`, the existing sequential loop runs unchanged. When `> 1
 | File | Role |
 |------|------|
 | `core/src/config/workflow.rs` | `max_parallel` on `WorkflowConfig`, `WorkflowStepConfig` |
-| `core/src/config/execution.rs` | `max_parallel` on `TaskExecutionStep`, `TaskExecutionPlan` |
+| `crates/orchestrator-config/src/config/execution.rs` | `max_parallel` on `TaskExecutionStep`, `TaskExecutionPlan` |
 | `core/src/scheduler/loop_engine.rs` | `ScopeSegment.max_parallel`, parallel dispatch in `StepScope::Item` |
 | `core/src/scheduler/item_executor.rs` | `OwnedProcessItemRequest`, `process_item_filtered_owned` |
 | `core/src/state.rs` | `RunningTask::fork()` |
@@ -51,7 +51,7 @@ Verify `max_parallel` field is accepted in workflow YAML, propagated through the
 1. Verify the `max_parallel` field exists in config structs and parses correctly via serde:
    ```bash
    grep -n "max_parallel" crates/orchestrator-config/src/config/workflow.rs
-   grep -n "max_parallel" core/src/config/execution.rs
+   grep -n "max_parallel" crates/orchestrator-config/src/config/execution.rs
    ```
 
 2. Run workflow config serde round-trip tests:
@@ -61,7 +61,7 @@ Verify `max_parallel` field is accepted in workflow YAML, propagated through the
 
 3. Verify `max_parallel` propagation through execution plan in code:
    ```bash
-   rg -n "max_parallel" crates/orchestrator-config/src/config/workflow.rs core/src/config/execution.rs
+   rg -n "max_parallel" crates/orchestrator-config/src/config/workflow.rs crates/orchestrator-config/src/config/execution.rs
    ```
 
 ### Expected
@@ -234,8 +234,8 @@ Verify the database uses a writer+reader connection model with WAL mode and busy
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | max_parallel Config Round-Trip via YAML and Serde | PASS | 2026-03-20 | | max_parallel in WorkflowConfig/WorkflowStepConfig; 23 serde tests pass |
-| 2 | ScopeSegment Resolves max_parallel From Step and Plan | PASS | 2026-03-20 | | build_segments 5/5 pass; scope_segment/parallel 0 filtered (core covered) |
+| 1 | max_parallel Config Round-Trip via YAML and Serde | PASS | 2026-03-20 | | max_parallel in WorkflowConfig/WorkflowStepConfig (workflow.rs:67,175; execution.rs:73,197); 23 serde tests pass. Doc path `crates/orchestrator-config/src/config/execution.rs` is wrong — correct: `crates/orchestrator-config/src/config/execution.rs` |
+| 2 | ScopeSegment Resolves max_parallel From Step and Plan | PASS | 2026-03-20 | | build_segments 5/5 pass; `scope_segment`/`parallel` test filters return 0 (patterns not present in current codebase — doc drift) |
 | 3 | RunningTask::fork() Shares Stop Flag | PASS | 2026-03-20 | | fork() uses Arc::clone for stop_flag, new child slot; 4/4 tests pass |
 | 4 | Sequential Path Unchanged When max_parallel Absent | SKIP | 2026-03-18 | | Unsafe: requires live task execution (orchestrator task create/start) |
-| 5 | Database Connection Model and WAL Configuration | PASS | 2026-03-20 | | 2-conn model (writer+reader); SQLITE_BUSY_TIMEOUT_MS=5000; test passes |
+| 5 | Database Connection Model and WAL Configuration | PASS | 2026-03-20 | | 2-conn model (writer+reader); SQLITE_BUSY_TIMEOUT_MS=5000; 2/2 tests pass |
