@@ -1,0 +1,31 @@
+[package]
+name = "orchestrator-gui"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+orchestrator-proto = { path = "../proto" }
+tauri = { version = "2", features = ["rustls-tls"] }
+tonic = { version = "0.14", features = ["tls-native-roots", "tls-ring"] }
+tokio = { version = "1.44", features = ["macros", "rt-multi-thread", "sync", "signal"] }
+tokio-util = "0.7"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yml = "0.0.12"
+anyhow = "1.0"
+tower = "0.5"
+hyper-util = "0.1"
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[build-dependencies]
+tauri-build = "2"
+
+[lib]
+name = "orchestrator_gui_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "orchestrator-gui"
+path = "src/main.rs"

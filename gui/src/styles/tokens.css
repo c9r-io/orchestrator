@@ -1,0 +1,190 @@
+/* Liquid Glass Design System — imported from docs/design-system.md */
+
+:root {
+  --bg-primary: #f2f2f7;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #e5e5ea;
+
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-bg-hover: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.5);
+  --glass-border-subtle: rgba(0, 0, 0, 0.06);
+  --glass-shadow: rgba(0, 0, 0, 0.08);
+  --glass-shadow-strong: rgba(0, 0, 0, 0.15);
+  --glass-highlight: rgba(255, 255, 255, 0.9);
+  --glass-illumination: rgba(255, 255, 255, 0.4);
+
+  --text-primary: #1d1d1f;
+  --text-secondary: #86868b;
+  --text-tertiary: #aeaeb2;
+  --text-inverse: #ffffff;
+
+  --accent: #007aff;
+  --accent-tint: rgba(0, 122, 255, 0.12);
+  --danger: #ff3b30;
+  --danger-tint: rgba(255, 59, 48, 0.12);
+  --success: #34c759;
+  --warning: #ff9500;
+}
+
+[data-theme="dark"] {
+  --bg-primary: #000000;
+  --bg-secondary: #1c1c1e;
+  --bg-tertiary: #2c2c2e;
+
+  --glass-bg: rgba(44, 44, 46, 0.65);
+  --glass-bg-hover: rgba(58, 58, 60, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-border-subtle: rgba(255, 255, 255, 0.05);
+  --glass-shadow: rgba(0, 0, 0, 0.4);
+  --glass-shadow-strong: rgba(0, 0, 0, 0.6);
+  --glass-highlight: rgba(255, 255, 255, 0.15);
+  --glass-illumination: rgba(255, 255, 255, 0.05);
+
+  --text-primary: #ffffff;
+  --text-secondary: #98989d;
+  --text-tertiary: #636366;
+  --text-inverse: #000000;
+
+  --accent-tint: rgba(0, 122, 255, 0.2);
+  --danger-tint: rgba(255, 59, 48, 0.2);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+}
+
+.liquid-glass {
+  position: relative;
+  background: var(--glass-bg);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  box-shadow:
+    0 8px 32px var(--glass-shadow),
+    inset 0 1px 0 var(--glass-highlight),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.05);
+  padding: 20px;
+  transition: all 0.2s ease;
+}
+
+.liquid-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, var(--glass-illumination) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.liquid-glass:hover {
+  background: var(--glass-bg-hover);
+  box-shadow:
+    0 12px 40px var(--glass-shadow-strong),
+    inset 0 1px 0 var(--glass-highlight),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.05);
+  transform: translateY(-2px);
+}
+
+@supports not (backdrop-filter: blur(24px)) {
+  .liquid-glass {
+    background: var(--bg-secondary);
+  }
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border-radius: 12px;
+  border: none;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--text-inverse);
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+.btn-secondary {
+  background: var(--glass-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--glass-border-subtle);
+}
+
+.btn-destructive {
+  background: var(--danger);
+  color: var(--text-inverse);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.btn-ghost:hover {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+/* Status badges */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.badge-success {
+  background: rgba(52, 199, 89, 0.15);
+  color: var(--success);
+}
+
+.badge-warning {
+  background: rgba(255, 149, 0, 0.15);
+  color: var(--warning);
+}
+
+.badge-danger {
+  background: var(--danger-tint);
+  color: var(--danger);
+}
+
+.badge-info {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+/* Layout */
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.page-title {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 20px;
+}

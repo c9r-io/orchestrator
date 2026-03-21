@@ -1,0 +1,31 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicegui-project/Tauri/dev/crates/tauri-utils/schema.json",
+  "productName": "Orchestrator GUI",
+  "version": "0.1.0",
+  "identifier": "io.c9r.orchestrator-gui",
+  "build": {
+    "frontendDist": "../../gui/dist",
+    "devUrl": "http://localhost:5173"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Orchestrator",
+        "width": 1200,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.png"
+    ]
+  }
+}

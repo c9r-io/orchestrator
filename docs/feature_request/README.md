@@ -49,7 +49,7 @@
 | FR-060 | 减少 QA 场景中的不安全操作 | P1 | In Progress |
 | FR-061 | Daemon 日志环境变量覆盖 | P2 | Closed |
 | FR-062 | Agent Health 状态可观测性 | P2 | Closed |
-| FR-063 | GUI 架构设计 — Tauri + gRPC 安全客户端 | P1 | Proposed |
+| FR-063 | GUI 架构设计 — Tauri + gRPC 安全客户端 | P1 | Closed |
 | FR-064 | GUI 用户界面设计 — 许愿池 + 进度观察 | P1 | Proposed |
 | FR-065 | Agent 间通信接口草案 — Mailbox + Session Control Plane | P1 | Closed |
 
@@ -120,3 +120,4 @@
 - FR-061 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/71-logging-env-var-override.md` 与 `docs/qa/orchestrator/113-logging-env-var-override.md` 承载
 - FR-062 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/72-agent-health-state-observability.md` 与 `docs/qa/orchestrator/114-agent-health-state-observability.md` 承载
 - FR-065 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/75-agent-mailbox-session-communication.md` 与 `docs/qa/orchestrator/115-agent-mailbox-session-communication.md` 承载
+- FR-063 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/73-gui-architecture-tauri-grpc.md` 与 `docs/qa/orchestrator/116-gui-architecture-tauri-grpc.md` 承载
