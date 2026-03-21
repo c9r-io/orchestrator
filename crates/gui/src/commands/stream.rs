@@ -63,3 +63,87 @@ pub async fn stop_task_follow(
     state.cancel_stream(&task_id).await;
     Ok(())
 }
+
+/// Snapshot of a task's current state, emitted by TaskWatch streaming.
+#[derive(Debug, Clone, Serialize)]
+pub struct WatchSnapshot {
+    pub task: super::task::TaskSummary,
+    pub items: Vec<super::task::TaskItemSummary>,
+}
+
+/// Start watching task status updates via Tauri events.
+///
+/// Each snapshot is emitted as a `task-watch-{task_id}` event.
+#[tauri::command]
+pub async fn start_task_watch(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    task_id: String,
+    interval_secs: Option<u64>,
+) -> Result<(), String> {
+    let mut client = state.client().await?;
+    let resp = client
+        .task_watch(orchestrator_proto::TaskWatchRequest {
+            task_id: task_id.clone(),
+            interval_secs: interval_secs.unwrap_or(2),
+            timeout_secs: 0, // no timeout
+        })
+        .await
+        .map_err(|e| e.message().to_string())?;
+
+    let mut stream = resp.into_inner();
+    let watch_key = format!("watch-{}", task_id);
+    let cancel = state.register_stream(&watch_key).await;
+    let event_name = format!("task-watch-{}", task_id);
+
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::select! {
+                msg = stream.message() => {
+                    match msg {
+                        Ok(Some(snapshot)) => {
+                            let task = snapshot.task.map(|t| super::task::TaskSummary {
+                                id: t.id,
+                                name: t.name,
+                                status: t.status,
+                                total_items: t.total_items,
+                                finished_items: t.finished_items,
+                                failed_items: t.failed_items,
+                                created_at: t.created_at,
+                                updated_at: t.updated_at,
+                            });
+                            if let Some(task) = task {
+                                let items: Vec<_> = snapshot.items.into_iter().map(|i| {
+                                    super::task::TaskItemSummary {
+                                        id: i.id,
+                                        qa_file_path: i.qa_file_path,
+                                        status: i.status,
+                                        order_no: i.order_no,
+                                    }
+                                }).collect();
+                                let payload = WatchSnapshot { task, items };
+                                let _ = app.emit(&event_name, &payload);
+                            }
+                        }
+                        Ok(None) => break,
+                        Err(_) => break,
+                    }
+                }
+                _ = cancel.cancelled() => break,
+            }
+        }
+    });
+
+    Ok(())
+}
+
+/// Stop watching task status updates.
+#[tauri::command]
+pub async fn stop_task_watch(
+    state: State<'_, AppState>,
+    task_id: String,
+) -> Result<(), String> {
+    let watch_key = format!("watch-{}", task_id);
+    state.cancel_stream(&watch_key).await;
+    Ok(())
+}

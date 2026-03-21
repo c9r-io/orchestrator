@@ -1,7 +1,12 @@
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo, useState, useCallback } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useGrpc } from "../hooks/useGrpc";
 import { useStream } from "../hooks/useStream";
 import { useRole } from "../hooks/useRole";
+import ProgressBar from "../components/ProgressBar";
+import StatusIcon from "../components/StatusIcon";
+import ConfirmDialog from "../components/ConfirmDialog";
+import ExpertPanel from "../components/ExpertPanel";
 import type { TaskDetail as TaskDetailType, LogLine } from "../lib/types";
 
 interface Props {
@@ -13,6 +18,10 @@ export default function TaskDetail({ taskId, onBack }: Props) {
   const { data, error, call } = useGrpc<TaskDetailType>("task_info");
   const { canAccess } = useRole();
   const logEndRef = useRef<HTMLDivElement>(null);
+  const [expert, setExpert] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
+  const [actionErr, setActionErr] = useState<string | null>(null);
 
   const streamParams = useMemo(() => ({ task_id: taskId }), [taskId]);
   const { data: logs, active, start, stop } = useStream<LogLine>(
@@ -22,143 +31,236 @@ export default function TaskDetail({ taskId, onBack }: Props) {
     streamParams
   );
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     call({ task_id: taskId });
   }, [call, taskId]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
 
   // Auto-scroll log viewer.
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
+  // Keyboard shortcuts.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "e") {
+        e.preventDefault();
+        setExpert((v) => !v);
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
+
+  const doAction = async (cmd: string, params: Record<string, unknown>) => {
+    setActionErr(null);
+    setActionMsg(null);
+    try {
+      const result = await invoke<{ message: string }>(cmd, params);
+      setActionMsg(result.message);
+      reload();
+    } catch (e) {
+      setActionErr(typeof e === "string" ? e : String(e));
+    }
+  };
+
+  const handlePause = () => doAction("task_pause", { task_id: taskId });
+  const handleResume = () => doAction("task_resume", { task_id: taskId });
+  const handleDelete = async () => {
+    setShowDelete(false);
+    await doAction("task_delete", { task_id: taskId, force: true });
+    onBack();
+  };
+
+  const isRunning = data?.status.toLowerCase() === "running" || data?.status.toLowerCase() === "in_progress";
+  const isPaused = data?.status.toLowerCase() === "paused";
+  const isFailed = data?.status.toLowerCase() === "failed" || data?.status.toLowerCase() === "error";
+
   return (
     <div>
-      <button className="btn btn-ghost" onClick={onBack} style={{ marginBottom: 12 }}>
-        &larr; Back
-      </button>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <button className="btn btn-ghost" onClick={onBack} aria-label="返回列表">
+          &larr; 返回
+        </button>
+        <span style={{ flex: 1 }} />
 
-      {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
+        {/* Action buttons */}
+        {canAccess("operator") && (
+          <>
+            {isRunning && (
+              <button className="btn btn-secondary" onClick={handlePause} aria-label="暂停任务">
+                暂停
+              </button>
+            )}
+            {isPaused && (
+              <button className="btn btn-secondary" onClick={handleResume} aria-label="恢复任务">
+                恢复
+              </button>
+            )}
+            {isFailed && data?.items.some((i) => i.status.toLowerCase() === "failed") && (
+              <button
+                className="btn btn-secondary"
+                onClick={() => {
+                  const failedItem = data.items.find((i) => i.status.toLowerCase() === "failed");
+                  if (failedItem) doAction("task_retry", { task_item_id: failedItem.id });
+                }}
+                aria-label="重试失败项"
+              >
+                重试
+              </button>
+            )}
+          </>
+        )}
 
-      {data && (
-        <div className="liquid-glass" style={{ marginBottom: 16 }}>
-          <h2 style={{ marginBottom: 12 }}>{data.name || data.id}</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            <div>
-              <span style={{ color: "var(--text-secondary)", fontSize: 13 }}>Status</span>
-              <p>{data.status}</p>
-            </div>
-            <div>
-              <span style={{ color: "var(--text-secondary)", fontSize: 13 }}>Progress</span>
-              <p>{data.total_items > 0 ? `${data.finished_items}/${data.total_items}` : "-"}</p>
-            </div>
-            <div>
-              <span style={{ color: "var(--text-secondary)", fontSize: 13 }}>Created</span>
-              <p>{data.created_at}</p>
-            </div>
-            <div>
-              <span style={{ color: "var(--text-secondary)", fontSize: 13 }}>Updated</span>
-              <p>{data.updated_at}</p>
-            </div>
-          </div>
-          {data.goal && (
-            <div style={{ marginTop: 12 }}>
-              <span style={{ color: "var(--text-secondary)", fontSize: 13 }}>Goal</span>
-              <p>{data.goal}</p>
-            </div>
-          )}
-
-          {data.items.length > 0 && (
-            <>
-              <h3 style={{ marginTop: 16, marginBottom: 8 }}>Items</h3>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr>
-                    <th style={thStyle}>#</th>
-                    <th style={thStyle}>File</th>
-                    <th style={thStyle}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.items.map((item) => (
-                    <tr key={item.id}>
-                      <td style={tdStyle}>{item.order_no}</td>
-                      <td style={tdStyle}>{item.qa_file_path}</td>
-                      <td style={tdStyle}>{item.status}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Log Streaming */}
-      <div className="liquid-glass">
-        <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
-          <h3 style={{ flex: 1 }}>Live Logs</h3>
-          {!active ? (
-            <button className="btn btn-primary" onClick={start}>
-              Follow
-            </button>
-          ) : (
-            <button className="btn btn-secondary" onClick={stop}>
-              Stop
-            </button>
-          )}
-        </div>
-
-        <div
-          style={{
-            background: "var(--bg-secondary)",
-            borderRadius: 12,
-            padding: 12,
-            maxHeight: 400,
-            overflowY: "auto",
-            fontFamily: "monospace",
-            fontSize: 13,
-            lineHeight: 1.6,
-          }}
+        <button
+          className={`btn ${expert ? "btn-primary" : "btn-ghost"}`}
+          onClick={() => setExpert((v) => !v)}
+          aria-label="切换专家模式 (Cmd+E)"
         >
-          {logs.length === 0 && (
-            <p style={{ color: "var(--text-tertiary)" }}>
-              {active ? "Waiting for log output..." : "Click Follow to stream logs."}
-            </p>
-          )}
-          {logs.map((log, i) => (
-            <div key={i}>
-              <span style={{ color: "var(--text-tertiary)", marginRight: 8 }}>
-                {log.timestamp}
-              </span>
-              <span>{log.line}</span>
-            </div>
-          ))}
-          <div ref={logEndRef} />
-        </div>
+          {expert ? "专家 ✓" : "专家"}
+        </button>
+
+        {canAccess("admin") && (
+          <button
+            className="btn btn-destructive"
+            onClick={() => setShowDelete(true)}
+            aria-label="删除任务"
+          >
+            删除
+          </button>
+        )}
       </div>
 
-      {/* RBAC-gated actions */}
-      {canAccess("operator") && (
-        <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
-          <button className="btn btn-secondary">Pause</button>
-          <button className="btn btn-secondary">Resume</button>
-          {canAccess("admin") && (
-            <button className="btn btn-destructive">Delete</button>
+      {/* Status messages */}
+      {actionMsg && <p style={{ color: "var(--success)", fontSize: 13, marginBottom: 8 }}>{actionMsg}</p>}
+      {actionErr && <p style={{ color: "var(--danger)", fontSize: 13, marginBottom: 8 }}>{actionErr}</p>}
+      {error && <p style={{ color: "var(--danger)", marginBottom: 8 }}>{error}</p>}
+
+      {data && (
+        <>
+          {/* Task info card */}
+          <div className="liquid-glass" style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <StatusIcon status={data.status} />
+              <h2 style={{ flex: 1, fontSize: 18 }}>{data.name || data.id}</h2>
+            </div>
+
+            {data.total_items > 0 && (
+              <ProgressBar finished={data.finished_items} total={data.total_items} />
+            )}
+
+            {data.goal && (
+              <p style={{ marginTop: 8, color: "var(--text-secondary)", fontSize: 14 }}>
+                {data.goal}
+              </p>
+            )}
+
+            {/* Items list */}
+            {data.items.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <h3 style={{ fontSize: 14, marginBottom: 8, color: "var(--text-secondary)" }}>
+                  步骤进度
+                </h3>
+                {data.items.map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "4px 0",
+                      borderBottom: "1px solid var(--glass-border-subtle)",
+                      fontSize: 13,
+                    }}
+                  >
+                    <span style={{ color: "var(--text-tertiary)", minWidth: 24 }}>
+                      {item.order_no}.
+                    </span>
+                    <StatusIcon status={item.status} size="sm" />
+                    <span
+                      style={{
+                        flex: 1,
+                        color:
+                          item.status.toLowerCase() === "running"
+                            ? "var(--accent)"
+                            : "var(--text-primary)",
+                      }}
+                    >
+                      {item.qa_file_path || `Item ${item.order_no}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Expert mode panel OR log streaming */}
+          {expert ? (
+            <ExpertPanel taskDetail={data} />
+          ) : (
+            <div className="liquid-glass">
+              <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
+                <h3 style={{ flex: 1 }}>实时日志</h3>
+                {!active ? (
+                  <button className="btn btn-primary" onClick={start} aria-label="开始追踪日志">
+                    追踪
+                  </button>
+                ) : (
+                  <button className="btn btn-secondary" onClick={stop} aria-label="停止追踪日志">
+                    停止
+                  </button>
+                )}
+              </div>
+
+              <div
+                role="log"
+                aria-label="任务实时日志"
+                aria-live="polite"
+                style={{
+                  background: "var(--bg-secondary)",
+                  borderRadius: 12,
+                  padding: 12,
+                  maxHeight: 400,
+                  overflowY: "auto",
+                  fontFamily: "monospace",
+                  fontSize: 13,
+                  lineHeight: 1.6,
+                }}
+              >
+                {logs.length === 0 && (
+                  <p style={{ color: "var(--text-tertiary)" }}>
+                    {active ? "等待日志输出..." : "点击「追踪」开始接收日志流。"}
+                  </p>
+                )}
+                {logs.map((log, i) => (
+                  <div key={i}>
+                    <span style={{ color: "var(--text-tertiary)", marginRight: 8 }}>
+                      {log.timestamp}
+                    </span>
+                    <span>{log.line}</span>
+                  </div>
+                ))}
+                <div ref={logEndRef} />
+              </div>
+            </div>
           )}
-        </div>
+        </>
       )}
+
+      <ConfirmDialog
+        open={showDelete}
+        title="删除任务"
+        message="确定要删除这个任务吗？此操作不可撤销。"
+        confirmLabel="确认删除"
+        destructive
+        onConfirm={handleDelete}
+        onCancel={() => setShowDelete(false)}
+      />
     </div>
   );
 }
-
-const thStyle: React.CSSProperties = {
-  padding: "8px 12px",
-  textAlign: "left",
-  color: "var(--text-secondary)",
-  fontSize: 12,
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: "6px 12px",
-  fontSize: 13,
-};

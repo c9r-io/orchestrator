@@ -1,17 +1,20 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { RoleContext, hasAccess } from "./hooks/useRole";
 import type { Role } from "./lib/types";
 import ConnectionStatus from "./pages/ConnectionStatus";
-import TaskList from "./pages/TaskList";
+import WishPool from "./pages/WishPool";
+import WishDetail from "./pages/WishDetail";
+import ProgressList from "./pages/ProgressList";
 import TaskDetail from "./pages/TaskDetail";
 
-type Tab = "status" | "tasks";
+type Tab = "wishes" | "progress";
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>("status");
+  const [tab, setTab] = useState<Tab>("wishes");
   const [role, setRole] = useState<Role | null>(null);
   const [connected, setConnected] = useState(false);
+  const [selectedWishId, setSelectedWishId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   // Auto-connect on mount.
@@ -28,6 +31,31 @@ export default function App() {
     })();
   }, []);
 
+  // Keyboard shortcuts.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey) {
+        if (e.key === "1") {
+          e.preventDefault();
+          setTab("wishes");
+          setSelectedWishId(null);
+          setSelectedTaskId(null);
+        } else if (e.key === "2") {
+          e.preventDefault();
+          setTab("progress");
+          setSelectedWishId(null);
+          setSelectedTaskId(null);
+        }
+      }
+      if (e.key === "Escape") {
+        if (selectedWishId) setSelectedWishId(null);
+        else if (selectedTaskId) setSelectedTaskId(null);
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [selectedWishId, selectedTaskId]);
+
   const roleCtx = useMemo(
     () => ({
       role,
@@ -36,41 +64,83 @@ export default function App() {
     [role]
   );
 
+  // When a wish is confirmed, navigate to the progress tab with the new task.
+  const handleWishConfirmed = useCallback((newTaskId: string) => {
+    setTab("progress");
+    setSelectedWishId(null);
+    setSelectedTaskId(newTaskId);
+  }, []);
+
+  // Show connection status if not connected.
+  if (!connected) {
+    return (
+      <RoleContext.Provider value={roleCtx}>
+        <div className="page">
+          <ConnectionStatus connected={false} />
+        </div>
+      </RoleContext.Provider>
+    );
+  }
+
   return (
     <RoleContext.Provider value={roleCtx}>
       <div className="page">
-        <nav style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+        {/* Navigation */}
+        <nav
+          style={{ display: "flex", gap: 8, marginBottom: 20, alignItems: "center" }}
+          aria-label="主导航"
+        >
           <button
-            className={`btn ${tab === "status" ? "btn-primary" : "btn-ghost"}`}
-            onClick={() => { setTab("status"); setSelectedTaskId(null); }}
+            className={`btn ${tab === "wishes" ? "btn-primary" : "btn-ghost"}`}
+            onClick={() => {
+              setTab("wishes");
+              setSelectedWishId(null);
+              setSelectedTaskId(null);
+            }}
+            aria-label="许愿池 (Cmd+1)"
           >
-            Status
+            许愿池
           </button>
           <button
-            className={`btn ${tab === "tasks" ? "btn-primary" : "btn-ghost"}`}
-            onClick={() => { setTab("tasks"); setSelectedTaskId(null); }}
+            className={`btn ${tab === "progress" ? "btn-primary" : "btn-ghost"}`}
+            onClick={() => {
+              setTab("progress");
+              setSelectedWishId(null);
+              setSelectedTaskId(null);
+            }}
+            aria-label="进度观察 (Cmd+2)"
           >
-            Tasks
+            进度观察
           </button>
+
           {role && (
             <span
               className="badge badge-info"
-              style={{ marginLeft: "auto", alignSelf: "center" }}
+              style={{ marginLeft: "auto" }}
+              aria-label={`当前角色: ${role}`}
             >
               {role}
             </span>
           )}
         </nav>
 
-        {tab === "status" && (
-          <ConnectionStatus connected={connected} />
+        {/* Wish Pool tab */}
+        {tab === "wishes" && !selectedWishId && (
+          <WishPool onSelectWish={(id) => setSelectedWishId(id)} />
+        )}
+        {tab === "wishes" && selectedWishId && (
+          <WishDetail
+            taskId={selectedWishId}
+            onBack={() => setSelectedWishId(null)}
+            onConfirmed={handleWishConfirmed}
+          />
         )}
 
-        {tab === "tasks" && !selectedTaskId && (
-          <TaskList onSelect={(id) => setSelectedTaskId(id)} />
+        {/* Progress Observer tab */}
+        {tab === "progress" && !selectedTaskId && (
+          <ProgressList onSelect={(id) => setSelectedTaskId(id)} />
         )}
-
-        {tab === "tasks" && selectedTaskId && (
+        {tab === "progress" && selectedTaskId && (
           <TaskDetail
             taskId={selectedTaskId}
             onBack={() => setSelectedTaskId(null)}

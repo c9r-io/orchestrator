@@ -70,6 +70,150 @@ pub async fn task_list(
     Ok(tasks)
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct TaskCreateResult {
+    pub task_id: String,
+    pub status: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TaskActionResult {
+    pub message: String,
+}
+
+/// Create a new task (wish pool → FR drafting or development).
+#[tauri::command]
+pub async fn task_create(
+    state: State<'_, AppState>,
+    name: Option<String>,
+    goal: Option<String>,
+    project_id: Option<String>,
+    workspace_id: Option<String>,
+    workflow_id: Option<String>,
+    target_files: Option<Vec<String>>,
+    no_start: Option<bool>,
+) -> Result<TaskCreateResult, String> {
+    let mut client = state.client().await?;
+    let resp = client
+        .task_create(orchestrator_proto::TaskCreateRequest {
+            name,
+            goal,
+            project_id,
+            workspace_id,
+            workflow_id,
+            target_files: target_files.unwrap_or_default(),
+            no_start: no_start.unwrap_or(false),
+        })
+        .await
+        .map_err(|e| e.message().to_string())?;
+    let inner = resp.into_inner();
+    Ok(TaskCreateResult {
+        task_id: inner.task_id,
+        status: inner.status,
+        message: inner.message,
+    })
+}
+
+/// Start a pending task.
+#[tauri::command]
+pub async fn task_start(
+    state: State<'_, AppState>,
+    task_id: Option<String>,
+    latest: Option<bool>,
+) -> Result<TaskCreateResult, String> {
+    let mut client = state.client().await?;
+    let resp = client
+        .task_start(orchestrator_proto::TaskStartRequest {
+            task_id,
+            latest: latest.unwrap_or(false),
+        })
+        .await
+        .map_err(|e| e.message().to_string())?;
+    let inner = resp.into_inner();
+    Ok(TaskCreateResult {
+        task_id: inner.task_id,
+        status: inner.status,
+        message: inner.message,
+    })
+}
+
+/// Pause a running task (operator+).
+#[tauri::command]
+pub async fn task_pause(
+    state: State<'_, AppState>,
+    task_id: String,
+) -> Result<TaskActionResult, String> {
+    let mut client = state.client().await?;
+    let resp = client
+        .task_pause(orchestrator_proto::TaskPauseRequest { task_id })
+        .await
+        .map_err(|e| e.message().to_string())?;
+    Ok(TaskActionResult {
+        message: resp.into_inner().message,
+    })
+}
+
+/// Resume a paused task (operator+).
+#[tauri::command]
+pub async fn task_resume(
+    state: State<'_, AppState>,
+    task_id: String,
+    reset_blocked: Option<bool>,
+) -> Result<TaskActionResult, String> {
+    let mut client = state.client().await?;
+    let resp = client
+        .task_resume(orchestrator_proto::TaskResumeRequest {
+            task_id,
+            reset_blocked: reset_blocked.unwrap_or(false),
+        })
+        .await
+        .map_err(|e| e.message().to_string())?;
+    Ok(TaskActionResult {
+        message: resp.into_inner().message,
+    })
+}
+
+/// Retry a failed task item (operator+).
+#[tauri::command]
+pub async fn task_retry(
+    state: State<'_, AppState>,
+    task_item_id: String,
+    force: Option<bool>,
+) -> Result<TaskActionResult, String> {
+    let mut client = state.client().await?;
+    let resp = client
+        .task_retry(orchestrator_proto::TaskRetryRequest {
+            task_item_id,
+            force: force.unwrap_or(false),
+        })
+        .await
+        .map_err(|e| e.message().to_string())?;
+    Ok(TaskActionResult {
+        message: resp.into_inner().message,
+    })
+}
+
+/// Delete a task (admin).
+#[tauri::command]
+pub async fn task_delete(
+    state: State<'_, AppState>,
+    task_id: String,
+    force: Option<bool>,
+) -> Result<TaskActionResult, String> {
+    let mut client = state.client().await?;
+    let resp = client
+        .task_delete(orchestrator_proto::TaskDeleteRequest {
+            task_id,
+            force: force.unwrap_or(false),
+        })
+        .await
+        .map_err(|e| e.message().to_string())?;
+    Ok(TaskActionResult {
+        message: resp.into_inner().message,
+    })
+}
+
 /// Get detailed info for a single task.
 #[tauri::command]
 pub async fn task_info(

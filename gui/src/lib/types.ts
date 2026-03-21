@@ -37,9 +37,24 @@ export interface TaskItemSummary {
   order_no: number;
 }
 
+export interface TaskCreateResult {
+  task_id: string;
+  status: string;
+  message: string;
+}
+
+export interface TaskActionResult {
+  message: string;
+}
+
 export interface LogLine {
   line: string;
   timestamp: string;
+}
+
+export interface WatchSnapshot {
+  task: TaskSummary;
+  items: TaskItemSummary[];
 }
 
 export interface ResourceResult {
@@ -63,3 +78,6 @@ export interface StoreEntry {
 }
 
 export type Role = "read_only" | "operator" | "admin";
+
+/** Wish status derived from task status + workflow context. */
+export type WishStatus = "drafting" | "pending_confirm" | "confirmed" | "failed" | "cancelled";

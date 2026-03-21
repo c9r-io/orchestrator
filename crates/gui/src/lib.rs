@@ -16,9 +16,17 @@ pub fn run() {
             // task
             commands::task::task_list,
             commands::task::task_info,
+            commands::task::task_create,
+            commands::task::task_start,
+            commands::task::task_pause,
+            commands::task::task_resume,
+            commands::task::task_retry,
+            commands::task::task_delete,
             // streaming
             commands::stream::start_task_follow,
             commands::stream::stop_task_follow,
+            commands::stream::start_task_watch,
+            commands::stream::stop_task_watch,
             // resource
             commands::resource::resource_get,
             commands::resource::resource_describe,
