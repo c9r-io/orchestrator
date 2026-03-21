@@ -1,6 +1,8 @@
 use serde::Serialize;
 use tauri::State;
 
+use std::sync::Arc;
+
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize)]
@@ -19,7 +21,7 @@ pub struct EventStatsResult {
 /// Clean up old events (admin).
 #[tauri::command]
 pub async fn event_cleanup(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     older_than_days: u32,
     dry_run: Option<bool>,
     archive: Option<bool>,
@@ -32,7 +34,7 @@ pub async fn event_cleanup(
             archive: archive.unwrap_or(false),
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     let inner = resp.into_inner();
     Ok(CleanupResult {
         affected_count: inner.affected_count,
@@ -42,12 +44,12 @@ pub async fn event_cleanup(
 
 /// Get event statistics (read_only+).
 #[tauri::command]
-pub async fn event_stats(state: State<'_, AppState>) -> Result<EventStatsResult, String> {
+pub async fn event_stats(state: State<'_, Arc<AppState>>) -> Result<EventStatsResult, String> {
     let mut client = state.client().await?;
     let resp = client
         .event_stats(orchestrator_proto::EventStatsRequest {})
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     let inner = resp.into_inner();
     Ok(EventStatsResult {
         total_rows: inner.total_rows,

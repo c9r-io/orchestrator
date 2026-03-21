@@ -1,6 +1,8 @@
 use serde::Serialize;
 use tauri::State;
 
+use std::sync::Arc;
+
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize)]
@@ -15,14 +17,14 @@ pub struct AgentInfo {
 
 /// List all registered agents (read_only+).
 #[tauri::command]
-pub async fn agent_list(state: State<'_, AppState>) -> Result<Vec<AgentInfo>, String> {
+pub async fn agent_list(state: State<'_, Arc<AppState>>) -> Result<Vec<AgentInfo>, String> {
     let mut client = state.client().await?;
     let resp = client
         .agent_list(orchestrator_proto::AgentListRequest {
             project_id: None,
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
 
     let agents = resp
         .into_inner()
@@ -43,7 +45,7 @@ pub async fn agent_list(state: State<'_, AppState>) -> Result<Vec<AgentInfo>, St
 /// Cordon an agent (admin).
 #[tauri::command]
 pub async fn agent_cordon(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     agent_name: String,
 ) -> Result<String, String> {
     let mut client = state.client().await?;
@@ -53,14 +55,14 @@ pub async fn agent_cordon(
             project_id: None,
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     Ok(resp.into_inner().message)
 }
 
 /// Uncordon an agent (admin).
 #[tauri::command]
 pub async fn agent_uncordon(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     agent_name: String,
 ) -> Result<String, String> {
     let mut client = state.client().await?;
@@ -70,14 +72,14 @@ pub async fn agent_uncordon(
             project_id: None,
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     Ok(resp.into_inner().message)
 }
 
 /// Drain an agent (admin).
 #[tauri::command]
 pub async fn agent_drain(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     agent_name: String,
 ) -> Result<String, String> {
     let mut client = state.client().await?;
@@ -88,6 +90,6 @@ pub async fn agent_drain(
             timeout_secs: None,
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     Ok(resp.into_inner().message)
 }

@@ -1,6 +1,8 @@
 use serde::Serialize;
 use tauri::State;
 
+use std::sync::Arc;
+
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize)]
@@ -19,7 +21,7 @@ pub struct ExportResult {
 /// Validate a YAML manifest (operator+).
 #[tauri::command]
 pub async fn manifest_validate(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     content: String,
     project_id: Option<String>,
 ) -> Result<ValidateResult, String> {
@@ -30,7 +32,7 @@ pub async fn manifest_validate(
             project_id,
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     let inner = resp.into_inner();
     Ok(ValidateResult {
         valid: inner.valid,
@@ -42,7 +44,7 @@ pub async fn manifest_validate(
 /// Export all resources as YAML or JSON (read_only+).
 #[tauri::command]
 pub async fn manifest_export(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     output_format: Option<String>,
 ) -> Result<ExportResult, String> {
     let mut client = state.client().await?;
@@ -51,7 +53,7 @@ pub async fn manifest_export(
             output_format: output_format.unwrap_or_else(|| "yaml".into()),
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     let inner = resp.into_inner();
     Ok(ExportResult {
         content: inner.content,

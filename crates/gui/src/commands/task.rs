@@ -1,6 +1,8 @@
 use serde::Serialize;
 use tauri::State;
 
+use std::sync::Arc;
+
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize)]
@@ -45,7 +47,7 @@ pub struct TaskItemSummary {
 /// List all tasks with optional status filter.
 #[tauri::command]
 pub async fn task_list(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     status_filter: Option<String>,
     project_filter: Option<String>,
 ) -> Result<Vec<TaskSummary>, String> {
@@ -56,7 +58,7 @@ pub async fn task_list(
             project_filter,
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
 
     let tasks = resp
         .into_inner()
@@ -94,7 +96,7 @@ pub struct TaskActionResult {
 /// Create a new task (wish pool → FR drafting or development).
 #[tauri::command]
 pub async fn task_create(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     name: Option<String>,
     goal: Option<String>,
     project_id: Option<String>,
@@ -115,7 +117,7 @@ pub async fn task_create(
             no_start: no_start.unwrap_or(false),
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     let inner = resp.into_inner();
     Ok(TaskCreateResult {
         task_id: inner.task_id,
@@ -127,7 +129,7 @@ pub async fn task_create(
 /// Start a pending task.
 #[tauri::command]
 pub async fn task_start(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     task_id: Option<String>,
     latest: Option<bool>,
 ) -> Result<TaskCreateResult, String> {
@@ -138,7 +140,7 @@ pub async fn task_start(
             latest: latest.unwrap_or(false),
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     let inner = resp.into_inner();
     Ok(TaskCreateResult {
         task_id: inner.task_id,
@@ -150,14 +152,14 @@ pub async fn task_start(
 /// Pause a running task (operator+).
 #[tauri::command]
 pub async fn task_pause(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     task_id: String,
 ) -> Result<TaskActionResult, String> {
     let mut client = state.client().await?;
     let resp = client
         .task_pause(orchestrator_proto::TaskPauseRequest { task_id })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     Ok(TaskActionResult {
         message: resp.into_inner().message,
     })
@@ -166,7 +168,7 @@ pub async fn task_pause(
 /// Resume a paused task (operator+).
 #[tauri::command]
 pub async fn task_resume(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     task_id: String,
     reset_blocked: Option<bool>,
 ) -> Result<TaskActionResult, String> {
@@ -177,7 +179,7 @@ pub async fn task_resume(
             reset_blocked: reset_blocked.unwrap_or(false),
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     Ok(TaskActionResult {
         message: resp.into_inner().message,
     })
@@ -186,7 +188,7 @@ pub async fn task_resume(
 /// Retry a failed task item (operator+).
 #[tauri::command]
 pub async fn task_retry(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     task_item_id: String,
     force: Option<bool>,
 ) -> Result<TaskActionResult, String> {
@@ -197,7 +199,7 @@ pub async fn task_retry(
             force: force.unwrap_or(false),
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     Ok(TaskActionResult {
         message: resp.into_inner().message,
     })
@@ -206,7 +208,7 @@ pub async fn task_retry(
 /// Delete a task (admin).
 #[tauri::command]
 pub async fn task_delete(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     task_id: String,
     force: Option<bool>,
 ) -> Result<TaskActionResult, String> {
@@ -217,7 +219,7 @@ pub async fn task_delete(
             force: force.unwrap_or(false),
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     Ok(TaskActionResult {
         message: resp.into_inner().message,
     })
@@ -231,7 +233,7 @@ pub struct TaskTraceResult {
 /// Get task execution trace (read_only+).
 #[tauri::command]
 pub async fn task_trace(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     task_id: String,
     verbose: Option<bool>,
 ) -> Result<TaskTraceResult, String> {
@@ -242,7 +244,7 @@ pub async fn task_trace(
             verbose: verbose.unwrap_or(false),
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     Ok(TaskTraceResult {
         trace_json: resp.into_inner().trace_json,
     })
@@ -258,14 +260,14 @@ pub struct TaskRecoverResult {
 /// Recover a task from error state (operator+).
 #[tauri::command]
 pub async fn task_recover(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     task_id: String,
 ) -> Result<TaskRecoverResult, String> {
     let mut client = state.client().await?;
     let resp = client
         .task_recover(orchestrator_proto::TaskRecoverRequest { task_id })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     let inner = resp.into_inner();
     Ok(TaskRecoverResult {
         task_id: inner.task_id,
@@ -285,7 +287,7 @@ pub struct BulkDeleteResult {
 /// Bulk delete tasks (admin).
 #[tauri::command]
 pub async fn task_delete_bulk(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     task_ids: Option<Vec<String>>,
     force: Option<bool>,
     status_filter: Option<String>,
@@ -300,7 +302,7 @@ pub async fn task_delete_bulk(
             project_filter: project_filter.unwrap_or_default(),
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     let inner = resp.into_inner();
     Ok(BulkDeleteResult {
         deleted: inner.deleted,
@@ -313,14 +315,14 @@ pub async fn task_delete_bulk(
 /// Get detailed info for a single task.
 #[tauri::command]
 pub async fn task_info(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     task_id: String,
 ) -> Result<TaskDetail, String> {
     let mut client = state.client().await?;
     let resp = client
         .task_info(orchestrator_proto::TaskInfoRequest { task_id })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
 
     let inner = resp.into_inner();
     let task = inner.task.ok_or("task not found")?;

@@ -2,6 +2,8 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::client::TransportKind;
+use std::sync::Arc;
+
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize)]
@@ -14,7 +16,7 @@ pub struct PingInfo {
 /// Connect to the daemon (auto-discover or explicit config).
 #[tauri::command]
 pub async fn connect(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     config_path: Option<String>,
 ) -> Result<(), String> {
     state.connect(config_path.as_deref()).await
@@ -22,12 +24,12 @@ pub async fn connect(
 
 /// Ping the daemon and return version info.
 #[tauri::command]
-pub async fn ping(state: State<'_, AppState>) -> Result<PingInfo, String> {
+pub async fn ping(state: State<'_, Arc<AppState>>) -> Result<PingInfo, String> {
     let mut client = state.client().await?;
     let resp = client
         .ping(orchestrator_proto::PingRequest {})
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     let inner = resp.into_inner();
     Ok(PingInfo {
         version: inner.version,
@@ -45,7 +47,7 @@ pub async fn ping(state: State<'_, AppState>) -> Result<PingInfo, String> {
 ///   will return `InvalidArgument` for operators). If also `PermissionDenied`,
 ///   role is "read_only".
 #[tauri::command]
-pub async fn probe_role(state: State<'_, AppState>) -> Result<String, String> {
+pub async fn probe_role(state: State<'_, Arc<AppState>>) -> Result<String, String> {
     // Return cached role if available.
     if let Some(role) = state.get_role().await {
         return Ok(role);
@@ -86,7 +88,7 @@ pub async fn probe_role(state: State<'_, AppState>) -> Result<String, String> {
                 _ => "operator".into(),
             }
         }
-        Err(e) => return Err(format!("role probe failed: {}", e.message())),
+        Err(e) => return Err(crate::errors::humanize_grpc_error(&e)),
     };
 
     state.set_role(role.clone()).await;
@@ -103,7 +105,7 @@ pub struct CheckResult {
 /// Run preflight checks (read_only+).
 #[tauri::command]
 pub async fn check(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     workflow: Option<String>,
     project_id: Option<String>,
 ) -> Result<CheckResult, String> {
@@ -115,7 +117,7 @@ pub async fn check(
             project_id,
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     let inner = resp.into_inner();
     Ok(CheckResult {
         content: inner.content,
@@ -137,12 +139,12 @@ pub struct WorkerStatusResult {
 
 /// Get worker thread status (read_only+).
 #[tauri::command]
-pub async fn worker_status(state: State<'_, AppState>) -> Result<WorkerStatusResult, String> {
+pub async fn worker_status(state: State<'_, Arc<AppState>>) -> Result<WorkerStatusResult, String> {
     let mut client = state.client().await?;
     let resp = client
         .worker_status(orchestrator_proto::WorkerStatusRequest {})
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     let inner = resp.into_inner();
     Ok(WorkerStatusResult {
         pending_tasks: inner.pending_tasks,
@@ -166,12 +168,12 @@ pub struct DbStatusResult {
 
 /// Get database status (read_only+).
 #[tauri::command]
-pub async fn db_status(state: State<'_, AppState>) -> Result<DbStatusResult, String> {
+pub async fn db_status(state: State<'_, Arc<AppState>>) -> Result<DbStatusResult, String> {
     let mut client = state.client().await?;
     let resp = client
         .db_status(orchestrator_proto::DbStatusRequest {})
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     let inner = resp.into_inner();
     Ok(DbStatusResult {
         db_path: inner.db_path,
@@ -185,7 +187,7 @@ pub async fn db_status(state: State<'_, AppState>) -> Result<DbStatusResult, Str
 /// Gracefully shutdown the daemon (admin).
 #[tauri::command]
 pub async fn shutdown(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     graceful: Option<bool>,
 ) -> Result<String, String> {
     let mut client = state.client().await?;
@@ -194,7 +196,7 @@ pub async fn shutdown(
             graceful: graceful.unwrap_or(true),
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     Ok(resp.into_inner().message)
 }
 
@@ -207,14 +209,14 @@ pub struct MaintenanceModeResult {
 /// Toggle maintenance mode (admin).
 #[tauri::command]
 pub async fn maintenance_mode(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     enable: bool,
 ) -> Result<MaintenanceModeResult, String> {
     let mut client = state.client().await?;
     let resp = client
         .maintenance_mode(orchestrator_proto::MaintenanceModeRequest { enable })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     let inner = resp.into_inner();
     Ok(MaintenanceModeResult {
         maintenance_mode: inner.maintenance_mode,

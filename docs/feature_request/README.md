@@ -54,7 +54,7 @@
 | FR-065 | Agent 间通信接口草案 — Mailbox + Session Control Plane | P1 | Closed |
 | FR-066 | GUI 实时状态推送与许愿池数据隔离 | P0 | Closed |
 | FR-067 | GUI CLI 功能对齐 — 补全缺失 RPC 覆盖 | P1 | Closed |
-| FR-068 | GUI 连接韧性与系统通知 | P1 | Proposed |
+| FR-068 | GUI 连接韧性与系统通知 | P1 | Closed |
 | FR-069 | GUI 体验打磨 — 主题切换 / 动画 / i18n / 响应式 / 构建分发 | P2 | Proposed |
 
 ## 说明
@@ -129,3 +129,4 @@
 - FR-066 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/76-gui-realtime-wish-isolation.md` 与 `docs/qa/orchestrator/118-gui-realtime-wish-isolation.md` 承载
 - FR-060 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/77-reduce-unsafe-qa-operations.md` 承载（13 次迭代将 unsafe 文档从 114 降至 33，+360 安全场景，23.1% unsafe 率达成 < 30% 目标）
 - FR-067 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/77-gui-cli-rpc-parity.md` 与 `docs/qa/orchestrator/119-gui-cli-rpc-parity.md` 承载
+- FR-068 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/78-gui-connection-resilience-notification.md` 与 `docs/qa/orchestrator/120-gui-connection-resilience-notification.md` 承载

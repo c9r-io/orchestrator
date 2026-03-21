@@ -200,6 +200,57 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
+/* Connection banner */
+.connection-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  animation: banner-slide-in 0.3s ease;
+}
+
+.banner-warning {
+  background: var(--warning);
+  color: #fff;
+}
+
+.banner-danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.banner-success {
+  background: var(--success);
+  color: #fff;
+}
+
+.banner-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  margin-right: 8px;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes banner-slide-in {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   * {

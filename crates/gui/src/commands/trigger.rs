@@ -1,6 +1,8 @@
 use serde::Serialize;
 use tauri::State;
 
+use std::sync::Arc;
+
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize)]
@@ -12,7 +14,7 @@ pub struct TriggerFireResult {
 /// Suspend a trigger (operator+).
 #[tauri::command]
 pub async fn trigger_suspend(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     trigger_name: String,
     project: Option<String>,
 ) -> Result<String, String> {
@@ -23,14 +25,14 @@ pub async fn trigger_suspend(
             project,
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     Ok(resp.into_inner().message)
 }
 
 /// Resume a trigger (operator+).
 #[tauri::command]
 pub async fn trigger_resume(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     trigger_name: String,
     project: Option<String>,
 ) -> Result<String, String> {
@@ -41,14 +43,14 @@ pub async fn trigger_resume(
             project,
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     Ok(resp.into_inner().message)
 }
 
 /// Manually fire a trigger (operator+).
 #[tauri::command]
 pub async fn trigger_fire(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     trigger_name: String,
     project: Option<String>,
 ) -> Result<TriggerFireResult, String> {
@@ -59,7 +61,7 @@ pub async fn trigger_fire(
             project,
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     let inner = resp.into_inner();
     Ok(TriggerFireResult {
         task_id: inner.task_id,

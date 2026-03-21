@@ -1,6 +1,8 @@
 use serde::Serialize;
 use tauri::State;
 
+use std::sync::Arc;
+
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize)]
@@ -34,25 +36,25 @@ fn map_key(k: orchestrator_proto::SecretKeyRecord) -> SecretKeyInfo {
 
 /// List all secret keys (admin).
 #[tauri::command]
-pub async fn secret_key_list(state: State<'_, AppState>) -> Result<Vec<SecretKeyInfo>, String> {
+pub async fn secret_key_list(state: State<'_, Arc<AppState>>) -> Result<Vec<SecretKeyInfo>, String> {
     let mut client = state.client().await?;
     let resp = client
         .secret_key_list(orchestrator_proto::SecretKeyListRequest {})
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     Ok(resp.into_inner().keys.into_iter().map(map_key).collect())
 }
 
 /// Get secret key status (admin).
 #[tauri::command]
 pub async fn secret_key_status(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
 ) -> Result<SecretKeyStatusResult, String> {
     let mut client = state.client().await?;
     let resp = client
         .secret_key_status(orchestrator_proto::SecretKeyStatusRequest {})
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     let inner = resp.into_inner();
     Ok(SecretKeyStatusResult {
         active_key: inner.active_key.map(map_key),
@@ -63,7 +65,7 @@ pub async fn secret_key_status(
 /// Rotate secret keys (admin).
 #[tauri::command]
 pub async fn secret_key_rotate(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     resume: Option<bool>,
 ) -> Result<RotateResult, String> {
     let mut client = state.client().await?;
@@ -72,7 +74,7 @@ pub async fn secret_key_rotate(
             resume: resume.unwrap_or(false),
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     let inner = resp.into_inner();
     Ok(RotateResult {
         message: inner.message,
@@ -85,7 +87,7 @@ pub async fn secret_key_rotate(
 /// Revoke a secret key (admin).
 #[tauri::command]
 pub async fn secret_key_revoke(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     key_id: String,
     force: Option<bool>,
 ) -> Result<String, String> {
@@ -96,6 +98,6 @@ pub async fn secret_key_revoke(
             force: force.unwrap_or(false),
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     Ok(resp.into_inner().message)
 }

@@ -1,7 +1,10 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification";
 import { RoleContext, hasAccess } from "./hooks/useRole";
+import { useConnectionState } from "./hooks/useConnectionState";
 import type { Role } from "./lib/types";
+import ConnectionBanner from "./components/ConnectionBanner";
 import ConnectionStatus from "./pages/ConnectionStatus";
 import WishPool from "./pages/WishPool";
 import WishDetail from "./pages/WishDetail";
@@ -13,23 +16,48 @@ type Tab = "wishes" | "progress";
 export default function App() {
   const [tab, setTab] = useState<Tab>("wishes");
   const [role, setRole] = useState<Role | null>(null);
-  const [connected, setConnected] = useState(false);
+  const { connectionState, reconnect } = useConnectionState();
   const [selectedWishId, setSelectedWishId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
-  // Auto-connect on mount.
+  const connected = connectionState.kind === "Connected";
+
+  // Auto-connect on mount and request notification permission.
   useEffect(() => {
     (async () => {
       try {
         await invoke("connect", {});
-        setConnected(true);
         const r = await invoke<string>("probe_role", {});
         setRole(r as Role);
       } catch {
-        // Connection failed — will show on status page.
+        // Connection failed — will show on wizard page.
+      }
+
+      // Request notification permission.
+      try {
+        const granted = await isPermissionGranted();
+        if (!granted) {
+          await requestPermission();
+        }
+      } catch {
+        // Notification not available on this platform.
       }
     })();
   }, []);
+
+  // Re-probe role when reconnected.
+  useEffect(() => {
+    if (connected && !role) {
+      (async () => {
+        try {
+          const r = await invoke<string>("probe_role", {});
+          setRole(r as Role);
+        } catch {
+          // Will retry on next reconnect.
+        }
+      })();
+    }
+  }, [connected, role]);
 
   // Keyboard shortcuts.
   useEffect(() => {
@@ -71,12 +99,13 @@ export default function App() {
     setSelectedTaskId(newTaskId);
   }, []);
 
-  // Show connection status if not connected.
-  if (!connected) {
+  // Show connection wizard if not connected (and not currently reconnecting from a prior connection).
+  if (!connected && connectionState.kind !== "Reconnecting") {
     return (
       <RoleContext.Provider value={roleCtx}>
+        <ConnectionBanner state={connectionState} onRetry={reconnect} />
         <div className="page">
-          <ConnectionStatus connected={false} />
+          <ConnectionStatus state={connectionState} onRetry={reconnect} />
         </div>
       </RoleContext.Provider>
     );
@@ -84,6 +113,7 @@ export default function App() {
 
   return (
     <RoleContext.Provider value={roleCtx}>
+      <ConnectionBanner state={connectionState} onRetry={reconnect} />
       <div className="page">
         {/* Navigation */}
         <nav

@@ -1,5 +1,8 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
+use tauri_plugin_notification::NotificationExt;
+
+use std::sync::Arc;
 
 use crate::state::AppState;
 
@@ -15,7 +18,7 @@ pub struct LogLine {
 #[tauri::command]
 pub async fn start_task_follow(
     app: AppHandle,
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     task_id: String,
 ) -> Result<(), String> {
     let mut client = state.client().await?;
@@ -24,12 +27,13 @@ pub async fn start_task_follow(
             task_id: task_id.clone(),
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
 
     let mut stream = resp.into_inner();
     let cancel = state.register_stream(&task_id).await;
     let event_name = format!("task-follow-{}", task_id);
 
+    let error_event = format!("stream-error-{}", task_id);
     tauri::async_runtime::spawn(async move {
         loop {
             tokio::select! {
@@ -43,7 +47,11 @@ pub async fn start_task_follow(
                             let _ = app.emit(&event_name, &payload);
                         }
                         Ok(None) => break,
-                        Err(_) => break,
+                        Err(e) => {
+                            let msg = crate::errors::humanize_grpc_error(&e);
+                            let _ = app.emit(&error_event, &msg);
+                            break;
+                        }
                     }
                 }
                 _ = cancel.cancelled() => break,
@@ -57,7 +65,7 @@ pub async fn start_task_follow(
 /// Stop streaming task logs.
 #[tauri::command]
 pub async fn stop_task_follow(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     task_id: String,
 ) -> Result<(), String> {
     state.cancel_stream(&task_id).await;
@@ -77,7 +85,7 @@ pub struct WatchSnapshot {
 #[tauri::command]
 pub async fn start_task_watch(
     app: AppHandle,
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     task_id: String,
     interval_secs: Option<u64>,
 ) -> Result<(), String> {
@@ -89,14 +97,16 @@ pub async fn start_task_watch(
             timeout_secs: 0, // no timeout
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
 
     let mut stream = resp.into_inner();
     let watch_key = format!("watch-{}", task_id);
     let cancel = state.register_stream(&watch_key).await;
     let event_name = format!("task-watch-{}", task_id);
 
+    let error_event = format!("stream-error-watch-{}", task_id);
     tauri::async_runtime::spawn(async move {
+        let mut prev_status = String::new();
         loop {
             tokio::select! {
                 msg = stream.message() => {
@@ -116,6 +126,12 @@ pub async fn start_task_watch(
                                 goal: t.goal,
                             });
                             if let Some(task) = task {
+                                // Detect status transitions for notifications.
+                                if !prev_status.is_empty() && task.status != prev_status {
+                                    send_task_notification(&app, &task.name, &task.status, &task.project_id);
+                                }
+                                prev_status.clone_from(&task.status);
+
                                 let items: Vec<_> = snapshot.items.into_iter().map(|i| {
                                     super::task::TaskItemSummary {
                                         id: i.id,
@@ -129,7 +145,11 @@ pub async fn start_task_watch(
                             }
                         }
                         Ok(None) => break,
-                        Err(_) => break,
+                        Err(e) => {
+                            let msg = crate::errors::humanize_grpc_error(&e);
+                            let _ = app.emit(&error_event, &msg);
+                            break;
+                        }
                     }
                 }
                 _ = cancel.cancelled() => break,
@@ -140,10 +160,34 @@ pub async fn start_task_watch(
     Ok(())
 }
 
+/// Send OS notification for task status transitions.
+fn send_task_notification(app: &AppHandle, task_name: &str, status: &str, project_id: &str) {
+    let (title, body) = match status {
+        "completed" | "succeeded" => {
+            if project_id == "wish-pool" {
+                ("FR 草稿就绪".to_string(), format!("「{}」的需求方案已生成，等待确认", task_name))
+            } else {
+                ("任务完成".to_string(), format!("「{}」已成功完成", task_name))
+            }
+        }
+        "failed" | "error" => {
+            ("任务失败".to_string(), format!("「{}」执行失败", task_name))
+        }
+        _ => return,
+    };
+
+    let _ = app
+        .notification()
+        .builder()
+        .title(&title)
+        .body(&body)
+        .show();
+}
+
 /// Stop watching task status updates.
 #[tauri::command]
 pub async fn stop_task_watch(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     task_id: String,
 ) -> Result<(), String> {
     let watch_key = format!("watch-{}", task_id);
@@ -163,7 +207,7 @@ pub struct TaskLogChunk {
 /// Get historical task logs (collects all chunks from the streaming RPC).
 #[tauri::command]
 pub async fn task_logs(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     task_id: String,
     tail: Option<u64>,
 ) -> Result<Vec<TaskLogChunk>, String> {
@@ -175,11 +219,11 @@ pub async fn task_logs(
             timestamps: false,
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
 
     let mut stream = resp.into_inner();
     let mut chunks = Vec::new();
-    while let Some(chunk) = stream.message().await.map_err(|e| e.message().to_string())? {
+    while let Some(chunk) = stream.message().await.map_err(|e| crate::errors::humanize_grpc_error(&e))? {
         chunks.push(TaskLogChunk {
             run_id: chunk.run_id,
             phase: chunk.phase,

@@ -1,6 +1,8 @@
 use serde::Serialize;
 use tauri::State;
 
+use std::sync::Arc;
+
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize)]
@@ -13,7 +15,7 @@ pub struct StoreEntry {
 /// List store entries (read_only+).
 #[tauri::command]
 pub async fn store_list(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     store: String,
     project: Option<String>,
 ) -> Result<Vec<StoreEntry>, String> {
@@ -26,7 +28,7 @@ pub async fn store_list(
             offset: 0,
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
 
     let entries = resp
         .into_inner()
@@ -44,7 +46,7 @@ pub async fn store_list(
 /// Get a store value (read_only+).
 #[tauri::command]
 pub async fn store_get(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     store: String,
     key: String,
     project: Option<String>,
@@ -57,7 +59,7 @@ pub async fn store_get(
             project: project.unwrap_or_default(),
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     let inner = resp.into_inner();
     if inner.found {
         Ok(inner.value_json)
@@ -69,7 +71,7 @@ pub async fn store_get(
 /// Put a store value (operator+).
 #[tauri::command]
 pub async fn store_put(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     store: String,
     key: String,
     value_json: String,
@@ -86,14 +88,14 @@ pub async fn store_put(
             task_id: task_id.unwrap_or_default(),
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     Ok(resp.into_inner().message)
 }
 
 /// Delete a store value (operator+).
 #[tauri::command]
 pub async fn store_delete(
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     store: String,
     key: String,
     project: Option<String>,
@@ -106,6 +108,6 @@ pub async fn store_delete(
             project: project.unwrap_or_default(),
         })
         .await
-        .map_err(|e| e.message().to_string())?;
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
     Ok(resp.into_inner().message)
 }

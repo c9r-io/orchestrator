@@ -29,7 +29,7 @@ export default function WishDetail({ taskId, onBack, onConfirmed }: Props) {
   const startTimeRef = useRef(Date.now());
 
   const streamParams = useMemo(() => ({ task_id: taskId }), [taskId]);
-  const { data: logs, active, start, stop } = useStream<LogLine>(
+  const { data: logs, start, stop } = useStream<LogLine>(
     "start_task_follow",
     "stop_task_follow",
     `task-follow-${taskId}`,

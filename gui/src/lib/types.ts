@@ -84,6 +84,14 @@ export interface StoreEntry {
 
 export type Role = "read_only" | "operator" | "admin";
 
+/** Connection lifecycle states emitted from the Rust backend. */
+export type ConnectionState =
+  | { kind: "Disconnected" }
+  | { kind: "Connecting" }
+  | { kind: "Connected" }
+  | { kind: "Reconnecting"; attempt: number; max_attempts: number }
+  | { kind: "Failed"; message: string };
+
 export interface TaskLogChunk {
   run_id: string;
   phase: string;

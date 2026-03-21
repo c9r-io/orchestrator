@@ -1,13 +1,28 @@
 pub mod client;
 pub mod commands;
+pub mod errors;
 pub mod state;
+
+use std::sync::Arc;
 
 use state::AppState;
 
 /// Build and configure the Tauri application.
 pub fn run() {
+    let app_state = Arc::new(AppState::new());
+
     tauri::Builder::default()
-        .manage(AppState::new())
+        .plugin(tauri_plugin_notification::init())
+        .manage(app_state.clone())
+        .setup(move |app| {
+            let handle = app.handle().clone();
+            let state = app_state.clone();
+            tauri::async_runtime::spawn(async move {
+                state.set_app_handle(handle).await;
+                state.start_heartbeat();
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             // system
             commands::system::connect,
