@@ -51,6 +51,12 @@ Daemon lifecycle:
    - `debug`
    - `check`
    - `manifest`
+   - `secret`
+   - `db`
+   - `agent`
+   - `event`
+   - `trigger`
+   - `daemon`
    - `version`
 
 3. Confirm `task` subcommands:
@@ -65,6 +71,7 @@ Daemon lifecycle:
    - `retry`
    - `watch`
    - `trace`
+   - `recover`
 
 ### Expected Result
 

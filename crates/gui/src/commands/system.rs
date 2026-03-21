@@ -63,9 +63,7 @@ pub async fn probe_role(state: State<'_, Arc<AppState>>) -> Result<String, Strin
 
     // Try admin-only RPC.
     let admin_result = client
-        .config_debug(orchestrator_proto::ConfigDebugRequest {
-            component: None,
-        })
+        .config_debug(orchestrator_proto::ConfigDebugRequest { component: None })
         .await;
 
     let role: String = match admin_result {

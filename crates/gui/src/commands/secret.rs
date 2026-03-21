@@ -36,7 +36,9 @@ fn map_key(k: orchestrator_proto::SecretKeyRecord) -> SecretKeyInfo {
 
 /// List all secret keys (admin).
 #[tauri::command]
-pub async fn secret_key_list(state: State<'_, Arc<AppState>>) -> Result<Vec<SecretKeyInfo>, String> {
+pub async fn secret_key_list(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<SecretKeyInfo>, String> {
     let mut client = state.client().await?;
     let resp = client
         .secret_key_list(orchestrator_proto::SecretKeyListRequest {})

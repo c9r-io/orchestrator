@@ -238,8 +238,8 @@ WHERE id = '{task_id}';
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Strict Validation Rejects Non-JSON QA Output | PASS | 2026-03-21 | Claude | Code review + unit test (strict_phase_requires_json, strict_phase_accepts_json, effective_exit_code_maps_validation_failure_to_nonzero) |
+| 1 | Strict Validation Rejects Non-JSON QA Output | PASS | 2026-03-21 | Claude | Code review + unit test (strict_phase_requires_json, strict_phase_suffix_match_requires_json, strict_phase_accepts_json, effective_exit_code_maps_validation_failure_to_nonzero) |
 | 2 | Structured Output Persists Into command_runs | PASS | 2026-03-21 | Claude | Code review + unit test (test_agent_output_creation, apply_captures_stdout_json_path_extracts_score, insert_command_run_with_all_optional_fields) |
-| 3 | Scheduler Publishes Phase Output Events | PASS | 2026-03-21 | Claude | Code review + unit test (build_trace_*, single_cycle_with_steps, extract_event_promoted_fields_*) |
+| 3 | Scheduler Publishes Phase Output Events | PASS | 2026-03-21 | Claude | Code review + unit test (build_trace_*, single_cycle_with_steps, extract_event_promoted_fields_with_step_key, *_phase_fallback, *_step_takes_priority_over_phase, *_invalid_json, *_empty_json_object, *_cycle_as_string) |
 | 4 | Detach Mode Enqueues Tasks | SKIP | | | UNSAFE — daemon queue lifecycle (self-referential mode) |
 | 5 | Worker Start/Stop and Queue Consumption | SKIP | | | UNSAFE — daemon worker lifecycle (start/kill) (self-referential mode) |

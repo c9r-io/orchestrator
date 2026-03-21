@@ -69,4 +69,4 @@ Verify that manifest export includes capability-orchestration fields: `required_
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Manifest Export Shows Capability Fields | ☐ | | | |
+| 1 | Manifest Export Shows Capability Fields | ✅ | 2026-03-21 | Claude | All 17 normalization tests + 3 export tests + 2 agent config tests passed |

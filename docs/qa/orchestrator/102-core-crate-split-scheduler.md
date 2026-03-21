@@ -90,7 +90,7 @@ cargo test --workspace --lib
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ⚠️ | S1-S3, S5-S7: PASS; S4: FAIL (doc issue - see ticket) |
+| 1 | All scenarios verified | ✅ | S1-S7: ALL PASS (2026-03-21) |
 
 ## Verification Summary (2026-03-20)
 
@@ -104,3 +104,16 @@ cargo test --workspace --lib
 
 ### Notes
 - **S4**: Daemon does depend on both `agent-orchestrator` and `orchestrator-scheduler` as expected. Integration tests depend on `orchestrator-scheduler` only. CLI accesses scheduler indirectly via daemon gRPC.
+
+## Verification Summary (2026-03-21)
+
+### All Scenarios PASS ✅
+| Scenario | Result | Details |
+|----------|--------|---------|
+| S1 | PASS | `cargo test --workspace --lib` = 1437 tests passed |
+| S2 | PASS | scheduler: 409 tests, agent-orchestrator: 23 tests |
+| S3 | PASS | Core LOC: 59,269 < 65,000 target |
+| S4 | PASS | scheduler→agent-orchestrator, no reverse dep, daemon/integration-tests deps correct |
+| S5 | PASS | core/src/scheduler/*, service/task.rs removed, no pub mod references |
+| S6 | PASS | daemon uses `orchestrator_scheduler::*` paths; `scheduler_service` remains in agent_orchestrator |
+| S7 | PASS | Implicitly verified by passing tests |

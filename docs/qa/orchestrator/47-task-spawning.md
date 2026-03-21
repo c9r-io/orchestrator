@@ -153,8 +153,8 @@ Verify that spawned child can use a different workflow than the parent.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Single task spawn via PostAction | ✅ | 2026-03-07 | claude | Code path verified: spawn.rs, apply.rs. Unit tests: resolve_template, validate_spawn_depth |
-| 2 | Batch task spawn from JSON pipeline variable | ✅ | 2026-03-07 | claude | Code path verified: spawn.rs. max_tasks cap + per-item workflow override |
-| 3 | Spawn depth limit enforcement | ✅ | 2026-03-07 | claude | Tests: at_limit, within_limit, no_limit |
-| 4 | Spawn inherits workspace and project | ✅ | 2026-03-07 | claude | SpawnInherit defaults workspace=true, project=true |
-| 5 | Spawn with custom workflow override | ✅ | 2026-03-07 | claude | spawn.rs single + batch per-item override |
+| 1 | Single task spawn via PostAction | ✅ | 2026-03-21 | claude | Unit tests: test_resolve_template, test_resolve_template_no_vars, execute_spawn_task_creates_child_task_and_increments_depth, test_spawn_task_action_minimal — all PASS |
+| 2 | Batch task spawn from JSON pipeline variable | ✅ | 2026-03-21 | claude | Unit tests: execute_spawn_tasks_creates_batch_children_skips_missing_goal_and_honors_limit, execute_spawn_tasks_errors_when_source_variable_is_missing, test_spawn_tasks_action_defaults, test_spawn_tasks_action_full — all PASS |
+| 3 | Spawn depth limit enforcement | ✅ | 2026-03-21 | claude | Unit tests: test_validate_spawn_depth_within_limit, test_validate_spawn_depth_at_limit, test_validate_spawn_depth_no_limit — all PASS |
+| 4 | Spawn inherits workspace and project | ✅ | 2026-03-21 | claude | Unit test: execute_spawn_task_without_workspace_inheritance_uses_default_workspace PASS. Code review: SpawnInherit::default() → workspace=true, project=true |
+| 5 | Spawn with custom workflow override | ✅ | 2026-03-21 | claude | Unit test: spawn_task_runner_returns_early_for_duplicate_task PASS. Code review: action.workflow optional override confirmed in spawn.rs lines 32-35, 101-106 |

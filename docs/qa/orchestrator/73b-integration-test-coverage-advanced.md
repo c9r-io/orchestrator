@@ -53,4 +53,4 @@ cargo test --workspace
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ✔ | S1: multi_cycle_loop passed; S2: 4/4 gRPC compat tests passed; S3: 2057 total tests passed in ~22s |
+| 1 | All scenarios verified | ✔ | S1: multi_cycle_loop passed; S2: 4/4 gRPC compat tests passed; S3: 2052 total tests passed in ~45s |

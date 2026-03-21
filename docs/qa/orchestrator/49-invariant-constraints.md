@@ -193,9 +193,9 @@ Verify that `evaluate_invariants()` only runs invariants matching the current ch
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Invariant passes — command exit code check | ✅ | 2026-03-20 | claude | Code path verified: invariant.rs:37-112. Tests: test_passing_invariant, test_invariant_with_expected_exit |
-| 2 | Invariant fails — command returns wrong exit code | ✅ | 2026-03-20 | claude | Code path verified: invariant.rs:66-78. Tests: test_failing_invariant, test_has_halting_violation |
-| 3 | Protected file modification detection | ✅ | 2026-03-20 | claude | Code path verified: invariant.rs:41-51 (short-circuit), invariant.rs:115-142 (git diff). Tests: file_matches_pattern_exact/prefix_glob/suffix_glob |
-| 4 | Invariant with warn-only violation | ✅ | 2026-03-20 | claude | Code path verified: invariant.rs:24-28, loop_engine.rs:724-731. Tests: test_no_halting_violation_when_warn |
-| 5 | Checkpoint filtering — invariants run only at configured points | ✅ | 2026-03-20 | claude | Code path verified: invariant.rs:13-15. Tests: test_evaluate_invariants_filters_by_checkpoint |
-| G | Invariant immutability (pinned at task start) | ✅ | 2026-03-20 | claude | Code path verified: runtime.rs:376 pins Arc<Vec<InvariantConfig>> at task start. All usage is read-only |
+| 1 | Invariant passes — command exit code check | ✅ | 2026-03-21 | claude | 28 invariant unit tests pass + 409 scheduler tests pass. Code path verified: invariant.rs:37-112. Tests: test_passing_invariant, test_invariant_with_expected_exit |
+| 2 | Invariant fails — command returns wrong exit code | ✅ | 2026-03-21 | claude | Code path verified: invariant.rs:66-78. Tests: test_failing_invariant, test_has_halting_violation |
+| 3 | Protected file modification detection | ✅ | 2026-03-21 | claude | Code path verified: invariant.rs:41-51 (short-circuit), invariant.rs:115-142 (git diff). Tests: file_matches_pattern_exact/prefix_glob/suffix_glob |
+| 4 | Invariant with warn-only violation | ✅ | 2026-03-21 | claude | Code path verified: invariant.rs:24-28, loop_engine.rs:724-731. Tests: test_no_halting_violation_when_warn |
+| 5 | Checkpoint filtering — invariants run only at configured points | ✅ | 2026-03-21 | claude | Code path verified: invariant.rs:13-15. Tests: test_evaluate_invariants_filters_by_checkpoint |
+| G | Invariant immutability (pinned at task start) | ✅ | 2026-03-21 | claude | Code path verified: runtime.rs:376 pins Arc<Vec<InvariantConfig>> at task start. All usage is read-only |

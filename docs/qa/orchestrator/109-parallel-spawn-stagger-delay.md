@@ -53,3 +53,5 @@
 > **Note (2026-03-19)**: S1-S3 需要专用 daemon 运行环境（无其他任务占用 worker）。
 > 当 full-QA 占用 daemon 全部 worker 时，新创建的测试任务会停留在 pending 状态。
 > 这是基础设施并发限制，非 FR-055 功能 bug。S4/S5 已通过验证。
+
+> **Troubleshooting**: S2 和 S3 依赖 daemon 有空闲 worker 来并行调度 item。当 full-QA 回归测试同时运行时，daemon 的全部 worker 可能被其他任务占满，导致新任务的 item 停留在 pending 状态而无法观测 stagger delay。解决方案：(1) 使用 `--workers N` 启动 daemon 并预留足够 worker；(2) 在隔离环境下单独运行本 QA 测试；(3) 等待其他任务完成后再执行 S2/S3。

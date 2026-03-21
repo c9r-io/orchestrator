@@ -43,7 +43,9 @@ rg -n "fn proactive_max_cycles" crates/orchestrator-scheduler/src/scheduler/loop
 
 ## Scenario 2: Dynamic items 在 max_cycles 内完成 qa_testing
 
-**Workflow**: 同 Scenario 1 的 task (复用同一 task_id)
+**Workflow**: 需要独立运行态 task 执行（不能复用 S1 的 task_id）
+
+> **Troubleshooting**: 天然不安全 — 需要运行态 task 执行。S1 仅运行单元测试，不创建 task_id，因此 S2 无法复用 S1 的 task_id。执行前需通过 `orchestrator task run` 或等效方式创建实际 task。
 
 **验证**:
 ```bash

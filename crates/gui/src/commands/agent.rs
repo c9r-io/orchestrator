@@ -20,9 +20,7 @@ pub struct AgentInfo {
 pub async fn agent_list(state: State<'_, Arc<AppState>>) -> Result<Vec<AgentInfo>, String> {
     let mut client = state.client().await?;
     let resp = client
-        .agent_list(orchestrator_proto::AgentListRequest {
-            project_id: None,
-        })
+        .agent_list(orchestrator_proto::AgentListRequest { project_id: None })
         .await
         .map_err(|e| crate::errors::humanize_grpc_error(&e))?;
 

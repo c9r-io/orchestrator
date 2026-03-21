@@ -165,14 +165,18 @@ fn send_task_notification(app: &AppHandle, task_name: &str, status: &str, projec
     let (title, body) = match status {
         "completed" | "succeeded" => {
             if project_id == "wish-pool" {
-                ("FR 草稿就绪".to_string(), format!("「{}」的需求方案已生成，等待确认", task_name))
+                (
+                    "FR 草稿就绪".to_string(),
+                    format!("「{}」的需求方案已生成，等待确认", task_name),
+                )
             } else {
-                ("任务完成".to_string(), format!("「{}」已成功完成", task_name))
+                (
+                    "任务完成".to_string(),
+                    format!("「{}」已成功完成", task_name),
+                )
             }
         }
-        "failed" | "error" => {
-            ("任务失败".to_string(), format!("「{}」执行失败", task_name))
-        }
+        "failed" | "error" => ("任务失败".to_string(), format!("「{}」执行失败", task_name)),
         _ => return,
     };
 
@@ -223,7 +227,11 @@ pub async fn task_logs(
 
     let mut stream = resp.into_inner();
     let mut chunks = Vec::new();
-    while let Some(chunk) = stream.message().await.map_err(|e| crate::errors::humanize_grpc_error(&e))? {
+    while let Some(chunk) = stream
+        .message()
+        .await
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?
+    {
         chunks.push(TaskLogChunk {
             run_id: chunk.run_id,
             phase: chunk.phase,

@@ -85,10 +85,14 @@
 
 ## Checklist
 
-- [ ] S1: Mailbox 与 Session 双层抽象已文档化
-- [ ] S2: 标识优先级 `session_id` > `pid` 已明确
-- [ ] S3: AgentSession、AgentMailbox、AgentMessage CRD 字段覆盖完整
-- [ ] S4: Mailbox/Session CLI 形状覆盖完整
-- [ ] S5: gRPC API 形状（Mailbox 6 RPC、Session 8 RPC）覆盖完整
-- [ ] S6: 实施阶段依赖排序合理
-- [ ] S7: 实施前对齐约束已记录
+- [x] S1: Mailbox 与 Session 双层抽象已文档化
+- [x] S2: 标识优先级 `session_id` > `pid` 已明确
+- [x] S3: AgentSession、AgentMailbox、AgentMessage CRD 字段覆盖完整
+- [x] S4: Mailbox/Session CLI 形状覆盖完整
+- [x] S5: gRPC API 形状（Mailbox 6 RPC、Session 8 RPC）覆盖完整
+- [x] S6: 实施阶段依赖排序合理
+- [x] S7: 实施前对齐约束已记录
+
+---
+
+**QA 结果**：全部通过（2026-03-21）

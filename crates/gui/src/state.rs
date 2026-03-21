@@ -38,6 +38,12 @@ pub struct AppState {
     heartbeat_cancel: CancellationToken,
 }
 
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AppState {
     pub fn new() -> Self {
         Self {
@@ -106,10 +112,8 @@ impl AppState {
             .as_ref()
             .ok_or_else(|| "未连接到 daemon".to_string())?
             .clone();
-        Ok(
-            OrchestratorServiceClient::new(channel)
-                .max_decoding_message_size(client::max_decode_size()),
-        )
+        Ok(OrchestratorServiceClient::new(channel)
+            .max_decoding_message_size(client::max_decode_size()))
     }
 
     /// Get the transport kind of the current connection.
@@ -169,10 +173,7 @@ impl AppState {
 
                 // Try a ping to check liveness.
                 let ping_ok = match state.client().await {
-                    Ok(mut c) => c
-                        .ping(orchestrator_proto::PingRequest {})
-                        .await
-                        .is_ok(),
+                    Ok(mut c) => c.ping(orchestrator_proto::PingRequest {}).await.is_ok(),
                     Err(_) => false,
                 };
 
@@ -182,9 +183,7 @@ impl AppState {
                         *state.connection_state.read().await,
                         ConnectionState::Connected
                     ) {
-                        state
-                            .set_connection_state(ConnectionState::Connected)
-                            .await;
+                        state.set_connection_state(ConnectionState::Connected).await;
                     }
                     continue;
                 }

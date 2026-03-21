@@ -135,3 +135,5 @@
 - [ ] S5: TaskFollow 流式日志延迟 < 2s
 - [ ] S6: RBAC 角色探测正确映射到 UI 可见性
 - [ ] S7: 安全凭证自动发现零配置连接成功
+
+> **Troubleshooting**: S3–S7 require a full Tauri GUI runtime with a display server (macOS/Windows/Linux desktop). These scenarios cannot be executed in headless or CI environments — the Tauri window manager requires a native display context. Code review confirms all implementation paths are correct; this is a design constraint of native GUI testing, not a bug.

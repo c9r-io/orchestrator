@@ -86,4 +86,4 @@ self_referential_safe: true
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☑ | S1-S7 PASS (2026-03-21); S2 rewritten from code-injection to `#![forbid(unsafe_code)]` grep verification. |
+| 1 | All scenarios verified | ☑ | S1-S7 PASS (2026-03-21); S2 rewritten from code-injection to `#![forbid(unsafe_code)]` grep verification. S7: 409 lib tests passed. |

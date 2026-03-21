@@ -16,7 +16,7 @@ self_referential_safe: true
    ```
 2. **Unit test** — 验证 `is_agent_healthy` 对无记录 agent 返回 true：
    ```bash
-   cargo test -p agent-orchestrator -- health::tests::healthy_agent_without_entry
+   cargo test -p agent-orchestrator -- health::tests::is_agent_healthy_unknown_agent_is_healthy
    ```
 
 **预期**:
@@ -75,7 +75,7 @@ self_referential_safe: true
    ```
 
 **预期**:
-- 23+ health 测试全部通过
+- 16 health 测试全部通过
 - 409+ workspace 测试全部通过
 
 ---

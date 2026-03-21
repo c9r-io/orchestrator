@@ -39,7 +39,7 @@ cargo test --workspace --lib
    - No vendored fallback warning is emitted
 
 **Expected**:
-- [ ] `build.rs` uses `Path::new(&protoc).is_file()` to validate the provided path
+- [ ] `build.rs` uses `Path::new(&protoc).exists()` to validate the provided path
 - [ ] When valid, sets `env::set_var("PROTOC", protoc)` and proceeds without warning
 - [ ] `cargo:rerun-if-env-changed=PROTOC` is declared for proper rebuild triggers
 
@@ -51,7 +51,7 @@ cargo test --workspace --lib
    - Warning is emitted showing the vendored path
 
 **Expected**:
-- [ ] `is_file()` check fails for non-existent path → enters fallback branch
+- [ ] `exists()` check fails for non-existent path → enters fallback branch
 - [ ] Same vendored fallback as S-01 activates
 - [ ] Warning message is emitted
 
@@ -94,7 +94,7 @@ All scenarios verified locally on 2026-03-18.
 | Scenario | Status | Notes |
 |----------|--------|-------|
 | S-01 | PASS (doc drift) | Code works correctly; warning message is "vendored" not "protobuf-src" — ticket created |
-| S-02 | PASS | `is_file()` validation, env var set, `cargo:rerun-if-env-changed=PROTOC` confirmed |
+| S-02 | PASS | `exists()` validation, env var set, `cargo:rerun-if-env-changed=PROTOC` confirmed |
 | S-03 | PASS | Invalid path triggers fallback via `exists()` check |
 | S-04 | PASS | `cargo test --workspace --lib` — 407 tests pass |
 | S-05 | PASS | Clippy job uses `-D warnings` and `PROTOC: /usr/bin/protoc` at step level |
@@ -107,7 +107,7 @@ All scenarios verified locally on 2026-03-18.
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
 | 1 | S-01 Vendored fallback logic | ☑ | `build.rs` fallback + `protoc-bin-vendored` dep confirmed; warning msg is "vendored" not "protobuf-src" — ticket |
-| 2 | S-02 Explicit override | ☑ | `is_file()` validation, env set, `cargo:rerun-if-env-changed=PROTOC` confirmed |
+| 2 | S-02 Explicit override | ☑ | `exists()` validation, env set, `cargo:rerun-if-env-changed=PROTOC` confirmed |
 | 3 | S-03 Invalid path fallback | ☑ | `exists()` check triggers fallback correctly |
 | 4 | S-04 Workspace compilation | ☑ | `cargo test --workspace --lib` — 407 tests pass |
 | 5 | S-05 Clippy clean | ☑ | `-D warnings` + PROTOC at step level confirmed |

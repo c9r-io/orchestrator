@@ -69,6 +69,6 @@ rg -n '#!\\[deny\\(missing_docs\\)\\]' core/src/lib.rs crates/cli/src/main.rs cr
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☑ | S1-S5 PASS (2026-03-20); S1-S4 rewritten as safe (code review + deny attributes + CI gate) |
+| 1 | All scenarios verified | ☑ | S1-S5 PASS (2026-03-21); S1-S4 rewritten as safe (code review + deny attributes + CI gate) |
 
 See also: `docs/qa/orchestrator/75b-public-api-doc-comments-legacy.md` for legacy exemption cleanup verification.

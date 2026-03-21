@@ -83,13 +83,13 @@ orchestrator trigger fire test-cron
 
 ## Checklist
 
-| # | Check | Status | Notes |
-|---|-------|--------|-------|
-| 1 | S2 (preflight validation) executed | ✅ | S1 skipped (self-referential unsafe); S2 verified: code review + 4 unit tests passed |
-
 **S2 Results** (2026-03-21 re-verified):
 - Code review: `trigger_workflow_ref` / `trigger_workspace_ref` validation found at `crates/orchestrator-scheduler/src/scheduler/check/mod.rs:258-280`
 - `cargo test -p agent-orchestrator --lib test_sandbox_backend_preflight_issues_reports_macos_allowlist_gap` — **PASSED**
 - `cargo test -p orchestrator-scheduler --lib test_execute_self_test_step_success_with_manifest_validate` — **PASSED**
 - `cargo test --package agent-orchestrator --lib trigger` — **20/20 PASSED**
 - `cargo test -p orchestrator-scheduler --lib check` — **29/29 PASSED**
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | S2 (preflight validation) executed | ✅ | S1 skipped (self-referential unsafe); S2 verified: code review + 4 unit test suites passed (1 + 1 + 20 + 29 = 51 tests) |

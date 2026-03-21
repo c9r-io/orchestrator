@@ -95,6 +95,7 @@ pub struct TaskActionResult {
 
 /// Create a new task (wish pool → FR drafting or development).
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn task_create(
     state: State<'_, Arc<AppState>>,
     name: Option<String>,

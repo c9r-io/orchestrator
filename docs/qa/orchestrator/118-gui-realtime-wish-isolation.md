@@ -3,7 +3,30 @@
 **关联设计**: `docs/design_doc/orchestrator/76-gui-realtime-wish-isolation.md`
 **关联 FR**: FR-066（已闭环）
 
+## 前置条件
+
+> **重要**: 许愿池功能依赖 `wish-pool` 项目。在执行 S3/S4 前，需要先创建该项目：
+> ```bash
+> orchestrator init
+> orchestrator apply --project wish-pool -f docs/workflow/full-qa.yaml
+> ```
+> 若缺少 `wish-pool` 项目，`task create --project wish-pool` 会报错 `project not found: wish-pool`。
+
 ## 验证场景
+
+## Scenario 0: 入口可见性
+
+**入口**: 启动 GUI 后，侧边栏「进度观察」Tab
+
+| 步骤 | 操作 | 预期结果 |
+|------|------|---------|
+| 1 | 启动 GUI | 默认进入「进度观察」Tab |
+| 2 | 确认侧边栏有「进度观察」Tab | Tab 可见且可点击 |
+| 3 | 确认活跃 running 任务右上角有「● 实时」标记 | 实时状态指示器可见 |
+
+**预期**: 进度观察 Tab 可见，实时状态指示器正常显示。
+
+---
 
 ### 场景 1: ProgressList 实时更新
 
@@ -103,10 +126,34 @@
 
 ## Checklist
 
-- [ ] S1: ProgressList running 任务自动更新（无需手动刷新）
-- [ ] S2: TaskDetail 步骤状态和进度实时刷新
-- [ ] S3: 许愿池仅显示 wish-pool 项目任务
-- [ ] S4: 许愿创建时 project_id 正确传递
-- [ ] S5: 完成状态许愿显示 TaskLogs 完整草稿
-- [ ] S6: 草稿中状态显示分阶段等待提示
-- [ ] S7: 页面切换时 watch 订阅正确清理
+- [ ] S1: ProgressList running 任务自动更新（无需手动刷新）— **GUI REQUIRED**
+- [ ] S2: TaskDetail 步骤状态和进度实时刷新 — **GUI REQUIRED**
+- [x] S3: 许愿池仅显示 wish-pool 项目任务 — **PARTIAL** (CLI验证通过 project_filter 逻辑，但 "wish-pool" 项目未配置)
+- [ ] S4: 许愿创建时 project_id 正确传递 — **FAILED** (项目 "wish-pool" 不存在，task_create 报错)
+- [ ] S5: 完成状态许愿显示 TaskLogs 完整草稿 — **GUI REQUIRED**
+- [ ] S6: 草稿中状态显示分阶段等待提示 — **GUI REQUIRED**
+- [ ] S7: 页面切换时 watch 订阅正确清理 — **GUI REQUIRED**
+
+## 测试结果摘要 (2026-03-21)
+
+### CLI 可验证项
+
+**S3 — PARTIAL PASS**
+- `orchestrator task list --project {project_id}` 过滤功能正常工作
+- 验证：使用 `self-bootstrap` 项目创建任务，project filter 正确返回该项目的任务
+- 问题：`wish-pool` 项目未在配置中定义，导致基于该项目的过滤/创建都会失败
+
+**S4 — FAILED**
+- 错误：`task.create: project not found: wish-pool`
+- 根因：`crates/orchestrator-scheduler/src/task_ops.rs:117-124` 要求 project_id 必须在 `active.config.projects` 中存在
+- 影响：GUI WishPool 创建许愿时会失败（`WishPool.tsx:68` 传递 `project_id: "wish-pool"`）
+
+### GUI 专用项 (需要 Tauri GUI 运行)
+
+S1, S2, S5, S6, S7 均需要：
+1. Tauri GUI 构建并运行
+2. 可通过 `start_task_watch` / `stop_task_watch` RPC 命令验证实时功能
+
+### 关联 Ticket
+
+- `docs/ticket/qa118_gui_wishpool_projectid_20260321_180500.md` — S3/S4 项目隔离问题

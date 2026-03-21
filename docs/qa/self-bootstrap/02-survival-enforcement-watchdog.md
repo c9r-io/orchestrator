@@ -210,8 +210,8 @@ Verify that the watchdog restores the `.stable` binary after `WATCHDOG_MAX_FAILU
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Self-Referential Without Checkpoint Fails | ☐ | | | |
-| 2 | Warning When Auto-Rollback Disabled | ☐ | | | |
-| 3 | Warning When No Self-Test Step | ☐ | | | |
+| 1 | Self-Referential Without Checkpoint Fails | ✅ | 2026-03-21 | Claude | All 4 unit tests passed |
+| 2 | Warning When Auto-Rollback Disabled | ✅ | 2026-03-21 | Claude | Unit test passed |
+| 3 | Warning When No Self-Test Step | ✅ | 2026-03-21 | Claude | Unit test passed + complementary positive test passed |
 | 4 | Watchdog Detects Healthy Binary | ☐ | | | |
 | 5 | Watchdog Restores After 3 Failures | ☐ | | | |

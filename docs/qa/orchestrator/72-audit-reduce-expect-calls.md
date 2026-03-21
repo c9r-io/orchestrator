@@ -13,7 +13,7 @@ Verify that production code contains no `expect()`/`unwrap()` calls, that deny-l
 ### S-01: Zero expect() in production code
 
 **Steps**:
-1. Verify deny lint is active: confirm `deny(clippy::expect_used)` in `core/src/lib.rs`, `crates/cli/src/main.rs`, `crates/daemon/src/main.rs`
+1. Verify deny lint is active: `rg -n "expect_used" core/ crates/cli/ crates/daemon/` — confirm `deny(clippy::expect_used)` in `core/src/lib.rs`, `crates/cli/src/main.rs`, `crates/daemon/src/main.rs`
 2. Run `cargo check --workspace` — if it compiles, no production expect() exists
 
 **Expected**: All three crate roots contain `deny(clippy::expect_used)` (gated with `cfg_attr(not(test), ...)`). Compilation succeeds, proving zero production expect() calls.
@@ -25,7 +25,7 @@ Verify that production code contains no `expect()`/`unwrap()` calls, that deny-l
 ### S-02: Zero unwrap() in production code
 
 **Steps**:
-1. Verify deny lint is active: confirm `deny(clippy::unwrap_used)` in all three crate roots
+1. Verify deny lint is active: `rg -n "unwrap_used" core/ crates/cli/ crates/daemon/` — confirm `deny(clippy::unwrap_used)` in all three crate roots
 2. Run `cargo check --workspace` — if it compiles, no production unwrap() exists
 
 **Expected**: Compilation succeeds. `.unwrap_or()` and `.unwrap_or_else()` are allowed (not flagged by clippy).
@@ -68,7 +68,7 @@ Verify that production code contains no `expect()`/`unwrap()` calls, that deny-l
 
 ## Result
 
-S-01 and S-02: `deny(clippy::expect_used)` and `deny(clippy::unwrap_used)` are NOT present in crate roots. The codebase has 88+ files with `.expect()` calls in production code. Adding deny attrs would require a large-scale refactor. Current state: expect/unwrap usage is pervasive but acceptable for the current development stage. S-03–S-06 verified via code review + CI gate (clippy + deny(warnings)).
+S-01 through S-06: All PASS. `deny(clippy::expect_used)` and `deny(clippy::unwrap_used)` are present in all three crate roots (`core/src/lib.rs:17`, `crates/cli/src/main.rs:6`, `crates/daemon/src/main.rs:6`). The earlier false-negative was caused by running grep with relative paths that failed to resolve. Using `rg -n "expect_used" core/ crates/cli/ crates/daemon/` confirms the attributes are in place. Compilation succeeds with deny attributes active, proving zero production expect/unwrap calls.
 
 ---
 

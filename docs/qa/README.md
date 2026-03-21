@@ -218,6 +218,13 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/114-agent-health-state-observability.md` | 5 | FR-062: agent health state CLI observability via `agent list` and `task info` |
 | orchestrator | `docs/qa/orchestrator/115-agent-mailbox-session-communication.md` | 7 | FR-065: Agent 间通信接口草案 — Mailbox + Session 设计验证 |
 | orchestrator | `docs/qa/orchestrator/116-gui-architecture-tauri-grpc.md` | 7 | FR-063: GUI 架构 Tauri 2.x + gRPC 安全客户端验证 |
+| orchestrator | `docs/qa/orchestrator/117-gui-uiux-wish-pool-progress.md` | 11 | GUI 用户界面 — 许愿池 + 进度观察 + 专家模式 |
+| orchestrator | `docs/qa/orchestrator/118-gui-realtime-wish-isolation.md` | 7 | GUI 实时状态推送与许愿池数据隔离 |
+| orchestrator | `docs/qa/orchestrator/119-gui-cli-rpc-parity.md` | 4 | GUI CLI 功能对齐 — RPC 覆盖补全 |
+| orchestrator | `docs/qa/orchestrator/120-gui-connection-resilience.md` | 4 | GUI 连接韧性 — 向导 / 重连 / 流式 |
+| orchestrator | `docs/qa/orchestrator/120b-gui-notification-error-humanization.md` | 4 | GUI 系统通知与错误信息人性化 |
+| orchestrator | `docs/qa/orchestrator/121-gui-polish-visual.md` | 4 | GUI 体验打磨 — 主题 / 动画 / DAG / 日志 |
+| orchestrator | `docs/qa/orchestrator/121b-gui-i18n-ux.md` | 3 | GUI i18n / 响应式 / 构建分发 |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |

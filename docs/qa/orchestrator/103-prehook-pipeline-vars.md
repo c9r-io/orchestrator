@@ -74,4 +74,4 @@
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☑ | S1-S8: unit test PASS; S9-S10: 通过现有测试间接覆盖（见自动化覆盖说明） |
+| 1 | All scenarios verified | ✅ | 2026-03-21: S1-S8 unit test PASS (cargo test -p agent-orchestrator prehook::tests::test_prehook_pipeline_var); S9-S10: 通过现有测试间接覆盖 |
