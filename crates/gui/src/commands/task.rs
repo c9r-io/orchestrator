@@ -13,6 +13,9 @@ pub struct TaskSummary {
     pub failed_items: i64,
     pub created_at: String,
     pub updated_at: String,
+    pub project_id: String,
+    pub workflow_id: String,
+    pub goal: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -26,6 +29,8 @@ pub struct TaskDetail {
     pub failed_items: i64,
     pub created_at: String,
     pub updated_at: String,
+    pub project_id: String,
+    pub workflow_id: String,
     pub items: Vec<TaskItemSummary>,
 }
 
@@ -42,12 +47,13 @@ pub struct TaskItemSummary {
 pub async fn task_list(
     state: State<'_, AppState>,
     status_filter: Option<String>,
+    project_filter: Option<String>,
 ) -> Result<Vec<TaskSummary>, String> {
     let mut client = state.client().await?;
     let resp = client
         .task_list(orchestrator_proto::TaskListRequest {
             status_filter,
-            project_filter: None,
+            project_filter,
         })
         .await
         .map_err(|e| e.message().to_string())?;
@@ -65,6 +71,9 @@ pub async fn task_list(
             failed_items: t.failed_items,
             created_at: t.created_at,
             updated_at: t.updated_at,
+            project_id: t.project_id,
+            workflow_id: t.workflow_id,
+            goal: t.goal,
         })
         .collect();
     Ok(tasks)
@@ -249,6 +258,8 @@ pub async fn task_info(
         failed_items: task.failed_items,
         created_at: task.created_at,
         updated_at: task.updated_at,
+        project_id: task.project_id,
+        workflow_id: task.workflow_id,
         items,
     })
 }

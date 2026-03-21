@@ -27,6 +27,7 @@ pub fn run() {
             commands::stream::stop_task_follow,
             commands::stream::start_task_watch,
             commands::stream::stop_task_watch,
+            commands::stream::task_logs,
             // resource
             commands::resource::resource_get,
             commands::resource::resource_describe,

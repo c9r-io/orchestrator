@@ -1,5 +1,6 @@
 import { useEffect, useRef, useMemo, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useGrpc } from "../hooks/useGrpc";
 import { useStream } from "../hooks/useStream";
 import { useRole } from "../hooks/useRole";
@@ -7,7 +8,7 @@ import ProgressBar from "../components/ProgressBar";
 import StatusIcon from "../components/StatusIcon";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ExpertPanel from "../components/ExpertPanel";
-import type { TaskDetail as TaskDetailType, LogLine } from "../lib/types";
+import type { TaskDetail as TaskDetailType, LogLine, WatchSnapshot } from "../lib/types";
 
 interface Props {
   taskId: string;
@@ -38,6 +39,49 @@ export default function TaskDetail({ taskId, onBack }: Props) {
   useEffect(() => {
     reload();
   }, [reload]);
+
+  // TaskWatch: live status/items updates.
+  const [liveData, setLiveData] = useState<TaskDetailType | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+
+    (async () => {
+      unlisten = await listen<WatchSnapshot>(`task-watch-${taskId}`, (event) => {
+        if (cancelled) return;
+        const snap = event.payload;
+        // Merge watch snapshot into detail view.
+        setLiveData((prev) => ({
+          id: snap.task.id,
+          name: snap.task.name,
+          status: snap.task.status,
+          goal: prev?.goal ?? snap.task.goal ?? "",
+          total_items: snap.task.total_items,
+          finished_items: snap.task.finished_items,
+          failed_items: snap.task.failed_items,
+          created_at: snap.task.created_at,
+          updated_at: snap.task.updated_at,
+          project_id: snap.task.project_id,
+          workflow_id: snap.task.workflow_id,
+          items: snap.items,
+        }));
+      });
+      try {
+        await invoke("start_task_watch", { task_id: taskId, interval_secs: 2 });
+      } catch {
+        // Task may already be completed.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+      invoke("stop_task_watch", { task_id: taskId }).catch(() => {});
+    };
+  }, [taskId]);
+
+  // Use live data if available, otherwise fall back to initial load.
+  const displayData = liveData ?? data;
 
   // Auto-scroll log viewer.
   useEffect(() => {
@@ -76,9 +120,9 @@ export default function TaskDetail({ taskId, onBack }: Props) {
     onBack();
   };
 
-  const isRunning = data?.status.toLowerCase() === "running" || data?.status.toLowerCase() === "in_progress";
-  const isPaused = data?.status.toLowerCase() === "paused";
-  const isFailed = data?.status.toLowerCase() === "failed" || data?.status.toLowerCase() === "error";
+  const isRunning = displayData?.status.toLowerCase() === "running" || data?.status.toLowerCase() === "in_progress";
+  const isPaused = displayData?.status.toLowerCase() === "paused";
+  const isFailed = displayData?.status.toLowerCase() === "failed" || data?.status.toLowerCase() === "error";
 
   return (
     <div>
@@ -102,11 +146,11 @@ export default function TaskDetail({ taskId, onBack }: Props) {
                 恢复
               </button>
             )}
-            {isFailed && data?.items.some((i) => i.status.toLowerCase() === "failed") && (
+            {isFailed && displayData?.items.some((i) => i.status.toLowerCase() === "failed") && (
               <button
                 className="btn btn-secondary"
                 onClick={() => {
-                  const failedItem = data.items.find((i) => i.status.toLowerCase() === "failed");
+                  const failedItem = displayData.items.find((i) => i.status.toLowerCase() === "failed");
                   if (failedItem) doAction("task_retry", { task_item_id: failedItem.id });
                 }}
                 aria-label="重试失败项"
@@ -141,32 +185,32 @@ export default function TaskDetail({ taskId, onBack }: Props) {
       {actionErr && <p style={{ color: "var(--danger)", fontSize: 13, marginBottom: 8 }}>{actionErr}</p>}
       {error && <p style={{ color: "var(--danger)", marginBottom: 8 }}>{error}</p>}
 
-      {data && (
+      {displayData && (
         <>
           {/* Task info card */}
           <div className="liquid-glass" style={{ marginBottom: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <StatusIcon status={data.status} />
-              <h2 style={{ flex: 1, fontSize: 18 }}>{data.name || data.id}</h2>
+              <StatusIcon status={displayData.status} />
+              <h2 style={{ flex: 1, fontSize: 18 }}>{displayData.name || displayData.id}</h2>
             </div>
 
-            {data.total_items > 0 && (
-              <ProgressBar finished={data.finished_items} total={data.total_items} />
+            {displayData.total_items > 0 && (
+              <ProgressBar finished={displayData.finished_items} total={displayData.total_items} />
             )}
 
-            {data.goal && (
+            {displayData.goal && (
               <p style={{ marginTop: 8, color: "var(--text-secondary)", fontSize: 14 }}>
-                {data.goal}
+                {displayData.goal}
               </p>
             )}
 
             {/* Items list */}
-            {data.items.length > 0 && (
+            {displayData.items.length > 0 && (
               <div style={{ marginTop: 16 }}>
                 <h3 style={{ fontSize: 14, marginBottom: 8, color: "var(--text-secondary)" }}>
                   步骤进度
                 </h3>
-                {data.items.map((item) => (
+                {displayData.items.map((item) => (
                   <div
                     key={item.id}
                     style={{
@@ -201,7 +245,7 @@ export default function TaskDetail({ taskId, onBack }: Props) {
 
           {/* Expert mode panel OR log streaming */}
           {expert ? (
-            <ExpertPanel taskDetail={data} />
+            <ExpertPanel taskDetail={displayData} />
           ) : (
             <div className="liquid-glass">
               <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>

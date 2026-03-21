@@ -15,6 +15,9 @@ export interface TaskSummary {
   failed_items: number;
   created_at: string;
   updated_at: string;
+  project_id: string;
+  workflow_id: string;
+  goal: string;
 }
 
 export interface TaskDetail {
@@ -27,6 +30,8 @@ export interface TaskDetail {
   failed_items: number;
   created_at: string;
   updated_at: string;
+  project_id: string;
+  workflow_id: string;
   items: TaskItemSummary[];
 }
 
@@ -78,6 +83,13 @@ export interface StoreEntry {
 }
 
 export type Role = "read_only" | "operator" | "admin";
+
+export interface TaskLogChunk {
+  run_id: string;
+  phase: string;
+  content: string;
+  started_at: string | null;
+}
 
 /** Wish status derived from task status + workflow context. */
 export type WishStatus = "drafting" | "pending_confirm" | "confirmed" | "failed" | "cancelled";

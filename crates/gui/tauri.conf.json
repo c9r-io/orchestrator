@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "identifier": "io.c9r.orchestrator-gui",
   "build": {
+    "beforeDevCommand": { "script": "npm run dev", "cwd": "../../gui" },
+    "beforeBuildCommand": { "script": "npm run build", "cwd": "../../gui" },
     "frontendDist": "../../gui/dist",
     "devUrl": "http://localhost:5173"
   },

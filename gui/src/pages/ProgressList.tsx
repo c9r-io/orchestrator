@@ -1,8 +1,9 @@
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import ProgressBar from "../components/ProgressBar";
 import StatusIcon from "../components/StatusIcon";
-import type { TaskSummary } from "../lib/types";
+import type { TaskSummary, WatchSnapshot } from "../lib/types";
 
 interface Props {
   onSelect: (taskId: string) => void;
@@ -25,10 +26,17 @@ function sortTasks(a: TaskSummary, b: TaskSummary): number {
   return b.updated_at.localeCompare(a.updated_at);
 }
 
+function isActive(status: string): boolean {
+  const s = status.toLowerCase();
+  return s === "running" || s === "in_progress" || s === "paused";
+}
+
 export default function ProgressList({ onSelect }: Props) {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const watchedRef = useRef<Set<string>>(new Set());
+  const unlistenersRef = useRef<Map<string, UnlistenFn>>(new Map());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -36,16 +44,71 @@ export default function ProgressList({ onSelect }: Props) {
     try {
       const data = await invoke<TaskSummary[]>("task_list", {});
       setTasks(data.sort(sortTasks));
+      return data;
     } catch (e) {
       setError(typeof e === "string" ? e : String(e));
+      return [];
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // Subscribe to TaskWatch for active tasks.
+  const startWatching = useCallback(async (taskList: TaskSummary[]) => {
+    const activeTasks = taskList.filter((t) => isActive(t.status));
+    for (const task of activeTasks) {
+      if (watchedRef.current.has(task.id)) continue;
+      watchedRef.current.add(task.id);
+
+      // Listen for watch events.
+      const unlisten = await listen<WatchSnapshot>(
+        `task-watch-${task.id}`,
+        (event) => {
+          const snapshot = event.payload;
+          setTasks((prev) =>
+            prev
+              .map((t) => (t.id === snapshot.task.id ? snapshot.task : t))
+              .sort(sortTasks)
+          );
+        }
+      );
+      unlistenersRef.current.set(task.id, unlisten);
+
+      // Start the watch stream.
+      try {
+        await invoke("start_task_watch", {
+          task_id: task.id,
+          interval_secs: 3,
+        });
+      } catch {
+        // Task may have completed before watch started.
+      }
+    }
+  }, []);
+
+  // Cleanup all watches.
+  const stopAllWatches = useCallback(async () => {
+    for (const [taskId, unlisten] of unlistenersRef.current) {
+      unlisten();
+      try {
+        await invoke("stop_task_watch", { task_id: taskId });
+      } catch {
+        // Ignore errors on cleanup.
+      }
+    }
+    unlistenersRef.current.clear();
+    watchedRef.current.clear();
+  }, []);
+
   useEffect(() => {
-    load();
-  }, [load]);
+    (async () => {
+      const data = await load();
+      await startWatching(data);
+    })();
+    return () => {
+      stopAllWatches();
+    };
+  }, [load, startWatching, stopAllWatches]);
 
   return (
     <div>
@@ -80,8 +143,11 @@ export default function ProgressList({ onSelect }: Props) {
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <StatusIcon status={task.status} />
               <span style={{ flex: 1, fontWeight: 500, fontSize: 15 }}>
-                {task.name || task.id.slice(0, 8)}
+                {task.name || task.goal?.slice(0, 40) || task.id.slice(0, 8)}
               </span>
+              {isActive(task.status) && (
+                <span style={{ fontSize: 11, color: "var(--accent)" }}>● 实时</span>
+              )}
             </div>
 
             {task.total_items > 0 && (

@@ -47,7 +47,7 @@ export default function WishPool({ onSelectWish }: Props) {
 
   const loadWishes = useCallback(async () => {
     try {
-      const tasks = await invoke<TaskSummary[]>("task_list", {});
+      const tasks = await invoke<TaskSummary[]>("task_list", { project_filter: "wish-pool" });
       setWishes(tasks.sort((a, b) => b.updated_at.localeCompare(a.updated_at)));
     } catch {
       // silently fail on list refresh
@@ -65,6 +65,7 @@ export default function WishPool({ onSelectWish }: Props) {
     try {
       const result = await invoke<TaskCreateResult>("task_create", {
         goal: input.trim(),
+        project_id: "wish-pool",
       });
       setInput("");
       // Navigate to the newly created wish detail
@@ -186,7 +187,7 @@ export default function WishPool({ onSelectWish }: Props) {
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <StatusIcon status={wish.status} />
               <span style={{ flex: 1, fontWeight: 500 }}>
-                {wish.name || wish.id.slice(0, 8)}
+                {wish.goal?.slice(0, 50) || wish.name || wish.id.slice(0, 8)}
               </span>
               <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
                 {wish.updated_at}

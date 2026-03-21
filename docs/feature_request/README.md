@@ -52,6 +52,10 @@
 | FR-063 | GUI 架构设计 — Tauri + gRPC 安全客户端 | P1 | Closed |
 | FR-064 | GUI 用户界面设计 — 许愿池 + 进度观察 | P1 | Closed |
 | FR-065 | Agent 间通信接口草案 — Mailbox + Session Control Plane | P1 | Closed |
+| FR-066 | GUI 实时状态推送与许愿池数据隔离 | P0 | Closed |
+| FR-067 | GUI CLI 功能对齐 — 补全缺失 RPC 覆盖 | P1 | Proposed |
+| FR-068 | GUI 连接韧性与系统通知 | P1 | Proposed |
+| FR-069 | GUI 体验打磨 — 主题切换 / 动画 / i18n / 响应式 / 构建分发 | P2 | Proposed |
 
 ## 说明
 
@@ -122,3 +126,4 @@
 - FR-065 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/75-agent-mailbox-session-communication.md` 与 `docs/qa/orchestrator/115-agent-mailbox-session-communication.md` 承载
 - FR-063 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/73-gui-architecture-tauri-grpc.md` 与 `docs/qa/orchestrator/116-gui-architecture-tauri-grpc.md` 承载
 - FR-064 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/74-gui-uiux-wish-pool-progress.md` 与 `docs/qa/orchestrator/117-gui-uiux-wish-pool-progress.md` 承载
+- FR-066 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/76-gui-realtime-wish-isolation.md` 与 `docs/qa/orchestrator/118-gui-realtime-wish-isolation.md` 承载

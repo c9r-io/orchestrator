@@ -111,6 +111,9 @@ pub async fn start_task_watch(
                                 failed_items: t.failed_items,
                                 created_at: t.created_at,
                                 updated_at: t.updated_at,
+                                project_id: t.project_id,
+                                workflow_id: t.workflow_id,
+                                goal: t.goal,
                             });
                             if let Some(task) = task {
                                 let items: Vec<_> = snapshot.items.into_iter().map(|i| {
@@ -146,4 +149,43 @@ pub async fn stop_task_watch(
     let watch_key = format!("watch-{}", task_id);
     state.cancel_stream(&watch_key).await;
     Ok(())
+}
+
+/// A chunk of historical task logs.
+#[derive(Debug, Clone, Serialize)]
+pub struct TaskLogChunk {
+    pub run_id: String,
+    pub phase: String,
+    pub content: String,
+    pub started_at: Option<String>,
+}
+
+/// Get historical task logs (collects all chunks from the streaming RPC).
+#[tauri::command]
+pub async fn task_logs(
+    state: State<'_, AppState>,
+    task_id: String,
+    tail: Option<u64>,
+) -> Result<Vec<TaskLogChunk>, String> {
+    let mut client = state.client().await?;
+    let resp = client
+        .task_logs(orchestrator_proto::TaskLogsRequest {
+            task_id,
+            tail: tail.unwrap_or(0),
+            timestamps: false,
+        })
+        .await
+        .map_err(|e| e.message().to_string())?;
+
+    let mut stream = resp.into_inner();
+    let mut chunks = Vec::new();
+    while let Some(chunk) = stream.message().await.map_err(|e| e.message().to_string())? {
+        chunks.push(TaskLogChunk {
+            run_id: chunk.run_id,
+            phase: chunk.phase,
+            content: chunk.content,
+            started_at: chunk.started_at,
+        });
+    }
+    Ok(chunks)
 }
