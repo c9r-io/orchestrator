@@ -223,6 +223,93 @@ pub async fn task_delete(
     })
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct TaskTraceResult {
+    pub trace_json: String,
+}
+
+/// Get task execution trace (read_only+).
+#[tauri::command]
+pub async fn task_trace(
+    state: State<'_, AppState>,
+    task_id: String,
+    verbose: Option<bool>,
+) -> Result<TaskTraceResult, String> {
+    let mut client = state.client().await?;
+    let resp = client
+        .task_trace(orchestrator_proto::TaskTraceRequest {
+            task_id,
+            verbose: verbose.unwrap_or(false),
+        })
+        .await
+        .map_err(|e| e.message().to_string())?;
+    Ok(TaskTraceResult {
+        trace_json: resp.into_inner().trace_json,
+    })
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TaskRecoverResult {
+    pub task_id: String,
+    pub recovered_items: u64,
+    pub message: String,
+}
+
+/// Recover a task from error state (operator+).
+#[tauri::command]
+pub async fn task_recover(
+    state: State<'_, AppState>,
+    task_id: String,
+) -> Result<TaskRecoverResult, String> {
+    let mut client = state.client().await?;
+    let resp = client
+        .task_recover(orchestrator_proto::TaskRecoverRequest { task_id })
+        .await
+        .map_err(|e| e.message().to_string())?;
+    let inner = resp.into_inner();
+    Ok(TaskRecoverResult {
+        task_id: inner.task_id,
+        recovered_items: inner.recovered_items,
+        message: inner.message,
+    })
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BulkDeleteResult {
+    pub deleted: i32,
+    pub failed: i32,
+    pub errors: Vec<String>,
+    pub message: String,
+}
+
+/// Bulk delete tasks (admin).
+#[tauri::command]
+pub async fn task_delete_bulk(
+    state: State<'_, AppState>,
+    task_ids: Option<Vec<String>>,
+    force: Option<bool>,
+    status_filter: Option<String>,
+    project_filter: Option<String>,
+) -> Result<BulkDeleteResult, String> {
+    let mut client = state.client().await?;
+    let resp = client
+        .task_delete_bulk(orchestrator_proto::TaskDeleteBulkRequest {
+            task_ids: task_ids.unwrap_or_default(),
+            force: force.unwrap_or(false),
+            status_filter: status_filter.unwrap_or_default(),
+            project_filter: project_filter.unwrap_or_default(),
+        })
+        .await
+        .map_err(|e| e.message().to_string())?;
+    let inner = resp.into_inner();
+    Ok(BulkDeleteResult {
+        deleted: inner.deleted,
+        failed: inner.failed,
+        errors: inner.errors,
+        message: inner.message,
+    })
+}
+
 /// Get detailed info for a single task.
 #[tauri::command]
 pub async fn task_info(

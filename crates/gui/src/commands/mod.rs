@@ -1,6 +1,10 @@
 pub mod agent;
+pub mod event;
+pub mod manifest;
 pub mod resource;
+pub mod secret;
 pub mod store;
 pub mod stream;
 pub mod system;
 pub mod task;
+pub mod trigger;

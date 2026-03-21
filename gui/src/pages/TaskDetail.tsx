@@ -114,15 +114,25 @@ export default function TaskDetail({ taskId, onBack }: Props) {
 
   const handlePause = () => doAction("task_pause", { task_id: taskId });
   const handleResume = () => doAction("task_resume", { task_id: taskId });
+  const handleRecover = () => doAction("task_recover", { task_id: taskId });
   const handleDelete = async () => {
     setShowDelete(false);
     await doAction("task_delete", { task_id: taskId, force: true });
     onBack();
   };
 
-  const isRunning = displayData?.status.toLowerCase() === "running" || data?.status.toLowerCase() === "in_progress";
-  const isPaused = displayData?.status.toLowerCase() === "paused";
-  const isFailed = displayData?.status.toLowerCase() === "failed" || data?.status.toLowerCase() === "error";
+  const [traceJson, setTraceJson] = useState<string | null>(null);
+  const handleTrace = async () => {
+    try {
+      const r = await invoke<{ trace_json: string }>("task_trace", { task_id: taskId, verbose: true });
+      setTraceJson(r.trace_json);
+    } catch (e) { setActionErr(typeof e === "string" ? e : String(e)); }
+  };
+
+  const status = displayData?.status.toLowerCase() ?? "";
+  const isRunning = status === "running" || status === "in_progress";
+  const isPaused = status === "paused";
+  const isFailed = status === "failed" || status === "error";
 
   return (
     <div>
@@ -158,8 +168,17 @@ export default function TaskDetail({ taskId, onBack }: Props) {
                 重试
               </button>
             )}
+            {isFailed && (
+              <button className="btn btn-secondary" onClick={handleRecover} aria-label="恢复任务">
+                恢复任务
+              </button>
+            )}
           </>
         )}
+
+        <button className="btn btn-ghost" onClick={handleTrace} aria-label="执行跟踪" style={{ fontSize: 13 }}>
+          跟踪
+        </button>
 
         <button
           className={`btn ${expert ? "btn-primary" : "btn-ghost"}`}
@@ -184,6 +203,19 @@ export default function TaskDetail({ taskId, onBack }: Props) {
       {actionMsg && <p style={{ color: "var(--success)", fontSize: 13, marginBottom: 8 }}>{actionMsg}</p>}
       {actionErr && <p style={{ color: "var(--danger)", fontSize: 13, marginBottom: 8 }}>{actionErr}</p>}
       {error && <p style={{ color: "var(--danger)", marginBottom: 8 }}>{error}</p>}
+
+      {traceJson && (
+        <div className="liquid-glass" style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
+            <h3 style={{ flex: 1, fontSize: 14 }}>执行跟踪</h3>
+            <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setTraceJson(null)}>关闭</button>
+          </div>
+          <pre style={{ background: "var(--bg-secondary)", borderRadius: 12, padding: 12,
+            fontSize: 12, whiteSpace: "pre-wrap", maxHeight: 300, overflowY: "auto" }}>
+            {traceJson}
+          </pre>
+        </div>
+      )}
 
       {displayData && (
         <>
