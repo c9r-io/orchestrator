@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S5]
 ---
 
 # QA: Long-Lived Command Guard
@@ -107,13 +108,20 @@ Verifies FR-045: `task watch --timeout`, stall auto-termination, and QA agent ti
 
 ### Steps
 
-1. Read `fixtures/workflow/self-bootstrap.yaml`.
-2. Find the `qa_testing` step template.
+1. Verify the timeout guidance exists in the self-bootstrap workflow fixture:
+   ```bash
+   rg -n "timeout" fixtures/workflow/self-bootstrap.yaml
+   ```
+2. Code review — confirm the `qa_testing` step template in `fixtures/workflow/self-bootstrap.yaml` (lines 165-167):
+   - Template prompt contains guidance about using `--timeout` where available
+   - Template prompt wraps with shell `timeout` command to prevent indefinite blocking
+   - Example command uses `--timeout` flag: `orchestrator task watch <task_id> --interval 1 --timeout 30`
 
 ### Expected
 
-- The template prompt contains guidance about using `--timeout` or `timeout` wrapper for streaming commands.
-- Example command in prompt uses `--timeout` flag.
+- `rg` output shows 3+ matches for `timeout` in the fixture file
+- The template prompt contains guidance about using `--timeout` or `timeout` wrapper for streaming commands
+- Example command in prompt uses `--timeout` flag
 
 ---
 

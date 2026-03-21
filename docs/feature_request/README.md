@@ -46,7 +46,7 @@
 | FR-056 | Agent Health Policy 可配置化 — Disease 策略按 Agent/Workspace 设定 | P1 | Closed |
 | FR-057 | orchestratord 真正 Daemon 化 | P1 | Closed |
 | FR-058 | QA 自引用测试覆盖率恢复 — 场景级安全分级治理 | P1 | Closed |
-| FR-060 | 减少 QA 场景中的不安全操作 | P1 | In Progress |
+| FR-060 | 减少 QA 场景中的不安全操作 | P1 | Closed |
 | FR-061 | Daemon 日志环境变量覆盖 | P2 | Closed |
 | FR-062 | Agent Health 状态可观测性 | P2 | Closed |
 | FR-063 | GUI 架构设计 — Tauri + gRPC 安全客户端 | P1 | Closed |
@@ -127,3 +127,4 @@
 - FR-063 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/73-gui-architecture-tauri-grpc.md` 与 `docs/qa/orchestrator/116-gui-architecture-tauri-grpc.md` 承载
 - FR-064 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/74-gui-uiux-wish-pool-progress.md` 与 `docs/qa/orchestrator/117-gui-uiux-wish-pool-progress.md` 承载
 - FR-066 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/76-gui-realtime-wish-isolation.md` 与 `docs/qa/orchestrator/118-gui-realtime-wish-isolation.md` 承载
+- FR-060 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/77-reduce-unsafe-qa-operations.md` 承载（13 次迭代将 unsafe 文档从 114 降至 33，+360 安全场景，23.1% unsafe 率达成 < 30% 目标）

@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S2, S3]
 ---
 
 # Orchestrator - Step Execution Profiles
@@ -72,7 +73,7 @@ Ensure `ExecutionProfile` manifests can be applied and exported as project-scope
 
 ### Preconditions
 
-- CLI built from latest source.
+- None (unit test verification)
 
 ### Goal
 
@@ -80,30 +81,18 @@ Ensure `execution_profile` can only be used on agent steps.
 
 ### Steps
 
-1. Create an invalid workflow with a builtin step using `execution_profile`:
+1. Run the dedicated unit test:
    ```bash
-   cat > /tmp/execution-profile-invalid-builtin.yaml << 'YAML'
-   apiVersion: orchestrator.dev/v2
-   kind: Workflow
-   metadata:
-     name: invalid-builtin-profile
-   spec:
-     steps:
-       - id: self_test
-         type: self_test
-         builtin: self_test
-         execution_profile: sandbox_write
-         enabled: true
-     loop:
-       mode: once
-   YAML
-   orchestrator manifest validate -f /tmp/execution-profile-invalid-builtin.yaml
+   cargo test -p agent-orchestrator --lib -- exec_profile_rejects_non_agent_step_with_profile
    ```
+2. Code review — verify the validation logic in `core/src/config_load/validate/tests.rs` (line 1401):
+   - Test constructs a command step (non-agent) with `execution_profile: Some("sandboxed")`
+   - Calls `validate_execution_profiles_for_project()` and asserts error containing `"only supported on agent steps"`
 
 ### Expected
 
-- Command exits non-zero.
-- Validation error states that `execution_profile` is only supported on agent steps.
+- Unit test passes
+- Error path confirmed: non-agent step with `execution_profile` produces validation error
 
 ---
 
@@ -111,8 +100,7 @@ Ensure `execution_profile` can only be used on agent steps.
 
 ### Preconditions
 
-- CLI built from latest source.
-- Runtime initialized.
+- None (unit test verification)
 
 ### Goal
 
@@ -120,50 +108,19 @@ Ensure a workflow cannot reference a non-existent project-scoped profile.
 
 ### Steps
 
-1. Prepare isolated project and apply minimal workspace/agent resources:
+1. Run the dedicated unit test:
    ```bash
-   QA_PROJECT="qa-exec-profile-missing"
-   orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
-   rm -rf "workspace/${QA_PROJECT}"
-   cat > /tmp/execution-profile-missing-bundle.yaml << 'YAML'
-   apiVersion: orchestrator.dev/v2
-   kind: Workspace
-   metadata:
-     name: default
-   spec:
-     root_path: "."
-     qa_targets: [docs/qa]
-     ticket_dir: fixtures/ticket
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: mock-impl
-   spec:
-     capabilities: [implement]
-     command: "echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Workflow
-   metadata:
-     name: invalid-missing-profile
-   spec:
-     steps:
-       - id: implement
-         type: implement
-         required_capability: implement
-         execution_profile: missing_profile
-         enabled: true
-     loop:
-       mode: once
-   YAML
-   orchestrator apply --project "${QA_PROJECT}" -f /tmp/execution-profile-missing-bundle.yaml
+   cargo test -p agent-orchestrator --lib -- exec_profile_rejects_unknown_profile_name
    ```
+2. Code review — verify the validation logic in `core/src/config_load/validate/tests.rs` (line 1426):
+   - Test constructs an agent step with `execution_profile: Some("nonexistent")`
+   - Project config has no profile named `"nonexistent"`
+   - Calls `validate_execution_profiles_for_project()` and asserts error containing `"unknown execution profile"`
 
 ### Expected
 
-- `apply` exits non-zero.
-- Error states that the workflow step references an unknown execution profile.
+- Unit test passes
+- Error path confirmed: referencing a non-existent execution profile produces validation error
 
 ---
 

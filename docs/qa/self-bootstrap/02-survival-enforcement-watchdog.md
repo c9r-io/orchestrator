@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S1, S2, S3]
 ---
 
 # Self-Bootstrap - Self-Referential Enforcement & Watchdog
@@ -45,165 +46,73 @@ orchestrator delete "project/${QA_PROJECT}" --force
 ## Scenario 1: Self-Referential Workspace Without Checkpoint Strategy Fails
 
 ### Preconditions
-- Common Preconditions applied
+- None (unit test verification)
 
 ### Goal
-Verify that starting a task on a self-referential workspace with `checkpoint_strategy: none` produces a hard error and the task does not start.
+Verify that `validate_self_referential_safety()` rejects a self-referential workspace with `checkpoint_strategy: none`.
 
 ### Steps
-1. Apply a manifest with `self_referential: true` but `checkpoint_strategy: none`:
-   ```yaml
-   apiVersion: orchestrator.dev/v2
-   kind: Workspace
-   metadata:
-     name: unsafe-ws
-   spec:
-     root_path: "."
-     qa_targets: [docs/qa]
-     ticket_dir: fixtures/ticket
-     self_referential: true
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Workflow
-   metadata:
-     name: unsafe-workflow
-   spec:
-     steps:
-       - id: plan
-         type: plan
-         required_capability: plan
-         enabled: true
-     safety:
-       max_consecutive_failures: 3
-       auto_rollback: true
-       checkpoint_strategy: none
-   ```
+1. Run the dedicated unit test:
    ```bash
-   orchestrator apply -f /tmp/unsafe-manifest.yaml --project "${QA_PROJECT}"
+   cargo test -p agent-orchestrator --lib -- validate_self_referential_safety_errors_without_checkpoint_strategy
    ```
-2. Create a task and attempt to start it:
-   ```bash
-   orchestrator task create --project "${QA_PROJECT}" --workflow unsafe-workflow --goal "test unsafe"
-   ```
+2. Code review — verify the validation logic in `core/src/config_load/validate/tests.rs` (line 503):
+   - Test constructs a `WorkflowConfig` with `checkpoint_strategy: None` and `self_referential: true`
+   - Calls `validate_self_referential_safety()` and asserts error containing `"self_ref.checkpoint_strategy_required"`
 
 ### Expected
-- Task start fails with error message containing `[SELF_REF_UNSAFE]`
-- Error message includes: "self_referential but checkpoint_strategy is 'none'"
-- Task status transitions to `failed` (the task is marked `running` before validation, then `failed` when validation rejects it)
-
-### Troubleshooting
-
-| Symptom | Root Cause | Fix |
-|---------|-----------|-----|
-| Task status is `failed` instead of `pending` | By design: `task start` sets status to `running` before loading runtime context; on validation failure it transitions to `failed` | This is expected behavior — verify the error message is correct |
+- Unit test passes
+- Error path confirmed: `checkpoint_strategy: none` on a self-referential workspace produces `self_ref.checkpoint_strategy_required`
 
 ---
 
 ## Scenario 2: Warning When Auto-Rollback Disabled on Self-Referential Workspace
 
 ### Preconditions
-- Common Preconditions applied
+- None (unit test verification)
 
 ### Goal
-Verify that `auto_rollback: false` is rejected as a hard error on a self-referential workspace with a valid checkpoint strategy.
+Verify that `validate_self_referential_safety()` rejects `auto_rollback: false` on a self-referential workspace with a valid checkpoint strategy.
 
 ### Steps
-1. Apply a manifest with `self_referential: true`, `checkpoint_strategy: git_tag`, but `auto_rollback: false`:
-   ```yaml
-   apiVersion: orchestrator.dev/v2
-   kind: Workspace
-   metadata:
-     name: warn-ws
-   spec:
-     root_path: "."
-     qa_targets: [docs/qa]
-     ticket_dir: fixtures/ticket
-     self_referential: true
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Workflow
-   metadata:
-     name: warn-workflow
-   spec:
-     steps:
-       - id: plan
-         type: plan
-         required_capability: plan
-         enabled: true
-     safety:
-       max_consecutive_failures: 3
-       auto_rollback: false
-       checkpoint_strategy: git_tag
-   ```
+1. Run the dedicated unit test:
    ```bash
-   orchestrator apply -f /tmp/warn-manifest.yaml --project "${QA_PROJECT}"
+   cargo test -p agent-orchestrator --lib -- validate_self_referential_safety_errors_disabled_auto_rollback
    ```
-2. Apply the manifest and inspect stderr:
-   ```bash
-   orchestrator apply -f /tmp/warn-manifest.yaml --project "${QA_PROJECT}" 2>/tmp/warn-manifest.err || true
-   cat /tmp/warn-manifest.err
-   ```
+2. Code review — verify the validation logic in `core/src/config_load/validate/tests.rs` (line 761):
+   - Test constructs a `WorkflowConfig` with `checkpoint_strategy: GitStash`, `auto_rollback: false`, and `self_referential: true`
+   - Calls `validate_self_referential_safety()` and asserts error containing `"self_ref.auto_rollback_required"`
 
 ### Expected
-- `apply` exits non-zero
-- stderr contains `self_ref.auto_rollback_required`
-- Rejection uses `[SELF_REF_POLICY_VIOLATION]`, not a warning-only path
+- Unit test passes
+- Error path confirmed: `auto_rollback: false` on a self-referential workspace produces `self_ref.auto_rollback_required`
 
 ---
 
 ## Scenario 3: Warning When No Self-Test Step in Self-Referential Workflow
 
 ### Preconditions
-- Common Preconditions applied
+- None (unit test verification)
 
 ### Goal
-Verify that a self-referential workspace workflow without builtin `self_test` is rejected as a hard error.
+Verify that `validate_self_referential_safety()` rejects a self-referential workflow without a builtin `self_test` step.
 
 ### Steps
-1. Apply a manifest with `self_referential: true`, valid safety config, but no `self_test` step:
-   ```yaml
-   apiVersion: orchestrator.dev/v2
-   kind: Workspace
-   metadata:
-     name: notest-ws
-   spec:
-     root_path: "."
-     qa_targets: [docs/qa]
-     ticket_dir: fixtures/ticket
-     self_referential: true
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Workflow
-   metadata:
-     name: notest-workflow
-   spec:
-     steps:
-       - id: plan
-         type: plan
-         required_capability: plan
-         enabled: true
-       - id: implement
-         type: implement
-         required_capability: implement
-         enabled: true
-     safety:
-       max_consecutive_failures: 3
-       auto_rollback: true
-       checkpoint_strategy: git_tag
-   ```
+1. Run the dedicated unit test:
    ```bash
-   orchestrator apply -f /tmp/notest-manifest.yaml --project "${QA_PROJECT}"
+   cargo test -p agent-orchestrator --lib -- validate_self_referential_safety_errors_missing_self_test
    ```
-2. Apply the manifest and inspect stderr:
+2. Code review — verify the validation logic in `core/src/config_load/validate/tests.rs` (line 351):
+   - Test constructs a `WorkflowConfig` with `checkpoint_strategy: GitTag`, `auto_rollback: true`, but only an `implement` step (no `self_test`)
+   - Calls `validate_self_referential_safety()` and asserts error containing `"self_ref.self_test_required"`
+3. Verify complementary positive test:
    ```bash
-   orchestrator apply -f /tmp/notest-manifest.yaml --project "${QA_PROJECT}" 2>/tmp/notest-manifest.err || true
-   cat /tmp/notest-manifest.err
+   cargo test -p agent-orchestrator --lib -- validate_self_referential_safety_passes_with_self_test
    ```
 
 ### Expected
-- `apply` exits non-zero
-- stderr contains `self_ref.self_test_required`
-- Rejection uses `[SELF_REF_POLICY_VIOLATION]`, not a warning-only path
+- Both unit tests pass
+- Error path confirmed: missing `self_test` step on a self-referential workflow produces `self_ref.self_test_required`
 
 ---
 
