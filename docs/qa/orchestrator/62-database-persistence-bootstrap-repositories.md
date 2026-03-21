@@ -189,8 +189,8 @@ Verify the persistence extraction does not regress orchestrator package behavior
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Persistence Bootstrap Owns Schema Initialization | PASS | 2026-03-20 | Claude | Focused bootstrap test passed; no schema init errors |
-| 2 | Public DB Facade No Longer Exposes `ensure_column` | PASS | 2026-03-20 | Claude | `rg` confirmed no public helper and no `crate::db::ensure_column` call sites remain |
-| 3 | Session Async Wrapper Delegates Through Repository Boundary | PASS | 2026-03-20 | Claude | Both session tests passed; insert/load/update/cleanup intact |
-| 4 | Local Workflow Store Uses Repository-Backed Persistence | PASS | 2026-03-20 | Claude | All store tests passed; CRUD/upsert/list/prune semantics intact |
-| 5 | Full Package Regression Remains Green After Persistence Refactor | PASS | 2026-03-20 | Claude | 1437 lib tests passed; no regressions in scheduler/session/store/migration |
+| 1 | Persistence Bootstrap Owns Schema Initialization | PASS | 2026-03-21 | Claude | Focused bootstrap test passed; no schema init errors |
+| 2 | Public DB Facade No Longer Exposes `ensure_column` | PASS | 2026-03-21 | Claude | `rg` confirmed no public helper and no `crate::db::ensure_column` call sites remain |
+| 3 | Session Async Wrapper Delegates Through Repository Boundary | PASS | 2026-03-21 | Claude | Both session tests passed; insert/load/update/cleanup intact |
+| 4 | Local Workflow Store Uses Repository-Backed Persistence | PASS | 2026-03-21 | Claude | All store tests passed; CRUD/upsert/list/prune semantics intact |
+| 5 | Full Package Regression Remains Green After Persistence Refactor | PASS | 2026-03-21 | Claude | 1437 lib tests passed; no regressions in scheduler/session/store/migration |

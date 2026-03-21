@@ -192,8 +192,8 @@ Ensure config defaults and CLI override precedence for structured logging remain
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Release Build Includes Logging Surface | ✅ | 2026-03-20 | Claude | CLI `-v` flag works; config parsing surface exists (env var wiring is a separate feature) |
-| 2 | `init` Preserves stdout Contract | ✅ | 2026-03-20 | Claude | CLI uses println!/eprintln! correctly; observability tests pass |
-| 3 | JSON Console Logging Works Via Environment Variable | ✅ | 2026-03-20 | Claude | `LoggingFormat::parse("json")` works; validates config parsing surface |
-| 4 | Daemon Log File Is Written | ✅ | 2026-03-20 | Claude | data/daemon.log populated via fd redirection in daemon mode; content correct when daemon runs in daemon mode |
-| 5 | Logging Config Resolution Unit Tests Pass | ✅ | 2026-03-20 | Claude | All 4 observability tests pass |
+| 1 | Release Build Includes Logging Surface | ✅ | 2026-03-21 | Claude | CLI `-v` flag works; config parsing surface exists; `ORCHESTRATOR_LOG`/`ORCHESTRATOR_LOG_FORMAT` env vars wired in daemon bootstrap (main.rs:122-132) |
+| 2 | `init` Preserves stdout Contract | ✅ | 2026-03-21 | Claude | CLI uses println!/eprintln! correctly; tracing subscriber writes to stderr via make_writer; observability tests pass |
+| 3 | JSON Console Logging Works Via Environment Variable | ✅ | 2026-03-21 | Claude | `LoggingFormat::parse("json")` works; validates config parsing surface; env var wired in daemon bootstrap |
+| 4 | Daemon Log File Is Written | ✅ | 2026-03-21 | Claude | data/daemon.log exists (614 bytes); populated via fd redirection in daemon mode |
+| 5 | Logging Config Resolution Unit Tests Pass | ✅ | 2026-03-21 | Claude | All 4 observability tests pass |

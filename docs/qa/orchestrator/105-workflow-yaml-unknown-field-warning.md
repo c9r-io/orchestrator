@@ -99,3 +99,9 @@ self_referential_safe: true
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
 | 1 | All scenarios verified | ☑ | S5 false positive warnings fixed — added `len` to CEL keywords, `steps` to builtin vars, and prior step IDs to allowed identifiers |
+| 2 | S1: capture suggestion | ☑ | `did_you_mean("capture")` → `"behavior.captures"` confirmed; test passed |
+| 3 | S2: no suggestion | ☑ | Unknown field without suggestion only reports field name; test passed |
+| 4 | S3: valid YAML | ☑ | yaml_round-trip test passes; no spurious warnings |
+| 5 | S4: prehook uncaptured | ☑ | Warning generated for undeclared capture variable; test passed |
+| 6 | S5: prehook captured | ☑ | No warning when variable previously declared; test passed |
+| 7 | S6: no exit code impact | ☑ | warnings.push on lines 226/231/257; 9 workflow_steps tests pass |

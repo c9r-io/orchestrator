@@ -67,6 +67,16 @@
 > 新创建的测试任务会停留在 pending 状态。这是基础设施并发限制，非功能 bug。
 > 功能已通过 full-QA 任务本身验证（Progress: 75/139 递增、step_progress 正确）。
 
+## 验证记录 (2026-03-21)
+
+| Scenario | Verification | Task ID | Result |
+|----------|--------------|---------|--------|
+| S1: Progress 实时递增 | `orchestrator task info 69341fbe` 多次检查，进度从 17→18→19 递增 | 69341fbe | ✅ |
+| S2: Step 级进度 Table | `Progress: 18/141 items` 下方显示 `qa_testing: 19 completed` | 69341fbe | ✅ |
+| S3: Step 级进度 JSON | JSON 包含 `step_progress: [{'completed': 20, 'phase': 'qa_testing', 'running': 0}]` | 69341fbe | ✅ |
+| S4: 失败 item 正确计入 | `Status: failed`, `Progress: 2/130 items`, `Failed: 1` | 757ac3d5 | ✅ |
+| S5: 批量 finalize 幂等 | 增量 finalize 已写入终态的事件，未观察到 duplicate key 错误 | 46c76c29 | ✅ |
+
 ## 关联
 
 - 设计文档: `docs/design_doc/orchestrator/66-incremental-item-progress.md`

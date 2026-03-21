@@ -194,9 +194,9 @@ Verify self_test_exit_code and self_test_passed propagate to pipeline variables 
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Self-Test Step Parsing | ☐ | | | |
-| 2 | Self-Test YAML Parsing | ☐ | | | |
-| 3 | Self-Test Builtin Normalization | ☐ | | | |
-| 4 | Self-Referential Safety Validation | ☐ | | | |
-| 5 | Smoke Chain Execution | ☐ | | | |
-| G | Pipeline Variable Propagation | ☐ | | | |
+| 1 | Self-Test Step Parsing | ✅ PASS | 2026-03-21 | Claude | |
+| 2 | Self-Test YAML Parsing | ✅ PASS | 2026-03-21 | Claude | |
+| 3 | Self-Test Builtin Normalization | ✅ PASS | 2026-03-21 | Claude | |
+| 4 | Self-Referential Safety Validation | ✅ PASS | 2026-03-21 | Claude | 8 tests passed |
+| 5 | Smoke Chain Execution | ✅ PASS | 2026-03-21 | Claude | 5 tests + code review verified three-phase execution |
+| G | Pipeline Variable Propagation | ✅ PASS | 2026-03-21 | Claude | 2 tests + code review verified add_variable bindings |

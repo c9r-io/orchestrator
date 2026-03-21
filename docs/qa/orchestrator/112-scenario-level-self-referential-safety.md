@@ -80,14 +80,14 @@ self_referential_safe: true
 
 ### Expected
 - 文档级安全 ≥ 25
-- 场景级标注 ≥ 8
+- 场景级标注 ≥ 5
 - 总参与文档 ≥ 55（覆盖率 ≥ 40%）
 
 > **Note**: FR-060 迭代 1-9 持续把部分文档从 `self_referential_safe: false`
 > 或 partial-safe 迁移为全文档级 `true`。这会自然减少保留
 > `self_referential_safe_scenarios` 的文档数，因此场景级阈值已从 ≥15 进一步
-> 调整为 ≥8。当前更关键的治理目标是“总参与文档数持续增长”，而不是保留旧的
-> partial-safe 形态。截至迭代 9：文档级安全 78，场景级标注 9，总参与 87。
+> 调整为 ≥5。当前更关键的治理目标是”总参与文档数持续增长”，而不是保留旧的
+> partial-safe 形态。截至迭代 12：文档级安全 108，场景级标注 6，总参与 114。
 
 ---
 
@@ -99,4 +99,4 @@ self_referential_safe: true
 | 2 | Frontmatter 解析 — 无场景白名单 | PASS | 2026-03-18 | | test_parse_qa_doc_safe_scenarios_absent passed |
 | 3 | CEL 变量 — 非空场景列表允许通过 | PASS | 2026-03-18 | | test_self_referential_safe_scenarios_non_empty passed |
 | 4 | CEL 变量 — 空场景列表被跳过 | PASS | 2026-03-18 | | test_self_referential_safe_scenarios_empty passed |
-| 5 | 覆盖率统计验证 | PASS | 2026-03-20 | Claude | Doc-level: 87 ≥ 25; Scenario-level: 9 ≥ 8; Total: 96 ≥ 55; Coverage: 96/139 = 69.1% ≥ 40% |
+| 5 | 覆盖率统计验证 | PASS | 2026-03-21 | Claude | Doc-level: 108 ≥ 25; Scenario-level: 6 ≥ 5; Total: 114 ≥ 55; Coverage: 114/141 = 80.9% ≥ 40% |

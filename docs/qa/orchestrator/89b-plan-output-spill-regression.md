@@ -41,3 +41,4 @@ self_referential_safe: true
 |---|-------|--------|-------|
 | 1 | Scenario 1 (spill tests) | ✅ | 14 tests pass in orchestrator-scheduler crate |
 | 2 | Scenario 2 (extract_stream_json) | ✅ | 2 tests pass in agent-orchestrator crate |
+| 3 | Execution completed | ✅ | 2026-03-21 |

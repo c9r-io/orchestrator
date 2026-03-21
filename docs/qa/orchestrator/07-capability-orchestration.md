@@ -240,8 +240,8 @@ capability-aware strategies when choosing between agents.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Capability Isolation | PASS | 2026-03-20 | Claude | All tests pass. Doc command note: use `cargo test -p agent-orchestrator` instead of `--workspace --lib` |
-| 2 | Multi-Agent Same Capability | PASS | 2026-03-20 | Claude | `test_select_agent_by_preference_random_fallback`, `test_single_candidate_deterministic` pass |
-| 3 | Repeatable Step Execution | PASS | 2026-03-20 | Claude | Loop engine tests in orchestrator-scheduler crate; use `cargo test -p orchestrator-scheduler` |
-| 4 | Guard Step Termination | PASS | 2026-03-20 | Claude | `build_segments_skips_guards` + loop termination tests pass |
-| 5 | Performance Selection | PASS | 2026-03-20 | Claude | Cost-differential and both strategy tests pass |
+| 1 | Capability Isolation | PASS | 2026-03-21 | Claude | `test_select_agent_advanced_finds_matching_capability`, `resolve_effective_agents_returns_project_agents_when_capability_matches` pass |
+| 2 | Multi-Agent Same Capability | PASS | 2026-03-21 | Claude | `test_select_agent_by_preference_random_fallback`, `test_single_candidate_deterministic` pass |
+| 3 | Repeatable Step Execution | PASS | 2026-03-21 | Claude | Loop engine tests in orchestrator-scheduler crate; `infinite_mode_respects_max_cycles`, `once_mode_always_stops`, `build_segments_groups_contiguous_scopes` pass |
+| 4 | Guard Step Termination | PASS | 2026-03-21 | Claude | `build_segments_skips_guards` + loop termination tests pass |
+| 5 | Performance Selection | PASS | 2026-03-21 | Claude | `test_cost_differential_lower_cost_scores_higher`, `test_selection_strategy_capability_aware`, `test_selection_strategy_cost_based` pass |

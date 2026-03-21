@@ -216,6 +216,8 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/112-scenario-level-self-referential-safety.md` | 5 | Scenario-level self-referential safety: prehook filter, agent isolation, workspace binding |
 | orchestrator | `docs/qa/orchestrator/113-logging-env-var-override.md` | 5 | FR-061: ORCHESTRATOR_LOG/RUST_LOG/ORCHESTRATOR_LOG_FORMAT env var override |
 | orchestrator | `docs/qa/orchestrator/114-agent-health-state-observability.md` | 5 | FR-062: agent health state CLI observability via `agent list` and `task info` |
+| orchestrator | `docs/qa/orchestrator/115-agent-mailbox-session-communication.md` | 7 | FR-065: Agent 间通信接口草案 — Mailbox + Session 设计验证 |
+| orchestrator | `docs/qa/orchestrator/116-gui-architecture-tauri-grpc.md` | 7 | FR-063: GUI 架构 Tauri 2.x + gRPC 安全客户端验证 |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |

@@ -82,3 +82,13 @@
 2. 确认文档显式记录"后续实现前，必须再次与用户进行需求对齐"
 
 **预期**：约束明确记录，避免需求记忆漂移。
+
+## Checklist
+
+- [ ] S1: Mailbox 与 Session 双层抽象已文档化
+- [ ] S2: 标识优先级 `session_id` > `pid` 已明确
+- [ ] S3: AgentSession、AgentMailbox、AgentMessage CRD 字段覆盖完整
+- [ ] S4: Mailbox/Session CLI 形状覆盖完整
+- [ ] S5: gRPC API 形状（Mailbox 6 RPC、Session 8 RPC）覆盖完整
+- [ ] S6: 实施阶段依赖排序合理
+- [ ] S7: 实施前对齐约束已记录

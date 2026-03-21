@@ -155,8 +155,8 @@ cargo test --workspace --lib -- \
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | YAML 语法错误预检 | ✅ PASS | 2026-03-19 | Claude | 3/3 tests passed: single-doc, multi-doc, null-skip |
-| 2 | 多错误聚合报告 | ✅ PASS | 2026-03-19 | Claude | 10/10 tests passed: duplicate IDs, invalid capture, probe rules |
-| 3 | 路径不存在错误 | ✅ PASS | 2026-03-19 | Claude | 6/6 ensure_within_root tests passed (covers S3+S4) |
-| 4 | 路径逃逸检测 | ✅ PASS | 2026-03-19 | Claude | symlink escape, ../ escape, child/deeply-nested all rejected correctly |
-| 5 | 有效配置规范化输出 | ✅ PASS | 2026-03-19 | Claude | 6/6 normalize tests passed: CRD fill, store rebuild, idempotency |
+| 1 | YAML 语法错误预检 | ✅ PASS | 2026-03-21 | Claude | 3/3 tests passed: single-doc, multi-doc, null-skip |
+| 2 | 多错误聚合报告 | ✅ PASS | 2026-03-21 | Claude | 10/10 tests passed: duplicate IDs, invalid capture, probe rules |
+| 3 | 路径不存在错误 | ✅ PASS | 2026-03-21 | Claude | 6/6 ensure_within_root tests passed (covers S3+S4) |
+| 4 | 路径逃逸检测 | ✅ PASS | 2026-03-21 | Claude | symlink escape, ../ escape, child/deeply-nested all rejected correctly |
+| 5 | 有效配置规范化输出 | ✅ PASS | 2026-03-21 | Claude | 6/6 normalize tests passed: CRD fill, store rebuild, idempotency |

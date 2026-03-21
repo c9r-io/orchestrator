@@ -160,7 +160,7 @@ candidate selection — via code review and unit tests.
   excluded from the candidate pool entirely
 - `is_capability_healthy_*` tests pass (6 tests): capability-level health checks
   correctly identify healthy, degraded, and diseased states
-- `is_agent_healthy_*` tests pass (6 tests): agent-level health aggregation works
+- `is_agent_healthy_*` tests pass (4 tests): agent-level health aggregation works
 - No panics
 
 ---
@@ -282,8 +282,8 @@ works correctly — via code review and unit tests.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Cost-Based Scoring | PASS | 2026-03-20 | Claude | 2 tests passed |
-| 2 | Quality Scoring | PASS | 2026-03-20 | Claude | 2 tests passed |
-| 3 | Health Degradation | PASS | 2026-03-20 | Claude | 16 tests passed |
-| 4 | Retry Status Transitions | PASS | 2026-03-20 | Claude | 8 tests passed |
-| 5 | Load Balancing | PASS | 2026-03-20 | Claude | 3 tests passed |
+| 1 | Cost-Based Scoring | PASS | 2026-03-21 | Claude | 2 tests passed |
+| 2 | Quality Scoring | PASS | 2026-03-21 | Claude | 2 tests passed |
+| 3 | Health Degradation | PASS | 2026-03-21 | Claude | 15 tests passed |
+| 4 | Retry Status Transitions | PASS | 2026-03-21 | Claude | 10 tests passed |
+| 5 | Load Balancing | PASS | 2026-03-21 | Claude | 3 tests passed |

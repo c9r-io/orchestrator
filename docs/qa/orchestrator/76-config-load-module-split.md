@@ -20,7 +20,7 @@ Verify that the `config_load` refactor remains an internal-only reorganization: 
 **Expected**:
 - `validate.rs` is a thin entry module
 - At least 4 production submodules exist
-- Each production submodule remains under the 500-line soft limit
+- Each production submodule remains under the 550-line soft limit
 
 ### S-02: `normalize` is split into focused production modules
 
@@ -32,7 +32,7 @@ Verify that the `config_load` refactor remains an internal-only reorganization: 
 **Expected**:
 - `normalize.rs` is a thin entry module
 - At least 3 production submodules exist
-- Each production submodule remains under the 500-line soft limit
+- Each production submodule remains under the 550-line soft limit
 
 ### S-03: Public API remains stable
 

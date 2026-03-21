@@ -85,8 +85,8 @@ self_referential_safe: true
 
 | # | Scenario | Status | Notes |
 |---|----------|--------|-------|
-| 1 | ORCHESTRATOR_LOG 设置日志级别 | ☐ | |
-| 2 | RUST_LOG 作为回退 | ☐ | |
-| 3 | ORCHESTRATOR_LOG_FORMAT=json 输出 JSON | ☐ | |
-| 4 | 未设置环境变量时向后兼容 | ☐ | |
-| 5 | tracing-subscriber features 配置正确 | ☐ | |
+| 1 | ORCHESTRATOR_LOG 设置日志级别 | ✅ | Code review + unit test passed |
+| 2 | RUST_LOG 作为回退 | ✅ | Code review confirmed: try_from_default_env fallback |
+| 3 | ORCHESTRATOR_LOG_FORMAT=json 输出 JSON | ✅ | Code review + unit test passed |
+| 4 | 未设置环境变量时向后兼容 | ✅ | Code review confirmed: info default + pretty fmt |
+| 5 | tracing-subscriber features 配置正确 | ✅ | 409 workspace tests passed |

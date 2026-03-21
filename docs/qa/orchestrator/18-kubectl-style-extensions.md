@@ -124,6 +124,6 @@ Verify that YAML content piped via stdin is correctly parsed into typed manifest
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | List-Style Get | ✅ PASS | 2026-03-18 | Claude | `-o table` falls back to JSON (documented); json/yaml produce correct encodings |
-| 2 | Label Selector on Get List | ✅ PASS | 2026-03-18 | Claude | List queries succeed with selectors; single-resource with `-l` exits 1 with clear error |
-| 3 | Stdin Apply Parsing and Routing | ✅ PASS | 2026-03-20 | Claude | 5 parse_manifests_from_yaml + 6 apply_to_project tests pass; code review confirms stdin/file apply share same YAML parsing path |
+| 1 | List-Style Get | ✅ PASS | 2026-03-21 | Claude | `-o table` falls back to JSON (documented); json/yaml/table output works; 16 workspaces, 18 agents, 31 workflows listed |
+| 2 | Label Selector on Get List | ✅ PASS | 2026-03-21 | Claude | List queries accept `-l` selectors; multi-condition AND works; single-resource with `-l` exits 1 with clear error |
+| 3 | Stdin Apply Parsing and Routing | ✅ PASS | 2026-03-21 | Claude | 5 parse_manifests_from_yaml + 6 apply_to_project tests pass; code review confirms stdin `-f -` → read_input_or_file → gRPC apply → parse_manifests_from_yaml same path as file apply |

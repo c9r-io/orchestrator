@@ -134,9 +134,9 @@ Verify that `apply_prompt_delivery` in arg mode correctly shell-escapes the full
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Default prompt delivery is arg | ✅ | 2026-03-20 | Claude | |
-| 2 | Serde round-trip preserves delivery mode | ✅ | 2026-03-20 | Claude | |
-| 3 | Preflight warns on stdin with prompt placeholder | ✅ | 2026-03-20 | Claude | |
-| 4 | Preflight warns on file without prompt_file | ✅ | 2026-03-20 | Claude | |
-| 5 | Arg mode shell-escapes full prompt | ✅ | 2026-03-20 | Claude | shell_escape called at line 78 |
-| G | Arg mode no warning | ✅ | 2026-03-20 | Claude | |
+| 1 | Default prompt delivery is arg | ✅ | 2026-03-21 | Claude | |
+| 2 | Serde round-trip preserves delivery mode | ✅ | 2026-03-21 | Claude | |
+| 3 | Preflight warns on stdin with prompt placeholder | ✅ | 2026-03-21 | Claude | |
+| 4 | Preflight warns on file without prompt_file | ✅ | 2026-03-21 | Claude | |
+| 5 | Arg mode shell-escapes full prompt | ✅ | 2026-03-21 | Claude | shell_escape called at line 78 |
+| G | Arg mode no warning | ✅ | 2026-03-21 | Claude | |

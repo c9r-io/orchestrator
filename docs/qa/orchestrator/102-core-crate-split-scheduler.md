@@ -68,6 +68,7 @@ cargo test --workspace --lib
 | daemon | `agent_orchestrator::scheduler::*` | `orchestrator_scheduler::scheduler::*` |
 | daemon | `agent_orchestrator::service::task::*` | `orchestrator_scheduler::service::task::*` |
 | daemon | `agent_orchestrator::service::system::run_check` | `orchestrator_scheduler::service::system::run_check` |
+| daemon | `agent_orchestrator::scheduler_service::*` | `agent_orchestrator::scheduler_service::*`（保留：worker signal 处理函数 `claim_next_pending_task`, `clear_worker_stop_signal`, `worker_stop_signal_path` 仍在 core crate） |
 | integration-tests | 同上 | 同上 |
 
 ### 场景 7: 运行时性能验证

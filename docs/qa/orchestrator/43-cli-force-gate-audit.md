@@ -195,6 +195,6 @@ Verify that pre-existing `--force` gates still function correctly.
 |---|----------|--------|-----------|--------|-------|
 | 1 | Config Backfill-Events Rejected Without --force | SKIP | | | `config backfill-events` not yet implemented |
 | 2 | Config Backfill-Events Executes With --force | ☐ | | | Code review + unit test (backfill logic, CLI not wired) |
-| 3 | Task Retry Rejected Without --force | PASS | 2026-03-19 | | Re-verify: exit=1, "use --force to confirm", item status unchanged |
-| 4 | Task Retry Executes With --force | PASS | 2026-03-19 | | Code review: reset_task_item_for_retry→pending; --force in cli.rs; unit tests: 2 reset tests + update_task_item_status test all pass |
-| 5 | Existing Force Gates Regression Check | PASS | 2026-03-19 | | task delete: exit=1; delete project: exit=1; --help grep count=1 for all 3 commands |
+| 3 | Task Retry Rejected Without --force | PASS | 2026-03-21 | | Re-verify: exit=1, "use --force to confirm", item status unchanged |
+| 4 | Task Retry Executes With --force | PASS | 2026-03-21 | | Code review: reset_task_item_for_retry→pending; --force in cli.rs; unit tests: 2 reset tests + update_task_item_status test all pass |
+| 5 | Existing Force Gates Regression Check | PASS | 2026-03-21 | | task delete: exit=1; delete project: exit=1; --help grep count=1 for all 3 commands |

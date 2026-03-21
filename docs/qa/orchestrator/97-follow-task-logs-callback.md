@@ -68,3 +68,6 @@ cargo test -p orchestrator-scheduler --lib follow_one_stream_callback_incrementa
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
 | 1 | All scenarios verified | ✔ | S1: ok, S2: ok, S3: ok |
+| 2 | S1: `follow_one_stream_uses_callback_for_stdout` | ✔ | passed |
+| 3 | S2: `follow_one_stream_uses_callback_for_stderr` | ✔ | passed |
+| 4 | S3: `follow_one_stream_callback_incremental_read` | ✔ | passed |

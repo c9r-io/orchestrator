@@ -250,8 +250,8 @@ Verify ResourceStore correctness for edge cases: cross-kind key isolation, prefi
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Builtin CRD Bootstrap on Normalize | PASS | 2026-03-20 | claude | 2 targeted tests pass (normalize_config_populates_builtin_crds, normalize_config_rebuilds_resource_store) |
-| 2 | CrdProjectable Round-Trip for All 10 Types | PASS | 2026-03-20 | claude | 13 projection tests pass (all round-trips + malformed spec rejection) |
-| 3 | Targeted Writeback — write_back_single and remove_from_legacy | PASS | 2026-03-20 | claude | 39 writeback tests pass (seed, reconcile, remove for all builtin kinds) |
-| 4 | apply_to_store / delete_from_store Integration | PASS | 2026-03-20 | claude | 78 resource tests pass incl. apply_to_store (5), delete_from_store (3), metadata_from_store (3), generation (1) |
-| 5 | ResourceStore Edge Cases — Key Isolation and Corruption Resilience | PASS | 2026-03-20 | claude | 22 store tests pass (cross-kind isolation, generation, namespaced keys, singleton projection, corruption resilience) |
+| 1 | Builtin CRD Bootstrap on Normalize | PASS | 2026-03-21 | claude | 2 targeted tests pass (normalize_config_populates_builtin_crds, normalize_config_rebuilds_resource_store) |
+| 2 | CrdProjectable Round-Trip for All 10 Types | PASS | 2026-03-21 | claude | 13 projection tests pass (all round-trips + malformed spec rejection) |
+| 3 | Targeted Writeback — write_back_single and remove_from_legacy | PASS | 2026-03-21 | claude | 39 writeback tests pass (seed, reconcile, remove for all builtin kinds) |
+| 4 | apply_to_store / delete_from_store Integration | PASS | 2026-03-21 | claude | 10 tests: apply_to_store (5), delete_from_store (3), metadata_from_store (2) |
+| 5 | ResourceStore Edge Cases — Key Isolation and Corruption Resilience | PASS | 2026-03-21 | claude | 22 store tests pass (cross-kind isolation, generation, namespaced keys, singleton projection, corruption resilience) |

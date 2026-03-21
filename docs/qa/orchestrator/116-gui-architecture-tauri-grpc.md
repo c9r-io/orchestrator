@@ -125,3 +125,13 @@
 | 前端 React + Vite + TS | `gui/` 目录 | ✅ |
 | Liquid Glass 设计系统 | `gui/src/styles/tokens.css` | ✅ |
 | Workspace 集成 | `cargo build -p orchestrator-gui` 编译通过 | ✅ |
+
+## Checklist
+
+- [ ] S1: Cargo workspace 集成编译通过
+- [ ] S2: gRPC 5 级连接发现 + mTLS 配置正确
+- [ ] S3: Ping RPC 返回正确版本信息
+- [ ] S4: TaskList RPC 返回与 CLI 一致的任务列表
+- [ ] S5: TaskFollow 流式日志延迟 < 2s
+- [ ] S6: RBAC 角色探测正确映射到 UI 可见性
+- [ ] S7: 安全凭证自动发现零配置连接成功

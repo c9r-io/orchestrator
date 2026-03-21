@@ -123,7 +123,7 @@ This doc validates the contract introduced by FR-008 governance:
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Runtime Execution Preserves Chain Shape | ✅ PASS | 2026-03-19 | Claude | Rewritten as safe (cargo test --lib) |
-| 2 | Chain Children Are Valid Self-Contained Steps | ✅ PASS | 2026-03-19 | Claude | Rewritten as safe (cargo test --lib) |
-| 3 | Guide Contract Matches Runtime Semantics | ✅ PASS | 2026-03-19 | Claude | All 3 guide contract checks pass |
-| 4 | Chain Event Names Remain Trace-Compatible | ✅ PASS | 2026-03-19 | Claude | Rewritten as safe (cargo test --lib) |
+| 1 | Runtime Execution Preserves Chain Shape | ✅ PASS | 2026-03-21 | Claude | cargo test --lib passed for both tests |
+| 2 | Chain Children Are Valid Self-Contained Steps | ✅ PASS | 2026-03-21 | Claude | cargo test --lib passed for both tests |
+| 3 | Guide Contract Matches Runtime Semantics | ✅ PASS | 2026-03-21 | Claude | EN+ZH guides: container, pipeline_vars, on_failure order |
+| 4 | Chain Event Names Remain Trace-Compatible | ✅ PASS | 2026-03-21 | Claude | cargo test --lib passed |

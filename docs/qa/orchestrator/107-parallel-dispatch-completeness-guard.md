@@ -16,6 +16,10 @@
 
 **预期**: 无 `parallel_dispatch_incomplete` 事件，task 正常完成，所有 items 获得 command_runs
 
+> **Note**: S1 验证需要 workspace 配置了 `qa_targets` 指向包含多个文件的目录。
+> 不要使用 `--target-file` 指向 bundle manifest（bundle manifest 本身会被视为单个 item，
+> 而不是扫描其中引用的 qa_targets 目录）。
+
 ### Scenario 2: dispatched_count 计数器准确性
 
 **步骤**:

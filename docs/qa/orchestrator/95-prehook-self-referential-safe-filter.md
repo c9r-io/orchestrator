@@ -9,7 +9,7 @@ self_referential_safe: true
 **Scenarios**: 1
 
 
-## Scenario 2: Safe QA doc runs normally in self-referential mode
+## Scenario 1: Safe QA doc runs normally in self-referential mode
 
 **Precondition**: Unit tests pass (`cargo test --workspace --lib`)
 
