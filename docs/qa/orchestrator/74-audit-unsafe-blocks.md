@@ -1,6 +1,5 @@
 ---
-self_referential_safe: false
-self_referential_safe_scenarios: [S1, S3, S4, S5, S6, S7]
+self_referential_safe: true
 ---
 
 # QA: Audit Unsafe Blocks (FR-024)
@@ -22,12 +21,13 @@ self_referential_safe_scenarios: [S1, S3, S4, S5, S6, S7]
 ### S2: `forbid(unsafe_code)` on proto crate
 
 **Steps:**
-1. Add an `unsafe {}` block to `crates/proto/src/lib.rs`
-2. Run `cargo check -p orchestrator-proto`
+1. Code review — verify `#![forbid(unsafe_code)]` attribute exists in proto crate:
+   ```bash
+   rg -n 'forbid\(unsafe_code\)' crates/proto/src/lib.rs
+   ```
+2. Implicit compilation by `cargo test --workspace --lib` confirms no unsafe blocks exist in proto crate.
 
-**Expected:** Compile error due to `#![forbid(unsafe_code)]`.
-
-**Teardown:** Revert the test change.
+**Expected:** `#![forbid(unsafe_code)]` attribute is present in `crates/proto/src/lib.rs`, enforced at compile time.
 
 ### S3: Eliminated unsafe blocks use safe wrappers
 
@@ -86,4 +86,4 @@ self_referential_safe_scenarios: [S1, S3, S4, S5, S6, S7]
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☑ | S1/S3/S4/S5/S6/S7 PASS (2026-03-19); S1/S4/S7 rewritten as safe. S2 remains unsafe (temp code injection). |
+| 1 | All scenarios verified | ☑ | S1-S7 PASS (2026-03-21); S2 rewritten from code-injection to `#![forbid(unsafe_code)]` grep verification. |

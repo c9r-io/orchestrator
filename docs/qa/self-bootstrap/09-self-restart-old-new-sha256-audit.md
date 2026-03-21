@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Self-Bootstrap - Self-Restart Old/New Binary SHA256 Audit Chain
@@ -33,12 +33,11 @@ Verify that when a self-restart step succeeds, the `self_restart_ready` event pa
 ### Steps
 1. Confirm the payload fields exist in the source:
    ```bash
-   cd /Volumes/Yotta/ai_native_sdlc/core
-   grep -A12 '"self_restart_ready"' src/scheduler/safety.rs | grep -E 'old_binary_sha256|new_binary_sha256|binary_changed'
+   rg -n 'old_binary_sha256|new_binary_sha256|binary_changed' crates/orchestrator-scheduler/src/scheduler/safety.rs
    ```
 2. Run the unit test that validates the payload structure:
    ```bash
-   cargo test --lib -- --test-threads=1 test_execute_self_restart_step_records_old_and_new_sha256 2>&1 | tail -5
+   cargo test -p orchestrator-scheduler --lib -- test_execute_self_restart_step_records_old_and_new_sha256 2>&1 | tail -5
    ```
 
 ### Expected
@@ -59,12 +58,11 @@ Verify that `binary_changed` is `true` when `old_binary_sha256 != new_binary_sha
 ### Steps
 1. Run the unit test:
    ```bash
-   cd /Volumes/Yotta/ai_native_sdlc/core
-   cargo test --lib -- --test-threads=1 test_execute_self_restart_step_binary_changed_flag_true 2>&1 | tail -5
+   cargo test -p orchestrator-scheduler --lib -- test_execute_self_restart_step_binary_changed_flag_true 2>&1 | tail -5
    ```
 2. Confirm the conservative logic — `binary_changed` must be `false` when either hash is `"unknown"`:
    ```bash
-   cargo test --lib -- --test-threads=1 test_execute_self_restart_step_binary_changed_flag_false_when_unknown 2>&1 | tail -5
+   cargo test -p orchestrator-scheduler --lib -- test_execute_self_restart_step_binary_changed_flag_false_when_unknown 2>&1 | tail -5
    ```
 
 ### Expected
@@ -84,12 +82,11 @@ Verify that after restart, `verify_post_restart_binary` propagates `old_binary_s
 ### Steps
 1. Run the unit test for propagation:
    ```bash
-   cd /Volumes/Yotta/ai_native_sdlc/core
-   cargo test --lib -- --test-threads=1 test_verify_post_restart_binary_includes_old_sha256_in_verification 2>&1 | tail -5
+   cargo test -p orchestrator-scheduler --lib -- test_verify_post_restart_binary_includes_old_sha256_in_verification 2>&1 | tail -5
    ```
 2. Confirm the verification event payload structure in source:
    ```bash
-   grep -B2 -A8 '"binary_verification"' src/scheduler/safety.rs | grep -E 'old_binary_sha256|expected_sha256|actual_sha256|verified'
+   rg -n 'old_binary_sha256|expected_sha256|actual_sha256|verified' crates/orchestrator-scheduler/src/scheduler/safety.rs | head -20
    ```
 
 ### Expected
@@ -109,12 +106,11 @@ Verify that `verify_post_restart_binary` handles legacy `self_restart_ready` eve
 ### Steps
 1. Run the backward-compat unit test:
    ```bash
-   cd /Volumes/Yotta/ai_native_sdlc/core
-   cargo test --lib -- --test-threads=1 test_verify_post_restart_binary_missing_old_sha256_defaults_unknown 2>&1 | tail -5
+   cargo test -p orchestrator-scheduler --lib -- test_verify_post_restart_binary_missing_old_sha256_defaults_unknown 2>&1 | tail -5
    ```
 2. Confirm the fallback logic in source:
    ```bash
-   grep -A3 'old_binary_sha256' src/scheduler/safety.rs | grep 'unwrap_or\|unknown'
+   rg -n 'old_binary_sha256.*unwrap_or|unknown' crates/orchestrator-scheduler/src/scheduler/safety.rs | head -5
    ```
 
 ### Expected

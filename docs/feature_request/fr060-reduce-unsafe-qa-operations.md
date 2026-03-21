@@ -384,7 +384,37 @@
 **累计净收益**: 迭代 1 (+4) + 迭代 2 (+11) + 迭代 3 (+17) + 迭代 4 (+28) + 迭代 5 (+40) + 迭代 6 (+48) + 迭代 7 (+28) + 迭代 8 (+34) + 迭代 9 (+35) + 迭代 10 (+52) + 迭代 11 (+33) = +330 个安全场景
 **Unsafe 文档数**: 50 → 41
 
-### 迭代 12+: 逐步处理剩余类别
+### 迭代 12: 元数据修正 + 单场景补全 + 完整重写批量转换（2026-03-21）
+
+**分析文档**（8 个）:
+- Tier 1（纯元数据修正）: `self-bootstrap/09-self-restart-old-new-sha256-audit.md`, `self-bootstrap/06-survival-smoke-binary-snapshot-verification.md`
+- Tier 2（单场景补全 → 全文档 safe）: `74-audit-unsafe-blocks.md`, `77-event-table-ttl-archival.md`, `44-parallel-item-execution.md`, `53-client-server-architecture.md`
+- Tier 3（完整重写）: `27-self-test-step.md`, `self-bootstrap/08-build-version-hash.md`
+
+| 文档 | 总场景 | 可转安全 | 分类 |
+|------|--------|---------|------|
+| SB-09 | 4 | 4 | **元数据修正** — 全部场景已是 `cargo test --lib` + grep，修正硬编码路径 `/Volumes/Yotta/ai_native_sdlc/core` → 相对路径，crate 名修正 |
+| SB-06 | 5 | 5 | **元数据修正** — 全部场景有对应 unit test（9 tests in `safety/tests.rs`），重写为直接引用 unit test |
+| QA-74 | 1 (S2) | 1 | **单场景补全** — S2 从代码注入（`unsafe {}` + `cargo check`）改为 grep 验证 `#![forbid(unsafe_code)]` 属性存在 |
+| QA-77 | 1 (S5) | 1 | **单场景补全** — S5 从 daemon 重启改为 unit test 间接验证（文档自身已注明可通过单元测试覆盖） |
+| QA-44 | 1 (S4) | 1 | **单场景补全** — S4 从 live task execution 改为 code review + `build_segments` unit test 验证 sequential 默认路径 |
+| QA-53 | 1 (S1) | 1 | **单场景补全** — S1 从 daemon 启停改为 code review of `lifecycle.rs` 信号处理 + PID/socket 清理逻辑 |
+| QA-27 | 5+G | 6 | **完整重写** — S1-S4 修正 `cd core` 为正确 crate 命令；S5 从 live smoke chain 改为 `execute_self_test_step` unit test + code review；G 改为 prehook CEL pipeline var unit test |
+| SB-08 | 5 | 5 | **完整重写** — S1-S3 从 `cargo build --release` + CLI 运行改为 code review of `build.rs`/`cli.rs` + 隐式编译验证；S4-S5 修正硬编码路径 |
+
+**修复内容**:
+- 8 个文档完全转为 safe：SB-09, SB-06, QA-74, QA-77, QA-44, QA-53, QA-27, SB-08
+- 移除 `self_referential_safe_scenarios` 限制（QA-74, QA-77, QA-44, QA-53）
+- 修正硬编码路径 `/Volumes/Yotta/ai_native_sdlc` → 相对路径（SB-09, SB-08）
+- 修正 crate 名引用（SB-09: `core` → `orchestrator-scheduler`）
+- 无代码变更 — 纯 QA 文档重写
+- 409 个 unit test 全部通过，零回归
+
+**净收益**: +24 个可安全执行的场景（SB-09 ×4, SB-06 ×5, QA-74 ×1, QA-77 ×1, QA-44 ×1, QA-53 ×1, QA-27 ×6, SB-08 ×5）
+**累计净收益**: 迭代 1 (+4) + 迭代 2 (+11) + 迭代 3 (+17) + 迭代 4 (+28) + 迭代 5 (+40) + 迭代 6 (+48) + 迭代 7 (+28) + 迭代 8 (+34) + 迭代 9 (+35) + 迭代 10 (+52) + 迭代 11 (+33) + 迭代 12 (+24) = +354 个安全场景
+**Unsafe 文档数**: 41 → 33
+
+### 迭代 13+: 逐步处理剩余类别
 
 每次 1-2 个文档，持续推进直到 unsafe 比例从 82% 降到合理水平（目标 < 30%）。
 

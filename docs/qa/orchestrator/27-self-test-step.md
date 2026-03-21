@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Orchestrator - Self-Test Step (SMOKE CHAIN)
@@ -48,7 +48,7 @@ Verify self_test step type validates correctly
 
 1. Run unit test:
    ```bash
-   cargo test -p orchestrator-config test_validate_step_type_known_ids
+   cargo test -p orchestrator-config --lib -- test_validate_step_type_known_ids 2>&1 | tail -5
    ```
 
 ### Expected
@@ -72,7 +72,7 @@ Verify WorkflowSpec with self_test step converts correctly to WorkflowConfig wit
 
 1. Run unit test:
    ```bash
-   cd core && cargo test --lib workflow_spec_to_config_self_test_sets_builtin_execution
+   cargo test -p agent-orchestrator --lib -- workflow_spec_to_config_self_test_sets_builtin_execution 2>&1 | tail -5
    ```
 
 ### Expected
@@ -98,7 +98,7 @@ Verify normalization sets builtin = "self_test" for self_test step id
 
 1. Run unit test:
    ```bash
-   cd core && cargo test --lib normalize_workflow_sets_builtin_for_self_test
+   cargo test -p agent-orchestrator --lib -- normalize_workflow_sets_builtin_for_self_test 2>&1 | tail -5
    ```
 
 ### Expected
@@ -122,7 +122,7 @@ Verify self-referential validation rejects workflows that omit builtin `self_tes
 
 1. Run unit tests:
    ```bash
-   cd core && cargo test --lib validate_self_referential_safety
+   cargo test -p agent-orchestrator --lib -- validate_self_referential_safety 2>&1 | tail -10
    ```
 
 ### Expected
@@ -132,44 +132,36 @@ Verify self-referential validation rejects workflows that omit builtin `self_tes
 
 ---
 
-## Scenario 5: Smoke Chain Execution (Survival Test)
+## Scenario 5: Self-Test Step Execution Logic (Unit Test + Code Review)
 
 ### Preconditions
 
-- Project initialized:
-  ```bash
-  QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-  orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
-  rm -rf "workspace/${QA_PROJECT}"
-  orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml --project "${QA_PROJECT}"
-  ```
+- Rust toolchain available
 
 ### Goal
 
-Validate self_test step executes and code compiles (survival smoke test)
+Verify `execute_self_test_step` three-phase execution logic (empty_change_check → cargo_check → cargo_test_lib) via unit test coverage and code review.
 
 ### Steps
 
-1. Execute self_test via scheduler using a workflow with self_test step:
+1. Run self_test execution unit tests in the scheduler safety module:
    ```bash
-   orchestrator task create --project "${QA_PROJECT}" --workflow sdlc_full_pipeline --goal "smoke chain survival test"
+   cargo test -p orchestrator-scheduler --lib -- execute_self_test 2>&1 | tail -10
    ```
-2. Wait for task completion and query self_test events:
+2. Code review — verify the three-phase execution sequence:
    ```bash
-   TASK_ID=$(orchestrator task list --project "${QA_PROJECT}" -o json | jq -r '.[0].id')
-   orchestrator task watch "${TASK_ID}" --interval 2 --timeout 120
-   sqlite3 data/agent_orchestrator.db "SELECT event_type, json_extract(payload_json, '$.step'), json_extract(payload_json, '$.phase') FROM events WHERE task_id = '${TASK_ID}' AND json_extract(payload_json, '$.step') = 'self_test' ORDER BY created_at;"
+   rg -n "empty_change_check|cargo_check|cargo_test_lib" crates/orchestrator-scheduler/src/scheduler/safety.rs | head -15
+   ```
+3. Code review — verify self_test emits phase events with `self_test_phase` event type:
+   ```bash
+   rg -n "self_test_phase|self_test_exit_code|self_test_passed" crates/orchestrator-scheduler/src/scheduler/safety.rs | head -10
    ```
 
 ### Expected
 
-- self_test step starts and finishes (step_started + step_finished events)
-- **Mock fixture limitation**: Mock agents do not create real git changes, so `empty_change_check` detects no diff and self_test fails early with exit_code=1. This is expected behavior (FR-044).
-- `self_test_phase` events emitted with phase = "empty_change_check" (passed = false)
-- `cargo_check` phase is **not reached** because `empty_change_check` returns early
-- The task may still complete (depending on workflow `on_failure` policy) since self_test failure is non-fatal in the pipeline
-
-> **Note**: To verify the full self_test chain (cargo_check + cargo_test_lib), use a workflow where the implement step makes real code changes and commits them. This scenario only validates the smoke chain wiring.
+- `execute_self_test_step` unit tests pass (empty_change_check → cargo_check → cargo_test_lib phases)
+- Phase events are emitted with `self_test_phase` event type and appropriate `passed`/`exit_code` fields
+- `empty_change_check` returns early (exit_code=1) when no git changes are detected, skipping subsequent phases
 
 ---
 
@@ -177,21 +169,24 @@ Validate self_test step executes and code compiles (survival smoke test)
 
 ### Goal
 
-Verify self_test_exit_code and self_test_passed propagate to pipeline variables
+Verify self_test_exit_code and self_test_passed propagate to pipeline variables via prehook CEL context.
 
 ### Steps
 
-1. Execute workflow with self_test step
-2. Check pipeline variables:
+1. Run prehook CEL unit tests that verify self_test pipeline variables:
    ```bash
-   # Query via CLI or check scheduler.rs logic
-   # Variables should be set in PipelineVars
+   cargo test -p agent-orchestrator --lib -- test_prehook_cel_context_self_test_exit_code_variable test_evaluate_step_prehook_expression_self_test_passed_not_in_cel 2>&1 | tail -10
+   ```
+2. Code review — verify pipeline variable binding in prehook context:
+   ```bash
+   rg -n "self_test_exit_code|self_test_passed" core/src/prehook/context.rs | head -5
    ```
 
 ### Expected
 
-- `self_test_exit_code` = "0" on success
-- `self_test_passed` = "true" on success
+- `test_prehook_cel_context_self_test_exit_code_variable` passes: `self_test_exit_code` is available in CEL context
+- `test_evaluate_step_prehook_expression_self_test_passed_not_in_cel` passes: `self_test_passed` evaluated correctly
+- Both variables are bound via `add_variable` in prehook context builder
 
 ---
 
