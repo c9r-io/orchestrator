@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import i18n from "../lib/i18n";
 import type { ConnectionState } from "../lib/types";
 
 interface Props {
@@ -36,7 +37,7 @@ export default function ConnectionBanner({ state, onRetry }: Props) {
     return (
       <div className="connection-banner banner-warning" role="alert">
         <span className="banner-spinner" />
-        连接中断，正在重连... (尝试 {state.attempt}/{state.max_attempts})
+        {i18n.connectionBanner.reconnecting(state.attempt, state.max_attempts)}
       </div>
     );
   }
@@ -44,9 +45,9 @@ export default function ConnectionBanner({ state, onRetry }: Props) {
   if (state.kind === "Failed") {
     return (
       <div className="connection-banner banner-danger" role="alert">
-        连接失败：{state.message}
+        {i18n.connectionBanner.failed(state.message)}
         <button className="btn btn-secondary" style={{ marginLeft: 12 }} onClick={onRetry}>
-          重试
+          {i18n.connectionBanner.retry}
         </button>
       </div>
     );
@@ -55,7 +56,7 @@ export default function ConnectionBanner({ state, onRetry }: Props) {
   if (showRestored) {
     return (
       <div className="connection-banner banner-success" role="status">
-        已恢复连接
+        {i18n.connectionBanner.restored}
       </div>
     );
   }

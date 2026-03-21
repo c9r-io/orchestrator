@@ -5,6 +5,7 @@ import { useStream } from "../hooks/useStream";
 import { useRole } from "../hooks/useRole";
 import ConfirmDialog from "../components/ConfirmDialog";
 import StatusIcon from "../components/StatusIcon";
+import i18n from "../lib/i18n";
 import type { TaskDetail, LogLine, TaskCreateResult, TaskLogChunk } from "../lib/types";
 
 interface Props {
@@ -14,9 +15,9 @@ interface Props {
 }
 
 const PROGRESS_PHASES = [
-  { delay: 0, text: "正在理解你的需求..." },
-  { delay: 3000, text: "正在设计功能方案..." },
-  { delay: 8000, text: "正在撰写 FR 文档..." },
+  { delay: 0, text: i18n.wishDetail.phaseUnderstanding },
+  { delay: 3000, text: i18n.wishDetail.phaseDesigning },
+  { delay: 8000, text: i18n.wishDetail.phaseWriting },
 ];
 
 export default function WishDetail({ taskId, onBack, onConfirmed }: Props) {
@@ -108,7 +109,7 @@ export default function WishDetail({ taskId, onBack, onConfirmed }: Props) {
   return (
     <div>
       <button className="btn btn-ghost" onClick={onBack} style={{ marginBottom: 12 }}>
-        &larr; 返回许愿池
+        {i18n.wishDetail.backToPool}
       </button>
 
       {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
@@ -119,9 +120,9 @@ export default function WishDetail({ taskId, onBack, onConfirmed }: Props) {
           {/* Original wish */}
           <div className="liquid-glass" style={{ marginBottom: 16 }}>
             <h3 style={{ color: "var(--text-secondary)", fontSize: 13, marginBottom: 4 }}>
-              原始需求
+              {i18n.wishDetail.originalWish}
             </h3>
-            <p>{data.goal || "(无描述)"}</p>
+            <p>{data.goal || i18n.wishDetail.noDescription}</p>
             <div style={{ marginTop: 8 }}>
               <StatusIcon status={data.status} />
             </div>
@@ -130,22 +131,12 @@ export default function WishDetail({ taskId, onBack, onConfirmed }: Props) {
           {/* FR Draft preview */}
           <div className="liquid-glass" style={{ marginBottom: 16 }}>
             <h3 style={{ color: "var(--text-secondary)", fontSize: 13, marginBottom: 8 }}>
-              {isCompleted ? "FR 草稿预览" : phaseText}
+              {isCompleted ? i18n.wishDetail.frDraftPreview : phaseText}
             </h3>
 
             {isDrafting && !displayContent && (
               <div style={{ textAlign: "center", padding: 24 }}>
-                <div
-                  style={{
-                    display: "inline-block",
-                    width: 24,
-                    height: 24,
-                    border: "3px solid var(--glass-border-subtle)",
-                    borderTopColor: "var(--accent)",
-                    borderRadius: "50%",
-                    animation: "spin 1s linear infinite",
-                  }}
-                />
+                <div className="banner-spinner" style={{ width: 24, height: 24, borderWidth: 3, marginBottom: 8 }} />
                 <p style={{ color: "var(--text-tertiary)", marginTop: 8 }}>
                   {phaseText}
                 </p>
@@ -168,7 +159,7 @@ export default function WishDetail({ taskId, onBack, onConfirmed }: Props) {
                   overflowY: "auto",
                 }}
                 role="log"
-                aria-label="FR 草稿内容"
+                aria-label={i18n.wishDetail.frDraftContent}
               >
                 {displayContent}
               </div>
@@ -182,25 +173,25 @@ export default function WishDetail({ taskId, onBack, onConfirmed }: Props) {
                 <button
                   className="btn btn-primary"
                   onClick={handleConfirm}
-                  aria-label="确认开发"
+                  aria-label={i18n.wishDetail.confirmDev}
                 >
-                  确认开发
+                  {i18n.wishDetail.confirmDev}
                 </button>
               )}
               <button
                 className="btn btn-secondary"
                 onClick={onBack}
-                aria-label="修改需求"
+                aria-label={i18n.wishDetail.modifyWish}
               >
-                修改需求
+                {i18n.wishDetail.modifyWish}
               </button>
               <button
                 className="btn btn-ghost"
                 style={{ color: "var(--danger)" }}
                 onClick={() => setShowCancel(true)}
-                aria-label="取消许愿"
+                aria-label={i18n.wishDetail.cancelWish}
               >
-                取消
+                {i18n.wishDetail.cancelWish}
               </button>
             </div>
           )}
@@ -209,20 +200,13 @@ export default function WishDetail({ taskId, onBack, onConfirmed }: Props) {
 
       <ConfirmDialog
         open={showCancel}
-        title="取消许愿"
-        message="确定要取消这个许愿吗？此操作不可撤销。"
-        confirmLabel="确认取消"
+        title={i18n.wishDetail.cancelTitle}
+        message={i18n.wishDetail.cancelMessage}
+        confirmLabel={i18n.wishDetail.cancelConfirm}
         destructive
         onConfirm={handleCancel}
         onCancel={() => setShowCancel(false)}
       />
-
-      {/* Spinner animation */}
-      <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 }

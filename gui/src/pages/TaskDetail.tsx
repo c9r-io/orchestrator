@@ -8,6 +8,7 @@ import ProgressBar from "../components/ProgressBar";
 import StatusIcon from "../components/StatusIcon";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ExpertPanel from "../components/ExpertPanel";
+import i18n from "../lib/i18n";
 import type { TaskDetail as TaskDetailType, LogLine, WatchSnapshot } from "../lib/types";
 
 interface Props {
@@ -15,22 +16,31 @@ interface Props {
   onBack: () => void;
 }
 
+const LOG_LIMIT = 500;
+
 export default function TaskDetail({ taskId, onBack }: Props) {
   const { data, error, call } = useGrpc<TaskDetailType>("task_info");
   const { canAccess } = useRole();
+  const logContainerRef = useRef<HTMLDivElement>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
   const [expert, setExpert] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [actionErr, setActionErr] = useState<string | null>(null);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const streamParams = useMemo(() => ({ task_id: taskId }), [taskId]);
-  const { data: logs, active, start, stop } = useStream<LogLine>(
+  const { data: allLogs, active, start, stop } = useStream<LogLine>(
     "start_task_follow",
     "stop_task_follow",
     `task-follow-${taskId}`,
     streamParams
   );
+
+  // Limit displayed logs.
+  const logs = allLogs.length > LOG_LIMIT ? allLogs.slice(-LOG_LIMIT) : allLogs;
+  const truncated = allLogs.length > LOG_LIMIT;
 
   const reload = useCallback(() => {
     call({ task_id: taskId });
@@ -83,10 +93,25 @@ export default function TaskDetail({ taskId, onBack }: Props) {
   // Use live data if available, otherwise fall back to initial load.
   const displayData = liveData ?? data;
 
+  // Detect user scroll to pause auto-scroll.
+  useEffect(() => {
+    const container = logContainerRef.current;
+    if (!container) return;
+    const handler = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const atBottom = scrollHeight - scrollTop - clientHeight < 40;
+      setAutoScroll(atBottom);
+    };
+    container.addEventListener("scroll", handler);
+    return () => container.removeEventListener("scroll", handler);
+  }, []);
+
   // Auto-scroll log viewer.
   useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [logs]);
+    if (autoScroll) {
+      logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [logs, autoScroll]);
 
   // Keyboard shortcuts.
   useEffect(() => {
@@ -134,12 +159,32 @@ export default function TaskDetail({ taskId, onBack }: Props) {
   const isPaused = status === "paused";
   const isFailed = status === "failed" || status === "error";
 
+  // Highlight matching text in a log line.
+  const highlightLine = (text: string) => {
+    if (!searchQuery) return text;
+    const idx = text.toLowerCase().indexOf(searchQuery.toLowerCase());
+    if (idx === -1) return text;
+    return (
+      <>
+        {text.slice(0, idx)}
+        <mark style={{ background: "var(--warning)", color: "#000", borderRadius: 2, padding: "0 2px" }}>
+          {text.slice(idx, idx + searchQuery.length)}
+        </mark>
+        {text.slice(idx + searchQuery.length)}
+      </>
+    );
+  };
+
+  const filteredLogs = searchQuery
+    ? logs.filter((l) => l.line.toLowerCase().includes(searchQuery.toLowerCase()))
+    : logs;
+
   return (
     <div>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <button className="btn btn-ghost" onClick={onBack} aria-label="返回列表">
-          &larr; 返回
+        <button className="btn btn-ghost" onClick={onBack} aria-label={i18n.taskDetail.backLabel}>
+          {i18n.common.backToList}
         </button>
         <span style={{ flex: 1 }} />
 
@@ -147,13 +192,13 @@ export default function TaskDetail({ taskId, onBack }: Props) {
         {canAccess("operator") && (
           <>
             {isRunning && (
-              <button className="btn btn-secondary" onClick={handlePause} aria-label="暂停任务">
-                暂停
+              <button className="btn btn-secondary" onClick={handlePause} aria-label={i18n.taskDetail.pauseLabel}>
+                {i18n.taskDetail.pause}
               </button>
             )}
             {isPaused && (
-              <button className="btn btn-secondary" onClick={handleResume} aria-label="恢复任务">
-                恢复
+              <button className="btn btn-secondary" onClick={handleResume} aria-label={i18n.taskDetail.resumeLabel}>
+                {i18n.taskDetail.resume}
               </button>
             )}
             {isFailed && displayData?.items.some((i) => i.status.toLowerCase() === "failed") && (
@@ -163,38 +208,38 @@ export default function TaskDetail({ taskId, onBack }: Props) {
                   const failedItem = displayData.items.find((i) => i.status.toLowerCase() === "failed");
                   if (failedItem) doAction("task_retry", { task_item_id: failedItem.id });
                 }}
-                aria-label="重试失败项"
+                aria-label={i18n.taskDetail.retryLabel}
               >
-                重试
+                {i18n.taskDetail.retry}
               </button>
             )}
             {isFailed && (
-              <button className="btn btn-secondary" onClick={handleRecover} aria-label="恢复任务">
-                恢复任务
+              <button className="btn btn-secondary" onClick={handleRecover} aria-label={i18n.taskDetail.recoverLabel}>
+                {i18n.taskDetail.recover}
               </button>
             )}
           </>
         )}
 
-        <button className="btn btn-ghost" onClick={handleTrace} aria-label="执行跟踪" style={{ fontSize: 13 }}>
-          跟踪
+        <button className="btn btn-ghost" onClick={handleTrace} aria-label={i18n.taskDetail.traceLabel} style={{ fontSize: 13 }}>
+          {i18n.taskDetail.trace}
         </button>
 
         <button
           className={`btn ${expert ? "btn-primary" : "btn-ghost"}`}
           onClick={() => setExpert((v) => !v)}
-          aria-label="切换专家模式 (Cmd+E)"
+          aria-label={i18n.taskDetail.expertToggle}
         >
-          {expert ? "专家 ✓" : "专家"}
+          {expert ? i18n.taskDetail.expertOn : i18n.taskDetail.expertOff}
         </button>
 
         {canAccess("admin") && (
           <button
             className="btn btn-destructive"
             onClick={() => setShowDelete(true)}
-            aria-label="删除任务"
+            aria-label={i18n.taskDetail.deleteLabel}
           >
-            删除
+            {i18n.common.delete}
           </button>
         )}
       </div>
@@ -207,8 +252,8 @@ export default function TaskDetail({ taskId, onBack }: Props) {
       {traceJson && (
         <div className="liquid-glass" style={{ marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
-            <h3 style={{ flex: 1, fontSize: 14 }}>执行跟踪</h3>
-            <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setTraceJson(null)}>关闭</button>
+            <h3 style={{ flex: 1, fontSize: 14 }}>{i18n.taskDetail.traceTitle}</h3>
+            <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setTraceJson(null)}>{i18n.common.close}</button>
           </div>
           <pre style={{ background: "var(--bg-secondary)", borderRadius: 12, padding: 12,
             fontSize: 12, whiteSpace: "pre-wrap", maxHeight: 300, overflowY: "auto" }}>
@@ -240,7 +285,7 @@ export default function TaskDetail({ taskId, onBack }: Props) {
             {displayData.items.length > 0 && (
               <div style={{ marginTop: 16 }}>
                 <h3 style={{ fontSize: 14, marginBottom: 8, color: "var(--text-secondary)" }}>
-                  步骤进度
+                  {i18n.taskDetail.stepProgress}
                 </h3>
                 {displayData.items.map((item) => (
                   <div
@@ -280,22 +325,48 @@ export default function TaskDetail({ taskId, onBack }: Props) {
             <ExpertPanel taskDetail={displayData} />
           ) : (
             <div className="liquid-glass">
-              <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
-                <h3 style={{ flex: 1 }}>实时日志</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <h3 style={{ flex: 1 }}>{i18n.taskDetail.liveLog}</h3>
+                {truncated && (
+                  <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                    {i18n.taskDetail.logLimitHint(LOG_LIMIT)}
+                  </span>
+                )}
                 {!active ? (
-                  <button className="btn btn-primary" onClick={start} aria-label="开始追踪日志">
-                    追踪
+                  <button className="btn btn-primary" onClick={start} aria-label={i18n.taskDetail.followLabel}>
+                    {i18n.taskDetail.follow}
                   </button>
                 ) : (
-                  <button className="btn btn-secondary" onClick={stop} aria-label="停止追踪日志">
-                    停止
+                  <button className="btn btn-secondary" onClick={stop} aria-label={i18n.taskDetail.stopFollowLabel}>
+                    {i18n.taskDetail.stopFollow}
                   </button>
                 )}
               </div>
 
+              {/* Search bar */}
+              <div style={{ marginBottom: 8 }}>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={i18n.taskDetail.searchPlaceholder}
+                  style={{
+                    width: "100%",
+                    padding: "6px 10px",
+                    borderRadius: 8,
+                    border: "1px solid var(--glass-border-subtle)",
+                    background: "var(--bg-secondary)",
+                    color: "var(--text-primary)",
+                    fontSize: 13,
+                    outline: "none",
+                  }}
+                />
+              </div>
+
               <div
+                ref={logContainerRef}
                 role="log"
-                aria-label="任务实时日志"
+                aria-label={i18n.taskDetail.logLabel}
                 aria-live="polite"
                 style={{
                   background: "var(--bg-secondary)",
@@ -308,21 +379,37 @@ export default function TaskDetail({ taskId, onBack }: Props) {
                   lineHeight: 1.6,
                 }}
               >
-                {logs.length === 0 && (
+                {filteredLogs.length === 0 && (
                   <p style={{ color: "var(--text-tertiary)" }}>
-                    {active ? "等待日志输出..." : "点击「追踪」开始接收日志流。"}
+                    {active ? i18n.taskDetail.logWaiting : i18n.taskDetail.logHint}
                   </p>
                 )}
-                {logs.map((log, i) => (
+                {filteredLogs.map((log, i) => (
                   <div key={i}>
                     <span style={{ color: "var(--text-tertiary)", marginRight: 8 }}>
                       {log.timestamp}
                     </span>
-                    <span>{log.line}</span>
+                    <span>{highlightLine(log.line)}</span>
                   </div>
                 ))}
                 <div ref={logEndRef} />
               </div>
+
+              {/* Scroll-to-bottom button when auto-scroll is paused */}
+              {!autoScroll && logs.length > 0 && (
+                <div style={{ textAlign: "center", marginTop: 4 }}>
+                  <button
+                    className="btn btn-ghost"
+                    style={{ fontSize: 12 }}
+                    onClick={() => {
+                      setAutoScroll(true);
+                      logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                  >
+                    {i18n.taskDetail.scrollToBottom}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </>
@@ -330,9 +417,9 @@ export default function TaskDetail({ taskId, onBack }: Props) {
 
       <ConfirmDialog
         open={showDelete}
-        title="删除任务"
-        message="确定要删除这个任务吗？此操作不可撤销。"
-        confirmLabel="确认删除"
+        title={i18n.taskDetail.deleteTitle}
+        message={i18n.taskDetail.deleteMessage}
+        confirmLabel={i18n.taskDetail.deleteConfirm}
         destructive
         onConfirm={handleDelete}
         onCancel={() => setShowDelete(false)}

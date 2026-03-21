@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useRole } from "../hooks/useRole";
 import ConfirmDialog from "./ConfirmDialog";
+import i18n from "../lib/i18n";
 import type { AgentInfo } from "../lib/types";
 
 export default function ExpertAgents() {
@@ -64,18 +65,18 @@ export default function ExpertAgents() {
       {actionMsg && <p style={{ color: "var(--success)", fontSize: 13 }}>{actionMsg}</p>}
 
       {agents.length === 0 && !error && (
-        <p style={{ color: "var(--text-secondary)" }}>暂无注册的 Agent</p>
+        <p style={{ color: "var(--text-secondary)" }}>{i18n.expertAgents.noAgents}</p>
       )}
 
       {agents.length > 0 && (
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              <th style={thStyle}>名称</th>
-              <th style={thStyle}>状态</th>
-              <th style={thStyle}>健康</th>
-              <th style={thStyle}>在途任务</th>
-              {canAccess("admin") && <th style={thStyle}>操作</th>}
+              <th style={thStyle}>{i18n.expertAgents.colName}</th>
+              <th style={thStyle}>{i18n.expertAgents.colStatus}</th>
+              <th style={thStyle}>{i18n.expertAgents.colHealth}</th>
+              <th style={thStyle}>{i18n.expertAgents.colInFlight}</th>
+              {canAccess("admin") && <th style={thStyle}>{i18n.expertAgents.colActions}</th>}
             </tr>
           </thead>
           <tbody>
@@ -91,7 +92,7 @@ export default function ExpertAgents() {
                     {agent.lifecycle_state}
                   </span>
                 </td>
-                <td style={tdStyle}>{agent.is_healthy ? "✅" : "🔴"}</td>
+                <td style={tdStyle}>{agent.is_healthy ? "\u2705" : "\uD83D\uDD34"}</td>
                 <td style={tdStyle}>{agent.in_flight_items}</td>
                 {canAccess("admin") && (
                   <td style={tdStyle}>
@@ -131,9 +132,9 @@ export default function ExpertAgents() {
 
       <ConfirmDialog
         open={!!drainTarget}
-        title="Drain Agent"
-        message={`确定要 drain agent "${drainTarget}" 吗？这将停止分配新任务并等待当前任务完成。`}
-        confirmLabel="确认 Drain"
+        title={i18n.expertAgents.drainTitle}
+        message={i18n.expertAgents.drainMessage(drainTarget ?? "")}
+        confirmLabel={i18n.expertAgents.drainConfirm}
         destructive
         onConfirm={handleDrain}
         onCancel={() => setDrainTarget(null)}

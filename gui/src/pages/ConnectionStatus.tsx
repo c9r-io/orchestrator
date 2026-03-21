@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import i18n from "../lib/i18n";
 import type { ConnectionState } from "../lib/types";
 
 interface Props {
@@ -35,18 +36,18 @@ export default function ConnectionStatus({ state, onRetry }: Props) {
 
   return (
     <div>
-      <h1 className="page-title">无法连接到 orchestratord</h1>
+      <h1 className="page-title">{i18n.connection.title}</h1>
 
       <div className="liquid-glass" style={{ marginBottom: 20 }}>
-        <h3 style={{ marginBottom: 16, fontWeight: 600 }}>可能的原因</h3>
+        <h3 style={{ marginBottom: 16, fontWeight: 600 }}>{i18n.connection.possibleCauses}</h3>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
             <span style={{ fontSize: 20 }}>1.</span>
             <div>
-              <strong>守护进程未启动</strong>
+              <strong>{i18n.connection.cause1Title}</strong>
               <p style={{ color: "var(--text-secondary)", marginTop: 4 }}>
-                请在终端执行：<code style={{ background: "var(--bg-tertiary)", padding: "2px 6px", borderRadius: 4 }}>orchestratord --foreground</code>
+                {i18n.connection.cause1Desc}<code style={{ background: "var(--bg-tertiary)", padding: "2px 6px", borderRadius: 4 }}>{i18n.connection.cause1Cmd}</code>
               </p>
             </div>
           </div>
@@ -54,9 +55,9 @@ export default function ConnectionStatus({ state, onRetry }: Props) {
           <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
             <span style={{ fontSize: 20 }}>2.</span>
             <div>
-              <strong>连接地址不正确</strong>
+              <strong>{i18n.connection.cause2Title}</strong>
               <p style={{ color: "var(--text-secondary)", marginTop: 4 }}>
-                检查 <code style={{ background: "var(--bg-tertiary)", padding: "2px 6px", borderRadius: 4 }}>ORCHESTRATOR_SOCKET</code> 环境变量是否指向正确的 socket 文件
+                {i18n.connection.cause2Desc}
               </p>
             </div>
           </div>
@@ -64,9 +65,9 @@ export default function ConnectionStatus({ state, onRetry }: Props) {
           <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
             <span style={{ fontSize: 20 }}>3.</span>
             <div>
-              <strong>远程连接证书问题</strong>
+              <strong>{i18n.connection.cause3Title}</strong>
               <p style={{ color: "var(--text-secondary)", marginTop: 4 }}>
-                检查 <code style={{ background: "var(--bg-tertiary)", padding: "2px 6px", borderRadius: 4 }}>~/.orchestrator/control-plane/</code> 下的 TLS 证书配置
+                {i18n.connection.cause3Desc}
               </p>
             </div>
           </div>
@@ -85,28 +86,28 @@ export default function ConnectionStatus({ state, onRetry }: Props) {
           onClick={onRetry}
           disabled={isRetrying}
         >
-          {isRetrying ? "连接中..." : "重试连接"}
+          {isRetrying ? i18n.connection.connecting : i18n.connection.retryConnect}
         </button>
         <button
           className="btn btn-secondary"
           onClick={() => setShowManual(!showManual)}
         >
-          {showManual ? "收起手动配置" : "手动配置"}
+          {showManual ? i18n.connection.collapseManual : i18n.connection.manualConfig}
         </button>
       </div>
 
       {showManual && (
         <div className="liquid-glass">
-          <h3 style={{ marginBottom: 12, fontWeight: 600 }}>手动配置连接</h3>
+          <h3 style={{ marginBottom: 12, fontWeight: 600 }}>{i18n.connection.manualTitle}</h3>
           <p style={{ color: "var(--text-secondary)", marginBottom: 12 }}>
-            指定 control-plane 配置文件路径（YAML），用于连接远程 daemon。
+            {i18n.connection.manualDesc}
           </p>
           <div style={{ display: "flex", gap: 8 }}>
             <input
               type="text"
               value={configPath}
               onChange={(e) => setConfigPath(e.target.value)}
-              placeholder="/path/to/config.yaml"
+              placeholder={i18n.connection.manualPlaceholder}
               style={{
                 flex: 1,
                 padding: "8px 12px",
@@ -122,7 +123,7 @@ export default function ConnectionStatus({ state, onRetry }: Props) {
               onClick={handleManualConnect}
               disabled={connecting || !configPath.trim()}
             >
-              {connecting ? "连接中..." : "连接"}
+              {connecting ? i18n.connection.connecting : i18n.connection.connect}
             </button>
           </div>
           {manualError && (

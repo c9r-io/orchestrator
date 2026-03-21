@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { useGrpc } from "../hooks/useGrpc";
 import { useRole } from "../hooks/useRole";
+import Skeleton from "../components/Skeleton";
+import i18n from "../lib/i18n";
 import type { TaskSummary } from "../lib/types";
 
 interface Props {
@@ -11,18 +13,18 @@ function statusBadgeClass(status: string): string {
   switch (status.toLowerCase()) {
     case "completed":
     case "succeeded":
-      return "badge badge-success";
+      return "badge badge-success status-transition";
     case "running":
     case "in_progress":
-      return "badge badge-info";
+      return "badge badge-info status-transition";
     case "failed":
     case "error":
-      return "badge badge-danger";
+      return "badge badge-danger status-transition";
     case "paused":
     case "pending":
-      return "badge badge-warning";
+      return "badge badge-warning status-transition";
     default:
-      return "badge";
+      return "badge status-transition";
   }
 }
 
@@ -42,22 +44,28 @@ export default function TaskList({ onSelect }: Props) {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", marginBottom: 20 }}>
-        <h1 className="page-title" style={{ marginBottom: 0 }}>Tasks</h1>
+        <h1 className="page-title" style={{ marginBottom: 0 }}>{i18n.taskList.title}</h1>
         <button
           className="btn btn-ghost"
           style={{ marginLeft: 12 }}
           onClick={() => call()}
         >
-          Refresh
+          {i18n.taskList.refreshBtn}
         </button>
       </div>
 
-      {loading && <p style={{ color: "var(--text-secondary)" }}>Loading...</p>}
+      {loading && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <Skeleton height={48} />
+          <Skeleton height={48} />
+          <Skeleton height={48} />
+        </div>
+      )}
       {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
 
       {data && data.length === 0 && (
         <div className="liquid-glass">
-          <p style={{ color: "var(--text-secondary)" }}>No tasks found.</p>
+          <p style={{ color: "var(--text-secondary)" }}>{i18n.taskList.noTasks}</p>
         </div>
       )}
 
@@ -66,11 +74,11 @@ export default function TaskList({ onSelect }: Props) {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--glass-border-subtle)" }}>
-                <th style={thStyle}>Name</th>
-                <th style={thStyle}>Status</th>
-                <th style={thStyle}>Progress</th>
-                <th style={thStyle}>Updated</th>
-                {canAccess("operator") && <th style={thStyle}>Actions</th>}
+                <th style={thStyle}>{i18n.taskList.colName}</th>
+                <th style={thStyle}>{i18n.taskList.colStatus}</th>
+                <th style={thStyle}>{i18n.taskList.colProgress}</th>
+                <th style={thStyle}>{i18n.taskList.colUpdated}</th>
+                {canAccess("operator") && <th style={thStyle}>{i18n.taskList.colActions}</th>}
               </tr>
             </thead>
             <tbody>
@@ -92,7 +100,7 @@ export default function TaskList({ onSelect }: Props) {
                         className="btn btn-ghost"
                         onClick={(e) => { e.stopPropagation(); onSelect(task.id); }}
                       >
-                        View
+                        {i18n.taskList.viewBtn}
                       </button>
                     </td>
                   )}

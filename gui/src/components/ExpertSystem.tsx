@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useRole } from "../hooks/useRole";
 import ConfirmDialog from "./ConfirmDialog";
+import i18n from "../lib/i18n";
 
 interface WorkerStatus {
   pending_tasks: number;
@@ -76,15 +77,15 @@ export default function ExpertSystem() {
       {/* Worker Status */}
       {worker && (
         <div style={{ marginBottom: 16 }}>
-          <h4 style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 8 }}>Worker 状态</h4>
+          <h4 style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 8 }}>{i18n.expertSystem.workerTitle}</h4>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
             {[
-              ["活跃", worker.active_workers],
-              ["空闲", worker.idle_workers],
-              ["运行中任务", worker.running_tasks],
-              ["待处理任务", worker.pending_tasks],
-              ["配置数", worker.configured_workers],
-              ["生命周期", worker.lifecycle_state],
+              [i18n.expertSystem.active, worker.active_workers],
+              [i18n.expertSystem.idle, worker.idle_workers],
+              [i18n.expertSystem.runningTasks, worker.running_tasks],
+              [i18n.expertSystem.pendingTasks, worker.pending_tasks],
+              [i18n.expertSystem.configuredCount, worker.configured_workers],
+              [i18n.expertSystem.lifecycle, worker.lifecycle_state],
             ].map(([label, val]) => (
               <div key={String(label)} style={{ fontSize: 13 }}>
                 <span style={{ color: "var(--text-tertiary)" }}>{label}: </span>
@@ -98,12 +99,12 @@ export default function ExpertSystem() {
       {/* DB Status */}
       {db && (
         <div style={{ marginBottom: 16 }}>
-          <h4 style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 8 }}>数据库状态</h4>
+          <h4 style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 8 }}>{i18n.expertSystem.dbTitle}</h4>
           <div style={{ fontSize: 13 }}>
-            <p>路径: <code>{db.db_path}</code></p>
-            <p>版本: {db.current_version}/{db.target_version} {db.is_current ? "✅" : "⚠️ 需迁移"}</p>
+            <p>{i18n.expertSystem.dbPath}: <code>{db.db_path}</code></p>
+            <p>{i18n.expertSystem.dbVersion(db.current_version, db.target_version)} {db.is_current ? "\u2705" : `\u26A0\uFE0F ${i18n.expertSystem.dbNeedsMigration}`}</p>
             {db.pending_names.length > 0 && (
-              <p style={{ color: "var(--warning)" }}>待迁移: {db.pending_names.join(", ")}</p>
+              <p style={{ color: "var(--warning)" }}>{i18n.expertSystem.dbPendingMigrations(db.pending_names.join(", "))}</p>
             )}
           </div>
         </div>
@@ -111,16 +112,16 @@ export default function ExpertSystem() {
 
       {/* Actions */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button className="btn btn-secondary" style={{ fontSize: 12 }} onClick={runCheck}>预检查</button>
-        <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={load}>刷新</button>
+        <button className="btn btn-secondary" style={{ fontSize: 12 }} onClick={runCheck}>{i18n.expertSystem.precheck}</button>
+        <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={load}>{i18n.common.refresh}</button>
         {canAccess("admin") && (
           <>
             <button className="btn btn-secondary" style={{ fontSize: 12 }}
-              onClick={() => toggleMaintenance(true)}>进入维护模式</button>
+              onClick={() => toggleMaintenance(true)}>{i18n.expertSystem.enterMaintenance}</button>
             <button className="btn btn-secondary" style={{ fontSize: 12 }}
-              onClick={() => toggleMaintenance(false)}>退出维护模式</button>
+              onClick={() => toggleMaintenance(false)}>{i18n.expertSystem.exitMaintenance}</button>
             <button className="btn btn-destructive" style={{ fontSize: 12 }}
-              onClick={() => setShowShutdown(true)}>关闭 Daemon</button>
+              onClick={() => setShowShutdown(true)}>{i18n.expertSystem.shutdownDaemon}</button>
           </>
         )}
       </div>
@@ -132,9 +133,9 @@ export default function ExpertSystem() {
         </pre>
       )}
 
-      <ConfirmDialog open={showShutdown} title="关闭 Daemon"
-        message="确定要优雅关闭 daemon 吗？所有正在运行的任务将被中断。"
-        confirmLabel="确认关闭" destructive onConfirm={handleShutdown}
+      <ConfirmDialog open={showShutdown} title={i18n.expertSystem.shutdownTitle}
+        message={i18n.expertSystem.shutdownMessage}
+        confirmLabel={i18n.expertSystem.shutdownConfirm} destructive onConfirm={handleShutdown}
         onCancel={() => setShowShutdown(false)} />
     </div>
   );

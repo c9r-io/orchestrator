@@ -3,7 +3,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification";
 import { RoleContext, hasAccess } from "./hooks/useRole";
 import { useConnectionState } from "./hooks/useConnectionState";
+import { useTheme } from "./hooks/useTheme";
 import type { Role } from "./lib/types";
+import i18n from "./lib/i18n";
 import ConnectionBanner from "./components/ConnectionBanner";
 import ConnectionStatus from "./pages/ConnectionStatus";
 import WishPool from "./pages/WishPool";
@@ -19,6 +21,7 @@ export default function App() {
   const { connectionState, reconnect } = useConnectionState();
   const [selectedWishId, setSelectedWishId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const { theme, toggleTheme } = useTheme();
 
   const connected = connectionState.kind === "Connected";
 
@@ -118,7 +121,7 @@ export default function App() {
         {/* Navigation */}
         <nav
           style={{ display: "flex", gap: 8, marginBottom: 20, alignItems: "center" }}
-          aria-label="主导航"
+          aria-label={i18n.nav.mainNav}
         >
           <button
             className={`btn ${tab === "wishes" ? "btn-primary" : "btn-ghost"}`}
@@ -127,9 +130,9 @@ export default function App() {
               setSelectedWishId(null);
               setSelectedTaskId(null);
             }}
-            aria-label="许愿池 (Cmd+1)"
+            aria-label={i18n.nav.wishPoolShortcut}
           >
-            许愿池
+            {i18n.nav.wishPool}
           </button>
           <button
             className={`btn ${tab === "progress" ? "btn-primary" : "btn-ghost"}`}
@@ -138,20 +141,30 @@ export default function App() {
               setSelectedWishId(null);
               setSelectedTaskId(null);
             }}
-            aria-label="进度观察 (Cmd+2)"
+            aria-label={i18n.nav.progressShortcut}
           >
-            进度观察
+            {i18n.nav.progress}
           </button>
+
+          <span style={{ flex: 1 }} />
 
           {role && (
             <span
               className="badge badge-info"
-              style={{ marginLeft: "auto" }}
-              aria-label={`当前角色: ${role}`}
+              aria-label={i18n.nav.currentRole(role)}
             >
               {role}
             </span>
           )}
+
+          <button
+            className="btn btn-ghost theme-toggle"
+            onClick={toggleTheme}
+            aria-label={theme === "light" ? i18n.theme.toggleDark : i18n.theme.toggleLight}
+            title={theme === "light" ? i18n.theme.toggleDark : i18n.theme.toggleLight}
+          >
+            {theme === "light" ? "\u{1F319}" : "\u{2600}\u{FE0F}"}
+          </button>
         </nav>
 
         {/* Wish Pool tab */}

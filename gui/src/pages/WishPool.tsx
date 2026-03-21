@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useRole } from "../hooks/useRole";
 import StatusIcon from "../components/StatusIcon";
+import i18n from "../lib/i18n";
 import type { TaskSummary, TaskCreateResult } from "../lib/types";
 
 interface Props {
@@ -10,30 +11,36 @@ interface Props {
 
 const MAX_CHARS = 2000;
 
-const STATUS_FILTERS = ["全部", "草稿中", "待确认", "已确认", "已取消"] as const;
+const STATUS_FILTERS = [
+  i18n.wishPool.filterAll,
+  i18n.wishPool.filterDrafting,
+  i18n.wishPool.filterPendingConfirm,
+  i18n.wishPool.filterConfirmed,
+  i18n.wishPool.filterCancelled,
+] as const;
 
 function wishStatusLabel(status: string): string {
   switch (status.toLowerCase()) {
     case "running":
     case "in_progress":
-      return "草稿中";
+      return i18n.wishStatus.drafting;
     case "completed":
     case "succeeded":
-      return "待确认";
+      return i18n.wishStatus.pendingConfirm;
     case "paused":
-      return "已暂停";
+      return i18n.wishStatus.paused;
     case "failed":
     case "error":
-      return "失败";
+      return i18n.wishStatus.failed;
     case "deleted":
-      return "已取消";
+      return i18n.wishStatus.cancelled;
     default:
       return status;
   }
 }
 
 function matchesFilter(task: TaskSummary, filter: string): boolean {
-  if (filter === "全部") return true;
+  if (filter === i18n.wishPool.filterAll) return true;
   return wishStatusLabel(task.status) === filter;
 }
 
@@ -41,7 +48,7 @@ export default function WishPool({ onSelectWish }: Props) {
   const [input, setInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [wishes, setWishes] = useState<TaskSummary[]>([]);
-  const [filter, setFilter] = useState("全部");
+  const [filter, setFilter] = useState<string>(i18n.wishPool.filterAll);
   const [error, setError] = useState<string | null>(null);
   const { canAccess } = useRole();
 
@@ -88,7 +95,7 @@ export default function WishPool({ onSelectWish }: Props) {
 
   return (
     <div>
-      <h1 className="page-title">许愿池</h1>
+      <h1 className="page-title">{i18n.wishPool.title}</h1>
 
       {/* Input area */}
       {canAccess("operator") && (
@@ -97,8 +104,8 @@ export default function WishPool({ onSelectWish }: Props) {
             value={input}
             onChange={(e) => setInput(e.target.value.slice(0, MAX_CHARS))}
             onKeyDown={handleKeyDown}
-            placeholder="描述你想要实现的功能，比如：我想让用户能通过邮箱注册账号..."
-            aria-label="需求描述"
+            placeholder={i18n.wishPool.placeholder}
+            aria-label={i18n.wishPool.inputLabel}
             style={{
               width: "100%",
               minHeight: 120,
@@ -129,9 +136,9 @@ export default function WishPool({ onSelectWish }: Props) {
               className="btn btn-primary"
               onClick={handleSubmit}
               disabled={!input.trim() || submitting}
-              aria-label="提交许愿"
+              aria-label={i18n.wishPool.submitLabel}
             >
-              {submitting ? "提交中..." : "许愿"}
+              {submitting ? i18n.wishPool.submitting : i18n.wishPool.submit}
             </button>
           </div>
           {error && (
@@ -157,7 +164,7 @@ export default function WishPool({ onSelectWish }: Props) {
           onClick={loadWishes}
           style={{ marginLeft: "auto", fontSize: 13 }}
         >
-          刷新
+          {i18n.common.refresh}
         </button>
       </div>
 
@@ -165,9 +172,7 @@ export default function WishPool({ onSelectWish }: Props) {
       {filtered.length === 0 && (
         <div className="liquid-glass" style={{ textAlign: "center" }}>
           <p style={{ color: "var(--text-secondary)" }}>
-            {wishes.length === 0
-              ? "还没有许过愿，在上方输入你的第一个需求吧"
-              : "没有匹配的许愿"}
+            {wishes.length === 0 ? i18n.wishPool.emptyFirst : i18n.wishPool.emptyFiltered}
           </p>
         </div>
       )}
@@ -182,7 +187,7 @@ export default function WishPool({ onSelectWish }: Props) {
             role="button"
             tabIndex={0}
             onKeyDown={(e) => e.key === "Enter" && onSelectWish(wish.id)}
-            aria-label={`许愿: ${wish.name || wish.goal}`}
+            aria-label={i18n.wishPool.wishLabel(wish.name || wish.goal)}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <StatusIcon status={wish.status} />

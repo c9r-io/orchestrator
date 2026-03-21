@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import ProgressBar from "../components/ProgressBar";
 import StatusIcon from "../components/StatusIcon";
+import Skeleton from "../components/Skeleton";
+import i18n from "../lib/i18n";
 import type { TaskSummary, WatchSnapshot } from "../lib/types";
 
 interface Props {
@@ -113,18 +115,24 @@ export default function ProgressList({ onSelect }: Props) {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", marginBottom: 20 }}>
-        <h1 className="page-title" style={{ marginBottom: 0 }}>进度观察</h1>
+        <h1 className="page-title" style={{ marginBottom: 0 }}>{i18n.progressList.title}</h1>
         <button className="btn btn-ghost" style={{ marginLeft: 12 }} onClick={load}>
-          刷新
+          {i18n.common.refresh}
         </button>
       </div>
 
-      {loading && <p style={{ color: "var(--text-secondary)" }}>加载中...</p>}
+      {loading && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <Skeleton height={80} />
+          <Skeleton height={80} />
+          <Skeleton height={80} />
+        </div>
+      )}
       {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
 
       {!loading && tasks.length === 0 && (
         <div className="liquid-glass" style={{ textAlign: "center" }}>
-          <p style={{ color: "var(--text-secondary)" }}>暂无任务</p>
+          <p style={{ color: "var(--text-secondary)" }}>{i18n.progressList.noTasks}</p>
         </div>
       )}
 
@@ -138,7 +146,7 @@ export default function ProgressList({ onSelect }: Props) {
             role="button"
             tabIndex={0}
             onKeyDown={(e) => e.key === "Enter" && onSelect(task.id)}
-            aria-label={`任务: ${task.name || task.id}`}
+            aria-label={i18n.progressList.taskLabel(task.name || task.id)}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <StatusIcon status={task.status} />
@@ -146,7 +154,7 @@ export default function ProgressList({ onSelect }: Props) {
                 {task.name || task.goal?.slice(0, 40) || task.id.slice(0, 8)}
               </span>
               {isActive(task.status) && (
-                <span style={{ fontSize: 11, color: "var(--accent)" }}>● 实时</span>
+                <span style={{ fontSize: 11, color: "var(--accent)" }}>{i18n.progressList.realtime}</span>
               )}
             </div>
 
@@ -163,10 +171,10 @@ export default function ProgressList({ onSelect }: Props) {
                 color: "var(--text-tertiary)",
               }}
             >
-              <span>开始于 {task.created_at}</span>
+              <span>{i18n.progressList.startedAt(task.created_at)}</span>
               {task.failed_items > 0 && (
                 <span style={{ color: "var(--danger)" }}>
-                  {task.failed_items} 项失败
+                  {i18n.progressList.failedItems(task.failed_items)}
                 </span>
               )}
             </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import i18n from "../lib/i18n";
 
 interface Props {
   open: boolean;
@@ -14,7 +15,7 @@ export default function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = "确认",
+  confirmLabel = i18n.common.confirm,
   destructive = false,
   onConfirm,
   onCancel,
@@ -35,15 +36,7 @@ export default function ConfirmDialog({
 
   return (
     <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.4)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-      }}
+      className="dialog-overlay"
       onClick={onCancel}
       role="dialog"
       aria-modal="true"
@@ -51,7 +44,7 @@ export default function ConfirmDialog({
     >
       <div
         ref={dialogRef}
-        className="liquid-glass"
+        className="liquid-glass dialog-content"
         style={{ maxWidth: 400, width: "90%" }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -59,7 +52,7 @@ export default function ConfirmDialog({
         <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>{message}</p>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button className="btn btn-ghost" onClick={onCancel}>
-            取消
+            {i18n.common.cancel}
           </button>
           <button
             className={`btn ${destructive ? "btn-destructive" : "btn-primary"}`}

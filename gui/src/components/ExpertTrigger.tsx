@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useRole } from "../hooks/useRole";
+import i18n from "../lib/i18n";
 import type { ResourceResult } from "../lib/types";
 
 interface TriggerAction {
@@ -62,17 +63,17 @@ export default function ExpertTrigger() {
       {/* Trigger name input + actions */}
       {canAccess("operator") && (
         <div style={{ display: "flex", gap: 4, marginBottom: 12, alignItems: "center" }}>
-          <input placeholder="trigger 名称" value={triggerName}
+          <input placeholder={i18n.expertTrigger.namePlaceholder} value={triggerName}
             onChange={(e) => setTriggerName(e.target.value)}
             style={{ flex: 1, padding: "4px 8px", borderRadius: 8,
               border: "1px solid var(--glass-border-subtle)",
               background: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: 13 }} />
           <button className="btn btn-secondary" style={{ fontSize: 12 }}
-            onClick={() => doAction("trigger_suspend")} disabled={!triggerName}>暂停</button>
+            onClick={() => doAction("trigger_suspend")} disabled={!triggerName}>{i18n.expertTrigger.suspend}</button>
           <button className="btn btn-secondary" style={{ fontSize: 12 }}
-            onClick={() => doAction("trigger_resume")} disabled={!triggerName}>恢复</button>
+            onClick={() => doAction("trigger_resume")} disabled={!triggerName}>{i18n.expertTrigger.resumeTrigger}</button>
           <button className="btn btn-primary" style={{ fontSize: 12 }}
-            onClick={() => doAction("trigger_fire")} disabled={!triggerName}>触发</button>
+            onClick={() => doAction("trigger_fire")} disabled={!triggerName}>{i18n.expertTrigger.fire}</button>
         </div>
       )}
 
@@ -84,7 +85,7 @@ export default function ExpertTrigger() {
         </pre>
       )}
       {!content && !error && (
-        <p style={{ color: "var(--text-tertiary)", fontSize: 13 }}>暂无触发器</p>
+        <p style={{ color: "var(--text-tertiary)", fontSize: 13 }}>{i18n.expertTrigger.noTriggers}</p>
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useRole } from "../hooks/useRole";
+import i18n from "../lib/i18n";
 
 interface StoreEntry {
   key: string;
@@ -87,7 +88,7 @@ export default function ExpertStore() {
               {e.key}
             </div>
           ))}
-          {entries.length === 0 && <p style={{ color: "var(--text-tertiary)", fontSize: 13 }}>空</p>}
+          {entries.length === 0 && <p style={{ color: "var(--text-tertiary)", fontSize: 13 }}>{i18n.common.empty}</p>}
         </div>
         <div>
           {selectedKey && !editMode && (
@@ -99,9 +100,9 @@ export default function ExpertStore() {
               </pre>
               {canAccess("operator") && (
                 <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
-                  <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setEditMode(true)}>编辑</button>
+                  <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setEditMode(true)}>{i18n.common.edit}</button>
                   <button className="btn btn-ghost" style={{ fontSize: 12, color: "var(--danger)" }}
-                    onClick={() => handleDelete(selectedKey)}>删除</button>
+                    onClick={() => handleDelete(selectedKey)}>{i18n.common.delete}</button>
                 </div>
               )}
             </div>
@@ -113,8 +114,8 @@ export default function ExpertStore() {
                   border: "1px solid var(--glass-border-subtle)", borderRadius: 8, padding: 8,
                   fontFamily: "monospace", fontSize: 12, color: "var(--text-primary)" }} />
               <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
-                <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={handlePut}>保存</button>
-                <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setEditMode(false)}>取消</button>
+                <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={handlePut}>{i18n.common.save}</button>
+                <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setEditMode(false)}>{i18n.common.cancel}</button>
               </div>
             </div>
           )}
@@ -130,7 +131,7 @@ export default function ExpertStore() {
             style={{ flex: 1, padding: "4px 8px", borderRadius: 8, border: "1px solid var(--glass-border-subtle)",
               background: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: 12 }} />
           <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={handlePut}
-            disabled={!newKey}>添加</button>
+            disabled={!newKey}>{i18n.common.add}</button>
         </div>
       )}
     </div>

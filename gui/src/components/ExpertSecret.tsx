@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useRole } from "../hooks/useRole";
 import ConfirmDialog from "./ConfirmDialog";
+import i18n from "../lib/i18n";
 
 interface SecretKeyInfo {
   key_id: string;
@@ -63,17 +64,17 @@ export default function ExpertSecret() {
       {msg && <p style={{ color: "var(--success)", fontSize: 13 }}>{msg}</p>}
 
       {keys.length === 0 && !error && (
-        <p style={{ color: "var(--text-tertiary)", fontSize: 13 }}>暂无密钥</p>
+        <p style={{ color: "var(--text-tertiary)", fontSize: 13 }}>{i18n.expertSecret.noKeys}</p>
       )}
 
       {keys.length > 0 && (
         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
           <thead>
             <tr>
-              <th style={thStyle}>Key ID</th>
-              <th style={thStyle}>状态</th>
-              <th style={thStyle}>创建时间</th>
-              {canAccess("admin") && <th style={thStyle}>操作</th>}
+              <th style={thStyle}>{i18n.expertSecret.colKeyId}</th>
+              <th style={thStyle}>{i18n.expertSecret.colStatus}</th>
+              <th style={thStyle}>{i18n.expertSecret.colCreatedAt}</th>
+              {canAccess("admin") && <th style={thStyle}>{i18n.expertSecret.colActions}</th>}
             </tr>
           </thead>
           <tbody>
@@ -84,7 +85,7 @@ export default function ExpertSecret() {
               }}>
                 <td style={tdStyle}>
                   <code>{k.key_id.slice(0, 12)}</code>
-                  {k.key_id === activeKeyId && <span style={{ color: "var(--accent)", marginLeft: 4 }}>活跃</span>}
+                  {k.key_id === activeKeyId && <span style={{ color: "var(--accent)", marginLeft: 4 }}>{i18n.expertSecret.activeLabel}</span>}
                 </td>
                 <td style={tdStyle}>{k.status}</td>
                 <td style={tdStyle}>{k.created_at}</td>
@@ -92,7 +93,7 @@ export default function ExpertSecret() {
                   <td style={tdStyle}>
                     {k.key_id !== activeKeyId && k.status !== "revoked" && (
                       <button className="btn btn-ghost" style={{ fontSize: 11, color: "var(--danger)" }}
-                        onClick={() => setRevokeTarget(k.key_id)}>撤销</button>
+                        onClick={() => setRevokeTarget(k.key_id)}>{i18n.expertSecret.revoke}</button>
                     )}
                   </td>
                 )}
@@ -104,14 +105,14 @@ export default function ExpertSecret() {
 
       {canAccess("admin") && (
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={handleRotate}>轮转密钥</button>
-          <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={load}>刷新</button>
+          <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={handleRotate}>{i18n.expertSecret.rotateKey}</button>
+          <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={load}>{i18n.common.refresh}</button>
         </div>
       )}
 
-      <ConfirmDialog open={!!revokeTarget} title="撤销密钥"
-        message={`确定要撤销密钥 "${revokeTarget?.slice(0, 12)}" 吗？此操作不可逆。`}
-        confirmLabel="确认撤销" destructive onConfirm={handleRevoke}
+      <ConfirmDialog open={!!revokeTarget} title={i18n.expertSecret.revokeTitle}
+        message={i18n.expertSecret.revokeMessage(revokeTarget?.slice(0, 12) ?? "")}
+        confirmLabel={i18n.expertSecret.revokeConfirm} destructive onConfirm={handleRevoke}
         onCancel={() => setRevokeTarget(null)} />
     </div>
   );

@@ -176,6 +176,11 @@ body {
   color: var(--accent);
 }
 
+/* Status transition for badge color changes */
+.status-transition {
+  transition: color 0.3s ease, background-color 0.3s ease;
+}
+
 /* Layout */
 .page {
   max-width: 1100px;
@@ -187,6 +192,14 @@ body {
   font-size: 28px;
   font-weight: 700;
   margin-bottom: 20px;
+}
+
+/* Theme toggle button */
+.theme-toggle {
+  font-size: 18px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  line-height: 1;
 }
 
 /* Accessibility — focus rings */
@@ -249,6 +262,63 @@ button:focus-visible {
 @keyframes banner-slide-in {
   from { transform: translateY(-100%); }
   to { transform: translateY(0); }
+}
+
+/* Skeleton loading placeholder */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-tertiary) 25%,
+    var(--glass-bg-hover) 50%,
+    var(--bg-tertiary) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Dialog overlay with fade-in */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: dialog-fade-in 0.2s ease;
+}
+
+.dialog-content {
+  animation: dialog-scale-in 0.2s ease;
+}
+
+@keyframes dialog-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dialog-scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Responsive breakpoints */
+@media (max-width: 1000px) {
+  .page {
+    max-width: 100%;
+    padding: 16px;
+  }
+}
+
+@media (min-width: 1200px) {
+  .page {
+    max-width: 1200px;
+  }
 }
 
 /* Reduced motion */

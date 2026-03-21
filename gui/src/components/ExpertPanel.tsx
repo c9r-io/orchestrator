@@ -7,6 +7,7 @@ import ExpertSystem from "./ExpertSystem";
 import ExpertTrigger from "./ExpertTrigger";
 import ExpertSecret from "./ExpertSecret";
 import ExpertRawData from "./ExpertRawData";
+import i18n from "../lib/i18n";
 import type { TaskDetail } from "../lib/types";
 
 interface Props {
@@ -16,14 +17,14 @@ interface Props {
 type ExpertTab = "workflow" | "resources" | "agents" | "store" | "system" | "trigger" | "secret" | "raw";
 
 const TABS: { key: ExpertTab; label: string }[] = [
-  { key: "workflow", label: "工作流" },
-  { key: "resources", label: "资源" },
-  { key: "agents", label: "Agent" },
-  { key: "store", label: "Store" },
-  { key: "system", label: "系统" },
-  { key: "trigger", label: "触发器" },
-  { key: "secret", label: "密钥" },
-  { key: "raw", label: "原始数据" },
+  { key: "workflow", label: i18n.expert.workflow },
+  { key: "resources", label: i18n.expert.resources },
+  { key: "agents", label: i18n.expert.agents },
+  { key: "store", label: i18n.expert.store },
+  { key: "system", label: i18n.expert.system },
+  { key: "trigger", label: i18n.expert.trigger },
+  { key: "secret", label: i18n.expert.secret },
+  { key: "raw", label: i18n.expert.rawData },
 ];
 
 export default function ExpertPanel({ taskDetail }: Props) {
@@ -31,7 +32,7 @@ export default function ExpertPanel({ taskDetail }: Props) {
 
   return (
     <div className="liquid-glass" style={{ marginTop: 16 }}>
-      <nav style={{ display: "flex", gap: 4, marginBottom: 16, flexWrap: "wrap" }} aria-label="专家模式导航">
+      <nav style={{ display: "flex", gap: 4, marginBottom: 16, flexWrap: "wrap" }} aria-label={i18n.expert.navLabel}>
         {TABS.map((t) => (
           <button
             key={t.key}

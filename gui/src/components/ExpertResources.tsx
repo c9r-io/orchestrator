@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useRole } from "../hooks/useRole";
+import i18n from "../lib/i18n";
 import type { ResourceResult } from "../lib/types";
 
 const RESOURCE_KINDS = ["workspaces", "workflows", "agents", "steptemplates", "executionprofiles"];
@@ -87,7 +88,7 @@ export default function ExpertResources() {
           onClick={() => { setSelectedResource(null); loadResources(kind); }}
           style={{ marginBottom: 8, fontSize: 13 }}
         >
-          &larr; 返回列表
+          {i18n.expertResources.backToList}
         </button>
       )}
 
@@ -136,10 +137,10 @@ export default function ExpertResources() {
           />
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
             <button className="btn btn-primary" onClick={handleApply}>
-              应用
+              {i18n.common.apply}
             </button>
             <button className="btn btn-ghost" onClick={() => setEditing(false)}>
-              取消
+              {i18n.common.cancel}
             </button>
           </div>
         </div>
@@ -149,13 +150,13 @@ export default function ExpertResources() {
       {selectedResource && !editing && canAccess("operator") && (
         <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
           <button className="btn btn-secondary" onClick={() => setEditing(true)}>
-            编辑
+            {i18n.common.edit}
           </button>
           <button
             className="btn btn-ghost"
             onClick={() => navigator.clipboard.writeText(content ?? "")}
           >
-            复制
+            {i18n.common.copy}
           </button>
         </div>
       )}
@@ -163,7 +164,7 @@ export default function ExpertResources() {
       {/* Clickable resource list hint */}
       {!selectedResource && content && (
         <p style={{ color: "var(--text-tertiary)", fontSize: 12, marginTop: 8 }}>
-          使用 resource_describe 查看详情：在上方搜索 "kind/name" 格式
+          {i18n.expertResources.describeHint}
         </p>
       )}
     </div>
