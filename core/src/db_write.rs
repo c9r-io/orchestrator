@@ -230,6 +230,17 @@ impl DbWriteCoordinator {
             .await
     }
 
+    /// Persists accumulated pipeline variables back to the task item's dynamic_vars column.
+    pub async fn update_task_item_pipeline_vars(
+        &self,
+        task_item_id: &str,
+        pipeline_vars_json: &str,
+    ) -> Result<()> {
+        self.repo
+            .update_task_item_pipeline_vars(task_item_id, pipeline_vars_json)
+            .await
+    }
+
     /// Replaces the ticket file and preview payloads for one task item.
     pub async fn update_task_item_tickets(
         &self,

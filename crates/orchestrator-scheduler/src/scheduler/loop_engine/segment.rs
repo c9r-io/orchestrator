@@ -497,6 +497,22 @@ pub(super) async fn try_item_selection(
                     .update_task_item_status(id, "eliminated")
                     .await;
             }
+            // Persist pipeline_vars for eliminated items (they won't reach finalize)
+            for es in &eval_states {
+                if result.eliminated_ids.contains(&es.item_id) {
+                    let existing = items
+                        .iter()
+                        .find(|i| i.id == es.item_id)
+                        .and_then(|i| i.dynamic_vars_json.as_deref());
+                    super::super::item_executor::persist_item_pipeline_vars(
+                        state,
+                        &es.item_id,
+                        existing,
+                        &es.pipeline_vars,
+                    )
+                    .await;
+                }
+            }
             promote_winner_vars(&mut task_ctx.pipeline_vars, &result);
             isolation::apply_winner_if_needed(state, task_id, task_ctx).await?;
             persist_selection_to_store(state, task_ctx, task_id, &result, &config).await;

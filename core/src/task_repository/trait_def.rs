@@ -46,6 +46,12 @@ pub trait TaskRepository {
     fn set_task_item_terminal_status(&self, task_item_id: &str, status: &str) -> Result<()>;
     /// Updates a task item to an arbitrary status value.
     fn update_task_item_status(&self, task_item_id: &str, status: &str) -> Result<()>;
+    /// Persists accumulated pipeline variables back to the task item's dynamic_vars column.
+    fn update_task_item_pipeline_vars(
+        &self,
+        task_item_id: &str,
+        pipeline_vars_json: &str,
+    ) -> Result<()>;
     /// Loads the human-readable name of a task.
     fn load_task_name(&self, task_id: &str) -> Result<Option<String>>;
     /// Lists recent command runs for log streaming or inspection.

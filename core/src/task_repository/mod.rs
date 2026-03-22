@@ -147,6 +147,15 @@ impl TaskRepository for SqliteTaskRepository {
         items::update_task_item_status(&conn, task_item_id, status)
     }
 
+    fn update_task_item_pipeline_vars(
+        &self,
+        task_item_id: &str,
+        pipeline_vars_json: &str,
+    ) -> Result<()> {
+        let conn = self.connection()?;
+        items::update_task_item_pipeline_vars(&conn, task_item_id, pipeline_vars_json)
+    }
+
     fn load_task_name(&self, task_id: &str) -> Result<Option<String>> {
         let conn = self.connection()?;
         queries::load_task_name(&conn, task_id)
@@ -588,6 +597,24 @@ impl AsyncSqliteTaskRepository {
             .writer()
             .call(move |conn| {
                 items::update_task_item_status(conn, &task_item_id, &status)
+                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    /// Persists accumulated pipeline variables back to the task item's dynamic_vars column.
+    pub async fn update_task_item_pipeline_vars(
+        &self,
+        task_item_id: &str,
+        pipeline_vars_json: &str,
+    ) -> Result<()> {
+        let task_item_id = task_item_id.to_owned();
+        let pipeline_vars_json = pipeline_vars_json.to_owned();
+        self.async_db
+            .writer()
+            .call(move |conn| {
+                items::update_task_item_pipeline_vars(conn, &task_item_id, &pipeline_vars_json)
                     .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
             })
             .await

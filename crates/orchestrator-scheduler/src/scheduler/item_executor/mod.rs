@@ -15,5 +15,5 @@ pub use dispatch::{
     process_item, process_item_filtered, process_item_filtered_owned, OwnedProcessItemRequest,
     ProcessItemRequest,
 };
-pub use finalize::finalize_item_execution;
+pub use finalize::{finalize_item_execution, persist_item_pipeline_vars};
 pub use guard::{execute_guard_step, GuardResult};

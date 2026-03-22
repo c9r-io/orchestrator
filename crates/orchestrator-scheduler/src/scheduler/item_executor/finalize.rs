@@ -5,6 +5,7 @@ use agent_orchestrator::state::InnerState;
 use agent_orchestrator::ticket::list_existing_tickets_for_item;
 use anyhow::Result;
 use serde_json::json;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::accumulator::StepExecutionAccumulator;
@@ -79,9 +80,40 @@ pub async fn finalize_item_execution(
             .await?;
     }
 
+    persist_item_pipeline_vars(
+        state,
+        item_id,
+        item.dynamic_vars_json.as_deref(),
+        &acc.pipeline_vars.vars,
+    )
+    .await;
+
     state
         .db_writer
         .set_task_item_terminal_status(item_id, &acc.item_status)
         .await?;
     Ok(())
+}
+
+/// Merge item's accumulated pipeline_vars into its dynamic_vars_json and persist.
+pub async fn persist_item_pipeline_vars(
+    state: &Arc<InnerState>,
+    item_id: &str,
+    existing_dynamic_vars_json: Option<&str>,
+    pipeline_vars: &HashMap<String, String>,
+) {
+    if pipeline_vars.is_empty() {
+        return;
+    }
+    // Start from existing dynamic_vars, overlay pipeline_vars on top
+    let mut merged: HashMap<String, String> = existing_dynamic_vars_json
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_default();
+    merged.extend(pipeline_vars.iter().map(|(k, v)| (k.clone(), v.clone())));
+    if let Ok(json) = serde_json::to_string(&merged) {
+        let _ = state
+            .db_writer
+            .update_task_item_pipeline_vars(item_id, &json)
+            .await;
+    }
 }

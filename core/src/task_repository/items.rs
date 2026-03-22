@@ -14,6 +14,18 @@ pub fn update_task_item_status(conn: &Connection, task_item_id: &str, status: &s
     Ok(())
 }
 
+pub fn update_task_item_pipeline_vars(
+    conn: &Connection,
+    task_item_id: &str,
+    pipeline_vars_json: &str,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE task_items SET dynamic_vars_json = ?2, updated_at = ?3 WHERE id = ?1",
+        params![task_item_id, pipeline_vars_json, now_ts()],
+    )?;
+    Ok(())
+}
+
 pub fn mark_task_item_running(conn: &Connection, task_item_id: &str) -> Result<()> {
     let now = now_ts();
     conn.execute(

@@ -345,6 +345,65 @@ fn update_task_item_status_updates_updated_at() {
     assert_ne!(old_updated, new_updated, "updated_at should change");
 }
 
+// ── update_task_item_pipeline_vars ────────────────────────────────
+
+#[test]
+fn update_task_item_pipeline_vars_persists_json() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let item_id: String = conn
+        .query_row(
+            "SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1",
+            params![task_id],
+            |row| row.get(0),
+        )
+        .expect("task item exists");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    let vars_json = r#"{"score":"70","approach":"regex"}"#;
+    repo.update_task_item_pipeline_vars(&item_id, vars_json)
+        .expect("update should succeed");
+
+    let stored: Option<String> = conn
+        .query_row(
+            "SELECT dynamic_vars_json FROM task_items WHERE id = ?1",
+            params![item_id],
+            |row| row.get(0),
+        )
+        .expect("query item");
+    assert_eq!(stored.as_deref(), Some(vars_json));
+}
+
+#[test]
+fn update_task_item_pipeline_vars_updates_updated_at() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let (item_id, old_updated): (String, String) = conn
+        .query_row(
+            "SELECT id, updated_at FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1",
+            params![task_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("task item exists");
+
+    std::thread::sleep(std::time::Duration::from_millis(10));
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    repo.update_task_item_pipeline_vars(&item_id, r#"{"k":"v"}"#)
+        .expect("update should succeed");
+
+    let new_updated: String = conn
+        .query_row(
+            "SELECT updated_at FROM task_items WHERE id = ?1",
+            params![item_id],
+            |row| row.get(0),
+        )
+        .expect("query item");
+    assert_ne!(old_updated, new_updated, "updated_at should change");
+}
+
 #[test]
 fn mark_task_item_running_sets_started_at() {
     let mut fixture = TestState::new();
