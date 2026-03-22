@@ -1,0 +1,91 @@
+# Test fixture: generate_items - Malformed JSON (Scenario 4)
+# Tests graceful error handling when JSON is syntactically invalid
+---
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: s4-malformed-json-test
+spec:
+  root_path: "."
+  qa_targets:
+    - fixtures/qa-narrow-test
+  ticket_dir: fixtures/ticket
+  self_referential: false
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_architect
+  description: "Mock architect — outputs malformed JSON"
+spec:
+  capabilities:
+    - plan
+    - qa_doc_gen
+  command: "printf '%s' 'I found these targets: {regression_targets: [target-a, target-b]}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_tester
+  description: "Mock tester — echoes success JSON for qa_testing"
+spec:
+  capabilities:
+    - qa_testing
+    - loop_guard
+  command: "echo '{\"confidence\":0.92,\"quality_score\":0.88,\"artifacts\":[]}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: s4-malformed-json
+spec:
+  max_parallel: 4
+
+  steps:
+    - id: plan
+      type: plan
+      scope: task
+      required_capability: plan
+      enabled: true
+      repeatable: false
+      command: "echo '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[]}'"
+
+    - id: qa_doc_gen
+      type: qa_doc_gen
+      scope: task
+      required_capability: qa_doc_gen
+      enabled: true
+      repeatable: false
+      behavior:
+        post_actions:
+          - type: generate_items
+            from_var: qa_doc_gen_output
+            json_path: "$.regression_targets"
+            mapping:
+              item_id: "$.id"
+              label: "$.name"
+            replace: true
+
+    - id: qa_testing
+      type: qa_testing
+      scope: item
+      required_capability: qa_testing
+      enabled: true
+      repeatable: true
+
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+
+  loop:
+    mode: fixed
+    max_cycles: 1
+    enabled: true
+
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none

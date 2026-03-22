@@ -1,0 +1,16 @@
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: s4_invalid_cel
+spec:
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  loop:
+    mode: infinite
+    max_cycles: 10
+    convergence_expr:
+      - engine: cel
+        when: "invalid cel syntax [[["
+        reason: "bad_expr"

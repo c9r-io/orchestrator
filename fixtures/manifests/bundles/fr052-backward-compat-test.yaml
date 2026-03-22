@@ -1,0 +1,15 @@
+# Test fixture for FR-052 backward compatibility test
+# Uses workflow WITHOUT the new inflight_wait_timeout_secs / inflight_heartbeat_grace_secs fields
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: fr052-backward-compat-test
+spec:
+  max_parallel: 1
+  # No safety section at all - should use all defaults including inflight_wait_timeout
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  loop:
+    mode: once

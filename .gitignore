@@ -17,3 +17,5 @@ target/
 dist/
 .DS_Store
 fixtures/*/*.md
+node_modules/
+tmp/

@@ -1,0 +1,31 @@
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_capture
+spec:
+  capabilities:
+    - qa
+  command: "echo '{\"confidence\":0.95,\"delta_lines\":3}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: s5_pipeline_var
+spec:
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+      behavior:
+        captures:
+          - var: delta_lines
+            source: stdout
+            json_path: "$.delta_lines"
+  loop:
+    mode: infinite
+    max_cycles: 10
+    stop_when_no_unresolved: false
+    convergence_expr:
+      - engine: cel
+        when: "delta_lines < 5 && cycle >= 2"
+        reason: "diff_converged"

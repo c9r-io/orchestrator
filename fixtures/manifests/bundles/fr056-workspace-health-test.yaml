@@ -1,0 +1,43 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: qa-ws-health
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa/orchestrator
+  ticket_dir: "docs/ticket"
+  health_policy:
+    disease_duration_hours: 0
+    disease_threshold: 10
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: ws-default-agent
+spec:
+  command: "echo '{\"confidence\":1.0}'"
+  capabilities:
+    - qa_testing
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: ws-override-agent
+spec:
+  command: "echo '{\"confidence\":1.0}'"
+  capabilities:
+    - qa_testing
+  health_policy:
+    disease_duration_hours: 2
+    disease_threshold: 3
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: qa-test-ws
+spec:
+  steps:
+    - id: qa
+      type: qa
+      required_capability: qa_testing

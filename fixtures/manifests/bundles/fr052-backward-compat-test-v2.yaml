@@ -1,0 +1,15 @@
+# Test fixture for FR-052 backward compatibility test
+# Uses workflow with EMPTY safety section - should use all defaults
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: fr052-backward-compat-test-v2
+spec:
+  max_parallel: 1
+  safety: {}
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  loop:
+    mode: once
