@@ -550,7 +550,8 @@ async fn execute_builtin_step_dispatch(
                 "step_id": step.id,
                 "step_scope": step.resolved_scope(),
                 "exit_code": exit_code,
-                "success": passed
+                "success": passed,
+                "cycle": task_ctx.current_cycle
             });
             if let Some(parent_step) = parent_step {
                 payload["parent_step"] = json!(parent_step);
@@ -622,7 +623,8 @@ async fn execute_builtin_step_dispatch(
                         "step_id": step.id,
                         "step_scope": step.resolved_scope(),
                         "exit_code": exit_code,
-                        "restart": true
+                        "restart": true,
+                        "cycle": task_ctx.current_cycle
                     });
                     if let Some(parent_step) = parent_step {
                         payload["parent_step"] = json!(parent_step);
@@ -681,7 +683,8 @@ async fn execute_builtin_step_dispatch(
                         "step_id": step.id,
                         "step_scope": step.resolved_scope(),
                         "exit_code": exit_code,
-                        "restart": false
+                        "restart": false,
+                        "cycle": task_ctx.current_cycle
                     });
                     if let Some(parent_step) = parent_step {
                         payload["parent_step"] = json!(parent_step);
@@ -721,7 +724,8 @@ async fn execute_builtin_step_dispatch(
                 "step": phase,
                 "step_id": step.id,
                 "step_scope": step.resolved_scope(),
-                "tickets": acc.active_tickets.len()
+                "tickets": acc.active_tickets.len(),
+                "cycle": task_ctx.current_cycle
             });
             if let Some(parent_step) = parent_step {
                 payload["parent_step"] = json!(parent_step);
@@ -737,7 +741,8 @@ async fn execute_builtin_step_dispatch(
                 "step": phase,
                 "step_id": step.id,
                 "step_scope": step.resolved_scope(),
-                "builtin": "item_select"
+                "builtin": "item_select",
+                "cycle": task_ctx.current_cycle
             });
             if let Some(parent_step) = parent_step {
                 payload["parent_step"] = json!(parent_step);
