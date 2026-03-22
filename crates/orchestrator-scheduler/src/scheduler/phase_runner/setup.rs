@@ -72,8 +72,15 @@ pub(super) async fn setup_phase_execution(
                 project_cfg
                     .and_then(|p| p.execution_profiles.get(name))
                     .map(|profile| {
-                        let always_writable =
+                        let mut always_writable =
                             vec![state.logs_dir.join(task_id), std::env::temp_dir()];
+                        // Claude Code agents need write access to ~/.claude/ for
+                        // session-env bootstrapping; without this the sandbox blocks
+                        // every bash command after self_restart.
+                        if let Ok(home) = std::env::var("HOME") {
+                            always_writable
+                                .push(std::path::PathBuf::from(home).join(".claude"));
+                        }
                         ResolvedExecutionProfile::from_config(
                             name,
                             profile,
