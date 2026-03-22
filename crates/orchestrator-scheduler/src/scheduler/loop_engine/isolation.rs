@@ -142,6 +142,22 @@ pub(crate) async fn apply_winner_if_needed(
     .await
     .with_context(|| format!("merge winner branch {}", branch))?;
 
+    // R2: Collect diff stats for observability
+    let (files_changed, insertions, deletions) =
+        match run_git_output(&task_ctx.workspace_root, ["diff", "--numstat", "HEAD~1..HEAD"]).await
+        {
+            Ok(output) => parse_numstat(&output.stdout),
+            Err(_) => (0usize, 0usize, 0usize),
+        };
+
+    tracing::info!(
+        winner_branch = %branch,
+        files_changed,
+        insertions,
+        deletions,
+        "evo_apply_winner: applied winner worktree"
+    );
+
     task_ctx
         .pipeline_vars
         .vars
@@ -155,6 +171,9 @@ pub(crate) async fn apply_winner_if_needed(
         json!({
             "strategy": "git_worktree",
             "branch": branch,
+            "files_changed": files_changed,
+            "insertions": insertions,
+            "deletions": deletions,
         }),
     )
     .await?;
@@ -296,6 +315,24 @@ where
         .context("failed to execute git command")
 }
 
+/// Parse `git diff --numstat` output into (files_changed, insertions, deletions).
+/// Each line has the format: `<added>\t<removed>\t<file>`.
+fn parse_numstat(raw: &[u8]) -> (usize, usize, usize) {
+    let text = String::from_utf8_lossy(raw);
+    let mut files = 0usize;
+    let mut ins = 0usize;
+    let mut del = 0usize;
+    for line in text.lines() {
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() >= 3 {
+            files += 1;
+            ins += parts[0].parse::<usize>().unwrap_or(0);
+            del += parts[1].parse::<usize>().unwrap_or(0);
+        }
+    }
+    (files, ins, del)
+}
+
 fn sanitize_ref_component(value: &str) -> String {
     let sanitized: String = value
         .chars()
@@ -317,5 +354,32 @@ mod tests {
     #[test]
     fn sanitize_ref_component_replaces_invalid_chars() {
         assert_eq!(sanitize_ref_component("task 01:item"), "task-01-item");
+    }
+
+    #[test]
+    fn parse_numstat_basic() {
+        let raw = b"10\t3\tsrc/main.rs\n5\t0\tsrc/lib.rs\n";
+        let (files, ins, del) = parse_numstat(raw);
+        assert_eq!(files, 2);
+        assert_eq!(ins, 15);
+        assert_eq!(del, 3);
+    }
+
+    #[test]
+    fn parse_numstat_empty() {
+        let (files, ins, del) = parse_numstat(b"");
+        assert_eq!(files, 0);
+        assert_eq!(ins, 0);
+        assert_eq!(del, 0);
+    }
+
+    #[test]
+    fn parse_numstat_binary_files() {
+        // Binary files show "-" for added/removed
+        let raw = b"-\t-\timage.png\n5\t2\tsrc/main.rs\n";
+        let (files, ins, del) = parse_numstat(raw);
+        assert_eq!(files, 2);
+        assert_eq!(ins, 5);
+        assert_eq!(del, 2);
     }
 }

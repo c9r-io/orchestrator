@@ -342,6 +342,7 @@ impl StepExecutionAccumulator {
     }
 
     /// Apply capture declarations from a step result into the accumulator.
+    /// Returns the list of variable names whose capture extraction failed (value was `None`).
     pub fn apply_captures(
         &mut self,
         captures: &[agent_orchestrator::config::CaptureDecl],
@@ -349,7 +350,8 @@ impl StepExecutionAccumulator {
         task_id: &str,
         step_id: &str,
         result: &agent_orchestrator::dto::RunResult,
-    ) {
+    ) -> Vec<String> {
+        let mut missing = Vec::new();
         for cap in captures {
             match cap.source {
                 CaptureSource::ExitCode => {
@@ -388,6 +390,7 @@ impl StepExecutionAccumulator {
                                 );
                             }
                             None => {
+                                missing.push(cap.var.clone());
                                 self.pipeline_vars
                                     .vars
                                     .insert(cap.var.clone(), String::new());
@@ -399,6 +402,9 @@ impl StepExecutionAccumulator {
                     if let Some(ref output) = result.output {
                         let value =
                             capture_text_field(&output.stderr, &cap.var, cap.json_path.as_deref());
+                        if value.is_none() {
+                            missing.push(cap.var.clone());
+                        }
                         self.pipeline_vars
                             .vars
                             .insert(cap.var.clone(), value.unwrap_or_default());
@@ -406,6 +412,7 @@ impl StepExecutionAccumulator {
                 }
             }
         }
+        missing
     }
 }
 

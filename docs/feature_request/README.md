@@ -56,6 +56,7 @@
 | FR-067 | GUI CLI 功能对齐 — 补全缺失 RPC 覆盖 | P1 | Closed |
 | FR-068 | GUI 连接韧性与系统通知 | P1 | Closed |
 | FR-069 | GUI 体验打磨 — 主题切换 / 动画 / i18n / 响应式 / 构建分发 | P2 | Closed |
+| FR-070 | evo_apply_winner 可观测性增强 — 候选选择与代码应用决策日志 | P1 | Closed |
 
 ## 说明
 
@@ -131,3 +132,4 @@
 - FR-067 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/77-gui-cli-rpc-parity.md` 与 `docs/qa/orchestrator/119-gui-cli-rpc-parity.md` 承载
 - FR-068 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/78-gui-connection-resilience-notification.md` 与 `docs/qa/orchestrator/120-gui-connection-resilience-notification.md` 承载
 - FR-069 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/79-gui-polish-theme-i18n-responsive.md` 与 `docs/qa/orchestrator/121-gui-polish-theme-i18n-responsive.md` 承载
+- FR-070 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/80-evo-apply-winner-observability.md` 与 `docs/qa/orchestrator/122-evo-apply-winner-observability.md` 承载

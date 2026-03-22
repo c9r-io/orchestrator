@@ -578,10 +578,11 @@ fn apply_captures_exit_code() {
     }];
     let result = make_run_result(42, false, None);
 
-    acc.apply_captures(&captures, temp.path(), "task-1", "qa_testing", &result);
+    let missing = acc.apply_captures(&captures, temp.path(), "task-1", "qa_testing", &result);
 
     assert_eq!(*acc.exit_codes.get("qa_testing").unwrap(), 42);
     assert_eq!(acc.pipeline_vars.vars.get("qa_exit").unwrap(), "42");
+    assert!(missing.is_empty());
 }
 
 #[test]
@@ -595,7 +596,7 @@ fn apply_captures_failed_flag() {
     }];
     let result = make_run_result(1, false, None);
 
-    acc.apply_captures(&captures, temp.path(), "task-1", "qa", &result);
+    let _ = acc.apply_captures(&captures, temp.path(), "task-1", "qa", &result);
 
     assert!(*acc.flags.get("qa_failed").unwrap());
     assert_eq!(acc.pipeline_vars.vars.get("qa_failed").unwrap(), "true");
@@ -612,7 +613,7 @@ fn apply_captures_success_flag() {
     }];
     let result = make_run_result(0, true, None);
 
-    acc.apply_captures(&captures, temp.path(), "task-1", "fix", &result);
+    let _ = acc.apply_captures(&captures, temp.path(), "task-1", "fix", &result);
 
     assert!(*acc.flags.get("fix_success").unwrap());
     assert_eq!(acc.pipeline_vars.vars.get("fix_success").unwrap(), "true");
@@ -629,7 +630,7 @@ fn apply_captures_success_flag_on_failure() {
     }];
     let result = make_run_result(1, false, None);
 
-    acc.apply_captures(&captures, temp.path(), "task-1", "fix", &result);
+    let _ = acc.apply_captures(&captures, temp.path(), "task-1", "fix", &result);
 
     assert!(!*acc.flags.get("fix_success").unwrap());
 }
@@ -660,7 +661,7 @@ fn apply_captures_stderr() {
     }];
     let result = make_run_result(0, true, Some(output));
 
-    acc.apply_captures(&captures, temp.path(), "task-1", "qa", &result);
+    let _ = acc.apply_captures(&captures, temp.path(), "task-1", "qa", &result);
 
     assert_eq!(
         acc.pipeline_vars.vars.get("qa_stderr").unwrap(),
@@ -679,7 +680,7 @@ fn apply_captures_stdout_no_output_is_noop() {
     }];
     let result = make_run_result(0, true, None);
 
-    acc.apply_captures(&captures, temp.path(), "task-1", "qa", &result);
+    let _ = acc.apply_captures(&captures, temp.path(), "task-1", "qa", &result);
 
     assert!(!acc.pipeline_vars.vars.contains_key("qa_stdout"));
 }
@@ -695,7 +696,7 @@ fn apply_captures_stderr_no_output_is_noop() {
     }];
     let result = make_run_result(0, true, None);
 
-    acc.apply_captures(&captures, temp.path(), "task-1", "qa", &result);
+    let _ = acc.apply_captures(&captures, temp.path(), "task-1", "qa", &result);
 
     assert!(!acc.pipeline_vars.vars.contains_key("qa_stderr"));
 }
@@ -723,7 +724,7 @@ fn apply_captures_multiple() {
     ];
     let result = make_run_result(0, true, None);
 
-    acc.apply_captures(&captures, temp.path(), "task-1", "step1", &result);
+    let _ = acc.apply_captures(&captures, temp.path(), "task-1", "step1", &result);
 
     assert_eq!(acc.pipeline_vars.vars.get("exit").unwrap(), "0");
     assert!(!*acc.flags.get("failed").unwrap());
@@ -756,7 +757,7 @@ fn apply_captures_stdout_spills_under_task_logs_dir() {
     };
     let result = make_run_result(0, true, Some(output));
 
-    acc.apply_captures(&captures, temp.path(), "task-123", "plan", &result);
+    let _ = acc.apply_captures(&captures, temp.path(), "task-123", "plan", &result);
 
     let spill_path = temp.path().join("task-123").join("plan_output.txt");
     assert_eq!(
@@ -798,7 +799,7 @@ fn apply_captures_stdout_json_path_extracts_score() {
     }];
     let result = make_run_result(0, true, Some(output));
 
-    acc.apply_captures(&captures, temp.path(), "task-1", "benchmark", &result);
+    let _ = acc.apply_captures(&captures, temp.path(), "task-1", "benchmark", &result);
 
     assert_eq!(acc.pipeline_vars.vars.get("score").unwrap(), "85");
 }
@@ -833,7 +834,7 @@ fn apply_captures_stdout_json_path_extracts_stream_json_score() {
     }];
     let result = make_run_result(0, true, Some(output));
 
-    acc.apply_captures(&captures, temp.path(), "task-1", "benchmark", &result);
+    let _ = acc.apply_captures(&captures, temp.path(), "task-1", "benchmark", &result);
 
     assert_eq!(acc.pipeline_vars.vars.get("score").unwrap(), "91");
 }
@@ -864,9 +865,10 @@ fn apply_captures_stdout_json_path_falls_back_to_empty_string_on_missing_field()
     }];
     let result = make_run_result(0, true, Some(output));
 
-    acc.apply_captures(&captures, temp.path(), "task-1", "benchmark", &result);
+    let missing = acc.apply_captures(&captures, temp.path(), "task-1", "benchmark", &result);
 
     assert_eq!(acc.pipeline_vars.vars.get("score").unwrap(), "");
+    assert_eq!(missing, vec!["score".to_string()]);
 }
 
 #[test]
@@ -898,7 +900,7 @@ fn benchmark_score_capture_can_drive_item_select_max() {
             test_failures: vec![],
         }),
     );
-    first.apply_captures(&captures, temp.path(), "task-1", "benchmark", &result_a);
+    let _ = first.apply_captures(&captures, temp.path(), "task-1", "benchmark", &result_a);
 
     let mut second = StepExecutionAccumulator::new(empty_pipeline());
     let result_b = make_run_result(
@@ -920,7 +922,7 @@ fn benchmark_score_capture_can_drive_item_select_max() {
             test_failures: vec![],
         }),
     );
-    second.apply_captures(&captures, temp.path(), "task-1", "benchmark", &result_b);
+    let _ = second.apply_captures(&captures, temp.path(), "task-1", "benchmark", &result_b);
 
     let items = vec![
         ItemEvalState {

@@ -500,6 +500,18 @@ pub(super) async fn try_item_selection(
             promote_winner_vars(&mut task_ctx.pipeline_vars, &result);
             isolation::apply_winner_if_needed(state, task_id, task_ctx).await?;
             persist_selection_to_store(state, task_ctx, task_id, &result, &config).await;
+            // R4: Collect per-item scores for observability
+            let scores: serde_json::Map<String, serde_json::Value> = eval_states
+                .iter()
+                .filter_map(|s| {
+                    config.metric_var.as_ref().and_then(|mv| {
+                        s.pipeline_vars
+                            .get(mv)
+                            .and_then(|v| v.parse::<f64>().ok())
+                            .map(|score| (s.item_id.clone(), json!(score)))
+                    })
+                })
+                .collect();
             insert_event(
                 state,
                 task_id,
@@ -508,6 +520,8 @@ pub(super) async fn try_item_selection(
                 json!({
                     "winner": result.winner_id,
                     "eliminated": result.eliminated_ids,
+                    "selection_succeeded": true,
+                    "scores": scores,
                 }),
             )
             .await?;
@@ -517,6 +531,29 @@ pub(super) async fn try_item_selection(
         }
         Err(e) => {
             warn!(error = %e, "item_select failed");
+            // R1: Emit item_select_failed event with diagnostic payload
+            let item_vars: serde_json::Map<String, serde_json::Value> = eval_states
+                .iter()
+                .map(|s| {
+                    let keys: Vec<String> = s.pipeline_vars.keys().cloned().collect();
+                    (s.item_id.clone(), json!(keys))
+                })
+                .collect();
+            insert_event(
+                state,
+                task_id,
+                None,
+                "item_select_failed",
+                json!({
+                    "error": e.to_string(),
+                    "metric_var": config.metric_var,
+                    "item_count": eval_states.len(),
+                    "item_vars": item_vars,
+                }),
+            )
+            .await?;
+            // Still apply winner via fallback (constraint: don't change control flow)
+            isolation::apply_winner_if_needed(state, task_id, task_ctx).await?;
         }
     }
 

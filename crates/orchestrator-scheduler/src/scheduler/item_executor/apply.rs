@@ -38,7 +38,7 @@ pub(super) async fn apply_step_results(
 ) -> Result<bool> {
     // 3. Capture outputs
     acc.exit_codes.insert(step.id.clone(), result.exit_code);
-    acc.apply_captures(
+    let captures_missing = acc.apply_captures(
         &step.behavior.captures,
         &state.logs_dir,
         task_id,
@@ -308,6 +308,9 @@ pub(super) async fn apply_step_results(
     });
     if let Some(parent_step) = parent_step {
         payload["parent_step"] = json!(parent_step);
+    }
+    if !captures_missing.is_empty() {
+        payload["captures_missing"] = json!(captures_missing);
     }
     insert_event(state, task_id, Some(item_id), finish_event_type, payload).await?;
 
