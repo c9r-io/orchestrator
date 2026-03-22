@@ -33,10 +33,10 @@
 ### 1.2 执行链路
 
 ```text
-qa_testing(item) → ticket_fix(item) → align_tests(task) → doc_governance(task) → loop_guard
+qa_testing(item) → ticket_fix(item) → align_tests(task) → doc_governance(task) → self_test → loop_guard
 ```
 
-单 cycle，无 plan/implement/self_test/self_restart。
+单 cycle，无 plan/implement/self_restart。
 
 ---
 
@@ -55,8 +55,12 @@ prehook:
   when: >-
     qa_file_path.startsWith("docs/qa/")
     && qa_file_path.endsWith(".md")
-    && self_referential_safe
+    && (self_referential_safe || size(self_referential_safe_scenarios) > 0)
 ```
+
+即：`self_referential_safe: true` 的文档**全量执行**，
+有 `self_referential_safe_scenarios` 的文档**部分执行**（仅限列出的场景），
+两者均不满足的文档被**完全跳过**。
 
 **第二层 — QA 文档 frontmatter 标记**
 
@@ -68,77 +72,93 @@ self_referential_safe: false
 ```
 
 当 workspace 设置 `self_referential: true` 时，系统读取 QA 文档的 frontmatter，
-`self_referential_safe: false` 的文档会被 prehook 跳过，不会被 agent 执行。
+`self_referential_safe: false`（且无 `self_referential_safe_scenarios`）的文档会被 prehook 跳过，不会被 agent 执行。
 
-### 2.2 标记为不安全的文档（114 个）
+### 2.2 标记为不安全的文档（33 个）
 
 以下文档包含 kill daemon、重启进程、重编译二进制、创建任务、修改资源等危险或干扰操作，
-已标记为 `self_referential_safe: false`：
+已标记为 `self_referential_safe: false`。
 
-#### docs/qa/orchestrator/（77 个，含写操作类 42 个）
+其中 **26 个被完全跳过**（无 `self_referential_safe_scenarios`），
+**7 个被部分执行**（仅限列出的安全场景）。
 
-| 文件 | 危险操作 |
-|------|---------|
-| `00-command-contract.md` | 文档 `kill $(cat data/daemon.pid)` 为 daemon 停止命令 |
-| `05-workflow-execution.md` | 涉及 daemon 交互的工作流执行 |
-| `07-capability-orchestration.md` | 涉及 daemon 交互的能力编排 |
-| `14-config-validation-enhanced.md` | `cargo build --workspace` 重编译 |
-| `20-structured-output-worker-scheduler.md` | `kill "${DAEMON_PID}"` 清理步骤 |
-| `22-performance-io-queue-optimizations.md` | `kill "${DAEMON_PID}"` 清理步骤 |
-| `26-self-bootstrap-workflow.md` | `cargo build --release` via skill prerequisites |
-| `36-structured-logging.md` | `cargo build --release -p orchestratord` 重编译 daemon |
-| `43-cli-force-gate-audit.md` | `--force` 破坏性操作测试 |
-| `45-cli-unsafe-mode.md` | `--unsafe` 模式跳过安全检查 |
-| `51-primitive-composition.md` | `cargo build --release` 重编译 |
-| `53-client-server-architecture.md` | SIGTERM 关闭 daemon、PID 文件操作 |
-| `56-sandbox-resource-network-enforcement.md` | `kill "$(cat data/daemon.pid)"` + 启动新 daemon |
-| `57-sandbox-resource-limits-extended.md` | `kill "$(cat data/daemon.pid)"` + 启动新 daemon |
-| `58-control-plane-security.md` | `kill "$DAEMON_PID"` ×3, `cargo build --release` |
-| `59-dynamic-dag-mainline-execution.md` | `cargo build --release` 重编译 |
-| `60-daemon-lifecycle-runtime-metrics.md` | SIGTERM 关闭、daemon PID 操作 |
-| `65-grpc-control-plane-protection.md` | `kill "$DAEMON_PID"` ×4, `cargo build --release` |
-| `71-automate-protoc-dependency.md` | `cargo build --workspace` 重编译 |
-| `85-daemon-crash-resilience.md` | `kill -9` SIGKILL 崩溃模拟 |
-| `86-orphaned-running-items-recovery.md` | `kill -9` SIGKILL + `pkill orchestratord` |
-| `87-self-referential-daemon-pid-guard.md` | 测试 `kill $(cat data/daemon.pid)` 阻断 |
-| `91b-daemon-crash-resilience-shutdown.md` | SIGTERM/SIGINT 关闭回归 |
-| `92-dynamic-items-cycle-overflow.md` | `cargo build --release` 重编译 |
-| `93-inflight-step-completion-race.md` | `cargo build --release` 重编译 |
-| `94-trigger-resource-cron-event-driven.md` | `cargo build --release` 重编译 |
-| `94b-trigger-resource-advanced.md` | `cargo build --release` 重编译 |
-| `95-prehook-self-referential-safe-filter.md` | `orchestrator task create` 创建 self-bootstrap 任务触发 self_restart |
-| `96-self-restart-socket-continuity.md` | `exec()` 自替换测试 |
-| `100-agent-subprocess-daemon-pid-guard.md` | Agent subprocess kill guard 测试 |
-| `101-core-crate-split-config.md` | `cargo build --workspace` 重编译 |
-| `102-core-crate-split-scheduler.md` | `cargo build --workspace` 重编译 |
-| `111-daemon-proper-daemonize.md` | `orchestrator daemon stop` 发送 SIGTERM 停止 daemon |
-| `smoke-orchestrator.md` | `cargo build --release` 重编译 |
+#### docs/qa/orchestrator/（28 个）
 
-#### docs/qa/self-bootstrap/（9 个）
+**完全跳过（21 个）：**
 
 | 文件 | 危险操作 |
 |------|---------|
-| `01-survival-binary-checkpoint-self-test.md` | 集成测试触发 `exec()` 自替换 |
-| `02-survival-enforcement-watchdog.md` | watchdog 脚本、`kill "$WATCHDOG_PID"` |
-| `04-cycle2-validation-and-runtime-timestamps.md` | `cargo build --release -p orchestratord` + self_restart 任务 |
-| `07-self-restart-process-continuity.md` | `exec()` 自替换、`cargo build --release` |
-| `08-build-version-hash.md` | `cargo build --release` 验证 hash |
-| `scenario2-binary-rollback.md` | 创建任务触发 self_restart |
-| `scenario3-binary-skip-disabled.md` | 创建任务触发 self_restart |
-| `10-self-referential-safety-policy-alignment.md` | `orchestrator apply` 修改资源 |
-| `scenario4-self-test-pass.md` | `orchestrator task create` 创建任务 |
+| `01-cli-agent-orchestration.md` | force delete, task create/start, apply resources |
+| `02-cli-task-lifecycle.md` | force delete, task create/start, apply resources |
+| `15-workflow-multi-target-files.md` | force delete, task create/start, apply resources |
+| `19-scheduler-repository-refactor-regression.md` | force delete, task create/start, apply resources |
+| `26-self-bootstrap-workflow.md` | `cargo build --release`, force delete, apply resources |
+| `28-self-bootstrap-pipeline.md` | force delete, apply resources |
+| `41-project-scoped-agent-selection.md` | force delete, task create/start, apply resources |
+| `45-cli-unsafe-mode.md` | force delete, `--unsafe` 模式 |
+| `51-primitive-composition.md` | `cargo build --release`, task create/start |
+| `55-sandbox-write-boundaries.md` | force delete, task create/start, apply resources |
+| `56-sandbox-denial-anomaly-trace.md` | force delete, task create/start, apply resources |
+| `56-sandbox-resource-network-enforcement.md` | `cargo build --release`, kill daemon |
+| `57-sandbox-resource-limits-extended.md` | `cargo build --release`, kill daemon |
+| `58-control-plane-security.md` | `cargo build --release`, kill daemon |
+| `60-daemon-lifecycle-runtime-metrics.md` | `cargo build --release`, kill daemon, signal ops |
+| `65-grpc-control-plane-protection.md` | `cargo build --release`, kill daemon |
+| `84-generate-items-regression-narrowing.md` | force delete, task create/start, apply resources |
+| `87-self-referential-daemon-pid-guard.md` | kill daemon |
+| `96-self-restart-socket-continuity.md` | `cargo build`, `exec()` 自替换 |
+| `100-agent-subprocess-daemon-pid-guard.md` | kill daemon |
+| `smoke-orchestrator.md` | `cargo build --release` |
 
-### 2.3 安全 QA 文档（约 25 个）
+**部分执行（7 个，仅限列出的安全场景）：**
 
-未标记的文档默认 `self_referential_safe: true`，包括：
+| 文件 | 安全场景 | 危险操作（跳过的场景） |
+|------|---------|----------------------|
+| `20-structured-output-worker-scheduler.md` | S1, S2, S3 | kill daemon, task create/start |
+| `22-performance-io-queue-optimizations.md` | S1, S2, S3 | kill daemon, task create/start |
+| `54-step-execution-profiles.md` | S2, S3 | force delete, task create/start |
+| `64-secretstore-key-lifecycle.md` | S5 | apply resources |
+| `94b-trigger-resource-advanced.md` | S2 | apply resources |
+| `99-long-lived-command-guard.md` | S5 | task create/start |
+| `111-daemon-proper-daemonize.md` | — | kill daemon, signal ops, daemon stop |
+
+> 注：`111-daemon-proper-daemonize.md` 标记为 false 且无 scenarios，归入完全跳过。
+> 上表为便于对照将其列在此处，实际跳过数为 22 个 orchestrator 文档。
+
+#### docs/qa/self-bootstrap/（5 个）
+
+**完全跳过（4 个）：**
+
+| 文件 | 危险操作 |
+|------|---------|
+| `01-survival-binary-checkpoint-self-test.md` | `cargo build --release`, `exec()` 自替换 |
+| `04-cycle2-validation-and-runtime-timestamps.md` | `cargo build --release`, `exec()` 自替换 |
+| `07-self-restart-process-continuity.md` | `cargo build --release`, `exec()` 自替换 |
+| `smoke-self-bootstrap.md` | smoke 测试（含 daemon 交互） |
+
+**部分执行（1 个）：**
+
+| 文件 | 安全场景 | 危险操作（跳过的场景） |
+|------|---------|----------------------|
+| `02-survival-enforcement-watchdog.md` | S1, S2, S3 | kill daemon, signal ops, file deletion |
+
+### 2.3 安全 QA 文档（约 124 个）
+
+| 类别 | 数量 | 说明 |
+|------|------|------|
+| 显式 `self_referential_safe: true` | 89 | 完全执行 |
+| 无 frontmatter 标记（默认 safe） | 28 | 完全执行 |
+| `false` + 有 `scenarios` | 7 | 部分执行（仅安全场景） |
+| **合计可执行** | **124** | |
+
+可执行文档包括：
 - 纯单元测试文档（`cargo test --lib`）
 - CLI 命令验证（`orchestrator get/apply/check` 等只读操作）
 - 数据库查询验证（`sqlite3` 查询）
 - 配置验证文档
 - 文档格式/结构验证
 
-> **注意**：部分文档标记了 `self_referential_safe_scenarios`（列出允许执行的场景编号），
-> 这些文档会被**部分执行**（仅限列出的场景），而非完全跳过。
+> **注意**：有 `self_referential_safe_scenarios` 的文档会被**部分执行**（仅限列出的场景），
 > 在指标统计中，这类文档计为"已执行"。
 
 ---
@@ -148,7 +168,7 @@ self_referential_safe: false
 ### 3.1 构建并确认 daemon 运行
 
 ```bash
-cd /Volumes/Yotta/c9r-io/orchestrator
+cd /Users/chenhan/c9r-io/orchestrator
 
 # 确认 daemon 运行
 ps aux | grep orchestratord | grep -v grep
@@ -189,8 +209,8 @@ orchestrator task create \
 ```
 
 > 不指定 `-t`，系统自动扫描 `qa_targets` 配置的 `docs/qa/` 下所有 `.md` 文件。
-> 预计约 138 个 item，其中约 114 个会被 prehook 自动跳过（`self_referential_safe: false`），
-> 实际执行约 25 个。
+> 预计约 150 个 item，其中约 26 个会被 prehook 完全跳过（`self_referential_safe: false` 且无 scenarios），
+> 约 7 个部分执行（仅安全场景），实际全量执行约 117 个。
 
 记录返回的 `<task_id>`。
 
@@ -233,7 +253,7 @@ orchestrator task logs --tail 200 <task_id>
 # agent 子进程
 ps aux | grep "claude -p" | grep -v grep | wc -l
 
-# 预期最多 4 个并行（max_parallel: 4）
+# 预期最多 4 个并行（workflow max_parallel: 4；ticket_fix 步骤 max_parallel: 2）
 ```
 
 ### 4.4 中间检查
@@ -259,13 +279,14 @@ sqlite3 data/agent_orchestrator.db \
 ### 5.1 安全检查点
 
 - [ ] `full-qa.yaml` workspace 的 `self_referential: true` 已生效
-- [ ] 114 个不安全 QA 文档被 prehook 跳过（`step_skipped` 事件）
+- [ ] 26 个完全不安全的 QA 文档被 prehook 跳过（`step_skipped` 事件）
+- [ ] 7 个部分安全文档仅执行了指定场景
 - [ ] daemon 进程在整个执行过程中保持稳定（PID 不变）
 - [ ] 无 `cargo build --release -p orchestratord` 被执行
 
 ### 5.2 QA Testing 阶段
 
-- [ ] 所有安全 QA 文档都被执行（约 25 个）
+- [ ] 所有安全 QA 文档都被执行（约 124 个）
 - [ ] 每个场景的 pass/fail 有明确结论
 - [ ] 失败场景有对应的 ticket 文件
 
@@ -286,6 +307,11 @@ sqlite3 data/agent_orchestrator.db \
 - [ ] QA 文档无格式漂移
 - [ ] README/manifest 一致性
 
+### 5.6 Self Test 阶段
+
+- [ ] `cargo test` 编译通过
+- [ ] 单测无回归
+
 ---
 
 ## 6. 成功判定
@@ -294,10 +320,11 @@ sqlite3 data/agent_orchestrator.db \
 
 1. orchestrator 完整跑完 `full-qa` workflow，在 `loop_guard` 正常收口。
 2. 安全 QA 场景通过率 ≥ 90%（允许部分环境依赖的场景失败）。
-3. 114 个不安全文档全部被正确跳过。
+3. 26 个完全不安全文档全部被正确跳过，7 个部分安全文档仅执行了安全场景。
 4. 所有 ticket 被 ticket_fix 处理（修复或明确标记无法修复）。
 5. `align_tests` 确认单测和编译无回归。
 6. `doc_governance` 确认文档无漂移。
+7. `self_test` 确认编译和测试通过。
 
 ---
 
@@ -305,7 +332,7 @@ sqlite3 data/agent_orchestrator.db \
 
 | 异常 | 判断方式 | 处理 |
 |------|---------|------|
-| 不安全文档未被跳过 | `step_skipped` 数量 < 114 | 检查 workspace `self_referential` 设置、QA 文档 frontmatter |
+| 不安全文档未被跳过 | `step_skipped` 数量 < 26 | 检查 workspace `self_referential` 设置、QA 文档 frontmatter |
 | 大量 QA 文档同类失败 | 相同 pattern 的 ticket 超过 10 个 | 可能是系统性问题，暂停排查根因 |
 | agent 进程僵死 | `claude -p` 进程无输出超过 10 分钟 | 检查 API 配额和网络 |
 | ticket_fix 产生新问题 | 修复后 align_tests 失败 | 检查 ticket_fix 的改动范围 |
@@ -316,12 +343,12 @@ sqlite3 data/agent_orchestrator.db \
 
 ## 8. 预计执行时间
 
-- **约 25 个安全 QA 文档** × **每个约 2-5 分钟** = 约 50-130 分钟（4 并行）
-- 114 个不安全文档被跳过（< 1 秒）
-- ticket_fix 取决于 ticket 数量
-- align_tests + doc_governance 约 10-20 分钟
+- **约 117 个全量执行 + 7 个部分执行** × **每个约 2-5 分钟** = 约 60-310 分钟（4 并行）
+- 26 个不安全文档被跳过（< 1 秒）
+- ticket_fix 取决于 ticket 数量（max_parallel: 2）
+- align_tests + doc_governance + self_test 约 10-20 分钟
 
-总计预估：**1 - 2.5 小时**
+总计预估：**1.5 - 6 小时**
 
 ---
 
