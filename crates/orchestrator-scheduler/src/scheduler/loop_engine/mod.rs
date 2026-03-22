@@ -255,6 +255,13 @@ async fn run_task_loop_core(
             continue 'cycle;
         }
 
+        // Clear restart_completed_steps after the resumed cycle so they don't
+        // cause task-scoped steps (e.g. implement, self_test) to be wrongly
+        // skipped in subsequent cycles.
+        if !task_ctx.restart_completed_steps.is_empty() {
+            task_ctx.restart_completed_steps.clear();
+        }
+
         let cycle_unresolved = count_unresolved_items(&state, task_id).await?;
         if cycle_unresolved > 0 {
             task_ctx.consecutive_failures += 1;

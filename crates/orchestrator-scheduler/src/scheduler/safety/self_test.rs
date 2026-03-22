@@ -67,6 +67,7 @@ pub async fn execute_self_test_step(
     );
     let check_output = tokio::process::Command::new(&cargo_bin)
         .args(["check", "--workspace", "--message-format=short"])
+        .env("CARGO_INCREMENTAL", "0")
         .current_dir(workspace_root)
         .output()
         .await
@@ -109,6 +110,7 @@ pub async fn execute_self_test_step(
             "--skip",
             "self_test_survives_smoke_test",
         ])
+        .env("CARGO_INCREMENTAL", "0")
         .current_dir(workspace_root)
         .output()
         .await

@@ -357,7 +357,10 @@ fn execute_step<'a>(
 
         // Built-in safety: skip self-referential-unsafe docs globally,
         // unless they have scenario-level safe annotations.
+        // Only applies to item-scoped steps — task-scoped steps operate on the
+        // whole workspace and should not be gated by the anchor item's QA file.
         if task_ctx.self_referential
+            && step.resolved_scope() == agent_orchestrator::config::StepScope::Item
             && !agent_orchestrator::ticket::is_self_referential_safe(
                 &task_ctx.workspace_root,
                 &item.qa_file_path,
