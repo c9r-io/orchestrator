@@ -193,6 +193,11 @@ pub fn registered_migrations() -> Vec<Migration> {
             name: "m0019_daemon_incarnation",
             up: crate::persistence::migration_steps::m0019_daemon_incarnation,
         },
+        Migration {
+            version: 20,
+            name: "m0020_command_template_column",
+            up: crate::persistence::migration_steps::m0020_command_template_column,
+        },
     ]
 }
 

@@ -601,6 +601,7 @@ mod tests {
             task_item_id: item_id.to_string(),
             phase: "qa".to_string(),
             command: "echo test".to_string(),
+            command_template: None,
             cwd: "/tmp".to_string(),
             workspace_id: "default".to_string(),
             agent_id: "echo".to_string(),

@@ -452,6 +452,7 @@ mod tests {
                         task_item_id: item_id,
                         phase: "qa".to_string(),
                         command: "echo bootstrap".to_string(),
+                        command_template: None,
                         cwd: state.app_root.display().to_string(),
                         workspace_id: "".to_string(),
                         agent_id: "echo".to_string(),

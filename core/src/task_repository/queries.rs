@@ -105,7 +105,7 @@ pub fn load_task_detail_rows(conn: &Connection, task_id: &str) -> Result<TaskDet
         .collect::<std::result::Result<Vec<_>, _>>()?;
 
     let mut runs_stmt = conn.prepare(
-        "SELECT cr.id, cr.task_item_id, cr.phase, cr.command, cr.cwd, cr.workspace_id, cr.agent_id, cr.exit_code, cr.stdout_path, cr.stderr_path, cr.started_at, cr.ended_at, cr.interrupted
+        "SELECT cr.id, cr.task_item_id, cr.phase, cr.command, cr.cwd, cr.workspace_id, cr.agent_id, cr.exit_code, cr.stdout_path, cr.stderr_path, cr.started_at, cr.ended_at, cr.interrupted, cr.command_template
          FROM command_runs cr
          JOIN task_items ti ON ti.id = cr.task_item_id
          WHERE ti.task_id = ?1
@@ -119,6 +119,7 @@ pub fn load_task_detail_rows(conn: &Connection, task_id: &str) -> Result<TaskDet
                 task_item_id: row.get(1)?,
                 phase: row.get(2)?,
                 command: row.get(3)?,
+                command_template: row.get(13)?,
                 cwd: row.get(4)?,
                 workspace_id: row.get(5)?,
                 agent_id: row.get(6)?,

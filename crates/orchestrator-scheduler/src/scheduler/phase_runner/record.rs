@@ -40,6 +40,7 @@ pub(super) async fn record_phase_results(
         task_item_id: item_id.to_string(),
         phase: phase.to_string(),
         command: setup.command.clone(),
+        command_template: setup.command_template.clone(),
         cwd: workspace_root.to_string_lossy().to_string(),
         workspace_id: workspace_id.to_string(),
         agent_id: agent_id.to_string(),

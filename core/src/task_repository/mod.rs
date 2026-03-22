@@ -1104,6 +1104,7 @@ mod async_wrapper_tests {
             task_item_id: item_id,
             phase: "qa".to_string(),
             command: "echo repo".to_string(),
+            command_template: None,
             cwd: state.app_root.display().to_string(),
             workspace_id: "default".to_string(),
             agent_id: "echo".to_string(),

@@ -720,6 +720,16 @@ pub(crate) fn m0019_daemon_incarnation(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn m0020_command_template_column(conn: &Connection) -> Result<()> {
+    ensure_column_exists(
+        conn,
+        "command_runs",
+        "command_template",
+        "ALTER TABLE command_runs ADD COLUMN command_template TEXT",
+    )?;
+    Ok(())
+}
+
 pub(crate) fn m0014_task_graph_debug_tables(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"

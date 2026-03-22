@@ -87,6 +87,7 @@ fn make_run(phase: &str, item_id: &str, exit_code: Option<i64>, agent_id: &str) 
         task_item_id: item_id.to_string(),
         phase: phase.to_string(),
         command: format!("echo {}", phase),
+        command_template: None,
         cwd: "/tmp".to_string(),
         workspace_id: "ws".to_string(),
         agent_id: agent_id.to_string(),
@@ -367,6 +368,7 @@ fn detect_unexpanded_template_var_anomaly() {
         task_item_id: "item-1".to_string(),
         phase: "qa_doc_gen".to_string(),
         command: "echo {plan_output}".to_string(),
+        command_template: Some("echo {plan_output}".to_string()),
         cwd: "/tmp".to_string(),
         workspace_id: "ws".to_string(),
         agent_id: "agent-1".to_string(),
@@ -388,6 +390,98 @@ fn detect_unexpanded_template_var_anomaly() {
         .expect("unexpanded_template_var anomaly should exist")
         .message
         .contains("{plan_output}"));
+}
+
+#[test]
+fn detect_unexpanded_template_var_ignores_user_content() {
+    let runs = vec![CommandRunDto {
+        id: "run-1".to_string(),
+        task_item_id: "item-1".to_string(),
+        phase: "evo_implement".to_string(),
+        command: "claude -p '支持 {var:-default} 语法' --cwd /tmp/ws".to_string(),
+        command_template: Some("claude -p '{prompt}' --cwd {workspace_root}".to_string()),
+        cwd: "/tmp".to_string(),
+        workspace_id: "ws".to_string(),
+        agent_id: "agent-1".to_string(),
+        exit_code: Some(0),
+        stdout_path: String::new(),
+        stderr_path: String::new(),
+        started_at: "2025-01-01 10:00:00".to_string(),
+        ended_at: None,
+        interrupted: false,
+    }];
+
+    let trace = build_trace("test-task", "completed", &[], &runs);
+    let tmpl_anomalies: Vec<_> = trace
+        .anomalies
+        .iter()
+        .filter(|a| a.rule == "unexpanded_template_var")
+        .collect();
+    assert!(
+        tmpl_anomalies.is_empty(),
+        "should not flag {{var}} from user content; found: {:?}",
+        tmpl_anomalies
+    );
+}
+
+#[test]
+fn detect_unexpanded_template_var_legacy_row_skipped() {
+    let runs = vec![CommandRunDto {
+        id: "run-1".to_string(),
+        task_item_id: "item-1".to_string(),
+        phase: "implement".to_string(),
+        command: "echo {phase}".to_string(),
+        command_template: None,
+        cwd: "/tmp".to_string(),
+        workspace_id: "ws".to_string(),
+        agent_id: "agent-1".to_string(),
+        exit_code: Some(0),
+        stdout_path: String::new(),
+        stderr_path: String::new(),
+        started_at: "2025-01-01 10:00:00".to_string(),
+        ended_at: None,
+        interrupted: false,
+    }];
+
+    let trace = build_trace("test-task", "completed", &[], &runs);
+    let tmpl_anomalies: Vec<_> = trace
+        .anomalies
+        .iter()
+        .filter(|a| a.rule == "unexpanded_template_var")
+        .collect();
+    assert!(
+        tmpl_anomalies.is_empty(),
+        "legacy rows without command_template should be skipped"
+    );
+}
+
+#[test]
+fn detect_unexpanded_template_var_true_positive_only() {
+    let runs = vec![CommandRunDto {
+        id: "run-1".to_string(),
+        task_item_id: "item-1".to_string(),
+        phase: "implement".to_string(),
+        command: "echo {rel_path} build".to_string(),
+        command_template: Some("echo {rel_path} {phase}".to_string()),
+        cwd: "/tmp".to_string(),
+        workspace_id: "ws".to_string(),
+        agent_id: "agent-1".to_string(),
+        exit_code: Some(0),
+        stdout_path: String::new(),
+        stderr_path: String::new(),
+        started_at: "2025-01-01 10:00:00".to_string(),
+        ended_at: None,
+        interrupted: false,
+    }];
+
+    let trace = build_trace("test-task", "completed", &[], &runs);
+    let tmpl_anomalies: Vec<_> = trace
+        .anomalies
+        .iter()
+        .filter(|a| a.rule == "unexpanded_template_var")
+        .collect();
+    assert_eq!(tmpl_anomalies.len(), 1, "should detect only {{rel_path}}");
+    assert!(tmpl_anomalies[0].message.contains("{rel_path}"));
 }
 
 #[test]

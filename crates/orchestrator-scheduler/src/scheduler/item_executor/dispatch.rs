@@ -929,6 +929,7 @@ pub(crate) async fn execute_builtin_step(
                 phase,
                 tty: step.tty,
                 command: rendered_command,
+                command_template: Some(command.to_string()),
                 workspace_root: &workspace_root,
                 workspace_id: &task_ctx.workspace_id,
                 agent_id: "builtin",

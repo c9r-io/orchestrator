@@ -23,6 +23,7 @@ pub(super) async fn setup_phase_execution(
     phase: &str,
     tty: bool,
     command: String,
+    command_template: Option<String>,
     workspace_root: &Path,
     workspace_id: &str,
     agent_id: &str,
@@ -204,6 +205,7 @@ pub(super) async fn setup_phase_execution(
             task_item_id: item_id.to_string(),
             phase: phase.to_string(),
             command: command.clone(),
+            command_template: command_template.clone(),
             cwd: workspace_root.to_string_lossy().to_string(),
             workspace_id: workspace_id.to_string(),
             agent_id: agent_id.to_string(),
@@ -245,5 +247,6 @@ pub(super) async fn setup_phase_execution(
         stdout_file,
         stderr_file,
         command,
+        command_template,
     })
 }

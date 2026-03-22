@@ -109,6 +109,7 @@ async fn run_phase_with_timeout(
         phase,
         tty,
         command,
+        command_template,
         workspace_root,
         workspace_id,
         agent_id,
@@ -132,6 +133,7 @@ async fn run_phase_with_timeout(
         phase,
         tty,
         command,
+        command_template,
         workspace_root,
         workspace_id,
         agent_id,
@@ -595,6 +597,10 @@ pub async fn run_phase_with_selected_agent(
         agent_id,
     );
 
+    // Snapshot the command after prompt injection but before variable substitution.
+    // This captures the set of template variables that should be expanded.
+    let command_template_snapshot = command.clone();
+
     let escaped_paths: Vec<String> = ticket_paths.iter().map(|p| shell_escape(p)).collect();
     command = command
         .replace("{rel_path}", &shell_escape(rel_path))
@@ -626,6 +632,7 @@ pub async fn run_phase_with_selected_agent(
             phase,
             tty,
             command,
+            command_template: Some(command_template_snapshot),
             workspace_root,
             workspace_id,
             agent_id,

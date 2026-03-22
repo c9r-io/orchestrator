@@ -273,12 +273,22 @@ pub(super) fn detect_unexpanded_template_var(
     anomalies: &mut Vec<Anomaly>,
 ) {
     for run in command_runs {
+        // Use the pre-rendered template to determine which variables are expected.
+        // Legacy rows without a template are skipped to avoid false positives from
+        // user-provided content (goal text, diffs) that may contain {var} patterns.
+        let expected_vars: HashSet<String> = match &run.command_template {
+            Some(template) => find_template_vars(template).into_iter().collect(),
+            None => continue,
+        };
+
         for var in find_template_vars(&run.command) {
-            anomalies.push(Anomaly::new(
-                AnomalyRule::UnexpandedTemplateVar,
-                format!("Command contains literal {} (phase={})", var, run.phase),
-                Some(run.started_at.clone()),
-            ));
+            if expected_vars.contains(&var) {
+                anomalies.push(Anomaly::new(
+                    AnomalyRule::UnexpandedTemplateVar,
+                    format!("Command contains literal {} (phase={})", var, run.phase),
+                    Some(run.started_at.clone()),
+                ));
+            }
         }
     }
 }
@@ -483,6 +493,7 @@ mod tests {
             task_item_id: item_id.to_string(),
             phase: phase.to_string(),
             command: "echo test".to_string(),
+            command_template: None,
             cwd: "/tmp".to_string(),
             workspace_id: "ws1".to_string(),
             agent_id: "agent1".to_string(),

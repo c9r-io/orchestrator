@@ -119,6 +119,8 @@ pub struct CommandRunDto {
     pub phase: String,
     /// Command string that was executed.
     pub command: String,
+    /// Pre-rendered command template before variable substitution.
+    pub command_template: Option<String>,
     /// Working directory used for execution.
     pub cwd: String,
     /// Workspace identifier resolved for the run.

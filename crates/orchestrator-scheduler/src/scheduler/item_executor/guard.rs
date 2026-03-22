@@ -146,6 +146,7 @@ pub async fn execute_guard_step(
             phase: "guard",
             tty: step.tty,
             command,
+            command_template: None,
             workspace_root: &task_ctx.workspace_root,
             workspace_id: &task_ctx.workspace_id,
             agent_id: &agent_id,

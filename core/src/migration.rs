@@ -786,8 +786,8 @@ mod tests {
         let migrations = all_migrations();
         assert_eq!(
             migrations.len(),
-            19,
-            "expected 19 migrations, got {}",
+            20,
+            "expected 20 migrations, got {}",
             migrations.len()
         );
     }

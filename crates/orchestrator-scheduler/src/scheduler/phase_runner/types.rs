@@ -60,6 +60,7 @@ pub(super) struct PhaseSetup {
     pub stdout_file: std::fs::File,
     pub stderr_file: std::fs::File,
     pub command: String,
+    pub command_template: Option<String>,
     pub execution_profile: ResolvedExecutionProfile,
 }
 
@@ -104,6 +105,7 @@ pub struct PhaseRunRequest<'a> {
     pub phase: &'a str,
     pub tty: bool,
     pub command: String,
+    pub command_template: Option<String>,
     pub workspace_root: &'a Path,
     pub workspace_id: &'a str,
     pub agent_id: &'a str,

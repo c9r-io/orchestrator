@@ -9,6 +9,8 @@ pub struct NewCommandRun {
     pub phase: String,
     /// Rendered command string that was executed.
     pub command: String,
+    /// Pre-rendered command template containing unexpanded variable placeholders.
+    pub command_template: Option<String>,
     /// Working directory used for the command.
     pub cwd: String,
     /// Workspace identifier for the run.
