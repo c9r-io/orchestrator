@@ -43,9 +43,22 @@ rg -n "fn proactive_max_cycles" crates/orchestrator-scheduler/src/scheduler/loop
 
 ## Scenario 2: Dynamic items 在 max_cycles 内完成 qa_testing
 
-**Workflow**: 需要独立运行态 task 执行（不能复用 S1 的 task_id）
+**Workflow**: 需要独立运行态 task 执行（S1 仅运行单元测试，不产生 task_id）。
 
-> **Troubleshooting**: 天然不安全 — 需要运行态 task 执行。S1 仅运行单元测试，不创建 task_id，因此 S2 无法复用 S1 的 task_id。执行前需通过 `orchestrator task run` 或等效方式创建实际 task。
+**前置步骤**（创建可观测的运行态 task）:
+```bash
+# 确保 daemon 运行
+orchestrator init
+orchestrator apply -f docs/workflow/self-bootstrap.yaml --project self-bootstrap
+
+# 创建 task，记录返回的 task_id
+orchestrator task create \
+  -n "qa92-s2-test" \
+  -w self -W self-bootstrap \
+  --project self-bootstrap \
+  -g "QA92 dynamic items cycle overflow verification"
+# 记录返回的 <task_id>
+```
 
 **验证**:
 ```bash

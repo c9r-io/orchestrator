@@ -5,12 +5,20 @@
 
 ## 前置条件
 
-> **重要**: 许愿池功能依赖 `wish-pool` 项目。在执行 S3/S4 前，需要先创建该项目：
+> **重要**: 许愿池功能依赖 `wish-pool` 项目。GUI 中 `WishPool.tsx` 硬编码了
+> `project_id: "wish-pool"`，若该项目不存在，`task create` 会报错
+> `project not found: wish-pool`。
+>
+> 在执行 S3/S4 前，需要先初始化该项目：
 > ```bash
 > orchestrator init
+> # 使用 full-qa workflow 为 wish-pool 项目创建 workspace + agent + workflow
 > orchestrator apply --project wish-pool -f docs/workflow/full-qa.yaml
+> # 同时加载所需的 secret 和 execution profile
+> orchestrator apply --project wish-pool -f docs/workflow/claude-secret.yaml
+> orchestrator apply --project wish-pool -f docs/workflow/execution-profiles.yaml
 > ```
-> 若缺少 `wish-pool` 项目，`task create --project wish-pool` 会报错 `project not found: wish-pool`。
+> 验证项目已创建：`orchestrator task list --project wish-pool`（应返回空列表而非报错）。
 
 ## 验证场景
 
