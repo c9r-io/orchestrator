@@ -102,10 +102,25 @@ pub(super) fn build_workspace(resource: OrchestratorResource) -> Result<Register
 }
 
 /// Converts a workspace manifest spec into runtime config.
+///
+/// Relative `root_path` values are resolved against the current working
+/// directory so that the stored config always contains an absolute path.
 pub(crate) fn workspace_spec_to_config(spec: &WorkspaceSpec) -> WorkspaceConfig {
     use crate::config::HealthPolicyConfig;
+    let root_path = {
+        let p = std::path::Path::new(&spec.root_path);
+        if p.is_absolute() {
+            spec.root_path.clone()
+        } else {
+            std::env::current_dir()
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
+                .join(p)
+                .to_string_lossy()
+                .to_string()
+        }
+    };
     WorkspaceConfig {
-        root_path: spec.root_path.clone(),
+        root_path,
         qa_targets: spec.qa_targets.clone(),
         ticket_dir: spec.ticket_dir.clone(),
         self_referential: spec.self_referential,
@@ -178,7 +193,17 @@ mod tests {
 
         let loaded = WorkspaceResource::get_from(&config, "ws-roundtrip")
             .expect("workspace should be present in config");
-        assert_eq!(loaded.spec.root_path, "workspace/ws-roundtrip");
+        // root_path is absolutized at apply-time against CWD
+        assert!(
+            std::path::Path::new(&loaded.spec.root_path).is_absolute(),
+            "root_path should be absolute after apply: {}",
+            loaded.spec.root_path
+        );
+        assert!(
+            loaded.spec.root_path.ends_with("workspace/ws-roundtrip"),
+            "root_path should end with original relative path: {}",
+            loaded.spec.root_path
+        );
         assert_eq!(loaded.kind(), ResourceKind::Workspace);
     }
 

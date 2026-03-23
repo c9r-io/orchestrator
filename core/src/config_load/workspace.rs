@@ -54,18 +54,8 @@ pub fn resolve_and_validate_workspaces_for_project(
             anyhow::bail!("[INVALID_WORKSPACE] workspace '{}' qa_targets cannot be empty\n  category: validation\n  suggested_fix: add at least one qa_targets path (e.g. docs/qa)", id);
         }
 
-        let raw_root = std::path::Path::new(&entry.root_path);
-        let root_base = if raw_root.is_absolute() {
-            raw_root.to_path_buf()
-        } else {
-            // Relative paths resolve against CWD (workspace root_path should
-            // be stored as absolute at apply-time; this fallback covers legacy
-            // data and tests).
-            std::env::current_dir()
-                .unwrap_or_else(|_| data_dir.to_path_buf())
-                .join(raw_root)
-        };
-        let root_path = root_base
+        let root_path = data_dir
+            .join(&entry.root_path)
             .canonicalize()
             .with_context(|| {
                 format!(
@@ -122,14 +112,7 @@ pub fn resolve_and_validate_projects(
     for (project_id, project_config) in &config.projects {
         let mut workspaces = HashMap::new();
         for (workspace_id, workspace_config) in &project_config.workspaces {
-            let raw = std::path::Path::new(&workspace_config.root_path);
-            let root_path = if raw.is_absolute() {
-                raw.to_path_buf()
-            } else {
-                std::env::current_dir()
-                    .unwrap_or_else(|_| data_dir.to_path_buf())
-                    .join(raw)
-            };
+            let root_path = data_dir.join(&workspace_config.root_path);
             workspaces.insert(
                 workspace_id.clone(),
                 ResolvedWorkspace {

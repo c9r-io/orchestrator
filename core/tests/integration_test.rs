@@ -154,13 +154,15 @@ fn apply_creates_new_workspace_in_config() {
         .expect("default project")
         .workspaces
         .contains_key("new-ws"));
-    assert_eq!(
-        config
-            .default_project()
-            .expect("default project")
-            .workspaces["new-ws"]
-            .root_path,
-        "workspace/new-ws"
+    let new_ws_root = &config
+        .default_project()
+        .expect("default project")
+        .workspaces["new-ws"]
+        .root_path;
+    assert!(
+        std::path::Path::new(new_ws_root).is_absolute()
+            && new_ws_root.ends_with("workspace/new-ws"),
+        "root_path should be absolute and end with workspace/new-ws: {new_ws_root}"
     );
 }
 
@@ -173,13 +175,14 @@ fn apply_updates_existing_workspace() {
     let r1 = dispatch_resource(only(v1)).expect("dispatch v1");
     let result = r1.apply(&mut config).expect("apply");
     assert_eq!(result, ApplyResult::Configured);
-    assert_eq!(
-        config
-            .default_project()
-            .expect("default project")
-            .workspaces["default"]
-            .root_path,
-        "workspace/v1"
+    let v1_root = &config
+        .default_project()
+        .expect("default project")
+        .workspaces["default"]
+        .root_path;
+    assert!(
+        std::path::Path::new(v1_root).is_absolute() && v1_root.ends_with("workspace/v1"),
+        "v1 root_path should be absolute: {v1_root}"
     );
 
     let v2 =
@@ -187,13 +190,14 @@ fn apply_updates_existing_workspace() {
     let r2 = dispatch_resource(only(v2)).expect("dispatch v2");
     let result = r2.apply(&mut config).expect("apply");
     assert_eq!(result, ApplyResult::Configured);
-    assert_eq!(
-        config
-            .default_project()
-            .expect("default project")
-            .workspaces["default"]
-            .root_path,
-        "workspace/v2"
+    let v2_root = &config
+        .default_project()
+        .expect("default project")
+        .workspaces["default"]
+        .root_path;
+    assert!(
+        std::path::Path::new(v2_root).is_absolute() && v2_root.ends_with("workspace/v2"),
+        "v2 root_path should be absolute: {v2_root}"
     );
 }
 
