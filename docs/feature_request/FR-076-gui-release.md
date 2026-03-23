@@ -1,8 +1,8 @@
 # FR-076: GUI 正式发布 — Tauri App 打包分发
 
-## 优先级: P2
+## 优先级: P3
 
-## 状态: Proposed
+## 状态: Deferred
 
 ## 背景
 

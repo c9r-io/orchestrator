@@ -1,6 +1,6 @@
 # FR-077: Workflow 模板库 — 常见 SDLC 自动化场景预设
 
-## 优先级: P2
+## 优先级: P1
 
 ## 状态: Proposed
 
