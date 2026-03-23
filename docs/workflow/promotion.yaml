@@ -1,0 +1,375 @@
+# Promotion workflow — automated project marketing content generation and distribution.
+#
+# Usage:
+#   orchestrator apply -f docs/workflow/promotion-secrets.yaml --project promotion
+#   orchestrator apply -f docs/workflow/promotion.yaml --project promotion
+#
+# Prerequisites:
+#   - Dev.to API key (optional, for auto-publishing)
+#   - Claude API credits (sonnet-level)
+#
+# This workflow collects recent project updates, generates platform-specific
+# marketing content, publishes to API-friendly platforms, and saves drafts
+# for manual-only platforms. Designed for weekly cron execution.
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: promotion
+spec:
+  root_path: "."
+  qa_targets: []
+  ticket_dir: docs/ticket
+  self_referential: false
+---
+# ── Step Templates ──────────────────────────────────────────────────────
+# Prompts are decoupled from agents. Each template defines the prompt for
+# a workflow step; the agent's `command` injects it via the {prompt} placeholder.
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: analyze_highlights
+spec:
+  description: "Analyze recent project changes and identify newsworthy highlights"
+  prompt: >-
+    You are a developer relations specialist analyzing the Agent Orchestrator project
+    at {source_tree}. This is a Rust-based CLI tool for AI-native SDLC automation —
+    it orchestrates AI agents to autonomously plan, implement, test, and evolve
+    software projects.
+
+    Project URL: https://github.com/c9r-io/orchestrator
+
+    Recent project changes (git log since last promotion):
+    {gather_updates_output}
+
+    Your task: analyze these changes and identify 1-3 newsworthy highlights suitable
+    for project promotion. For each highlight, assess which platforms would benefit
+    most from the content.
+
+    Target platforms and their characteristics:
+    - devto: Developer blog platform, supports long-form technical articles with markdown
+    - hashnode: Developer blog platform, similar to Dev.to, Hashnode-specific markdown
+    - twitter: Short-form microblogging, tweet threads (3-7 tweets, each < 280 chars)
+    - linkedin: Professional network, 200-400 word posts focused on business value
+    - hacker_news: Tech community, factual/understated Show HN submissions, no hype
+
+    Output a JSON object with these keys:
+    - summary (string): a 2-3 sentence overview of the most impactful changes
+    - highlights (array of objects, each with):
+      - title (string): headline for the highlight
+      - description (string): 2-3 sentence explanation of the change and its significance
+      - technical_depth (string): "deep" or "accessible"
+      - tags (array of strings): relevant technology tags (e.g. "rust", "ai", "automation")
+    - platforms (array of objects, each with):
+      - id (string): platform identifier (devto, hashnode, twitter, linkedin, hacker_news)
+      - name (string): human-readable platform name (Dev.to, Hashnode, Twitter, LinkedIn, Hacker News)
+      - content_type (string): "blog_post", "tweet_thread", "short_post", or "link_submission"
+      - api_publishable (boolean): true for devto/hashnode, false for twitter/linkedin/hacker_news
+      - priority (number 1-5): how well this content fits the platform audience
+
+    If there are no meaningful changes since the last promotion, output:
+    {"summary": "No significant changes to promote", "highlights": [], "platforms": []}
+
+    IMPORTANT: Output ONLY valid JSON. No markdown, no explanation outside the JSON.
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: generate_content
+spec:
+  description: "Generate platform-specific promotional content"
+  prompt: >-
+    You are a developer relations content writer for the Agent Orchestrator project
+    at {source_tree}. This is a Rust-based CLI tool for AI-native SDLC automation.
+
+    Project URL: https://github.com/c9r-io/orchestrator
+
+    Project highlights to promote:
+    {promotion_summary}
+
+    You are generating content for platform: {item_label} (type: {content_type})
+
+    Platform-specific guidelines:
+    - Dev.to: Write a full blog post (800-1500 words) with markdown formatting, include
+      frontmatter (title, published: false, tags), code examples, and a call-to-action.
+      Tone: technical but approachable.
+    - Hashnode: Similar to Dev.to but with Hashnode-specific conventions. Include a TL;DR section.
+    - Twitter: Write a tweet thread (3-7 tweets, each under 280 chars). Use emojis sparingly.
+      First tweet should hook attention. Last tweet should link to the project.
+    - LinkedIn: Write a professional short post (200-400 words). Focus on business value
+      and industry impact. Tone: professional, not overly technical.
+    - Hacker News: Write a concise Show HN title (under 80 chars) and a 2-3 paragraph
+      submission comment. Tone: factual, understated, no marketing language. HN audience
+      dislikes hype — focus on what it does and why it matters technically.
+
+    IMPORTANT: Output the content as a JSON object with these keys:
+    - platform (string): the platform id
+    - title (string): content title or first tweet
+    - body (string): full content body (markdown for blogs, thread as numbered list for twitter)
+    - metadata (object): platform-specific metadata (tags, frontmatter fields, etc.)
+    - filename (string): suggested filename for the draft (e.g. "2026-03-23-devto-orchestrator-update.md")
+
+    Output ONLY valid JSON. No markdown wrapping, no explanation outside the JSON.
+---
+# ── Agents ──────────────────────────────────────────────────────────────
+# Content agents use claude-sonnet — content generation is creative writing,
+# not deep code reasoning. Sonnet is cheaper and produces comparable marketing copy.
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: content-analyst
+  description: "analyst agent — analyzes project updates and identifies promotion opportunities"
+spec:
+  capabilities:
+    - analyze
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    - fromRef: claude-sonnet-promo
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: content-writer
+  description: "writer agent — generates platform-specific promotional content"
+spec:
+  capabilities:
+    - content_gen
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    - fromRef: claude-sonnet-promo
+---
+# ── Workflow Store ──────────────────────────────────────────────────────
+# Tracks promotion state across runs to avoid duplicate content.
+---
+apiVersion: orchestrator.dev/v2
+kind: WorkflowStore
+metadata:
+  name: promotion
+spec:
+  backend: local
+  schema:
+    type: object
+    properties:
+      value:
+        type: string
+  retention:
+    max_entries: 100
+    ttl_seconds: 7776000
+---
+# ── Workflow ────────────────────────────────────────────────────────────
+#
+# Promotion Pipeline:
+#
+#   ┌── Task ──────────────────────────────────────────────────────────────┐
+#   gather_updates (command) → analyze_highlights (agent) ─ generate_items ►
+#
+#   ┌── Item ──────────────────────────────────────────────────────────────┐
+#   generate_content (agent ×N) → save_drafts (command ×N) →
+#   publish (command ×N, prehook: api_publishable)
+#
+#   ┌── Task ──────────────────────────────────────────────────────────────┐
+#   track_results (command) → loop_guard (builtin)
+#
+# Cost controls:
+#   - claude-sonnet (not opus) — content generation, not code reasoning
+#   - 1 cycle only — no iterative refinement
+#   - max_parallel: 3 — platforms are independent, safe to parallelize
+#
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: promotion
+spec:
+  max_parallel: 3
+
+  steps:
+    # ── Task segment: gather_updates → analyze_highlights ──
+
+    - id: gather_updates
+      scope: task
+      enabled: true
+      repeatable: false
+      tty: false
+      command: >-
+        cd {workspace_root} &&
+        LAST_SHA="{last_published_sha}" &&
+        if [ -n "$LAST_SHA" ] && [ "$LAST_SHA" != "{last_published_sha}" ]; then
+          echo "=== Changes since last promotion (${LAST_SHA:0:8}) ===" &&
+          git log --oneline --no-merges ${LAST_SHA}..HEAD 2>/dev/null || git log --oneline --no-merges -20;
+          echo "" &&
+          echo "=== Detailed changelog ===" &&
+          git log --format="### %s%n%b%n---" --no-merges ${LAST_SHA}..HEAD 2>/dev/null || git log --format="### %s%n%b%n---" --no-merges -20;
+        else
+          echo "=== Recent changes (last 20 commits) ===" &&
+          git log --oneline --no-merges -20;
+          echo "" &&
+          echo "=== Detailed changelog ===" &&
+          git log --format="### %s%n%b%n---" --no-merges -20;
+        fi &&
+        echo "" &&
+        echo "=== Current HEAD ===" &&
+        git rev-parse HEAD
+      store_inputs:
+        - store: promotion
+          key: last_published_sha
+          as_var: last_published_sha
+
+    - id: analyze_highlights
+      type: evaluate
+      scope: task
+      required_capability: analyze
+      template: analyze_highlights
+      enabled: true
+      repeatable: false
+      tty: false
+      behavior:
+        captures:
+          - var: promotion_summary
+            source: stdout
+            json_path: "$.summary"
+        post_actions:
+          - type: generate_items
+            from_var: analyze_highlights_output
+            json_path: "$.platforms"
+            mapping:
+              item_id: "$.id"
+              label: "$.name"
+              vars:
+                content_type: "$.content_type"
+                api_publishable: "$.api_publishable"
+                platform_priority: "$.priority"
+            replace: true
+
+    # ── Item segment: generate_content → save_drafts → publish ──
+
+    - id: generate_content
+      type: implement
+      scope: item
+      required_capability: content_gen
+      template: generate_content
+      enabled: true
+      repeatable: false
+      tty: false
+      behavior:
+        captures:
+          - var: draft_filename
+            source: stdout
+            json_path: "$.filename"
+          - var: draft_title
+            source: stdout
+            json_path: "$.title"
+
+    - id: save_drafts
+      scope: item
+      enabled: true
+      repeatable: false
+      tty: false
+      command: >-
+        cd {workspace_root} &&
+        mkdir -p docs/promotion/drafts &&
+        FILENAME="{draft_filename}" &&
+        if [ -z "$FILENAME" ] || [ "$FILENAME" = "{draft_filename}" ]; then
+          FILENAME="draft-{task_item_id}.json";
+        fi &&
+        cat > "docs/promotion/drafts/${FILENAME}" << 'DRAFT_EOF'
+        {generate_content_output}
+        DRAFT_EOF
+        echo "Draft saved: docs/promotion/drafts/${FILENAME}"
+
+    - id: publish
+      scope: item
+      enabled: true
+      repeatable: false
+      tty: false
+      prehook:
+        engine: cel
+        when: "api_publishable == \"true\""
+        reason: "Only publish to platforms with API support; others have drafts saved for manual submission"
+      command: >-
+        PLATFORM="{item_label}" &&
+        echo "Publishing to ${PLATFORM}..." &&
+        case "${PLATFORM}" in
+          "Dev.to")
+            if [ -n "${DEVTO_API_KEY}" ]; then
+              BODY=$(cat docs/promotion/drafts/{draft_filename} | python3 -c "
+        import sys, json
+        data = json.load(sys.stdin)
+        article = {'article': {'title': data['title'], 'body_markdown': data['body'], 'published': False, 'tags': data.get('metadata', {}).get('tags', [])}}
+        json.dump(article, sys.stdout)
+        ") &&
+              curl -s -X POST https://dev.to/api/articles \
+                -H "Content-Type: application/json" \
+                -H "api-key: ${DEVTO_API_KEY}" \
+                -d "$BODY" &&
+              echo "" &&
+              echo "Published draft to Dev.to (unpublished, review at dev.to/dashboard)";
+            else
+              echo "DEVTO_API_KEY not set — draft saved for manual publishing";
+            fi
+            ;;
+          "Hashnode")
+            echo "Hashnode publishing requires manual setup — draft saved"
+            ;;
+          *)
+            echo "No API publisher configured for ${PLATFORM} — draft saved for manual posting"
+            ;;
+        esac
+
+    # ── Task segment: track_results → loop_guard ──
+
+    - id: track_results
+      scope: task
+      enabled: true
+      repeatable: false
+      tty: false
+      command: >-
+        cd {workspace_root} &&
+        HEAD_SHA=$(git rev-parse HEAD) &&
+        orchestrator store put promotion last_published_sha "${HEAD_SHA}" --project promotion &&
+        orchestrator store put promotion "published_$(date +%Y%m%d)" "task:{task_id}" --project promotion &&
+        echo "Tracked: published at SHA ${HEAD_SHA}" &&
+        echo "Drafts available at: docs/promotion/drafts/" &&
+        ls -la docs/promotion/drafts/ 2>/dev/null || echo "(no drafts directory)"
+
+    # Loop guard (builtin, always last)
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+
+  # Single cycle — one-shot promotion, no iterative refinement
+  loop:
+    mode: fixed
+    max_cycles: 1
+    enabled: true
+    stop_when_no_unresolved: false
+
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: git_tag
+    max_spawn_depth: 0
+    max_spawned_tasks: 0
+---
+# ── Trigger ─────────────────────────────────────────────────────────────
+# Weekly promotion run: every Monday at 10:00 UTC.
+# Starts suspended — activate with: orchestrator trigger resume weekly-promotion
+---
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: weekly-promotion
+spec:
+  cron:
+    schedule: "0 0 10 * * 1"
+    timezone: "UTC"
+  action:
+    workflow: promotion
+    workspace: promotion
+  concurrencyPolicy: Forbid
+  suspend: true
+  historyLimit: 5
