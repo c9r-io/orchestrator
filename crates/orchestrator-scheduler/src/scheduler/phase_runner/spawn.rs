@@ -105,7 +105,7 @@ pub(super) async fn spawn_phase_process(
 
     // Write prompt to child stdin for stdin delivery mode
     if effective_pipe_stdin {
-        if let Some(ref payload) = prompt_payload {
+        if let Some(payload) = &prompt_payload {
             if let Some(mut stdin_handle) = child.stdin.take() {
                 use tokio::io::AsyncWriteExt;
                 stdin_handle.write_all(payload.as_bytes()).await?;

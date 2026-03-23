@@ -830,8 +830,11 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let home = temp.path().join("home");
         std::fs::create_dir_all(&home).expect("home");
-        std::env::set_var("HOME", &home);
-        std::env::set_var("USER", "tester");
+        // SAFETY: single-threaded test; no concurrent env reads.
+        unsafe {
+            std::env::set_var("HOME", &home);
+            std::env::set_var("USER", "tester");
+        }
         let db_path = temp.path().join("data/agent_orchestrator.db");
         std::fs::create_dir_all(db_path.parent().expect("db parent")).expect("data dir");
         init_schema(&db_path).expect("schema");

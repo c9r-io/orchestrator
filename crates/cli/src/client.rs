@@ -357,7 +357,8 @@ contexts:
         // sockets that adds latency from the retry loop.
         let temp = tempfile::tempdir().expect("tempdir");
         let expected = temp.path().join("missing.sock");
-        std::env::set_var("ORCHESTRATOR_SOCKET", &expected);
+        // SAFETY: test runs single-threaded; no concurrent env reads.
+        unsafe { std::env::set_var("ORCHESTRATOR_SOCKET", &expected) };
 
         let resolved = discover_socket_path();
         assert_eq!(
@@ -369,14 +370,16 @@ contexts:
             "socket should not exist — connect_uds would bail with 'daemon socket not found'"
         );
 
-        std::env::remove_var("ORCHESTRATOR_SOCKET");
+        // SAFETY: single-threaded test cleanup.
+        unsafe { std::env::remove_var("ORCHESTRATOR_SOCKET") };
     }
 
     #[test]
     fn discover_explicit_config_returns_none_when_no_explicit() {
         // With no explicit path and no env, should return None
         let _guard = std::env::var("ORCHESTRATOR_CONTROL_PLANE_CONFIG");
-        std::env::remove_var("ORCHESTRATOR_CONTROL_PLANE_CONFIG");
+        // SAFETY: test runs single-threaded; no concurrent env reads.
+        unsafe { std::env::remove_var("ORCHESTRATOR_CONTROL_PLANE_CONFIG") };
         let result = discover_explicit_control_plane_config(None).expect("no error");
         assert!(
             result.is_none(),
@@ -410,8 +413,11 @@ contexts:
         // Clear ORCHESTRATOR_SOCKET so discover_socket_path falls through to
         // the ORCHESTRATORD_DATA_DIR branch (env vars are process-global and
         // another test may have set ORCHESTRATOR_SOCKET).
-        std::env::remove_var("ORCHESTRATOR_SOCKET");
-        std::env::set_var("ORCHESTRATORD_DATA_DIR", temp.path());
+        // SAFETY: test runs single-threaded; no concurrent env reads.
+        unsafe {
+            std::env::remove_var("ORCHESTRATOR_SOCKET");
+            std::env::set_var("ORCHESTRATORD_DATA_DIR", temp.path());
+        }
 
         let socket = discover_socket_path();
         assert_eq!(
@@ -426,6 +432,7 @@ contexts:
         std::fs::write(&socket, "").expect("create socket stub");
         assert!(socket.exists(), "local socket should exist for probe");
 
-        std::env::remove_var("ORCHESTRATORD_DATA_DIR");
+        // SAFETY: single-threaded test cleanup.
+        unsafe { std::env::remove_var("ORCHESTRATORD_DATA_DIR") };
     }
 }

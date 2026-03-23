@@ -143,7 +143,7 @@ pub(super) async fn setup_phase_execution(
     // Handle non-arg prompt delivery modes before spawn
     let command = match prompt_delivery {
         PromptDelivery::File => {
-            if let Some(ref payload) = prompt_payload {
+            if let Some(payload) = &prompt_payload {
                 let prompt_file_path = logs_dir.join(format!("prompt_{}.txt", run_id));
                 std::fs::write(&prompt_file_path, payload).with_context(|| {
                     format!(
@@ -157,7 +157,7 @@ pub(super) async fn setup_phase_execution(
             }
         }
         PromptDelivery::Env => {
-            if let Some(ref payload) = prompt_payload {
+            if let Some(payload) = &prompt_payload {
                 const ENV_SIZE_LIMIT: usize = 128 * 1024;
                 if payload.len() > ENV_SIZE_LIMIT {
                     tracing::warn!(

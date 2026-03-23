@@ -4,8 +4,8 @@ version = "0.1.0"
 description = "Scheduler, runner, and prehook engine for the Agent Orchestrator"
 authors = [""]
 license = "MIT"
-edition = "2021"
-rust-version = "1.77"
+edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 agent-orchestrator = { path = "../../core" }

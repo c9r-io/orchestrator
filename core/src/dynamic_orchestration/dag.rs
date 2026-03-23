@@ -204,7 +204,7 @@ impl DynamicExecutionPlan {
 
         let mut queue: Vec<&str> = in_degree
             .iter()
-            .filter(|(_, &d)| d == 0)
+            .filter(|(_, d)| **d == 0)
             .map(|(k, _)| *k)
             .collect();
 

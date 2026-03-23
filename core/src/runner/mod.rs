@@ -249,9 +249,12 @@ mod tests {
         runner.policy = RunnerPolicy::Allowlist;
         runner.env_allowlist = vec!["RUNNER_ALLOWED_TEST".to_string()];
 
-        std::env::set_var("RUNNER_ALLOWED_TEST", "visible");
-        std::env::set_var("RUNNER_BLOCKED_TEST", "hidden");
-        std::env::set_var("CLAUDECODE", "nested-session");
+        // SAFETY: test runs single-threaded; no concurrent env reads.
+        unsafe {
+            std::env::set_var("RUNNER_ALLOWED_TEST", "visible");
+            std::env::set_var("RUNNER_BLOCKED_TEST", "hidden");
+            std::env::set_var("CLAUDECODE", "nested-session");
+        }
 
         let mut child = spawn_with_runner(
             &runner,
@@ -266,9 +269,12 @@ mod tests {
         .expect("spawn with allowlist");
 
         let status = child.wait().await.expect("wait for child");
-        std::env::remove_var("RUNNER_ALLOWED_TEST");
-        std::env::remove_var("RUNNER_BLOCKED_TEST");
-        std::env::remove_var("CLAUDECODE");
+        // SAFETY: test runs single-threaded; no concurrent env reads.
+        unsafe {
+            std::env::remove_var("RUNNER_ALLOWED_TEST");
+            std::env::remove_var("RUNNER_BLOCKED_TEST");
+            std::env::remove_var("CLAUDECODE");
+        }
 
         assert!(status.success());
         assert_eq!(

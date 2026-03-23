@@ -9,7 +9,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .is_none()
     {
         let protoc = protoc_bin_vendored::protoc_bin_path()?;
-        std::env::set_var("PROTOC", &protoc);
+        // SAFETY: build scripts run single-threaded before compilation.
+        unsafe { std::env::set_var("PROTOC", &protoc) };
         println!(
             "cargo:warning=Using vendored protoc at {}",
             protoc.display()
@@ -21,7 +22,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .is_none()
     {
         let include = protoc_bin_vendored::include_path()?;
-        std::env::set_var("PROTOC_INCLUDE", &include);
+        // SAFETY: build scripts run single-threaded before compilation.
+        unsafe { std::env::set_var("PROTOC_INCLUDE", &include) };
         println!(
             "cargo:warning=Using vendored protobuf include at {}",
             include.display()

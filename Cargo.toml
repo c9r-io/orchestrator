@@ -11,5 +11,9 @@ members = [
     "crates/integration-tests",
 ]
 
+[workspace.package]
+edition = "2024"
+rust-version = "1.85"
+
 [workspace.dependencies]
 libc = "0.2"

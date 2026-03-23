@@ -189,7 +189,7 @@ pub(super) async fn record_phase_results(
             let agent_policy = project
                 .and_then(|p| p.agents.get(agent_id))
                 .map(|a| &a.health_policy);
-            if agent_policy.map_or(true, |p| p.is_default()) {
+            if agent_policy.is_none_or(|p| p.is_default()) {
                 // Agent has no explicit override — try workspace fallback.
                 let ws_policy = project
                     .and_then(|p| p.workspaces.get(workspace_id))

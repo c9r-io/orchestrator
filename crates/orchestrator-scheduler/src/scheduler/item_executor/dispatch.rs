@@ -127,7 +127,7 @@ pub async fn process_item_filtered(
         run_dynamic_steps,
     } = request;
     let should_run_step =
-        |step_id: &str| -> bool { step_filter.map_or(true, |f| f.contains(step_id)) };
+        |step_id: &str| -> bool { step_filter.is_none_or(|f| f.contains(step_id)) };
     acc.merge_task_pipeline_vars(&task_ctx.pipeline_vars);
 
     // Inject dynamic item variables (from generate_items) into pipeline vars

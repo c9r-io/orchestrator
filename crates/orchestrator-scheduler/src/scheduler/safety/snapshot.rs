@@ -79,11 +79,10 @@ pub async fn verify_binary_snapshot(workspace_root: &Path) -> Result<BinaryVerif
 
     let manifest_path = workspace_root.join(STABLE_MANIFEST);
     let manifest = if manifest_path.exists() {
-        let manifest_content = tokio::fs::read_to_string(&manifest_path)
+        tokio::fs::read_to_string(&manifest_path)
             .await
             .ok()
-            .and_then(|s| serde_json::from_str::<SnapshotManifest>(&s).ok());
-        manifest_content
+            .and_then(|s| serde_json::from_str::<SnapshotManifest>(&s).ok())
     } else {
         None
     };

@@ -145,10 +145,8 @@ pub fn recover_orphaned_running_items(conn: &Connection) -> Result<Vec<(String, 
         let mut stmt = tx.prepare(
             "SELECT id, task_id FROM task_items WHERE status = 'running' ORDER BY task_id",
         )?;
-        let mapped = stmt
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        mapped
+        stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<std::result::Result<Vec<_>, _>>()?
     };
 
     if rows.is_empty() {
@@ -229,10 +227,8 @@ pub fn recover_orphaned_running_items_for_task(
     let item_ids: Vec<String> = {
         let mut stmt =
             tx.prepare("SELECT id FROM task_items WHERE task_id = ?1 AND status = 'running'")?;
-        let mapped = stmt
-            .query_map(params![task_id], |row| row.get(0))?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        mapped
+        stmt.query_map(params![task_id], |row| row.get(0))?
+            .collect::<std::result::Result<Vec<_>, _>>()?
     };
 
     if item_ids.is_empty() {
@@ -272,10 +268,8 @@ pub fn recover_stalled_running_items(
         let mut stmt = tx.prepare(
             "SELECT id, task_id FROM task_items WHERE status = 'running' AND started_at < ?1 ORDER BY task_id",
         )?;
-        let mapped = stmt
-            .query_map(params![cutoff], |row| Ok((row.get(0)?, row.get(1)?)))?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        mapped
+        stmt.query_map(params![cutoff], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<std::result::Result<Vec<_>, _>>()?
     };
 
     if rows.is_empty() {
