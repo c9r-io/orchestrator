@@ -35,7 +35,13 @@ extern "C" fn sigterm_sigaction_handler(
     if !info.is_null() {
         // SAFETY: `info` is a valid pointer provided by the kernel to a
         // SA_SIGINFO handler.
-        let sender_pid = unsafe { (*info).si_pid };
+        let sender_pid = unsafe {
+            // On Linux, libc exposes si_pid as a method; on macOS it is a field.
+            #[cfg(target_os = "linux")]
+            { (*info).si_pid() }
+            #[cfg(not(target_os = "linux"))]
+            { (*info).si_pid }
+        };
         SIGTERM_SENDER_PID.store(sender_pid, Ordering::SeqCst);
     }
 
