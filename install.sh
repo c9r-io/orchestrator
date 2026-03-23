@@ -2,7 +2,7 @@
 
 set -eu
 
-REPO="${INSTALL_ORCHESTRATOR_REPO:-gpgkd906/ai_native_sdlc}"
+REPO="${INSTALL_ORCHESTRATOR_REPO:-c9r-io/orchestrator}"
 BIN_DIR="${INSTALL_ORCHESTRATOR_BIN_DIR:-/usr/local/bin}"
 VERSION="${INSTALL_ORCHESTRATOR_VERSION:-latest}"
 

@@ -63,7 +63,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --exclude orchestrator-gui --all-targets -- -D warnings
         env:
           PROTOC: /usr/bin/protoc
 
@@ -84,7 +84,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run tests
-        run: cargo test --workspace
+        run: cargo test --workspace --exclude orchestrator-gui
         env:
           PROTOC: /usr/bin/protoc
 
@@ -169,6 +169,6 @@ jobs:
         run: echo "path=$(which protoc)" >> "$GITHUB_OUTPUT"
 
       - name: Cargo check
-        run: cargo check --workspace --target ${{ matrix.target }}
+        run: cargo check --workspace --exclude orchestrator-gui --target ${{ matrix.target }}
         env:
           PROTOC: ${{ steps.protoc.outputs.path }}

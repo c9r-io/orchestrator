@@ -9,11 +9,14 @@ allow_core_rwlock_files=(
   "core/src/state.rs"
   "core/src/service/bootstrap.rs"
   "core/src/test_utils.rs"
-  "core/src/scheduler/runtime.rs"
 )
 
 allow_daemon_rwlock_files=(
   "crates/daemon/src/protection.rs"
+)
+
+allow_scheduler_rwlock_files=(
+  "crates/orchestrator-scheduler/src/scheduler/runtime.rs"
 )
 
 deny_patterns=(
@@ -60,7 +63,10 @@ core_violations="$(filter_allowed "$core_matches" "${allow_core_rwlock_files[@]}
 daemon_matches="$(collect_matches crates/daemon/src)"
 daemon_violations="$(filter_allowed "$daemon_matches" "${allow_daemon_rwlock_files[@]}")"
 
-if [[ -n "$core_violations" || -n "$daemon_violations" ]]; then
+scheduler_matches="$(collect_matches crates/orchestrator-scheduler/src)"
+scheduler_violations="$(filter_allowed "$scheduler_matches" "${allow_scheduler_rwlock_files[@]}")"
+
+if [[ -n "$core_violations" || -n "$daemon_violations" || -n "$scheduler_violations" ]]; then
   echo "Async lock governance check failed."
   echo
   if [[ -n "$core_violations" ]]; then
@@ -73,8 +79,13 @@ if [[ -n "$core_violations" || -n "$daemon_violations" ]]; then
     printf '%s\n' "$daemon_violations"
     echo
   fi
+  if [[ -n "$scheduler_violations" ]]; then
+    echo "Unexpected std::sync::RwLock or guard usage in async-governed scheduler paths:"
+    printf '%s\n' "$scheduler_violations"
+    echo
+  fi
   echo "Approved exceptions:"
-  printf '  %s\n' "${allow_core_rwlock_files[@]}" "${allow_daemon_rwlock_files[@]}"
+  printf '  %s\n' "${allow_core_rwlock_files[@]}" "${allow_daemon_rwlock_files[@]}" "${allow_scheduler_rwlock_files[@]}"
   echo
   echo "Use config snapshots, tokio::sync::{Mutex,RwLock}, atomics, or message passing instead."
   exit 1
@@ -82,4 +93,4 @@ fi
 
 echo "Async lock governance check passed."
 echo "Approved sync exceptions:"
-printf '  %s\n' "${allow_core_rwlock_files[@]}" "${allow_daemon_rwlock_files[@]}"
+printf '  %s\n' "${allow_core_rwlock_files[@]}" "${allow_daemon_rwlock_files[@]}" "${allow_scheduler_rwlock_files[@]}"

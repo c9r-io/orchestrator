@@ -278,20 +278,20 @@ These workflows live under `.github/workflows/`, and dependency update policy is
 Install the latest GitHub Release with:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/gpgkd906/ai_native_sdlc/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/c9r-io/orchestrator/main/install.sh | sh
 ```
 
 Install a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/gpgkd906/ai_native_sdlc/main/install.sh | INSTALL_ORCHESTRATOR_VERSION=v0.1.0 sh
+curl -fsSL https://raw.githubusercontent.com/c9r-io/orchestrator/main/install.sh | INSTALL_ORCHESTRATOR_VERSION=v0.1.0 sh
 ```
 
 Useful environment variables:
 
 - `INSTALL_ORCHESTRATOR_VERSION`: release tag, defaults to `latest`
 - `INSTALL_ORCHESTRATOR_BIN_DIR`: installation directory, defaults to `/usr/local/bin`
-- `INSTALL_ORCHESTRATOR_REPO`: GitHub repository in `owner/name` format, defaults to `gpgkd906/ai_native_sdlc`
+- `INSTALL_ORCHESTRATOR_REPO`: GitHub repository in `owner/name` format, defaults to `c9r-io/orchestrator`
 
 ## Release Process
 
