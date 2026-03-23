@@ -18,7 +18,7 @@ cel-interpreter = "0.10.0"
 dirs = "6"
 chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = "0.10"
-cron = "0.13"
+cron = "0.15"
 glob = "0.3"
 sha2 = "0.10"
 rand = "0.8"
