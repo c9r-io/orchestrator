@@ -640,7 +640,7 @@ pub(crate) fn m0016_secret_key_lifecycle(conn: &Connection) -> Result<()> {
     .context("m0016: failed to create secret key lifecycle tables")?;
 
     // Import legacy key if it exists.
-    // We need to find the app_root from the db_path context. Since migrations run
+    // We need to find the data_dir from the db_path context. Since migrations run
     // in-transaction and we only have &Connection, we attempt to locate the legacy
     // key file relative to common paths. The import is best-effort during migration;
     // the bootstrap phase will ensure the keyring is populated.

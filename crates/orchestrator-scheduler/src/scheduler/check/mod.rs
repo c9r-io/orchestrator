@@ -142,7 +142,7 @@ impl From<PolicyDiagnostic> for CheckResult {
 /// `project_id`: if Some, check project-scoped resources instead of global.
 pub fn run_checks(
     config: &ActiveConfig,
-    app_root: &Path,
+    data_dir: &Path,
     workflow_filter: Option<&str>,
     project_id: Option<&str>,
 ) -> CheckReport {
@@ -169,14 +169,14 @@ pub fn run_checks(
             return build_report(checks);
         };
 
-    workspace::check_workspace_roots(workspaces, app_root, &mut checks);
-    workspace::check_qa_targets(workspaces, app_root, &mut checks);
+    workspace::check_workspace_roots(workspaces, data_dir, &mut checks);
+    workspace::check_qa_targets(workspaces, data_dir, &mut checks);
     execution::check_execution_profile_backend_support(
         workspaces,
         workflows,
         effective_project,
         &oc.projects,
-        app_root,
+        data_dir,
         workflow_filter,
         &mut checks,
     );
@@ -502,10 +502,10 @@ mod tests {
     fn clean_config_no_errors() {
         let cfg = base_config();
         let tmp = tempfile::tempdir().expect("create temp dir");
-        let app_root = tmp.path();
-        make_temp_ws(app_root);
+        let data_dir = tmp.path();
+        make_temp_ws(data_dir);
 
-        let report = run_checks(&cfg, app_root, None, None);
+        let report = run_checks(&cfg, data_dir, None, None);
         let errors: Vec<_> = report
             .checks
             .iter()

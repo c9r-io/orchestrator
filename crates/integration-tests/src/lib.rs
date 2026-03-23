@@ -1077,7 +1077,7 @@ impl OrchestratorService for TestOrchestratorServer {
             }));
         }
         let affected = if req.archive {
-            let archive_dir = self.state.app_root.join("data/archive/events");
+            let archive_dir = self.state.data_dir.join("archive/events");
             agent_orchestrator::event_cleanup::archive_events(
                 &self.state.async_database,
                 &archive_dir,
@@ -1189,10 +1189,16 @@ impl TestHarness {
         let mut test_state = TestState::new();
         let state = test_state.build();
 
+        // Rewrite relative workspace root_path values to point at the test
+        // temp directory so workspace validation succeeds.
+        let ws_root = state.data_dir.join("workspace/default");
+        let resolved_yaml =
+            manifest_yaml.replace("root_path: \".\"", &format!("root_path: \"{}\"", ws_root.display()));
+
         // Apply manifest
         agent_orchestrator::service::resource::apply_manifests(
             &state,
-            manifest_yaml,
+            &resolved_yaml,
             false,
             None,
             false,

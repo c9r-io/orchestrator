@@ -1,6 +1,6 @@
 use crate::collab::MessageBus;
 use crate::config_load::{
-    build_active_config_with_self_heal, detect_app_root, load_or_seed_config,
+    build_active_config_with_self_heal, data_dir, load_or_seed_config,
 };
 use crate::persistence::schema::PersistenceBootstrap;
 use crate::state::{ConfigRuntimeSnapshot, InnerState, ManagedState};
@@ -17,12 +17,12 @@ use tokio::sync::{Mutex, Notify};
 /// creates a temporary runtime for async DB initialization. When called from
 /// within an async runtime (e.g., daemon), use `init_state_async()` instead.
 pub fn init_state(unsafe_mode: bool) -> Result<ManagedState> {
-    let app_root = detect_app_root();
-    let (db_path, logs_dir) = initialize_runtime(&app_root)?;
+    let data_dir = data_dir();
+    let (db_path, logs_dir) = initialize_runtime(&data_dir)?;
 
     let (config, _yaml, _version, _updated_at) = load_or_seed_config(&db_path)?;
     let (active, active_config_error, active_config_notice) =
-        build_active_config_result(&app_root, &db_path, config)?;
+        build_active_config_result(&data_dir, &db_path, config)?;
 
     let async_database = Arc::new(
         tokio::runtime::Runtime::new()
@@ -32,7 +32,7 @@ pub fn init_state(unsafe_mode: bool) -> Result<ManagedState> {
     );
 
     build_managed_state(
-        app_root,
+        data_dir,
         db_path,
         logs_dir,
         unsafe_mode,
@@ -45,12 +45,12 @@ pub fn init_state(unsafe_mode: bool) -> Result<ManagedState> {
 
 /// Async variant of `init_state` — safe to call from within an existing tokio runtime.
 pub async fn init_state_async(unsafe_mode: bool) -> Result<ManagedState> {
-    let app_root = detect_app_root();
-    let (db_path, logs_dir) = initialize_runtime(&app_root)?;
+    let data_dir = data_dir();
+    let (db_path, logs_dir) = initialize_runtime(&data_dir)?;
 
     let (config, _yaml, _version, _updated_at) = load_or_seed_config(&db_path)?;
     let (active, active_config_error, active_config_notice) =
-        build_active_config_result(&app_root, &db_path, config)?;
+        build_active_config_result(&data_dir, &db_path, config)?;
 
     let async_database = Arc::new(
         crate::async_database::AsyncDatabase::open(&db_path)
@@ -59,7 +59,7 @@ pub async fn init_state_async(unsafe_mode: bool) -> Result<ManagedState> {
     );
 
     build_managed_state(
-        app_root,
+        data_dir,
         db_path,
         logs_dir,
         unsafe_mode,
@@ -71,7 +71,7 @@ pub async fn init_state_async(unsafe_mode: bool) -> Result<ManagedState> {
 }
 
 fn build_active_config_result(
-    app_root: &Path,
+    data_dir: &Path,
     db_path: &Path,
     config: crate::config::OrchestratorConfig,
 ) -> Result<(
@@ -79,7 +79,7 @@ fn build_active_config_result(
     Option<String>,
     Option<crate::config_load::ConfigSelfHealReport>,
 )> {
-    match build_active_config_with_self_heal(app_root, db_path, config.clone()) {
+    match build_active_config_with_self_heal(data_dir, db_path, config.clone()) {
         Ok((active, report)) => {
             if let Some(default_workspace) = active
                 .projects
@@ -102,7 +102,7 @@ fn build_active_config_result(
 
 #[allow(clippy::too_many_arguments)]
 fn build_managed_state(
-    app_root: std::path::PathBuf,
+    data_dir: std::path::PathBuf,
     db_path: std::path::PathBuf,
     logs_dir: std::path::PathBuf,
     unsafe_mode: bool,
@@ -120,11 +120,11 @@ fn build_managed_state(
     let task_repo = Arc::new(crate::task_repository::AsyncSqliteTaskRepository::new(
         async_database.clone(),
     ));
-    let store_manager = crate::store::StoreManager::new(async_database.clone(), app_root.clone());
+    let store_manager = crate::store::StoreManager::new(async_database.clone(), data_dir.clone());
 
     Ok(ManagedState {
         inner: Arc::new(InnerState {
-            app_root,
+            data_dir,
             db_path,
             unsafe_mode,
             async_database,
@@ -200,23 +200,22 @@ fn backfill_default_scope_data(
     Ok(())
 }
 
-fn initialize_runtime(app_root: &Path) -> Result<(std::path::PathBuf, std::path::PathBuf)> {
-    let data_dir = app_root.join("data");
+fn initialize_runtime(data_dir: &Path) -> Result<(std::path::PathBuf, std::path::PathBuf)> {
     let logs_dir = data_dir.join("logs");
     std::fs::create_dir_all(&logs_dir)
         .with_context(|| format!("failed to create logs dir {}", logs_dir.display()))?;
     let db_path = data_dir.join("agent_orchestrator.db");
     PersistenceBootstrap::ensure_current(&db_path)?;
     // Ensure legacy key exists (backward compat)
-    crate::secret_store_crypto::ensure_secret_key(app_root, &db_path)?;
+    crate::secret_store_crypto::ensure_secret_key(data_dir, &db_path)?;
     // Import legacy key into secret_keys table if not already present
-    import_legacy_key_if_needed(app_root, &db_path)?;
+    import_legacy_key_if_needed(data_dir, &db_path)?;
     // Startup diagnostics for key lifecycle
-    run_key_lifecycle_diagnostics(app_root, &db_path);
+    run_key_lifecycle_diagnostics(data_dir, &db_path);
     Ok((db_path, logs_dir))
 }
 
-fn import_legacy_key_if_needed(app_root: &Path, db_path: &Path) -> Result<()> {
+fn import_legacy_key_if_needed(data_dir: &Path, db_path: &Path) -> Result<()> {
     let conn = crate::db::open_conn(db_path)?;
     let table_exists: bool = conn
         .query_row(
@@ -231,7 +230,7 @@ fn import_legacy_key_if_needed(app_root: &Path, db_path: &Path) -> Result<()> {
     let count: i64 = conn.query_row("SELECT COUNT(*) FROM secret_keys", [], |row| row.get(0))?;
     if count == 0 {
         if let Some(record) =
-            crate::secret_key_lifecycle::import_legacy_key_record(&conn, app_root)?
+            crate::secret_key_lifecycle::import_legacy_key_record(&conn, data_dir)?
         {
             let now = crate::config_load::now_ts();
             // Write audit events for the imported key
@@ -262,8 +261,8 @@ fn import_legacy_key_if_needed(app_root: &Path, db_path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn run_key_lifecycle_diagnostics(app_root: &Path, db_path: &Path) {
-    let keyring = match crate::secret_key_lifecycle::load_keyring(app_root, db_path) {
+fn run_key_lifecycle_diagnostics(data_dir: &Path, db_path: &Path) {
+    let keyring = match crate::secret_key_lifecycle::load_keyring(data_dir, db_path) {
         Ok(kr) => kr,
         Err(e) => {
             tracing::error!("failed to load keyring for diagnostics: {e}");
@@ -340,7 +339,7 @@ mod tests {
         );
 
         let (active, active_config_error, active_config_notice) =
-            build_active_config_result(temp.path(), &db_path, config)
+            build_active_config_result(temp.path(), &db_path, config.clone())
                 .expect("build active config from blank bootstrap state");
         assert!(active.workspaces.is_empty());
         assert!(active_config_notice.is_none());
@@ -395,7 +394,7 @@ mod tests {
         let mut fixture = TestState::new();
         let seeded = fixture.build();
         let managed = build_managed_state(
-            seeded.app_root.clone(),
+            seeded.data_dir.clone(),
             seeded.db_path.clone(),
             seeded.logs_dir.clone(),
             true,
@@ -410,7 +409,7 @@ mod tests {
         .expect("build managed state");
 
         assert!(managed.inner.unsafe_mode);
-        assert_eq!(managed.inner.app_root, seeded.app_root);
+        assert_eq!(managed.inner.data_dir, seeded.data_dir);
         assert!(
             crate::state::config_runtime_snapshot(&managed.inner)
                 .active_config_error
@@ -424,7 +423,7 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/bootstrap-backfill.md");
         std::fs::write(&qa_file, "# bootstrap backfill\n").expect("seed qa file");
         let created = create_task_impl(&state, CreateTaskPayload::default()).expect("create task");
@@ -453,17 +452,17 @@ mod tests {
                         phase: "qa".to_string(),
                         command: "echo bootstrap".to_string(),
                         command_template: None,
-                        cwd: state.app_root.display().to_string(),
+                        cwd: state.data_dir.display().to_string(),
                         workspace_id: "".to_string(),
                         agent_id: "echo".to_string(),
                         exit_code: 0,
                         stdout_path: state
-                            .app_root
+                            .data_dir
                             .join("logs/bootstrap-stdout.log")
                             .display()
                             .to_string(),
                         stderr_path: state
-                            .app_root
+                            .data_dir
                             .join("logs/bootstrap-stderr.log")
                             .display()
                             .to_string(),

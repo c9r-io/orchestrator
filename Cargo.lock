@@ -57,6 +57,7 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "cron",
+ "dirs",
  "glob",
  "libc",
  "nix",
@@ -2996,6 +2997,7 @@ dependencies = [
  "anyhow",
  "clap",
  "clap_complete",
+ "dirs",
  "hyper-util",
  "libc",
  "nix",
@@ -3032,6 +3034,7 @@ name = "orchestrator-gui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "dirs",
  "hyper-util",
  "libc",
  "orchestrator-proto",

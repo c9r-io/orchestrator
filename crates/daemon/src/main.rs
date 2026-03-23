@@ -113,8 +113,8 @@ fn main() -> Result<()> {
     let use_ansi = if args.foreground {
         true
     } else {
-        let app_root = agent_orchestrator::config_load::detect_app_root();
-        let log_path = app_root.join("data/daemon.log");
+        let data_dir = agent_orchestrator::config_load::data_dir();
+        let log_path = data_dir.join("daemon.log");
         daemonize::daemonize(&log_path)?;
         false
     };
@@ -156,10 +156,10 @@ fn main() -> Result<()> {
         }
     }
 
-    // Install panic hook that appends to data/daemon_crash.log before the default hook.
+    // Install panic hook that appends to daemon_crash.log before the default hook.
     {
-        let app_root = agent_orchestrator::config_load::detect_app_root();
-        let crash_log = app_root.join("data/daemon_crash.log");
+        let data_dir = agent_orchestrator::config_load::data_dir();
+        let crash_log = data_dir.join("daemon_crash.log");
         let default_hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
             if let Ok(mut f) = std::fs::OpenOptions::new()
@@ -202,8 +202,8 @@ fn main() -> Result<()> {
         .unwrap_or(0);
         inner.daemon_runtime.set_incarnation(incarnation);
 
-        let socket_path = lifecycle::socket_path(&inner.app_root);
-        let pid_path = lifecycle::pid_path(&inner.app_root);
+        let socket_path = lifecycle::socket_path(&inner.data_dir);
+        let pid_path = lifecycle::pid_path(&inner.data_dir);
 
         // Detect stale PID from a previous crash before overwriting
         let stale_pid_detected = lifecycle::detect_stale_pid(&pid_path);
@@ -353,7 +353,7 @@ fn main() -> Result<()> {
             let archive_dir = args
                 .event_archive_dir
                 .clone()
-                .unwrap_or_else(|| inner.app_root.join("data/archive/events"));
+                .unwrap_or_else(|| inner.data_dir.join("archive/events"));
             let interval_secs = args.event_cleanup_interval_secs;
             info!(
                 retention_days,
@@ -443,7 +443,7 @@ fn main() -> Result<()> {
         let shutdown_notify = Arc::new(tokio::sync::Notify::new());
 
         let protection = Arc::new(protection::ControlPlaneProtection::load_or_bootstrap(
-            &inner.app_root,
+            &inner.data_dir,
             &inner.db_path,
             args.control_plane_dir.as_deref(),
         )?);
@@ -478,7 +478,7 @@ fn main() -> Result<()> {
         if let Some(addr) = args.bind.as_deref() {
             let addr = addr.parse().context("invalid bind address")?;
             let secure = control_plane::prepare_secure_server(
-                &inner.app_root,
+                &inner.data_dir,
                 &inner.db_path,
                 &addr,
                 args.control_plane_dir.as_deref(),
@@ -642,7 +642,7 @@ fn handle_subcommand(command: Commands) -> Result<()> {
                 .or_else(|| std::env::var_os("HOME").map(PathBuf::from))
                 .ok_or_else(|| anyhow::anyhow!("HOME is not set; pass --home explicitly"))?;
             let client_dir = control_plane::issue_client_materials(
-                &state.inner.app_root,
+                &state.inner.data_dir,
                 &addr,
                 control_plane_dir.as_deref(),
                 &home,

@@ -268,7 +268,7 @@ mod tests {
         let state = fixture.build();
 
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/db_write_test.md");
         std::fs::write(&qa_file, "# db_write test\n").expect("seed qa file");
 

@@ -26,7 +26,7 @@ pub(crate) async fn secret_key_status(
 ) -> Result<Response<SecretKeyStatusResponse>, Status> {
     authorize(server, &request, "SecretKeyStatus").map_err(Status::from)?;
 
-    let keyring = secret_key_lifecycle::load_keyring(&server.state.app_root, &server.state.db_path)
+    let keyring = secret_key_lifecycle::load_keyring(&server.state.data_dir, &server.state.db_path)
         .map_err(|e| {
             map_core_error(agent_orchestrator::error::classify_secret_error(
                 "secret.status",
@@ -49,7 +49,7 @@ pub(crate) async fn secret_key_list(
 ) -> Result<Response<SecretKeyListResponse>, Status> {
     authorize(server, &request, "SecretKeyList").map_err(Status::from)?;
 
-    let keyring = secret_key_lifecycle::load_keyring(&server.state.app_root, &server.state.db_path)
+    let keyring = secret_key_lifecycle::load_keyring(&server.state.data_dir, &server.state.db_path)
         .map_err(|e| {
             map_core_error(agent_orchestrator::error::classify_secret_error(
                 "secret.list",
@@ -77,7 +77,7 @@ pub(crate) async fn secret_key_rotate(
 
     if req.resume {
         let report =
-            secret_key_lifecycle::resume_rotation(&conn, &server.state.app_root).map_err(|e| {
+            secret_key_lifecycle::resume_rotation(&conn, &server.state.data_dir).map_err(|e| {
                 map_core_error(agent_orchestrator::error::classify_secret_error(
                     "secret.rotate",
                     e,
@@ -96,7 +96,7 @@ pub(crate) async fn secret_key_rotate(
     }
 
     // Begin new rotation
-    let (new_rec, old_rec) = secret_key_lifecycle::begin_rotation(&conn, &server.state.app_root)
+    let (new_rec, old_rec) = secret_key_lifecycle::begin_rotation(&conn, &server.state.data_dir)
         .map_err(|e| {
             map_core_error(agent_orchestrator::error::classify_secret_error(
                 "secret.rotate",
@@ -105,8 +105,8 @@ pub(crate) async fn secret_key_rotate(
         })?;
 
     // Re-encrypt with new key
-    let old_key_path = server.state.app_root.join(&old_rec.file_path);
-    let new_key_path = server.state.app_root.join(&new_rec.file_path);
+    let old_key_path = server.state.data_dir.join(&old_rec.file_path);
+    let new_key_path = server.state.data_dir.join(&new_rec.file_path);
 
     let old_handle = agent_orchestrator::secret_store_crypto::load_key_file_as_handle(
         &old_key_path,

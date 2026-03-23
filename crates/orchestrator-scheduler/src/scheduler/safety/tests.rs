@@ -378,7 +378,7 @@ async fn test_execute_self_test_step_returns_nonzero_when_cargo_check_fails() {
     let _env_guard = ENV_LOCK.lock().await;
     let mut fixture = TestState::new();
     let state = fixture.build();
-    let workspace_root = state.app_root.clone();
+    let workspace_root = state.data_dir.clone();
 
     let fake_bin = workspace_root.join("fake-bin");
     let cargo_log = workspace_root.join("fake-cargo.log");
@@ -414,7 +414,7 @@ async fn test_execute_self_test_step_success_with_manifest_validate() {
     let _env_guard = ENV_LOCK.lock().await;
     let mut fixture = TestState::new();
     let state = fixture.build();
-    let workspace_root = state.app_root.clone();
+    let workspace_root = state.data_dir.clone();
 
     let fake_bin = workspace_root.join("fake-bin");
     let cargo_log = workspace_root.join("fake-cargo.log");
@@ -724,7 +724,7 @@ async fn test_execute_self_test_step_cargo_test_fails() {
     let _env_guard = ENV_LOCK.lock().await;
     let mut fixture = TestState::new();
     let state = fixture.build();
-    let workspace_root = state.app_root.clone();
+    let workspace_root = state.data_dir.clone();
 
     let fake_bin = workspace_root.join("fake-bin");
     let cargo_log = workspace_root.join("fake-cargo.log");
@@ -765,7 +765,7 @@ async fn test_execute_self_test_step_no_manifest_script() {
     let _env_guard = ENV_LOCK.lock().await;
     let mut fixture = TestState::new();
     let state = fixture.build();
-    let workspace_root = state.app_root.clone();
+    let workspace_root = state.data_dir.clone();
 
     let fake_bin = workspace_root.join("fake-bin");
     let cargo_log = workspace_root.join("fake-cargo.log");
@@ -918,7 +918,7 @@ async fn test_execute_self_restart_step_build_fails() {
     let _env_guard = ENV_LOCK.lock().await;
     let mut fixture = TestState::new();
     let state = fixture.build();
-    let workspace_root = state.app_root.clone();
+    let workspace_root = state.data_dir.clone();
 
     let fake_bin = workspace_root.join("fake-bin");
     write_executable(&fake_bin.join("cargo"), "#!/bin/sh\nexit 7\n");
@@ -960,7 +960,7 @@ async fn test_execute_self_restart_step_success_returns_exit_restart() {
     let _env_guard = ENV_LOCK.lock().await;
     let mut fixture = TestState::new();
     let state = fixture.build();
-    let workspace_root = state.app_root.clone();
+    let workspace_root = state.data_dir.clone();
 
     // Create a fake cargo that succeeds on build
     let fake_bin = workspace_root.join("fake-bin");
@@ -1142,7 +1142,7 @@ async fn test_execute_self_restart_step_verify_timeout() {
     let _env_guard = ENV_LOCK.lock().await;
     let mut fixture = TestState::new();
     let state = fixture.build();
-    let workspace_root = state.app_root.clone();
+    let workspace_root = state.data_dir.clone();
 
     // Build succeeds
     let fake_bin = workspace_root.join("fake-bin");
@@ -1177,7 +1177,7 @@ async fn test_execute_self_restart_step_snapshot_fails() {
     let _env_guard = ENV_LOCK.lock().await;
     let mut fixture = TestState::new();
     let state = fixture.build();
-    let workspace_root = state.app_root.clone();
+    let workspace_root = state.data_dir.clone();
 
     // Build succeeds
     let fake_bin = workspace_root.join("fake-bin");
@@ -1211,7 +1211,7 @@ async fn test_execute_self_restart_step_binary_read_fails_uses_unknown() {
     let _env_guard = ENV_LOCK.lock().await;
     let mut fixture = TestState::new();
     let state = fixture.build();
-    let workspace_root = state.app_root.clone();
+    let workspace_root = state.data_dir.clone();
 
     // Build succeeds
     let fake_bin = workspace_root.join("fake-bin");
@@ -1283,7 +1283,7 @@ async fn test_execute_self_test_step_manifest_validate_fails() {
     let _env_guard = ENV_LOCK.lock().await;
     let mut fixture = TestState::new();
     let state = fixture.build();
-    let workspace_root = state.app_root.clone();
+    let workspace_root = state.data_dir.clone();
 
     let fake_bin = workspace_root.join("fake-bin");
     let cargo_log = workspace_root.join("fake-cargo.log");
@@ -1411,7 +1411,7 @@ async fn test_execute_self_restart_step_records_old_binary_sha256() {
     let _env_guard = ENV_LOCK.lock().await;
     let mut fixture = TestState::new();
     let state = fixture.build();
-    let workspace_root = state.app_root.clone();
+    let workspace_root = state.data_dir.clone();
 
     // Build succeeds
     let fake_bin = workspace_root.join("fake-bin");

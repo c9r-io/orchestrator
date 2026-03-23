@@ -260,13 +260,13 @@ impl TokenBucket {
 impl ControlPlaneProtection {
     /// Load the persisted protection policy or write a default config on first start.
     pub fn load_or_bootstrap(
-        app_root: &Path,
+        data_dir: &Path,
         db_path: &Path,
         control_plane_dir: Option<&Path>,
     ) -> Result<Self> {
         let dir = control_plane_dir
             .map(Path::to_path_buf)
-            .unwrap_or_else(|| app_root.join("data/control-plane"));
+            .unwrap_or_else(|| data_dir.join("control-plane"));
         std::fs::create_dir_all(&dir)
             .with_context(|| format!("failed to create {}", dir.display()))?;
         let config_path = dir.join("protection.yaml");

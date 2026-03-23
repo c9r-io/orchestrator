@@ -11,8 +11,8 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-const KEY_RELATIVE_PATH: &str = "data/secrets/secretstore.key";
-const KEY_META_RELATIVE_PATH: &str = "data/secrets/secretstore.key.meta.json";
+const KEY_RELATIVE_PATH: &str = "secrets/secretstore.key";
+const KEY_META_RELATIVE_PATH: &str = "secrets/secretstore.key.meta.json";
 const KEY_ID_PRIMARY: &str = "primary";
 const KEY_SIZE_BYTES: usize = 32;
 const NONCE_SIZE_BYTES: usize = 12;
@@ -270,17 +270,17 @@ pub fn generate_and_write_key_file(path: &Path, key_id: &str) -> Result<SecretKe
 }
 
 /// Resolves the canonical path of the primary SecretStore key file.
-pub fn secret_key_path(app_root: &Path) -> PathBuf {
-    app_root.join(KEY_RELATIVE_PATH)
+pub fn secret_key_path(data_dir: &Path) -> PathBuf {
+    data_dir.join(KEY_RELATIVE_PATH)
 }
 
 /// Resolves the path of the metadata file associated with the primary SecretStore key.
-pub fn secret_key_meta_path(app_root: &Path) -> PathBuf {
-    app_root.join(KEY_META_RELATIVE_PATH)
+pub fn secret_key_meta_path(data_dir: &Path) -> PathBuf {
+    data_dir.join(KEY_META_RELATIVE_PATH)
 }
 
 /// Resolves the application root from a database path in either nested or flat layouts.
-pub fn resolve_app_root_from_db_path(db_path: &Path) -> Result<PathBuf> {
+pub fn resolve_data_dir_from_db_path(db_path: &Path) -> Result<PathBuf> {
     let parent = db_path
         .parent()
         .with_context(|| format!("db path has no parent: {}", db_path.display()))?;
@@ -295,22 +295,22 @@ pub fn resolve_app_root_from_db_path(db_path: &Path) -> Result<PathBuf> {
 }
 
 /// Loads the existing primary key or initializes one when no encrypted SecretStore data exists.
-pub fn ensure_secret_key(app_root: &Path, db_path: &Path) -> Result<SecretKeyHandle> {
-    if let Some(existing) = load_existing_secret_key(app_root)? {
+pub fn ensure_secret_key(data_dir: &Path, db_path: &Path) -> Result<SecretKeyHandle> {
+    if let Some(existing) = load_existing_secret_key(data_dir)? {
         return Ok(existing);
     }
     if encrypted_secret_data_exists(db_path)? {
         bail!(
             "secret store key missing at {} while encrypted SecretStore data exists; restore the original key before starting",
-            secret_key_path(app_root).display()
+            secret_key_path(data_dir).display()
         );
     }
-    initialize_secret_key(app_root)
+    initialize_secret_key(data_dir)
 }
 
 /// Loads the primary SecretStore key if it already exists on disk.
-pub fn load_existing_secret_key(app_root: &Path) -> Result<Option<SecretKeyHandle>> {
-    let path = secret_key_path(app_root);
+pub fn load_existing_secret_key(data_dir: &Path) -> Result<Option<SecretKeyHandle>> {
+    let path = secret_key_path(data_dir);
     if !path.exists() {
         return Ok(None);
     }
@@ -350,9 +350,9 @@ pub fn redact_secret_data_map(map: &mut serde_json::Map<String, Value>) {
     }
 }
 
-fn initialize_secret_key(app_root: &Path) -> Result<SecretKeyHandle> {
-    let key_path = secret_key_path(app_root);
-    let meta_path = secret_key_meta_path(app_root);
+fn initialize_secret_key(data_dir: &Path) -> Result<SecretKeyHandle> {
+    let key_path = secret_key_path(data_dir);
+    let meta_path = secret_key_meta_path(data_dir);
     let secrets_dir = key_path
         .parent()
         .with_context(|| format!("secret key path has no parent: {}", key_path.display()))?;
@@ -633,17 +633,17 @@ mod tests {
     }
 
     #[test]
-    fn resolve_app_root_from_db_path_accepts_data_and_flat_layouts() {
+    fn resolve_data_dir_from_db_path_accepts_data_and_flat_layouts() {
         let temp = tempdir().expect("tempdir");
         let nested = temp.path().join("data/agent_orchestrator.db");
         let flat = temp.path().join("agent_orchestrator.db");
 
         assert_eq!(
-            resolve_app_root_from_db_path(&nested).expect("nested root"),
+            resolve_data_dir_from_db_path(&nested).expect("nested root"),
             temp.path()
         );
         assert_eq!(
-            resolve_app_root_from_db_path(&flat).expect("flat root"),
+            resolve_data_dir_from_db_path(&flat).expect("flat root"),
             temp.path()
         );
     }

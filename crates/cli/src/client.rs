@@ -61,14 +61,12 @@ fn discover_socket_path() -> std::path::PathBuf {
     if let Ok(path) = std::env::var("ORCHESTRATOR_SOCKET") {
         return std::path::PathBuf::from(path);
     }
-
-    let app_root = std::env::var("ORCHESTRATOR_ROOT")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| {
-            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
-        });
-
-    app_root.join("data/orchestrator.sock")
+    if let Ok(dir) = std::env::var("ORCHESTRATORD_DATA_DIR") {
+        return std::path::PathBuf::from(dir).join("orchestrator.sock");
+    }
+    dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join(".orchestratord/orchestrator.sock")
 }
 
 /// Connect to the daemon using the best available transport.
@@ -76,8 +74,8 @@ fn discover_socket_path() -> std::path::PathBuf {
 /// Connection priority:
 /// 1. `ORCHESTRATOR_SOCKET` env (no explicit config) → UDS
 /// 2. Explicit control-plane config (flag or env) → TCP/TLS
-/// 3. Local socket file exists (`data/orchestrator.sock`) → UDS
-/// 4. Auto-discover `~/.orchestrator/control-plane/config.yaml` → TCP/TLS
+/// 3. Default socket file exists (`~/.orchestratord/orchestrator.sock`) → UDS
+/// 4. Auto-discover `~/.orchestratord/control-plane/config.yaml` → TCP/TLS
 /// 5. Fallback → UDS
 pub async fn connect(
     explicit_control_plane_config: Option<&str>,
@@ -255,13 +253,13 @@ fn discover_explicit_control_plane_config(explicit: Option<&str>) -> Result<Opti
     Ok(None)
 }
 
-/// Check `~/.orchestrator/control-plane/config.yaml` auto-discovery.
+/// Check `~/.orchestratord/control-plane/config.yaml` auto-discovery.
 fn discover_home_control_plane_config() -> Result<Option<PathBuf>> {
-    let home = match std::env::var_os("HOME") {
-        Some(home) => PathBuf::from(home),
+    let home = match dirs::home_dir() {
+        Some(home) => home,
         None => return Ok(None),
     };
-    let path = home.join(".orchestrator/control-plane/config.yaml");
+    let path = home.join(".orchestratord/control-plane/config.yaml");
     if path.exists() {
         return Ok(Some(path));
     }
@@ -410,25 +408,24 @@ contexts:
         // priority ordering documented in connect()'s doc comment.
         let temp = tempfile::tempdir().expect("tempdir");
         // Clear ORCHESTRATOR_SOCKET so discover_socket_path falls through to
-        // the ORCHESTRATOR_ROOT branch (env vars are process-global and another
-        // test may have set ORCHESTRATOR_SOCKET).
+        // the ORCHESTRATORD_DATA_DIR branch (env vars are process-global and
+        // another test may have set ORCHESTRATOR_SOCKET).
         std::env::remove_var("ORCHESTRATOR_SOCKET");
-        std::env::set_var("ORCHESTRATOR_ROOT", temp.path());
+        std::env::set_var("ORCHESTRATORD_DATA_DIR", temp.path());
 
         let socket = discover_socket_path();
         assert_eq!(
             socket,
-            temp.path().join("data/orchestrator.sock"),
-            "discover_socket_path should use ORCHESTRATOR_ROOT"
+            temp.path().join("orchestrator.sock"),
+            "discover_socket_path should use ORCHESTRATORD_DATA_DIR"
         );
 
         // When the socket exists, connect() step 3 fires before step 4.
         // We verify this structurally: the socket path is computable and
         // checkable before home-dir discovery runs.
-        std::fs::create_dir_all(socket.parent().unwrap()).expect("data dir");
         std::fs::write(&socket, "").expect("create socket stub");
         assert!(socket.exists(), "local socket should exist for probe");
 
-        std::env::remove_var("ORCHESTRATOR_ROOT");
+        std::env::remove_var("ORCHESTRATORD_DATA_DIR");
     }
 }

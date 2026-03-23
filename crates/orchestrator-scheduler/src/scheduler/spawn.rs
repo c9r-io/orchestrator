@@ -235,7 +235,7 @@ mod tests {
 
     fn seed_default_qa_file(state: &InnerState, name: &str) {
         let qa_path = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa")
             .join(format!("{name}.md"));
         std::fs::write(qa_path, "# spawn coverage\n").expect("seed default QA file");

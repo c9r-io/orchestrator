@@ -58,8 +58,8 @@ impl ConfigRuntimeSnapshot {
 
 /// Shared daemon state referenced by services and scheduler code.
 pub struct InnerState {
-    /// Application root directory.
-    pub app_root: PathBuf,
+    /// Runtime data directory (`~/.orchestratord` by default).
+    pub data_dir: PathBuf,
     /// SQLite database path.
     pub db_path: PathBuf,
     /// Whether unsafe mode is enabled.

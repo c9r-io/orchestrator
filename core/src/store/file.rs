@@ -6,13 +6,13 @@ use std::path::PathBuf;
 
 /// Filesystem-backed workflow store implementation.
 pub struct FileStoreBackend {
-    app_root: PathBuf,
+    data_dir: PathBuf,
 }
 
 impl FileStoreBackend {
     /// Creates a file-store backend rooted at the orchestrator app directory.
-    pub fn new(app_root: PathBuf) -> Self {
-        Self { app_root }
+    pub fn new(data_dir: PathBuf) -> Self {
+        Self { data_dir }
     }
 
     /// Executes a store operation against JSON files on disk.
@@ -56,7 +56,7 @@ impl FileStoreBackend {
         } else {
             project_id
         };
-        self.app_root
+        self.data_dir
             .join("data")
             .join("stores")
             .join(store_name)

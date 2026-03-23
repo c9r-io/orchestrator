@@ -28,10 +28,10 @@ pub struct ResourceRemoval {
 }
 
 /// Builds the fully resolved active config for the whole workspace.
-pub fn build_active_config(app_root: &Path, config: OrchestratorConfig) -> Result<ActiveConfig> {
+pub fn build_active_config(data_dir: &Path, config: OrchestratorConfig) -> Result<ActiveConfig> {
     let config = normalize_config(config);
-    let workspaces = resolve_and_validate_workspaces(app_root, &config)?;
-    let projects = resolve_and_validate_projects(app_root, &config)?;
+    let workspaces = resolve_and_validate_workspaces(data_dir, &config)?;
+    let projects = resolve_and_validate_projects(data_dir, &config)?;
     validate_agent_env_store_refs(&config)?;
     Ok(ActiveConfig {
         workspaces,
@@ -44,14 +44,14 @@ pub fn build_active_config(app_root: &Path, config: OrchestratorConfig) -> Resul
 /// Other projects are included in the result but not validated, allowing
 /// apply to succeed even if another project has broken paths.
 pub fn build_active_config_for_project(
-    app_root: &Path,
+    data_dir: &Path,
     config: OrchestratorConfig,
     target_project: &str,
 ) -> Result<ActiveConfig> {
     let config = normalize_config(config);
     let workspaces =
-        resolve_and_validate_workspaces_for_project(app_root, &config, target_project)?;
-    let projects = resolve_and_validate_projects(app_root, &config)?;
+        resolve_and_validate_workspaces_for_project(data_dir, &config, target_project)?;
+    let projects = resolve_and_validate_projects(data_dir, &config)?;
     validate_agent_env_store_refs_for_project(&config, target_project)?;
     Ok(ActiveConfig {
         workspaces,
@@ -62,11 +62,11 @@ pub fn build_active_config_for_project(
 
 /// Attempts to build active config and persists a healed snapshot when self-heal succeeds.
 pub fn build_active_config_with_self_heal(
-    app_root: &Path,
+    data_dir: &Path,
     db_path: &Path,
     config: OrchestratorConfig,
 ) -> Result<(ActiveConfig, Option<ConfigSelfHealReport>)> {
-    match build_active_config(app_root, config.clone()) {
+    match build_active_config(data_dir, config.clone()) {
         Ok(active) => Ok((active, None)),
         Err(error) => {
             let original_error = error.to_string();
@@ -78,7 +78,7 @@ pub fn build_active_config_with_self_heal(
                 anyhow::bail!(original_error);
             };
 
-            let healed_active = match build_active_config(app_root, healed_config) {
+            let healed_active = match build_active_config(data_dir, healed_config) {
                 Ok(active) => active,
                 Err(_) => anyhow::bail!(original_error),
             };
@@ -332,13 +332,13 @@ mod tests {
         make_builtin_step, make_command_step, make_config_with_default_project,
         make_minimal_buildable_config, make_step, make_test_db, make_workflow,
     };
-    use crate::config_load::{detect_app_root, persist_raw_config};
+    use crate::config_load::persist_raw_config;
     #[allow(unused_imports)]
     use std::collections::HashMap;
 
     #[test]
     fn build_active_config_with_self_heal_recovers_builtin_capability_conflict() {
-        let app_root = detect_app_root();
+        let data_dir = std::env::current_dir().expect("cwd");
         let (_temp_dir, db_path) = make_test_db();
         let mut config = make_minimal_buildable_config();
         let workflow = config
@@ -359,14 +359,14 @@ mod tests {
         let invalid_config = config.clone();
         persist_raw_config(&db_path, config.clone(), "test-seed").expect("seed config");
 
-        let direct_error = build_active_config(&app_root, config)
+        let direct_error = build_active_config(&data_dir, config)
             .expect_err("invalid config should fail direct active config construction");
         assert!(direct_error
             .to_string()
             .contains("cannot define both builtin and required_capability"));
 
         let (active, report) =
-            build_active_config_with_self_heal(&app_root, &db_path, invalid_config)
+            build_active_config_with_self_heal(&data_dir, &db_path, invalid_config)
                 .expect("self-heal wrapper should recover");
 
         assert!(active
@@ -383,7 +383,7 @@ mod tests {
 
     #[test]
     fn build_active_config_with_self_heal_persists_self_heal_version() {
-        let app_root = detect_app_root();
+        let data_dir = std::env::current_dir().expect("cwd");
         let (_temp_dir, db_path) = make_test_db();
         let mut config = make_minimal_buildable_config();
         let workflow = config
@@ -402,7 +402,7 @@ mod tests {
         let seeded = persist_raw_config(&db_path, config, "test-seed").expect("seed config");
 
         let (_active, report) =
-            build_active_config_with_self_heal(&app_root, &db_path, invalid_config)
+            build_active_config_with_self_heal(&data_dir, &db_path, invalid_config)
                 .expect("self-heal wrapper should recover");
 
         let report = report.expect("expected self-heal report");
@@ -420,7 +420,7 @@ mod tests {
 
     #[test]
     fn build_active_config_with_self_heal_persists_heal_log_entries() {
-        let app_root = detect_app_root();
+        let data_dir = std::env::current_dir().expect("cwd");
         let (_temp_dir, db_path) = make_test_db();
         let mut config = make_minimal_buildable_config();
         let workflow = config
@@ -439,7 +439,7 @@ mod tests {
         persist_raw_config(&db_path, config, "test-seed").expect("seed config");
 
         let (_active, report) =
-            build_active_config_with_self_heal(&app_root, &db_path, invalid_config)
+            build_active_config_with_self_heal(&data_dir, &db_path, invalid_config)
                 .expect("self-heal wrapper should recover");
 
         let report = report.expect("expected self-heal report");
@@ -457,7 +457,7 @@ mod tests {
 
     #[test]
     fn build_active_config_with_self_heal_returns_original_error_for_unhealable_config() {
-        let app_root = detect_app_root();
+        let data_dir = std::env::current_dir().expect("cwd");
         let (_temp_dir, db_path) = make_test_db();
         let mut config = make_minimal_buildable_config();
         config
@@ -470,7 +470,7 @@ mod tests {
             .root_path = "fixtures/does-not-exist".to_string();
         persist_raw_config(&db_path, config.clone(), "test-seed").expect("seed config");
 
-        let err = build_active_config_with_self_heal(&app_root, &db_path, config)
+        let err = build_active_config_with_self_heal(&data_dir, &db_path, config)
             .expect_err("unhealable config should still fail");
 
         assert!(

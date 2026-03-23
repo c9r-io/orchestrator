@@ -2,9 +2,9 @@
 
 ## Forbidden Operations
 
-### Never delete `data/agent_orchestrator.db`
+### Never delete the runtime database
 
-Do NOT run `rm -f data/agent_orchestrator.db`, `rm data/agent_orchestrator.db`, or any command that deletes or truncates the runtime database.
+Do NOT run `rm -f ~/.orchestratord/agent_orchestrator.db` or any command that deletes or truncates the runtime database (default location: `~/.orchestratord/agent_orchestrator.db`, overridable via `ORCHESTRATORD_DATA_DIR`).
 
 If you encounter a scenario that seems to require deleting the database, it indicates a bug — the system should provide proper isolation (e.g., project-scoped operations) without destructive resets.
 

@@ -77,7 +77,7 @@ pub(super) mod test_fixtures {
     ) {
         let state = fixture.build();
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/query_test.md");
         std::fs::write(&qa_file, "# query test\n").expect("seed qa file");
         let created = create_task_impl(

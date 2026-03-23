@@ -105,13 +105,13 @@ pub fn sigterm_sender_pid() -> Option<i32> {
 }
 
 /// Returns the path to the daemon Unix Domain Socket.
-pub fn socket_path(app_root: &Path) -> PathBuf {
-    app_root.join("data/orchestrator.sock")
+pub fn socket_path(data_dir: &Path) -> PathBuf {
+    data_dir.join("orchestrator.sock")
 }
 
 /// Returns the path to the daemon PID file.
-pub fn pid_path(app_root: &Path) -> PathBuf {
-    app_root.join("data/daemon.pid")
+pub fn pid_path(data_dir: &Path) -> PathBuf {
+    data_dir.join("daemon.pid")
 }
 
 /// Write the current process PID to the PID file.

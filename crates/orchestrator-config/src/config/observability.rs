@@ -170,7 +170,7 @@ fn default_file_format() -> LoggingFormat {
 }
 
 fn default_log_directory() -> String {
-    "data/logs/system".to_string()
+    "logs/system".to_string()
 }
 
 #[cfg(test)]
@@ -185,7 +185,7 @@ mod tests {
         assert_eq!(cfg.logging.console.format, LoggingFormat::Pretty);
         assert!(cfg.logging.file.enabled);
         assert_eq!(cfg.logging.file.format, LoggingFormat::Json);
-        assert_eq!(cfg.logging.file.directory, "data/logs/system");
+        assert_eq!(cfg.logging.file.directory, "logs/system");
         assert!(cfg.logging.event_bridge);
     }
 

@@ -160,7 +160,7 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/multi_test.md");
         std::fs::write(&qa_file, "# multi test\n").expect("seed qa file");
 

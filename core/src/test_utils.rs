@@ -29,7 +29,7 @@ fn backfill_default_scope_data(
     Ok(())
 }
 
-fn create_minimal_test_config() -> OrchestratorConfig {
+fn create_minimal_test_config(temp_root: &Path) -> OrchestratorConfig {
     OrchestratorConfig {
         projects: {
             let mut projects = HashMap::new();
@@ -42,7 +42,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                         ws.insert(
                             "default".to_string(),
                             WorkspaceConfig {
-                                root_path: "workspace/default".to_string(),
+                                root_path: temp_root.join("workspace/default").to_string_lossy().to_string(),
                                 qa_targets: vec!["docs/qa".to_string()],
                                 ticket_dir: "docs/ticket".to_string(),
                                 self_referential: false,
@@ -166,7 +166,7 @@ impl TestState {
         ));
         std::fs::create_dir_all(&temp_root).expect("failed to create test temp root");
 
-        let config = create_minimal_test_config();
+        let config = create_minimal_test_config(&temp_root);
         Self {
             temp_root,
             config,
@@ -177,6 +177,15 @@ impl TestState {
     /// Add a workspace to the test config.
     pub fn with_workspace(mut self, name: impl Into<String>, path: impl Into<String>) -> Self {
         let workspace_id = name.into();
+        let raw_path = path.into();
+        let root_path = {
+            let p = std::path::Path::new(&raw_path);
+            if p.is_absolute() {
+                raw_path
+            } else {
+                self.temp_root.join(p).to_string_lossy().to_string()
+            }
+        };
         self.config
             .projects
             .get_mut(crate::config::DEFAULT_PROJECT_ID)
@@ -185,7 +194,7 @@ impl TestState {
             .insert(
                 workspace_id.clone(),
                 WorkspaceConfig {
-                    root_path: path.into(),
+                    root_path,
                     qa_targets: vec!["docs/qa".to_string(), "docs/security".to_string()],
                     ticket_dir: "docs/ticket".to_string(),
                     self_referential: false,
@@ -245,11 +254,10 @@ impl TestState {
 
         self.ensure_workspace_dirs();
 
-        let data_dir = self.temp_root.join("data");
-        let logs_dir = data_dir.join("logs");
+        let logs_dir = self.temp_root.join("logs");
         std::fs::create_dir_all(&logs_dir).expect("failed to create temp logs dir");
 
-        let db_path = data_dir.join("agent_orchestrator.db");
+        let db_path = self.temp_root.join("agent_orchestrator.db");
         init_schema(&db_path).expect("failed to initialize test schema");
         persist_raw_config(&db_path, self.config.clone(), "test-seed")
             .expect("failed to persist test config");
@@ -295,7 +303,7 @@ impl TestState {
         let store_manager =
             crate::store::StoreManager::new(async_database.clone(), self.temp_root.clone());
         let state = Arc::new(InnerState {
-            app_root: self.temp_root.clone(),
+            data_dir: self.temp_root.clone(),
             db_path,
             unsafe_mode: false,
             async_database,
@@ -335,7 +343,12 @@ impl TestState {
             .get(crate::config::DEFAULT_PROJECT_ID)
             .expect("default project");
         for workspace in project.workspaces.values() {
-            let root_path = self.temp_root.join(&workspace.root_path);
+            let raw = std::path::Path::new(&workspace.root_path);
+            let root_path = if raw.is_absolute() {
+                raw.to_path_buf()
+            } else {
+                self.temp_root.join(raw)
+            };
             let root_result = std::fs::create_dir_all(&root_path);
             assert!(
                 root_result.is_ok(),

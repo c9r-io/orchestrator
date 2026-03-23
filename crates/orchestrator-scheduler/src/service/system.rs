@@ -23,7 +23,7 @@ pub fn run_check(
     project_id: Option<&str>,
 ) -> Result<RenderedCheckReport> {
     let active = read_active_config(state)?;
-    let report = run_checks(&active, &state.app_root, workflow, project_id);
+    let report = run_checks(&active, &state.data_dir, workflow, project_id);
 
     let content = match output_format {
         "json" => serde_json::to_string_pretty(&report)?,

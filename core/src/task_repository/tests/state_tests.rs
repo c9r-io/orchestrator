@@ -574,7 +574,7 @@ fn recover_orphaned_running_items_for_task_only_affects_target_task() {
 
     // Create a second task
     let qa_file2 = state
-        .app_root
+        .data_dir
         .join("workspace/default/docs/qa/repo_test2.md");
     std::fs::write(&qa_file2, "# repo test 2\n").expect("seed second qa file");
     let created2 = crate::task_ops::create_task_impl(

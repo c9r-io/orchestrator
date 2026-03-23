@@ -7,7 +7,7 @@ use rusqlite::params;
 pub fn seed_task(fixture: &mut TestState) -> (std::sync::Arc<crate::state::InnerState>, String) {
     let state = fixture.build();
     let qa_file = state
-        .app_root
+        .data_dir
         .join("workspace/default/docs/qa/repo_test.md");
     std::fs::write(&qa_file, "# repository test\n").expect("seed qa file");
     let created = create_task_impl(

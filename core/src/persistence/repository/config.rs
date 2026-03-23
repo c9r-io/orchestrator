@@ -4,7 +4,7 @@ use crate::dto::ConfigOverview;
 use crate::resource::export_manifest_resources;
 use crate::secret_store_crypto::{
     decrypt_resource_spec_json, encrypt_resource_spec_json, ensure_secret_key,
-    load_existing_secret_key, redact_secret_data_map, resolve_app_root_from_db_path,
+    load_existing_secret_key, redact_secret_data_map, resolve_data_dir_from_db_path,
     SecretEncryption,
 };
 use anyhow::{Context, Result};
@@ -327,17 +327,17 @@ fn load_all_resources(
     crate::crd::store::ResourceStore,
     HashMap<String, crate::crd::types::CustomResourceDefinition>,
 )> {
-    let app_root = resolve_app_root_from_db_path(db_path)?;
+    let data_dir = resolve_data_dir_from_db_path(db_path)?;
     // Try loading via KeyRing for multi-key support; fall back to single-key
-    let secret_encryption = match crate::secret_key_lifecycle::load_keyring(&app_root, db_path) {
+    let secret_encryption = match crate::secret_key_lifecycle::load_keyring(&data_dir, db_path) {
         Ok(keyring) => {
             if keyring.has_active_key() {
                 SecretEncryption::from_keyring(&keyring).ok()
             } else {
-                load_existing_secret_key(&app_root)?.map(SecretEncryption::from_key)
+                load_existing_secret_key(&data_dir)?.map(SecretEncryption::from_key)
             }
         }
-        Err(_) => load_existing_secret_key(&app_root)?.map(SecretEncryption::from_key),
+        Err(_) => load_existing_secret_key(&data_dir)?.map(SecretEncryption::from_key),
     };
     let conn = crate::db::open_conn(db_path)?;
     let table_exists: bool = conn
@@ -600,9 +600,9 @@ impl ConfigRepository for SqliteConfigRepository {
         json_raw: &str,
         author: &str,
     ) -> Result<ConfigOverview> {
-        let app_root = resolve_app_root_from_db_path(&self.db_path)?;
+        let data_dir = resolve_data_dir_from_db_path(&self.db_path)?;
         let secret_encryption =
-            SecretEncryption::from_key(ensure_secret_key(&app_root, &self.db_path)?);
+            SecretEncryption::from_key(ensure_secret_key(&data_dir, &self.db_path)?);
         let conn = self.open_conn()?;
         let tx = conn.unchecked_transaction()?;
         let (version, updated_at) = persist_config_versioned(&tx, yaml, json_raw, author)?;
@@ -630,13 +630,13 @@ impl ConfigRepository for SqliteConfigRepository {
         author: &str,
         deleted_resources: &[ResourceRemoval],
     ) -> Result<ConfigOverview> {
-        let app_root = resolve_app_root_from_db_path(&self.db_path)?;
+        let data_dir = resolve_data_dir_from_db_path(&self.db_path)?;
         let has_secret_stores = !normalized
             .resource_store
             .list_by_kind("SecretStore")
             .is_empty();
         let secret_encryption = match crate::secret_key_lifecycle::load_keyring(
-            &app_root,
+            &data_dir,
             &self.db_path,
         ) {
             Ok(keyring) => {
@@ -647,10 +647,10 @@ impl ConfigRepository for SqliteConfigRepository {
                             "SecretStore write blocked: no active encryption key (all keys revoked or retired)"
                         );
                 } else {
-                    SecretEncryption::from_key(ensure_secret_key(&app_root, &self.db_path)?)
+                    SecretEncryption::from_key(ensure_secret_key(&data_dir, &self.db_path)?)
                 }
             }
-            Err(_) => SecretEncryption::from_key(ensure_secret_key(&app_root, &self.db_path)?),
+            Err(_) => SecretEncryption::from_key(ensure_secret_key(&data_dir, &self.db_path)?),
         };
         let conn = self.open_conn()?;
         let tx = conn.unchecked_transaction()?;

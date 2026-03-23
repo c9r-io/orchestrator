@@ -400,7 +400,7 @@ mod tests {
     fn seed_task(fixture: &mut TestState) -> (Arc<InnerState>, String) {
         let state = fixture.build();
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/runtime_test.md");
         std::fs::write(&qa_file, "# runtime test\n").expect("seed qa file");
         let created = create_task_impl(
@@ -497,7 +497,7 @@ mod tests {
     async fn load_task_runtime_context_errors_when_workspace_root_is_missing() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
-        std::fs::remove_dir_all(state.app_root.join("workspace/default"))
+        std::fs::remove_dir_all(state.data_dir.join("workspace/default"))
             .expect("remove workspace root");
 
         let err = load_task_runtime_context(&state, &task_id)
@@ -695,7 +695,7 @@ mod tests {
     /// Helper: rebuild a state arc with `unsafe_mode = true`, reusing the same DB/config.
     fn state_with_unsafe_mode(base: &Arc<InnerState>) -> Arc<InnerState> {
         Arc::new(InnerState {
-            app_root: base.app_root.clone(),
+            data_dir: base.data_dir.clone(),
             db_path: base.db_path.clone(),
             unsafe_mode: true,
             async_database: base.async_database.clone(),
@@ -720,7 +720,7 @@ mod tests {
             task_repo: base.task_repo.clone(),
             store_manager: agent_orchestrator::store::StoreManager::new(
                 base.async_database.clone(),
-                base.app_root.clone(),
+                base.data_dir.clone(),
             ),
             daemon_runtime: agent_orchestrator::runtime::DaemonRuntimeState::new(),
             worker_notify: Arc::new(tokio::sync::Notify::new()),

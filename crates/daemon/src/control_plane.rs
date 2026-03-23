@@ -357,17 +357,17 @@ impl ControlPlaneSecurity {
 
 /// Load or bootstrap PKI material for the secure control-plane listener.
 pub fn prepare_secure_server(
-    app_root: &Path,
+    data_dir: &Path,
     db_path: &Path,
     bind_addr: &SocketAddr,
     control_plane_dir: Option<&Path>,
 ) -> Result<SecureServerConfig> {
     let dir = control_plane_dir
         .map(Path::to_path_buf)
-        .unwrap_or_else(|| app_root.join("data/control-plane"));
+        .unwrap_or_else(|| data_dir.join("control-plane"));
     let paths = ControlPlanePaths::new(dir);
     bootstrap_control_plane(&paths, bind_addr)?;
-    ensure_default_user_materials(app_root, &paths, bind_addr)?;
+    ensure_default_user_materials(data_dir, &paths, bind_addr)?;
 
     let server_cert = std::fs::read(&paths.server_cert)
         .with_context(|| format!("failed to read {}", paths.server_cert.display()))?;
@@ -392,7 +392,7 @@ pub fn prepare_secure_server(
 
 /// Issue a client certificate bundle and kubeconfig-like file for one subject.
 pub fn issue_client_materials(
-    app_root: &Path,
+    data_dir: &Path,
     bind_addr: &SocketAddr,
     control_plane_dir: Option<&Path>,
     home_dir: &Path,
@@ -401,7 +401,7 @@ pub fn issue_client_materials(
 ) -> Result<PathBuf> {
     let dir = control_plane_dir
         .map(Path::to_path_buf)
-        .unwrap_or_else(|| app_root.join("data/control-plane"));
+        .unwrap_or_else(|| data_dir.join("control-plane"));
     let paths = ControlPlanePaths::new(dir);
     bootstrap_control_plane(&paths, bind_addr)?;
     let username = subject_id
@@ -493,7 +493,7 @@ fn bootstrap_control_plane(paths: &ControlPlanePaths, bind_addr: &SocketAddr) ->
 }
 
 fn ensure_default_user_materials(
-    app_root: &Path,
+    data_dir: &Path,
     paths: &ControlPlanePaths,
     bind_addr: &SocketAddr,
 ) -> Result<()> {
@@ -511,7 +511,7 @@ fn ensure_default_user_materials(
             role: Role::Admin,
             description: Some(format!(
                 "default local admin generated for {}",
-                app_root.display()
+                data_dir.display()
             )),
             disabled: false,
         },
@@ -840,7 +840,7 @@ mod tests {
         let secure =
             prepare_secure_server(temp.path(), &db_path, &bind_addr, None).expect("secure");
         assert!(secure.security.policy_path.exists());
-        assert!(temp.path().join("data/control-plane/pki/ca.crt").exists());
+        assert!(temp.path().join("control-plane/pki/ca.crt").exists());
         assert!(home
             .join(".orchestrator/control-plane/config.yaml")
             .exists());

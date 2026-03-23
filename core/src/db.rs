@@ -443,7 +443,7 @@ mod tests {
         let state = fixture.build();
 
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/count_ws_test.md");
         std::fs::write(&qa_file, "# count ws test\n").expect("seed qa file");
 
@@ -477,7 +477,7 @@ mod tests {
         let state = fixture.build();
 
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/count_wf_test.md");
         std::fs::write(&qa_file, "# count wf test\n").expect("seed qa file");
 
@@ -537,7 +537,7 @@ mod tests {
         let state = fixture.build();
 
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/reset_test.md");
         std::fs::write(&qa_file, "# reset test\n").expect("seed qa file");
 
@@ -596,7 +596,7 @@ mod tests {
         let state = fixture.build();
 
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/guard_test.md");
         std::fs::write(&qa_file, "# guard test\n").expect("seed qa file");
 
@@ -627,7 +627,7 @@ mod tests {
         let state = fixture.build();
 
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/restart_guard.md");
         std::fs::write(&qa_file, "# restart guard\n").expect("seed qa file");
 
@@ -705,7 +705,7 @@ mod tests {
         let state = fixture.build();
 
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/list_ws_test.md");
         std::fs::write(&qa_file, "# list ws test\n").expect("seed qa file");
 
@@ -731,7 +731,7 @@ mod tests {
         let state = fixture.build();
 
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/limit_ws_test.md");
         std::fs::write(&qa_file, "# limit ws test\n").expect("seed qa file");
 
@@ -756,7 +756,7 @@ mod tests {
         let state = fixture.build();
 
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/terminal_ws_test.md");
         std::fs::write(&qa_file, "# terminal ws test\n").expect("seed qa file");
 
@@ -799,7 +799,7 @@ mod tests {
         let state = fixture.build();
 
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/list_wf_test.md");
         std::fs::write(&qa_file, "# list wf test\n").expect("seed qa file");
 
@@ -823,7 +823,7 @@ mod tests {
         let state = fixture.build();
 
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/limit_wf_test.md");
         std::fs::write(&qa_file, "# limit wf test\n").expect("seed qa file");
 
@@ -961,7 +961,7 @@ mod tests {
         let state = fixture.build();
 
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/proj_reset_test.md");
         std::fs::write(&qa_file, "# proj reset test\n").expect("seed qa file");
 
@@ -1016,7 +1016,7 @@ mod tests {
         let state = fixture.build();
 
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/terminal_count_test.md");
         std::fs::write(&qa_file, "# terminal count test\n").expect("seed qa file");
 

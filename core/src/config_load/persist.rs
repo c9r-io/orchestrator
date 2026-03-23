@@ -100,8 +100,8 @@ pub fn persist_config_and_reload(
     deleted_resources: &[ResourceRemoval],
 ) -> Result<ConfigOverview> {
     let candidate = match target_project {
-        Some(project) => build_active_config_for_project(&state.app_root, config.clone(), project)?,
-        None => build_active_config(&state.app_root, config.clone())?,
+        Some(project) => build_active_config_for_project(&state.data_dir, config.clone(), project)?,
+        None => build_active_config(&state.data_dir, config.clone())?,
     };
     let normalized = candidate.config.clone();
     let (yaml, json_raw) = serialize_config_snapshot(&normalized)?;
@@ -142,7 +142,7 @@ pub fn persist_config_for_delete(
     )?;
 
     // Best-effort rebuild of active config; if validation fails, still persist
-    match build_active_config(&state.app_root, normalized.clone()) {
+    match build_active_config(&state.data_dir, normalized.clone()) {
         Ok(candidate) => {
             crate::state::set_config_runtime_snapshot(
                 state,

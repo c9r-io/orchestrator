@@ -48,7 +48,7 @@ pub async fn pending_task_count(state: &InnerState) -> Result<i64> {
 
 /// Returns the marker-file path used to request worker shutdown.
 pub fn worker_stop_signal_path(state: &InnerState) -> PathBuf {
-    state.app_root.join("data").join("worker.stop")
+    state.data_dir.join("worker.stop")
 }
 
 /// Service-layer wrapper around [`enqueue_task`] with error classification.
@@ -97,7 +97,7 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/scheduler_service_test.md");
         std::fs::write(&qa_file, "# scheduler service test\n").expect("seed qa file");
         let created = create_task_impl(&state, CreateTaskPayload::default()).expect("create task");
@@ -128,7 +128,7 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/scheduler_service_test.md");
         std::fs::write(&qa_file, "# scheduler service test\n").expect("seed qa file");
         let _created = create_task_impl(&state, CreateTaskPayload::default()).expect("create task");
@@ -152,7 +152,7 @@ mod tests {
     /// Helper to seed a qa file and create a task, returning the state and task id.
     fn seed_task(fixture: &mut TestState) -> (std::sync::Arc<crate::state::InnerState>, String) {
         let state = fixture.build();
-        let qa_file = state.app_root.join("workspace/default/docs/qa/svc_test.md");
+        let qa_file = state.data_dir.join("workspace/default/docs/qa/svc_test.md");
         std::fs::write(&qa_file, "# svc test\n").expect("seed qa file");
         let created = create_task_impl(
             &state,
@@ -232,7 +232,7 @@ mod tests {
 
         // Seed a qa file and create 2 tasks, then enqueue them
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/count_test.md");
         std::fs::write(&qa_file, "# count test\n").expect("seed qa file");
 
@@ -317,7 +317,7 @@ mod tests {
 
         // Create a second task and manually set it to restart_pending
         let qa_file2 = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/svc_test2.md");
         std::fs::write(&qa_file2, "# svc test 2\n").expect("seed qa file 2");
         let created2 = create_task_impl(
@@ -361,7 +361,7 @@ mod tests {
 
         let stop_path = worker_stop_signal_path(&state);
 
-        assert!(stop_path.starts_with(state.app_root.join("data")));
+        assert!(stop_path.starts_with(&*state.data_dir));
         assert!(stop_path.ends_with("worker.stop"));
     }
 }

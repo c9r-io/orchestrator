@@ -345,7 +345,7 @@ fn list_task_ids_ordered_by_created_desc_respects_order() {
     let mut fixture = TestState::new();
     let state = fixture.build();
     let qa_file = state
-        .app_root
+        .data_dir
         .join("workspace/default/docs/qa/repo_test.md");
     std::fs::write(&qa_file, "# repository test\n").expect("seed qa file");
 

@@ -4,11 +4,11 @@ use std::path::Path;
 
 pub(super) fn check_workspace_roots(
     workspaces: &std::collections::HashMap<String, agent_orchestrator::config::WorkspaceConfig>,
-    app_root: &Path,
+    data_dir: &Path,
     out: &mut Vec<CheckResult>,
 ) {
     for (ws_id, ws) in workspaces {
-        let full = app_root.join(&ws.root_path);
+        let full = data_dir.join(&ws.root_path);
         let exists = full.exists();
         out.push(CheckResult::simple(
             "workspace_root_missing",
@@ -29,11 +29,11 @@ pub(super) fn check_workspace_roots(
 
 pub(super) fn check_qa_targets(
     workspaces: &std::collections::HashMap<String, agent_orchestrator::config::WorkspaceConfig>,
-    app_root: &Path,
+    data_dir: &Path,
     out: &mut Vec<CheckResult>,
 ) {
     for (ws_id, ws) in workspaces {
-        let ws_root = app_root.join(&ws.root_path);
+        let ws_root = data_dir.join(&ws.root_path);
         for target in &ws.qa_targets {
             let full = ws_root.join(target);
             let exists = full.exists();

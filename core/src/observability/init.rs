@@ -46,11 +46,11 @@ pub struct ObservabilityGuard {
 
 /// Initializes tracing subscribers using config and CLI/environment overrides.
 pub fn init_observability(
-    app_root: &Path,
+    data_dir: &Path,
     config: Option<&OrchestratorConfig>,
     overrides: CliLoggingOverrides,
 ) -> Result<ObservabilityGuard> {
-    let resolved = resolve_logging_config(app_root, config, overrides);
+    let resolved = resolve_logging_config(data_dir, config, overrides);
     let level_filter = LevelFilter::from_level(resolved.level.as_tracing_level());
     let mut file_guard = None;
 
@@ -185,7 +185,7 @@ pub fn init_observability(
 
 /// Resolves the effective logging configuration before subscriber initialization.
 pub fn resolve_logging_config(
-    app_root: &Path,
+    data_dir: &Path,
     config: Option<&OrchestratorConfig>,
     overrides: CliLoggingOverrides,
 ) -> ResolvedLoggingConfig {
@@ -212,7 +212,7 @@ pub fn resolve_logging_config(
         console_format = env_format;
     }
 
-    let file_dir = resolve_log_dir(app_root, &logging);
+    let file_dir = resolve_log_dir(data_dir, &logging);
 
     ResolvedLoggingConfig {
         level,
@@ -239,12 +239,12 @@ fn read_env_format() -> Option<LoggingFormat> {
         .and_then(LoggingFormat::parse)
 }
 
-fn resolve_log_dir(app_root: &Path, logging: &LoggingConfig) -> PathBuf {
+fn resolve_log_dir(data_dir: &Path, logging: &LoggingConfig) -> PathBuf {
     let configured = Path::new(&logging.file.directory);
     if configured.is_absolute() {
         configured.to_path_buf()
     } else {
-        app_root.join(configured)
+        data_dir.join(configured)
     }
 }
 
@@ -307,6 +307,6 @@ mod tests {
             Some(&cfg),
             CliLoggingOverrides::default(),
         );
-        assert_eq!(resolved.file_dir, Path::new("/tmp/app/data/logs/system"));
+        assert_eq!(resolved.file_dir, Path::new("/tmp/app/logs/system"));
     }
 }

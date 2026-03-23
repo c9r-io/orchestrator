@@ -148,7 +148,7 @@ async fn seed_dynamic_graph_task() -> (
     let mut fixture = TestState::new().with_workflow("dynamic-graph", dynamic_dag_workflow());
     let state = fixture.build();
     let qa_file = state
-        .app_root
+        .data_dir
         .join("workspace/default/docs/qa/dynamic_graph.md");
     std::fs::write(&qa_file, "# dynamic graph\n").expect("seed qa file");
     let created = create_task_impl(

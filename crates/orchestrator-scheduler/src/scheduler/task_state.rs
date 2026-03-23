@@ -331,7 +331,7 @@ mod tests {
     fn seed_task(fixture: &mut TestState) -> (std::sync::Arc<InnerState>, String) {
         let state = fixture.build();
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/task_state_test.md");
         std::fs::write(&qa_file, "# task state test\n").expect("seed qa file");
         let created = create_task_impl(

@@ -63,12 +63,12 @@ fn discover_socket_path() -> PathBuf {
     if let Ok(path) = std::env::var("ORCHESTRATOR_SOCKET") {
         return PathBuf::from(path);
     }
-
-    let app_root = std::env::var("ORCHESTRATOR_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-
-    app_root.join("data/orchestrator.sock")
+    if let Ok(dir) = std::env::var("ORCHESTRATORD_DATA_DIR") {
+        return PathBuf::from(dir).join("orchestrator.sock");
+    }
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".orchestratord/orchestrator.sock")
 }
 
 /// Connect to the daemon using the best available transport.
@@ -250,11 +250,11 @@ fn discover_explicit_control_plane_config(explicit: Option<&str>) -> Result<Opti
 }
 
 fn discover_home_control_plane_config() -> Result<Option<PathBuf>> {
-    let home = match std::env::var_os("HOME") {
-        Some(home) => PathBuf::from(home),
+    let home = match dirs::home_dir() {
+        Some(home) => home,
         None => return Ok(None),
     };
-    let path = home.join(".orchestrator/control-plane/config.yaml");
+    let path = home.join(".orchestratord/control-plane/config.yaml");
     if path.exists() {
         return Ok(Some(path));
     }

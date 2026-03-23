@@ -584,7 +584,7 @@ pub fn delete_resource(
         if let Some(project_cfg) = config.projects.get(name) {
             for ws_config in project_cfg.workspaces.values() {
                 let ticket_path = state
-                    .app_root
+                    .data_dir
                     .join(&ws_config.root_path)
                     .join(&ws_config.ticket_dir);
                 if ticket_path.is_dir() {
@@ -999,19 +999,21 @@ mod tests {
         )
     }
 
-    fn project_bundle_manifest(delete_workflow_name: &str) -> String {
+    fn project_bundle_manifest(delete_workflow_name: &str, workspace_root: &str) -> String {
         format!(
-            "apiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: shared-ws\nspec:\n  root_path: \"workspace/default\"\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n  self_referential: false\n---\napiVersion: orchestrator.dev/v2\nkind: Agent\nmetadata:\n  name: shared-agent\nspec:\n  capabilities:\n    - implement\n  command: \"echo '{{\\\"confidence\\\":1.0,\\\"quality_score\\\":1.0,\\\"artifacts\\\":[]}}'\"\n---\napiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: keep-me\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo keep\"\n  loop:\n    mode: once\n---\napiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: {delete_workflow_name}\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo delete\"\n  loop:\n    mode: once\n"
+            "apiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: shared-ws\nspec:\n  root_path: \"{workspace_root}\"\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n  self_referential: false\n---\napiVersion: orchestrator.dev/v2\nkind: Agent\nmetadata:\n  name: shared-agent\nspec:\n  capabilities:\n    - implement\n  command: \"echo '{{\\\"confidence\\\":1.0,\\\"quality_score\\\":1.0,\\\"artifacts\\\":[]}}'\"\n---\napiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: keep-me\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo keep\"\n  loop:\n    mode: once\n---\napiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: {delete_workflow_name}\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo delete\"\n  loop:\n    mode: once\n"
         )
     }
 
-    fn project_subset_manifest() -> String {
-        "apiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: shared-ws\nspec:\n  root_path: \"workspace/default\"\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n  self_referential: false\n---\napiVersion: orchestrator.dev/v2\nkind: Agent\nmetadata:\n  name: shared-agent\nspec:\n  capabilities:\n    - implement\n  command: \"echo '{\\\"confidence\\\":1.0,\\\"quality_score\\\":1.0,\\\"artifacts\\\":[]}'\"\n---\napiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: keep-me\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo keep\"\n  loop:\n    mode: once\n".to_string()
+    fn project_subset_manifest(workspace_root: &str) -> String {
+        format!(
+            "apiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: shared-ws\nspec:\n  root_path: \"{workspace_root}\"\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n  self_referential: false\n---\napiVersion: orchestrator.dev/v2\nkind: Agent\nmetadata:\n  name: shared-agent\nspec:\n  capabilities:\n    - implement\n  command: \"echo '{{\\\"confidence\\\":1.0,\\\"quality_score\\\":1.0,\\\"artifacts\\\":[]}}'\"\n---\napiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: keep-me\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo keep\"\n  loop:\n    mode: once\n"
+        )
     }
 
-    fn labeled_bundle_manifest(project: &str) -> String {
+    fn labeled_bundle_manifest(project: &str, workspace_root: &str) -> String {
         format!(
-            "apiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: labeled-ws\n  labels:\n    env: dev\n    tier: qa\nspec:\n  root_path: \"workspace/default\"\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n  self_referential: false\n---\napiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: unlabeled-ws\nspec:\n  root_path: \"workspace/default\"\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n  self_referential: false\n---\napiVersion: orchestrator.dev/v2\nkind: Agent\nmetadata:\n  name: labeled-agent\n  labels:\n    env: dev\nspec:\n  capabilities:\n    - implement\n  command: \"echo '{{\\\"confidence\\\":1.0,\\\"quality_score\\\":1.0,\\\"artifacts\\\":[]}}'\"\n---\napiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: labeled-workflow\n  project: {project}\n  labels:\n    env: dev\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo keep\"\n  loop:\n    mode: once\n"
+            "apiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: labeled-ws\n  labels:\n    env: dev\n    tier: qa\nspec:\n  root_path: \"{workspace_root}\"\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n  self_referential: false\n---\napiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: unlabeled-ws\nspec:\n  root_path: \"{workspace_root}\"\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n  self_referential: false\n---\napiVersion: orchestrator.dev/v2\nkind: Agent\nmetadata:\n  name: labeled-agent\n  labels:\n    env: dev\nspec:\n  capabilities:\n    - implement\n  command: \"echo '{{\\\"confidence\\\":1.0,\\\"quality_score\\\":1.0,\\\"artifacts\\\":[]}}'\"\n---\napiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: labeled-workflow\n  project: {project}\n  labels:\n    env: dev\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo keep\"\n  loop:\n    mode: once\n"
         )
     }
 
@@ -1102,7 +1104,7 @@ mod tests {
         let state = fixture.build();
 
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/prune-block.md");
         std::fs::write(&qa_file, "# prune block\n").expect("seed qa file");
 
@@ -1157,7 +1159,9 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
 
-        let bundle = project_bundle_manifest("delete-me");
+        let ws_root = state.data_dir.join("workspace/default");
+        let ws_root_str = ws_root.to_string_lossy();
+        let bundle = project_bundle_manifest("delete-me", &ws_root_str);
         apply_manifests(&state, &bundle, false, Some("alpha"), false).expect("seed alpha");
         apply_manifests(&state, &bundle, false, Some("beta"), false).expect("seed beta");
 
@@ -1184,12 +1188,13 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
 
-        let qa_file = state
-            .app_root
-            .join("workspace/default/docs/qa/cross-project.md");
+        let ws_root = state.data_dir.join("workspace/default");
+        let ws_root_str = ws_root.to_string_lossy();
+
+        let qa_file = ws_root.join("docs/qa/cross-project.md");
         std::fs::write(&qa_file, "# cross project\n").expect("seed qa file");
 
-        let bundle = project_bundle_manifest("delete-me");
+        let bundle = project_bundle_manifest("delete-me", &ws_root_str);
         apply_manifests(&state, &bundle, false, Some("alpha"), false).expect("seed alpha");
         apply_manifests(&state, &bundle, false, Some("beta"), false).expect("seed beta");
 
@@ -1206,7 +1211,7 @@ mod tests {
 
         apply_manifests(
             &state,
-            &project_subset_manifest(),
+            &project_subset_manifest(&ws_root_str),
             false,
             Some("beta"),
             true,
@@ -1226,9 +1231,12 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
 
+        let ws_root = state.data_dir.join("workspace/default");
+        let ws_root_str = ws_root.to_string_lossy();
+
         apply_manifests(
             &state,
-            &labeled_bundle_manifest(crate::config::DEFAULT_PROJECT_ID),
+            &labeled_bundle_manifest(crate::config::DEFAULT_PROJECT_ID, &ws_root_str),
             false,
             Some(crate::config::DEFAULT_PROJECT_ID),
             false,
@@ -1243,7 +1251,7 @@ mod tests {
             Some(crate::config::DEFAULT_PROJECT_ID),
         )
         .expect("get named workspace");
-        assert!(named.contains("root_path: workspace/default"));
+        assert!(named.contains(&format!("root_path: {}", ws_root_str)));
 
         let listed = get_resource(
             &state,
@@ -1309,9 +1317,12 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
 
+        let ws_root = state.data_dir.join("workspace/default");
+        let ws_root_str = ws_root.to_string_lossy();
+
         let response = apply_manifests(
             &state,
-            &labeled_bundle_manifest("beta"),
+            &labeled_bundle_manifest("beta", &ws_root_str),
             false,
             Some("alpha"),
             false,
@@ -1329,9 +1340,12 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
 
+        let ws_root = state.data_dir.join("workspace/default");
+        let ws_root_str = ws_root.to_string_lossy();
+
         apply_manifests(
             &state,
-            &project_bundle_manifest("delete-me"),
+            &project_bundle_manifest("delete-me", &ws_root_str),
             false,
             Some("alpha"),
             false,
@@ -1362,9 +1376,12 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
 
+        let ws_root = state.data_dir.join("workspace/default");
+        let ws_root_str = ws_root.to_string_lossy();
+
         apply_manifests(
             &state,
-            &project_bundle_manifest("delete-me"),
+            &project_bundle_manifest("delete-me", &ws_root_str),
             false,
             Some("alpha"),
             false,

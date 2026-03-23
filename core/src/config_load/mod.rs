@@ -26,24 +26,16 @@ pub fn now_ts() -> String {
     chrono::Utc::now().to_rfc3339()
 }
 
-/// Detects the application root from the current working directory.
-pub fn detect_app_root() -> PathBuf {
-    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-
-    if cwd.join("core").exists() {
-        return cwd;
+/// Returns the daemon data directory (`~/.orchestratord` by default).
+///
+/// Override with the `ORCHESTRATORD_DATA_DIR` environment variable.
+pub fn data_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("ORCHESTRATORD_DATA_DIR") {
+        return PathBuf::from(dir);
     }
-
-    if cwd.ends_with("core") {
-        let parent = cwd.parent().unwrap_or(&cwd);
-        return parent.to_path_buf();
-    }
-
-    let candidate = cwd.join("tools/agent-orchestrator");
-    if candidate.exists() {
-        return candidate;
-    }
-    cwd
+    dirs::home_dir()
+        .expect("unable to determine home directory")
+        .join(".orchestratord")
 }
 
 #[cfg(test)]

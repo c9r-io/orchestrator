@@ -119,14 +119,14 @@ pub fn run_init(state: &InnerState, root: Option<&str>) -> Result<String> {
         let path = if Path::new(root_path).is_absolute() {
             std::path::PathBuf::from(root_path)
         } else {
-            state.app_root.join(root_path)
+            state.data_dir.join(root_path)
         };
         std::fs::create_dir_all(&path)
             .with_context(|| format!("failed to create workspace root {}", path.display()))?;
     }
     Ok(format!(
         "Orchestrator initialized at {} (sqlite: {})",
-        state.app_root.display(),
+        state.data_dir.display(),
         state.db_path.display()
     ))
 }
@@ -317,7 +317,7 @@ pub fn validate_manifests(
 
     // Try to build active config to validate the full configuration
     match crate::config_load::build_active_config_for_project(
-        &state.app_root,
+        &state.data_dir,
         merged_config,
         effective_project_id,
     ) {
@@ -398,7 +398,7 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/system-worker.md");
         std::fs::write(&qa_file, "# worker\n").expect("seed qa file");
         let created = create_task_impl(&state, crate::dto::CreateTaskPayload::default())
@@ -442,7 +442,7 @@ mod tests {
 
         let message = run_init(&state, Some("workspace/new-root")).expect("run init");
         assert!(message.contains("Orchestrator initialized at"));
-        assert!(state.app_root.join("workspace/new-root").exists());
+        assert!(state.data_dir.join("workspace/new-root").exists());
     }
 
     #[test]

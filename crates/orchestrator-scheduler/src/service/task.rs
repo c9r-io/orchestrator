@@ -271,7 +271,7 @@ mod tests {
     use agent_orchestrator::test_utils::TestState;
 
     fn seed_log_files(state: &InnerState, name: &str) -> (std::path::PathBuf, std::path::PathBuf) {
-        let dir = state.app_root.join("logs").join(name);
+        let dir = state.data_dir.join("logs").join(name);
         std::fs::create_dir_all(&dir).expect("create log dir");
         let stdout_path = dir.join("stdout.log");
         let stderr_path = dir.join("stderr.log");
@@ -281,7 +281,7 @@ mod tests {
     fn seed_task(fixture: &mut TestState) -> (Arc<InnerState>, String) {
         let state = fixture.build();
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/service-task-fixture.md");
         std::fs::write(&qa_file, "# service task fixture\n").expect("seed qa file");
         let created = create_task_impl(
@@ -311,7 +311,7 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/service-task.md");
         std::fs::write(&qa_file, "# service task\n").expect("seed qa file");
 
@@ -383,7 +383,7 @@ mod tests {
                 phase: "qa".to_string(),
                 command: "echo hi".to_string(),
                 command_template: None,
-                cwd: state.app_root.display().to_string(),
+                cwd: state.data_dir.display().to_string(),
                 workspace_id: "default".to_string(),
                 agent_id: "echo".to_string(),
                 exit_code: 0,

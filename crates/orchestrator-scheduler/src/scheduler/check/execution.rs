@@ -8,7 +8,7 @@ pub(super) fn check_execution_profile_backend_support(
     workflows: &std::collections::HashMap<String, agent_orchestrator::config::WorkflowConfig>,
     project_id: &str,
     projects: &std::collections::HashMap<String, agent_orchestrator::config::ProjectConfig>,
-    app_root: &Path,
+    data_dir: &Path,
     workflow_filter: Option<&str>,
     out: &mut Vec<CheckResult>,
 ) {
@@ -18,8 +18,8 @@ pub(super) fn check_execution_profile_backend_support(
     let workspace_root = workspaces
         .values()
         .next()
-        .map(|ws| app_root.join(&ws.root_path))
-        .unwrap_or_else(|| app_root.to_path_buf());
+        .map(|ws| data_dir.join(&ws.root_path))
+        .unwrap_or_else(|| data_dir.to_path_buf());
 
     for (workflow_id, workflow) in workflows {
         if let Some(filter) = workflow_filter {

@@ -113,10 +113,10 @@ pub struct StoreManager {
 
 impl StoreManager {
     /// Creates a store manager with built-in local and file backends.
-    pub fn new(async_db: Arc<AsyncDatabase>, app_root: std::path::PathBuf) -> Self {
+    pub fn new(async_db: Arc<AsyncDatabase>, data_dir: std::path::PathBuf) -> Self {
         Self {
             local_backend: LocalStoreBackend::new(async_db.clone()),
-            file_backend: FileStoreBackend::new(app_root),
+            file_backend: FileStoreBackend::new(data_dir),
             command_adapter: CommandAdapter,
         }
     }

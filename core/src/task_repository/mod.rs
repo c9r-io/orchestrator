@@ -945,7 +945,7 @@ mod async_wrapper_tests {
     fn seed_task(fixture: &mut TestState) -> (std::sync::Arc<crate::state::InnerState>, String) {
         let state = fixture.build();
         let qa_file = state
-            .app_root
+            .data_dir
             .join("workspace/default/docs/qa/async-repo.md");
         std::fs::write(&qa_file, "# async repo\n").expect("seed qa file");
         let created = create_task_impl(
@@ -1115,8 +1115,8 @@ mod async_wrapper_tests {
         let (state, task_id) = seed_task(&mut fixture);
         let repo = &state.task_repo;
         let item_id = first_item_id(&state, &task_id);
-        let stdout_path = state.app_root.join("logs/async-wrapper-stdout.log");
-        let stderr_path = state.app_root.join("logs/async-wrapper-stderr.log");
+        let stdout_path = state.data_dir.join("logs/async-wrapper-stdout.log");
+        let stderr_path = state.data_dir.join("logs/async-wrapper-stderr.log");
         std::fs::create_dir_all(
             stdout_path
                 .parent()
@@ -1132,7 +1132,7 @@ mod async_wrapper_tests {
             phase: "qa".to_string(),
             command: "echo repo".to_string(),
             command_template: None,
-            cwd: state.app_root.display().to_string(),
+            cwd: state.data_dir.display().to_string(),
             workspace_id: "default".to_string(),
             agent_id: "echo".to_string(),
             exit_code: 0,

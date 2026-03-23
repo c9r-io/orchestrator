@@ -159,7 +159,7 @@ fn audit_event_for_record(
 // ─── Load KeyRing ────────────────────────────────────────────────
 
 /// Loads the SecretStore keyring from the lifecycle tables or legacy single-key storage.
-pub fn load_keyring(app_root: &Path, db_path: &Path) -> Result<KeyRing> {
+pub fn load_keyring(data_dir: &Path, db_path: &Path) -> Result<KeyRing> {
     let conn = crate::db::open_conn(db_path)?;
     let table_exists: bool = conn
         .query_row(
@@ -171,26 +171,26 @@ pub fn load_keyring(app_root: &Path, db_path: &Path) -> Result<KeyRing> {
 
     if !table_exists {
         // Pre-migration: fall back to legacy single-key loading
-        return load_keyring_legacy(app_root, db_path);
+        return load_keyring_legacy(data_dir, db_path);
     }
 
     let records = query_all_key_records(&conn)?;
     if records.is_empty() {
         // Table exists but empty — fall back to legacy
-        return load_keyring_legacy(app_root, db_path);
+        return load_keyring_legacy(data_dir, db_path);
     }
 
-    build_keyring_from_records(app_root, records)
+    build_keyring_from_records(data_dir, records)
 }
 
-fn load_keyring_legacy(app_root: &Path, db_path: &Path) -> Result<KeyRing> {
-    let handle = crate::secret_store_crypto::ensure_secret_key(app_root, db_path)?;
+fn load_keyring_legacy(data_dir: &Path, db_path: &Path) -> Result<KeyRing> {
+    let handle = crate::secret_store_crypto::ensure_secret_key(data_dir, db_path)?;
     let key_id = handle.key_id().to_string();
     let record = KeyRecord {
         key_id: key_id.clone(),
         state: KeyState::Active,
         fingerprint: handle.fingerprint().to_string(),
-        file_path: crate::secret_store_crypto::secret_key_path(app_root)
+        file_path: crate::secret_store_crypto::secret_key_path(data_dir)
             .to_string_lossy()
             .to_string(),
         created_at: now_ts(),
@@ -208,7 +208,7 @@ fn load_keyring_legacy(app_root: &Path, db_path: &Path) -> Result<KeyRing> {
     })
 }
 
-fn build_keyring_from_records(app_root: &Path, records: Vec<KeyRecord>) -> Result<KeyRing> {
+fn build_keyring_from_records(data_dir: &Path, records: Vec<KeyRecord>) -> Result<KeyRing> {
     let mut active_key = None;
     let mut decrypt_keys = HashMap::new();
 
@@ -216,7 +216,7 @@ fn build_keyring_from_records(app_root: &Path, records: Vec<KeyRecord>) -> Resul
         if record.state.is_terminal() {
             continue;
         }
-        let key_path = resolve_key_file_path(app_root, &record.file_path);
+        let key_path = resolve_key_file_path(data_dir, &record.file_path);
         if let Some(handle) = load_key_file(&key_path, &record.key_id)? {
             if record.state == KeyState::Active {
                 active_key = Some(handle.clone());
@@ -232,12 +232,12 @@ fn build_keyring_from_records(app_root: &Path, records: Vec<KeyRecord>) -> Resul
     })
 }
 
-fn resolve_key_file_path(app_root: &Path, file_path: &str) -> PathBuf {
+fn resolve_key_file_path(data_dir: &Path, file_path: &str) -> PathBuf {
     let p = Path::new(file_path);
     if p.is_absolute() {
         p.to_path_buf()
     } else {
-        app_root.join(file_path)
+        data_dir.join(file_path)
     }
 }
 
@@ -318,7 +318,7 @@ fn generate_key_id() -> String {
 
 /// Begin key rotation: generate new key, set old active to decrypt_only.
 /// Returns (new_active_record, old_decrypt_only_record).
-pub fn begin_rotation(conn: &Connection, app_root: &Path) -> Result<(KeyRecord, KeyRecord)> {
+pub fn begin_rotation(conn: &Connection, data_dir: &Path) -> Result<(KeyRecord, KeyRecord)> {
     let old_active = query_active_key_record(conn)?
         .ok_or_else(|| anyhow::anyhow!("no active key found; cannot begin rotation"))?;
 
@@ -329,7 +329,7 @@ pub fn begin_rotation(conn: &Connection, app_root: &Path) -> Result<(KeyRecord, 
     }
 
     let new_key_id = generate_key_id();
-    let keys_dir = app_root.join("data/secrets/keys");
+    let keys_dir = data_dir.join("secrets/keys");
     std::fs::create_dir_all(&keys_dir)
         .with_context(|| format!("failed to create keys dir {}", keys_dir.display()))?;
     #[cfg(unix)]
@@ -343,7 +343,7 @@ pub fn begin_rotation(conn: &Connection, app_root: &Path) -> Result<(KeyRecord, 
         crate::secret_store_crypto::generate_and_write_key_file(&new_key_path, &new_key_id)?;
     let now = now_ts();
 
-    let new_file_path = format!("data/secrets/keys/{new_key_id}.key");
+    let new_file_path = format!("secrets/keys/{new_key_id}.key");
     let new_record = KeyRecord {
         key_id: new_key_id.clone(),
         state: KeyState::Active,
@@ -583,7 +583,7 @@ pub fn complete_rotation(conn: &Connection, old_key_id: &str) -> Result<()> {
 
 /// Resume an incomplete rotation: find decrypt_only key and re-encrypt remaining data.
 /// Resume an incomplete rotation: find decrypt_only key and re-encrypt remaining data.
-pub fn resume_rotation(conn: &Connection, app_root: &Path) -> Result<ReEncryptionReport> {
+pub fn resume_rotation(conn: &Connection, data_dir: &Path) -> Result<ReEncryptionReport> {
     let records = query_all_key_records(conn)?;
     let old_record = records
         .iter()
@@ -596,8 +596,8 @@ pub fn resume_rotation(conn: &Connection, app_root: &Path) -> Result<ReEncryptio
         .find(|r| r.state == KeyState::Active)
         .ok_or_else(|| anyhow::anyhow!("no active key found to complete rotation"))?;
 
-    let old_key_path = resolve_key_file_path(app_root, &old_record.file_path);
-    let new_key_path = resolve_key_file_path(app_root, &new_record.file_path);
+    let old_key_path = resolve_key_file_path(data_dir, &old_record.file_path);
+    let new_key_path = resolve_key_file_path(data_dir, &new_record.file_path);
 
     let old_handle =
         crate::secret_store_crypto::load_key_file_as_handle(&old_key_path, &old_record.key_id)?;
@@ -661,19 +661,19 @@ pub fn revoke_key(conn: &Connection, key_id: &str, force: bool) -> Result<()> {
 // ─── Migration helper: import legacy key ─────────────────────────
 
 /// Imports the legacy primary key file into the lifecycle table if present.
-pub fn import_legacy_key_record(conn: &Connection, app_root: &Path) -> Result<Option<KeyRecord>> {
-    let legacy_path = crate::secret_store_crypto::secret_key_path(app_root);
+pub fn import_legacy_key_record(conn: &Connection, data_dir: &Path) -> Result<Option<KeyRecord>> {
+    let legacy_path = crate::secret_store_crypto::secret_key_path(data_dir);
     if !legacy_path.exists() {
         return Ok(None);
     }
 
-    let handle = match crate::secret_store_crypto::load_existing_secret_key(app_root)? {
+    let handle = match crate::secret_store_crypto::load_existing_secret_key(data_dir)? {
         Some(h) => h,
         None => return Ok(None),
     };
 
     let now = now_ts();
-    let relative_path = "data/secrets/secretstore.key";
+    let relative_path = "secrets/secretstore.key";
 
     let record = KeyRecord {
         key_id: handle.key_id().to_string(),

@@ -163,7 +163,7 @@ pub(crate) async fn event_cleanup(
     }
 
     let affected = if req.archive {
-        let archive_dir = server.state.app_root.join("data/archive/events");
+        let archive_dir = server.state.data_dir.join("archive/events");
         agent_orchestrator::event_cleanup::archive_events(
             &server.state.async_database,
             &archive_dir,

@@ -28,16 +28,16 @@ pub fn resolve_workspace_path(
 
 /// Resolves and validates workspaces for the default project.
 pub fn resolve_and_validate_workspaces(
-    app_root: &Path,
+    data_dir: &Path,
     config: &OrchestratorConfig,
 ) -> Result<HashMap<String, ResolvedWorkspace>> {
-    resolve_and_validate_workspaces_for_project(app_root, config, crate::config::DEFAULT_PROJECT_ID)
+    resolve_and_validate_workspaces_for_project(data_dir, config, crate::config::DEFAULT_PROJECT_ID)
 }
 
 /// Validate and resolve workspaces, agents, and workflows for a specific
 /// project. Returns the resolved workspace map for that project.
 pub fn resolve_and_validate_workspaces_for_project(
-    app_root: &Path,
+    data_dir: &Path,
     config: &OrchestratorConfig,
     project_id: &str,
 ) -> Result<HashMap<String, ResolvedWorkspace>> {
@@ -54,8 +54,18 @@ pub fn resolve_and_validate_workspaces_for_project(
             anyhow::bail!("[INVALID_WORKSPACE] workspace '{}' qa_targets cannot be empty\n  category: validation\n  suggested_fix: add at least one qa_targets path (e.g. docs/qa)", id);
         }
 
-        let root_path = app_root
-            .join(&entry.root_path)
+        let raw_root = std::path::Path::new(&entry.root_path);
+        let root_base = if raw_root.is_absolute() {
+            raw_root.to_path_buf()
+        } else {
+            // Relative paths resolve against CWD (workspace root_path should
+            // be stored as absolute at apply-time; this fallback covers legacy
+            // data and tests).
+            std::env::current_dir()
+                .unwrap_or_else(|_| data_dir.to_path_buf())
+                .join(raw_root)
+        };
+        let root_path = root_base
             .canonicalize()
             .with_context(|| {
                 format!(
@@ -105,14 +115,21 @@ pub fn resolve_and_validate_workspaces_for_project(
 
 /// Resolves lightweight project snapshots without canonicalizing workspace paths.
 pub fn resolve_and_validate_projects(
-    app_root: &Path,
+    data_dir: &Path,
     config: &OrchestratorConfig,
 ) -> Result<HashMap<String, ResolvedProject>> {
     let mut resolved = HashMap::new();
     for (project_id, project_config) in &config.projects {
         let mut workspaces = HashMap::new();
         for (workspace_id, workspace_config) in &project_config.workspaces {
-            let root_path = app_root.join(&workspace_config.root_path);
+            let raw = std::path::Path::new(&workspace_config.root_path);
+            let root_path = if raw.is_absolute() {
+                raw.to_path_buf()
+            } else {
+                std::env::current_dir()
+                    .unwrap_or_else(|_| data_dir.to_path_buf())
+                    .join(raw)
+            };
             workspaces.insert(
                 workspace_id.clone(),
                 ResolvedWorkspace {
@@ -426,7 +443,7 @@ mod tests {
         ws.insert(
             "proj-ws".to_string(),
             WorkspaceConfig {
-                root_path: "some/relative/path".to_string(),
+                root_path: "/app/some/absolute/path".to_string(),
                 qa_targets: vec!["docs".to_string()],
                 ticket_dir: "tickets".to_string(),
                 self_referential: false,
