@@ -57,6 +57,13 @@
 | FR-068 | GUI 连接韧性与系统通知 | P1 | Closed |
 | FR-069 | GUI 体验打磨 — 主题切换 / 动画 / i18n / 响应式 / 构建分发 | P2 | Closed |
 | FR-070 | evo_apply_winner 可观测性增强 — 候选选择与代码应用决策日志 | P1 | Closed |
+| FR-071 | 开源合规基础设施 — LICENSE / CHANGELOG / CONTRIBUTING / v0.1.0 Release | P0 | Proposed |
+| FR-072 | 分发渠道扩展 — Docker 镜像与 Homebrew Tap | P1 | Proposed |
+| FR-073 | 文档站点与 Landing Page — 外部可发现性 | P1 | Proposed |
+| FR-074 | 可观测性导出 — Prometheus Metrics 端点 | P2 | Proposed |
+| FR-075 | VS Code 扩展 — Manifest Schema Validation & Autocomplete | P2 | Proposed |
+| FR-076 | GUI 正式发布 — Tauri App 打包分发 | P2 | Proposed |
+| FR-077 | Workflow 模板库 — 常见 SDLC 自动化场景预设 | P2 | Proposed |
 
 ## 说明
 
