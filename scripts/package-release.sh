@@ -29,6 +29,7 @@ for binary in orchestrator orchestratord; do
   fi
 done
 
+mkdir -p "${stage_root}"
 mkdir -p "${stage_dir}"
 
 install -m 0755 "${release_dir}/orchestrator" "${stage_dir}/orchestrator"
