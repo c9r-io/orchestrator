@@ -105,62 +105,74 @@ PrehookDecision::Transform // Transform template
 
 ## Config Format
 
+Resources are declared as YAML manifests with `apiVersion: orchestrator.dev/v2` and applied via `orchestrator apply -f`. Multiple resources can be combined in a single file separated by `---`.
+
 ```yaml
-runner:
-  shell: /bin/bash
-  shell_arg: -lc
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: docs/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: qa_testing
+spec:
+  description: "Execute QA scenarios"
+  prompt: >-
+    /qa-testing {rel_path}
+    Read the QA document at {rel_path}, execute each scenario step by step.
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: tester
+  description: "tester agent — QA scenario execution"
+spec:
+  capabilities:
+    - qa_testing
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    - fromRef: claude-sonnet
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: my-workflow
+spec:
+  max_parallel: 2
+  steps:
+    - id: qa_testing
+      scope: item
+      required_capability: qa_testing
+      template: qa_testing
+      enabled: true
+      repeatable: true
 
-resume:
-  auto: false
+    - id: loop_guard
+      builtin: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
 
-defaults:
-  workspace: default
-  workflow: my_workflow
+  loop:
+    mode: fixed
+    max_cycles: 1
+    enabled: true
+    stop_when_no_unresolved: false
 
-workspaces:
-  default:
-    root_path: .
-    qa_targets:
-      - docs/qa
-    ticket_dir: docs/ticket
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: true
+    checkpoint_strategy: git_tag
+```
 
-agents:
-  opencode:
-    metadata:
-      name: opencode
-      cost: 50
-    capabilities:
-      - qa
-      - fix
-    templates:
-      qa: "opencode run {rel_path}"
-      fix: "opencode run {ticket_paths}"
-      loop_guard: "echo '{\"continue\":false,\"should_stop\":true}'"
-
-workflows:
-  my_workflow:
-    steps:
-      - id: run_qa
-        required_capability: qa
-        enabled: true
-        repeatable: true
-
-      - id: run_fix
-        required_capability: fix
-        enabled: true
-        repeatable: true
-
-      - id: check_stop
-        builtin: loop_guard
-        enabled: true
-        repeatable: true
-        is_guard: true
-
-    loop:
-      mode: infinite
-      guard:
-        enabled: true
-        stop_when_no_unresolved: true
+See `docs/workflow/` for complete production manifests including `SecretStore`, `ExecutionProfile`, `WorkflowStore`, and `Trigger` resources.
 
 ## CLI Commands
 
