@@ -63,13 +63,11 @@ Crates must be published in strict dependency order (leaf → root):
 
 A 30-second delay between publishes allows the crates.io index to propagate.
 
-#### Trusted Publisher (OIDC)
+#### Authentication
 
-Authentication uses crates.io Trusted Publishers via GitHub Actions OIDC — no manual API tokens needed:
+**Initial publish**: Uses `CARGO_REGISTRY_TOKEN` secret (crates.io API token) since Trusted Publishers requires at least one version to be published first.
 
-- The `crates-io` job declares `permissions: { id-token: write }` and `environment: release`
-- `rust-lang/crates-io-auth-action@v1` exchanges the GitHub OIDC token for a short-lived crates.io publish token
-- Each crate must be configured on crates.io with a Trusted Publisher pointing to `c9r-io/orchestrator`, workflow `release.yml`, environment `release`
+**Post-initial publish**: Migrate to crates.io Trusted Publishers (OIDC) by adding `permissions: { id-token: write }`, `environment: release`, and replacing the secret with `rust-lang/crates-io-auth-action@v1`. See inline comment in `release.yml` for migration instructions.
 
 #### Excluded from Publishing
 
@@ -122,5 +120,4 @@ All publishable crates include: `description`, `repository`, `keywords`, `catego
 |----------|----------------|
 | `c9r-io/homebrew-tap` GitHub repo | Must be created manually |
 | `TAP_GITHUB_TOKEN` secret | Must be added to orchestrator repo settings |
-| crates.io Trusted Publisher | Each crate must be configured on crates.io: owner `c9r-io`, repo `orchestrator`, workflow `release.yml`, environment `release` |
-| GitHub environment `release` | Must be created in repo Settings → Environments (optional but recommended for approval gates) |
+| `CARGO_REGISTRY_TOKEN` secret | crates.io API token, required for initial publish; migrate to Trusted Publishers (OIDC) after first release |
