@@ -1,0 +1,763 @@
+syntax = "proto3";
+
+package orchestrator;
+
+// ─── Task lifecycle ───────────────────────────────────────────
+service OrchestratorService {
+  // Task lifecycle
+  rpc TaskCreate(TaskCreateRequest)   returns (TaskCreateResponse);
+  rpc TaskStart(TaskStartRequest)     returns (TaskStartResponse);
+  rpc TaskPause(TaskPauseRequest)     returns (TaskPauseResponse);
+  rpc TaskResume(TaskResumeRequest)   returns (TaskResumeResponse);
+  rpc TaskDelete(TaskDeleteRequest)   returns (TaskDeleteResponse);
+  rpc TaskDeleteBulk(TaskDeleteBulkRequest) returns (TaskDeleteBulkResponse);
+  rpc TaskRetry(TaskRetryRequest)     returns (TaskRetryResponse);
+  rpc TaskRecover(TaskRecoverRequest) returns (TaskRecoverResponse);
+
+  // Task queries
+  rpc TaskList(TaskListRequest)       returns (TaskListResponse);
+  rpc TaskInfo(TaskInfoRequest)       returns (TaskInfoResponse);
+
+  // Task streaming (server-streaming)
+  rpc TaskLogs(TaskLogsRequest)       returns (stream TaskLogChunk);
+  rpc TaskFollow(TaskFollowRequest)   returns (stream TaskLogLine);
+  rpc TaskWatch(TaskWatchRequest)     returns (stream TaskWatchSnapshot);
+
+  // Resource management
+  rpc Apply(ApplyRequest)             returns (ApplyResponse);
+  rpc Get(GetRequest)                 returns (GetResponse);
+  rpc Describe(DescribeRequest)       returns (DescribeResponse);
+  rpc Delete(DeleteRequest)           returns (DeleteResponse);
+
+  // Store
+  rpc StoreGet(StoreGetRequest)       returns (StoreGetResponse);
+  rpc StorePut(StorePutRequest)       returns (StorePutResponse);
+  rpc StoreDelete(StoreDeleteRequest) returns (StoreDeleteResponse);
+  rpc StoreList(StoreListRequest)     returns (StoreListResponse);
+  rpc StorePrune(StorePruneRequest)   returns (StorePruneResponse);
+
+  // System
+  rpc Ping(PingRequest)               returns (PingResponse);
+  rpc Shutdown(ShutdownRequest)       returns (ShutdownResponse);
+  rpc MaintenanceMode(MaintenanceModeRequest) returns (MaintenanceModeResponse);
+  rpc ConfigDebug(ConfigDebugRequest) returns (ConfigDebugResponse);
+  rpc WorkerStatus(WorkerStatusRequest) returns (WorkerStatusResponse);
+  rpc Check(CheckRequest)             returns (CheckResponse);
+  rpc Init(InitRequest)               returns (InitResponse);
+  rpc DbStatus(DbStatusRequest)       returns (DbStatusResponse);
+  rpc DbMigrationsList(DbMigrationsListRequest) returns (DbMigrationsListResponse);
+  rpc ManifestValidate(ManifestValidateRequest) returns (ManifestValidateResponse);
+  rpc ManifestExport(ManifestExportRequest) returns (ManifestExportResponse);
+  rpc TaskTrace(TaskTraceRequest)     returns (TaskTraceResponse);
+
+  // Secret key lifecycle
+  rpc SecretKeyStatus(SecretKeyStatusRequest)   returns (SecretKeyStatusResponse);
+  rpc SecretKeyList(SecretKeyListRequest)       returns (SecretKeyListResponse);
+  rpc SecretKeyRotate(SecretKeyRotateRequest)   returns (SecretKeyRotateResponse);
+  rpc SecretKeyRevoke(SecretKeyRevokeRequest)   returns (SecretKeyRevokeResponse);
+  rpc SecretKeyHistory(SecretKeyHistoryRequest) returns (SecretKeyHistoryResponse);
+
+  // Agent lifecycle (drain/cordon)
+  rpc AgentList(AgentListRequest)               returns (AgentListResponse);
+  rpc AgentCordon(AgentCordonRequest)           returns (AgentCordonResponse);
+  rpc AgentUncordon(AgentUncordonRequest)       returns (AgentUncordonResponse);
+  rpc AgentDrain(AgentDrainRequest)             returns (AgentDrainResponse);
+
+  // Event lifecycle
+  rpc EventCleanup(EventCleanupRequest)         returns (EventCleanupResponse);
+  rpc EventStats(EventStatsRequest)             returns (EventStatsResponse);
+
+  // Trigger lifecycle
+  rpc TriggerSuspend(TriggerSuspendRequest)     returns (TriggerSuspendResponse);
+  rpc TriggerResume(TriggerResumeRequest)       returns (TriggerResumeResponse);
+  rpc TriggerFire(TriggerFireRequest)           returns (TriggerFireResponse);
+
+}
+
+// ─── Task messages ────────────────────────────────────────────
+
+message TaskCreateRequest {
+  optional string name = 1;
+  optional string goal = 2;
+  optional string project_id = 3;
+  optional string workspace_id = 4;
+  optional string workflow_id = 5;
+  repeated string target_files = 6;
+  bool no_start = 7;
+}
+
+message TaskCreateResponse {
+  string task_id = 1;
+  string status = 2;      // "created" | "enqueued"
+  string message = 3;
+}
+
+message TaskStartRequest {
+  optional string task_id = 1;
+  bool latest = 2;
+}
+
+message TaskStartResponse {
+  string task_id = 1;
+  string status = 2;
+  string message = 3;
+}
+
+message TaskPauseRequest {
+  string task_id = 1;
+}
+
+message TaskPauseResponse {
+  string task_id = 1;
+  string message = 2;
+}
+
+message TaskResumeRequest {
+  string task_id = 1;
+  bool reset_blocked = 2;
+}
+
+message TaskResumeResponse {
+  string task_id = 1;
+  string status = 2;
+  string message = 3;
+}
+
+message TaskDeleteRequest {
+  string task_id = 1;
+  bool force = 2;
+}
+
+message TaskDeleteResponse {
+  string message = 1;
+}
+
+message TaskDeleteBulkRequest {
+  repeated string task_ids = 1;
+  bool force = 2;
+  string status_filter = 3;
+  string project_filter = 4;
+}
+
+message TaskDeleteBulkResponse {
+  int32 deleted = 1;
+  int32 failed = 2;
+  repeated string errors = 3;
+  string message = 4;
+}
+
+message TaskRetryRequest {
+  string task_item_id = 1;
+  bool force = 2;
+}
+
+message TaskRetryResponse {
+  string task_id = 1;
+  string status = 2;
+  string message = 3;
+}
+
+message TaskRecoverRequest {
+  string task_id = 1;
+}
+
+message TaskRecoverResponse {
+  string task_id = 1;
+  uint64 recovered_items = 2;
+  string message = 3;
+}
+
+message TaskListRequest {
+  optional string status_filter = 1;
+  optional string project_filter = 2;
+}
+
+message TaskListResponse {
+  repeated TaskSummary tasks = 1;
+}
+
+message TaskSummary {
+  string id = 1;
+  string name = 2;
+  string status = 3;
+  optional string started_at = 4;
+  optional string completed_at = 5;
+  string goal = 6;
+  string project_id = 7;
+  string workspace_id = 8;
+  string workflow_id = 9;
+  repeated string target_files = 10;
+  int64 total_items = 11;
+  int64 finished_items = 12;
+  int64 failed_items = 13;
+  string created_at = 14;
+  string updated_at = 15;
+  optional string parent_task_id = 16;
+  optional string spawn_reason = 17;
+  int64 spawn_depth = 18;
+}
+
+message TaskInfoRequest {
+  string task_id = 1;
+}
+
+message TaskInfoResponse {
+  TaskSummary task = 1;
+  repeated TaskItem items = 2;
+  repeated CommandRun runs = 3;
+  repeated Event events = 4;
+  repeated TaskGraphDebugBundle graph_debug = 5;
+  repeated AgentStatus agent_states = 6;
+}
+
+message TaskGraphDebugBundle {
+  string graph_run_id = 1;
+  int64 cycle = 2;
+  string source = 3;
+  string status = 4;
+  optional string fallback_mode = 5;
+  optional string planner_failure_class = 6;
+  optional string planner_failure_message = 7;
+  string effective_graph_json = 8;
+  optional string planner_raw_output_json = 9;
+  optional string normalized_plan_json = 10;
+  optional string execution_replay_json = 11;
+  string created_at = 12;
+  string updated_at = 13;
+}
+
+message TaskItem {
+  string id = 1;
+  string task_id = 2;
+  int64 order_no = 3;
+  string qa_file_path = 4;
+  string status = 5;
+  repeated string ticket_files = 6;
+  string ticket_content_json = 7;
+  bool fix_required = 8;
+  bool fixed = 9;
+  string last_error = 10;
+  optional string started_at = 11;
+  optional string completed_at = 12;
+  string updated_at = 13;
+}
+
+message CommandRun {
+  string id = 1;
+  string task_item_id = 2;
+  string phase = 3;
+  string command = 4;
+  string cwd = 5;
+  string workspace_id = 6;
+  string agent_id = 7;
+  optional int64 exit_code = 8;
+  string stdout_path = 9;
+  string stderr_path = 10;
+  string started_at = 11;
+  optional string ended_at = 12;
+  bool interrupted = 13;
+}
+
+message Event {
+  int64 id = 1;
+  string task_id = 2;
+  optional string task_item_id = 3;
+  string event_type = 4;
+  string payload_json = 5;
+  string created_at = 6;
+}
+
+// ─── Task streaming ───────────────────────────────────────────
+
+message TaskLogsRequest {
+  string task_id = 1;
+  uint64 tail = 2;
+  bool timestamps = 3;
+}
+
+message TaskLogChunk {
+  string run_id = 1;
+  string phase = 2;
+  string content = 3;
+  string stdout_path = 4;
+  string stderr_path = 5;
+  optional string started_at = 6;
+}
+
+message TaskFollowRequest {
+  string task_id = 1;
+}
+
+message TaskLogLine {
+  string line = 1;
+  string timestamp = 2;
+}
+
+message TaskWatchRequest {
+  string task_id = 1;
+  uint64 interval_secs = 2;
+  uint64 timeout_secs = 3;
+}
+
+message TaskWatchSnapshot {
+  TaskSummary task = 1;
+  repeated TaskItem items = 2;
+}
+
+// ─── Resource management ──────────────────────────────────────
+
+message ApplyRequest {
+  string content = 1;       // YAML manifest content
+  bool dry_run = 2;
+  optional string project = 3;
+  bool prune = 4;
+}
+
+message ApplyResultEntry {
+  string kind = 1;
+  string name = 2;
+  string action = 3;        // "created" | "updated" | "unchanged" | "deleted"
+  optional string project_scope = 4;
+}
+
+message ApplyResponse {
+  repeated ApplyResultEntry results = 1;
+  optional int64 config_version = 2;
+  repeated string errors = 3;
+  repeated string warnings = 4;
+}
+
+message GetRequest {
+  string resource = 1;      // "workspace/default" or "workspaces"
+  optional string selector = 2;
+  string output_format = 3; // "table" | "json" | "yaml"
+  optional string project = 4;
+}
+
+message GetResponse {
+  string content = 1;       // serialized output (JSON or YAML)
+  string format = 2;
+}
+
+message DescribeRequest {
+  string resource = 1;      // e.g., "workspace/default"
+  string output_format = 2;
+  optional string project = 3;
+}
+
+message DescribeResponse {
+  string content = 1;
+  string format = 2;
+}
+
+message DeleteRequest {
+  string resource = 1;      // e.g., "workspace/old-ws"
+  bool force = 2;
+  optional string project = 3;
+  bool dry_run = 4;
+}
+
+message DeleteResponse {
+  string message = 1;
+}
+
+// ─── Store ────────────────────────────────────────────────────
+
+message StoreGetRequest {
+  string store = 1;
+  string key = 2;
+  string project = 3;
+}
+
+message StoreGetResponse {
+  optional string value_json = 1;
+  bool found = 2;
+}
+
+message StorePutRequest {
+  string store = 1;
+  string key = 2;
+  string value_json = 3;
+  string project = 4;
+  string task_id = 5;
+}
+
+message StorePutResponse {
+  string message = 1;
+}
+
+message StoreDeleteRequest {
+  string store = 1;
+  string key = 2;
+  string project = 3;
+}
+
+message StoreDeleteResponse {
+  string message = 1;
+}
+
+message StoreListRequest {
+  string store = 1;
+  string project = 2;
+  uint64 limit = 3;
+  uint64 offset = 4;
+}
+
+message StoreEntry {
+  string key = 1;
+  string value_json = 2;
+  string updated_at = 3;
+}
+
+message StoreListResponse {
+  repeated StoreEntry entries = 1;
+}
+
+message StorePruneRequest {
+  string store = 1;
+  string project = 2;
+}
+
+message StorePruneResponse {
+  string message = 1;
+}
+
+// ─── System ───────────────────────────────────────────────────
+
+message PingRequest {}
+
+message PingResponse {
+  string version = 1;
+  string git_hash = 2;
+  string uptime_secs = 3;
+  bool shutdown_requested = 4;
+  string lifecycle_state = 5;
+  bool maintenance_mode = 6;
+  uint64 incarnation = 7;
+}
+
+message ShutdownRequest {
+  bool graceful = 1;
+}
+
+message ShutdownResponse {
+  string message = 1;
+}
+
+message MaintenanceModeRequest {
+  bool enable = 1;
+}
+
+message MaintenanceModeResponse {
+  bool maintenance_mode = 1;
+  string message = 2;
+}
+
+message ConfigDebugRequest {
+  optional string component = 1;
+}
+
+message ConfigDebugResponse {
+  string content = 1;
+  string format = 2;
+}
+
+message WorkerStatusRequest {}
+
+message WorkerStatusResponse {
+  int64 pending_tasks = 1;
+  bool stop_signal = 2;
+  int64 active_workers = 3;
+  int64 idle_workers = 4;
+  int64 running_tasks = 5;
+  int64 configured_workers = 6;
+  bool shutdown_requested = 7;
+  string lifecycle_state = 8;
+  int64 total_worker_restarts = 9;
+}
+
+message DiagnosticEntry {
+  string source = 1;
+  string rule = 2;
+  string severity = 3;
+  bool passed = 4;
+  bool blocking = 5;
+  string message = 6;
+  optional string context = 7;
+  optional string scope = 8;
+  optional string actual = 9;
+  optional string expected = 10;
+  optional string risk = 11;
+  optional string suggested_fix = 12;
+}
+
+message CheckRequest {
+  optional string workflow = 1;
+  string output_format = 2;
+  optional string project_id = 3;
+}
+
+message CheckResponse {
+  string content = 1;
+  string format = 2;
+  int32 exit_code = 3;
+  repeated DiagnosticEntry diagnostics = 4;
+}
+
+// ─── Init / ManifestValidate / TaskTrace ─────────────────────
+
+message InitRequest {
+  optional string root = 1;
+}
+
+message InitResponse {
+  string message = 1;
+}
+
+message DbStatusRequest {}
+
+message DbStatusResponse {
+  string db_path = 1;
+  uint32 current_version = 2;
+  uint32 target_version = 3;
+  repeated uint32 pending_versions = 4;
+  repeated string pending_names = 5;
+  bool is_current = 6;
+}
+
+message DbMigration {
+  uint32 version = 1;
+  string name = 2;
+  bool applied = 3;
+}
+
+message DbMigrationsListRequest {}
+
+message DbMigrationsListResponse {
+  string db_path = 1;
+  uint32 current_version = 2;
+  uint32 target_version = 3;
+  repeated DbMigration migrations = 4;
+}
+
+message ManifestValidateRequest {
+  string content = 1;
+  optional string project_id = 2;
+}
+
+message ManifestValidateResponse {
+  bool valid = 1;
+  repeated string errors = 2;
+  string message = 3;
+  repeated DiagnosticEntry diagnostics = 4;
+}
+
+message ManifestExportRequest {
+  string output_format = 1;  // "json" | "yaml"
+}
+
+message ManifestExportResponse {
+  string content = 1;
+  string format = 2;
+}
+
+message TaskTraceRequest {
+  string task_id = 1;
+  bool verbose = 2;
+}
+
+message TaskTraceResponse {
+  repeated TraceEntry entries = 1;
+  repeated Anomaly anomalies = 2;
+  // Full trace as JSON (TaskTrace struct serialized) for --json output
+  string trace_json = 3;
+}
+
+message TraceEntry {
+  string timestamp = 1;
+  string event_type = 2;
+  string step = 3;
+  optional string item_id = 4;
+  string payload_json = 5;
+}
+
+message Anomaly {
+  string rule = 1;
+  string severity = 2;
+  string message = 3;
+  optional string at = 4;
+  string escalation = 5;
+}
+
+// ─── Secret Key Lifecycle ────────────────────────────────────────
+
+message SecretKeyRecord {
+  string key_id = 1;
+  string state = 2;
+  string fingerprint = 3;
+  string file_path = 4;
+  string created_at = 5;
+  optional string activated_at = 6;
+  optional string rotated_out_at = 7;
+  optional string retired_at = 8;
+  optional string revoked_at = 9;
+}
+
+message SecretKeyStatusRequest {}
+
+message SecretKeyStatusResponse {
+  optional SecretKeyRecord active_key = 1;
+  repeated SecretKeyRecord all_keys = 2;
+}
+
+message SecretKeyListRequest {}
+
+message SecretKeyListResponse {
+  repeated SecretKeyRecord keys = 1;
+}
+
+message SecretKeyRotateRequest {
+  bool resume = 1;
+}
+
+message SecretKeyRotateResponse {
+  string message = 1;
+  uint64 resources_updated = 2;
+  uint64 versions_updated = 3;
+  repeated string errors = 4;
+}
+
+message SecretKeyRevokeRequest {
+  string key_id = 1;
+  bool force = 2;
+}
+
+message SecretKeyRevokeResponse {
+  string message = 1;
+}
+
+message SecretKeyAuditEvent {
+  string event_kind = 1;
+  string key_id = 2;
+  string key_fingerprint = 3;
+  string actor = 4;
+  string detail_json = 5;
+  string created_at = 6;
+}
+
+message SecretKeyHistoryRequest {
+  uint64 limit = 1;
+  optional string key_id = 2;
+}
+
+message SecretKeyHistoryResponse {
+  repeated SecretKeyAuditEvent events = 1;
+}
+
+// ─── Agent Lifecycle (Drain / Cordon) ────────────────────────
+
+message AgentStatus {
+  string name = 1;
+  bool enabled = 2;
+  string lifecycle_state = 3;
+  int32 in_flight_items = 4;
+  repeated string capabilities = 5;
+  optional string drain_requested_at = 6;
+  bool is_healthy = 7;
+  optional string diseased_until = 8;
+  int32 consecutive_errors = 9;
+}
+
+message AgentListRequest {
+  optional string project_id = 1;
+}
+
+message AgentListResponse {
+  repeated AgentStatus agents = 1;
+}
+
+message AgentCordonRequest {
+  string agent_name = 1;
+  optional string project_id = 2;
+}
+
+message AgentCordonResponse {
+  string message = 1;
+}
+
+message AgentUncordonRequest {
+  string agent_name = 1;
+  optional string project_id = 2;
+}
+
+message AgentUncordonResponse {
+  string message = 1;
+}
+
+message AgentDrainRequest {
+  string agent_name = 1;
+  optional string project_id = 2;
+  optional uint64 timeout_secs = 3;
+}
+
+message AgentDrainResponse {
+  string message = 1;
+  string lifecycle_state = 2;
+}
+
+// ─── Event Lifecycle ─────────────────────────────────────────
+
+message EventCleanupRequest {
+  uint32 older_than_days = 1;
+  bool dry_run = 2;
+  bool archive = 3;
+}
+
+message EventCleanupResponse {
+  uint64 affected_count = 1;
+  string message = 2;
+}
+
+message EventStatsRequest {}
+
+message EventStatsResponse {
+  uint64 total_rows = 1;
+  string earliest = 2;
+  string latest = 3;
+  repeated EventStatusCount by_task_status = 4;
+}
+
+message EventStatusCount {
+  string status = 1;
+  uint64 count = 2;
+}
+
+// ─── Trigger Lifecycle ───────────────────────────────────────
+
+message TriggerSuspendRequest {
+  string trigger_name = 1;
+  optional string project = 2;
+}
+
+message TriggerSuspendResponse {
+  string message = 1;
+}
+
+message TriggerResumeRequest {
+  string trigger_name = 1;
+  optional string project = 2;
+}
+
+message TriggerResumeResponse {
+  string message = 1;
+}
+
+message TriggerFireRequest {
+  string trigger_name = 1;
+  optional string project = 2;
+}
+
+message TriggerFireResponse {
+  string task_id = 1;
+  string message = 2;
+}

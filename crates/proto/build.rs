@@ -1,6 +1,6 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Rebuild when proto file or PROTOC env var changes
-    println!("cargo:rerun-if-changed=../../proto/orchestrator.proto");
+    println!("cargo:rerun-if-changed=orchestrator.proto");
     println!("cargo:rerun-if-env-changed=PROTOC");
     println!("cargo:rerun-if-env-changed=PROTOC_INCLUDE");
 
@@ -30,6 +30,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    tonic_prost_build::compile_protos("../../proto/orchestrator.proto")?;
+    let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR")?);
+    let proto_file = manifest_dir.join("orchestrator.proto");
+    tonic_prost_build::configure()
+        .compile_protos(&[&proto_file], &[&manifest_dir])?;
     Ok(())
 }
