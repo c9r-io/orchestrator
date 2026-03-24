@@ -174,7 +174,7 @@ pub fn apply_manifests(
 
     let config_version = if !dry_run && !results.is_empty() && errors.is_empty() {
         autofill_defaults_for_manifest_mode(&mut merged_config);
-        let yaml = serde_yml::to_string(&merged_config)
+        let yaml = serde_yaml::to_string(&merged_config)
             .context("failed to serialize config after apply")
             .map_err(|err| classify_resource_error("resource.apply", err))?;
         let overview = persist_config_and_reload(
@@ -842,10 +842,10 @@ pub fn export_manifests(state: &InnerState, output_format: &str) -> Result<Strin
         _ => {
             let mut parts = Vec::new();
             for doc in &builtin_docs {
-                parts.push(serde_yml::to_string(doc)?);
+                parts.push(serde_yaml::to_string(doc)?);
             }
             for doc in &crd_docs {
-                parts.push(serde_yml::to_string(doc)?);
+                parts.push(serde_yaml::to_string(doc)?);
             }
             Ok(parts.join("---\n"))
         }
@@ -855,7 +855,7 @@ pub fn export_manifests(state: &InnerState, output_format: &str) -> Result<Strin
 fn format_output<T: serde::Serialize>(value: &T, format: &str) -> Result<String> {
     match format {
         "json" => Ok(serde_json::to_string_pretty(value)?),
-        "yaml" => Ok(serde_yml::to_string(value)?),
+        "yaml" => Ok(serde_yaml::to_string(value)?),
         "table" => Ok(serde_json::to_string_pretty(value)?), // fallback
         _ => Ok(serde_json::to_string_pretty(value)?),
     }
@@ -975,7 +975,7 @@ fn set_trigger_suspend(
 
     trigger_cfg.suspend = suspend;
 
-    let yaml = serde_yml::to_string(&config)
+    let yaml = serde_yaml::to_string(&config)
         .context("failed to serialize config after trigger update")
         .map_err(|err| classify_resource_error(op, err))?;
     persist_config_and_reload(state, config, yaml, op, Some(project_id), &[])

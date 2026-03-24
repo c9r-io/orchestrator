@@ -163,8 +163,8 @@ impl From<serde_json::Error> for OrchestratorError {
     }
 }
 
-impl From<serde_yml::Error> for OrchestratorError {
-    fn from(value: serde_yml::Error) -> Self {
+impl From<serde_yaml::Error> for OrchestratorError {
+    fn from(value: serde_yaml::Error) -> Self {
         OrchestratorError::internal_invariant("internal", value)
     }
 }

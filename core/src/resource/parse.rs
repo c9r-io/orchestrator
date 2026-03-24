@@ -15,12 +15,12 @@ use super::{
 /// Parse YAML into builtin OrchestratorResource types only (backward-compatible).
 pub fn parse_resources_from_yaml(content: &str) -> Result<Vec<OrchestratorResource>> {
     let mut resources = Vec::new();
-    for document in serde_yml::Deserializer::from_str(content) {
-        let value = serde_yml::Value::deserialize(document)?;
+    for document in serde_yaml::Deserializer::from_str(content) {
+        let value = serde_yaml::Value::deserialize(document)?;
         if value.is_null() {
             continue;
         }
-        let resource = serde_yml::from_value::<OrchestratorResource>(value)?;
+        let resource = serde_yaml::from_value::<OrchestratorResource>(value)?;
         resources.push(resource);
     }
     Ok(resources)
@@ -29,8 +29,8 @@ pub fn parse_resources_from_yaml(content: &str) -> Result<Vec<OrchestratorResour
 /// Two-phase YAML parsing: reads `kind` first, then routes to the appropriate type.
 pub fn parse_manifests_from_yaml(content: &str) -> Result<Vec<ParsedManifest>> {
     let mut manifests = Vec::new();
-    for document in serde_yml::Deserializer::from_str(content) {
-        let value = serde_yml::Value::deserialize(document)?;
+    for document in serde_yaml::Deserializer::from_str(content) {
+        let value = serde_yaml::Value::deserialize(document)?;
         if value.is_null() {
             continue;
         }
@@ -43,21 +43,21 @@ pub fn parse_manifests_from_yaml(content: &str) -> Result<Vec<ParsedManifest>> {
 
         let manifest = match kind_str.as_deref() {
             Some("CustomResourceDefinition") => {
-                let crd: CrdManifest = serde_yml::from_value(value)?;
+                let crd: CrdManifest = serde_yaml::from_value(value)?;
                 ParsedManifest::Crd(crd)
             }
             Some(kind) if is_builtin_kind(kind) => {
-                let resource: OrchestratorResource = serde_yml::from_value(value)?;
+                let resource: OrchestratorResource = serde_yaml::from_value(value)?;
                 ParsedManifest::Builtin(Box::new(resource))
             }
             Some(_) => {
                 // Unknown kind → treat as custom resource
-                let cr: CustomResourceManifest = serde_yml::from_value(value)?;
+                let cr: CustomResourceManifest = serde_yaml::from_value(value)?;
                 ParsedManifest::Custom(cr)
             }
             None => {
                 // No kind field — try as builtin (will error later on dispatch)
-                let resource: OrchestratorResource = serde_yml::from_value(value)?;
+                let resource: OrchestratorResource = serde_yaml::from_value(value)?;
                 ParsedManifest::Builtin(Box::new(resource))
             }
         };

@@ -485,7 +485,7 @@ fn bootstrap_control_plane(paths: &ControlPlanePaths, bind_addr: &SocketAddr) ->
 
     if !paths.policy.exists() {
         let policy = AuthzPolicy::default();
-        let raw = serde_yml::to_string(&policy).context("failed to serialize authz policy")?;
+        let raw = serde_yaml::to_string(&policy).context("failed to serialize authz policy")?;
         agent_orchestrator::secure_files::write_atomic(&paths.policy, raw.as_bytes(), 0o644)?;
     }
 
@@ -581,7 +581,7 @@ fn write_client_bundle(
         }],
     };
     let raw =
-        serde_yml::to_string(&config).context("failed to serialize control-plane client config")?;
+        serde_yaml::to_string(&config).context("failed to serialize control-plane client config")?;
     agent_orchestrator::secure_files::write_atomic(&config_path, raw.as_bytes(), 0o644)?;
     Ok(())
 }
@@ -598,14 +598,14 @@ fn upsert_policy_subject(policy_path: &Path, subject: PolicySubject) -> Result<(
         policy.subjects.push(subject);
         policy.subjects.sort_by(|a, b| a.id.cmp(&b.id));
     }
-    let raw = serde_yml::to_string(&policy).context("failed to serialize authz policy")?;
+    let raw = serde_yaml::to_string(&policy).context("failed to serialize authz policy")?;
     agent_orchestrator::secure_files::write_atomic(policy_path, raw.as_bytes(), 0o644)
 }
 
 fn load_policy(policy_path: &Path) -> Result<AuthzPolicy> {
     let raw = std::fs::read_to_string(policy_path)
         .with_context(|| format!("failed to read {}", policy_path.display()))?;
-    serde_yml::from_str(&raw).context("failed to parse authz policy")
+    serde_yaml::from_str(&raw).context("failed to parse authz policy")
 }
 
 fn current_username() -> String {

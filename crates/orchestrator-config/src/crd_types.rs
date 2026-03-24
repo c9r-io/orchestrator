@@ -243,7 +243,7 @@ spec:
           prompts:
             type: array
 "#;
-        let manifest: CrdManifest = serde_yml::from_str(yaml).expect("parse CRD manifest");
+        let manifest: CrdManifest = serde_yaml::from_str(yaml).expect("parse CRD manifest");
         assert_eq!(manifest.spec.kind, "PromptLibrary");
         assert_eq!(manifest.spec.plural, "promptlibraries");
         assert_eq!(manifest.spec.versions.len(), 1);
@@ -265,7 +265,7 @@ spec:
       template: "Review the code"
 "#;
         let manifest: CustomResourceManifest =
-            serde_yml::from_str(yaml).expect("parse CR manifest");
+            serde_yaml::from_str(yaml).expect("parse CR manifest");
         assert_eq!(manifest.kind, "PromptLibrary");
         assert_eq!(manifest.metadata.name, "qa-prompts");
         assert!(manifest.spec.is_object());

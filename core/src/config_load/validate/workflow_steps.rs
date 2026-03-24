@@ -289,7 +289,7 @@ mod tests {
         let step = WorkflowStepSpec {
             id: "qa_doc_gen".to_string(),
             step_type: "qa_doc_gen".to_string(),
-            extra: [("capture".to_string(), serde_yml::Value::Null)]
+            extra: [("capture".to_string(), serde_yaml::Value::Null)]
                 .into_iter()
                 .collect(),
             ..default_step_spec()
@@ -339,7 +339,7 @@ mod tests {
         let step = WorkflowStepSpec {
             id: "step1".to_string(),
             step_type: "qa".to_string(),
-            extra: [("foobar".to_string(), serde_yml::Value::Null)]
+            extra: [("foobar".to_string(), serde_yaml::Value::Null)]
                 .into_iter()
                 .collect(),
             ..default_step_spec()
@@ -436,7 +436,7 @@ mod tests {
     engine: cel
     when: "qa_file_path in regression_target_ids"
 "#;
-        let steps: Vec<WorkflowStepSpec> = serde_yml::from_str(yaml).expect("parse");
+        let steps: Vec<WorkflowStepSpec> = serde_yaml::from_str(yaml).expect("parse");
         assert_eq!(steps.len(), 2);
         // "capture" is unknown → should be in extra
         assert!(

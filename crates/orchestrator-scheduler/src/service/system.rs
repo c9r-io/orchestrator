@@ -27,7 +27,7 @@ pub fn run_check(
 
     let content = match output_format {
         "json" => serde_json::to_string_pretty(&report)?,
-        "yaml" => serde_yml::to_string(&report)?,
+        "yaml" => serde_yaml::to_string(&report)?,
         _ => {
             let mut buf = String::new();
             buf.push_str("orchestrator check \u{2014} preflight validation\n\n");

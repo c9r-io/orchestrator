@@ -245,7 +245,7 @@ spec:
     workspace: test-ws
 "#,
         );
-        serde_yml::from_str(&yaml).expect("should parse trigger YAML")
+        serde_yaml::from_str(&yaml).expect("should parse trigger YAML")
     }
 
     fn trigger_event_manifest(name: &str, source: &str) -> OrchestratorResource {
@@ -267,7 +267,7 @@ spec:
   concurrencyPolicy: Replace
 "#,
         );
-        serde_yml::from_str(&yaml).expect("should parse trigger event YAML")
+        serde_yaml::from_str(&yaml).expect("should parse trigger event YAML")
     }
 
     #[test]
@@ -315,7 +315,7 @@ spec:
     workflow: wf
     workspace: ws
 "#;
-        let resource: OrchestratorResource = serde_yml::from_str(yaml).expect("should parse YAML");
+        let resource: OrchestratorResource = serde_yaml::from_str(yaml).expect("should parse YAML");
         let registered = dispatch_resource(resource).expect("dispatch");
         let err = registered.validate().expect_err("should reject both");
         assert!(err.to_string().contains("not both"));
@@ -333,7 +333,7 @@ spec:
     workflow: wf
     workspace: ws
 "#;
-        let resource: OrchestratorResource = serde_yml::from_str(yaml).expect("should parse YAML");
+        let resource: OrchestratorResource = serde_yaml::from_str(yaml).expect("should parse YAML");
         let registered = dispatch_resource(resource).expect("dispatch");
         let err = registered.validate().expect_err("should reject neither");
         assert!(err.to_string().contains("must be set"));
@@ -405,7 +405,7 @@ spec:
     successful: 3
     failed: 3
 "#;
-        let resource: OrchestratorResource = serde_yml::from_str(yaml).expect("should parse YAML");
+        let resource: OrchestratorResource = serde_yaml::from_str(yaml).expect("should parse YAML");
         resource
             .validate_version()
             .expect("version should be valid");
@@ -446,7 +446,7 @@ spec:
   throttle:
     minInterval: 300
 "#;
-        let resource: OrchestratorResource = serde_yml::from_str(yaml).expect("should parse YAML");
+        let resource: OrchestratorResource = serde_yaml::from_str(yaml).expect("should parse YAML");
         assert_eq!(resource.kind, ResourceKind::Trigger);
         if let ResourceSpec::Trigger(ref spec) = resource.spec {
             assert!(spec.event.is_some());

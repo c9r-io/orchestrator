@@ -277,7 +277,7 @@ fn discover_control_plane_config(explicit: Option<&str>) -> Result<Option<PathBu
 fn load_control_plane_config(path: &Path) -> Result<ControlPlaneConfig> {
     let raw = std::fs::read_to_string(path)
         .with_context(|| format!("failed to read {}", path.display()))?;
-    serde_yml::from_str(&raw).with_context(|| format!("failed to parse {}", path.display()))
+    serde_yaml::from_str(&raw).with_context(|| format!("failed to parse {}", path.display()))
 }
 
 /// Connect to a TCP address (for remote daemon).

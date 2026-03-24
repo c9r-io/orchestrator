@@ -113,7 +113,7 @@ pub(crate) async fn dispatch(
                             })
                         })
                         .collect();
-                    println!("{}", serde_yml::to_string(&entries)?);
+                    println!("{}", serde_yaml::to_string(&entries)?);
                 }
                 OutputFormat::Table => {
                     if resp.entries.is_empty() {

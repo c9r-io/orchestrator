@@ -273,11 +273,11 @@ impl ControlPlaneProtection {
         let config = if config_path.exists() {
             let raw = std::fs::read_to_string(&config_path)
                 .with_context(|| format!("failed to read {}", config_path.display()))?;
-            serde_yml::from_str(&raw)
+            serde_yaml::from_str(&raw)
                 .with_context(|| format!("failed to parse {}", config_path.display()))?
         } else {
             let config = ProtectionConfig::default();
-            let raw = serde_yml::to_string(&config)
+            let raw = serde_yaml::to_string(&config)
                 .context("failed to serialize default protection config")?;
             std::fs::write(&config_path, raw)
                 .with_context(|| format!("failed to write {}", config_path.display()))?;

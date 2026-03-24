@@ -36,7 +36,7 @@ pub fn debug_info(state: &InnerState, component: Option<&str>) -> Result<String>
                 .map_err(|err| classify_system_error("system.debug_info", err))?;
             Ok(format!(
                 "Active Configuration:\n{}",
-                serde_yml::to_string(&config.config).unwrap_or_default()
+                serde_yaml::to_string(&config.config).unwrap_or_default()
             ))
         }
         "dag" => debug_dag_info(state),

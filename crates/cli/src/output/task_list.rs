@@ -36,7 +36,7 @@ pub(super) fn print(tasks: &[TaskSummary], format: OutputFormat) {
                     })
                 })
                 .collect();
-            println!("{}", serde_yml::to_string(&yaml).unwrap_or_default());
+            println!("{}", serde_yaml::to_string(&yaml).unwrap_or_default());
         }
         OutputFormat::Table => {
             println!(

@@ -20,7 +20,7 @@ pub(super) fn print(resp: &TaskInfoResponse, format: OutputFormat) {
         }
         OutputFormat::Yaml => {
             let json = task_detail_value(task, resp);
-            println!("{}", serde_yml::to_string(&json).unwrap_or_default());
+            println!("{}", serde_yaml::to_string(&json).unwrap_or_default());
         }
         OutputFormat::Table => {
             println!("Task: {}", task.id);

@@ -361,7 +361,7 @@ mod tests {
 
     #[test]
     fn capture_decl_deserializes_without_json_path() {
-        let capture: CaptureDecl = serde_yml::from_str(
+        let capture: CaptureDecl = serde_yaml::from_str(
             r#"
 var: score
 source: stdout
@@ -376,7 +376,7 @@ source: stdout
 
     #[test]
     fn capture_decl_deserializes_with_json_path() {
-        let capture: CaptureDecl = serde_yml::from_str(
+        let capture: CaptureDecl = serde_yaml::from_str(
             r#"
 var: score
 source: stdout
