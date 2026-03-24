@@ -216,6 +216,9 @@ orchestrator store delete context my_key
     post_actions:
       - type: spawn_tasks
         from_var: task_list        # 包含目标 JSON 数组的管道变量
+        json_path: "$.goals"
+        mapping:
+          goal: "$.description"
         workflow: child_workflow
 ```
 

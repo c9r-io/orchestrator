@@ -23,7 +23,7 @@
 ## 补充资源
 
 - **架构文档**：`docs/architecture.md` —— 系统设计与内部原理
-- **QA 测试文档**：`docs/qa/` —— 场景化验证（87+ 份文档）
+- **QA 测试文档**：`docs/qa/` —— 场景化验证（120+ 份文档）
 - **设计文档**：`docs/design_doc/` —— 详细特性设计
 - **Fixture 清单**：`fixtures/manifests/bundles/` —— 真实 YAML 示例
 
@@ -39,7 +39,7 @@
 ./target/release/orchestrator <command>
 
 # 停止守护进程
-kill $(cat data/daemon.pid)
+orchestrator daemon stop
 ```
 
 参见 [07 - CLI 参考](07-cli-reference.md) 获取完整 C/S 命令列表。

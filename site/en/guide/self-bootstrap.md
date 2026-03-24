@@ -73,11 +73,11 @@ prehook:
   reason: "Skip unsafe self-referential QA docs"
 ```
 
-### Layer 4: Watchdog
+### Layer 4: exec() Self-Replacement
 
-The daemon (`orchestratord --foreground`) handles self-restart via `exec()` self-replacement. When the `self_restart` builtin step rebuilds the binary, it calls `exec()` to replace the running process in-place (preserving PID). If `exec()` fails, the process exits with code 75, which external supervisors (systemd, Docker restart policy) can use to relaunch.
+The daemon handles self-restart via `exec()` self-replacement. When the `self_restart` builtin step rebuilds the binary, it calls `exec()` to replace the running process in-place (preserving PID). The new binary resumes execution seamlessly without requiring an external supervisor.
 
-Exit code 75 is the self-restart signal: the `self_restart` builtin step rebuilds the binary, verifies it, snapshots `.stable`, and triggers the restart.
+If `exec()` fails, the process exits with code 1. External supervisors (systemd, Docker restart policy) can detect the non-zero exit and take corrective action, but they are not part of the standard self-restart flow.
 
 ## Self-Restart Flow
 
@@ -86,14 +86,10 @@ Cycle 1:
   implement → modifies source code
   self_test → cargo check + test
   self_restart → cargo build --release
-                → snapshot new binary hash
-                → exit(75)
+                → snapshot new binary as .stable
+                → exec() replaces process in-place (same PID)
 
-Watchdog detects exit 75:
-  → Relaunches orchestrator with new binary
-  → Orchestrator resumes at Cycle 2
-
-Cycle 2:
+New binary resumes at Cycle 2:
   implement → reviews diff, makes incremental improvements
   self_test → validates again
   qa_testing → runs QA scenarios against the new code

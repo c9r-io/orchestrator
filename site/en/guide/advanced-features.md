@@ -216,6 +216,9 @@ Steps can spawn child tasks as post-actions, enabling autonomous work decomposit
     post_actions:
       - type: spawn_tasks
         from_var: task_list        # pipeline variable containing JSON array of goals
+        json_path: "$.goals"
+        mapping:
+          goal: "$.description"
         workflow: child_workflow
 ```
 

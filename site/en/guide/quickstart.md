@@ -37,7 +37,7 @@ The daemon owns the SQLite database, task queue, and worker pool. Keep it runnin
 ./target/release/orchestrator init
 ```
 
-This creates the SQLite schema at `data/agent_orchestrator.db`. It does **not** load any configuration; that comes next.
+This creates the SQLite schema at `~/.orchestratord/agent_orchestrator.db` (override with `ORCHESTRATORD_DATA_DIR`). It does **not** load any configuration; that comes next.
 
 ## Step 4: Write a Manifest
 

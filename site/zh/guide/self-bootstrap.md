@@ -73,11 +73,11 @@ prehook:
   reason: "跳过不安全的自引用 QA 文档"
 ```
 
-### 第 4 层：看门狗脚本
+### 第 4 层：exec() 原地替换
 
-`scripts/watchdog.sh` 脚本充当看门狗。如果编排器进程连续崩溃，看门狗恢复 `.stable` 二进制快照并重启。
+daemon 通过 `exec()` 系统调用处理自重启。当 `self_restart` 内置步骤重建二进制后，它调用 `exec()` 原地替换运行中的进程（保持 PID 不变）。新二进制无缝恢复执行，无需外部监控进程。
 
-自重启机制：`self_restart` 内置步骤重建二进制后，daemon 通过 `exec()` 系统调用原地替换进程（保持 PID 不变）。如果 exec 失败，CLI 前台模式的 exit-code-75 重启循环作为后备。
+如果 `exec()` 失败，进程以退出码 1 退出。外部监控工具（systemd、Docker 重启策略）可以检测到非零退出码并采取纠正措施，但它们不属于标准自重启流程的一部分。
 
 ## 自重启流程
 
@@ -86,14 +86,10 @@ Cycle 1：
   implement → 修改源代码
   self_test → cargo check + test
   self_restart → cargo build --release
-                → 快照新二进制哈希
-                → exit(75)
+                → 将新二进制快照为 .stable
+                → exec() 原地替换进程（同一 PID）
 
-看门狗检测到退出码 75：
-  → 用新二进制重新启动编排器
-  → 编排器在 Cycle 2 恢复执行
-
-Cycle 2：
+新二进制在 Cycle 2 恢复执行：
   implement → 审查差异，进行增量改进
   self_test → 再次验证
   qa_testing → 针对新代码运行 QA 场景

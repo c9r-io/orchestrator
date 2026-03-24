@@ -274,14 +274,16 @@ metadata:
   name: nightly-qa
 spec:
   cron:
-    schedule: "0 0 2 * * *"           # 6 段 cron：秒 分 时 日 月 周
+    schedule: "0 2 * * *"             # 5 段 cron：分 时 日 月 周
     timezone: "Asia/Shanghai"          # IANA 时区（可选，默认 UTC）
   action:
     workflow: full-qa                  # 触发时运行的工作流
     workspace: main-workspace          # 任务所用的工作区
   concurrencyPolicy: Forbid            # Allow | Forbid | Replace
   suspend: false
-  historyLimit: 5                      # 保留的已完成任务上限
+  historyLimit:
+    successful: 5
+    failed: 3
 ```
 
 | 字段 | 必填 | 说明 |

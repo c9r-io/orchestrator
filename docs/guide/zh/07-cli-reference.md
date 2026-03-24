@@ -28,18 +28,19 @@ Agent Orchestrator CLI 全部命令速查。
 | `get` | `g` |
 | `describe` | `desc` |
 | `delete` | `rm` |
+| `event` | `ev` |
 | `task` | `t` |
 | `task list` | `task ls` |
 | `task create` | `task new` |
 | `task info` | `task get` |
 | `task logs` | `task log` |
 | `task delete` | `task rm` |
-| `project` | `proj` |
 | `check` | `ck` |
 | `debug` | `dbg` |
 | `store list` | `store ls` |
 | `agent` | `ag` |
 | `agent list` | `agent ls` |
+| `trigger` | `tg` |
 | `secret key list` | `secret key ls` |
 | `db migrations list` | `db migrations ls` |
 
@@ -193,6 +194,14 @@ orchestrator task info <task_id> -o yaml
 | `-o, --output` | 输出格式：table（默认）、json、yaml |
 | `-v, --verbose` | 详细输出 |
 
+### task recover
+
+恢复孤立的运行中项目（例如崩溃后）。
+
+```bash
+orchestrator task recover <task_id>
+```
+
 ### task start / pause / resume
 
 ```bash
@@ -201,11 +210,16 @@ orchestrator task start --latest             # 启动最近的任务
 
 orchestrator task pause <task_id>
 orchestrator task resume <task_id>
+orchestrator task resume <task_id> --reset-blocked   # 将阻塞项重置为未解决状态
 ```
 
 | 标志 (start) | 说明 |
 |--------------|------|
 | `-l, --latest` | 启动最近的任务 |
+
+| 标志 (resume) | 说明 |
+|---------------|------|
+| `--reset-blocked` | 将阻塞项重置为未解决状态 |
 
 ### task logs / watch / trace
 
@@ -233,6 +247,7 @@ orchestrator task trace <task_id> --verbose --json
 | 标志 (watch) | 说明 |
 |--------------|------|
 | `--interval` | 刷新间隔秒数（默认：2） |
+| `--timeout <SECONDS>` | N 秒后退出（0 = 无超时，默认：0） |
 
 | 标志 (trace) | 说明 |
 |--------------|------|
@@ -251,7 +266,18 @@ orchestrator task retry <task_item_id> [--force]
 
 ```bash
 orchestrator task delete <task_id> --force
+orchestrator task delete <id1> <id2> <id3> --force   # 多个任务 ID
+orchestrator task delete --all --force                # 删除所有任务
+orchestrator task delete --all --status completed     # 按状态筛选删除
+orchestrator task delete --all --project my-project   # 删除指定项目的所有任务
 ```
+
+| 标志 | 说明 |
+|------|------|
+| `-f, --force` | 强制删除，无需确认 |
+| `--all` | 删除所有任务 |
+| `--status <STATUS>` | 按状态筛选（与 `--all` 配合使用） |
+| `--project <PROJECT>` | 按项目筛选（与 `--all` 配合使用） |
 
 ## 清单
 
@@ -373,6 +399,35 @@ orchestrator agent drain <agent_name> --timeout 60
 | `-o, --output`（仅 list） | 输出格式：table（默认）、json、yaml |
 | `--timeout`（仅 drain） | 超时秒数；超时后强制 drain |
 
+## 守护进程生命周期
+
+```bash
+orchestrator daemon status                    # 显示守护进程 PID 和状态
+orchestrator daemon stop                      # 向守护进程发送 SIGTERM
+orchestrator daemon maintenance --enable      # 阻止新任务创建
+orchestrator daemon maintenance --disable     # 恢复任务创建
+```
+
+## 事件生命周期
+
+```bash
+orchestrator event stats                      # 显示事件表统计信息
+orchestrator event cleanup                    # 清理旧事件
+orchestrator event cleanup --older-than 30    # 清理 N 天前的事件（默认 30）
+orchestrator event cleanup --dry-run          # 预览，不实际删除
+orchestrator event cleanup --archive          # 删除前归档为 JSONL
+```
+
+## 触发器生命周期
+
+```bash
+orchestrator trigger suspend <name>           # 挂起触发器
+orchestrator trigger resume <name>            # 恢复已挂起的触发器
+orchestrator trigger fire <name>              # 手动触发一次
+```
+
+所有触发器子命令均支持 `--project` 标志用于项目级操作。
+
 ## 调试与系统
 
 ```bash
@@ -417,6 +472,12 @@ orchestrator check -o json           # 结构化检查输出
 | `--bind <addr>` | TCP 绑定地址（默认：Unix 套接字） |
 | `--workers <N>` | 后台工作器数量（默认：1） |
 | `--insecure-bind <addr>` | 用于开发的不安全 TCP 绑定（feature-gated：`dev-insecure`） |
+| `--control-plane-dir <DIR>` | 控制面板证书目录 |
+| `--event-retention-days <DAYS>` | 事件保留天数（默认：30，0 = 禁用） |
+| `--event-cleanup-interval-secs <SECS>` | 清理扫描间隔秒数（默认：3600） |
+| `--event-archive-enabled` | 清理前将事件归档为 JSONL |
+| `--event-archive-dir <DIR>` | 覆盖事件归档目录 |
+| `--stall-timeout-mins <MINS>` | 运行中项目被视为停滞的分钟数（默认：30，0 = 禁用） |
 
 ### control-plane issue-client
 
@@ -432,7 +493,7 @@ orchestratord control-plane issue-client \
 ```bash
 ./target/release/orchestratord --foreground --workers 2   # 前台运行（推荐）
 nohup ./target/release/orchestratord --foreground &       # 后台运行
-kill $(cat data/daemon.pid)                               # 优雅关闭（SIGTERM）
+orchestrator daemon stop                                  # 优雅关闭（SIGTERM）
 ```
 
 ### C/S CLI 命令列表

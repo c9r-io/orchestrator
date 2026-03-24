@@ -28,18 +28,19 @@ The daemon holds all state (engine, DB, task queue). The CLI is a thin RPC clien
 | `get` | `g` |
 | `describe` | `desc` |
 | `delete` | `rm` |
+| `event` | `ev` |
 | `task` | `t` |
 | `task list` | `task ls` |
 | `task create` | `task new` |
 | `task info` | `task get` |
 | `task logs` | `task log` |
 | `task delete` | `task rm` |
-| `project` | `proj` |
 | `check` | `ck` |
 | `debug` | `dbg` |
 | `store list` | `store ls` |
 | `agent` | `ag` |
 | `agent list` | `agent ls` |
+| `trigger` | `tg` |
 | `secret key list` | `secret key ls` |
 | `db migrations list` | `db migrations ls` |
 
@@ -193,6 +194,14 @@ orchestrator task info <task_id> -o yaml
 | `-o, --output` | Output format: table (default), json, yaml |
 | `-v, --verbose` | Verbose output |
 
+### task recover
+
+Recover orphaned running items (e.g. after a crash).
+
+```bash
+orchestrator task recover <task_id>
+```
+
 ### task start / pause / resume
 
 ```bash
@@ -201,11 +210,16 @@ orchestrator task start --latest             # start the most recent task
 
 orchestrator task pause <task_id>
 orchestrator task resume <task_id>
+orchestrator task resume <task_id> --reset-blocked   # reset blocked items back to unresolved
 ```
 
 | Flag (start) | Description |
 |--------------|-------------|
 | `-l, --latest` | Start the latest task |
+
+| Flag (resume) | Description |
+|---------------|-------------|
+| `--reset-blocked` | Reset blocked items back to unresolved |
 
 ### task logs / watch / trace
 
@@ -233,6 +247,7 @@ orchestrator task trace <task_id> --verbose --json
 | Flag (watch) | Description |
 |--------------|-------------|
 | `--interval` | Update interval in seconds (default: 2) |
+| `--timeout <SECONDS>` | Exit after N seconds (0 = no timeout, default: 0) |
 
 | Flag (trace) | Description |
 |--------------|-------------|
@@ -251,7 +266,18 @@ orchestrator task retry <task_item_id> [--force]
 
 ```bash
 orchestrator task delete <task_id> --force
+orchestrator task delete <id1> <id2> <id3> --force   # multiple task IDs
+orchestrator task delete --all --force                # delete all tasks
+orchestrator task delete --all --status completed     # delete all with status filter
+orchestrator task delete --all --project my-project   # delete all in a project
 ```
+
+| Flag | Description |
+|------|-------------|
+| `-f, --force` | Force delete without confirmation |
+| `--all` | Delete all tasks |
+| `--status <STATUS>` | Filter by status (used with `--all`) |
+| `--project <PROJECT>` | Filter by project (used with `--all`) |
 
 ## Manifest
 
@@ -374,6 +400,35 @@ orchestrator agent drain <agent_name> --timeout 60
 | `-o, --output` (list only) | Output format: table (default), json, yaml |
 | `--timeout` (drain only) | Timeout in seconds; force-drain after this duration |
 
+## Daemon Lifecycle
+
+```bash
+orchestrator daemon status                    # show daemon PID and status
+orchestrator daemon stop                      # send SIGTERM to daemon
+orchestrator daemon maintenance --enable      # block new task creation
+orchestrator daemon maintenance --disable     # allow task creation again
+```
+
+## Event Lifecycle
+
+```bash
+orchestrator event stats                      # show event table statistics
+orchestrator event cleanup                    # clean up old events
+orchestrator event cleanup --older-than 30    # events older than N days (default 30)
+orchestrator event cleanup --dry-run          # preview without deleting
+orchestrator event cleanup --archive          # archive to JSONL before deleting
+```
+
+## Trigger Lifecycle
+
+```bash
+orchestrator trigger suspend <name>           # suspend a trigger
+orchestrator trigger resume <name>            # resume a suspended trigger
+orchestrator trigger fire <name>              # manually fire a trigger once
+```
+
+All trigger subcommands accept the `--project` flag for project-scoped operation.
+
 ## Debug & System
 
 ```bash
@@ -418,6 +473,12 @@ The daemon binary that runs the gRPC server and embedded background workers.
 | `--bind <addr>` | TCP bind address (default: Unix socket) |
 | `--workers <N>` | Number of background workers (default: 1) |
 | `--insecure-bind <addr>` | Insecure TCP bind for development (feature-gated: `dev-insecure`) |
+| `--control-plane-dir <DIR>` | Control plane certificate directory |
+| `--event-retention-days <DAYS>` | Days to retain events (default: 30, 0 = disabled) |
+| `--event-cleanup-interval-secs <SECS>` | Cleanup sweep interval in seconds (default: 3600) |
+| `--event-archive-enabled` | Archive events to JSONL before cleanup |
+| `--event-archive-dir <DIR>` | Override event archive directory |
+| `--stall-timeout-mins <MINS>` | Minutes before a running item is considered stalled (default: 30, 0 = disabled) |
 
 ### control-plane issue-client
 
@@ -429,15 +490,15 @@ orchestratord control-plane issue-client \
 ```
 
 Files created:
-- PID: `data/daemon.pid`
-- Socket: `data/orchestrator.sock`
+- PID: `~/.orchestratord/daemon.pid`
+- Socket: `~/.orchestratord/orchestrator.sock`
 
 ### daemon management
 
 ```bash
 ./target/release/orchestratord --foreground --workers 2   # foreground (recommended)
 nohup ./target/release/orchestratord --foreground &       # background via nohup
-kill $(cat data/daemon.pid)                               # graceful SIGTERM
+orchestrator daemon stop                                  # graceful SIGTERM
 ```
 
 ### C/S CLI command surface

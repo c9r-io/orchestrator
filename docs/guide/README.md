@@ -23,7 +23,7 @@ This guide helps you understand and use the Agent Orchestrator — a CLI tool fo
 ## Complementary Resources
 
 - **Architecture**: `docs/architecture.md` — system design and internals
-- **QA Test Docs**: `docs/qa/` — scenario-based validation (87+ documents)
+- **QA Test Docs**: `docs/qa/` — scenario-based validation (120+ documents)
 - **Design Docs**: `docs/design_doc/` — detailed feature designs
 - **Fixture Manifests**: `fixtures/manifests/bundles/` — real YAML examples
 
@@ -39,7 +39,7 @@ The orchestrator uses a C/S architecture where a long-running daemon holds all s
 ./target/release/orchestrator <command>
 
 # Stop daemon
-kill $(cat data/daemon.pid)
+orchestrator daemon stop
 ```
 
 See [07 - CLI Reference](07-cli-reference.md) for the complete C/S command surface.

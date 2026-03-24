@@ -274,14 +274,16 @@ metadata:
   name: nightly-qa
 spec:
   cron:
-    schedule: "0 0 2 * * *"           # 6-field cron: sec min hour day month weekday
+    schedule: "0 2 * * *"             # 5-field cron: min hour dom month dow
     timezone: "Asia/Shanghai"          # IANA timezone (optional, default UTC)
   action:
     workflow: full-qa                  # workflow to run
     workspace: main-workspace          # workspace for the task
   concurrencyPolicy: Forbid            # Allow | Forbid | Replace
   suspend: false
-  historyLimit: 5                      # max completed tasks to retain
+  historyLimit:
+    successful: 5
+    failed: 3
 ```
 
 | Field | Required | Description |
