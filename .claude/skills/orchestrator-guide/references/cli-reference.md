@@ -32,13 +32,11 @@
 | describe | desc |
 | delete | rm |
 | task | t |
-| task list | task ls |
-| task create | task new |
-| workspace | ws |
-| manifest | m |
-| edit | e |
-| config | cfg |
+| task list | ls |
+| debug | dbg |
 | check | ck |
+| agent | ag |
+| event | ev |
 | trigger | tg |
 
 ## Daemon Lifecycle
@@ -69,6 +67,7 @@ Connection: CLI connects via UDS (`~/.orchestratord/orchestrator.sock`) by defau
 orchestrator init
 orchestrator apply -f manifest.yaml
 orchestrator apply -f manifest.yaml --dry-run
+orchestrator apply -f manifest.yaml --prune       # delete resources not in manifest
 orchestrator apply -f manifest.yaml --project my-project
 cat manifest.yaml | orchestrator apply -f -
 ```
@@ -100,6 +99,8 @@ orchestrator get workspaces -l env=dev
 orchestrator describe workspace default
 orchestrator describe executionprofile sandbox_write
 orchestrator delete agent old-agent
+orchestrator delete agent old-agent --force       # skip confirmation
+orchestrator delete agent old-agent --dry-run     # preview without deleting
 orchestrator manifest export
 orchestrator edit workspace default
 orchestrator check
@@ -117,19 +118,22 @@ orchestrator check
 ## Task Lifecycle
 
 ```bash
-# Create (defaults to --detach: auto-enqueues to daemon worker, returns immediately)
+# Create (auto-enqueues to daemon worker, returns immediately)
 orchestrator task create \
   --name "task-name" --goal "description" \
-  --workflow self-bootstrap --project my-project \
+  --workflow my-workflow --project my-project \
   --target-file docs/qa/01.md   # repeatable; -t shorthand
 
-# Create with blocking wait (foreground execution)
-orchestrator task create --name X --goal Y --attach
+# Create without auto-starting
+orchestrator task create --name X --goal Y --no-start
 
 # Control
+orchestrator task start <id>              # start a created task
+orchestrator task start --latest          # start the most recent task
 orchestrator task pause <id>
 orchestrator task resume <id>
 orchestrator task retry <id> --item <item_id> --force
+orchestrator task recover <id>            # recover orphaned running items
 
 # Inspect
 orchestrator task list -o json
@@ -143,9 +147,9 @@ orchestrator task trace <id>              # execution timeline with anomaly dete
 orchestrator task delete <id>
 ```
 
-> **Note**: In C/S mode, `task create` defaults to `--detach` (enqueue to daemon worker).
+> **Note**: `task create` auto-enqueues to the daemon worker by default.
 > Tasks start executing immediately when a worker picks them up.
-> Use `--attach` for blocking inline execution.
+> Use `--no-start` to create without auto-starting.
 
 ## Agent Management
 
@@ -208,9 +212,13 @@ orchestrator db migrations list    # list applied migrations
 ## Other Commands
 
 ```bash
-orchestrator debug                 # system debug info
-orchestrator check                 # preflight check
-orchestrator version               # show version
-orchestrator daemon stop           # stop the daemon
-orchestrator daemon status         # check daemon status
+orchestrator debug                           # system debug info
+orchestrator check                           # preflight check
+orchestrator check --workflow my-wf          # check specific workflow
+orchestrator check --project my-proj -o json # check with project filter
+orchestrator version                         # show version
+orchestrator daemon stop                     # stop the daemon
+orchestrator daemon status                   # check daemon status
+orchestrator daemon maintenance --enable     # block new task creation
+orchestrator daemon maintenance --disable    # resume normal operation
 ```
