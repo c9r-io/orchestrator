@@ -112,7 +112,7 @@ Invalid: URLs (`https://...`), wildcards (`*.example.com`), paths.
 
 ### Production vs QA Profiles
 
-Production profiles live in `docs/workflow/execution-profiles.yaml` with `network_mode: inherit` (agents need API access). QA/fixture profiles in `fixtures/manifests/bundles/` use `network_mode: deny` to test sandbox enforcement.
+Production profiles typically use `network_mode: inherit` (agents need API access). QA/test profiles use `network_mode: deny` to verify sandbox enforcement.
 
 ## SecretStore & EnvStore
 

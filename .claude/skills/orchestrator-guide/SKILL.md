@@ -19,12 +19,14 @@ description: >-
 
 The orchestrator uses a **client/server** model over gRPC:
 
-- **`orchestratord`** — daemon binary (gRPC server + embedded worker pool). Listens on UDS (`data/orchestrator.sock`) by default, or TCP with `--bind`.
-- **`orchestrator`** — thin CLI client binary that forwards all commands to the daemon via gRPC. No core library dependency.
+- **`orchestratord`** — daemon binary (gRPC server + embedded worker pool). Listens on UDS (`~/.orchestratord/orchestrator.sock`) by default, or TCP with `--bind`.
+- **`orchestrator`** — thin CLI client binary that forwards all commands to the daemon via gRPC.
 
-Binary locations after `cargo build --release -p orchestratord -p orchestrator-cli`:
-- `target/release/orchestratord` — daemon
-- `target/release/orchestrator` — CLI client
+Install via the one-line installer or download from GitHub Releases:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/c9r-io/orchestrator/main/install.sh | sh
+```
 
 Start the daemon first, then use the CLI:
 
@@ -138,8 +140,8 @@ spec:
 
 ### Production vs QA Profiles
 
-- **Production profiles** (`docs/workflow/execution-profiles.yaml`): `network_mode: inherit` — agents need API access for LLM calls.
-- **QA/fixture profiles** (`fixtures/manifests/bundles/sandbox-execution-profiles.yaml`): `network_mode: deny` — tests verify sandbox enforcement.
+- **Production profiles**: Use `network_mode: inherit` — agents need API access for LLM calls.
+- **QA/fixture profiles**: Use `network_mode: deny` — tests verify sandbox enforcement.
 
 Referenced in workflow steps:
 

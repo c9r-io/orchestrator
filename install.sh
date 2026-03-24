@@ -150,3 +150,15 @@ install_binary "${package_dir}/orchestrator" "${BIN_DIR}/orchestrator"
 install_binary "${package_dir}/orchestratord" "${BIN_DIR}/orchestratord"
 
 log "installed orchestrator binaries to ${BIN_DIR}"
+
+# Install Claude Code skills (orchestrator-guide) if available
+skills_archive="orchestrator-skills-${release_tag}.tar.gz"
+skills_url="${base_url}/${skills_archive}"
+if curl -fsSL --head "$skills_url" >/dev/null 2>&1; then
+  curl -fsSL "$skills_url" -o "${tmp_dir}/${skills_archive}"
+  log "installing orchestrator skills"
+  # Extract .claude/skills/ into the current working directory so that
+  # Claude Code picks them up when the user opens any project.
+  tar -xzf "${tmp_dir}/${skills_archive}" -C "."
+  log "installed orchestrator-guide skill to .claude/skills/"
+fi
