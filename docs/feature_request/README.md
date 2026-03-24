@@ -62,6 +62,7 @@
 | FR-073 | 文档站点与 Landing Page — 外部可发现性 | P1 | Closed |
 | FR-076 | GUI 正式发布 — Tauri App 打包分发 | P3 | Deferred |
 | FR-077 | Workflow 模板库 — 常见 SDLC 自动化场景预设 | P1 | Proposed |
+| FR-078 | Task Items 与 Event List CLI 命令 | P1 | Proposed |
 
 ## 说明
 
