@@ -116,10 +116,12 @@ orchestrator apply -f docs/workflow/self-evolution.yaml --project self-evolution
 
 ### 3.3 验证资源已加载
 
-project-only 部署下 `orchestrator get` 会因全局 defaults 为空报错，
-改用 sqlite 直接验证：
+验证资源已加载（可加 --project 限定项目范围）：
 
 ```bash
+orchestrator get workspaces --project self-evolution
+
+# 或直接查询数据库（调试用）：
 sqlite3 ~/.orchestratord/agent_orchestrator.db \
   "SELECT json_group_array(key) FROM (
      SELECT key FROM json_each(

@@ -213,12 +213,8 @@ pub fn get_resource(
         read_active_config(state).map_err(|err| classify_resource_error("resource.get", err))?;
     let config = &active.config;
     let project_id = project.unwrap_or(crate::config::DEFAULT_PROJECT_ID);
-    let proj_cfg = config.projects.get(project_id).ok_or_else(|| {
-        classify_resource_error(
-            "resource.get",
-            anyhow::anyhow!("project not found: {}", project_id),
-        )
-    })?;
+    let empty_project = crate::config::ProjectConfig::default();
+    let proj_cfg = config.projects.get(project_id).unwrap_or(&empty_project);
 
     if resource.contains('/') {
         if selector.is_some() {
@@ -518,10 +514,15 @@ pub fn delete_resource(
             }
         }
         let project_id = project.unwrap_or(crate::config::DEFAULT_PROJECT_ID);
-        let proj_cfg = config
-            .projects
-            .get(project_id)
-            .context(format!("project not found: {}", project_id))?;
+        let proj_cfg = match config.projects.get(project_id) {
+            Some(p) => p,
+            None => {
+                return Err(classify_resource_error(
+                    "resource.delete",
+                    anyhow::anyhow!("{}/{} not found in project '{}'", kind, name, project_id),
+                ));
+            }
+        };
         let exists = match kind {
             "ws" | "workspace" => proj_cfg.workspaces.contains_key(name),
             "agent" => proj_cfg.agents.contains_key(name),
