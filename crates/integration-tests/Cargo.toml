@@ -7,9 +7,9 @@ license = "MIT"
 publish = false
 
 [dependencies]
-agent-orchestrator = { path = "../../core", features = ["test-harness"] }
-orchestrator-scheduler = { path = "../orchestrator-scheduler", features = ["test-harness"] }
-orchestrator-proto = { path = "../proto" }
+agent-orchestrator = { path = "../../core", version = "0.1.0", features = ["test-harness"] }
+orchestrator-scheduler = { path = "../orchestrator-scheduler", version = "0.1.0", features = ["test-harness"] }
+orchestrator-proto = { path = "../proto", version = "0.1.0" }
 tonic = "0.14"
 tokio = { version = "1.44", features = ["macros", "rt-multi-thread", "time", "sync", "net"] }
 tokio-stream = "0.1"

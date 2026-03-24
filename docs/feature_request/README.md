@@ -58,7 +58,7 @@
 | FR-069 | GUI 体验打磨 — 主题切换 / 动画 / i18n / 响应式 / 构建分发 | P2 | Closed |
 | FR-070 | evo_apply_winner 可观测性增强 — 候选选择与代码应用决策日志 | P1 | Closed |
 | FR-071 | 开源合规基础设施 — LICENSE / CHANGELOG / CONTRIBUTING / v0.1.0 Release | P0 | Closed |
-| FR-072 | 分发渠道扩展 — Docker 镜像与 Homebrew Tap | P1 | Proposed |
+| FR-072 | 分发渠道扩展 — Docker 镜像与 Homebrew Tap | P1 | Closed |
 | FR-073 | 文档站点与 Landing Page — 外部可发现性 | P1 | Proposed |
 | FR-076 | GUI 正式发布 — Tauri App 打包分发 | P3 | Deferred |
 | FR-077 | Workflow 模板库 — 常见 SDLC 自动化场景预设 | P1 | Proposed |
@@ -139,3 +139,4 @@
 - FR-069 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/79-gui-polish-theme-i18n-responsive.md` 与 `docs/qa/orchestrator/121-gui-polish-theme-i18n-responsive.md` 承载
 - FR-070 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/80-evo-apply-winner-observability.md` 与 `docs/qa/orchestrator/122-evo-apply-winner-observability.md` 承载
 - FR-071 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/81-open-source-compliance.md` 与 `docs/qa/orchestrator/123-open-source-compliance.md` 承载（LICENSE、CHANGELOG、CONTRIBUTING、GitHub 模板已就绪；v0.1.0 release 待 tag 推送）
+- FR-072 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/82-homebrew-tap-distribution.md` 与 `docs/qa/orchestrator/124-homebrew-tap-distribution.md` 承载（Docker 分发因架构不兼容已排除——orchestratord 以子进程方式 spawn agent，需宿主机工具与凭证；已实现 Homebrew tap 与 cargo install 两条分发渠道）

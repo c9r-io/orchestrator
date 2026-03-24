@@ -1,15 +1,17 @@
 [package]
 name = "agent-orchestrator"
 version = "0.1.0"
-description = "Agent Orchestrator"
-authors = [""]
+description = "Core library for the Agent Orchestrator — task scheduling, runner, and persistence"
+repository = "https://github.com/c9r-io/orchestrator"
+keywords = ["orchestrator", "agent", "automation", "sdlc"]
+categories = ["development-tools"]
 license = "MIT"
 edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-orchestrator-config = { path = "../crates/orchestrator-config" }
-orchestrator-proto = { path = "../crates/proto" }
+orchestrator-config = { path = "../crates/orchestrator-config", version = "0.1.0" }
+orchestrator-proto = { path = "../crates/proto", version = "0.1.0" }
 anyhow = "1.0"
 arc-swap = "1.7"
 aes-gcm-siv = "0.11"

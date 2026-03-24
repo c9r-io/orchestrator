@@ -1,6 +1,10 @@
 [package]
 name = "orchestratord"
 version = "0.1.0"
+description = "Daemon process for the Agent Orchestrator — gRPC control plane and task execution"
+repository = "https://github.com/c9r-io/orchestrator"
+keywords = ["orchestrator", "daemon", "grpc", "agent"]
+categories = ["command-line-utilities", "development-tools"]
 edition.workspace = true
 rust-version.workspace = true
 license = "MIT"
@@ -10,9 +14,9 @@ name = "orchestratord"
 path = "src/main.rs"
 
 [dependencies]
-agent-orchestrator = { path = "../../core" }
-orchestrator-scheduler = { path = "../orchestrator-scheduler" }
-orchestrator-proto = { path = "../proto" }
+agent-orchestrator = { path = "../../core", version = "0.1.0" }
+orchestrator-scheduler = { path = "../orchestrator-scheduler", version = "0.1.0" }
+orchestrator-proto = { path = "../proto", version = "0.1.0" }
 anyhow = "1.0"
 clap = { version = "4.5", features = ["derive", "env"] }
 pem = "3.0"

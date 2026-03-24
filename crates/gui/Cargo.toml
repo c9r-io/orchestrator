@@ -4,9 +4,10 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license = "MIT"
+publish = false
 
 [dependencies]
-orchestrator-proto = { path = "../proto" }
+orchestrator-proto = { path = "../proto", version = "0.1.0" }
 tauri = { version = "2", features = ["rustls-tls"] }
 tauri-plugin-notification = "2"
 tonic = { version = "0.14", features = ["tls-native-roots", "tls-ring"] }

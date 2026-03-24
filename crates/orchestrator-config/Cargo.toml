@@ -2,7 +2,9 @@
 name = "orchestrator-config"
 version = "0.1.0"
 description = "Configuration models and loading for the Agent Orchestrator"
-authors = [""]
+repository = "https://github.com/c9r-io/orchestrator"
+keywords = ["orchestrator", "config", "yaml", "agent"]
+categories = ["development-tools", "config"]
 license = "MIT"
 edition.workspace = true
 rust-version.workspace = true
