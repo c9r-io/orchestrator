@@ -19,3 +19,4 @@ dist/
 fixtures/*/*.md
 node_modules/
 tmp/
+.wrangler/
