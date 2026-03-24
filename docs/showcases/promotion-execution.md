@@ -68,7 +68,7 @@ gather_updates(command) → analyze_highlights(agent) → generate_content(agent
 ### 3.1 构建并启动 daemon
 
 ```bash
-cd /Volumes/Yotta/ai_native_sdlc
+cd "$ORCHESTRATOR_ROOT"   # your orchestrator project directory
 
 cargo build --release -p orchestratord -p orchestrator-cli
 
@@ -88,7 +88,7 @@ orchestrator delete project/promotion --force
 orchestrator init
 
 # 加载 secrets（如有 Dev.to API key，先 export DEVTO_API_KEY=xxx）
-orchestrator apply -f docs/workflow/promotion-secrets.yaml --project promotion
+orchestrator apply -f your-secrets.yaml           --project promotion
 
 # 加载主 workflow
 orchestrator apply -f docs/workflow/promotion.yaml --project promotion
@@ -97,7 +97,7 @@ orchestrator apply -f docs/workflow/promotion.yaml --project promotion
 ### 3.3 验证资源已加载
 
 ```bash
-sqlite3 data/agent_orchestrator.db \
+sqlite3 ~/.orchestratord/agent_orchestrator.db \
   "SELECT json_group_array(key) FROM (
      SELECT key FROM json_each(
        (SELECT json_extract(config_json, '$.projects.\"promotion\".workspaces')
@@ -106,7 +106,7 @@ sqlite3 data/agent_orchestrator.db \
    );"
 # 预期: ["promotion"]
 
-sqlite3 data/agent_orchestrator.db \
+sqlite3 ~/.orchestratord/agent_orchestrator.db \
   "SELECT json_group_array(key) FROM (
      SELECT key FROM json_each(
        (SELECT json_extract(config_json, '$.projects.\"promotion\".agents')

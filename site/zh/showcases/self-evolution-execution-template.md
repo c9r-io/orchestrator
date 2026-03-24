@@ -98,7 +98,7 @@ evo_plan ──[generate_items]──> evo_implement (x2) ──> evo_benchmark 
 C/S 架构下，CLI（`orchestrator`）通过 Unix Domain Socket 连接 daemon（`orchestratord`）。
 
 ```bash
-cd /path/to/orchestrator
+cd "$ORCHESTRATOR_ROOT"   # your orchestrator project directory
 
 cargo build --release -p orchestratord -p orchestrator-cli
 
@@ -121,8 +121,8 @@ orchestrator task list -o json
 ```bash
 orchestrator delete project/self-evolution --force
 orchestrator init
-orchestrator apply -f docs/workflow/secrets.yaml --project self-evolution
-orchestrator apply -f docs/workflow/secrets.yaml --project self-evolution
+orchestrator apply -f your-secrets.yaml           --project self-evolution
+# apply additional secret manifests as needed      --project self-evolution
 # 如需使用 Claude 原生 API，注释上行即可（claude-* 的模型配置将生效）
 orchestrator apply -f docs/workflow/execution-profiles.yaml --project self-evolution
 # ⚠️  必须使用 --project，否则真实 AI agent 会注册到全局空间
@@ -136,7 +136,7 @@ project-only 部署下 `orchestrator get` 会因全局 defaults 为空报错，
 改用 sqlite 直接验证：
 
 ```bash
-sqlite3 data/agent_orchestrator.db \
+sqlite3 ~/.orchestratord/agent_orchestrator.db \
   "SELECT json_group_array(key) FROM (
      SELECT key FROM json_each(
        (SELECT json_extract(config_json, '$.projects.\"self-evolution\".workspaces')
@@ -145,7 +145,7 @@ sqlite3 data/agent_orchestrator.db \
    );"
 # 预期: ["self"]
 
-sqlite3 data/agent_orchestrator.db \
+sqlite3 ~/.orchestratord/agent_orchestrator.db \
   "SELECT json_group_array(key) FROM (
      SELECT key FROM json_each(
        (SELECT json_extract(config_json, '$.projects.\"self-evolution\".agents')
@@ -198,19 +198,19 @@ self-evolution 相比 self-bootstrap 有以下特有的观察点：
 
 1. **`items_generated` 事件**：确认 `evo_plan` 成功生成了候选 item
    ```bash
-   sqlite3 data/agent_orchestrator.db \
+   sqlite3 ~/.orchestratord/agent_orchestrator.db \
      "SELECT payload_json FROM events WHERE task_id='<task_id>' AND event_type='items_generated';"
    ```
 
 2. **动态 item 状态**：确认候选都被执行
    ```bash
-   sqlite3 data/agent_orchestrator.db \
+   sqlite3 ~/.orchestratord/agent_orchestrator.db \
      "SELECT id, label, source, status FROM task_items WHERE task_id='<task_id>';"
    ```
 
 3. **选择结果**：确认 item_select 选出了胜者
    ```bash
-   sqlite3 data/agent_orchestrator.db \
+   sqlite3 ~/.orchestratord/agent_orchestrator.db \
      "SELECT value_json FROM workflow_store_entries WHERE store_name='evolution' AND key='winner_latest';"
    ```
 
@@ -255,7 +255,7 @@ git diff --stat
 
 ```bash
 orchestrator task trace <task_id> --json
-sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events WHERE task_id = '<task_id>' ORDER BY id DESC LIMIT 20;"
+sqlite3 ~/.orchestratord/agent_orchestrator.db "SELECT event_type, payload_json FROM events WHERE task_id = '<task_id>' ORDER BY id DESC LIMIT 20;"
 ```
 
 ---

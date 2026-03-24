@@ -78,7 +78,7 @@ Cycle 2: plan -> qa_doc_gen -> implement -> self_test -> [self_restart skipped] 
 ### 3.1 构建并启动 daemon
 
 ```bash
-cd /Volumes/Yotta/c9r-io/orchestrator
+cd "$ORCHESTRATOR_ROOT"   # your orchestrator project directory
 
 cargo build --release -p orchestratord -p orchestrator-cli
 
@@ -110,8 +110,8 @@ grep -n "echo" crates/daemon/src/server/system.rs
 ```bash
 orchestrator delete project/self-bootstrap --force
 orchestrator init
-orchestrator apply -f docs/workflow/claude-secret.yaml --project self-bootstrap
-orchestrator apply -f docs/workflow/minimax-secret.yaml --project self-bootstrap
+orchestrator apply -f your-secrets.yaml           --project self-bootstrap
+# apply additional secret manifests as needed      --project self-bootstrap
 orchestrator apply -f docs/workflow/execution-profiles.yaml --project self-bootstrap
 orchestrator apply -f docs/workflow/self-bootstrap.yaml --project self-bootstrap
 ```
@@ -119,7 +119,7 @@ orchestrator apply -f docs/workflow/self-bootstrap.yaml --project self-bootstrap
 ### 3.4 验证资源已加载
 
 ```bash
-sqlite3 data/agent_orchestrator.db \
+sqlite3 ~/.orchestratord/agent_orchestrator.db \
   "SELECT json_group_array(key) FROM (
      SELECT key FROM json_each(
        (SELECT json_extract(config_json, '$.projects.\"self-bootstrap\".workspaces')
@@ -128,7 +128,7 @@ sqlite3 data/agent_orchestrator.db \
    );"
 # 预期: ["self"]
 
-sqlite3 data/agent_orchestrator.db \
+sqlite3 ~/.orchestratord/agent_orchestrator.db \
   "SELECT json_group_array(key) FROM (
      SELECT key FROM json_each(
        (SELECT json_extract(config_json, '$.projects.\"self-bootstrap\".agents')

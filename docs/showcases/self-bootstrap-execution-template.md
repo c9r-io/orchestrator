@@ -72,7 +72,7 @@ plan -> qa_doc_gen -> implement -> self_test -> self_restart -> qa_testing -> ti
 C/S 架构下，CLI（`orchestrator`）通过 Unix Domain Socket 连接 daemon（`orchestratord`）。
 
 ```bash
-cd /Volumes/Yotta/ai_native_sdlc
+cd "$ORCHESTRATOR_ROOT"   # your orchestrator project directory
 
 cargo build --release -p orchestratord -p orchestrator-cli
 
@@ -95,8 +95,8 @@ orchestrator task list -o json
 ```bash
 orchestrator delete project/self-bootstrap --force
 orchestrator init
-orchestrator apply -f docs/workflow/claude-secret.yaml --project self-bootstrap
-orchestrator apply -f docs/workflow/minimax-secret.yaml --project self-bootstrap
+orchestrator apply -f your-secrets.yaml           --project self-bootstrap
+# apply additional secret manifests as needed      --project self-bootstrap
 # 如需使用 Claude 原生 API，注释上行即可（claude-* 的模型配置将生效）
 orchestrator apply -f docs/workflow/execution-profiles.yaml --project self-bootstrap
 # ⚠️  必须使用 --project，否则真实 AI agent 会注册到全局空间
@@ -110,7 +110,7 @@ project-only 部署下 `orchestrator get` 会因全局 defaults 为空报错，
 改用 sqlite 直接验证：
 
 ```bash
-sqlite3 data/agent_orchestrator.db \
+sqlite3 ~/.orchestratord/agent_orchestrator.db \
   "SELECT json_group_array(key) FROM (
      SELECT key FROM json_each(
        (SELECT json_extract(config_json, '$.projects.\"self-bootstrap\".workspaces')
@@ -119,7 +119,7 @@ sqlite3 data/agent_orchestrator.db \
    );"
 # 预期: ["self"]
 
-sqlite3 data/agent_orchestrator.db \
+sqlite3 ~/.orchestratord/agent_orchestrator.db \
   "SELECT json_group_array(key) FROM (
      SELECT key FROM json_each(
        (SELECT json_extract(config_json, '$.projects.\"self-bootstrap\".agents')
@@ -231,7 +231,7 @@ git diff --stat
 ```bash
 orchestrator task trace <task_id> --json
 orchestrator task watch <task_id>
-sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events WHERE task_id = '<task_id>' ORDER BY id DESC LIMIT 20;"
+sqlite3 ~/.orchestratord/agent_orchestrator.db "SELECT event_type, payload_json FROM events WHERE task_id = '<task_id>' ORDER BY id DESC LIMIT 20;"
 ```
 
 适用场景：
@@ -278,7 +278,7 @@ sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events 
 监控 self_restart 热重载：
 ```bash
 # 查看 self_restart 相关事件
-sqlite3 data/agent_orchestrator.db "SELECT payload_json FROM events WHERE task_id = '<task_id>' AND event_type LIKE 'self_restart%' ORDER BY id DESC LIMIT 10;"
+sqlite3 ~/.orchestratord/agent_orchestrator.db "SELECT payload_json FROM events WHERE task_id = '<task_id>' AND event_type LIKE 'self_restart%' ORDER BY id DESC LIMIT 10;"
 ```
 
 ### 5.4 Self-Test 阶段检查点

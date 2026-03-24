@@ -168,7 +168,7 @@ self_referential_safe: false
 ### 3.1 构建并确认 daemon 运行
 
 ```bash
-cd /Users/chenhan/c9r-io/orchestrator
+cd "$ORCHESTRATOR_ROOT"   # your orchestrator project directory
 
 # 确认 daemon 运行
 ps aux | grep orchestratord | grep -v grep
@@ -187,8 +187,8 @@ ps aux | grep orchestratord | grep -v grep
 orchestrator init
 
 # 加载 secrets 和 execution profiles
-orchestrator apply -f docs/workflow/claude-secret.yaml --project self-bootstrap
-orchestrator apply -f docs/workflow/minimax-secret.yaml --project self-bootstrap
+orchestrator apply -f your-secrets.yaml           --project self-bootstrap
+# apply additional secret manifests as needed      --project self-bootstrap
 orchestrator apply -f docs/workflow/execution-profiles.yaml --project self-bootstrap
 
 # 加载 self-bootstrap 的 StepTemplates（full-qa 复用这些模板）
@@ -268,7 +268,7 @@ ls docs/ticket/
 ls docs/ticket/*.md 2>/dev/null | wc -l
 
 # 验证不安全文档被跳过
-sqlite3 data/agent_orchestrator.db \
+sqlite3 ~/.orchestratord/agent_orchestrator.db \
   "SELECT COUNT(*) FROM events WHERE task_id = '<task_id>' AND event_type = 'step_skipped' AND json_extract(payload_json, '$.step') = 'qa_testing';"
 ```
 

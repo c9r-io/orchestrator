@@ -11,7 +11,7 @@ Entry point: `orchestrator` (CLI client) + `orchestratord` (daemon).
 Run from repository root:
 
 ```bash
-cd /Volumes/Yotta/ai_native_sdlc
+cd "$ORCHESTRATOR_ROOT"   # your orchestrator project directory
 cargo build --release -p orchestratord -p orchestrator-cli
 ```
 
@@ -38,7 +38,7 @@ orchestrator init
 ```
 
 Runtime data locations:
-- SQLite DB: `data/agent_orchestrator.db`
+- SQLite DB: `~/.orchestratord/agent_orchestrator.db`
 - Logs: `data/logs/`
 
 ---
@@ -155,7 +155,7 @@ orchestrator task logs <task_id> --tail 50
 Check step order:
 
 ```bash
-sqlite3 data/agent_orchestrator.db "
+sqlite3 ~/.orchestratord/agent_orchestrator.db "
 SELECT id,
        event_type,
        json_extract(payload_json,'$.step') AS step,
@@ -171,7 +171,7 @@ ORDER BY id;"
 Check run details and log file paths:
 
 ```bash
-sqlite3 data/agent_orchestrator.db "
+sqlite3 ~/.orchestratord/agent_orchestrator.db "
 SELECT id, phase, agent_id, exit_code, validation_status, started_at, ended_at, stdout_path, stderr_path
 FROM command_runs
 WHERE task_item_id=(SELECT id FROM task_items WHERE task_id='<task_id>' ORDER BY order_no LIMIT 1)
@@ -187,7 +187,7 @@ ORDER BY started_at;"
 Check command text:
 
 ```bash
-sqlite3 data/agent_orchestrator.db "
+sqlite3 ~/.orchestratord/agent_orchestrator.db "
 SELECT phase, command
 FROM command_runs
 WHERE task_item_id=(SELECT id FROM task_items WHERE task_id='<task_id>' ORDER BY order_no LIMIT 1)
@@ -220,7 +220,7 @@ sed -n '1,120p' docs/qa/self-bootstrap/smoke-self-bootstrap.md
 Quick query:
 
 ```bash
-sqlite3 data/agent_orchestrator.db "
+sqlite3 ~/.orchestratord/agent_orchestrator.db "
 SELECT t.id,
        substr(t.execution_plan_json,1,120) AS execution_plan_json_head,
        r.phase,
