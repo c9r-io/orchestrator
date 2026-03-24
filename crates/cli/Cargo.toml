@@ -1,6 +1,6 @@
 [package]
 name = "orchestrator-cli"
-version = "0.1.0"
+version = "0.1.1"
 description = "CLI client for the Agent Orchestrator daemon"
 repository = "https://github.com/c9r-io/orchestrator"
 keywords = ["orchestrator", "cli", "agent", "automation"]
@@ -8,13 +8,14 @@ categories = ["command-line-utilities", "development-tools"]
 edition.workspace = true
 rust-version.workspace = true
 license = "MIT"
+readme = "README.md"
 
 [[bin]]
 name = "orchestrator"
 path = "src/main.rs"
 
 [dependencies]
-orchestrator-proto = { path = "../proto", version = "0.1.0" }
+orchestrator-proto = { path = "../proto", version = "0.1.1" }
 anyhow = "1.0"
 dirs = "6"
 clap = { version = "4.5", features = ["derive", "env"] }
@@ -29,7 +30,7 @@ tokio-stream = "0.1"
 tower = "0.5"
 hyper-util = "0.1"
 
-agent-orchestrator = { path = "../../core", version = "0.1.0" }
+agent-orchestrator = { path = "../../core", version = "0.1.1" }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
