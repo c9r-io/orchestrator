@@ -67,8 +67,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          archive="dist/orchestrator-${RELEASE_TAG}-${{ matrix.target }}.tar.gz"
-          shasum -a 256 "$archive" > "${archive}.sha256"
+          cd dist
+          shasum -a 256 "orchestrator-${RELEASE_TAG}-${{ matrix.target }}.tar.gz" > "orchestrator-${RELEASE_TAG}-${{ matrix.target }}.tar.gz.sha256"
 
       - name: Upload release assets
         uses: actions/upload-artifact@v4
