@@ -21,9 +21,7 @@
 | Flag | Description |
 |------|-------------|
 | `-v, --verbose` | Verbose output |
-| `--log-level <LEVEL>` | error/warn/info/debug/trace |
-| `--log-format <FORMAT>` | pretty/json |
-| `--unsafe` | Bypass --force gates |
+| `--control-plane-config <PATH>` | Override control-plane client config file |
 
 ## Aliases
 
@@ -61,7 +59,7 @@ orchestrator task worker status                   # worker queue state
 kill <pid>                                        # graceful SIGTERM
 ```
 
-Connection: CLI connects via UDS (`data/orchestrator.sock`) by default, or `$ORCHESTRATOR_SOCKET` env.
+Connection: CLI connects via UDS (`~/.orchestratord/orchestrator.sock`) by default, or `$ORCHESTRATOR_SOCKET` env.
 
 > Config changes from `apply` are hot-reloaded into the daemon via `RwLock<ActiveConfig>` — no restart needed.
 
@@ -77,11 +75,11 @@ cat manifest.yaml | orchestrator apply -f -
 
 > **Important**: Production workflows (self-bootstrap, self-evolution) must ALWAYS use `--project` to isolate resources. Apply execution profiles BEFORE workflows that reference them.
 
-Recommended apply order:
+Recommended apply order for multi-resource setups:
 ```bash
-orchestrator apply -f docs/workflow/execution-profiles.yaml --project self-bootstrap
-orchestrator apply -f docs/workflow/claude-secret.yaml --project self-bootstrap
-orchestrator apply -f docs/workflow/self-bootstrap.yaml --project self-bootstrap
+orchestrator apply -f execution-profiles.yaml --project my-project
+orchestrator apply -f secrets.yaml --project my-project
+orchestrator apply -f workflow.yaml --project my-project
 ```
 
 ## Manifest Operations
@@ -111,7 +109,7 @@ orchestrator check
 > In project-only deployments (no global workspaces), `get` will fail.
 > Use sqlite queries to verify project-scoped resources:
 > ```bash
-> sqlite3 data/agent_orchestrator.db \
+> sqlite3 ~/.orchestratord/agent_orchestrator.db \
 >   "SELECT json_extract(config_json, '$.projects.\"<project>\".workspaces') \
 >    FROM orchestrator_config_versions ORDER BY id DESC LIMIT 1;"
 > ```
@@ -141,16 +139,8 @@ orchestrator task logs --tail 100 <id>
 orchestrator task watch <id>              # real-time auto-refreshing panel
 orchestrator task trace <id>              # execution timeline with anomaly detection
 
-# Worker management
-orchestrator task worker status           # queue state: pending tasks, stop signal
-orchestrator task worker start            # start standalone worker loop (non-daemon mode)
-orchestrator task worker stop             # signal worker to stop
-
 # Other
 orchestrator task delete <id>
-orchestrator task edit --help
-orchestrator task session list
-orchestrator exec -it <task_id> <step_id>
 ```
 
 > **Note**: In C/S mode, `task create` defaults to `--detach` (enqueue to daemon worker).
@@ -208,26 +198,19 @@ orchestrator event cleanup               # remove old events (per retention conf
 orchestrator event stats                  # show event table statistics
 ```
 
-## QA & Database
+## Database
 
 ```bash
-# Project-scoped reset (safe, isolated)
-orchestrator qa project reset <project> --keep-config --force
-orchestrator qa project create <project> --force
-orchestrator qa doctor
-
-# Database reset (DESTRUCTIVE)
-orchestrator db reset --force
-orchestrator db reset --force --include-config
+orchestrator db status             # show database info
+orchestrator db migrations list    # list applied migrations
 ```
 
 ## Other Commands
 
 ```bash
-orchestrator debug
-orchestrator verify
-orchestrator version
-orchestrator config heal-log
-orchestrator config backfill-events --force
-orchestrator completion bash > ~/.bash_completion.d/orchestrator
+orchestrator debug                 # system debug info
+orchestrator check                 # preflight check
+orchestrator version               # show version
+orchestrator daemon stop           # stop the daemon
+orchestrator daemon status         # check daemon status
 ```

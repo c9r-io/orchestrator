@@ -208,18 +208,17 @@ safety:
 
 ## Deployment Manifest Order
 
-For production self-bootstrap workflows, apply manifests in this order:
+For production workflows, apply manifests in dependency order:
 
 ```bash
 # 1. Execution profiles (must exist before workflows reference them)
-orchestrator apply -f docs/workflow/execution-profiles.yaml --project self-bootstrap
+orchestrator apply -f execution-profiles.yaml --project my-project
 
 # 2. Secrets (API keys for AI agents)
-orchestrator apply -f docs/workflow/claude-secret.yaml --project self-bootstrap
-orchestrator apply -f docs/workflow/minimax-secret.yaml --project self-bootstrap
+orchestrator apply -f secrets.yaml --project my-project
 
 # 3. Workflow (references profiles and agents)
-orchestrator apply -f docs/workflow/self-bootstrap.yaml --project self-bootstrap
+orchestrator apply -f workflow.yaml --project my-project
 ```
 
 Workflow validation rejects references to nonexistent execution profiles, so profiles must be applied first.

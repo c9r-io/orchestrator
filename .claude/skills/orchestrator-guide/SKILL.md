@@ -38,7 +38,6 @@ orchestratord --bind 0.0.0.0:9090 --workers 4   # TCP instead of UDS
 
 # Monitor daemon
 ps aux | grep orchestratord | grep -v grep       # check process
-orchestrator task worker status                   # check worker queue state
 
 # Stop daemon
 kill <pid>                                        # graceful SIGTERM
@@ -47,7 +46,7 @@ kill <pid>                                        # graceful SIGTERM
 ## Core Workflow
 
 1. Start the daemon: `orchestratord --foreground --workers 2`
-2. `orchestrator init` — create SQLite schema
+2. `orchestrator init` — initialize orchestrator runtime (creates `~/.orchestratord/` with DB, secrets, etc.)
 3. `orchestrator apply -f manifest.yaml --project <name>` — load resources (daemon hot-reloads config via RwLock, no restart needed)
 4. `orchestrator task create --name X --goal Y --workflow Z --project <name>` — create and run (auto-enqueues to worker)
 5. `orchestrator task info <id>` / `task trace <id>` / `task logs <id>` — inspect results
