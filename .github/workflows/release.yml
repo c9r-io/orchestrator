@@ -119,14 +119,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Generate formula
-        run: scripts/update-homebrew-formula.sh "$RELEASE_TAG" > /tmp/orchestrator.rb
+        run: scripts/update-homebrew-formula.sh "$RELEASE_TAG" > "${{ github.workspace }}/orchestrator.rb"
 
       - name: Push to Homebrew tap
         uses: dmnemec/copy_file_to_another_repo_action@main
         env:
           API_TOKEN_GITHUB: ${{ secrets.TAP_GITHUB_TOKEN }}
         with:
-          source_file: /tmp/orchestrator.rb
+          source_file: orchestrator.rb
           destination_repo: c9r-io/homebrew-tap
           destination_folder: Formula
           user_email: github-actions[bot]@users.noreply.github.com
