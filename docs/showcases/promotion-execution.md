@@ -97,23 +97,8 @@ orchestrator apply -f docs/workflow/promotion.yaml --project promotion
 ### 3.3 验证资源已加载
 
 ```bash
-sqlite3 ~/.orchestratord/agent_orchestrator.db \
-  "SELECT json_group_array(key) FROM (
-     SELECT key FROM json_each(
-       (SELECT json_extract(config_json, '$.projects.\"promotion\".workspaces')
-        FROM orchestrator_config_versions ORDER BY id DESC LIMIT 1)
-     )
-   );"
-# 预期: ["promotion"]
-
-sqlite3 ~/.orchestratord/agent_orchestrator.db \
-  "SELECT json_group_array(key) FROM (
-     SELECT key FROM json_each(
-       (SELECT json_extract(config_json, '$.projects.\"promotion\".agents')
-        FROM orchestrator_config_versions ORDER BY id DESC LIMIT 1)
-     )
-   );"
-# 预期: ["content-analyst","content-writer"]
+orchestrator get workspaces --project promotion -o json
+orchestrator get agents --project promotion -o json
 ```
 
 ### 3.4 创建任务（手动执行）

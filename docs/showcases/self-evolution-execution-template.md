@@ -135,26 +135,8 @@ orchestrator apply -f docs/workflow/self-evolution.yaml --project self-evolution
 验证资源已加载（可加 --project 限定项目范围）：
 
 ```bash
-orchestrator get workspaces --project self-evolution
-
-# 或直接查询数据库（调试用）：
-sqlite3 ~/.orchestratord/agent_orchestrator.db \
-  "SELECT json_group_array(key) FROM (
-     SELECT key FROM json_each(
-       (SELECT json_extract(config_json, '$.projects.\"self-evolution\".workspaces')
-        FROM orchestrator_config_versions ORDER BY id DESC LIMIT 1)
-     )
-   );"
-# 预期: ["self"]
-
-sqlite3 ~/.orchestratord/agent_orchestrator.db \
-  "SELECT json_group_array(key) FROM (
-     SELECT key FROM json_each(
-       (SELECT json_extract(config_json, '$.projects.\"self-evolution\".agents')
-        FROM orchestrator_config_versions ORDER BY id DESC LIMIT 1)
-     )
-   );"
-# 预期: ["evo_architect","evo_coder","evo_reviewer"]
+orchestrator get workspaces --project self-evolution -o json
+orchestrator get agents --project self-evolution -o json
 ```
 
 ### 3.4 创建任务（把目标交给 orchestrator）
@@ -200,20 +182,21 @@ self-evolution 相比 self-bootstrap 有以下特有的观察点：
 
 1. **`items_generated` 事件**：确认 `evo_plan` 成功生成了候选 item
    ```bash
+   # 调试用：直接查询数据库
    sqlite3 ~/.orchestratord/agent_orchestrator.db \
      "SELECT payload_json FROM events WHERE task_id='<task_id>' AND event_type='items_generated';"
    ```
 
 2. **动态 item 状态**：确认候选都被执行
    ```bash
+   # 调试用：直接查询数据库
    sqlite3 ~/.orchestratord/agent_orchestrator.db \
      "SELECT id, label, source, status FROM task_items WHERE task_id='<task_id>';"
    ```
 
 3. **选择结果**：确认 item_select 选出了胜者
    ```bash
-   sqlite3 ~/.orchestratord/agent_orchestrator.db \
-     "SELECT value_json FROM workflow_store_entries WHERE store_name='evolution' AND key='winner_latest';"
+   orchestrator store get evolution winner_latest --project self-evolution
    ```
 
 ### 4.3 日志监控
@@ -257,6 +240,7 @@ git diff --stat
 
 ```bash
 orchestrator task trace <task_id> --json
+# 调试用：直接查询数据库
 sqlite3 ~/.orchestratord/agent_orchestrator.db "SELECT event_type, payload_json FROM events WHERE task_id = '<task_id>' ORDER BY id DESC LIMIT 20;"
 ```
 

@@ -119,23 +119,8 @@ orchestrator apply -f docs/workflow/self-bootstrap.yaml --project self-bootstrap
 ### 3.4 验证资源已加载
 
 ```bash
-sqlite3 ~/.orchestratord/agent_orchestrator.db \
-  "SELECT json_group_array(key) FROM (
-     SELECT key FROM json_each(
-       (SELECT json_extract(config_json, '$.projects.\"self-bootstrap\".workspaces')
-        FROM orchestrator_config_versions ORDER BY id DESC LIMIT 1)
-     )
-   );"
-# 预期: ["self"]
-
-sqlite3 ~/.orchestratord/agent_orchestrator.db \
-  "SELECT json_group_array(key) FROM (
-     SELECT key FROM json_each(
-       (SELECT json_extract(config_json, '$.projects.\"self-bootstrap\".agents')
-        FROM orchestrator_config_versions ORDER BY id DESC LIMIT 1)
-     )
-   );"
-# 预期: ["architect","coder","reviewer","tester"]
+orchestrator get workspaces --project self-bootstrap -o json
+orchestrator get agents --project self-bootstrap -o json
 ```
 
 ### 3.5 创建任务

@@ -109,26 +109,8 @@ orchestrator apply -f docs/workflow/self-bootstrap.yaml --project self-bootstrap
 验证资源已加载（可加 --project 限定项目范围）：
 
 ```bash
-orchestrator get workspaces --project self-bootstrap
-
-# 或直接查询数据库（调试用）：
-sqlite3 ~/.orchestratord/agent_orchestrator.db \
-  "SELECT json_group_array(key) FROM (
-     SELECT key FROM json_each(
-       (SELECT json_extract(config_json, '$.projects.\"self-bootstrap\".workspaces')
-        FROM orchestrator_config_versions ORDER BY id DESC LIMIT 1)
-     )
-   );"
-# 预期: ["self"]
-
-sqlite3 ~/.orchestratord/agent_orchestrator.db \
-  "SELECT json_group_array(key) FROM (
-     SELECT key FROM json_each(
-       (SELECT json_extract(config_json, '$.projects.\"self-bootstrap\".agents')
-        FROM orchestrator_config_versions ORDER BY id DESC LIMIT 1)
-     )
-   );"
-# 预期: ["architect","coder","reviewer","tester"]
+orchestrator get workspaces --project self-bootstrap -o json
+orchestrator get agents --project self-bootstrap -o json
 ```
 
 ### 3.4 创建任务（把目标交给 orchestrator）
@@ -233,6 +215,7 @@ git diff --stat
 ```bash
 orchestrator task trace <task_id> --json
 orchestrator task watch <task_id>
+# 调试用：直接查询数据库
 sqlite3 ~/.orchestratord/agent_orchestrator.db "SELECT event_type, payload_json FROM events WHERE task_id = '<task_id>' ORDER BY id DESC LIMIT 20;"
 ```
 
@@ -279,7 +262,7 @@ sqlite3 ~/.orchestratord/agent_orchestrator.db "SELECT event_type, payload_json 
 
 监控 self_restart 热重载：
 ```bash
-# 查看 self_restart 相关事件
+# 调试用：直接查询数据库，查看 self_restart 相关事件
 sqlite3 ~/.orchestratord/agent_orchestrator.db "SELECT payload_json FROM events WHERE task_id = '<task_id>' AND event_type LIKE 'self_restart%' ORDER BY id DESC LIMIT 10;"
 ```
 
