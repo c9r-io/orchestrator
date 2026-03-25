@@ -5,6 +5,80 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.1] - 2026-03-26
+
+### Added
+- Per-trigger webhook authentication — `webhook.secret.fromRef` resolves signing keys from SecretStore with multi-key rotation support
+- Custom signature header per trigger — `webhook.signatureHeader` (default: `X-Webhook-Signature`)
+- CEL payload filtering — `filter.condition` evaluates CEL expressions against webhook JSON body
+- Integration manifest packages — companion repo `c9r-io/orchestrator-integrations` with Slack, GitHub, LINE pre-configured triggers
+- `integration-authoring` skill for creating new integration packages
+- Secret rotation showcase (`docs/showcases/secret-rotation-workflow.md`)
+
+### Changed
+- Webhook auth fallback chain: per-trigger secret → global `--webhook-secret` → no verification
+
+## [0.2.0] - 2026-03-25
+
+### Added
+- HTTP webhook endpoint — `--webhook-bind <ADDR>` runs axum HTTP server alongside gRPC
+- Webhook trigger source — `event.source: webhook` for external event ingestion
+- HMAC-SHA256 signature verification — `--webhook-secret` with `X-Webhook-Signature` header
+- `orchestrator trigger fire --payload` — simulate webhook payloads via CLI
+- `orchestrator task items <task_id>` — list task item status
+- `orchestrator event list --task <task_id>` — list task events with type filter
+- `orchestrator db vacuum` — reclaim SQLite disk space
+- `orchestrator db cleanup --older-than N` — manual log file cleanup
+- `orchestrator db status` — shows DB, logs, and archive sizes
+- Automatic log file TTL cleanup — `--log-retention-days 30` (default enabled)
+- Optional task auto-cleanup — `--task-retention-days N` (default disabled)
+
+### Changed
+- Webhook payload included in trigger goal for context
+- `db status` output now includes disk usage information
+
+## [0.1.6] - 2026-03-25
+
+### Changed
+- Dependencies upgraded: clap 4.6, nix 0.31, cron 0.15, arc-swap 1.9, tracing-subscriber 0.3.23, clap_complete 4.6
+- Fix nix 0.31 breaking change: `dup2()` API migration to `AsFd` + `OwnedFd`
+- CI clippy and fmt fixes
+
+## [0.1.5] - 2026-03-25
+
+### Changed
+- Documentation site launched at docs.c9r.io (VitePress + Cloudflare Pages)
+- 9 showcase execution plans with EN/ZH translations
+- Multi-model benchmark showcase for comparing LLM shells and models
+- README slimmed from 371 to 74 lines with agent-first vision
+- Project identity: "Built for agents, by agents"
+
+## [0.1.3] - 2026-03-25
+
+### Fixed
+- Supply chain: rustls-webpki 0.103.9 → 0.103.10 (RUSTSEC-2026-0049)
+- Supply chain: migrate serde_yml → serde_yaml (RUSTSEC-2025-0067/0068)
+
+## [0.1.2] - 2026-03-24
+
+### Fixed
+- `orchestrator get` returns empty results instead of error for missing projects
+- Full CLI/daemon documentation alignment (20+ stale references fixed)
+
+### Changed
+- Showcases sanitized with developer-friendly placeholders
+- sqlite workarounds replaced with CLI commands
+
+## [0.1.1] - 2026-03-24
+
+### Added
+- Homebrew tap: `brew install c9r-io/tap/orchestrator`
+- crates.io publishing with Trusted Publishers (OIDC)
+- crate READMEs for crates.io display
+
+### Changed
+- Release workflow: Homebrew formula auto-push + crates.io auto-publish
+
 ## [0.1.0] - 2026-03-24
 
 Initial release of the Agent Orchestrator platform.
