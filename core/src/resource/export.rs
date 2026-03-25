@@ -2,9 +2,9 @@ use crate::cli_types::{OrchestratorResource, ResourceKind, ResourceSpec};
 use crate::config::OrchestratorConfig;
 
 use super::{
-    AgentResource, EnvStoreResource, ExecutionProfileResource, ProjectResource, RegisteredResource,
-    Resource, RuntimePolicyResource, SecretStoreResource, StepTemplateResource, WorkflowResource,
-    WorkspaceResource, API_VERSION,
+    API_VERSION, AgentResource, EnvStoreResource, ExecutionProfileResource, ProjectResource,
+    RegisteredResource, Resource, RuntimePolicyResource, SecretStoreResource, StepTemplateResource,
+    WorkflowResource, WorkspaceResource,
 };
 
 fn project_metadata(
@@ -240,7 +240,7 @@ pub fn export_manifest_documents(config: &OrchestratorConfig) -> Vec<Orchestrato
 mod tests {
     use super::*;
     use crate::cli_types::{ResourceMetadata, ResourceSpec, WorkspaceSpec};
-    use crate::resource::{dispatch_resource, Resource, API_VERSION};
+    use crate::resource::{API_VERSION, Resource, dispatch_resource};
 
     use super::super::test_fixtures::{
         agent_manifest, make_config, project_manifest, workflow_manifest, workspace_manifest,

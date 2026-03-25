@@ -3,7 +3,7 @@ use super::profile::ResolvedExecutionProfile;
 #[cfg(unix)]
 use super::profile::UnixResourceLimits;
 #[cfg(unix)]
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 #[cfg(unix)]
 use std::io;
 

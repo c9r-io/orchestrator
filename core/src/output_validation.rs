@@ -1,4 +1,4 @@
-use crate::collab::{parse_artifacts_from_output, AgentOutput};
+use crate::collab::{AgentOutput, parse_artifacts_from_output};
 use crate::config::{BuildError, BuildErrorLevel, TestFailure};
 use anyhow::Result;
 use serde_json::Value;
@@ -410,11 +410,13 @@ warning: unused variable
             .expect("validation should return outcome");
         // The "test ... FAILED" line is detected, and then the failure block merges with it
         assert!(!outcome.output.test_failures.is_empty());
-        assert!(outcome
-            .output
-            .test_failures
-            .iter()
-            .any(|f| f.test_name == "my_module::test_foo"));
+        assert!(
+            outcome
+                .output
+                .test_failures
+                .iter()
+                .any(|f| f.test_name == "my_module::test_foo")
+        );
     }
 
     #[test]

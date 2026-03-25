@@ -1,9 +1,9 @@
+use crate::scheduler::RunningTask;
 use crate::scheduler::item_executor::{
-    finalize_item_execution, process_item_filtered, process_item_filtered_owned,
-    OwnedProcessItemRequest, ProcessItemRequest, StepExecutionAccumulator,
+    OwnedProcessItemRequest, ProcessItemRequest, StepExecutionAccumulator, finalize_item_execution,
+    process_item_filtered, process_item_filtered_owned,
 };
 use crate::scheduler::task_state::{list_task_items_for_cycle, set_item_blocked, set_task_status};
-use crate::scheduler::RunningTask;
 use agent_orchestrator::config::StepScope;
 use agent_orchestrator::events::insert_event;
 use agent_orchestrator::state::InnerState;

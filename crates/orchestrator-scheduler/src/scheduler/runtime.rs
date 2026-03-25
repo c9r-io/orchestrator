@@ -6,16 +6,16 @@ use agent_orchestrator::events::insert_event;
 use agent_orchestrator::self_referential_policy::{
     evaluate_self_referential_policy, format_blocking_policy_error,
 };
-use agent_orchestrator::state::{task_semaphore, InnerState};
+use agent_orchestrator::state::{InnerState, task_semaphore};
 use anyhow::{Context, Result};
 use serde_json::json;
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use tracing::{error, info_span, Instrument};
+use std::sync::atomic::Ordering;
+use tracing::{Instrument, error, info_span};
 
 use super::task_state::set_task_status;
-use super::{run_task_loop, RunningTask};
+use super::{RunningTask, run_task_loop};
 use agent_orchestrator::runner::kill_child_process_group;
 
 /// Kills the currently tracked child process for a running task, if present.

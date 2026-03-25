@@ -1,15 +1,15 @@
 use crate::cli_types::{OrchestratorResource, ResourceKind};
 use crate::config::OrchestratorConfig;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
-use super::{
-    agent, env_store, execution_profile, project, runtime_policy, secret_store, step_template,
-    trigger, workflow, workspace, ApplyResult, Resource,
-};
 use super::{
     AgentResource, EnvStoreResource, ExecutionProfileResource, ProjectResource,
     RuntimePolicyResource, SecretStoreResource, StepTemplateResource, TriggerResource,
     WorkflowResource, WorkspaceResource,
+};
+use super::{
+    ApplyResult, Resource, agent, env_store, execution_profile, project, runtime_policy,
+    secret_store, step_template, trigger, workflow, workspace,
 };
 
 #[derive(Debug, Clone)]

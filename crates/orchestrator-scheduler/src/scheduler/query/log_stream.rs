@@ -633,7 +633,7 @@ mod tests {
                     task_item_id: item_id.clone(),
                     phase: "qa".to_string(),
                     command: format!("echo {}", i),
-                command_template: None,
+                    command_template: None,
                     cwd: "/tmp".to_string(),
                     workspace_id: "default".to_string(),
                     agent_id: "echo".to_string(),
@@ -868,12 +868,16 @@ mod tests {
             .await
             .expect("stream task logs");
         assert_eq!(chunks.len(), 2);
-        assert!(chunks
-            .iter()
-            .any(|chunk| chunk.content.contains("available output")));
-        assert!(chunks
-            .iter()
-            .any(|chunk| chunk.content.contains(LOG_UNAVAILABLE_MARKER)));
+        assert!(
+            chunks
+                .iter()
+                .any(|chunk| chunk.content.contains("available output"))
+        );
+        assert!(
+            chunks
+                .iter()
+                .any(|chunk| chunk.content.contains(LOG_UNAVAILABLE_MARKER))
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

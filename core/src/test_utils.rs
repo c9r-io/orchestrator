@@ -42,7 +42,10 @@ fn create_minimal_test_config(temp_root: &Path) -> OrchestratorConfig {
                         ws.insert(
                             "default".to_string(),
                             WorkspaceConfig {
-                                root_path: temp_root.join("workspace/default").to_string_lossy().to_string(),
+                                root_path: temp_root
+                                    .join("workspace/default")
+                                    .to_string_lossy()
+                                    .to_string(),
                                 qa_targets: vec!["docs/qa".to_string()],
                                 ticket_dir: "docs/ticket".to_string(),
                                 self_referential: false,

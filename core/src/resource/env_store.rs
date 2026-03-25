@@ -1,6 +1,6 @@
 use crate::cli_types::{EnvStoreSpec, OrchestratorResource, ResourceKind, ResourceSpec};
 use crate::config::{EnvStoreConfig, OrchestratorConfig};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
 

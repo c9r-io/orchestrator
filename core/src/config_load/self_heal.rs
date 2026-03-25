@@ -1,6 +1,6 @@
 use crate::config::{
-    is_known_builtin_step_name, normalize_step_execution_mode, OrchestratorConfig, WorkflowConfig,
-    WorkflowStepConfig,
+    OrchestratorConfig, WorkflowConfig, WorkflowStepConfig, is_known_builtin_step_name,
+    normalize_step_execution_mode,
 };
 use anyhow::Result;
 use serde::Serialize;
@@ -210,10 +210,12 @@ mod tests {
                 name: "self_test".to_string()
             }
         );
-        assert!(healed
-            .1
-            .iter()
-            .any(|change| change.rule == ConfigSelfHealRule::NormalizeStepExecutionMode));
+        assert!(
+            healed
+                .1
+                .iter()
+                .any(|change| change.rule == ConfigSelfHealRule::NormalizeStepExecutionMode)
+        );
     }
 
     #[test]

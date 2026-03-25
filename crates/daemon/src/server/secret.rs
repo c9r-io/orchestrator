@@ -4,7 +4,7 @@ use agent_orchestrator::secret_store_crypto::SecretEncryption;
 use orchestrator_proto::*;
 use tonic::{Request, Response, Status};
 
-use super::{authorize, map_core_error, OrchestratorServer};
+use super::{OrchestratorServer, authorize, map_core_error};
 
 fn map_key_record(r: &secret_key_lifecycle::KeyRecord) -> SecretKeyRecord {
     SecretKeyRecord {

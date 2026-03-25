@@ -8,9 +8,9 @@ use anyhow::Result;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use super::super::phase_runner::{run_phase, shell_escape, PhaseRunRequest};
-use super::super::task_state::count_unresolved_items;
 use super::super::RunningTask;
+use super::super::phase_runner::{PhaseRunRequest, run_phase, shell_escape};
+use super::super::task_state::count_unresolved_items;
 
 /// Result returned by a guard step evaluation.
 pub struct GuardResult {

@@ -22,7 +22,7 @@ pub use types::{
 };
 pub use write_ops::{CompletedRunRecord, InflightRunRecord};
 
-use crate::async_database::{flatten_err, AsyncDatabase};
+use crate::async_database::{AsyncDatabase, flatten_err};
 use crate::dto::{CommandRunDto, EventDto, TaskGraphDebugBundle, TaskItemDto};
 use anyhow::Result;
 use std::sync::Arc;
@@ -1164,9 +1164,11 @@ mod async_wrapper_tests {
             .await
             .expect("delete task and collect log paths");
         assert_eq!(paths.len(), 2);
-        assert!(paths
-            .iter()
-            .any(|path| path.ends_with("async-wrapper-stdout.log")));
+        assert!(
+            paths
+                .iter()
+                .any(|path| path.ends_with("async-wrapper-stdout.log"))
+        );
     }
 
     #[test]

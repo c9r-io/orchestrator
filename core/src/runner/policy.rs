@@ -1,5 +1,5 @@
 use crate::config::{RunnerConfig, RunnerPolicy};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::fmt;
 
 /// Enforces runner shell-policy allowlists before command execution.
@@ -258,10 +258,12 @@ mod tests {
     fn blocks_kill_env_var() {
         let result = guard_daemon_pid_kill("kill $ORCHESTRATOR_DAEMON_PID", 12345);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .matched_pattern
-            .contains("ORCHESTRATOR_DAEMON_PID"));
+        assert!(
+            result
+                .unwrap_err()
+                .matched_pattern
+                .contains("ORCHESTRATOR_DAEMON_PID")
+        );
     }
 
     #[test]
@@ -274,10 +276,12 @@ mod tests {
     fn blocks_pkill_orchestratord() {
         let result = guard_daemon_pid_kill("pkill orchestratord", 12345);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .matched_pattern
-            .contains("pkill orchestratord"));
+        assert!(
+            result
+                .unwrap_err()
+                .matched_pattern
+                .contains("pkill orchestratord")
+        );
     }
 
     #[test]
@@ -338,10 +342,12 @@ mod tests {
     fn blocks_orchestrator_daemon_stop() {
         let result = guard_daemon_pid_kill("orchestrator daemon stop", 12345);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .matched_pattern
-            .contains("orchestrator daemon stop"));
+        assert!(
+            result
+                .unwrap_err()
+                .matched_pattern
+                .contains("orchestrator daemon stop")
+        );
     }
 
     #[test]

@@ -1,7 +1,7 @@
 use crate::crd::store::SYSTEM_PROJECT;
-use aes_gcm_siv::aead::{Aead, KeyInit, Payload};
 use aes_gcm_siv::Aes256GcmSiv;
-use anyhow::{anyhow, bail, Context, Result};
+use aes_gcm_siv::aead::{Aead, KeyInit, Payload};
+use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
@@ -627,9 +627,10 @@ mod tests {
 
         let err =
             ensure_secret_key(temp.path(), &db_path).expect_err("should refuse to regenerate");
-        assert!(err
-            .to_string()
-            .contains("encrypted SecretStore data exists"));
+        assert!(
+            err.to_string()
+                .contains("encrypted SecretStore data exists")
+        );
     }
 
     #[test]

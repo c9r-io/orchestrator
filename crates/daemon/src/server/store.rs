@@ -1,7 +1,7 @@
 use orchestrator_proto::*;
 use tonic::{Request, Response, Status};
 
-use super::{map_core_error, OrchestratorServer};
+use super::{OrchestratorServer, map_core_error};
 
 pub(crate) async fn store_get(
     server: &OrchestratorServer,

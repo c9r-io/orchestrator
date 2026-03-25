@@ -11,10 +11,10 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::time::Instant;
 
+use super::RunningTask;
 use super::types::HEARTBEAT_INTERVAL_SECS;
 use super::types::{HeartbeatProgress, WaitResult};
 use super::util::{resolved_step_timeout_secs, sample_heartbeat_progress, step_scope_label};
-use super::RunningTask;
 
 /// Stage 3: Polling loop with heartbeat sampling, pause detection, timeout handling.
 #[allow(clippy::too_many_arguments)]

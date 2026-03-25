@@ -1,7 +1,7 @@
 use crate::anomaly::Severity;
 use crate::config::{
-    default_scope_for_step_id, resolve_step_semantic_kind, CheckpointStrategy, StepScope,
-    StepSemanticKind, WorkflowConfig, WorkflowSafetyProfile,
+    CheckpointStrategy, StepScope, StepSemanticKind, WorkflowConfig, WorkflowSafetyProfile,
+    default_scope_for_step_id, resolve_step_semantic_kind,
 };
 use anyhow::Result;
 use serde::Serialize;
@@ -525,10 +525,12 @@ mod tests {
         wf.steps.retain(|step| step.id != "self_test");
         let report = evaluate_self_referential_policy(&wf, "wf", "ws", true).expect("policy");
         assert!(report.has_blocking_errors());
-        assert!(report
-            .diagnostics
-            .iter()
-            .any(|diag| diag.rule_id == "self_ref.self_test_required"));
+        assert!(
+            report
+                .diagnostics
+                .iter()
+                .any(|diag| diag.rule_id == "self_ref.self_test_required")
+        );
     }
 
     #[test]

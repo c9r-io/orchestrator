@@ -837,10 +837,12 @@ fn normalize_config_clears_stale_store() {
     };
     config.resource_store.put(stale_cr);
     // Agent is project-scoped, so put() auto-assigns DEFAULT_PROJECT_ID
-    assert!(config
-        .resource_store
-        .get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "stale-agent")
-        .is_some());
+    assert!(
+        config
+            .resource_store
+            .get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "stale-agent")
+            .is_some()
+    );
 
     // Legacy does NOT have "stale-agent"
     let normalized = normalize_config(config);
@@ -872,15 +874,19 @@ fn normalize_config_idempotent_double_call() {
     let first = normalize_config(config);
     let second = normalize_config(first);
 
-    assert!(second
-        .projects
-        .get(crate::config::DEFAULT_PROJECT_ID)
-        .expect("default project")
-        .agents
-        .contains_key("idem-ag"));
-    assert!(second
-        .resource_store
-        .get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "idem-ag")
-        .is_some());
+    assert!(
+        second
+            .projects
+            .get(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project")
+            .agents
+            .contains_key("idem-ag")
+    );
+    assert!(
+        second
+            .resource_store
+            .get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "idem-ag")
+            .is_some()
+    );
     assert_eq!(second.custom_resource_definitions.len(), 11);
 }

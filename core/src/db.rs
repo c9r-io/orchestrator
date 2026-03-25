@@ -1,5 +1,5 @@
 use anyhow::Result;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use std::path::Path;
 
 pub use crate::persistence::sqlite::SQLITE_BUSY_TIMEOUT_MS;
@@ -643,10 +643,12 @@ mod tests {
 
         let result = reset_db(&state, false, false);
         assert!(result.is_err());
-        assert!(result
-            .expect_err("should be blocked")
-            .to_string()
-            .contains("db reset blocked"));
+        assert!(
+            result
+                .expect_err("should be blocked")
+                .to_string()
+                .contains("db reset blocked")
+        );
     }
 
     // ── reset_project_data ──

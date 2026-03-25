@@ -4,7 +4,7 @@ use crate::cli_types::{
 use crate::config::{
     OrchestratorConfig, ResumeConfig, RunnerConfig, RunnerExecutorKind, RunnerPolicy,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
 
@@ -168,7 +168,7 @@ pub(crate) fn runner_config_to_spec(config: &RunnerConfig) -> RunnerSpec {
 mod tests {
     use super::*;
     use crate::cli_types::{ProjectSpec, ResourceMetadata, ResourceSpec};
-    use crate::resource::{dispatch_resource, API_VERSION};
+    use crate::resource::{API_VERSION, dispatch_resource};
 
     use super::super::test_fixtures::{make_config, runtime_policy_manifest};
 
@@ -288,9 +288,10 @@ mod tests {
         }
         let resource = dispatch_resource(manifest).expect("dispatch should succeed");
         let err = resource.validate().expect_err("operation should fail");
-        assert!(err
-            .to_string()
-            .contains("runner.allowed_shells cannot be empty"));
+        assert!(
+            err.to_string()
+                .contains("runner.allowed_shells cannot be empty")
+        );
     }
 
     #[test]
@@ -303,9 +304,10 @@ mod tests {
         }
         let resource = dispatch_resource(manifest).expect("dispatch should succeed");
         let err = resource.validate().expect_err("operation should fail");
-        assert!(err
-            .to_string()
-            .contains("runner.allowed_shell_args cannot be empty"));
+        assert!(
+            err.to_string()
+                .contains("runner.allowed_shell_args cannot be empty")
+        );
     }
 
     #[test]

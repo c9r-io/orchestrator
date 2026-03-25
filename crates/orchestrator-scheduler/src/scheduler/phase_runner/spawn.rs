@@ -9,9 +9,9 @@ use std::path::Path;
 use std::sync::Arc;
 use uuid::Uuid;
 
+use super::RunningTask;
 use super::types::{PhaseSetup, SpawnResult};
 use super::util::{shell_escape, step_scope_label};
-use super::RunningTask;
 
 /// Stage 2: TTY allocation, session creation, process spawning, stdin write.
 /// Returns early for TTY sessions or hands back spawn metadata.

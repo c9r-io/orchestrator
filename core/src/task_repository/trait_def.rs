@@ -1,9 +1,9 @@
 use crate::dto::{TaskGraphDebugBundle, TaskItemRow, TaskSummary};
 use anyhow::Result;
 
+use super::TaskDetailRows;
 use super::command_run::NewCommandRun;
 use super::types::{DbEventRecord, TaskLogRunRow, TaskRuntimeRow};
-use super::TaskDetailRows;
 
 /// Synchronous repository interface for task, run, and event persistence.
 pub trait TaskRepository {

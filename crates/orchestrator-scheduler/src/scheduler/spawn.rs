@@ -413,8 +413,9 @@ mod tests {
         )
         .unwrap_err();
 
-        assert!(err
-            .to_string()
-            .contains("pipeline variable 'missing' not found for spawn_tasks"));
+        assert!(
+            err.to_string()
+                .contains("pipeline variable 'missing' not found for spawn_tasks")
+        );
     }
 }

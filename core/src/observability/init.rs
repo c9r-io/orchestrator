@@ -3,10 +3,10 @@ use crate::config_ext::OrchestratorConfigExt as _;
 use anyhow::{Context, Result};
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
+use tracing_subscriber::Layer;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::Layer;
 
 #[derive(Debug, Clone, Copy, Default)]
 /// CLI flags that override logging configuration resolved from runtime policy.

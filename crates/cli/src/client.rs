@@ -135,7 +135,7 @@ async fn connect_uds() -> Result<OrchestratorServiceClient<Channel>> {
         match result {
             Ok(channel) => {
                 return Ok(OrchestratorServiceClient::new(channel)
-                    .max_decoding_message_size(MAX_GRPC_DECODE_SIZE))
+                    .max_decoding_message_size(MAX_GRPC_DECODE_SIZE));
             }
             Err(e) => {
                 if attempt < max_attempts {

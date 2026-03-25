@@ -1,7 +1,7 @@
 use crate::cli_types::{ExecutionProfileSpec, OrchestratorResource, ResourceKind, ResourceSpec};
 use crate::config::{ExecutionProfileConfig, OrchestratorConfig};
 use crate::sandbox_network::validate_network_allowlist;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
 

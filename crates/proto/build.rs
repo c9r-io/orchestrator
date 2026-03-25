@@ -32,7 +32,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR")?);
     let proto_file = manifest_dir.join("orchestrator.proto");
-    tonic_prost_build::configure()
-        .compile_protos(&[&proto_file], &[&manifest_dir])?;
+    tonic_prost_build::configure().compile_protos(&[&proto_file], &[&manifest_dir])?;
     Ok(())
 }

@@ -2,7 +2,7 @@ use agent_orchestrator::config::PromptDelivery;
 use agent_orchestrator::config_ext::OrchestratorConfigExt as _;
 use agent_orchestrator::config_load::now_ts;
 use agent_orchestrator::events::insert_event;
-use agent_orchestrator::runner::{validate_execution_profile_support, ResolvedExecutionProfile};
+use agent_orchestrator::runner::{ResolvedExecutionProfile, validate_execution_profile_support};
 use agent_orchestrator::state::InnerState;
 use agent_orchestrator::task_repository::NewCommandRun;
 use anyhow::{Context, Result};
@@ -79,8 +79,7 @@ pub(super) async fn setup_phase_execution(
                         // session-env bootstrapping; without this the sandbox blocks
                         // every bash command after self_restart.
                         if let Ok(home) = std::env::var("HOME") {
-                            always_writable
-                                .push(std::path::PathBuf::from(home).join(".claude"));
+                            always_writable.push(std::path::PathBuf::from(home).join(".claude"));
                         }
                         ResolvedExecutionProfile::from_config(
                             name,

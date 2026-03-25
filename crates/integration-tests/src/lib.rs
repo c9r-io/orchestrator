@@ -841,9 +841,8 @@ impl OrchestratorService for TestOrchestratorServer {
         &self,
         _request: Request<DbVacuumRequest>,
     ) -> Result<Response<DbVacuumResponse>, Status> {
-        let result =
-            agent_orchestrator::db_maintenance::vacuum_database(&self.state.db_path)
-                .map_err(|e| Status::internal(e.to_string()))?;
+        let result = agent_orchestrator::db_maintenance::vacuum_database(&self.state.db_path)
+            .map_err(|e| Status::internal(e.to_string()))?;
         Ok(Response::new(DbVacuumResponse {
             size_before: result.size_before,
             size_after: result.size_after,
@@ -856,7 +855,11 @@ impl OrchestratorService for TestOrchestratorServer {
         request: Request<DbLogCleanupRequest>,
     ) -> Result<Response<DbLogCleanupResponse>, Status> {
         let req = request.into_inner();
-        let days = if req.older_than_days == 0 { 30 } else { req.older_than_days };
+        let days = if req.older_than_days == 0 {
+            30
+        } else {
+            req.older_than_days
+        };
         let result = agent_orchestrator::log_cleanup::cleanup_old_logs(
             &self.state.async_database,
             &self.state.logs_dir,
@@ -1259,8 +1262,10 @@ impl TestHarness {
         // Rewrite relative workspace root_path values to point at the test
         // temp directory so workspace validation succeeds.
         let ws_root = state.data_dir.join("workspace/default");
-        let resolved_yaml =
-            manifest_yaml.replace("root_path: \".\"", &format!("root_path: \"{}\"", ws_root.display()));
+        let resolved_yaml = manifest_yaml.replace(
+            "root_path: \".\"",
+            &format!("root_path: \"{}\"", ws_root.display()),
+        );
 
         // Apply manifest
         agent_orchestrator::service::resource::apply_manifests(

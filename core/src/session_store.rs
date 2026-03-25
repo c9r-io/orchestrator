@@ -2,7 +2,7 @@ use crate::async_database::AsyncDatabase;
 use crate::config_load::now_ts;
 use crate::persistence::repository::{SessionRepository, SqliteSessionRepository};
 use anyhow::{Context, Result};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -510,9 +510,11 @@ mod tests {
         assert_eq!(exited.exit_code, Some(7));
         assert!(exited.ended_at.is_some());
 
-        assert!(load_session(&conn, "missing")
-            .expect("load missing session")
-            .is_none());
+        assert!(
+            load_session(&conn, "missing")
+                .expect("load missing session")
+                .is_none()
+        );
     }
 
     #[test]
@@ -665,14 +667,18 @@ mod tests {
             .expect("list sessions");
         assert_eq!(listed.len(), 1);
 
-        assert!(store
-            .acquire_writer("sess-async", "writer-1")
-            .await
-            .expect("acquire writer"));
-        assert!(!store
-            .acquire_writer("sess-async", "writer-2")
-            .await
-            .expect("reject second writer"));
+        assert!(
+            store
+                .acquire_writer("sess-async", "writer-1")
+                .await
+                .expect("acquire writer")
+        );
+        assert!(
+            !store
+                .acquire_writer("sess-async", "writer-2")
+                .await
+                .expect("reject second writer")
+        );
 
         store
             .attach_reader("sess-async", "reader-1")
@@ -719,15 +725,19 @@ mod tests {
             .await
             .expect("cleanup stale sessions");
         assert_eq!(deleted, 1);
-        assert!(store
-            .load_session("sess-async")
-            .await
-            .expect("load deleted session")
-            .is_none());
-        assert!(store
-            .load_session("missing")
-            .await
-            .expect("load missing session")
-            .is_none());
+        assert!(
+            store
+                .load_session("sess-async")
+                .await
+                .expect("load deleted session")
+                .is_none()
+        );
+        assert!(
+            store
+                .load_session("missing")
+                .await
+                .expect("load missing session")
+                .is_none()
+        );
     }
 }

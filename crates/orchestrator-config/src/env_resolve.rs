@@ -1,6 +1,6 @@
 use crate::cli_types::AgentEnvEntry;
 use crate::config::EnvStoreConfig;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::collections::HashMap;
 
 /// Resolves an agent's env entries against the available env stores.

@@ -383,9 +383,11 @@ mod tests {
         set_task_status(&state, &task_id, "paused", false)
             .await
             .expect("pause task");
-        assert!(is_task_paused_in_db(&state, &task_id)
-            .await
-            .expect("check paused status"));
+        assert!(
+            is_task_paused_in_db(&state, &task_id)
+                .await
+                .expect("check paused status")
+        );
 
         let conn = open_conn(&state.db_path).expect("open sqlite");
         let metric_rows: i64 = conn

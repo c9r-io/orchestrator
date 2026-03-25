@@ -108,11 +108,13 @@ mod cases {
         let result = resource.apply(&mut config).expect("apply");
 
         assert_eq!(result, ApplyResult::Created);
-        assert!(config
-            .default_project()
-            .expect("default project")
-            .workspaces
-            .contains_key("fresh-ws"));
+        assert!(
+            config
+                .default_project()
+                .expect("default project")
+                .workspaces
+                .contains_key("fresh-ws")
+        );
     }
 
     #[test]
@@ -213,35 +215,40 @@ mod cases {
     fn registered_resource_to_yaml_delegates() {
         let ws = dispatch_resource(workspace_manifest("ty-ws", "workspace/ty"))
             .expect("dispatch yaml ws");
-        assert!(ws
-            .to_yaml()
-            .expect("serialize workspace yaml")
-            .contains("Workspace"));
+        assert!(
+            ws.to_yaml()
+                .expect("serialize workspace yaml")
+                .contains("Workspace")
+        );
 
         let ag = dispatch_resource(agent_manifest("ty-ag", "cmd")).expect("dispatch yaml agent");
-        assert!(ag
-            .to_yaml()
-            .expect("serialize agent yaml")
-            .contains("Agent"));
+        assert!(
+            ag.to_yaml()
+                .expect("serialize agent yaml")
+                .contains("Agent")
+        );
 
         let wf = dispatch_resource(workflow_manifest("ty-wf")).expect("dispatch yaml workflow");
-        assert!(wf
-            .to_yaml()
-            .expect("serialize workflow yaml")
-            .contains("Workflow"));
+        assert!(
+            wf.to_yaml()
+                .expect("serialize workflow yaml")
+                .contains("Workflow")
+        );
 
         let pr = dispatch_resource(project_manifest("ty-pr", "d")).expect("dispatch yaml project");
-        assert!(pr
-            .to_yaml()
-            .expect("serialize project yaml")
-            .contains("Project"));
+        assert!(
+            pr.to_yaml()
+                .expect("serialize project yaml")
+                .contains("Project")
+        );
 
         let rp =
             dispatch_resource(runtime_policy_manifest()).expect("dispatch yaml runtime policy");
-        assert!(rp
-            .to_yaml()
-            .expect("serialize runtime policy yaml")
-            .contains("RuntimePolicy"));
+        assert!(
+            rp.to_yaml()
+                .expect("serialize runtime policy yaml")
+                .contains("RuntimePolicy")
+        );
     }
 
     #[test]
@@ -268,11 +275,13 @@ mod cases {
             .expect("dispatch delete ws");
         ws.apply(&mut config).expect("apply");
         assert!(RegisteredResource::delete_from(&mut config, "rd-ws"));
-        assert!(!config
-            .default_project()
-            .expect("default project")
-            .workspaces
-            .contains_key("rd-ws"));
+        assert!(
+            !config
+                .default_project()
+                .expect("default project")
+                .workspaces
+                .contains_key("rd-ws")
+        );
     }
 
     #[test]
@@ -281,11 +290,13 @@ mod cases {
         let ag = dispatch_resource(agent_manifest("rd-ag", "cmd")).expect("dispatch delete agent");
         ag.apply(&mut config).expect("apply");
         assert!(RegisteredResource::delete_from(&mut config, "rd-ag"));
-        assert!(!config
-            .default_project()
-            .expect("default project")
-            .agents
-            .contains_key("rd-ag"));
+        assert!(
+            !config
+                .default_project()
+                .expect("default project")
+                .agents
+                .contains_key("rd-ag")
+        );
     }
 
     #[test]
@@ -294,11 +305,13 @@ mod cases {
         let wf = dispatch_resource(workflow_manifest("rd-wf")).expect("dispatch delete workflow");
         wf.apply(&mut config).expect("apply");
         assert!(RegisteredResource::delete_from(&mut config, "rd-wf"));
-        assert!(!config
-            .default_project()
-            .expect("default project")
-            .workflows
-            .contains_key("rd-wf"));
+        assert!(
+            !config
+                .default_project()
+                .expect("default project")
+                .workflows
+                .contains_key("rd-wf")
+        );
     }
 
     #[test]
@@ -411,15 +424,19 @@ mod cases {
         let meta = metadata_with_name("ws-new");
         let result = apply_to_store(&mut config, "Workspace", "ws-new", &meta, ws.to_cr_spec());
         assert_eq!(result, ApplyResult::Created);
-        assert!(config
-            .resource_store
-            .get_namespaced("Workspace", crate::config::DEFAULT_PROJECT_ID, "ws-new")
-            .is_some());
-        assert!(config
-            .default_project()
-            .expect("default project")
-            .workspaces
-            .contains_key("ws-new"));
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("Workspace", crate::config::DEFAULT_PROJECT_ID, "ws-new")
+                .is_some()
+        );
+        assert!(
+            config
+                .default_project()
+                .expect("default project")
+                .workspaces
+                .contains_key("ws-new")
+        );
     }
 
     #[test]
@@ -489,14 +506,16 @@ mod cases {
                 health_policy: Default::default(),
             },
         );
-        assert!(config
-            .resource_store
-            .get_namespaced(
-                "Workspace",
-                crate::config::DEFAULT_PROJECT_ID,
-                "snapshot-ws",
-            )
-            .is_none());
+        assert!(
+            config
+                .resource_store
+                .get_namespaced(
+                    "Workspace",
+                    crate::config::DEFAULT_PROJECT_ID,
+                    "snapshot-ws",
+                )
+                .is_none()
+        );
 
         // Apply the identical resource — should return Unchanged because reconciliation detects it.
         let ws = crate::config::WorkspaceConfig {
@@ -571,23 +590,29 @@ mod cases {
         };
         let meta = metadata_with_name("ws-del");
         apply_to_store(&mut config, "Workspace", "ws-del", &meta, ws.to_cr_spec());
-        assert!(config
-            .default_project()
-            .expect("default project")
-            .workspaces
-            .contains_key("ws-del"));
+        assert!(
+            config
+                .default_project()
+                .expect("default project")
+                .workspaces
+                .contains_key("ws-del")
+        );
 
         let removed = delete_from_store(&mut config, "Workspace", "ws-del");
         assert!(removed);
-        assert!(config
-            .resource_store
-            .get_namespaced("Workspace", crate::config::DEFAULT_PROJECT_ID, "ws-del")
-            .is_none());
-        assert!(!config
-            .default_project()
-            .expect("default project")
-            .workspaces
-            .contains_key("ws-del"));
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("Workspace", crate::config::DEFAULT_PROJECT_ID, "ws-del")
+                .is_none()
+        );
+        assert!(
+            !config
+                .default_project()
+                .expect("default project")
+                .workspaces
+                .contains_key("ws-del")
+        );
     }
 
     #[test]
@@ -606,11 +631,13 @@ mod cases {
         );
         let removed = delete_from_store(&mut config, "Workspace", "snapshot-del");
         assert!(removed, "should seed from the config snapshot then remove");
-        assert!(!config
-            .default_project()
-            .expect("default project")
-            .workspaces
-            .contains_key("snapshot-del"));
+        assert!(
+            !config
+                .default_project()
+                .expect("default project")
+                .workspaces
+                .contains_key("snapshot-del")
+        );
     }
 
     #[test]

@@ -1,7 +1,7 @@
+use super::super::SqliteTaskRepository;
 use super::super::state;
 use super::super::trait_def::TaskRepository;
 use super::super::types::TaskRepositorySource;
-use super::super::SqliteTaskRepository;
 use super::fixtures::{get_item_id, seed_task};
 use crate::db::open_conn;
 use crate::test_utils::TestState;

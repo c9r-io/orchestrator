@@ -13,8 +13,8 @@ use std::path::Path;
 #[cfg(test)]
 use super::now_ts;
 use super::{
-    build_active_config, build_active_config_for_project, normalize_config,
-    validate_agent_env_store_refs, ResourceRemoval,
+    ResourceRemoval, build_active_config, build_active_config_for_project, normalize_config,
+    validate_agent_env_store_refs,
 };
 
 pub(crate) fn serialize_config_snapshot(config: &OrchestratorConfig) -> Result<(String, String)> {
@@ -414,12 +414,16 @@ mod tests {
             .expect("query config snapshot");
         assert!(!snapshot.0.contains("sk-secret-123"));
         assert!(!snapshot.1.contains("sk-secret-123"));
-        assert!(snapshot
-            .0
-            .contains(crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER));
-        assert!(snapshot
-            .1
-            .contains(crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER));
+        assert!(
+            snapshot
+                .0
+                .contains(crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER)
+        );
+        assert!(
+            snapshot
+                .1
+                .contains(crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER)
+        );
 
         let loaded = load_config(&db_path)
             .expect("load config")

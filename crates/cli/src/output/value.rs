@@ -1,7 +1,7 @@
 use orchestrator_proto::{
     AgentStatus, CommandRun, Event, TaskGraphDebugBundle, TaskInfoResponse, TaskItem, TaskSummary,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub(super) fn task_detail_value(task: &TaskSummary, resp: &TaskInfoResponse) -> Value {
     // FR-054: Aggregate step-level progress from runs

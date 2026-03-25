@@ -9,16 +9,16 @@ mod sandbox_linux;
 mod sandbox_macos;
 mod spawn;
 
-pub use policy::{enforce_runner_policy, DaemonPidGuardBlocked};
+pub use policy::{DaemonPidGuardBlocked, enforce_runner_policy};
 pub use profile::ResolvedExecutionProfile;
 pub use redact::redact_text;
 pub use sandbox::{
-    sandbox_backend_label, sandbox_backend_preflight_issues, validate_execution_profile_support,
-    SandboxBackendError, SandboxResourceKind,
+    SandboxBackendError, SandboxResourceKind, sandbox_backend_label,
+    sandbox_backend_preflight_issues, validate_execution_profile_support,
 };
 pub use spawn::{
-    kill_child_process_group, spawn_with_runner, spawn_with_runner_and_capture, CapturedChild,
-    RunnerExecutor, RunnerStdioMode, ShellRunnerExecutor, SpawnParams,
+    CapturedChild, RunnerExecutor, RunnerStdioMode, ShellRunnerExecutor, SpawnParams,
+    kill_child_process_group, spawn_with_runner, spawn_with_runner_and_capture,
 };
 
 #[cfg(test)]
@@ -58,10 +58,12 @@ mod tests {
         let runner = make_runner_config();
         let result = enforce_runner_policy(&runner, "");
         assert!(result.is_err());
-        assert!(result
-            .expect_err("operation should fail")
-            .to_string()
-            .contains("cannot be empty"));
+        assert!(
+            result
+                .expect_err("operation should fail")
+                .to_string()
+                .contains("cannot be empty")
+        );
     }
 
     #[test]
@@ -76,10 +78,12 @@ mod tests {
         let runner = make_runner_config();
         let result = enforce_runner_policy(&runner, "echo hello\rwhoami");
         assert!(result.is_err());
-        assert!(result
-            .expect_err("operation should fail")
-            .to_string()
-            .contains("control characters"));
+        assert!(
+            result
+                .expect_err("operation should fail")
+                .to_string()
+                .contains("control characters")
+        );
     }
 
     #[test]
@@ -88,10 +92,12 @@ mod tests {
         let long_command = "x".repeat(131_073);
         let result = enforce_runner_policy(&runner, &long_command);
         assert!(result.is_err());
-        assert!(result
-            .expect_err("operation should fail")
-            .to_string()
-            .contains("too long"));
+        assert!(
+            result
+                .expect_err("operation should fail")
+                .to_string()
+                .contains("too long")
+        );
     }
 
     #[test]
@@ -102,10 +108,12 @@ mod tests {
 
         let result = enforce_runner_policy(&runner, "echo hello");
         assert!(result.is_err());
-        assert!(result
-            .expect_err("operation should fail")
-            .to_string()
-            .contains("runner.shell"));
+        assert!(
+            result
+                .expect_err("operation should fail")
+                .to_string()
+                .contains("runner.shell")
+        );
     }
 
     #[test]
@@ -116,10 +124,12 @@ mod tests {
 
         let result = enforce_runner_policy(&runner, "echo hello");
         assert!(result.is_err());
-        assert!(result
-            .expect_err("operation should fail")
-            .to_string()
-            .contains("runner.shell_arg"));
+        assert!(
+            result
+                .expect_err("operation should fail")
+                .to_string()
+                .contains("runner.shell_arg")
+        );
     }
 
     #[test]
@@ -230,9 +240,11 @@ mod tests {
 
         let issues = sandbox_backend_preflight_issues(&profile);
         #[cfg(target_os = "macos")]
-        assert!(issues
-            .iter()
-            .any(|issue| issue.contains("does not support network_mode=allowlist")));
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.contains("does not support network_mode=allowlist"))
+        );
         #[cfg(not(target_os = "macos"))]
         assert!(!issues.is_empty());
     }

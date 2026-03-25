@@ -27,12 +27,12 @@ use agent_orchestrator::events::insert_event;
 use agent_orchestrator::scheduler_service::{
     claim_next_pending_task, clear_worker_stop_signal, worker_stop_signal_path,
 };
-use agent_orchestrator::state::{task_semaphore, InnerState};
+use agent_orchestrator::state::{InnerState, task_semaphore};
 use orchestrator_proto::OrchestratorServiceServer;
 use orchestrator_scheduler::scheduler::safety::RestartRequestedError;
 use orchestrator_scheduler::scheduler::{
-    load_task_summary, register_running_task, run_task_loop, shutdown_running_tasks,
-    unregister_running_task, RunningTask,
+    RunningTask, load_task_summary, register_running_task, run_task_loop, shutdown_running_tasks,
+    unregister_running_task,
 };
 
 #[derive(Debug, Parser)]

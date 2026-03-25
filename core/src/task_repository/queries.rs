@@ -2,11 +2,11 @@ use crate::dto::{
     CommandRunDto, EventDto, TaskGraphDebugBundle, TaskItemDto, TaskItemRow, TaskSummary,
 };
 use anyhow::{Context, Result};
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 use serde_json::Value;
 
-use super::types::{NewTaskGraphRun, NewTaskGraphSnapshot, TaskLogRunRow, TaskRuntimeRow};
 use super::TaskDetailRows;
+use super::types::{NewTaskGraphRun, NewTaskGraphSnapshot, TaskLogRunRow, TaskRuntimeRow};
 use rusqlite::Connection;
 
 pub fn resolve_task_id(conn: &Connection, task_id_or_prefix: &str) -> Result<String> {

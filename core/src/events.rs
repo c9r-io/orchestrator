@@ -2,7 +2,7 @@ use crate::async_database::flatten_err;
 use crate::db::open_conn;
 use crate::state::InnerState;
 use anyhow::Result;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde_json::Value;
 use std::path::Path;
 use tracing::{debug, error, info, warn};

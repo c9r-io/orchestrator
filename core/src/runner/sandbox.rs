@@ -275,7 +275,7 @@ pub(crate) fn detect_linux_sandbox_support(
         LinuxSandboxSupport {
             backend: SandboxBackend::Unavailable,
             missing_requirements: vec![
-                "linux_native backend is only available on Linux".to_string()
+                "linux_native backend is only available on Linux".to_string(),
             ],
         }
     }

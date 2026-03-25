@@ -1,6 +1,6 @@
 use super::daemon::runtime_snapshot;
 use crate::config_load::read_active_config;
-use crate::error::{classify_system_error, OrchestratorError, Result};
+use crate::error::{OrchestratorError, Result, classify_system_error};
 use crate::persistence::migration;
 use crate::scheduler_service::{pending_task_count, worker_stop_signal_path};
 use crate::state::InnerState;
@@ -229,7 +229,7 @@ pub fn validate_manifests(
     project_id: Option<&str>,
 ) -> Result<ManifestValidationReport> {
     use crate::crd::{self, ParsedManifest};
-    use crate::resource::{dispatch_resource, kind_as_str, Resource};
+    use crate::resource::{Resource, dispatch_resource, kind_as_str};
 
     let manifests = match crate::resource::parse_manifests_from_yaml(content) {
         Ok(m) => m,
@@ -493,10 +493,12 @@ mod tests {
 
         let message = run_db_reset(&state, true, false, true).expect("reset with config");
         assert!(message.contains("All config versions deleted"));
-        assert!(crate::config_load::read_loaded_config(&state)
-            .expect("read active config")
-            .projects
-            .is_empty());
+        assert!(
+            crate::config_load::read_loaded_config(&state)
+                .expect("read active config")
+                .projects
+                .is_empty()
+        );
     }
 
     #[test]

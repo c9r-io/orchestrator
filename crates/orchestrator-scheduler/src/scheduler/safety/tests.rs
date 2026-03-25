@@ -1,4 +1,4 @@
-use super::snapshot::{sha256_hex, RELEASE_BINARY_REL, STABLE_FILE, STABLE_MANIFEST, STABLE_TMP};
+use super::snapshot::{RELEASE_BINARY_REL, STABLE_FILE, STABLE_MANIFEST, STABLE_TMP, sha256_hex};
 use super::*;
 use agent_orchestrator::events::insert_event;
 use agent_orchestrator::test_utils::TestState;

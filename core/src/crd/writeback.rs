@@ -491,8 +491,8 @@ pub fn sync_config_snapshot_to_store(config: &mut OrchestratorConfig) {
 mod tests {
     use super::*;
     use crate::config::{
-        AgentConfig, EnvStoreConfig, OrchestratorConfig, ProjectConfig, StepTemplateConfig,
-        WorkspaceConfig, DEFAULT_PROJECT_ID,
+        AgentConfig, DEFAULT_PROJECT_ID, EnvStoreConfig, OrchestratorConfig, ProjectConfig,
+        StepTemplateConfig, WorkspaceConfig,
     };
     use crate::crd::projection::CrdProjectable;
 
@@ -543,11 +543,13 @@ mod tests {
             .workflows
             .insert("wf1".to_string(), make_workflow_config());
         remove_from_config_snapshot(&mut config, "Workflow", None, "wf1");
-        assert!(!config
-            .default_project()
-            .unwrap()
-            .workflows
-            .contains_key("wf1"));
+        assert!(
+            !config
+                .default_project()
+                .unwrap()
+                .workflows
+                .contains_key("wf1")
+        );
     }
 
     #[test]
@@ -558,11 +560,13 @@ mod tests {
             .workflows
             .insert("wf2".to_string(), make_workflow_config());
         remove_from_config_snapshot(&mut config, "Workflow", Some(DEFAULT_PROJECT_ID), "wf2");
-        assert!(!config
-            .default_project()
-            .unwrap()
-            .workflows
-            .contains_key("wf2"));
+        assert!(
+            !config
+                .default_project()
+                .unwrap()
+                .workflows
+                .contains_key("wf2")
+        );
     }
 
     #[test]
@@ -579,11 +583,13 @@ mod tests {
             },
         );
         remove_from_config_snapshot(&mut config, "Workspace", None, "ws1");
-        assert!(!config
-            .default_project()
-            .unwrap()
-            .workspaces
-            .contains_key("ws1"));
+        assert!(
+            !config
+                .default_project()
+                .unwrap()
+                .workspaces
+                .contains_key("ws1")
+        );
     }
 
     #[test]
@@ -600,11 +606,13 @@ mod tests {
             },
         );
         remove_from_config_snapshot(&mut config, "Workspace", Some(DEFAULT_PROJECT_ID), "ws2");
-        assert!(!config
-            .default_project()
-            .unwrap()
-            .workspaces
-            .contains_key("ws2"));
+        assert!(
+            !config
+                .default_project()
+                .unwrap()
+                .workspaces
+                .contains_key("ws2")
+        );
     }
 
     #[test]
@@ -627,11 +635,13 @@ mod tests {
             },
         );
         remove_from_config_snapshot(&mut config, "StepTemplate", None, "tmpl1");
-        assert!(!config
-            .default_project()
-            .unwrap()
-            .step_templates
-            .contains_key("tmpl1"));
+        assert!(
+            !config
+                .default_project()
+                .unwrap()
+                .step_templates
+                .contains_key("tmpl1")
+        );
     }
 
     #[test]
@@ -650,11 +660,13 @@ mod tests {
             Some(DEFAULT_PROJECT_ID),
             "tmpl2",
         );
-        assert!(!config
-            .default_project()
-            .unwrap()
-            .step_templates
-            .contains_key("tmpl2"));
+        assert!(
+            !config
+                .default_project()
+                .unwrap()
+                .step_templates
+                .contains_key("tmpl2")
+        );
     }
 
     #[test]
@@ -665,11 +677,13 @@ mod tests {
             .execution_profiles
             .insert("ep1".to_string(), ExecutionProfileConfig::default());
         remove_from_config_snapshot(&mut config, "ExecutionProfile", None, "ep1");
-        assert!(!config
-            .default_project()
-            .unwrap()
-            .execution_profiles
-            .contains_key("ep1"));
+        assert!(
+            !config
+                .default_project()
+                .unwrap()
+                .execution_profiles
+                .contains_key("ep1")
+        );
     }
 
     #[test]
@@ -685,11 +699,13 @@ mod tests {
             Some(DEFAULT_PROJECT_ID),
             "ep2",
         );
-        assert!(!config
-            .default_project()
-            .unwrap()
-            .execution_profiles
-            .contains_key("ep2"));
+        assert!(
+            !config
+                .default_project()
+                .unwrap()
+                .execution_profiles
+                .contains_key("ep2")
+        );
     }
 
     #[test]
@@ -703,11 +719,13 @@ mod tests {
             },
         );
         remove_from_config_snapshot(&mut config, "EnvStore", None, "env1");
-        assert!(!config
-            .default_project()
-            .unwrap()
-            .env_stores
-            .contains_key("env1"));
+        assert!(
+            !config
+                .default_project()
+                .unwrap()
+                .env_stores
+                .contains_key("env1")
+        );
     }
 
     #[test]
@@ -721,11 +739,13 @@ mod tests {
             },
         );
         remove_from_config_snapshot(&mut config, "SecretStore", None, "sec1");
-        assert!(!config
-            .default_project()
-            .unwrap()
-            .env_stores
-            .contains_key("sec1"));
+        assert!(
+            !config
+                .default_project()
+                .unwrap()
+                .env_stores
+                .contains_key("sec1")
+        );
     }
 
     #[test]
@@ -739,11 +759,13 @@ mod tests {
             },
         );
         remove_from_config_snapshot(&mut config, "EnvStore", Some(DEFAULT_PROJECT_ID), "env2");
-        assert!(!config
-            .default_project()
-            .unwrap()
-            .env_stores
-            .contains_key("env2"));
+        assert!(
+            !config
+                .default_project()
+                .unwrap()
+                .env_stores
+                .contains_key("env2")
+        );
     }
 
     #[test]
@@ -824,10 +846,12 @@ mod tests {
             .agents
             .insert("my-agent".to_string(), AgentConfig::new());
         seed_store_from_config_snapshot(&mut config, "Agent", "my-agent", "2024-01-01T00:00:00Z");
-        assert!(config
-            .resource_store
-            .get_namespaced("Agent", DEFAULT_PROJECT_ID, "my-agent")
-            .is_some());
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("Agent", DEFAULT_PROJECT_ID, "my-agent")
+                .is_some()
+        );
     }
 
     #[test]
@@ -838,10 +862,12 @@ mod tests {
             .workflows
             .insert("my-wf".to_string(), make_workflow_config());
         seed_store_from_config_snapshot(&mut config, "Workflow", "my-wf", "2024-01-01T00:00:00Z");
-        assert!(config
-            .resource_store
-            .get_namespaced("Workflow", DEFAULT_PROJECT_ID, "my-wf")
-            .is_some());
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("Workflow", DEFAULT_PROJECT_ID, "my-wf")
+                .is_some()
+        );
     }
 
     #[test]
@@ -858,10 +884,12 @@ mod tests {
             },
         );
         seed_store_from_config_snapshot(&mut config, "Workspace", "my-ws", "2024-01-01T00:00:00Z");
-        assert!(config
-            .resource_store
-            .get_namespaced("Workspace", DEFAULT_PROJECT_ID, "my-ws")
-            .is_some());
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("Workspace", DEFAULT_PROJECT_ID, "my-ws")
+                .is_some()
+        );
     }
 
     #[test]
@@ -880,10 +908,12 @@ mod tests {
             "my-tmpl",
             "2024-01-01T00:00:00Z",
         );
-        assert!(config
-            .resource_store
-            .get_namespaced("StepTemplate", DEFAULT_PROJECT_ID, "my-tmpl")
-            .is_some());
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("StepTemplate", DEFAULT_PROJECT_ID, "my-tmpl")
+                .is_some()
+        );
     }
 
     #[test]
@@ -899,10 +929,12 @@ mod tests {
             "my-ep",
             "2024-01-01T00:00:00Z",
         );
-        assert!(config
-            .resource_store
-            .get_namespaced("ExecutionProfile", DEFAULT_PROJECT_ID, "my-ep")
-            .is_some());
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("ExecutionProfile", DEFAULT_PROJECT_ID, "my-ep")
+                .is_some()
+        );
     }
 
     #[test]
@@ -916,10 +948,12 @@ mod tests {
             },
         );
         seed_store_from_config_snapshot(&mut config, "EnvStore", "my-env", "2024-01-01T00:00:00Z");
-        assert!(config
-            .resource_store
-            .get_namespaced("EnvStore", DEFAULT_PROJECT_ID, "my-env")
-            .is_some());
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("EnvStore", DEFAULT_PROJECT_ID, "my-env")
+                .is_some()
+        );
     }
 
     #[test]
@@ -939,10 +973,12 @@ mod tests {
             "2024-01-01T00:00:00Z",
         );
         // Should NOT seed because the store is sensitive
-        assert!(config
-            .resource_store
-            .get_namespaced("EnvStore", DEFAULT_PROJECT_ID, "secret-env")
-            .is_none());
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("EnvStore", DEFAULT_PROJECT_ID, "secret-env")
+                .is_none()
+        );
     }
 
     #[test]
@@ -961,10 +997,12 @@ mod tests {
             "my-secret",
             "2024-01-01T00:00:00Z",
         );
-        assert!(config
-            .resource_store
-            .get_namespaced("SecretStore", DEFAULT_PROJECT_ID, "my-secret")
-            .is_some());
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("SecretStore", DEFAULT_PROJECT_ID, "my-secret")
+                .is_some()
+        );
     }
 
     #[test]
@@ -983,10 +1021,12 @@ mod tests {
             "not-secret",
             "2024-01-01T00:00:00Z",
         );
-        assert!(config
-            .resource_store
-            .get_namespaced("SecretStore", DEFAULT_PROJECT_ID, "not-secret")
-            .is_none());
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("SecretStore", DEFAULT_PROJECT_ID, "not-secret")
+                .is_none()
+        );
     }
 
     #[test]
@@ -1011,10 +1051,12 @@ mod tests {
             "runtime",
             "2024-01-01T00:00:00Z",
         );
-        assert!(config
-            .resource_store
-            .get("RuntimePolicy", "runtime")
-            .is_some());
+        assert!(
+            config
+                .resource_store
+                .get("RuntimePolicy", "runtime")
+                .is_some()
+        );
     }
 
     #[test]
@@ -1050,11 +1092,13 @@ mod tests {
         };
         config.resource_store.put(cr);
         reconcile_single_resource(&mut config, "Agent", Some(DEFAULT_PROJECT_ID), "rec-ag");
-        assert!(config
-            .default_project()
-            .unwrap()
-            .agents
-            .contains_key("rec-ag"));
+        assert!(
+            config
+                .default_project()
+                .unwrap()
+                .agents
+                .contains_key("rec-ag")
+        );
     }
 
     #[test]
@@ -1083,22 +1127,26 @@ mod tests {
         };
         config.resource_store.put(cr);
         reconcile_single_resource(&mut config, "Workspace", Some(DEFAULT_PROJECT_ID), "rec-ws");
-        assert!(config
-            .default_project()
-            .unwrap()
-            .workspaces
-            .contains_key("rec-ws"));
+        assert!(
+            config
+                .default_project()
+                .unwrap()
+                .workspaces
+                .contains_key("rec-ws")
+        );
     }
 
     #[test]
     fn reconcile_single_resource_noop_for_missing_cr() {
         let mut config = make_default_config_with_project();
         reconcile_single_resource(&mut config, "Agent", Some(DEFAULT_PROJECT_ID), "no-such");
-        assert!(!config
-            .default_project()
-            .unwrap()
-            .agents
-            .contains_key("no-such"));
+        assert!(
+            !config
+                .default_project()
+                .unwrap()
+                .agents
+                .contains_key("no-such")
+        );
     }
 
     #[test]
@@ -1261,38 +1309,54 @@ mod tests {
 
         sync_config_snapshot_to_store(&mut config);
 
-        assert!(config
-            .resource_store
-            .get_namespaced("Agent", DEFAULT_PROJECT_ID, "sync-ag")
-            .is_some());
-        assert!(config
-            .resource_store
-            .get_namespaced("Workflow", DEFAULT_PROJECT_ID, "sync-wf")
-            .is_some());
-        assert!(config
-            .resource_store
-            .get_namespaced("Workspace", DEFAULT_PROJECT_ID, "sync-ws")
-            .is_some());
-        assert!(config
-            .resource_store
-            .get_namespaced("StepTemplate", DEFAULT_PROJECT_ID, "sync-tmpl")
-            .is_some());
-        assert!(config
-            .resource_store
-            .get_namespaced("ExecutionProfile", DEFAULT_PROJECT_ID, "sync-ep")
-            .is_some());
-        assert!(config
-            .resource_store
-            .get_namespaced("EnvStore", DEFAULT_PROJECT_ID, "sync-env")
-            .is_some());
-        assert!(config
-            .resource_store
-            .get_namespaced("SecretStore", DEFAULT_PROJECT_ID, "sync-sec")
-            .is_some());
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("Agent", DEFAULT_PROJECT_ID, "sync-ag")
+                .is_some()
+        );
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("Workflow", DEFAULT_PROJECT_ID, "sync-wf")
+                .is_some()
+        );
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("Workspace", DEFAULT_PROJECT_ID, "sync-ws")
+                .is_some()
+        );
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("StepTemplate", DEFAULT_PROJECT_ID, "sync-tmpl")
+                .is_some()
+        );
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("ExecutionProfile", DEFAULT_PROJECT_ID, "sync-ep")
+                .is_some()
+        );
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("EnvStore", DEFAULT_PROJECT_ID, "sync-env")
+                .is_some()
+        );
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("SecretStore", DEFAULT_PROJECT_ID, "sync-sec")
+                .is_some()
+        );
         // Also creates Project entry
-        assert!(config
-            .resource_store
-            .get("Project", DEFAULT_PROJECT_ID)
-            .is_some());
+        assert!(
+            config
+                .resource_store
+                .get("Project", DEFAULT_PROJECT_ID)
+                .is_some()
+        );
     }
 }

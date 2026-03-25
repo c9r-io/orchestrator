@@ -1,10 +1,11 @@
 use crate::scheduler::{
-    delete_task_impl, find_latest_resumable_task_id, follow_task_logs, get_task_details_impl,
-    list_tasks_impl, load_task_summary, prepare_task_for_start, resolve_task_id, run_task_loop,
-    stop_task_runtime, stop_task_runtime_for_delete, stream_task_logs_impl, RunningTask,
+    RunningTask, delete_task_impl, find_latest_resumable_task_id, follow_task_logs,
+    get_task_details_impl, list_tasks_impl, load_task_summary, prepare_task_for_start,
+    resolve_task_id, run_task_loop, stop_task_runtime, stop_task_runtime_for_delete,
+    stream_task_logs_impl,
 };
 use agent_orchestrator::dto::{CreateTaskPayload, LogChunk, TaskDetail, TaskSummary};
-use agent_orchestrator::error::{classify_task_error, OrchestratorError, Result};
+use agent_orchestrator::error::{OrchestratorError, Result, classify_task_error};
 use agent_orchestrator::scheduler_service::enqueue_task as enqueue_task_impl;
 use agent_orchestrator::state::InnerState;
 use agent_orchestrator::task_ops::{create_task_impl, reset_task_item_for_retry};

@@ -96,35 +96,33 @@ pub async fn list_task_events(
     let events = db
         .reader()
         .call(move |conn| {
-            let (sql, params): (String, Vec<Box<dyn rusqlite::types::ToSql>>) =
-                if let Some(ref prefix) = type_filter {
-                    (
-                        format!(
-                            "SELECT id, task_id, task_item_id, event_type, payload_json, created_at \
+            let (sql, params): (String, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(
+                ref prefix,
+            ) = type_filter
+            {
+                (
+                    format!(
+                        "SELECT id, task_id, task_item_id, event_type, payload_json, created_at \
                              FROM events WHERE task_id = ?1 AND event_type LIKE ?2 \
                              ORDER BY id DESC LIMIT {limit}"
-                        ),
-                        vec![
-                            Box::new(task_id.clone()),
-                            Box::new(format!("{prefix}%")),
-                        ],
-                    )
-                } else {
-                    (
-                        format!(
-                            "SELECT id, task_id, task_item_id, event_type, payload_json, created_at \
+                    ),
+                    vec![Box::new(task_id.clone()), Box::new(format!("{prefix}%"))],
+                )
+            } else {
+                (
+                    format!(
+                        "SELECT id, task_id, task_item_id, event_type, payload_json, created_at \
                              FROM events WHERE task_id = ?1 \
                              ORDER BY id DESC LIMIT {limit}"
-                        ),
-                        vec![Box::new(task_id.clone())],
-                    )
-                };
+                    ),
+                    vec![Box::new(task_id.clone())],
+                )
+            };
             let mut stmt = conn.prepare(&sql)?;
             let rows = stmt
                 .query_map(rusqlite::params_from_iter(params.iter()), |row| {
                     let payload_str: String = row.get(4)?;
-                    let payload: Value =
-                        serde_json::from_str(&payload_str).unwrap_or(Value::Null);
+                    let payload: Value = serde_json::from_str(&payload_str).unwrap_or(Value::Null);
                     Ok(EventDto {
                         id: row.get(0)?,
                         task_id: row.get(1)?,

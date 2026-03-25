@@ -1,9 +1,9 @@
 use crate::cli_types::{OrchestratorResource, ResourceKind, ResourceMetadata, ResourceSpec};
 use crate::config::OrchestratorConfig;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::Serialize;
 
-use super::{ApplyResult, API_VERSION};
+use super::{API_VERSION, ApplyResult};
 
 pub(crate) fn validate_resource_name(name: &str) -> Result<()> {
     if name.trim().is_empty() {

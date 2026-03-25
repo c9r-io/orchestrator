@@ -30,10 +30,12 @@ fn test_validate_step_prehook_empty_expression() {
     };
     let result = validate_step_prehook(&prehook, "test-workflow", "qa");
     assert!(result.is_err());
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("prehook.when cannot be empty"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("prehook.when cannot be empty")
+    );
 }
 
 #[test]
@@ -73,10 +75,12 @@ fn test_validate_workflow_finalize_rule_empty_id() {
     };
     let result = validate_workflow_finalize_rule(&rule, "test-workflow");
     assert!(result.is_err());
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("empty id"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("empty id")
+    );
 }
 
 #[test]
@@ -90,10 +94,12 @@ fn test_validate_workflow_finalize_rule_empty_status() {
     };
     let result = validate_workflow_finalize_rule(&rule, "test-workflow");
     assert!(result.is_err());
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("empty status"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("empty status")
+    );
 }
 
 #[test]
@@ -107,10 +113,12 @@ fn test_validate_workflow_finalize_rule_empty_when() {
     };
     let result = validate_workflow_finalize_rule(&rule, "test-workflow");
     assert!(result.is_err());
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("empty when"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("empty when")
+    );
 }
 
 #[test]
@@ -647,10 +655,12 @@ fn test_validate_step_prehook_whitespace_only_expression() {
     };
     let result = validate_step_prehook(&prehook, "wf", "step");
     assert!(result.is_err());
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("prehook.when cannot be empty"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("prehook.when cannot be empty")
+    );
 }
 
 #[test]
@@ -688,10 +698,12 @@ fn test_validate_workflow_finalize_rule_whitespace_id() {
     let rule = make_rule("  ", "true", "skipped", None);
     let result = validate_workflow_finalize_rule(&rule, "wf");
     assert!(result.is_err());
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("empty id"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("empty id")
+    );
 }
 
 #[test]
@@ -705,10 +717,12 @@ fn test_validate_workflow_finalize_rule_whitespace_status() {
     };
     let result = validate_workflow_finalize_rule(&rule, "wf");
     assert!(result.is_err());
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("empty status"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("empty status")
+    );
 }
 
 #[test]
@@ -722,10 +736,12 @@ fn test_validate_workflow_finalize_rule_whitespace_when() {
     };
     let result = validate_workflow_finalize_rule(&rule, "wf");
     assert!(result.is_err());
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("empty when"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("empty when")
+    );
 }
 
 // ========================================================================
@@ -783,10 +799,12 @@ fn test_evaluate_finalize_rule_expression_non_bool_result() {
     let context = default_item_finalize_context();
     let result = evaluate_finalize_rule_expression(&rule, &context);
     assert!(result.is_err());
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("must return bool"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("must return bool")
+    );
 }
 
 #[test]
@@ -1011,9 +1029,11 @@ fn test_resolve_workflow_finalize_outcome_no_rules() {
     let context = default_item_finalize_context();
     let result = resolve_workflow_finalize_outcome(&finalize, &context);
     assert!(result.is_ok());
-    assert!(result
-        .expect("finalize without rules should resolve")
-        .is_none());
+    assert!(
+        result
+            .expect("finalize without rules should resolve")
+            .is_none()
+    );
 }
 
 #[test]
@@ -1029,9 +1049,11 @@ fn test_resolve_workflow_finalize_outcome_no_match() {
     let context = default_item_finalize_context();
     let result = resolve_workflow_finalize_outcome(&finalize, &context);
     assert!(result.is_ok());
-    assert!(result
-        .expect("finalize without matches should resolve")
-        .is_none());
+    assert!(
+        result
+            .expect("finalize without matches should resolve")
+            .is_none()
+    );
 }
 
 #[test]
@@ -1162,13 +1184,13 @@ fn test_resolve_workflow_finalize_outcome_complex_conditions() {
 #[test]
 fn test_fix_skipped_variable_available_in_cel_context() {
     let finalize = WorkflowFinalizeConfig {
-            rules: vec![make_rule(
-                "fix_skipped_check",
-                "fix_enabled == true && fix_ran == false && fix_skipped == false && active_ticket_count > 0",
-                "unresolved",
-                Some("fix did not run"),
-            )],
-        };
+        rules: vec![make_rule(
+            "fix_skipped_check",
+            "fix_enabled == true && fix_ran == false && fix_skipped == false && active_ticket_count > 0",
+            "unresolved",
+            Some("fix did not run"),
+        )],
+    };
     let ctx = ItemFinalizeContext {
         fix_enabled: true,
         fix_ran: false,
@@ -1215,10 +1237,12 @@ fn test_evaluate_step_prehook_expression_non_bool_result() {
     // Expression returns an integer, not a bool
     let result = evaluate_step_prehook_expression("active_ticket_count + 1", &context);
     assert!(result.is_err());
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("must return bool"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("must return bool")
+    );
 }
 
 #[test]
@@ -1424,11 +1448,11 @@ fn test_evaluate_step_prehook_expression_cycle_arithmetic() {
 #[test]
 fn test_evaluate_finalize_rule_all_bool_flags_false() {
     let rule = make_rule(
-            "r1",
-            "!qa_enabled && !qa_ran && !qa_skipped && !fix_enabled && !fix_ran && !fix_success && !retest_enabled && !retest_ran && !retest_success && !qa_failed && !fix_required",
-            "none",
-            None,
-        );
+        "r1",
+        "!qa_enabled && !qa_ran && !qa_skipped && !fix_enabled && !fix_ran && !fix_success && !retest_enabled && !retest_ran && !retest_success && !qa_failed && !fix_required",
+        "none",
+        None,
+    );
     let context = ItemFinalizeContext {
         qa_enabled: false,
         qa_ran: false,
@@ -1451,11 +1475,11 @@ fn test_evaluate_finalize_rule_all_bool_flags_false() {
 #[test]
 fn test_evaluate_finalize_rule_all_bool_flags_true() {
     let rule = make_rule(
-            "r1",
-            "qa_enabled && qa_ran && qa_skipped && fix_enabled && fix_ran && fix_success && retest_enabled && retest_ran && retest_success && qa_failed && fix_required",
-            "all_true",
-            None,
-        );
+        "r1",
+        "qa_enabled && qa_ran && qa_skipped && fix_enabled && fix_ran && fix_success && retest_enabled && retest_ran && retest_success && qa_failed && fix_required",
+        "all_true",
+        None,
+    );
     let context = ItemFinalizeContext {
         qa_enabled: true,
         qa_ran: true,

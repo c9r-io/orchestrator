@@ -2,8 +2,8 @@ use super::{CheckResult, KNOWN_SYSTEM_VARS};
 use crate::scheduler::trace::find_template_vars;
 use agent_orchestrator::anomaly::Severity;
 use agent_orchestrator::config::{
-    is_known_builtin_step_name, resolve_step_semantic_kind, ExecutionMode, StepSemanticKind,
-    WorkflowStepConfig,
+    ExecutionMode, StepSemanticKind, WorkflowStepConfig, is_known_builtin_step_name,
+    resolve_step_semantic_kind,
 };
 use std::collections::HashSet;
 

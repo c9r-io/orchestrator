@@ -17,7 +17,7 @@ use anyhow::{Context, Result};
 /// The original parent prints the final daemon PID before exiting (communicated
 /// from the grandchild via a pipe).
 pub fn daemonize(log_path: &Path) -> Result<()> {
-    use nix::unistd::{fork, setsid, ForkResult};
+    use nix::unistd::{ForkResult, fork, setsid};
     use std::fs::File;
     use std::io::Read;
     use std::os::fd::FromRawFd;

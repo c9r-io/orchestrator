@@ -3,8 +3,8 @@ use std::net::{IpAddr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use agent_orchestrator::db::{insert_control_plane_audit, ControlPlaneAuditRecord};
-use anyhow::{anyhow, bail, Context, Result};
+use agent_orchestrator::db::{ControlPlaneAuditRecord, insert_control_plane_audit};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::ValueEnum;
 use rcgen::{
     BasicConstraints, CertificateParams, DistinguishedName, DnType, IsCa, Issuer, KeyPair,
@@ -580,8 +580,8 @@ fn write_client_bundle(
             },
         }],
     };
-    let raw =
-        serde_yaml::to_string(&config).context("failed to serialize control-plane client config")?;
+    let raw = serde_yaml::to_string(&config)
+        .context("failed to serialize control-plane client config")?;
     agent_orchestrator::secure_files::write_atomic(&config_path, raw.as_bytes(), 0o644)?;
     Ok(())
 }
@@ -844,9 +844,10 @@ mod tests {
             prepare_secure_server(temp.path(), &db_path, &bind_addr, None).expect("secure");
         assert!(secure.security.policy_path.exists());
         assert!(temp.path().join("control-plane/pki/ca.crt").exists());
-        assert!(home
-            .join(".orchestrator/control-plane/config.yaml")
-            .exists());
+        assert!(
+            home.join(".orchestrator/control-plane/config.yaml")
+                .exists()
+        );
 
         let policy = load_policy(&secure.security.policy_path).expect("policy");
         assert_eq!(policy.subjects.len(), 1);

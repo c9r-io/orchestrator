@@ -1,6 +1,6 @@
 use super::CheckResult;
 use agent_orchestrator::anomaly::Severity;
-use agent_orchestrator::runner::{sandbox_backend_preflight_issues, ResolvedExecutionProfile};
+use agent_orchestrator::runner::{ResolvedExecutionProfile, sandbox_backend_preflight_issues};
 use std::path::Path;
 
 pub(super) fn check_execution_profile_backend_support(

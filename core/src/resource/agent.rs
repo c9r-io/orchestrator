@@ -6,7 +6,7 @@ use crate::config::{
     AgentConfig, AgentMetadata, AgentSelectionConfig, HealthPolicyConfig, OrchestratorConfig,
     PromptDelivery,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
 
@@ -192,7 +192,7 @@ pub(crate) fn agent_config_to_spec(config: &AgentConfig) -> AgentSpec {
 mod tests {
     use super::*;
     use crate::cli_types::{ResourceMetadata, ResourceSpec};
-    use crate::resource::{dispatch_resource, API_VERSION};
+    use crate::resource::{API_VERSION, dispatch_resource};
 
     use super::super::test_fixtures::{agent_manifest, make_config};
 
@@ -285,16 +285,20 @@ mod tests {
         let ag = dispatch_resource(agent_manifest("meta-ag", "glmcode -p \"{prompt}\""))
             .expect("dispatch agent resource");
         ag.apply(&mut config).expect("apply");
-        assert!(config
-            .resource_store
-            .get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "meta-ag")
-            .is_some());
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "meta-ag")
+                .is_some()
+        );
 
         AgentResource::delete_from(&mut config, "meta-ag");
-        assert!(config
-            .resource_store
-            .get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "meta-ag")
-            .is_none());
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "meta-ag")
+                .is_none()
+        );
     }
 
     #[test]

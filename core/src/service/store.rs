@@ -1,4 +1,4 @@
-use crate::error::{classify_store_error, OrchestratorError, Result};
+use crate::error::{OrchestratorError, Result, classify_store_error};
 use crate::state::InnerState;
 use crate::store::{StoreOp, StoreOpResult};
 

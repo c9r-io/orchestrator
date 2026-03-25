@@ -34,9 +34,7 @@ pub(crate) async fn dispatch(
         }
         DbCommands::Cleanup { older_than_days } => {
             let resp = client
-                .db_log_cleanup(orchestrator_proto::DbLogCleanupRequest {
-                    older_than_days,
-                })
+                .db_log_cleanup(orchestrator_proto::DbLogCleanupRequest { older_than_days })
                 .await?
                 .into_inner();
             println!("{}", resp.message);
@@ -88,7 +86,10 @@ fn print_status(resp: &orchestrator_proto::DbStatusResponse, output: OutputForma
             println!();
             println!("DB Size:          {}", format_bytes(resp.db_size_bytes));
             println!("Logs Size:        {}", format_bytes(resp.logs_size_bytes));
-            println!("Archive Size:     {}", format_bytes(resp.archive_size_bytes));
+            println!(
+                "Archive Size:     {}",
+                format_bytes(resp.archive_size_bytes)
+            );
             Ok(())
         }
         OutputFormat::Yaml => anyhow::bail!("db commands support only table or json output"),

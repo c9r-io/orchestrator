@@ -1,7 +1,7 @@
 use super::common::AgentLookup;
 use crate::cli_types::WorkflowStepSpec;
 use crate::config::{
-    resolve_step_semantic_kind, CaptureSource, StepSemanticKind, WorkflowStepConfig,
+    CaptureSource, StepSemanticKind, WorkflowStepConfig, resolve_step_semantic_kind,
 };
 use anyhow::Result;
 use std::collections::HashSet;

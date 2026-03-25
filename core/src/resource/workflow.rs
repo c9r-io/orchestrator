@@ -1,6 +1,6 @@
 use crate::cli_types::{OrchestratorResource, ResourceKind, ResourceSpec, WorkflowSpec};
 use crate::config::{LoopMode, OrchestratorConfig};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
 
@@ -141,7 +141,7 @@ mod tests {
         ResourceMetadata, ResourceSpec, SafetySpec, WorkflowLoopSpec, WorkflowStepSpec,
     };
     use crate::config_load::read_active_config;
-    use crate::resource::{dispatch_resource, API_VERSION};
+    use crate::resource::{API_VERSION, dispatch_resource};
     use crate::test_utils::TestState;
 
     use super::super::test_fixtures::{make_config, workflow_manifest};
@@ -460,10 +460,12 @@ mod tests {
         };
         let result = workflow.validate();
         assert!(result.is_err());
-        assert!(result
-            .expect_err("operation should fail")
-            .to_string()
-            .contains("cannot be empty"));
+        assert!(
+            result
+                .expect_err("operation should fail")
+                .to_string()
+                .contains("cannot be empty")
+        );
     }
 
     #[test]
@@ -478,16 +480,20 @@ mod tests {
         let wf =
             dispatch_resource(workflow_manifest("meta-wf")).expect("dispatch workflow resource");
         wf.apply(&mut config).expect("apply");
-        assert!(config
-            .resource_store
-            .get_namespaced("Workflow", crate::config::DEFAULT_PROJECT_ID, "meta-wf")
-            .is_some());
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("Workflow", crate::config::DEFAULT_PROJECT_ID, "meta-wf")
+                .is_some()
+        );
 
         WorkflowResource::delete_from(&mut config, "meta-wf");
-        assert!(config
-            .resource_store
-            .get_namespaced("Workflow", crate::config::DEFAULT_PROJECT_ID, "meta-wf")
-            .is_none());
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("Workflow", crate::config::DEFAULT_PROJECT_ID, "meta-wf")
+                .is_none()
+        );
     }
 
     #[test]

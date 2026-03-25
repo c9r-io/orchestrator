@@ -1,4 +1,4 @@
-use crate::scheduler::check::{run_checks, CheckReport, CheckResult};
+use crate::scheduler::check::{CheckReport, CheckResult, run_checks};
 use agent_orchestrator::config_load::read_active_config;
 use agent_orchestrator::error::Result;
 use agent_orchestrator::state::InnerState;

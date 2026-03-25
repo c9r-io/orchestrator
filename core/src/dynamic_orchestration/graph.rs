@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::config::{StepPrehookConfig, StepScope, TaskExecutionStep, TaskRuntimeContext};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 
 /// Source used to derive the effective execution graph.

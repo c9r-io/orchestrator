@@ -1,5 +1,5 @@
 mod init;
 
 pub use init::{
-    init_observability, resolve_logging_config, CliLoggingOverrides, ObservabilityGuard,
+    CliLoggingOverrides, ObservabilityGuard, init_observability, resolve_logging_config,
 };

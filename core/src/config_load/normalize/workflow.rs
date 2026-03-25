@@ -1,7 +1,7 @@
 use super::steps::{apply_default_step_behavior, normalize_step_execution_mode_recursive};
 use crate::config::{
-    default_builtin_for_step_id, default_required_capability_for_step_id, StepBehavior,
-    WorkflowConfig, WorkflowStepConfig,
+    StepBehavior, WorkflowConfig, WorkflowStepConfig, default_builtin_for_step_id,
+    default_required_capability_for_step_id,
 };
 use std::collections::HashSet;
 

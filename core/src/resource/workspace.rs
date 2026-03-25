@@ -1,6 +1,6 @@
 use crate::cli_types::{OrchestratorResource, ResourceKind, ResourceSpec, WorkspaceSpec};
 use crate::config::{OrchestratorConfig, WorkspaceConfig};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
 
@@ -169,7 +169,7 @@ mod tests {
     use super::*;
     use crate::cli_types::{ResourceMetadata, ResourceSpec};
     use crate::config_load::read_active_config;
-    use crate::resource::{dispatch_resource, API_VERSION};
+    use crate::resource::{API_VERSION, dispatch_resource};
     use crate::test_utils::TestState;
 
     use super::super::test_fixtures::{make_config, workspace_manifest};
@@ -287,16 +287,20 @@ mod tests {
         };
         let rr = dispatch_resource(resource).expect("dispatch workspace resource");
         rr.apply(&mut config).expect("apply");
-        assert!(config
-            .resource_store
-            .get_namespaced("Workspace", crate::config::DEFAULT_PROJECT_ID, "meta-ws")
-            .is_some());
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("Workspace", crate::config::DEFAULT_PROJECT_ID, "meta-ws")
+                .is_some()
+        );
 
         WorkspaceResource::delete_from(&mut config, "meta-ws");
-        assert!(config
-            .resource_store
-            .get_namespaced("Workspace", crate::config::DEFAULT_PROJECT_ID, "meta-ws")
-            .is_none());
+        assert!(
+            config
+                .resource_store
+                .get_namespaced("Workspace", crate::config::DEFAULT_PROJECT_ID, "meta-ws")
+                .is_none()
+        );
     }
 
     #[test]

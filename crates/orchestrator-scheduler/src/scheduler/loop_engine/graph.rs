@@ -1,25 +1,25 @@
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde_json::json;
 use uuid::Uuid;
 
+use crate::scheduler::RunningTask;
 use crate::scheduler::item_executor::{
-    execute_dynamic_step_config, process_item_filtered, ProcessItemRequest,
-    StepExecutionAccumulator,
+    ProcessItemRequest, StepExecutionAccumulator, execute_dynamic_step_config,
+    process_item_filtered,
 };
-use crate::scheduler::phase_runner::{run_phase_with_selected_agent, SelectedPhaseRunRequest};
+use crate::scheduler::phase_runner::{SelectedPhaseRunRequest, run_phase_with_selected_agent};
 use crate::scheduler::task_state::{
     is_task_paused_in_db, list_task_items_for_cycle, set_task_status,
 };
-use crate::scheduler::RunningTask;
 use agent_orchestrator::config::{DagFallbackMode, StepScope, TaskRuntimeContext};
 use agent_orchestrator::dynamic_orchestration::{
-    build_adaptive_execution_graph, build_static_execution_graph, AdaptiveFailureClass,
-    AdaptivePlanExecutor, AdaptivePlanSource, AdaptivePlanner, EffectiveExecutionGraph,
-    ExecutionGraphNode, ExecutionGraphNodeSpec, ExecutionGraphSource,
+    AdaptiveFailureClass, AdaptivePlanExecutor, AdaptivePlanSource, AdaptivePlanner,
+    EffectiveExecutionGraph, ExecutionGraphNode, ExecutionGraphNodeSpec, ExecutionGraphSource,
+    build_adaptive_execution_graph, build_static_execution_graph,
 };
 use agent_orchestrator::events::insert_event;
 use agent_orchestrator::state::InnerState;

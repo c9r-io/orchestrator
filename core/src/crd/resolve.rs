@@ -1,6 +1,6 @@
 use crate::config::OrchestratorConfig;
 use crate::crd::types::{CrdVersion, CustomResourceDefinition};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 /// Find a CRD by kind name, plural name, or short_name alias.
 pub fn find_crd_by_kind_or_alias<'a>(

@@ -302,9 +302,11 @@ mod tests {
         );
         assert!(cr.metadata.project.is_none());
         store.put(cr);
-        assert!(store
-            .get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "my-agent")
-            .is_some());
+        assert!(
+            store
+                .get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "my-agent")
+                .is_some()
+        );
         assert!(store.get("Agent", "my-agent").is_none());
     }
 
@@ -323,13 +325,15 @@ mod tests {
         // RuntimePolicy is project-scoped — auto-assigned to DEFAULT_PROJECT_ID.
         let cr = make_cr("RuntimePolicy", "runtime", serde_json::json!({}));
         store.put(cr);
-        assert!(store
-            .get_namespaced(
-                "RuntimePolicy",
-                crate::config::DEFAULT_PROJECT_ID,
-                "runtime"
-            )
-            .is_some());
+        assert!(
+            store
+                .get_namespaced(
+                    "RuntimePolicy",
+                    crate::config::DEFAULT_PROJECT_ID,
+                    "runtime"
+                )
+                .is_some()
+        );
         // Not in _system
         assert!(store.get("RuntimePolicy", "runtime").is_none());
     }

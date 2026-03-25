@@ -2,8 +2,8 @@ use anyhow::Result;
 use orchestrator_proto::OrchestratorServiceClient;
 use tonic::transport::Channel;
 
-use crate::cli::AgentCommands;
 use crate::OutputFormat;
+use crate::cli::AgentCommands;
 
 pub(crate) async fn dispatch(
     client: &mut OrchestratorServiceClient<Channel>,

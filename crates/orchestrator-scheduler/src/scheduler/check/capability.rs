@@ -1,7 +1,7 @@
 use super::CheckResult;
 use agent_orchestrator::anomaly::Severity;
 use agent_orchestrator::config::{
-    resolve_step_semantic_kind, PromptDelivery, StepSemanticKind, WorkflowStepConfig,
+    PromptDelivery, StepSemanticKind, WorkflowStepConfig, resolve_step_semantic_kind,
 };
 use std::collections::HashSet;
 

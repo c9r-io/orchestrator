@@ -1,14 +1,13 @@
 use crate::config::OrchestratorConfig;
-use crate::config_load::{now_ts, ConfigSelfHealChange, ResourceRemoval};
+use crate::config_load::{ConfigSelfHealChange, ResourceRemoval, now_ts};
 use crate::dto::ConfigOverview;
 use crate::resource::export_manifest_resources;
 use crate::secret_store_crypto::{
-    decrypt_resource_spec_json, encrypt_resource_spec_json, ensure_secret_key,
+    SecretEncryption, decrypt_resource_spec_json, encrypt_resource_spec_json, ensure_secret_key,
     load_existing_secret_key, redact_secret_data_map, resolve_data_dir_from_db_path,
-    SecretEncryption,
 };
 use anyhow::{Context, Result};
-use rusqlite::{params, OptionalExtension, Transaction};
+use rusqlite::{OptionalExtension, Transaction, params};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -644,8 +643,8 @@ impl ConfigRepository for SqliteConfigRepository {
                     SecretEncryption::from_keyring(&keyring)?
                 } else if has_secret_stores {
                     anyhow::bail!(
-                            "SecretStore write blocked: no active encryption key (all keys revoked or retired)"
-                        );
+                        "SecretStore write blocked: no active encryption key (all keys revoked or retired)"
+                    );
                 } else {
                     SecretEncryption::from_key(ensure_secret_key(&data_dir, &self.db_path)?)
                 }

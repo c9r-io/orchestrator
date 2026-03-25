@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 use agent_orchestrator::state::InnerState;
 
@@ -38,9 +38,13 @@ extern "C" fn sigterm_sigaction_handler(
         let sender_pid = unsafe {
             // On Linux, libc exposes si_pid as a method; on macOS it is a field.
             #[cfg(target_os = "linux")]
-            { (*info).si_pid() }
+            {
+                (*info).si_pid()
+            }
             #[cfg(not(target_os = "linux"))]
-            { (*info).si_pid }
+            {
+                (*info).si_pid
+            }
         };
         SIGTERM_SENDER_PID.store(sender_pid, Ordering::SeqCst);
     }
@@ -103,11 +107,7 @@ fn install_sigterm_siginfo_handler() -> Result<()> {
 /// Return the PID that sent SIGTERM, or `None` if not yet captured.
 pub fn sigterm_sender_pid() -> Option<i32> {
     let pid = SIGTERM_SENDER_PID.load(Ordering::SeqCst);
-    if pid != 0 {
-        Some(pid)
-    } else {
-        None
-    }
+    if pid != 0 { Some(pid) } else { None }
 }
 
 /// Returns the path to the daemon Unix Domain Socket.

@@ -1,9 +1,9 @@
 use crate::config::{AgentConfig, PromptDelivery};
 use crate::health::is_capability_healthy;
 use crate::metrics::{
-    calculate_agent_score, AgentHealthState, AgentMetrics, AgentRuntimeState, SelectionRequirement,
+    AgentHealthState, AgentMetrics, AgentRuntimeState, SelectionRequirement, calculate_agent_score,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
 
@@ -227,10 +227,12 @@ mod tests {
             &HashMap::new(),
         );
         assert!(result.is_err());
-        assert!(result
-            .expect_err("operation should fail")
-            .to_string()
-            .contains("No healthy agent"));
+        assert!(
+            result
+                .expect_err("operation should fail")
+                .to_string()
+                .contains("No healthy agent")
+        );
     }
 
     #[test]
@@ -303,10 +305,12 @@ mod tests {
         let result = select_agent_by_preference(&agents);
 
         assert!(result.is_err());
-        assert!(result
-            .expect_err("operation should fail")
-            .to_string()
-            .contains("no agents configured"));
+        assert!(
+            result
+                .expect_err("operation should fail")
+                .to_string()
+                .contains("no agents configured")
+        );
     }
 
     #[test]
@@ -462,10 +466,12 @@ mod tests {
             &HashMap::new(),
         );
         assert!(result.is_err());
-        assert!(result
-            .expect_err("should fail when all excluded")
-            .to_string()
-            .contains("No healthy agent"));
+        assert!(
+            result
+                .expect_err("should fail when all excluded")
+                .to_string()
+                .contains("No healthy agent")
+        );
     }
 
     #[test]

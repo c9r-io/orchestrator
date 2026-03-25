@@ -3,7 +3,7 @@ use crate::crd::resolve::{find_crd_for_kind, is_builtin_alias, is_builtin_kind, 
 use crate::crd::schema::{validate_json_schema, validate_schema_definition};
 use crate::crd::types::{CelValidationRule, CrdManifest, CustomResourceManifest};
 use crate::resource::validate_resource_name;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use cel_interpreter::{Context as CelContext, Program, Value as CelValue};
 use std::collections::HashMap;
 
@@ -400,10 +400,11 @@ mod tests {
         };
         let err = validate_custom_resource(&config, &manifest);
         assert!(err.is_err());
-        assert!(err
-            .expect_err("should fail")
-            .to_string()
-            .contains("items must not be empty"));
+        assert!(
+            err.expect_err("should fail")
+                .to_string()
+                .contains("items must not be empty")
+        );
     }
 
     #[test]

@@ -15,12 +15,13 @@ use anyhow::Result;
 use chrono::TimeZone;
 use serde_json::json;
 use std::collections::HashMap;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
+use super::RunningTask;
 use super::item_executor::finalize_item_execution;
-use super::item_executor::{process_item, StepExecutionAccumulator};
-use super::phase_runner::{run_phase_with_rotation, RotatingPhaseRunRequest};
+use super::item_executor::{StepExecutionAccumulator, process_item};
+use super::phase_runner::{RotatingPhaseRunRequest, run_phase_with_rotation};
 use super::runtime::load_task_runtime_context;
 use super::safety::RestartRequestedError;
 use super::task_state::query_recent_cycle_timestamps;
@@ -31,7 +32,6 @@ use super::task_state::{
     list_task_items_for_cycle, mark_command_run_killed, query_completed_steps_in_cycle,
     record_task_execution_metric, set_task_status, update_task_cycle_state,
 };
-use super::RunningTask;
 
 /// Runs the main workflow loop for a task until completion, pause, or failure.
 pub async fn run_task_loop(

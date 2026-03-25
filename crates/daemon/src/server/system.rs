@@ -1,7 +1,7 @@
 use orchestrator_proto::*;
 use tonic::{Request, Response, Status};
 
-use super::{map_core_error, OrchestratorServer};
+use super::{OrchestratorServer, map_core_error};
 
 pub(crate) async fn ping(
     server: &OrchestratorServer,
@@ -151,7 +151,11 @@ pub(crate) async fn db_log_cleanup(
 ) -> Result<Response<DbLogCleanupResponse>, Status> {
     super::authorize(server, &request, "DbLogCleanup").map_err(Status::from)?;
     let req = request.into_inner();
-    let days = if req.older_than_days == 0 { 30 } else { req.older_than_days };
+    let days = if req.older_than_days == 0 {
+        30
+    } else {
+        req.older_than_days
+    };
     let result = agent_orchestrator::log_cleanup::cleanup_old_logs(
         &server.state.async_database,
         &server.state.logs_dir,
@@ -284,7 +288,10 @@ pub(crate) async fn task_events(
     .await
     .map_err(|e| Status::internal(e.to_string()))?;
     Ok(Response::new(TaskEventsResponse {
-        events: events.into_iter().map(super::mapping::event_to_proto).collect(),
+        events: events
+            .into_iter()
+            .map(super::mapping::event_to_proto)
+            .collect(),
     }))
 }
 

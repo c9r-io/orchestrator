@@ -1,6 +1,6 @@
 use anyhow::Result;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 /// Trait for types that can be projected to/from CRD custom resource specs.
 ///

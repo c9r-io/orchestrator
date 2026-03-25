@@ -1,6 +1,6 @@
 //! Schema validation for store entry values.
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 /// Validate a JSON value against a JSON Schema (simplified subset).
 ///
@@ -132,10 +132,11 @@ mod tests {
         let value = json!("not an object");
         let err = validate_schema(&value, &schema);
         assert!(err.is_err());
-        assert!(err
-            .unwrap_err()
-            .to_string()
-            .contains("expected type 'object'"));
+        assert!(
+            err.unwrap_err()
+                .to_string()
+                .contains("expected type 'object'")
+        );
     }
 
     #[test]
@@ -150,10 +151,11 @@ mod tests {
         let value = json!({});
         let err = validate_schema(&value, &schema);
         assert!(err.is_err());
-        assert!(err
-            .unwrap_err()
-            .to_string()
-            .contains("missing required field 'name'"));
+        assert!(
+            err.unwrap_err()
+                .to_string()
+                .contains("missing required field 'name'")
+        );
     }
 
     #[test]

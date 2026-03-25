@@ -1,12 +1,12 @@
+use super::super::SqliteTaskRepository;
 use super::super::trait_def::TaskRepository;
 use super::super::types::{NewTaskGraphRun, NewTaskGraphSnapshot, TaskRepositorySource};
-use super::super::SqliteTaskRepository;
 use super::fixtures::seed_task;
 use crate::db::open_conn;
 use crate::dto::CreateTaskPayload;
 use crate::task_ops::create_task_impl;
 use crate::test_utils::TestState;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
 #[test]
 fn resolve_task_id_supports_exact_and_prefix() {
@@ -998,40 +998,42 @@ fn query_helpers_error_on_missing_schema() {
     assert!(super::super::queries::load_task_detail_rows(&conn, "missing").is_err());
     assert!(super::super::queries::list_task_items_for_cycle(&conn, "missing").is_err());
     assert!(super::super::queries::list_task_log_runs(&conn, "missing", 5).is_err());
-    assert!(super::super::queries::insert_task_graph_run(
-        &conn,
-        &NewTaskGraphRun {
-            graph_run_id: "graph-missing".to_string(),
-            task_id: "task-missing".to_string(),
-            cycle: 1,
-            mode: "dynamic_dag".to_string(),
-            source: "adaptive_planner".to_string(),
-            status: "materialized".to_string(),
-            fallback_mode: None,
-            planner_failure_class: None,
-            planner_failure_message: None,
-            entry_node_id: None,
-            node_count: 0,
-            edge_count: 0,
-        },
-    )
-    .is_err());
-    assert!(super::super::queries::update_task_graph_run_status(
-        &conn,
-        "graph-missing",
-        "completed",
-    )
-    .is_err());
-    assert!(super::super::queries::insert_task_graph_snapshot(
-        &conn,
-        &NewTaskGraphSnapshot {
-            graph_run_id: "graph-missing".to_string(),
-            task_id: "task-missing".to_string(),
-            snapshot_kind: "effective_graph".to_string(),
-            payload_json: "{}".to_string(),
-        },
-    )
-    .is_err());
+    assert!(
+        super::super::queries::insert_task_graph_run(
+            &conn,
+            &NewTaskGraphRun {
+                graph_run_id: "graph-missing".to_string(),
+                task_id: "task-missing".to_string(),
+                cycle: 1,
+                mode: "dynamic_dag".to_string(),
+                source: "adaptive_planner".to_string(),
+                status: "materialized".to_string(),
+                fallback_mode: None,
+                planner_failure_class: None,
+                planner_failure_message: None,
+                entry_node_id: None,
+                node_count: 0,
+                edge_count: 0,
+            },
+        )
+        .is_err()
+    );
+    assert!(
+        super::super::queries::update_task_graph_run_status(&conn, "graph-missing", "completed",)
+            .is_err()
+    );
+    assert!(
+        super::super::queries::insert_task_graph_snapshot(
+            &conn,
+            &NewTaskGraphSnapshot {
+                graph_run_id: "graph-missing".to_string(),
+                task_id: "task-missing".to_string(),
+                snapshot_kind: "effective_graph".to_string(),
+                payload_json: "{}".to_string(),
+            },
+        )
+        .is_err()
+    );
 }
 
 #[test]

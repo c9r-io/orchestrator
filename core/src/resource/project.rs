@@ -1,6 +1,6 @@
 use crate::cli_types::{OrchestratorResource, ProjectSpec, ResourceKind, ResourceSpec};
 use crate::config::{OrchestratorConfig, ProjectConfig};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
 
@@ -104,7 +104,7 @@ pub(super) fn build_project(resource: OrchestratorResource) -> Result<Registered
 mod tests {
     use super::*;
     use crate::cli_types::{ResourceMetadata, ResourceSpec};
-    use crate::resource::{dispatch_resource, API_VERSION};
+    use crate::resource::{API_VERSION, dispatch_resource};
 
     use super::super::test_fixtures::{make_config, project_manifest};
 

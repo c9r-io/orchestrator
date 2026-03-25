@@ -11,23 +11,23 @@ use agent_orchestrator::prehook::evaluate_step_prehook;
 use agent_orchestrator::state::InnerState;
 use agent_orchestrator::store::{StoreOp, StoreOpResult};
 use agent_orchestrator::ticket::scan_active_tickets_for_task_items;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::{HashSet, VecDeque};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use tracing::warn;
 
+use super::super::RunningTask;
 use super::super::phase_runner::{
-    run_phase, run_phase_with_rotation, run_phase_with_selected_agent, PhaseRunRequest,
-    RotatingPhaseRunRequest, SelectedPhaseRunRequest,
+    PhaseRunRequest, RotatingPhaseRunRequest, SelectedPhaseRunRequest, run_phase,
+    run_phase_with_rotation, run_phase_with_selected_agent,
 };
 use super::super::safety::{
-    execute_self_restart_step, execute_self_test_step, RestartRequestedError, SelfRestartOutcome,
+    RestartRequestedError, SelfRestartOutcome, execute_self_restart_step, execute_self_test_step,
 };
-use super::super::RunningTask;
 use super::accumulator::StepExecutionAccumulator;
 use super::apply::apply_step_results;
 use super::finalize::finalize_item_execution;

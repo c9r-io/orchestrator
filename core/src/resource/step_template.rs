@@ -1,6 +1,6 @@
 use crate::cli_types::{OrchestratorResource, ResourceKind, ResourceSpec, StepTemplateSpec};
 use crate::config::{OrchestratorConfig, StepTemplateConfig};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
 

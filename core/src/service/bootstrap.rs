@@ -1,7 +1,5 @@
 use crate::collab::MessageBus;
-use crate::config_load::{
-    build_active_config_with_self_heal, data_dir, load_or_seed_config,
-};
+use crate::config_load::{build_active_config_with_self_heal, data_dir, load_or_seed_config};
 use crate::persistence::schema::PersistenceBootstrap;
 use crate::state::{ConfigRuntimeSnapshot, InnerState, ManagedState};
 use anyhow::{Context, Result};
@@ -374,9 +372,11 @@ mod tests {
 
         let loaded = read_active_config(&managed.inner).expect("read active config");
         assert!(loaded.workspaces.is_empty());
-        assert!(loaded
-            .projects
-            .contains_key(crate::config::DEFAULT_PROJECT_ID));
+        assert!(
+            loaded
+                .projects
+                .contains_key(crate::config::DEFAULT_PROJECT_ID)
+        );
     }
 
     #[test]

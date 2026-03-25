@@ -19,7 +19,7 @@ use crate::async_database::AsyncDatabase;
 use crate::config::{StoreBackendProviderConfig, WorkflowStoreConfig};
 use crate::crd::projection::CrdProjectable;
 use crate::crd::types::CustomResource;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;

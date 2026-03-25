@@ -48,10 +48,15 @@ pub fn resolve_and_validate_workspaces_for_project(
         .ok_or_else(|| anyhow::anyhow!("project '{}' does not exist", project_id))?;
     for (id, entry) in &project.workspaces {
         if id.trim().is_empty() {
-            anyhow::bail!("[INVALID_WORKSPACE] workspace id cannot be empty\n  category: validation\n  suggested_fix: provide a non-empty workspace name");
+            anyhow::bail!(
+                "[INVALID_WORKSPACE] workspace id cannot be empty\n  category: validation\n  suggested_fix: provide a non-empty workspace name"
+            );
         }
         if entry.qa_targets.is_empty() {
-            anyhow::bail!("[INVALID_WORKSPACE] workspace '{}' qa_targets cannot be empty\n  category: validation\n  suggested_fix: add at least one qa_targets path (e.g. docs/qa)", id);
+            anyhow::bail!(
+                "[INVALID_WORKSPACE] workspace '{}' qa_targets cannot be empty\n  category: validation\n  suggested_fix: add at least one qa_targets path (e.g. docs/qa)",
+                id
+            );
         }
 
         let root_path = data_dir
@@ -199,10 +204,12 @@ mod tests {
         let config = OrchestratorConfig::default();
         let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
         assert!(result.is_err());
-        assert!(result
-            .expect_err("operation should fail")
-            .to_string()
-            .contains("project 'default' does not exist"));
+        assert!(
+            result
+                .expect_err("operation should fail")
+                .to_string()
+                .contains("project 'default' does not exist")
+        );
     }
 
     #[test]
@@ -315,10 +322,12 @@ mod tests {
         };
         let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
         assert!(result.is_err());
-        assert!(result
-            .expect_err("operation should fail")
-            .to_string()
-            .contains("INVALID_WORKSPACE"));
+        assert!(
+            result
+                .expect_err("operation should fail")
+                .to_string()
+                .contains("INVALID_WORKSPACE")
+        );
     }
 
     #[test]
@@ -357,10 +366,12 @@ mod tests {
         };
         let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
         assert!(result.is_err());
-        assert!(result
-            .expect_err("operation should fail")
-            .to_string()
-            .contains("qa_targets cannot be empty"));
+        assert!(
+            result
+                .expect_err("operation should fail")
+                .to_string()
+                .contains("qa_targets cannot be empty")
+        );
     }
 
     #[test]
@@ -413,9 +424,11 @@ mod tests {
         let config = OrchestratorConfig::default();
         let result = resolve_and_validate_projects(Path::new("/tmp"), &config);
         assert!(result.is_ok());
-        assert!(result
-            .expect("empty project config should validate")
-            .is_empty());
+        assert!(
+            result
+                .expect("empty project config should validate")
+                .is_empty()
+        );
     }
 
     #[test]

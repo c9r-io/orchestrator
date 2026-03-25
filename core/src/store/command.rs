@@ -2,7 +2,7 @@
 
 use crate::config::StoreBackendCommands;
 use crate::store::{StoreEntry, StoreOp, StoreOpResult};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 /// Adapter for store backends implemented as shell commands.
 pub struct CommandAdapter;

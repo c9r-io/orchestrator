@@ -22,7 +22,7 @@ pub mod writeback;
 use crate::cli_types::OrchestratorResource;
 use crate::config::OrchestratorConfig;
 use crate::resource::ApplyResult;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use types::{CrdManifest, CustomResource, CustomResourceManifest};
 
 /// Tri-state parse result for YAML manifests.

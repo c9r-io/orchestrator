@@ -1,4 +1,4 @@
-use crate::async_database::{flatten_err, AsyncDatabase};
+use crate::async_database::{AsyncDatabase, flatten_err};
 use crate::session_store::{self, OwnedNewSession, SessionRow};
 use anyhow::Result;
 use async_trait::async_trait;

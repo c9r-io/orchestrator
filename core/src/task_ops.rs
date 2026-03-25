@@ -776,10 +776,12 @@ mod tests {
         };
         let result = create_task_impl(&state, payload);
         assert!(result.is_err());
-        assert!(result
-            .expect_err("operation should fail")
-            .to_string()
-            .contains("task-scoped workflow accepts at most one --target-file"));
+        assert!(
+            result
+                .expect_err("operation should fail")
+                .to_string()
+                .contains("task-scoped workflow accepts at most one --target-file")
+        );
     }
 
     #[test]

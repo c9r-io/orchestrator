@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::process::Command;
 
 /// Execute a lifecycle hook command synchronously.
@@ -96,10 +96,12 @@ mod tests {
     fn execute_hook_failure() {
         let result = execute_hook("exit 1", "Foo", "my-foo", "create", &serde_json::json!({}));
         assert!(result.is_err());
-        assert!(result
-            .expect_err("should fail")
-            .to_string()
-            .contains("hook"));
+        assert!(
+            result
+                .expect_err("should fail")
+                .to_string()
+                .contains("hook")
+        );
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use agent_orchestrator::config::{PipelineVariables, PIPELINE_VAR_INLINE_LIMIT};
+use agent_orchestrator::config::{PIPELINE_VAR_INLINE_LIMIT, PipelineVariables};
 use std::path::Path;
 use tracing::warn;
 

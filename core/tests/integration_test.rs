@@ -1,8 +1,8 @@
 use agent_orchestrator::cli_types::ResourceKind;
 use agent_orchestrator::config::DEFAULT_PROJECT_ID;
 use agent_orchestrator::resource::{
-    delete_resource_by_kind, dispatch_resource, kind_as_str, parse_resources_from_yaml,
-    ApplyResult, Resource,
+    ApplyResult, Resource, delete_resource_by_kind, dispatch_resource, kind_as_str,
+    parse_resources_from_yaml,
 };
 
 fn only<T>(mut items: Vec<T>) -> T {
@@ -149,11 +149,13 @@ fn apply_creates_new_workspace_in_config() {
 
     let result = registered.apply(&mut config).expect("apply");
     assert_eq!(result, ApplyResult::Created);
-    assert!(config
-        .default_project()
-        .expect("default project")
-        .workspaces
-        .contains_key("new-ws"));
+    assert!(
+        config
+            .default_project()
+            .expect("default project")
+            .workspaces
+            .contains_key("new-ws")
+    );
     let new_ws_root = &config
         .default_project()
         .expect("default project")
@@ -221,16 +223,20 @@ fn apply_preserves_unmentioned_resources() {
     let registered = dispatch_resource(only(resources)).expect("dispatch new workspace");
     registered.apply(&mut config).expect("apply");
 
-    assert!(config
-        .default_project()
-        .expect("default project")
-        .workspaces
-        .contains_key("default"));
-    assert!(config
-        .default_project()
-        .expect("default project")
-        .workspaces
-        .contains_key("new-ws"));
+    assert!(
+        config
+            .default_project()
+            .expect("default project")
+            .workspaces
+            .contains_key("default")
+    );
+    assert!(
+        config
+            .default_project()
+            .expect("default project")
+            .workspaces
+            .contains_key("new-ws")
+    );
 }
 
 #[test]
@@ -268,16 +274,20 @@ fn multi_document_apply_all_to_config() {
         registered.apply(&mut config).expect("apply");
     }
 
-    assert!(config
-        .default_project()
-        .expect("default project")
-        .workspaces
-        .contains_key("ws-extra"));
-    assert!(config
-        .default_project()
-        .expect("default project")
-        .agents
-        .contains_key("agent-extra"));
+    assert!(
+        config
+            .default_project()
+            .expect("default project")
+            .workspaces
+            .contains_key("ws-extra")
+    );
+    assert!(
+        config
+            .default_project()
+            .expect("default project")
+            .agents
+            .contains_key("agent-extra")
+    );
 }
 
 #[test]
@@ -295,10 +305,12 @@ spec:
     let registered = dispatch_resource(only(resources)).expect("dispatch invalid workspace");
     let result = registered.validate();
     assert!(result.is_err());
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("root_path"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("root_path")
+    );
 }
 
 #[test]
@@ -314,10 +326,12 @@ spec:
     let registered = dispatch_resource(only(resources)).expect("dispatch invalid agent");
     let result = registered.validate();
     assert!(result.is_err());
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("command cannot be empty"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("command cannot be empty")
+    );
 }
 
 #[test]
@@ -335,9 +349,11 @@ spec:
     let resource = &resources[0];
     let result = resource.validate_version();
     assert!(result.is_err());
-    assert!(result
-        .expect_err("operation should fail")
-        .contains("wrong/v2"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .contains("wrong/v2")
+    );
 }
 
 #[test]
@@ -357,16 +373,20 @@ fn delete_removes_workspace_from_config() {
     let deleted =
         delete_resource_by_kind(&mut config, "workspace", "to-delete").expect("should succeed");
     assert!(deleted);
-    assert!(!config
-        .default_project()
-        .expect("default project")
-        .workspaces
-        .contains_key("to-delete"));
-    assert!(config
-        .default_project()
-        .expect("default project")
-        .workspaces
-        .contains_key("default"));
+    assert!(
+        !config
+            .default_project()
+            .expect("default project")
+            .workspaces
+            .contains_key("to-delete")
+    );
+    assert!(
+        config
+            .default_project()
+            .expect("default project")
+            .workspaces
+            .contains_key("default")
+    );
 }
 
 #[test]
@@ -402,20 +422,24 @@ fn apply_then_delete_roundtrip() {
         registered.apply(&mut config).expect("apply"),
         ApplyResult::Created
     );
-    assert!(config
-        .default_project()
-        .expect("default project")
-        .agents
-        .contains_key("temp-agent"));
+    assert!(
+        config
+            .default_project()
+            .expect("default project")
+            .agents
+            .contains_key("temp-agent")
+    );
 
     let deleted =
         delete_resource_by_kind(&mut config, "agent", "temp-agent").expect("delete temp agent");
     assert!(deleted);
-    assert!(!config
-        .default_project()
-        .expect("default project")
-        .agents
-        .contains_key("temp-agent"));
+    assert!(
+        !config
+            .default_project()
+            .expect("default project")
+            .agents
+            .contains_key("temp-agent")
+    );
 }
 
 #[test]

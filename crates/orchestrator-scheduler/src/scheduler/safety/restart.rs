@@ -1,4 +1,4 @@
-use super::snapshot::{sha256_hex, snapshot_binary, RELEASE_BINARY_REL};
+use super::snapshot::{RELEASE_BINARY_REL, sha256_hex, snapshot_binary};
 use agent_orchestrator::async_database::flatten_err;
 use agent_orchestrator::events::insert_event;
 use agent_orchestrator::state::InnerState;

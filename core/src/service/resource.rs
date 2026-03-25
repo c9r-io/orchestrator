@@ -1,12 +1,12 @@
 use crate::config_load::{
-    enforce_deletion_guards_for_removals, load_config, persist_config_and_reload,
-    persist_config_for_delete, read_active_config, ResourceRemoval,
+    ResourceRemoval, enforce_deletion_guards_for_removals, load_config, persist_config_and_reload,
+    persist_config_for_delete, read_active_config,
 };
 use crate::crd::{self, ParsedManifest};
-use crate::error::{classify_resource_error, Result};
+use crate::error::{Result, classify_resource_error};
 use crate::resource::{
-    apply_to_project, dispatch_resource, kind_as_str, parse_manifests_from_yaml, ApplyResult,
-    Resource,
+    ApplyResult, Resource, apply_to_project, dispatch_resource, kind_as_str,
+    parse_manifests_from_yaml,
 };
 use crate::state::InnerState;
 use anyhow::Context;
@@ -1085,10 +1085,12 @@ mod tests {
         )
         .expect("dry-run prune");
 
-        assert!(dry_run
-            .results
-            .iter()
-            .any(|entry| entry.name == "delete-me" && entry.action == "deleted"));
+        assert!(
+            dry_run
+                .results
+                .iter()
+                .any(|entry| entry.name == "delete-me" && entry.action == "deleted")
+        );
 
         let active = read_active_config(&state).expect("read active config");
         let project = active
@@ -1284,9 +1286,11 @@ mod tests {
             Some(crate::config::DEFAULT_PROJECT_ID),
         )
         .expect_err("named query with selector should fail");
-        assert!(named_with_selector
-            .to_string()
-            .contains("label selector (-l) cannot be used"));
+        assert!(
+            named_with_selector
+                .to_string()
+                .contains("label selector (-l) cannot be used")
+        );
 
         let conditions = parse_label_selector("env=dev,tier=qa").expect("parse selector");
         assert_eq!(
@@ -1308,9 +1312,11 @@ mod tests {
 
         let invalid_selector =
             parse_label_selector("env").expect_err("invalid selector should fail");
-        assert!(invalid_selector
-            .to_string()
-            .contains("invalid label selector"));
+        assert!(
+            invalid_selector
+                .to_string()
+                .contains("invalid label selector")
+        );
     }
 
     #[test]
@@ -1330,10 +1336,12 @@ mod tests {
         )
         .expect("apply should return response");
 
-        assert!(response
-            .errors
-            .iter()
-            .any(|error| error.contains("project mismatch")));
+        assert!(
+            response
+                .errors
+                .iter()
+                .any(|error| error.contains("project mismatch"))
+        );
     }
 
     #[test]
@@ -1393,9 +1401,10 @@ mod tests {
         let json_value: Value = serde_json::from_str(&json).expect("parse export json");
         let docs = json_value.as_array().expect("json export array");
         assert!(!docs.is_empty());
-        assert!(docs
-            .iter()
-            .any(|doc| doc.get("kind") == Some(&Value::String("Workspace".to_string()))));
+        assert!(
+            docs.iter()
+                .any(|doc| doc.get("kind") == Some(&Value::String("Workspace".to_string())))
+        );
 
         let yaml = export_manifests(&state, "yaml").expect("export yaml");
         assert!(yaml.contains("kind: Workspace"));
@@ -1472,7 +1481,9 @@ mod tests {
             delete_resource_from_project(&mut project, "workspace", "ws")
                 .expect("delete workspace")
         );
-        assert!(delete_resource_from_project(&mut project, "agent", "agent").expect("delete agent"));
+        assert!(
+            delete_resource_from_project(&mut project, "agent", "agent").expect("delete agent")
+        );
         assert!(
             delete_resource_from_project(&mut project, "workflow", "wf").expect("delete workflow")
         );
@@ -1483,9 +1494,11 @@ mod tests {
 
         let mut config = crate::config::OrchestratorConfig::default();
         autofill_defaults_for_manifest_mode(&mut config);
-        assert!(config
-            .projects
-            .contains_key(crate::config::DEFAULT_PROJECT_ID));
+        assert!(
+            config
+                .projects
+                .contains_key(crate::config::DEFAULT_PROJECT_ID)
+        );
 
         assert_eq!(apply_action_label(ApplyResult::Created), "created");
         assert_eq!(apply_action_label(ApplyResult::Configured), "updated");

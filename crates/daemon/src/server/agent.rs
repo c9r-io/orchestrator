@@ -4,7 +4,7 @@ use agent_orchestrator::selection::resolve_effective_agents;
 use orchestrator_proto::*;
 use tonic::{Request, Response, Status};
 
-use super::{authorize, OrchestratorServer};
+use super::{OrchestratorServer, authorize};
 
 pub(crate) async fn agent_list(
     server: &OrchestratorServer,

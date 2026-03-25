@@ -7,7 +7,7 @@ use tonic::{Request, Response, Status};
 use super::mapping::{
     event_to_proto, graph_debug_to_proto, item_to_proto, run_to_proto, summary_to_proto,
 };
-use super::{map_core_error, OrchestratorServer};
+use super::{OrchestratorServer, map_core_error};
 
 pub(crate) type TaskLogsStream = Pin<Box<dyn Stream<Item = Result<TaskLogChunk, Status>> + Send>>;
 pub(crate) type TaskFollowStream = Pin<Box<dyn Stream<Item = Result<TaskLogLine, Status>> + Send>>;

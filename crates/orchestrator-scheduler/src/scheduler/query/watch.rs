@@ -11,7 +11,7 @@ use super::format::{colorize_status, format_bytes, format_duration};
 use super::is_transient_query_error;
 use super::task_queries::load_task_summary;
 use agent_orchestrator::events::{
-    observed_step_scope_label, query_step_events_async, ObservedStepScope, StepEvent,
+    ObservedStepScope, StepEvent, observed_step_scope_label, query_step_events_async,
 };
 
 /// Watch a task in real-time, updating the display at the specified interval.

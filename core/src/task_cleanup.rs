@@ -82,7 +82,10 @@ pub async fn cleanup_old_tasks(
     }
 
     if deleted > 0 {
-        info!(tasks = deleted, retention_days, "task auto-cleanup completed");
+        info!(
+            tasks = deleted,
+            retention_days, "task auto-cleanup completed"
+        );
     }
 
     Ok(deleted)

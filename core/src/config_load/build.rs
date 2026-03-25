@@ -8,12 +8,12 @@ use anyhow::{Context, Result};
 use std::path::Path;
 
 use super::{
-    apply_self_heal_pass, normalize_config, normalize_step_execution_mode_recursive,
-    resolve_and_validate_projects, resolve_and_validate_workspaces,
-    resolve_and_validate_workspaces_for_project, serialize_config_snapshot,
-    validate_agent_env_store_refs, validate_agent_env_store_refs_for_project,
-    validate_execution_profiles_for_project, validate_workflow_config,
-    validate_workflow_config_with_agents, ConfigSelfHealReport,
+    ConfigSelfHealReport, apply_self_heal_pass, normalize_config,
+    normalize_step_execution_mode_recursive, resolve_and_validate_projects,
+    resolve_and_validate_workspaces, resolve_and_validate_workspaces_for_project,
+    serialize_config_snapshot, validate_agent_env_store_refs,
+    validate_agent_env_store_refs_for_project, validate_execution_profiles_for_project,
+    validate_workflow_config, validate_workflow_config_with_agents,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -328,11 +328,11 @@ fn format_blocking_delete_error(
 mod tests {
     use super::*;
     use crate::config::{ExecutionMode, LoopMode, OrchestratorConfig};
+    use crate::config_load::persist_raw_config;
     use crate::config_load::tests::{
         make_builtin_step, make_command_step, make_config_with_default_project,
         make_minimal_buildable_config, make_step, make_test_db, make_workflow,
     };
-    use crate::config_load::persist_raw_config;
     #[allow(unused_imports)]
     use std::collections::HashMap;
 
@@ -361,19 +361,23 @@ mod tests {
 
         let direct_error = build_active_config(&data_dir, config)
             .expect_err("invalid config should fail direct active config construction");
-        assert!(direct_error
-            .to_string()
-            .contains("cannot define both builtin and required_capability"));
+        assert!(
+            direct_error
+                .to_string()
+                .contains("cannot define both builtin and required_capability")
+        );
 
         let (active, report) =
             build_active_config_with_self_heal(&data_dir, &db_path, invalid_config)
                 .expect("self-heal wrapper should recover");
 
-        assert!(active
-            .projects
-            .get(crate::config::DEFAULT_PROJECT_ID)
-            .map(|p| p.workflows.contains_key("basic"))
-            .unwrap_or(false));
+        assert!(
+            active
+                .projects
+                .get(crate::config::DEFAULT_PROJECT_ID)
+                .map(|p| p.workflows.contains_key("basic"))
+                .unwrap_or(false)
+        );
         let report = report.expect("expected self-heal report");
         assert!(
             !report.changes.is_empty(),
@@ -450,9 +454,11 @@ mod tests {
             "heal log entries should be persisted during self-heal"
         );
         assert_eq!(entries[0].version, report.healed_version);
-        assert!(entries[0]
-            .original_error
-            .contains("builtin and required_capability"));
+        assert!(
+            entries[0]
+                .original_error
+                .contains("builtin and required_capability")
+        );
     }
 
     #[test]

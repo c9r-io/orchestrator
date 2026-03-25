@@ -3,7 +3,7 @@ use crate::config::{
     OrchestratorConfig, TriggerActionConfig, TriggerConfig, TriggerCronConfig, TriggerEventConfig,
     TriggerEventFilterConfig, TriggerHistoryLimitConfig, TriggerThrottleConfig,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
 

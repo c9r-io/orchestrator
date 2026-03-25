@@ -23,7 +23,7 @@ mod tests {
     use super::*;
     use crate::db::configure_conn;
     use crate::persistence::migration_steps::{
-        m0001_baseline_schema, m0009_normalize_unspecified_agent_ids, HISTORICAL_AGENT_PLACEHOLDER,
+        HISTORICAL_AGENT_PLACEHOLDER, m0001_baseline_schema, m0009_normalize_unspecified_agent_ids,
     };
     use tempfile::tempdir;
 

@@ -1,4 +1,4 @@
-use crate::async_database::{flatten_err, AsyncDatabase};
+use crate::async_database::{AsyncDatabase, flatten_err};
 use anyhow::Result;
 use async_trait::async_trait;
 use std::sync::Arc;

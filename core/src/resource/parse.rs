@@ -1,9 +1,9 @@
 use crate::cli_types::{OrchestratorResource, ResourceKind};
 use crate::config::OrchestratorConfig;
+use crate::crd::ParsedManifest;
 use crate::crd::resolve::{find_crd_by_kind_or_alias, is_builtin_kind};
 use crate::crd::types::{CrdManifest, CustomResourceManifest};
-use crate::crd::ParsedManifest;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::Deserialize;
 
 use super::{
@@ -199,13 +199,17 @@ spec:
         let ws = dispatch_resource(workspace_manifest("del-ws", "workspace/del"))
             .expect("dispatch should succeed");
         ws.apply(&mut config).expect("apply");
-        assert!(delete_resource_by_kind(&mut config, "workspace", "del-ws")
-            .expect("delete workspace resource"));
-        assert!(!config
-            .default_project()
-            .expect("default project")
-            .workspaces
-            .contains_key("del-ws"));
+        assert!(
+            delete_resource_by_kind(&mut config, "workspace", "del-ws")
+                .expect("delete workspace resource")
+        );
+        assert!(
+            !config
+                .default_project()
+                .expect("default project")
+                .workspaces
+                .contains_key("del-ws")
+        );
     }
 
     #[test]
@@ -223,13 +227,17 @@ spec:
         let agent = dispatch_resource(agent_manifest("del-agent", "cargo test"))
             .expect("dispatch should succeed");
         agent.apply(&mut config).expect("apply");
-        assert!(delete_resource_by_kind(&mut config, "agent", "del-agent")
-            .expect("delete agent resource"));
-        assert!(!config
-            .default_project()
-            .expect("default project")
-            .agents
-            .contains_key("del-agent"));
+        assert!(
+            delete_resource_by_kind(&mut config, "agent", "del-agent")
+                .expect("delete agent resource")
+        );
+        assert!(
+            !config
+                .default_project()
+                .expect("default project")
+                .agents
+                .contains_key("del-agent")
+        );
     }
 
     #[test]
@@ -237,8 +245,10 @@ spec:
         let mut config = make_config();
         let wf = dispatch_resource(workflow_manifest("del-wf")).expect("dispatch should succeed");
         wf.apply(&mut config).expect("apply");
-        assert!(delete_resource_by_kind(&mut config, "workflow", "del-wf")
-            .expect("delete workflow resource"));
+        assert!(
+            delete_resource_by_kind(&mut config, "workflow", "del-wf")
+                .expect("delete workflow resource")
+        );
     }
 
     #[test]
@@ -257,8 +267,10 @@ spec:
         let proj = dispatch_resource(project_manifest("del-proj", "desc"))
             .expect("dispatch should succeed");
         proj.apply(&mut config).expect("apply");
-        assert!(delete_resource_by_kind(&mut config, "project", "del-proj")
-            .expect("delete project resource"));
+        assert!(
+            delete_resource_by_kind(&mut config, "project", "del-proj")
+                .expect("delete project resource")
+        );
     }
 
     #[test]

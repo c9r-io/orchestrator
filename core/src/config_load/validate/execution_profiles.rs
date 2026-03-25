@@ -1,6 +1,6 @@
 use crate::config::{
-    resolve_step_semantic_kind, ExecutionProfileMode, OrchestratorConfig, StepSemanticKind,
-    WorkflowConfig,
+    ExecutionProfileMode, OrchestratorConfig, StepSemanticKind, WorkflowConfig,
+    resolve_step_semantic_kind,
 };
 use anyhow::Result;
 

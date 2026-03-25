@@ -26,19 +26,13 @@ pub struct SizeInfo {
 /// Note: VACUUM temporarily requires up to 2x the database size in free
 /// disk space because SQLite creates a temporary copy.
 pub fn vacuum_database(db_path: &Path) -> Result<VacuumResult> {
-    let size_before = db_path
-        .metadata()
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let size_before = db_path.metadata().map(|m| m.len()).unwrap_or(0);
 
     let conn = rusqlite::Connection::open(db_path)?;
     conn.execute_batch("VACUUM")?;
     drop(conn);
 
-    let size_after = db_path
-        .metadata()
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let size_after = db_path.metadata().map(|m| m.len()).unwrap_or(0);
 
     Ok(VacuumResult {
         size_before,

@@ -1,7 +1,7 @@
 use agent_orchestrator::anomaly::Severity;
 use agent_orchestrator::dto::{CommandRunDto, EventDto};
 use agent_orchestrator::events::{
-    observed_step_scope_from_payload, observed_step_scope_label, ObservedStepScope,
+    ObservedStepScope, observed_step_scope_from_payload, observed_step_scope_label,
 };
 use std::collections::HashMap;
 

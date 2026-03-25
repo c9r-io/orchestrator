@@ -1,5 +1,5 @@
-use anyhow::{bail, Context, Result};
-use rusqlite::{params, Connection};
+use anyhow::{Context, Result, bail};
+use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -325,7 +325,9 @@ pub fn begin_rotation(conn: &Connection, data_dir: &Path) -> Result<(KeyRecord, 
     // Check for existing incomplete rotation
     let records = query_all_key_records(conn)?;
     if records.iter().any(|r| r.state == KeyState::DecryptOnly) {
-        bail!("incomplete rotation detected: a key is already in decrypt_only state; use --resume to complete the previous rotation first");
+        bail!(
+            "incomplete rotation detected: a key is already in decrypt_only state; use --resume to complete the previous rotation first"
+        );
     }
 
     let new_key_id = generate_key_id();
@@ -634,7 +636,9 @@ pub fn revoke_key(conn: &Connection, key_id: &str, force: bool) -> Result<()> {
     }
 
     if record.state == KeyState::Active && !force {
-        bail!("refusing to revoke active key '{key_id}' without --force; this will block all SecretStore writes");
+        bail!(
+            "refusing to revoke active key '{key_id}' without --force; this will block all SecretStore writes"
+        );
     }
 
     let now = now_ts();

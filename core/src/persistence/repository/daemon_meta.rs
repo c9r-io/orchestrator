@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::sync::Arc;
 
-use crate::async_database::{flatten_err, AsyncDatabase};
+use crate::async_database::{AsyncDatabase, flatten_err};
 
 /// Increment the persistent daemon incarnation counter and return the new value.
 ///

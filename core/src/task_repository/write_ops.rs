@@ -1,6 +1,6 @@
 use crate::config_load::now_ts;
 use anyhow::Result;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
 use super::command_run::NewCommandRun;
 use super::types::DbEventRecord;

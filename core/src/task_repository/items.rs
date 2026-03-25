@@ -1,6 +1,6 @@
 use crate::config_load::now_ts;
 use anyhow::Result;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 use std::collections::HashSet;
 
 use super::command_run::NewCommandRun;

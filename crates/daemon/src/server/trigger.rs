@@ -1,7 +1,7 @@
 use orchestrator_proto::*;
 use tonic::{Request, Response, Status};
 
-use super::{authorize, map_core_error, OrchestratorServer};
+use super::{OrchestratorServer, authorize, map_core_error};
 
 pub(crate) async fn trigger_suspend(
     server: &OrchestratorServer,

@@ -1,5 +1,5 @@
 use crate::config::{
-    normalize_step_execution_mode, CaptureDecl, CaptureSource, PostAction, WorkflowStepConfig,
+    CaptureDecl, CaptureSource, PostAction, WorkflowStepConfig, normalize_step_execution_mode,
 };
 use anyhow::Result;
 

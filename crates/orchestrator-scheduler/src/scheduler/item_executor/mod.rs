@@ -12,8 +12,8 @@ mod tests;
 pub use accumulator::StepExecutionAccumulator;
 pub(crate) use dispatch::execute_dynamic_step_config;
 pub use dispatch::{
-    process_item, process_item_filtered, process_item_filtered_owned, OwnedProcessItemRequest,
-    ProcessItemRequest,
+    OwnedProcessItemRequest, ProcessItemRequest, process_item, process_item_filtered,
+    process_item_filtered_owned,
 };
 pub use finalize::{finalize_item_execution, persist_item_pipeline_vars};
-pub use guard::{execute_guard_step, GuardResult};
+pub use guard::{GuardResult, execute_guard_step};

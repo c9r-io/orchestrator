@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -6,7 +6,7 @@ use super::time::parse_trace_timestamp;
 use agent_orchestrator::anomaly::Severity;
 use agent_orchestrator::dto::{CommandRunDto, EventDto};
 use agent_orchestrator::events::ObservedStepScope;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 fn make_task_meta<'a>(
     status: &'a str,
@@ -386,10 +386,11 @@ fn detect_unexpanded_template_var_anomaly() {
         .iter()
         .find(|a| a.rule == "unexpanded_template_var");
     assert!(tmpl.is_some(), "should detect unexpanded template var");
-    assert!(tmpl
-        .expect("unexpanded_template_var anomaly should exist")
-        .message
-        .contains("{plan_output}"));
+    assert!(
+        tmpl.expect("unexpanded_template_var anomaly should exist")
+            .message
+            .contains("{plan_output}")
+    );
 }
 
 #[test]
@@ -1334,10 +1335,12 @@ fn detect_empty_cycle_between_two_cycles() {
     let trace = build_trace("test-task", "completed", &events, &[]);
     let empty = trace.anomalies.iter().find(|a| a.rule == "empty_cycle");
     assert!(empty.is_some(), "should detect empty cycle 1");
-    assert!(empty
-        .expect("empty cycle anomaly")
-        .message
-        .contains("Cycle 1"));
+    assert!(
+        empty
+            .expect("empty cycle anomaly")
+            .message
+            .contains("Cycle 1")
+    );
 }
 
 #[test]

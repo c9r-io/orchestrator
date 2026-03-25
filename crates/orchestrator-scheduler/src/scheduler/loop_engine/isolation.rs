@@ -143,12 +143,15 @@ pub(crate) async fn apply_winner_if_needed(
     .with_context(|| format!("merge winner branch {}", branch))?;
 
     // R2: Collect diff stats for observability
-    let (files_changed, insertions, deletions) =
-        match run_git_output(&task_ctx.workspace_root, ["diff", "--numstat", "HEAD~1..HEAD"]).await
-        {
-            Ok(output) => parse_numstat(&output.stdout),
-            Err(_) => (0usize, 0usize, 0usize),
-        };
+    let (files_changed, insertions, deletions) = match run_git_output(
+        &task_ctx.workspace_root,
+        ["diff", "--numstat", "HEAD~1..HEAD"],
+    )
+    .await
+    {
+        Ok(output) => parse_numstat(&output.stdout),
+        Err(_) => (0usize, 0usize, 0usize),
+    };
 
     tracing::info!(
         winner_branch = %branch,

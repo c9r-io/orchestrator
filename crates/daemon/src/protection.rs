@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::task::{Context as TaskContext, Poll};
 use std::time::Instant;
 
-use agent_orchestrator::db::{insert_control_plane_audit, ControlPlaneAuditRecord};
+use agent_orchestrator::db::{ControlPlaneAuditRecord, insert_control_plane_audit};
 use anyhow::{Context, Result};
 use http::{Request as HttpRequest, Response as HttpResponse};
 use http_body::Body as HttpBody;

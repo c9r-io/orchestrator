@@ -342,9 +342,10 @@ fn validate_workflow_config_rejects_json_path_on_exit_code_capture() {
     let err = validate_workflow_config(&config, &workflow, "test-workflow")
         .expect_err("json_path on exit_code should be rejected");
 
-    assert!(err
-        .to_string()
-        .contains("uses json_path with unsupported source"));
+    assert!(
+        err.to_string()
+            .contains("uses json_path with unsupported source")
+    );
 }
 
 #[test]
@@ -405,10 +406,12 @@ fn validate_self_referential_safety_errors_missing_self_test() {
 
     let result = validate_self_referential_safety(&workflow, "test-workflow", "test-ws", true);
     assert!(result.is_err(), "validation should fail without self_test");
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("self_ref.self_test_required"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("self_ref.self_test_required")
+    );
 }
 
 #[test]
@@ -545,10 +548,12 @@ fn validate_workflow_rejects_empty_steps() {
     let config = make_config_with_default_project();
     let result = validate_workflow_config(&config, &workflow, "test-wf");
     assert!(result.is_err());
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("at least one step"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("at least one step")
+    );
 }
 
 #[test]
@@ -557,10 +562,12 @@ fn validate_workflow_rejects_no_enabled_steps() {
     let config = make_config_with_default_project();
     let result = validate_workflow_config(&config, &workflow, "test-wf");
     assert!(result.is_err());
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("no enabled steps"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("no enabled steps")
+    );
 }
 
 #[test]
@@ -569,10 +576,12 @@ fn validate_workflow_rejects_missing_agent_template() {
     let config = make_config_with_default_project();
     let result = validate_workflow_config(&config, &workflow, "test-wf");
     assert!(result.is_err());
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("no agent supports capability"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("no agent supports capability")
+    );
 }
 
 #[test]
@@ -632,10 +641,12 @@ fn validate_workflow_rejects_zero_max_cycles() {
     let config = make_config_with_default_project();
     let result = validate_workflow_config(&config, &workflow, "test-wf");
     assert!(result.is_err());
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("max_cycles must be > 0"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("max_cycles must be > 0")
+    );
 }
 
 #[test]
@@ -646,10 +657,12 @@ fn validate_workflow_rejects_fixed_without_max_cycles() {
     let config = make_config_with_default_project();
     let result = validate_workflow_config(&config, &workflow, "test-wf");
     assert!(result.is_err());
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("loop.mode=fixed requires guard.max_cycles"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("loop.mode=fixed requires guard.max_cycles")
+    );
 }
 
 #[test]
@@ -674,10 +687,12 @@ fn validate_workflow_rejects_guard_enabled_without_loop_guard_agent() {
     let config = make_config_with_default_project();
     let result = validate_workflow_config(&config, &workflow, "test-wf");
     assert!(result.is_err());
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("no agent supports loop_guard capability"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("no agent supports loop_guard capability")
+    );
 }
 
 #[test]
@@ -751,10 +766,12 @@ fn validate_workflow_rejects_step_with_builtin_and_required_capability() {
         result.is_err(),
         "conflicting semantic fields should fail validation"
     );
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("cannot define both builtin and required_capability"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("cannot define both builtin and required_capability")
+    );
 }
 
 #[test]
@@ -774,10 +791,12 @@ fn validate_self_referential_safety_errors_disabled_auto_rollback() {
     };
     let result = validate_self_referential_safety(&workflow, "test-workflow", "test-ws", true);
     assert!(result.is_err());
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("self_ref.auto_rollback_required"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("self_ref.auto_rollback_required")
+    );
 }
 
 #[test]
@@ -828,10 +847,12 @@ fn self_referential_probe_without_self_test_is_rejected() {
 
     let result = validate_self_referential_safety(&workflow, "probe", "self-ref", true);
     assert!(result.is_err());
-    assert!(result
-        .expect_err("operation should fail")
-        .to_string()
-        .contains("self_ref.self_test_required"));
+    assert!(
+        result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("self_ref.self_test_required")
+    );
 }
 
 #[test]
@@ -1744,9 +1765,10 @@ fn adaptive_refs_agent_missing_capability_errors() {
     agents.insert("planner".to_string(), &agent);
     let err = validate_adaptive_workflow_config_refs(&workflow, "wf1", &agents)
         .expect_err("missing adaptive_plan capability should fail");
-    assert!(err
-        .to_string()
-        .contains("must support capability 'adaptive_plan'"));
+    assert!(
+        err.to_string()
+            .contains("must support capability 'adaptive_plan'")
+    );
 }
 
 #[test]
