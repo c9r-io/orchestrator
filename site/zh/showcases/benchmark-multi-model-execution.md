@@ -1,226 +1,153 @@
 # 多模型 × 多外壳 SDLC Benchmark 执行计划
 
-本文档定义了一个可重复的 benchmark 框架，用于在相同任务目标下对比不同 LLM 模型和 AI 编码外壳的表现。
+> **使用方式**：在 Claude Code 中打开本项目，然后要求 Claude Code 读取并执行本执行计划。Claude Code 将自动完成资源部署、任务执行、监控和结果评估的全流程。
 
-## 1. 变量矩阵
+## 1. Benchmark 目标
 
-| 维度 | 变量 | 控制方式 |
-|------|------|----------|
-| **模型** | claude-opus-4-6, claude-sonnet-4-6, gpt-4o, gemini-2.5-pro | SecretStore `ANTHROPIC_MODEL` / provider env |
-| **外壳** | Claude Code, OpenCode, Codex CLI, Gemini CLI | Agent `spec.command` |
-| **任务** | self-bootstrap (线性迭代), self-evolution (竞争选择) | Workflow manifest |
+在相同的任务目标下，依次使用不同的 LLM 模型和 AI 编码外壳执行 self-bootstrap workflow，收集执行结果，最后由 Claude Code 进行统一的深度评估和对比分析。
 
-### 预定义组合
+## 2. 变量矩阵
 
 | ID | 外壳 | 模型 | Agent Manifest | SecretStore |
 |----|------|------|----------------|-------------|
-| A1 | Claude Code | Opus 4.6 | `agent-claude-opus.yaml` | `secrets-claude-opus.yaml` |
-| A2 | Claude Code | Sonnet 4.6 | `agent-claude-sonnet.yaml` | `secrets-claude-sonnet.yaml` |
-| B1 | OpenCode | Opus 4.6 | `agent-opencode-opus.yaml` | `secrets-claude-opus.yaml` |
-| C1 | Codex CLI | GPT-4o | `agent-codex-gpt4o.yaml` | `secrets-openai.yaml` |
+| A1 | Claude Code | Opus 4.6 | `fixtures/benchmarks/agent-claude-opus.yaml` | `fixtures/benchmarks/secrets-claude-opus.yaml` |
+| A2 | Claude Code | Sonnet 4.6 | `fixtures/benchmarks/agent-claude-sonnet.yaml` | `fixtures/benchmarks/secrets-claude-sonnet.yaml` |
+| B1 | OpenCode | Opus 4.6 | `fixtures/benchmarks/agent-opencode-opus.yaml` | `fixtures/benchmarks/secrets-claude-opus.yaml` |
+| C1 | Codex CLI | GPT-4o | `fixtures/benchmarks/agent-codex-gpt4o.yaml` | `fixtures/benchmarks/secrets-openai.yaml` |
 
-> 用户可按需扩展矩阵，只需创建新的 Agent + SecretStore manifest。
+> 可按需扩展：创建新的 Agent + SecretStore manifest 即可。
 
-## 2. 前置条件
+## 3. 前置条件
 
-### 2.1 环境准备
+执行者（Claude Code）应首先验证以下条件：
 
-```bash
-# 确保 orchestrator 和 orchestratord 已安装
-orchestrator --version
-orchestratord --version
+- `orchestrator --version` 和 `orchestratord --version` 可执行
+- daemon 正在运行（`orchestrator daemon status`），如未运行则启动：`orchestratord --foreground --workers 2 &`
+- 矩阵中涉及的外壳已安装（`claude --version`、`opencode --version` 等）
+- `fixtures/benchmarks/secrets-*.yaml` 中的 API 密钥已填入（非 `<placeholder>` 值）
 
-# 确保目标外壳已安装
-claude --version       # Claude Code
-opencode --version     # OpenCode (如测试 B1)
-codex --version        # Codex CLI (如测试 C1)
+## 4. 统一任务目标
+
+所有组合使用完全相同的 goal（控制变量）：
+
+```
+Implement a retry mechanism for gRPC client connections with exponential backoff and configurable max retries. Add unit tests.
 ```
 
-### 2.2 API 密钥配置
+## 5. 执行流程（逐组合执行）
 
-编辑 `fixtures/benchmarks/secrets-*.yaml`，填入实际的 API 密钥：
+对矩阵中的每个组合 ID，按以下步骤执行：
 
-```bash
-# Claude (Anthropic) — 使用已有的环境变量即可，无需额外配置
-# OpenAI — 编辑 secrets-openai.yaml，填入 OPENAI_API_KEY
-# Gemini — 编辑 secrets-gemini.yaml，填入 GEMINI_API_KEY
-```
-
-### 2.3 Daemon 启动
-
-```bash
-orchestratord --foreground --workers 2
-```
-
-## 3. 单次 Benchmark 执行步骤
-
-以组合 **A1（Claude Code + Opus）** 为例：
-
-### 3.1 应用资源
+### 5.1 环境准备
 
 ```bash
 cd "$ORCHESTRATOR_ROOT"
+git stash --include-untracked || true
+```
 
-# 应用 SecretStore（模型配置）
-orchestrator apply -f fixtures/benchmarks/secrets-claude-opus.yaml --project benchmark
+### 5.2 部署资源
 
-# 应用 Agent（外壳 + 模型绑定）
-orchestrator apply -f fixtures/benchmarks/agent-claude-opus.yaml --project benchmark
-
-# 应用 Workflow（含评估步骤）
+```bash
+orchestrator apply -f fixtures/benchmarks/<secret_file> --project benchmark
+orchestrator apply -f fixtures/benchmarks/<agent_file> --project benchmark
 orchestrator apply -f fixtures/benchmarks/workflow-benchmark-bootstrap.yaml --project benchmark
 ```
 
-### 3.2 验证资源加载
+验证：
 
 ```bash
-orchestrator get workspaces --project benchmark
-orchestrator get agents --project benchmark
-orchestrator get workflows --project benchmark
+orchestrator get agents --project benchmark -o json
+orchestrator get workflows --project benchmark -o json
 ```
 
-### 3.3 创建并执行任务
+### 5.3 创建任务
 
 ```bash
-# 使用统一的目标描述（所有组合使用相同的 goal）
 orchestrator task create \
   --project benchmark \
   --workflow benchmark-bootstrap \
   --goal "Implement a retry mechanism for gRPC client connections with exponential backoff and configurable max retries. Add unit tests."
-
-# 记录 task ID
-TASK_ID=<返回的 task_id>
 ```
 
-### 3.4 监控执行
+记录返回的 `task_id`。
+
+### 5.4 监控至完成
 
 ```bash
-# 实时观察
-orchestrator task watch "$TASK_ID"
-
-# 查看日志
-orchestrator task logs "$TASK_ID" -f
-
-# 查看步骤轨迹
-orchestrator task trace "$TASK_ID"
-
-# 查看 item 状态
-orchestrator task items "$TASK_ID"
+orchestrator task watch <task_id> --timeout 1800
 ```
 
-### 3.5 收集结果
+如超时或失败，记录状态后继续下一个组合。
+
+### 5.5 收集结果
 
 ```bash
-# 任务详情（耗时、状态、轮次）
-orchestrator task info "$TASK_ID" -o json > results/A1-task-info.json
-
-# 事件流（benchmark_eval 分数）
-orchestrator event list --task "$TASK_ID" -o json > results/A1-events.json
-
-# 提取评估分数
-orchestrator event list --task "$TASK_ID" --type step_finished -o json | \
-  python3 -c "
-import sys, json
-events = json.load(sys.stdin)
-for e in events:
-    p = e.get('payload', {})
-    if 'total_score' in str(p):
-        print(json.dumps(p, indent=2))
-"
+orchestrator task info <task_id> -o json
+orchestrator event list --task <task_id> -o json
+orchestrator task items <task_id> -o json
+orchestrator task trace <task_id> --json
 ```
 
-### 3.6 清理（可选）
+### 5.6 保存产出物快照
 
 ```bash
-# 回滚 git 变更，恢复到 benchmark 前状态
+git diff > results/<combo_id>-diff.patch
+git diff --stat > results/<combo_id>-diffstat.txt
+```
+
+### 5.7 恢复环境
+
+```bash
 git checkout -- .
 git clean -fd
-
-# 删除任务（保留数据库中的结果供对比）
-# orchestrator task delete "$TASK_ID" --force
+git stash pop || true
 ```
 
-## 4. 批量执行
+重复 5.1–5.7 直到所有组合执行完毕。
 
-对矩阵中的每个组合重复步骤 3，替换对应的 manifest 文件：
+## 6. 评估阶段
 
-```bash
-COMBINATIONS=(
-  "A1:agent-claude-opus.yaml:secrets-claude-opus.yaml"
-  "A2:agent-claude-sonnet.yaml:secrets-claude-sonnet.yaml"
-  "B1:agent-opencode-opus.yaml:secrets-claude-opus.yaml"
-  "C1:agent-codex-gpt4o.yaml:secrets-openai.yaml"
-)
+所有组合执行完成后，Claude Code 应对 `results/` 目录下的全部产出进行统一评估。
 
-mkdir -p results
+### 6.1 定量指标（从 JSON 结果中提取）
 
-for combo in "${COMBINATIONS[@]}"; do
-  IFS=':' read -r id agent_file secret_file <<< "$combo"
-  echo "=== Running benchmark: $id ==="
+| 指标 | 数据来源 |
+|------|----------|
+| 完成状态 | `task info` → `status` (completed/failed) |
+| 总耗时 | `task info` → `started_at` 到 `completed_at` |
+| 执行轮次 | `event list` → `cycle_completed` 事件计数 |
+| 步骤成功率 | `event list` → `step_finished` 中 `success: true` 的比例 |
 
-  # 清理工作区
-  git checkout -- . && git clean -fd
+### 6.2 代码质量评估（Claude Code 直接执行）
 
-  # 应用资源
-  orchestrator apply -f "fixtures/benchmarks/$secret_file" --project benchmark
-  orchestrator apply -f "fixtures/benchmarks/$agent_file" --project benchmark
-  orchestrator apply -f fixtures/benchmarks/workflow-benchmark-bootstrap.yaml --project benchmark
+对每个组合的 `results/<combo_id>-diff.patch`：
 
-  # 创建任务
-  TASK_ID=$(orchestrator task create \
-    --project benchmark \
-    --workflow benchmark-bootstrap \
-    --goal "Implement a retry mechanism for gRPC client connections with exponential backoff and configurable max retries. Add unit tests." \
-    2>&1 | grep -oP 'task_id: \K\S+')
+1. **编译检查**：`cargo build --release` 是否通过
+2. **测试检查**：`cargo test --workspace` 是否通过
+3. **Lint 检查**：`cargo clippy --workspace -- -D warnings` 是否通过
+4. **Diff 审查**：阅读 patch 文件，评估：
+   - 实现是否正确完整
+   - 代码是否简洁、惯用
+   - 是否有不必要的变更
+   - 错误处理是否充分
+   - 测试覆盖是否合理
 
-  echo "Task $id: $TASK_ID"
+### 6.3 输出评估报告
 
-  # 等待完成
-  orchestrator task watch "$TASK_ID" --timeout 1800
+以 markdown 表格格式输出对比结果：
 
-  # 收集结果
-  orchestrator task info "$TASK_ID" -o json > "results/${id}-task-info.json"
-  orchestrator event list --task "$TASK_ID" -o json > "results/${id}-events.json"
-done
+```markdown
+| 组合 | 外壳 | 模型 | 状态 | 耗时 | 轮次 | 编译 | 测试 | Lint | Diff行数 | 代码质量评分(0-10) | 备注 |
+|------|------|------|------|------|------|------|------|------|----------|-------------------|------|
+| A1   | ...  | ...  | ...  | ...  | ...  | ...  | ...  | ...  | ...      | ...               | ...  |
 ```
 
-## 5. 结果对比
+最后给出总结分析：各组合的优劣势、模型维度和外壳维度的对比发现、推荐配置。
 
-### 5.1 评估维度
+## 7. 约束
 
-| 维度 | 数据来源 | 说明 |
-|------|----------|------|
-| **完成率** | `task info` → `status` | completed vs failed |
-| **总耗时** | `task info` → `started_at` / `completed_at` | 端到端时间 |
-| **循环数** | `event list` → `cycle_completed` 事件数 | 迭代轮次 |
-| **评估分数** | `event list` → `benchmark_eval` 步骤输出 | 0-100 结构化评分 |
-| **代码质量** | 评估 JSON → `code_quality` 字段 | 0-20 主观评分 |
-| **Diff 大小** | `git diff --stat` | 变更范围 |
-| **编译/测试** | 评估 JSON → `compilation` / `tests` | 是否通过 |
-
-### 5.2 对比矩阵模板
-
-| 组合 | 外壳 | 模型 | 状态 | 耗时 | 循环 | 总分 | 编译 | 测试 | Lint | Diff | 代码质量 |
-|------|------|------|------|------|------|------|------|------|------|------|----------|
-| A1 | Claude Code | Opus 4.6 | | | | | | | | | |
-| A2 | Claude Code | Sonnet 4.6 | | | | | | | | | |
-| B1 | OpenCode | Opus 4.6 | | | | | | | | | |
-| C1 | Codex CLI | GPT-4o | | | | | | | | | |
-
-### 5.3 深度评估（可选）
-
-对于每个组合的产出代码，可使用 Claude Code 作为独立评估者进行代码审查：
-
-```bash
-# 使用 Claude Code 对 diff 进行深度审查
-git diff HEAD~1 | claude -p "Review this diff for code quality, security, performance, and maintainability. Score each dimension 0-10 and provide a total."
-```
-
-## 6. 注意事项
-
-- **控制变量**：每次只改变一个变量（模型或外壳），其他保持不变
-- **相同目标**：所有组合使用完全相同的 `--goal` 字符串
-- **环境隔离**：每次执行前 `git checkout -- . && git clean -fd` 恢复干净状态
-- **超时控制**：`task watch --timeout 1800`（30 分钟）防止无限运行
-- **成本意识**：Opus 比 Sonnet 贵约 5x，GPT-4o 与 Sonnet 相当；批量测试前估算成本
-- **可复现性**：所有 manifest 已版本化在 `fixtures/benchmarks/`，可精确复现
+- **控制变量**：每次只改变一个变量（模型或外壳），workflow 和 goal 保持不变
+- **环境隔离**：每个组合执行前后恢复干净的 git 状态
+- **超时保护**：单次任务 30 分钟超时
+- **成本意识**：Opus ≈ 5× Sonnet 成本；批量执行前确认预算
+- **可复现性**：所有 manifest 版本化在 `fixtures/benchmarks/`

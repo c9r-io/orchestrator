@@ -1,223 +1,153 @@
 # Multi-Model × Multi-Shell SDLC Benchmark Execution Plan
 
-This document defines a repeatable benchmark framework for comparing different LLM models and AI coding shells on identical task goals.
+> **How to use**: Open this project in Claude Code, then ask Claude Code to read and execute this plan. Claude Code will autonomously handle resource deployment, task execution, monitoring, and result evaluation.
 
-## 1. Variable Matrix
+## 1. Benchmark Objective
 
-| Dimension | Variable | Control Mechanism |
-|-----------|----------|-------------------|
-| **Model** | claude-opus-4-6, claude-sonnet-4-6, gpt-4o, gemini-2.5-pro | SecretStore `ANTHROPIC_MODEL` / provider env |
-| **Shell** | Claude Code, OpenCode, Codex CLI, Gemini CLI | Agent `spec.command` |
-| **Task** | self-bootstrap (linear iteration), self-evolution (competitive selection) | Workflow manifest |
+Run the self-bootstrap workflow with an identical task goal using different LLM models and AI coding shells. Collect execution results, then have Claude Code perform a unified deep evaluation and comparative analysis.
 
-### Predefined Combinations
+## 2. Variable Matrix
 
 | ID | Shell | Model | Agent Manifest | SecretStore |
 |----|-------|-------|----------------|-------------|
-| A1 | Claude Code | Opus 4.6 | `agent-claude-opus.yaml` | `secrets-claude-opus.yaml` |
-| A2 | Claude Code | Sonnet 4.6 | `agent-claude-sonnet.yaml` | `secrets-claude-sonnet.yaml` |
-| B1 | OpenCode | Opus 4.6 | `agent-opencode-opus.yaml` | `secrets-claude-opus.yaml` |
-| C1 | Codex CLI | GPT-4o | `agent-codex-gpt4o.yaml` | `secrets-openai.yaml` |
+| A1 | Claude Code | Opus 4.6 | `fixtures/benchmarks/agent-claude-opus.yaml` | `fixtures/benchmarks/secrets-claude-opus.yaml` |
+| A2 | Claude Code | Sonnet 4.6 | `fixtures/benchmarks/agent-claude-sonnet.yaml` | `fixtures/benchmarks/secrets-claude-sonnet.yaml` |
+| B1 | OpenCode | Opus 4.6 | `fixtures/benchmarks/agent-opencode-opus.yaml` | `fixtures/benchmarks/secrets-claude-opus.yaml` |
+| C1 | Codex CLI | GPT-4o | `fixtures/benchmarks/agent-codex-gpt4o.yaml` | `fixtures/benchmarks/secrets-openai.yaml` |
 
-> Users can extend the matrix by creating additional Agent + SecretStore manifests.
+> Extend the matrix by creating additional Agent + SecretStore manifests.
 
-## 2. Prerequisites
+## 3. Prerequisites
 
-### 2.1 Environment Setup
+The executor (Claude Code) should first verify:
 
-```bash
-# Ensure orchestrator and orchestratord are installed
-orchestrator --version
-orchestratord --version
+- `orchestrator --version` and `orchestratord --version` are available
+- Daemon is running (`orchestrator daemon status`); if not, start it: `orchestratord --foreground --workers 2 &`
+- Shells referenced in the matrix are installed (`claude --version`, `opencode --version`, etc.)
+- API keys in `fixtures/benchmarks/secrets-*.yaml` are filled in (no `<placeholder>` values)
 
-# Ensure target shells are installed
-claude --version       # Claude Code
-opencode --version     # OpenCode (for B1)
-codex --version        # Codex CLI (for C1)
+## 4. Uniform Task Goal
+
+All combinations use the exact same goal (controlled variable):
+
+```
+Implement a retry mechanism for gRPC client connections with exponential backoff and configurable max retries. Add unit tests.
 ```
 
-### 2.2 API Key Configuration
+## 5. Execution Flow (Per Combination)
 
-Edit `fixtures/benchmarks/secrets-*.yaml` and fill in your API keys:
+For each combination ID in the matrix, execute the following steps:
 
-```bash
-# Claude (Anthropic) — uses existing environment variables, no extra config needed
-# OpenAI — edit secrets-openai.yaml, fill in OPENAI_API_KEY
-# Gemini — edit secrets-gemini.yaml, fill in GEMINI_API_KEY
-```
-
-### 2.3 Start Daemon
-
-```bash
-orchestratord --foreground --workers 2
-```
-
-## 3. Single Benchmark Execution
-
-Example: combination **A1 (Claude Code + Opus)**
-
-### 3.1 Apply Resources
+### 5.1 Prepare Environment
 
 ```bash
 cd "$ORCHESTRATOR_ROOT"
+git stash --include-untracked || true
+```
 
-# Apply SecretStore (model config)
-orchestrator apply -f fixtures/benchmarks/secrets-claude-opus.yaml --project benchmark
+### 5.2 Deploy Resources
 
-# Apply Agent (shell + model binding)
-orchestrator apply -f fixtures/benchmarks/agent-claude-opus.yaml --project benchmark
-
-# Apply Workflow (with evaluation step)
+```bash
+orchestrator apply -f fixtures/benchmarks/<secret_file> --project benchmark
+orchestrator apply -f fixtures/benchmarks/<agent_file> --project benchmark
 orchestrator apply -f fixtures/benchmarks/workflow-benchmark-bootstrap.yaml --project benchmark
 ```
 
-### 3.2 Verify Resources
+Verify:
 
 ```bash
-orchestrator get workspaces --project benchmark
-orchestrator get agents --project benchmark
-orchestrator get workflows --project benchmark
+orchestrator get agents --project benchmark -o json
+orchestrator get workflows --project benchmark -o json
 ```
 
-### 3.3 Create and Run Task
+### 5.3 Create Task
 
 ```bash
-# Use a uniform goal (same goal for all combinations)
 orchestrator task create \
   --project benchmark \
   --workflow benchmark-bootstrap \
   --goal "Implement a retry mechanism for gRPC client connections with exponential backoff and configurable max retries. Add unit tests."
-
-# Record the task ID
-TASK_ID=<returned task_id>
 ```
 
-### 3.4 Monitor Execution
+Record the returned `task_id`.
+
+### 5.4 Monitor Until Completion
 
 ```bash
-# Real-time watch
-orchestrator task watch "$TASK_ID"
-
-# Follow logs
-orchestrator task logs "$TASK_ID" -f
-
-# View step trace
-orchestrator task trace "$TASK_ID"
-
-# View item status
-orchestrator task items "$TASK_ID"
+orchestrator task watch <task_id> --timeout 1800
 ```
 
-### 3.5 Collect Results
+If timeout or failure occurs, record the status and proceed to the next combination.
+
+### 5.5 Collect Results
 
 ```bash
-# Task details (timing, status, cycles)
-orchestrator task info "$TASK_ID" -o json > results/A1-task-info.json
-
-# Event stream (benchmark_eval scores)
-orchestrator event list --task "$TASK_ID" -o json > results/A1-events.json
-
-# Extract evaluation score
-orchestrator event list --task "$TASK_ID" --type step_finished -o json | \
-  python3 -c "
-import sys, json
-events = json.load(sys.stdin)
-for e in events:
-    p = e.get('payload', {})
-    if 'total_score' in str(p):
-        print(json.dumps(p, indent=2))
-"
+orchestrator task info <task_id> -o json
+orchestrator event list --task <task_id> -o json
+orchestrator task items <task_id> -o json
+orchestrator task trace <task_id> --json
 ```
 
-### 3.6 Cleanup (Optional)
+### 5.6 Save Output Snapshot
 
 ```bash
-# Revert git changes to restore pre-benchmark state
+git diff > results/<combo_id>-diff.patch
+git diff --stat > results/<combo_id>-diffstat.txt
+```
+
+### 5.7 Restore Environment
+
+```bash
 git checkout -- .
 git clean -fd
+git stash pop || true
 ```
 
-## 4. Batch Execution
+Repeat 5.1–5.7 until all combinations are complete.
 
-Repeat step 3 for each combination, substituting the corresponding manifest files:
+## 6. Evaluation Phase
 
-```bash
-COMBINATIONS=(
-  "A1:agent-claude-opus.yaml:secrets-claude-opus.yaml"
-  "A2:agent-claude-sonnet.yaml:secrets-claude-sonnet.yaml"
-  "B1:agent-opencode-opus.yaml:secrets-claude-opus.yaml"
-  "C1:agent-codex-gpt4o.yaml:secrets-openai.yaml"
-)
+After all combinations are executed, Claude Code should perform a unified evaluation of all outputs in `results/`.
 
-mkdir -p results
+### 6.1 Quantitative Metrics (Extract from JSON Results)
 
-for combo in "${COMBINATIONS[@]}"; do
-  IFS=':' read -r id agent_file secret_file <<< "$combo"
-  echo "=== Running benchmark: $id ==="
+| Metric | Data Source |
+|--------|------------|
+| Completion status | `task info` → `status` (completed/failed) |
+| Total duration | `task info` → `started_at` to `completed_at` |
+| Execution cycles | `event list` → `cycle_completed` event count |
+| Step success rate | `event list` → `step_finished` with `success: true` ratio |
 
-  # Clean workspace
-  git checkout -- . && git clean -fd
+### 6.2 Code Quality Evaluation (Claude Code Executes Directly)
 
-  # Apply resources
-  orchestrator apply -f "fixtures/benchmarks/$secret_file" --project benchmark
-  orchestrator apply -f "fixtures/benchmarks/$agent_file" --project benchmark
-  orchestrator apply -f fixtures/benchmarks/workflow-benchmark-bootstrap.yaml --project benchmark
+For each combination's `results/<combo_id>-diff.patch`:
 
-  # Create task
-  TASK_ID=$(orchestrator task create \
-    --project benchmark \
-    --workflow benchmark-bootstrap \
-    --goal "Implement a retry mechanism for gRPC client connections with exponential backoff and configurable max retries. Add unit tests." \
-    2>&1 | grep -oP 'task_id: \K\S+')
+1. **Build check**: Does `cargo build --release` pass?
+2. **Test check**: Does `cargo test --workspace` pass?
+3. **Lint check**: Does `cargo clippy --workspace -- -D warnings` pass?
+4. **Diff review**: Read the patch file and evaluate:
+   - Is the implementation correct and complete?
+   - Is the code concise and idiomatic?
+   - Are there unnecessary changes?
+   - Is error handling adequate?
+   - Is test coverage reasonable?
 
-  echo "Task $id: $TASK_ID"
+### 6.3 Output Evaluation Report
 
-  # Wait for completion
-  orchestrator task watch "$TASK_ID" --timeout 1800
+Output a comparison in markdown table format:
 
-  # Collect results
-  orchestrator task info "$TASK_ID" -o json > "results/${id}-task-info.json"
-  orchestrator event list --task "$TASK_ID" -o json > "results/${id}-events.json"
-done
+```markdown
+| Combo | Shell | Model | Status | Duration | Cycles | Build | Tests | Lint | Diff Lines | Quality (0-10) | Notes |
+|-------|-------|-------|--------|----------|--------|-------|-------|------|------------|----------------|-------|
+| A1    | ...   | ...   | ...    | ...      | ...    | ...   | ...   | ...  | ...        | ...            | ...   |
 ```
 
-## 5. Results Comparison
+Conclude with a summary analysis: strengths and weaknesses of each combination, comparative findings along the model and shell dimensions, and recommended configuration.
 
-### 5.1 Evaluation Dimensions
+## 7. Constraints
 
-| Dimension | Data Source | Description |
-|-----------|------------|-------------|
-| **Completion** | `task info` → `status` | completed vs failed |
-| **Duration** | `task info` → `started_at` / `completed_at` | End-to-end time |
-| **Cycles** | `event list` → `cycle_completed` events | Iteration count |
-| **Eval Score** | `event list` → `benchmark_eval` step output | 0-100 structured score |
-| **Code Quality** | Eval JSON → `code_quality` field | 0-20 subjective score |
-| **Diff Size** | `git diff --stat` | Scope of changes |
-| **Build/Tests** | Eval JSON → `compilation` / `tests` | Pass/fail |
-
-### 5.2 Comparison Matrix Template
-
-| Combo | Shell | Model | Status | Duration | Cycles | Score | Build | Tests | Lint | Diff | Quality |
-|-------|-------|-------|--------|----------|--------|-------|-------|-------|------|------|---------|
-| A1 | Claude Code | Opus 4.6 | | | | | | | | | |
-| A2 | Claude Code | Sonnet 4.6 | | | | | | | | | |
-| B1 | OpenCode | Opus 4.6 | | | | | | | | | |
-| C1 | Codex CLI | GPT-4o | | | | | | | | | |
-
-### 5.3 Deep Evaluation (Optional)
-
-For each combination's output, use Claude Code as an independent reviewer:
-
-```bash
-# Deep code review of the diff
-git diff HEAD~1 | claude -p "Review this diff for code quality, security, performance, and maintainability. Score each dimension 0-10 and provide a total."
-```
-
-## 6. Notes
-
-- **Control variables**: Change only one variable (model or shell) at a time
-- **Identical goal**: All combinations use the exact same `--goal` string
-- **Environment isolation**: `git checkout -- . && git clean -fd` before each run
-- **Timeout**: `task watch --timeout 1800` (30 min) to prevent infinite runs
-- **Cost awareness**: Opus is ~5x more expensive than Sonnet; GPT-4o is comparable to Sonnet; estimate costs before batch runs
-- **Reproducibility**: All manifests are versioned in `fixtures/benchmarks/` for exact reproduction
+- **Control variables**: Change only one variable (model or shell) at a time; workflow and goal remain constant
+- **Environment isolation**: Restore clean git state before and after each combination
+- **Timeout protection**: 30-minute timeout per task
+- **Cost awareness**: Opus is ~5x Sonnet cost; confirm budget before batch execution
+- **Reproducibility**: All manifests are versioned in `fixtures/benchmarks/`
