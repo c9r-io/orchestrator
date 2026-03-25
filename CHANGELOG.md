@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.2] - 2026-03-26
+
+### Added
+- Skill template packaging — 17 skills distributed as templates (generic/framework/sdlc-patterns)
+- `scripts/package-skill-templates.sh` — sanitizes and packages skills for release
+- `install.sh` installs templates to `~/.orchestratord/skill-templates/`
+- Skill setup showcase — agent-driven project analysis and skill specialization
+- `integration-authoring` skill for managing companion integrations repo
+
 ## [0.2.1] - 2026-03-26
 
 ### Added
