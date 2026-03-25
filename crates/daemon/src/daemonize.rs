@@ -20,8 +20,7 @@ pub fn daemonize(log_path: &Path) -> Result<()> {
     use nix::unistd::{ForkResult, fork, setsid};
     use std::fs::File;
     use std::io::Read;
-    use std::os::fd::FromRawFd;
-    use std::os::unix::io::AsRawFd;
+    use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
 
     // Ensure log directory exists
     if let Some(parent) = log_path.parent() {
@@ -87,7 +86,11 @@ pub fn daemonize(log_path: &Path) -> Result<()> {
 
     // Redirect stdin → /dev/null
     let devnull = File::open("/dev/null").context("failed to open /dev/null")?;
-    nix::unistd::dup2(devnull.as_raw_fd(), 0).context("dup2 stdin failed")?;
+    // SAFETY: fd 0 is a valid open file descriptor (stdin); we wrap it in
+    // OwnedFd for dup2, then forget to avoid double-close.
+    let mut stdin_fd = unsafe { OwnedFd::from_raw_fd(0) };
+    nix::unistd::dup2(devnull.as_fd(), &mut stdin_fd).context("dup2 stdin failed")?;
+    std::mem::forget(stdin_fd);
 
     // Redirect stdout/stderr → log file (append)
     let logfile = File::options()
@@ -95,8 +98,14 @@ pub fn daemonize(log_path: &Path) -> Result<()> {
         .append(true)
         .open(log_path)
         .with_context(|| format!("failed to open daemon log: {}", log_path.display()))?;
-    nix::unistd::dup2(logfile.as_raw_fd(), 1).context("dup2 stdout failed")?;
-    nix::unistd::dup2(logfile.as_raw_fd(), 2).context("dup2 stderr failed")?;
+    // SAFETY: fd 1 is a valid open file descriptor (stdout).
+    let mut stdout_fd = unsafe { OwnedFd::from_raw_fd(1) };
+    nix::unistd::dup2(logfile.as_fd(), &mut stdout_fd).context("dup2 stdout failed")?;
+    std::mem::forget(stdout_fd);
+    // SAFETY: fd 2 is a valid open file descriptor (stderr).
+    let mut stderr_fd = unsafe { OwnedFd::from_raw_fd(2) };
+    nix::unistd::dup2(logfile.as_fd(), &mut stderr_fd).context("dup2 stderr failed")?;
+    std::mem::forget(stderr_fd);
 
     Ok(())
 }

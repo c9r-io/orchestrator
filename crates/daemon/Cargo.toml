@@ -1,6 +1,6 @@
 [package]
 name = "orchestratord"
-version = "0.1.5"
+version = "0.1.6"
 description = "Daemon process for the Agent Orchestrator — gRPC control plane and task execution"
 repository = "https://github.com/c9r-io/orchestrator"
 keywords = ["orchestrator", "daemon", "grpc", "agent"]
@@ -15,11 +15,11 @@ name = "orchestratord"
 path = "src/main.rs"
 
 [dependencies]
-agent-orchestrator = { path = "../../core", version = "0.1.5" }
-orchestrator-scheduler = { path = "../orchestrator-scheduler", version = "0.1.5" }
-orchestrator-proto = { path = "../proto", version = "0.1.5" }
+agent-orchestrator = { path = "../../core", version = "0.1.6" }
+orchestrator-scheduler = { path = "../orchestrator-scheduler", version = "0.1.6" }
+orchestrator-proto = { path = "../proto", version = "0.1.6" }
 anyhow = "1.0"
-clap = { version = "4.5", features = ["derive", "env"] }
+clap = { version = "4.6", features = ["derive", "env"] }
 pem = "3.0"
 prost = "0.14"
 rcgen = { version = "0.14", features = ["pem", "x509-parser"] }
