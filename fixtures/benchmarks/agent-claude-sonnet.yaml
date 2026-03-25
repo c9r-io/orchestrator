@@ -1,0 +1,21 @@
+# Benchmark agent: Claude Code shell + Sonnet model
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: bench-claude-sonnet
+  description: "Claude Code + Sonnet 4.6"
+spec:
+  capabilities:
+    - plan
+    - implement
+    - qa_testing
+    - qa_doc_gen
+    - ticket_fix
+    - align_tests
+    - self_test
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    - fromRef: claude-sonnet
+  metadata:
+    benchmark_shell: "claude-code"
+    benchmark_model: "claude-sonnet-4-6"

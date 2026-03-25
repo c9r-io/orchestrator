@@ -34,6 +34,7 @@ export default defineConfig({
             {
               text: 'Showcases',
               items: [
+                { text: 'Multi-Model Benchmark', link: '/en/showcases/benchmark-multi-model-execution' },
                 { text: 'Self-Evolution', link: '/en/showcases/self-evolution-execution-template' },
                 { text: 'Self-Bootstrap', link: '/en/showcases/self-bootstrap-execution-template' },
                 { text: 'Full QA Execution', link: '/en/showcases/full-qa-execution' },
@@ -77,6 +78,7 @@ export default defineConfig({
             {
               text: '示例',
               items: [
+                { text: '多模型 Benchmark', link: '/zh/showcases/benchmark-multi-model-execution' },
                 { text: '自演化执行', link: '/zh/showcases/self-evolution-execution-template' },
                 { text: '自举引导执行', link: '/zh/showcases/self-bootstrap-execution-template' },
                 { text: '全量 QA 执行', link: '/zh/showcases/full-qa-execution' },

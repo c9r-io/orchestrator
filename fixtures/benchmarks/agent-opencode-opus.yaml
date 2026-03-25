@@ -1,0 +1,22 @@
+# Benchmark agent: OpenCode shell + Opus model
+# Requires: opencode CLI installed (https://github.com/opencode-ai/opencode)
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: bench-opencode-opus
+  description: "OpenCode + Opus 4.6"
+spec:
+  capabilities:
+    - plan
+    - implement
+    - qa_testing
+    - qa_doc_gen
+    - ticket_fix
+    - align_tests
+    - self_test
+  command: opencode -p "{prompt}" --non-interactive --output-format stream-json
+  env:
+    - fromRef: claude-opus
+  metadata:
+    benchmark_shell: "opencode"
+    benchmark_model: "claude-opus-4-6"

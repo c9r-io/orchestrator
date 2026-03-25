@@ -1,0 +1,21 @@
+# Benchmark agent: Claude Code shell + Opus model
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: bench-claude-opus
+  description: "Claude Code + Opus 4.6"
+spec:
+  capabilities:
+    - plan
+    - implement
+    - qa_testing
+    - qa_doc_gen
+    - ticket_fix
+    - align_tests
+    - self_test
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    - fromRef: claude-opus
+  metadata:
+    benchmark_shell: "claude-code"
+    benchmark_model: "claude-opus-4-6"

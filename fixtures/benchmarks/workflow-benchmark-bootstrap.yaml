@@ -1,0 +1,113 @@
+# Benchmark variant of self-bootstrap workflow.
+# Adds an evaluation step after self_test to capture a structured score.
+# Use with different Agent manifests to benchmark shell × model combinations.
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: docs/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: plan
+spec:
+  description: "Analyze the goal and produce an implementation plan"
+  prompt: >-
+    Analyze the following task goal and produce a concrete implementation plan.
+    List the files to modify, the changes needed, and the order of operations.
+    Goal: {goal}
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: implement
+spec:
+  description: "Implement the plan from the previous step"
+  prompt: >-
+    Implement the plan produced in the previous step.
+    The plan output is available as context.
+    Write clean, idiomatic Rust code. Run `cargo check` before finishing.
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: self_test
+spec:
+  description: "Run the full test suite"
+  prompt: >-
+    Run `cargo test --workspace` and `cargo clippy --workspace -- -D warnings`.
+    Fix any failures. Report pass/fail status.
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: benchmark_eval
+spec:
+  description: "Evaluate output quality with structured scoring"
+  prompt: >-
+    You are an impartial code reviewer. Assess the changes made in this task:
+
+    1. Compilation (0-25): `cargo build --release`
+    2. Tests (0-25): `cargo test --workspace`
+    3. Lint (0-15): `cargo clippy --workspace -- -D warnings`
+    4. Diff Quality (0-15): focused diff, <200 lines, no debug leftovers
+    5. Code Quality (0-20): clean, idiomatic, maintainable
+
+    Output JSON: {"compilation":N,"tests":N,"lint":N,"diff_quality":N,"code_quality":N,"total_score":N,"notes":"..."}
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: benchmark-bootstrap
+spec:
+  max_parallel: 1
+  steps:
+    - id: plan
+      scope: task
+      required_capability: plan
+      template: plan
+      enabled: true
+      repeatable: false
+
+    - id: implement
+      scope: task
+      required_capability: implement
+      template: implement
+      enabled: true
+      repeatable: true
+
+    - id: self_test
+      scope: task
+      required_capability: self_test
+      template: self_test
+      enabled: true
+      repeatable: true
+
+    - id: benchmark_eval
+      scope: task
+      required_capability: qa_testing
+      template: benchmark_eval
+      enabled: true
+      repeatable: false
+
+    - id: loop_guard
+      builtin: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+
+  loop:
+    mode: fixed
+    max_cycles: 2
+    enabled: true
+    stop_when_no_unresolved: true
+
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: true
+    checkpoint_strategy: git_tag

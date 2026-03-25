@@ -1,0 +1,33 @@
+# Evaluation step template for benchmark scoring.
+# The evaluator agent reviews the task output and produces a structured score.
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: benchmark_eval
+spec:
+  description: "Evaluate task output quality with structured scoring"
+  prompt: >-
+    You are an impartial code reviewer evaluating the output of an automated
+    SDLC task. Assess the following criteria on a 0-100 scale:
+
+    1. **Compilation** (0-25): Does `cargo build --release` succeed?
+    2. **Tests** (0-25): Does `cargo test --workspace` pass?
+    3. **Lint** (0-15): Does `cargo clippy --workspace -- -D warnings` pass?
+    4. **Diff Quality** (0-15): Is the diff focused? Fewer than 200 lines changed?
+       No unnecessary file touches? No debug leftovers?
+    5. **Code Quality** (0-20): Is the implementation clean, idiomatic Rust,
+       well-structured, and maintainable?
+
+    Run each check, then output a single JSON object:
+
+    ```json
+    {
+      "compilation": <0-25>,
+      "tests": <0-25>,
+      "lint": <0-15>,
+      "diff_quality": <0-15>,
+      "code_quality": <0-20>,
+      "total_score": <sum>,
+      "notes": "<brief summary of findings>"
+    }
+    ```
