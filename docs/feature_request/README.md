@@ -64,6 +64,7 @@
 | FR-077 | Workflow 模板库 — 常见 SDLC 自动化场景预设 | P1 | Proposed |
 | FR-078 | Task Items 与 Event List CLI 命令 | P1 | Closed |
 | FR-079 | 数据生命周期治理 — 日志清理、DB 瘦身与自动化回收 | P1 | Closed |
+| FR-080 | Webhook Trigger 基础设施 — HTTP 事件入口与通用事件源扩展 | P0 | Proposed |
 
 ## 说明
 
