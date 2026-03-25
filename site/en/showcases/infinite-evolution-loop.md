@@ -1,25 +1,25 @@
-# 无限进化循环：Evolution ↔ Bootstrap 交替迭代
+# Infinite Evolution Loop: Alternating Evolution and Bootstrap Iterations
 
-## 背景
+## Background
 
-self-evolution 和 self-bootstrap 已分别完成端到端验证：
+self-evolution and self-bootstrap have each completed end-to-end verification:
 
-- **self-evolution**: 多路径竞争探索，自动选出最优方案（2026-03-08 验证通过）
-- **self-bootstrap**: 单路径迭代打磨，反复自测直到稳定（2026-02-28 验证通过）
+- **self-evolution**: Multi-path competitive exploration, automatically selecting the optimal solution (verified 2026-03-08)
+- **self-bootstrap**: Single-path iterative refinement, repeatedly self-testing until stable (verified 2026-02-28)
 
-下一步目标：将两者组合为 **evolution → bootstrap → evolution → bootstrap → ...** 的无限迭代循环，让 orchestrator 持续自主进化。
+The next goal: combine both into an **evolution -> bootstrap -> evolution -> bootstrap -> ...** infinite iteration loop, enabling the orchestrator to continuously evolve autonomously.
 
 ---
 
-## 前置条件：Git Commit 机制
+## Prerequisite: Git Commit Mechanism
 
-### 问题
+### Problem
 
-当前 agent 的代码变更直接落在工作区，没有自动 commit。多轮迭代的变更会混在一起，无法区分、审查或回滚。
+Currently, agent code changes land directly in the working directory without automatic commits. Changes from multiple iterations mix together, making them impossible to distinguish, review, or roll back.
 
-### 方案
+### Solution
 
-使用现有的 command step，在 workflow YAML 中编排 git 操作，**无需核心代码改动**：
+Use existing command steps to orchestrate git operations in workflow YAML, **with no core code changes required**:
 
 ```yaml
 - id: git_commit
@@ -30,17 +30,17 @@ self-evolution 和 self-bootstrap 已分别完成端到端验证：
     git commit -m "[orchestrator] {task_name} cycle {cycle} — {step_id}"
 ```
 
-关键设计点：
+Key design points:
 
-1. **Commit 时机**: 放在 `self_test` 通过之后，通过 prehook 确保只在测试通过时执行
-2. **Commit 消息**: 包含 task_name、cycle 号、workflow 名，便于追溯
-3. **空 commit 保护**: `git diff --cached --quiet` 避免无变更时报错
-4. **Branch 策略**: 在 feature branch 上操作（见下节），不直接动 main
-5. **Rollback 支持**: checkpoint 与 git commit 关联，失败时可 `git revert`
+1. **Commit timing**: Placed after `self_test` passes, with a prehook ensuring execution only when tests pass
+2. **Commit message**: Includes task_name, cycle number, and workflow name for traceability
+3. **Empty commit protection**: `git diff --cached --quiet` prevents errors when there are no changes
+4. **Branch strategy**: Operate on a feature branch (see next section), never directly on main
+5. **Rollback support**: Checkpoints are associated with git commits; failures can use `git revert`
 
-### Feature Branch 自动管理
+### Automatic Feature Branch Management
 
-同样通过 command step 实现，放在 `init_once` 或 cycle 1 的首个步骤：
+Also implemented via command steps, placed in `init_once` or the first step of cycle 1:
 
 ```yaml
 - id: init_once
@@ -49,44 +49,44 @@ self-evolution 和 self-bootstrap 已分别完成端到端验证：
     git checkout -b auto/{task_name} 2>/dev/null || git checkout auto/{task_name}
 ```
 
-任务结束后由人工决定是否 merge 到 main。
+After the task completes, humans decide whether to merge into main.
 
 ---
 
-## 编排方案
+## Orchestration Approach
 
-### 方案 A: 单 Workflow 内交替（推荐起步）
+### Approach A: Alternating Within a Single Workflow (Recommended Starting Point)
 
-一个 workflow 包含完整的 evolution + bootstrap 段，用循环模式驱动多轮：
+One workflow contains complete evolution + bootstrap segments, driven by a loop mode through multiple rounds:
 
 ```
 Cycle N:
-  [Evolution 段]
+  [Evolution Segment]
   evo_plan → generate_items → evo_implement (×2) → evo_benchmark (×2) → select_best
   → evo_apply_winner → self_test → git_commit
 
-  [Bootstrap 段]
+  [Bootstrap Segment]
   plan → implement → self_test → align_tests → self_test → git_commit
 
-  [收敛判断]
-  loop_guard: 检查本轮 diff 是否足够小 / 测试是否全绿 / 无新 clippy warning
+  [Convergence Check]
+  loop_guard: Check if this round's diff is small enough / tests are all green / no new clippy warnings
 ```
 
-所有步骤均可用现有 workflow 原语表达：
-- evolution 段的 `generate_items` post-action 生成候选项
-- item-scoped 步骤并行实现和评测
-- `captures` 提取 benchmark 分数到 pipeline 变量
-- prehook CEL 表达式控制条件执行
+All steps can be expressed using existing workflow primitives:
+- The evolution segment's `generate_items` post-action generates candidate items
+- item-scoped steps implement and evaluate in parallel
+- `captures` extracts benchmark scores into pipeline variables
+- prehook CEL expressions control conditional execution
 
-**优点**: 紧凑，状态在 pipeline vars 内自然传递，无需跨 workflow 通信
-**缺点**: workflow YAML 较长
+**Pros**: Compact; state passes naturally within pipeline vars; no cross-workflow communication needed
+**Cons**: Workflow YAML is longer
 
-### 方案 B: Workflow 级联（通过 Trigger 资源）
+### Approach B: Workflow Cascading (via Trigger Resources)
 
-两个独立 workflow 通过 Trigger 资源（FR-039，已实现）互相触发：
+Two independent workflows trigger each other via Trigger resources (FR-039, already implemented):
 
 ```yaml
-# Trigger: evolution 完成后启动 bootstrap
+# Trigger: start bootstrap after evolution completes
 apiVersion: orchestrator.dev/v2
 kind: Trigger
 metadata:
@@ -100,10 +100,10 @@ spec:
   action:
     workspace: self
     workflow: self-bootstrap
-    goal: "打磨上一轮 evolution 的产出"
+    goal: "Refine the output from the previous evolution round"
   concurrency_policy: Forbid
 
-# Trigger: bootstrap 完成后启动下一轮 evolution
+# Trigger: start next evolution round after bootstrap completes
 apiVersion: orchestrator.dev/v2
 kind: Trigger
 metadata:
@@ -117,58 +117,58 @@ spec:
   action:
     workspace: self
     workflow: self-evolution
-    goal: "探索下一个改进方向"
+    goal: "Explore the next improvement direction"
   concurrency_policy: Forbid
 ```
 
-**优点**: 各 workflow 独立演进，职责清晰，可单独测试
-**缺点**: 跨 workflow 状态传递需通过 Store 资源中转
+**Pros**: Each workflow evolves independently; clear responsibilities; can be tested separately
+**Cons**: Cross-workflow state transfer requires Store resources as intermediary
 
-### 建议
+### Recommendation
 
-先用方案 A 验证概念，等稳定后再拆分为方案 B。
+Start with Approach A to validate the concept, then split into Approach B once stable.
 
 ---
 
-## 收敛条件
+## Convergence Conditions
 
-无限循环需要合理的停止条件，避免无意义空转。
+An infinite loop requires reasonable stopping conditions to avoid meaningless idle cycling.
 
-已提交 **FR-043**（`docs/feature_request/FR-043-convergence-expression.md`），为 `loop_guard` 增加 CEL 表达式驱动的收敛判断：
+**FR-043** has been filed (`docs/feature_request/FR-043-convergence-expression.md`) to add CEL expression-driven convergence checks to `loop_guard`:
 
 ```yaml
 loop:
   mode: infinite
-  max_cycles: 10          # 硬上限安全阀
+  max_cycles: 10          # hard upper limit safety valve
   convergence_expr:
     engine: cel
     when: "delta_lines < 5 && cycle >= 2"
     reason: "code diff converged"
 ```
 
-在 FR-043 实现之前，可通过现有机制近似实现：
-- `max_cycles` 硬停
-- `loop_guard` builtin 的 `stop_when_no_unresolved` 标志
-- prehook 条件跳过不必要的步骤
+Before FR-043 is implemented, existing mechanisms can approximate this:
+- `max_cycles` hard stop
+- `loop_guard` builtin's `stop_when_no_unresolved` flag
+- prehook to conditionally skip unnecessary steps
 
-收敛维度参考：
+Reference convergence dimensions:
 
-1. **Diff 收敛**: 连续 N 轮的 diff 行数低于阈值（如 < 5 行）
-2. **Score 收敛**: evolution 阶段两个候选的 benchmark score 差距低于阈值
-3. **测试稳定**: 连续 N 轮无新增/修复测试
-4. **Budget 上限**: 最大循环次数 or 最大 agent 调用次数
-5. **人工中断**: `task pause` 随时可介入
+1. **Diff convergence**: Diff line count falls below threshold for N consecutive rounds (e.g., < 5 lines)
+2. **Score convergence**: Gap between two candidates' benchmark scores in the evolution phase falls below threshold
+3. **Test stability**: No new/fixed tests for N consecutive rounds
+4. **Budget cap**: Maximum cycle count or maximum agent invocation count
+5. **Manual interrupt**: `task pause` can intervene at any time
 
 ---
 
-## 课题自动发现
+## Automatic Topic Discovery
 
-通过 agent step + `spawn_tasks` post-action 实现，**无需核心代码改动**：
+Implemented via agent step + `spawn_tasks` post-action, **with no core code changes required**:
 
 ```yaml
 - id: discover_topics
   required_capability: plan
-  template: topic_discovery    # prompt 引导 agent 分析代码库找改进点
+  template: topic_discovery    # prompt guides agent to analyze codebase for improvement points
   behavior:
     post_actions:
       - type: spawn_tasks
@@ -181,37 +181,37 @@ loop:
         max_tasks: 3
 ```
 
-agent 分析代码库输出 JSON 列表 → `spawn_tasks` 自动创建子任务。配合 Trigger 资源可形成持续发现闭环。
+The agent analyzes the codebase and outputs a JSON list -> `spawn_tasks` automatically creates sub-tasks. Combined with Trigger resources, this forms a continuous discovery loop.
 
 ---
 
-## 实现优先级
+## Implementation Priority
 
-| 优先级 | 任务 | 实现方式 | 依赖 |
-|--------|------|----------|------|
-| P0 | Git commit 机制 | command step（纯 YAML） | 无 |
-| P0 | Feature branch 自动管理 | command step（纯 YAML） | 无 |
-| P1 | 单 workflow 交替编排（方案 A） | workflow YAML 编写 | Git commit |
-| P1 | 收敛条件表达式（FR-043） | 核心代码改动 | loop_guard CEL 扩展 |
-| P2 | Workflow 级联触发（方案 B） | Trigger 资源（纯 YAML） | 已具备（FR-039） |
-| P2 | 课题自动发现 | agent step + spawn_tasks（纯 YAML） | topic_discovery template |
+| Priority | Task | Implementation Method | Dependencies |
+|----------|------|----------------------|--------------|
+| P0 | Git commit mechanism | command step (pure YAML) | None |
+| P0 | Automatic feature branch management | command step (pure YAML) | None |
+| P1 | Single workflow alternating orchestration (Approach A) | workflow YAML authoring | Git commit |
+| P1 | Convergence condition expression (FR-043) | Core code change | loop_guard CEL extension |
+| P2 | Workflow cascading trigger (Approach B) | Trigger resource (pure YAML) | Already available (FR-039) |
+| P2 | Automatic topic discovery | agent step + spawn_tasks (pure YAML) | topic_discovery template |
 
-> **注**: P0/P1 中仅 FR-043 需要核心代码改动，其余均可通过 workflow YAML 编排实现。
+> **Note**: Among P0/P1, only FR-043 requires core code changes; everything else can be implemented through workflow YAML orchestration.
 
 ---
 
-## 预期效果
+## Expected Outcome
 
-完成后，只需一条命令即可启动持续自主进化：
+Once complete, a single command launches continuous autonomous evolution:
 
 ```bash
 orchestrator task create \
   -n "continuous-evolution" \
   -w self -W self-evolve-bootstrap \
   --project self-evolution \
-  -g "持续改进 orchestrator 代码质量、性能和功能"
+  -g "Continuously improve orchestrator code quality, performance, and features"
 ```
 
-引擎将自主循环：探索新方案 → 选出最优 → 打磨实现 → commit → 探索下一个改进点 → ...
+The engine will autonomously loop: explore new solutions -> select the best -> refine implementation -> commit -> explore the next improvement -> ...
 
-直到收敛条件满足或人工介入为止。
+Until convergence conditions are met or a human intervenes.
