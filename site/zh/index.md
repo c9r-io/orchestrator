@@ -39,6 +39,8 @@ features:
 
 ## 快速开始
 
+直接运行以下命令，或让你的 AI 编码 Agent 代为执行 — CLI 为两者而设计。
+
 ```bash
 # 安装
 curl -fsSL https://raw.githubusercontent.com/c9r-io/orchestrator/main/install.sh | sh

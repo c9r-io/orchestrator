@@ -27,6 +27,8 @@ cargo install orchestrator-cli orchestratord
 
 ## Quick Start
 
+Run these commands directly, or let your AI coding agent handle it — the CLI is designed for both.
+
 ```bash
 # Start daemon
 orchestratord --foreground --workers 2 &

@@ -39,6 +39,8 @@ features:
 
 ## Quick Start
 
+Run these commands directly, or let your AI coding agent handle it — the CLI is designed for both.
+
 ```bash
 # Install
 curl -fsSL https://raw.githubusercontent.com/c9r-io/orchestrator/main/install.sh | sh
