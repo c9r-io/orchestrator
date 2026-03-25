@@ -47,11 +47,33 @@ pub struct TriggerCronConfig {
 /// Stored event source configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TriggerEventConfig {
-    /// Event source type (e.g. `task_completed`, `task_failed`).
+    /// Event source type (e.g. `task_completed`, `task_failed`, `webhook`).
     pub source: String,
     /// Optional filter conditions.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filter: Option<TriggerEventFilterConfig>,
+    /// Webhook-specific authentication configuration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub webhook: Option<TriggerWebhookConfig>,
+}
+
+/// Webhook authentication configuration for per-trigger secret verification.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TriggerWebhookConfig {
+    /// SecretStore reference for signature verification.
+    /// All values in the store are tried (supports key rotation).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret: Option<TriggerSecretRef>,
+    /// Custom HTTP header name for the signature (default: `X-Webhook-Signature`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature_header: Option<String>,
+}
+
+/// Reference to a SecretStore for webhook secret resolution.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TriggerSecretRef {
+    /// Name of the SecretStore to resolve.
+    pub from_ref: String,
 }
 
 /// Stored event filter.

@@ -464,12 +464,42 @@ pub struct TriggerCronSpec {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct TriggerEventSpec {
-    /// Event source type (e.g. "task_completed", "task_failed").
+    /// Event source type (e.g. "task_completed", "task_failed", "webhook").
     pub source: String,
 
     /// Optional filter conditions for the event.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filter: Option<TriggerEventFilter>,
+
+    /// Webhook-specific authentication configuration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub webhook: Option<TriggerWebhookSpec>,
+}
+
+/// Webhook authentication specification for YAML manifests.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TriggerWebhookSpec {
+    /// SecretStore reference for signature verification.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret: Option<WebhookSecretRef>,
+
+    /// Custom HTTP header name for the signature.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "signatureHeader"
+    )]
+    pub signature_header: Option<String>,
+}
+
+/// Reference to a SecretStore for webhook secret resolution.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WebhookSecretRef {
+    /// Name of the SecretStore.
+    #[serde(rename = "fromRef")]
+    pub from_ref: String,
 }
 
 /// Filter conditions for event-based triggers.

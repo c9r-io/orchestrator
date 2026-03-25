@@ -1,7 +1,8 @@
 use crate::cli_types::{OrchestratorResource, ResourceKind, ResourceSpec, TriggerSpec};
 use crate::config::{
     OrchestratorConfig, TriggerActionConfig, TriggerConfig, TriggerCronConfig, TriggerEventConfig,
-    TriggerEventFilterConfig, TriggerHistoryLimitConfig, TriggerThrottleConfig,
+    TriggerEventFilterConfig, TriggerHistoryLimitConfig, TriggerSecretRef, TriggerThrottleConfig,
+    TriggerWebhookConfig,
 };
 use anyhow::{Result, anyhow};
 
@@ -164,6 +165,12 @@ fn to_config(spec: &TriggerSpec) -> TriggerConfig {
                 workflow: f.workflow.clone(),
                 condition: f.condition.clone(),
             }),
+            webhook: e.webhook.as_ref().map(|w| TriggerWebhookConfig {
+                secret: w.secret.as_ref().map(|s| TriggerSecretRef {
+                    from_ref: s.from_ref.clone(),
+                }),
+                signature_header: w.signature_header.clone(),
+            }),
         }),
         action: TriggerActionConfig {
             workflow: spec.action.workflow.clone(),
@@ -189,7 +196,7 @@ fn to_config(spec: &TriggerSpec) -> TriggerConfig {
 fn from_config(cfg: &TriggerConfig) -> TriggerSpec {
     use crate::cli_types::{
         TriggerActionSpec, TriggerCronSpec, TriggerEventFilter, TriggerEventSpec,
-        TriggerHistoryLimit, TriggerThrottleSpec,
+        TriggerHistoryLimit, TriggerThrottleSpec, TriggerWebhookSpec, WebhookSecretRef,
     };
 
     TriggerSpec {
@@ -202,6 +209,12 @@ fn from_config(cfg: &TriggerConfig) -> TriggerSpec {
             filter: e.filter.as_ref().map(|f| TriggerEventFilter {
                 workflow: f.workflow.clone(),
                 condition: f.condition.clone(),
+            }),
+            webhook: e.webhook.as_ref().map(|w| TriggerWebhookSpec {
+                secret: w.secret.as_ref().map(|s| WebhookSecretRef {
+                    from_ref: s.from_ref.clone(),
+                }),
+                signature_header: w.signature_header.clone(),
             }),
         }),
         action: TriggerActionSpec {

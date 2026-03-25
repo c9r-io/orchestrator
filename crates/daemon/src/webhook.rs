@@ -70,23 +70,52 @@ fn do_webhook(
     project: String,
     body: axum::body::Bytes,
 ) -> Response {
-    // ── Signature verification ───────────────────────────────────────────
-    if let Some(ref secret) = state.secret {
-        let signature = headers
-            .get("x-webhook-signature")
-            .and_then(|v| v.to_str().ok());
-        match signature {
-            Some(sig) => {
-                if !verify_hmac(secret.as_bytes(), &body, sig) {
-                    warn!(trigger = trigger_name.as_str(), "webhook signature failed");
-                    return (StatusCode::UNAUTHORIZED, "invalid signature").into_response();
-                }
-            }
-            None => {
-                warn!(trigger = trigger_name.as_str(), "webhook missing signature");
-                return (StatusCode::UNAUTHORIZED, "missing signature").into_response();
-            }
+    // ── Resolve per-trigger webhook config ───────────────────────────────
+    let active_config = agent_orchestrator::config_load::read_active_config(&state.inner).ok();
+    let trigger_webhook_cfg = active_config.as_ref().and_then(|ac| {
+        ac.config
+            .projects
+            .get(&project)
+            .and_then(|p| p.triggers.get(&trigger_name))
+            .and_then(|t| t.event.as_ref())
+            .and_then(|e| e.webhook.as_ref())
+    });
+
+    // ── Signature verification (per-trigger → global fallback) ──────────
+    let verification_result = if let Some(wh_cfg) = trigger_webhook_cfg {
+        // Per-trigger secret from SecretStore
+        if let Some(ref secret_ref) = wh_cfg.secret {
+            let header_name = wh_cfg
+                .signature_header
+                .as_deref()
+                .unwrap_or("x-webhook-signature");
+            verify_with_store_secrets(
+                &state.inner,
+                &project,
+                &secret_ref.from_ref,
+                header_name,
+                &headers,
+                &body,
+            )
+        } else {
+            // Per-trigger config exists but no secret → no verification
+            Ok(())
         }
+    } else if let Some(ref global_secret) = state.secret {
+        // Global fallback
+        verify_with_single_secret(global_secret, "x-webhook-signature", &headers, &body)
+    } else {
+        // No secret configured anywhere → allow
+        Ok(())
+    };
+
+    if let Err(msg) = verification_result {
+        warn!(
+            trigger = trigger_name.as_str(),
+            reason = msg.as_str(),
+            "webhook auth failed"
+        );
+        return (StatusCode::UNAUTHORIZED, msg).into_response();
     }
 
     // ── Parse JSON body ─────────────────────────────────────────────────
@@ -144,6 +173,62 @@ fn do_webhook(
             (StatusCode::NOT_FOUND, axum::Json(json)).into_response()
         }
     }
+}
+
+/// Verify signature against a single secret string.
+fn verify_with_single_secret(
+    secret: &str,
+    header_name: &str,
+    headers: &HeaderMap,
+    body: &[u8],
+) -> Result<(), String> {
+    let signature = headers.get(header_name).and_then(|v| v.to_str().ok());
+    match signature {
+        Some(sig) => {
+            if verify_hmac(secret.as_bytes(), body, sig) {
+                Ok(())
+            } else {
+                Err("invalid signature".to_string())
+            }
+        }
+        None => Err("missing signature".to_string()),
+    }
+}
+
+/// Verify signature against all values in a SecretStore (multi-key rotation).
+fn verify_with_store_secrets(
+    state: &InnerState,
+    project: &str,
+    store_name: &str,
+    header_name: &str,
+    headers: &HeaderMap,
+    body: &[u8],
+) -> Result<(), String> {
+    let signature = headers
+        .get(header_name)
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| "missing signature".to_string())?;
+
+    // Read active config to resolve SecretStore
+    let active = agent_orchestrator::config_load::read_active_config(state)
+        .map_err(|e| format!("config error: {e}"))?;
+    let env_stores = active
+        .config
+        .projects
+        .get(project)
+        .map(|p| &p.env_stores)
+        .ok_or_else(|| format!("project '{project}' not found"))?;
+    let store = env_stores
+        .get(store_name)
+        .ok_or_else(|| format!("SecretStore '{store_name}' not found"))?;
+
+    // Try all values in the store — any match is accepted (rotation support)
+    for secret_value in store.data.values() {
+        if verify_hmac(secret_value.as_bytes(), body, signature) {
+            return Ok(());
+        }
+    }
+    Err("invalid signature (no matching key)".to_string())
 }
 
 /// Verify HMAC-SHA256 signature.

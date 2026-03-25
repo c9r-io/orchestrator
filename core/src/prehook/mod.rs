@@ -13,7 +13,7 @@ use cel_interpreter::Program;
 // Public API re-exports
 pub use cel::{
     evaluate_convergence_expression, evaluate_finalize_rule_expression,
-    evaluate_step_prehook_expression,
+    evaluate_step_prehook_expression, evaluate_webhook_filter,
 };
 pub use finalize::{
     emit_item_finalize_event, emit_step_prehook_event, evaluate_step_prehook,

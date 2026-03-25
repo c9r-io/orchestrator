@@ -268,15 +268,35 @@ impl TriggerEngine {
                                 _ => continue,
                             }
                         }
-                        // CEL condition evaluation on webhook payload.
-                        if let Some(ref _condition) = filter.condition {
-                            // TODO: evaluate CEL expression against payload.
-                            // For now, webhook triggers with condition are allowed
-                            // (condition is ignored with a debug log).
-                            if payload.event_type != "webhook" {
+                        // CEL condition evaluation on payload.
+                        if let Some(ref condition) = filter.condition {
+                            if let Some(ref event_payload) = payload.payload {
+                                match crate::prehook::evaluate_webhook_filter(
+                                    condition,
+                                    event_payload,
+                                ) {
+                                    Ok(true) => {} // Condition matched, proceed
+                                    Ok(false) => {
+                                        debug!(
+                                            trigger = name.as_str(),
+                                            condition, "CEL filter rejected payload"
+                                        );
+                                        continue;
+                                    }
+                                    Err(e) => {
+                                        warn!(
+                                            trigger = name.as_str(),
+                                            error = %e,
+                                            "CEL filter evaluation failed, skipping"
+                                        );
+                                        continue;
+                                    }
+                                }
+                            } else {
+                                // No payload but condition set — skip (can't evaluate)
                                 debug!(
                                     trigger = name.as_str(),
-                                    "CEL condition on non-webhook trigger not yet implemented, skipping"
+                                    "CEL condition set but no payload available, skipping"
                                 );
                                 continue;
                             }

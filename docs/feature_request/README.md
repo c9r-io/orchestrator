@@ -65,7 +65,7 @@
 | FR-078 | Task Items 与 Event List CLI 命令 | P1 | Closed |
 | FR-079 | 数据生命周期治理 — 日志清理、DB 瘦身与自动化回收 | P1 | Closed |
 | FR-080 | Webhook Trigger 基础设施 — HTTP 事件入口与通用事件源扩展 | P0 | Closed |
-| FR-081 | Per-Trigger Webhook 认证与 CEL Payload 过滤 | P1 | Proposed |
+| FR-081 | Per-Trigger Webhook 认证与 CEL Payload 过滤 | P1 | Closed |
 | FR-082 | 集成 Manifest 包 — Slack / GitHub / Line 预制配置 | P2 | Proposed |
 | FR-083 | CRD 插件系统 — Webhook 拦截器与自动化生命周期 | P3 | Proposed |
 
@@ -150,3 +150,4 @@
 - FR-078 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/84-task-items-event-list-cli.md` 与 `docs/qa/orchestrator/126-task-items-event-list-cli.md` 承载（新增 `task items` 和 `event list` CLI 命令，消除 showcase 中的 sqlite 直接查询）
 - FR-079 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/85-data-lifecycle-governance.md` 与 `docs/qa/orchestrator/127-data-lifecycle-governance.md` 承载（日志 TTL 默认 30 天自动清理、`db vacuum` 命令、`db cleanup` 命令、`db status` 显示磁盘用量、可选 task 自动清理）
 - FR-080 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/86-webhook-trigger-infrastructure.md` 与 `docs/qa/orchestrator/128-webhook-trigger-infrastructure.md` 承载（HTTP webhook 端点、`source: webhook` 触发器、HMAC 签名验证、`trigger fire --payload`、axum HTTP 服务与 gRPC 并行运行）
+- FR-081 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/87-per-trigger-webhook-auth.md` 与 `docs/qa/orchestrator/129-per-trigger-webhook-auth-cel-filter.md` 承载（Per-trigger SecretStore 签名验证 + 多密钥轮替、自定义签名 header、CEL payload 过滤、全局 secret fallback）
