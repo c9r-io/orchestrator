@@ -14,7 +14,7 @@ rust-version.workspace = true
 orchestrator-config = { path = "../crates/orchestrator-config", version = "0.1.5" }
 orchestrator-proto = { path = "../crates/proto", version = "0.1.5" }
 anyhow = "1.0"
-arc-swap = "1.7"
+arc-swap = "1.9"
 aes-gcm-siv = "0.11"
 base64 = "0.22"
 cel-interpreter = "0.10.0"
