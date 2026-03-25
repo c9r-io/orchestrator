@@ -18,7 +18,7 @@ path = "src/main.rs"
 orchestrator-proto = { path = "../proto", version = "0.1.5" }
 anyhow = "1.0"
 dirs = "6"
-clap = { version = "4.5", features = ["derive", "env"] }
+clap = { version = "4.6", features = ["derive", "env"] }
 clap_complete = "4.6"
 prost = "0.14"
 serde = { version = "1.0", features = ["derive"] }
