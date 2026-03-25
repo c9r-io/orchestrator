@@ -215,8 +215,7 @@ git diff --stat
 ```bash
 orchestrator task trace <task_id> --json
 orchestrator task watch <task_id>
-# 调试用：直接查询数据库
-sqlite3 ~/.orchestratord/agent_orchestrator.db "SELECT event_type, payload_json FROM events WHERE task_id = '<task_id>' ORDER BY id DESC LIMIT 20;"
+orchestrator event list --task <task_id> --limit 20
 ```
 
 适用场景：
@@ -262,8 +261,7 @@ sqlite3 ~/.orchestratord/agent_orchestrator.db "SELECT event_type, payload_json 
 
 监控 self_restart 热重载：
 ```bash
-# 调试用：直接查询数据库，查看 self_restart 相关事件
-sqlite3 ~/.orchestratord/agent_orchestrator.db "SELECT payload_json FROM events WHERE task_id = '<task_id>' AND event_type LIKE 'self_restart%' ORDER BY id DESC LIMIT 10;"
+orchestrator event list --task <task_id> --type self_restart --limit 10
 ```
 
 ### 5.4 Self-Test 阶段检查点

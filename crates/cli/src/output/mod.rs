@@ -2,7 +2,7 @@ mod task_detail;
 mod task_list;
 mod value;
 
-use orchestrator_proto::{TaskInfoResponse, TaskSummary};
+use orchestrator_proto::{Event, TaskInfoResponse, TaskItem, TaskSummary};
 
 use crate::OutputFormat;
 
@@ -14,6 +14,129 @@ pub fn print_task_list(tasks: &[TaskSummary], format: OutputFormat) {
 /// Render a task detail payload in the requested output format.
 pub fn print_task_detail(resp: &TaskInfoResponse, format: OutputFormat) {
     task_detail::print(resp, format);
+}
+
+/// Render task items in the requested output format.
+pub fn print_task_items(items: &[TaskItem], format: OutputFormat) {
+    match format {
+        OutputFormat::Json => {
+            let arr: Vec<serde_json::Value> = items
+                .iter()
+                .map(|item| {
+                    serde_json::json!({
+                        "id": item.id,
+                        "label": item.qa_file_path,
+                        "status": item.status,
+                        "order_no": item.order_no,
+                        "fix_required": item.fix_required,
+                        "fixed": item.fixed,
+                        "last_error": item.last_error,
+                        "started_at": item.started_at,
+                        "completed_at": item.completed_at,
+                    })
+                })
+                .collect();
+            println!("{}", serde_json::to_string_pretty(&arr).unwrap_or_default());
+        }
+        OutputFormat::Yaml => {
+            let arr: Vec<serde_json::Value> = items
+                .iter()
+                .map(|item| {
+                    serde_json::json!({
+                        "id": item.id,
+                        "label": item.qa_file_path,
+                        "status": item.status,
+                        "order_no": item.order_no,
+                    })
+                })
+                .collect();
+            println!("{}", serde_yaml::to_string(&arr).unwrap_or_default());
+        }
+        OutputFormat::Table => {
+            if items.is_empty() {
+                println!("No items found.");
+                return;
+            }
+            println!(
+                "{:<8} {:<40} {:<12} {:<8}",
+                "ORDER", "LABEL", "STATUS", "FIXED"
+            );
+            for item in items {
+                let label = if item.qa_file_path.len() > 38 {
+                    format!("..{}", &item.qa_file_path[item.qa_file_path.len() - 36..])
+                } else {
+                    item.qa_file_path.clone()
+                };
+                println!(
+                    "{:<8} {:<40} {:<12} {:<8}",
+                    item.order_no,
+                    label,
+                    item.status,
+                    if item.fixed { "yes" } else { "no" },
+                );
+            }
+            println!("\n{} item(s)", items.len());
+        }
+    }
+}
+
+/// Render an event list in the requested output format.
+pub fn print_event_list(events: &[Event], format: OutputFormat) {
+    match format {
+        OutputFormat::Json => {
+            let arr: Vec<serde_json::Value> = events
+                .iter()
+                .map(|e| {
+                    let payload: serde_json::Value =
+                        serde_json::from_str(&e.payload_json).unwrap_or(serde_json::Value::Null);
+                    serde_json::json!({
+                        "id": e.id,
+                        "event_type": e.event_type,
+                        "task_item_id": e.task_item_id,
+                        "payload": payload,
+                        "created_at": e.created_at,
+                    })
+                })
+                .collect();
+            println!("{}", serde_json::to_string_pretty(&arr).unwrap_or_default());
+        }
+        OutputFormat::Yaml => {
+            let arr: Vec<serde_json::Value> = events
+                .iter()
+                .map(|e| {
+                    serde_json::json!({
+                        "id": e.id,
+                        "event_type": e.event_type,
+                        "payload_json": e.payload_json,
+                        "created_at": e.created_at,
+                    })
+                })
+                .collect();
+            println!("{}", serde_yaml::to_string(&arr).unwrap_or_default());
+        }
+        OutputFormat::Table => {
+            if events.is_empty() {
+                println!("No events found.");
+                return;
+            }
+            println!(
+                "{:<8} {:<28} {:<60} {}",
+                "ID", "TYPE", "PAYLOAD", "CREATED"
+            );
+            for e in events {
+                let payload = if e.payload_json.len() > 58 {
+                    format!("{}...", &e.payload_json[..55])
+                } else {
+                    e.payload_json.clone()
+                };
+                println!(
+                    "{:<8} {:<28} {:<60} {}",
+                    e.id, e.event_type, payload, e.created_at
+                );
+            }
+            println!("\n{} event(s)", events.len());
+        }
+    }
 }
 
 #[cfg(test)]

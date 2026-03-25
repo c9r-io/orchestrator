@@ -4,7 +4,9 @@
 //! optionally archiving them to JSONL before deletion.
 
 use crate::async_database::AsyncDatabase;
+use crate::dto::EventDto;
 use anyhow::Result;
+use serde_json::Value;
 use std::path::Path;
 use tracing::info;
 
@@ -81,6 +83,67 @@ pub async fn count_pending_cleanup(db: &AsyncDatabase, retention_days: u32) -> R
 }
 
 /// Gather statistics about the events table.
+/// List events for a specific task, optionally filtered by event type prefix.
+pub async fn list_task_events(
+    db: &AsyncDatabase,
+    task_id: &str,
+    event_type_filter: Option<&str>,
+    limit: u32,
+) -> Result<Vec<EventDto>> {
+    let task_id = task_id.to_string();
+    let type_filter = event_type_filter.map(|s| s.to_string());
+    let limit = if limit == 0 { 50 } else { limit };
+    let events = db
+        .reader()
+        .call(move |conn| {
+            let (sql, params): (String, Vec<Box<dyn rusqlite::types::ToSql>>) =
+                if let Some(ref prefix) = type_filter {
+                    (
+                        format!(
+                            "SELECT id, task_id, task_item_id, event_type, payload_json, created_at \
+                             FROM events WHERE task_id = ?1 AND event_type LIKE ?2 \
+                             ORDER BY id DESC LIMIT {limit}"
+                        ),
+                        vec![
+                            Box::new(task_id.clone()),
+                            Box::new(format!("{prefix}%")),
+                        ],
+                    )
+                } else {
+                    (
+                        format!(
+                            "SELECT id, task_id, task_item_id, event_type, payload_json, created_at \
+                             FROM events WHERE task_id = ?1 \
+                             ORDER BY id DESC LIMIT {limit}"
+                        ),
+                        vec![Box::new(task_id.clone())],
+                    )
+                };
+            let mut stmt = conn.prepare(&sql)?;
+            let rows = stmt
+                .query_map(rusqlite::params_from_iter(params.iter()), |row| {
+                    let payload_str: String = row.get(4)?;
+                    let payload: Value =
+                        serde_json::from_str(&payload_str).unwrap_or(Value::Null);
+                    Ok(EventDto {
+                        id: row.get(0)?,
+                        task_id: row.get(1)?,
+                        task_item_id: row.get(2)?,
+                        event_type: row.get(3)?,
+                        payload,
+                        created_at: row.get(5)?,
+                    })
+                })?
+                .filter_map(|r| r.ok())
+                .collect();
+            Ok(rows)
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    Ok(events)
+}
+
+/// Compute aggregate statistics for the events table.
 pub async fn event_stats(db: &AsyncDatabase) -> Result<EventStats> {
     let stats = db
         .reader()

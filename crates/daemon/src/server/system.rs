@@ -207,6 +207,30 @@ pub(crate) async fn event_stats(
     }))
 }
 
+pub(crate) async fn task_events(
+    server: &OrchestratorServer,
+    request: Request<TaskEventsRequest>,
+) -> Result<Response<TaskEventsResponse>, Status> {
+    super::authorize(server, &request, "TaskEvents").map_err(Status::from)?;
+    let req = request.into_inner();
+    let type_filter = if req.event_type_filter.is_empty() {
+        None
+    } else {
+        Some(req.event_type_filter.as_str())
+    };
+    let events = agent_orchestrator::event_cleanup::list_task_events(
+        &server.state.async_database,
+        &req.task_id,
+        type_filter,
+        req.limit,
+    )
+    .await
+    .map_err(|e| Status::internal(e.to_string()))?;
+    Ok(Response::new(TaskEventsResponse {
+        events: events.into_iter().map(super::mapping::event_to_proto).collect(),
+    }))
+}
+
 pub(crate) async fn manifest_validate(
     server: &OrchestratorServer,
     request: Request<ManifestValidateRequest>,

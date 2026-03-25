@@ -182,16 +182,12 @@ self-evolution 相比 self-bootstrap 有以下特有的观察点：
 
 1. **`items_generated` 事件**：确认 `evo_plan` 成功生成了候选 item
    ```bash
-   # 调试用：直接查询数据库
-   sqlite3 ~/.orchestratord/agent_orchestrator.db \
-     "SELECT payload_json FROM events WHERE task_id='<task_id>' AND event_type='items_generated';"
+   orchestrator event list --task <task_id> --type items_generated -o json
    ```
 
 2. **动态 item 状态**：确认候选都被执行
    ```bash
-   # 调试用：直接查询数据库
-   sqlite3 ~/.orchestratord/agent_orchestrator.db \
-     "SELECT id, label, source, status FROM task_items WHERE task_id='<task_id>';"
+   orchestrator task items <task_id>
    ```
 
 3. **选择结果**：确认 item_select 选出了胜者
@@ -240,8 +236,7 @@ git diff --stat
 
 ```bash
 orchestrator task trace <task_id> --json
-# 调试用：直接查询数据库
-sqlite3 ~/.orchestratord/agent_orchestrator.db "SELECT event_type, payload_json FROM events WHERE task_id = '<task_id>' ORDER BY id DESC LIMIT 20;"
+orchestrator event list --task <task_id> --limit 20
 ```
 
 ---

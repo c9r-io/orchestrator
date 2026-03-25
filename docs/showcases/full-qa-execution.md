@@ -154,7 +154,7 @@ self_referential_safe: false
 可执行文档包括：
 - 纯单元测试文档（`cargo test --lib`）
 - CLI 命令验证（`orchestrator get/apply/check` 等只读操作）
-- 数据库查询验证（`sqlite3` 查询）
+- 数据库查询验证（`orchestrator event list` / `orchestrator db status` 等）
 - 配置验证文档
 - 文档格式/结构验证
 
@@ -267,9 +267,8 @@ ls docs/ticket/
 # 查看 ticket 数量
 ls docs/ticket/*.md 2>/dev/null | wc -l
 
-# 验证不安全文档被跳过
-sqlite3 ~/.orchestratord/agent_orchestrator.db \
-  "SELECT COUNT(*) FROM events WHERE task_id = '<task_id>' AND event_type = 'step_skipped' AND json_extract(payload_json, '$.step') = 'qa_testing';"
+# 验证不安全文档被跳过（从 JSON 输出中统计 step_skipped 事件数量）
+orchestrator event list --task <task_id> --type step_skipped -o json
 ```
 
 ---

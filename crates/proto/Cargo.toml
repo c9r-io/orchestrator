@@ -1,6 +1,6 @@
 [package]
 name = "orchestrator-proto"
-version = "0.1.3"
+version = "0.1.4"
 description = "Protocol Buffers definitions and generated code for the Agent Orchestrator"
 repository = "https://github.com/c9r-io/orchestrator"
 keywords = ["orchestrator", "grpc", "protobuf", "agent"]

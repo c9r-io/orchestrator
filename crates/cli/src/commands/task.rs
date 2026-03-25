@@ -61,6 +61,28 @@ pub(crate) async fn dispatch(
             Ok(())
         }
 
+        TaskCommands::Items {
+            task_id,
+            status,
+            output,
+        } => {
+            let resp = client
+                .task_info(orchestrator_proto::TaskInfoRequest { task_id })
+                .await?
+                .into_inner();
+            let items: Vec<_> = resp
+                .items
+                .into_iter()
+                .filter(|item| {
+                    status
+                        .as_ref()
+                        .is_none_or(|s| item.status.eq_ignore_ascii_case(s))
+                })
+                .collect();
+            output::print_task_items(&items, output);
+            Ok(())
+        }
+
         TaskCommands::Start { task_id, latest } => {
             let resp = client
                 .task_start(orchestrator_proto::TaskStartRequest { task_id, latest })

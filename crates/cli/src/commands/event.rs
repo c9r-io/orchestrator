@@ -2,6 +2,7 @@ use anyhow::Result;
 use orchestrator_proto::OrchestratorServiceClient;
 use tonic::transport::Channel;
 
+use crate::output;
 use crate::EventCommands;
 
 pub(crate) async fn dispatch(
@@ -23,6 +24,23 @@ pub(crate) async fn dispatch(
                 .await?
                 .into_inner();
             println!("{}", resp.message);
+            Ok(())
+        }
+        EventCommands::List {
+            task,
+            event_type,
+            limit,
+            output,
+        } => {
+            let resp = client
+                .task_events(orchestrator_proto::TaskEventsRequest {
+                    task_id: task,
+                    event_type_filter: event_type.unwrap_or_default(),
+                    limit,
+                })
+                .await?
+                .into_inner();
+            output::print_event_list(&resp.events, output);
             Ok(())
         }
         EventCommands::Stats => {

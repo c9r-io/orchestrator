@@ -1120,6 +1120,39 @@ impl OrchestratorService for TestOrchestratorServer {
         }))
     }
 
+    async fn task_events(
+        &self,
+        request: Request<TaskEventsRequest>,
+    ) -> Result<Response<TaskEventsResponse>, Status> {
+        let req = request.into_inner();
+        let type_filter = if req.event_type_filter.is_empty() {
+            None
+        } else {
+            Some(req.event_type_filter.as_str())
+        };
+        let events = agent_orchestrator::event_cleanup::list_task_events(
+            &self.state.async_database,
+            &req.task_id,
+            type_filter,
+            req.limit,
+        )
+        .await
+        .map_err(|e| Status::internal(e.to_string()))?;
+        Ok(Response::new(TaskEventsResponse {
+            events: events
+                .into_iter()
+                .map(|e| Event {
+                    id: e.id,
+                    task_id: e.task_id,
+                    task_item_id: e.task_item_id,
+                    event_type: e.event_type,
+                    payload_json: serde_json::to_string(&e.payload).unwrap_or_default(),
+                    created_at: e.created_at,
+                })
+                .collect(),
+        }))
+    }
+
     async fn trigger_suspend(
         &self,
         request: Request<TriggerSuspendRequest>,

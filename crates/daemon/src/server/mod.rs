@@ -393,6 +393,13 @@ impl OrchestratorService for OrchestratorServer {
         system::event_stats(self, request).await
     }
 
+    async fn task_events(
+        &self,
+        request: Request<TaskEventsRequest>,
+    ) -> Result<Response<TaskEventsResponse>, Status> {
+        system::task_events(self, request).await
+    }
+
     async fn trigger_suspend(
         &self,
         request: Request<TriggerSuspendRequest>,

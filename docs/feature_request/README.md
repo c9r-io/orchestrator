@@ -62,7 +62,7 @@
 | FR-073 | 文档站点与 Landing Page — 外部可发现性 | P1 | Closed |
 | FR-076 | GUI 正式发布 — Tauri App 打包分发 | P3 | Deferred |
 | FR-077 | Workflow 模板库 — 常见 SDLC 自动化场景预设 | P1 | Proposed |
-| FR-078 | Task Items 与 Event List CLI 命令 | P1 | Proposed |
+| FR-078 | Task Items 与 Event List CLI 命令 | P1 | Closed |
 
 ## 说明
 
@@ -142,3 +142,4 @@
 - FR-071 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/81-open-source-compliance.md` 与 `docs/qa/orchestrator/123-open-source-compliance.md` 承载（LICENSE、CHANGELOG、CONTRIBUTING、GitHub 模板已就绪；v0.1.0 release 待 tag 推送）
 - FR-072 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/82-homebrew-tap-distribution.md` 与 `docs/qa/orchestrator/124-homebrew-tap-distribution.md` 承载（Docker 分发因架构不兼容已排除——orchestratord 以子进程方式 spawn agent，需宿主机工具与凭证；已实现 Homebrew tap 与 cargo install 两条分发渠道）
 - FR-073 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/83-documentation-site.md` 与 `docs/qa/orchestrator/125-documentation-site.md` 承载（VitePress 文档站 + Landing Page + "Why Orchestrator?" 对比页；README 精简至 74 行；Cloudflare Pages 自动部署）
+- FR-078 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/84-task-items-event-list-cli.md` 与 `docs/qa/orchestrator/126-task-items-event-list-cli.md` 承载（新增 `task items` 和 `event list` CLI 命令，消除 showcase 中的 sqlite 直接查询）

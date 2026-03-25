@@ -475,6 +475,20 @@ pub enum TaskCommands {
         no_start: bool,
     },
 
+    /// List task items and their status.
+    Items {
+        /// Task identifier.
+        task_id: String,
+
+        /// Filter by item status.
+        #[arg(short, long)]
+        status: Option<String>,
+
+        /// Output encoding.
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+
     #[command(alias = "get")]
     /// Show detailed information for one task.
     Info {
@@ -783,6 +797,26 @@ pub enum EventCommands {
         /// Archive events to JSONL before deleting.
         #[arg(long)]
         archive: bool,
+    },
+
+    /// List events for a task.
+    #[command(alias = "ls")]
+    List {
+        /// Task identifier (required).
+        #[arg(long)]
+        task: String,
+
+        /// Filter by event type (prefix match).
+        #[arg(long = "type")]
+        event_type: Option<String>,
+
+        /// Maximum number of events to return.
+        #[arg(short, long, default_value_t = 50)]
+        limit: u32,
+
+        /// Output encoding.
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
     },
 
     /// Show event table statistics
