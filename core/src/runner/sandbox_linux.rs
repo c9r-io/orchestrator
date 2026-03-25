@@ -1,7 +1,7 @@
 #[cfg(target_os = "linux")]
 use super::profile::ResolvedExecutionProfile;
 #[cfg(target_os = "linux")]
-use super::sandbox::{SandboxBackend, SandboxBackendError, detect_linux_sandbox_support};
+use super::sandbox::{SandboxBackendError, detect_linux_sandbox_support};
 #[cfg(target_os = "linux")]
 use crate::config::{ExecutionNetworkMode, RunnerConfig};
 #[cfg(target_os = "linux")]
