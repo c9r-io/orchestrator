@@ -1,6 +1,6 @@
 # Full QA Regression Test Execution Plan
 
-> **Recommended usage**: Open this project in an AI coding agent (Claude Code, OpenCode, Codex, etc.) and ask the agent to read and execute this plan. The agent can autonomously handle resource deployment, task creation, execution monitoring, and result verification.
+> **Agent Collaboration**: This document is an agent-executable plan. Open this project in an AI coding agent (Claude Code, OpenCode, Codex, etc.) — the agent reads this plan and orchestrates other agents via the orchestrator CLI to collaboratively complete the task, from resource deployment and execution to result verification, fully autonomously.
 
 
 This document is for performing a **single-iteration, full QA regression test** against the current codebase, with no code modifications involved.

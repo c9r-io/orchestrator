@@ -1,6 +1,6 @@
 # 项目推广内容自动生成与分发执行计划
 
-> **推荐使用方式**：在 AI 编码 Agent（Claude Code、OpenCode、Codex 等）中打开本项目，让 Agent 读取本执行计划并自主执行。Agent 可以自动完成资源部署、任务创建、执行监控和结果验证的全流程。
+> **Agent 协作**：本文档是一个 Agent 可执行的计划。在 AI 编码 Agent（Claude Code、OpenCode、Codex 等）中打开本项目，Agent 读取本计划后，通过 orchestrator CLI 调度其他 Agent 协作完成任务 — 从资源部署、任务执行到结果验证，全程自主完成。
 
 本文档是 orchestrator 的第 4 类 showcase：**项目推广** — 自动化内容创建与多平台分发。与前三类 showcase（自举、自进化、全量 QA）不同，本工作流展示 orchestrator 处理**面向外部的自动化任务**的能力，而非 SDLC 内部循环。
 

@@ -1,6 +1,6 @@
 # 多模型 × 多外壳 SDLC Benchmark 执行计划
 
-> **推荐使用方式**：在 AI 编码 Agent（Claude Code、OpenCode、Codex 等）中打开本项目，让 Agent 读取本执行计划并自主执行。Agent 可以自动完成资源部署、任务创建、执行监控和结果评估的全流程。
+> **Agent 协作**：本文档是一个 Agent 可执行的计划。在 AI 编码 Agent（Claude Code、OpenCode、Codex 等）中打开本项目，Agent 读取本计划后，通过 orchestrator CLI 调度其他 Agent 协作完成任务 — 从资源部署、任务执行到结果评估，全程自主完成。
 
 ## 1. Benchmark 目标
 

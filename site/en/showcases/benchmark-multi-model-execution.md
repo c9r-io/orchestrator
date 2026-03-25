@@ -1,6 +1,6 @@
 # Multi-Model x Multi-Shell SDLC Benchmark Execution Plan
 
-> **Recommended usage**: Open this project in an AI coding Agent (Claude Code, OpenCode, Codex, etc.) and let the Agent read this execution plan and carry it out autonomously. The Agent can automatically complete the entire workflow of resource deployment, task creation, execution monitoring, and result evaluation.
+> **Agent Collaboration**: This document is an agent-executable plan. Open this project in an AI coding agent (Claude Code, OpenCode, Codex, etc.) — the agent reads this plan and orchestrates other agents via the orchestrator CLI to collaboratively complete the task, from resource deployment and execution to result evaluation, fully autonomously.
 
 ## 1. Benchmark Objective
 

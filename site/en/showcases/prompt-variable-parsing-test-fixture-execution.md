@@ -1,6 +1,6 @@
 # Self-Evolution Topic Execution Plan
 
-> **Recommended usage**: Open this project in an AI coding agent (Claude Code, OpenCode, Codex, etc.) and ask the agent to read and execute this plan. The agent can autonomously handle resource deployment, task creation, execution monitoring, and result verification.
+> **Agent Collaboration**: This document is an agent-executable plan. Open this project in an AI coding agent (Claude Code, OpenCode, Codex, etc.) — the agent reads this plan and orchestrates other agents via the orchestrator CLI to collaboratively complete the task, from resource deployment and execution to result verification, fully autonomously.
 
 
 This document is the first real-world test topic for the `self-evolution` workflow. Unlike `self-bootstrap`, self-evolution uses WP03 dynamic candidate generation + competitive selection to explore multiple implementation paths, with the engine automatically selecting the best solution.

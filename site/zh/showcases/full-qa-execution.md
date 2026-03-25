@@ -1,6 +1,6 @@
 # 全量 QA 回归测试执行计划
 
-> **推荐使用方式**：在 AI 编码 Agent（Claude Code、OpenCode、Codex 等）中打开本项目，让 Agent 读取本执行计划并自主执行。Agent 可以自动完成资源部署、任务创建、执行监控和结果验证的全流程。
+> **Agent 协作**：本文档是一个 Agent 可执行的计划。在 AI 编码 Agent（Claude Code、OpenCode、Codex 等）中打开本项目，Agent 读取本计划后，通过 orchestrator CLI 调度其他 Agent 协作完成任务 — 从资源部署、任务执行到结果验证，全程自主完成。
 
 本文档用于对当前代码库进行**单次迭代、全量 QA 回归测试**，不涉及代码改动。
 适用场景：大批量重构后、发布前、或定期回归验证。
