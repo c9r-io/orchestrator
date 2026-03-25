@@ -1,22 +1,22 @@
-# AI-Native SDLC Skills 初始化执行计划
+# AI-Native SDLC Skills Initialization Execution Plan
 
-> **Agent 协作**：本文档是一个 Agent 可执行的计划。在 AI 编码 Agent（Claude Code、OpenCode、Codex 等）中打开本项目，Agent 读取本计划后，通过 orchestrator CLI 调度其他 Agent 协作完成任务 — 从资源部署、任务执行到结果验证，全程自主完成。
+> **Agent Collaboration**: This document is an agent-executable plan. Open this project in an AI coding agent (Claude Code, OpenCode, Codex, etc.). After reading this plan, the agent orchestrates other agents via the orchestrator CLI to collaboratively complete the task — from resource deployment and task execution to result verification, all done autonomously.
 
-## 1. 目标
+## 1. Goal
 
-为当前项目初始化 AI-native SDLC skills。Agent 分析项目的语言、框架和目录结构，从 skill 模板中选择适合的 skills，特化后安装到 `.claude/skills/`。
+Initialize AI-native SDLC skills for the current project. The agent analyzes the project's language, framework, and directory structure, selects appropriate skills from skill templates, customizes them, and installs them to `.claude/skills/`.
 
-## 2. Skill 模板位置
+## 2. Skill Template Location
 
-模板安装在 `~/.orchestratord/skill-templates/`，分三个类别：
+Templates are installed at `~/.orchestratord/skill-templates/`, organized into three categories:
 
 ```
 skill-templates/
-├── generic/              # 通用（任何项目）
+├── generic/              # Generic (any project)
 │   ├── performance-testing/
 │
 │   └── project-bootstrap/
-├── framework/            # 框架相关（根据项目技术栈选择）
+├── framework/            # Framework-specific (selected based on project tech stack)
 │   ├── align-tests/
 │   ├── deploy-gh-k8s/
 │   ├── e2e-testing/
@@ -27,7 +27,7 @@ skill-templates/
 │   ├── rust-conventions/
 │   ├── test-authoring/
 │   └── test-coverage/
-└── sdlc-patterns/        # SDLC 模式（适合需要治理流程的项目）
+└── sdlc-patterns/        # SDLC patterns (suitable for projects requiring governance processes)
     ├── fr-governance/
     ├── qa-testing/
     ├── ticket-fix/
@@ -35,14 +35,14 @@ skill-templates/
     └── security-test-doc-gen/
 ```
 
-## 3. 执行流程
+## 3. Execution Flow
 
-### 3.1 分析项目
+### 3.1 Analyze the Project
 
-Agent 应首先检查：
+The agent should first check:
 
 ```bash
-# 检查语言和框架
+# Check language and framework
 ls Cargo.toml 2>/dev/null && echo "Rust project"
 ls package.json 2>/dev/null && echo "Node.js project"
 ls go.mod 2>/dev/null && echo "Go project"
@@ -52,50 +52,50 @@ ls .github/workflows/ 2>/dev/null && echo "GitHub Actions found"
 ls docs/qa/ 2>/dev/null && echo "QA docs found"
 ```
 
-### 3.2 选择 Skills
+### 3.2 Select Skills
 
-根据分析结果，Agent 决定安装哪些 skills：
+Based on the analysis results, the agent decides which skills to install:
 
-| 条件 | 安装的 Skills |
-|------|---------------|
-| 任何项目 | `performance-testing` |
-| 有 `Cargo.toml` | `rust-conventions`, `align-tests`, `test-coverage`, `test-authoring` |
-| 有 `package.json` | `e2e-testing`, `test-authoring` |
-| 有 `docker-compose.yml` | `ops`, `reset-local-env` |
-| 有 `k8s/` 或 `deploy/` | `deploy-gh-k8s`, `project-readiness` |
-| 有 `.github/workflows/` | `project-readiness` |
-| 有 `docs/qa/` | `qa-testing`, `ticket-fix`, `qa-doc-gen` |
-| 有 `docs/feature_request/` | `fr-governance` |
-| 有 `docs/security/` | `security-test-doc-gen` |
+| Condition | Skills to Install |
+|-----------|-------------------|
+| Any project | `performance-testing` |
+| Has `Cargo.toml` | `rust-conventions`, `align-tests`, `test-coverage`, `test-authoring` |
+| Has `package.json` | `e2e-testing`, `test-authoring` |
+| Has `docker-compose.yml` | `ops`, `reset-local-env` |
+| Has `k8s/` or `deploy/` | `deploy-gh-k8s`, `project-readiness` |
+| Has `.github/workflows/` | `project-readiness` |
+| Has `docs/qa/` | `qa-testing`, `ticket-fix`, `qa-doc-gen` |
+| Has `docs/feature_request/` | `fr-governance` |
+| Has `docs/security/` | `security-test-doc-gen` |
 
-### 3.3 特化模板
+### 3.3 Customize Templates
 
-对每个选中的 skill：
+For each selected skill:
 
-1. 从 `~/.orchestratord/skill-templates/<category>/<skill>/` 复制到 `.claude/skills/<skill>/`
-2. 读取模板中的 `SKILL.md`
-3. 根据项目实际情况替换占位符：
-   - `<project-root>` → 实际项目根路径
-   - `core/` → 实际的后端源码目录
-   - `portal/` → 实际的前端目录
-   - `docker/docker-compose.yml` → 实际的 compose 文件路径
-   - `docs/qa/<project>/` → 实际的 QA 文档目录
+1. Copy from `~/.orchestratord/skill-templates/<category>/<skill>/` to `.claude/skills/<skill>/`
+2. Read the `SKILL.md` in the template
+3. Replace placeholders based on the actual project structure:
+   - `<project-root>` -> actual project root path
+   - `core/` -> actual backend source directory
+   - `portal/` -> actual frontend directory
+   - `docker/docker-compose.yml` -> actual compose file path
+   - `docs/qa/<project>/` -> actual QA documentation directory
 
-### 3.4 验证
+### 3.4 Verification
 
 ```bash
-# 确认 skills 已安装
+# Confirm skills are installed
 ls .claude/skills/
 
-# 每个 skill 都有 SKILL.md
+# Each skill should have a SKILL.md
 for d in .claude/skills/*/; do
   [[ -f "$d/SKILL.md" ]] && echo "OK: $d" || echo "MISSING: $d/SKILL.md"
 done
 ```
 
-## 4. 注意事项
+## 4. Notes
 
-- Agent 应只安装与当前项目相关的 skills，不要全部安装
-- 如果模板不存在（`~/.orchestratord/skill-templates/` 为空），提示用户运行 `install.sh` 或从 GitHub Release 下载
-- 已存在的 `.claude/skills/` 不应被覆盖 — 跳过已有的 skill
-- 特化时保持 SKILL.md 的 frontmatter 格式（`---` 分隔的 name/description）
+- The agent should only install skills relevant to the current project — do not install all of them
+- If templates do not exist (`~/.orchestratord/skill-templates/` is empty), prompt the user to run `install.sh` or download from GitHub Releases
+- Existing `.claude/skills/` should not be overwritten — skip skills that are already present
+- When customizing, preserve the SKILL.md frontmatter format (`---` delimited name/description)

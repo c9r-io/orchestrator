@@ -1,27 +1,27 @@
-# 密钥自动轮替 Workflow 执行计划
+# Automated Secret Rotation Workflow Execution Plan
 
-> **Agent 协作**：本文档是一个 Agent 可执行的计划。在 AI 编码 Agent（Claude Code、OpenCode、Codex 等）中打开本项目，Agent 读取本计划后，通过 orchestrator CLI 调度其他 Agent 协作完成任务 — 从资源部署、任务执行到结果验证，全程自主完成。
+> **Agent Collaboration**: This document is an agent-executable plan. Open this project in an AI coding agent (Claude Code, OpenCode, Codex, etc.). After reading this plan, the agent orchestrates other agents via the orchestrator CLI to collaboratively complete the task — from resource deployment and task execution to result verification, all done autonomously.
 
-## 1. 目标
+## 1. Goal
 
-配置一个 cron trigger，定期执行密钥同步 workflow。Agent 调用平台 API 获取最新密钥，通过 `orchestrator apply` 更新 SecretStore，实现密钥自动轮替。
+Configure a cron trigger to periodically execute a secret sync workflow. The agent calls platform APIs to fetch the latest secrets and updates the SecretStore via `orchestrator apply`, achieving automated secret rotation.
 
-## 2. 适用场景
+## 2. Use Cases
 
-- Slack Signing Secret 定期更换
-- GitHub Webhook Secret 轮替
-- API token 过期前自动刷新
-- 任何需要定期更新 SecretStore 的场景
+- Periodic rotation of Slack Signing Secrets
+- GitHub Webhook Secret rotation
+- Automatic refresh of API tokens before expiration
+- Any scenario requiring periodic SecretStore updates
 
-## 3. 前置条件
+## 3. Prerequisites
 
-- orchestratord 运行中，已配置 `--webhook-bind`
-- 已部署对应平台的集成包（`orchestrator-integrations`）
-- Agent 有权限调用平台 API（API token 在 SecretStore 中）
+- orchestratord is running with `--webhook-bind` configured
+- The corresponding platform integration package (`orchestrator-integrations`) is deployed
+- The agent has permission to call platform APIs (API token is in the SecretStore)
 
-## 4. Manifest 示例
+## 4. Manifest Examples
 
-### 4.1 密钥轮替 StepTemplate
+### 4.1 Secret Rotation StepTemplate
 
 ```yaml
 apiVersion: orchestrator.dev/v2
@@ -40,7 +40,7 @@ spec:
     5. Report which secrets were rotated and which remain unchanged
 ```
 
-### 4.2 Cron Trigger（每周执行）
+### 4.2 Cron Trigger (Weekly Execution)
 
 ```yaml
 apiVersion: orchestrator.dev/v2
@@ -49,7 +49,7 @@ metadata:
   name: weekly-secret-rotation
 spec:
   cron:
-    schedule: "0 2 * * 0"    # 每周日凌晨 2 点
+    schedule: "0 2 * * 0"    # Every Sunday at 2:00 AM
     timezone: "Asia/Tokyo"
   action:
     workflow: secret-rotation
@@ -57,7 +57,7 @@ spec:
     start: true
 ```
 
-### 4.3 完整 Workflow
+### 4.3 Complete Workflow
 
 ```yaml
 apiVersion: orchestrator.dev/v2
@@ -78,20 +78,20 @@ spec:
     max_cycles: 1
 ```
 
-## 5. 执行流程
+## 5. Execution Flow
 
-1. Cron trigger 按计划触发 → 创建 task
-2. Agent 执行 `rotate-secrets` step：
-   - 读取当前 SecretStore 配置
-   - 调用平台 API 验证/轮替密钥
-   - 生成更新后的 SecretStore YAML
-   - `orchestrator apply -f` 更新 SecretStore
-3. 新密钥立即生效（webhook handler 每次请求都读取最新 config）
-4. Task 完成，记录轮替结果
+1. The cron trigger fires on schedule and creates a task
+2. The agent executes the `rotate-secrets` step:
+   - Reads the current SecretStore configuration
+   - Calls platform APIs to verify/rotate secrets
+   - Generates the updated SecretStore YAML
+   - Updates the SecretStore via `orchestrator apply -f`
+3. New secrets take effect immediately (the webhook handler reads the latest config on every request)
+4. The task completes and the rotation results are recorded
 
-## 6. 注意事项
+## 6. Notes
 
-- 密钥轮替期间，SecretStore 中同时保留新旧密钥（multi-key rotation）
-- 确认新密钥有效后再移除旧密钥
-- 建议在低流量时段执行（cron schedule 设置为凌晨）
-- Agent 需要平台 API 的管理权限
+- During secret rotation, both old and new secrets are kept in the SecretStore (multi-key rotation)
+- Remove old secrets only after confirming the new secrets are valid
+- It is recommended to run during low-traffic periods (set the cron schedule to early morning hours)
+- The agent requires admin-level permissions for the platform API
