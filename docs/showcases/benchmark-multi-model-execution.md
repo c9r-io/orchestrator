@@ -1,29 +1,41 @@
 # 多模型 × 多外壳 SDLC Benchmark 执行计划
 
-> **使用方式**：在 Claude Code 中打开本项目，然后要求 Claude Code 读取并执行本执行计划。Claude Code 将自动完成资源部署、任务执行、监控和结果评估的全流程。
+> **推荐使用方式**：在 AI 编码 Agent（Claude Code、OpenCode、Codex 等）中打开本项目，让 Agent 读取本执行计划并自主执行。Agent 可以自动完成资源部署、任务创建、执行监控和结果评估的全流程。
 
 ## 1. Benchmark 目标
 
-在相同的任务目标下，依次使用不同的 LLM 模型和 AI 编码外壳执行 self-bootstrap workflow，收集执行结果，最后由 Claude Code 进行统一的深度评估和对比分析。
+通过控制变量法，在相同的任务目标和 Workflow 下，分别替换 **LLM 模型**和 **Agent 外壳**，评估两个独立维度的性能差异：
+
+- **模型维度**：固定外壳（如 Claude Code），替换模型（Opus / Sonnet / GLM-5 / Gemini / GPT-5.4），观察模型能力对任务完成度和代码质量的影响
+- **外壳维度**：固定模型（如 Opus 4.6），替换外壳（Claude Code / OpenCode / Codex / Gemini CLI），观察外壳工具链对执行效率和结果的影响
 
 ## 2. 变量矩阵
 
 | ID | 外壳 | 模型 | Agent Manifest | SecretStore |
 |----|------|------|----------------|-------------|
 | A1 | Claude Code | Opus 4.6 | `fixtures/benchmarks/agent-claude-opus.yaml` | `fixtures/benchmarks/secrets-claude-opus.yaml` |
-| A2 | Claude Code | Sonnet 4.6 | `fixtures/benchmarks/agent-claude-sonnet.yaml` | `fixtures/benchmarks/secrets-claude-sonnet.yaml` |
 | B1 | OpenCode | Opus 4.6 | `fixtures/benchmarks/agent-opencode-opus.yaml` | `fixtures/benchmarks/secrets-claude-opus.yaml` |
-| C1 | Codex CLI | GPT-4o | `fixtures/benchmarks/agent-codex-gpt4o.yaml` | `fixtures/benchmarks/secrets-openai.yaml` |
+| C1 | OpenCode | GLM-5 | `fixtures/benchmarks/agent-opencode-glm5.yaml` | `fixtures/benchmarks/secrets-glm5.yaml` |
+| D1 | Gemini CLI | Gemini 3.1 Pro | `fixtures/benchmarks/agent-gemini-pro.yaml` | `fixtures/benchmarks/secrets-gemini.yaml` |
+| E1 | Codex CLI | GPT-5.4 | `fixtures/benchmarks/agent-codex-gpt54.yaml` | `fixtures/benchmarks/secrets-openai.yaml` |
+
+**控制变量分析组：**
+
+| 对比 | 固定变量 | 变化变量 | 观察目标 |
+|------|----------|----------|----------|
+| A1 vs B1 | Opus 4.6 | Claude Code vs OpenCode | 外壳差异 |
+| B1 vs C1 | OpenCode | Opus 4.6 vs GLM-5 | 模型差异 |
+| A1 vs D1 vs E1 | — | 全组合 | 综合差异 |
 
 > 可按需扩展：创建新的 Agent + SecretStore manifest 即可。
 
 ## 3. 前置条件
 
-执行者（Claude Code）应首先验证以下条件：
+执行者（Agent）应首先验证以下条件：
 
 - `orchestrator --version` 和 `orchestratord --version` 可执行
 - daemon 正在运行（`orchestrator daemon status`），如未运行则启动：`orchestratord --foreground --workers 2 &`
-- 矩阵中涉及的外壳已安装（`claude --version`、`opencode --version` 等）
+- 矩阵中涉及的外壳已安装（`claude --version`、`opencode --version`、`gemini --version`、`codex --version` 等）
 - `fixtures/benchmarks/secrets-*.yaml` 中的 API 密钥已填入（非 `<placeholder>` 值）
 
 ## 4. 统一任务目标
@@ -107,7 +119,7 @@ git stash pop || true
 
 ## 6. 评估阶段
 
-所有组合执行完成后，Claude Code 应对 `results/` 目录下的全部产出进行统一评估。
+所有组合执行完成后，Agent 应对 `results/` 目录下的全部产出进行统一评估。
 
 ### 6.1 定量指标（从 JSON 结果中提取）
 
@@ -118,7 +130,7 @@ git stash pop || true
 | 执行轮次 | `event list` → `cycle_completed` 事件计数 |
 | 步骤成功率 | `event list` → `step_finished` 中 `success: true` 的比例 |
 
-### 6.2 代码质量评估（Claude Code 直接执行）
+### 6.2 代码质量评估（Agent 直接执行）
 
 对每个组合的 `results/<combo_id>-diff.patch`：
 
@@ -137,12 +149,20 @@ git stash pop || true
 以 markdown 表格格式输出对比结果：
 
 ```markdown
-| 组合 | 外壳 | 模型 | 状态 | 耗时 | 轮次 | 编译 | 测试 | Lint | Diff行数 | 代码质量评分(0-10) | 备注 |
-|------|------|------|------|------|------|------|------|------|----------|-------------------|------|
-| A1   | ...  | ...  | ...  | ...  | ...  | ...  | ...  | ...  | ...      | ...               | ...  |
+| 组合 | 外壳 | 模型 | 状态 | 耗时 | 轮次 | 编译 | 测试 | Lint | Diff行数 | 代码质量(0-10) | 备注 |
+|------|------|------|------|------|------|------|------|------|----------|---------------|------|
+| A1   | Claude Code  | Opus 4.6      | | | | | | | | | |
+| B1   | OpenCode     | Opus 4.6      | | | | | | | | | |
+| C1   | OpenCode     | GLM-5         | | | | | | | | | |
+| D1   | Gemini CLI   | Gemini 3.1 Pro| | | | | | | | | |
+| E1   | Codex CLI    | GPT-5.4       | | | | | | | | | |
 ```
 
-最后给出总结分析：各组合的优劣势、模型维度和外壳维度的对比发现、推荐配置。
+最后给出总结分析，分两个维度：
+
+1. **模型维度**（对比 B1 vs C1：同一外壳 OpenCode，不同模型）：模型能力对结果的影响
+2. **外壳维度**（对比 A1 vs B1：同一模型 Opus，不同外壳）：工具链对执行效率的影响
+3. **综合排名**：所有组合的推荐程度
 
 ## 7. 约束
 

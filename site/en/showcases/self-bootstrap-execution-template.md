@@ -1,5 +1,8 @@
 # self-bootstrap Topic Execution Plan Template
 
+> **Recommended usage**: Open this project in an AI coding agent (Claude Code, OpenCode, Codex, etc.) and ask the agent to read and execute this plan. The agent can autonomously handle resource deployment, task creation, execution monitoring, and result verification.
+
+
 This document is a generic template for submitting a topic directly to the orchestrator's `self-bootstrap` workflow for execution. Usage: copy this file, replace the placeholders, and pass the topic objective to orchestrator. The human role is limited to launching, monitoring, recording, and intervening when exceptions occur.
 
 Recommended reference examples:

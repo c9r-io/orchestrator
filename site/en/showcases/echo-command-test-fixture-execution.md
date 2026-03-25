@@ -1,5 +1,8 @@
 # Self-Bootstrap Test Fixture: Echo CLI Subcommand
 
+> **Recommended usage**: Open this project in an AI coding agent (Claude Code, OpenCode, Codex, etc.) and ask the agent to read and execute this plan. The agent can autonomously handle resource deployment, task creation, execution monitoring, and result verification.
+
+
 This document is a **permanent test fixture** for validating the orchestrator's self-bootstrap capability.
 The fixture itself is implementable but should never be merged — simply revert the code after each test to reuse it.
 

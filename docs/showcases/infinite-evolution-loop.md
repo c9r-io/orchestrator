@@ -1,5 +1,7 @@
 # 无限进化循环：Evolution ↔ Bootstrap 交替迭代
 
+> **推荐使用方式**：在 AI 编码 Agent（Claude Code、OpenCode、Codex 等）中打开本项目，让 Agent 读取本执行计划并自主执行。Agent 可以自动完成资源部署、任务创建、执行监控和结果验证的全流程。
+
 ## 背景
 
 self-evolution 和 self-bootstrap 已分别完成端到端验证：

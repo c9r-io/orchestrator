@@ -1,0 +1,22 @@
+# Benchmark agent: Gemini CLI shell + Gemini 3.1 Pro model
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: bench-gemini-pro
+  description: "Gemini CLI + Gemini 3.1 Pro"
+spec:
+  capabilities:
+    - plan
+    - implement
+    - qa_testing
+    - qa_doc_gen
+    - ticket_fix
+    - align_tests
+    - self_test
+  command: gemini -p "{prompt}"
+  promptDelivery: arg
+  env:
+    - fromRef: gemini-pro
+  metadata:
+    benchmark_shell: "gemini-cli"
+    benchmark_model: "gemini-3.1-pro"

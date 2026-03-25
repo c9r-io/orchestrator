@@ -1,5 +1,8 @@
 # Infinite Evolution Loop: Alternating Evolution and Bootstrap Iterations
 
+> **Recommended usage**: Open this project in an AI coding agent (Claude Code, OpenCode, Codex, etc.) and ask the agent to read and execute this plan. The agent can autonomously handle resource deployment, task creation, execution monitoring, and result verification.
+
+
 ## Background
 
 self-evolution and self-bootstrap have each completed end-to-end verification:

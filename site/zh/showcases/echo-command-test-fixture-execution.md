@@ -1,5 +1,7 @@
 # self-bootstrap 测试 fixture：Echo CLI 子命令
 
+> **推荐使用方式**：在 AI 编码 Agent（Claude Code、OpenCode、Codex 等）中打开本项目，让 Agent 读取本执行计划并自主执行。Agent 可以自动完成资源部署、任务创建、执行监控和结果验证的全流程。
+
 本文档是一个**永久测试课题**，用于验证 orchestrator 的 self-bootstrap 能力。
 课题本身可实现但不应合并——每次测试后还原代码即可重复使用。
 

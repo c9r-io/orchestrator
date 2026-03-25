@@ -1,5 +1,8 @@
 # self-evolution Topic Execution Plan Template
 
+> **Recommended usage**: Open this project in an AI coding agent (Claude Code, OpenCode, Codex, etc.) and ask the agent to read and execute this plan. The agent can autonomously handle resource deployment, task creation, execution monitoring, and result verification.
+
+
 This document is a generic template for submitting a topic to the orchestrator's `self-evolution` workflow for execution. Unlike `self-bootstrap`'s linear iteration, self-evolution uses WP03 dynamic candidate generation + competitive selection to explore multiple implementation paths, with the engine automatically selecting the optimal solution.
 
 Applicable scenarios:

@@ -1,5 +1,8 @@
 # Full QA Regression Test Execution Plan
 
+> **Recommended usage**: Open this project in an AI coding agent (Claude Code, OpenCode, Codex, etc.) and ask the agent to read and execute this plan. The agent can autonomously handle resource deployment, task creation, execution monitoring, and result verification.
+
+
 This document is for performing a **single-iteration, full QA regression test** against the current codebase, with no code modifications involved.
 Applicable scenarios: after large-scale refactoring, before releases, or for periodic regression verification.
 

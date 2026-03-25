@@ -1,0 +1,21 @@
+# Benchmark agent: OpenCode shell + GLM-5 model
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: bench-opencode-glm5
+  description: "OpenCode + GLM-5"
+spec:
+  capabilities:
+    - plan
+    - implement
+    - qa_testing
+    - qa_doc_gen
+    - ticket_fix
+    - align_tests
+    - self_test
+  command: opencode -p "{prompt}" --non-interactive --output-format stream-json
+  env:
+    - fromRef: glm5
+  metadata:
+    benchmark_shell: "opencode"
+    benchmark_model: "GLM-5"

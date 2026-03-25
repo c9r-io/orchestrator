@@ -1,5 +1,7 @@
 # Orchestrator Usage (Manual Testing)
 
+> **Recommended usage**: Open this project in an AI coding agent (Claude Code, OpenCode, Codex, etc.) and ask the agent to read and execute this plan. The agent can autonomously handle resource deployment, task creation, execution monitoring, and result verification.
+
 This document is a practical, copy-paste oriented guide for manually testing the orchestrator from CLI.
 
 Entry point: `orchestrator` (CLI client) + `orchestratord` (daemon).
