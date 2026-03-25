@@ -16,7 +16,7 @@ orchestrator-config = { path = "../orchestrator-config", version = "0.1.5" }
 orchestrator-proto = { path = "../proto", version = "0.1.5" }
 async-trait = "0.1"
 anyhow = "1.0"
-arc-swap = "1.7"
+arc-swap = "1.9"
 cel-interpreter = "0.10.0"
 chrono = { version = "0.4", features = ["serde"] }
 glob = "0.3"
