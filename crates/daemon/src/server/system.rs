@@ -125,6 +125,63 @@ pub(crate) async fn db_status(
     Ok(Response::new(status))
 }
 
+pub(crate) async fn db_vacuum(
+    server: &OrchestratorServer,
+    request: Request<DbVacuumRequest>,
+) -> Result<Response<DbVacuumResponse>, Status> {
+    super::authorize(server, &request, "DbVacuum").map_err(Status::from)?;
+    let result = agent_orchestrator::db_maintenance::vacuum_database(&server.state.db_path)
+        .map_err(|e| Status::internal(e.to_string()))?;
+    let freed = result.size_before.saturating_sub(result.size_after);
+    Ok(Response::new(DbVacuumResponse {
+        size_before: result.size_before,
+        size_after: result.size_after,
+        message: format!(
+            "VACUUM complete: {} -> {} (freed {})",
+            format_bytes(result.size_before),
+            format_bytes(result.size_after),
+            format_bytes(freed),
+        ),
+    }))
+}
+
+pub(crate) async fn db_log_cleanup(
+    server: &OrchestratorServer,
+    request: Request<DbLogCleanupRequest>,
+) -> Result<Response<DbLogCleanupResponse>, Status> {
+    super::authorize(server, &request, "DbLogCleanup").map_err(Status::from)?;
+    let req = request.into_inner();
+    let days = if req.older_than_days == 0 { 30 } else { req.older_than_days };
+    let result = agent_orchestrator::log_cleanup::cleanup_old_logs(
+        &server.state.async_database,
+        &server.state.logs_dir,
+        days,
+    )
+    .await
+    .map_err(|e| Status::internal(e.to_string()))?;
+    Ok(Response::new(DbLogCleanupResponse {
+        files_deleted: result.files_deleted,
+        bytes_freed: result.bytes_freed,
+        message: format!(
+            "Deleted {} file(s), freed {}",
+            result.files_deleted,
+            format_bytes(result.bytes_freed),
+        ),
+    }))
+}
+
+fn format_bytes(bytes: u64) -> String {
+    if bytes >= 1_073_741_824 {
+        format!("{:.1} GB", bytes as f64 / 1_073_741_824.0)
+    } else if bytes >= 1_048_576 {
+        format!("{:.1} MB", bytes as f64 / 1_048_576.0)
+    } else if bytes >= 1024 {
+        format!("{:.1} KB", bytes as f64 / 1024.0)
+    } else {
+        format!("{} B", bytes)
+    }
+}
+
 pub(crate) async fn db_migrations_list(
     server: &OrchestratorServer,
     request: Request<DbMigrationsListRequest>,

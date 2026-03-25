@@ -24,6 +24,24 @@ pub(crate) async fn dispatch(
                 .into_inner();
             print_migrations(&resp, output)
         }
+        DbCommands::Vacuum => {
+            let resp = client
+                .db_vacuum(orchestrator_proto::DbVacuumRequest {})
+                .await?
+                .into_inner();
+            println!("{}", resp.message);
+            Ok(())
+        }
+        DbCommands::Cleanup { older_than_days } => {
+            let resp = client
+                .db_log_cleanup(orchestrator_proto::DbLogCleanupRequest {
+                    older_than_days,
+                })
+                .await?
+                .into_inner();
+            println!("{}", resp.message);
+            Ok(())
+        }
     }
 }
 
@@ -39,6 +57,9 @@ fn print_status(resp: &orchestrator_proto::DbStatusResponse, output: OutputForma
                     "pending_versions": resp.pending_versions,
                     "pending_names": resp.pending_names,
                     "is_current": resp.is_current,
+                    "db_size_bytes": resp.db_size_bytes,
+                    "logs_size_bytes": resp.logs_size_bytes,
+                    "archive_size_bytes": resp.archive_size_bytes,
                 }))?
             );
             Ok(())
@@ -64,6 +85,10 @@ fn print_status(resp: &orchestrator_proto::DbStatusResponse, output: OutputForma
                 );
                 println!("Pending Names:    {}", resp.pending_names.join(", "));
             }
+            println!();
+            println!("DB Size:          {}", format_bytes(resp.db_size_bytes));
+            println!("Logs Size:        {}", format_bytes(resp.logs_size_bytes));
+            println!("Archive Size:     {}", format_bytes(resp.archive_size_bytes));
             Ok(())
         }
         OutputFormat::Yaml => anyhow::bail!("db commands support only table or json output"),
@@ -115,6 +140,18 @@ fn print_migrations(
     }
 }
 
+fn format_bytes(bytes: u64) -> String {
+    if bytes >= 1_073_741_824 {
+        format!("{:.1} GB", bytes as f64 / 1_073_741_824.0)
+    } else if bytes >= 1_048_576 {
+        format!("{:.1} MB", bytes as f64 / 1_048_576.0)
+    } else if bytes >= 1024 {
+        format!("{:.1} KB", bytes as f64 / 1024.0)
+    } else {
+        format!("{} B", bytes)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -128,6 +165,9 @@ mod tests {
             pending_versions: vec![2],
             pending_names: vec!["m0002".into()],
             is_current: false,
+            db_size_bytes: 1048576,
+            logs_size_bytes: 2097152,
+            archive_size_bytes: 0,
         };
 
         print_status(&resp, OutputFormat::Json).expect("print json");

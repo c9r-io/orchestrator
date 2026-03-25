@@ -70,6 +70,14 @@ struct Args {
     #[arg(long = "event-archive-dir")]
     event_archive_dir: Option<PathBuf>,
 
+    /// Number of days to retain log files before automatic cleanup (0 = disabled).
+    #[arg(long = "log-retention-days", default_value_t = 30)]
+    log_retention_days: u32,
+
+    /// Number of days to retain terminated tasks before automatic cleanup (0 = disabled).
+    #[arg(long = "task-retention-days", default_value_t = 0)]
+    task_retention_days: u32,
+
     /// Minutes before a running item is considered stalled (0 = disabled).
     #[arg(long = "stall-timeout-mins", default_value_t = 30)]
     stall_timeout_mins: u64,
@@ -385,6 +393,53 @@ fn main() -> Result<()> {
                             }
                         }
                         _ = cleanup_shutdown.changed() => {
+                            break;
+                        }
+                    }
+                }
+            });
+        }
+
+        // Spawn log + task cleanup sweep (piggybacks on event cleanup interval)
+        if args.log_retention_days > 0 || args.task_retention_days > 0 {
+            let lifecycle_state = inner.clone();
+            let mut lifecycle_shutdown = shutdown_rx.clone();
+            let log_days = args.log_retention_days;
+            let task_days = args.task_retention_days;
+            let interval_secs = args.event_cleanup_interval_secs;
+            info!(
+                log_retention_days = log_days,
+                task_retention_days = task_days,
+                interval_secs,
+                "data lifecycle sweep started"
+            );
+            tokio::spawn(async move {
+                let mut interval =
+                    tokio::time::interval(std::time::Duration::from_secs(interval_secs));
+                loop {
+                    tokio::select! {
+                        _ = interval.tick() => {
+                            if log_days > 0 {
+                                if let Err(e) = agent_orchestrator::log_cleanup::cleanup_old_logs(
+                                    &lifecycle_state.async_database,
+                                    &lifecycle_state.logs_dir,
+                                    log_days,
+                                ).await {
+                                    tracing::warn!(error = %e, "log cleanup sweep failed");
+                                }
+                            }
+                            if task_days > 0 {
+                                if let Err(e) = agent_orchestrator::task_cleanup::cleanup_old_tasks(
+                                    &lifecycle_state.async_database,
+                                    &lifecycle_state.logs_dir,
+                                    task_days,
+                                    50,
+                                ).await {
+                                    tracing::warn!(error = %e, "task cleanup sweep failed");
+                                }
+                            }
+                        }
+                        _ = lifecycle_shutdown.changed() => {
                             break;
                         }
                     }

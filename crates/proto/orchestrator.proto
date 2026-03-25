@@ -46,6 +46,8 @@ service OrchestratorService {
   rpc Init(InitRequest)               returns (InitResponse);
   rpc DbStatus(DbStatusRequest)       returns (DbStatusResponse);
   rpc DbMigrationsList(DbMigrationsListRequest) returns (DbMigrationsListResponse);
+  rpc DbVacuum(DbVacuumRequest)       returns (DbVacuumResponse);
+  rpc DbLogCleanup(DbLogCleanupRequest) returns (DbLogCleanupResponse);
   rpc ManifestValidate(ManifestValidateRequest) returns (ManifestValidateResponse);
   rpc ManifestExport(ManifestExportRequest) returns (ManifestExportResponse);
   rpc TaskTrace(TaskTraceRequest)     returns (TaskTraceResponse);
@@ -524,6 +526,9 @@ message DbStatusResponse {
   repeated uint32 pending_versions = 4;
   repeated string pending_names = 5;
   bool is_current = 6;
+  uint64 db_size_bytes = 7;
+  uint64 logs_size_bytes = 8;
+  uint64 archive_size_bytes = 9;
 }
 
 message DbMigration {
@@ -539,6 +544,24 @@ message DbMigrationsListResponse {
   uint32 current_version = 2;
   uint32 target_version = 3;
   repeated DbMigration migrations = 4;
+}
+
+message DbVacuumRequest {}
+
+message DbVacuumResponse {
+  uint64 size_before = 1;
+  uint64 size_after = 2;
+  string message = 3;
+}
+
+message DbLogCleanupRequest {
+  uint32 older_than_days = 1;
+}
+
+message DbLogCleanupResponse {
+  uint64 files_deleted = 1;
+  uint64 bytes_freed = 2;
+  string message = 3;
 }
 
 message ManifestValidateRequest {

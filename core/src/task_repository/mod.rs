@@ -4,7 +4,7 @@
 )]
 
 mod command_run;
-mod items;
+pub(crate) mod items;
 mod queries;
 mod state;
 mod trait_def;

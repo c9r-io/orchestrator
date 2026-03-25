@@ -34,6 +34,8 @@ pub use orchestrator_config::config;
 pub mod config_load;
 /// Custom resource definitions and resource store projections.
 pub mod crd;
+/// Database maintenance utilities: VACUUM and size reporting.
+pub mod db_maintenance;
 /// SQLite schema bootstrap and connection setup helpers.
 pub mod db;
 /// Serialized database write coordination for async callers.
@@ -47,6 +49,8 @@ pub use orchestrator_config::env_resolve;
 pub mod error;
 /// TTL-based event cleanup, archival, and statistics.
 pub mod event_cleanup;
+/// TTL-based log file cleanup for terminated tasks.
+pub mod log_cleanup;
 /// Event sink types and event-query helpers.
 pub mod events;
 /// Backfill helpers for reconstructing missing event streams.
@@ -100,6 +104,8 @@ pub mod session_store;
 /// Shared daemon state and state transition helpers.
 pub mod state;
 pub mod store;
+/// Auto-cleanup of terminated tasks and associated data.
+pub mod task_cleanup;
 /// High-level task mutation operations.
 pub mod task_ops;
 /// Task repository interfaces and SQLite implementations.

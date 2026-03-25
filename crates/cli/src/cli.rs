@@ -405,6 +405,16 @@ pub enum DbCommands {
     /// Database migration operations
     #[command(subcommand)]
     Migrations(DbMigrationCommands),
+
+    /// Run VACUUM to reclaim disk space
+    Vacuum,
+
+    /// Clean up old log files from terminated tasks
+    Cleanup {
+        /// Delete logs older than this many days (default 30).
+        #[arg(long = "older-than", default_value_t = 30)]
+        older_than_days: u32,
+    },
 }
 
 /// Subcommands for inspecting database migration state.

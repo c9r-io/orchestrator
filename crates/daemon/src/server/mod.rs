@@ -295,6 +295,20 @@ impl OrchestratorService for OrchestratorServer {
         system::db_migrations_list(self, request).await
     }
 
+    async fn db_vacuum(
+        &self,
+        request: Request<DbVacuumRequest>,
+    ) -> Result<Response<DbVacuumResponse>, Status> {
+        system::db_vacuum(self, request).await
+    }
+
+    async fn db_log_cleanup(
+        &self,
+        request: Request<DbLogCleanupRequest>,
+    ) -> Result<Response<DbLogCleanupResponse>, Status> {
+        system::db_log_cleanup(self, request).await
+    }
+
     async fn manifest_validate(
         &self,
         request: Request<ManifestValidateRequest>,

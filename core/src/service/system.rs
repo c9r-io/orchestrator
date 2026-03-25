@@ -136,6 +136,16 @@ pub fn db_status(state: &InnerState) -> Result<orchestrator_proto::DbStatusRespo
     let status = crate::persistence::schema::PersistenceBootstrap::status(&state.db_path)
         .map_err(|err| classify_system_error("system.db_status", err))?;
     let is_current = status.is_current();
+    let size_info = crate::db_maintenance::database_size_info(
+        &state.db_path,
+        &state.logs_dir,
+        None, // TODO: archive dir from config
+    )
+    .unwrap_or(crate::db_maintenance::SizeInfo {
+        db_size: 0,
+        logs_size: 0,
+        archive_size: 0,
+    });
     Ok(orchestrator_proto::DbStatusResponse {
         db_path: state.db_path.display().to_string(),
         current_version: status.current_version,
@@ -147,6 +157,9 @@ pub fn db_status(state: &InnerState) -> Result<orchestrator_proto::DbStatusRespo
             .map(str::to_string)
             .collect(),
         is_current,
+        db_size_bytes: size_info.db_size,
+        logs_size_bytes: size_info.logs_size,
+        archive_size_bytes: size_info.archive_size,
     })
 }
 

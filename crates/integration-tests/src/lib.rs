@@ -837,6 +837,40 @@ impl OrchestratorService for TestOrchestratorServer {
         Ok(Response::new(list))
     }
 
+    async fn db_vacuum(
+        &self,
+        _request: Request<DbVacuumRequest>,
+    ) -> Result<Response<DbVacuumResponse>, Status> {
+        let result =
+            agent_orchestrator::db_maintenance::vacuum_database(&self.state.db_path)
+                .map_err(|e| Status::internal(e.to_string()))?;
+        Ok(Response::new(DbVacuumResponse {
+            size_before: result.size_before,
+            size_after: result.size_after,
+            message: "VACUUM complete".into(),
+        }))
+    }
+
+    async fn db_log_cleanup(
+        &self,
+        request: Request<DbLogCleanupRequest>,
+    ) -> Result<Response<DbLogCleanupResponse>, Status> {
+        let req = request.into_inner();
+        let days = if req.older_than_days == 0 { 30 } else { req.older_than_days };
+        let result = agent_orchestrator::log_cleanup::cleanup_old_logs(
+            &self.state.async_database,
+            &self.state.logs_dir,
+            days,
+        )
+        .await
+        .map_err(|e| Status::internal(e.to_string()))?;
+        Ok(Response::new(DbLogCleanupResponse {
+            files_deleted: result.files_deleted,
+            bytes_freed: result.bytes_freed,
+            message: format!("Deleted {} file(s)", result.files_deleted),
+        }))
+    }
+
     async fn manifest_validate(
         &self,
         request: Request<ManifestValidateRequest>,
