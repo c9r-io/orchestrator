@@ -47,13 +47,15 @@ async fn cancel_task_for_trigger(state: &InnerState, task_id: &str) -> Result<()
 
 // ── Public types ─────────────────────────────────────────────────────────────
 
-/// Payload broadcast when a task_completed or task_failed event fires.
+/// Payload broadcast when a trigger-relevant event fires.
 #[derive(Debug, Clone)]
 pub struct TriggerEventPayload {
-    /// Event type: "task_completed" or "task_failed".
+    /// Event type: "task_completed", "task_failed", or "webhook".
     pub event_type: String,
-    /// Source task ID.
+    /// Source task ID (empty for webhook events).
     pub task_id: String,
+    /// Optional JSON payload (webhook body or event metadata).
+    pub payload: Option<serde_json::Value>,
 }
 
 /// Notification sent to the engine when trigger configuration changes.
@@ -231,7 +233,12 @@ impl TriggerEngine {
     async fn handle_event_trigger(&self, payload: &TriggerEventPayload) {
         // Resolve the source task's workflow from the database (the payload only
         // carries event_type + task_id to keep the broadcast lightweight).
-        let source_workflow = self.lookup_task_workflow(&payload.task_id).await;
+        // For webhook events, skip workflow lookup (no source task).
+        let source_workflow = if payload.task_id.is_empty() {
+            None
+        } else {
+            self.lookup_task_workflow(&payload.task_id).await
+        };
 
         let snap = self.state.config_runtime.load();
         let config = &snap.active_config.config;
@@ -261,14 +268,18 @@ impl TriggerEngine {
                                 _ => continue,
                             }
                         }
-                        // CEL condition evaluation — future extension.
-                        // For now, if a condition is set, log a warning and skip.
-                        if filter.condition.is_some() {
-                            debug!(
-                                trigger = name.as_str(),
-                                "CEL condition evaluation not yet implemented, skipping"
-                            );
-                            continue;
+                        // CEL condition evaluation on webhook payload.
+                        if let Some(ref _condition) = filter.condition {
+                            // TODO: evaluate CEL expression against payload.
+                            // For now, webhook triggers with condition are allowed
+                            // (condition is ignored with a debug log).
+                            if payload.event_type != "webhook" {
+                                debug!(
+                                    trigger = name.as_str(),
+                                    "CEL condition on non-webhook trigger not yet implemented, skipping"
+                                );
+                                continue;
+                            }
                         }
                     }
 
@@ -276,11 +287,15 @@ impl TriggerEngine {
                         trigger = name.as_str(),
                         project = project_id.as_str(),
                         event_type = payload.event_type.as_str(),
-                        source_task = payload.task_id.as_str(),
                         "event trigger matched"
                     );
-                    self.fire_trigger_with_config(name, project_id, trigger)
-                        .await;
+                    self.fire_trigger_with_config(
+                        name,
+                        project_id,
+                        trigger,
+                        payload.payload.as_ref(),
+                    )
+                    .await;
                 }
             }
         }
@@ -302,7 +317,7 @@ impl TriggerEngine {
             return;
         };
 
-        self.fire_trigger_with_config(trigger_name, project, trigger)
+        self.fire_trigger_with_config(trigger_name, project, trigger, None)
             .await;
     }
 
@@ -311,6 +326,7 @@ impl TriggerEngine {
         trigger_name: &str,
         project: &str,
         trigger: &TriggerConfig,
+        webhook_payload: Option<&serde_json::Value>,
     ) {
         // ── Suspend check ────────────────────────────────────────────────
         if trigger.suspend {
@@ -362,7 +378,7 @@ impl TriggerEngine {
 
         let payload = CreateTaskPayload {
             name: Some(task_name),
-            goal: Some(format!("Triggered by: {trigger_name}")),
+            goal: Some(build_trigger_goal(trigger_name, webhook_payload)),
             project_id: Some(project.to_string()),
             workspace_id: Some(trigger.action.workspace.clone()),
             workflow_id: Some(trigger.action.workflow.clone()),
@@ -784,9 +800,28 @@ async fn cleanup_history(
     Ok(())
 }
 
+// ── Goal construction ────────────────────────────────────────────────────────
+
+/// Build a task goal string for a trigger fire.
+/// If a webhook payload is present, include a summary in the goal.
+fn build_trigger_goal(trigger_name: &str, webhook_payload: Option<&serde_json::Value>) -> String {
+    match webhook_payload {
+        Some(payload) => {
+            let summary = serde_json::to_string(payload).unwrap_or_default();
+            let truncated = if summary.len() > 500 {
+                format!("{}...", &summary[..497])
+            } else {
+                summary
+            };
+            format!("Triggered by webhook '{trigger_name}': {truncated}")
+        }
+        None => format!("Triggered by: {trigger_name}"),
+    }
+}
+
 // ── Public helper for event broadcasting ─────────────────────────────────────
 
-/// Broadcast a trigger-relevant event (task_completed / task_failed).
+/// Broadcast a trigger-relevant event (task_completed / task_failed / webhook).
 /// Called from the daemon's event handling path.
 pub fn broadcast_task_event(state: &InnerState, payload: TriggerEventPayload) {
     // Ignore send errors (no subscribers = no triggers configured).

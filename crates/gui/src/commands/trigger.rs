@@ -59,6 +59,7 @@ pub async fn trigger_fire(
         .trigger_fire(orchestrator_proto::TriggerFireRequest {
             trigger_name,
             project,
+            payload_json: None,
         })
         .await
         .map_err(|e| crate::errors::humanize_grpc_error(&e))?;

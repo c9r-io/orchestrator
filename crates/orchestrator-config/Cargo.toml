@@ -1,6 +1,6 @@
 [package]
 name = "orchestrator-config"
-version = "0.1.6"
+version = "0.2.0"
 description = "Configuration models and loading for the Agent Orchestrator"
 repository = "https://github.com/c9r-io/orchestrator"
 keywords = ["orchestrator", "config", "yaml", "agent"]

@@ -57,7 +57,7 @@ impl Resource for TriggerResource {
 
         // Validate event source if present.
         if let Some(ref event) = self.spec.event {
-            let valid_sources = ["task_completed", "task_failed"];
+            let valid_sources = ["task_completed", "task_failed", "webhook"];
             if !valid_sources.contains(&event.source.as_str()) {
                 return Err(anyhow!(
                     "trigger '{}': event.source must be one of {:?}, got '{}'",
@@ -341,7 +341,7 @@ spec:
 
     #[test]
     fn trigger_validate_rejects_invalid_event_source() {
-        let resource = dispatch_resource(trigger_event_manifest("bad", "webhook"))
+        let resource = dispatch_resource(trigger_event_manifest("bad", "invalid_source"))
             .expect("dispatch should succeed");
         let err = resource.validate().expect_err("should reject");
         assert!(err.to_string().contains("event.source must be one of"));

@@ -51,6 +51,20 @@ pub(crate) async fn trigger_fire(
     }
     let req = request.into_inner();
 
+    // If a payload was provided, broadcast as a webhook event for trigger matching.
+    if let Some(ref payload_json) = req.payload_json {
+        if let Ok(payload) = serde_json::from_str::<serde_json::Value>(payload_json) {
+            agent_orchestrator::trigger_engine::broadcast_task_event(
+                &server.state,
+                agent_orchestrator::trigger_engine::TriggerEventPayload {
+                    event_type: "webhook".to_string(),
+                    task_id: String::new(),
+                    payload: Some(payload),
+                },
+            );
+        }
+    }
+
     let task_id = agent_orchestrator::service::resource::fire_trigger(
         &server.state,
         &req.trigger_name,

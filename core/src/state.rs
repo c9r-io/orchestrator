@@ -126,6 +126,7 @@ impl InnerState {
                 crate::trigger_engine::TriggerEventPayload {
                     event_type: event_type.to_string(),
                     task_id: task_id.to_string(),
+                    payload: None,
                 },
             );
         }

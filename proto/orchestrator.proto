@@ -789,6 +789,7 @@ message TriggerResumeResponse {
 message TriggerFireRequest {
   string trigger_name = 1;
   optional string project = 2;
+  optional string payload_json = 3;
 }
 
 message TriggerFireResponse {

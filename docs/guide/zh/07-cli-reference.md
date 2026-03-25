@@ -424,6 +424,7 @@ orchestrator event cleanup --archive          # 删除前归档为 JSONL
 orchestrator trigger suspend <name>           # 挂起触发器
 orchestrator trigger resume <name>            # 恢复已挂起的触发器
 orchestrator trigger fire <name>              # 手动触发一次
+orchestrator trigger fire <name> --payload '{"key":"value"}'   # 携带 JSON payload 触发
 ```
 
 所有触发器子命令均支持 `--project` 标志用于项目级操作。
@@ -478,6 +479,8 @@ orchestrator check -o json           # 结构化检查输出
 | `--event-archive-enabled` | 清理前将事件归档为 JSONL |
 | `--event-archive-dir <DIR>` | 覆盖事件归档目录 |
 | `--stall-timeout-mins <MINS>` | 运行中项目被视为停滞的分钟数（默认：30，0 = 禁用） |
+| `--webhook-bind <ADDR>` | HTTP webhook 服务绑定地址（未设置则禁用） |
+| `--webhook-secret <SECRET>` | Webhook HMAC-SHA256 签名验证密钥（环境变量：`ORCHESTRATOR_WEBHOOK_SECRET`） |
 
 ### control-plane issue-client
 

@@ -31,11 +31,16 @@ pub(crate) async fn dispatch(
             println!("{}", resp.message);
             Ok(())
         }
-        TriggerCommands::Fire { name, project } => {
+        TriggerCommands::Fire {
+            name,
+            project,
+            payload,
+        } => {
             let resp = client
                 .trigger_fire(orchestrator_proto::TriggerFireRequest {
                     trigger_name: name,
                     project,
+                    payload_json: payload,
                 })
                 .await?
                 .into_inner();

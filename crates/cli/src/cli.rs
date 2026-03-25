@@ -864,6 +864,10 @@ pub enum TriggerCommands {
         /// Optional project override.
         #[arg(short, long)]
         project: Option<String>,
+
+        /// Optional JSON payload (simulates a webhook body).
+        #[arg(long)]
+        payload: Option<String>,
     },
 }
 

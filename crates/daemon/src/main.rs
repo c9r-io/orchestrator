@@ -13,6 +13,7 @@ mod daemonize;
 mod lifecycle;
 mod protection;
 mod server;
+mod webhook;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -77,6 +78,14 @@ struct Args {
     /// Number of days to retain terminated tasks before automatic cleanup (0 = disabled).
     #[arg(long = "task-retention-days", default_value_t = 0)]
     task_retention_days: u32,
+
+    /// Bind address for the HTTP webhook server (disabled if not set).
+    #[arg(long = "webhook-bind")]
+    webhook_bind: Option<String>,
+
+    /// Shared secret for webhook HMAC-SHA256 signature verification.
+    #[arg(long = "webhook-secret", env = "ORCHESTRATOR_WEBHOOK_SECRET")]
+    webhook_secret: Option<String>,
 
     /// Minutes before a running item is considered stalled (0 = disabled).
     #[arg(long = "stall-timeout-mins", default_value_t = 30)]
@@ -492,6 +501,31 @@ fn main() -> Result<()> {
                         }
                     }
                 }
+            });
+        }
+
+        // Spawn webhook HTTP server if configured.
+        if let Some(ref webhook_addr) = args.webhook_bind {
+            let addr: std::net::SocketAddr = webhook_addr
+                .parse()
+                .context("invalid --webhook-bind address")?;
+            let wh_state = webhook::WebhookState {
+                inner: inner.clone(),
+                secret: args.webhook_secret.clone(),
+            };
+            let router = webhook::router(wh_state);
+            let listener = tokio::net::TcpListener::bind(addr)
+                .await
+                .with_context(|| format!("failed to bind webhook on {addr}"))?;
+            info!(%addr, "webhook HTTP server started");
+            let mut wh_shutdown = shutdown_rx.clone();
+            tokio::spawn(async move {
+                axum::serve(listener, router)
+                    .with_graceful_shutdown(async move {
+                        let _ = wh_shutdown.changed().await;
+                    })
+                    .await
+                    .ok();
             });
         }
 
