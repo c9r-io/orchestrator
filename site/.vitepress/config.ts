@@ -12,8 +12,7 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: 'Guide', link: '/en/guide/quickstart' },
-          { text: 'Showcases', link: '/en/showcases/self-evolution-execution-template' },
-          { text: 'Why Orchestrator?', link: '/en/why' },
+          { text: 'Showcases', link: '/en/showcases/benchmark-multi-model-execution' },
         ],
         sidebar: {
           '/en/guide/': [
@@ -56,8 +55,7 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: '指南', link: '/zh/guide/quickstart' },
-          { text: '示例', link: '/zh/showcases/self-evolution-execution-template' },
-          { text: '为什么选择 Orchestrator?', link: '/zh/why' },
+          { text: '示例', link: '/zh/showcases/benchmark-multi-model-execution' },
         ],
         sidebar: {
           '/zh/guide/': [

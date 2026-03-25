@@ -10,8 +10,8 @@ hero:
       text: Get Started
       link: /en/guide/quickstart
     - theme: alt
-      text: Why Orchestrator?
-      link: /en/why
+      text: Showcases
+      link: /en/showcases/benchmark-multi-model-execution
     - theme: alt
       text: GitHub
       link: https://github.com/c9r-io/orchestrator
