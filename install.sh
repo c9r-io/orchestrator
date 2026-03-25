@@ -157,8 +157,17 @@ skills_url="${base_url}/${skills_archive}"
 if curl -fsSL --head "$skills_url" >/dev/null 2>&1; then
   curl -fsSL "$skills_url" -o "${tmp_dir}/${skills_archive}"
   log "installing orchestrator skills"
-  # Extract .claude/skills/ into the current working directory so that
-  # Claude Code picks them up when the user opens any project.
   tar -xzf "${tmp_dir}/${skills_archive}" -C "."
   log "installed orchestrator-guide skill to .claude/skills/"
+fi
+
+# Install skill templates to ~/.orchestratord/skill-templates/ if available
+templates_archive="orchestrator-skill-templates-${release_tag}.tar.gz"
+templates_url="${base_url}/${templates_archive}"
+data_dir="${ORCHESTRATORD_DATA_DIR:-$HOME/.orchestratord}"
+if curl -fsSL --head "$templates_url" >/dev/null 2>&1; then
+  curl -fsSL "$templates_url" -o "${tmp_dir}/${templates_archive}"
+  mkdir -p "${data_dir}"
+  tar -xzf "${tmp_dir}/${templates_archive}" -C "${data_dir}"
+  log "installed skill templates to ${data_dir}/skill-templates/"
 fi
