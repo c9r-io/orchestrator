@@ -14,7 +14,7 @@ DST="skill-templates"
 echo "Packaging skill templates..."
 
 # ── Generic skills (no sanitization needed) ──────────────────────────────────
-for skill in performance-testing playwright-cli project-bootstrap; do
+for skill in performance-testing project-bootstrap; do
   if [[ -d "$SRC/$skill" ]]; then
     rm -rf "$DST/generic/$skill"
     cp -r "$SRC/$skill" "$DST/generic/$skill"

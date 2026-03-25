@@ -14,7 +14,7 @@
 skill-templates/
 ├── generic/              # 通用（任何项目）
 │   ├── performance-testing/
-│   ├── playwright-cli/
+│
 │   └── project-bootstrap/
 ├── framework/            # 框架相关（根据项目技术栈选择）
 │   ├── align-tests/
@@ -58,7 +58,7 @@ ls docs/qa/ 2>/dev/null && echo "QA docs found"
 
 | 条件 | 安装的 Skills |
 |------|---------------|
-| 任何项目 | `performance-testing`, `playwright-cli` |
+| 任何项目 | `performance-testing` |
 | 有 `Cargo.toml` | `rust-conventions`, `align-tests`, `test-coverage`, `test-authoring` |
 | 有 `package.json` | `e2e-testing`, `test-authoring` |
 | 有 `docker-compose.yml` | `ops`, `reset-local-env` |
