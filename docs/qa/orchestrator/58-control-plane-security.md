@@ -55,7 +55,7 @@ Related paths:
 ## Scenario 1: Secure TCP Bootstrap Generates Server And Client Materials
 
 ### Preconditions
-- Repository root: `/Volumes/Yotta/ai_native_sdlc`
+- Repository root: `$ORCHESTRATOR_ROOT`
 - Release binaries built:
   ```bash
   cargo build --release -p orchestratord -p orchestrator-cli

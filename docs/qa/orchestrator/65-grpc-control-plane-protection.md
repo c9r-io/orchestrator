@@ -51,7 +51,7 @@ Related paths:
 ## Scenario 1: Secure TCP Bootstrap Generates Protection Config With Defaults
 
 ### Preconditions
-- Repository root: `/Volumes/Yotta/ai_native_sdlc`
+- Repository root: `$ORCHESTRATOR_ROOT`
 - Release binaries built:
   ```bash
   cargo build --release -p orchestratord -p orchestrator-cli
@@ -70,7 +70,7 @@ Verify secure TCP startup bootstraps `protection.yaml` alongside the existing co
 1. Start the secure daemon from the isolated app root:
    ```bash
    cd "$QA_ROOT"
-   /Volumes/Yotta/ai_native_sdlc/target/release/orchestratord --foreground --bind 127.0.0.1:51051 --workers 1 > daemon.log 2>&1 &
+   $ORCHESTRATOR_ROOT/target/release/orchestratord --foreground --bind 127.0.0.1:51051 --workers 1 > daemon.log 2>&1 &
    DAEMON_PID=$!
    sleep 3
    ```
@@ -138,17 +138,17 @@ Verify two rapid `TaskList` calls from the same secure client hit the subject-sc
 1. Start the secure daemon:
    ```bash
    cd "$QA_ROOT"
-   /Volumes/Yotta/ai_native_sdlc/target/release/orchestratord --foreground --bind 127.0.0.1:51052 --workers 1 > daemon.log 2>&1 &
+   $ORCHESTRATOR_ROOT/target/release/orchestratord --foreground --bind 127.0.0.1:51052 --workers 1 > daemon.log 2>&1 &
    DAEMON_PID=$!
    sleep 3
    ```
 2. Execute the first read call:
    ```bash
-   /Volumes/Yotta/ai_native_sdlc/target/release/orchestrator task list -o json
+   $ORCHESTRATOR_ROOT/target/release/orchestrator task list -o json
    ```
 3. Immediately execute the second read call:
    ```bash
-   /Volumes/Yotta/ai_native_sdlc/target/release/orchestrator task list -o json 2>&1 | tee second-read.log
+   $ORCHESTRATOR_ROOT/target/release/orchestrator task list -o json 2>&1 | tee second-read.log
    ```
 4. Inspect the latest audit rows:
    ```bash
@@ -220,19 +220,19 @@ Verify `TaskWatch` consumes a stream permit until disconnect and the second conc
 1. Start the secure daemon:
    ```bash
    cd "$QA_ROOT"
-   /Volumes/Yotta/ai_native_sdlc/target/release/orchestratord --foreground --bind 127.0.0.1:51053 --workers 1 > daemon.log 2>&1 &
+   $ORCHESTRATOR_ROOT/target/release/orchestratord --foreground --bind 127.0.0.1:51053 --workers 1 > daemon.log 2>&1 &
    DAEMON_PID=$!
    sleep 3
    ```
 2. Apply the mock fixture into the isolated daemon:
    ```bash
-   /Volumes/Yotta/ai_native_sdlc/target/release/orchestrator apply \
-     -f /Volumes/Yotta/ai_native_sdlc/fixtures/manifests/bundles/pause-resume-workflow.yaml \
+   $ORCHESTRATOR_ROOT/target/release/orchestrator apply \
+     -f $ORCHESTRATOR_ROOT/fixtures/manifests/bundles/pause-resume-workflow.yaml \
      --project qa-protect-watch
    ```
 3. Create a pending task:
    ```bash
-   TASK_ID=$(/Volumes/Yotta/ai_native_sdlc/target/release/orchestrator task create \
+   TASK_ID=$($ORCHESTRATOR_ROOT/target/release/orchestrator task create \
      --project qa-protect-watch \
      --workflow qa_sleep \
      --name "watch-hold" \
@@ -242,13 +242,13 @@ Verify `TaskWatch` consumes a stream permit until disconnect and the second conc
    ```
 4. Open the first watch in the background (with timeout to prevent stalling):
    ```bash
-   /Volumes/Yotta/ai_native_sdlc/target/release/orchestrator task watch "$TASK_ID" --interval 1 --timeout 30 > first-watch.log 2>&1 &
+   $ORCHESTRATOR_ROOT/target/release/orchestrator task watch "$TASK_ID" --interval 1 --timeout 30 > first-watch.log 2>&1 &
    WATCH_PID=$!
    sleep 2
    ```
 5. Attempt a second watch from the same client (with timeout):
    ```bash
-   /Volumes/Yotta/ai_native_sdlc/target/release/orchestrator task watch "$TASK_ID" --interval 1 --timeout 10 2>&1 | tee second-watch.log || true
+   $ORCHESTRATOR_ROOT/target/release/orchestrator task watch "$TASK_ID" --interval 1 --timeout 10 2>&1 | tee second-watch.log || true
    ```
 6. Query audit rows, then clean up:
    ```bash
@@ -308,17 +308,17 @@ Verify UDS mode is not exempt from protection and falls back to a non-subject id
 1. Start the daemon in default UDS mode:
    ```bash
    cd "$QA_ROOT"
-   /Volumes/Yotta/ai_native_sdlc/target/release/orchestratord --foreground --workers 1 > daemon.log 2>&1 &
+   $ORCHESTRATOR_ROOT/target/release/orchestratord --foreground --workers 1 > daemon.log 2>&1 &
    DAEMON_PID=$!
    sleep 3
    ```
 2. Execute the first UDS read:
    ```bash
-   /Volumes/Yotta/ai_native_sdlc/target/release/orchestrator task list -o json
+   $ORCHESTRATOR_ROOT/target/release/orchestrator task list -o json
    ```
 3. Immediately execute the second UDS read:
    ```bash
-   /Volumes/Yotta/ai_native_sdlc/target/release/orchestrator task list -o json 2>&1 | tee uds-second-read.log
+   $ORCHESTRATOR_ROOT/target/release/orchestrator task list -o json 2>&1 | tee uds-second-read.log
    ```
 4. Inspect audit rows:
    ```bash
@@ -352,7 +352,7 @@ LIMIT 2;
 ## Scenario 5: Secure TCP Pressure Script Rejects Fast And Preserves Daemon Availability
 
 ### Preconditions
-- Repository root: `/Volumes/Yotta/ai_native_sdlc`
+- Repository root: `$ORCHESTRATOR_ROOT`
 - Release binaries built:
   ```bash
   cargo build --release -p orchestratord -p orchestrator-cli
@@ -364,7 +364,7 @@ Verify the middleware-based protection stack rejects excess `TaskList`, `TaskWat
 ### Steps
 1. Run the pressure script:
    ```bash
-   cd /Volumes/Yotta/ai_native_sdlc
+   cd $ORCHESTRATOR_ROOT
    scripts/qa/test-fr013-control-plane-protection.sh
    ```
 2. Observe the emitted audit sample at the end of the script.

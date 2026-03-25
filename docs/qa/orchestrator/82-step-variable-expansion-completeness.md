@@ -38,7 +38,7 @@ Design doc: `docs/design_doc/orchestrator/43-step-variable-expansion-governance.
 
 ### Preconditions
 - Rust toolchain is available
-- Repository root is `/Volumes/Yotta/c9r-io/orchestrator`
+- Repository root is `$ORCHESTRATOR_ROOT`
 
 ### Goal
 Verify the low-level template helpers fully replace basic placeholders and preserve expected behavior for empty ticket lists and shared-state helpers.
@@ -134,7 +134,7 @@ Verify runtime prompt-to-command propagation expands spill-file placeholders suc
 ## Scenario 4: Every Known Step ID Maps to a Covered Rendering Entry Point
 
 ### Preconditions
-- Repository root is `/Volumes/Yotta/c9r-io/orchestrator`
+- Repository root is `$ORCHESTRATOR_ROOT`
 - Mock fixture manifests are available
 
 ### Goal

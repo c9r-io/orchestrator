@@ -8,7 +8,7 @@ Implemented
 
 `self-evolution` workflow relies on `evo_benchmark` producing a numeric score per candidate and `item_select` choosing the highest `score`.
 
-Before this change, [`docs/workflow/self-evolution.yaml`](/Volumes/Yotta/c9r-io/orchestrator/docs/workflow/self-evolution.yaml) captured:
+Before this change, [`docs/workflow/self-evolution.yaml`](docs/workflow/self-evolution.yaml) captured:
 
 ```yaml
 - var: score
@@ -25,7 +25,7 @@ Extend capture declarations with an optional `json_path` and apply it to `stdout
 
 ### Capture Schema
 
-[`core/src/config/step.rs`](/Volumes/Yotta/c9r-io/orchestrator/core/src/config/step.rs) now defines:
+[`core/src/config/step.rs`](core/src/config/step.rs) now defines:
 
 - `CaptureDecl.var`
 - `CaptureDecl.source`
@@ -35,7 +35,7 @@ The field is optional and omitted by default, so existing workflows keep their c
 
 ### Runtime Extraction
 
-[`core/src/scheduler/item_executor/accumulator.rs`](/Volumes/Yotta/c9r-io/orchestrator/core/src/scheduler/item_executor/accumulator.rs) now:
+[`core/src/scheduler/item_executor/accumulator.rs`](core/src/scheduler/item_executor/accumulator.rs) now:
 
 1. preserves legacy raw capture behavior when `json_path` is absent
 2. for `stdout`/`stderr + json_path`, resolves stream-json `result` payloads first
@@ -46,17 +46,17 @@ This keeps the scheduler non-fatal for malformed agent output while allowing dow
 
 ### Shared Stream-JSON Helper
 
-[`core/src/json_extract.rs`](/Volumes/Yotta/c9r-io/orchestrator/core/src/json_extract.rs) now owns `extract_stream_json_result()`, and [`core/src/scheduler/item_generate.rs`](/Volumes/Yotta/c9r-io/orchestrator/core/src/scheduler/item_generate.rs) reuses the same helper.
+[`core/src/json_extract.rs`](core/src/json_extract.rs) now owns `extract_stream_json_result()`, and [`core/src/scheduler/item_generate.rs`](core/src/scheduler/item_generate.rs) reuses the same helper.
 
 This removes duplicate parsing logic and keeps stream-json handling consistent between dynamic item generation and capture extraction.
 
 ### Validation Guardrail
 
-[`core/src/config_load/validate/workflow_steps.rs`](/Volumes/Yotta/c9r-io/orchestrator/core/src/config_load/validate/workflow_steps.rs) now rejects `json_path` on unsupported capture sources such as `exit_code`, `failed_flag`, or `success_flag`.
+[`core/src/config_load/validate/workflow_steps.rs`](core/src/config_load/validate/workflow_steps.rs) now rejects `json_path` on unsupported capture sources such as `exit_code`, `failed_flag`, or `success_flag`.
 
 ### Workflow Update
 
-[`docs/workflow/self-evolution.yaml`](/Volumes/Yotta/c9r-io/orchestrator/docs/workflow/self-evolution.yaml) now captures:
+[`docs/workflow/self-evolution.yaml`](docs/workflow/self-evolution.yaml) now captures:
 
 ```yaml
 - var: score
@@ -76,7 +76,7 @@ That aligns the workflow with the benchmark agent contract.
 
 ## Verification
 
-- `PROTOC=/Volumes/Yotta/c9r-io/orchestrator/target/debug/build/protobuf-src-4bb380d39c3cf831/out/bin/protoc cargo test --workspace`
-- `PROTOC=/Volumes/Yotta/c9r-io/orchestrator/target/debug/build/protobuf-src-4bb380d39c3cf831/out/bin/protoc cargo clippy --workspace --all-targets -- -D warnings`
+- `PROTOC=target/debug/build/protobuf-src-4bb380d39c3cf831/out/bin/protoc cargo test --workspace`
+- `PROTOC=target/debug/build/protobuf-src-4bb380d39c3cf831/out/bin/protoc cargo clippy --workspace --all-targets -- -D warnings`
 
 Both checks passed on 2026-03-12.

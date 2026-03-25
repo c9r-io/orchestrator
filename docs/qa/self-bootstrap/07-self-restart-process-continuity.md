@@ -58,7 +58,7 @@ Verify that the unit tests for `execute_self_restart_step` pass: build succeeds,
 ### Steps
 1. Run the self_restart success unit test:
    ```bash
-   cd /Volumes/Yotta/ai_native_sdlc/core
+   cd $ORCHESTRATOR_ROOT/core
    cargo test --lib -- --test-threads=1 test_execute_self_restart_step_success_returns_exit_restart 2>&1
    ```
 2. Verify it passes.
@@ -85,7 +85,7 @@ Verify that when `cargo build --release` fails, `execute_self_restart_step` retu
 ### Steps
 1. Run the build failure unit test:
    ```bash
-   cd /Volumes/Yotta/ai_native_sdlc/core
+   cd $ORCHESTRATOR_ROOT/core
    cargo test --lib -- --test-threads=1 test_execute_self_restart_step_build_fails 2>&1
    ```
 2. Verify it passes.
@@ -108,7 +108,7 @@ Verify that `prepare_task_for_start_batch` handles `restart_pending` status by t
 ### Steps
 1. Run the restart_pending preservation test:
    ```bash
-   cd /Volumes/Yotta/ai_native_sdlc/core
+   cd $ORCHESTRATOR_ROOT/core
    cargo test --lib -- --test-threads=1 prepare_task_restart_pending_preserves_items 2>&1
    ```
 2. Run the status behavior test:
@@ -143,7 +143,7 @@ Verify that the worker's `claim_next_pending_task` picks up `restart_pending` ta
 ### Steps
 1. Run the priority claiming test:
    ```bash
-   cd /Volumes/Yotta/ai_native_sdlc/core
+   cd $ORCHESTRATOR_ROOT/core
    cargo test --lib -- --test-threads=1 claim_next_prioritizes_restart_pending 2>&1
    ```
 2. Run the resumability test:
@@ -169,7 +169,7 @@ LIMIT 1;
 ## Scenario 5: Daemon Restart Loop and Step Registration
 
 ### Preconditions
-- Repository checked out at `/Volumes/Yotta/ai_native_sdlc`
+- Repository checked out at `$ORCHESTRATOR_ROOT`
 - `orchestratord` binary is available with `exec()` self-replacement support (exit code 75 fallback)
 
 ### Goal
@@ -179,7 +179,7 @@ Verify that (a) the daemon handles restart via `exec()` self-replacement (with e
 1. Verify the daemon handles restart via `exec()` self-replacement (built into `orchestratord`).
 2. Verify self_restart is registered as a known step and builtin:
    ```bash
-   cd /Volumes/Yotta/ai_native_sdlc/core
+   cd $ORCHESTRATOR_ROOT/core
    cargo test --lib -- test_validate_step_type_known_ids 2>&1
    ```
 3. Verify self_restart appears in the workflow YAML after self_test:

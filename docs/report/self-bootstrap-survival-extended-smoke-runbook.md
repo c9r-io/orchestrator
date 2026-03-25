@@ -1,7 +1,7 @@
 # Self-Bootstrap Survival Extended Smoke Runbook
 
 Date baseline: 2026-02-27
-Repository: `/Volumes/Yotta/ai_native_sdlc`
+Repository: `$ORCHESTRATOR_ROOT`
 Entry CLI: `orchestrator`
 
 This runbook is a **high-cost, high-confidence** extension of
@@ -78,7 +78,7 @@ If cleanup fails, stop and restore `core/src/lib.rs` before continuing any other
 Run from repo root:
 
 ```bash
-cd /Volumes/Yotta/ai_native_sdlc
+cd "$ORCHESTRATOR_ROOT"
 ```
 
 ### 4.1 Build And Baseline

@@ -1,7 +1,7 @@
 # Self-Bootstrap Smoke Runbook
 
 Date baseline: 2026-02-26  
-Repository: `/Volumes/Yotta/ai_native_sdlc`  
+Repository: `$ORCHESTRATOR_ROOT`  
 Entry CLI: `orchestrator`
 
 This document records a reproducible smoke process for orchestrator self-bootstrap and can be reused in future sessions.
@@ -27,7 +27,7 @@ Primary smoke chain:
 Run from repo root:
 
 ```bash
-cd /Volumes/Yotta/ai_native_sdlc
+cd "$ORCHESTRATOR_ROOT"
 ```
 
 Ensure runtime is clean:

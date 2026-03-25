@@ -1,7 +1,7 @@
 # Self-Bootstrap Survival Smoke Runbook
 
 Date baseline: 2026-03-08
-Repository: `/Volumes/Yotta/ai_native_sdlc`
+Repository: `$ORCHESTRATOR_ROOT`
 Entry CLI: `orchestrator`
 
 This runbook is a reproducible, copy-paste oriented smoke process that validates
@@ -33,7 +33,7 @@ Evidence sources:
 Run from repo root:
 
 ```bash
-cd /Volumes/Yotta/ai_native_sdlc
+cd "$ORCHESTRATOR_ROOT"
 ```
 
 ### 2.1 Build and Verify CLI

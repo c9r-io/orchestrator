@@ -10,7 +10,7 @@ Create, update, or extend integration manifest packages in the companion `orches
 ## Repository Layout
 
 ```
-/Users/chenhan/c9r-io/
+<org-root>/
 ├── orchestrator/                  # Main project (this repo)
 │   ├── crates/                    # Core engine code
 │   ├── docs/showcases/            # Execution plans
