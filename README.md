@@ -47,7 +47,7 @@ orchestrator task logs <task_id>
 
 ## Documentation
 
-Full documentation: **[docs site](https://c9r-io.github.io/orchestrator/)** (EN / ZH)
+Full documentation: **[docs.c9r.io](https://docs.c9r.io)** (EN / ZH)
 
 - [Quick Start](docs/guide/01-quickstart.md)
 - [Resource Model](docs/guide/02-resource-model.md)
