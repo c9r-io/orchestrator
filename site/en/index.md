@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Agent Orchestrator
   text: Built for Agents, by Agents
-  tagline: An orchestration platform that enables any shell-based AI agent to collaborate on complex, multi-step software development tasks through declarative YAML manifests.
+  tagline: An orchestration platform that enables any shell-based AI agent to collaborate on complex, multi-step software development tasks through Kubernetes-style YAML manifests.
   actions:
     - theme: brand
       text: Get Started
@@ -19,7 +19,7 @@ hero:
 features:
   - icon: "\U0001F916"
     title: Agent-First Design
-    details: CLI outputs machine-parseable JSON, configuration is declarative YAML, and skills provide structured plans that agents follow autonomously. Any shell-based agent can participate.
+    details: CLI outputs machine-parseable JSON, configuration is Kubernetes-style YAML, and skills provide structured plans that agents follow autonomously. Any shell-based agent can participate.
   - icon: "\U0001F91D"
     title: Multi-Agent Collaboration
     details: Agents with different capabilities (plan, implement, test, review) collaborate through the orchestrator. Capability matching, health scoring, and rotation are built in.

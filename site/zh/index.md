@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Agent Orchestrator
   text: 为 Agent 而生，由 Agent 驱动
-  tagline: 一个编排平台，让任何基于 Shell 的 AI Agent 可以通过声明式 YAML 清单协作完成复杂的多步骤软件开发任务。
+  tagline: 一个编排平台，让任何基于 Shell 的 AI Agent 可以通过 Kubernetes 风格的 YAML 清单协作完成复杂的多步骤软件开发任务。
   actions:
     - theme: brand
       text: 快速开始
@@ -19,7 +19,7 @@ hero:
 features:
   - icon: "\U0001F916"
     title: Agent 优先设计
-    details: CLI 输出机器可解析的 JSON，配置是声明式 YAML，Skills 提供结构化的执行计划供 Agent 自主遵循。任何基于 Shell 的 Agent 都可以参与协作。
+    details: CLI 输出机器可解析的 JSON，配置是 Kubernetes 风格的 YAML（apiVersion、kind、metadata、spec），Skills 提供结构化的执行计划供 Agent 自主遵循。任何基于 Shell 的 Agent 都可以参与协作。
   - icon: "\U0001F91D"
     title: 多 Agent 协作
     details: 具备不同能力的 Agent（规划、实现、测试、审查）通过编排器协作。内置能力匹配、健康评分和轮换机制。

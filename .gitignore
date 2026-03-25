@@ -20,3 +20,4 @@ fixtures/*/*.md
 node_modules/
 tmp/
 .wrangler/
+docs/promotion/

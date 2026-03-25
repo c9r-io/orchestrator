@@ -1,8 +1,13 @@
 # Agent Orchestrator
 
-An orchestration platform **built for AI agents, by AI agents**. It enables any shell-based agent (Claude Code, OpenCode, Codex, Gemini CLI, etc.) to collaborate on complex, multi-step software development tasks through declarative YAML manifests.
+[![CI](https://github.com/c9r-io/orchestrator/actions/workflows/ci.yml/badge.svg)](https://github.com/c9r-io/orchestrator/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/orchestrator-cli.svg)](https://crates.io/crates/orchestrator-cli)
+[![docs](https://img.shields.io/badge/docs-docs.c9r.io-blue)](https://docs.c9r.io)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-While human developers can use it directly via the CLI, the platform is designed agent-first: the CLI is machine-parseable, configuration is declarative YAML (no imperative code), and the skill system provides structured context that agents can discover and follow autonomously.
+An orchestration platform **built for AI agents, by AI agents**. It enables any shell-based agent (Claude Code, OpenCode, Codex, Gemini CLI, etc.) to collaborate on complex, multi-step software development tasks through Kubernetes-style YAML manifests.
+
+While human developers can use it directly via the CLI, the platform is designed agent-first: the CLI is machine-parseable, configuration is Kubernetes-style YAML (apiVersion, kind, metadata, spec — no imperative code), and the skill system provides structured context that agents can discover and follow autonomously.
 
 ```
 orchestrator (CLI) ──gRPC/UDS──> orchestratord (daemon)
