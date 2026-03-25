@@ -23,11 +23,13 @@ Orchestrator 在 `~/.orchestratord/` 下持久化运行时数据（SQLite DB、s
 
 ## 需求
 
-### 1. 日志文件 TTL 清理
+### 1. 日志文件 TTL 清理（默认启用，自动无感）
 
 - Daemon 后台定期扫描 `~/.orchestratord/logs/` 下的 stdout/stderr 日志文件
 - 清理已终结 task（completed/failed/cancelled）且创建超过 N 天的日志文件
+- **默认 30 天**，与 event retention 一致，开箱即用无需配置
 - 可配置：`--log-retention-days <DAYS>`（默认 30，0=禁用）
+- 复用现有 event cleanup sweep 定时器（`--event-cleanup-interval-secs`，默认 3600）
 - CLI 手动触发：`orchestrator db cleanup --logs`
 
 ### 2. SQLite VACUUM
