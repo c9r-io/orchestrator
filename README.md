@@ -54,6 +54,12 @@ orchestrator task logs <task_id>
 - **Showcases** — `docs/showcases/` contain end-to-end execution plans designed for agents to read and execute
 - **Any shell agent** — Any tool that accepts a prompt and runs shell commands can be an orchestrator agent
 
+## Integrations
+
+Pre-configured webhook trigger packages for external platforms: **[orchestrator-integrations](https://github.com/c9r-io/orchestrator-integrations)**
+
+Slack, GitHub, LINE — each with per-trigger signature verification, CEL payload filtering, and setup guides. Add new integrations via the `/integration-authoring` skill.
+
 ## Key Features
 
 - **Declarative workflows** — YAML manifests with loop control, guard steps, DAG execution
