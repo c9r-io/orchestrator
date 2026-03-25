@@ -6,6 +6,7 @@ use anyhow::Result;
 use std::io;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)] // Variants are platform-specific; not all used on every OS.
 pub(crate) enum SandboxBackend {
     Host,
     MacosSeatbelt,

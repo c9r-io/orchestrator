@@ -119,7 +119,7 @@ pub fn print_event_list(events: &[Event], format: OutputFormat) {
                 println!("No events found.");
                 return;
             }
-            println!("{:<8} {:<28} {:<60} {}", "ID", "TYPE", "PAYLOAD", "CREATED");
+            println!("{:<8} {:<28} {:<60} CREATED", "ID", "TYPE", "PAYLOAD");
             for e in events {
                 let payload = if e.payload_json.len() > 58 {
                     format!("{}...", &e.payload_json[..55])
