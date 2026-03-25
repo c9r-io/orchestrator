@@ -1,6 +1,8 @@
 # Agent Orchestrator
 
-AI-native SDLC automation — declarative workflow and agent orchestration for the entire software development lifecycle.
+An orchestration platform **built for AI agents, by AI agents**. It enables any shell-based agent (Claude Code, OpenCode, Codex, Gemini CLI, etc.) to collaborate on complex, multi-step software development tasks through declarative YAML manifests.
+
+While human developers can use it directly via the CLI, the platform is designed agent-first: the CLI is machine-parseable, configuration is declarative YAML (no imperative code), and the skill system provides structured context that agents can discover and follow autonomously.
 
 ```
 orchestrator (CLI) ──gRPC/UDS──> orchestratord (daemon)
@@ -36,6 +38,14 @@ orchestrator task create --goal "My first QA run"
 orchestrator task list
 orchestrator task logs <task_id>
 ```
+
+## Agent-First Design
+
+- **CLI** — Machine-parseable output (`-o json`), structured error codes, no interactive prompts
+- **Manifests** — Declarative YAML, no imperative code; agents read and apply without interpretation
+- **Skills** — `.claude/skills/` provide structured execution plans that agents follow autonomously
+- **Showcases** — `docs/showcases/` contain end-to-end execution plans designed for agents to read and execute
+- **Any shell agent** — Any tool that accepts a prompt and runs shell commands can be an orchestrator agent
 
 ## Key Features
 

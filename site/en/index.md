@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Agent Orchestrator
-  text: AI-native SDLC Automation
-  tagline: Declarative workflow and agent orchestration for the entire software development lifecycle — from requirements to deployment.
+  text: Built for Agents, by Agents
+  tagline: An orchestration platform that enables any shell-based AI agent to collaborate on complex, multi-step software development tasks through declarative YAML manifests.
   actions:
     - theme: brand
       text: Get Started
@@ -17,24 +17,24 @@ hero:
       link: https://github.com/c9r-io/orchestrator
 
 features:
+  - icon: "\U0001F916"
+    title: Agent-First Design
+    details: CLI outputs machine-parseable JSON, configuration is declarative YAML, and skills provide structured plans that agents follow autonomously. Any shell-based agent can participate.
+  - icon: "\U0001F91D"
+    title: Multi-Agent Collaboration
+    details: Agents with different capabilities (plan, implement, test, review) collaborate through the orchestrator. Capability matching, health scoring, and rotation are built in.
   - icon: "\U0001F4CB"
     title: Declarative Workflows
-    details: Define multi-step workflows in YAML with loop control, guard steps, DAG execution, and dynamic step pools.
-  - icon: "\U0001F916"
-    title: Agent Orchestration
-    details: Capability-driven agent selection with health scoring, rotation, and metrics-based load balancing.
+    details: Define multi-step workflows in YAML with loop control, guard steps, DAG execution, and dynamic step pools. No imperative code needed.
   - icon: "\u26A1"
     title: CEL Prehooks
     details: Dynamic control flow via CEL expressions — Run, Skip, Branch, DynamicAdd, and Transform decisions at runtime.
   - icon: "\U0001F512"
     title: Built-in Security
     details: mTLS authentication, RBAC authorization, sandbox enforcement (macOS Seatbelt / Linux namespaces), and output redaction.
-  - icon: "\U0001F680"
-    title: Client/Server Architecture
-    details: Lightweight CLI client communicates with the daemon over gRPC/UDS. Embedded workers, SQLite persistence, hot-reloadable config.
   - icon: "\U0001F310"
-    title: Multi-platform
-    details: "Install via curl | sh, brew install, or cargo install. Supports macOS (ARM64) and Linux (x86_64, ARM64)."
+    title: Any Agent, Any Model
+    details: "Claude Code, OpenCode, Codex, Gemini CLI — any tool that accepts a prompt and runs shell commands can be an orchestrator agent. Switch models via environment variables."
 ---
 
 ## Quick Start

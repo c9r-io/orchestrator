@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Agent Orchestrator
-  text: AI 原生 SDLC 自动化
-  tagline: 声明式工作流与 Agent 编排，覆盖从需求到部署的完整软件开发生命周期。
+  text: 为 Agent 而生，由 Agent 驱动
+  tagline: 一个编排平台，让任何基于 Shell 的 AI Agent 可以通过声明式 YAML 清单协作完成复杂的多步骤软件开发任务。
   actions:
     - theme: brand
       text: 快速开始
@@ -17,24 +17,24 @@ hero:
       link: https://github.com/c9r-io/orchestrator
 
 features:
+  - icon: "\U0001F916"
+    title: Agent 优先设计
+    details: CLI 输出机器可解析的 JSON，配置是声明式 YAML，Skills 提供结构化的执行计划供 Agent 自主遵循。任何基于 Shell 的 Agent 都可以参与协作。
+  - icon: "\U0001F91D"
+    title: 多 Agent 协作
+    details: 具备不同能力的 Agent（规划、实现、测试、审查）通过编排器协作。内置能力匹配、健康评分和轮换机制。
   - icon: "\U0001F4CB"
     title: 声明式工作流
-    details: 通过 YAML 定义多步骤工作流，支持循环控制、守卫步骤、DAG 执行和动态步骤池。
-  - icon: "\U0001F916"
-    title: Agent 编排
-    details: 基于能力的 Agent 选择，配合健康评分、轮换策略和指标驱动的负载均衡。
+    details: 通过 YAML 定义多步骤工作流，支持循环控制、守卫步骤、DAG 执行和动态步骤池。无需编写命令式代码。
   - icon: "\u26A1"
     title: CEL 前置钩子
     details: 通过 CEL 表达式实现动态控制流 — 运行时决策：Run、Skip、Branch、DynamicAdd、Transform。
   - icon: "\U0001F512"
     title: 内置安全
     details: mTLS 认证、RBAC 授权、沙箱执行（macOS Seatbelt / Linux 命名空间）、输出脱敏。
-  - icon: "\U0001F680"
-    title: 客户端/服务端架构
-    details: 轻量级 CLI 通过 gRPC/UDS 与守护进程通信。内嵌 Worker、SQLite 持久化、配置热加载。
   - icon: "\U0001F310"
-    title: 多平台支持
-    details: "通过 curl | sh、brew install 或 cargo install 安装。支持 macOS (ARM64) 和 Linux (x86_64, ARM64)。"
+    title: 任意 Agent，任意模型
+    details: "Claude Code、OpenCode、Codex、Gemini CLI — 任何接受 prompt 并执行 Shell 命令的工具都可以作为编排器 Agent。通过环境变量切换模型。"
 ---
 
 ## 快速开始
