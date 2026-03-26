@@ -2,7 +2,7 @@
 
 ## 优先级: P1
 
-## 状态: Proposed
+## 状态: In Progress
 
 ## 背景
 
@@ -30,13 +30,13 @@ spec:
         - modify            # 文件修改（可选）
         - delete            # 文件删除（可选）
       debounce_ms: 500      # 防抖窗口（默认 500ms）
-    filter: "event.filename.matches('^FR-.*\\\\.md$')"  # CEL 过滤：文件名匹配
+    filter:
+      condition: "payload_event_type == 'create' && payload_filename.matches('^FR-.*\\\\.md$')"
   action:
     workflow: fr_governance
     workspace: default
-    goal: "Triage newly created feature request: {event.filename}"
     start: true
-  concurrency_policy: Forbid
+  concurrencyPolicy: Forbid
 ```
 
 > **设计原则：核心只提供原子事件变量，过滤逻辑统一由 CEL 承载。** 不在 `filesystem` 配置中引入 glob 参数 — glob 匹配等价于 `event.filename.matches(regex)`，复用已有的 CEL filter 通道即可，避免核心 API 面膨胀。
@@ -84,16 +84,16 @@ filesystem 事件应将以下信息注入 CEL filter 和 action 模板变量：
 
 ## 验收标准
 
-- [ ] `event.source: filesystem` 通过 manifest validate
-- [ ] 无 filesystem trigger 时 daemon 不创建 watcher（零开销）
-- [ ] apply 首个 filesystem trigger 后 watcher 启动
-- [ ] 在监控目录创建匹配文件时自动创建 task
-- [ ] CEL filter 可访问 `event.path`、`event.filename`、`event.event_type`
-- [ ] 防抖机制生效：500ms 内同文件多次事件只触发一次
-- [ ] 路径安全约束：拒绝 `root_path` 外的路径
-- [ ] `trigger suspend/resume` 正确暂停/恢复文件监控；suspend 最后一个 trigger 释放 watcher
-- [ ] Trigger 删除时清理 watcher 资源
-- [ ] Agent 在非监控目录批量写文件时不产生任何 filesystem 事件
+- [x] `event.source: filesystem` 通过 manifest validate
+- [x] 无 filesystem trigger 时 daemon 不创建 watcher（零开销）
+- [x] apply 首个 filesystem trigger 后 watcher 启动
+- [ ] 在监控目录创建匹配文件时自动创建 task（需 daemon 集成测试验证）
+- [x] CEL filter 可访问 `payload_path`、`payload_filename`、`payload_event_type`
+- [ ] 防抖机制生效：500ms 内同文件多次事件只触发一次（需 daemon 集成测试验证）
+- [x] 路径安全约束：拒绝 `root_path` 外的路径
+- [x] `trigger suspend/resume` 正确暂停/恢复文件监控；suspend 最后一个 trigger 释放 watcher
+- [x] Trigger 删除时清理 watcher 资源
+- [x] Agent 在非监控目录批量写文件时不产生任何 filesystem 事件
 
 ## 风险
 

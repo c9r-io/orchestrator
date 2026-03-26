@@ -69,7 +69,7 @@
 | FR-082 | 集成 Manifest 包 — Slack / GitHub / Line 预制配置 | P2 | Closed |
 | FR-083 | CRD 插件系统 — Webhook 拦截器与自动化生命周期 | P3 | Proposed |
 | FR-084 | Agent 条件命令规则 + Session 复用 | P1 | Closed |
-| FR-085 | Filesystem Trigger — 文件系统变更原生触发器 | P1 | Proposed |
+| FR-085 | Filesystem Trigger — 文件系统变更原生触发器 | P1 | In Progress |
 
 ## 说明
 

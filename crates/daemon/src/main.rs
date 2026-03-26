@@ -10,6 +10,7 @@
 
 mod control_plane;
 mod daemonize;
+mod fs_watcher;
 mod lifecycle;
 mod protection;
 mod server;
@@ -339,6 +340,19 @@ fn main() -> Result<()> {
             let trig_shutdown = shutdown_rx.clone();
             tokio::spawn(async move {
                 engine.run(trig_shutdown).await;
+            });
+        }
+
+        // Spawn filesystem watcher (lazy — only activates when source: filesystem triggers exist)
+        {
+            let (fs_handle, fs_reload_rx) = fs_watcher::new_handle();
+            if let Ok(mut guard) = inner.fs_watcher_reload_tx.lock() {
+                *guard = Some(fs_handle.reload_tx.clone());
+            }
+            let fs_state = inner.clone();
+            let fs_shutdown = shutdown_rx.clone();
+            tokio::spawn(async move {
+                fs_watcher::run_fs_watcher(fs_state, fs_reload_rx, fs_shutdown).await;
             });
         }
 

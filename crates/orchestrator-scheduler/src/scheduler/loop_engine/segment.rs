@@ -280,7 +280,9 @@ pub(super) async fn execute_item_segment(
             }
 
             // FR-035 L1: Track per-item per-step failures and apply circuit breaker
-            let acc = item_state.get(&item.id).expect("acc just inserted");
+            let Some(acc) = item_state.get(&item.id) else {
+                continue;
+            };
             for (step_id, &exit_code) in &acc.exit_codes {
                 if !segment.step_ids.contains(step_id) {
                     continue;

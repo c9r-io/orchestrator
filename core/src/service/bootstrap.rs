@@ -147,6 +147,7 @@ fn build_managed_state(
             worker_notify: Arc::new(Notify::new()),
             trigger_event_tx: tokio::sync::broadcast::channel(64).0,
             trigger_engine_handle: std::sync::Mutex::new(None),
+            fs_watcher_reload_tx: std::sync::Mutex::new(None),
         }),
     })
 }

@@ -1,8 +1,8 @@
 use crate::cli_types::{OrchestratorResource, ResourceKind, ResourceSpec, TriggerSpec};
 use crate::config::{
     OrchestratorConfig, TriggerActionConfig, TriggerConfig, TriggerCronConfig, TriggerEventConfig,
-    TriggerEventFilterConfig, TriggerHistoryLimitConfig, TriggerSecretRef, TriggerThrottleConfig,
-    TriggerWebhookConfig,
+    TriggerEventFilterConfig, TriggerFilesystemConfig, TriggerHistoryLimitConfig, TriggerSecretRef,
+    TriggerThrottleConfig, TriggerWebhookConfig,
 };
 use anyhow::{Result, anyhow};
 
@@ -58,7 +58,7 @@ impl Resource for TriggerResource {
 
         // Validate event source if present.
         if let Some(ref event) = self.spec.event {
-            let valid_sources = ["task_completed", "task_failed", "webhook"];
+            let valid_sources = ["task_completed", "task_failed", "webhook", "filesystem"];
             if !valid_sources.contains(&event.source.as_str()) {
                 return Err(anyhow!(
                     "trigger '{}': event.source must be one of {:?}, got '{}'",
@@ -66,6 +66,40 @@ impl Resource for TriggerResource {
                     valid_sources,
                     event.source,
                 ));
+            }
+
+            // Filesystem-specific validation.
+            if event.source == "filesystem" {
+                let fs = event.filesystem.as_ref().ok_or_else(|| {
+                    anyhow!(
+                        "trigger '{}': source 'filesystem' requires a 'filesystem' configuration block",
+                        self.name()
+                    )
+                })?;
+                if fs.paths.is_empty() {
+                    return Err(anyhow!(
+                        "trigger '{}': filesystem.paths must not be empty",
+                        self.name()
+                    ));
+                }
+                let valid_events = ["create", "modify", "delete"];
+                for ev in &fs.events {
+                    if !valid_events.contains(&ev.as_str()) {
+                        return Err(anyhow!(
+                            "trigger '{}': filesystem.events must be one of {:?}, got '{}'",
+                            self.name(),
+                            valid_events,
+                            ev,
+                        ));
+                    }
+                }
+                if fs.debounce_ms > 60000 {
+                    return Err(anyhow!(
+                        "trigger '{}': filesystem.debounce_ms must be <= 60000, got {}",
+                        self.name(),
+                        fs.debounce_ms,
+                    ));
+                }
             }
         }
 
@@ -171,6 +205,11 @@ fn to_config(spec: &TriggerSpec) -> TriggerConfig {
                 }),
                 signature_header: w.signature_header.clone(),
             }),
+            filesystem: e.filesystem.as_ref().map(|fs| TriggerFilesystemConfig {
+                paths: fs.paths.clone(),
+                events: fs.events.clone(),
+                debounce_ms: fs.debounce_ms,
+            }),
         }),
         action: TriggerActionConfig {
             workflow: spec.action.workflow.clone(),
@@ -196,7 +235,8 @@ fn to_config(spec: &TriggerSpec) -> TriggerConfig {
 fn from_config(cfg: &TriggerConfig) -> TriggerSpec {
     use crate::cli_types::{
         TriggerActionSpec, TriggerCronSpec, TriggerEventFilter, TriggerEventSpec,
-        TriggerHistoryLimit, TriggerThrottleSpec, TriggerWebhookSpec, WebhookSecretRef,
+        TriggerFilesystemSpec, TriggerHistoryLimit, TriggerThrottleSpec, TriggerWebhookSpec,
+        WebhookSecretRef,
     };
 
     TriggerSpec {
@@ -215,6 +255,11 @@ fn from_config(cfg: &TriggerConfig) -> TriggerSpec {
                     from_ref: s.from_ref.clone(),
                 }),
                 signature_header: w.signature_header.clone(),
+            }),
+            filesystem: e.filesystem.as_ref().map(|fs| TriggerFilesystemSpec {
+                paths: fs.paths.clone(),
+                events: fs.events.clone(),
+                debounce_ms: fs.debounce_ms,
             }),
         }),
         action: TriggerActionSpec {
@@ -475,6 +520,135 @@ spec:
                 crate::cli_types::ConcurrencyPolicy::Replace
             );
             assert_eq!(spec.throttle.as_ref().unwrap().min_interval, 300);
+        } else {
+            panic!("expected Trigger spec");
+        }
+    }
+
+    #[test]
+    fn trigger_validate_accepts_filesystem_source() {
+        let yaml = r#"
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: fr-watch
+spec:
+  event:
+    source: filesystem
+    filesystem:
+      paths:
+        - docs/feature_request/
+      events:
+        - create
+      debounce_ms: 500
+    filter:
+      condition: "payload_filename.matches('^FR-.*\\.md$')"
+  action:
+    workflow: fr-governance
+    workspace: default
+"#;
+        let resource: OrchestratorResource = serde_yaml::from_str(yaml).expect("should parse YAML");
+        let registered = dispatch_resource(resource).expect("dispatch");
+        assert!(registered.validate().is_ok());
+    }
+
+    #[test]
+    fn trigger_validate_filesystem_requires_paths() {
+        let yaml = r#"
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: bad-fs
+spec:
+  event:
+    source: filesystem
+    filesystem:
+      paths: []
+  action:
+    workflow: wf
+    workspace: ws
+"#;
+        let resource: OrchestratorResource = serde_yaml::from_str(yaml).expect("should parse YAML");
+        let registered = dispatch_resource(resource).expect("dispatch");
+        let err = registered.validate().expect_err("should reject empty paths");
+        assert!(err.to_string().contains("paths must not be empty"));
+    }
+
+    #[test]
+    fn trigger_validate_filesystem_requires_block() {
+        let yaml = r#"
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: bad-fs
+spec:
+  event:
+    source: filesystem
+  action:
+    workflow: wf
+    workspace: ws
+"#;
+        let resource: OrchestratorResource = serde_yaml::from_str(yaml).expect("should parse YAML");
+        let registered = dispatch_resource(resource).expect("dispatch");
+        let err = registered.validate().expect_err("should reject missing filesystem");
+        assert!(err.to_string().contains("requires a 'filesystem' configuration block"));
+    }
+
+    #[test]
+    fn trigger_validate_filesystem_rejects_invalid_events() {
+        let yaml = r#"
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: bad-fs
+spec:
+  event:
+    source: filesystem
+    filesystem:
+      paths:
+        - src/
+      events:
+        - invalid_event
+  action:
+    workflow: wf
+    workspace: ws
+"#;
+        let resource: OrchestratorResource = serde_yaml::from_str(yaml).expect("should parse YAML");
+        let registered = dispatch_resource(resource).expect("dispatch");
+        let err = registered.validate().expect_err("should reject invalid events");
+        assert!(err.to_string().contains("filesystem.events must be one of"));
+    }
+
+    #[test]
+    fn trigger_yaml_roundtrip_filesystem() {
+        let yaml = r#"
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: fr-watch
+spec:
+  event:
+    source: filesystem
+    filesystem:
+      paths:
+        - docs/feature_request/
+      events:
+        - create
+      debounce_ms: 1000
+  action:
+    workflow: fr-governance
+    workspace: default
+  concurrencyPolicy: Forbid
+"#;
+        let resource: OrchestratorResource = serde_yaml::from_str(yaml).expect("should parse YAML");
+        assert_eq!(resource.kind, ResourceKind::Trigger);
+        if let ResourceSpec::Trigger(ref spec) = resource.spec {
+            let event = spec.event.as_ref().unwrap();
+            assert_eq!(event.source, "filesystem");
+            let fs = event.filesystem.as_ref().unwrap();
+            assert_eq!(fs.paths, vec!["docs/feature_request/"]);
+            assert_eq!(fs.events, vec!["create"]);
+            assert_eq!(fs.debounce_ms, 1000);
         } else {
             panic!("expected Trigger spec");
         }

@@ -464,7 +464,7 @@ pub struct TriggerCronSpec {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct TriggerEventSpec {
-    /// Event source type (e.g. "task_completed", "task_failed", "webhook").
+    /// Event source type (e.g. "task_completed", "task_failed", "webhook", "filesystem").
     pub source: String,
 
     /// Optional filter conditions for the event.
@@ -474,6 +474,31 @@ pub struct TriggerEventSpec {
     /// Webhook-specific authentication configuration.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub webhook: Option<TriggerWebhookSpec>,
+
+    /// Filesystem watcher configuration (required when source = "filesystem").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filesystem: Option<TriggerFilesystemSpec>,
+}
+
+/// Filesystem watcher specification for filesystem triggers.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TriggerFilesystemSpec {
+    /// Directories to watch (relative to Workspace root_path).
+    pub paths: Vec<String>,
+
+    /// Event types to subscribe to: "create", "modify", "delete".
+    /// Defaults to all three if empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub events: Vec<String>,
+
+    /// Debounce window in milliseconds. Defaults to 500.
+    #[serde(default = "default_fs_debounce_ms")]
+    pub debounce_ms: u64,
+}
+
+fn default_fs_debounce_ms() -> u64 {
+    500
 }
 
 /// Webhook authentication specification for YAML manifests.

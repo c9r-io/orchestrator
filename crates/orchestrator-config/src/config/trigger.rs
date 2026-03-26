@@ -47,7 +47,7 @@ pub struct TriggerCronConfig {
 /// Stored event source configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TriggerEventConfig {
-    /// Event source type (e.g. `task_completed`, `task_failed`, `webhook`).
+    /// Event source type (e.g. `task_completed`, `task_failed`, `webhook`, `filesystem`).
     pub source: String,
     /// Optional filter conditions.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -55,6 +55,26 @@ pub struct TriggerEventConfig {
     /// Webhook-specific authentication configuration.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub webhook: Option<TriggerWebhookConfig>,
+    /// Filesystem watcher configuration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filesystem: Option<TriggerFilesystemConfig>,
+}
+
+/// Stored filesystem watcher configuration.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TriggerFilesystemConfig {
+    /// Directories to watch (relative to Workspace root_path).
+    pub paths: Vec<String>,
+    /// Event types to subscribe to: "create", "modify", "delete".
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub events: Vec<String>,
+    /// Debounce window in milliseconds.
+    #[serde(default = "default_fs_debounce_ms")]
+    pub debounce_ms: u64,
+}
+
+fn default_fs_debounce_ms() -> u64 {
+    500
 }
 
 /// Webhook authentication configuration for per-trigger secret verification.

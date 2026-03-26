@@ -102,6 +102,9 @@ pub struct InnerState {
         tokio::sync::broadcast::Sender<crate::trigger_engine::TriggerEventPayload>,
     /// Handle for notifying the trigger engine of config changes.
     pub trigger_engine_handle: std::sync::Mutex<Option<crate::trigger_engine::TriggerEngineHandle>>,
+    /// Handle for notifying the filesystem watcher of config changes.
+    /// Set by the daemon; `None` in CLI-only contexts.
+    pub fs_watcher_reload_tx: std::sync::Mutex<Option<tokio::sync::mpsc::Sender<()>>>,
 }
 
 impl InnerState {

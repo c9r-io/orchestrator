@@ -50,11 +50,11 @@ async fn cancel_task_for_trigger(state: &InnerState, task_id: &str) -> Result<()
 /// Payload broadcast when a trigger-relevant event fires.
 #[derive(Debug, Clone)]
 pub struct TriggerEventPayload {
-    /// Event type: "task_completed", "task_failed", or "webhook".
+    /// Event type: "task_completed", "task_failed", "webhook", or "filesystem".
     pub event_type: String,
-    /// Source task ID (empty for webhook events).
+    /// Source task ID (empty for webhook/filesystem events).
     pub task_id: String,
-    /// Optional JSON payload (webhook body or event metadata).
+    /// Optional JSON payload (webhook body, filesystem event context, or task metadata).
     pub payload: Option<serde_json::Value>,
 }
 
@@ -823,17 +823,25 @@ async fn cleanup_history(
 // ── Goal construction ────────────────────────────────────────────────────────
 
 /// Build a task goal string for a trigger fire.
-/// If a webhook payload is present, include a summary in the goal.
-fn build_trigger_goal(trigger_name: &str, webhook_payload: Option<&serde_json::Value>) -> String {
-    match webhook_payload {
+/// If an event payload is present, include a summary in the goal.
+fn build_trigger_goal(trigger_name: &str, event_payload: Option<&serde_json::Value>) -> String {
+    match event_payload {
         Some(payload) => {
+            // For filesystem events, use a friendlier format.
+            if let Some(filename) = payload.get("filename").and_then(|v| v.as_str()) {
+                if let Some(event_type) = payload.get("event_type").and_then(|v| v.as_str()) {
+                    return format!(
+                        "Triggered by filesystem '{trigger_name}': {event_type} {filename}"
+                    );
+                }
+            }
             let summary = serde_json::to_string(payload).unwrap_or_default();
             let truncated = if summary.len() > 500 {
                 format!("{}...", &summary[..497])
             } else {
                 summary
             };
-            format!("Triggered by webhook '{trigger_name}': {truncated}")
+            format!("Triggered by '{trigger_name}': {truncated}")
         }
         None => format!("Triggered by: {trigger_name}"),
     }
@@ -849,11 +857,18 @@ pub fn broadcast_task_event(state: &InnerState, payload: TriggerEventPayload) {
 }
 
 /// Notify the trigger engine to reload its configuration.
-/// Safe to call from sync code. No-op if no engine is running.
+/// Also notifies the filesystem watcher (if running) to re-evaluate watched paths.
+/// Safe to call from sync code. No-op if no engine/watcher is running.
 pub fn notify_trigger_reload(state: &InnerState) {
     if let Ok(guard) = state.trigger_engine_handle.lock() {
         if let Some(ref handle) = *guard {
             let _ = handle.reload_sync();
+        }
+    }
+    // Also notify filesystem watcher to reload its watch list.
+    if let Ok(guard) = state.fs_watcher_reload_tx.lock() {
+        if let Some(ref tx) = *guard {
+            let _ = tx.try_send(());
         }
     }
 }

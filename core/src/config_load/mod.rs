@@ -33,9 +33,10 @@ pub fn data_dir() -> PathBuf {
     if let Ok(dir) = std::env::var("ORCHESTRATORD_DATA_DIR") {
         return PathBuf::from(dir);
     }
-    dirs::home_dir()
-        .expect("unable to determine home directory")
-        .join(".orchestratord")
+    match dirs::home_dir() {
+        Some(home) => home.join(".orchestratord"),
+        None => PathBuf::from(".orchestratord"),
+    }
 }
 
 #[cfg(test)]
