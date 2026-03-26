@@ -19,13 +19,15 @@ The project structure is organized as follows:
 ```
 /
 ├── Cargo.toml            # Workspace root (members: core, crates/*)
-├── core/                 # Core Rust library (orchestrator engine)
+├── core/                 # Core Rust library (models, persistence, service layer)
 │   ├── src/
 │   │   ├── service/      # Pure business logic layer (task, resource, store, system)
-│   │   ├── scheduler.rs  # Task scheduling & loop execution
+│   │   ├── scheduler_service.rs  # High-level enqueue/claim entry points
 │   │   └── ...
 │   └── Cargo.toml
 ├── crates/
+│   ├── orchestrator-config/  # Configuration models and loading
+│   ├── orchestrator-scheduler/ # Scheduler engine (task loop, phases, guards, traces)
 │   ├── proto/            # gRPC codegen (tonic + prost)
 │   │   ├── src/lib.rs    # Generated types + re-exports
 │   │   └── build.rs      # tonic_build
@@ -34,14 +36,16 @@ The project structure is organized as follows:
 │   │       ├── main.rs   # Entry point, worker loop, signal handling
 │   │       ├── server.rs # OrchestratorService gRPC impl
 │   │       └── lifecycle.rs  # PID, socket, shutdown
-│   └── cli/              # orchestrator binary (no core dependency!)
-│       └── src/
-│           ├── main.rs   # Clap commands, dispatch
-│           ├── client.rs # UDS/TCP gRPC client
-│           └── commands/ # Command handlers
+│   ├── cli/              # orchestrator binary (depends on core for config types)
+│   │   └── src/
+│   │       ├── main.rs   # Clap commands, dispatch
+│   │       ├── client.rs # UDS/TCP gRPC client
+│   │       └── commands/ # Command handlers
+│   ├── gui/              # Tauri desktop application
+│   └── integration-tests/ # Integration test suite
 ├── proto/
 │   └── orchestrator.proto  # gRPC service definition
-├── data/                 # Runtime data storage
+├── ~/.orchestratord/     # Default runtime data directory (override via ORCHESTRATORD_DATA_DIR)
 │   ├── agent_orchestrator.db  # SQLite database
 │   ├── orchestrator.sock # Daemon Unix socket (C/S mode)
 │   ├── daemon.pid        # Daemon PID file (C/S mode)
@@ -86,13 +90,17 @@ flowchart TB
 
 ```
 crates/
-  proto/         # gRPC service definitions (tonic + prost)
-  daemon/        # orchestratord binary (gRPC server + embedded workers)
-  cli/           # orchestrator binary (lightweight gRPC client, no core dependency)
+  orchestrator-config/     # Configuration models and loading
+  orchestrator-scheduler/  # Scheduler engine (task loop, phases, guards, traces)
+  proto/                   # gRPC service definitions (tonic + prost)
+  daemon/                  # orchestratord binary (gRPC server + embedded workers)
+  cli/                     # orchestrator binary (lightweight gRPC client)
+  gui/                     # Tauri desktop application
+  integration-tests/       # Integration test suite
 core/
-  src/service/   # Pure business logic layer (task, resource, store, system)
+  src/service/             # Pure business logic layer (task, resource, store, system)
 proto/
-  orchestrator.proto   # Protocol buffer definitions
+  orchestrator.proto       # Protocol buffer definitions
 ```
 
 ### 3.2 Core Components
@@ -102,7 +110,9 @@ proto/
     *   **Daemon** (`crates/daemon/`): gRPC server that translates RPC calls into service layer calls.
     *   Displays output (tables, JSON, YAML).
 
-2.  **Orchestrator Engine (`core/src/lib.rs`, `scheduler.rs`)**:
+2.  **Orchestrator Engine** (`core/` + `crates/orchestrator-scheduler/`):
+    *   **Core** (`core/`): Models, persistence, service layer, `scheduler_service.rs` (enqueue/claim tasks).
+    *   **Scheduler** (`crates/orchestrator-scheduler/`): Task loop execution, phase runner, loop guards, traces, checkpoints.
     *   **Task Management**: Creates, starts, pauses, and resumes tasks.
     *   **Cycle Loop**: Manages the iterative execution of workflows.
     *   **Process Management**: Spawns and monitors agent processes (shell commands).
@@ -191,9 +201,12 @@ The Agent Orchestrator is distributed as a Cargo workspace with a core library a
 
 | Crate | Type | Purpose |
 |-------|------|---------|
-| `core` (`agent-orchestrator`) | Library | Core engine — scheduling, orchestration, state management |
+| `core` (`agent-orchestrator`) | Library | Core engine — models, persistence, service layer, state management |
+| `crates/orchestrator-scheduler` | Library | Scheduler engine — task loop, phase runner, guards, traces |
+| `crates/orchestrator-config` | Library | Configuration models and loading |
 | `crates/daemon` (`orchestratord`) | Binary | Daemon — gRPC server + embedded workers |
 | `crates/cli` (`orchestrator`) | Binary | CLI client — lightweight gRPC client |
+| `crates/gui` (`orchestrator-gui`) | Binary | Tauri desktop application |
 
 - **C/S mode**: Daemon (`orchestratord`) runs persistently, CLI client (`orchestrator`) connects via Unix Domain Socket (`data/orchestrator.sock`) or TCP (`--bind`).
 - Both binaries require `sqlite3` and standard shell utilities (`bash`, `grep`, etc.) if used by agents.
