@@ -4,9 +4,9 @@
 
 ## 适用场景
 
-- Agent 需要根据运行时状态选择不同命令（如首步创建 session、后续步骤复用 session）
-- 某些步骤需要隔离的变量环境（如 QA 步骤需要独立 session，不受先入为主影响）
-- 需要同一 Agent 在不同步骤使用不同工具或参数的场景
+- 同一 Agent 在不同步骤使用不同命令（如默认/详细/快速三种模式）
+- 某些步骤需要隔离的变量环境（如 QA 步骤清空 session 上下文）
+- Agent 根据运行时状态（session 是否存在、当前 cycle 等）选择不同工具
 
 ## 前置条件
 
@@ -25,8 +25,8 @@ orchestrator apply -f docs/workflow/command-rules.yaml --project cmd-rules
 
 ```bash
 orchestrator task create \
-  --name "session-demo" \
-  --goal "Demonstrate command rules and step_vars" \
+  --name "mode-demo" \
+  --goal "Demonstrate command rules" \
   --workflow command_rules \
   --project cmd-rules
 ```
@@ -41,62 +41,76 @@ orchestrator task logs <task_id>
 ## 工作流步骤
 
 ```
-init_session (default cmd) → continue_session (rule[0]: resume) → independent_review (rule[1]: fresh, via step_vars)
+default_analysis (default cmd) → verbose_analysis (rule[0]) → quick_review (rule[1])
 ```
 
-1. **init_session** — 无 session_id 变量 → 所有 rules 不匹配 → 使用默认 command
-2. **continue_session** — session_id 已设置 → `command_rules[0]` 匹配 → 使用 resume command
-3. **independent_review** — `step_vars: { fresh_session: "true" }` → `command_rules[1]` 匹配 → 使用 fresh session command
+1. **default_analysis** — 无 step_vars → `run_mode` 不存在 → 所有 rules 不匹配 → 默认 command
+2. **verbose_analysis** — `step_vars: { run_mode: "verbose" }` → rule[0] 匹配 → verbose command
+3. **quick_review** — `step_vars: { run_mode: "quick" }` → rule[1] 匹配 → quick command
+
+每个步骤的 echo 输出不同（`default-mode` / `verbose-mode` / `quick-mode`），可通过 `task logs` 验证命令切换生效。
 
 ### 核心特性：command_rules
 
 ```yaml
 kind: Agent
 spec:
-  command: echo 'default command'   # 兜底命令
+  command: echo 'default mode'        # 兜底命令
   command_rules:
-    - when: "vars.session_id != ''"      # CEL 条件
-      command: echo 'resume session'      # 匹配时使用此命令
-    - when: "vars.fresh_session == 'true'"
-      command: echo 'fresh session'
+    - when: "run_mode == \"verbose\""  # CEL 条件（变量名直接引用）
+      command: echo 'verbose mode'     # 匹配时使用此命令
+    - when: "run_mode == \"quick\""
+      command: echo 'quick mode'
 ```
+
+**CEL 变量引用**：pipeline variables 以顶级名称注入 CEL — 直接写 `run_mode == "verbose"`，**不需要** `vars.` 前缀。
 
 **匹配语义**：按序评估，首个 `when` 为 true 的规则生效；全部不匹配则回退默认 `command`。
 
-**CEL 上下文**：`vars` map 包含当前 pipeline variables，可访问所有已捕获的步骤输出和 step_vars 覆盖值。
-
-**审计**：匹配的 rule index 记录在 `command_runs.command_rule_index`（NULL = 默认命令）。
+**审计**：匹配的 rule index 记录在 `command_runs.command_rule_index`（NULL = 默认命令，0 = 第一条规则）。
 
 ### 核心特性：step_vars
 
 ```yaml
-- id: independent_review
+- id: verbose_analysis
   step_vars:
-    fresh_session: "true"    # 仅对此步骤有效
+    run_mode: "verbose"    # 仅对此步骤有效
 ```
 
-**语义**：步骤执行前将 `step_vars` 合并到 pipeline variables 的浅拷贝中，步骤执行后恢复原始值。不影响其他步骤的变量视图。
+**语义**：步骤执行前将 `step_vars` 合并到 pipeline variables 的浅拷贝中，步骤执行后恢复原始值。其他步骤看到的变量不受影响。
+
+**典型用途**：
+- 控制 command_rules 匹配（如本模板）
+- 清空 session ID 强制新建 session（`step_vars: { session_id: "" }`）
+- 注入步骤特定配置（如超时时间、日志级别）
 
 ## 自定义指南
 
-### 替换为真实 Agent（Session 复用场景）
+### 真实 Agent Session 复用
 
 ```yaml
-command: claude -p "{prompt}" --session-id new --verbose --output-format stream-json
+# 默认：创建新 session
+command: claude -p "{prompt}" --session-id new --output-format stream-json
 command_rules:
-  - when: "vars.session_id != ''"
-    command: claude -p "{prompt}" --resume {session_id} --verbose --output-format stream-json
-  - when: "vars.fresh_session == 'true'"
-    command: claude -p "{prompt}" --session-id new --verbose --output-format stream-json
+  # 有 session → 复用
+  - when: "loop_session_id != \"\""
+    command: claude -p "{prompt}" --resume {loop_session_id} --output-format stream-json
+```
+
+QA 步骤通过 step_vars 清空 session 强制独立分析：
+```yaml
+- id: qa_testing
+  step_vars:
+    loop_session_id: ""    # 屏蔽 session 复用
 ```
 
 ### 按步骤类型切换工具
 
 ```yaml
 command_rules:
-  - when: "vars.step_type == 'test'"
+  - when: "step_type == \"test\""
     command: cargo test --workspace 2>&1
-  - when: "vars.step_type == 'lint'"
+  - when: "step_type == \"lint\""
     command: cargo clippy --workspace -- -D warnings 2>&1
 ```
 

@@ -4,9 +4,9 @@
 
 ## Use Cases
 
-- Agent selects different commands based on runtime state (e.g. first step creates a session, subsequent steps resume it)
-- Certain steps need isolated variable environments (e.g. QA needs a fresh session, unaffected by prior context)
-- Same agent uses different tools or parameters across different workflow steps
+- Same agent uses different commands across steps (e.g. default / verbose / quick modes)
+- Certain steps need isolated variable environments (e.g. QA clears session context)
+- Agent selects different tools based on runtime state (session exists, current cycle, etc.)
 
 ## Prerequisites
 
@@ -25,8 +25,8 @@ orchestrator apply -f docs/workflow/command-rules.yaml --project cmd-rules
 
 ```bash
 orchestrator task create \
-  --name "session-demo" \
-  --goal "Demonstrate command rules and step_vars" \
+  --name "mode-demo" \
+  --goal "Demonstrate command rules" \
   --workflow command_rules \
   --project cmd-rules
 ```
@@ -41,62 +41,76 @@ orchestrator task logs <task_id>
 ## Workflow Steps
 
 ```
-init_session (default cmd) → continue_session (rule[0]: resume) → independent_review (rule[1]: fresh, via step_vars)
+default_analysis (default cmd) → verbose_analysis (rule[0]) → quick_review (rule[1])
 ```
 
-1. **init_session** — No `session_id` variable → all rules fail → uses default `command`
-2. **continue_session** — `session_id` is set → `command_rules[0]` matches → uses resume command
-3. **independent_review** — `step_vars: { fresh_session: "true" }` → `command_rules[1]` matches → uses fresh session command
+1. **default_analysis** — No step_vars → `run_mode` absent → no rule matches → default command
+2. **verbose_analysis** — `step_vars: { run_mode: "verbose" }` → rule[0] matches → verbose command
+3. **quick_review** — `step_vars: { run_mode: "quick" }` → rule[1] matches → quick command
+
+Each step's echo output differs (`default-mode` / `verbose-mode` / `quick-mode`), verifiable via `task logs`.
 
 ### Key Feature: command_rules
 
 ```yaml
 kind: Agent
 spec:
-  command: echo 'default command'   # fallback
+  command: echo 'default mode'        # fallback
   command_rules:
-    - when: "vars.session_id != ''"      # CEL condition
-      command: echo 'resume session'      # used when matched
-    - when: "vars.fresh_session == 'true'"
-      command: echo 'fresh session'
+    - when: "run_mode == \"verbose\""  # CEL condition (direct variable name)
+      command: echo 'verbose mode'     # used when matched
+    - when: "run_mode == \"quick\""
+      command: echo 'quick mode'
 ```
 
-**Matching semantics**: Rules are evaluated in order; the first `when` that returns true wins. If none match, the default `command` is used.
+**CEL variable access**: Pipeline variables are injected as top-level CEL names — write `run_mode == "verbose"` directly, **no** `vars.` prefix needed.
 
-**CEL context**: The `vars` map contains current pipeline variables, including all captured step outputs and `step_vars` overlays.
+**Matching semantics**: Rules evaluated in order; first `when` returning true wins. If none match, the default `command` is used.
 
-**Audit trail**: The matched rule index is recorded in `command_runs.command_rule_index` (NULL = default command).
+**Audit trail**: Matched rule index recorded in `command_runs.command_rule_index` (NULL = default, 0 = first rule).
 
 ### Key Feature: step_vars
 
 ```yaml
-- id: independent_review
+- id: verbose_analysis
   step_vars:
-    fresh_session: "true"    # only applies to this step
+    run_mode: "verbose"    # only applies to this step
 ```
 
-**Semantics**: Before step execution, `step_vars` are merged into a shallow copy of pipeline variables. After execution, original values are restored. Other steps see unchanged variables.
+**Semantics**: Before step execution, `step_vars` merge into a shallow copy of pipeline variables. After execution, original values are restored. Other steps see unchanged variables.
+
+**Typical uses**:
+- Control command_rules matching (as in this template)
+- Clear a session ID to force a new session (`step_vars: { session_id: "" }`)
+- Inject step-specific config (timeout, log level, etc.)
 
 ## Customization Guide
 
 ### Real Agent with Session Reuse
 
 ```yaml
-command: claude -p "{prompt}" --session-id new --verbose --output-format stream-json
+# Default: create new session
+command: claude -p "{prompt}" --session-id new --output-format stream-json
 command_rules:
-  - when: "vars.session_id != ''"
-    command: claude -p "{prompt}" --resume {session_id} --verbose --output-format stream-json
-  - when: "vars.fresh_session == 'true'"
-    command: claude -p "{prompt}" --session-id new --verbose --output-format stream-json
+  # Has session → resume it
+  - when: "loop_session_id != \"\""
+    command: claude -p "{prompt}" --resume {loop_session_id} --output-format stream-json
+```
+
+QA steps clear the session via step_vars for independent analysis:
+```yaml
+- id: qa_testing
+  step_vars:
+    loop_session_id: ""    # blocks session reuse
 ```
 
 ### Tool Switching by Step Type
 
 ```yaml
 command_rules:
-  - when: "vars.step_type == 'test'"
+  - when: "step_type == \"test\""
     command: cargo test --workspace 2>&1
-  - when: "vars.step_type == 'lint'"
+  - when: "step_type == \"lint\""
     command: cargo clippy --workspace -- -D warnings 2>&1
 ```
 
