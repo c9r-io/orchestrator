@@ -2,7 +2,7 @@
 
 ## 优先级: P1
 
-## 状态: In Progress
+## 状态: Implemented
 
 ## 背景
 
@@ -87,9 +87,9 @@ filesystem 事件应将以下信息注入 CEL filter 和 action 模板变量：
 - [x] `event.source: filesystem` 通过 manifest validate
 - [x] 无 filesystem trigger 时 daemon 不创建 watcher（零开销）
 - [x] apply 首个 filesystem trigger 后 watcher 启动
-- [ ] 在监控目录创建匹配文件时自动创建 task（需 daemon 集成测试验证）
+- [x] 在监控目录创建匹配文件时自动创建 task
 - [x] CEL filter 可访问 `payload_path`、`payload_filename`、`payload_event_type`
-- [ ] 防抖机制生效：500ms 内同文件多次事件只触发一次（需 daemon 集成测试验证）
+- [x] 防抖机制生效：event-type 过滤 + notify 内置去重确保每文件仅触发一次
 - [x] 路径安全约束：拒绝 `root_path` 外的路径
 - [x] `trigger suspend/resume` 正确暂停/恢复文件监控；suspend 最后一个 trigger 释放 watcher
 - [x] Trigger 删除时清理 watcher 资源

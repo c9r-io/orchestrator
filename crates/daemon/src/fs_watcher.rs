@@ -58,6 +58,7 @@ pub(crate) async fn run_fs_watcher(
         tokio::select! {
             // ── Notify events from the filesystem ─────────────────────
             Some(event) = notify_rx.recv() => {
+                debug!(kind = ?event.kind, paths = ?event.paths, "filesystem watcher: raw notify event");
                 handle_notify_event(&state, &event, &trigger_configs);
             }
 
@@ -174,7 +175,9 @@ fn reload_watches(
                         continue;
                     }
                 }
-                resolved_paths.push(abs_path);
+                // Canonicalize to resolve symlinks (e.g. /var → /private/var on macOS).
+                let canonical = abs_path.canonicalize().unwrap_or(abs_path);
+                resolved_paths.push(canonical);
             }
 
             for p in &resolved_paths {
@@ -212,10 +215,12 @@ fn reload_watches(
         match notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
             match res {
                 Ok(event) => {
-                    let _ = tx.try_send(event);
+                    if tx.try_send(event).is_err() {
+                        eprintln!("[fs_watcher] event channel full or closed, dropping event");
+                    }
                 }
                 Err(e) => {
-                    warn!(error = %e, "filesystem watcher error");
+                    eprintln!("[fs_watcher] error: {e}");
                 }
             }
         }) {
