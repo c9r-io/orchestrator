@@ -547,7 +547,7 @@ mod tests {
             item_select_config: None,
             store_inputs: vec![],
             store_outputs: vec![],
-                step_vars: None,
+            step_vars: None,
         }
     }
 
@@ -578,7 +578,7 @@ mod tests {
             item_select_config: None,
             store_inputs: vec![],
             store_outputs: vec![],
-                step_vars: None,
+            step_vars: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -610,7 +610,7 @@ mod tests {
             item_select_config: None,
             store_inputs: vec![],
             store_outputs: vec![],
-                step_vars: None,
+            step_vars: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -642,7 +642,7 @@ mod tests {
             item_select_config: None,
             store_inputs: vec![],
             store_outputs: vec![],
-                step_vars: None,
+            step_vars: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -676,7 +676,7 @@ mod tests {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
-                step_vars: None,
+                    step_vars: None,
                 },
                 TaskExecutionStep {
                     id: "qa".to_string(),
@@ -703,7 +703,7 @@ mod tests {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
-                step_vars: None,
+                    step_vars: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig::default(),

@@ -26,9 +26,7 @@ use tonic::transport::Server;
 use tracing::{error, info};
 
 use agent_orchestrator::events::insert_event;
-use agent_orchestrator::service::system::{
-    clear_worker_stop_signal, worker_stop_signal_path,
-};
+use agent_orchestrator::service::system::{clear_worker_stop_signal, worker_stop_signal_path};
 use agent_orchestrator::state::{InnerState, task_semaphore};
 use orchestrator_proto::OrchestratorServiceServer;
 use orchestrator_scheduler::scheduler::safety::RestartRequestedError;

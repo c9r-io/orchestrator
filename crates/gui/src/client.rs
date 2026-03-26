@@ -1,4 +1,4 @@
-pub use orchestrator_client::{connect, TransportKind, MAX_GRPC_DECODE_SIZE};
+pub use orchestrator_client::{MAX_GRPC_DECODE_SIZE, TransportKind, connect};
 
 /// Return the max decoding size for clients created from our channel.
 pub fn max_decode_size() -> usize {

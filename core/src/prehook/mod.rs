@@ -34,14 +34,13 @@ pub fn validate_agent_command_rules(
                 i
             );
         }
-        let compiled =
-            std::panic::catch_unwind(|| Program::compile(expression)).map_err(|_| {
-                anyhow::anyhow!(
-                    "agent '{}' command_rules[{}].when caused CEL parser panic",
-                    agent_id,
-                    i
-                )
-            })?;
+        let compiled = std::panic::catch_unwind(|| Program::compile(expression)).map_err(|_| {
+            anyhow::anyhow!(
+                "agent '{}' command_rules[{}].when caused CEL parser panic",
+                agent_id,
+                i
+            )
+        })?;
         compiled.map_err(|err| {
             anyhow::anyhow!(
                 "agent '{}' command_rules[{}].when is invalid CEL: {}",

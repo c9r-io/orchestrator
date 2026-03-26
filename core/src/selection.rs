@@ -120,7 +120,12 @@ pub fn select_agent_by_preference(
             } else {
                 cfg.command.clone()
             };
-            return Ok((id.clone(), command, cfg.prompt_delivery, cfg.command_rules.clone()));
+            return Ok((
+                id.clone(),
+                command,
+                cfg.prompt_delivery,
+                cfg.command_rules.clone(),
+            ));
         }
     }
 
@@ -135,7 +140,12 @@ pub fn select_agent_by_preference(
         config.command.clone()
     };
 
-    Ok((agent_id.clone(), command, config.prompt_delivery, config.command_rules.clone()))
+    Ok((
+        agent_id.clone(),
+        command,
+        config.prompt_delivery,
+        config.command_rules.clone(),
+    ))
 }
 
 /// Resolve effective agents for a task. Strict project isolation:

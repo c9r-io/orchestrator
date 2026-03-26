@@ -298,7 +298,7 @@ mod tests {
                         item_select_config: None,
                         store_inputs: vec![],
                         store_outputs: vec![],
-                step_vars: None,
+                        step_vars: None,
                     },
                     crate::config::TaskExecutionStep {
                         id: "plan".to_string(),
@@ -325,7 +325,7 @@ mod tests {
                         item_select_config: None,
                         store_inputs: vec![],
                         store_outputs: vec![],
-                step_vars: None,
+                        step_vars: None,
                     },
                     crate::config::TaskExecutionStep {
                         id: "qa".to_string(),
@@ -352,7 +352,7 @@ mod tests {
                         item_select_config: None,
                         store_inputs: vec![],
                         store_outputs: vec![],
-                step_vars: None,
+                        step_vars: None,
                     },
                     crate::config::TaskExecutionStep {
                         id: "loop_guard".to_string(),
@@ -379,7 +379,7 @@ mod tests {
                         item_select_config: None,
                         store_inputs: vec![],
                         store_outputs: vec![],
-                step_vars: None,
+                        step_vars: None,
                     },
                 ],
                 loop_policy: Default::default(),

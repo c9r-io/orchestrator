@@ -414,7 +414,11 @@ mod tests {
     /// emits the scheduler_enqueued event.  Avoids a dependency on the
     /// `orchestrator-scheduler` crate.
     async fn enqueue_task_for_test(state: &InnerState, task_id: &str) {
-        state.task_repo.reset_unresolved_items(task_id).await.expect("reset items");
+        state
+            .task_repo
+            .reset_unresolved_items(task_id)
+            .await
+            .expect("reset items");
         state
             .db_writer
             .set_task_status(task_id, "pending", false)
@@ -606,10 +610,7 @@ mod tests {
         assert!(!stop_path.exists());
         signal_worker_stop(&state).expect("signal stop");
         assert!(stop_path.exists());
-        assert_eq!(
-            std::fs::read_to_string(&stop_path).expect("read"),
-            "stop"
-        );
+        assert_eq!(std::fs::read_to_string(&stop_path).expect("read"), "stop");
     }
 
     #[test]

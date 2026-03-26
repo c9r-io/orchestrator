@@ -1697,12 +1697,8 @@ mod step_vars_tests {
     #[test]
     fn restore_reverts_overridden_keys() {
         let mut pv = PipelineVariables::default();
-        pv.vars
-            .insert("loop_session_id".to_string(), String::new());
-        let originals = vec![(
-            "loop_session_id".to_string(),
-            Some("ORIGINAL".to_string()),
-        )];
+        pv.vars.insert("loop_session_id".to_string(), String::new());
+        let originals = vec![("loop_session_id".to_string(), Some("ORIGINAL".to_string()))];
         restore_step_vars_overlay(&mut pv, originals);
         assert_eq!(pv.vars.get("loop_session_id").unwrap(), "ORIGINAL");
     }
@@ -1735,15 +1731,9 @@ mod step_vars_tests {
 
         restore_step_vars_overlay(&mut new_pipeline, originals);
 
-        assert_eq!(
-            new_pipeline.vars.get("loop_session_id").unwrap(),
-            "ABC-123"
-        );
+        assert_eq!(new_pipeline.vars.get("loop_session_id").unwrap(), "ABC-123");
         assert!(!new_pipeline.vars.contains_key("temp_var"));
-        assert_eq!(
-            new_pipeline.vars.get("captured_output").unwrap(),
-            "result"
-        );
+        assert_eq!(new_pipeline.vars.get("captured_output").unwrap(), "result");
         assert_eq!(new_pipeline.vars.get("other").unwrap(), "keep");
     }
 }

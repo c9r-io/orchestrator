@@ -2512,10 +2512,12 @@ fn validate_command_rules_missing_prompt_placeholder() {
     }];
     let result = super::validate_agent_command_rules("ag1", &rules);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("{prompt} placeholder"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("{prompt} placeholder")
+    );
 }
 
 // ── command rule CEL evaluation with pipeline vars ──────────────────
@@ -2525,8 +2527,7 @@ fn command_rule_cel_matches_pipeline_var() {
     let mut ctx = make_prehook_ctx();
     ctx.vars
         .insert("loop_session_id".to_string(), "ABC-123".to_string());
-    let result =
-        evaluate_step_prehook_expression("loop_session_id != \"\"", &ctx);
+    let result = evaluate_step_prehook_expression("loop_session_id != \"\"", &ctx);
     assert!(result.unwrap());
 }
 
@@ -2535,8 +2536,7 @@ fn command_rule_cel_empty_var_does_not_match() {
     let mut ctx = make_prehook_ctx();
     ctx.vars
         .insert("loop_session_id".to_string(), String::new());
-    let result =
-        evaluate_step_prehook_expression("loop_session_id != \"\"", &ctx);
+    let result = evaluate_step_prehook_expression("loop_session_id != \"\"", &ctx);
     assert!(!result.unwrap());
 }
 
@@ -2544,8 +2544,7 @@ fn command_rule_cel_empty_var_does_not_match() {
 fn command_rule_cel_missing_var_does_not_match() {
     let ctx = make_prehook_ctx();
     // loop_session_id not in vars → evaluates as empty string
-    let result =
-        evaluate_step_prehook_expression("loop_session_id != \"\"", &ctx);
+    let result = evaluate_step_prehook_expression("loop_session_id != \"\"", &ctx);
     // Should either return false or error — either way, not a match
     assert!(!result.unwrap_or(false));
 }

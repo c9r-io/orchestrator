@@ -390,7 +390,7 @@ mod tests {
                         item_select_config: None,
                         store_inputs: vec![],
                         store_outputs: vec![],
-                step_vars: None,
+                        step_vars: None,
                     },
                     WorkflowStepConfig {
                         id: "implement".into(),
@@ -418,7 +418,7 @@ mod tests {
                         item_select_config: None,
                         store_inputs: vec![],
                         store_outputs: vec![],
-                step_vars: None,
+                        step_vars: None,
                     },
                     WorkflowStepConfig {
                         id: "loop_guard".into(),
@@ -451,7 +451,7 @@ mod tests {
                         item_select_config: None,
                         store_inputs: vec![],
                         store_outputs: vec![],
-                step_vars: None,
+                        step_vars: None,
                     },
                 ],
                 execution: Default::default(),
@@ -772,7 +772,7 @@ mod tests {
             item_select_config: None,
             store_inputs: vec![],
             store_outputs: vec![],
-                step_vars: None,
+            step_vars: None,
         }];
 
         let tmp = tempfile::tempdir().expect("create temp dir");
@@ -896,7 +896,7 @@ mod tests {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
-                step_vars: None,
+                    step_vars: None,
                 }],
                 execution: Default::default(),
                 loop_policy: WorkflowLoopConfig::default(),
@@ -974,7 +974,7 @@ mod tests {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
-                step_vars: None,
+                    step_vars: None,
                 }],
                 scope: None,
                 behavior: StepBehavior::default(),

@@ -322,7 +322,7 @@ fn validate_workflow_config_rejects_json_path_on_exit_code_capture() {
             item_select_config: None,
             store_inputs: vec![],
             store_outputs: vec![],
-                step_vars: None,
+            step_vars: None,
         }],
         execution: Default::default(),
         loop_policy: crate::config::WorkflowLoopConfig {
@@ -384,7 +384,7 @@ fn validate_self_referential_safety_errors_missing_self_test() {
             item_select_config: None,
             store_inputs: vec![],
             store_outputs: vec![],
-                step_vars: None,
+            step_vars: None,
         }],
         execution: Default::default(),
         loop_policy: crate::config::WorkflowLoopConfig {

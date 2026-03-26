@@ -437,9 +437,7 @@ impl TriggerEngine {
                     let state = self.state.clone();
                     let tid = task_id.clone();
                     tokio::spawn(async move {
-                        if let Err(e) =
-                            state.task_enqueuer.enqueue_task(&state, &tid).await
-                        {
+                        if let Err(e) = state.task_enqueuer.enqueue_task(&state, &tid).await {
                             error!(task_id = tid.as_str(), error = %e, "failed to enqueue triggered task");
                         } else {
                             state.worker_notify.notify_one();

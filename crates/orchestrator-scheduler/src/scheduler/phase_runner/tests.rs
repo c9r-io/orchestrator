@@ -623,8 +623,15 @@ mod cases {
             when: "loop_session_id != \"\"".to_string(),
             command: "claude --resume {loop_session_id}".to_string(),
         }];
-        let (cmd, idx) =
-            crate::scheduler::phase_runner::resolve_agent_command("echo default", &rules, Some(&pv), "t1", "i1", 1, "plan");
+        let (cmd, idx) = crate::scheduler::phase_runner::resolve_agent_command(
+            "echo default",
+            &rules,
+            Some(&pv),
+            "t1",
+            "i1",
+            1,
+            "plan",
+        );
         assert_eq!(cmd, "claude --resume {loop_session_id}");
         assert_eq!(idx, Some(0));
     }
@@ -637,8 +644,15 @@ mod cases {
             when: "loop_session_id != \"\"".to_string(),
             command: "claude --resume {loop_session_id}".to_string(),
         }];
-        let (cmd, idx) =
-            crate::scheduler::phase_runner::resolve_agent_command("echo default", &rules, Some(&pv), "t1", "i1", 1, "plan");
+        let (cmd, idx) = crate::scheduler::phase_runner::resolve_agent_command(
+            "echo default",
+            &rules,
+            Some(&pv),
+            "t1",
+            "i1",
+            1,
+            "plan",
+        );
         assert_eq!(cmd, "echo default");
         assert_eq!(idx, None);
     }
@@ -658,8 +672,15 @@ mod cases {
                 command: "second {prompt}".to_string(),
             },
         ];
-        let (cmd, idx) =
-            crate::scheduler::phase_runner::resolve_agent_command("default", &rules, Some(&pv), "t1", "i1", 1, "plan");
+        let (cmd, idx) = crate::scheduler::phase_runner::resolve_agent_command(
+            "default",
+            &rules,
+            Some(&pv),
+            "t1",
+            "i1",
+            1,
+            "plan",
+        );
         assert_eq!(cmd, "first {prompt}");
         assert_eq!(idx, Some(0));
     }

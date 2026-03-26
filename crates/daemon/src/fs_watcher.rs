@@ -212,8 +212,8 @@ fn reload_watches(
     // Ensure watcher exists.
     if watcher.is_none() {
         let tx = notify_tx.clone();
-        match notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
-            match res {
+        match notify::recommended_watcher(
+            move |res: Result<notify::Event, notify::Error>| match res {
                 Ok(event) => {
                     if tx.try_send(event).is_err() {
                         eprintln!("[fs_watcher] event channel full or closed, dropping event");
@@ -222,8 +222,8 @@ fn reload_watches(
                 Err(e) => {
                     eprintln!("[fs_watcher] error: {e}");
                 }
-            }
-        }) {
+            },
+        ) {
             Ok(w) => {
                 info!(
                     count = desired_paths.len(),

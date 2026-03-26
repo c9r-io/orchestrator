@@ -470,9 +470,7 @@ pub(crate) fn resolve_agent_command(
 
     // Build a minimal prehook context for CEL evaluation.
     // The key ingredient is `vars` — the pipeline variables map.
-    let vars = pipeline_vars
-        .map(|pv| pv.vars.clone())
-        .unwrap_or_default();
+    let vars = pipeline_vars.map(|pv| pv.vars.clone()).unwrap_or_default();
     let ctx = agent_orchestrator::config::StepPrehookContext {
         task_id: task_id.to_string(),
         task_item_id: item_id.to_string(),

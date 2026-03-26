@@ -570,7 +570,9 @@ spec:
 "#;
         let resource: OrchestratorResource = serde_yaml::from_str(yaml).expect("should parse YAML");
         let registered = dispatch_resource(resource).expect("dispatch");
-        let err = registered.validate().expect_err("should reject empty paths");
+        let err = registered
+            .validate()
+            .expect_err("should reject empty paths");
         assert!(err.to_string().contains("paths must not be empty"));
     }
 
@@ -590,8 +592,13 @@ spec:
 "#;
         let resource: OrchestratorResource = serde_yaml::from_str(yaml).expect("should parse YAML");
         let registered = dispatch_resource(resource).expect("dispatch");
-        let err = registered.validate().expect_err("should reject missing filesystem");
-        assert!(err.to_string().contains("requires a 'filesystem' configuration block"));
+        let err = registered
+            .validate()
+            .expect_err("should reject missing filesystem");
+        assert!(
+            err.to_string()
+                .contains("requires a 'filesystem' configuration block")
+        );
     }
 
     #[test]
@@ -615,7 +622,9 @@ spec:
 "#;
         let resource: OrchestratorResource = serde_yaml::from_str(yaml).expect("should parse YAML");
         let registered = dispatch_resource(resource).expect("dispatch");
-        let err = registered.validate().expect_err("should reject invalid events");
+        let err = registered
+            .validate()
+            .expect_err("should reject invalid events");
         assert!(err.to_string().contains("filesystem.events must be one of"));
     }
 

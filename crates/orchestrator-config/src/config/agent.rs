@@ -290,7 +290,10 @@ mod tests {
 
         let deserialized: AgentConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.command_rules.len(), 1);
-        assert_eq!(deserialized.command_rules[0].when, cfg.command_rules[0].when);
+        assert_eq!(
+            deserialized.command_rules[0].when,
+            cfg.command_rules[0].when
+        );
         assert_eq!(
             deserialized.command_rules[0].command,
             cfg.command_rules[0].command
