@@ -29,8 +29,8 @@ spec:
         - create            # 文件创建
         - modify            # 文件修改（可选）
         - delete            # 文件删除（可选）
-      glob: "FR-*.md"       # 可选：文件名 glob 过滤
-    filter: "event.filename.endsWith('.md')"  # 可选：CEL 进一步过滤
+      debounce_ms: 500      # 防抖窗口（默认 500ms）
+    filter: "event.filename.matches('^FR-.*\\\\.md$')"  # CEL 过滤：文件名匹配
   action:
     workflow: fr_governance
     workspace: default
@@ -38,6 +38,8 @@ spec:
     start: true
   concurrency_policy: Forbid
 ```
+
+> **设计原则：核心只提供原子事件变量，过滤逻辑统一由 CEL 承载。** 不在 `filesystem` 配置中引入 glob 参数 — glob 匹配等价于 `event.filename.matches(regex)`，复用已有的 CEL filter 通道即可，避免核心 API 面膨胀。
 
 ### 2. Daemon 内嵌文件监控
 
@@ -60,12 +62,7 @@ filesystem 事件应将以下信息注入 CEL filter 和 action 模板变量：
 
 ### 4. 防抖（Debounce）
 
-文件系统事件通常成批到达（编辑器保存会触发多次 write 事件）。需要可配置的防抖窗口：
-
-```yaml
-filesystem:
-  debounce_ms: 500   # 默认 500ms，合并同文件的重复事件
-```
+文件系统事件通常成批到达（编辑器保存会触发多次 write 事件）。`filesystem.debounce_ms` 提供可配置的防抖窗口（默认 500ms），合并同文件的重复事件为一次触发。
 
 ### 5. 安全约束
 
@@ -88,4 +85,4 @@ filesystem:
 
 - **跨平台差异**：macOS FSEvents 和 Linux inotify 行为不完全一致（如递归监控、事件粒度）。`notify` crate 抽象了大部分差异，但需关注边界情况。
 - **大目录性能**：递归监控大型目录树可能消耗 fd/内存。应限制递归深度或单 trigger 最大监控路径数。
-- **编辑器临时文件**：vim/emacs 等编辑器的 swap 文件和备份文件可能触发误报。glob 过滤可缓解。
+- **编辑器临时文件**：vim/emacs 等编辑器的 swap 文件和备份文件可能触发误报。CEL filter（如 `!event.filename.startsWith('.')`）可缓解。
