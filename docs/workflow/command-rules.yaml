@@ -1,0 +1,129 @@
+# Command Rules — conditional agent command selection template.
+#
+# Usage:
+#   orchestrator apply -f docs/workflow/command-rules.yaml --project cmd-rules
+#   orchestrator task create --name "session-demo" --goal "Demonstrate command rules" --workflow command_rules --project cmd-rules
+#
+# Demonstrates: Agent command_rules (CEL conditional command selection),
+# step_vars (per-step pipeline variable overlay), and multi-step workflows
+# where different steps use different agent commands based on runtime state.
+# All agents are echo-based — no API keys required.
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: docs/ticket
+---
+# ── Step Templates ────────────────────────────────────────────────────
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: init_session
+spec:
+  description: "Initialize a new agent session"
+  prompt: >-
+    You are working on a project at {source_tree}.
+    Goal: {goal}.
+    Start a new analysis session and capture initial findings.
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: continue_session
+spec:
+  description: "Continue an existing agent session with follow-up analysis"
+  prompt: >-
+    Continue the analysis session for: {goal}.
+    Review the initial findings and provide deeper analysis.
+    Previous output: {init_session_output}
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: independent_review
+spec:
+  description: "Independent review without session context"
+  prompt: >-
+    Independently review the project at {source_tree} for: {goal}.
+    This is a fresh review — do not rely on prior session context.
+---
+# ── Agent with command_rules ──────────────────────────────────────────
+# The agent uses different commands based on runtime state:
+#   - First step (no session): creates a new session
+#   - Subsequent steps (session exists): resumes the session
+#   - QA steps: always use a fresh session (via step_vars override)
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: adaptive-agent
+  description: "Agent with CEL-driven command selection"
+spec:
+  capabilities:
+    - init
+    - continue
+    - review
+  command: >-
+    echo '{"confidence":0.92,"quality_score":0.90,
+    "artifacts":[{"kind":"analysis","findings":[
+    {"title":"default-cmd","description":"Using default command (no rule matched).","severity":"info"}
+    ]}]}'
+  command_rules:
+    # Rule 1: When session_id variable exists, use "resume" command
+    - when: "vars.session_id != ''"
+      command: >-
+        echo '{"confidence":0.94,"quality_score":0.92,
+        "artifacts":[{"kind":"analysis","findings":[
+        {"title":"session-resumed","description":"Resumed existing session.","severity":"info"}
+        ]}]}'
+    # Rule 2: When fresh_session is set (via step_vars), force new session
+    - when: "vars.fresh_session == 'true'"
+      command: >-
+        echo '{"confidence":0.91,"quality_score":0.89,
+        "artifacts":[{"kind":"analysis","findings":[
+        {"title":"fresh-session","description":"Started fresh session for independent review.","severity":"info"}
+        ]}]}'
+---
+# ── Workflow ──────────────────────────────────────────────────────────
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: command_rules
+spec:
+  max_parallel: 1
+  steps:
+    # Step 1: Init session — default command (no session_id yet)
+    - id: init_session
+      type: init
+      scope: task
+      required_capability: init
+      template: init_session
+      enabled: true
+      repeatable: false
+    # Step 2: Continue session — command_rules[0] matches (session_id set)
+    - id: continue_session
+      type: continue
+      scope: task
+      required_capability: continue
+      template: continue_session
+      enabled: true
+      repeatable: false
+    # Step 3: Independent review — step_vars forces fresh_session=true,
+    # command_rules[1] matches, overriding session context
+    - id: independent_review
+      type: review
+      scope: task
+      required_capability: review
+      template: independent_review
+      enabled: true
+      repeatable: false
+      step_vars:
+        fresh_session: "true"
+  loop:
+    mode: once

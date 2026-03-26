@@ -38,6 +38,7 @@ export default defineConfig({
                 { text: 'Plan & Execute', link: '/en/showcases/plan-execute' },
                 { text: 'Scheduled Scan', link: '/en/showcases/scheduled-scan' },
                 { text: 'FR Watch', link: '/en/showcases/fr-watch' },
+                { text: 'Command Rules', link: '/en/showcases/command-rules' },
               ],
             },
             {
@@ -93,6 +94,7 @@ export default defineConfig({
                 { text: 'Plan & Execute', link: '/zh/showcases/plan-execute' },
                 { text: 'Scheduled Scan', link: '/zh/showcases/scheduled-scan' },
                 { text: 'FR Watch', link: '/zh/showcases/fr-watch' },
+                { text: 'Command Rules', link: '/zh/showcases/command-rules' },
               ],
             },
             {

@@ -1,21 +1,16 @@
-# FR Watch — webhook-triggered FR governance workflow template.
+# FR Watch — filesystem-triggered FR governance workflow template.
 #
 # Usage:
 #   orchestrator apply -f docs/workflow/fr-watch.yaml --project fr-watch
 #
-#   # Simulate a new FR file event:
-#   orchestrator trigger fire fr-file-created --project fr-watch \
-#     --payload '{"file":"docs/feature_request/FR-099-new-feature.md"}'
+#   # Then create a new FR file in the watched directory:
+#   echo "# FR-099" > docs/feature_request/FR-099-new-feature.md
 #
-#   # Or integrate with a file watcher (e.g., fswatch, inotifywait):
-#   fswatch -0 docs/feature_request/ | while read -d '' file; do
-#     curl -X POST http://127.0.0.1:9090/webhook/fr-file-created \
-#       -H "Content-Type: application/json" \
-#       -d "{\"file\":\"$file\"}"
-#   done
+#   # The filesystem trigger detects the new file and auto-creates a task.
+#   # No external tools (fswatch, curl) needed — the daemon watches natively.
 #
-# Demonstrates: webhook Trigger with CEL payload filter, agent-driven
-# FR analysis, and event-driven automation (file system → webhook → task).
+# Demonstrates: native filesystem Trigger with CEL payload filter,
+# agent-driven FR analysis, and event-driven automation.
 # All agents are echo-based — no API keys required.
 apiVersion: orchestrator.dev/v2
 kind: Workspace
@@ -23,7 +18,8 @@ metadata:
   name: default
 spec:
   root_path: "."
-  qa_targets: []
+  qa_targets:
+    - docs/qa
   ticket_dir: docs/ticket
 ---
 # ── Step Templates ────────────────────────────────────────────────────
@@ -112,13 +108,8 @@ spec:
     max_cycles: 1
 ---
 # ── Trigger ───────────────────────────────────────────────────────────
-# Webhook trigger: fires when an external file watcher or CI system
-# sends a POST with a payload containing a new FR file path.
-#
-# Integration examples:
-#   fswatch + curl:  fswatch docs/feature_request/ | xargs -I{} curl -X POST ...
-#   GitHub Action:   on push to docs/feature_request/FR-*.md → POST webhook
-#   inotifywait:     inotifywait -m docs/feature_request/ -e create | ...
+# Native filesystem trigger: the daemon monitors docs/feature_request/
+# directly — no external file watcher or webhook bridge needed.
 ---
 apiVersion: orchestrator.dev/v2
 kind: Trigger
@@ -126,11 +117,17 @@ metadata:
   name: fr-file-created
 spec:
   event:
-    source: webhook
-    filter: "has(payload.file) && payload.file.startsWith('docs/feature_request/FR-')"
+    source: filesystem
+    filesystem:
+      paths:
+        - docs/feature_request/
+      events:
+        - create
+      debounce_ms: 500
+    filter:
+      condition: "payload_filename.endsWith('.md') && payload_filename.startsWith('FR-')"
   action:
     workflow: fr_governance
     workspace: default
-    goal: "Triage and plan newly created feature request"
     start: true
-  concurrency_policy: Forbid
+  concurrencyPolicy: Forbid
