@@ -2,10 +2,10 @@ use super::daemon::runtime_snapshot;
 use crate::config_load::read_active_config;
 use crate::error::{OrchestratorError, Result, classify_system_error};
 use crate::persistence::migration;
-use crate::scheduler_service::{pending_task_count, worker_stop_signal_path};
+use crate::persistence::repository::{SchedulerRepository, SqliteSchedulerRepository};
 use crate::state::InnerState;
 use anyhow::Context;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Result of manifest validation with both plain-text and structured diagnostics.
 #[derive(Debug, Clone)]
@@ -90,6 +90,38 @@ fn debug_dag_info(state: &InnerState) -> Result<String> {
     }
 
     Ok(lines.join("\n"))
+}
+
+/// Returns the number of tasks currently in the pending state.
+pub async fn pending_task_count(state: &InnerState) -> anyhow::Result<i64> {
+    SqliteSchedulerRepository::new(state.async_database.clone())
+        .pending_task_count()
+        .await
+}
+
+/// Returns the marker-file path used to request worker shutdown.
+pub fn worker_stop_signal_path(state: &InnerState) -> PathBuf {
+    state.data_dir.join("worker.stop")
+}
+
+/// Removes the worker stop marker if it exists.
+pub fn clear_worker_stop_signal(state: &InnerState) -> anyhow::Result<()> {
+    let path = worker_stop_signal_path(state);
+    if path.exists() {
+        std::fs::remove_file(path)?;
+    }
+    Ok(())
+}
+
+/// Writes the worker stop marker and wakes the worker loop.
+pub fn signal_worker_stop(state: &InnerState) -> anyhow::Result<()> {
+    let path = worker_stop_signal_path(state);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, "stop")?;
+    state.worker_notify.notify_waiters();
+    Ok(())
 }
 
 /// Get worker status.
@@ -378,6 +410,28 @@ mod tests {
     use crate::task_ops::create_task_impl;
     use crate::test_utils::TestState;
 
+    /// Lightweight enqueue helper for tests — sets task status to pending and
+    /// emits the scheduler_enqueued event.  Avoids a dependency on the
+    /// `orchestrator-scheduler` crate.
+    async fn enqueue_task_for_test(state: &InnerState, task_id: &str) {
+        state.task_repo.reset_unresolved_items(task_id).await.expect("reset items");
+        state
+            .db_writer
+            .set_task_status(task_id, "pending", false)
+            .await
+            .expect("set pending");
+        state.worker_notify.notify_waiters();
+        crate::events::insert_event(
+            state,
+            task_id,
+            None,
+            "scheduler_enqueued",
+            serde_json::json!({"task_id": task_id}),
+        )
+        .await
+        .expect("insert enqueue event");
+    }
+
     fn workflow_manifest(name: &str) -> String {
         format!(
             "apiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: {name}\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo ok\"\n  loop:\n    mode: once\n"
@@ -416,9 +470,7 @@ mod tests {
         std::fs::write(&qa_file, "# worker\n").expect("seed qa file");
         let created = create_task_impl(&state, crate::dto::CreateTaskPayload::default())
             .expect("create task");
-        crate::scheduler_service::enqueue_task(&state, &created.id)
-            .await
-            .expect("enqueue task");
+        enqueue_task_for_test(&state, &created.id).await;
 
         let status = worker_status(&state).await.expect("worker status");
         assert_eq!(status.pending_tasks, 1);
@@ -525,6 +577,65 @@ mod tests {
         assert!(!invalid.valid);
         assert_eq!(invalid.message, "Validation failed");
         assert!(!invalid.errors.is_empty());
+    }
+
+    #[tokio::test]
+    async fn pending_task_count_returns_correct_count() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        assert_eq!(pending_task_count(&state).await.expect("count 0"), 0);
+
+        let qa_file = state
+            .data_dir
+            .join("workspace/default/docs/qa/count_test.md");
+        std::fs::write(&qa_file, "# count test\n").expect("seed qa file");
+        let t1 =
+            create_task_impl(&state, crate::dto::CreateTaskPayload::default()).expect("create 1");
+        let t2 =
+            create_task_impl(&state, crate::dto::CreateTaskPayload::default()).expect("create 2");
+        enqueue_task_for_test(&state, &t1.id).await;
+        enqueue_task_for_test(&state, &t2.id).await;
+        assert_eq!(pending_task_count(&state).await.expect("count 2"), 2);
+    }
+
+    #[test]
+    fn signal_worker_stop_creates_stop_file() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let stop_path = worker_stop_signal_path(&state);
+        assert!(!stop_path.exists());
+        signal_worker_stop(&state).expect("signal stop");
+        assert!(stop_path.exists());
+        assert_eq!(
+            std::fs::read_to_string(&stop_path).expect("read"),
+            "stop"
+        );
+    }
+
+    #[test]
+    fn clear_worker_stop_signal_removes_stop_file() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        signal_worker_stop(&state).expect("signal stop");
+        assert!(worker_stop_signal_path(&state).exists());
+        clear_worker_stop_signal(&state).expect("clear");
+        assert!(!worker_stop_signal_path(&state).exists());
+    }
+
+    #[test]
+    fn clear_worker_stop_signal_noop_when_no_file() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        clear_worker_stop_signal(&state).expect("clear nonexistent");
+    }
+
+    #[test]
+    fn worker_signal_paths_are_under_data_dir() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let stop_path = worker_stop_signal_path(&state);
+        assert!(stop_path.starts_with(&*state.data_dir));
+        assert!(stop_path.ends_with("worker.stop"));
     }
 
     // NOTE: run_check tests moved to orchestrator-scheduler crate.

@@ -22,7 +22,7 @@ The project structure is organized as follows:
 ├── core/                 # Core Rust library (models, persistence, service layer)
 │   ├── src/
 │   │   ├── service/      # Pure business logic layer (task, resource, store, system)
-│   │   ├── scheduler_service.rs  # High-level enqueue/claim entry points
+│   │   ├── scheduler_port.rs  # TaskEnqueuer trait — cross-crate enqueue dispatch
 │   │   └── ...
 │   └── Cargo.toml
 ├── crates/
@@ -111,8 +111,8 @@ proto/
     *   Displays output (tables, JSON, YAML).
 
 2.  **Orchestrator Engine** (`core/` + `crates/orchestrator-scheduler/`):
-    *   **Core** (`core/`): Models, persistence, service layer, `scheduler_service.rs` (enqueue/claim tasks).
-    *   **Scheduler** (`crates/orchestrator-scheduler/`): Task loop execution, phase runner, loop guards, traces, checkpoints.
+    *   **Core** (`core/`): Models, persistence, service layer, `scheduler_port.rs` (cross-crate enqueue dispatch via `TaskEnqueuer` trait).
+    *   **Scheduler** (`crates/orchestrator-scheduler/`): Task loop execution, enqueue/claim, phase runner, loop guards, traces, checkpoints.
     *   **Task Management**: Creates, starts, pauses, and resumes tasks.
     *   **Cycle Loop**: Manages the iterative execution of workflows.
     *   **Process Management**: Spawns and monitors agent processes (shell commands).

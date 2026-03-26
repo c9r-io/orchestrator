@@ -24,7 +24,7 @@ Key functions:
 - `execute_self_restart_step()` in `core/src/scheduler/safety.rs`
 - `EXIT_RESTART = 75` constant
 - `prepare_task_for_start_batch()` restart_pending branch in `core/src/task_repository/state.rs`
-- `claim_next_pending_task()` priority SQL in `core/src/scheduler_service.rs`
+- `claim_next_pending_task()` priority SQL in `crates/orchestrator-scheduler/src/service/task.rs`
 - `exec()` self-replacement in `orchestratord` (primary restart path)
 
 Workflow: `fixtures/manifests/bundles/self-bootstrap-mock.yaml`

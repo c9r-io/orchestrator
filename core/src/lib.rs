@@ -22,7 +22,12 @@
 pub mod agent_lifecycle;
 /// Anomaly classification types for scheduler traces and runtime diagnostics.
 pub mod anomaly;
-/// Async SQLite access helpers backed by `tokio_rusqlite`.
+/// Async SQLite access helpers backed by `tokio_rusqlite` (**foundation layer**).
+///
+/// Provides a writer/reader `AsyncDatabase` connection pair that bridges tokio
+/// and SQLite's single-writer model.  All async repository implementations
+/// (`task_repository`, `persistence/repository`, `session_store`) build on top
+/// of this layer.
 pub mod async_database;
 /// K8s-style declarative resource types shared by the CLI surface.
 pub use orchestrator_config::cli_types;
@@ -34,11 +39,22 @@ pub use orchestrator_config::config;
 pub mod config_load;
 /// Custom resource definitions and resource store projections.
 pub mod crd;
-/// SQLite schema bootstrap and connection setup helpers.
+/// SQLite admin facade (**admin / facade layer**).
+///
+/// Re-exports connection primitives from `persistence::sqlite`, and provides
+/// project-scoped task queries, audit-record insertion, execution-metrics
+/// sampling, and database reset/housekeeping operations.  This is the entry
+/// point for administrative database work; task-execution persistence lives in
+/// `task_repository`, and infrastructure (migrations, domain repos) lives in
+/// `persistence`.
 pub mod db;
 /// Database maintenance utilities: VACUUM and size reporting.
 pub mod db_maintenance;
-/// Serialized database write coordination for async callers.
+/// Serialized database write coordination for async callers (**async write layer**).
+///
+/// Wraps `AsyncSqliteTaskRepository` behind a `DbWriteCoordinator` that
+/// serializes event insertion, command-run updates, and phase-result
+/// persistence through the single-writer connection.
 pub mod db_write;
 /// Data transfer objects returned by public task and event APIs.
 pub mod dto;
@@ -68,7 +84,13 @@ pub mod observability;
 pub mod output_capture;
 /// Structured output validation and diagnostics.
 pub mod output_validation;
-/// Persistence repositories and migration models.
+/// Persistence infrastructure (**infrastructure layer**).
+///
+/// Connection management, schema migrations, and domain-specific repository
+/// traits and SQLite implementations: `ConfigRepository`, `SessionRepository`,
+/// `SchedulerRepository`, `WorkflowStoreRepository`.  Distinct from
+/// `task_repository` which covers task-execution abstractions, and from `db`
+/// which provides admin/facade operations.
 pub mod persistence;
 /// Prehook execution models and support helpers.
 pub mod prehook;
@@ -82,8 +104,9 @@ pub mod runner;
 pub mod runtime;
 /// Sandbox network allowlist parsing and validation.
 pub mod sandbox_network;
-/// High-level scheduler service orchestration entry points.
-pub mod scheduler_service;
+/// Scheduler port: [`TaskEnqueuer`](scheduler_port::TaskEnqueuer) trait for
+/// cross-crate task enqueue dispatch (see module docs).
+pub mod scheduler_port;
 /// Secret key audit reports and validation routines.
 pub mod secret_key_audit;
 /// Secret key rotation lifecycle primitives.
@@ -107,7 +130,13 @@ pub mod store;
 pub mod task_cleanup;
 /// High-level task mutation operations.
 pub mod task_ops;
-/// Task repository interfaces and SQLite implementations.
+/// Task-execution persistence abstraction (**execution layer**).
+///
+/// A 32-method `TaskRepository` trait covering task lifecycle, item management,
+/// command-run recording, event streaming, and task-graph snapshots.  The async
+/// wrapper `AsyncSqliteTaskRepository` is the primary runtime implementation.
+/// This layer is distinct from `persistence` (which handles config, sessions,
+/// scheduling state) and `db` (admin/facade operations).
 pub mod task_repository;
 /// Ticket discovery, preview, and creation helpers.
 pub mod ticket;

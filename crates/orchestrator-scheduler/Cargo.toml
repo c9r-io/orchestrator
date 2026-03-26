@@ -1,9 +1,9 @@
 [package]
 name = "orchestrator-scheduler"
 version = "0.2.2"
-description = "Scheduler, runner, and prehook engine for the Agent Orchestrator"
+description = "Task scheduler engine for the Agent Orchestrator"
 repository = "https://github.com/c9r-io/orchestrator"
-keywords = ["orchestrator", "scheduler", "runner", "agent"]
+keywords = ["orchestrator", "scheduler", "agent"]
 categories = ["development-tools"]
 license = "MIT"
 readme = "README.md"

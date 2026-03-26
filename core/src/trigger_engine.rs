@@ -438,7 +438,7 @@ impl TriggerEngine {
                     let tid = task_id.clone();
                     tokio::spawn(async move {
                         if let Err(e) =
-                            crate::scheduler_service::enqueue_task_as_service(&state, &tid).await
+                            state.task_enqueuer.enqueue_task(&state, &tid).await
                         {
                             error!(task_id = tid.as_str(), error = %e, "failed to enqueue triggered task");
                         } else {

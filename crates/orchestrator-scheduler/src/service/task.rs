@@ -6,10 +6,12 @@ use crate::scheduler::{
 };
 use agent_orchestrator::dto::{CreateTaskPayload, LogChunk, TaskDetail, TaskSummary};
 use agent_orchestrator::error::{OrchestratorError, Result, classify_task_error};
-use agent_orchestrator::scheduler_service::enqueue_task as enqueue_task_impl;
+use agent_orchestrator::events::insert_event;
+use agent_orchestrator::persistence::repository::{SchedulerRepository, SqliteSchedulerRepository};
 use agent_orchestrator::state::InnerState;
 use agent_orchestrator::task_ops::{create_task_impl, reset_task_item_for_retry};
 use anyhow::Context;
+use serde_json::json;
 use std::sync::Arc;
 
 /// Create a new task (synchronous — no async DB ops needed).
@@ -47,11 +49,69 @@ pub async fn resolve_start_id(
     }
 }
 
+/// Marks a task as pending and wakes the background worker.
+///
+/// Resets unresolved items when resuming from paused/failed status.
+/// This is the canonical enqueue implementation — called by the service layer
+/// and by [`SchedulerTaskEnqueuer`] (the [`TaskEnqueuer`] port impl).
+async fn enqueue_task_inner(state: &InnerState, task_id: &str) -> anyhow::Result<()> {
+    state.task_repo.reset_unresolved_items(task_id).await?;
+    state
+        .db_writer
+        .set_task_status(task_id, "pending", false)
+        .await?;
+    state.worker_notify.notify_waiters();
+    insert_event(
+        state,
+        task_id,
+        None,
+        "scheduler_enqueued",
+        json!({"task_id": task_id}),
+    )
+    .await?;
+    Ok(())
+}
+
 /// Enqueue a task for background worker processing.
 pub async fn enqueue_task(state: &InnerState, task_id: &str) -> Result<()> {
-    enqueue_task_impl(state, task_id)
+    enqueue_task_inner(state, task_id)
         .await
         .map_err(|err| classify_task_error("task.enqueue", err))
+}
+
+/// Returns the next pending task identifier without claiming it.
+pub async fn next_pending_task_id(state: &InnerState) -> anyhow::Result<Option<String>> {
+    SqliteSchedulerRepository::new(state.async_database.clone())
+        .next_pending_task_id()
+        .await
+}
+
+/// Claims the next pending task and transitions it to running.
+pub async fn claim_next_pending_task(state: &InnerState) -> anyhow::Result<Option<String>> {
+    SqliteSchedulerRepository::new(state.async_database.clone())
+        .claim_next_pending_task()
+        .await
+}
+
+/// Concrete [`TaskEnqueuer`](agent_orchestrator::scheduler_port::TaskEnqueuer)
+/// implementation backed by the scheduler's enqueue logic.
+///
+/// Injected into [`InnerState`] by the daemon at startup so that core modules
+/// (e.g. `trigger_engine`) can enqueue tasks without a direct crate dependency
+/// on `orchestrator-scheduler`.
+pub struct SchedulerTaskEnqueuer;
+
+#[async_trait::async_trait]
+impl agent_orchestrator::scheduler_port::TaskEnqueuer for SchedulerTaskEnqueuer {
+    async fn enqueue_task(
+        &self,
+        state: &InnerState,
+        task_id: &str,
+    ) -> agent_orchestrator::error::Result<()> {
+        enqueue_task_inner(state, task_id)
+            .await
+            .map_err(|err| classify_task_error("task.enqueue", err))
+    }
 }
 
 /// Start a task and block until completion.

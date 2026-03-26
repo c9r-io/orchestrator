@@ -127,7 +127,7 @@ Verify FR-009 closure did not allow new business SQL helpers to grow from compat
 - `TaskRepository` trait exists in `core/src/task_repository/trait_def.rs`.
 - New SQL for task/scheduler/config operations should be added to their respective repository implementations, not to `db.rs`.
 
-> **Note**: Full SQL migration from legacy modules (`db_write.rs`, `scheduler_service.rs`, `task_ops.rs`) into repository implementations is an ongoing effort. This scenario governs that the **boundary** (traits) exists and no **new** helpers are added to `db.rs`, not that all legacy SQL has been migrated.
+> **Note**: Full SQL migration from legacy modules (`db_write.rs`, `task_ops.rs`) into repository implementations is an ongoing effort. `scheduler_service.rs` was decomposed in 2026-03-26 (see Design Doc 92); its scheduling SQL now lives in the `orchestrator-scheduler` crate and its worker helpers moved to `service/system.rs`. This scenario governs that the **boundary** (traits) exists and no **new** helpers are added to `db.rs`, not that all legacy SQL has been migrated.
 
 ### Expected Data State
 ```sql

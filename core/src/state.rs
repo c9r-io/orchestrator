@@ -105,6 +105,12 @@ pub struct InnerState {
     /// Handle for notifying the filesystem watcher of config changes.
     /// Set by the daemon; `None` in CLI-only contexts.
     pub fs_watcher_reload_tx: std::sync::Mutex<Option<tokio::sync::mpsc::Sender<()>>>,
+    /// Scheduler port for cross-crate task enqueue dispatch.
+    ///
+    /// Wired with the real scheduler implementation by the daemon; defaults to
+    /// [`NoopTaskEnqueuer`](crate::scheduler_port::NoopTaskEnqueuer) in tests
+    /// and CLI-only contexts.
+    pub task_enqueuer: Arc<dyn crate::scheduler_port::TaskEnqueuer>,
 }
 
 impl InnerState {

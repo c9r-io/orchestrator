@@ -35,13 +35,15 @@ This keeps wakeup orchestration in the same shared state object already used by 
 
 ### Enqueue Path
 
-`core/src/scheduler_service.rs::enqueue_task()` now:
+`crates/orchestrator-scheduler/src/service/task.rs::enqueue_task_inner()` (moved from `core/src/scheduler_service.rs` in Design Doc 92):
 
 1. marks the task `pending`
 2. calls `state.worker_notify.notify_waiters()`
 3. emits `scheduler_enqueued`
 
-The wakeup side effect is now in-memory and immediate. No `worker.wakeup` file is created.
+`core/src/trigger_engine.rs` reaches this via `state.task_enqueuer.enqueue_task()` (the `TaskEnqueuer` trait port defined in `core/src/scheduler_port.rs`).
+
+The wakeup side effect is in-memory and immediate. No `worker.wakeup` file is created.
 
 ### Stop Path
 

@@ -2,13 +2,13 @@
 self_referential_safe: true
 ---
 
-# QA 102: Core Crate Split Phase 2 — orchestrator-scheduler Extraction
+# QA 102: Core Crate Split Phase 2+3 — orchestrator-scheduler Extraction and scheduler_service Decomposition
 
-## 验证目标
+## Scope
 
-确认 `scheduler/` 模块成功从 core 提取至 `crates/orchestrator-scheduler/`，core LOC 降至 65K 以下，且所有功能保持完整。
+Verify the scheduler module extraction from core to `crates/orchestrator-scheduler/` (Phase 2) and the subsequent decomposition of `scheduler_service.rs` via trait-based port inversion (Phase 3).
 
-所有场景使用代码审查和 unit test 验证 — 无需 `cargo build`。编译正确性由 `cargo test` 隐式验证。
+All scenarios use code review and unit test verification — no `cargo build`. Compilation correctness is implicitly verified by `cargo test`.
 
 ## Verification Command
 
@@ -16,104 +16,85 @@ self_referential_safe: true
 cargo test --workspace --lib
 ```
 
-## 验证场景
+## Scenarios
 
-### 场景 1: 编译验证 (Code Review + Implicit Verification)
+### S-01: Compilation verification (Code Review + Implicit Verification)
 
 **Steps**:
 1. Review `crates/orchestrator-scheduler/Cargo.toml` — verify crate exists and has correct dependencies
 2. Compilation of all crates is inherently verified by `cargo test --workspace --lib`
 
 **Expected**:
-- [ ] `crates/orchestrator-scheduler/` 目录存在且包含有效 Cargo.toml
-- [ ] `cargo test --workspace --lib` 通过 — 隐式验证全部 crate 编译成功（包括 orchestrator-scheduler 独立编译和 agent-orchestrator 不含 scheduler 编译）
+- `crates/orchestrator-scheduler/` directory exists with valid Cargo.toml
+- `cargo test --workspace --lib` passes — implicitly verifies all crates compile
 
-### 场景 2: 测试验证
+### S-02: Test verification
 
-| 步骤 | 预期结果 |
+| Step | Expected |
 |------|---------|
-| `cargo test --workspace --lib` | 全部通过 |
-| `cargo test -p orchestrator-scheduler` | 所有 scheduler 测试通过（~411 tests） |
-| `cargo test -p orchestrator-core` | 所有 core 测试通过（~1,390 tests） |
+| `cargo test --workspace --lib` | All pass |
+| `cargo test -p orchestrator-scheduler` | All scheduler tests pass (~425 tests) |
+| `cargo test -p agent-orchestrator` | All core tests pass |
 
-### 场景 3: LOC 目标验证
+### S-03: Dependency direction verification
 
-| 指标 | 验收标准 | 实际值 |
-|------|---------|-------|
-| Core LOC (`core/src/`) | < 65,000 | 57,172 |
-| Core LOC 降幅 | > 20% | 31.2% |
+| Check | Expected |
+|-------|---------|
+| `orchestrator-scheduler` Cargo.toml depends on `agent-orchestrator` | Yes |
+| `agent-orchestrator` Cargo.toml **does not** depend on `orchestrator-scheduler` | Yes (no cycle) |
+| daemon/integration-tests depend on both core and scheduler | Yes |
+| `core/src/scheduler_port.rs` defines `TaskEnqueuer` trait | Yes (cross-crate port) |
+| `InnerState.task_enqueuer` is `Arc<dyn TaskEnqueuer>` | Yes (trait object) |
 
-### 场景 4: 依赖方向验证
+### S-04: scheduler_service.rs fully decomposed
 
-| 检查项 | 预期 |
-|--------|------|
-| `orchestrator-scheduler` Cargo.toml 依赖 `agent-orchestrator` | 是 |
-| `agent-orchestrator` Cargo.toml **不**依赖 `orchestrator-scheduler` | 是（无循环依赖） |
-| daemon/integration-tests 同时依赖 core 和 scheduler | 是（CLI 通过 daemon gRPC 间接访问 scheduler，不直接依赖） |
+| Check | Expected |
+|-------|---------|
+| `core/src/scheduler_service.rs` | Deleted |
+| `core/src/lib.rs` has no `pub mod scheduler_service;` | Removed |
+| `enqueue_task`, `claim_next_pending_task`, `next_pending_task_id` | Moved to `crates/orchestrator-scheduler/src/service/task.rs` |
+| `pending_task_count`, `worker_stop_signal_path`, `clear_worker_stop_signal`, `signal_worker_stop` | Moved to `core/src/service/system.rs` |
+| `enqueue_task_as_service` | Deleted — replaced by `TaskEnqueuer` trait port |
+| `SchedulerTaskEnqueuer` struct in scheduler crate | Implements `TaskEnqueuer` trait |
+| `core/src/trigger_engine.rs` | Uses `state.task_enqueuer.enqueue_task()` |
 
-### 场景 5: 死代码清理验证
+### S-05: Consumer import path verification
 
-| 检查项 | 预期 |
-|--------|------|
-| `core/src/scheduler/` 目录 | 已删除 |
-| `core/src/scheduler.rs` | 已删除 |
-| `core/src/service/task.rs` | 已删除 |
-| `core/src/lib.rs` 无 `pub mod scheduler;` | 已移除 |
-| `core/src/service/mod.rs` 无 `pub mod task;` | 已移除 |
+| Consumer | Component | Import Path |
+|----------|-----------|-------------|
+| daemon | scheduler types | `orchestrator_scheduler::scheduler::*` |
+| daemon | task service | `orchestrator_scheduler::service::task::*` |
+| daemon | system checks | `orchestrator_scheduler::service::system::run_check` |
+| daemon | worker stop signals | `agent_orchestrator::service::system::{clear_worker_stop_signal, worker_stop_signal_path}` |
+| daemon | claim pending task | `orchestrator_scheduler::service::task::claim_next_pending_task` |
+| daemon | task enqueuer | `orchestrator_scheduler::service::task::SchedulerTaskEnqueuer` |
+| daemon | state init | `agent_orchestrator::service::bootstrap::init_state_async_with_enqueuer` |
+| core trigger_engine | enqueue dispatch | `state.task_enqueuer.enqueue_task()` (via `TaskEnqueuer` trait) |
 
-### 场景 6: 消费方导入路径验证
+## Regression Risk
 
-| 消费方 | 旧路径 | 新路径 |
-|--------|--------|--------|
-| daemon | `agent_orchestrator::scheduler::*` | `orchestrator_scheduler::scheduler::*` |
-| daemon | `agent_orchestrator::service::task::*` | `orchestrator_scheduler::service::task::*` |
-| daemon | `agent_orchestrator::service::system::run_check` | `orchestrator_scheduler::service::system::run_check` |
-| daemon | `agent_orchestrator::scheduler_service::*` | `agent_orchestrator::scheduler_service::*`（保留：worker signal 处理函数 `claim_next_pending_task`, `clear_worker_stop_signal`, `worker_stop_signal_path` 仍在 core crate） |
-| integration-tests | 同上 | 同上 |
-
-### 场景 7: 运行时性能验证
-
-| 检查项 | 预期 |
-|--------|------|
-| 无 `dyn Trait` 动态分发 | 是（直接函数调用） |
-| 无泛型参数传播 | 是（inverted dependency 模式） |
-| 无额外 allocation/clone | 是 |
-
-## 回归风险
-
-- 如果 core 修改了 `state.rs`、`events.rs`、`db_write.rs` 等被 scheduler 引用的模块，scheduler 需要同步更新
-- `trigger_engine.rs` 中的 `cancel_task_for_trigger()` 是 `stop_task_runtime()` 的简化版，如 scheduler 的任务取消逻辑变化需同步更新
+- If core modifies `state.rs`, `events.rs`, `db_write.rs` or other modules referenced by the scheduler, the scheduler crate needs to stay in sync
+- `trigger_engine.rs` uses `cancel_task_for_trigger()` (simplified `stop_task_runtime()`); if scheduler task cancellation logic changes, this inline function needs updating
+- `TaskEnqueuer` trait introduces one `dyn` dispatch on the enqueue hot path (trigger_engine only); direct calls in the scheduler crate remain zero-cost
 
 ---
 
 ## Checklist
 
-| # | Check | Status | Notes |
-|---|-------|--------|-------|
-| 1 | All scenarios verified | ✅ | S1-S7: ALL PASS (2026-03-21) |
+| # | Scenario | Status | Notes |
+|---|----------|--------|-------|
+| 1 | S-01 Compilation | ☑ | `cargo test --workspace --lib` passed (1451+425 tests) |
+| 2 | S-02 Tests | ☑ | agent-orchestrator: 1451, orchestrator-scheduler: 425 |
+| 3 | S-03 Dependencies | ☑ | scheduler→core (yes), core→scheduler (no), scheduler_port.rs trait, InnerState.task_enqueuer |
+| 4 | S-04 Decomposition | ☑ | scheduler_service.rs deleted; all 8 functions relocated correctly |
+| 5 | S-05 Import paths | ☑ | daemon: service::system for worker stop, scheduler::service::task for claim/enqueue, init_state_async_with_enqueuer |
 
-## Verification Summary (2026-03-20)
+## Verification Summary (2026-03-26)
 
-### Passed
-- **S1**: `cargo test --workspace --lib` passes (1437 tests)
-- **S2**: orchestrator-scheduler 409 tests, agent-orchestrator 23 tests pass
-- **S3**: Core LOC 59,250 < 65,000 target
-- **S5**: Dead code cleanup complete (scheduler/*, service/task.rs removed)
-- **S6**: Consumer imports use `orchestrator_scheduler::*` paths
-- **S7**: Implicitly verified by passing tests
-
-### Notes
-- **S4**: Daemon does depend on both `agent-orchestrator` and `orchestrator-scheduler` as expected. Integration tests depend on `orchestrator-scheduler` only. CLI accesses scheduler indirectly via daemon gRPC.
-
-## Verification Summary (2026-03-21)
-
-### All Scenarios PASS ✅
 | Scenario | Result | Details |
 |----------|--------|---------|
-| S1 | PASS | `cargo test --workspace --lib` = 1437 tests passed |
-| S2 | PASS | scheduler: 409 tests, agent-orchestrator: 23 tests |
-| S3 | PASS | Core LOC: 59,269 < 65,000 target |
-| S4 | PASS | scheduler→agent-orchestrator, no reverse dep, daemon/integration-tests deps correct |
-| S5 | PASS | core/src/scheduler/*, service/task.rs removed, no pub mod references |
-| S6 | PASS | daemon uses `orchestrator_scheduler::*` paths; `scheduler_service` remains in agent_orchestrator |
-| S7 | PASS | Implicitly verified by passing tests |
+| S-01 | PASS | `cargo test --workspace --lib` = 1876 tests passed |
+| S-02 | PASS | scheduler: 425 tests, agent-orchestrator: 1451 tests |
+| S-03 | PASS | scheduler→agent-orchestrator, no reverse dep; TaskEnqueuer trait port confirmed |
+| S-04 | PASS | scheduler_service.rs deleted; enqueue/claim/next in scheduler crate; worker stop/pending in service/system.rs |
+| S-05 | PASS | All import paths verified in daemon (SchedulerTaskEnqueuer, claim_next_pending_task, init_state_async_with_enqueuer) |

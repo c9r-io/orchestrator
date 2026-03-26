@@ -50,7 +50,7 @@ Three core-internal call sites previously used `crate::service::task::*` and `cr
 | Core call site | Original path | New core-local wrapper |
 |---|---|---|
 | `trigger_engine.rs` | `crate::service::task::create_task` | `crate::task_ops::create_task_as_service` |
-| `trigger_engine.rs` | `crate::service::task::enqueue_task` | `crate::scheduler_service::enqueue_task_as_service` |
+| `trigger_engine.rs` | `crate::service::task::enqueue_task` | ~~`crate::scheduler_service::enqueue_task_as_service`~~ → `state.task_enqueuer.enqueue_task()` (Design Doc 92: trait port inversion) |
 | `trigger_engine.rs` | `crate::scheduler::stop_task_runtime` | Inline `cancel_task_for_trigger()` function |
 | `service/resource.rs` | `crate::service::task::create_task` | `crate::task_ops::create_task_as_service` |
 
@@ -83,3 +83,5 @@ All scheduler source files had `crate::` prefixed imports rewritten:
 | All existing call patterns preserved | runner/prehook remain in core (smaller extraction scope) |
 | Incremental compilation: scheduler changes only rebuild scheduler + downstream | Core changes still rebuild scheduler |
 | Simple, low-risk extraction | Need core-local wrappers for 3 cross-boundary calls |
+
+> **Follow-up (2026-03-26)**: `scheduler_service.rs` was fully decomposed in Design Doc 92. Scheduling primitives moved to the scheduler crate; worker helpers moved to `service/system.rs`; `enqueue_task_as_service` replaced by `TaskEnqueuer` trait port. The 3 core-local wrappers are now reduced to 2 (create_task_as_service + cancel_task_for_trigger).

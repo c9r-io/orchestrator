@@ -1,3 +1,10 @@
+//! Synchronous task-execution repository trait.
+//!
+//! Defines the 32-method `TaskRepository` contract covering task lifecycle,
+//! item management, command-run recording, event streaming, and task-graph
+//! snapshots.  The async counterpart `AsyncSqliteTaskRepository` is in
+//! the parent module.
+
 use crate::dto::{TaskGraphDebugBundle, TaskItemRow, TaskSummary};
 use anyhow::Result;
 

@@ -21,24 +21,28 @@ Verify that daemon worker wakeup no longer depends on `worker.wakeup` filesystem
 ### S-02: Enqueue path wakes workers through `Notify`
 
 **Steps**:
-1. Inspect `core/src/scheduler_service.rs`
-2. Confirm `enqueue_task()` updates task status to `pending`
-3. Confirm `enqueue_task()` calls `state.worker_notify.notify_waiters()`
+1. Inspect `crates/orchestrator-scheduler/src/service/task.rs` — function `enqueue_task_inner()`
+2. Confirm it updates task status to `pending`
+3. Confirm it calls `state.worker_notify.notify_waiters()`
+4. Confirm `core/src/trigger_engine.rs` calls `state.task_enqueuer.enqueue_task()` (trait dispatch to scheduler)
 
 **Expected**:
 - Wakeup is in-memory and immediate
 - No wake file is created as part of enqueue
+- `trigger_engine` uses the `TaskEnqueuer` trait port, not a direct function call
 
 ### S-03: Stop path still works without wake-file coupling
 
 **Steps**:
-1. Code review confirms unit tests exist in `core/src/scheduler_service.rs`:
+1. Code review confirms unit tests exist in `core/src/service/system.rs`:
    - `signal_worker_stop_creates_stop_file`
-   - `signal_worker_stop_notifies_waiters`
+   - `clear_worker_stop_signal_removes_stop_file`
+   - `clear_worker_stop_signal_noop_when_no_file`
+   - `worker_signal_paths_are_under_data_dir`
 2. Run tests (safe: uses isolated temp state):
    ```bash
-   cargo test --lib -p agent-orchestrator -- scheduler_service::tests::signal_worker_stop_creates_stop_file
-   cargo test --lib -p agent-orchestrator -- scheduler_service::tests::signal_worker_stop_notifies_waiters
+   cargo test --lib -p agent-orchestrator -- service::system::tests::signal_worker_stop_creates_stop_file
+   cargo test --lib -p agent-orchestrator -- service::system::tests::clear_worker_stop_signal_removes_stop_file
    ```
 
 **Expected**:
@@ -48,11 +52,10 @@ Verify that daemon worker wakeup no longer depends on `worker.wakeup` filesystem
 ### S-04: Single-winner claim semantics remain intact
 
 **Steps**:
-1. Code review confirms unit test exists in `core/src/scheduler_service.rs`:
-   - `claim_next_pending_task_is_single_winner`
-2. Run test (safe: uses isolated temp-db):
+1. Code review confirms `claim_next_pending_task()` exists in `crates/orchestrator-scheduler/src/service/task.rs`
+2. Run claim tests (safe: uses isolated temp-db):
    ```bash
-   cargo test --lib -p agent-orchestrator -- scheduler_service::tests::claim_next_pending_task_is_single_winner
+   cargo test -p orchestrator-scheduler -- service::task::tests::
    ```
 
 **Expected**:
@@ -71,12 +74,14 @@ Verify that daemon worker wakeup no longer depends on `worker.wakeup` filesystem
 
 ## Result
 
-Verified on 2026-03-12:
+Verified on 2026-03-12 (original), updated 2026-03-26 after scheduler_service.rs decomposition:
 
 - wake-file symbols removed from `core/` and `crates/`
-- `scheduler_service::tests::signal_worker_stop_notifies_waiters`: passed
+- worker stop helpers moved from `core/src/scheduler_service.rs` to `core/src/service/system.rs`
+- enqueue/claim/next moved to `crates/orchestrator-scheduler/src/service/task.rs`
+- `trigger_engine` now uses `TaskEnqueuer` trait port (`core/src/scheduler_port.rs`)
 - `cargo test --workspace`: passed
-- `cargo clippy --workspace --all-targets -- -D warnings`: passed
+- `cargo clippy --workspace`: passed
 
 ---
 
@@ -84,4 +89,4 @@ Verified on 2026-03-12:
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☑ | S1-S5 PASS (2026-03-19); S3-S5 rewritten as safe (cargo test --lib + CI gate) |
+| 1 | All scenarios verified | ☑ | S1-S5 PASS (2026-03-26); paths updated after scheduler_service.rs decomposition |

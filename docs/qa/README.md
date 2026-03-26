@@ -201,7 +201,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/99-long-lived-command-guard.md` | 4 | FR-045: task watch --timeout, stall auto-termination, QA agent timeout guidance |
 | orchestrator | `docs/qa/orchestrator/100-agent-subprocess-daemon-pid-guard.md` | 4 | FR-046: agent subprocess daemon PID guard with CLAUDE.md + hooks injection |
 | orchestrator | `docs/qa/orchestrator/101-core-crate-split-config.md` | - | FR-047: core crate split phase 1 — orchestrator-config extraction |
-| orchestrator | `docs/qa/orchestrator/102-core-crate-split-scheduler.md` | - | FR-048: core crate split phase 2 — orchestrator-scheduler extraction |
+| orchestrator | `docs/qa/orchestrator/102-core-crate-split-scheduler.md` | 5 | FR-048: core crate split phase 2+3 — orchestrator-scheduler extraction and scheduler_service.rs decomposition |
 | orchestrator | `docs/qa/orchestrator/103-prehook-pipeline-vars.md` | - | FR-049: prehook CEL pipeline variables — type inference, JSON array `in`, truncation skip, builtin precedence |
 | orchestrator | `docs/qa/orchestrator/104-cli-uds-fallback-robustness.md` | - | FR-050: CLI UDS fallback robustness — local socket priority, env override, home-dir TCP fallback |
 | orchestrator | `docs/qa/orchestrator/105-workflow-yaml-unknown-field-warning.md` | - | FR-051: workflow YAML unknown field warnings and CEL prehook variable cross-check |

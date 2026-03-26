@@ -26,8 +26,8 @@ use tonic::transport::Server;
 use tracing::{error, info};
 
 use agent_orchestrator::events::insert_event;
-use agent_orchestrator::scheduler_service::{
-    claim_next_pending_task, clear_worker_stop_signal, worker_stop_signal_path,
+use agent_orchestrator::service::system::{
+    clear_worker_stop_signal, worker_stop_signal_path,
 };
 use agent_orchestrator::state::{InnerState, task_semaphore};
 use orchestrator_proto::OrchestratorServiceServer;
@@ -36,6 +36,7 @@ use orchestrator_scheduler::scheduler::{
     RunningTask, load_task_summary, register_running_task, run_task_loop, shutdown_running_tasks,
     unregister_running_task,
 };
+use orchestrator_scheduler::service::task::{SchedulerTaskEnqueuer, claim_next_pending_task};
 
 #[derive(Debug, Parser)]
 #[command(name = "orchestratord", version, about = "Agent Orchestrator daemon")]
@@ -206,9 +207,12 @@ fn main() -> Result<()> {
     }
 
     rt.block_on(async move {
-        let state = agent_orchestrator::service::bootstrap::init_state_async(false)
-            .await
-            .context("failed to initialize orchestrator state")?;
+        let state = agent_orchestrator::service::bootstrap::init_state_async_with_enqueuer(
+            false,
+            std::sync::Arc::new(SchedulerTaskEnqueuer),
+        )
+        .await
+        .context("failed to initialize orchestrator state")?;
         let inner = state.inner.clone();
         inner.daemon_runtime.set_configured_workers(args.workers);
 

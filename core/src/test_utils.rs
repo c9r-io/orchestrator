@@ -332,6 +332,7 @@ impl TestState {
             trigger_event_tx: tokio::sync::broadcast::channel(64).0,
             trigger_engine_handle: std::sync::Mutex::new(None),
             fs_watcher_reload_tx: std::sync::Mutex::new(None),
+            task_enqueuer: crate::scheduler_port::noop_task_enqueuer(),
         });
         self.state = Some(state.clone());
         state

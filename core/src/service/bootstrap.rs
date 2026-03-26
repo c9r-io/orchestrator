@@ -15,6 +15,16 @@ use tokio::sync::{Mutex, Notify};
 /// creates a temporary runtime for async DB initialization. When called from
 /// within an async runtime (e.g., daemon), use `init_state_async()` instead.
 pub fn init_state(unsafe_mode: bool) -> Result<ManagedState> {
+    init_state_with_enqueuer(unsafe_mode, crate::scheduler_port::noop_task_enqueuer())
+}
+
+/// Variant of [`init_state`] that accepts a concrete [`TaskEnqueuer`](crate::scheduler_port::TaskEnqueuer).
+///
+/// Used by the daemon to inject the real scheduler implementation.
+pub fn init_state_with_enqueuer(
+    unsafe_mode: bool,
+    task_enqueuer: Arc<dyn crate::scheduler_port::TaskEnqueuer>,
+) -> Result<ManagedState> {
     let data_dir = data_dir();
     let (db_path, logs_dir) = initialize_runtime(&data_dir)?;
 
@@ -38,11 +48,20 @@ pub fn init_state(unsafe_mode: bool) -> Result<ManagedState> {
         active,
         active_config_error,
         active_config_notice,
+        task_enqueuer,
     )
 }
 
 /// Async variant of `init_state` — safe to call from within an existing tokio runtime.
 pub async fn init_state_async(unsafe_mode: bool) -> Result<ManagedState> {
+    init_state_async_with_enqueuer(unsafe_mode, crate::scheduler_port::noop_task_enqueuer()).await
+}
+
+/// Async variant of [`init_state_with_enqueuer`].
+pub async fn init_state_async_with_enqueuer(
+    unsafe_mode: bool,
+    task_enqueuer: Arc<dyn crate::scheduler_port::TaskEnqueuer>,
+) -> Result<ManagedState> {
     let data_dir = data_dir();
     let (db_path, logs_dir) = initialize_runtime(&data_dir)?;
 
@@ -65,6 +84,7 @@ pub async fn init_state_async(unsafe_mode: bool) -> Result<ManagedState> {
         active,
         active_config_error,
         active_config_notice,
+        task_enqueuer,
     )
 }
 
@@ -108,6 +128,7 @@ fn build_managed_state(
     active: crate::config::ActiveConfig,
     active_config_error: Option<String>,
     active_config_notice: Option<crate::config_load::ConfigSelfHealReport>,
+    task_enqueuer: Arc<dyn crate::scheduler_port::TaskEnqueuer>,
 ) -> Result<ManagedState> {
     let db_writer = Arc::new(crate::db_write::DbWriteCoordinator::new(
         async_database.clone(),
@@ -148,6 +169,7 @@ fn build_managed_state(
             trigger_event_tx: tokio::sync::broadcast::channel(64).0,
             trigger_engine_handle: std::sync::Mutex::new(None),
             fs_watcher_reload_tx: std::sync::Mutex::new(None),
+            task_enqueuer,
         }),
     })
 }
@@ -368,6 +390,7 @@ mod tests {
             active,
             active_config_error,
             active_config_notice,
+            crate::scheduler_port::noop_task_enqueuer(),
         )
         .expect("build managed state");
 
@@ -406,6 +429,7 @@ mod tests {
                 .clone(),
             Some("config-error".to_string()),
             None,
+            crate::scheduler_port::noop_task_enqueuer(),
         )
         .expect("build managed state");
 
