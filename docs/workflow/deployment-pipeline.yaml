@@ -1,0 +1,160 @@
+# Deployment Pipeline — build-test-deploy sequential workflow template.
+#
+# Usage:
+#   orchestrator apply -f docs/workflow/deployment-pipeline.yaml --project deploy
+#   orchestrator task create --name "deploy-v1" --goal "Deploy version 1.0" --workflow deployment_pipeline --project deploy
+#
+# Demonstrates: ExecutionProfile for sandbox isolation, safety configuration,
+# sequential step chain with capability routing, and max_parallel control.
+# All agents are echo-based — no API keys required.
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets: []
+  ticket_dir: ""
+---
+# ── Execution Profiles ────────────────────────────────────────────────
+# Profiles control filesystem isolation and network access per step.
+---
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: sandbox_build
+spec:
+  mode: sandbox
+  fs_mode: workspace_rw_scoped
+  writable_paths:
+    - build
+    - dist
+  network_mode: inherit
+---
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: host
+spec:
+  mode: host
+---
+# ── Step Templates ────────────────────────────────────────────────────
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: build
+spec:
+  description: "Build the project artifacts"
+  prompt: >-
+    Build the project at {source_tree} for deployment.
+    Goal: {goal}.
+    Run the build command and report success/failure with artifact paths.
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: test
+spec:
+  description: "Run the test suite before deployment"
+  prompt: >-
+    Run the full test suite for the project at {source_tree}.
+    Report test results: total, passed, failed, skipped.
+    Deployment should only proceed if all tests pass.
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: deploy
+spec:
+  description: "Deploy the built artifacts"
+  prompt: >-
+    Deploy the built artifacts for the project at {source_tree}.
+    Goal: {goal}.
+    Verify the deployment is healthy after rollout.
+---
+# ── Agents ────────────────────────────────────────────────────────────
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: build-agent
+  description: "Build agent — compiles and packages artifacts"
+spec:
+  capabilities:
+    - build
+  command: >-
+    echo '{"confidence":0.95,"quality_score":0.95,
+    "artifacts":[{"kind":"analysis","findings":[
+    {"title":"build-success","description":"Build completed. Artifacts in dist/.","severity":"info"}
+    ]}]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: test-agent
+  description: "Test agent — runs test suite"
+spec:
+  capabilities:
+    - test
+  command: >-
+    echo '{"confidence":0.98,"quality_score":0.96,
+    "artifacts":[{"kind":"analysis","findings":[
+    {"title":"tests-pass","description":"42 tests passed, 0 failed.","severity":"info"}
+    ]}]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: deploy-agent
+  description: "Deploy agent — handles deployment rollout"
+spec:
+  capabilities:
+    - deploy
+  command: >-
+    echo '{"confidence":0.92,"quality_score":0.90,
+    "artifacts":[{"kind":"analysis","findings":[
+    {"title":"deploy-success","description":"Deployment healthy. All health checks pass.","severity":"info"}
+    ]}]}'
+---
+# ── Workflow ──────────────────────────────────────────────────────────
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: deployment_pipeline
+spec:
+  max_parallel: 1
+  steps:
+    # Step 1: Build (sandboxed — only build/ and dist/ writable)
+    - id: build
+      type: build
+      scope: task
+      required_capability: build
+      template: build
+      execution_profile: sandbox_build
+      enabled: true
+      repeatable: false
+    # Step 2: Test (host mode — needs full access for test runner)
+    - id: test
+      type: test
+      scope: task
+      required_capability: test
+      template: test
+      execution_profile: host
+      enabled: true
+      repeatable: false
+    # Step 3: Deploy (host mode — needs network and tooling access)
+    - id: deploy
+      type: deploy
+      scope: task
+      required_capability: deploy
+      template: deploy
+      execution_profile: host
+      enabled: true
+      repeatable: false
+  loop:
+    mode: once
+  safety:
+    max_consecutive_failures: 1
+    auto_rollback: false

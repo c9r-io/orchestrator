@@ -1,0 +1,81 @@
+# QA Loop — test-fix-retest cycle template.
+#
+# Usage:
+#   orchestrator apply -f docs/workflow/qa-loop.yaml --project qa-loop
+#   orchestrator task create --name "qa-run" --goal "Run QA cycle" --workflow qa_loop --project qa-loop
+#
+# Demonstrates: multi-step workflow, capability-based agent selection,
+# ticket_scan builtin, and loop-once execution.
+# All agents are echo-based — no API keys required.
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: docs/ticket
+---
+# QA agent — runs test scenarios and reports findings
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: qa-agent
+  description: "QA agent — executes test scenarios"
+spec:
+  capabilities:
+    - qa
+  command: >-
+    echo '{"confidence":0.92,"quality_score":0.88,
+    "artifacts":[{"kind":"analysis","findings":[
+    {"title":"qa-pass","description":"All scenarios passed.","severity":"info"}
+    ]}]}'
+---
+# Fix agent — resolves issues found by QA
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: fix-agent
+  description: "Fix agent — resolves QA failures and tickets"
+spec:
+  capabilities:
+    - fix
+    - retest
+  command: >-
+    echo '{"confidence":0.90,"quality_score":0.85,
+    "artifacts":[{"kind":"analysis","findings":[
+    {"title":"fix-applied","description":"Issue resolved.","severity":"info"}
+    ]}]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: qa_loop
+spec:
+  steps:
+    # Step 1: Run QA scenarios against qa_targets
+    - id: qa
+      type: qa
+      required_capability: qa
+      enabled: true
+      repeatable: false
+    # Step 2: Scan for tickets created by QA failures
+    - id: ticket_scan
+      type: ticket_scan
+      enabled: true
+      repeatable: false
+    # Step 3: Fix any issues found
+    - id: fix
+      type: fix
+      required_capability: fix
+      enabled: true
+      repeatable: false
+    # Step 4: Re-test to confirm fixes
+    - id: retest
+      type: retest
+      required_capability: retest
+      enabled: true
+      repeatable: false
+  loop:
+    mode: once

@@ -1,0 +1,137 @@
+# Plan-Execute — plan-then-implement iteration template.
+#
+# Usage:
+#   orchestrator apply -f docs/workflow/plan-execute.yaml --project plan-exec
+#   orchestrator task create --name "my-feature" --goal "Implement feature X" --workflow plan_execute --project plan-exec
+#
+# Demonstrates: StepTemplate with prompt variables, multi-agent collaboration,
+# task-scope vs item-scope steps, variable capture and propagation.
+# All agents are echo-based — no API keys required.
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: docs/ticket
+---
+# ── Step Templates ────────────────────────────────────────────────────
+# Prompts are decoupled from agents. The agent's `command` injects
+# the rendered prompt via the {prompt} placeholder.
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: plan
+spec:
+  description: "Create an implementation plan for the given goal"
+  prompt: >-
+    You are working on a project at {source_tree}.
+    Your task: create a detailed implementation plan for: {goal}.
+
+    Output a plan document with these sections:
+    1. Files to Change — which files need modifications
+    2. Approach — step-by-step implementation strategy
+    3. Test Strategy — how to verify the changes
+
+    Current diff: {diff}
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: implement
+spec:
+  description: "Implement changes according to the plan"
+  prompt: >-
+    You are working on a project at {source_tree}.
+    Your task: implement the changes described in: {goal}.
+
+    Read the plan output from the previous step and follow it precisely.
+    Run tests after making changes to verify correctness.
+
+    Plan output path: {plan_output_path}
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: verify
+spec:
+  description: "Verify implementation matches the plan"
+  prompt: >-
+    You are working on a project at {source_tree}.
+    Review the changes made for: {goal}.
+
+    1. Check that all planned changes were implemented
+    2. Run the test suite and report results
+    3. Flag any deviations from the plan
+
+    Current diff: {diff}
+---
+# ── Agents ────────────────────────────────────────────────────────────
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: planner
+  description: "Planning agent — creates implementation plans"
+spec:
+  capabilities:
+    - plan
+  command: >-
+    echo '{"confidence":0.95,"quality_score":0.92,
+    "artifacts":[{"kind":"analysis","findings":[
+    {"title":"plan-ready","description":"Implementation plan created.","severity":"info"}
+    ]}]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: coder
+  description: "Coding agent — implements and verifies changes"
+spec:
+  capabilities:
+    - implement
+    - verify
+  command: >-
+    echo '{"confidence":0.90,"quality_score":0.88,
+    "artifacts":[{"kind":"analysis","findings":[
+    {"title":"impl-done","description":"Implementation complete.","severity":"info"}
+    ]}]}'
+---
+# ── Workflow ──────────────────────────────────────────────────────────
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: plan_execute
+spec:
+  max_parallel: 1
+  steps:
+    # Step 1 (task-scope): Generate the plan
+    - id: plan
+      type: plan
+      scope: task
+      required_capability: plan
+      template: plan
+      enabled: true
+      repeatable: false
+    # Step 2 (task-scope): Implement the plan
+    - id: implement
+      type: implement
+      scope: task
+      required_capability: implement
+      template: implement
+      enabled: true
+      repeatable: false
+    # Step 3 (task-scope): Verify the result
+    - id: verify
+      type: verify
+      scope: task
+      required_capability: verify
+      template: verify
+      enabled: true
+      repeatable: false
+  loop:
+    mode: once

@@ -12,7 +12,7 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: 'Guide', link: '/en/guide/quickstart' },
-          { text: 'Showcases', link: '/en/showcases/benchmark-multi-model-execution' },
+          { text: 'Showcases', link: '/en/showcases/hello-world' },
         ],
         sidebar: {
           '/en/guide/': [
@@ -30,6 +30,16 @@ export default defineConfig({
             },
           ],
           '/en/showcases/': [
+            {
+              text: 'Templates',
+              items: [
+                { text: 'Hello World', link: '/en/showcases/hello-world' },
+                { text: 'QA Loop', link: '/en/showcases/qa-loop' },
+                { text: 'Plan & Execute', link: '/en/showcases/plan-execute' },
+                { text: 'Deployment Pipeline', link: '/en/showcases/deployment-pipeline' },
+                { text: 'Scheduled Scan', link: '/en/showcases/scheduled-scan' },
+              ],
+            },
             {
               text: 'Showcases',
               items: [
@@ -57,7 +67,7 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: '指南', link: '/zh/guide/quickstart' },
-          { text: '示例', link: '/zh/showcases/benchmark-multi-model-execution' },
+          { text: '示例', link: '/zh/showcases/hello-world' },
         ],
         sidebar: {
           '/zh/guide/': [
@@ -75,6 +85,16 @@ export default defineConfig({
             },
           ],
           '/zh/showcases/': [
+            {
+              text: '模板',
+              items: [
+                { text: 'Hello World', link: '/zh/showcases/hello-world' },
+                { text: 'QA Loop', link: '/zh/showcases/qa-loop' },
+                { text: 'Plan & Execute', link: '/zh/showcases/plan-execute' },
+                { text: 'Deployment Pipeline', link: '/zh/showcases/deployment-pipeline' },
+                { text: 'Scheduled Scan', link: '/zh/showcases/scheduled-scan' },
+              ],
+            },
             {
               text: '示例',
               items: [

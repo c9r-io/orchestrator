@@ -1,0 +1,44 @@
+# Hello World — minimal workflow template.
+#
+# Usage:
+#   orchestrator apply -f docs/workflow/hello-world.yaml --project hello-world
+#   orchestrator task create --name "hello" --goal "Say hello" --workflow hello --project hello-world
+#
+# This is the simplest possible workflow: one Workspace, one Agent, one Workflow.
+# The echo agent runs once and exits. No API keys required.
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets: []
+  ticket_dir: ""
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: echo-agent
+  description: "Echo agent — returns a fixed JSON result (no API cost)"
+spec:
+  capabilities:
+    - general
+  command: >-
+    echo '{"confidence":0.95,"quality_score":0.9,
+    "artifacts":[{"kind":"analysis","findings":[
+    {"title":"hello-world","description":"Workflow executed successfully.","severity":"info"}
+    ]}]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: hello
+spec:
+  steps:
+    - id: greet
+      type: general
+      required_capability: general
+      enabled: true
+      repeatable: false
+  loop:
+    mode: once

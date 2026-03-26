@@ -1,0 +1,96 @@
+# Scheduled Scan — cron-triggered audit workflow template.
+#
+# Usage:
+#   orchestrator apply -f docs/workflow/scheduled-scan.yaml --project scan
+#
+#   # Manual run:
+#   orchestrator task create --name "scan-1" --goal "Run security audit" --workflow scheduled_scan --project scan
+#
+#   # Or let the cron trigger create tasks automatically (requires --webhook-bind on daemon).
+#
+# Demonstrates: Trigger resource with cron schedule, single-cycle fixed loop,
+# and automated task creation without human intervention.
+# All agents are echo-based — no API keys required.
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets: []
+  ticket_dir: ""
+---
+# ── Step Template ─────────────────────────────────────────────────────
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: audit
+spec:
+  description: "Run a security or compliance audit scan"
+  prompt: >-
+    Run a security audit on the project at {source_tree}.
+    Goal: {goal}.
+
+    Check for:
+    1. Known vulnerabilities in dependencies
+    2. Hardcoded secrets or credentials
+    3. Insecure configuration patterns
+    4. Outdated dependencies with security patches available
+
+    Output a structured report with findings and severity levels.
+---
+# ── Agent ─────────────────────────────────────────────────────────────
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: scan-agent
+  description: "Audit agent — performs security and compliance scans"
+spec:
+  capabilities:
+    - audit
+  command: >-
+    echo '{"confidence":0.94,"quality_score":0.91,
+    "artifacts":[{"kind":"analysis","findings":[
+    {"title":"no-vulnerabilities","description":"No critical vulnerabilities found.","severity":"info"},
+    {"title":"deps-up-to-date","description":"All dependencies are current.","severity":"info"}
+    ]}]}'
+---
+# ── Workflow ──────────────────────────────────────────────────────────
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: scheduled_scan
+spec:
+  max_parallel: 1
+  steps:
+    - id: audit
+      scope: task
+      required_capability: audit
+      template: audit
+      enabled: true
+      repeatable: false
+  loop:
+    mode: fixed
+    max_cycles: 1
+---
+# ── Trigger ───────────────────────────────────────────────────────────
+# Cron trigger: creates a new task automatically on schedule.
+# Requires daemon started with --webhook-bind to enable the trigger engine.
+---
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: weekly-scan
+spec:
+  cron:
+    schedule: "0 3 * * 1"
+    timezone: "UTC"
+  action:
+    workflow: scheduled_scan
+    workspace: default
+    goal: "Weekly automated security audit"
+    start: true
+  concurrency_policy: Forbid
