@@ -28,6 +28,9 @@ jobs:
         working-directory: site
         run: npm ci
 
+      - name: Sync guide docs to site
+        run: node scripts/sync-docs.mjs
+
       - name: Build
         working-directory: site
         run: npx vitepress build
