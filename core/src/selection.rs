@@ -1,4 +1,4 @@
-use crate::config::{AgentConfig, PromptDelivery};
+use crate::config::{AgentCommandRule, AgentConfig, PromptDelivery};
 use crate::health::is_capability_healthy;
 use crate::metrics::{
     AgentHealthState, AgentMetrics, AgentRuntimeState, SelectionRequirement, calculate_agent_score,
@@ -15,7 +15,7 @@ pub fn select_agent_advanced(
     metrics_map: &HashMap<String, AgentMetrics>,
     excluded_agents: &HashSet<String>,
     lifecycle_map: &HashMap<String, AgentRuntimeState>,
-) -> Result<(String, String, PromptDelivery)> {
+) -> Result<(String, String, PromptDelivery, Vec<AgentCommandRule>)> {
     let candidates: Vec<_> = agents
         .iter()
         .filter(|(id, cfg)| {
@@ -98,13 +98,14 @@ pub fn select_agent_advanced(
         agent_id.clone(),
         config.command.clone(),
         config.prompt_delivery,
+        config.command_rules.clone(),
     ))
 }
 
 /// Selects an agent by configured preference when no capability filter is required.
 pub fn select_agent_by_preference(
     agents: &HashMap<String, AgentConfig>,
-) -> Result<(String, String, PromptDelivery)> {
+) -> Result<(String, String, PromptDelivery, Vec<AgentCommandRule>)> {
     if agents.is_empty() {
         return Err(anyhow!("no agents configured"));
     }
@@ -119,7 +120,7 @@ pub fn select_agent_by_preference(
             } else {
                 cfg.command.clone()
             };
-            return Ok((id.clone(), command, cfg.prompt_delivery));
+            return Ok((id.clone(), command, cfg.prompt_delivery, cfg.command_rules.clone()));
         }
     }
 
@@ -134,7 +135,7 @@ pub fn select_agent_by_preference(
         config.command.clone()
     };
 
-    Ok((agent_id.clone(), command, config.prompt_delivery))
+    Ok((agent_id.clone(), command, config.prompt_delivery, config.command_rules.clone()))
 }
 
 /// Resolve effective agents for a task. Strict project isolation:
@@ -203,7 +204,7 @@ mod tests {
             &HashMap::new(),
         );
         assert!(result.is_ok());
-        let (agent_id, template, _) = result.expect("qa agent should be selected");
+        let (agent_id, template, _, _rules) = result.expect("qa agent should be selected");
         assert_eq!(agent_id, "agent1");
         assert_eq!(template, "echo agent1");
     }
@@ -257,7 +258,7 @@ mod tests {
             &HashMap::new(),
         );
         assert!(result.is_ok());
-        let (agent_id, _, _) = result.expect("remaining agent should be selected");
+        let (agent_id, _, _, _rules) = result.expect("remaining agent should be selected");
         assert_eq!(agent_id, "agent2");
     }
 
@@ -271,7 +272,7 @@ mod tests {
 
         let result = select_agent_by_preference(&agents);
         assert!(result.is_ok());
-        let (agent_id, command, _) = result.expect("default agent should be returned");
+        let (agent_id, command, _, _rules) = result.expect("default agent should be returned");
         assert_eq!(agent_id, "default_agent");
         assert_eq!(command, "echo default template");
     }
@@ -294,7 +295,7 @@ mod tests {
 
         let result = select_agent_by_preference(&agents);
         assert!(result.is_ok());
-        let (agent_id, _command, _) = result.expect("one agent should be selected");
+        let (agent_id, _command, _, _rules) = result.expect("one agent should be selected");
         assert!(agent_id == "agent1" || agent_id == "agent2");
     }
 
@@ -334,7 +335,7 @@ mod tests {
         let excluded = HashSet::new();
 
         for _ in 0..20 {
-            let (agent_id, _, _) = select_agent_advanced(
+            let (agent_id, _, _, _rules) = select_agent_advanced(
                 "qa",
                 &agents,
                 &health_map,
@@ -386,7 +387,7 @@ mod tests {
         let excluded = HashSet::new();
 
         for _ in 0..20 {
-            let (agent_id, _, _) = select_agent_advanced(
+            let (agent_id, _, _, _rules) = select_agent_advanced(
                 "qa",
                 &agents,
                 &health_map,
@@ -427,7 +428,7 @@ mod tests {
         let excluded = HashSet::new();
 
         for _ in 0..20 {
-            let (agent_id, _, _) = select_agent_advanced(
+            let (agent_id, _, _, _rules) = select_agent_advanced(
                 "qa",
                 &agents,
                 &health_map,
@@ -485,7 +486,7 @@ mod tests {
         let excluded = HashSet::new();
 
         for _ in 0..10 {
-            let (agent_id, command, _) = select_agent_advanced(
+            let (agent_id, command, _, _rules) = select_agent_advanced(
                 "qa",
                 &agents,
                 &health_map,
@@ -510,7 +511,7 @@ mod tests {
 
         let result = select_agent_by_preference(&agents);
         assert!(result.is_ok());
-        let (agent_id, command, _) = result.expect("empty-capabilities agent should match");
+        let (agent_id, command, _, _rules) = result.expect("empty-capabilities agent should match");
         assert_eq!(agent_id, "custom_blank");
         assert_eq!(command, "echo custom_blank");
     }
@@ -539,7 +540,7 @@ mod tests {
         let excluded = HashSet::new();
 
         for _ in 0..10 {
-            let (agent_id, _, _) = select_agent_advanced(
+            let (agent_id, _, _, _rules) = select_agent_advanced(
                 "qa",
                 &agents,
                 &health_map,

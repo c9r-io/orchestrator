@@ -96,7 +96,7 @@ pub fn delete_task_and_collect_log_paths(conn: &Connection, task_id: &str) -> Re
 
 pub fn insert_command_run(conn: &Connection, run: &NewCommandRun) -> Result<()> {
     conn.execute(
-        "INSERT INTO command_runs (id, task_item_id, phase, command, cwd, workspace_id, agent_id, exit_code, stdout_path, stderr_path, output_json, artifacts_json, confidence, quality_score, validation_status, started_at, ended_at, interrupted, session_id, machine_output_source, output_json_path, command_template) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
+        "INSERT INTO command_runs (id, task_item_id, phase, command, cwd, workspace_id, agent_id, exit_code, stdout_path, stderr_path, output_json, artifacts_json, confidence, quality_score, validation_status, started_at, ended_at, interrupted, session_id, machine_output_source, output_json_path, command_template, command_rule_index) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)",
         params![
             run.id,
             run.task_item_id,
@@ -119,7 +119,8 @@ pub fn insert_command_run(conn: &Connection, run: &NewCommandRun) -> Result<()> 
             run.session_id,
             run.machine_output_source,
             run.output_json_path,
-            run.command_template
+            run.command_template,
+            run.command_rule_index
         ],
     )?;
     Ok(())

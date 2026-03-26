@@ -68,6 +68,7 @@ fn create_minimal_test_config(temp_root: &Path) -> OrchestratorConfig {
                                 },
                                 capabilities: vec!["qa".to_string()],
                                 command: "echo 'qa: {rel_path}'".to_string(),
+                                command_rules: Vec::new(),
                                 selection: AgentSelectionConfig::default(),
                                 env: None,
                                 prompt_delivery: PromptDelivery::default(),
@@ -107,6 +108,7 @@ fn create_minimal_test_config(temp_root: &Path) -> OrchestratorConfig {
                                     item_select_config: None,
                                     store_inputs: vec![],
                                     store_outputs: vec![],
+                                    step_vars: None,
                                 }],
                                 execution: Default::default(),
                                 loop_policy: WorkflowLoopConfig {

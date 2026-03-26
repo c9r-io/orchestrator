@@ -92,6 +92,19 @@ pub struct AgentMetadata {
     pub cost: Option<u8>,
 }
 
+/// A conditional command rule evaluated via CEL at step execution time.
+///
+/// When an agent has `command_rules`, each rule is evaluated in order before
+/// falling back to the default `command`. The first rule whose `when` expression
+/// evaluates to `true` provides the command template for that step invocation.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct AgentCommandRule {
+    /// CEL expression that must evaluate to `true` for this rule to match.
+    pub when: String,
+    /// Command template to use when the rule matches.
+    pub command: String,
+}
+
 /// Agent configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -108,6 +121,10 @@ pub struct AgentConfig {
     /// Command to execute (must contain {prompt} placeholder)
     #[serde(default)]
     pub command: String,
+    /// Conditional command rules evaluated in order via CEL.
+    /// First matching rule's command is used; falls back to `command` if none match.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub command_rules: Vec<AgentCommandRule>,
     #[serde(default)]
     /// Agent-selection policy and weights.
     pub selection: AgentSelectionConfig,
@@ -135,6 +152,7 @@ impl AgentConfig {
             enabled: true,
             capabilities: Vec::new(),
             command: String::new(),
+            command_rules: Vec::new(),
             selection: AgentSelectionConfig::default(),
             env: None,
             prompt_delivery: PromptDelivery::default(),
@@ -251,5 +269,41 @@ mod tests {
     fn test_agent_selection_config_default() {
         let cfg = AgentSelectionConfig::default();
         assert!(cfg.weights.is_none());
+    }
+
+    #[test]
+    fn command_rules_default_empty() {
+        let cfg = AgentConfig::new();
+        assert!(cfg.command_rules.is_empty());
+    }
+
+    #[test]
+    fn command_rules_serde_roundtrip() {
+        let mut cfg = AgentConfig::new();
+        cfg.command_rules = vec![AgentCommandRule {
+            when: "vars.loop_session_id != \"\"".to_string(),
+            command: "claude --resume {loop_session_id} -p \"{prompt}\"".to_string(),
+        }];
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(json.contains("command_rules"));
+        assert!(json.contains("loop_session_id"));
+
+        let deserialized: AgentConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.command_rules.len(), 1);
+        assert_eq!(deserialized.command_rules[0].when, cfg.command_rules[0].when);
+        assert_eq!(
+            deserialized.command_rules[0].command,
+            cfg.command_rules[0].command
+        );
+    }
+
+    #[test]
+    fn command_rules_omitted_when_empty() {
+        let cfg = AgentConfig::new();
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(
+            !json.contains("command_rules"),
+            "empty command_rules should be omitted"
+        );
     }
 }

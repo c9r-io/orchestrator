@@ -36,6 +36,7 @@ fn normalize_workflow_sets_builtin_for_self_test() {
             item_select_config: None,
             store_inputs: vec![],
             store_outputs: vec![],
+                step_vars: None,
         }],
         execution: Default::default(),
         loop_policy: crate::config::WorkflowLoopConfig {
@@ -144,6 +145,7 @@ fn normalize_workflow_preserves_multiple_self_test_steps() {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                step_vars: None,
             },
             WorkflowStepConfig {
                 id: "self_test_recover".to_string(),
@@ -171,6 +173,7 @@ fn normalize_workflow_preserves_multiple_self_test_steps() {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                step_vars: None,
             },
         ],
         execution: Default::default(),
@@ -713,6 +716,7 @@ fn normalize_preserves_required_capability_on_custom_step_ids() {
         item_select_config: None,
         store_inputs: vec![],
         store_outputs: vec![],
+                step_vars: None,
     }];
     let mut wf = make_workflow(steps);
     normalize_workflow_config(&mut wf);

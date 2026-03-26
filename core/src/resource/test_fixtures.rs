@@ -56,6 +56,7 @@ pub fn agent_manifest(name: &str, command: &str) -> OrchestratorResource {
             env: None,
             prompt_delivery: None,
             health_policy: None,
+            command_rules: vec![],
         })),
     }
 }
@@ -96,6 +97,7 @@ pub fn workflow_manifest(name: &str) -> OrchestratorResource {
                 store_inputs: vec![],
                 store_outputs: vec![],
                 extra: Default::default(),
+                step_vars: None,
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),

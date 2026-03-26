@@ -98,7 +98,7 @@ pub async fn execute_guard_step(
         }
     }
 
-    let (agent_id, template, _prompt_delivery) = {
+    let (agent_id, template, _prompt_delivery, _command_rules) = {
         let active = agent_orchestrator::config_load::read_active_config(state)?;
         let health_map = state.agent_health.read().await;
         let metrics_map = state.agent_metrics.read().await;
@@ -160,6 +160,7 @@ pub async fn execute_guard_step(
             project_id: &task_ctx.project_id,
             execution_profile: None,
             self_referential: task_ctx.self_referential,
+            command_rule_index: None,
         },
     )
     .await?;

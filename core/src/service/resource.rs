@@ -1442,6 +1442,7 @@ mod tests {
                     env: None,
                     prompt_delivery: crate::config::PromptDelivery::default(),
                     health_policy: Default::default(),
+                    command_rules: Vec::new(),
                 },
             )]),
             workflows: HashMap::from([(

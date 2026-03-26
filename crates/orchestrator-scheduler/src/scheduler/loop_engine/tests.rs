@@ -60,6 +60,7 @@ fn command_step(
         item_select_config: None,
         store_inputs: vec![],
         store_outputs: vec![],
+                step_vars: None,
     }
 }
 
@@ -90,6 +91,7 @@ fn loop_guard_step() -> WorkflowStepConfig {
         item_select_config: None,
         store_inputs: vec![],
         store_outputs: vec![],
+                step_vars: None,
     }
 }
 
@@ -320,6 +322,7 @@ fn build_segments_groups_contiguous_scopes() {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
                 TaskExecutionStep {
                     id: "implement".into(),
@@ -347,6 +350,7 @@ fn build_segments_groups_contiguous_scopes() {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
                 TaskExecutionStep {
                     id: "qa_testing".into(),
@@ -374,6 +378,7 @@ fn build_segments_groups_contiguous_scopes() {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
                 TaskExecutionStep {
                     id: "ticket_fix".into(),
@@ -401,6 +406,7 @@ fn build_segments_groups_contiguous_scopes() {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
                 TaskExecutionStep {
                     id: "doc_governance".into(),
@@ -428,6 +434,7 @@ fn build_segments_groups_contiguous_scopes() {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig::default(),
@@ -509,6 +516,7 @@ fn build_segments_skips_guards() {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
                 TaskExecutionStep {
                     id: "loop_guard".into(),
@@ -536,6 +544,7 @@ fn build_segments_skips_guards() {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig::default(),
@@ -599,6 +608,7 @@ fn resolved_scope_uses_explicit_override() {
         item_select_config: None,
         store_inputs: vec![],
         store_outputs: vec![],
+                step_vars: None,
     };
     assert_eq!(step.resolved_scope(), StepScope::Task);
 }
@@ -696,6 +706,7 @@ fn collect_remaining_item_step_steps_returns_only_item_steps_after_segment() {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
                 TaskExecutionStep {
                     id: "qa_testing".into(),
@@ -722,6 +733,7 @@ fn collect_remaining_item_step_steps_returns_only_item_steps_after_segment() {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
                 TaskExecutionStep {
                     id: "ticket_fix".into(),
@@ -748,6 +760,7 @@ fn collect_remaining_item_step_steps_returns_only_item_steps_after_segment() {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
                 TaskExecutionStep {
                     id: "align_tests".into(),
@@ -774,6 +787,7 @@ fn collect_remaining_item_step_steps_returns_only_item_steps_after_segment() {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig::default(),
@@ -846,6 +860,7 @@ fn collect_remaining_item_step_steps_skips_non_repeatable_steps_after_first_cycl
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                step_vars: None,
             }],
             loop_policy: WorkflowLoopConfig::default(),
             finalize: WorkflowFinalizeConfig::default(),
@@ -967,6 +982,7 @@ fn build_segments_skips_disabled_steps() {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
                 TaskExecutionStep {
                     id: "disabled_step".into(),
@@ -993,6 +1009,7 @@ fn build_segments_skips_disabled_steps() {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig::default(),
@@ -1219,6 +1236,7 @@ fn collect_remaining_item_step_steps_from_start_index_2() {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
                 TaskExecutionStep {
                     id: "qa".into(),
@@ -1245,6 +1263,7 @@ fn collect_remaining_item_step_steps_from_start_index_2() {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
                 TaskExecutionStep {
                     id: "governance".into(),
@@ -1271,6 +1290,7 @@ fn collect_remaining_item_step_steps_from_start_index_2() {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig::default(),
@@ -1384,6 +1404,7 @@ fn build_segments_item_select_is_task_scoped() {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
                 TaskExecutionStep {
                     id: "evaluate".into(),
@@ -1417,6 +1438,7 @@ fn build_segments_item_select_is_task_scoped() {
                     }),
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig::default(),

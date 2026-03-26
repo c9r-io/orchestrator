@@ -2459,3 +2459,93 @@ fn test_prehook_pipeline_var_builtin_takes_precedence() {
     let result = evaluate_step_prehook_expression("cycle == 2", &ctx);
     assert!(result.unwrap());
 }
+
+// ── validate_agent_command_rules ────────────────────────────────────
+
+#[test]
+fn validate_command_rules_empty_is_ok() {
+    let result = super::validate_agent_command_rules("ag1", &[]);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn validate_command_rules_valid_cel() {
+    use crate::config::AgentCommandRule;
+    let rules = vec![AgentCommandRule {
+        when: "vars.loop_session_id != \"\"".to_string(),
+        command: "claude --resume {loop_session_id} -p \"{prompt}\"".to_string(),
+    }];
+    let result = super::validate_agent_command_rules("ag1", &rules);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn validate_command_rules_invalid_cel() {
+    use crate::config::AgentCommandRule;
+    let rules = vec![AgentCommandRule {
+        when: "vars.x !!!".to_string(),
+        command: "echo \"{prompt}\"".to_string(),
+    }];
+    let result = super::validate_agent_command_rules("ag1", &rules);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("invalid CEL"));
+}
+
+#[test]
+fn validate_command_rules_empty_when_rejected() {
+    use crate::config::AgentCommandRule;
+    let rules = vec![AgentCommandRule {
+        when: "  ".to_string(),
+        command: "echo \"{prompt}\"".to_string(),
+    }];
+    let result = super::validate_agent_command_rules("ag1", &rules);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("cannot be empty"));
+}
+
+#[test]
+fn validate_command_rules_missing_prompt_placeholder() {
+    use crate::config::AgentCommandRule;
+    let rules = vec![AgentCommandRule {
+        when: "true".to_string(),
+        command: "echo hello".to_string(),
+    }];
+    let result = super::validate_agent_command_rules("ag1", &rules);
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("{prompt} placeholder"));
+}
+
+// ── command rule CEL evaluation with pipeline vars ──────────────────
+
+#[test]
+fn command_rule_cel_matches_pipeline_var() {
+    let mut ctx = make_prehook_ctx();
+    ctx.vars
+        .insert("loop_session_id".to_string(), "ABC-123".to_string());
+    let result =
+        evaluate_step_prehook_expression("loop_session_id != \"\"", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn command_rule_cel_empty_var_does_not_match() {
+    let mut ctx = make_prehook_ctx();
+    ctx.vars
+        .insert("loop_session_id".to_string(), String::new());
+    let result =
+        evaluate_step_prehook_expression("loop_session_id != \"\"", &ctx);
+    assert!(!result.unwrap());
+}
+
+#[test]
+fn command_rule_cel_missing_var_does_not_match() {
+    let ctx = make_prehook_ctx();
+    // loop_session_id not in vars → evaluates as empty string
+    let result =
+        evaluate_step_prehook_expression("loop_session_id != \"\"", &ctx);
+    // Should either return false or error — either way, not a match
+    assert!(!result.unwrap_or(false));
+}

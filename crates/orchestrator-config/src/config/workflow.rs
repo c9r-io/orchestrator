@@ -83,6 +83,10 @@ pub struct WorkflowStepConfig {
     /// Store outputs: write pipeline vars to workflow stores after step execution
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub store_outputs: Vec<StoreOutputConfig>,
+    /// Step-scoped variable overrides applied as a temporary overlay on pipeline
+    /// variables during this step's execution. Does not modify global pipeline state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_vars: Option<std::collections::HashMap<String, String>>,
 }
 
 fn default_true() -> bool {

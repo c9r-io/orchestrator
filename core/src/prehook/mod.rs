@@ -20,6 +20,47 @@ pub use finalize::{
     resolve_workflow_finalize_outcome,
 };
 
+/// Validates all command rules on an agent: CEL syntax and `{prompt}` placeholder.
+pub fn validate_agent_command_rules(
+    agent_id: &str,
+    rules: &[crate::config::AgentCommandRule],
+) -> Result<()> {
+    for (i, rule) in rules.iter().enumerate() {
+        let expression = rule.when.trim();
+        if expression.is_empty() {
+            anyhow::bail!(
+                "agent '{}' command_rules[{}].when cannot be empty",
+                agent_id,
+                i
+            );
+        }
+        let compiled =
+            std::panic::catch_unwind(|| Program::compile(expression)).map_err(|_| {
+                anyhow::anyhow!(
+                    "agent '{}' command_rules[{}].when caused CEL parser panic",
+                    agent_id,
+                    i
+                )
+            })?;
+        compiled.map_err(|err| {
+            anyhow::anyhow!(
+                "agent '{}' command_rules[{}].when is invalid CEL: {}",
+                agent_id,
+                i,
+                err
+            )
+        })?;
+        if !rule.command.contains("{prompt}") {
+            anyhow::bail!(
+                "agent '{}' command_rules[{}].command must contain {{prompt}} placeholder",
+                agent_id,
+                i
+            );
+        }
+    }
+    Ok(())
+}
+
 /// Validates one step prehook expression and its engine configuration.
 pub fn validate_step_prehook(
     prehook: &StepPrehookConfig,

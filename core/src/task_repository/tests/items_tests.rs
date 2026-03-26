@@ -38,6 +38,7 @@ fn insert_and_list_task_log_runs_work() {
         session_id: None,
         machine_output_source: "stdout".to_string(),
         output_json_path: None,
+            command_rule_index: None,
     };
     repo.insert_command_run(&run).expect("insert command run");
 
@@ -79,6 +80,7 @@ fn insert_command_run_with_all_optional_fields() {
         session_id: Some("session-123".to_string()),
         machine_output_source: "json".to_string(),
         output_json_path: Some("/tmp/output.json".to_string()),
+            command_rule_index: None,
     };
     repo.insert_command_run(&run)
         .expect("insert command run with optionals");
@@ -127,6 +129,7 @@ fn delete_task_and_collect_log_paths_cleans_data() {
         session_id: None,
         machine_output_source: "stdout".to_string(),
         output_json_path: None,
+            command_rule_index: None,
     };
     repo.insert_command_run(&run).expect("insert command run");
 
@@ -220,6 +223,7 @@ fn delete_task_and_collect_log_paths_filters_empty_paths() {
         session_id: None,
         machine_output_source: "stdout".to_string(),
         output_json_path: None,
+            command_rule_index: None,
     };
     repo.insert_command_run(&run).expect("insert command run");
 

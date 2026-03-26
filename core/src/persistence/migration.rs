@@ -198,6 +198,11 @@ pub fn registered_migrations() -> Vec<Migration> {
             name: "m0020_command_template_column",
             up: crate::persistence::migration_steps::m0020_command_template_column,
         },
+        Migration {
+            version: 21,
+            name: "m0021_command_rule_index_column",
+            up: crate::persistence::migration_steps::m0021_command_rule_index_column,
+        },
     ]
 }
 

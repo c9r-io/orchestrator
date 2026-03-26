@@ -1149,6 +1149,7 @@ mod async_wrapper_tests {
             session_id: None,
             machine_output_source: "stdout".to_string(),
             output_json_path: None,
+            command_rule_index: None,
         })
         .await
         .expect("insert command run");

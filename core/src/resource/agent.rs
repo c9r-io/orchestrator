@@ -118,6 +118,7 @@ pub(crate) fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
         enabled: spec.enabled.unwrap_or(true),
         capabilities,
         command: spec.command.clone(),
+        command_rules: spec.command_rules.clone(),
         selection: spec
             .selection
             .as_ref()
@@ -150,6 +151,7 @@ pub(crate) fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
 pub(crate) fn agent_config_to_spec(config: &AgentConfig) -> AgentSpec {
     AgentSpec {
         command: config.command.clone(),
+        command_rules: config.command_rules.clone(),
         enabled: if config.enabled { None } else { Some(false) },
         capabilities: if config.capabilities.is_empty() {
             None
@@ -227,6 +229,7 @@ mod tests {
                 env: None,
                 prompt_delivery: None,
                 health_policy: None,
+                command_rules: vec![],
             },
         };
         let err = agent.validate().expect_err("operation should fail");
@@ -246,6 +249,7 @@ mod tests {
                 env: None,
                 prompt_delivery: None,
                 health_policy: None,
+                command_rules: vec![],
             },
         };
         assert!(agent.validate().is_ok());
@@ -265,6 +269,7 @@ mod tests {
                 env: None,
                 prompt_delivery: PromptDelivery::default(),
                 health_policy: Default::default(),
+                command_rules: Vec::new(),
             },
         );
         let loaded =
@@ -319,6 +324,7 @@ mod tests {
                 env: None,
                 prompt_delivery: None,
                 health_policy: None,
+                command_rules: vec![],
             },
         };
         let yaml = agent.to_yaml().expect("should serialize");
@@ -344,6 +350,7 @@ mod tests {
             env: None,
             prompt_delivery: None,
             health_policy: None,
+            command_rules: vec![],
         };
 
         let config = agent_spec_to_config(&spec);
@@ -370,6 +377,7 @@ mod tests {
             env: None,
             prompt_delivery: PromptDelivery::default(),
             health_policy: Default::default(),
+            command_rules: Vec::new(),
         };
         let spec = agent_config_to_spec(&config);
         assert!(spec.capabilities.is_none());
@@ -391,6 +399,7 @@ mod tests {
             env: None,
             prompt_delivery: PromptDelivery::default(),
             health_policy: Default::default(),
+            command_rules: Vec::new(),
         };
         let spec = agent_config_to_spec(&config);
         assert!(spec.metadata.is_none());
@@ -417,6 +426,7 @@ mod tests {
                 env: None,
                 prompt_delivery: None,
                 health_policy: None,
+                command_rules: vec![],
             })),
         };
         let rr = dispatch_resource(resource).expect("dispatch agent resource");

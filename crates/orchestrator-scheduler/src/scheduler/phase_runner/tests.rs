@@ -595,4 +595,72 @@ mod cases {
         assert_eq!(final_sample.output_state, "low_output");
         assert!(final_sample.stagnant_heartbeats >= STALL_AUTO_KILL_CONSECUTIVE_HEARTBEATS);
     }
+
+    // ── resolve_agent_command tests ─────────────────────────────────
+
+    #[test]
+    fn resolve_command_no_rules_returns_default() {
+        let (cmd, idx) = crate::scheduler::phase_runner::resolve_agent_command(
+            "echo default",
+            &[],
+            None,
+            "t1",
+            "i1",
+            1,
+            "plan",
+        );
+        assert_eq!(cmd, "echo default");
+        assert_eq!(idx, None);
+    }
+
+    #[test]
+    fn resolve_command_matching_rule() {
+        use agent_orchestrator::config::{AgentCommandRule, PipelineVariables};
+        let mut pv = PipelineVariables::default();
+        pv.vars
+            .insert("loop_session_id".to_string(), "ABC-123".to_string());
+        let rules = vec![AgentCommandRule {
+            when: "loop_session_id != \"\"".to_string(),
+            command: "claude --resume {loop_session_id}".to_string(),
+        }];
+        let (cmd, idx) =
+            crate::scheduler::phase_runner::resolve_agent_command("echo default", &rules, Some(&pv), "t1", "i1", 1, "plan");
+        assert_eq!(cmd, "claude --resume {loop_session_id}");
+        assert_eq!(idx, Some(0));
+    }
+
+    #[test]
+    fn resolve_command_no_match_falls_back() {
+        use agent_orchestrator::config::{AgentCommandRule, PipelineVariables};
+        let pv = PipelineVariables::default(); // no vars
+        let rules = vec![AgentCommandRule {
+            when: "loop_session_id != \"\"".to_string(),
+            command: "claude --resume {loop_session_id}".to_string(),
+        }];
+        let (cmd, idx) =
+            crate::scheduler::phase_runner::resolve_agent_command("echo default", &rules, Some(&pv), "t1", "i1", 1, "plan");
+        assert_eq!(cmd, "echo default");
+        assert_eq!(idx, None);
+    }
+
+    #[test]
+    fn resolve_command_first_matching_rule_wins() {
+        use agent_orchestrator::config::{AgentCommandRule, PipelineVariables};
+        let mut pv = PipelineVariables::default();
+        pv.vars.insert("mode".to_string(), "shared".to_string());
+        let rules = vec![
+            AgentCommandRule {
+                when: "mode == \"shared\"".to_string(),
+                command: "first {prompt}".to_string(),
+            },
+            AgentCommandRule {
+                when: "mode == \"shared\"".to_string(),
+                command: "second {prompt}".to_string(),
+            },
+        ];
+        let (cmd, idx) =
+            crate::scheduler::phase_runner::resolve_agent_command("default", &rules, Some(&pv), "t1", "i1", 1, "plan");
+        assert_eq!(cmd, "first {prompt}");
+        assert_eq!(idx, Some(0));
+    }
 }

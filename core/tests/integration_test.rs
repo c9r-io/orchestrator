@@ -41,6 +41,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                         env: None,
                         prompt_delivery: PromptDelivery::default(),
                         health_policy: Default::default(),
+                        command_rules: Vec::new(),
                     },
                 )]
                 .into(),
@@ -73,6 +74,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                             item_select_config: None,
                             store_inputs: vec![],
                             store_outputs: vec![],
+                step_vars: None,
                         }],
                         execution: Default::default(),
                         loop_policy: WorkflowLoopConfig {
@@ -611,6 +613,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
             env: None,
             prompt_delivery: PromptDelivery::default(),
             health_policy: Default::default(),
+            command_rules: Vec::new(),
         }
     }
 
@@ -696,6 +699,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                                 item_select_config: None,
                                 store_inputs: vec![],
                                 store_outputs: vec![],
+                step_vars: None,
                             },
                             WorkflowStepConfig {
                                 id: "qa_doc_gen".to_string(),
@@ -723,6 +727,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                                 item_select_config: None,
                                 store_inputs: vec![],
                                 store_outputs: vec![],
+                step_vars: None,
                             },
                             WorkflowStepConfig {
                                 id: "implement".to_string(),
@@ -750,6 +755,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                                 item_select_config: None,
                                 store_inputs: vec![],
                                 store_outputs: vec![],
+                step_vars: None,
                             },
                             WorkflowStepConfig {
                                 id: "qa_testing".to_string(),
@@ -777,6 +783,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                                 item_select_config: None,
                                 store_inputs: vec![],
                                 store_outputs: vec![],
+                step_vars: None,
                             },
                             WorkflowStepConfig {
                                 id: "ticket_fix".to_string(),
@@ -804,6 +811,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                                 item_select_config: None,
                                 store_inputs: vec![],
                                 store_outputs: vec![],
+                step_vars: None,
                             },
                             WorkflowStepConfig {
                                 id: "align_tests".to_string(),
@@ -831,6 +839,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                                 item_select_config: None,
                                 store_inputs: vec![],
                                 store_outputs: vec![],
+                step_vars: None,
                             },
                             WorkflowStepConfig {
                                 id: "doc_governance".to_string(),
@@ -858,6 +867,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                                 item_select_config: None,
                                 store_inputs: vec![],
                                 store_outputs: vec![],
+                step_vars: None,
                             },
                             WorkflowStepConfig {
                                 id: "loop_guard".to_string(),
@@ -885,6 +895,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                                 item_select_config: None,
                                 store_inputs: vec![],
                                 store_outputs: vec![],
+                step_vars: None,
                             },
                         ],
                         execution: Default::default(),
@@ -1027,6 +1038,7 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                step_vars: None,
             },
             WorkflowStepConfig {
                 id: "align_tests".to_string(),
@@ -1054,6 +1066,7 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                step_vars: None,
             },
         ],
         execution: Default::default(),

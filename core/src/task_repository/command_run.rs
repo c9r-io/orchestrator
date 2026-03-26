@@ -45,4 +45,6 @@ pub struct NewCommandRun {
     pub machine_output_source: String,
     /// Optional path to a large structured output spill file.
     pub output_json_path: Option<String>,
+    /// Index of the matched agent command_rule (None = default command).
+    pub command_rule_index: Option<i32>,
 }

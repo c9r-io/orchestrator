@@ -32,6 +32,7 @@ pub(super) async fn setup_phase_execution(
     project_id: &str,
     execution_profile_name: Option<&str>,
     self_referential: bool,
+    command_rule_index: Option<i32>,
 ) -> Result<PhaseSetup> {
     let now = now_ts();
     let run_uuid = Uuid::new_v4();
@@ -226,6 +227,7 @@ pub(super) async fn setup_phase_execution(
                 "stdout".to_string()
             },
             output_json_path: None,
+            command_rule_index,
         };
         state
             .db_writer

@@ -730,6 +730,16 @@ pub(crate) fn m0020_command_template_column(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn m0021_command_rule_index_column(conn: &Connection) -> Result<()> {
+    ensure_column_exists(
+        conn,
+        "command_runs",
+        "command_rule_index",
+        "ALTER TABLE command_runs ADD COLUMN command_rule_index INTEGER",
+    )?;
+    Ok(())
+}
+
 pub(crate) fn m0014_task_graph_debug_tables(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"

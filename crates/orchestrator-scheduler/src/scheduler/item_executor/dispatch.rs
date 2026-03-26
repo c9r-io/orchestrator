@@ -261,6 +261,42 @@ enum StepExecutionOutcome {
     EarlyReturn,
 }
 
+/// Creates a shallow copy of pipeline vars with step_vars overlay applied.
+/// Returns (effective_pipeline, originals) where originals maps each overridden
+/// key to its previous value (or None if the key didn't exist).
+fn apply_step_vars_overlay(
+    pipeline: &PipelineVariables,
+    step_vars: &Option<std::collections::HashMap<String, String>>,
+) -> (PipelineVariables, Vec<(String, Option<String>)>) {
+    let Some(sv) = step_vars else {
+        return (pipeline.clone(), Vec::new());
+    };
+    let mut overlay = pipeline.clone();
+    let mut originals = Vec::with_capacity(sv.len());
+    for (k, v) in sv {
+        let original = overlay.vars.insert(k.clone(), v.clone());
+        originals.push((k.clone(), original));
+    }
+    (overlay, originals)
+}
+
+/// Restores pipeline vars to their pre-overlay state for step_vars keys.
+fn restore_step_vars_overlay(
+    pipeline: &mut PipelineVariables,
+    originals: Vec<(String, Option<String>)>,
+) {
+    for (key, original_value) in originals {
+        match original_value {
+            Some(v) => {
+                pipeline.vars.insert(key, v);
+            }
+            None => {
+                pipeline.vars.remove(&key);
+            }
+        }
+    }
+}
+
 fn build_step_event_payload(
     step: &TaskExecutionStep,
     cycle: u32,
@@ -817,6 +853,11 @@ async fn execute_agent_step(
 
         // ExecutionMode::Agent or ExecutionMode::Builtin for generic builtins
         _ => {
+            // Apply step_vars overlay: create a temporary view of pipeline vars
+            // with step-scoped overrides. Save originals for post-execution restore.
+            let (effective_pipeline, step_vars_originals) =
+                apply_step_vars_overlay(&acc.pipeline_vars, &step.step_vars);
+
             let exec_result = execute_builtin_step(
                 state,
                 task_id,
@@ -824,12 +865,12 @@ async fn execute_agent_step(
                 step,
                 BuiltinStepContext {
                     task_ctx,
-                    pipeline_vars: &acc.pipeline_vars,
+                    pipeline_vars: &effective_pipeline,
                     runtime,
                     rel_path: &item.qa_file_path,
                     workspace_root: crate::scheduler::loop_engine::isolation::step_workspace_root(
                         task_ctx,
-                        &acc.pipeline_vars,
+                        &effective_pipeline,
                         step.resolved_scope(),
                     ),
                 },
@@ -861,6 +902,10 @@ async fn execute_agent_step(
                 }
             };
             acc.pipeline_vars = new_pipeline;
+
+            // Restore original values for step_vars keys so the overlay
+            // doesn't leak into subsequent steps' global pipeline state.
+            restore_step_vars_overlay(&mut acc.pipeline_vars, step_vars_originals);
 
             if let Some(ref output) = result.output {
                 if !output.stdout.is_empty() {
@@ -945,6 +990,7 @@ pub(crate) async fn execute_builtin_step(
                 project_id: &task_ctx.project_id,
                 execution_profile: None,
                 self_referential: task_ctx.self_referential,
+                command_rule_index: None,
             },
         )
         .await?
@@ -1204,6 +1250,7 @@ impl AdaptivePlanExecutor for AgentBackedAdaptiveExecutor<'_> {
                 project_id: &self.task_ctx.project_id,
                 execution_profile: None,
                 self_referential: self.task_ctx.self_referential,
+                command_rule_index: None,
             },
         )
         .await?;
@@ -1438,6 +1485,7 @@ pub(crate) async fn execute_dynamic_step_config(
                 project_id: &task_ctx.project_id,
                 execution_profile: None,
                 self_referential: task_ctx.self_referential,
+                command_rule_index: None,
             },
         )
         .await?
@@ -1593,4 +1641,109 @@ async fn resolve_store_inputs(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod step_vars_tests {
+    use super::*;
+
+    #[test]
+    fn overlay_none_returns_clone() {
+        let mut pv = PipelineVariables::default();
+        pv.vars.insert("x".to_string(), "1".to_string());
+        let (effective, originals) = apply_step_vars_overlay(&pv, &None);
+        assert_eq!(effective.vars.get("x").unwrap(), "1");
+        assert!(originals.is_empty());
+    }
+
+    #[test]
+    fn overlay_adds_new_key() {
+        let pv = PipelineVariables::default();
+        let sv = Some(
+            [("session_id".to_string(), "ABC".to_string())]
+                .into_iter()
+                .collect(),
+        );
+        let (effective, originals) = apply_step_vars_overlay(&pv, &sv);
+        assert_eq!(effective.vars.get("session_id").unwrap(), "ABC");
+        assert_eq!(originals.len(), 1);
+        assert_eq!(originals[0].1, None);
+    }
+
+    #[test]
+    fn overlay_overrides_existing_key() {
+        let mut pv = PipelineVariables::default();
+        pv.vars
+            .insert("loop_session_id".to_string(), "ORIGINAL".to_string());
+        let sv = Some(
+            [("loop_session_id".to_string(), String::new())]
+                .into_iter()
+                .collect(),
+        );
+        let (effective, originals) = apply_step_vars_overlay(&pv, &sv);
+        assert_eq!(effective.vars.get("loop_session_id").unwrap(), "");
+        assert_eq!(originals[0].1, Some("ORIGINAL".to_string()));
+    }
+
+    #[test]
+    fn restore_removes_new_keys() {
+        let mut pv = PipelineVariables::default();
+        pv.vars.insert("new_key".to_string(), "value".to_string());
+        let originals = vec![("new_key".to_string(), None)];
+        restore_step_vars_overlay(&mut pv, originals);
+        assert!(!pv.vars.contains_key("new_key"));
+    }
+
+    #[test]
+    fn restore_reverts_overridden_keys() {
+        let mut pv = PipelineVariables::default();
+        pv.vars
+            .insert("loop_session_id".to_string(), String::new());
+        let originals = vec![(
+            "loop_session_id".to_string(),
+            Some("ORIGINAL".to_string()),
+        )];
+        restore_step_vars_overlay(&mut pv, originals);
+        assert_eq!(pv.vars.get("loop_session_id").unwrap(), "ORIGINAL");
+    }
+
+    #[test]
+    fn full_overlay_restore_roundtrip() {
+        let mut pv = PipelineVariables::default();
+        pv.vars
+            .insert("loop_session_id".to_string(), "ABC-123".to_string());
+        pv.vars.insert("other".to_string(), "keep".to_string());
+
+        let sv = Some(
+            [
+                ("loop_session_id".to_string(), String::new()),
+                ("temp_var".to_string(), "temp".to_string()),
+            ]
+            .into_iter()
+            .collect(),
+        );
+
+        let (effective, originals) = apply_step_vars_overlay(&pv, &sv);
+        assert_eq!(effective.vars.get("loop_session_id").unwrap(), "");
+        assert_eq!(effective.vars.get("temp_var").unwrap(), "temp");
+        assert_eq!(effective.vars.get("other").unwrap(), "keep");
+
+        let mut new_pipeline = effective;
+        new_pipeline
+            .vars
+            .insert("captured_output".to_string(), "result".to_string());
+
+        restore_step_vars_overlay(&mut new_pipeline, originals);
+
+        assert_eq!(
+            new_pipeline.vars.get("loop_session_id").unwrap(),
+            "ABC-123"
+        );
+        assert!(!new_pipeline.vars.contains_key("temp_var"));
+        assert_eq!(
+            new_pipeline.vars.get("captured_output").unwrap(),
+            "result"
+        );
+        assert_eq!(new_pipeline.vars.get("other").unwrap(), "keep");
+    }
 }

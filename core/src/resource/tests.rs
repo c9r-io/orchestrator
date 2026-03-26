@@ -42,6 +42,7 @@ mod cases {
                 env: None,
                 prompt_delivery: None,
                 health_policy: None,
+                command_rules: vec![],
             })),
         };
 

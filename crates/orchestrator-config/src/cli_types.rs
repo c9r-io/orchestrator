@@ -615,6 +615,11 @@ pub struct AgentSpec {
     /// Command to execute (must contain {prompt} placeholder)
     pub command: String,
 
+    /// Conditional command rules evaluated in order via CEL.
+    /// First matching rule's command is used; falls back to `command` if none match.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub command_rules: Vec<crate::config::AgentCommandRule>,
+
     /// Whether this agent is enabled for scheduling (default: true).
     /// Disabled agents are skipped during task dispatch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -877,6 +882,11 @@ pub struct WorkflowStepSpec {
     /// WP01: Store outputs — write pipeline vars to workflow stores after step execution
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub store_outputs: Vec<crate::config::StoreOutputConfig>,
+
+    /// Step-scoped variable overrides applied as a temporary overlay on pipeline
+    /// variables during this step's execution. Does not modify global pipeline state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_vars: Option<std::collections::HashMap<String, String>>,
 
     /// Captures unknown YAML fields for apply-time warning diagnostics.
     #[serde(flatten, default, skip_serializing)]

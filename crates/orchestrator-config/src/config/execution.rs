@@ -89,6 +89,10 @@ pub struct TaskExecutionStep {
     /// Store outputs: write pipeline vars to workflow stores after step execution
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub store_outputs: Vec<StoreOutputConfig>,
+    /// Step-scoped variable overrides applied as a temporary overlay on pipeline
+    /// variables during this step's execution. Does not modify global pipeline state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_vars: Option<std::collections::HashMap<String, String>>,
 }
 
 impl TaskExecutionStep {
@@ -543,6 +547,7 @@ mod tests {
             item_select_config: None,
             store_inputs: vec![],
             store_outputs: vec![],
+                step_vars: None,
         }
     }
 
@@ -573,6 +578,7 @@ mod tests {
             item_select_config: None,
             store_inputs: vec![],
             store_outputs: vec![],
+                step_vars: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -604,6 +610,7 @@ mod tests {
             item_select_config: None,
             store_inputs: vec![],
             store_outputs: vec![],
+                step_vars: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -635,6 +642,7 @@ mod tests {
             item_select_config: None,
             store_inputs: vec![],
             store_outputs: vec![],
+                step_vars: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -668,6 +676,7 @@ mod tests {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
                 TaskExecutionStep {
                     id: "qa".to_string(),
@@ -694,6 +703,7 @@ mod tests {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig::default(),

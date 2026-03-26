@@ -405,6 +405,7 @@ mod tests {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
                 WorkflowStepConfig {
                     id: "self_test".to_string(),
@@ -432,6 +433,7 @@ mod tests {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                step_vars: None,
                 },
             ],
             execution: Default::default(),

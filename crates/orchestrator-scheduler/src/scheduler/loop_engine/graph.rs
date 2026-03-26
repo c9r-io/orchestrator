@@ -440,6 +440,7 @@ impl AdaptivePlanExecutor for GraphAdaptiveExecutor<'_> {
                 project_id: &self.task_ctx.project_id,
                 execution_profile: None,
                 self_referential: self.task_ctx.self_referential,
+                command_rule_index: None,
             },
         )
         .await?;

@@ -56,3 +56,26 @@ pub fn validate_agent_env_store_refs_for_project(
     }
     Ok(())
 }
+
+/// Validates all agent `command_rules` CEL expressions and prompt placeholders.
+pub fn validate_agent_command_rules(config: &OrchestratorConfig) -> Result<()> {
+    for project in config.projects.values() {
+        for (agent_id, agent_cfg) in &project.agents {
+            crate::prehook::validate_agent_command_rules(agent_id, &agent_cfg.command_rules)?;
+        }
+    }
+    Ok(())
+}
+
+/// Like `validate_agent_command_rules` but scoped to a single project.
+pub fn validate_agent_command_rules_for_project(
+    config: &OrchestratorConfig,
+    project_id: &str,
+) -> Result<()> {
+    if let Some(project) = config.projects.get(project_id) {
+        for (agent_id, agent_cfg) in &project.agents {
+            crate::prehook::validate_agent_command_rules(agent_id, &agent_cfg.command_rules)?;
+        }
+    }
+    Ok(())
+}

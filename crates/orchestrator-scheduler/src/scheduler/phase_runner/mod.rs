@@ -123,6 +123,7 @@ async fn run_phase_with_timeout(
         project_id,
         execution_profile,
         self_referential,
+        command_rule_index,
     } = request;
 
     // Stage 1: setup
@@ -142,6 +143,7 @@ async fn run_phase_with_timeout(
         project_id,
         execution_profile,
         self_referential,
+        command_rule_index,
     )
     .await
     {
@@ -446,6 +448,69 @@ pub async fn run_phase(
     run_phase_with_timeout(state, request).await
 }
 
+/// Resolves the effective agent command by evaluating `command_rules` in order.
+///
+/// Each rule's `when` CEL expression is evaluated against a prehook-style context
+/// that includes pipeline `vars`. The first rule that evaluates to `true` provides
+/// the command template. If no rule matches, the default command is returned.
+/// Returns `(effective_command, matched_rule_index)`.
+/// `matched_rule_index` is `None` when the default command is used.
+pub(crate) fn resolve_agent_command(
+    default_command: &str,
+    command_rules: &[agent_orchestrator::config::AgentCommandRule],
+    pipeline_vars: Option<&agent_orchestrator::config::PipelineVariables>,
+    task_id: &str,
+    item_id: &str,
+    cycle: u32,
+    phase: &str,
+) -> (String, Option<i32>) {
+    if command_rules.is_empty() {
+        return (default_command.to_string(), None);
+    }
+
+    // Build a minimal prehook context for CEL evaluation.
+    // The key ingredient is `vars` — the pipeline variables map.
+    let vars = pipeline_vars
+        .map(|pv| pv.vars.clone())
+        .unwrap_or_default();
+    let ctx = agent_orchestrator::config::StepPrehookContext {
+        task_id: task_id.to_string(),
+        task_item_id: item_id.to_string(),
+        cycle,
+        step: phase.to_string(),
+        vars,
+        ..Default::default()
+    };
+
+    for (i, rule) in command_rules.iter().enumerate() {
+        match agent_orchestrator::prehook::evaluate_step_prehook_expression(&rule.when, &ctx) {
+            Ok(true) => {
+                tracing::debug!(
+                    task_id,
+                    phase,
+                    rule_index = i,
+                    expression = %rule.when,
+                    "command_rule matched"
+                );
+                return (rule.command.clone(), Some(i as i32));
+            }
+            Ok(false) => {}
+            Err(e) => {
+                tracing::warn!(
+                    task_id,
+                    phase,
+                    rule_index = i,
+                    expression = %rule.when,
+                    error = %e,
+                    "command_rule CEL evaluation failed, skipping rule"
+                );
+            }
+        }
+    }
+
+    (default_command.to_string(), None)
+}
+
 /// Runs one phase command while coordinating with self-restart rotation safeguards.
 pub async fn run_phase_with_rotation(
     state: &Arc<InnerState>,
@@ -478,7 +543,7 @@ pub async fn run_phase_with_rotation(
         _ => None,
     });
 
-    let (agent_id, template, prompt_delivery) = {
+    let (agent_id, template, prompt_delivery, command_rules) = {
         let active = agent_orchestrator::config_load::read_active_config(state)?;
         let agents = agent_orchestrator::selection::resolve_effective_agents(
             project_id,
@@ -503,6 +568,17 @@ pub async fn run_phase_with_rotation(
             select_agent_by_preference(&agents)?
         }
     };
+
+    // Resolve effective command from command_rules (CEL-based conditional selection)
+    let (template, command_rule_index) = resolve_agent_command(
+        &template,
+        &command_rules,
+        pipeline_vars,
+        task_id,
+        item_id,
+        cycle,
+        phase,
+    );
 
     {
         let mut metrics_map = state.agent_metrics.write().await;
@@ -539,6 +615,7 @@ pub async fn run_phase_with_rotation(
             project_id,
             execution_profile,
             self_referential,
+            command_rule_index,
         },
     )
     .await
@@ -571,6 +648,7 @@ pub async fn run_phase_with_selected_agent(
         project_id,
         execution_profile,
         self_referential,
+        command_rule_index,
     } = request;
 
     // Render template variables into the step template prompt, then inject into agent command
@@ -646,6 +724,7 @@ pub async fn run_phase_with_selected_agent(
             project_id,
             execution_profile,
             self_referential,
+            command_rule_index,
         },
     )
     .await

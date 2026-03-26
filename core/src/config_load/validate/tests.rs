@@ -40,6 +40,7 @@ fn validate_workflow_config_allows_multiple_self_test_steps() {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                step_vars: None,
             },
             WorkflowStepConfig {
                 id: "self_test_recover".to_string(),
@@ -67,6 +68,7 @@ fn validate_workflow_config_allows_multiple_self_test_steps() {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                step_vars: None,
             },
         ],
         execution: Default::default(),
@@ -128,6 +130,7 @@ fn validate_workflow_config_allows_multiple_implement_steps() {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                step_vars: None,
             },
             WorkflowStepConfig {
                 id: "implement_phase_two".to_string(),
@@ -155,6 +158,7 @@ fn validate_workflow_config_allows_multiple_implement_steps() {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                step_vars: None,
             },
         ],
         execution: Default::default(),
@@ -216,6 +220,7 @@ fn validate_workflow_config_rejects_duplicate_step_ids() {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                step_vars: None,
             },
             WorkflowStepConfig {
                 id: "duplicate_step".to_string(),
@@ -243,6 +248,7 @@ fn validate_workflow_config_rejects_duplicate_step_ids() {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                step_vars: None,
             },
         ],
         execution: Default::default(),
@@ -316,6 +322,7 @@ fn validate_workflow_config_rejects_json_path_on_exit_code_capture() {
             item_select_config: None,
             store_inputs: vec![],
             store_outputs: vec![],
+                step_vars: None,
         }],
         execution: Default::default(),
         loop_policy: crate::config::WorkflowLoopConfig {
@@ -377,6 +384,7 @@ fn validate_self_referential_safety_errors_missing_self_test() {
             item_select_config: None,
             store_inputs: vec![],
             store_outputs: vec![],
+                step_vars: None,
         }],
         execution: Default::default(),
         loop_policy: crate::config::WorkflowLoopConfig {
@@ -444,6 +452,7 @@ fn validate_self_referential_safety_passes_with_self_test() {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                step_vars: None,
             },
             WorkflowStepConfig {
                 id: "self_test".to_string(),
@@ -471,6 +480,7 @@ fn validate_self_referential_safety_passes_with_self_test() {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                step_vars: None,
             },
         ],
         execution: Default::default(),

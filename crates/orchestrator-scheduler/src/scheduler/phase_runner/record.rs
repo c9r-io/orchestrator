@@ -71,6 +71,7 @@ pub(super) async fn record_phase_results(
                     .join("output.json")
             })
             .map(|p| p.to_string_lossy().to_string()),
+        command_rule_index: None,
     };
     let sender = collab::AgentEndpoint::for_task_item(agent_id, task_id, item_id);
     let msg = collab::AgentMessage::publish(

@@ -14,7 +14,7 @@ use std::path::Path;
 use super::now_ts;
 use super::{
     ResourceRemoval, build_active_config, build_active_config_for_project, normalize_config,
-    validate_agent_env_store_refs,
+    validate_agent_command_rules, validate_agent_env_store_refs,
 };
 
 pub(crate) fn serialize_config_snapshot(config: &OrchestratorConfig) -> Result<(String, String)> {
@@ -86,6 +86,7 @@ pub fn persist_raw_config(
 ) -> Result<ConfigOverview> {
     let normalized = normalize_config(config);
     validate_agent_env_store_refs(&normalized)?;
+    validate_agent_command_rules(&normalized)?;
     let (yaml, json_raw) = serialize_config_snapshot(&normalized)?;
     SqliteConfigRepository::new(db_path).persist_raw_config(normalized, &yaml, &json_raw, author)
 }

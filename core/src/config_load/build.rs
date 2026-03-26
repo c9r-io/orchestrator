@@ -11,7 +11,8 @@ use super::{
     ConfigSelfHealReport, apply_self_heal_pass, normalize_config,
     normalize_step_execution_mode_recursive, resolve_and_validate_projects,
     resolve_and_validate_workspaces, resolve_and_validate_workspaces_for_project,
-    serialize_config_snapshot, validate_agent_env_store_refs,
+    serialize_config_snapshot, validate_agent_command_rules,
+    validate_agent_command_rules_for_project, validate_agent_env_store_refs,
     validate_agent_env_store_refs_for_project, validate_execution_profiles_for_project,
     validate_workflow_config, validate_workflow_config_with_agents,
 };
@@ -33,6 +34,7 @@ pub fn build_active_config(data_dir: &Path, config: OrchestratorConfig) -> Resul
     let workspaces = resolve_and_validate_workspaces(data_dir, &config)?;
     let projects = resolve_and_validate_projects(data_dir, &config)?;
     validate_agent_env_store_refs(&config)?;
+    validate_agent_command_rules(&config)?;
     Ok(ActiveConfig {
         workspaces,
         projects,
@@ -53,6 +55,7 @@ pub fn build_active_config_for_project(
         resolve_and_validate_workspaces_for_project(data_dir, &config, target_project)?;
     let projects = resolve_and_validate_projects(data_dir, &config)?;
     validate_agent_env_store_refs_for_project(&config, target_project)?;
+    validate_agent_command_rules_for_project(&config, target_project)?;
     Ok(ActiveConfig {
         workspaces,
         projects,
@@ -186,6 +189,7 @@ pub(crate) fn task_step_from_workflow_step(
         item_select_config: normalized.item_select_config.clone(),
         store_inputs: normalized.store_inputs.clone(),
         store_outputs: normalized.store_outputs.clone(),
+        step_vars: normalized.step_vars.clone(),
     })
 }
 

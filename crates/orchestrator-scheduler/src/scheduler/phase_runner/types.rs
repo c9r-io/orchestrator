@@ -124,6 +124,9 @@ pub struct PhaseRunRequest<'a> {
     pub execution_profile: Option<&'a str>,
     /// Whether the workspace is self-referential (daemon PID protection enabled).
     pub self_referential: bool,
+    /// Index of the matched agent command_rule (None = default command).
+    #[allow(dead_code)]
+    pub command_rule_index: Option<i32>,
 }
 
 pub struct RotatingPhaseRunRequest<'a> {
@@ -177,4 +180,6 @@ pub struct SelectedPhaseRunRequest<'a> {
     pub execution_profile: Option<&'a str>,
     /// Whether the workspace is self-referential (daemon PID protection enabled).
     pub self_referential: bool,
+    /// Index of the matched agent command_rule (None = default command).
+    pub command_rule_index: Option<i32>,
 }
