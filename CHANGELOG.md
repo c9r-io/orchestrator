@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [0.2.2] - 2026-03-26
 
 ### Added
+- Filesystem trigger — `event.source: filesystem` for native file system change detection (macOS FSEvents / Linux inotify via `notify` crate)
+- Lazy watcher lifecycle — zero filesystem triggers = zero overhead; watcher created/released on demand
+- Filesystem event payload — `payload_path`, `payload_filename`, `payload_dir`, `payload_event_type`, `payload_timestamp` available in CEL filter
+- Path safety constraints — watched paths must be within workspace `root_path`; `.git/` and daemon data dir auto-excluded
+- Workflow template library — 5 progressive templates (hello-world, qa-loop, plan-execute, scheduled-scan, fr-watch) with echo agents for zero-cost tryout
+- Doc site "Templates" section — 5 beginner-friendly entries in EN/ZH Showcases sidebar
 - Skill template packaging — 17 skills distributed as templates (generic/framework/sdlc-patterns)
 - `scripts/package-skill-templates.sh` — sanitizes and packages skills for release
 - `install.sh` installs templates to `~/.orchestratord/skill-templates/`
