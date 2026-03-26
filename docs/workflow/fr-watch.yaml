@@ -1,0 +1,136 @@
+# FR Watch — webhook-triggered FR governance workflow template.
+#
+# Usage:
+#   orchestrator apply -f docs/workflow/fr-watch.yaml --project fr-watch
+#
+#   # Simulate a new FR file event:
+#   orchestrator trigger fire fr-file-created --project fr-watch \
+#     --payload '{"file":"docs/feature_request/FR-099-new-feature.md"}'
+#
+#   # Or integrate with a file watcher (e.g., fswatch, inotifywait):
+#   fswatch -0 docs/feature_request/ | while read -d '' file; do
+#     curl -X POST http://127.0.0.1:9090/webhook/fr-file-created \
+#       -H "Content-Type: application/json" \
+#       -d "{\"file\":\"$file\"}"
+#   done
+#
+# Demonstrates: webhook Trigger with CEL payload filter, agent-driven
+# FR analysis, and event-driven automation (file system → webhook → task).
+# All agents are echo-based — no API keys required.
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets: []
+  ticket_dir: docs/ticket
+---
+# ── Step Templates ────────────────────────────────────────────────────
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: fr_triage
+spec:
+  description: "Triage a new feature request — assess scope, priority, and feasibility"
+  prompt: >-
+    A new feature request document has been created in the project at {source_tree}.
+    Goal: {goal}.
+
+    Perform FR triage:
+    1. Read the FR document and summarize the core requirement
+    2. Assess priority (P0–P3) based on impact and urgency
+    3. Check for overlap with existing features or open FRs
+    4. Estimate implementation complexity (low/medium/high)
+    5. Identify dependencies on other components or FRs
+
+    Output a triage report with: summary, recommended priority,
+    complexity estimate, dependencies, and suggested next steps.
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: fr_plan
+spec:
+  description: "Draft an implementation plan for the FR"
+  prompt: >-
+    Based on the triage of the new FR in the project at {source_tree}.
+    Goal: {goal}.
+
+    Draft an implementation plan:
+    1. Break the FR into concrete implementation tasks
+    2. Identify files and modules that need changes
+    3. Define acceptance criteria mapped to FR requirements
+    4. Propose a QA strategy (unit tests, integration tests, manual verification)
+    5. Flag any risks or open questions for the FR author
+
+    Output the plan as a structured document ready for review.
+---
+# ── Agent ─────────────────────────────────────────────────────────────
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: fr-governance-agent
+  description: "FR governance agent — triages and plans feature requests"
+spec:
+  capabilities:
+    - fr_triage
+    - fr_plan
+  command: >-
+    echo '{"confidence":0.93,"quality_score":0.90,
+    "artifacts":[{"kind":"analysis","findings":[
+    {"title":"fr-triaged","description":"FR triaged: P1 priority, medium complexity, no blocking dependencies.","severity":"info"}
+    ]}]}'
+---
+# ── Workflow ──────────────────────────────────────────────────────────
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: fr_governance
+spec:
+  max_parallel: 1
+  steps:
+    # Step 1: Triage the new FR
+    - id: fr_triage
+      scope: task
+      required_capability: fr_triage
+      template: fr_triage
+      enabled: true
+      repeatable: false
+    # Step 2: Draft implementation plan
+    - id: fr_plan
+      scope: task
+      required_capability: fr_plan
+      template: fr_plan
+      enabled: true
+      repeatable: false
+  loop:
+    mode: fixed
+    max_cycles: 1
+---
+# ── Trigger ───────────────────────────────────────────────────────────
+# Webhook trigger: fires when an external file watcher or CI system
+# sends a POST with a payload containing a new FR file path.
+#
+# Integration examples:
+#   fswatch + curl:  fswatch docs/feature_request/ | xargs -I{} curl -X POST ...
+#   GitHub Action:   on push to docs/feature_request/FR-*.md → POST webhook
+#   inotifywait:     inotifywait -m docs/feature_request/ -e create | ...
+---
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: fr-file-created
+spec:
+  event:
+    source: webhook
+    filter: "has(payload.file) && payload.file.startsWith('docs/feature_request/FR-')"
+  action:
+    workflow: fr_governance
+    workspace: default
+    goal: "Triage and plan newly created feature request"
+    start: true
+  concurrency_policy: Forbid

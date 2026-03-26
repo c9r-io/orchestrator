@@ -27,8 +27,8 @@ FR 原始提案建议新建 `examples/` 目录。经评估，项目已有 `docs/
 | hello-world | Workspace + Agent + Workflow | 最小集 |
 | qa-loop | + 多 Agent + 多步骤 | capability 匹配、ticket_scan |
 | plan-execute | + StepTemplate | prompt 变量、Agent 解耦 |
-| deployment-pipeline | + ExecutionProfile | 沙箱隔离、safety 熔断 |
-| scheduled-scan | + Trigger | cron 调度、自动任务创建 |
+| scheduled-scan | + StepTemplate×2 + Trigger | agent 安全分析 + 静态扫描、cron 调度 |
+| fr-watch | + Webhook Trigger + CEL filter | 文件监控事件驱动、payload 过滤 |
 
 ### 4. 文档站集成
 
@@ -44,19 +44,19 @@ FR 标记 CLI 模板命令为可选。当前通过 `orchestrator apply -f docs/w
 - `docs/workflow/hello-world.yaml`
 - `docs/workflow/qa-loop.yaml`
 - `docs/workflow/plan-execute.yaml`
-- `docs/workflow/deployment-pipeline.yaml`
+- `docs/workflow/fr-watch.yaml`
 - `docs/workflow/scheduled-scan.yaml`
 
 ### Showcase Docs (5)
 - `docs/showcases/hello-world.md`
 - `docs/showcases/qa-loop.md`
 - `docs/showcases/plan-execute.md`
-- `docs/showcases/deployment-pipeline.md`
+- `docs/showcases/fr-watch.md`
 - `docs/showcases/scheduled-scan.md`
 
 ### Doc Site Pages (10)
-- `site/en/showcases/{hello-world,qa-loop,plan-execute,deployment-pipeline,scheduled-scan}.md`
-- `site/zh/showcases/{hello-world,qa-loop,plan-execute,deployment-pipeline,scheduled-scan}.md`
+- `site/en/showcases/{hello-world,qa-loop,plan-execute,scheduled-scan,fr-watch}.md`
+- `site/zh/showcases/{hello-world,qa-loop,plan-execute,scheduled-scan,fr-watch}.md`
 
 ### Config
 - `site/.vitepress/config.ts` — sidebar Templates group

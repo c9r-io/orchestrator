@@ -1,11 +1,11 @@
 # Scheduled Scan Template
 
-> **Purpose**: Cron-triggered security/compliance audit — demonstrates the Trigger resource and cron scheduling.
+> **Purpose**: Cron-triggered security audit — demonstrates agent-driven security analysis, static checks, and the Trigger resource.
 
 ## Use Cases
 
-- Periodic security scanning: dependency vulnerability detection, hardcoded credential checks
-- Compliance audits: periodic configuration and security policy verification
+- Periodic security audits: agent-driven threat modeling + static tool scanning
+- Compliance checks: regular architecture security and dependency health reviews
 - Any periodically recurring audit task
 
 ## Prerequisites
@@ -49,8 +49,20 @@ The `weekly-scan` cron trigger will automatically create new tasks every Monday 
 ## Workflow Steps
 
 ```
-audit (scan-agent) — single step, fixed loop with 1 cycle
+agent_audit (scan-agent) → static_check (scan-agent)
 ```
+
+1. **agent_audit** — Agent-driven security analysis: identify trust boundaries, review auth logic, check injection vectors, assess secrets handling and error exposure
+2. **static_check** — Static tool scanning: dependency audit (cargo audit / npm audit), secret scanning, known vulnerability pattern checks
+
+### Why Agent Analysis First?
+
+Traditional static scanning only catches known patterns (CVEs, regex matches). AI agents can:
+- Understand security implications in business logic (permission bypasses, TOCTOU races)
+- Perform threat modeling (identify trust boundaries and attack surfaces)
+- Provide context-aware remediation advice
+
+Static scanning complements by covering mechanical checks the agent might miss (dependency CVEs, hardcoded credential regex, etc.).
 
 ### Key Feature: Trigger
 
@@ -70,11 +82,6 @@ spec:
   concurrency_policy: Forbid  # Prevent overlapping executions
 ```
 
-- `cron.schedule` — Standard cron expression
-- `cron.timezone` — Timezone control
-- `action.start: true` — Task starts automatically after creation
-- `concurrency_policy: Forbid` — Skips this trigger if the previous task is still running
-
 ## Customization Guide
 
 ### Adjust Frequency
@@ -90,32 +97,40 @@ schedule: "0 */6 * * *"
 schedule: "0 0 1 * *"
 ```
 
-### Replace with a Real Scan Agent
+### Replace with a Real Agent
 
-Swap the echo command for a real agent and customize the StepTemplate prompt:
+Swap the echo command for a real agent:
 
 ```yaml
-# Agent
 command: claude -p "{prompt}" --verbose --output-format stream-json
+```
 
-# StepTemplate prompt — customize for your tech stack
+The agent will then perform actual threat modeling and run static scan commands.
+
+### Customize StepTemplate Prompts
+
+Adjust the static_check prompt for your tech stack:
+
+```yaml
 prompt: >-
-  Run `cargo audit` to check for known vulnerabilities.
-  Run `rg -n 'password|secret|api_key' --type rust` to find hardcoded secrets.
-  Report all findings with severity levels.
+  Run static security checks:
+  - `cargo audit` for Rust dependency CVEs
+  - `rg -n 'password|secret|api_key' --type rust` for hardcoded secrets
+  - Check for `unsafe` blocks without safety comments
 ```
 
 ### Add a Webhook Trigger
 
-In addition to cron, trigger scans via webhook events:
+Trigger scans via webhook events (e.g., after CI push):
 
 ```yaml
 kind: Trigger
 metadata:
   name: on-push-scan
 spec:
-  source: webhook
-  filter: "payload.ref == 'refs/heads/main'"
+  event:
+    source: webhook
+    filter: "payload.ref == 'refs/heads/main'"
   action:
     workflow: scheduled_scan
     workspace: default
@@ -125,6 +140,6 @@ spec:
 
 ## Further Reading
 
-- [Secret Rotation Workflow](/en/showcases/secret-rotation-workflow) — Production cron trigger example (secret rotation)
-- [Content Promotion](/en/showcases/promotion-execution) — Another cron-triggered workflow (content distribution)
+- [FR Watch Template](/en/showcases/fr-watch) — Webhook Trigger example (file system monitoring)
+- [Secret Rotation Workflow](/en/showcases/secret-rotation-workflow) — Production cron trigger example
 - [Advanced Features](/en/guide/advanced-features) — Trigger resource details

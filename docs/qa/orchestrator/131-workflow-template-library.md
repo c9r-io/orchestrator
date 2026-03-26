@@ -10,7 +10,7 @@ Validates FR-077: workflow template library with 5 beginner-to-advanced template
 
 **Steps:**
 ```bash
-for f in docs/workflow/hello-world.yaml docs/workflow/qa-loop.yaml docs/workflow/plan-execute.yaml docs/workflow/deployment-pipeline.yaml docs/workflow/scheduled-scan.yaml; do
+for f in docs/workflow/hello-world.yaml docs/workflow/qa-loop.yaml docs/workflow/plan-execute.yaml docs/workflow/scheduled-scan.yaml docs/workflow/fr-watch.yaml; do
   echo "--- $f ---"
   grep -c 'apiVersion: orchestrator.dev/v2' "$f"
 done
@@ -45,29 +45,31 @@ grep 'kind: StepTemplate' docs/workflow/plan-execute.yaml | wc -l
 
 **Expected:** At least 3 StepTemplate resources (plan, implement, verify).
 
-## Scenario 5: Deployment Pipeline — ExecutionProfile resources
+## Scenario 5: Scheduled Scan — agent audit + static check two-phase
 
 **Steps:**
 ```bash
-grep 'kind: ExecutionProfile' docs/workflow/deployment-pipeline.yaml | wc -l
-```
-
-**Expected:** At least 1 ExecutionProfile resource with sandbox mode.
-
-## Scenario 6: Scheduled Scan — Trigger resource
-
-**Steps:**
-```bash
+grep 'kind: StepTemplate' docs/workflow/scheduled-scan.yaml | wc -l
 grep 'kind: Trigger' docs/workflow/scheduled-scan.yaml | wc -l
 ```
 
-**Expected:** At least 1 Trigger resource with cron schedule.
+**Expected:** At least 2 StepTemplate resources (agent_audit, static_check) and 1 Trigger with cron schedule.
+
+## Scenario 6: FR Watch — webhook Trigger with CEL filter
+
+**Steps:**
+```bash
+grep 'source: webhook' docs/workflow/fr-watch.yaml
+grep 'filter:' docs/workflow/fr-watch.yaml
+```
+
+**Expected:** Trigger has `source: webhook` and a CEL filter expression matching FR file paths.
 
 ## Scenario 7: All templates use echo agents (zero API cost)
 
 **Steps:**
 ```bash
-for f in docs/workflow/hello-world.yaml docs/workflow/qa-loop.yaml docs/workflow/plan-execute.yaml docs/workflow/deployment-pipeline.yaml docs/workflow/scheduled-scan.yaml; do
+for f in docs/workflow/hello-world.yaml docs/workflow/qa-loop.yaml docs/workflow/plan-execute.yaml docs/workflow/scheduled-scan.yaml docs/workflow/fr-watch.yaml; do
   echo "--- $f ---"
   grep -c "echo '" "$f"
 done
@@ -79,7 +81,7 @@ done
 
 **Steps:**
 ```bash
-for name in hello-world qa-loop plan-execute deployment-pipeline scheduled-scan; do
+for name in hello-world qa-loop plan-execute scheduled-scan fr-watch; do
   test -f "docs/showcases/${name}.md" && echo "OK: $name" || echo "MISSING: $name"
 done
 ```
@@ -91,7 +93,7 @@ done
 **Steps:**
 ```bash
 for lang in en zh; do
-  for name in hello-world qa-loop plan-execute deployment-pipeline scheduled-scan; do
+  for name in hello-world qa-loop plan-execute scheduled-scan fr-watch; do
     test -f "site/${lang}/showcases/${name}.md" && echo "OK: ${lang}/${name}" || echo "MISSING: ${lang}/${name}"
   done
 done
@@ -112,10 +114,10 @@ cd site && npx vitepress build 2>&1 | tail -3
 
 **Steps:**
 ```bash
-for f in hello-world qa-loop plan-execute deployment-pipeline scheduled-scan; do
+for f in hello-world qa-loop plan-execute scheduled-scan fr-watch; do
   count=$(grep -c '^kind:' "docs/workflow/${f}.yaml")
   echo "$f: $count resources"
 done
 ```
 
-**Expected:** Resource counts increase from hello-world (3) through scheduled-scan (5+), demonstrating progressive complexity.
+**Expected:** Resource counts increase from hello-world (3) through fr-watch (5+), demonstrating progressive complexity.

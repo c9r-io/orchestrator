@@ -36,8 +36,8 @@ export default defineConfig({
                 { text: 'Hello World', link: '/en/showcases/hello-world' },
                 { text: 'QA Loop', link: '/en/showcases/qa-loop' },
                 { text: 'Plan & Execute', link: '/en/showcases/plan-execute' },
-                { text: 'Deployment Pipeline', link: '/en/showcases/deployment-pipeline' },
                 { text: 'Scheduled Scan', link: '/en/showcases/scheduled-scan' },
+                { text: 'FR Watch', link: '/en/showcases/fr-watch' },
               ],
             },
             {
@@ -91,8 +91,8 @@ export default defineConfig({
                 { text: 'Hello World', link: '/zh/showcases/hello-world' },
                 { text: 'QA Loop', link: '/zh/showcases/qa-loop' },
                 { text: 'Plan & Execute', link: '/zh/showcases/plan-execute' },
-                { text: 'Deployment Pipeline', link: '/zh/showcases/deployment-pipeline' },
                 { text: 'Scheduled Scan', link: '/zh/showcases/scheduled-scan' },
+                { text: 'FR Watch', link: '/zh/showcases/fr-watch' },
               ],
             },
             {

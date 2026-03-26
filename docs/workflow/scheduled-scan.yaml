@@ -1,4 +1,4 @@
-# Scheduled Scan — cron-triggered audit workflow template.
+# Scheduled Scan — cron-triggered security audit workflow template.
 #
 # Usage:
 #   orchestrator apply -f docs/workflow/scheduled-scan.yaml --project scan
@@ -8,8 +8,8 @@
 #
 #   # Or let the cron trigger create tasks automatically (requires --webhook-bind on daemon).
 #
-# Demonstrates: Trigger resource with cron schedule, single-cycle fixed loop,
-# and automated task creation without human intervention.
+# Demonstrates: Trigger resource with cron schedule, agent-driven security
+# analysis followed by static checks, and automated task creation.
 # All agents are echo-based — no API keys required.
 apiVersion: orchestrator.dev/v2
 kind: Workspace
@@ -20,25 +20,44 @@ spec:
   qa_targets: []
   ticket_dir: ""
 ---
-# ── Step Template ─────────────────────────────────────────────────────
+# ── Step Templates ────────────────────────────────────────────────────
+# Two-phase audit: agent-driven analysis first, then static tooling.
 ---
 apiVersion: orchestrator.dev/v2
 kind: StepTemplate
 metadata:
-  name: audit
+  name: agent_audit
 spec:
-  description: "Run a security or compliance audit scan"
+  description: "Agent-driven security analysis — reason about architecture and risk"
   prompt: >-
-    Run a security audit on the project at {source_tree}.
+    You are a security engineer reviewing the project at {source_tree}.
     Goal: {goal}.
 
-    Check for:
-    1. Known vulnerabilities in dependencies
-    2. Hardcoded secrets or credentials
-    3. Insecure configuration patterns
-    4. Outdated dependencies with security patches available
+    Perform a threat-model-aware security review:
+    1. Identify trust boundaries (user input, network, filesystem, IPC)
+    2. Review authentication and authorization logic for bypass risks
+    3. Check for injection vectors (command, SQL, path traversal, template)
+    4. Assess secrets handling — are credentials hardcoded or leaked in logs?
+    5. Evaluate error handling — does it expose internal state?
 
-    Output a structured report with findings and severity levels.
+    Output a structured report: for each finding, provide title, description,
+    severity (critical/high/medium/low/info), and a recommended fix.
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: static_check
+spec:
+  description: "Static tooling checks — dependency audit and pattern scanning"
+  prompt: >-
+    Run static security checks on the project at {source_tree}.
+
+    Execute the following (adapt to your project's toolchain):
+    - Dependency audit: `cargo audit` / `npm audit` / `pip-audit`
+    - Secret scanning: `rg -n '(?i)(password|secret|api_key|token)\s*=' --type-not yaml`
+    - Known vulnerable patterns: check for eval(), exec(), unsafe deserialization
+
+    Summarize results. Only report actionable findings — skip informational noise.
 ---
 # ── Agent ─────────────────────────────────────────────────────────────
 ---
@@ -46,15 +65,15 @@ apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: scan-agent
-  description: "Audit agent — performs security and compliance scans"
+  description: "Security audit agent — performs agent-driven and static analysis"
 spec:
   capabilities:
     - audit
+    - static_check
   command: >-
     echo '{"confidence":0.94,"quality_score":0.91,
     "artifacts":[{"kind":"analysis","findings":[
-    {"title":"no-vulnerabilities","description":"No critical vulnerabilities found.","severity":"info"},
-    {"title":"deps-up-to-date","description":"All dependencies are current.","severity":"info"}
+    {"title":"no-critical-issues","description":"No critical security issues found. 2 low-severity recommendations noted.","severity":"info"}
     ]}]}'
 ---
 # ── Workflow ──────────────────────────────────────────────────────────
@@ -66,10 +85,18 @@ metadata:
 spec:
   max_parallel: 1
   steps:
-    - id: audit
+    # Step 1: Agent-driven security analysis (high-value, reasoning-based)
+    - id: agent_audit
       scope: task
       required_capability: audit
-      template: audit
+      template: agent_audit
+      enabled: true
+      repeatable: false
+    # Step 2: Static tooling checks (complement agent analysis)
+    - id: static_check
+      scope: task
+      required_capability: static_check
+      template: static_check
       enabled: true
       repeatable: false
   loop:
