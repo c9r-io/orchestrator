@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Path safety constraints — watched paths must be within workspace `root_path`; `.git/` and daemon data dir auto-excluded
 - Workflow template library — 5 progressive templates (hello-world, qa-loop, plan-execute, scheduled-scan, fr-watch) with echo agents for zero-cost tryout
 - Doc site "Templates" section — 5 beginner-friendly entries in EN/ZH Showcases sidebar
+- Agent `command_rules` — CEL conditional command selection per agent; first matching rule overrides default `command`
+- Step `step_vars` — per-step temporary pipeline variable overlay (isolated from other steps)
+- `command_rule_index` audit column in `command_runs` table for rule traceability
 - Skill template packaging — 17 skills distributed as templates (generic/framework/sdlc-patterns)
 - `scripts/package-skill-templates.sh` — sanitizes and packages skills for release
 - `install.sh` installs templates to `~/.orchestratord/skill-templates/`
