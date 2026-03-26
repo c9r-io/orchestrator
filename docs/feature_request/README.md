@@ -69,7 +69,7 @@
 | FR-082 | 集成 Manifest 包 — Slack / GitHub / Line 预制配置 | P2 | Closed |
 | FR-083 | CRD 插件系统 — Webhook 拦截器与自动化生命周期 | P3 | Proposed |
 | FR-084 | Agent 条件命令规则 + Session 复用 | P1 | Closed |
-| FR-085 | Filesystem Trigger — 文件系统变更原生触发器 | P1 | Implemented |
+| FR-085 | Filesystem Trigger — 文件系统变更原生触发器 | P1 | Closed |
 
 ## 说明
 
@@ -156,3 +156,4 @@
 - FR-082 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/88-integration-manifest-packages.md` 与 `docs/qa/orchestrator/130-integration-manifest-packages.md` 承载（`c9r-io/orchestrator-integrations` 独立仓库，Slack/GitHub/LINE 集成包，密钥轮替 showcase）
 - FR-084 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/89-agent-command-rules-step-vars.md` 与 `docs/qa/orchestrator/100-agent-command-rules-step-vars.md` 承载（Agent `command_rules` CEL 条件命令选择、Step `step_vars` 临时变量覆盖、`command_rule_index` 审计列；Session 复用为纯 workflow 编排示例）
 - FR-077 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/90-workflow-template-library.md` 与 `docs/qa/orchestrator/131-workflow-template-library.md` 承载（5 个渐进复杂度模板：hello-world / qa-loop / plan-execute / scheduled-scan / fr-watch，echo agent 零成本运行，文档站 Templates 分组）
+- FR-085 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/91-filesystem-trigger.md` 与 `docs/qa/orchestrator/132-filesystem-trigger.md` 承载（`source: filesystem` 原生触发器，`notify` crate 跨平台文件监控，按需启停 watcher，路径白名单 + 事件类型 + 防抖 + CEL 四层过滤，macOS symlink 兼容）
