@@ -1,12 +1,12 @@
 # Command Rules Template
 
-> **Purpose**: Conditional agent command selection + per-step variable overlay — demonstrates `command_rules` and `step_vars`.
+> **Purpose**: Agent session reuse and isolation — share session context across steps via `command_rules`, while isolating QA with `step_vars`.
 
 ## Use Cases
 
-- Same agent uses different commands across steps (e.g. default / verbose / quick modes)
-- Certain steps need isolated variable environments (e.g. QA clears session context)
-- Agent selects different tools based on runtime state (session exists, current cycle, etc.)
+- AI agents (e.g. Claude Code) support session mode: first step creates a session, subsequent steps `--resume` to retain context
+- Plan and implement steps need shared session context (plan output is prerequisite for implementation)
+- QA steps need a fresh session to avoid bias from prior context
 
 ## Prerequisites
 
@@ -25,8 +25,8 @@ orchestrator apply -f docs/workflow/command-rules.yaml --project cmd-rules
 
 ```bash
 orchestrator task create \
-  --name "mode-demo" \
-  --goal "Demonstrate command rules" \
+  --name "session-demo" \
+  --goal "Demonstrate session reuse" \
   --workflow command_rules \
   --project cmd-rules
 ```
@@ -41,81 +41,86 @@ orchestrator task logs <task_id>
 ## Workflow Steps
 
 ```
-default_analysis (default cmd) → verbose_analysis (rule[0]) → quick_review (rule[1])
+create_session (new) → plan (resume) → implement (resume) → qa_testing (new, isolated)
 ```
 
-1. **default_analysis** — No step_vars → `run_mode` absent → no rule matches → default command
-2. **verbose_analysis** — `step_vars: { run_mode: "verbose" }` → rule[0] matches → verbose command
-3. **quick_review** — `step_vars: { run_mode: "quick" }` → rule[1] matches → quick command
+### Step-by-Step Breakdown
 
-Each step's echo output differs (`default-mode` / `verbose-mode` / `quick-mode`), verifiable via `task logs`.
+| Step | loop_session_id | command_rules | Command Used | Effect |
+|------|----------------|---------------|-------------|--------|
+| create_session | absent | no match → default | new session | Outputs `session_id`, captured to pipeline vars |
+| plan | `"ses-abc-123"` | rule[0] ✓ | resume session | Reuses session context |
+| implement | `"ses-abc-123"` | rule[0] ✓ | resume session | Continues from plan |
+| qa_testing | `""` (step_vars clears) | no match → default | new session | Independent analysis, no bias |
 
-### Key Feature: command_rules
+After qa_testing, `loop_session_id` is restored to `"ses-abc-123"` (step_vars is a temporary overlay).
+
+### Key Mechanism 1: behavior.captures
+
+```yaml
+- id: create_session
+  behavior:
+    captures:
+      - var: loop_session_id     # pipeline variable name
+        source: stdout           # extract from stdout
+        json_path: "$.session_id"  # JSON path selector
+```
+
+The agent outputs `{"session_id":"ses-abc-123",...}`, and the capture automatically extracts the `session_id` field into the `loop_session_id` pipeline variable. All subsequent steps can access it.
+
+### Key Mechanism 2: command_rules
 
 ```yaml
 kind: Agent
 spec:
-  command: echo 'default mode'        # fallback
+  command: echo 'new session'          # default: create new session
   command_rules:
-    - when: "run_mode == \"verbose\""  # CEL condition (direct variable name)
-      command: echo 'verbose mode'     # used when matched
-    - when: "run_mode == \"quick\""
-      command: echo 'quick mode'
+    - when: "loop_session_id != \"\""  # CEL: session exists
+      command: echo 'resumed session'  # match: resume session
 ```
 
-**CEL variable access**: Pipeline variables are injected as top-level CEL names — write `run_mode == "verbose"` directly, **no** `vars.` prefix needed.
+- Pipeline variables are injected as **top-level CEL names** (write `loop_session_id` directly, no `vars.` prefix)
+- Rules evaluated in order; first `true` wins. No match → default `command`
+- Matched rule index recorded in `command_runs.command_rule_index` for auditing
 
-**Matching semantics**: Rules evaluated in order; first `when` returning true wins. If none match, the default `command` is used.
-
-**Audit trail**: Matched rule index recorded in `command_runs.command_rule_index` (NULL = default, 0 = first rule).
-
-### Key Feature: step_vars
+### Key Mechanism 3: step_vars
 
 ```yaml
-- id: verbose_analysis
+- id: qa_testing
   step_vars:
-    run_mode: "verbose"    # only applies to this step
+    loop_session_id: ""    # temporarily clear → force new session
 ```
 
-**Semantics**: Before step execution, `step_vars` merge into a shallow copy of pipeline variables. After execution, original values are restored. Other steps see unchanged variables.
-
-**Typical uses**:
-- Control command_rules matching (as in this template)
-- Clear a session ID to force a new session (`step_vars: { session_id: "" }`)
-- Inject step-specific config (timeout, log level, etc.)
+- Before execution, `step_vars` merge into a shallow copy of pipeline vars
+- After execution, original values are restored (`loop_session_id` returns to `"ses-abc-123"`)
+- Only affects the current step's input view; global pipeline state unchanged
 
 ## Customization Guide
 
-### Real Agent with Session Reuse
+### Real Agent (Claude Code Session)
 
 ```yaml
 # Default: create new session
 command: claude -p "{prompt}" --session-id new --output-format stream-json
+
 command_rules:
-  # Has session → resume it
+  # Has session → resume
   - when: "loop_session_id != \"\""
     command: claude -p "{prompt}" --resume {loop_session_id} --output-format stream-json
 ```
 
-QA steps clear the session via step_vars for independent analysis:
+### More step_vars Isolation Scenarios
+
 ```yaml
-- id: qa_testing
+# Security audit: independent session + extra audit directives
+- id: security_audit
   step_vars:
-    loop_session_id: ""    # blocks session reuse
-```
-
-### Tool Switching by Step Type
-
-```yaml
-command_rules:
-  - when: "step_type == \"test\""
-    command: cargo test --workspace 2>&1
-  - when: "step_type == \"lint\""
-    command: cargo clippy --workspace -- -D warnings 2>&1
+    loop_session_id: ""           # independent session
+    audit_mode: "strict"          # inject audit config
 ```
 
 ## Further Reading
 
-- [Plan & Execute Template](/en/showcases/plan-execute) — StepTemplate and multi-agent collaboration basics
-- [Self-Bootstrap Execution](/en/showcases/self-bootstrap-execution-template) — Production session reuse workflow
+- [Plan & Execute Template](/en/showcases/plan-execute) — StepTemplate and variable propagation basics
+- [Self-Bootstrap Execution](/en/showcases/self-bootstrap-execution-template) — Production multi-step workflow
 - [CEL Prehooks](/en/guide/cel-prehooks) — CEL expression syntax reference

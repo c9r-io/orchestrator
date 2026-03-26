@@ -1,17 +1,17 @@
-# Command Rules — conditional agent command selection template.
+# Command Rules — session reuse and isolation template.
 #
 # Usage:
 #   orchestrator apply -f docs/workflow/command-rules.yaml --project cmd-rules
-#   orchestrator task create --name "session-demo" --goal "Demonstrate command rules" --workflow command_rules --project cmd-rules
+#   orchestrator task create --name "session-demo" --goal "Demonstrate session reuse" --workflow command_rules --project cmd-rules
 #
-# Demonstrates: Agent command_rules (CEL conditional command selection)
-# and step_vars (per-step pipeline variable overlay).
+# Demonstrates the canonical use case for command_rules + step_vars:
+# Agent session reuse across workflow steps, with selective isolation.
 #
-# How command_rules work:
-#   1. Each rule has a `when` CEL expression evaluated against pipeline variables
-#   2. Pipeline variables are top-level CEL names (e.g. `my_var != ""`, NOT `vars.my_var`)
-#   3. First matching rule's command is used; no match → default `command`
-#   4. step_vars temporarily override pipeline variables for a single step
+# Scenario:
+#   1. create_session: generates a session ID (captured to pipeline vars)
+#   2. plan:           reuses session via command_rules (session context preserved)
+#   3. implement:      reuses session (builds on plan context)
+#   4. qa_testing:     step_vars clears session → forces fresh session (no bias)
 #
 # All agents are echo-based — no API keys required.
 apiVersion: orchestrator.dev/v2
@@ -29,67 +29,87 @@ spec:
 apiVersion: orchestrator.dev/v2
 kind: StepTemplate
 metadata:
-  name: analyze
+  name: create_session
 spec:
-  description: "Analyze the project"
+  description: "Create a new agent session and capture its ID"
   prompt: >-
-    Analyze the project at {source_tree} for: {goal}.
+    Initialize a new analysis session for: {goal}.
+    Output a JSON object with a session_id field.
 ---
 apiVersion: orchestrator.dev/v2
 kind: StepTemplate
 metadata:
-  name: review
+  name: plan
 spec:
-  description: "Review with independent context"
+  description: "Create implementation plan (reuses session context)"
   prompt: >-
-    Review the project at {source_tree} for: {goal}.
-    This is an independent review.
+    You are working on a project at {source_tree}.
+    Create an implementation plan for: {goal}.
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: implement
+spec:
+  description: "Implement changes (reuses session context from plan)"
+  prompt: >-
+    Implement the changes for: {goal}.
+    Follow the plan from the previous step.
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: qa_review
+spec:
+  description: "Independent QA review (fresh session, no prior bias)"
+  prompt: >-
+    Independently review the project at {source_tree} for: {goal}.
+    Perform QA verification without relying on prior session context.
 ---
 # ── Agent with command_rules ──────────────────────────────────────────
 #
-# CEL expressions reference pipeline variables by name directly:
-#   - `run_mode != ""` → true if run_mode was set (by step_vars or captures)
-#   - `run_mode == "verbose"` → matches specific value
+# Session reuse pattern:
+#   Default command:  creates a new session (--session-id new)
+#   Rule[0]:          if loop_session_id is set, resumes existing session (--resume)
 #
-# The matched rule index is recorded in command_runs.command_rule_index
-# for audit (NULL = default command, 0 = first rule, 1 = second rule).
+# With echo agents, the commands differ in output to demonstrate switching.
+# In production, replace echo with: claude -p "{prompt}" --session-id new ...
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
-  name: adaptive-agent
-  description: "Agent with CEL-driven command selection"
+  name: session-agent
+  description: "Agent with session reuse via command_rules"
 spec:
   capabilities:
-    - analyze
-    - review
+    - create_session
+    - plan
+    - implement
+    - qa_review
   command: >-
-    echo '{"confidence":0.90,"quality_score":0.88,
+    echo '{"session_id":"ses-abc-123","confidence":0.90,"quality_score":0.88,
     "artifacts":[{"kind":"analysis","findings":[
-    {"title":"default-mode","description":"Running in default mode.","severity":"info"}
+    {"title":"new-session","description":"Started NEW session.","severity":"info"}
     ]}]}'
   command_rules:
-    # Rule 0: verbose mode — triggered by step_vars override
-    - when: "run_mode == \"verbose\""
+    # When loop_session_id exists → resume session instead of creating new one
+    - when: "loop_session_id != \"\""
       command: >-
-        echo '{"confidence":0.95,"quality_score":0.94,
+        echo '{"confidence":0.94,"quality_score":0.92,
         "artifacts":[{"kind":"analysis","findings":[
-        {"title":"verbose-mode","description":"Running in VERBOSE mode with extra diagnostics.","severity":"info"}
-        ]}]}'
-    # Rule 1: quick mode — triggered by step_vars override
-    - when: "run_mode == \"quick\""
-      command: >-
-        echo '{"confidence":0.85,"quality_score":0.80,
-        "artifacts":[{"kind":"analysis","findings":[
-        {"title":"quick-mode","description":"Running in QUICK mode, minimal analysis.","severity":"info"}
+        {"title":"resumed-session","description":"RESUMED existing session for continuity.","severity":"info"}
         ]}]}'
 ---
 # ── Workflow ──────────────────────────────────────────────────────────
-# Three steps demonstrate how step_vars controls command_rules matching:
 #
-#   Step 1: no step_vars → run_mode absent → no rule matches → default command
-#   Step 2: step_vars { run_mode: "verbose" } → rule[0] matches → verbose command
-#   Step 3: step_vars { run_mode: "quick" }   → rule[1] matches → quick command
+# Step-by-step command selection:
+#
+#   create_session → loop_session_id absent   → default cmd (new session)
+#                    captures session_id to loop_session_id
+#   plan           → loop_session_id = "ses-abc-123" → rule[0] (resume)
+#   implement      → loop_session_id = "ses-abc-123" → rule[0] (resume)
+#   qa_testing     → step_vars clears loop_session_id → default cmd (new session)
+#                    after step: loop_session_id restored to "ses-abc-123"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow
@@ -98,33 +118,46 @@ metadata:
 spec:
   max_parallel: 1
   steps:
-    # Step 1: Default mode — no step_vars, so no rule matches
-    - id: default_analysis
-      type: analyze
+    # Step 1: Create session — no loop_session_id yet → default command
+    # Captures session_id from stdout JSON into loop_session_id pipeline var
+    - id: create_session
+      type: plan
       scope: task
-      required_capability: analyze
-      template: analyze
+      required_capability: create_session
+      template: create_session
       enabled: true
       repeatable: false
-    # Step 2: Verbose mode — step_vars sets run_mode="verbose", rule[0] matches
-    - id: verbose_analysis
-      type: analyze
+      behavior:
+        captures:
+          - var: loop_session_id
+            source: stdout
+            json_path: "$.session_id"
+    # Step 2: Plan — loop_session_id = "ses-abc-123" → rule[0] matches (resume)
+    - id: plan
+      type: plan
       scope: task
-      required_capability: analyze
-      template: analyze
+      required_capability: plan
+      template: plan
+      enabled: true
+      repeatable: false
+    # Step 3: Implement — loop_session_id still set → rule[0] matches (resume)
+    - id: implement
+      type: implement
+      scope: task
+      required_capability: implement
+      template: implement
+      enabled: true
+      repeatable: false
+    # Step 4: QA review — step_vars clears loop_session_id → fresh session
+    # This ensures QA has no bias from prior session context.
+    - id: qa_testing
+      type: qa_review
+      scope: task
+      required_capability: qa_review
+      template: qa_review
       enabled: true
       repeatable: false
       step_vars:
-        run_mode: "verbose"
-    # Step 3: Quick review — step_vars sets run_mode="quick", rule[1] matches
-    - id: quick_review
-      type: review
-      scope: task
-      required_capability: review
-      template: review
-      enabled: true
-      repeatable: false
-      step_vars:
-        run_mode: "quick"
+        loop_session_id: ""
   loop:
     mode: once
