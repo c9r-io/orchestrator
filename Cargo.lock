@@ -3129,18 +3129,30 @@ dependencies = [
  "anyhow",
  "clap",
  "clap_complete",
- "dirs",
- "hyper-util",
  "libc",
  "nix",
+ "orchestrator-client",
  "orchestrator-proto",
  "prost",
  "serde",
  "serde_json",
  "serde_yaml",
- "tempfile",
  "tokio",
  "tokio-stream",
+ "tonic",
+]
+
+[[package]]
+name = "orchestrator-client"
+version = "0.2.2"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "hyper-util",
+ "serde",
+ "serde_yaml",
+ "tempfile",
+ "tokio",
  "tonic",
  "tower",
 ]
@@ -3166,20 +3178,17 @@ name = "orchestrator-gui"
 version = "0.2.2"
 dependencies = [
  "anyhow",
- "dirs",
- "hyper-util",
  "libc",
+ "orchestrator-client",
  "orchestrator-proto",
  "serde",
  "serde_json",
- "serde_yaml",
  "tauri",
  "tauri-build",
  "tauri-plugin-notification",
  "tokio",
  "tokio-util",
  "tonic",
- "tower",
 ]
 
 [[package]]
@@ -3256,6 +3265,7 @@ dependencies = [
  "nix",
  "notify",
  "notify-debouncer-full",
+ "orchestrator-client",
  "orchestrator-proto",
  "orchestrator-scheduler",
  "pem",

@@ -1,0 +1,23 @@
+[package]
+name = "orchestrator-client"
+version = "0.2.2"
+description = "Shared control-plane client types and connection logic for the Agent Orchestrator"
+repository = "https://github.com/c9r-io/orchestrator"
+keywords = ["orchestrator", "client", "grpc", "control-plane"]
+categories = ["development-tools"]
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT"
+
+[dependencies]
+anyhow = "1.0"
+dirs = "6"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+tokio = { version = "1.44", features = ["time", "net"] }
+tonic = { version = "0.14", features = ["tls-native-roots", "tls-ring"] }
+tower = "0.5"
+hyper-util = "0.1"
+
+[dev-dependencies]
+tempfile = "3.10"

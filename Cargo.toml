@@ -8,6 +8,7 @@ members = [
     "crates/daemon",
     "crates/cli",
     "crates/gui",
+    "crates/orchestrator-client",
     "crates/integration-tests",
 ]
 
