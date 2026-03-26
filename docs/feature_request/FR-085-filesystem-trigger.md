@@ -41,12 +41,17 @@ spec:
 
 > **设计原则：核心只提供原子事件变量，过滤逻辑统一由 CEL 承载。** 不在 `filesystem` 配置中引入 glob 参数 — glob 匹配等价于 `event.filename.matches(regex)`，复用已有的 CEL filter 通道即可，避免核心 API 面膨胀。
 
-### 2. Daemon 内嵌文件监控
+### 2. Daemon 内嵌文件监控（按需启停）
 
 - 使用 `notify` crate（跨平台：macOS FSEvents、Linux inotify、Windows ReadDirectoryChanges）
-- Daemon 启动时根据已注册的 filesystem trigger 建立 watcher
-- Trigger apply/delete 时动态增减 watcher
+- **零 filesystem trigger = 零开销**：daemon 仅在存在至少一个有效（未 suspend）的 `source: filesystem` trigger 时才创建 `notify::Watcher` 实例。无 filesystem trigger 时不占用任何 fd、线程或内存
+- **动态生命周期管理**：
+  - `apply` 首个 filesystem trigger → 初始化 watcher，注册监控路径
+  - `apply` 后续 trigger → 增量添加路径到现有 watcher
+  - `delete` / `suspend` 最后一个 filesystem trigger → 完全释放 watcher 资源
+  - `resume` 已暂停的 trigger → 按需重建 watcher
 - 监控路径相对于 Workspace 的 `root_path` 解析
+- 多个 trigger 监控相同路径时共享 watcher，去重处理
 
 ### 3. 事件上下文注入
 
@@ -64,25 +69,33 @@ filesystem 事件应将以下信息注入 CEL filter 和 action 模板变量：
 
 文件系统事件通常成批到达（编辑器保存会触发多次 write 事件）。`filesystem.debounce_ms` 提供可配置的防抖窗口（默认 500ms），合并同文件的重复事件为一次触发。
 
-### 5. 安全约束
+### 5. 安全约束与监听范围控制
 
-- 监控路径必须在 Workspace `root_path` 内（或等于 `root_path`），禁止监控任意系统路径
-- 不监控 `.git/` 目录（高频变更，无业务意义）
-- 不监控 daemon 自身的数据目录（`ORCHESTRATORD_DATA_DIR`）
+监听范围通过安全约束严格限定，防止 agent 批量文件操作时产生事件风暴：
+
+- **路径白名单**：`filesystem.paths` 显式声明监控目录，仅监听指定路径（非递归到整个 `root_path`）
+- **root_path 围栏**：所有 `paths` 必须在 Workspace `root_path` 内（或等于 `root_path`），拒绝任意系统路径
+- **内置排除**：自动排除 `.git/`（高频变更，无业务意义）和 daemon 数据目录（`ORCHESTRATORD_DATA_DIR`）
+- **事件类型收窄**：`filesystem.events` 只订阅需要的事件类型（如仅 `create`），忽略 agent 写文件产生的大量 `modify` 事件
+- **防抖兜底**：即使上述约束未完全过滤，`debounce_ms` 保证同文件的密集事件合并为一次触发
+- **CEL 精确过滤**：最终由 CEL filter 决定是否触发 task，如 `event.filename.matches('^FR-.*\\.md$') && event.event_type == 'create'`
+
+这套分层防护确保：agent 在 `src/` 下批量修改 100 个文件时，仅监控 `docs/feature_request/` 的 trigger 不会产生任何事件。
 
 ## 验收标准
 
 - [ ] `event.source: filesystem` 通过 manifest validate
-- [ ] Daemon 启动后对 registered filesystem trigger 建立 watcher
+- [ ] 无 filesystem trigger 时 daemon 不创建 watcher（零开销）
+- [ ] apply 首个 filesystem trigger 后 watcher 启动
 - [ ] 在监控目录创建匹配文件时自动创建 task
 - [ ] CEL filter 可访问 `event.path`、`event.filename`、`event.event_type`
 - [ ] 防抖机制生效：500ms 内同文件多次事件只触发一次
 - [ ] 路径安全约束：拒绝 `root_path` 外的路径
-- [ ] `trigger suspend/resume` 正确暂停/恢复文件监控
+- [ ] `trigger suspend/resume` 正确暂停/恢复文件监控；suspend 最后一个 trigger 释放 watcher
 - [ ] Trigger 删除时清理 watcher 资源
+- [ ] Agent 在非监控目录批量写文件时不产生任何 filesystem 事件
 
 ## 风险
 
 - **跨平台差异**：macOS FSEvents 和 Linux inotify 行为不完全一致（如递归监控、事件粒度）。`notify` crate 抽象了大部分差异，但需关注边界情况。
-- **大目录性能**：递归监控大型目录树可能消耗 fd/内存。应限制递归深度或单 trigger 最大监控路径数。
 - **编辑器临时文件**：vim/emacs 等编辑器的 swap 文件和备份文件可能触发误报。CEL filter（如 `!event.filename.startsWith('.')`）可缓解。
