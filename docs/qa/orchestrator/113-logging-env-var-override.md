@@ -89,4 +89,4 @@ self_referential_safe: true
 | 2 | RUST_LOG 作为回退 | ✅ | Code review confirmed: try_from_default_env fallback |
 | 3 | ORCHESTRATOR_LOG_FORMAT=json 输出 JSON | ✅ | Code review + unit test passed |
 | 4 | 未设置环境变量时向后兼容 | ✅ | Code review confirmed: info default + pretty fmt |
-| 5 | tracing-subscriber features 配置正确 | ✅ | 409 workspace tests passed |
+| 5 | tracing-subscriber features 配置正确 | ✅ | 425 workspace tests passed |

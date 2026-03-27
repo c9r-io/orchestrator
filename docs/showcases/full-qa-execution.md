@@ -76,17 +76,17 @@ self_referential_safe: false
 当 workspace 设置 `self_referential: true` 时，系统读取 QA 文档的 frontmatter，
 `self_referential_safe: false`（且无 `self_referential_safe_scenarios`）的文档会被 prehook 跳过，不会被 agent 执行。
 
-### 2.2 标记为不安全的文档（33 个）
+### 2.2 标记为不安全的文档（41 个）
 
 以下文档包含 kill daemon、重启进程、重编译二进制、创建任务、修改资源等危险或干扰操作，
-已标记为 `self_referential_safe: false`。
+或需要 GUI 环境（在纯 CLI 回归中不可执行），已标记为 `self_referential_safe: false`。
 
-其中 **26 个被完全跳过**（无 `self_referential_safe_scenarios`），
+其中 **34 个被完全跳过**（无 `self_referential_safe_scenarios`），
 **7 个被部分执行**（仅限列出的安全场景）。
 
-#### docs/qa/orchestrator/（28 个）
+#### docs/qa/orchestrator/（36 个）
 
-**完全跳过（21 个）：**
+**完全跳过（29 个）：**
 
 | 文件 | 危险操作 |
 |------|---------|
@@ -110,6 +110,14 @@ self_referential_safe: false
 | `87-self-referential-daemon-pid-guard.md` | kill daemon |
 | `96-self-restart-socket-continuity.md` | `cargo build`, `exec()` 自替换 |
 | `100-agent-subprocess-daemon-pid-guard.md` | kill daemon |
+| `116-gui-architecture-tauri-grpc.md` | 需要 GUI 环境（Tauri） |
+| `117-gui-uiux-wish-pool-progress.md` | 需要 GUI 环境（Tauri） |
+| `118-gui-realtime-wish-isolation.md` | 需要 GUI 环境（Tauri） |
+| `119-gui-cli-rpc-parity.md` | 需要 GUI 环境（Tauri） |
+| `120-gui-connection-resilience.md` | 需要 GUI 环境（Tauri） |
+| `120b-gui-notification-error-humanization.md` | 需要 GUI 环境（Tauri） |
+| `121-gui-polish-visual.md` | 需要 GUI 环境（Tauri） |
+| `121b-gui-i18n-ux.md` | 需要 GUI 环境（Tauri） |
 | `smoke-orchestrator.md` | `cargo build --release` |
 
 **部分执行（7 个，仅限列出的安全场景）：**
@@ -125,7 +133,7 @@ self_referential_safe: false
 | `111-daemon-proper-daemonize.md` | — | kill daemon, signal ops, daemon stop |
 
 > 注：`111-daemon-proper-daemonize.md` 标记为 false 且无 scenarios，归入完全跳过。
-> 上表为便于对照将其列在此处，实际跳过数为 22 个 orchestrator 文档。
+> 上表为便于对照将其列在此处，实际跳过数为 30 个 orchestrator 文档。
 
 #### docs/qa/self-bootstrap/（5 个）
 
@@ -144,14 +152,14 @@ self_referential_safe: false
 |------|---------|----------------------|
 | `02-survival-enforcement-watchdog.md` | S1, S2, S3 | kill daemon, signal ops, file deletion |
 
-### 2.3 安全 QA 文档（约 124 个）
+### 2.3 安全 QA 文档（约 116 个）
 
 | 类别 | 数量 | 说明 |
 |------|------|------|
 | 显式 `self_referential_safe: true` | 89 | 完全执行 |
-| 无 frontmatter 标记（默认 safe） | 28 | 完全执行 |
+| 无 frontmatter 标记（默认 safe） | 20 | 完全执行 |
 | `false` + 有 `scenarios` | 7 | 部分执行（仅安全场景） |
-| **合计可执行** | **124** | |
+| **合计可执行** | **116** | |
 
 可执行文档包括：
 - 纯单元测试文档（`cargo test --lib`）
@@ -211,8 +219,8 @@ orchestrator task create \
 ```
 
 > 不指定 `-t`，系统自动扫描 `qa_targets` 配置的 `docs/qa/` 下所有 `.md` 文件。
-> 预计约 150 个 item，其中约 26 个会被 prehook 完全跳过（`self_referential_safe: false` 且无 scenarios），
-> 约 7 个部分执行（仅安全场景），实际全量执行约 117 个。
+> 预计约 150 个 item，其中约 34 个会被 prehook 完全跳过（`self_referential_safe: false` 且无 scenarios），
+> 约 7 个部分执行（仅安全场景），实际全量执行约 109 个。
 
 记录返回的 `<task_id>`。
 
@@ -280,14 +288,14 @@ orchestrator event list --task <task_id> --type step_skipped -o json
 ### 5.1 安全检查点
 
 - [ ] `full-qa.yaml` workspace 的 `self_referential: true` 已生效
-- [ ] 26 个完全不安全的 QA 文档被 prehook 跳过（`step_skipped` 事件）
+- [ ] 34 个完全不安全的 QA 文档被 prehook 跳过（`step_skipped` 事件）
 - [ ] 7 个部分安全文档仅执行了指定场景
 - [ ] daemon 进程在整个执行过程中保持稳定（PID 不变）
 - [ ] 无 `cargo build --release -p orchestratord` 被执行
 
 ### 5.2 QA Testing 阶段
 
-- [ ] 所有安全 QA 文档都被执行（约 124 个）
+- [ ] 所有安全 QA 文档都被执行（约 116 个）
 - [ ] 每个场景的 pass/fail 有明确结论
 - [ ] 失败场景有对应的 ticket 文件
 
@@ -321,7 +329,7 @@ orchestrator event list --task <task_id> --type step_skipped -o json
 
 1. orchestrator 完整跑完 `full-qa` workflow，在 `loop_guard` 正常收口。
 2. 安全 QA 场景通过率 ≥ 90%（允许部分环境依赖的场景失败）。
-3. 26 个完全不安全文档全部被正确跳过，7 个部分安全文档仅执行了安全场景。
+3. 34 个完全不安全文档全部被正确跳过，7 个部分安全文档仅执行了安全场景。
 4. 所有 ticket 被 ticket_fix 处理（修复或明确标记无法修复）。
 5. `align_tests` 确认单测和编译无回归。
 6. `doc_governance` 确认文档无漂移。
@@ -333,7 +341,7 @@ orchestrator event list --task <task_id> --type step_skipped -o json
 
 | 异常 | 判断方式 | 处理 |
 |------|---------|------|
-| 不安全文档未被跳过 | `step_skipped` 数量 < 26 | 检查 workspace `self_referential` 设置、QA 文档 frontmatter |
+| 不安全文档未被跳过 | `step_skipped` 数量 < 34 | 检查 workspace `self_referential` 设置、QA 文档 frontmatter |
 | 大量 QA 文档同类失败 | 相同 pattern 的 ticket 超过 10 个 | 可能是系统性问题，暂停排查根因 |
 | agent 进程僵死 | `claude -p` 进程无输出超过 10 分钟 | 检查 API 配额和网络 |
 | ticket_fix 产生新问题 | 修复后 align_tests 失败 | 检查 ticket_fix 的改动范围 |
@@ -344,8 +352,8 @@ orchestrator event list --task <task_id> --type step_skipped -o json
 
 ## 8. 预计执行时间
 
-- **约 117 个全量执行 + 7 个部分执行** × **每个约 2-5 分钟** = 约 60-310 分钟（4 并行）
-- 26 个不安全文档被跳过（< 1 秒）
+- **约 109 个全量执行 + 7 个部分执行** × **每个约 2-5 分钟** = 约 60-290 分钟（4 并行）
+- 34 个不安全文档被跳过（< 1 秒）
 - ticket_fix 取决于 ticket 数量（max_parallel: 2）
 - align_tests + doc_governance + self_test 约 10-20 分钟
 

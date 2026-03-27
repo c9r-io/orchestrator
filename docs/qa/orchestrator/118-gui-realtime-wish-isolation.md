@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA-118: GUI 实时状态推送与许愿池数据隔离
 
 **关联设计**: `docs/design_doc/orchestrator/76-gui-realtime-wish-isolation.md`

@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA-116: GUI 架构 — Tauri 2.x + gRPC 安全客户端
 
 **关联设计**: `docs/design_doc/orchestrator/73-gui-architecture-tauri-grpc.md`

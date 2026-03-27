@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA-120: GUI 连接韧性
 
 **关联设计**: DD-078

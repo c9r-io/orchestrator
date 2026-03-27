@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA-117: GUI 用户界面 — 许愿池 + 进度观察 + 专家模式
 
 **关联设计**: `docs/design_doc/orchestrator/74-gui-uiux-wish-pool-progress.md`

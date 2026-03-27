@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA-121: GUI 体验打磨 — 视觉与交互
 
 **关联**: FR-069, Design Doc 079

@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA-121b: GUI i18n / 响应式 / 构建分发
 
 **关联**: FR-069, Design Doc 079

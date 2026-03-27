@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA-120b: GUI 系统通知与错误信息人性化
 
 **关联设计**: DD-078

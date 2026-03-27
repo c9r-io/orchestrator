@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA-119: GUI CLI 功能对齐 — RPC 覆盖补全
 
 **关联设计**: `docs/design_doc/orchestrator/77-gui-cli-rpc-parity.md`
