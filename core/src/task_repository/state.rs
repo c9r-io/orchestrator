@@ -250,10 +250,16 @@ pub fn recover_orphaned_running_items_for_task(
 }
 
 /// Recover stalled running items older than the given threshold.
-/// Returns `Vec<(task_id, Vec<item_id>)>` for audit.
+///
+/// `exclude_task_ids` contains tasks that currently have an active worker.
+/// Items belonging to excluded tasks are skipped entirely — the active worker
+/// is responsible for managing them (they may simply be slow, not stalled).
+///
+/// Returns `Vec<(task_id, Vec<item_id>)>` for audit (only non-excluded tasks).
 pub fn recover_stalled_running_items(
     conn: &Connection,
     stall_threshold_secs: u64,
+    exclude_task_ids: &std::collections::HashSet<String>,
 ) -> Result<Vec<(String, Vec<String>)>> {
     let tx = conn.unchecked_transaction()?;
     let now = now_ts();
@@ -279,13 +285,21 @@ pub fn recover_stalled_running_items(
     let mut grouped: std::collections::BTreeMap<String, Vec<String>> =
         std::collections::BTreeMap::new();
     for (item_id, task_id) in &rows {
+        // Skip items belonging to tasks with active workers
+        if exclude_task_ids.contains(task_id) {
+            continue;
+        }
         grouped
             .entry(task_id.clone())
             .or_default()
             .push(item_id.clone());
     }
 
-    // Reset stalled items
+    if grouped.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Reset stalled items (only for non-excluded tasks)
     for item_id in grouped.values().flatten() {
         tx.execute(
             "UPDATE task_items SET status = 'pending', started_at = NULL, completed_at = NULL, updated_at = ?2 WHERE id = ?1",
@@ -293,7 +307,7 @@ pub fn recover_stalled_running_items(
         )?;
     }
 
-    // Set parent tasks to restart_pending
+    // Set parent tasks to restart_pending (only for non-excluded tasks)
     for task_id in grouped.keys() {
         tx.execute(
             "UPDATE tasks SET status = 'restart_pending', completed_at = NULL, updated_at = ?2 WHERE id = ?1 AND status = 'running'",

@@ -908,14 +908,17 @@ impl AsyncSqliteTaskRepository {
     }
 
     /// Recovers stalled running items older than the given threshold.
+    ///
+    /// Tasks in `exclude_task_ids` are skipped (they have active workers).
     pub async fn recover_stalled_running_items(
         &self,
         stall_threshold_secs: u64,
+        exclude_task_ids: std::collections::HashSet<String>,
     ) -> Result<Vec<(String, Vec<String>)>> {
         self.async_db
             .writer()
             .call(move |conn| {
-                state::recover_stalled_running_items(conn, stall_threshold_secs)
+                state::recover_stalled_running_items(conn, stall_threshold_secs, &exclude_task_ids)
                     .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
             })
             .await

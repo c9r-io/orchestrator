@@ -648,7 +648,8 @@ fn recover_stalled_running_items_respects_threshold() {
     .expect("mark item running with old started_at");
 
     // Threshold of 3 hours → should NOT recover (item is only 2h old)
-    let recovered = state::recover_stalled_running_items(&conn, 3 * 3600).expect("recover");
+    let no_exclude = std::collections::HashSet::new();
+    let recovered = state::recover_stalled_running_items(&conn, 3 * 3600, &no_exclude).expect("recover");
     assert!(
         recovered.is_empty(),
         "should not recover items within threshold"
@@ -665,7 +666,7 @@ fn recover_stalled_running_items_respects_threshold() {
     assert_eq!(status, "running");
 
     // Threshold of 1 hour → SHOULD recover (item is 2h old)
-    let recovered = state::recover_stalled_running_items(&conn, 3600).expect("recover");
+    let recovered = state::recover_stalled_running_items(&conn, 3600, &no_exclude).expect("recover");
     assert_eq!(recovered.len(), 1);
     assert_eq!(recovered[0].0, task_id);
 
@@ -678,6 +679,56 @@ fn recover_stalled_running_items_respects_threshold() {
         )
         .expect("item status");
     assert_eq!(status, "pending");
+}
+
+#[test]
+fn recover_stalled_running_items_skips_excluded_tasks() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let item_id = get_item_id(&state, &task_id);
+
+    // Set task and item to running with a started_at 2 hours ago
+    let old_ts = (chrono::Utc::now() - chrono::Duration::hours(2)).to_rfc3339();
+    conn.execute(
+        "UPDATE tasks SET status='running' WHERE id = ?1",
+        params![task_id.clone()],
+    )
+    .expect("mark task running");
+    conn.execute(
+        "UPDATE task_items SET status='running', started_at=?2 WHERE id = ?1",
+        params![item_id.clone(), old_ts],
+    )
+    .expect("mark item running with old started_at");
+
+    // Exclude this task (simulating an active worker)
+    let exclude = std::collections::HashSet::from([task_id.clone()]);
+    let recovered =
+        state::recover_stalled_running_items(&conn, 3600, &exclude).expect("recover");
+    assert!(
+        recovered.is_empty(),
+        "excluded task should not be recovered"
+    );
+
+    // Verify item is STILL running (not reset)
+    let status: String = conn
+        .query_row(
+            "SELECT status FROM task_items WHERE id = ?1",
+            params![item_id.clone()],
+            |row| row.get(0),
+        )
+        .expect("item status");
+    assert_eq!(status, "running", "item should remain running when task is excluded");
+
+    // Verify task is STILL running (not set to restart_pending)
+    let task_status: String = conn
+        .query_row(
+            "SELECT status FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| row.get(0),
+        )
+        .expect("task status");
+    assert_eq!(task_status, "running", "excluded task should remain running");
 }
 
 // ── recover_orphaned: paused task skipped in return value ──────────

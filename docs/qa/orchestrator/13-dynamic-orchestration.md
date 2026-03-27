@@ -222,8 +222,8 @@ N/A - Unit test verification
 
 | Scenario | Status | Notes |
 |----------|--------|-------|
-| 1. PrehookDecision Extended Types | | |
-| 2. DynamicStepPool Matching | | |
-| 3. DAG Topological Sort | | |
-| 4. Cycle Detection | | |
-| 5. Adaptive Planner Runtime, Validation, And Fallback | | |
+| 1. PrehookDecision Extended Types | PASS | `test_prehook_decision_from_bool` passed; enum found at `src/dynamic_orchestration/prehook.rs` |
+| 2. DynamicStepPool Matching | PASS | 8 step pool tests passed; `DynamicStepConfig` and `dynamic_steps` verified |
+| 3. DAG Topological Sort | PASS | 5 DAG sort tests passed including diamond, empty, cycle error cases |
+| 4. Cycle Detection | PASS | `test_dag_cycle_detection` passed; cycle detection verified |
+| 5. Adaptive Planner Runtime, Validation, And Fallback | PASS | 7 adaptive + 27 workflow_convert + 36 validate tests passed; event names and validation logic verified |

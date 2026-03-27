@@ -499,7 +499,14 @@ fn main() -> Result<()> {
                 loop {
                     tokio::select! {
                         _ = interval.tick() => {
-                            match stall_state.task_repo.recover_stalled_running_items(stall_threshold_secs).await {
+                            // Collect task IDs with active workers — these
+                            // should not be touched by stall recovery (their
+                            // items may be slow, not stalled).
+                            let active_task_ids: std::collections::HashSet<String> = {
+                                let running = stall_state.running.lock().await;
+                                running.keys().cloned().collect()
+                            };
+                            match stall_state.task_repo.recover_stalled_running_items(stall_threshold_secs, active_task_ids).await {
                                 Ok(recovered) => {
                                     for (task_id, item_ids) in &recovered {
                                         for item_id in item_ids {
