@@ -651,6 +651,26 @@ fn signer_from_pem(ca_cert_pem: &str, ca_key_pem: &str) -> Result<Issuer<'static
     Issuer::from_ca_cert_pem(ca_cert_pem, key_pair).context("failed to parse CA certificate")
 }
 
+/// Derive a deterministic webhook HMAC secret from the control-plane CA certificate.
+///
+/// When the control-plane PKI is bootstrapped the CA cert is stable, so this
+/// produces a consistent secret without any additional configuration.
+/// Returns `None` if the CA cert does not exist yet.
+pub fn derive_webhook_secret(
+    data_dir: &Path,
+    control_plane_dir: Option<&Path>,
+) -> Option<String> {
+    let dir = control_plane_dir
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| data_dir.join("control-plane"));
+    let ca_cert_path = dir.join("pki/ca.crt");
+    let ca_cert = std::fs::read(&ca_cert_path).ok()?;
+    let mut hasher = Sha256::new();
+    hasher.update(b"orchestrator-webhook-hmac-v1:");
+    hasher.update(&ca_cert);
+    Some(hex::encode(hasher.finalize()))
+}
+
 fn server_sans(bind_addr: &SocketAddr) -> Result<Vec<SanType>> {
     let mut ip_sans = BTreeSet::new();
     ip_sans.insert(IpAddr::V4(std::net::Ipv4Addr::LOCALHOST));

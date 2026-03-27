@@ -19,7 +19,7 @@ mod webhook;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use futures::FutureExt;
 use tonic::transport::Server;
@@ -79,9 +79,11 @@ struct Args {
     #[arg(long = "task-retention-days", default_value_t = 0)]
     task_retention_days: u32,
 
-    /// Bind address for the HTTP webhook server (disabled if not set).
-    #[arg(long = "webhook-bind")]
-    webhook_bind: Option<String>,
+    /// Bind address for the HTTP webhook server.
+    /// Defaults to 0.0.0.0:19090. Set to "none" to disable.
+    #[arg(long = "webhook-bind", default_value = "0.0.0.0:19090",
+          env = "ORCHESTRATOR_WEBHOOK_BIND")]
+    webhook_bind: String,
 
     /// Shared secret for webhook HMAC-SHA256 signature verification.
     #[arg(long = "webhook-secret", env = "ORCHESTRATOR_WEBHOOK_SECRET")]
@@ -99,6 +101,12 @@ struct Args {
 enum Commands {
     #[command(subcommand)]
     ControlPlane(ControlPlaneCommands),
+
+    /// Print the webhook HMAC secret derived from the control-plane CA certificate.
+    WebhookSecret {
+        #[arg(long = "control-plane-dir")]
+        control_plane_dir: Option<PathBuf>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -127,7 +135,8 @@ fn main() -> Result<()> {
     // Daemonize before starting any threads or the tokio runtime.
     // In daemon mode, stdout/stderr are redirected to data/daemon.log
     // so ANSI escape codes are disabled.
-    let use_ansi = if args.foreground {
+    // Subcommands skip daemonization — they run in the foreground and exit.
+    let use_ansi = if args.foreground || args.command.is_some() {
         true
     } else {
         let data_dir = agent_orchestrator::config_load::data_dir();
@@ -520,14 +529,33 @@ fn main() -> Result<()> {
             });
         }
 
-        // Spawn webhook HTTP server if configured.
-        if let Some(ref webhook_addr) = args.webhook_bind {
-            let addr: std::net::SocketAddr = webhook_addr
+        // Spawn webhook HTTP server (enabled by default on 0.0.0.0:19090).
+        let webhook_bind = args.webhook_bind.as_str();
+        if webhook_bind != "none" {
+            let addr: std::net::SocketAddr = webhook_bind
                 .parse()
-                .context("invalid --webhook-bind address")?;
+                .context("invalid --webhook-bind address (use \"none\" to disable)")?;
+            // Resolve webhook secret: explicit flag > derived from control-plane CA > none.
+            let webhook_secret = args.webhook_secret.clone().or_else(|| {
+                let derived = control_plane::derive_webhook_secret(
+                    &inner.data_dir,
+                    args.control_plane_dir.as_deref(),
+                );
+                if derived.is_some() {
+                    info!(%addr, "webhook secret derived from control-plane CA certificate");
+                }
+                derived
+            });
+            if webhook_secret.is_none() {
+                tracing::warn!(
+                    %addr,
+                    "webhook server starting without signature verification; \
+                     set --webhook-secret or configure control-plane PKI for production"
+                );
+            }
             let wh_state = webhook::WebhookState {
                 inner: inner.clone(),
-                secret: args.webhook_secret.clone(),
+                secret: webhook_secret,
             };
             let router = webhook::router(wh_state);
             let listener = tokio::net::TcpListener::bind(addr)
@@ -543,6 +571,8 @@ fn main() -> Result<()> {
                     .await
                     .ok();
             });
+        } else {
+            info!("webhook HTTP server disabled (--webhook-bind none)");
         }
 
         let shutdown_notify = Arc::new(tokio::sync::Notify::new());
@@ -756,6 +786,22 @@ fn handle_subcommand(command: Commands) -> Result<()> {
             )?;
             println!("{}", client_dir.display());
             Ok(())
+        }
+        Commands::WebhookSecret { control_plane_dir } => {
+            let data_dir = agent_orchestrator::config_load::data_dir();
+            match control_plane::derive_webhook_secret(
+                &data_dir,
+                control_plane_dir.as_deref(),
+            ) {
+                Some(secret) => {
+                    println!("{secret}");
+                    Ok(())
+                }
+                None => {
+                    bail!("no control-plane CA certificate found; \
+                           run the daemon with --bind first to bootstrap PKI")
+                }
+            }
         }
     }
 }

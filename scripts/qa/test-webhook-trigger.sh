@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # QA test: Webhook Trigger Infrastructure (FR-080 / QA-128)
-# Executes scenarios 1, 2, 4, 5, 6, 8, 9 from docs/qa/orchestrator/128-webhook-trigger-infrastructure.md
-# Scenarios 3, 7 require a running task infrastructure and are tested manually.
+# Executes scenarios 1, 2, 4, 5, 6, 7, 8, 9 from docs/qa/orchestrator/128-webhook-trigger-infrastructure.md
+# Scenarios 3 requires a running task infrastructure and is tested manually.
 
 set -euo pipefail
 
@@ -10,7 +10,7 @@ PASS=0
 FAIL=0
 ORCHESTRATORD="./target/release/orchestratord"
 ORCHESTRATOR="./target/release/orchestrator"
-WEBHOOK_PORT=19090  # Use non-standard port to avoid conflicts
+WEBHOOK_PORT=19090  # Default webhook port
 DAEMON_PID=""
 
 pass() { PASS=$((PASS + 1)); echo "  PASS: $1"; }
@@ -69,17 +69,17 @@ else
 fi
 rm -f "$WEBHOOK_MANIFEST"
 
-# ── Scenario 6: No webhook server without --webhook-bind ─────────────────────
+# ── Scenario 6: Webhook server disabled with --webhook-bind none ─────────────
 echo ""
-echo "--- Scenario 6: No webhook server without --webhook-bind ---"
-"$ORCHESTRATORD" --foreground --workers 1 &
+echo "--- Scenario 6: Webhook server disabled with --webhook-bind none ---"
+"$ORCHESTRATORD" --foreground --workers 1 --webhook-bind none &
 DAEMON_PID=$!
 sleep 2
 
 if curl -s --connect-timeout 2 "http://127.0.0.1:${WEBHOOK_PORT}/health" 2>&1 | grep -q "ok"; then
-  fail "webhook server should NOT be running without --webhook-bind"
+  fail "webhook server should NOT be running with --webhook-bind none"
 else
-  pass "no webhook server without --webhook-bind"
+  pass "no webhook server with --webhook-bind none"
 fi
 
 kill "$DAEMON_PID" 2>/dev/null || true
@@ -87,16 +87,16 @@ wait "$DAEMON_PID" 2>/dev/null || true
 DAEMON_PID=""
 sleep 1
 
-# ── Scenario 1: Webhook server starts with --webhook-bind ────────────────────
+# ── Scenario 1: Webhook server starts by default ─────────────────────────────
 echo ""
-echo "--- Scenario 1: Webhook server starts with --webhook-bind ---"
-"$ORCHESTRATORD" --foreground --workers 1 --webhook-bind "127.0.0.1:${WEBHOOK_PORT}" &
+echo "--- Scenario 1: Webhook server starts by default ---"
+"$ORCHESTRATORD" --foreground --workers 1 &
 DAEMON_PID=$!
 sleep 2
 
 HEALTH=$(curl -s --connect-timeout 2 "http://127.0.0.1:${WEBHOOK_PORT}/health" 2>/dev/null || echo "FAIL")
 if [[ "$HEALTH" == "ok" ]]; then
-  pass "health endpoint returns ok"
+  pass "health endpoint returns ok (default port ${WEBHOOK_PORT})"
 else
   fail "health endpoint returned: $HEALTH"
 fi
@@ -104,13 +104,41 @@ fi
 # ── Scenario 2: Webhook fires (trigger doesn't exist → 404, but server accepts request) ──
 echo ""
 echo "--- Scenario 2: Webhook request accepted ---"
-RESP=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://127.0.0.1:${WEBHOOK_PORT}/webhook/nonexistent" -d '{"key":"value"}' -H "Content-Type: application/json" 2>/dev/null || echo "000")
+BODY='{"key":"value"}'
+# If control-plane PKI exists, the daemon derives a webhook secret automatically.
+# Sign the request so it passes auth; fall back to unsigned if no PKI.
+DERIVED_SECRET=$("$ORCHESTRATORD" webhook-secret 2>/dev/null || true)
+if [[ -n "$DERIVED_SECRET" ]]; then
+  SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$DERIVED_SECRET" | awk '{print $NF}')
+  RESP=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://127.0.0.1:${WEBHOOK_PORT}/webhook/nonexistent" -d "$BODY" -H "Content-Type: application/json" -H "X-Webhook-Signature: sha256=${SIG}" 2>/dev/null || echo "000")
+else
+  RESP=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://127.0.0.1:${WEBHOOK_PORT}/webhook/nonexistent" -d "$BODY" -H "Content-Type: application/json" 2>/dev/null || echo "000")
+fi
 if [[ "$RESP" == "404" ]]; then
   pass "webhook returns 404 for nonexistent trigger (server is working)"
 elif [[ "$RESP" == "200" ]]; then
   pass "webhook returns 200 (trigger fired)"
 else
   fail "webhook returned unexpected status: $RESP"
+fi
+
+# ── Scenario 7: Custom bind address override ─────────────────────────────────
+kill "$DAEMON_PID" 2>/dev/null || true
+wait "$DAEMON_PID" 2>/dev/null || true
+DAEMON_PID=""
+sleep 1
+
+echo ""
+echo "--- Scenario 7: Custom bind address override ---"
+"$ORCHESTRATORD" --foreground --workers 1 --webhook-bind "127.0.0.1:18080" &
+DAEMON_PID=$!
+sleep 2
+
+HEALTH=$(curl -s --connect-timeout 2 "http://127.0.0.1:18080/health" 2>/dev/null || echo "FAIL")
+if [[ "$HEALTH" == "ok" ]]; then
+  pass "custom bind address 127.0.0.1:18080 works"
+else
+  fail "custom bind address returned: $HEALTH"
 fi
 
 # ── Scenario 4+5: HMAC signature verification ────────────────────────────────
@@ -122,7 +150,6 @@ sleep 1
 echo ""
 echo "--- Scenario 4+5: HMAC signature verification ---"
 "$ORCHESTRATORD" --foreground --workers 1 \
-  --webhook-bind "127.0.0.1:${WEBHOOK_PORT}" \
   --webhook-secret "test-secret-key" &
 DAEMON_PID=$!
 sleep 2

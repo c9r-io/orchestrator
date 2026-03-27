@@ -8,6 +8,10 @@ self_referential_safe: true
 
 FR-081
 
+## Prerequisites
+
+Daemon must already be running (webhook server enabled by default on `0.0.0.0:19090`).
+
 ## Scenario 1: Webhook config types compile
 
 **Steps:**
@@ -28,10 +32,9 @@ FR-081
 ## Scenario 3: Per-trigger secret from SecretStore
 
 **Steps:**
-1. Start daemon with `--webhook-bind 127.0.0.1:19091`
-2. Apply SecretStore with signing key
-3. Apply Trigger with `webhook.secret.fromRef: <store>`
-4. `curl` with valid HMAC signature
+1. Apply SecretStore with signing key
+2. Apply Trigger with `webhook.secret.fromRef: <store>`
+3. `curl -X POST http://127.0.0.1:19090/webhook/<trigger> -d '{}' -H 'X-Webhook-Signature: sha256=<valid>'`
 
 **Expected:** Returns 200 or 404 (trigger fired / trigger not found for default workspace).
 
