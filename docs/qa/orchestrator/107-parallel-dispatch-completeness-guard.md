@@ -56,3 +56,18 @@
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
 | 1 | All scenarios verified | ☑ | 2026-03-16 code review + unit tests 411 passed |
+| 2 | S1: Normal dispatch - no `parallel_dispatch_incomplete` | ☑ | 2026-03-27: Task c6cdb921 completed 4/4 items, no incomplete event |
+| 3 | S2: dispatched_count counter accuracy | ☑ | 2026-03-27: Line 343=0, line 396 increment after spawn, line 434 uses items.len() |
+| 4 | S3: Event payload structure | ☑ | 2026-03-27: Lines 449-451 show `dispatched` and `expected` integer fields |
+| 5 | S4: Error propagation blocks max_cycles_enforced | ☑ | 2026-03-27: bail! at line 455 propagates via ?, breaks cycle loop before line 162 |
+
+## Re-verification 2026-03-28
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| S1 | Normal dispatch - no `parallel_dispatch_incomplete` | ⚠ | 2026-03-28: Task c245e1db stuck in pending (daemon issue) - prior verification c6cdb921 valid |
+| S2 | dispatched_count counter accuracy | ☑ | 2026-03-28: Verified - line 343=0, line 396 increment after spawn, line 434 uses items.len() |
+| S3 | Event payload structure | ☑ | 2026-03-28: Verified - lines 449-451 show `dispatched` and `expected` integer fields |
+| S4 | Error propagation blocks max_cycles_enforced | ☑ | 2026-03-28: Verified - bail! at line 455 propagates via ?, breaks cycle loop before max_cycles_enforced |
+
+**Note**: S1 runtime verification blocked by daemon task scheduling issue (ticket: fixtures/ticket/qa107-s1-daemon-stuck-pending.md). Code review confirms FR-053 implementation is correct.

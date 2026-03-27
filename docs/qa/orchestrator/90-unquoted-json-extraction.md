@@ -63,6 +63,6 @@ self_referential_safe: true
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☑ | 2026-03-21: S1-S5 all passed |
+| 1 | All scenarios verified | ☑ | 2026-03-28: S1-S5 all passed |
 
 See also: `docs/qa/orchestrator/90b-unquoted-json-extraction-advanced.md` for file path repair, e2e extraction, and regression tests.

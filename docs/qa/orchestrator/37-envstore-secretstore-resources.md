@@ -154,8 +154,8 @@ Verify that `get_from` for EnvStore skips sensitive entries, and `get_from` for 
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Apply EnvStore and SecretStore — Created Status | PASS | 2026-03-21 | Claude | 2/2 unit tests passed |
-| 2 | Apply idempotency — Unchanged on re-apply | PASS | 2026-03-21 | Claude | 2/2 unit tests passed |
-| 3 | Delete EnvStore and SecretStore | PASS | 2026-03-21 | Claude | 2/2 unit tests passed |
-| 4 | Validate rejects empty resource name | PASS | 2026-03-21 | Claude | 2/2 unit tests passed |
-| 5 | EnvStore/SecretStore isolation — cross-kind get/delete | PASS | 2026-03-21 | Claude | 6/6 unit tests passed |
+| 1 | Apply EnvStore and SecretStore — Created Status | PASS | 2026-03-28 | Claude | 2/2 unit tests passed |
+| 2 | Apply idempotency — Unchanged on re-apply | PASS | 2026-03-28 | Claude | 2/2 unit tests passed |
+| 3 | Delete EnvStore and SecretStore | PASS | 2026-03-28 | Claude | 2/2 unit tests passed |
+| 4 | Validate rejects empty resource name | PASS | 2026-03-28 | Claude | 2/2 unit tests passed |
+| 5 | EnvStore/SecretStore isolation — cross-kind get/delete | PASS | 2026-03-28 | Claude | 6/6 unit tests passed |

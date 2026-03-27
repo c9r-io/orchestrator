@@ -28,5 +28,5 @@ rg '"path":|"filename":|"dir":|"event_type":|"timestamp":' crates/daemon/src/fs_
 
 ## Checklist
 
-- [ ] Scenario 11: Path safety — root_path fence and .git exclusion
-- [ ] Scenario 12: Event payload format
+- [x] Scenario 11: Path safety — root_path fence and .git exclusion
+- [x] Scenario 12: Event payload format

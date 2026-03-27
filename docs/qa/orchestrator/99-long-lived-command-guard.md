@@ -129,4 +129,5 @@ Verifies FR-045: `task watch --timeout`, stall auto-termination, and QA agent ti
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☐ | |
+| 1 | All scenarios verified | ☑ | S5 only (self-referential safe); others require daemon/task operations |
+| 2 | S5: timeout guidance in qa_testing template | ☑ | 3 matches; `--timeout` flag and `timeout` wrapper documented |

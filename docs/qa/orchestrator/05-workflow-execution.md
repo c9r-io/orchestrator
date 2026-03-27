@@ -64,9 +64,9 @@ after exactly one cycle, and that output validation accepts well-formed JSON.
 
 3. Run the unit tests:
    ```bash
-   cargo test --workspace --lib -- once_mode_always_stops
-   cargo test --workspace --lib -- strict_phase_accepts_json
-   cargo test --workspace --lib -- strict_phase_requires_json
+   cargo test -p orchestrator-scheduler --lib once_mode_always_stops
+   cargo test -p agent-orchestrator --lib strict_phase_accepts_json
+   cargo test -p agent-orchestrator --lib strict_phase_requires_json
    ```
 
 ### Expected
@@ -101,29 +101,21 @@ produces no failures.
 
 2. Review finalize rule evaluation (fix is skipped when no tickets exist):
    ```bash
-   rg -n "fn test_evaluate_finalize_rule_expression_true" core/src/prehook/tests.rs
-   rg -n "fn test_evaluate_finalize_rule_expression_false" core/src/prehook/tests.rs
-   rg -n "fn test_evaluate_finalize_rule_fix_variables" core/src/prehook/tests.rs
+   rg -n "fn test_evaluate_finalize_rule" core/src/prehook/tests.rs
    ```
 
 3. Run the unit tests:
    ```bash
-   cargo test --workspace --lib -- build_segments_groups_contiguous_scopes
-   cargo test --workspace --lib -- test_evaluate_finalize_rule_expression_true
-   cargo test --workspace --lib -- test_evaluate_finalize_rule_expression_false
-   cargo test --workspace --lib -- test_evaluate_finalize_rule_fix_variables
+   cargo test -p orchestrator-scheduler --lib build_segments_groups_contiguous_scopes
+   cargo test -p agent-orchestrator --lib test_evaluate_finalize_rule
    ```
 
 ### Expected
 
 - `build_segments_groups_contiguous_scopes` passes: confirms that QA and Fix
   phases are grouped into correct segments for sequential execution.
-- `test_evaluate_finalize_rule_expression_true` passes: confirms a CEL
-  expression evaluating to true triggers the finalize rule.
-- `test_evaluate_finalize_rule_expression_false` passes: confirms a CEL
-  expression evaluating to false skips the finalize rule.
-- `test_evaluate_finalize_rule_fix_variables` passes: confirms finalize rules
-  have access to fix-phase variables for skip decisions.
+- `test_evaluate_finalize_rule_*` (27 tests) pass: confirm CEL expressions
+  for finalize rules evaluate correctly across all phases and variables.
 
 ---
 
@@ -159,11 +151,9 @@ and that prehook logic can skip downstream phases when no failures occur in QA.
 
 4. Run the unit tests:
    ```bash
-   cargo test --workspace --lib -- build_segments_groups_contiguous_scopes
-   cargo test --workspace --lib -- test_prehook_decision_skip_does_not_run
-   cargo test --workspace --lib -- test_prehook_decision_default_is_run
-   cargo test --workspace --lib -- test_evaluate_finalize_rule_retest_variables
-   cargo test --workspace --lib -- test_evaluate_finalize_rule_retest_new_ticket_count
+   cargo test -p orchestrator-scheduler --lib build_segments_groups_contiguous_scopes
+   cargo test -p agent-orchestrator --lib test_prehook_decision
+   cargo test -p agent-orchestrator --lib test_evaluate_finalize_rule_retest
    ```
 
 ### Expected
@@ -218,11 +208,10 @@ from future candidate selection.
 
 5. Run the unit tests:
    ```bash
-   cargo test --workspace --lib -- test_create_ticket_for_qa_failure
-   cargo test --workspace --lib -- is_agent_healthy_diseased_in_future_is_unhealthy
-   cargo test --workspace --lib -- is_capability_healthy_diseased_with_bad_capability_rate
-   cargo test --workspace --lib -- test_diseased_agent_filtered_from_candidates
-   cargo test --workspace --lib -- test_is_active_ticket_status
+   cargo test -p agent-orchestrator --lib test_create_ticket_for_qa_failure
+   cargo test -p agent-orchestrator --lib is_agent_healthy_diseased
+   cargo test -p agent-orchestrator --lib test_diseased_agent_filtered
+   cargo test -p agent-orchestrator --lib test_is_active_ticket_status
    ```
 
 ### Expected
@@ -275,9 +264,9 @@ one cycle.
 
 4. Run the unit tests:
    ```bash
-   cargo test --workspace --lib -- infinite_mode_respects_max_cycles
-   cargo test --workspace --lib -- fixed_mode_stops_at_max_cycles
-   cargo test --workspace --lib -- fixed_mode_defaults_to_one_cycle
+   cargo test -p orchestrator-scheduler --lib infinite_mode_respects_max_cycles
+   cargo test -p orchestrator-scheduler --lib fixed_mode_stops_at_max_cycles
+   cargo test -p orchestrator-scheduler --lib fixed_mode_defaults_to_one_cycle
    ```
 
 ### Expected
@@ -295,8 +284,8 @@ one cycle.
 
 | # | Scenario | Status | Date | Tester | Notes |
 |---|----------|--------|------|--------|-------|
-| 1 | qa_only Workflow | PASS | 2026-03-27 | Claude | `once_mode_always_stops`, output validation tests |
-| 2 | qa_fix Workflow | PASS | 2026-03-27 | Claude | `build_segments_groups_contiguous_scopes`, finalize rule tests |
-| 3 | qa_fix_retest Workflow | PASS | 2026-03-27 | Claude | Segment grouping, prehook skip logic tests |
-| 4 | QA Failure and Ticket Creation | PASS | 2026-03-27 | Claude | 5 ticket tests + 2 health tests + 1 selection filter + 7 ticket status tests |
-| 5 | Loop Mode (max_cycles) | PASS | 2026-03-27 | Claude | `infinite_mode_respects_max_cycles`, `fixed_mode_stops_at_max_cycles`, `fixed_mode_defaults_to_one_cycle` |
+| 1 | qa_only Workflow | PASS | 2026-03-27 | Claude | `once_mode_always_stops` (scheduler); `strict_phase_accepts_json`, `strict_phase_requires_json` (agent-orchestrator) |
+| 2 | qa_fix Workflow | PASS | 2026-03-27 | Claude | `build_segments_groups_contiguous_scopes` (scheduler); 17 finalize rule tests (agent-orchestrator) |
+| 3 | qa_fix_retest Workflow | PASS | 2026-03-27 | Claude | `build_segments_groups_contiguous_scopes` (scheduler); 9 prehook decision tests + 14 retest finalize rule tests (agent-orchestrator) |
+| 4 | QA Failure and Ticket Creation | PASS | 2026-03-27 | Claude | 5 ticket + 5 health + 1 selection filter + 7 ticket status = 18 tests (agent-orchestrator) |
+| 5 | Loop Mode (max_cycles) | PASS | 2026-03-27 | Claude | `infinite_mode_respects_max_cycles`, `fixed_mode_stops_at_max_cycles`, `fixed_mode_defaults_to_one_cycle` (scheduler) |

@@ -61,8 +61,8 @@ grep 'kind: Trigger' docs/workflow/scheduled-scan.yaml | wc -l
 
 ## Checklist
 
-- [ ] Scenario 1: Template YAML valid structure
-- [ ] Scenario 2: Hello World template — minimal resource set
-- [ ] Scenario 3: QA Loop template — multi-step capability matching
-- [ ] Scenario 4: Plan-Execute template — StepTemplate resources
-- [ ] Scenario 5: Scheduled Scan — agent audit + static check two-phase
+- [x] Scenario 1: Template YAML valid structure
+- [x] Scenario 2: Hello World template — minimal resource set
+- [x] Scenario 3: QA Loop template — multi-step capability matching
+- [x] Scenario 4: Plan-Execute template — StepTemplate resources
+- [x] Scenario 5: Scheduled Scan — agent audit + static check two-phase

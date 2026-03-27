@@ -71,6 +71,6 @@ spec:
 
 ## Checklist
 
-- [ ] S6: DB migration m0021
-- [ ] S7: YAML manifest with command_rules parses correctly
-- [ ] S8: step_vars in workflow YAML parses correctly
+- [x] S6: DB migration m0021
+- [x] S7: YAML manifest with command_rules parses correctly
+- [x] S8: step_vars in workflow YAML parses correctly

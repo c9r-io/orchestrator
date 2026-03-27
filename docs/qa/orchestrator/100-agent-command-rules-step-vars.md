@@ -55,8 +55,8 @@ cargo test -p orchestrator-scheduler -- step_vars
 
 ## Checklist
 
-- [ ] S1: command_rules serde roundtrip
-- [ ] S2: command_rules CEL validation
-- [ ] S3: command rule CEL evaluation with pipeline vars
-- [ ] S4: resolve_agent_command behavior
-- [ ] S5: step_vars overlay and restore
+- [x] S1: command_rules serde roundtrip
+- [x] S2: command_rules CEL validation
+- [x] S3: command rule CEL evaluation with pipeline vars
+- [x] S4: resolve_agent_command behavior
+- [x] S5: step_vars overlay and restore

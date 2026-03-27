@@ -181,7 +181,7 @@ Code review + unit test verification.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Valid Top-Level Command Surface | ✅ | 2026-02-23 | opencode | |
-| 2 | Parameter Contract Check | ✅ | 2026-03-18 | Claude | Rewritten as code review + unit test |
-| 3 | kubectl-Style Surface Contract | ✅ | 2026-03-18 | Claude | Rewritten as code review + unit test |
-| 4 | Banned Patterns Guard | ✅ | 2026-03-18 | Claude | All sub-checks pass (lint script wrapper has `command -v rg` issue in non-interactive bash; individual checks verified manually) |
+| 1 | Valid Top-Level Command Surface | ✅ | 2026-03-27 | Claude | All 17 top-level commands and 12 task subcommands verified |
+| 2 | Parameter Contract Check | ✅ | 2026-03-27 | Claude | 253 resource tests + 3 apply_result tests pass |
+| 3 | kubectl-Style Surface Contract | ✅ | 2026-03-27 | Claude | Unit tests for resource_dispatch and registered_resource pass |
+| 4 | Banned Patterns Guard | ✅ | 2026-03-27 | Claude | qa-doc-lint.sh exits 0 with warnings for UI docs only |

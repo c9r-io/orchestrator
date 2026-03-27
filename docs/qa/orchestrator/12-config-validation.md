@@ -278,7 +278,7 @@ Entry point: `orchestrator <command>`
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | 验证有效配置 | PASS | 2026-03-18 | | "Manifest is valid", exit 0 |
-| 2 | 验证无效配置 - 空 workspace | PASS | 2026-03-18 | | `qa_targets cannot be empty`, exit 1 |
-| 3 | 验证无效配置 - workflow 无 steps | PASS | 2026-03-18 | | `steps cannot be empty`, exit 1 |
-| 4 | 验证无效配置 - agent 模板缺失 | PASS | 2026-03-18 | | `no agent supports capability for step 'qa'`, exit 1 |
+| 1 | 验证有效配置 | PASS | 2026-03-28 | claude | "Manifest is valid", exit 0 |
+| 2 | 验证无效配置 - 空 workspace | PASS | 2026-03-28 | claude | `qa_targets cannot be empty`, exit 1 |
+| 3 | 验证无效配置 - workflow 无 steps | PASS | 2026-03-28 | claude | `steps cannot be empty`, exit 1 |
+| 4 | 验证无效配置 - agent 模板缺失 | PASS | 2026-03-28 | claude | `no agent supports capability for step 'qa'`, exit 1 |

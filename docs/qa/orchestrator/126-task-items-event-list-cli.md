@@ -78,12 +78,12 @@ FR-078
 
 ## Checklist
 
-- [ ] S1: task items -- table output
-- [ ] S2: task items -- status filter
-- [ ] S3: task items -- JSON output
-- [ ] S4: event list -- basic
-- [ ] S5: event list -- type filter
-- [ ] S6: event list -- limit and JSON
-- [ ] S7: event list -- self_restart filter
-- [ ] S8: showcases free of sqlite workarounds
-- [ ] S9: compilation and tests
+- [x] S1: task items -- table output
+- [x] S2: task items -- status filter
+- [x] S3: task items -- JSON output
+- [x] S4: event list -- basic
+- [x] S5: event list -- type filter
+- [x] S6: event list -- limit and JSON
+- [x] S7: event list -- self_restart filter
+- [x] S8: showcases free of sqlite workarounds
+- [x] S9: compilation and tests

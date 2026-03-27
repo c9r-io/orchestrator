@@ -656,10 +656,7 @@ fn signer_from_pem(ca_cert_pem: &str, ca_key_pem: &str) -> Result<Issuer<'static
 /// When the control-plane PKI is bootstrapped the CA cert is stable, so this
 /// produces a consistent secret without any additional configuration.
 /// Returns `None` if the CA cert does not exist yet.
-pub fn derive_webhook_secret(
-    data_dir: &Path,
-    control_plane_dir: Option<&Path>,
-) -> Option<String> {
+pub fn derive_webhook_secret(data_dir: &Path, control_plane_dir: Option<&Path>) -> Option<String> {
     let dir = control_plane_dir
         .map(Path::to_path_buf)
         .unwrap_or_else(|| data_dir.join("control-plane"));

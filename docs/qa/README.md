@@ -230,7 +230,8 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/122-evo-apply-winner-observability.md` | - | FR-070: evo_apply_winner observability — item_select events, diff stats, captures |
 | orchestrator | `docs/qa/orchestrator/123-open-source-compliance.md` | 6 | FR-071: open-source compliance — LICENSE, CHANGELOG, templates, release |
 | orchestrator | `docs/qa/orchestrator/124-homebrew-tap-distribution.md` | - | FR-072: Homebrew tap formula, cargo publish, release workflow distribution |
-| orchestrator | `docs/qa/orchestrator/125-documentation-site.md` | - | FR-073: VitePress doc site, EN/ZH landing, search, guide navigation |
+| orchestrator | `docs/qa/orchestrator/125-documentation-site.md` | 5 | FR-073: VitePress doc site, EN/ZH landing, search, language switcher |
+| orchestrator | `docs/qa/orchestrator/125b-documentation-site-advanced.md` | 4 | FR-073: VitePress doc site, guide nav, "Why?" page, README check, Cloudflare deploy |
 | orchestrator | `docs/qa/orchestrator/126-task-items-event-list-cli.md` | - | FR-078: task items and event list CLI commands with filters and JSON output |
 | orchestrator | `docs/qa/orchestrator/127-data-lifecycle-governance.md` | - | FR-079: db status/vacuum/cleanup, auto log and task retention |
 | orchestrator | `docs/qa/orchestrator/128-webhook-trigger-infrastructure.md` | - | FR-080: webhook server, trigger firing, HMAC auth, project scope |

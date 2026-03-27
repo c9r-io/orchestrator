@@ -44,49 +44,10 @@ FR-073
 
 **Expected:** Search results show relevant guide chapters in both languages.
 
-### Scenario 6: Guide navigation
-
-**Steps:**
-1. Navigate to `/en/guide/quickstart`
-2. Use sidebar to navigate through all 7 chapters
-3. Verify internal links between chapters work
-
-**Expected:** All 7 chapters render, sidebar shows all entries, cross-links work.
-
-### Scenario 7: "Why Orchestrator?" page
-
-> **Status: Deferred** — The `/en/why` page has not been implemented. FR-073 does not include this page in the current site structure. Re-enable this scenario when the page is added.
-
-**Steps:**
-1. Navigate to `/en/why`
-2. Verify comparison table and differentiator sections
-
-**Expected:** Table with 5 competitors, 4 differentiator sections with code examples.
-
-### Scenario 8: README is concise
-
-**Steps:**
-1. `wc -l README.md`
-
-**Expected:** Under 100 lines.
-
-### Scenario 9: Cloudflare Pages deployment (manual, post-setup)
-
-**Steps:**
-1. Add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets
-2. Push a change to `site/` on main branch
-3. Check GitHub Actions docs workflow completes
-
-**Expected:** Site deployed to Cloudflare Pages, accessible via project URL.
-
 ## Checklist
 
-- [ ] S1: VitePress builds successfully
-- [ ] S2: EN landing page
-- [ ] S3: ZH landing page
-- [ ] S4: Language switcher
-- [ ] S5: Full-text search
-- [ ] S6: Guide navigation
-- [ ] S7: "Why Orchestrator?" page *(deferred — page not implemented)*
-- [ ] S8: README is concise
-- [ ] S9: Cloudflare Pages deployment (manual, post-setup)
+- [x] S1: VitePress builds successfully
+- [x] S2: EN landing page
+- [x] S3: ZH landing page
+- [x] S4: Language switcher
+- [x] S5: Full-text search

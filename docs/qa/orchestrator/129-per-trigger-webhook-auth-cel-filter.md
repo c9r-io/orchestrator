@@ -58,8 +58,14 @@ Daemon must already be running (webhook server enabled by default on `0.0.0.0:19
 
 ## Checklist
 
-- [ ] Scenario 1: Webhook config types compile
-- [ ] Scenario 2: Webhook source with webhook config accepted
-- [ ] Scenario 3: Per-trigger secret from SecretStore
-- [ ] Scenario 4: Invalid per-trigger signature rejected
-- [ ] Scenario 5: Multi-key rotation
+- [x] Scenario 1: Webhook config types compile
+- [x] Scenario 2: Webhook source with webhook config accepted
+- [x] Scenario 3: Per-trigger secret from SecretStore
+- [x] Scenario 4: Invalid per-trigger signature rejected
+- [x] Scenario 5: Multi-key rotation
+
+## Notes
+
+- **Daemon rebuild required**: The running daemon binary must be rebuilt with `cargo build --release -p orchestratord` before testing, as the webhook auth code was updated after the last daemon build.
+- **Default signature header**: The default header is `x-webhook-signature` (lowercase); HTTP header matching is case-insensitive so `X-Webhook-Signature` also works.
+- **Signature format**: HMAC-SHA256 hex-encoded, with optional `sha256=` prefix.

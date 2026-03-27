@@ -124,7 +124,7 @@ Verify that `verify_post_restart_binary` handles legacy `self_restart_ready` eve
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | self_restart_ready Event Contains Old and New SHA256 | PASS | 2026-03-21 | qa-testing skill | Doc drift fixed (stale test names, wrong source path); behavior correct |
-| 2 | binary_changed Flag Is True When Hashes Differ | PASS | 2026-03-21 | qa-testing skill | Doc drift fixed; logic tested via existing test + source |
-| 3 | binary_verification Event Includes old_binary_sha256 | PASS | 2026-03-21 | qa-testing skill | Doc drift fixed (stale test name, wrong source path) |
-| 4 | Backward Compatibility — Legacy Events Without old_binary_sha256 | PASS | 2026-03-21 | qa-testing skill | Doc drift fixed (stale test name, wrong source path) |
+| 1 | self_restart_ready Event Contains Old and New SHA256 | PASS | 2026-03-28 | qa-testing skill | All fields present; backward compat with legacy binary_sha256 confirmed |
+| 2 | binary_changed Flag Is True When Hashes Differ | PASS | 2026-03-28 | qa-testing skill | Logic confirmed: true only when both hashes valid and differ; false when either unknown |
+| 3 | binary_verification Event Includes old_binary_sha256 | PASS | 2026-03-28 | qa-testing skill | Both match/mismatch branches include old_binary_sha256, expected_sha256, actual_sha256, verified |
+| 4 | Backward Compatibility — Legacy Events Without old_binary_sha256 | PASS | 2026-03-28 | qa-testing skill | Legacy events default to "unknown"; verification still correct |

@@ -224,8 +224,8 @@ Code review + unit test verification.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Structured AgentOutput Persistence | ✅ PASS | 2026-03-21 | QA | 8 tests passed (5 core + 3 scheduler) |
-| 2 | Strict Phase Validation Behavior | ✅ PASS | 2026-03-21 | QA | 4 tests passed |
-| 3 | MessageBus Publication Observability | ✅ PASS | 2026-03-21 | QA | 7 trace tests passed |
-| 4 | Scheduler Template Placeholders | ✅ PASS | 2026-03-21 | QA | 1 template escaping test passed |
-| 5 | StepPrehookContext Structured Fields | ✅ PASS | 2026-03-21 | QA | 53 prehook CEL tests passed |
+| 1 | Structured AgentOutput Persistence | ✅ PASS | 2026-03-27 | QA | 8 tests passed (4 agent-orchestrator + 3 scheduler + 1 strict_phase_accepts_json) |
+| 2 | Strict Phase Validation Behavior | ✅ PASS | 2026-03-27 | QA | 4 tests passed |
+| 3 | MessageBus Publication Observability | ✅ PASS | 2026-03-27 | QA | 7 trace tests passed (4 build_trace + single_cycle + multi_cycle + skipped_step) |
+| 4 | Scheduler Template Placeholders | ✅ PASS | 2026-03-27 | QA | 1 template escaping test passed |
+| 5 | StepPrehookContext Structured Fields | ✅ PASS | 2026-03-27 | QA | 53 prehook CEL tests passed (28 evaluate + 25 context); 173 total prehook tests in workspace |

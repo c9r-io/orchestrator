@@ -84,8 +84,8 @@ self_referential_safe: true
 
 | # | Scenario | Status | Notes |
 |---|----------|--------|-------|
-| 1 | 健康 agent 显示 healthy | ☐ | |
-| 2 | Diseased agent 显示 diseased(HH:MM) | ☐ | |
-| 3 | Protobuf AgentStatus 包含 health 字段 | ☐ | |
-| 4 | gRPC handler 读取 agent_health map | ☐ | |
-| 5 | 全部 health 单元测试通过 | ☐ | |
+| 1 | 健康 agent 显示 healthy | ✅ | `agent_health_summary` 返回 `(true, None, 0)`，测试通过 |
+| 2 | Diseased agent 显示 diseased(HH:MM) | ✅ | `mark_agent_diseased_custom_duration` 测试通过，CLI 格式确认为 `diseased(HH:MM)` |
+| 3 | Protobuf AgentStatus 包含 health 字段 | ✅ | proto 定义包含 field 7/8/9，optional 向后兼容 |
+| 4 | gRPC handler 读取 agent_health map | ✅ | agent.rs:20/27 和 task.rs:333/338 均通过 `agent_health_summary()` 填充 |
+| 5 | 全部 health 单元测试通过 | ✅ | 16 health 测试通过，425 workspace 测试通过 |

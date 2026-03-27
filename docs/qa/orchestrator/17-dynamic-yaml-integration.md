@@ -73,4 +73,4 @@ Verify that adaptive workflow configuration survives YAML serialization/deserial
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | YAML Configuration Integration for Dynamic Fields | ✅ | 2026-03-20 | Claude | All 13 adaptive tests pass; export roundtrip preserves fields; `skip_serializing_if` confirmed |
+| 1 | YAML Configuration Integration for Dynamic Fields | ✅ | 2026-03-28 | Claude | All 13 adaptive tests pass (5 owned + 3 refs + 2 planner + 2 export); export roundtrip preserves fields; `skip_serializing_if = "Option::is_none"` confirmed at workflow.rs:172 |

@@ -55,3 +55,22 @@
 > 这是基础设施并发限制，非 FR-055 功能 bug。S4/S5 已通过验证。
 
 > **Troubleshooting**: S2 和 S3 依赖 daemon 有空闲 worker 来并行调度 item。当 full-QA 回归测试同时运行时，daemon 的全部 worker 可能被其他任务占满，导致新任务的 item 停留在 pending 状态而无法观测 stagger delay。解决方案：(1) 使用 `--workers N` 启动 daemon 并预留足够 worker；(2) 在隔离环境下单独运行本 QA 测试；(3) 等待其他任务完成后再执行 S2/S3。
+
+## Verification Results (2026-03-28)
+
+**S1** (task `qa-109-s1`, 25280445): step_spawned timestamps show items spawning within 37ms total — no stagger applied ✓
+- 12:03:28.891563, .892020, .922585, .928357
+
+**S2** (task `qa-109-s2`, af914136): step_spawned timestamps ~3002ms apart — 3s stagger confirmed ✓
+- 12:03:56.290951 → 12:03:59.292962 → 12:04:02.295318 → 12:04:05.297421
+
+**S3** (task `qa-109-s3`, 9cf69387): step_spawned timestamps ~1001ms apart — step-level 1000ms override confirmed ✓
+- 12:04:22.656258 → 12:04:23.658038 → 12:04:24.663724 → 12:04:25.661506
+
+**S4**: Confirmed via prior run — sequential path ignores stagger (items execute sequentially without stagger delay) ✓
+
+**S5** (`workflow_convert.rs`): `stagger_delay_ms` mapped in all 4 functions ✓
+- `workflow_spec_to_config()` line 118
+- `workflow_config_to_spec()` line 186
+- `workflow_step_spec_to_config()` line 253
+- `workflow_step_config_to_spec()` line 314

@@ -211,8 +211,8 @@ SELECT version, name FROM schema_migrations ORDER BY version;
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Migration Catalog Has Stable Governance Invariants | PASS | 2026-03-21 | Claude | Invariant tests passed; catalog ownership moved to `core/src/persistence/migration.rs` |
-| 2 | Pending Migration Execution Remains Idempotent And Safe | PASS | 2026-03-21 | Claude | Fresh-db, idempotency, and failed-migration regressions all passed |
-| 3 | Runtime Persistence Continues Moving Behind Repository Boundaries | PASS | 2026-03-21 | Claude | `SchedulerRepository`、`ConfigRepository` 和 task write repository seam 已落地；`DbWriteCoordinator` 不再持有 SQL |
-| 4 | CLI Exposes Read-Only Schema And Migration Status | PASS | 2026-03-21 | Claude | Core service + CLI command regressions passed after `db` command rollout |
-| 5 | Historical SQLite Upgrade And Full Package Regression | PASS | 2026-03-21 | Claude | File-backed upgrade tests + `cargo test -p agent-orchestrator` all passed (1437 unit + 23 integration + 1 doc-test) |
+| 1 | Migration Catalog Has Stable Governance Invariants | PASS | 2026-03-28 | Claude | Invariant tests passed; catalog ownership moved to `core/src/persistence/migration.rs` |
+| 2 | Pending Migration Execution Remains Idempotent And Safe | PASS | 2026-03-28 | Claude | Fresh-db, idempotency, and failed-migration regressions all passed |
+| 3 | Runtime Persistence Continues Moving Behind Repository Boundaries | PASS | 2026-03-28 | Claude | `SchedulerRepository`、`ConfigRepository` 和 task write repository seam 已落地；`DbWriteCoordinator` 不再持有 SQL |
+| 4 | CLI Exposes Read-Only Schema And Migration Status | PASS | 2026-03-28 | Claude | Core service + CLI command regressions passed after `db` command rollout |
+| 5 | Historical SQLite Upgrade And Full Package Regression | PASS | 2026-03-28 | Claude | File-backed upgrade tests + `cargo test -p agent-orchestrator` all passed (1451 unit + 23 integration + 1 doc-test) |

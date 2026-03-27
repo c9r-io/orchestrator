@@ -167,8 +167,8 @@ Verify that build.rs has proper fallback handling and rerun-if-changed triggers.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | --version Flag Shows Git Hash | PASS | 2026-03-21 | claude | `version = "0.1.0 (BUILD_GIT_HASH)"` in cli.rs; `git rev-parse --short HEAD` + `-dirty` suffix in build.rs |
-| 2 | version Subcommand Plain Text Output | PASS | 2026-03-21 | claude | Three lines: Version, Git Hash, Build Time; ISO 8601 UTC; preflight handler in main.rs before daemon init |
-| 3 | version --json Machine-Readable Output | PASS | 2026-03-21 | claude | Valid JSON with version, git_hash, build_time keys; --json flag on Version subcommand |
-| 4 | Restart Event Payloads Include Build Info | PASS | 2026-03-21 | claude | build_git_hash + build_timestamp in self_restart_ready + 2× binary_verification (restart.rs:228-229,288,297); 6 unit tests pass |
-| 5 | build.rs Fallback and Rerun Triggers | PASS | 2026-03-21 | claude | 2× unwrap_or_else, 2× "unknown" fallback, 2× rerun-if-changed (.git/HEAD + src/); 409 lib tests pass |
+| 1 | --version Flag Shows Git Hash | PASS | 2026-03-28 | claude | `version = "0.1.0 (BUILD_GIT_HASH)"` in cli.rs; `git rev-parse --short HEAD` + `-dirty` suffix in build.rs |
+| 2 | version Subcommand Plain Text Output | PASS | 2026-03-28 | claude | Three lines: Version, Git Hash, Build Time; ISO 8601 UTC; preflight handler in main.rs before daemon init |
+| 3 | version --json Machine-Readable Output | PASS | 2026-03-28 | claude | Valid JSON with version, git_hash, build_time keys; --json flag on Version subcommand |
+| 4 | Restart Event Payloads Include Build Info | PASS | 2026-03-28 | claude | build_git_hash + build_timestamp in self_restart_ready + 2× binary_verification (restart.rs:228-229,288,297); 6 unit tests pass |
+| 5 | build.rs Fallback and Rerun Triggers | PASS | 2026-03-28 | claude | 2× unwrap_or_else, 2× "unknown" fallback, 2× rerun-if-changed (.git/HEAD + src/); 425 lib tests pass |

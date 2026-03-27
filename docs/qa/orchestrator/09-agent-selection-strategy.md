@@ -282,8 +282,8 @@ works correctly — via code review and unit tests.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Cost-Based Scoring | PASS | 2026-03-21 | Claude | 2 tests passed |
-| 2 | Quality Scoring | PASS | 2026-03-21 | Claude | 2 tests passed |
-| 3 | Health Degradation | PASS | 2026-03-21 | Claude | 6 capability health + 4 agent health + 3 health penalty = 13 tests passed |
-| 4 | Retry Status Transitions | PASS | 2026-03-21 | Claude | 2 status + 3 started_at + 5 orphaned = 10 tests passed |
-| 5 | Load Balancing | PASS | 2026-03-21 | Claude | 3 tests passed |
+| 1 | Cost-Based Scoring | PASS | 2026-03-28 | Claude | 6 tests passed |
+| 2 | Quality Scoring | PASS | 2026-03-28 | Claude | 8 tests passed |
+| 3 | Health Degradation | PASS | 2026-03-28 | Claude | 1 health penalty + 1 diseased filter + 6 capability health + 4 agent health = 12 tests passed |
+| 4 | Retry Status Transitions | PASS | 2026-03-28 | Claude | 2 status + 2 started_at + 5 orphaned = 9 tests passed |
+| 5 | Load Balancing | PASS | 2026-03-28 | Claude | 3 tests passed |

@@ -183,8 +183,8 @@ Verify that `ConfigSelfHealRule` has stable Display and Serialize representation
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Heal Log Persisted During Self-Heal | ✅ PASS | 2026-03-21 | Claude | Both tests passed |
-| 2 | Heal Log Query Backend - Table Output | ✅ PASS | 2026-03-21 | Claude | 2 tests passed, DESC order confirmed |
-| 3 | Heal Log Query Backend - JSON Serialization | ✅ PASS | 2026-03-21 | Claude | 2 tests passed, field serialization confirmed |
-| 4 | Check Command Shows Persisted Heal Warning | ✅ PASS | 2026-03-21 | Claude | 3 tests passed (empty, matching, non-matching versions) |
-| 5 | ConfigSelfHealRule Display and Serialize Stability | ✅ PASS | 2026-03-21 | Claude | 3 tests passed (display, serialize, as_label) |
+| 1 | Heal Log Persisted During Self-Heal | ✅ PASS | 2026-03-28 | Claude | Both tests passed |
+| 2 | Heal Log Query Backend - Table Output | ✅ PASS | 2026-03-28 | Claude | 2 tests passed, DESC order confirmed |
+| 3 | Heal Log Query Backend - JSON Serialization | ✅ PASS | 2026-03-28 | Claude | 2 tests passed, field serialization confirmed |
+| 4 | Check Command Shows Persisted Heal Warning | ✅ PASS | 2026-03-28 | Claude | 3 tests passed (empty, matching, non-matching versions) |
+| 5 | ConfigSelfHealRule Display and Serialize Stability | ✅ PASS | 2026-03-28 | Claude | 3 tests passed (display, serialize, as_label) |

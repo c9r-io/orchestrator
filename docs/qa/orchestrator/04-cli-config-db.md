@@ -149,7 +149,35 @@ Code review + unit test verification.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Manifest Apply - Update Configuration | PASS | 2026-03-27 | Claude | 5/5 tests passed |
-| 2 | Manifest Apply - Invalid Configuration | PASS | 2026-03-27 | Claude | 4/4 tests passed |
-| 3 | Manifest Apply - Add New Workspace | PASS | 2026-03-27 | Claude | 4/4 tests passed |
-| 4 | Delete Project Clears Task State | PASS | 2026-03-27 | Claude | 3/3 tests passed |
+| 1 | Manifest Apply - Update Configuration | PASS | 2026-03-28 | Claude | 5/5 tests passed |
+| 2 | Manifest Apply - Invalid Configuration | PASS | 2026-03-28 | Claude | 4/4 tests passed |
+| 3 | Manifest Apply - Add New Workspace | PASS | 2026-03-28 | Claude | 4/4 tests passed |
+| 4 | Delete Project Clears Task State | PASS | 2026-03-28 | Claude | 3/3 tests passed |
+
+## Verification Complete
+
+All 16 tests executed and passed successfully using `cargo test --package agent-orchestrator --lib -- <test_name>`.
+
+### Scenario 1 - Manifest Apply - Update Configuration
+- `apply_result_created_when_missing` ✓
+- `apply_result_unchanged_for_identical_resource` ✓
+- `apply_result_configured_when_resource_changes` ✓
+- `apply_to_store_returns_created_for_new_resource` ✓
+- `apply_to_store_increments_generation` ✓
+
+### Scenario 2 - Manifest Apply - Invalid Configuration
+- `validate_workflow_rejects_empty_steps` ✓
+- `validate_workflow_rejects_no_enabled_steps` ✓
+- `validate_workflow_config_rejects_duplicate_step_ids` ✓
+- `resource_dispatch_rejects_mismatched_spec_kind` ✓
+
+### Scenario 3 - Manifest Apply - Add New Workspace
+- `apply_to_project_routes_workspace_to_project_scope` ✓
+- `apply_to_project_auto_creates_project_entry` ✓
+- `apply_to_project_returns_unchanged_for_identical` ✓
+- `apply_to_store_returns_created_for_new_resource` ✓
+
+### Scenario 4 - Delete Project Clears Task State
+- `registered_resource_delete_from_removes_project` ✓
+- `delete_from_store_removes_from_store_and_config_snapshot` ✓
+- `delete_from_store_returns_false_for_missing` ✓

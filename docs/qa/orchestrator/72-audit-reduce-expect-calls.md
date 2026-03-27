@@ -76,4 +76,4 @@ S-01 through S-06: All PASS. `deny(clippy::expect_used)` and `deny(clippy::unwra
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☑ | S-01–S-06 PASS (2026-03-19); S-03–S-06 rewritten as safe (code review + deny attributes + CI gate) |
+| 1 | All scenarios verified | ☑ | S-01–S-06 PASS (2026-03-19); S-03–S-06 rewritten as safe (code review + deny attributes + CI gate); Re-verified 2026-03-28: S-01–S-06 all PASS |

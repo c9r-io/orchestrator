@@ -239,8 +239,8 @@ cargo test --workspace --lib 2>&1 | grep "test result"
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Step Type Validation (Known and Unknown IDs) | ✅ PASS | 2026-03-21 | QA | 2 tests passed |
-| 2 | Default Scope Classification (Task vs Item) | ✅ PASS | 2026-03-21 | QA | 5 tests passed (2 scope + 3 resolved_scope) |
-| 3 | Semantic Normalization And Execution Rehydration | ✅ PASS | 2026-03-21 | QA | 11 tests passed (4 normalize + 7 build), 1979 workspace lib tests pass |
-| 4 | WorkflowStepType Fully Removed From Codebase | ✅ PASS | 2026-03-21 | QA | Grep audit — zero matches for WorkflowStepType and execution_plan.step() |
-| 5 | Static Checks And Resource Conversion Stay In Sync | ✅ PASS | 2026-03-21 | QA | 12 tests passed, 1979 workspace lib tests pass |
+| 1 | Step Type Validation (Known and Unknown IDs) | ✅ PASS | 2026-03-28 | QA | 2 tests passed |
+| 2 | Default Scope Classification (Task vs Item) | ✅ PASS | 2026-03-28 | QA | 2 tests passed |
+| 3 | Semantic Normalization And Execution Rehydration | ✅ PASS | 2026-03-28 | QA | 11 tests passed (4 normalize + 7 build), 425 workspace lib tests pass |
+| 4 | WorkflowStepType Fully Removed From Codebase | ✅ PASS | 2026-03-28 | QA | Grep audit — zero matches for WorkflowStepType and execution_plan.step() |
+| 5 | Static Checks And Resource Conversion Stay In Sync | ✅ PASS | 2026-03-28 | QA | 12 tests passed (8 workflow_spec_to_config + 4 scheduler check), 425 workspace lib tests pass |

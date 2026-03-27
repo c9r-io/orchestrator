@@ -81,8 +81,11 @@ struct Args {
 
     /// Bind address for the HTTP webhook server.
     /// Defaults to 0.0.0.0:19090. Set to "none" to disable.
-    #[arg(long = "webhook-bind", default_value = "0.0.0.0:19090",
-          env = "ORCHESTRATOR_WEBHOOK_BIND")]
+    #[arg(
+        long = "webhook-bind",
+        default_value = "0.0.0.0:19090",
+        env = "ORCHESTRATOR_WEBHOOK_BIND"
+    )]
     webhook_bind: String,
 
     /// Shared secret for webhook HMAC-SHA256 signature verification.
@@ -789,17 +792,16 @@ fn handle_subcommand(command: Commands) -> Result<()> {
         }
         Commands::WebhookSecret { control_plane_dir } => {
             let data_dir = agent_orchestrator::config_load::data_dir();
-            match control_plane::derive_webhook_secret(
-                &data_dir,
-                control_plane_dir.as_deref(),
-            ) {
+            match control_plane::derive_webhook_secret(&data_dir, control_plane_dir.as_deref()) {
                 Some(secret) => {
                     println!("{secret}");
                     Ok(())
                 }
                 None => {
-                    bail!("no control-plane CA certificate found; \
-                           run the daemon with --bind first to bootstrap PKI")
+                    bail!(
+                        "no control-plane CA certificate found; \
+                           run the daemon with --bind first to bootstrap PKI"
+                    )
                 }
             }
         }

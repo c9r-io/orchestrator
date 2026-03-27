@@ -159,9 +159,9 @@ Verify that SecretStore values are collected by `collect_sensitive_values()` and
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Agent with direct value env entry | PASS | 2026-03-19 | Claude | `resolve_direct_value` passed |
-| 2 | Agent with fromRef importing all store keys | PASS | 2026-03-19 | Claude | `resolve_from_ref` passed |
-| 3 | Agent with refValue importing single key with rename | PASS | 2026-03-19 | Claude | `resolve_ref_value` passed |
-| 4 | Config validation rejects missing store references | PASS | 2026-03-19 | Claude | 6 sub-tests passed |
-| 5 | SecretStore values redacted in task logs | PASS | 2026-03-19 | Claude | 5 sub-tests passed |
-| G | Override precedence — later entries win | PASS | 2026-03-19 | Claude | `resolve_later_entries_override_earlier` passed |
+| 1 | Agent with direct value env entry | PASS | 2026-03-28 | Claude | `resolve_direct_value` passed |
+| 2 | Agent with fromRef importing all store keys | PASS | 2026-03-28 | Claude | `resolve_from_ref` passed |
+| 3 | Agent with refValue importing single key with rename | PASS | 2026-03-28 | Claude | `resolve_ref_value` passed |
+| 4 | Config validation rejects missing store references | PASS | 2026-03-28 | Claude | 7 sub-tests passed: `resolve_missing_store_errors`, `resolve_missing_key_errors`, `resolve_invalid_entry_errors`, `validate_agent_env_store_refs` (4 sub-tests) |
+| 5 | SecretStore values redacted in task logs | PASS | 2026-03-28 | Claude | 5 sub-tests passed: `collect_sensitive_values_from_secret_store`, `collect_sensitive_values_skips_non_sensitive`, `test_collect_all_sensitive_store_values`, `test_collect_all_sensitive_store_values_empty` |
+| G | Override precedence — later entries win | PASS | 2026-03-28 | Claude | `resolve_later_entries_override_earlier` passed |

@@ -155,8 +155,8 @@ Verify the implementation integrates cleanly across config, runtime, scheduler, 
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Static Workflow Steps Materialize Into A Mainline Graph | ✅ | 2026-03-20 | | |
-| 2 | Invalid Dynamic Step Triggers Fail CEL Validation | ✅ | 2026-03-20 | | |
-| 3 | Task Trace Captures Graph Runs And Dynamic Events | ✅ | 2026-03-20 | | |
-| 4 | Task Info Exposes Persisted Graph Debug Bundles | ✅ | 2026-03-20 | | |
-| 5 | DAG Debug View And Workspace Compile Validation | ✅ | 2026-03-20 | | |
+| 1 | Static Workflow Steps Materialize Into A Mainline Graph | ✅ | 2026-03-28 | | |
+| 2 | Invalid Dynamic Step Triggers Fail CEL Validation | ✅ | 2026-03-28 | | |
+| 3 | Task Trace Captures Graph Runs And Dynamic Events | ✅ | 2026-03-28 | | |
+| 4 | Task Info Exposes Persisted Graph Debug Bundles | ✅ | 2026-03-28 | | |
+| 5 | DAG Debug View And Workspace Compile Validation | ✅ | 2026-03-28 | | |
