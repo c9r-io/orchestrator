@@ -54,9 +54,21 @@
 
 ---
 
-## Known Limitations
+## Test Fixture
 
-**Scenarios 1, 2, and 4** require a long-running agent fixture for proper E2E testing. The current mock agents (`mock_echo`, `mock_sleep`) exit too quickly — by the time `wait_for_inflight_runs()` executes post-loop, agent processes have already exited (`exit_code != -1`), so the inflight-wait timeout path is never exercised. A dedicated fixture with a persistent subprocess (e.g., `sleep 120 &` background process) is needed to keep `exit_code = -1` active long enough for the timeout logic to trigger. Unit tests (scenarios 3 and 5) confirm the implementation is correct.
+**Fixture**: `fixtures/manifests/bundles/qa106-long-running-agent.yaml`
+
+Apply before running S1/S2/S4/S5:
+```bash
+orchestrator apply -f fixtures/manifests/bundles/qa106-long-running-agent.yaml --project qa106
+```
+
+The fixture provides:
+- `mock_long_running` agent: `sleep 120` command keeping `exit_code=-1` while alive (for S1/S2/S4)
+- `mock_echo` agent: instant-exit agent (for S5 backward compatibility)
+- `qa106-heartbeat-test` workflow: 10s timeout + 5s heartbeat grace (for S1)
+- `qa106-no-heartbeat-test` workflow: 10s timeout without heartbeat expectation (for S2)
+- `qa106-backward-compat` workflow: old YAML without FR-052 safety fields (for S5)
 
 ## Checklist
 
@@ -64,4 +76,4 @@
 |---|-------|--------|-------|
 | 1 | S3/S5 verified via unit test + apply | ☑ | S1/S2/S4 require long-running agents that outlive step execution; echo/mock agents exit immediately so `exit_code != -1` by the time `wait_for_inflight_runs()` runs. Detection logic works (inflight_runs_detected emitted). Fixture redesign needed for timeout-path scenarios. |
 | 2 | S3: Serde defaults — unit tests pass | ☑ | `test_safety_config_default` (300s/60s), `test_safety_config_deserialize_minimal` (300s/60s), `test_fr052_fields_serde_round_trip`, `test_fr052_fields_explicit_json_deserialization` all PASS |
-| 3 | S5: Backward compat — apply fixture + run task | ⚠️ | YAML deserialization works (old YAML → defaults 300s/60s). However, post-loop shows 1 unresolved item causing `task_failed` - see ticket `qa106-s5-postloop-task-failed.md`. S5 core compat verified; the unresolved-item issue is a separate bug in loop guard logic, not FR-052. |
+| 3 | S5: Backward compat — apply fixture + run task | ☑ | YAML deserialization works (old YAML → defaults 300s/60s). The previous `task_failed` issue was caused by the stall sweep bug (fixed in 97861f4) resetting items while workers were active. Use fixture `qa106-long-running-agent.yaml` workflow `qa106-backward-compat`. |

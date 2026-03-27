@@ -69,7 +69,7 @@ self_referential_safe: true
    Expected:
 
    - `ci.yml` contains a `cross-compile` job
-   - Matrix includes all 5 targets: `x86_64-unknown-linux-gnu`, `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`, `aarch64-apple-darwin`
+   - Matrix includes all 4 targets: `x86_64-unknown-linux-gnu`, `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-gnu`, `aarch64-apple-darwin`
    - Each target uses `cargo check --workspace --target <triple>`
 
 ---

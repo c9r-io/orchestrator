@@ -292,6 +292,34 @@ mod tests {
     }
 
     #[test]
+    fn test_unparseable_metric_var_fails() {
+        let items = vec![
+            make_item("a", vec![("other_var", "hello")]),
+            make_item("b", vec![("other_var", "world")]),
+        ];
+        let config = make_config(SelectionStrategy::Max);
+        let err = execute_item_select(&items, &config).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("no items have parseable metric_var 'score'"),
+            "unexpected error: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_select_max_picks_highest_score() {
+        let items = vec![
+            make_item("a", vec![("score", "85.0")]),
+            make_item("b", vec![("score", "72.0")]),
+        ];
+        let config = make_config(SelectionStrategy::Max);
+        let result = execute_item_select(&items, &config).unwrap();
+        assert_eq!(result.winner_id, "a");
+        assert_eq!(result.eliminated_ids, vec!["b"]);
+        assert_eq!(result.winner_vars.get("score").unwrap(), "85.0");
+    }
+
+    #[test]
     fn test_tie_break_last() {
         let items = vec![
             make_item("a", vec![("score", "5.0")]),

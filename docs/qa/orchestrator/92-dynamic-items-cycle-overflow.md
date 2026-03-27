@@ -62,10 +62,10 @@ orchestrator task create \
 
 **验证**:
 ```bash
-# 1. Check items_generated event — dynamic items were created
+# 1. Check task_items table — dynamic items were created
 sqlite3 data/agent_orchestrator.db \
-  "SELECT event_type, payload_json FROM events
-   WHERE task_id='<task_id>' AND event_type='items_generated'"
+  "SELECT id, source, status, qa_file_path FROM task_items
+   WHERE task_id='<task_id>'"
 
 # 2. Check qa_testing step_finished events for dynamic items
 sqlite3 data/agent_orchestrator.db \
@@ -74,16 +74,18 @@ sqlite3 data/agent_orchestrator.db \
    AND event_type='step_finished'
    AND json_extract(payload_json,'$.step')='qa_testing'"
 
-# 3. Check task_items status
+# 3. Verify dynamic item count (source='dynamic')
 sqlite3 data/agent_orchestrator.db \
-  "SELECT id, source, status, qa_file_path FROM task_items
-   WHERE task_id='<task_id>'"
+  "SELECT COUNT(*) FROM task_items
+   WHERE task_id='<task_id>' AND source='dynamic'"
 ```
 
 **预期结果**:
-- `items_generated` 事件存在，count=2
+- Dynamic items exist in `task_items` table (count > 0, `source='dynamic'`)
 - `qa_testing` 的 `step_finished` 事件出现（dynamic items 被处理）
 - Dynamic items 状态为 `resolved`（mock agent 返回 success）
+
+> **Note**: There is no `items_generated` event type in the events schema. Verify dynamic item creation via the `task_items` table directly.
 
 ---
 

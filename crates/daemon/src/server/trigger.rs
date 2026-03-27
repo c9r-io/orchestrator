@@ -60,6 +60,7 @@ pub(crate) async fn trigger_fire(
                     event_type: "webhook".to_string(),
                     task_id: String::new(),
                     payload: Some(payload),
+                    project: None,
                 },
             );
         }

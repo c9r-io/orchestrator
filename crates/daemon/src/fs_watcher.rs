@@ -335,6 +335,7 @@ fn handle_notify_event(
                 event_type: "filesystem".to_string(),
                 task_id: String::new(),
                 payload: Some(payload),
+                project: None,
             },
         );
     }

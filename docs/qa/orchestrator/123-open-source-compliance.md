@@ -37,9 +37,12 @@ FR-071
 
 **Steps:**
 1. `grep -c 'AI-native' CONTRIBUTING.md`
-2. Verify sections: Feature Requests, Bug Reports, Pull Requests, Development Setup
+2. Verify sections exist (subsections under `## How to Contribute`):
+   ```bash
+   grep -E '^###? (How to Contribute|Feature Requests|Bug Reports|Pull Requests|Development Setup|Code Style|License)' CONTRIBUTING.md
+   ```
 
-**Expected:** AI-native positioning present; all sections exist.
+**Expected:** AI-native positioning present; `## How to Contribute` contains subsections `### Feature Requests (Preferred)`, `### Bug Reports`, `### Pull Requests`; top-level `## Development Setup`, `## Code Style`, and `## License` sections exist.
 
 ### Scenario 5: GitHub templates
 

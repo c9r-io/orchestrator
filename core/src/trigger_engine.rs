@@ -56,6 +56,9 @@ pub struct TriggerEventPayload {
     pub task_id: String,
     /// Optional JSON payload (webhook body, filesystem event context, or task metadata).
     pub payload: Option<serde_json::Value>,
+    /// Optional project scope. When set, the trigger engine only matches triggers
+    /// in this specific project, preventing cross-project trigger leakage.
+    pub project: Option<String>,
 }
 
 /// Notification sent to the engine when trigger configuration changes.
@@ -244,6 +247,12 @@ impl TriggerEngine {
         let config = &snap.active_config.config;
 
         for (project_id, project) in &config.projects {
+            // When a project scope is specified, only match triggers in that project.
+            if let Some(ref scoped_project) = payload.project {
+                if project_id != scoped_project {
+                    continue;
+                }
+            }
             for (name, trigger) in &project.triggers {
                 if trigger.suspend {
                     continue;

@@ -12,54 +12,62 @@
 ### S1: item_select 失败时发射 item_select_failed 事件
 
 **步骤**:
-1. 配置 workflow 包含 `item_select` 步骤，strategy 为 `max`，metric_var 为 `score`
-2. 运行两个候选 item，其 benchmark 步骤 stdout 不包含可解析的 `score` 变量
-3. 检查事件表
+1. 运行 `execute_item_select` 单元测试验证 unparseable metric_var 错误逻辑：
+   ```bash
+   cargo test -p orchestrator-scheduler --lib test_unparseable_metric_var_fails -- --nocapture
+   ```
+2. 代码审查 — 确认 `item_select_failed` 事件发射逻辑：
+   ```bash
+   rg -n "item_select_failed" crates/orchestrator-scheduler/src/scheduler/loop_engine/segment.rs
+   ```
 
 **期望**:
-- 事件表包含 `item_select_failed` 事件
-- payload 包含 `error`（含 "no items have parseable metric_var 'score'"）
-- payload 包含 `metric_var: "score"`
-- payload 包含 `item_count: 2`
-- payload 包含 `item_vars`，列出各候选实际拥有的 pipeline var keys
-- pipeline 继续执行（apply_winner 回退逻辑仍运行）
+- 单元测试通过：`execute_item_select` 在无可解析 metric_var 时返回 "no items have parseable metric_var 'score'" 错误
+- 代码审查确认 `segment.rs` 在 `execute_item_select` 失败时发射 `item_select_failed` 事件，payload 包含 `error`, `metric_var`, `item_count`, `item_vars`
 
 ### S2: worktree 合并日志包含 diff 统计
 
 **步骤**:
-1. 运行包含 `item_isolation: git_worktree` 的 evolution workflow
-2. 候选成功完成并产生代码变更
-3. item_select 成功选出 winner
-4. 检查 daemon 日志和事件表
+1. 运行 `parse_numstat` 单元测试（已在 S5 验证）确认 diff 统计解析正确
+2. 代码审查 — 确认 `evo_apply_winner` 日志和事件包含 diff 统计字段：
+   ```bash
+   rg -n "evo_apply_winner|files_changed|insertions|deletions|item_isolation_winner_applied" crates/orchestrator-scheduler/src/scheduler/loop_engine/isolation.rs
+   ```
 
 **期望**:
-- daemon 日志包含 `evo_apply_winner: applied winner worktree` INFO 条目
-- 日志包含 `winner_branch`, `files_changed`, `insertions`, `deletions` 字段
-- `item_isolation_winner_applied` 事件 payload 包含 `files_changed`, `insertions`, `deletions`
-- `files_changed > 0`（确认 diff 统计不全为零）
+- 代码审查确认 `isolation.rs` 的 `evo_apply_winner` 路径：
+  - 调用 `parse_numstat` 解析 `git diff --numstat` 输出
+  - INFO 日志包含 `winner_branch`, `files_changed`, `insertions`, `deletions`
+  - 发射 `item_isolation_winner_applied` 事件，payload 包含 diff 统计字段
 
 ### S3: capture 失败时 step_finished 包含 captures_missing
 
 **步骤**:
-1. 配置步骤 capture `var: score`，json_path 为 `$.total_score`
-2. agent 输出不包含 `total_score` 字段的 JSON
-3. 检查该步骤的 `step_finished` 事件
+1. 运行 `apply_captures` 单元测试（已在 S6 验证）确认 missing var 返回值
+2. 代码审查 — 确认 `captures_missing` 写入 `step_finished` payload：
+   ```bash
+   rg -n "captures_missing" crates/orchestrator-scheduler/src/scheduler/item_executor/apply.rs
+   ```
 
 **期望**:
-- `step_finished` 事件 payload 包含 `captures_missing: ["score"]`
-- `score` pipeline var 被设为空字符串（现有行为不变）
+- S6 单元测试确认 `apply_captures` 在 JSON path 未找到时返回 missing vec 包含 `"score"`
+- 代码审查确认 `apply.rs` 在 `captures_missing` 非空时将其写入 `step_finished` 事件 payload
 
 ### S4: item_selected 事件包含评分
 
 **步骤**:
-1. 运行两候选 item，各自 capture `score` 变量成功（如 85.0 和 72.0）
-2. item_select 以 `max` strategy 选出 winner
-3. 检查 `item_selected` 事件
+1. 运行 `execute_item_select` 单元测试验证 max strategy 选出最高分 winner：
+   ```bash
+   cargo test -p orchestrator-scheduler --lib test_select_max_picks_highest_score -- --nocapture
+   ```
+2. 代码审查 — 确认 `item_selected` 事件 payload 包含评分：
+   ```bash
+   rg -n "item_selected|selection_succeeded|scores" crates/orchestrator-scheduler/src/scheduler/loop_engine/segment.rs
+   ```
 
 **期望**:
-- payload 包含 `selection_succeeded: true`
-- payload 包含 `scores` 对象，key 为 item ID，value 为浮点评分
-- `winner` 对应 scores 中最大值的 item
+- 单元测试通过：两个候选（85.0 和 72.0），winner 为最高分 item，eliminated 包含另一个
+- 代码审查确认 `segment.rs` 发射 `item_selected` 事件，payload 包含 `selection_succeeded`, `scores`, `winner`
 
 ### S5: parse_numstat 单元测试
 

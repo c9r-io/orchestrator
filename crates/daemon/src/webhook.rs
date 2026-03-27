@@ -138,6 +138,7 @@ fn do_webhook(
             event_type: "webhook".to_string(),
             task_id: String::new(),
             payload: Some(payload.clone()),
+            project: Some(project.clone()),
         },
     );
 

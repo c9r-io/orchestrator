@@ -1,0 +1,91 @@
+# Test fixture for QA 106: Inflight Wait Heartbeat-Aware Timeout
+# Provides a long-running agent that stays alive (exit_code=-1) for
+# testing inflight-wait timeout and heartbeat logic.
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: qa106-test
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa/orchestrator
+  ticket_dir: fixtures/ticket
+---
+# Long-running agent: sleeps for 120s, keeping exit_code=-1 while alive.
+# S1/S2/S4 scenarios need an agent subprocess that remains active during
+# the post-loop wait_for_inflight_runs() phase.
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_long_running
+spec:
+  capabilities:
+    - qa
+  command: "sleep 120 && echo '{\"confidence\":0.93,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-pass\",\"description\":\"long-running qa passed\",\"severity\":\"info\"}]}]}'"
+---
+# Quick echo agent for non-inflight scenarios
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_echo
+spec:
+  capabilities:
+    - qa
+    - fix
+    - retest
+  command: "echo '{\"confidence\":0.93,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-pass\",\"description\":\"qa passed\",\"severity\":\"info\"}]}]}'"
+---
+# Workflow for S1: heartbeat resets timeout timer
+# Short timeout (10s) + heartbeat grace (5s) to observe timeout reset behavior
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: qa106-heartbeat-test
+spec:
+  max_parallel: 1
+  safety:
+    inflight_wait_timeout_secs: 10
+    inflight_heartbeat_grace_secs: 5
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  loop:
+    mode: once
+---
+# Workflow for S2: no heartbeat → normal timeout
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: qa106-no-heartbeat-test
+spec:
+  max_parallel: 1
+  safety:
+    inflight_wait_timeout_secs: 10
+    inflight_heartbeat_grace_secs: 5
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  loop:
+    mode: once
+---
+# Workflow for S5: backward compatibility (old YAML without FR-052 fields)
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: qa106-backward-compat
+spec:
+  max_parallel: 1
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+    - id: fix
+      type: fix
+      enabled: true
+    - id: retest
+      type: retest
+      enabled: true
+  loop:
+    mode: once

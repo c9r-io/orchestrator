@@ -153,7 +153,7 @@ Full interruption-resume testing requires simulating a mid-rotation crash, which
 
 ### Preconditions
 
-- Scenarios 1–4 have been executed (or equivalent operations performed).
+- **Scenarios 1–4 MUST be executed before S5** to populate event history. S5 cannot be validated independently — the audit trail it queries is produced by the create/rotate/revoke operations in S1–S4.
 
 ### Steps
 

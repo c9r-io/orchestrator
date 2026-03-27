@@ -19,8 +19,8 @@ Coverage model:
 
 | Step family | Known step IDs | Rendering path |
 |--------|------|-------|
-| Builtin or builtin-command steps | `init_once`, `loop_guard`, `self_test` | `crates/orchestrator-scheduler/src/scheduler/item_executor/dispatch.rs` + `AgentContext::render_template_with_pipeline()` |
-| Task-scoped capability/template steps | `plan`, `build`, `test`, `lint`, `implement`, `review`, `git_ops`, `qa_doc_gen`, `align_tests`, `doc_governance`, `smoke_chain` | `crates/orchestrator-scheduler/src/scheduler/phase_runner/mod.rs` + `AgentContext::render_template_with_pipeline()` |
+| Builtin or builtin-command steps | `init_once`, `loop_guard`, `self_test`, `self_restart`, `item_select` | `crates/orchestrator-scheduler/src/scheduler/item_executor/dispatch.rs` + `AgentContext::render_template_with_pipeline()` |
+| Task-scoped capability/template steps | `plan`, `build`, `test`, `lint`, `implement`, `review`, `git_ops`, `qa_doc_gen`, `align_tests`, `doc_governance`, `smoke_chain`, `evaluate` | `crates/orchestrator-scheduler/src/scheduler/phase_runner/mod.rs` + `AgentContext::render_template_with_pipeline()` |
 | Item-scoped capability/template steps | `qa`, `ticket_scan`, `fix`, `retest`, `qa_testing`, `ticket_fix` | `crates/orchestrator-scheduler/src/scheduler/phase_runner/mod.rs` basic placeholders + pipeline context |
 
 Placeholder families covered by this document:
@@ -157,7 +157,7 @@ Verify that no known step type bypasses the documented rendering paths and that 
    ```
 
 ### Expected
-- The known-step inventory contains all 21 standard step IDs with no undocumented extra step family.
+- The known-step inventory contains all 23 standard step IDs with no undocumented extra step family.
 - Rendering code inspection shows builtin-command steps and capability/template steps both pass through `render_template_with_pipeline()` or the phase-runner placeholder replacement path before spawn.
 - The self-bootstrap mock fixture continues to exercise template-driven placeholders for representative task-scoped and item-scoped steps.
 - Reviewers can map every known step ID to one of the three coverage rows in this document's Background table.
@@ -196,5 +196,5 @@ Verify the diagnostic backstop catches persisted commands that still contain tem
 | 1 | Basic template renderer covers core placeholders | PASS | 2026-03-21 | Claude | 6/6 tests pass — all in qa_utils.rs |
 | 2 | Agent context renders runtime, pipeline, and escape-sensitive values | PASS | 2026-03-21 | Claude | 3/3 tests pass — all in collab/context.rs |
 | 3 | Runtime propagation expands large pipeline variables without leaving placeholders | PASS | 2026-03-21 | Claude | 8/8 tests pass — auto_capture (3) + spill_large_var (5) in orchestrator-scheduler |
-| 4 | Every known step ID maps to a covered rendering entry point | PASS | 2026-03-21 | Claude | Code review — all 21 step IDs verified, rendering paths confirmed |
+| 4 | Every known step ID maps to a covered rendering entry point | PASS | 2026-03-21 | Claude | Code review — all 23 step IDs verified, rendering paths confirmed |
 | 5 | Task trace flags leftover unexpanded placeholders | PASS | 2026-03-21 | Claude | detect_unexpanded_template_var_anomaly test passes in trace/tests.rs |

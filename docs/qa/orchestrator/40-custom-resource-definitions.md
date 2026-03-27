@@ -100,7 +100,10 @@ Verify that schema validation (missing required fields) and CEL validation (cust
 ## Scenario 3: Custom Resource Get, Describe, and Label Selector
 
 ### Preconditions
-- CRD `PromptLibrary` registered and `qa-prompts` instance exists (via fixture)
+- CRD `PromptLibrary` registered and `qa-prompts` instance exists. Apply the fixture:
+  ```bash
+  orchestrator apply -f fixtures/manifests/bundles/crd-test.yaml --project crd-qa
+  ```
 
 ### Goal
 Verify get/describe/list operations work for custom resources, including label-based filtering.

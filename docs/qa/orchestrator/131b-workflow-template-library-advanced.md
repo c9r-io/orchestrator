@@ -9,15 +9,15 @@ Validates FR-077: advanced template features, echo-agent safety, showcase docume
 > **Split from:** [131-workflow-template-library.md](131-workflow-template-library.md) (scenarios 1-5)
 > **See also:** [131c-workflow-template-library-regression.md](131c-workflow-template-library-regression.md) (scenario 11)
 
-## Scenario 6: FR Watch — webhook Trigger with CEL filter
+## Scenario 6: FR Watch — filesystem Trigger with CEL filter
 
 **Steps:**
 ```bash
-grep 'source: webhook' docs/workflow/fr-watch.yaml
+grep 'source: filesystem' docs/workflow/fr-watch.yaml
 grep 'filter:' docs/workflow/fr-watch.yaml
 ```
 
-**Expected:** Trigger has `source: webhook` and a CEL filter expression matching FR file paths.
+**Expected:** Trigger has `source: filesystem` and a CEL filter expression matching FR file paths.
 
 ## Scenario 7: All templates use echo agents (zero API cost)
 
@@ -66,7 +66,7 @@ cd site && npx vitepress build 2>&1 | tail -3
 
 ## Checklist
 
-- [ ] Scenario 6: FR Watch — webhook Trigger with CEL filter
+- [ ] Scenario 6: FR Watch — filesystem Trigger with CEL filter
 - [ ] Scenario 7: All templates use echo agents (zero API cost)
 - [ ] Scenario 8: Showcase docs exist for all templates
 - [ ] Scenario 9: Doc site pages exist (EN + ZH)
