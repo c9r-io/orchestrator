@@ -78,3 +78,12 @@
 
 **期望**:
 - 返回的 missing vec 包含 `"score"`
+
+## Checklist
+
+- [ ] S1: item_select 失败时发射 item_select_failed 事件
+- [ ] S2: worktree 合并日志包含 diff 统计
+- [ ] S3: capture 失败时 step_finished 包含 captures_missing
+- [ ] S4: item_selected 事件包含评分
+- [ ] S5: parse_numstat 单元测试
+- [ ] S6: apply_captures 缺失变量返回值

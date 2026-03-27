@@ -200,6 +200,8 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/98-convergence-expression.md` | - | FR-043: convergence_expr CEL-based loop termination |
 | orchestrator | `docs/qa/orchestrator/99-long-lived-command-guard.md` | 4 | FR-045: task watch --timeout, stall auto-termination, QA agent timeout guidance |
 | orchestrator | `docs/qa/orchestrator/100-agent-subprocess-daemon-pid-guard.md` | 4 | FR-046: agent subprocess daemon PID guard with CLAUDE.md + hooks injection |
+| orchestrator | `docs/qa/orchestrator/100-agent-command-rules-step-vars.md` | 5 | FR-084: agent command_rules CEL selection, step_vars overlay, command_rule_index audit |
+| orchestrator | `docs/qa/orchestrator/100b-agent-command-rules-step-vars-advanced.md` | 3 | FR-084: DB migration, YAML manifest parsing for command_rules and step_vars (split from doc 100) |
 | orchestrator | `docs/qa/orchestrator/101-core-crate-split-config.md` | - | FR-047: core crate split phase 1 — orchestrator-config extraction |
 | orchestrator | `docs/qa/orchestrator/102-core-crate-split-scheduler.md` | 5 | FR-048: core crate split phase 2+3 — orchestrator-scheduler extraction and scheduler_service.rs decomposition |
 | orchestrator | `docs/qa/orchestrator/103-prehook-pipeline-vars.md` | - | FR-049: prehook CEL pipeline variables — type inference, JSON array `in`, truncation skip, builtin precedence |
@@ -225,6 +227,23 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/120b-gui-notification-error-humanization.md` | 4 | GUI 系统通知与错误信息人性化 |
 | orchestrator | `docs/qa/orchestrator/121-gui-polish-visual.md` | 4 | GUI 体验打磨 — 主题 / 动画 / DAG / 日志 |
 | orchestrator | `docs/qa/orchestrator/121b-gui-i18n-ux.md` | 3 | GUI i18n / 响应式 / 构建分发 |
+| orchestrator | `docs/qa/orchestrator/122-evo-apply-winner-observability.md` | - | FR-070: evo_apply_winner observability — item_select events, diff stats, captures |
+| orchestrator | `docs/qa/orchestrator/123-open-source-compliance.md` | 6 | FR-071: open-source compliance — LICENSE, CHANGELOG, templates, release |
+| orchestrator | `docs/qa/orchestrator/124-homebrew-tap-distribution.md` | - | FR-072: Homebrew tap formula, cargo publish, release workflow distribution |
+| orchestrator | `docs/qa/orchestrator/125-documentation-site.md` | - | FR-073: VitePress doc site, EN/ZH landing, search, guide navigation |
+| orchestrator | `docs/qa/orchestrator/126-task-items-event-list-cli.md` | - | FR-078: task items and event list CLI commands with filters and JSON output |
+| orchestrator | `docs/qa/orchestrator/127-data-lifecycle-governance.md` | - | FR-079: db status/vacuum/cleanup, auto log and task retention |
+| orchestrator | `docs/qa/orchestrator/128-webhook-trigger-infrastructure.md` | - | FR-080: webhook server, trigger firing, HMAC auth, project scope |
+| orchestrator | `docs/qa/orchestrator/129-per-trigger-webhook-auth-cel-filter.md` | 5 | FR-081: per-trigger webhook secret from SecretStore, multi-key rotation |
+| orchestrator | `docs/qa/orchestrator/129b-per-trigger-webhook-auth-cel-filter-advanced.md` | 3 | FR-081: global secret fallback, CEL filter unit test (split from doc 129) |
+| orchestrator | `docs/qa/orchestrator/130-integration-manifest-packages.md` | 5 | FR-082: Slack/GitHub/LINE integration manifest packages |
+| orchestrator | `docs/qa/orchestrator/130b-integration-manifest-packages-advanced.md` | 2 | FR-082: secret rotation showcase, README completeness (split from doc 130) |
+| orchestrator | `docs/qa/orchestrator/131-workflow-template-library.md` | 5 | FR-077: workflow template YAML structure and capability matching |
+| orchestrator | `docs/qa/orchestrator/131b-workflow-template-library-advanced.md` | 5 | FR-077: echo agents, showcase docs, doc site pages (split from doc 131) |
+| orchestrator | `docs/qa/orchestrator/131c-workflow-template-library-regression.md` | 1 | FR-077: progressive complexity regression check (split from doc 131) |
+| orchestrator | `docs/qa/orchestrator/132-filesystem-trigger.md` | 5 | FR-085: filesystem trigger source, validation, path and event checks |
+| orchestrator | `docs/qa/orchestrator/132b-filesystem-trigger-advanced.md` | 5 | FR-085: serde roundtrip, watcher lifecycle, trigger engine (split from doc 132) |
+| orchestrator | `docs/qa/orchestrator/132c-filesystem-trigger-regression.md` | 2 | FR-085: path safety guards and event payload format (split from doc 132) |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |

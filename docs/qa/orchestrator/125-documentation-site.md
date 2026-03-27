@@ -76,3 +76,15 @@ FR-073
 3. Check GitHub Actions docs workflow completes
 
 **Expected:** Site deployed to Cloudflare Pages, accessible via project URL.
+
+## Checklist
+
+- [ ] S1: VitePress builds successfully
+- [ ] S2: EN landing page
+- [ ] S3: ZH landing page
+- [ ] S4: Language switcher
+- [ ] S5: Full-text search
+- [ ] S6: Guide navigation
+- [ ] S7: "Why Orchestrator?" page
+- [ ] S8: README is concise
+- [ ] S9: Cloudflare Pages deployment (manual, post-setup)

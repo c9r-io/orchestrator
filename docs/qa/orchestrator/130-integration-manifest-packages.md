@@ -43,16 +43,10 @@ FR-082
 
 **Expected:** All manifests have correct apiVersion, kind, metadata, spec structure.
 
-## Scenario 6: Secret rotation showcase exists
+## Checklist
 
-**Steps:**
-1. `cat docs/showcases/secret-rotation-workflow.md | head -5`
-
-**Expected:** File exists with Agent Collaboration header.
-
-## Scenario 7: Each README has setup steps
-
-**Steps:**
-1. Check each integration README for: Prerequisites, Setup steps, Apply commands
-
-**Expected:** All READMEs are complete.
+- [ ] Scenario 1: Integrations repo exists
+- [ ] Scenario 2: Slack package completeness
+- [ ] Scenario 3: GitHub package completeness
+- [ ] Scenario 4: LINE package completeness
+- [ ] Scenario 5: Manifest syntax valid

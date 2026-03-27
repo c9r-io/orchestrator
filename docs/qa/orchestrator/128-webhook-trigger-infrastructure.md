@@ -75,3 +75,15 @@ FR-080
 2. `cargo clippy --workspace --all-targets -- -D warnings`
 
 **Expected:** All tests pass, no clippy warnings.
+
+## Checklist
+
+- [ ] S1: Webhook server starts with --webhook-bind
+- [ ] S2: Webhook fires a trigger
+- [ ] S3: Webhook with project scope
+- [ ] S4: HMAC signature verification
+- [ ] S5: Missing signature rejected
+- [ ] S6: No webhook server without --webhook-bind
+- [ ] S7: trigger fire --payload via CLI
+- [ ] S8: Webhook source accepted in manifest
+- [ ] S9: Compilation and tests

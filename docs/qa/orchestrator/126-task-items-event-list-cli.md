@@ -69,3 +69,15 @@ FR-078
 1. `cargo test --workspace`
 
 **Expected:** All tests pass.
+
+## Checklist
+
+- [ ] S1: task items -- table output
+- [ ] S2: task items -- status filter
+- [ ] S3: task items -- JSON output
+- [ ] S4: event list -- basic
+- [ ] S5: event list -- type filter
+- [ ] S6: event list -- limit and JSON
+- [ ] S7: event list -- self_restart filter
+- [ ] S8: showcases free of sqlite workarounds
+- [ ] S9: compilation and tests

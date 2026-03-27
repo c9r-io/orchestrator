@@ -64,3 +64,14 @@ FR-079
 1. `cargo test --workspace`
 
 **Expected:** All tests pass.
+
+## Checklist
+
+- [ ] S1: db status shows sizes
+- [ ] S2: db status JSON includes size fields
+- [ ] S3: db vacuum
+- [ ] S4: db cleanup
+- [ ] S5: daemon auto log cleanup
+- [ ] S6: daemon auto task cleanup
+- [ ] S7: log-retention-days=0 disables cleanup
+- [ ] S8: compilation and tests

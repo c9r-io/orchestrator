@@ -53,26 +53,10 @@ FR-081
 
 **Expected:** Both old and new keys accepted, wrong key rejected.
 
-## Scenario 6: Global secret fallback
+## Checklist
 
-**Steps:**
-1. Start daemon with `--webhook-bind ... --webhook-secret global-key`
-2. Apply trigger WITHOUT `webhook.secret`
-3. `curl` with HMAC of `global-key`
-
-**Expected:** Returns 200/404 (global fallback used).
-
-## Scenario 7: CEL filter — unit test
-
-**Steps:**
-1. `cargo test --lib -p agent-orchestrator -- prehook::cel::tests`
-
-**Expected:** evaluate_webhook_filter tests pass.
-
-## Scenario 8: All tests and clippy
-
-**Steps:**
-1. `cargo test --workspace`
-2. `cargo clippy --workspace --all-targets -- -D warnings`
-
-**Expected:** All pass, no warnings.
+- [ ] Scenario 1: Webhook config types compile
+- [ ] Scenario 2: Webhook source with webhook config accepted
+- [ ] Scenario 3: Per-trigger secret from SecretStore
+- [ ] Scenario 4: Invalid per-trigger signature rejected
+- [ ] Scenario 5: Multi-key rotation

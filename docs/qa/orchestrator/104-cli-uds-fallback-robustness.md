@@ -18,9 +18,11 @@ self_referential_safe: true
 ## 场景
 
 ### S1: 无环境变量且本地 socket 存在时优先 UDS
-- **前置**: 未设置 `ORCHESTRATOR_SOCKET`，未设置 `ORCHESTRATOR_CONTROL_PLANE_CONFIG`，`~/.orchestrator/control-plane/config.yaml` 存在，`data/orchestrator.sock` 存在
+- **前置**: 未设置 `ORCHESTRATOR_SOCKET`，未设置 `ORCHESTRATOR_CONTROL_PLANE_CONFIG`，`data/orchestrator.sock` 存在（symlink 到 `~/.orchestratord/orchestrator.sock`）
 - **操作**: 执行 `orchestrator task list`
 - **预期**: CLI 通过 UDS 连接成功，不尝试 TCP
+
+> **Note:** `~/.orchestratord/control-plane/config.yaml` 不是 S1 的前置条件。UDS 优先路径仅检查 socket 文件是否存在（`connect()` 步骤 3），不依赖 control-plane 配置。
 
 ### S2: 显式 --control-plane-config 优先于本地 socket
 - **前置**: Repository root is the current working directory. Rust toolchain available.

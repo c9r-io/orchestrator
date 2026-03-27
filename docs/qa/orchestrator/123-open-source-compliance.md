@@ -17,17 +17,21 @@ FR-071
 ### Scenario 2: Cargo.toml license consistency
 
 **Steps:**
-1. `grep -r 'license = "MIT"' --include='Cargo.toml' | wc -l`
+1. `grep -r 'license = "MIT"' --include='Cargo.toml' --exclude-dir=target | wc -l`
 
-**Expected:** 8 (all workspace members).
+**Expected:** 9 (all workspace members — excludes `target/` build artifacts).
+
+> **Note:** The workspace currently has 9 crates. If crates are added or removed, update this count accordingly.
 
 ### Scenario 3: CHANGELOG format
 
 **Steps:**
 1. `head -20 CHANGELOG.md`
-2. Verify Keep a Changelog header and `[0.1.0]` entry
+2. Verify Keep a Changelog header and a valid `[x.y.z]` version entry
 
-**Expected:** Valid changelog with v0.1.0 section containing Added subsections.
+**Expected:** Valid changelog following [Keep a Changelog](https://keepachangelog.com/) format with at least one semantic version entry (e.g., `## [0.2.2] - YYYY-MM-DD`).
+
+> **Note:** The version evolves over time. Do not assert a specific version number — verify format compliance instead.
 
 ### Scenario 4: CONTRIBUTING.md content
 
@@ -54,3 +58,12 @@ FR-071
 4. `curl -fsSL https://raw.githubusercontent.com/c9r-io/orchestrator/main/install.sh | sh`
 
 **Expected:** Binaries downloadable and installable.
+
+## Checklist
+
+- [ ] S1: LICENSE file
+- [ ] S2: Cargo.toml license consistency
+- [ ] S3: CHANGELOG format
+- [ ] S4: CONTRIBUTING.md content
+- [ ] S5: GitHub templates
+- [ ] S6: v0.1.0 release (manual)
