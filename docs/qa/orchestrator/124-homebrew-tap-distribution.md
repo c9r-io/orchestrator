@@ -38,9 +38,18 @@ FR-072
 ### Scenario 4: Path dependencies carry version specs
 
 **Steps:**
-1. `grep -rn 'path = "' --include='Cargo.toml' | grep -v 'version ='`
+1. Search workspace Cargo.toml files for path dependencies missing version specs:
+   ```bash
+   grep -rn 'path = "' crates/ core/ Cargo.toml --include='Cargo.toml' \
+     | grep -v 'version =' \
+     | grep -v 'src/main.rs' \
+     | grep -v 'src/lib.rs' \
+     | grep -v 'tests/'
+   ```
 
 **Expected:** Zero results — all path dependencies must also include `version = "..."`.
+
+> **Note:** The grep excludes `path = "src/..."` entries (internal `[[bin]]`/`[[lib]]` targets, not external dependencies) and scopes to workspace directories to avoid stale `target/package/` artifacts.
 
 ### Scenario 5: crates.io metadata completeness
 

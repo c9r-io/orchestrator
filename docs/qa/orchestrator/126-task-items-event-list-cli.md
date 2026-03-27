@@ -70,6 +70,12 @@ FR-078
 
 **Expected:** All tests pass.
 
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `unrecognized subcommand 'items'` or `'list'` | Installed binary is outdated and does not include FR-078 | Rebuild: `cargo install --path crates/cli` or use `./target/release/orchestrator` after `cargo build --release -p orchestrator-cli` |
+
 ## Checklist
 
 - [ ] S1: task items -- table output

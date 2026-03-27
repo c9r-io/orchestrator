@@ -55,6 +55,8 @@ FR-073
 
 ### Scenario 7: "Why Orchestrator?" page
 
+> **Status: Deferred** — The `/en/why` page has not been implemented. FR-073 does not include this page in the current site structure. Re-enable this scenario when the page is added.
+
 **Steps:**
 1. Navigate to `/en/why`
 2. Verify comparison table and differentiator sections
@@ -85,6 +87,6 @@ FR-073
 - [ ] S4: Language switcher
 - [ ] S5: Full-text search
 - [ ] S6: Guide navigation
-- [ ] S7: "Why Orchestrator?" page
+- [ ] S7: "Why Orchestrator?" page *(deferred — page not implemented)*
 - [ ] S8: README is concise
 - [ ] S9: Cloudflare Pages deployment (manual, post-setup)

@@ -274,6 +274,10 @@ pub(crate) async fn task_events(
 ) -> Result<Response<TaskEventsResponse>, Status> {
     super::authorize(server, &request, "TaskEvents").map_err(Status::from)?;
     let req = request.into_inner();
+    let resolved_id =
+        orchestrator_scheduler::service::task::resolve_id(&server.state, &req.task_id)
+            .await
+            .map_err(map_core_error)?;
     let type_filter = if req.event_type_filter.is_empty() {
         None
     } else {
@@ -281,7 +285,7 @@ pub(crate) async fn task_events(
     };
     let events = agent_orchestrator::event_cleanup::list_task_events(
         &server.state.async_database,
-        &req.task_id,
+        &resolved_id,
         type_filter,
         req.limit,
     )
