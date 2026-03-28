@@ -1,3 +1,13 @@
+---
+self_referential_safe: false
+self_referential_safe_scenarios:
+  - S2
+  - S3
+  - S4
+# S1 不安全：执行 orchestrator delete --force / task create / cargo build（自引用危险操作）
+# S2-S4 安全：纯代码审查，只读 segment.rs 源码
+---
+
 # QA Doc 107: Parallel Dispatch Completeness Guard (FR-053)
 
 **关联**: Design Doc 65, FR-037 (Design Doc 49)

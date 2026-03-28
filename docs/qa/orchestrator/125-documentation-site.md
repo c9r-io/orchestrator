@@ -1,3 +1,11 @@
+---
+self_referential_safe: false
+self_referential_safe_scenarios:
+  - S1
+# S1 安全：npm ci + vitepress build，纯构建验证无副作用
+# S2-S5 不安全：需要启动 dev server + 浏览器/GUI 交互
+---
+
 # QA 125: Documentation Site & Landing Page
 
 ## FR Reference

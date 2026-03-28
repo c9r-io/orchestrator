@@ -1,3 +1,19 @@
+---
+self_referential_safe: false
+self_referential_safe_scenarios:
+  - S1
+  - S3
+  - S4
+  - S5
+  - S6
+  - S7
+  - S8
+# S2 不安全：需要已发布的 release 和 checksum manifest
+# S9 不安全：端到端 Homebrew 安装，需要外部 tap repo 和 release tag
+# S10 不安全：端到端 cargo install，需要 crates.io 发布
+# S1/S3-S8 安全：文件读取、grep 检查、cargo check
+---
+
 # QA 124: Distribution Channels — Homebrew Tap & Cargo
 
 ## FR Reference
