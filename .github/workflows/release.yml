@@ -165,6 +165,9 @@ jobs:
           for crate in \
             crates/proto \
             crates/orchestrator-config \
+            crates/orchestrator-collab \
+            crates/orchestrator-security \
+            crates/orchestrator-runner \
             core \
             crates/orchestrator-scheduler \
             crates/cli \
