@@ -314,14 +314,14 @@ spec:
         captures:
           - var: regression_target_ids
             source: stdout
-            json_path: "$.regression_targets[*].id"
+            json_path: "$.regression_targets[*]"
         post_actions:
           # Narrows the QA item set for the downstream Item segment (qa_testing).
           # Deferred: buffers here, executes after the Task segment ends.
           # On extraction failure: silent fallback to all static items.
           - type: generate_items
-            from_var: qa_doc_gen_output
-            json_path: "$.regression_targets"
+            from_var: regression_target_ids
+            json_path: "$"
             mapping:
               item_id: "$.id"
               label: "$.name"

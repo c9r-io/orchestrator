@@ -175,7 +175,7 @@ Verify the diagnostic backstop catches persisted commands that still contain tem
 ### Steps
 1. Run:
    ```bash
-   cargo test --workspace --lib detect_unexpanded_template_var_anomaly -- --nocapture
+   cargo test -p orchestrator-scheduler --lib detect_unexpanded_template_var_anomaly -- --nocapture
    ```
 2. Inspect the anomaly rule implementation:
    ```bash
