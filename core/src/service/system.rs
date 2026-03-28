@@ -28,8 +28,7 @@ pub fn debug_info(state: &InnerState, component: Option<&str>) -> Result<String>
     let comp = component.unwrap_or("state");
     match comp {
         "state" => Ok(
-            "Debug Information\n=================\n\nAvailable: state, config, dag\n"
-                .to_string(),
+            "Debug Information\n=================\n\nAvailable: state, config, dag\n".to_string(),
         ),
         "config" => {
             let config = read_active_config(state)
