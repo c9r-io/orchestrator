@@ -170,6 +170,7 @@ jobs:
             crates/orchestrator-runner \
             core \
             crates/orchestrator-scheduler \
+            crates/orchestrator-client \
             crates/cli \
             crates/daemon; do
             echo "::group::Publishing ${crate}"
