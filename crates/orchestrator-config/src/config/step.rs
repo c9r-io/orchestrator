@@ -172,33 +172,9 @@ pub enum CostPreference {
     Balance,
 }
 
-/// Known workflow step IDs
-const KNOWN_STEP_IDS: &[&str] = &[
-    "init_once",
-    "plan",
-    "qa",
-    "ticket_scan",
-    "fix",
-    "retest",
-    "loop_guard",
-    "build",
-    "test",
-    "lint",
-    "implement",
-    "review",
-    "git_ops",
-    "qa_doc_gen",
-    "qa_testing",
-    "ticket_fix",
-    "doc_governance",
-    "align_tests",
-    "self_test",
-    "self_restart",
-    "smoke_chain",
-    "evaluate",
-    "item_select",
-];
-
+/// Framework builtin step names — these have Rust implementations in the
+/// scheduler and form a security boundary: only names in this list may be
+/// dispatched as `ExecutionMode::Builtin`.
 const KNOWN_BUILTIN_STEP_NAMES: &[&str] = &[
     "init_once",
     "loop_guard",
@@ -208,12 +184,16 @@ const KNOWN_BUILTIN_STEP_NAMES: &[&str] = &[
     "item_select",
 ];
 
-/// Validate that a step type string is a known step ID.
+/// Accepts any non-empty step type string.
+///
+/// The framework no longer maintains a whitelist of known step IDs.
+/// Custom step IDs are legal and resolve to `Agent { capability = step_id }`
+/// via the universal fallback rule.
 pub fn validate_step_type(value: &str) -> Result<String, String> {
-    if KNOWN_STEP_IDS.contains(&value) {
-        Ok(value.to_string())
+    if value.trim().is_empty() {
+        Err("step type cannot be empty".to_string())
     } else {
-        Err(format!("unknown workflow step type: {}", value))
+        Ok(value.to_string())
     }
 }
 
@@ -222,44 +202,15 @@ pub fn is_known_builtin_step_name(value: &str) -> bool {
     KNOWN_BUILTIN_STEP_NAMES.contains(&value)
 }
 
-/// Returns the implicit builtin implementation for a conventional step id.
-pub fn default_builtin_for_step_id(step_id: &str) -> Option<&'static str> {
-    match step_id {
-        "init_once" => Some("init_once"),
-        "loop_guard" => Some("loop_guard"),
-        "ticket_scan" => Some("ticket_scan"),
-        "self_test" => Some("self_test"),
-        "self_restart" => Some("self_restart"),
-        "item_select" => Some("item_select"),
-        _ => None,
-    }
-}
-
-/// Returns the implicit required capability for a conventional step id.
-pub fn default_required_capability_for_step_id(step_id: &str) -> Option<&'static str> {
-    match step_id {
-        "qa" => Some("qa"),
-        "fix" => Some("fix"),
-        "retest" => Some("retest"),
-        "plan" => Some("plan"),
-        "build" => Some("build"),
-        "test" => Some("test"),
-        "lint" => Some("lint"),
-        "implement" => Some("implement"),
-        "review" => Some("review"),
-        "git_ops" => Some("git_ops"),
-        "qa_doc_gen" => Some("qa_doc_gen"),
-        "qa_testing" => Some("qa_testing"),
-        "ticket_fix" => Some("ticket_fix"),
-        "doc_governance" => Some("doc_governance"),
-        "align_tests" => Some("align_tests"),
-        "smoke_chain" => Some("smoke_chain"),
-        "evaluate" => Some("evaluate"),
-        _ => None,
-    }
-}
-
-/// Resolves the semantic step kind after applying builtin and capability defaults.
+/// Resolves the semantic step kind after applying convention-registry defaults.
+///
+/// Resolution priority:
+/// 1. chain_steps → Chain
+/// 2. command → Command
+/// 3. explicit builtin (validated against KNOWN_BUILTIN_STEP_NAMES) → Builtin
+/// 4. explicit required_capability → Agent
+/// 5. convention-registry builtin → Builtin
+/// 6. universal fallback → Agent { capability = step_id }
 pub fn resolve_step_semantic_kind(step: &WorkflowStepConfig) -> Result<StepSemanticKind, String> {
     if step.builtin.is_some() && step.required_capability.is_some() {
         return Err(format!(
@@ -294,22 +245,16 @@ pub fn resolve_step_semantic_kind(step: &WorkflowStepConfig) -> Result<StepSeman
         });
     }
 
-    if let Some(builtin) = default_builtin_for_step_id(&step.id) {
-        return Ok(StepSemanticKind::Builtin {
-            name: builtin.to_string(),
-        });
+    // Convention-registry lookup: check if this step ID maps to a framework builtin.
+    if let Some(builtin_name) = super::CONVENTIONS.builtin_name(&step.id) {
+        return Ok(StepSemanticKind::Builtin { name: builtin_name });
     }
 
-    if let Some(capability) = default_required_capability_for_step_id(&step.id) {
-        return Ok(StepSemanticKind::Agent {
-            capability: capability.to_string(),
-        });
-    }
-
-    Err(format!(
-        "step '{}' is missing builtin, required_capability, command, or chain_steps",
-        step.id
-    ))
+    // Universal fallback: any step dispatches to an agent whose capability
+    // matches the step ID.  This replaces the former hardcoded capability table.
+    Ok(StepSemanticKind::Agent {
+        capability: step.id.clone(),
+    })
 }
 
 /// Normalizes the execution mode and default selectors for one workflow step.
@@ -336,23 +281,10 @@ pub fn normalize_step_execution_mode(step: &mut WorkflowStepConfig) -> Result<()
     Ok(())
 }
 
-/// Returns true if a step ID produces structured output for pipeline variables
-pub fn has_structured_output(step_id: &str) -> bool {
-    matches!(
-        step_id,
-        "build" | "test" | "lint" | "qa_testing" | "self_test" | "smoke_chain"
-    )
-}
-
 /// Returns the default execution scope for a step ID.
-/// Task-scoped steps run once per cycle; item-scoped steps fan-out per QA file.
+/// Delegates to the convention registry; falls back to Task scope.
 pub fn default_scope_for_step_id(step_id: &str) -> StepScope {
-    match step_id {
-        // Item-scoped: fan-out per QA file
-        "qa" | "qa_testing" | "ticket_fix" | "ticket_scan" | "fix" | "retest" => StepScope::Item,
-        // Everything else defaults to task-scoped
-        _ => StepScope::Task,
-    }
+    super::CONVENTIONS.default_scope(step_id)
 }
 
 #[cfg(test)]
@@ -420,31 +352,17 @@ json_path: $.total_score
     }
 
     #[test]
-    fn test_validate_step_type_unknown_id() {
+    fn test_validate_step_type_accepts_custom_ids() {
+        // Custom step IDs are now accepted — no whitelist restriction.
         let result = validate_step_type("my_custom_step");
-        assert!(result.is_err());
-        assert!(
-            result
-                .expect_err("operation should fail")
-                .contains("unknown workflow step type")
-        );
+        assert!(result.is_ok(), "custom step IDs should be accepted");
+        assert_eq!(result.unwrap(), "my_custom_step");
     }
 
     #[test]
-    fn test_has_structured_output() {
-        assert!(has_structured_output("build"));
-        assert!(has_structured_output("test"));
-        assert!(has_structured_output("lint"));
-        assert!(has_structured_output("qa_testing"));
-        assert!(has_structured_output("self_test"));
-        assert!(has_structured_output("smoke_chain"));
-
-        assert!(!has_structured_output("plan"));
-        assert!(!has_structured_output("fix"));
-        assert!(!has_structured_output("implement"));
-        assert!(!has_structured_output("review"));
-        assert!(!has_structured_output("qa"));
-        assert!(!has_structured_output("doc_governance"));
+    fn test_validate_step_type_rejects_empty() {
+        assert!(validate_step_type("").is_err());
+        assert!(validate_step_type("  ").is_err());
     }
 
     #[test]
@@ -493,6 +411,14 @@ json_path: $.total_score
                 id
             );
         }
+    }
+
+    #[test]
+    fn test_unknown_step_scope_defaults_to_task() {
+        assert_eq!(
+            default_scope_for_step_id("my_custom_step"),
+            StepScope::Task
+        );
     }
 
     #[test]

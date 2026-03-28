@@ -1,7 +1,7 @@
 use crate::anomaly::Severity;
 use crate::config::{
-    CheckpointStrategy, StepScope, StepSemanticKind, WorkflowConfig, WorkflowSafetyProfile,
-    default_scope_for_step_id, resolve_step_semantic_kind,
+    CONVENTIONS, CheckpointStrategy, StepScope, StepSemanticKind, WorkflowConfig,
+    WorkflowSafetyProfile, resolve_step_semantic_kind,
 };
 use anyhow::Result;
 use serde::Serialize;
@@ -293,7 +293,7 @@ fn append_probe_diagnostics(
     for step in workflow.steps.iter().filter(|step| step.enabled) {
         let step_scope = step
             .scope
-            .unwrap_or_else(|| default_scope_for_step_id(&step.id));
+            .unwrap_or_else(|| CONVENTIONS.default_scope(&step.id));
         if step_scope != StepScope::Task {
             diagnostics.push(
                 PolicyDiagnostic::error(

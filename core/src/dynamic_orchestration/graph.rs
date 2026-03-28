@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::config::{StepPrehookConfig, StepScope, TaskExecutionStep, TaskRuntimeContext};
+use crate::config::{CONVENTIONS, StepPrehookConfig, StepScope, TaskExecutionStep, TaskRuntimeContext};
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 
@@ -233,7 +233,7 @@ pub fn build_adaptive_execution_graph(
     for node in plan.nodes.values() {
         graph.add_node(ExecutionGraphNode {
             id: node.id.clone(),
-            scope: crate::config::default_scope_for_step_id(&node.step_type),
+            scope: CONVENTIONS.default_scope(&node.step_type),
             repeatable: node.repeatable,
             is_guard: node.is_guard,
             prehook: node.prehook.as_ref().map(|prehook| StepPrehookConfig {

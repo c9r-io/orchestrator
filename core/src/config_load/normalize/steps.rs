@@ -1,10 +1,11 @@
-use crate::config::{
-    CaptureDecl, CaptureSource, PostAction, WorkflowStepConfig, normalize_step_execution_mode,
-};
+use crate::config::{CONVENTIONS, WorkflowStepConfig, normalize_step_execution_mode};
 use anyhow::Result;
 
 /// Apply sensible default behavior to well-known step types when the user
 /// hasn't configured explicit captures or collect_artifacts.
+///
+/// Defaults are now data-driven via the convention registry
+/// (`sdlc_conventions.yaml`) instead of hardcoded match arms.
 pub(crate) fn apply_default_step_behavior(step: &mut WorkflowStepConfig) {
     let key = step
         .builtin
@@ -12,43 +13,20 @@ pub(crate) fn apply_default_step_behavior(step: &mut WorkflowStepConfig) {
         .or(step.required_capability.as_deref())
         .unwrap_or(&step.id);
 
-    let has_capture = |var: &str| step.behavior.captures.iter().any(|c| c.var == var);
-    let has_post_action = |pa: &PostAction| step.behavior.post_actions.iter().any(|a| a == pa);
-
-    match key {
-        "qa" | "qa_testing" => {
+    if let Some(conv) = CONVENTIONS.lookup(key) {
+        if conv.collect_artifacts {
             step.behavior.collect_artifacts = true;
-            if !has_capture("qa_failed") {
-                step.behavior.captures.push(CaptureDecl {
-                    var: "qa_failed".to_string(),
-                    source: CaptureSource::FailedFlag,
-                    json_path: None,
-                });
-            }
-            if !has_post_action(&PostAction::CreateTicket) {
-                step.behavior.post_actions.push(PostAction::CreateTicket);
+        }
+        for capture in &conv.captures {
+            if !step.behavior.captures.iter().any(|c| c.var == capture.var) {
+                step.behavior.captures.push(capture.clone());
             }
         }
-        "fix" | "ticket_fix" => {
-            if !has_capture("fix_success") {
-                step.behavior.captures.push(CaptureDecl {
-                    var: "fix_success".to_string(),
-                    source: CaptureSource::SuccessFlag,
-                    json_path: None,
-                });
+        for action in &conv.post_actions {
+            if !step.behavior.post_actions.iter().any(|a| a == action) {
+                step.behavior.post_actions.push(action.clone());
             }
         }
-        "retest" => {
-            step.behavior.collect_artifacts = true;
-            if !has_capture("retest_success") {
-                step.behavior.captures.push(CaptureDecl {
-                    var: "retest_success".to_string(),
-                    source: CaptureSource::SuccessFlag,
-                    json_path: None,
-                });
-            }
-        }
-        _ => {}
     }
 }
 

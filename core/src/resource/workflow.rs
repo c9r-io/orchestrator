@@ -47,6 +47,8 @@ impl Resource for WorkflowResource {
         for step in &self.spec.steps {
             crate::config::validate_step_type(&step.step_type).map_err(|e| anyhow!(e))?;
         }
+        // Note: validate_step_type now accepts any non-empty step ID.
+        // Custom step IDs resolve to Agent { capability = step_id } at runtime.
         let loop_mode = parse_loop_mode(&self.spec.loop_policy.mode)?;
         if matches!(loop_mode, LoopMode::Fixed) {
             match self.spec.loop_policy.max_cycles {

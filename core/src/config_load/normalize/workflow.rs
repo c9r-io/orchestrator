@@ -1,8 +1,5 @@
 use super::steps::{apply_default_step_behavior, normalize_step_execution_mode_recursive};
-use crate::config::{
-    StepBehavior, WorkflowConfig, WorkflowStepConfig, default_builtin_for_step_id,
-    default_required_capability_for_step_id,
-};
+use crate::config::{CONVENTIONS, StepBehavior, WorkflowConfig, WorkflowStepConfig};
 use std::collections::HashSet;
 
 /// Normalizes one workflow config in place to align legacy and implicit defaults.
@@ -25,19 +22,23 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
         seen_ids.insert(step.id.clone());
 
         if step.required_capability.is_none() && step.builtin.is_none() && step.command.is_none() {
-            if let Some(builtin) = default_builtin_for_step_id(&step.id) {
-                step.builtin = Some(builtin.to_string());
-            } else if let Some(capability) = default_required_capability_for_step_id(&step.id) {
-                step.required_capability = Some(capability.to_string());
+            if let Some(builtin_name) = CONVENTIONS.builtin_name(&step.id) {
+                step.builtin = Some(builtin_name);
+            } else if !step.chain_steps.is_empty() {
+                // chain steps don't need a capability
+            } else {
+                // Universal fallback: capability = step_id
+                step.required_capability = Some(step.id.clone());
             }
         }
 
-        if step
+        let is_loop_guard = step
             .builtin
             .as_deref()
-            .or_else(|| default_builtin_for_step_id(&step.id))
-            == Some("loop_guard")
-        {
+            .map(|b| b == "loop_guard")
+            .unwrap_or(false)
+            || CONVENTIONS.builtin_name(&step.id).as_deref() == Some("loop_guard");
+        if is_loop_guard {
             step.is_guard = true;
         }
 

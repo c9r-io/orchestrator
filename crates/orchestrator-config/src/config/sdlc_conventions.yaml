@@ -1,0 +1,85 @@
+# Built-in SDLC step conventions.
+# These provide backward-compatible defaults for well-known step IDs.
+# All values can be overridden per-step in workflow YAML.
+#
+# Compiled into the binary via include_str!. Changes here are reflected
+# at the next build with zero external-file dependency at runtime.
+steps:
+  # ── Framework builtins (Rust implementations) ──────────────────────
+  init_once:
+    builtin: init_once
+    scope: task
+  loop_guard:
+    builtin: loop_guard
+    scope: task
+    is_guard: true
+  ticket_scan:
+    builtin: ticket_scan
+    scope: item
+  self_test:
+    builtin: self_test
+    scope: task
+  self_restart:
+    builtin: self_restart
+    scope: task
+  item_select:
+    builtin: item_select
+    scope: task
+
+  # ── SDLC agent-backed steps ────────────────────────────────────────
+  plan:
+    scope: task
+  qa:
+    scope: item
+    collect_artifacts: true
+    captures:
+      - var: qa_failed
+        source: failed_flag
+    post_actions:
+      - create_ticket
+  fix:
+    scope: item
+    captures:
+      - var: fix_success
+        source: success_flag
+  retest:
+    scope: item
+    collect_artifacts: true
+    captures:
+      - var: retest_success
+        source: success_flag
+  build:
+    scope: task
+  test:
+    scope: task
+  lint:
+    scope: task
+  implement:
+    scope: task
+  review:
+    scope: task
+  git_ops:
+    scope: task
+  qa_doc_gen:
+    scope: task
+  qa_testing:
+    scope: item
+    collect_artifacts: true
+    captures:
+      - var: qa_failed
+        source: failed_flag
+    post_actions:
+      - create_ticket
+  ticket_fix:
+    scope: item
+    captures:
+      - var: fix_success
+        source: success_flag
+  doc_governance:
+    scope: task
+  align_tests:
+    scope: task
+  smoke_chain:
+    scope: task
+  evaluate:
+    scope: task

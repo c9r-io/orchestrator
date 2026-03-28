@@ -9,21 +9,7 @@ use crate::config::{
     WorkflowSafetyProfile, WorkflowStepConfig, normalize_step_execution_mode,
 };
 use anyhow::{Result, anyhow};
-
-fn owned_builtin_step_type(step_type: &str) -> Option<String> {
-    matches!(
-        step_type,
-        "init_once" | "loop_guard" | "self_test" | "self_restart"
-    )
-    .then(|| step_type.to_string())
-}
-
-fn is_builtin_step_type(step_type: &str) -> bool {
-    matches!(
-        step_type,
-        "init_once" | "loop_guard" | "ticket_scan" | "self_test" | "self_restart" | "item_select"
-    )
-}
+use crate::config::CONVENTIONS;
 
 pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowConfig> {
     let steps = spec
@@ -192,7 +178,7 @@ fn workflow_step_spec_to_config(step: &WorkflowStepSpec) -> Result<WorkflowStepC
     crate::config::validate_step_type(&step.step_type).map_err(|e| anyhow!(e))?;
     let step_type = step.step_type.as_str();
     let is_guard = step_type == "loop_guard";
-    let builtin = owned_builtin_step_type(step_type);
+    let builtin = CONVENTIONS.builtin_name(step_type);
     let prehook = match step.prehook.as_ref() {
         Some(prehook) => Some(StepPrehookConfig {
             engine: parse_hook_engine(&prehook.engine),
@@ -213,7 +199,7 @@ fn workflow_step_spec_to_config(step: &WorkflowStepSpec) -> Result<WorkflowStepC
         Some("item") => Some(StepScope::Item),
         _ => None,
     };
-    let is_builtin_type = is_builtin_step_type(step_type);
+    let is_builtin_type = CONVENTIONS.is_known_builtin(step_type);
     let required_capability = step.required_capability.clone().or_else(|| {
         if is_builtin_type || step.builtin.is_some() || !step.chain_steps.is_empty() {
             None
@@ -300,7 +286,7 @@ fn workflow_step_config_to_spec(step: &WorkflowStepConfig) -> WorkflowStepSpec {
             .map(workflow_step_config_to_spec)
             .collect(),
         scope: step.scope.and_then(|s| {
-            let default = crate::config::default_scope_for_step_id(&step.id);
+            let default = CONVENTIONS.default_scope(&step.id);
             if s != default {
                 Some(match s {
                     StepScope::Task => "task".to_string(),

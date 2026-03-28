@@ -537,6 +537,17 @@ fn sdlc_step_types_round_trip() {
 }
 
 #[test]
+fn custom_step_types_accepted() {
+    use agent_orchestrator::config::validate_step_type;
+
+    // Custom step IDs are now accepted — no whitelist restriction.
+    for s in &["my_deploy", "security_scan", "notify_slack"] {
+        let result = validate_step_type(s);
+        assert!(result.is_ok(), "custom step type '{s}' should be accepted");
+    }
+}
+
+#[test]
 fn parse_self_bootstrap_fixture_resources() {
     let yaml = std::fs::read_to_string("../fixtures/manifests/bundles/self-bootstrap-test.yaml")
         .expect("fixture file missing");
