@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.5] - 2026-03-29
+
+### Fixed
+- **SafetySpec derived Default** stored zeros instead of proper defaults — now correctly initializes all safety fields
+- **Block-style YAML arrays** in frontmatter parser — suppressed false `orphan_command` warnings for multi-line list syntax
+- **FR-086 daemon config hot reload** confirmed already implemented via ArcSwap — closed as no-op
+- **FR-086 agent selection threshold** closed via Option 2 (unit-test verification) — added `test_diseased_agent_with_passing_capability_threshold_is_selected` integration test proving diseased agents with custom `capability_success_threshold` remain selectable
+- **QA-106 inflight wait test fixture** — 3 integration tests verify heartbeat reset (S1), timeout reap (S2), and diagnostic events (S4)
+- Resolved all 18 QA tickets — fmt drift, doc date corrections, lint fixes, and feature gap FRs
+
+### Changed
+- Removed unused `MessageBus` mechanism (dead code cleanup)
+- Added scenario-level self-referential safety annotations to QA docs
+
+## [0.2.4] - 2026-03-28
+
+### Changed
+- Extended panic-safety deny lints (`clippy::unwrap_used`, `clippy::expect_used`, `clippy::panic`) to all production crates
+- Resolved clippy errors and formatting drift across core crates after crate decomposition
+
 ## [0.2.3] - 2026-03-28
 
 ### Changed
