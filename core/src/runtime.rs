@@ -148,13 +148,19 @@ impl DaemonRuntimeState {
 
     /// Stores a binary path for deferred restart (when other tasks are running).
     pub fn set_deferred_restart(&self, binary_path: PathBuf) {
-        let mut guard = self.deferred_restart_binary.lock().unwrap();
+        let mut guard = self
+            .deferred_restart_binary
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         *guard = Some(binary_path);
     }
 
     /// Atomically takes the deferred restart binary path, if any.
     pub fn take_deferred_restart(&self) -> Option<PathBuf> {
-        let mut guard = self.deferred_restart_binary.lock().unwrap();
+        let mut guard = self
+            .deferred_restart_binary
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         guard.take()
     }
 

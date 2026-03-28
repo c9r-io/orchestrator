@@ -25,9 +25,7 @@ fn validate_env_store_refs_for_agents(
                     }
                 }
                 if let Some(ref rv) = entry.ref_value {
-                    if !env_stores.contains_key(&rv.name)
-                        && !secret_stores.contains_key(&rv.name)
-                    {
+                    if !env_stores.contains_key(&rv.name) && !secret_stores.contains_key(&rv.name) {
                         anyhow::bail!(
                             "agent '{}'(project '{}') env refValue.name '{}' references unknown store",
                             agent_name,

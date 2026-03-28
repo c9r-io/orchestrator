@@ -649,7 +649,8 @@ fn recover_stalled_running_items_respects_threshold() {
 
     // Threshold of 3 hours → should NOT recover (item is only 2h old)
     let no_exclude = std::collections::HashSet::new();
-    let recovered = state::recover_stalled_running_items(&conn, 3 * 3600, &no_exclude).expect("recover");
+    let recovered =
+        state::recover_stalled_running_items(&conn, 3 * 3600, &no_exclude).expect("recover");
     assert!(
         recovered.is_empty(),
         "should not recover items within threshold"
@@ -666,7 +667,8 @@ fn recover_stalled_running_items_respects_threshold() {
     assert_eq!(status, "running");
 
     // Threshold of 1 hour → SHOULD recover (item is 2h old)
-    let recovered = state::recover_stalled_running_items(&conn, 3600, &no_exclude).expect("recover");
+    let recovered =
+        state::recover_stalled_running_items(&conn, 3600, &no_exclude).expect("recover");
     assert_eq!(recovered.len(), 1);
     assert_eq!(recovered[0].0, task_id);
 
@@ -703,8 +705,7 @@ fn recover_stalled_running_items_skips_excluded_tasks() {
 
     // Exclude this task (simulating an active worker)
     let exclude = std::collections::HashSet::from([task_id.clone()]);
-    let recovered =
-        state::recover_stalled_running_items(&conn, 3600, &exclude).expect("recover");
+    let recovered = state::recover_stalled_running_items(&conn, 3600, &exclude).expect("recover");
     assert!(
         recovered.is_empty(),
         "excluded task should not be recovered"
@@ -718,7 +719,10 @@ fn recover_stalled_running_items_skips_excluded_tasks() {
             |row| row.get(0),
         )
         .expect("item status");
-    assert_eq!(status, "running", "item should remain running when task is excluded");
+    assert_eq!(
+        status, "running",
+        "item should remain running when task is excluded"
+    );
 
     // Verify task is STILL running (not set to restart_pending)
     let task_status: String = conn
@@ -728,7 +732,10 @@ fn recover_stalled_running_items_skips_excluded_tasks() {
             |row| row.get(0),
         )
         .expect("task status");
-    assert_eq!(task_status, "running", "excluded task should remain running");
+    assert_eq!(
+        task_status, "running",
+        "excluded task should remain running"
+    );
 }
 
 // ── recover_orphaned: paused task skipped in return value ──────────

@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use crate::config::{CONVENTIONS, StepPrehookConfig, StepScope, TaskExecutionStep, TaskRuntimeContext};
+use crate::config::{
+    CONVENTIONS, StepPrehookConfig, StepScope, TaskExecutionStep, TaskRuntimeContext,
+};
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 

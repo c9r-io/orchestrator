@@ -1,4 +1,6 @@
-use crate::config::{EnvStoreConfig, ExecutionProfileConfig, OrchestratorConfig, SecretStoreConfig};
+use crate::config::{
+    EnvStoreConfig, ExecutionProfileConfig, OrchestratorConfig, SecretStoreConfig,
+};
 use crate::crd::projection::{CrdProjectable, RuntimePolicyProjection};
 use crate::crd::store::ResourceStoreExt;
 
@@ -465,14 +467,22 @@ pub fn sync_config_snapshot_to_store(config: &mut OrchestratorConfig) {
             ));
         }
         for (name, store) in &project.env_stores {
-            config
-                .resource_store
-                .put(make_cr("EnvStore", name, Some(project_id.clone()), store.to_cr_spec(), &now));
+            config.resource_store.put(make_cr(
+                "EnvStore",
+                name,
+                Some(project_id.clone()),
+                store.to_cr_spec(),
+                &now,
+            ));
         }
         for (name, store) in &project.secret_stores {
-            config
-                .resource_store
-                .put(make_cr("SecretStore", name, Some(project_id.clone()), store.to_cr_spec(), &now));
+            config.resource_store.put(make_cr(
+                "SecretStore",
+                name,
+                Some(project_id.clone()),
+                store.to_cr_spec(),
+                &now,
+            ));
         }
     }
 

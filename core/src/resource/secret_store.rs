@@ -132,8 +132,7 @@ mod tests {
                 .default_project()
                 .unwrap()
                 .secret_stores
-                .get("my-secrets")
-                .is_some()
+                .contains_key("my-secrets")
         );
     }
 

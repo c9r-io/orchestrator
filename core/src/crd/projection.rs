@@ -20,8 +20,8 @@ pub trait CrdProjectable: Sized + Serialize + DeserializeOwned {
 // ── Implementations for the 9 builtin config types ───────────────────────────
 
 use crate::cli_types::{
-    AgentSpec, EnvStoreSpec, ExecutionProfileSpec, ProjectSpec, RuntimePolicySpec,
-    SecretStoreSpec, StepTemplateSpec, WorkspaceSpec,
+    AgentSpec, EnvStoreSpec, ExecutionProfileSpec, ProjectSpec, RuntimePolicySpec, SecretStoreSpec,
+    StepTemplateSpec, WorkspaceSpec,
 };
 use crate::config::{
     AgentConfig, EnvStoreConfig, ExecutionProfileConfig, ProjectConfig, ResumeConfig, RunnerConfig,

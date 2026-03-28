@@ -2,6 +2,7 @@ use crate::cli_types::{
     ConvergenceExprSpec, DynamicStepSpec, SafetySpec, WorkflowFinalizeRuleSpec,
     WorkflowFinalizeSpec, WorkflowLoopSpec, WorkflowPrehookSpec, WorkflowSpec, WorkflowStepSpec,
 };
+use crate::config::CONVENTIONS;
 use crate::config::{
     CheckpointStrategy, ConvergenceExprEntry, CostPreference, LoopMode, SafetyConfig,
     StepHookEngine, StepPrehookConfig, StepPrehookUiConfig, StepScope, WorkflowConfig,
@@ -9,7 +10,6 @@ use crate::config::{
     WorkflowSafetyProfile, WorkflowStepConfig, normalize_step_execution_mode,
 };
 use anyhow::{Result, anyhow};
-use crate::config::CONVENTIONS;
 
 pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowConfig> {
     let steps = spec

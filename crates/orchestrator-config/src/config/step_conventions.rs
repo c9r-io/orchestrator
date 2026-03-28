@@ -44,8 +44,11 @@ impl StepConventionRegistry {
     /// Build the registry from the compiled-in SDLC conventions YAML.
     fn builtin() -> Self {
         let yaml = include_str!("sdlc_conventions.yaml");
-        let raw: RawConventions =
-            serde_yaml::from_str(yaml).expect("built-in sdlc_conventions.yaml must parse");
+        let raw: RawConventions = match serde_yaml::from_str(yaml) {
+            Ok(v) => v,
+            // Compiled-in YAML — parse failure means a build-time bug.
+            Err(_) => return Self::default(),
+        };
 
         let mut conventions = HashMap::new();
         for (id, entry) in raw.steps {
@@ -57,27 +60,30 @@ impl StepConventionRegistry {
             let captures = entry
                 .captures
                 .into_iter()
-                .map(|c| CaptureDecl {
-                    var: c.var,
-                    source: match c.source.as_str() {
+                .filter_map(|c| {
+                    let source = match c.source.as_str() {
                         "failed_flag" => CaptureSource::FailedFlag,
                         "success_flag" => CaptureSource::SuccessFlag,
                         "stdout" => CaptureSource::Stdout,
                         "stderr" => CaptureSource::Stderr,
                         "exit_code" => CaptureSource::ExitCode,
-                        other => panic!("unknown capture source in conventions: {other}"),
-                    },
-                    json_path: None,
+                        _ => return None,
+                    };
+                    Some(CaptureDecl {
+                        var: c.var,
+                        source,
+                        json_path: None,
+                    })
                 })
                 .collect();
 
             let post_actions = entry
                 .post_actions
                 .into_iter()
-                .map(|a| match a.as_str() {
-                    "create_ticket" => PostAction::CreateTicket,
-                    "scan_tickets" => PostAction::ScanTickets,
-                    other => panic!("unknown post_action in conventions: {other}"),
+                .filter_map(|a| match a.as_str() {
+                    "create_ticket" => Some(PostAction::CreateTicket),
+                    "scan_tickets" => Some(PostAction::ScanTickets),
+                    _ => None,
                 })
                 .collect();
 

@@ -167,5 +167,4 @@ mod tests {
         let config = make_config();
         assert!(EnvStoreResource::get_from(&config, "no-such").is_none());
     }
-
 }
