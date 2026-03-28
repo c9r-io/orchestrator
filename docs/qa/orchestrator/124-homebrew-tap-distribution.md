@@ -108,13 +108,13 @@ FR-072
 
 ## Checklist
 
-- [ ] S1: Formula template syntax
-- [ ] S2: Update script renders formula
-- [ ] S3: Release workflow includes homebrew job
-- [ ] S4: Path dependencies carry version specs
-- [ ] S5: crates.io metadata completeness
-- [ ] S6: Non-publishable crates excluded
-- [ ] S7: Release workflow cargo publish job
-- [ ] S8: Workspace compiles with version specs
+- [x] S1: Formula template syntax ✅
+- [ ] S2: Update script renders formula (requires published release — manual post-release)
+- [x] S3: Release workflow includes homebrew job ✅
+- [x] S4: Path dependencies carry version specs ✅
+- [x] S5: crates.io metadata completeness ✅
+- [x] S6: Non-publishable crates excluded ✅
+- [x] S7: Release workflow cargo publish job ✅
+- [x] S8: Workspace compiles with version specs ✅
 - [ ] S9: End-to-end Homebrew install (manual, post-release)
 - [ ] S10: End-to-end cargo install (manual, post-release)

@@ -234,6 +234,8 @@ pub struct TaskItemRow {
     pub label: Option<String>,
     /// Origin of the item, such as static workflow or dynamic generation.
     pub source: String,
+    /// Current status of the item (e.g. `pending`, `qa_passed`, `skipped`).
+    pub status: String,
 }
 
 /// Preview metadata extracted from a ticket document.

@@ -99,4 +99,4 @@ self_referential_safe: true
 | 2 | Frontmatter 解析 — 无场景白名单 | PASS | 2026-03-27 | | test_parse_qa_doc_safe_scenarios_absent passed |
 | 3 | CEL 变量 — 非空场景列表允许通过 | PASS | 2026-03-27 | | test_self_referential_safe_scenarios_non_empty passed |
 | 4 | CEL 变量 — 空场景列表被跳过 | PASS | 2026-03-27 | | test_self_referential_safe_scenarios_empty passed |
-| 5 | 覆盖率统计验证 | PASS | 2026-03-27 | | Doc-level: 127 ≥ 25; Scenario-level: 8 ≥ 5; Total: 135 ≥ 55; Coverage: 135/162 = 83.3% ≥ 40% |
+| 5 | 覆盖率统计验证 | PASS | 2026-03-28 | Claude | Doc-level: 127 ≥ 25; Scenario-level: 8 ≥ 5; Total: 135 ≥ 55; Coverage: 135/170 = 79.4% ≥ 40% |

@@ -65,9 +65,9 @@
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| S1 | Normal dispatch - no `parallel_dispatch_incomplete` | ⚠ | 2026-03-28: Task c245e1db stuck in pending (daemon issue) - prior verification c6cdb921 valid |
+| S1 | Normal dispatch - no `parallel_dispatch_incomplete` | ☑ | 2026-03-28: Task c893b783 completed 4/4 items with max_parallel=2, no incomplete event. Parallel spawn pattern verified (paired step_spawned/step_finished events). |
 | S2 | dispatched_count counter accuracy | ☑ | 2026-03-28: Verified - line 343=0, line 396 increment after spawn, line 434 uses items.len() |
 | S3 | Event payload structure | ☑ | 2026-03-28: Verified - lines 449-451 show `dispatched` and `expected` integer fields |
 | S4 | Error propagation blocks max_cycles_enforced | ☑ | 2026-03-28: Verified - bail! at line 455 propagates via ?, breaks cycle loop before max_cycles_enforced |
 
-**Note**: S1 runtime verification blocked by daemon task scheduling issue (ticket: fixtures/ticket/qa107-s1-daemon-stuck-pending.md). Code review confirms FR-053 implementation is correct.
+**Note**: S1 runtime verification succeeded using explicit socket path (ORCHESTRATOR_SOCKET=/Users/chenhan/.orchestratord/orchestrator.sock). Task completed 4/4 items with max_parallel=2, no `parallel_dispatch_incomplete` event. Parallel execution pattern confirmed via paired spawn/finish events.

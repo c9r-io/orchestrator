@@ -68,4 +68,4 @@ Expected:
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ⚠️ S3 FAIL (clippy) | S1 PASS, S2 PASS, S3 FAIL (clippy), S4 PASS — 2026-03-21 |
+| 1 | All scenarios verified | ✅ ALL PASS | S1 PASS, S2 PASS, S3 PASS (427 tests, clippy clean), S4 PASS — 2026-03-28 |

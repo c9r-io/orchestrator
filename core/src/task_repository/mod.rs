@@ -879,6 +879,18 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Pauses only tasks in `restart_pending` status and resets their running items.
+    pub async fn pause_restart_pending_tasks_and_items(&self) -> Result<usize> {
+        self.async_db
+            .writer()
+            .call(move |conn| {
+                state::pause_restart_pending_tasks_and_items(conn)
+                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
     /// Recovers all orphaned running items across all tasks.
     pub async fn recover_orphaned_running_items(&self) -> Result<Vec<(String, Vec<String>)>> {
         self.async_db

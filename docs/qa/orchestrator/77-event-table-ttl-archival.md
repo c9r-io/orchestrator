@@ -98,4 +98,4 @@ self_referential_safe: true
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☑ | S1-S5 PASS (2026-03-28); S1/S2 verified live; S3/S4/S5 verified via unit tests. S5 code review confirms daemon timer registration at main.rs:393-413. |
+| 1 | All scenarios verified | ☑ | S1-S5 PASS (2026-03-28); S1/S2 verified live; S3/S4/S5 verified via unit tests. S5 code review confirms daemon timer registration at main.rs:393-416. |

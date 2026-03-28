@@ -155,7 +155,7 @@ rg -n "evaluate_loop_continuation\|should_continue\|LoopDecision" crates/orchest
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | S1: Fixed mode max_cycles | ☐ | Rewritten: proactive gate unit tests |
+| 1 | S1: Fixed mode max_cycles | ☑ | Unit tests pass: proactive_max_cycles_fixed_mode, proactive_max_cycles_fixed_mode_default |
 | 2 | S2: Dynamic items qa_testing | ☑ | Data-plane verification (DB only) |
-| 3 | S3: Infinite mode | ☐ | Rewritten: loop_engine unit tests |
-| 4 | S4: Fixed mode baseline | ☐ | Rewritten: loop continuation unit tests |
+| 3 | S3: Infinite mode | ☑ | Unit tests pass: proactive_max_cycles_infinite_mode_no_cap, proactive_max_cycles_infinite_mode_with_cap |
+| 4 | S4: Fixed mode baseline | ☑ | Unit tests pass: fixed_mode_stops_at_max_cycles, fixed_mode_defaults_to_one_cycle, proactive_max_cycles_once_mode_passthrough |

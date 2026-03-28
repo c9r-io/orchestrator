@@ -622,6 +622,7 @@ fn propagate_task_segment_terminal_state_marks_all_items_terminal() {
             dynamic_vars_json: None,
             label: None,
             source: "static".to_string(),
+            status: "pending".to_string(),
         },
         agent_orchestrator::dto::TaskItemRow {
             id: "item-2".to_string(),
@@ -629,6 +630,7 @@ fn propagate_task_segment_terminal_state_marks_all_items_terminal() {
             dynamic_vars_json: None,
             label: None,
             source: "static".to_string(),
+            status: "pending".to_string(),
         },
     ];
     let mut item_state = HashMap::new();
@@ -900,6 +902,7 @@ async fn emit_skipped_item_step_events_writes_event_rows() {
             dynamic_vars_json: None,
             label: None,
             source: "static".to_string(),
+            status: "pending".to_string(),
         },
         agent_orchestrator::dto::TaskItemRow {
             id: "item-2".to_string(),
@@ -907,6 +910,7 @@ async fn emit_skipped_item_step_events_writes_event_rows() {
             dynamic_vars_json: None,
             label: None,
             source: "static".to_string(),
+            status: "pending".to_string(),
         },
     ];
     let task_id = "task-skip-events";
@@ -1140,6 +1144,7 @@ fn propagate_task_segment_terminal_state_no_execution_failed_flag() {
         dynamic_vars_json: None,
         label: None,
         source: "static".to_string(),
+        status: "pending".to_string(),
     }];
     let mut item_state = HashMap::new();
     let mut task_acc = StepExecutionAccumulator::new(PipelineVariables::default());
@@ -1169,6 +1174,7 @@ fn propagate_preserves_existing_item_state() {
         dynamic_vars_json: None,
         label: None,
         source: "static".to_string(),
+        status: "pending".to_string(),
     }];
     let mut item_state = HashMap::new();
     let mut existing_acc = StepExecutionAccumulator::new(PipelineVariables::default());
@@ -1333,6 +1339,7 @@ async fn emit_skipped_item_step_events_empty_steps_emits_nothing() {
         dynamic_vars_json: None,
         label: None,
         source: "static".to_string(),
+        status: "pending".to_string(),
     }];
 
     emit_skipped_item_step_events(&state, "task-1", &items, &[])
@@ -1489,6 +1496,7 @@ fn collect_item_eval_states_maps_pipeline_vars() {
             dynamic_vars_json: None,
             label: None,
             source: "static".into(),
+            status: "pending".into(),
         },
         agent_orchestrator::dto::TaskItemRow {
             id: "item-b".into(),
@@ -1496,6 +1504,7 @@ fn collect_item_eval_states_maps_pipeline_vars() {
             dynamic_vars_json: None,
             label: None,
             source: "static".into(),
+            status: "pending".into(),
         },
     ];
     let mut item_state = HashMap::new();

@@ -770,15 +770,22 @@ fn main() -> Result<()> {
             // remains valid and prevents other processes from starting a
             // competing daemon during the restart window.
 
-            // Blanket-reset: ensure no running items/tasks survive across exec().
-            // Handles race where requesting worker already removed its task
-            // from state.running before shutdown_running_tasks could pause it.
-            match inner.task_repo.pause_all_running_tasks_and_items().await {
+            // Targeted reset: only pause tasks that requested the restart
+            // (status = restart_pending). Other tasks were already drained via
+            // the deferred-restart mechanism and should not be disturbed.
+            match inner
+                .task_repo
+                .pause_restart_pending_tasks_and_items()
+                .await
+            {
                 Ok(count) if count > 0 => {
-                    info!(count, "blanket-reset running items before exec");
+                    info!(count, "reset restart-pending items before exec");
                 }
                 Err(e) => {
-                    error!(error = %e, "failed to blanket-reset running items before exec");
+                    error!(
+                        error = %e,
+                        "failed to reset restart-pending items before exec"
+                    );
                 }
                 _ => {}
             }
@@ -908,6 +915,26 @@ async fn worker_iteration(
             let _ = register_running_task(state, &task_id, runtime.clone()).await;
             let run_result = run_task_loop(state.clone(), &task_id, runtime).await;
             unregister_running_task(state, &task_id).await;
+
+            // Check if a deferred restart can now proceed (all other tasks drained).
+            if let Some(binary_path) = state.daemon_runtime.take_deferred_restart() {
+                let running_count = {
+                    let running = state.running.lock().await;
+                    running.len()
+                };
+                if running_count == 0 {
+                    info!(
+                        worker = worker_num,
+                        "all tasks drained, executing deferred restart"
+                    );
+                    state.daemon_runtime.request_shutdown();
+                    return WorkerIterationOutcome::RestartRequested(binary_path);
+                } else {
+                    // Not yet drained, put the binary path back.
+                    state.daemon_runtime.set_deferred_restart(binary_path);
+                }
+            }
+
             state.daemon_runtime.worker_became_idle();
             *is_busy = false;
             emit_daemon_event(
@@ -929,11 +956,31 @@ async fn worker_iteration(
                 }
                 Err(e) => {
                     if let Some(restart) = e.downcast_ref::<RestartRequestedError>() {
-                        info!(worker = worker_num, "restart requested, signalling daemon");
-                        state.daemon_runtime.request_shutdown();
-                        return WorkerIterationOutcome::RestartRequested(
-                            restart.binary_path.clone(),
-                        );
+                        let other_running = {
+                            let running = state.running.lock().await;
+                            running
+                                .keys()
+                                .filter(|id| id.as_str() != task_id.as_str())
+                                .count()
+                        };
+                        if other_running == 0 {
+                            info!(worker = worker_num, "restart requested, signalling daemon");
+                            state.daemon_runtime.request_shutdown();
+                            return WorkerIterationOutcome::RestartRequested(
+                                restart.binary_path.clone(),
+                            );
+                        } else {
+                            info!(
+                                worker = worker_num,
+                                other_tasks = other_running,
+                                "deferring restart until other tasks complete"
+                            );
+                            state
+                                .daemon_runtime
+                                .set_deferred_restart(restart.binary_path.clone());
+                            // Task remains in restart_pending status.
+                            // Worker will continue to next iteration.
+                        }
                     }
                     error!(worker = worker_num, %task_id, error = %e, "task failed");
                 }

@@ -817,6 +817,16 @@ async fn flush_pending_generate_items(
                     // "replaced" in the DB so they don't count as unresolved.
                     match list_task_items_for_cycle(state, task_id).await {
                         Ok(all_items) => {
+                            // Filter out terminal items (preserved from prior run).
+                            const TERMINAL_STATUSES: &[&str] = &[
+                                "qa_passed", "skipped", "fixed", "verified",
+                                "eliminated", "replaced",
+                            ];
+                            let all_items: Vec<_> = all_items
+                                .into_iter()
+                                .filter(|i| !TERMINAL_STATUSES.contains(&i.status.as_str()))
+                                .collect();
+
                             let has_dynamic = all_items.iter().any(|i| i.source == "dynamic");
                             if has_dynamic {
                                 // Mark static items as "replaced" so they don't

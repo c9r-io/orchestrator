@@ -445,6 +445,7 @@ fn make_item(id: &str, qa_file: &str) -> agent_orchestrator::dto::TaskItemRow {
         dynamic_vars_json: None,
         label: None,
         source: "static".to_string(),
+        status: "pending".to_string(),
     }
 }
 

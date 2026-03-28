@@ -415,4 +415,61 @@ mod tests {
         let result = resolve_pipeline_var_content(&vars, "data");
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_extract_dynamic_items_from_array_json_string() {
+        // Simulates the case where a pipeline variable contains a JSON string of an array
+        // (e.g., `["docs/qa/foo.md", "docs/qa/bar.md"]`) — the format produced by
+        // capture_text_field when the capture's json_path extracts the regression_targets array.
+        let mut vars = HashMap::new();
+        vars.insert(
+            "regression_target_ids".to_string(),
+            r#"["fixtures/qa-fr037/target-a.md","fixtures/qa-fr037/target-b.md"]"#.to_string(),
+        );
+
+        let action = GenerateItemsAction {
+            from_var: "regression_target_ids".to_string(),
+            json_path: "$".to_string(),
+            mapping: DynamicItemMapping {
+                item_id: "$".to_string(),
+                label: None,
+                vars: HashMap::new(),
+            },
+            replace: false,
+        };
+
+        let items = extract_dynamic_items(&vars, &action).expect("extract items");
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].item_id, "fixtures/qa-fr037/target-a.md");
+        assert_eq!(items[1].item_id, "fixtures/qa-fr037/target-b.md");
+    }
+
+    #[test]
+    fn test_extract_dynamic_items_from_full_object_json_string() {
+        // Simulates the case where the variable contains the full object
+        // {"regression_targets": [...]} — the format before the capture's json_path extraction.
+        let mut vars = HashMap::new();
+        vars.insert(
+            "qa_doc_gen_output".to_string(),
+            r#"{"regression_targets":[{"id":"fixtures/qa-fr037/target-a.md","name":"target-a"},{"id":"fixtures/qa-fr037/target-b.md","name":"target-b"}]}"#.to_string(),
+        );
+
+        let action = GenerateItemsAction {
+            from_var: "qa_doc_gen_output".to_string(),
+            json_path: "$.regression_targets".to_string(),
+            mapping: DynamicItemMapping {
+                item_id: "$.id".to_string(),
+                label: Some("$.name".to_string()),
+                vars: HashMap::new(),
+            },
+            replace: false,
+        };
+
+        let items = extract_dynamic_items(&vars, &action).expect("extract items");
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].item_id, "fixtures/qa-fr037/target-a.md");
+        assert_eq!(items[0].label, Some("target-a".to_string()));
+        assert_eq!(items[1].item_id, "fixtures/qa-fr037/target-b.md");
+        assert_eq!(items[1].label, Some("target-b".to_string()));
+    }
 }

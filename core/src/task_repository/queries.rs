@@ -267,7 +267,7 @@ pub fn count_stale_pending_items(conn: &Connection, task_id: &str) -> Result<i64
 
 pub fn list_task_items_for_cycle(conn: &Connection, task_id: &str) -> Result<Vec<TaskItemRow>> {
     let mut stmt = conn.prepare(
-        "SELECT id, qa_file_path, dynamic_vars_json, label, source
+        "SELECT id, qa_file_path, dynamic_vars_json, label, source, status
          FROM task_items
          WHERE task_id = ?1
          ORDER BY order_no",
@@ -282,6 +282,9 @@ pub fn list_task_items_for_cycle(conn: &Connection, task_id: &str) -> Result<Vec
                 source: row
                     .get::<_, Option<String>>(4)?
                     .unwrap_or_else(|| "static".to_string()),
+                status: row
+                    .get::<_, Option<String>>(5)?
+                    .unwrap_or_else(|| "pending".to_string()),
             })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;

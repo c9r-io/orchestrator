@@ -69,5 +69,5 @@
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☑ | Worker panic 恢复、supervisor 重生、crash 日志、stale PID 检测、runtime snapshot 计数器 |
+| 1 | All scenarios verified | ☑ | 2026-03-28 | Worker panic 恢复、supervisor 重生、crash 日志、stale PID 检测、runtime snapshot 计数器 |
 

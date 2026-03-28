@@ -139,7 +139,7 @@ Entry point: `orchestrator edit <command>` (subcommands: `export`, `open`; bare 
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Edit Export Workspace | N/A | 2026-03-27 | claude | `edit` subcommand not implemented — confirmed 2026-03-27 |
-| 2 | Edit Export Agent | N/A | 2026-03-27 | claude | `edit` subcommand not implemented — verified 2026-03-27 |
-| 3 | Edit Export Workflow | N/A | 2026-03-27 | claude | `edit` subcommand not implemented — verified 2026-03-27 |
-| 4 | Edit Open | N/A | 2026-03-27 | claude | `edit` subcommand not implemented — verified 2026-03-27 |
+| 1 | Edit Export Workspace | N/A | 2026-03-28 | claude | `edit` subcommand not implemented — confirmed 2026-03-28 |
+| 2 | Edit Export Agent | N/A | 2026-03-28 | claude | `edit` subcommand not implemented — verified 2026-03-28 |
+| 3 | Edit Export Workflow | N/A | 2026-03-28 | claude | `edit` subcommand not implemented — verified 2026-03-28 |
+| 4 | Edit Open | N/A | 2026-03-28 | claude | `edit` subcommand not implemented — verified 2026-03-28 |

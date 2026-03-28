@@ -276,6 +276,9 @@ pub fn extract_stream_json_result(content: &str) -> Option<String> {
 }
 
 fn resolve_path<'a>(root: &'a Value, path: &str) -> Result<&'a Value> {
+    if path == "$" {
+        return Ok(root);
+    }
     let path = path.strip_prefix("$.").unwrap_or(path);
     let mut current = root;
     for segment in path.split('.') {

@@ -473,6 +473,36 @@ async fn execute_cycle_segments(
     }
 
     let all_items = list_task_items_for_cycle(state, task_id).await?;
+
+    // Filter out items that already reached a terminal status (e.g. after a
+    // pause/resume cycle). These items should not be re-processed.
+    const TERMINAL_STATUSES: &[&str] = &[
+        "qa_passed",
+        "skipped",
+        "fixed",
+        "verified",
+        "eliminated",
+        "replaced",
+    ];
+    let preserved_count = all_items
+        .iter()
+        .filter(|i| TERMINAL_STATUSES.contains(&i.status.as_str()))
+        .count();
+    let all_items: Vec<_> = all_items
+        .into_iter()
+        .filter(|i| !TERMINAL_STATUSES.contains(&i.status.as_str()))
+        .collect();
+    if preserved_count > 0 {
+        insert_event(
+            state,
+            task_id,
+            None,
+            "items_preserved_on_resume",
+            json!({"preserved": preserved_count, "actionable": all_items.len()}),
+        )
+        .await?;
+    }
+
     // When dynamic items exist (created by generate_items post-action, possibly
     // before a self_restart), narrow to only dynamic items so that item-scoped
     // segments (e.g. qa_testing) process only the selected subset.

@@ -39,6 +39,6 @@ Daemon must already be running with `--webhook-secret global-key` (or `ORCHESTRA
 
 ## Checklist
 
-- [ ] Scenario 6: Global secret fallback
-- [ ] Scenario 7: CEL filter — unit test
-- [ ] Scenario 8: All tests and clippy
+- [ ] **S6: Global secret fallback** — CANNOT VERIFY (daemon not running with `--webhook-secret global-key`; global secret derived from control-plane CA cert instead). See [ticket](../ticket/auto_129b-per-trigger-webhook-auth-cel-filter-advanced_260328_scenario6_2026028.md).
+- [x] **S7: CEL filter — unit test** — PASSED (6/6 tests passed)
+- [x] **S8: All tests and clippy** — PASSED (all workspace tests passed, clippy clean)

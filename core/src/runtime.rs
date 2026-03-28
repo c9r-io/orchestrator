@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use std::time::Instant;
 
@@ -83,6 +84,8 @@ pub struct DaemonRuntimeState {
     total_worker_restarts: AtomicU64,
     incarnation: AtomicU64,
     maintenance_mode: AtomicBool,
+    /// Binary path for a deferred restart (when other tasks are still running).
+    deferred_restart_binary: std::sync::Mutex<Option<PathBuf>>,
 }
 
 impl Default for DaemonRuntimeState {
@@ -106,6 +109,7 @@ impl DaemonRuntimeState {
             total_worker_restarts: AtomicU64::new(0),
             incarnation: AtomicU64::new(0),
             maintenance_mode: AtomicBool::new(false),
+            deferred_restart_binary: std::sync::Mutex::new(None),
         }
     }
 
@@ -140,6 +144,18 @@ impl DaemonRuntimeState {
         self.lifecycle_state
             .store(DaemonLifecycleState::Draining.as_u8(), Ordering::SeqCst);
         first
+    }
+
+    /// Stores a binary path for deferred restart (when other tasks are running).
+    pub fn set_deferred_restart(&self, binary_path: PathBuf) {
+        let mut guard = self.deferred_restart_binary.lock().unwrap();
+        *guard = Some(binary_path);
+    }
+
+    /// Atomically takes the deferred restart binary path, if any.
+    pub fn take_deferred_restart(&self) -> Option<PathBuf> {
+        let mut guard = self.deferred_restart_binary.lock().unwrap();
+        guard.take()
     }
 
     /// Marks the daemon lifecycle as fully stopped.

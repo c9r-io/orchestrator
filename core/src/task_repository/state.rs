@@ -215,6 +215,42 @@ pub fn pause_all_running_tasks_and_items(conn: &Connection) -> Result<usize> {
     Ok(count)
 }
 
+/// Pause only tasks in `restart_pending` status and reset their running items.
+/// Used before `exec()` to avoid disrupting unrelated tasks.
+pub fn pause_restart_pending_tasks_and_items(conn: &Connection) -> Result<usize> {
+    let tx = conn.unchecked_transaction()?;
+    let now = now_ts();
+
+    // Collect task IDs that are in restart_pending
+    let task_ids: Vec<String> = {
+        let mut stmt = tx.prepare("SELECT id FROM tasks WHERE status = 'restart_pending'")?;
+        stmt.query_map([], |row| row.get::<_, String>(0))?
+            .filter_map(|r| r.ok())
+            .collect()
+    };
+
+    if task_ids.is_empty() {
+        tx.commit()?;
+        return Ok(0);
+    }
+
+    let mut total = 0usize;
+    for tid in &task_ids {
+        tx.execute(
+            "UPDATE tasks SET status = 'paused', updated_at = ?1 WHERE id = ?2",
+            params![now, tid],
+        )?;
+        let count = tx.execute(
+            "UPDATE task_items SET status = 'pending', started_at = NULL, completed_at = NULL, updated_at = ?1 WHERE task_id = ?2 AND status = 'running'",
+            params![now, tid],
+        )?;
+        total += count;
+    }
+
+    tx.commit()?;
+    Ok(total)
+}
+
 /// Recover orphaned running items for a single task.
 /// Returns the list of recovered item IDs.
 pub fn recover_orphaned_running_items_for_task(

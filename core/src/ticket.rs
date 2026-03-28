@@ -337,6 +337,46 @@ pub fn collect_target_files(
     Ok(files)
 }
 
+/// Returns the first active ticket path matching this QA file, if any.
+fn find_active_ticket_for_qa_file(
+    workspace_root: &Path,
+    ticket_dir: &str,
+    qa_file_path: &str,
+) -> Result<Option<String>> {
+    let abs_ticket_dir = resolve_workspace_path(workspace_root, ticket_dir, "ticket_dir")?;
+    if !abs_ticket_dir.exists() {
+        return Ok(None);
+    }
+    let normalized_target = normalize_rel_path_for_match(qa_file_path);
+    if normalized_target.is_empty() {
+        return Ok(None);
+    }
+    for entry in WalkDir::new(&abs_ticket_dir)
+        .max_depth(2)
+        .into_iter()
+        .flatten()
+    {
+        if entry.file_type().is_file()
+            && entry.path().extension() == Some(std::ffi::OsStr::new("md"))
+        {
+            let rel = entry
+                .path()
+                .strip_prefix(workspace_root)
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let preview = read_ticket_preview_from_workspace(workspace_root, &rel);
+            if !is_active_ticket_status(&preview.status) {
+                continue;
+            }
+            let normalized_doc = normalize_rel_path_for_match(&preview.qa_document);
+            if normalized_doc == normalized_target {
+                return Ok(Some(rel));
+            }
+        }
+    }
+    Ok(None)
+}
+
 /// Creates a Markdown ticket for a QA failure when no active duplicate exists.
 pub fn create_ticket_for_qa_failure(
     workspace_root: &Path,
@@ -350,6 +390,14 @@ pub fn create_ticket_for_qa_failure(
     let abs_ticket_dir = resolve_workspace_path(workspace_root, ticket_dir, "ticket_dir")?;
     if !abs_ticket_dir.exists() {
         std::fs::create_dir_all(&abs_ticket_dir)?;
+    }
+
+    // Skip if an active ticket already exists for this QA file
+    if let Ok(Some(existing)) =
+        find_active_ticket_for_qa_file(workspace_root, ticket_dir, qa_file_path)
+    {
+        tracing::debug!(qa_file = %qa_file_path, existing = %existing, "skipping duplicate ticket");
+        return Ok(None);
     }
 
     let now = Utc::now();
