@@ -1,5 +1,6 @@
 ---
-self_referential_safe: true
+self_referential_safe: false
+self_referential_safe_scenarios: [S1, S4, S5, S6, S7, S9]
 ---
 
 # QA 128: Webhook Trigger Infrastructure

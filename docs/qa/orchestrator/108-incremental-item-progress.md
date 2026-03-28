@@ -77,6 +77,16 @@
 | S4: 失败 item 正确计入 | `Status: failed`, `Progress: 2/130 items`, `Failed: 1` | 757ac3d5 | ✅ |
 | S5: 批量 finalize 幂等 | 增量 finalize 已写入终态的事件，未观察到 duplicate key 错误 | 46c76c29 | ✅ |
 
+## 验证记录 (2026-03-29)
+
+| Scenario | Verification | Task ID | Result |
+|----------|--------------|---------|--------|
+| S1: Progress 实时递增 | Event log timestamps for task `8a605cb6` show incremental `item_finalize_evaluated` per batch (waves of 2 items at T+0ms, +15ms, +30ms, +45ms, +60ms from task start). Echo agent completes too fast (<100ms) to observe mid-execution progress via `orchestrator task info`. Incremental pattern confirmed by event timestamps. | 8a605cb6 | ✅ |
+| S2: Step 级进度 Table | `Progress: 10/10 items` 下显示 `qa_testing: 10 completed` — matches expected format. | 8a605cb6 | ✅ |
+| S3: Step 级进度 JSON | `step_progress: [{"phase": "qa_testing", "completed": 10, "running": 0}]` — correct JSON structure. | 8a605cb6 | ✅ |
+| S4: 失败 item 正确计入 | Task `91f40162` with fail agent: `Status: failed`, `Progress: 10/10 items`, `Failed: 10`. All 10 items counted in progress including failures. | 91f40162 | ✅ |
+| S5: 批量 finalize 幂等 | DB event log shows no `UNIQUE constraint` errors or `duplicate key` errors. Incremental `item_finalize_evaluated` events (item status: pending → qa_passed) coexist with batch finalize pass without冲突. Daemon log grep confirms no finalize-related errors. | 8a605cb6, 91f40162 | ✅ |
+
 ## 关联
 
 - 设计文档: `docs/design_doc/orchestrator/66-incremental-item-progress.md`

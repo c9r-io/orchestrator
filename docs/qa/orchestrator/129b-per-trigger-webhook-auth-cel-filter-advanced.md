@@ -1,5 +1,6 @@
 ---
-self_referential_safe: true
+self_referential_safe: false
+self_referential_safe_scenarios: [S7, S8]
 ---
 
 # QA 129b: Per-Trigger Webhook Auth & CEL Payload Filter (Advanced)

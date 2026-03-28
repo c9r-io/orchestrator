@@ -1,3 +1,8 @@
+---
+self_referential_safe: false
+self_referential_safe_scenarios: [S2, S3, S4, S5, S6, S7, S8, S9]
+---
+
 # QA 126: Task Items & Event List CLI Commands
 
 ## FR Reference

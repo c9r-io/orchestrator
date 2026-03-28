@@ -95,8 +95,8 @@ self_referential_safe: true
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Frontmatter 解析 — 有场景白名单 | PASS | 2026-03-27 | | Function `parse_qa_doc_safe_scenarios` found at line 56; 5 tests passed |
-| 2 | Frontmatter 解析 — 无场景白名单 | PASS | 2026-03-27 | | test_parse_qa_doc_safe_scenarios_absent passed |
-| 3 | CEL 变量 — 非空场景列表允许通过 | PASS | 2026-03-27 | | test_self_referential_safe_scenarios_non_empty passed |
-| 4 | CEL 变量 — 空场景列表被跳过 | PASS | 2026-03-27 | | test_self_referential_safe_scenarios_empty passed |
-| 5 | 覆盖率统计验证 | PASS | 2026-03-28 | Claude | Doc-level: 127 ≥ 25; Scenario-level: 8 ≥ 5; Total: 135 ≥ 55; Coverage: 135/170 = 79.4% ≥ 40% |
+| 1 | Frontmatter 解析 — 有场景白名单 | PASS | 2026-03-29 | | Function `parse_qa_doc_safe_scenarios` found at line 56; 9 tests passed |
+| 2 | Frontmatter 解析 — 无场景白名单 | PASS | 2026-03-29 | | test_parse_qa_doc_safe_scenarios_absent passed |
+| 3 | CEL 变量 — 非空场景列表允许通过 | PASS | 2026-03-29 | | test_self_referential_safe_scenarios_non_empty passed |
+| 4 | CEL 变量 — 空场景列表被跳过 | PASS | 2026-03-29 | | test_self_referential_safe_scenarios_empty passed |
+| 5 | 覆盖率统计验证 | PASS | 2026-03-29 | Claude | Doc-level: 125 ≥ 25; Scenario-level: 11 ≥ 5; Total: 136 ≥ 55; Coverage: 136/171 = 79.5% ≥ 40% |

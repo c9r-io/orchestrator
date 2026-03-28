@@ -149,10 +149,10 @@ Code review + unit test verification.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Manifest Apply - Update Configuration | PASS | 2026-03-28 | Claude | 5/5 tests passed |
-| 2 | Manifest Apply - Invalid Configuration | PASS | 2026-03-28 | Claude | 4/4 tests passed |
-| 3 | Manifest Apply - Add New Workspace | PASS | 2026-03-28 | Claude | 4/4 tests passed |
-| 4 | Delete Project Clears Task State | PASS | 2026-03-28 | Claude | 3/3 tests passed |
+| 1 | Manifest Apply - Update Configuration | PASS | 2026-03-29 | Claude | 5/5 tests passed |
+| 2 | Manifest Apply - Invalid Configuration | PASS | 2026-03-29 | Claude | 4/4 tests passed |
+| 3 | Manifest Apply - Add New Workspace | PASS | 2026-03-29 | Claude | 4/4 tests passed |
+| 4 | Delete Project Clears Task State | PASS | 2026-03-29 | Claude | 3/3 tests passed |
 
 ## Verification Complete
 

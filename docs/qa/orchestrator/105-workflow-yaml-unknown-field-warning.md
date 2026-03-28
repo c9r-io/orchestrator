@@ -98,7 +98,7 @@ self_referential_safe: true
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ✅ | All 6 scenarios passed — re-verified 2026-03-27 |
+| 1 | All scenarios verified | ✅ | All 6 scenarios passed — re-verified 2026-03-29 |
 | 2 | S1: capture suggestion | ✅ | `did_you_mean("capture")` → `"behavior.captures"` confirmed; test passed |
 | 3 | S2: no suggestion | ✅ | Unknown field without suggestion only reports field name; test passed |
 | 4 | S3: valid YAML | ✅ | yaml_round-trip test passes; no spurious warnings |
