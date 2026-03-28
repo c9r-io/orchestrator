@@ -761,7 +761,7 @@ pub struct WorkflowSpec {
 }
 
 /// Safety configuration specification for YAML
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SafetySpec {
     /// Maximum consecutive failures before safety actions trigger.
     #[serde(default = "default_max_consecutive_failures")]
@@ -808,6 +808,28 @@ pub struct SafetySpec {
     /// FR-052: Heartbeat must be within this many seconds to be considered active
     #[serde(default = "default_inflight_heartbeat_grace_secs")]
     pub inflight_heartbeat_grace_secs: u64,
+}
+
+impl Default for SafetySpec {
+    fn default() -> Self {
+        Self {
+            max_consecutive_failures: 3,
+            auto_rollback: false,
+            checkpoint_strategy: String::new(),
+            step_timeout_secs: None,
+            binary_snapshot: false,
+            profile: None,
+            invariants: Vec::new(),
+            max_spawned_tasks: None,
+            max_spawn_depth: None,
+            spawn_cooldown_seconds: None,
+            max_item_step_failures: 3,
+            min_cycle_interval_secs: 60,
+            stall_timeout_secs: None,
+            inflight_wait_timeout_secs: 300,
+            inflight_heartbeat_grace_secs: 60,
+        }
+    }
 }
 
 fn default_max_consecutive_failures() -> u32 {
