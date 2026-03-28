@@ -480,8 +480,9 @@ The daemon binary that runs the gRPC server and embedded background workers.
 | `--event-archive-enabled` | Archive events to JSONL before cleanup |
 | `--event-archive-dir <DIR>` | Override event archive directory |
 | `--stall-timeout-mins <MINS>` | Minutes before a running item is considered stalled (default: 30, 0 = disabled) |
-| `--webhook-bind <ADDR>` | Bind address for HTTP webhook server (disabled if not set) |
+| `--webhook-bind <ADDR>` | Bind address for HTTP webhook server (default: `127.0.0.1:19090`, `none` to disable). Non-loopback addresses require a secret. |
 | `--webhook-secret <SECRET>` | Shared secret for webhook HMAC-SHA256 verification (env: `ORCHESTRATOR_WEBHOOK_SECRET`) |
+| `--webhook-allow-unsigned` | Allow webhook on non-loopback without signature verification (env: `ORCHESTRATOR_WEBHOOK_ALLOW_UNSIGNED`) |
 
 ### control-plane issue-client
 

@@ -10,7 +10,7 @@ FR-080
 
 ## Prerequisites
 
-Daemon must already be running (webhook server enabled by default on `0.0.0.0:19090`).
+Daemon must already be running (webhook server enabled by default on `127.0.0.1:19090`).
 
 ## Verification Scenarios
 
@@ -55,7 +55,7 @@ Daemon must already be running (webhook server enabled by default on `0.0.0.0:19
 ### Scenario 6: Webhook disabled via --webhook-bind none
 
 **Steps:**
-1. Verify `orchestratord --help` shows `--webhook-bind` with default `0.0.0.0:19090` and accepts `none`
+1. Verify `orchestratord --help` shows `--webhook-bind` with default `127.0.0.1:19090` and accepts `none`
 
 **Expected:** Help text documents the flag. (Actual disable test requires daemon restart — tested in `scripts/qa/test-webhook-trigger.sh`.)
 

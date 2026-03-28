@@ -1,7 +1,8 @@
 //! Lightweight HTTP webhook server for external trigger ingestion.
 //!
-//! Runs alongside the gRPC server by default on `0.0.0.0:19090`.
+//! Runs alongside the gRPC server by default on `127.0.0.1:19090` (loopback).
 //! Use `--webhook-bind <addr>` to override or `--webhook-bind none` to disable.
+//! Non-loopback addresses require a webhook secret or `--webhook-allow-unsigned`.
 //! Accepts `POST /webhook/{trigger_name}` with a JSON body and fires
 //! the named trigger with the payload.
 

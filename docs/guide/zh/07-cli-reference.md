@@ -479,8 +479,9 @@ orchestrator check -o json           # 结构化检查输出
 | `--event-archive-enabled` | 清理前将事件归档为 JSONL |
 | `--event-archive-dir <DIR>` | 覆盖事件归档目录 |
 | `--stall-timeout-mins <MINS>` | 运行中项目被视为停滞的分钟数（默认：30，0 = 禁用） |
-| `--webhook-bind <ADDR>` | HTTP webhook 服务绑定地址（未设置则禁用） |
+| `--webhook-bind <ADDR>` | HTTP webhook 服务绑定地址（默认：`127.0.0.1:19090`，`none` 禁用）。非回环地址需要配置密钥。 |
 | `--webhook-secret <SECRET>` | Webhook HMAC-SHA256 签名验证密钥（环境变量：`ORCHESTRATOR_WEBHOOK_SECRET`） |
+| `--webhook-allow-unsigned` | 允许非回环地址无签名验证启动 webhook（环境变量：`ORCHESTRATOR_WEBHOOK_ALLOW_UNSIGNED`） |
 
 ### control-plane issue-client
 

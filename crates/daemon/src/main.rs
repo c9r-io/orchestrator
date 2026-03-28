@@ -80,10 +80,11 @@ struct Args {
     task_retention_days: u32,
 
     /// Bind address for the HTTP webhook server.
-    /// Defaults to 0.0.0.0:19090. Set to "none" to disable.
+    /// Defaults to 127.0.0.1:19090 (loopback only). Set to "none" to disable.
+    /// Use 0.0.0.0:19090 for Docker/K8s (requires --webhook-secret or PKI).
     #[arg(
         long = "webhook-bind",
-        default_value = "0.0.0.0:19090",
+        default_value = "127.0.0.1:19090",
         env = "ORCHESTRATOR_WEBHOOK_BIND"
     )]
     webhook_bind: String,
@@ -91,6 +92,16 @@ struct Args {
     /// Shared secret for webhook HMAC-SHA256 signature verification.
     #[arg(long = "webhook-secret", env = "ORCHESTRATOR_WEBHOOK_SECRET")]
     webhook_secret: Option<String>,
+
+    /// Allow the webhook server to run without signature verification on
+    /// non-loopback addresses. Insecure — use only behind a trusted reverse
+    /// proxy or in test environments.
+    #[arg(
+        long = "webhook-allow-unsigned",
+        env = "ORCHESTRATOR_WEBHOOK_ALLOW_UNSIGNED",
+        default_value_t = false
+    )]
+    webhook_allow_unsigned: bool,
 
     /// Minutes before a running item is considered stalled (0 = disabled).
     #[arg(long = "stall-timeout-mins", default_value_t = 30)]
@@ -539,7 +550,7 @@ fn main() -> Result<()> {
             });
         }
 
-        // Spawn webhook HTTP server (enabled by default on 0.0.0.0:19090).
+        // Spawn webhook HTTP server (enabled by default on 127.0.0.1:19090).
         let webhook_bind = args.webhook_bind.as_str();
         if webhook_bind != "none" {
             let addr: std::net::SocketAddr = webhook_bind
@@ -557,11 +568,33 @@ fn main() -> Result<()> {
                 derived
             });
             if webhook_secret.is_none() {
-                tracing::warn!(
-                    %addr,
-                    "webhook server starting without signature verification; \
-                     set --webhook-secret or configure control-plane PKI for production"
-                );
+                if addr.ip().is_loopback() {
+                    info!(
+                        %addr,
+                        "webhook server on loopback without signature verification \
+                         (safe for local development)"
+                    );
+                } else if args.webhook_allow_unsigned {
+                    tracing::warn!(
+                        %addr,
+                        "webhook server starting without signature verification on a \
+                         non-loopback address (--webhook-allow-unsigned); this is insecure"
+                    );
+                } else {
+                    bail!(
+                        "refusing to start webhook server on {addr} without signature \
+                         verification.\n\n\
+                         The webhook server is bound to a non-loopback address but no \
+                         HMAC secret is configured. This would accept unsigned requests \
+                         from the network.\n\n\
+                         Options:\n  \
+                         1. Set --webhook-secret <secret> or ORCHESTRATOR_WEBHOOK_SECRET\n  \
+                         2. Configure control-plane PKI (auto-derives a secret)\n  \
+                         3. Use --webhook-bind 127.0.0.1:19090 for local-only access\n  \
+                         4. Pass --webhook-allow-unsigned to override this check\n  \
+                         5. Set --webhook-bind none to disable the webhook server"
+                    );
+                }
             }
             let wh_state = webhook::WebhookState {
                 inner: inner.clone(),

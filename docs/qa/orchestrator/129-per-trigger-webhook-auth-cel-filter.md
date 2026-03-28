@@ -10,7 +10,7 @@ FR-081
 
 ## Prerequisites
 
-Daemon must already be running (webhook server enabled by default on `0.0.0.0:19090`).
+Daemon must already be running (webhook server enabled by default on `127.0.0.1:19090`).
 
 ## Scenario 1: Webhook config types compile
 
