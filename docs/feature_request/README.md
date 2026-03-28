@@ -70,6 +70,7 @@
 | FR-083 | CRD 插件系统 — Webhook 拦截器与自动化生命周期 | P3 | Proposed |
 | FR-084 | Agent 条件命令规则 + Session 复用 | P1 | Closed |
 | FR-085 | Filesystem Trigger — 文件系统变更原生触发器 | P1 | Closed |
+| FR-086 | CLI Command to Simulate Agent Selection Logic | P3 | Closed |
 
 ## 说明
 
@@ -157,5 +158,6 @@
 - FR-084 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/89-agent-command-rules-step-vars.md` 与 `docs/qa/orchestrator/100-agent-command-rules-step-vars.md` 承载（Agent `command_rules` CEL 条件命令选择、Step `step_vars` 临时变量覆盖、`command_rule_index` 审计列；Session 复用为纯 workflow 编排示例）
 - FR-077 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/90-workflow-template-library.md` 与 `docs/qa/orchestrator/131-workflow-template-library.md` 承载（5 个渐进复杂度模板：hello-world / qa-loop / plan-execute / scheduled-scan / fr-watch，echo agent 零成本运行，文档站 Templates 分组）
 - FR-085 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/91-filesystem-trigger.md` 与 `docs/qa/orchestrator/132-filesystem-trigger.md` 承载（`source: filesystem` 原生触发器，`notify` crate 跨平台文件监控，按需启停 watcher，路径白名单 + 事件类型 + 防抖 + CEL 四层过滤，macOS symlink 兼容）
-- FR-086 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/92-daemon-config-hot-reload.md` 与 `docs/qa/orchestrator/133-daemon-config-hot-reload.md` 承载（ArcSwap 原子快照机制实现无重启配置热加载，`persist_config_and_reload()` 在 apply 响应前同步更新 `config_runtime`；QA 128 S2/S3 限制已移除）
+- FR-086 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/94-agent-selection-threshold-verification.md` 与 `docs/qa/orchestrator/110b-agent-health-policy-advanced.md` 承载（采用 Option 2 单元测试验证路径：`is_capability_healthy_custom_threshold` + `test_diseased_agent_with_passing_capability_threshold_is_selected` 确定性证明 diseased agent 在自定义 `capability_success_threshold` 下的选中行为）
+- FR-086（原 daemon config hot reload 议题）已闭环；其设计与验证信息现由 `docs/design_doc/orchestrator/92-daemon-config-hot-reload.md` 与 `docs/qa/orchestrator/133-daemon-config-hot-reload.md` 承载（ArcSwap 原子快照机制实现无重启配置热加载，`persist_config_and_reload()` 在 apply 响应前同步更新 `config_runtime`；QA 128 S2/S3 限制已移除）
 - QA-106 inflight wait test fixture 已闭环删除（原 FR-085 编号冲突）；其设计与验证信息现由 `docs/design_doc/orchestrator/93-long-running-agent-test-fixture.md` 与 `docs/qa/orchestrator/106-inflight-wait-heartbeat-aware-timeout.md` 承载（3 项集成测试直接验证 `wait_for_inflight_runs()` 的 heartbeat 重置、超时回收、诊断事件；S1-S5 全部 ☑）

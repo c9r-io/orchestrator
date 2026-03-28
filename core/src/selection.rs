@@ -566,6 +566,66 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_diseased_agent_with_passing_capability_threshold_is_selected() {
+        use crate::metrics::CapabilityHealth;
+        use chrono::{Duration, Utc};
+
+        // Two agents: one healthy, one diseased with 35% success rate on "qa".
+        // The diseased agent uses capability_success_threshold = 0.3 (30%),
+        // so 35% >= 30% means it should NOT be filtered out.
+        let mut agents = HashMap::new();
+        let (id_diseased, mut cfg_diseased) = make_test_agent("diseased_agent", "qa", 30);
+        cfg_diseased.health_policy.capability_success_threshold = 0.3;
+        let (id_healthy, cfg_healthy) = make_test_agent("healthy_agent", "qa", 30);
+        agents.insert(id_diseased.clone(), cfg_diseased);
+        agents.insert(id_healthy.clone(), cfg_healthy);
+
+        let mut cap_health = HashMap::new();
+        cap_health.insert(
+            "qa".to_string(),
+            CapabilityHealth {
+                success_count: 7, // 7 / 20 = 35%
+                failure_count: 13,
+                last_error_at: None,
+            },
+        );
+
+        let mut health_map = HashMap::new();
+        health_map.insert(
+            id_diseased,
+            AgentHealthState {
+                diseased_until: Some(Utc::now() + Duration::hours(1)),
+                capability_health: cap_health,
+                ..Default::default()
+            },
+        );
+
+        let metrics_map = HashMap::new();
+        let excluded = HashSet::new();
+
+        // Run multiple times — the diseased agent should appear as a candidate
+        // (not filtered), so both agents can be selected.
+        let mut selected_ids = HashSet::new();
+        for _ in 0..50 {
+            let (agent_id, _, _, _) = select_agent_advanced(
+                "qa",
+                &agents,
+                &health_map,
+                &metrics_map,
+                &excluded,
+                &HashMap::new(),
+            )
+            .expect("at least one agent should be selectable");
+            selected_ids.insert(agent_id);
+        }
+
+        assert!(
+            selected_ids.contains("diseased_agent"),
+            "diseased agent with 35% success rate should pass 30% threshold and be selectable"
+        );
+    }
+
     // ── resolve_effective_agents tests ─────────────────────────────────
 
     fn make_config_with_project_agents() -> crate::config::OrchestratorConfig {

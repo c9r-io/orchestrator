@@ -1856,11 +1856,7 @@ async fn execute_cycle_graph_uses_deterministic_dag_fallback_graph_on_fail_close
 
 /// Seed an in-flight command_run row pointing at a real PID.
 /// Returns the generated run ID.
-fn seed_inflight_command_run(
-    conn: &rusqlite::Connection,
-    item_id: &str,
-    pid: i64,
-) -> String {
+fn seed_inflight_command_run(conn: &rusqlite::Connection, item_id: &str, pid: i64) -> String {
     let run_id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
     conn.execute(
@@ -2000,7 +1996,9 @@ async fn inflight_wait_heartbeat_resets_timeout() {
         .await
         .expect("wait_for_inflight_runs should succeed");
 
-    heartbeat_task.await.expect("heartbeat task should complete");
+    heartbeat_task
+        .await
+        .expect("heartbeat task should complete");
 
     // Assert: no timeout event was emitted.
     let conn = open_conn(&state.db_path).expect("open sqlite for assertions");
@@ -2052,7 +2050,11 @@ async fn inflight_wait_timeout_without_heartbeat() {
 
     // Assert: timeout event emitted.
     let timeout_events = query_event_payloads(&conn, &task_id, "inflight_wait_timeout");
-    assert_eq!(timeout_events.len(), 1, "should emit exactly one timeout event");
+    assert_eq!(
+        timeout_events.len(),
+        1,
+        "should emit exactly one timeout event"
+    );
 
     // Assert: reaped event emitted.
     let reaped = query_event_payloads(&conn, &task_id, "inflight_runs_reaped");

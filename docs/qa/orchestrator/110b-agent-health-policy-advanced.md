@@ -18,6 +18,18 @@ Split from doc 110: capability threshold and check output.
 - 35% ≥ 30% 阈值 → agent 仍可被选中执行 `qa` 任务
 - 默认阈值 50% 下同场景 agent 会被排除
 
+**验证方法**
+
+以单元测试作为权威验证（FR-086 Option 2 闭环）：
+
+1. `is_capability_healthy_custom_threshold`（`core/src/health.rs`）— 直接验证 diseased agent 在自定义阈值下的健康判定
+2. `test_diseased_agent_with_passing_capability_threshold_is_selected`（`core/src/selection.rs`）— 集成级验证：diseased agent（35% 成功率 + 0.3 阈值）在 `select_agent_advanced()` 中不被过滤
+
+```bash
+cargo test -p agent-orchestrator -- is_capability_healthy_custom_threshold
+cargo test -p agent-orchestrator -- test_diseased_agent_with_passing_capability_threshold_is_selected
+```
+
 ## 场景 2：orchestrator check 展示 health policy
 
 **步骤**
