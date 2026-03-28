@@ -1,6 +1,6 @@
 [package]
 name = "orchestrator-scheduler"
-version = "0.2.3"
+version = "0.2.4"
 description = "Task scheduler engine for the Agent Orchestrator"
 repository = "https://github.com/c9r-io/orchestrator"
 keywords = ["orchestrator", "scheduler", "agent"]
@@ -11,9 +11,9 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-agent-orchestrator = { path = "../../core", version = "0.2.3" }
-orchestrator-config = { path = "../orchestrator-config", version = "0.2.3" }
-orchestrator-proto = { path = "../proto", version = "0.2.3" }
+agent-orchestrator = { path = "../../core", version = "0.2.4" }
+orchestrator-config = { path = "../orchestrator-config", version = "0.2.4" }
+orchestrator-proto = { path = "../proto", version = "0.2.4" }
 async-trait = "0.1"
 anyhow = "1.0"
 arc-swap = "1.9"
@@ -40,5 +40,5 @@ nix = { version = "0.31", default-features = false, features = ["user"] }
 test-harness = ["agent-orchestrator/test-harness"]
 
 [dev-dependencies]
-agent-orchestrator = { path = "../../core", version = "0.2.3", features = ["test-harness"] }
+agent-orchestrator = { path = "../../core", version = "0.2.4", features = ["test-harness"] }
 tempfile = "3.26.0"
