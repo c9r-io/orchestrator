@@ -1,7 +1,7 @@
 use super::policy::enforce_runner_policy;
 use super::profile::ResolvedExecutionProfile;
 use super::sandbox::{build_command_for_profile, classify_sandbox_spawn_error};
-use crate::config::{RunnerConfig, RunnerExecutorKind, RunnerPolicy};
+use orchestrator_config::config::{RunnerConfig, RunnerExecutorKind, RunnerPolicy};
 use crate::output_capture::{OutputCaptureHandles, spawn_sanitized_output_capture};
 use anyhow::{Context, Result};
 use std::fs::File;

@@ -1,6 +1,9 @@
 use super::super::SqliteTaskRepository;
 use super::super::command_run::NewCommandRun;
-use super::super::trait_def::TaskRepository;
+use super::super::trait_def::{
+    CommandRunRepository, TaskGraphRepository, TaskItemMutRepository, TaskQueryRepository,
+    TaskStateRepository,
+};
 use super::super::types::TaskRepositorySource;
 use super::fixtures::{get_item_id, seed_task};
 use crate::config_load::now_ts;

@@ -1,7 +1,7 @@
 use super::profile::ResolvedExecutionProfile;
 #[cfg(target_os = "linux")]
-use crate::config::ExecutionFsMode;
-use crate::config::{ExecutionNetworkMode, ExecutionProfileMode, RunnerConfig};
+use orchestrator_config::config::ExecutionFsMode;
+use orchestrator_config::config::{ExecutionNetworkMode, ExecutionProfileMode, RunnerConfig};
 use anyhow::Result;
 use std::io;
 

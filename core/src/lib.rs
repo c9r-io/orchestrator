@@ -81,7 +81,7 @@ pub mod migration;
 /// Logging and metrics bootstrap helpers for runtime observability.
 pub mod observability;
 /// Output capture utilities for spawned commands.
-pub mod output_capture;
+pub use orchestrator_runner::output_capture;
 /// Structured output validation and diagnostics.
 pub mod output_validation;
 /// Persistence infrastructure (**infrastructure layer**).
@@ -99,22 +99,22 @@ pub mod qa_utils;
 /// Declarative resource CRUD support and manifest rendering.
 pub mod resource;
 /// Command runner abstractions, policies, and spawn helpers.
-pub mod runner;
+pub use orchestrator_runner::runner;
 /// Daemon lifecycle state and runtime snapshots.
 pub mod runtime;
 /// Sandbox network allowlist parsing and validation.
-pub mod sandbox_network;
+pub use orchestrator_runner::sandbox_network;
 /// Scheduler port: [`TaskEnqueuer`](scheduler_port::TaskEnqueuer) trait for
 /// cross-crate task enqueue dispatch (see module docs).
 pub mod scheduler_port;
 /// Secret key audit reports and validation routines.
-pub mod secret_key_audit;
+pub use orchestrator_security::secret_key_audit;
 /// Secret key rotation lifecycle primitives.
-pub mod secret_key_lifecycle;
+pub use orchestrator_security::secret_key_lifecycle;
 /// Secret-store encryption and decryption helpers.
-pub mod secret_store_crypto;
+pub use orchestrator_security::secret_store_crypto;
 /// Secure file and directory creation helpers.
-pub mod secure_files;
+pub use orchestrator_security::secure_files;
 /// Agent selection algorithms and resolution helpers.
 pub mod selection;
 /// Self-referential workspace safety policies.
@@ -132,11 +132,12 @@ pub mod task_cleanup;
 pub mod task_ops;
 /// Task-execution persistence abstraction (**execution layer**).
 ///
-/// A 32-method `TaskRepository` trait covering task lifecycle, item management,
-/// command-run recording, event streaming, and task-graph snapshots.  The async
-/// wrapper `AsyncSqliteTaskRepository` is the primary runtime implementation.
-/// This layer is distinct from `persistence` (which handles config, sessions,
-/// scheduling state) and `db` (admin/facade operations).
+/// Seven domain-aligned sub-traits compose into the backward-compatible
+/// `TaskRepository` supertrait: `TaskQueryRepository`,
+/// `TaskItemQueryRepository`, `TaskStateRepository`, `TaskItemMutRepository`,
+/// `CommandRunRepository`, `EventRepository`, `TaskGraphRepository`.
+/// The async wrapper `AsyncSqliteTaskRepository` is the primary runtime
+/// implementation.
 pub mod task_repository;
 /// Ticket discovery, preview, and creation helpers.
 pub mod ticket;

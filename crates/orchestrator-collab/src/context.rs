@@ -96,7 +96,7 @@ impl AgentContext {
     pub fn render_template_with_pipeline(
         &self,
         template: &str,
-        pipeline: Option<&crate::config::PipelineVariables>,
+        pipeline: Option<&orchestrator_config::config::PipelineVariables>,
     ) -> String {
         let mut result = template.to_string();
 
@@ -211,7 +211,7 @@ pub struct PhaseRecord {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::collab::{Artifact, ArtifactKind};
+    use crate::{Artifact, ArtifactKind};
 
     #[test]
     fn test_agent_context_template() {
@@ -298,7 +298,7 @@ mod tests {
             "ws1".to_string(),
         );
 
-        let mut pipeline = crate::config::PipelineVariables::default();
+        let mut pipeline = orchestrator_config::config::PipelineVariables::default();
         pipeline.vars.insert(
             "plan_output".to_string(),
             "Split `resource.rs` into `mod.rs` and `api.rs`".to_string(),

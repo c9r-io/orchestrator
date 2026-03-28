@@ -1,0 +1,26 @@
+[package]
+name = "orchestrator-security"
+version = "0.2.2"
+description = "SecretStore encryption, key lifecycle, audit, and secure file helpers"
+repository = "https://github.com/c9r-io/orchestrator"
+keywords = ["orchestrator", "security", "encryption"]
+categories = ["development-tools"]
+license = "MIT"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+orchestrator-config = { path = "../orchestrator-config", version = "0.2.2" }
+aes-gcm-siv = "0.11"
+anyhow = "1.0"
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
+rand = "0.8"
+rusqlite = { version = "0.31", features = ["bundled"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+tracing = "0.1"
+
+[dev-dependencies]
+tempfile = "3.26.0"

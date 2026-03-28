@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use crate::config_load::now_ts;
+use crate::now_ts;
 use crate::secret_store_crypto::{SecretEncryption, SecretKeyHandle};
 
 // ─── Key State Machine ───────────────────────────────────────────
@@ -160,7 +160,7 @@ fn audit_event_for_record(
 
 /// Loads the SecretStore keyring from the lifecycle tables or legacy single-key storage.
 pub fn load_keyring(data_dir: &Path, db_path: &Path) -> Result<KeyRing> {
-    let conn = crate::db::open_conn(db_path)?;
+    let conn = crate::open_conn(db_path)?;
     let table_exists: bool = conn
         .query_row(
             "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='secret_keys'",
@@ -715,7 +715,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let db_path = temp.path().join("data/agent_orchestrator.db");
         std::fs::create_dir_all(db_path.parent().expect("parent")).expect("create data dir");
-        crate::db::init_schema(&db_path).expect("init schema");
+        crate::init_test_schema(&db_path).expect("init schema");
         (temp, db_path)
     }
 
@@ -756,7 +756,7 @@ mod tests {
         let (temp, db_path) = setup_test_db();
         crate::secret_store_crypto::ensure_secret_key(temp.path(), &db_path).expect("ensure key");
 
-        let conn = crate::db::open_conn(&db_path).expect("open");
+        let conn = crate::open_conn(&db_path).expect("open");
         // Import legacy key to DB
         import_legacy_key_record(&conn, temp.path()).expect("import legacy");
 
@@ -771,7 +771,7 @@ mod tests {
         let (temp, db_path) = setup_test_db();
         crate::secret_store_crypto::ensure_secret_key(temp.path(), &db_path).expect("ensure key");
 
-        let conn = crate::db::open_conn(&db_path).expect("open");
+        let conn = crate::open_conn(&db_path).expect("open");
         import_legacy_key_record(&conn, temp.path()).expect("import legacy");
 
         let records = query_all_key_records(&conn).expect("query");
@@ -799,7 +799,7 @@ mod tests {
             .encrypt_secret_store_spec("default", "test-secret", &spec)
             .expect("encrypt");
 
-        let conn = crate::db::open_conn(&db_path).expect("open");
+        let conn = crate::open_conn(&db_path).expect("open");
         conn.execute(
             "INSERT INTO resources (kind, project, name, api_version, spec_json, metadata_json, generation, created_at, updated_at)
              VALUES ('SecretStore', 'default', 'test-secret', 'v2', ?1, '{}', 1, datetime('now'), datetime('now'))",

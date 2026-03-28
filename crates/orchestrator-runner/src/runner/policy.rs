@@ -1,4 +1,4 @@
-use crate::config::{RunnerConfig, RunnerPolicy};
+use orchestrator_config::config::{RunnerConfig, RunnerPolicy};
 use anyhow::{Result, anyhow};
 use std::fmt;
 

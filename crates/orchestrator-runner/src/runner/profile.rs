@@ -1,4 +1,4 @@
-use crate::config::{
+use orchestrator_config::config::{
     ExecutionFsMode, ExecutionNetworkMode, ExecutionProfileConfig, ExecutionProfileMode,
 };
 use std::path::{Path, PathBuf};

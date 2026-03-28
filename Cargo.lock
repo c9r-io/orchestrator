@@ -61,8 +61,11 @@ dependencies = [
  "glob",
  "libc",
  "nix",
+ "orchestrator-collab",
  "orchestrator-config",
  "orchestrator-proto",
+ "orchestrator-runner",
+ "orchestrator-security",
  "pathdiff",
  "rand 0.8.5",
  "rusqlite",
@@ -3158,6 +3161,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "orchestrator-collab"
+version = "0.2.2"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "orchestrator-config",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "orchestrator-config"
 version = "0.2.2"
 dependencies = [
@@ -3219,6 +3235,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "orchestrator-runner"
+version = "0.2.2"
+dependencies = [
+ "anyhow",
+ "libc",
+ "nix",
+ "orchestrator-config",
+ "tempfile",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "orchestrator-scheduler"
 version = "0.2.2"
 dependencies = [
@@ -3245,6 +3274,24 @@ dependencies = [
  "tokio-rusqlite",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "orchestrator-security"
+version = "0.2.2"
+dependencies = [
+ "aes-gcm-siv",
+ "anyhow",
+ "base64 0.22.1",
+ "chrono",
+ "orchestrator-config",
+ "rand 0.8.5",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tracing",
 ]
 
 [[package]]

@@ -3,7 +3,7 @@ use crate::config_load::build_execution_plan_for_project;
 use crate::config_load::{now_ts, read_active_config};
 use crate::db::open_conn;
 use crate::dto::{CreateTaskPayload, TaskSummary, UNASSIGNED_QA_FILE_PATH};
-use crate::task_repository::{SqliteTaskRepository, TaskRepository};
+use crate::task_repository::{SqliteTaskRepository, TaskQueryRepository};
 use crate::ticket::{collect_target_files, collect_target_files_from_active_tickets};
 use anyhow::{Context, Result};
 use chrono::Utc;

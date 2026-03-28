@@ -1,4 +1,4 @@
-use crate::crd::store::SYSTEM_PROJECT;
+use orchestrator_config::resource_store::SYSTEM_PROJECT;
 use aes_gcm_siv::Aes256GcmSiv;
 use aes_gcm_siv::aead::{Aead, KeyInit, Payload};
 use anyhow::{Context, Result, anyhow, bail};
@@ -373,7 +373,7 @@ fn initialize_secret_key(data_dir: &Path) -> Result<SecretKeyHandle> {
     rand::rngs::OsRng.fill_bytes(&mut key_bytes);
     let encoded = base64::engine::general_purpose::STANDARD.encode(key_bytes);
     write_atomic_secret_file(&key_path, encoded.as_bytes())?;
-    let now = crate::config_load::now_ts();
+    let now = crate::now_ts();
     let metadata = SecretKeyMetadata {
         key_id: KEY_ID_PRIMARY.to_string(),
         created_at: now.clone(),
@@ -446,7 +446,7 @@ fn write_atomic_secret_file(path: &Path, contents: &[u8]) -> Result<()> {
 }
 
 fn encrypted_secret_data_exists(db_path: &Path) -> Result<bool> {
-    let conn = crate::db::open_conn(db_path)?;
+    let conn = crate::open_conn(db_path)?;
     let resources_exists: bool = conn
         .query_row(
             "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='resources'",
@@ -574,7 +574,7 @@ mod tests {
         let db_path = temp.path().join("data/agent_orchestrator.db");
         std::fs::create_dir_all(db_path.parent().expect("db path should have parent"))
             .expect("create data dir");
-        crate::db::init_schema(&db_path).expect("init schema");
+        crate::init_test_schema(&db_path).expect("init schema");
 
         let first = ensure_secret_key(temp.path(), &db_path).expect("create key");
         let second = ensure_secret_key(temp.path(), &db_path).expect("reuse key");
@@ -588,7 +588,7 @@ mod tests {
     fn encrypt_and_decrypt_secret_store_round_trip() {
         let temp = tempdir().expect("tempdir");
         let db_path = temp.path().join("agent_orchestrator.db");
-        crate::db::init_schema(&db_path).expect("init schema");
+        crate::init_test_schema(&db_path).expect("init schema");
         let key = ensure_secret_key(temp.path(), &db_path).expect("create key");
         let encryption = SecretEncryption::from_key(key);
         let spec = serde_json::json!({"data": {"API_KEY": "sk-123"}});
@@ -609,14 +609,14 @@ mod tests {
     fn ensure_secret_key_refuses_to_regenerate_when_encrypted_data_exists() {
         let temp = tempdir().expect("tempdir");
         let db_path = temp.path().join("agent_orchestrator.db");
-        crate::db::init_schema(&db_path).expect("init schema");
+        crate::init_test_schema(&db_path).expect("init schema");
         let key = ensure_secret_key(temp.path(), &db_path).expect("create key");
         let encryption = SecretEncryption::from_key(key);
         let spec = serde_json::json!({"data": {"API_KEY": "sk-123"}});
         let cipher = encryption
             .encrypt_secret_store_spec("default", "api-keys", &spec)
             .expect("encrypt");
-        let conn = crate::db::open_conn(&db_path).expect("open sqlite");
+        let conn = crate::open_conn(&db_path).expect("open sqlite");
         conn.execute(
             "INSERT INTO resources (kind, project, name, api_version, spec_json, metadata_json, generation, created_at, updated_at)
              VALUES ('SecretStore', 'default', 'api-keys', 'orchestrator.dev/v2', ?1, '{}', 1, datetime('now'), datetime('now'))",

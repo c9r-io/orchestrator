@@ -15,7 +15,10 @@ mod write_ops;
 mod tests;
 
 pub use command_run::NewCommandRun;
-pub use trait_def::TaskRepository;
+pub use trait_def::{
+    CommandRunRepository, EventRepository, TaskGraphRepository, TaskItemMutRepository,
+    TaskItemQueryRepository, TaskQueryRepository, TaskRepository, TaskStateRepository,
+};
 pub use types::{
     DbEventRecord, NewTaskGraphRun, NewTaskGraphSnapshot, TaskLogRunRow, TaskRepositoryConn,
     TaskRepositorySource, TaskRuntimeRow,
@@ -56,7 +59,9 @@ impl SqliteTaskRepository {
     }
 }
 
-impl TaskRepository for SqliteTaskRepository {
+// ── TaskQueryRepository ─────────────────────────────────────────────
+
+impl TaskQueryRepository for SqliteTaskRepository {
     fn resolve_task_id(&self, task_id_or_prefix: &str) -> Result<String> {
         let conn = self.connection()?;
         queries::resolve_task_id(&conn, task_id_or_prefix)
@@ -92,14 +97,23 @@ impl TaskRepository for SqliteTaskRepository {
         queries::load_task_runtime_row(&conn, task_id)
     }
 
+    fn load_task_status(&self, task_id: &str) -> Result<Option<String>> {
+        let conn = self.connection()?;
+        queries::load_task_status(&conn, task_id)
+    }
+
+    fn load_task_name(&self, task_id: &str) -> Result<Option<String>> {
+        let conn = self.connection()?;
+        queries::load_task_name(&conn, task_id)
+    }
+}
+
+// ── TaskItemQueryRepository ──���──────────────────────────────────────
+
+impl TaskItemQueryRepository for SqliteTaskRepository {
     fn first_task_item_id(&self, task_id: &str) -> Result<Option<String>> {
         let conn = self.connection()?;
         queries::first_task_item_id(&conn, task_id)
-    }
-
-    fn count_unresolved_items(&self, task_id: &str) -> Result<i64> {
-        let conn = self.connection()?;
-        queries::count_unresolved_items(&conn, task_id)
     }
 
     fn list_task_items_for_cycle(&self, task_id: &str) -> Result<Vec<crate::dto::TaskItemRow>> {
@@ -107,11 +121,30 @@ impl TaskRepository for SqliteTaskRepository {
         queries::list_task_items_for_cycle(&conn, task_id)
     }
 
-    fn load_task_status(&self, task_id: &str) -> Result<Option<String>> {
+    fn count_unresolved_items(&self, task_id: &str) -> Result<i64> {
         let conn = self.connection()?;
-        queries::load_task_status(&conn, task_id)
+        queries::count_unresolved_items(&conn, task_id)
     }
 
+    fn count_stale_pending_items(&self, task_id: &str) -> Result<i64> {
+        let conn = self.connection()?;
+        queries::count_stale_pending_items(&conn, task_id)
+    }
+
+    fn count_recent_heartbeats_for_items(
+        &self,
+        task_id: &str,
+        item_ids: &[String],
+        cutoff_ts: &str,
+    ) -> Result<i64> {
+        let conn = self.connection()?;
+        write_ops::count_recent_heartbeats_for_items(&conn, task_id, item_ids, cutoff_ts)
+    }
+}
+
+// ── TaskStateRepository ──────────────────────────────────��──────────
+
+impl TaskStateRepository for SqliteTaskRepository {
     fn set_task_status(&self, task_id: &str, status: &str, set_completed: bool) -> Result<()> {
         let conn = self.connection()?;
         state::set_task_status(&conn, task_id, status, set_completed)
@@ -132,6 +165,20 @@ impl TaskRepository for SqliteTaskRepository {
         state::update_task_cycle_state(&conn, task_id, current_cycle, init_done)
     }
 
+    fn update_task_pipeline_vars(&self, task_id: &str, pipeline_vars_json: &str) -> Result<()> {
+        let conn = self.connection()?;
+        write_ops::update_task_pipeline_vars(&conn, task_id, pipeline_vars_json)
+    }
+
+    fn delete_task_and_collect_log_paths(&self, task_id: &str) -> Result<Vec<String>> {
+        let conn = self.connection()?;
+        items::delete_task_and_collect_log_paths(&conn, task_id)
+    }
+}
+
+// ── TaskItemMutRepository ───────────────────────────────────────────
+
+impl TaskItemMutRepository for SqliteTaskRepository {
     fn mark_task_item_running(&self, task_item_id: &str) -> Result<()> {
         let conn = self.connection()?;
         items::mark_task_item_running(&conn, task_item_id)
@@ -156,52 +203,28 @@ impl TaskRepository for SqliteTaskRepository {
         items::update_task_item_pipeline_vars(&conn, task_item_id, pipeline_vars_json)
     }
 
-    fn load_task_name(&self, task_id: &str) -> Result<Option<String>> {
-        let conn = self.connection()?;
-        queries::load_task_name(&conn, task_id)
-    }
-
-    fn list_task_log_runs(&self, task_id: &str, limit: usize) -> Result<Vec<TaskLogRunRow>> {
-        let conn = self.connection()?;
-        queries::list_task_log_runs(&conn, task_id, limit)
-    }
-
-    fn insert_task_graph_run(&self, run: &NewTaskGraphRun) -> Result<()> {
-        let conn = self.connection()?;
-        queries::insert_task_graph_run(&conn, run)
-    }
-
-    fn update_task_graph_run_status(&self, graph_run_id: &str, status: &str) -> Result<()> {
-        let conn = self.connection()?;
-        queries::update_task_graph_run_status(&conn, graph_run_id, status)
-    }
-
-    fn insert_task_graph_snapshot(&self, snapshot: &NewTaskGraphSnapshot) -> Result<()> {
-        let conn = self.connection()?;
-        queries::insert_task_graph_snapshot(&conn, snapshot)
-    }
-
-    fn load_task_graph_debug_bundles(
+    fn update_task_item_tickets(
         &self,
-        task_id: &str,
-    ) -> Result<Vec<crate::dto::TaskGraphDebugBundle>> {
+        task_item_id: &str,
+        ticket_files_json: &str,
+        ticket_content_json: &str,
+    ) -> Result<()> {
         let conn = self.connection()?;
-        queries::load_task_graph_debug_bundles(&conn, task_id)
+        write_ops::update_task_item_tickets(
+            &conn,
+            task_item_id,
+            ticket_files_json,
+            ticket_content_json,
+        )
     }
+}
 
-    fn delete_task_and_collect_log_paths(&self, task_id: &str) -> Result<Vec<String>> {
-        let conn = self.connection()?;
-        items::delete_task_and_collect_log_paths(&conn, task_id)
-    }
+// ─�� CommandRunRepository ────────────────────────────────────────────
 
+impl CommandRunRepository for SqliteTaskRepository {
     fn insert_command_run(&self, run: &NewCommandRun) -> Result<()> {
         let conn = self.connection()?;
         items::insert_command_run(&conn, run)
-    }
-
-    fn insert_event(&self, event: &DbEventRecord) -> Result<()> {
-        let conn = self.connection()?;
-        write_ops::insert_event(&conn, event)
     }
 
     fn update_command_run(&self, run: &NewCommandRun) -> Result<()> {
@@ -232,6 +255,11 @@ impl TaskRepository for SqliteTaskRepository {
         write_ops::update_command_run_pid(&conn, run_id, pid)
     }
 
+    fn list_task_log_runs(&self, task_id: &str, limit: usize) -> Result<Vec<TaskLogRunRow>> {
+        let conn = self.connection()?;
+        queries::list_task_log_runs(&conn, task_id, limit)
+    }
+
     fn find_active_child_pids(&self, task_id: &str) -> Result<Vec<i64>> {
         let conn = self.connection()?;
         write_ops::find_active_child_pids(&conn, task_id)
@@ -249,40 +277,41 @@ impl TaskRepository for SqliteTaskRepository {
         let conn = self.connection()?;
         write_ops::find_completed_runs_for_pending_items(&conn, task_id)
     }
+}
 
-    fn count_stale_pending_items(&self, task_id: &str) -> Result<i64> {
+// ── EventRepository ─────────────────────────────────────��───────────
+
+impl EventRepository for SqliteTaskRepository {
+    fn insert_event(&self, event: &DbEventRecord) -> Result<()> {
         let conn = self.connection()?;
-        queries::count_stale_pending_items(&conn, task_id)
+        write_ops::insert_event(&conn, event)
+    }
+}
+
+// ── TaskGraphRepository ─────��───────────────────────────────────────
+
+impl TaskGraphRepository for SqliteTaskRepository {
+    fn insert_task_graph_run(&self, run: &NewTaskGraphRun) -> Result<()> {
+        let conn = self.connection()?;
+        queries::insert_task_graph_run(&conn, run)
     }
 
-    fn count_recent_heartbeats_for_items(
+    fn update_task_graph_run_status(&self, graph_run_id: &str, status: &str) -> Result<()> {
+        let conn = self.connection()?;
+        queries::update_task_graph_run_status(&conn, graph_run_id, status)
+    }
+
+    fn insert_task_graph_snapshot(&self, snapshot: &NewTaskGraphSnapshot) -> Result<()> {
+        let conn = self.connection()?;
+        queries::insert_task_graph_snapshot(&conn, snapshot)
+    }
+
+    fn load_task_graph_debug_bundles(
         &self,
         task_id: &str,
-        item_ids: &[String],
-        cutoff_ts: &str,
-    ) -> Result<i64> {
+    ) -> Result<Vec<crate::dto::TaskGraphDebugBundle>> {
         let conn = self.connection()?;
-        write_ops::count_recent_heartbeats_for_items(&conn, task_id, item_ids, cutoff_ts)
-    }
-
-    fn update_task_pipeline_vars(&self, task_id: &str, pipeline_vars_json: &str) -> Result<()> {
-        let conn = self.connection()?;
-        write_ops::update_task_pipeline_vars(&conn, task_id, pipeline_vars_json)
-    }
-
-    fn update_task_item_tickets(
-        &self,
-        task_item_id: &str,
-        ticket_files_json: &str,
-        ticket_content_json: &str,
-    ) -> Result<()> {
-        let conn = self.connection()?;
-        write_ops::update_task_item_tickets(
-            &conn,
-            task_item_id,
-            ticket_files_json,
-            ticket_content_json,
-        )
+        queries::load_task_graph_debug_bundles(&conn, task_id)
     }
 }
 

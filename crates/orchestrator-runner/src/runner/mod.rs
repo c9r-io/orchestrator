@@ -24,7 +24,7 @@ pub use spawn::{
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{
+    use orchestrator_config::config::{
         ExecutionNetworkMode, ExecutionProfileMode, RunnerConfig, RunnerExecutorKind, RunnerPolicy,
     };
     use std::fs::File;

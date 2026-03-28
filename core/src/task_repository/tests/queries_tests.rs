@@ -1,5 +1,7 @@
 use super::super::SqliteTaskRepository;
-use super::super::trait_def::TaskRepository;
+use super::super::trait_def::{
+    CommandRunRepository, TaskGraphRepository, TaskItemQueryRepository, TaskQueryRepository,
+};
 use super::super::types::{NewTaskGraphRun, NewTaskGraphSnapshot, TaskRepositorySource};
 use super::fixtures::seed_task;
 use crate::db::open_conn;

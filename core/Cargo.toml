@@ -11,8 +11,11 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+orchestrator-collab = { path = "../crates/orchestrator-collab", version = "0.2.2" }
 orchestrator-config = { path = "../crates/orchestrator-config", version = "0.2.2" }
+orchestrator-security = { path = "../crates/orchestrator-security", version = "0.2.2" }
 orchestrator-proto = { path = "../crates/proto", version = "0.2.2" }
+orchestrator-runner = { path = "../crates/orchestrator-runner", version = "0.2.2" }
 anyhow = "1.0"
 arc-swap = "1.9"
 aes-gcm-siv = "0.11"

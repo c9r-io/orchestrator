@@ -31,10 +31,10 @@ pub struct AgentOutput {
     pub created_at: DateTime<Utc>,
     /// Structured build errors (populated for build/lint phases)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub build_errors: Vec<crate::config::BuildError>,
+    pub build_errors: Vec<orchestrator_config::config::BuildError>,
     /// Structured test failures (populated for test phases)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub test_failures: Vec<crate::config::TestFailure>,
+    pub test_failures: Vec<orchestrator_config::config::TestFailure>,
 }
 
 impl AgentOutput {
@@ -110,7 +110,7 @@ pub struct ExecutionMetrics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::collab::{ArtifactKind, ExecutionMetrics};
+    use crate::{ArtifactKind, ExecutionMetrics};
 
     #[test]
     fn test_agent_output_creation() {

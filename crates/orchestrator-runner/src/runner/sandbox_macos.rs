@@ -1,7 +1,7 @@
 #[cfg(target_os = "macos")]
 use super::profile::ResolvedExecutionProfile;
 #[cfg(target_os = "macos")]
-use crate::config::{ExecutionFsMode, ExecutionNetworkMode};
+use orchestrator_config::config::{ExecutionFsMode, ExecutionNetworkMode};
 #[cfg(target_os = "macos")]
 use std::path::Path;
 
