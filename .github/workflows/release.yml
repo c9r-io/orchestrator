@@ -173,9 +173,9 @@ jobs:
             crates/cli \
             crates/daemon; do
             echo "::group::Publishing ${crate}"
-            cargo publish --manifest-path "${crate}/Cargo.toml" || {
+            cargo publish --manifest-path "${crate}/Cargo.toml" 2>&1 | tee /tmp/publish.log || {
               # Tolerate "already exists" for idempotent retries
-              if cargo search "$(basename "$crate")" 2>/dev/null | grep -q "$(grep '^version' "${crate}/Cargo.toml" | head -1 | tr -d ' "' | cut -d= -f2)"; then
+              if grep -q "already exists" /tmp/publish.log; then
                 echo "⚠ Already published — skipping"
               else
                 exit 1
