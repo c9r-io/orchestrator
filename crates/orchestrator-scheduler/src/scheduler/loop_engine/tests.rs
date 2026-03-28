@@ -1851,3 +1851,304 @@ async fn execute_cycle_graph_uses_deterministic_dag_fallback_graph_on_fail_close
         .expect("count failure events");
     assert_eq!(failed_events, 1);
 }
+
+// ── FR-087 / QA-106: wait_for_inflight_runs integration tests ────────────
+
+/// Seed an in-flight command_run row pointing at a real PID.
+/// Returns the generated run ID.
+fn seed_inflight_command_run(
+    conn: &rusqlite::Connection,
+    item_id: &str,
+    pid: i64,
+) -> String {
+    let run_id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "INSERT INTO command_runs (id, task_item_id, phase, command, cwd, workspace_id,
+             agent_id, project_id, exit_code, stdout_path, stderr_path, started_at, pid)
+         VALUES (?1, ?2, 'qa_testing', 'sleep 120', '.', 'default',
+                 'echo', 'default', -1, '/dev/null', '/dev/null', ?3, ?4)",
+        params![run_id, item_id, now, pid],
+    )
+    .expect("insert inflight command_run");
+    run_id
+}
+
+/// Query all events of a given type and return their `payload_json` strings.
+fn query_event_payloads(
+    conn: &rusqlite::Connection,
+    task_id: &str,
+    event_type: &str,
+) -> Vec<String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT payload_json FROM events
+             WHERE task_id = ?1 AND event_type = ?2
+             ORDER BY id",
+        )
+        .expect("prepare event query");
+    stmt.query_map(params![task_id, event_type], |row| row.get(0))
+        .expect("query events")
+        .collect::<Result<Vec<String>, _>>()
+        .expect("collect events")
+}
+
+/// Set up a TestState with a task and one item, returning (fixture, state, task_id, item_id).
+async fn seed_inflight_test() -> (
+    TestState,
+    std::sync::Arc<agent_orchestrator::state::InnerState>,
+    String,
+    String,
+) {
+    let mut fixture = TestState::new();
+    let state = fixture.build();
+    let qa_file = state
+        .data_dir
+        .join("workspace/default/docs/qa/inflight_test.md");
+    std::fs::write(&qa_file, "# inflight test\n").expect("seed qa file");
+    let created = create_task_impl(
+        &state,
+        CreateTaskPayload {
+            name: Some("inflight-test".to_string()),
+            goal: Some("test wait_for_inflight_runs".to_string()),
+            workflow_id: Some("basic".to_string()),
+            target_files: Some(vec!["docs/qa/inflight_test.md".to_string()]),
+            ..Default::default()
+        },
+    )
+    .expect("create inflight test task");
+
+    crate::scheduler::task_state::prepare_task_for_start(&state, &created.id)
+        .await
+        .expect("prepare task");
+    set_task_status(&state, &created.id, "running", false)
+        .await
+        .expect("mark task running");
+
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let item_id: String = conn
+        .query_row(
+            "SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1",
+            params![created.id],
+            |row| row.get(0),
+        )
+        .expect("task item exists");
+
+    (fixture, state, created.id, item_id)
+}
+
+/// QA-106 S1: Heartbeat resets timeout timer.
+///
+/// With timeout=5s and grace=4s, continuously emitted heartbeats prevent
+/// timeout. After heartbeats stop and the spawned process is killed, the
+/// function returns via the PID-death check — no timeout event.
+#[tokio::test]
+async fn inflight_wait_heartbeat_resets_timeout() {
+    use agent_orchestrator::config::SafetyConfig;
+    use agent_orchestrator::events::insert_event;
+
+    let (_fixture, state, task_id, item_id) = seed_inflight_test().await;
+
+    // Spawn a real child process so PID liveness checks succeed.
+    let mut child = std::process::Command::new("sleep")
+        .arg("120")
+        .spawn()
+        .expect("spawn sleep");
+    let pid = child.id() as i64;
+
+    // Seed inflight command_run in DB.
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    seed_inflight_command_run(&conn, &item_id, pid);
+    drop(conn);
+
+    let safety = SafetyConfig {
+        inflight_wait_timeout_secs: 5,
+        inflight_heartbeat_grace_secs: 4,
+        ..SafetyConfig::default()
+    };
+
+    // Spawn a background task that emits heartbeats every 2s for ~8s,
+    // then kills the child process and reaps the zombie.
+    let hb_state = state.clone();
+    let hb_task_id = task_id.clone();
+    let hb_item_id = item_id.clone();
+    let hb_pid = pid;
+    let heartbeat_task = tokio::spawn(async move {
+        for _ in 0..4 {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            // Use async insert_event so the write is visible to the async reader.
+            let _ = insert_event(
+                &hb_state,
+                &hb_task_id,
+                Some(&hb_item_id),
+                "step_heartbeat",
+                serde_json::json!({}),
+            )
+            .await;
+        }
+        // Kill the process and reap the zombie so libc::kill(pid,0) returns ESRCH.
+        // SAFETY: SIGKILL to our own test child process; pid comes from Command::spawn().
+        unsafe {
+            libc::kill(hb_pid as i32, libc::SIGKILL);
+        }
+        let _ = child.wait();
+    });
+
+    // This should NOT timeout — heartbeats keep resetting the timer,
+    // then PID death causes clean exit.
+    super::wait_for_inflight_runs(&state, &task_id, &safety)
+        .await
+        .expect("wait_for_inflight_runs should succeed");
+
+    heartbeat_task.await.expect("heartbeat task should complete");
+
+    // Assert: no timeout event was emitted.
+    let conn = open_conn(&state.db_path).expect("open sqlite for assertions");
+    let timeout_events = query_event_payloads(&conn, &task_id, "inflight_wait_timeout");
+    assert!(
+        timeout_events.is_empty(),
+        "heartbeat should have prevented timeout, but got {} timeout events",
+        timeout_events.len()
+    );
+    // Assert: detected event was emitted.
+    let detected = query_event_payloads(&conn, &task_id, "inflight_runs_detected");
+    assert_eq!(detected.len(), 1, "should emit inflight_runs_detected once");
+}
+
+/// QA-106 S2: No heartbeat → normal timeout + reaping.
+///
+/// With timeout=4s and no heartbeat, the function times out, reaps the
+/// in-flight process (exit_code → -9), and emits diagnostic events.
+#[tokio::test]
+async fn inflight_wait_timeout_without_heartbeat() {
+    use agent_orchestrator::config::SafetyConfig;
+
+    let (_fixture, state, task_id, item_id) = seed_inflight_test().await;
+
+    let mut child = std::process::Command::new("sleep")
+        .arg("120")
+        .spawn()
+        .expect("spawn sleep");
+    let pid = child.id() as i64;
+
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let run_id = seed_inflight_command_run(&conn, &item_id, pid);
+    drop(conn);
+
+    let safety = SafetyConfig {
+        inflight_wait_timeout_secs: 4,
+        inflight_heartbeat_grace_secs: 2,
+        ..SafetyConfig::default()
+    };
+
+    super::wait_for_inflight_runs(&state, &task_id, &safety)
+        .await
+        .expect("wait_for_inflight_runs should succeed");
+
+    // Reap the zombie so the process is fully gone.
+    let _ = child.wait();
+
+    let conn = open_conn(&state.db_path).expect("open sqlite for assertions");
+
+    // Assert: timeout event emitted.
+    let timeout_events = query_event_payloads(&conn, &task_id, "inflight_wait_timeout");
+    assert_eq!(timeout_events.len(), 1, "should emit exactly one timeout event");
+
+    // Assert: reaped event emitted.
+    let reaped = query_event_payloads(&conn, &task_id, "inflight_runs_reaped");
+    assert_eq!(reaped.len(), 1, "should emit exactly one reaped event");
+
+    // Assert: command_run exit_code updated to -9 (killed).
+    let exit_code: i64 = conn
+        .query_row(
+            "SELECT exit_code FROM command_runs WHERE id = ?1",
+            params![run_id],
+            |row| row.get(0),
+        )
+        .expect("query exit_code");
+    assert_eq!(exit_code, -9, "reaped run should have exit_code = -9");
+
+    // Assert: process is dead (zombie reaped above).
+    // SAFETY: Signal 0 only checks process existence; pid from our own spawned child.
+    let alive = unsafe { libc::kill(pid as i32, 0) } == 0;
+    assert!(!alive, "sleep process should have been killed");
+}
+
+/// QA-106 S4: Enhanced diagnostic event payload.
+///
+/// Verifies that the `inflight_wait_timeout` event contains all required
+/// diagnostic fields: elapsed_secs, since_last_activity_secs, remaining_runs,
+/// remaining_items, pids, timeout_secs, grace_secs.
+#[tokio::test]
+async fn inflight_wait_timeout_diagnostic_fields() {
+    use agent_orchestrator::config::SafetyConfig;
+
+    let (_fixture, state, task_id, item_id) = seed_inflight_test().await;
+
+    let mut child = std::process::Command::new("sleep")
+        .arg("120")
+        .spawn()
+        .expect("spawn sleep");
+    let pid = child.id() as i64;
+
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    seed_inflight_command_run(&conn, &item_id, pid);
+    drop(conn);
+
+    let safety = SafetyConfig {
+        inflight_wait_timeout_secs: 4,
+        inflight_heartbeat_grace_secs: 2,
+        ..SafetyConfig::default()
+    };
+
+    super::wait_for_inflight_runs(&state, &task_id, &safety)
+        .await
+        .expect("wait_for_inflight_runs should succeed");
+
+    // Reap zombie.
+    let _ = child.wait();
+
+    let conn = open_conn(&state.db_path).expect("open sqlite for assertions");
+    let payloads = query_event_payloads(&conn, &task_id, "inflight_wait_timeout");
+    assert_eq!(payloads.len(), 1);
+
+    let payload: serde_json::Value =
+        serde_json::from_str(&payloads[0]).expect("parse timeout payload");
+
+    // All required diagnostic fields must be present.
+    assert!(
+        payload.get("elapsed_secs").is_some(),
+        "missing elapsed_secs"
+    );
+    assert!(
+        payload.get("since_last_activity_secs").is_some(),
+        "missing since_last_activity_secs"
+    );
+    assert!(
+        payload.get("remaining_runs").is_some(),
+        "missing remaining_runs"
+    );
+    assert!(
+        payload.get("remaining_items").is_some(),
+        "missing remaining_items"
+    );
+    assert!(payload.get("pids").is_some(), "missing pids");
+    assert!(
+        payload.get("timeout_secs").is_some(),
+        "missing timeout_secs"
+    );
+    assert!(payload.get("grace_secs").is_some(), "missing grace_secs");
+
+    // Verify semantic correctness.
+    assert_eq!(payload["timeout_secs"], 4);
+    assert_eq!(payload["grace_secs"], 2);
+    assert_eq!(payload["remaining_runs"], 1);
+    let items = payload["remaining_items"]
+        .as_array()
+        .expect("remaining_items should be array");
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].as_str().unwrap(), item_id);
+    let pids_arr = payload["pids"].as_array().expect("pids should be array");
+    assert_eq!(pids_arr.len(), 1);
+    assert_eq!(pids_arr[0].as_i64().unwrap(), pid);
+}

@@ -74,6 +74,8 @@ The fixture provides:
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | S3/S5 verified via unit test + apply | ☑ | S1/S2/S4 require long-running agents that outlive step execution; echo/mock agents exit immediately so `exit_code != -1` by the time `wait_for_inflight_runs()` runs. Detection logic works (inflight_runs_detected emitted). Fixture redesign needed for timeout-path scenarios. |
-| 2 | S3: Serde defaults — unit tests pass | ☑ | `test_safety_config_default` (300s/60s), `test_safety_config_deserialize_minimal` (300s/60s), `test_fr052_fields_serde_round_trip`, `test_fr052_fields_explicit_json_deserialization` all PASS |
-| 3 | S5: Backward compat — apply fixture + run task | ☑ | YAML deserialization works (old YAML → defaults 300s/60s). The previous `task_failed` issue was caused by the stall sweep bug (fixed in 97861f4) resetting items while workers were active. Use fixture `qa106-long-running-agent.yaml` workflow `qa106-backward-compat`. |
+| 1 | S1: Heartbeat resets timeout | ☑ | Integration test `inflight_wait_heartbeat_resets_timeout` — spawns real child process, emits async heartbeats every 2s, verifies no `inflight_wait_timeout` event; function exits via PID-death check. |
+| 2 | S2: No heartbeat → normal timeout | ☑ | Integration test `inflight_wait_timeout_without_heartbeat` — no heartbeats, timeout fires at ~4s, `reap_inflight_runs` kills process, `exit_code` → -9. |
+| 3 | S3: Serde defaults — unit tests pass | ☑ | `test_safety_config_default` (300s/60s), `test_safety_config_deserialize_minimal` (300s/60s), `test_fr052_fields_serde_round_trip`, `test_fr052_fields_explicit_json_deserialization` all PASS |
+| 4 | S4: Enhanced diagnostic event payload | ☑ | Integration test `inflight_wait_timeout_diagnostic_fields` — verifies `inflight_wait_timeout` event contains `elapsed_secs`, `since_last_activity_secs`, `remaining_runs`, `remaining_items`, `pids`, `timeout_secs`, `grace_secs` with correct values. |
+| 5 | S5: Backward compat — apply fixture + run task | ☑ | YAML deserialization works (old YAML → defaults 300s/60s). The previous `task_failed` issue was caused by the stall sweep bug (fixed in 97861f4) resetting items while workers were active. Use fixture `qa106-long-running-agent.yaml` workflow `qa106-backward-compat`. |
