@@ -728,7 +728,6 @@ mod tests {
 
     #[tokio::test]
     async fn stream_task_logs_impl_redacts_secret_store_values() {
-        use agent_orchestrator::config::EnvStoreConfig;
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
         let item_id = first_item_id(&state, &task_id);

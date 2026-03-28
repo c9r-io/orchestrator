@@ -4,6 +4,7 @@
 //! for encrypting/decrypting SecretStore values, managing key rotation, emitting
 //! audit events, and creating files/directories with safe permissions.
 
+#![cfg_attr(not(test), deny(clippy::panic, clippy::unwrap_used, clippy::expect_used))]
 #![deny(missing_docs)]
 
 /// SecretStore key audit event types and database helpers.

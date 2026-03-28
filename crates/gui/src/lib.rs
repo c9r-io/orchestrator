@@ -1,3 +1,5 @@
+#![cfg_attr(not(test), deny(clippy::panic, clippy::unwrap_used, clippy::expect_used))]
+
 pub mod client;
 pub mod commands;
 pub mod errors;
@@ -8,6 +10,7 @@ use std::sync::Arc;
 use state::AppState;
 
 /// Build and configure the Tauri application.
+#[allow(clippy::expect_used)] // Tauri event loop failure is unrecoverable
 pub fn run() {
     let app_state = Arc::new(AppState::new());
 

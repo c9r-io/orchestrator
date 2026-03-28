@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented
+Implemented (extended to full workspace coverage)
 
 ## Context
 
@@ -29,6 +29,14 @@ Use `deny`-level crate-root lint attributes gated by `cfg(not(test))` to prevent
 | `core/src/lib.rs:15-18` | `#![cfg_attr(not(test), deny(clippy::panic, clippy::unwrap_used, clippy::expect_used))]` |
 | `crates/cli/src/main.rs:4-7` | Same deny attribute |
 | `crates/daemon/src/main.rs:4-7` | Same deny attribute |
+| `crates/orchestrator-config/src/lib.rs` | Same deny attribute (with `test-harness` feature gate) |
+| `crates/orchestrator-scheduler/src/lib.rs` | Same deny attribute (with `test-harness` feature gate) |
+| `crates/orchestrator-runner/src/lib.rs` | Same deny attribute |
+| `crates/orchestrator-security/src/lib.rs` | Same deny attribute |
+| `crates/orchestrator-collab/src/lib.rs` | Same deny attribute |
+| `crates/orchestrator-client/src/lib.rs` | Same deny attribute |
+| `crates/proto/src/lib.rs` | Same deny attribute |
+| `crates/gui/src/lib.rs` | Same deny attribute (with `#[allow]` on Tauri `run()`) |
 
 ## Audit Summary
 
