@@ -56,8 +56,8 @@ Ensure that explicitly setting `policy: unsafe` is accepted, serialized correctl
 
 6. **Unit test** — verify runner policy enforcement allows valid commands:
    ```bash
-   cargo test -p agent-orchestrator --lib test_enforce_runner_policy_allows_valid_command
-   cargo test -p agent-orchestrator --lib test_enforce_runner_policy_allows_newline_in_command
+   cargo test -p orchestrator-runner --lib test_enforce_runner_policy_allows_valid_command
+   cargo test -p orchestrator-runner --lib test_enforce_runner_policy_allows_newline_in_command
    ```
 
 ### Expected
@@ -66,7 +66,7 @@ Ensure that explicitly setting `policy: unsafe` is accepted, serialized correctl
 - Runtime policy dispatches correctly for unsafe kind
 - Unsafe runner spec has no shell/arg allowlist enforcement
 - Runner config round-trips with correct defaults
-- Valid commands pass enforcement; newlines are allowed
+- Valid commands pass enforcement; newlines are allowed (⚠️ tests missing — ticket qa131)
 
 ---
 
@@ -111,5 +111,5 @@ Ensure that `policy: legacy` in YAML manifests is accepted as a backward-compati
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Explicit Unsafe Mode Remains Functional | ✔ PASS | 2026-03-28 | Claude | All 6 unit tests passed |
+| 1 | Explicit Unsafe Mode Remains Functional | ⚠ PARTIAL | 2026-03-28 | Claude | 4/6 unit tests passed; steps 6a & 6b tests missing — see ticket qa131 |
 | 2 | Legacy Alias Backward Compatibility | ✔ PASS | 2026-03-28 | Claude | All 3 unit tests + code review passed |

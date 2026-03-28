@@ -171,6 +171,6 @@ Entry point: `orchestrator <command>`
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
 | 1 | init 后默认配置已存在 | PASS | 2026-03-28 | Claude | Code review + unit test (normalize_config_populates_builtin_crds, reconcile_all_builtins_does_not_panic) |
-| 2 | init + apply 叠加资源 | PASS | 2026-03-28 | Claude | Code review + unit test (apply_result_*, apply_to_project_*, sync_config_snapshot) |
+| 2 | init + apply 叠加资源 | PASS | 2026-03-28 | Claude | Code review + unit test (apply_result_created_when_missing, apply_result_configured_when_resource_changes, apply_result_unchanged_for_identical_resource, sync_config_snapshot_to_store_populates_resource_store) |
 | 3 | apply 非法 Manifest 失败 | PASS | 2026-03-28 | Claude | Code review + unit test (build_rejects_wrong_kind, resource_dispatch_rejects_mismatched_spec_kind, validate_resource_name_rejects_empty) |
-| 4 | apply 语法损坏文件失败 | PASS | 2026-03-28 | Claude | Code review + unit test (parse_resources_from_yaml_*, build_rejects_*) |
+| 4 | apply 语法损坏文件失败 | PASS | 2026-03-28 | Claude | Code review + unit test (parse_resources_from_yaml_multi_document, parse_resources_from_yaml_single_document, parse_resources_from_yaml_skips_null_documents) |

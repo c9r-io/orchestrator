@@ -143,3 +143,7 @@ Entry point: `orchestrator edit <command>` (subcommands: `export`, `open`; bare 
 | 2 | Edit Export Agent | N/A | 2026-03-28 | claude | `edit` subcommand not implemented — verified 2026-03-28 |
 | 3 | Edit Export Workflow | N/A | 2026-03-28 | claude | `edit` subcommand not implemented — verified 2026-03-28 |
 | 4 | Edit Open | N/A | 2026-03-28 | claude | `edit` subcommand not implemented — verified 2026-03-28 |
+
+## Execution Log
+
+- 2026-03-28: Verified `orchestrator edit export workspace/default` → `error: unrecognized subcommand 'edit'` — command not implemented per document status. All 4 scenarios are N/A.

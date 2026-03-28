@@ -8,6 +8,8 @@ self_referential_safe: true
 
 FR-080
 
+> **Known Limitation (S2/S3):** The running daemon does not hot-reload newly applied triggers. S2 and S3 require a daemon restart after `orchestrator apply` to pick up new webhook triggers. See FR-084 for the planned fix.
+
 ## Prerequisites
 
 Daemon must already be running (webhook server enabled by default on `127.0.0.1:19090`).
@@ -83,12 +85,12 @@ Daemon must already be running (webhook server enabled by default on `127.0.0.1:
 
 ## Checklist
 
-- [ ] S1: Webhook health endpoint
-- [ ] S2: Webhook fires a trigger
-- [ ] S3: Webhook with project scope
-- [ ] S4: HMAC signature verification
-- [ ] S5: Missing signature rejected
-- [ ] S6: Webhook disabled via --webhook-bind none
-- [ ] S7: Custom bind address override
-- [ ] S8: Webhook source accepted in manifest
-- [ ] S9: Compilation and tests
+- [x] S1: Webhook health endpoint — **PASS** (returns "ok")
+- [ ] S2: Webhook fires a trigger — **FAIL** (ticket: `docs/ticket/128-s2-s3-daemon-config-stale.md`; daemon config stale, trigger not found)
+- [ ] S3: Webhook with project scope — **FAIL** (same as S2)
+- [x] S4: HMAC signature verification — **PASS** (invalid signature rejected)
+- [x] S5: Missing signature rejected — **PASS** (missing signature rejected)
+- [x] S6: Webhook disabled via --webhook-bind none — **PASS** (help text correct)
+- [x] S7: Custom bind address override — **PASS** (help text correct)
+- [x] S8: Webhook source accepted in manifest — **PASS** (manifest validated successfully)
+- [ ] S9: Compilation and tests — **SKIPPED** (unsafe in self-referential mode)

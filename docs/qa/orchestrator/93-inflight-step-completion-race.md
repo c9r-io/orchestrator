@@ -93,7 +93,7 @@ Post-loop 判定使用 `effective_unresolved = unresolved + stale_pending`，确
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
 | 1 | S1: Unit tests pass | ✅ PASS | 9 tests pass: find_inflight (3), completed_runs_for_pending (2), stale_pending (3), find_completed_runs_excludes (1) |
-| 2 | S2: Full test suite | ✅ PASS | 1435 unit + 23 integration + 1 doc test pass |
-| 3 | S3: wait_for_inflight_runs code review | SKIP | `wait_for_inflight_runs()` loop engine integration not yet implemented (DB layer exists) |
-| 4 | S4: compensate_pending_items code review | SKIP | `compensate_pending_items()` loop engine wiring not yet implemented (DB layer exists) |
-| 5 | S5: effective_unresolved code review | SKIP | `effective_unresolved` post-loop wiring not yet implemented (`count_stale_pending_items()` DB query exists) |
+| 2 | S2: Full test suite | ✅ PASS | 1341 unit + 24 integration + 1 doc test pass |
+| 3 | S3: wait_for_inflight_runs code review | ✅ PASS | Line 703-705: returns immediately if inflight.is_empty(), post-loop call at line 317 |
+| 4 | S4: compensate_pending_items code review | ✅ PASS | Lines 867+: CompletedRunRecord provides phase/exit_code/confidence/quality_score; accumulator correctly populated; finalize_item_execution called |
+| 5 | S5: effective_unresolved code review | ✅ PASS | Lines 332-334: `effective_unresolved = unresolved + stale_pending` post-loop calculation correct |

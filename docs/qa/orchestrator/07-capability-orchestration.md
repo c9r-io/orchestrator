@@ -240,8 +240,8 @@ capability-aware strategies when choosing between agents.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Capability Isolation | PASS | 2026-03-28 | Claude | All 2 tests pass — verified fresh run |
-| 2 | Multi-Agent Same Capability | PASS | 2026-03-28 | Claude | All 3 tests pass — verified fresh run |
-| 3 | Repeatable Step Execution | PASS | 2026-03-28 | Claude | All 3 tests pass in orchestrator-scheduler — verified fresh run |
-| 4 | Guard Step Termination | PASS | 2026-03-28 | Claude | All 3 tests pass — verified fresh run |
-| 5 | Performance Selection | PASS | 2026-03-28 | Claude | All 3 tests pass — verified fresh run |
+| 1 | Capability Isolation | PASS | 2026-03-28 | Claude | All 2 tests pass — fresh run verified |
+| 2 | Multi-Agent Same Capability | PASS | 2026-03-28 | Claude | All 3 tests pass — fresh run verified |
+| 3 | Repeatable Step Execution | PASS | 2026-03-28 | Claude | All 3 tests pass in orchestrator-scheduler — fresh run verified |
+| 4 | Guard Step Termination | PASS | 2026-03-28 | Claude | All 3 tests pass — fresh run verified |
+| 5 | Performance Selection | PASS | 2026-03-28 | Claude | All 3 tests pass — fresh run verified |

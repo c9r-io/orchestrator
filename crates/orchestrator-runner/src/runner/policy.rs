@@ -1,5 +1,5 @@
-use orchestrator_config::config::{RunnerConfig, RunnerPolicy};
 use anyhow::{Result, anyhow};
+use orchestrator_config::config::{RunnerConfig, RunnerPolicy};
 use std::fmt;
 
 /// Enforces runner shell-policy allowlists before command execution.

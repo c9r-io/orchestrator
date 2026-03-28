@@ -38,8 +38,8 @@ pub fn resolve_agent_env(
             }
             // Form 2: import all keys from a store — fromRef
             (None, None, Some(store_name), None) => {
-                let data = lookup_store_data(store_name, env_stores, secret_stores)
-                    .ok_or_else(|| {
+                let data =
+                    lookup_store_data(store_name, env_stores, secret_stores).ok_or_else(|| {
                         anyhow!(
                             "agent env fromRef '{}' references unknown store",
                             store_name
@@ -51,15 +51,13 @@ pub fn resolve_agent_env(
             }
             // Form 3: single key from a store — name + refValue
             (Some(name), None, None, Some(ref_value)) => {
-                let data =
-                    lookup_store_data(&ref_value.name, env_stores, secret_stores).ok_or_else(
-                        || {
-                            anyhow!(
-                                "agent env refValue.name '{}' references unknown store",
-                                ref_value.name
-                            )
-                        },
-                    )?;
+                let data = lookup_store_data(&ref_value.name, env_stores, secret_stores)
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "agent env refValue.name '{}' references unknown store",
+                            ref_value.name
+                        )
+                    })?;
                 let value = data.get(&ref_value.key).ok_or_else(|| {
                     anyhow!(
                         "agent env refValue key '{}' not found in store '{}'",

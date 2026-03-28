@@ -59,8 +59,8 @@ rg "fs_watcher_reload_tx" core/src/trigger_engine.rs
 
 ## Checklist
 
-- [ ] Scenario 6: TriggerFilesystemSpec serde roundtrip
-- [ ] Scenario 7: Unit tests for filesystem validation
-- [ ] Scenario 8: FsWatcher config types exist
-- [ ] Scenario 9: FsWatcher module exists with lazy lifecycle
-- [ ] Scenario 10: Trigger engine notifies fs_watcher on reload
+- [x] Scenario 6: TriggerFilesystemSpec serde roundtrip
+- [x] Scenario 7: Unit tests for filesystem validation
+- [x] Scenario 8: FsWatcher config types exist
+- [x] Scenario 9: FsWatcher module exists with lazy lifecycle
+- [x] Scenario 10: Trigger engine notifies fs_watcher on reload

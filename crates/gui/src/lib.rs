@@ -1,4 +1,7 @@
-#![cfg_attr(not(test), deny(clippy::panic, clippy::unwrap_used, clippy::expect_used))]
+#![cfg_attr(
+    not(test),
+    deny(clippy::panic, clippy::unwrap_used, clippy::expect_used)
+)]
 
 pub mod client;
 pub mod commands;

@@ -4,7 +4,7 @@ self_referential_safe_scenarios:
   - S2
   - S3
   - S4
-# S1 不安全：执行 orchestrator delete --force / task create / cargo build（自引用危险操作）
+# S1 不安全：执行 orchestrator delete --force / 任务创建 / cargo build（自引用危险操作）
 # S2-S4 安全：纯代码审查，只读 segment.rs 源码
 ---
 

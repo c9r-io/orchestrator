@@ -67,11 +67,11 @@ FR-079
 
 ## Checklist
 
-- [ ] S1: db status shows sizes
-- [ ] S2: db status JSON includes size fields
-- [ ] S3: db vacuum
-- [ ] S4: db cleanup
-- [ ] S5: daemon auto log cleanup
-- [ ] S6: daemon auto task cleanup
-- [ ] S7: log-retention-days=0 disables cleanup
-- [ ] S8: compilation and tests
+- [x] S1: db status shows sizes — **FAIL** (no size fields in output)
+- [x] S2: db status JSON includes size fields — **FAIL** (no size bytes in JSON)
+- [x] S3: db vacuum — **FAIL** (subcommand not implemented)
+- [x] S4: db cleanup — **FAIL** (subcommand not implemented)
+- [x] S5: daemon auto log cleanup — **BLOCKED** (daemon already running, cannot restart with flags)
+- [x] S6: daemon auto task cleanup — **BLOCKED** (daemon already running, cannot restart with flags)
+- [x] S7: log-retention-days=0 disables cleanup — **BLOCKED** (daemon already running, cannot restart with flags)
+- [x] S8: compilation and tests — **FAIL** (doctest: pre-existing rlib path issue)

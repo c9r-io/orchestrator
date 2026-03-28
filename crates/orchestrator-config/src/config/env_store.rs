@@ -37,8 +37,7 @@ mod tests {
 
     #[test]
     fn secret_store_config_serde() {
-        let cfg: SecretStoreConfig =
-            serde_json::from_str(r#"{"data":{"SECRET":"val"}}"#).unwrap();
+        let cfg: SecretStoreConfig = serde_json::from_str(r#"{"data":{"SECRET":"val"}}"#).unwrap();
         assert_eq!(cfg.data.get("SECRET").unwrap(), "val");
     }
 

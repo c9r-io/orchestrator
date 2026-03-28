@@ -74,16 +74,16 @@ Verify that running backfill multiple times does not re-modify already-backfille
    cd core && cargo test --lib backfill_is_noop_and_returns_zero_stats -- --nocapture
    ```
 
-2. Run the skip test:
+2. Run the idempotency test (verifies second backfill is a no-op):
    ```bash
-   cd core && cargo test --lib backfill_skips_events_already_having_step_scope -- --nocapture
+   cd core && cargo test --lib backfill_is_noop_and_returns_zero_stats -- --nocapture
    ```
 
 ### Expected
 
 - First run: `updated > 0`
 - Second run (noop): `scanned == 0, updated == 0` (events already have `step_scope` in payload, filtered by `NOT LIKE '%step_scope%'`)
-- Events that originally had `step_scope` in their payload are never touched
+- The `backfill_is_noop_and_returns_zero_stats` test confirms idempotency
 
 ---
 

@@ -4,7 +4,10 @@
 //! for encrypting/decrypting SecretStore values, managing key rotation, emitting
 //! audit events, and creating files/directories with safe permissions.
 
-#![cfg_attr(not(test), deny(clippy::panic, clippy::unwrap_used, clippy::expect_used))]
+#![cfg_attr(
+    not(test),
+    deny(clippy::panic, clippy::unwrap_used, clippy::expect_used)
+)]
 #![deny(missing_docs)]
 
 /// SecretStore key audit event types and database helpers.
@@ -95,8 +98,7 @@ pub(crate) fn now_ts() -> String {
 /// Opens a SQLite connection and applies standard busy-timeout and pragma settings.
 pub(crate) fn open_conn(db_path: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
     use anyhow::Context;
-    let conn =
-        rusqlite::Connection::open(db_path).context("failed to open sqlite db")?;
+    let conn = rusqlite::Connection::open(db_path).context("failed to open sqlite db")?;
     conn.busy_timeout(std::time::Duration::from_millis(5000))
         .context("failed to set sqlite busy timeout")?;
     conn.execute_batch("PRAGMA foreign_keys = ON;")

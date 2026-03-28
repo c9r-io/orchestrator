@@ -1,8 +1,8 @@
 use super::profile::ResolvedExecutionProfile;
+use anyhow::Result;
 #[cfg(target_os = "linux")]
 use orchestrator_config::config::ExecutionFsMode;
 use orchestrator_config::config::{ExecutionNetworkMode, ExecutionProfileMode, RunnerConfig};
-use anyhow::Result;
 use std::io;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

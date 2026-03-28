@@ -85,7 +85,12 @@ pub fn build_trace_with_meta(
     // Events may be truncated by the SQL LIMIT cap in load_task_detail_rows.
     // When truncated, suppress orphan detection for items not in the loaded window.
     let events_truncated = events.len() >= EVENT_QUERY_LIMIT;
-    detect_orphan_commands(&sorted_events, command_runs, events_truncated, &mut anomalies);
+    detect_orphan_commands(
+        &sorted_events,
+        command_runs,
+        events_truncated,
+        &mut anomalies,
+    );
     detect_nonzero_exit(command_runs, &mut anomalies);
     detect_unexpanded_template_var(command_runs, &mut anomalies);
     detect_long_running_steps(&cycles, &mut anomalies);

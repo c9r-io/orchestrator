@@ -3,7 +3,10 @@
 //! Provides structured agent-to-agent communication, message bus,
 //! shared context, and DAG-based workflow execution.
 
-#![cfg_attr(not(test), deny(clippy::panic, clippy::unwrap_used, clippy::expect_used))]
+#![cfg_attr(
+    not(test),
+    deny(clippy::panic, clippy::unwrap_used, clippy::expect_used)
+)]
 #![deny(missing_docs)]
 
 /// Artifact models and shared-state helpers for multi-agent execution.

@@ -143,3 +143,11 @@ Code review + unit test verification.
 | 2 | 创建 Workspace (实际) | PASS | 2026-03-28 | Claude | 3/3 tests passed |
 | 3 | 创建完整的最小配置 | PASS | 2026-03-28 | Claude | 6/6 tests passed |
 | 4 | 资源存在时 apply (更新) | PASS | 2026-03-28 | Claude | 5/5 tests passed |
+
+**Test Run: 2026-03-28**
+- Scenario 1: `apply_result_created_when_missing`, `apply_to_store_returns_created_for_new_resource` — 2/2 PASS
+- Scenario 2: `apply_to_project_routes_workspace_to_project_scope`, `apply_to_store_returns_created_for_new_resource`, `apply_to_store_increments_generation` — 3/3 PASS
+- Scenario 3: `resource_dispatch_maps_workspace_manifest`, `resource_dispatch_rejects_mismatched_spec_kind`, `apply_to_project_routes_agent_to_project_scope`, `apply_to_project_routes_workflow_to_project_scope`, `validate_workflow_accepts_builtin_step_without_agent`, `validate_workflow_accepts_command_step_without_agent` — 6/6 PASS
+- Scenario 4: `apply_result_configured_when_resource_changes`, `apply_result_unchanged_for_identical_resource`, `apply_to_store_returns_configured_for_changed`, `apply_to_store_returns_unchanged_for_identical`, `apply_to_store_seeds_from_config_snapshot_for_correct_change_detection` — 5/5 PASS
+
+**Total: 16/16 tests passed, 0 failed**

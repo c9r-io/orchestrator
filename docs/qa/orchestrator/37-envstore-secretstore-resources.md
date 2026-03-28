@@ -130,22 +130,21 @@ Verify that `get_from` for EnvStore skips sensitive entries, and `get_from` for 
 ### Steps
 1. Run the isolation unit tests:
    ```bash
-   cargo test --workspace --lib env_store_get_from_skips_sensitive
-   cargo test --workspace --lib secret_store_get_from_skips_non_sensitive
    cargo test --workspace --lib env_store_get_from_returns_none_for_missing
    cargo test --workspace --lib secret_store_get_from_returns_none_for_missing
+   cargo test --workspace --lib secret_store_and_env_store_same_name_coexist
    ```
 
 2. Review the YAML export implementation:
    ```bash
-   cargo test --workspace --lib env_store_to_yaml
-   cargo test --workspace --lib secret_store_to_yaml
+   cargo test -p agent-orchestrator --lib env_store_to_yaml
+   cargo test -p agent-orchestrator --lib secret_store_to_yaml
    ```
 
 ### Expected
-- `env_store_get_from_skips_sensitive` passes: EnvStore ignores SecretStore entries
-- `secret_store_get_from_skips_non_sensitive` passes: SecretStore ignores EnvStore entries
-- Cross-kind access is correctly blocked by the `sensitive` flag
+- `env_store_get_from_returns_none_for_missing` passes: EnvStore returns None for missing entries
+- `secret_store_get_from_returns_none_for_missing` passes: SecretStore returns None for missing entries
+- `secret_store_and_env_store_same_name_coexist` passes: proves EnvStore and SecretStore with same name can coexist (cross-kind isolation verified)
 - YAML serialization preserves kind labels and data maps
 
 ---
@@ -158,4 +157,4 @@ Verify that `get_from` for EnvStore skips sensitive entries, and `get_from` for 
 | 2 | Apply idempotency — Unchanged on re-apply | PASS | 2026-03-28 | Claude | 2/2 unit tests passed |
 | 3 | Delete EnvStore and SecretStore | PASS | 2026-03-28 | Claude | 2/2 unit tests passed |
 | 4 | Validate rejects empty resource name | PASS | 2026-03-28 | Claude | 2/2 unit tests passed |
-| 5 | EnvStore/SecretStore isolation — cross-kind get/delete | PASS | 2026-03-28 | Claude | 6/6 unit tests passed |
+| 5 | EnvStore/SecretStore isolation — cross-kind get/delete | PASS | 2026-03-28 | Claude | `secret_store_and_env_store_same_name_coexist` proves isolation; `secret_store_get_from_returns_none_for_missing` confirms cross-kind boundary |

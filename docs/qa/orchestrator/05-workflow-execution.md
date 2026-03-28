@@ -289,3 +289,4 @@ one cycle.
 | 3 | qa_fix_retest Workflow | PASS | 2026-03-28 | Claude | `build_segments_groups_contiguous_scopes` (scheduler); 9 prehook decision tests + 5 retest finalize rule tests (agent-orchestrator) |
 | 4 | QA Failure and Ticket Creation | PASS | 2026-03-28 | Claude | 5 ticket + 2 health + 1 selection filter + 7 ticket status = 15 tests (agent-orchestrator) |
 | 5 | Loop Mode (max_cycles) | PASS | 2026-03-28 | Claude | `infinite_mode_respects_max_cycles`, `fixed_mode_stops_at_max_cycles`, `fixed_mode_defaults_to_one_cycle` (scheduler) |
+| 5 | Loop Mode (max_cycles) | PASS | 2026-03-28 | Claude | Re-confirmed: 3/3 loop mode tests |

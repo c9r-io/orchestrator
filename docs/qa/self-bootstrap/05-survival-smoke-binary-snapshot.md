@@ -153,8 +153,10 @@ Verify that content integrity is maintained through a full snapshot/restore cycl
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | snapshot_binary Creates Stable Copy | ✅ PASS | 2026-03-21 | QA-122 | Covered by `test_snapshot_binary_success` — 44 safety tests pass |
-| 2 | snapshot_binary Errors When Binary Missing | ✅ PASS | 2026-03-21 | QA-122 | Covered by `test_snapshot_binary_missing_release` |
-| 3 | restore_binary_snapshot Restores Binary | ✅ PASS | 2026-03-21 | QA-122 | Covered by `test_restore_binary_snapshot_success` |
-| 4 | restore_binary_snapshot Errors When Stable Missing | ✅ PASS | 2026-03-21 | QA-122 | Covered by `test_restore_binary_snapshot_missing_stable` |
-| 5 | Snapshot/Restore Cycle Preserves Content | ✅ PASS | 2026-03-21 | QA-122 | Covered by `test_snapshot_restore_content_integrity` |
+| 1 | snapshot_binary Creates Stable Copy | ✅ PASS | 2026-03-28 | QA-auto | Verified: `cargo test safety::tests::test_snapshot_binary_success` — ok |
+| 2 | snapshot_binary Errors When Binary Missing | ✅ PASS | 2026-03-28 | QA-auto | Verified: `cargo test safety::tests::test_snapshot_binary_missing_release` — ok |
+| 3 | restore_binary_snapshot Restores Binary | ✅ PASS | 2026-03-28 | QA-auto | Verified: `cargo test safety::tests::test_restore_binary_snapshot_success` — ok |
+| 4 | restore_binary_snapshot Errors When Stable Missing | ✅ PASS | 2026-03-28 | QA-auto | Verified: `cargo test safety::tests::test_restore_binary_snapshot_missing_stable` — ok |
+| 5 | Snapshot/Restore Cycle Preserves Content | ✅ PASS | 2026-03-28 | QA-auto | Verified: `cargo test safety::tests::test_snapshot_restore_content_integrity` — ok |
+
+**Full safety suite**: 44 tests, all passing (9.81s)

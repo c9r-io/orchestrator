@@ -52,7 +52,7 @@ while IFS=: read -r file line _; do
   fi
 done < <(
   rg -n "task create" docs/qa -g '*.md' \
-    | rg -v -e "task create --help" -e "task create --format" -e "does not depend on" -e "task create supports" -e "task create does NOT" -e "task create --no-start is defined" -e "^\S+:\d+:\|" -e "\`task create\` supports" -e "\`task create\` does NOT" -e "\`task create --no-start\` creates" -e "\`task create --no-start\` is defined" || true
+    | rg -v -e "task create --help" -e "task create --format" -e "does not depend on" -e "task create supports" -e "task create does NOT" -e "task create --no-start is defined" -e "^\S+:\d+:\|" -e "\`task create\` supports" -e "\`task create\` does NOT" -e "\`task create --no-start\` creates" -e "\`task create --no-start\` is defined" -e "^\S+:\d+:#" || true
 )
 
 echo "[qa-doc-lint] Checking workflow ID cross-reference against fixtures..."

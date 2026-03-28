@@ -23,4 +23,4 @@ done
 
 ## Checklist
 
-- [ ] Scenario 11: Progressive complexity — resource count increases
+- [x] Scenario 11: Progressive complexity — resource count increases

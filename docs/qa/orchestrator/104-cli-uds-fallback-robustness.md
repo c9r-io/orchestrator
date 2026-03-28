@@ -33,7 +33,7 @@ self_referential_safe: true
      ```
   2. 运行 unit test 验证显式配置优先:
      ```bash
-     cargo test -p orchestrator-cli --lib -- discover_control_plane_config_prefers_explicit_path --nocapture
+     cargo test -p orchestrator-client -- discover_control_plane_config_prefers_explicit_path --nocapture
      ```
 - **预期**: unit test 通过, code review 确认显式 `--control-plane-config` 在优先级链中排第一
 
@@ -51,7 +51,7 @@ self_referential_safe: true
      ```
   2. 运行 unit test 验证 socket → home-dir 回退:
      ```bash
-     cargo test -p orchestrator-cli --lib -- local_socket_probe_precedes_home_config --nocapture
+     cargo test -p orchestrator-client -- local_socket_probe_precedes_home_config_in_connect_priority --nocapture
      ```
 - **预期**: unit test 通过, code review 确认 socket 探测失败后回退到 `~/.orchestrator/control-plane/config.yaml`
 
@@ -64,7 +64,7 @@ self_referential_safe: true
      ```
   2. 运行 unit test 验证 env 变量优先级:
      ```bash
-     cargo test -p orchestrator-cli --lib -- connect_prefers_socket_when_env_is_present --nocapture
+     cargo test -p orchestrator-client -- connect_prefers_socket_when_env_is_present_and_no_explicit_config --nocapture
      ```
 - **预期**: code review 确认无配置时输出包含 `orchestratord --foreground --workers 2` 提示; unit test 通过
 

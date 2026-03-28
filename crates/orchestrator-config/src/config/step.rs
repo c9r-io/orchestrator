@@ -415,10 +415,7 @@ json_path: $.total_score
 
     #[test]
     fn test_unknown_step_scope_defaults_to_task() {
-        assert_eq!(
-            default_scope_for_step_id("my_custom_step"),
-            StepScope::Task
-        );
+        assert_eq!(default_scope_for_step_id("my_custom_step"), StepScope::Task);
     }
 
     #[test]

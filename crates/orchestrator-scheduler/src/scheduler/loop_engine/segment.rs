@@ -819,8 +819,12 @@ async fn flush_pending_generate_items(
                         Ok(all_items) => {
                             // Filter out terminal items (preserved from prior run).
                             const TERMINAL_STATUSES: &[&str] = &[
-                                "qa_passed", "skipped", "fixed", "verified",
-                                "eliminated", "replaced",
+                                "qa_passed",
+                                "skipped",
+                                "fixed",
+                                "verified",
+                                "eliminated",
+                                "replaced",
                             ];
                             let all_items: Vec<_> = all_items
                                 .into_iter()

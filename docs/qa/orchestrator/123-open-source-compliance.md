@@ -19,9 +19,9 @@ FR-071
 **Steps:**
 1. `grep -r 'license = "MIT"' --include='Cargo.toml' --exclude-dir=target | wc -l`
 
-**Expected:** 9 (all workspace members — excludes `target/` build artifacts).
+**Expected:** 12 (all workspace members — excludes `target/` build artifacts).
 
-> **Note:** The workspace currently has 9 crates. If crates are added or removed, update this count accordingly.
+> **Note:** The workspace currently has 12 crates. If crates are added or removed, update this count accordingly.
 
 ### Scenario 3: CHANGELOG format
 
