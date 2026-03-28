@@ -768,24 +768,33 @@ fn plan_prune_for_project(
                 project_id,
                 &mut deletions,
             ),
-            "EnvStore" | "SecretStore" => {
-                let expected_sensitivity = *kind == "SecretStore";
+            "EnvStore" => {
                 let existing_names: Vec<String> = previous_project
                     .env_stores
-                    .iter()
-                    .filter_map(|(name, store)| {
-                        if store.sensitive == expected_sensitivity && !declared_names.contains(name)
-                        {
-                            Some(name.clone())
-                        } else {
-                            None
-                        }
-                    })
+                    .keys()
+                    .filter(|name| !declared_names.contains(*name))
+                    .cloned()
                     .collect();
                 for name in existing_names {
                     candidate_project.env_stores.remove(&name);
                     deletions.push(ResourceRemoval {
-                        kind: (*kind).to_string(),
+                        kind: "EnvStore".to_string(),
+                        project_id: project_id.to_string(),
+                        name,
+                    });
+                }
+            }
+            "SecretStore" => {
+                let existing_names: Vec<String> = previous_project
+                    .secret_stores
+                    .keys()
+                    .filter(|name| !declared_names.contains(*name))
+                    .cloned()
+                    .collect();
+                for name in existing_names {
+                    candidate_project.secret_stores.remove(&name);
+                    deletions.push(ResourceRemoval {
+                        kind: "SecretStore".to_string(),
                         project_id: project_id.to_string(),
                         name,
                     });
@@ -872,6 +881,7 @@ fn autofill_defaults_for_manifest_mode(config: &mut crate::config::OrchestratorC
             workflows: Default::default(),
             step_templates: Default::default(),
             env_stores: Default::default(),
+            secret_stores: Default::default(),
             execution_profiles: Default::default(),
             triggers: Default::default(),
         });
@@ -1469,6 +1479,7 @@ mod tests {
             )]),
             step_templates: HashMap::new(),
             env_stores: HashMap::new(),
+            secret_stores: HashMap::new(),
             execution_profiles: HashMap::new(),
             triggers: HashMap::new(),
         };

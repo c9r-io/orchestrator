@@ -496,8 +496,10 @@ pub struct ResolvedProject {
     pub workflows: HashMap<String, WorkflowConfig>,
     /// Reusable step templates indexed by name.
     pub step_templates: HashMap<String, crate::config::StepTemplateConfig>,
-    /// Environment or secret stores available to the project.
+    /// Non-sensitive environment stores available to the project.
     pub env_stores: HashMap<String, crate::config::EnvStoreConfig>,
+    /// Sensitive secret stores available to the project.
+    pub secret_stores: HashMap<String, crate::config::SecretStoreConfig>,
     /// Named execution profiles available to the project.
     pub execution_profiles: HashMap<String, ExecutionProfileConfig>,
 }

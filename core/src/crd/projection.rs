@@ -21,12 +21,12 @@ pub trait CrdProjectable: Sized + Serialize + DeserializeOwned {
 
 use crate::cli_types::{
     AgentSpec, EnvStoreSpec, ExecutionProfileSpec, ProjectSpec, RuntimePolicySpec,
-    StepTemplateSpec, WorkspaceSpec,
+    SecretStoreSpec, StepTemplateSpec, WorkspaceSpec,
 };
 use crate::config::{
     AgentConfig, EnvStoreConfig, ExecutionProfileConfig, ProjectConfig, ResumeConfig, RunnerConfig,
-    StepTemplateConfig, StoreBackendProviderConfig, WorkflowConfig, WorkflowStoreConfig,
-    WorkspaceConfig,
+    SecretStoreConfig, StepTemplateConfig, StoreBackendProviderConfig, WorkflowConfig,
+    WorkflowStoreConfig, WorkspaceConfig,
 };
 use crate::resource::agent::{agent_config_to_spec, agent_spec_to_config};
 use crate::resource::execution_profile::{
@@ -98,6 +98,7 @@ impl CrdProjectable for ProjectConfig {
             workflows: Default::default(),
             step_templates: Default::default(),
             env_stores: Default::default(),
+            secret_stores: Default::default(),
             execution_profiles: Default::default(),
             triggers: Default::default(),
         })
@@ -202,10 +203,7 @@ impl CrdProjectable for EnvStoreConfig {
 
     fn from_cr_spec(spec: &serde_json::Value) -> Result<Self> {
         let es_spec: EnvStoreSpec = serde_json::from_value(spec.clone())?;
-        Ok(EnvStoreConfig {
-            data: es_spec.data,
-            sensitive: false,
-        })
+        Ok(EnvStoreConfig { data: es_spec.data })
     }
 
     fn to_cr_spec(&self) -> serde_json::Value {
@@ -216,27 +214,19 @@ impl CrdProjectable for EnvStoreConfig {
     }
 }
 
-/// Wrapper type for SecretStore projection (EnvStoreConfig with sensitive=true).
-#[derive(Debug, Clone, Serialize, serde::Deserialize)]
-/// Wrapper that projects a sensitive env store as a SecretStore resource.
-pub struct SecretStoreProjection(pub EnvStoreConfig);
-
-impl CrdProjectable for SecretStoreProjection {
+impl CrdProjectable for SecretStoreConfig {
     fn crd_kind() -> &'static str {
         "SecretStore"
     }
 
     fn from_cr_spec(spec: &serde_json::Value) -> Result<Self> {
-        let es_spec: EnvStoreSpec = serde_json::from_value(spec.clone())?;
-        Ok(SecretStoreProjection(EnvStoreConfig {
-            data: es_spec.data,
-            sensitive: true,
-        }))
+        let ss_spec: SecretStoreSpec = serde_json::from_value(spec.clone())?;
+        Ok(SecretStoreConfig { data: ss_spec.data })
     }
 
     fn to_cr_spec(&self) -> serde_json::Value {
-        let spec = EnvStoreSpec {
-            data: self.0.data.clone(),
+        let spec = SecretStoreSpec {
+            data: self.data.clone(),
         };
         serde_json::to_value(&spec).unwrap_or_default()
     }
@@ -319,24 +309,20 @@ mod tests {
     fn env_store_config_round_trip() {
         let config = EnvStoreConfig {
             data: [("K".to_string(), "V".to_string())].into(),
-            sensitive: false,
         };
         let spec = config.to_cr_spec();
         let back = EnvStoreConfig::from_cr_spec(&spec).expect("should deserialize");
         assert_eq!(back.data.get("K").unwrap(), "V");
-        assert!(!back.sensitive);
     }
 
     #[test]
-    fn secret_store_projection_round_trip() {
-        let config = SecretStoreProjection(EnvStoreConfig {
+    fn secret_store_config_round_trip() {
+        let config = SecretStoreConfig {
             data: [("SECRET".to_string(), "val".to_string())].into(),
-            sensitive: true,
-        });
+        };
         let spec = config.to_cr_spec();
-        let back = SecretStoreProjection::from_cr_spec(&spec).expect("should deserialize");
-        assert!(back.0.sensitive);
-        assert_eq!(back.0.data.get("SECRET").unwrap(), "val");
+        let back = SecretStoreConfig::from_cr_spec(&spec).expect("should deserialize");
+        assert_eq!(back.data.get("SECRET").unwrap(), "val");
     }
 
     #[test]
@@ -361,6 +347,7 @@ mod tests {
             workflows: Default::default(),
             step_templates: Default::default(),
             env_stores: Default::default(),
+            secret_stores: Default::default(),
             execution_profiles: Default::default(),
             triggers: Default::default(),
         };
@@ -526,7 +513,7 @@ mod tests {
             RuntimePolicyProjection::crd_kind(),
             StepTemplateConfig::crd_kind(),
             EnvStoreConfig::crd_kind(),
-            SecretStoreProjection::crd_kind(),
+            SecretStoreConfig::crd_kind(),
             WorkflowStoreConfig::crd_kind(),
             StoreBackendProviderConfig::crd_kind(),
         ];

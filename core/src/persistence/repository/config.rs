@@ -102,11 +102,9 @@ fn serialize_config_snapshot(config: &OrchestratorConfig) -> Result<(String, Str
 fn sanitized_config_snapshot(config: &OrchestratorConfig) -> OrchestratorConfig {
     let mut sanitized = config.clone();
     for project in sanitized.projects.values_mut() {
-        for store in project.env_stores.values_mut() {
-            if store.sensitive {
-                for value in store.data.values_mut() {
-                    *value = crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER.to_string();
-                }
+        for store in project.secret_stores.values_mut() {
+            for value in store.data.values_mut() {
+                *value = crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER.to_string();
             }
         }
     }

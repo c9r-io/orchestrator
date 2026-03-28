@@ -37,7 +37,7 @@ pub async fn stream_task_logs_impl(
             .projects
             .get(agent_orchestrator::config::DEFAULT_PROJECT_ID)
         {
-            patterns.extend(collect_all_sensitive_store_values(&project.env_stores));
+            patterns.extend(collect_all_sensitive_store_values(&project.secret_stores));
         }
         patterns
     };
@@ -119,7 +119,7 @@ where
             .projects
             .get(agent_orchestrator::config::DEFAULT_PROJECT_ID)
         {
-            patterns.extend(collect_all_sensitive_store_values(&project.env_stores));
+            patterns.extend(collect_all_sensitive_store_values(&project.secret_stores));
         }
         patterns
     };
@@ -740,12 +740,11 @@ mod tests {
                 .config
                 .project_mut(None)
                 .expect("default project")
-                .env_stores
+                .secret_stores
                 .insert(
                     "secrets".to_string(),
-                    EnvStoreConfig {
+                    agent_orchestrator::config::SecretStoreConfig {
                         data: [("API_KEY".to_string(), "super-secret-value".to_string())].into(),
-                        sensitive: true,
                     },
                 );
             (next, ())

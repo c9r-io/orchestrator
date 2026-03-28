@@ -81,10 +81,15 @@ impl<'de> Deserialize<'de> for OrchestratorResource {
                     serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
                 ResourceSpec::ExecutionProfile(s)
             }
-            ResourceKind::EnvStore | ResourceKind::SecretStore => {
+            ResourceKind::EnvStore => {
                 let s: EnvStoreSpec =
                     serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
                 ResourceSpec::EnvStore(s)
+            }
+            ResourceKind::SecretStore => {
+                let s: SecretStoreSpec =
+                    serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
+                ResourceSpec::SecretStore(s)
             }
             ResourceKind::Trigger => {
                 let s: TriggerSpec =
@@ -188,9 +193,11 @@ pub enum ResourceSpec {
     /// Execution profile resource spec
     ExecutionProfile(ExecutionProfileSpec),
 
-    /// Env store / Secret store resource spec (both share the same data shape).
-    /// The `ResourceKind` field on `OrchestratorResource` distinguishes them.
+    /// Non-sensitive env store resource spec.
     EnvStore(EnvStoreSpec),
+
+    /// Sensitive secret store resource spec.
+    SecretStore(SecretStoreSpec),
 
     /// Trigger resource spec.
     Trigger(TriggerSpec),
@@ -402,6 +409,15 @@ fn default_execution_network_mode() -> String {
 #[serde(deny_unknown_fields)]
 pub struct EnvStoreSpec {
     /// Key-value environment pairs exposed by the store.
+    pub data: HashMap<String, String>,
+}
+
+/// SecretStore resource specification.
+/// Declares reusable secret variable sets. All values are sensitive.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SecretStoreSpec {
+    /// Key-value secret pairs exposed by the store.
     pub data: HashMap<String, String>,
 }
 
@@ -1237,10 +1253,10 @@ spec:
             serde_yaml::from_str(yaml).expect("Failed to parse SecretStore YAML");
         resource.validate_version().expect("version ok");
         assert_eq!(resource.kind, ResourceKind::SecretStore);
-        if let ResourceSpec::EnvStore(spec) = &resource.spec {
+        if let ResourceSpec::SecretStore(spec) = &resource.spec {
             assert_eq!(spec.data.get("OPENAI_API_KEY").unwrap(), "sk-test123");
         } else {
-            panic!("Expected EnvStore spec (SecretStore uses same spec shape)");
+            panic!("Expected SecretStore spec");
         }
     }
 

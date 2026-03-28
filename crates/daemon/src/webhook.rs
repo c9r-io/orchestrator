@@ -215,13 +215,13 @@ fn verify_with_store_secrets(
     // Read active config to resolve SecretStore
     let active = agent_orchestrator::config_load::read_active_config(state)
         .map_err(|e| format!("config error: {e}"))?;
-    let env_stores = active
+    let secret_stores = active
         .config
         .projects
         .get(project)
-        .map(|p| &p.env_stores)
+        .map(|p| &p.secret_stores)
         .ok_or_else(|| format!("project '{project}' not found"))?;
-    let store = env_stores
+    let store = secret_stores
         .get(store_name)
         .ok_or_else(|| format!("SecretStore '{store_name}' not found"))?;
 

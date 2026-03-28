@@ -75,26 +75,20 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
             ));
         }
         for (name, store) in &project.env_stores {
-            let store_kind = if store.sensitive {
-                "SecretStore"
-            } else {
-                "EnvStore"
-            };
-            let metadata = project_metadata(config, store_kind, project_id, name);
-            let spec = crate::cli_types::EnvStoreSpec {
-                data: store.data.clone(),
-            };
-            if store.sensitive {
-                resources.push(RegisteredResource::SecretStore(SecretStoreResource {
-                    metadata,
-                    spec,
-                }));
-            } else {
-                resources.push(RegisteredResource::EnvStore(EnvStoreResource {
-                    metadata,
-                    spec,
-                }));
-            }
+            resources.push(RegisteredResource::EnvStore(EnvStoreResource {
+                metadata: project_metadata(config, "EnvStore", project_id, name),
+                spec: crate::cli_types::EnvStoreSpec {
+                    data: store.data.clone(),
+                },
+            }));
+        }
+        for (name, store) in &project.secret_stores {
+            resources.push(RegisteredResource::SecretStore(SecretStoreResource {
+                metadata: project_metadata(config, "SecretStore", project_id, name),
+                spec: crate::cli_types::SecretStoreSpec {
+                    data: store.data.clone(),
+                },
+            }));
         }
     }
     resources
@@ -224,7 +218,7 @@ pub fn export_manifest_documents(config: &OrchestratorConfig) -> Vec<Orchestrato
                 api_version: API_VERSION.to_string(),
                 kind: ResourceKind::SecretStore,
                 metadata: item.metadata,
-                spec: ResourceSpec::EnvStore(item.spec),
+                spec: ResourceSpec::SecretStore(item.spec),
             },
             RegisteredResource::Trigger(item) => OrchestratorResource {
                 api_version: API_VERSION.to_string(),
@@ -271,19 +265,17 @@ mod tests {
                 "shared-config".to_string(),
                 crate::config::EnvStoreConfig {
                     data: [("K".to_string(), "V".to_string())].into(),
-                    sensitive: false,
                 },
             );
         config
             .projects
             .get_mut("default")
             .unwrap()
-            .env_stores
+            .secret_stores
             .insert(
                 "api-keys".to_string(),
-                crate::config::EnvStoreConfig {
+                crate::config::SecretStoreConfig {
                     data: [("SECRET".to_string(), "val".to_string())].into(),
-                    sensitive: true,
                 },
             );
 
@@ -456,19 +448,17 @@ mod tests {
                 "test-config".to_string(),
                 crate::config::EnvStoreConfig {
                     data: [("K".to_string(), "V".to_string())].into(),
-                    sensitive: false,
                 },
             );
         config
             .projects
             .get_mut("default")
             .unwrap()
-            .env_stores
+            .secret_stores
             .insert(
                 "test-secrets".to_string(),
-                crate::config::EnvStoreConfig {
+                crate::config::SecretStoreConfig {
                     data: [("S".to_string(), "V".to_string())].into(),
-                    sensitive: true,
                 },
             );
 
@@ -495,6 +485,7 @@ mod tests {
                 workflows: Default::default(),
                 step_templates: Default::default(),
                 env_stores: Default::default(),
+                secret_stores: Default::default(),
                 execution_profiles: Default::default(),
                 triggers: Default::default(),
             },

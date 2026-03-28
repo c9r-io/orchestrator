@@ -51,16 +51,23 @@ pub(super) async fn setup_phase_execution(
         let project_cfg = active.config.projects.get(effective_project_id);
         let agent_cfg = project_cfg.and_then(|p| p.agents.get(agent_id));
         let empty_env_stores = HashMap::new();
+        let empty_secret_stores = HashMap::new();
         let env_stores = project_cfg
             .map(|p| &p.env_stores)
             .unwrap_or(&empty_env_stores);
+        let secret_stores = project_cfg
+            .map(|p| &p.secret_stores)
+            .unwrap_or(&empty_secret_stores);
         let (extra_env, sensitive) = if let Some(agent_cfg) = agent_cfg {
             if let Some(ref env_entries) = agent_cfg.env {
-                let env =
-                    agent_orchestrator::env_resolve::resolve_agent_env(env_entries, env_stores)?;
-                let sens = agent_orchestrator::env_resolve::collect_sensitive_values(
+                let env = agent_orchestrator::env_resolve::resolve_agent_env(
                     env_entries,
                     env_stores,
+                    secret_stores,
+                )?;
+                let sens = agent_orchestrator::env_resolve::collect_sensitive_values(
+                    env_entries,
+                    secret_stores,
                 );
                 (env, sens)
             } else {

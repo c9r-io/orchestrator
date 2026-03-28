@@ -1,5 +1,5 @@
-use crate::cli_types::{EnvStoreSpec, OrchestratorResource, ResourceKind, ResourceSpec};
-use crate::config::{EnvStoreConfig, OrchestratorConfig};
+use crate::cli_types::{OrchestratorResource, ResourceKind, ResourceSpec, SecretStoreSpec};
+use crate::config::{OrchestratorConfig, SecretStoreConfig};
 use anyhow::{Result, anyhow};
 
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
@@ -10,7 +10,7 @@ pub struct SecretStoreResource {
     /// Resource metadata from the manifest.
     pub metadata: ResourceMetadata,
     /// Manifest spec payload for the secret store.
-    pub spec: EnvStoreSpec,
+    pub spec: SecretStoreSpec,
 }
 
 impl Resource for SecretStoreResource {
@@ -28,13 +28,12 @@ impl Resource for SecretStoreResource {
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult> {
-        let incoming = EnvStoreConfig {
+        let incoming = SecretStoreConfig {
             data: self.spec.data.clone(),
-            sensitive: true,
         };
         let project = config.ensure_project(self.metadata.project.as_deref());
         Ok(super::helpers::apply_to_map(
-            &mut project.env_stores,
+            &mut project.secret_stores,
             self.name(),
             incoming,
         ))
@@ -44,7 +43,7 @@ impl Resource for SecretStoreResource {
         super::manifest_yaml(
             ResourceKind::SecretStore,
             &self.metadata,
-            ResourceSpec::EnvStore(self.spec.clone()),
+            ResourceSpec::SecretStore(self.spec.clone()),
         )
     }
 
@@ -55,19 +54,13 @@ impl Resource for SecretStoreResource {
     ) -> Option<Self> {
         config
             .project(project_id)?
-            .env_stores
+            .secret_stores
             .get(name)
-            .and_then(|store| {
-                if store.sensitive {
-                    Some(Self {
-                        metadata: super::metadata_with_name(name),
-                        spec: EnvStoreSpec {
-                            data: store.data.clone(),
-                        },
-                    })
-                } else {
-                    None // EnvStore, not SecretStore
-                }
+            .map(|store| Self {
+                metadata: super::metadata_with_name(name),
+                spec: SecretStoreSpec {
+                    data: store.data.clone(),
+                },
             })
     }
 
@@ -78,10 +71,7 @@ impl Resource for SecretStoreResource {
     ) -> bool {
         config
             .project_mut(project_id)
-            .map(|project| {
-                matches!(project.env_stores.get(name), Some(store) if store.sensitive)
-                    && project.env_stores.remove(name).is_some()
-            })
+            .map(|project| project.secret_stores.remove(name).is_some())
             .unwrap_or(false)
     }
 }
@@ -98,10 +88,12 @@ pub(super) fn build_secret_store(resource: OrchestratorResource) -> Result<Regis
         return Err(anyhow!("resource kind/spec mismatch for SecretStore"));
     }
     match spec {
-        ResourceSpec::EnvStore(spec) => Ok(RegisteredResource::SecretStore(SecretStoreResource {
-            metadata,
-            spec,
-        })),
+        ResourceSpec::SecretStore(spec) => {
+            Ok(RegisteredResource::SecretStore(SecretStoreResource {
+                metadata,
+                spec,
+            }))
+        }
         _ => Err(anyhow!("resource kind/spec mismatch for SecretStore")),
     }
 }
@@ -114,7 +106,7 @@ mod tests {
     fn make_secret_store(name: &str) -> SecretStoreResource {
         SecretStoreResource {
             metadata: super::super::metadata_with_name(name),
-            spec: EnvStoreSpec {
+            spec: SecretStoreSpec {
                 data: [("API_KEY".to_string(), "sk-secret".to_string())].into(),
             },
         }
@@ -134,15 +126,14 @@ mod tests {
         assert_eq!(loaded.spec.data.get("API_KEY").unwrap(), "sk-secret");
         assert_eq!(loaded.kind(), ResourceKind::SecretStore);
 
-        // Underlying config should be marked sensitive
+        // Underlying config should be in secret_stores
         assert!(
             config
                 .default_project()
                 .unwrap()
-                .env_stores
+                .secret_stores
                 .get("my-secrets")
-                .unwrap()
-                .sensitive
+                .is_some()
         );
     }
 
@@ -190,15 +181,27 @@ mod tests {
     }
 
     #[test]
-    fn secret_store_get_from_skips_non_sensitive() {
+    fn secret_store_and_env_store_same_name_coexist() {
+        use crate::cli_types::EnvStoreSpec;
+        use crate::resource::env_store::EnvStoreResource;
+
         let mut config = make_config();
-        config.ensure_project(None).env_stores.insert(
-            "plain-env".to_string(),
-            EnvStoreConfig {
-                data: [("K".to_string(), "v".to_string())].into(),
-                sensitive: false,
+
+        // Apply EnvStore with name "shared"
+        let env = EnvStoreResource {
+            metadata: super::super::metadata_with_name("shared"),
+            spec: EnvStoreSpec {
+                data: [("ENV_KEY".to_string(), "env_val".to_string())].into(),
             },
-        );
-        assert!(SecretStoreResource::get_from(&config, "plain-env").is_none());
+        };
+        env.apply(&mut config).expect("apply env");
+
+        // Apply SecretStore with same name "shared"
+        let secret = make_secret_store("shared");
+        secret.apply(&mut config).expect("apply secret");
+
+        // Both should coexist
+        assert!(EnvStoreResource::get_from(&config, "shared").is_some());
+        assert!(SecretStoreResource::get_from(&config, "shared").is_some());
     }
 }

@@ -361,6 +361,7 @@ mod tests {
                     workflows: HashMap::new(),
                     step_templates: HashMap::new(),
                     env_stores: HashMap::new(),
+                    secret_stores: HashMap::new(),
                     execution_profiles: HashMap::new(),
                 })
                 .workflows

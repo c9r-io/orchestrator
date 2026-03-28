@@ -1320,7 +1320,6 @@ fn validate_agent_env_store_refs_passes_with_valid_refs() {
         "shared".to_string(),
         EnvStoreConfig {
             data: [("K".to_string(), "V".to_string())].into(),
-            sensitive: false,
         },
     );
     project.agents.insert(
@@ -2036,16 +2035,15 @@ fn env_store_refs_project_missing_returns_ok() {
 #[test]
 fn env_store_refs_project_valid_refs_pass() {
     use crate::cli_types::{AgentEnvEntry, AgentEnvRefValue};
-    use crate::config::{AgentConfig, EnvStoreConfig};
+    use crate::config::{AgentConfig, SecretStoreConfig};
 
     let mut config = OrchestratorConfig::default();
     let pid = "my-project";
     let project = config.projects.entry(pid.to_string()).or_default();
-    project.env_stores.insert(
+    project.secret_stores.insert(
         "vault".to_string(),
-        EnvStoreConfig {
+        SecretStoreConfig {
             data: [("SECRET".to_string(), "hidden".to_string())].into(),
-            sensitive: true,
         },
     );
     project.agents.insert(

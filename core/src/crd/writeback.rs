@@ -1,5 +1,5 @@
-use crate::config::{EnvStoreConfig, ExecutionProfileConfig, OrchestratorConfig};
-use crate::crd::projection::{CrdProjectable, RuntimePolicyProjection, SecretStoreProjection};
+use crate::config::{EnvStoreConfig, ExecutionProfileConfig, OrchestratorConfig, SecretStoreConfig};
+use crate::crd::projection::{CrdProjectable, RuntimePolicyProjection};
 use crate::crd::store::ResourceStoreExt;
 
 /// Reconciles one builtin kind from the resource store back into legacy config fields.
@@ -105,25 +105,20 @@ pub fn seed_store_from_config_snapshot(
         "EnvStore" => {
             for (pid, project) in &config.projects {
                 if let Some(v) = project.env_stores.get(name) {
-                    if !v.sensitive {
-                        config
-                            .resource_store
-                            .put(make_cr(Some(pid.clone()), v.to_cr_spec()));
-                        return;
-                    }
+                    config
+                        .resource_store
+                        .put(make_cr(Some(pid.clone()), v.to_cr_spec()));
+                    return;
                 }
             }
         }
         "SecretStore" => {
             for (pid, project) in &config.projects {
-                if let Some(v) = project.env_stores.get(name) {
-                    if v.sensitive {
-                        let proj = SecretStoreProjection(v.clone());
-                        config
-                            .resource_store
-                            .put(make_cr(Some(pid.clone()), proj.to_cr_spec()));
-                        return;
-                    }
+                if let Some(v) = project.secret_stores.get(name) {
+                    config
+                        .resource_store
+                        .put(make_cr(Some(pid.clone()), v.to_cr_spec()));
+                    return;
                 }
             }
         }
@@ -240,11 +235,11 @@ pub fn reconcile_single_resource(
             }
         }
         "SecretStore" => {
-            if let Ok(v) = SecretStoreProjection::from_cr_spec(&spec) {
+            if let Ok(v) = SecretStoreConfig::from_cr_spec(&spec) {
                 config
                     .ensure_project(cr.metadata.project.as_deref())
-                    .env_stores
-                    .insert(name.to_string(), v.0);
+                    .secret_stores
+                    .insert(name.to_string(), v);
             }
         }
         _ => {}
@@ -327,7 +322,7 @@ pub fn remove_from_config_snapshot(
                 }
             }
         }
-        "EnvStore" | "SecretStore" => {
+        "EnvStore" => {
             if let Some(project_id) = project {
                 if let Some(project) = config.projects.get_mut(project_id) {
                     project.env_stores.remove(name);
@@ -335,6 +330,19 @@ pub fn remove_from_config_snapshot(
             } else {
                 for project in config.projects.values_mut() {
                     if project.env_stores.remove(name).is_some() {
+                        return;
+                    }
+                }
+            }
+        }
+        "SecretStore" => {
+            if let Some(project_id) = project {
+                if let Some(project) = config.projects.get_mut(project_id) {
+                    project.secret_stores.remove(name);
+                }
+            } else {
+                for project in config.projects.values_mut() {
+                    if project.secret_stores.remove(name).is_some() {
                         return;
                     }
                 }
@@ -457,19 +465,14 @@ pub fn sync_config_snapshot_to_store(config: &mut OrchestratorConfig) {
             ));
         }
         for (name, store) in &project.env_stores {
-            let kind = if store.sensitive {
-                "SecretStore"
-            } else {
-                "EnvStore"
-            };
-            let spec = if store.sensitive {
-                SecretStoreProjection(store.clone()).to_cr_spec()
-            } else {
-                store.to_cr_spec()
-            };
             config
                 .resource_store
-                .put(make_cr(kind, name, Some(project_id.clone()), spec, &now));
+                .put(make_cr("EnvStore", name, Some(project_id.clone()), store.to_cr_spec(), &now));
+        }
+        for (name, store) in &project.secret_stores {
+            config
+                .resource_store
+                .put(make_cr("SecretStore", name, Some(project_id.clone()), store.to_cr_spec(), &now));
         }
     }
 
@@ -715,7 +718,6 @@ mod tests {
             "env1".to_string(),
             EnvStoreConfig {
                 data: Default::default(),
-                sensitive: false,
             },
         );
         remove_from_config_snapshot(&mut config, "EnvStore", None, "env1");
@@ -731,11 +733,10 @@ mod tests {
     #[test]
     fn remove_secret_store_from_snapshot() {
         let mut config = make_default_config_with_project();
-        config.ensure_project(None).env_stores.insert(
+        config.ensure_project(None).secret_stores.insert(
             "sec1".to_string(),
-            EnvStoreConfig {
+            SecretStoreConfig {
                 data: Default::default(),
-                sensitive: true,
             },
         );
         remove_from_config_snapshot(&mut config, "SecretStore", None, "sec1");
@@ -743,7 +744,7 @@ mod tests {
             !config
                 .default_project()
                 .unwrap()
-                .env_stores
+                .secret_stores
                 .contains_key("sec1")
         );
     }
@@ -755,7 +756,6 @@ mod tests {
             "env2".to_string(),
             EnvStoreConfig {
                 data: Default::default(),
-                sensitive: false,
             },
         );
         remove_from_config_snapshot(&mut config, "EnvStore", Some(DEFAULT_PROJECT_ID), "env2");
@@ -944,7 +944,6 @@ mod tests {
             "my-env".to_string(),
             EnvStoreConfig {
                 data: Default::default(),
-                sensitive: false,
             },
         );
         seed_store_from_config_snapshot(&mut config, "EnvStore", "my-env", "2024-01-01T00:00:00Z");
@@ -957,13 +956,12 @@ mod tests {
     }
 
     #[test]
-    fn seed_env_store_skips_sensitive() {
+    fn seed_env_store_not_found_in_secret_stores() {
         let mut config = make_default_config_with_project();
-        config.ensure_project(None).env_stores.insert(
+        config.ensure_project(None).secret_stores.insert(
             "secret-env".to_string(),
-            EnvStoreConfig {
+            SecretStoreConfig {
                 data: Default::default(),
-                sensitive: true,
             },
         );
         seed_store_from_config_snapshot(
@@ -972,7 +970,7 @@ mod tests {
             "secret-env",
             "2024-01-01T00:00:00Z",
         );
-        // Should NOT seed because the store is sensitive
+        // Should NOT seed because the name only exists in secret_stores
         assert!(
             config
                 .resource_store
@@ -984,11 +982,10 @@ mod tests {
     #[test]
     fn seed_secret_store_from_config_snapshot() {
         let mut config = make_default_config_with_project();
-        config.ensure_project(None).env_stores.insert(
+        config.ensure_project(None).secret_stores.insert(
             "my-secret".to_string(),
-            EnvStoreConfig {
+            SecretStoreConfig {
                 data: Default::default(),
-                sensitive: true,
             },
         );
         seed_store_from_config_snapshot(
@@ -1006,13 +1003,12 @@ mod tests {
     }
 
     #[test]
-    fn seed_secret_store_skips_non_sensitive() {
+    fn seed_secret_store_not_found_in_env_stores() {
         let mut config = make_default_config_with_project();
         config.ensure_project(None).env_stores.insert(
             "not-secret".to_string(),
             EnvStoreConfig {
                 data: Default::default(),
-                sensitive: false,
             },
         );
         seed_store_from_config_snapshot(
@@ -1296,14 +1292,12 @@ mod tests {
             "sync-env".to_string(),
             EnvStoreConfig {
                 data: Default::default(),
-                sensitive: false,
             },
         );
-        config.ensure_project(None).env_stores.insert(
+        config.ensure_project(None).secret_stores.insert(
             "sync-sec".to_string(),
-            EnvStoreConfig {
+            SecretStoreConfig {
                 data: Default::default(),
-                sensitive: true,
             },
         );
 

@@ -32,11 +32,9 @@ pub(crate) fn serialize_config_snapshot(config: &OrchestratorConfig) -> Result<(
 fn sanitized_config_snapshot(config: &OrchestratorConfig) -> OrchestratorConfig {
     let mut sanitized = config.clone();
     for project in sanitized.projects.values_mut() {
-        for store in project.env_stores.values_mut() {
-            if store.sensitive {
-                for value in store.data.values_mut() {
-                    *value = crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER.to_string();
-                }
+        for store in project.secret_stores.values_mut() {
+            for value in store.data.values_mut() {
+                *value = crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER.to_string();
             }
         }
     }
@@ -345,6 +343,7 @@ mod tests {
                     )]),
                     step_templates: HashMap::new(),
                     env_stores: HashMap::new(),
+                    secret_stores: HashMap::new(),
                     execution_profiles: HashMap::new(),
                     triggers: HashMap::new(),
                 },
@@ -373,12 +372,11 @@ mod tests {
         let mut config = crate::config_load::tests::make_config_with_default_project();
         config
             .ensure_project(Some(crate::config::DEFAULT_PROJECT_ID))
-            .env_stores
+            .secret_stores
             .insert(
                 "api-keys".to_string(),
-                crate::config::EnvStoreConfig {
+                crate::config::SecretStoreConfig {
                     data: [("OPENAI_API_KEY".to_string(), "sk-secret-123".to_string())].into(),
-                    sensitive: true,
                 },
             );
         crate::crd::writeback::reconcile_all_builtins(&mut config);
@@ -433,7 +431,7 @@ mod tests {
         let loaded_value = loaded
             .projects
             .get(crate::config::DEFAULT_PROJECT_ID)
-            .and_then(|project| project.env_stores.get("api-keys"))
+            .and_then(|project| project.secret_stores.get("api-keys"))
             .and_then(|store| store.data.get("OPENAI_API_KEY"))
             .cloned()
             .expect("loaded decrypted secret value");

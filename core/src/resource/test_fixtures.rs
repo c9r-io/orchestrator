@@ -203,7 +203,7 @@ pub fn env_store_manifest(name: &str) -> OrchestratorResource {
 }
 
 pub fn secret_store_manifest(name: &str) -> OrchestratorResource {
-    use crate::cli_types::EnvStoreSpec;
+    use crate::cli_types::SecretStoreSpec;
     use std::collections::HashMap;
     let mut data = HashMap::new();
     data.insert("SECRET".to_string(), "s3cret".to_string());
@@ -216,7 +216,7 @@ pub fn secret_store_manifest(name: &str) -> OrchestratorResource {
             labels: None,
             annotations: None,
         },
-        spec: ResourceSpec::EnvStore(EnvStoreSpec { data }),
+        spec: ResourceSpec::SecretStore(SecretStoreSpec { data }),
     }
 }
 

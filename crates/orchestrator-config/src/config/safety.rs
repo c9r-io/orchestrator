@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use super::{
     AgentConfig, EnvStoreConfig, ExecutionProfileConfig, HealthPolicyConfig, InvariantConfig,
-    StepTemplateConfig, TriggerConfig, WorkflowConfig,
+    SecretStoreConfig, StepTemplateConfig, TriggerConfig, WorkflowConfig,
 };
 
 /// Safety configuration for self-bootstrap and dangerous operations
@@ -162,6 +162,9 @@ pub struct ProjectConfig {
     #[serde(default)]
     /// Environment stores scoped to the project.
     pub env_stores: HashMap<String, EnvStoreConfig>,
+    #[serde(default)]
+    /// Secret stores scoped to the project. All values are sensitive.
+    pub secret_stores: HashMap<String, SecretStoreConfig>,
     #[serde(default)]
     /// Execution profiles available within the project.
     pub execution_profiles: HashMap<String, ExecutionProfileConfig>,

@@ -30,7 +30,6 @@ impl Resource for EnvStoreResource {
     fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult> {
         let incoming = EnvStoreConfig {
             data: self.spec.data.clone(),
-            sensitive: false,
         };
         let project = config.ensure_project(self.metadata.project.as_deref());
         Ok(super::helpers::apply_to_map(
@@ -57,17 +56,11 @@ impl Resource for EnvStoreResource {
             .project(project_id)?
             .env_stores
             .get(name)
-            .and_then(|store| {
-                if store.sensitive {
-                    None // SecretStore, not EnvStore
-                } else {
-                    Some(Self {
-                        metadata: super::metadata_with_name(name),
-                        spec: EnvStoreSpec {
-                            data: store.data.clone(),
-                        },
-                    })
-                }
+            .map(|store| Self {
+                metadata: super::metadata_with_name(name),
+                spec: EnvStoreSpec {
+                    data: store.data.clone(),
+                },
             })
     }
 
@@ -78,10 +71,7 @@ impl Resource for EnvStoreResource {
     ) -> bool {
         config
             .project_mut(project_id)
-            .map(|project| {
-                matches!(project.env_stores.get(name), Some(store) if !store.sensitive)
-                    && project.env_stores.remove(name).is_some()
-            })
+            .map(|project| project.env_stores.remove(name).is_some())
             .unwrap_or(false)
     }
 }
@@ -178,16 +168,4 @@ mod tests {
         assert!(EnvStoreResource::get_from(&config, "no-such").is_none());
     }
 
-    #[test]
-    fn env_store_get_from_skips_sensitive() {
-        let mut config = make_config();
-        config.ensure_project(None).env_stores.insert(
-            "secret-one".to_string(),
-            EnvStoreConfig {
-                data: [("S".to_string(), "v".to_string())].into(),
-                sensitive: true,
-            },
-        );
-        assert!(EnvStoreResource::get_from(&config, "secret-one").is_none());
-    }
 }
