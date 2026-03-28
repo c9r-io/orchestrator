@@ -173,7 +173,14 @@ jobs:
             crates/cli \
             crates/daemon; do
             echo "::group::Publishing ${crate}"
-            cargo publish --manifest-path "${crate}/Cargo.toml"
+            cargo publish --manifest-path "${crate}/Cargo.toml" || {
+              # Tolerate "already exists" for idempotent retries
+              if cargo search "$(basename "$crate")" 2>/dev/null | grep -q "$(grep '^version' "${crate}/Cargo.toml" | head -1 | tr -d ' "' | cut -d= -f2)"; then
+                echo "⚠ Already published — skipping"
+              else
+                exit 1
+              fi
+            }
             echo "::endgroup::"
             # crates.io index needs time to propagate
             sleep 30
