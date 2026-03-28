@@ -9,6 +9,9 @@ use super::anomaly::*;
 use super::model::*;
 use super::time::compute_wall_time;
 
+/// Must match the LIMIT in `core/src/task_repository/queries.rs` load_task_detail_rows.
+const EVENT_QUERY_LIMIT: usize = 2000;
+
 fn get_build_version() -> Option<BuildVersion> {
     Some(BuildVersion {
         version: env!("CARGO_PKG_VERSION").to_string(),
@@ -79,7 +82,10 @@ pub fn build_trace_with_meta(
     detect_overlapping_steps(&sorted_events, &mut anomalies);
     detect_missing_step_end(&sorted_events, &mut anomalies);
     detect_empty_cycles(&sorted_events, &mut anomalies);
-    detect_orphan_commands(&sorted_events, command_runs, &mut anomalies);
+    // Events may be truncated by the SQL LIMIT cap in load_task_detail_rows.
+    // When truncated, suppress orphan detection for items not in the loaded window.
+    let events_truncated = events.len() >= EVENT_QUERY_LIMIT;
+    detect_orphan_commands(&sorted_events, command_runs, events_truncated, &mut anomalies);
     detect_nonzero_exit(command_runs, &mut anomalies);
     detect_unexpanded_template_var(command_runs, &mut anomalies);
     detect_long_running_steps(&cycles, &mut anomalies);

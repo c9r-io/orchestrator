@@ -59,7 +59,7 @@ pub fn parse_qa_doc_safe_scenarios(content: &str) -> Vec<String> {
         Some(line) if line.trim() == "---" => {}
         _ => return Vec::new(),
     }
-    for line in lines {
+    while let Some(line) = lines.next() {
         let trimmed = line.trim();
         if trimmed == "---" {
             break;
@@ -74,6 +74,27 @@ pub fn parse_qa_doc_safe_scenarios(content: &str) -> Vec<String> {
                     .map(|s| s.trim().to_string())
                     .filter(|s| !s.is_empty())
                     .collect();
+            }
+            // Parse YAML block-style list:
+            //   - S1
+            //   - S2
+            if val.is_empty() {
+                let mut items = Vec::new();
+                for next_line in lines.by_ref() {
+                    let next_trimmed = next_line.trim();
+                    if next_trimmed == "---" || next_trimmed.is_empty() {
+                        break;
+                    }
+                    if let Some(item) = next_trimmed.strip_prefix("- ") {
+                        let item = item.trim().to_string();
+                        if !item.is_empty() {
+                            items.push(item);
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                return items;
             }
         }
     }
@@ -1561,6 +1582,34 @@ mod tests {
     #[test]
     fn test_parse_qa_doc_safe_scenarios_empty_list() {
         let content = "---\nself_referential_safe_scenarios: []\n---\n# Doc";
+        let result = parse_qa_doc_safe_scenarios(content);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_parse_qa_doc_safe_scenarios_block_style() {
+        let content = "---\nself_referential_safe: false\nself_referential_safe_scenarios:\n  - S1\n  - S2\n  - S3\n---\n# Doc";
+        let result = parse_qa_doc_safe_scenarios(content);
+        assert_eq!(result, vec!["S1", "S2", "S3"]);
+    }
+
+    #[test]
+    fn test_parse_qa_doc_safe_scenarios_block_style_single() {
+        let content = "---\nself_referential_safe_scenarios:\n  - S5\n---\n# Doc";
+        let result = parse_qa_doc_safe_scenarios(content);
+        assert_eq!(result, vec!["S5"]);
+    }
+
+    #[test]
+    fn test_parse_qa_doc_safe_scenarios_block_style_with_comment() {
+        let content = "---\nself_referential_safe: false\nself_referential_safe_scenarios:\n  - S1\n  - S3\n# S2 unsafe: needs daemon\nother_field: true\n---\n# Doc";
+        let result = parse_qa_doc_safe_scenarios(content);
+        assert_eq!(result, vec!["S1", "S3"]);
+    }
+
+    #[test]
+    fn test_parse_qa_doc_safe_scenarios_block_style_empty() {
+        let content = "---\nself_referential_safe_scenarios:\n---\n# Doc";
         let result = parse_qa_doc_safe_scenarios(content);
         assert!(result.is_empty());
     }

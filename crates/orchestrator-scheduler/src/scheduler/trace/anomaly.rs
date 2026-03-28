@@ -215,10 +215,15 @@ pub(super) fn detect_empty_cycles(events: &[&EventDto], anomalies: &mut Vec<Anom
 pub(super) fn detect_orphan_commands(
     events: &[&EventDto],
     command_runs: &[CommandRunDto],
+    events_truncated: bool,
     anomalies: &mut Vec<Anomaly>,
 ) {
     let mut known_steps: HashSet<(String, String)> = HashSet::new();
+    let mut known_item_ids: HashSet<String> = HashSet::new();
     for event in events {
+        if let Some(item_id) = &event.task_item_id {
+            known_item_ids.insert(item_id.clone());
+        }
         if matches!(
             event.event_type.as_str(),
             "step_started" | "chain_step_started" | "dynamic_step_started"
@@ -239,6 +244,12 @@ pub(super) fn detect_orphan_commands(
     for run in command_runs {
         let key = (run.task_item_id.clone(), run.phase.clone());
         if !known_steps.contains(&key) {
+            // When events are truncated, skip orphan detection for items whose
+            // events were entirely outside the loaded window — the step_started
+            // event likely exists but was not loaded due to the LIMIT cap.
+            if events_truncated && !known_item_ids.contains(&run.task_item_id) {
+                continue;
+            }
             anomalies.push(Anomaly::new(
                 AnomalyRule::OrphanCommand,
                 format!(
@@ -601,6 +612,65 @@ mod tests {
         let mut anomalies = Vec::new();
         detect_sandbox_denied(&refs, &mut anomalies);
         assert!(anomalies.is_empty());
+    }
+
+    fn make_item_event(id: i64, item_id: &str, event_type: &str, step: &str) -> EventDto {
+        EventDto {
+            id,
+            task_id: "t1".to_string(),
+            task_item_id: Some(item_id.to_string()),
+            event_type: event_type.to_string(),
+            payload: serde_json::json!({"step": step, "step_scope": "item"}),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn orphan_command_detected_without_truncation() {
+        let events = [make_item_event(1, "item-1", "step_started", "qa_testing")];
+        let refs: Vec<&EventDto> = events.iter().collect();
+        // run for item-2 has no matching step_started
+        let runs = vec![make_run("r1", "item-2", "qa_testing", Some(0))];
+        let mut anomalies = Vec::new();
+        detect_orphan_commands(&refs, &runs, false, &mut anomalies);
+        assert_eq!(anomalies.len(), 1, "should detect orphan for item-2");
+        assert_eq!(anomalies[0].rule, "orphan_command");
+    }
+
+    #[test]
+    fn orphan_command_skipped_when_events_truncated_and_item_unknown() {
+        // Only item-1 has events loaded; item-2 has no events at all (truncated away).
+        let events = [make_item_event(1, "item-1", "step_started", "qa_testing")];
+        let refs: Vec<&EventDto> = events.iter().collect();
+        let runs = vec![make_run("r1", "item-2", "qa_testing", Some(0))];
+        let mut anomalies = Vec::new();
+        detect_orphan_commands(&refs, &runs, true, &mut anomalies);
+        assert!(
+            anomalies.is_empty(),
+            "should suppress orphan when events truncated and item has no loaded events"
+        );
+    }
+
+    #[test]
+    fn orphan_command_not_skipped_for_known_item_even_when_truncated() {
+        // item-1 has a step_finished event loaded but no step_started — real orphan
+        let events = [EventDto {
+            id: 1,
+            task_id: "t1".to_string(),
+            task_item_id: Some("item-1".to_string()),
+            event_type: "step_finished".to_string(),
+            payload: serde_json::json!({"step": "qa_testing", "success": true}),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+        }];
+        let refs: Vec<&EventDto> = events.iter().collect();
+        let runs = vec![make_run("r1", "item-1", "qa_testing", Some(0))];
+        let mut anomalies = Vec::new();
+        detect_orphan_commands(&refs, &runs, true, &mut anomalies);
+        assert_eq!(
+            anomalies.len(),
+            1,
+            "should still flag orphan for item with loaded events but no step_started"
+        );
     }
 
     #[test]

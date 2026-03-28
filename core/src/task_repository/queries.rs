@@ -110,7 +110,7 @@ pub fn load_task_detail_rows(conn: &Connection, task_id: &str) -> Result<TaskDet
          JOIN task_items ti ON ti.id = cr.task_item_id
          WHERE ti.task_id = ?1
          ORDER BY cr.started_at DESC
-         LIMIT 120",
+         LIMIT 500",
     )?;
     let runs = runs_stmt
         .query_map(params![task_id], |row| {
@@ -134,7 +134,7 @@ pub fn load_task_detail_rows(conn: &Connection, task_id: &str) -> Result<TaskDet
         .collect::<std::result::Result<Vec<_>, _>>()?;
 
     let mut events_stmt = conn.prepare(
-        "SELECT id, task_id, task_item_id, event_type, payload_json, created_at FROM events WHERE task_id = ?1 ORDER BY id DESC LIMIT 200",
+        "SELECT id, task_id, task_item_id, event_type, payload_json, created_at FROM events WHERE task_id = ?1 ORDER BY id DESC LIMIT 2000",
     )?;
     let events = events_stmt
         .query_map(params![task_id], |row| {
