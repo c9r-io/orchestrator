@@ -105,7 +105,7 @@ Performance audit and code review identified three hotspots in scheduler runtime
 
 ## Observability
 
-- Existing events remain source of truth (`scheduler_enqueued`, `phase_output_published`, validation events).
+- Existing events remain source of truth (`scheduler_enqueued`, validation events).
 - Added measurable perf probes via scripts:
   - `docs/qa/script/test-worker-throughput.sh`
   - `docs/qa/script/test-log-tail-latency.sh`

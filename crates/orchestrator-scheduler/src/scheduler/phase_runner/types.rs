@@ -88,7 +88,6 @@ pub(super) struct ValidatedOutput {
     pub validation_status: &'static str,
     pub validation_event_payload_json: Option<String>,
     pub redacted_output: agent_orchestrator::collab::AgentOutput,
-    pub validation_error: Option<String>,
     pub sandbox_denied: bool,
     pub sandbox_event_type: Option<&'static str>,
     pub sandbox_reason_code: Option<&'static str>,

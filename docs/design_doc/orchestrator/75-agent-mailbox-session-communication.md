@@ -10,7 +10,7 @@ orchestrator 当前运行时已具备：
 - `task` / `task_item` / `command_run` / `events` 形成完整执行审计链
 - step 启动时记录 `pid`，可通过运行态映射查询当前任务上下文
 - TTY 路径已生成 `session_id`，持久化 `agent_sessions`、`input_fifo`、`transcript.log`、`output.json`
-- 协作层已有 `collab::AgentMessage`（`core/src/collab/message.rs`）与 `MessageBus` 抽象，当前仅用于进程内 publish
+- 协作层已有 shared context、DAG、artifact 等类型（`orchestrator-collab` crate）；早期的 `MessageBus` 抽象因从未被消费端使用已被移除
 
 **缺口**：agent 可被 orchestrator 调度，但缺少正式、可观测、可审计的 agent 间交互控制面。
 
@@ -266,7 +266,7 @@ rpc AgentSessionResolvePid(AgentSessionResolvePidRequest) returns (AgentSessionR
 - 不要求立即支持跨主机/分布式 agent 通信
 - 不要求立即支持音视频式"通话"
 - 不要求在第一阶段实现 GUI
-- 不要求废弃现有 `collab::MessageBus`
+
 
 ## 11. 实施前约束
 
@@ -278,8 +278,6 @@ rpc AgentSessionResolvePid(AgentSessionResolvePidRequest) returns (AgentSessionR
 
 | 组件 | 位置 | 当前状态 |
 |------|------|----------|
-| `AgentMessage` struct | `core/src/collab/message.rs` | 进程内消息信封，含 sender/receiver/payload/correlation_id/ttl/delivery_mode |
-| `MessageBus` | `core/src/collab/message.rs` | 内存 publish 机制，mpsc channel |
 | `agent_sessions` 表 | `core/src/persistence/migration_steps.rs` | 持久化会话记录，含 session_id/pid/fifo/transcript 路径 |
 | `session_attachments` 表 | `core/src/persistence/migration_steps.rs` | reader/writer 附着记录 |
 | `SessionRow` / store ops | `core/src/session_store.rs` | insert/update/query 操作 |

@@ -1,7 +1,7 @@
 [package]
 name = "orchestrator-collab"
 version = "0.2.4"
-description = "Agent collaboration types — message bus, shared context, DAG, and artifacts"
+description = "Agent collaboration types — shared context, DAG, and artifacts"
 repository = "https://github.com/c9r-io/orchestrator"
 keywords = ["orchestrator", "agent", "collaboration"]
 categories = ["development-tools"]
@@ -11,12 +11,7 @@ rust-version.workspace = true
 
 [dependencies]
 orchestrator-config = { path = "../orchestrator-config", version = "0.2.4" }
-anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tokio = { version = "1.44", features = ["sync"] }
 uuid = { version = "1.11", features = ["serde", "v4"] }
-
-[dev-dependencies]
-tokio = { version = "1.44", features = ["macros", "rt-multi-thread", "sync"] }

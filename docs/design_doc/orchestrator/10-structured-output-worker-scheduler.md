@@ -96,7 +96,6 @@ The refactor integrated structured outputs into phase execution and added queue/
 
 - Logs/events:
   - `output_validation_failed`
-  - `phase_output_published`
   - `scheduler_enqueued`
 - Persisted run payloads:
   - `command_runs.output_json`

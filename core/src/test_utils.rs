@@ -1,4 +1,4 @@
-use crate::collab::MessageBus;
+
 use crate::config::{
     AgentConfig, AgentMetadata, AgentSelectionConfig, LoopMode, OrchestratorConfig, ProjectConfig,
     PromptDelivery, SafetyConfig, StepBehavior, WorkflowConfig, WorkflowFinalizeConfig,
@@ -321,7 +321,6 @@ impl TestState {
             agent_health: tokio::sync::RwLock::new(HashMap::new()),
             agent_metrics: tokio::sync::RwLock::new(HashMap::new()),
             agent_lifecycle: tokio::sync::RwLock::new(HashMap::new()),
-            message_bus: Arc::new(MessageBus::new()),
             // FR-016 sync exception: test constructor for the event-sink boundary.
             event_sink: std::sync::RwLock::new(Arc::new(NoopSink)),
             db_writer: writer,

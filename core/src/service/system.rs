@@ -28,7 +28,7 @@ pub fn debug_info(state: &InnerState, component: Option<&str>) -> Result<String>
     let comp = component.unwrap_or("state");
     match comp {
         "state" => Ok(
-            "Debug Information\n=================\n\nAvailable: state, config, dag, messagebus\n"
+            "Debug Information\n=================\n\nAvailable: state, config, dag\n"
                 .to_string(),
         ),
         "config" => {
@@ -40,12 +40,8 @@ pub fn debug_info(state: &InnerState, component: Option<&str>) -> Result<String>
             ))
         }
         "dag" => debug_dag_info(state),
-        "messagebus" => Ok(
-            "MessageBus Debug Information\n============================\n\nMessageBus is an internal component.\n"
-                .to_string(),
-        ),
         _ => Ok(format!(
-            "Unknown debug component: {}\nAvailable: state, config, dag, messagebus\n",
+            "Unknown debug component: {}\nAvailable: state, config, dag\n",
             comp
         )),
     }
@@ -448,17 +444,13 @@ mod tests {
         let state = fixture.build();
 
         let state_info = debug_info(&state, None).expect("default debug info");
-        assert!(state_info.contains("Available: state, config, dag, messagebus"));
+        assert!(state_info.contains("Available: state, config, dag"));
 
         let config_info = debug_info(&state, Some("config")).expect("config debug info");
         assert!(config_info.contains("Active Configuration"));
 
         let dag_info = debug_info(&state, Some("dag")).expect("dag debug info");
         assert!(dag_info.contains("DAG Debug Information"));
-
-        let messagebus_info =
-            debug_info(&state, Some("messagebus")).expect("messagebus debug info");
-        assert!(messagebus_info.contains("MessageBus"));
 
         let unknown = debug_info(&state, Some("bogus")).expect("unknown component");
         assert!(unknown.contains("Unknown debug component"));

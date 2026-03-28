@@ -101,7 +101,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/07-capability-orchestration.md` | 5 | Capability-driven orchestration core |
 | orchestrator | `docs/qa/orchestrator/08-project-namespace.md` | 5 | Project namespace behavior |
 | orchestrator | `docs/qa/orchestrator/09-agent-selection-strategy.md` | 5 | Multi-factor selection strategy |
-| orchestrator | `docs/qa/orchestrator/10-agent-collaboration.md` | 5 | AgentOutput and MessageBus |
+| orchestrator | `docs/qa/orchestrator/10-agent-collaboration.md` | 5 | AgentOutput and collaboration |
 | orchestrator | `docs/qa/orchestrator/10-config-error-handling.md` | 4 | Config error paths |
 | orchestrator | `docs/qa/orchestrator/11-config-creation-flow.md` | 4 | Apply-based resource creation |
 | orchestrator | `docs/qa/orchestrator/12-config-validation.md` | 4 | Manifest validate command |

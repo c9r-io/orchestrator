@@ -18,7 +18,7 @@ This document validates the refactor that moved `collab` capabilities into the s
 
 - strict JSON output validation for `qa`/`fix`/`retest`/`guard`
 - structured output persistence in `command_runs`
-- phase execution result publication to MessageBus with observable events
+- phase execution result persistence with observable events
 - dual CLI model: foreground run and detach queue + worker loop
 - C/S mode: daemon-embedded workers replace standalone worker lifecycle commands
 
@@ -42,7 +42,7 @@ Entry point: `orchestrator` (CLI client) or `orchestratord` (daemon)
 ### Table: events
 | Column | Type | Notes |
 |--------|------|-------|
-| event_type | TEXT | Includes `output_validation_failed`, `phase_output_published`, `scheduler_enqueued` |
+| event_type | TEXT | Includes `output_validation_failed`, `scheduler_enqueued` |
 | payload_json | TEXT | Event payload details |
 
 ---
@@ -125,13 +125,13 @@ Verify phase outputs are published as observable events — validated via code r
 ### Steps
 1. **Code review** — verify event publication in phase runner:
    ```bash
-   rg -n "phase_output_published|bus_publish_failed|output_validation_failed" \
+   rg -n "output_validation_failed|sandbox_denied" \
      crates/orchestrator-scheduler/src/scheduler/phase_runner/record.rs
    ```
 
 2. **Code review** — verify event types are stored with run_id:
    ```bash
-   rg -n "run_id|event_type.*phase_output" \
+   rg -n "run_id|event_type" \
      core/src/db_write.rs \
      core/src/task_repository/write_ops.rs
    ```
@@ -142,7 +142,6 @@ Verify phase outputs are published as observable events — validated via code r
    ```
 
 ### Expected
-- Phase runner emits `phase_output_published` event on success path
 - Phase runner emits `output_validation_failed` event when validation fails
 - `build_trace_*` tests pass: events are correctly captured in execution trace
 - `extract_event_promoted_fields_*` tests pass: event payload fields extracted correctly

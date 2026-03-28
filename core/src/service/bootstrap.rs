@@ -1,4 +1,3 @@
-use crate::collab::MessageBus;
 use crate::config_load::{build_active_config_with_self_heal, data_dir, load_or_seed_config};
 use crate::persistence::schema::PersistenceBootstrap;
 use crate::state::{ConfigRuntimeSnapshot, InnerState, ManagedState};
@@ -157,7 +156,6 @@ fn build_managed_state(
             agent_health: tokio::sync::RwLock::new(HashMap::new()),
             agent_metrics: tokio::sync::RwLock::new(HashMap::new()),
             agent_lifecycle: tokio::sync::RwLock::new(HashMap::new()),
-            message_bus: Arc::new(MessageBus::new()),
             // FR-016 sync exception: constructor site for the event-sink boundary.
             event_sink: std::sync::RwLock::new(Arc::new(crate::events::TracingEventSink::new())),
             db_writer,

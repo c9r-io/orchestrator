@@ -1,4 +1,3 @@
-use agent_orchestrator::collab;
 use agent_orchestrator::config_load::now_ts;
 use agent_orchestrator::health::{
     increment_consecutive_errors, mark_agent_diseased, reset_consecutive_errors,
@@ -14,7 +13,7 @@ use std::sync::Arc;
 
 use super::types::{PhaseSetup, ValidatedOutput};
 
-/// Stage 5: Construct results, publish to message bus, insert events, update metrics.
+/// Stage 5: Construct results, insert events, update metrics.
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn record_phase_results(
     state: &Arc<InnerState>,
@@ -73,34 +72,10 @@ pub(super) async fn record_phase_results(
             .map(|p| p.to_string_lossy().to_string()),
         command_rule_index: None,
     };
-    let sender = collab::AgentEndpoint::for_task_item(agent_id, task_id, item_id);
-    let msg = collab::AgentMessage::publish(
-        sender,
-        collab::MessagePayload::ExecutionResult(collab::ExecutionResult {
-            run_id: setup.run_uuid,
-            output: validated.redacted_output.clone(),
-            success: validated.success,
-            error: validated.validation_error.clone(),
-        }),
-    );
-    let (publish_event_type, publish_event_payload_json) =
-        if let Err(err) = state.message_bus.publish(msg).await {
-            (
-                "bus_publish_failed",
-                serde_json::to_string(
-                    &json!({"phase":phase,"run_id":setup.run_id,"error":err.to_string()}),
-                )?,
-            )
-        } else {
-            (
-                "phase_output_published",
-                serde_json::to_string(&json!({"phase":phase,"run_id":setup.run_id}))?,
-            )
-        };
 
     let validation_event_payload_json = validated.validation_event_payload_json.clone();
     {
-        let mut events = Vec::with_capacity(3);
+        let mut events = Vec::with_capacity(2);
         if let Some(payload_json) = validation_event_payload_json {
             events.push(agent_orchestrator::db_write::DbEventRecord {
                 task_id: task_id_owned.clone(),
@@ -141,12 +116,6 @@ pub(super) async fn record_phase_results(
                 }))?,
             });
         }
-        events.push(agent_orchestrator::db_write::DbEventRecord {
-            task_id: task_id_owned,
-            task_item_id: Some(item_id_owned),
-            event_type: publish_event_type.to_string(),
-            payload_json: publish_event_payload_json,
-        });
         writer
             .update_command_run_with_owned_events(insert_payload, events)
             .await?;

@@ -1,7 +1,7 @@
 //! Agent Collaboration Module
 //!
-//! Provides structured agent-to-agent communication, message bus,
-//! shared context, and DAG-based workflow execution.
+//! Provides structured agent-to-agent communication, shared context,
+//! and DAG-based workflow execution.
 
 #![cfg_attr(
     not(test),
@@ -15,15 +15,12 @@ pub mod artifact;
 pub mod context;
 /// DAG primitives used by collaboration planning flows.
 pub mod dag;
-/// Message envelope types exchanged between collaborating agents.
-pub mod message;
 /// Structured agent output payloads and metrics.
 pub mod output;
 
 pub use artifact::*;
 pub use context::*;
 pub use dag::*;
-pub use message::*;
 pub use output::*;
 
 /// Escape a string for safe embedding inside a bash double-quoted string.

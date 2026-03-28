@@ -3188,12 +3188,10 @@ dependencies = [
 name = "orchestrator-collab"
 version = "0.2.4"
 dependencies = [
- "anyhow",
  "chrono",
  "orchestrator-config",
  "serde",
  "serde_json",
- "tokio",
  "uuid",
 ]
 

@@ -1,4 +1,3 @@
-use crate::collab::MessageBus;
 use crate::config::ActiveConfig;
 use crate::config_load::ConfigSelfHealReport;
 use crate::events::{EventSink, TracingEventSink};
@@ -78,8 +77,6 @@ pub struct InnerState {
     pub agent_metrics: tokio::sync::RwLock<HashMap<String, AgentMetrics>>,
     /// Runtime agent lifecycle map.
     pub agent_lifecycle: tokio::sync::RwLock<HashMap<String, AgentRuntimeState>>,
-    /// Collaboration message bus.
-    pub message_bus: Arc<MessageBus>,
     // FR-016 sync exception: event emission must remain callable from sync and async
     // paths without making the EventSink interface async. This lock is an
     // observability boundary, not async main-path shared business state.

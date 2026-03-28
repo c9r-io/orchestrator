@@ -45,7 +45,7 @@ Verify phase result writes persist all structured fields (output_json, artifacts
 
 2. **Code review** — verify event publication is tied to run ID:
    ```bash
-   rg -n "run_id.*event|event.*run_id|phase_output_published" \
+   rg -n "run_id.*event|event.*run_id" \
      crates/orchestrator-scheduler/src/scheduler/phase_runner/record.rs \
      crates/orchestrator-scheduler/src/scheduler/phase_runner/validate.rs
    ```
