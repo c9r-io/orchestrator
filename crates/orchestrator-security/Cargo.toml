@@ -1,6 +1,6 @@
 [package]
 name = "orchestrator-security"
-version = "0.2.2"
+version = "0.2.3"
 description = "SecretStore encryption, key lifecycle, audit, and secure file helpers"
 repository = "https://github.com/c9r-io/orchestrator"
 keywords = ["orchestrator", "security", "encryption"]
@@ -10,7 +10,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-orchestrator-config = { path = "../orchestrator-config", version = "0.2.2" }
+orchestrator-config = { path = "../orchestrator-config", version = "0.2.3" }
 aes-gcm-siv = "0.11"
 anyhow = "1.0"
 base64 = "0.22"
