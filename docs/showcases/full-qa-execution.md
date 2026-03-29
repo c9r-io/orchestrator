@@ -76,15 +76,15 @@ self_referential_safe: false
 当 workspace 设置 `self_referential: true` 时，系统读取 QA 文档的 frontmatter，
 `self_referential_safe: false`（且无 `self_referential_safe_scenarios`）的文档会被 prehook 跳过，不会被 agent 执行。
 
-### 2.2 标记为不安全的文档（48 个）
+### 2.2 标记为不安全的文档（47 个）
 
-以下文档包含 kill daemon、重启进程、重编译二进制、创建任务、修改资源、触发 webhook 等危险或干扰操作，
+以下文档包含 kill daemon、重启进程、重编译二进制、创建任务、触发 webhook 等危险或干扰操作，
 或需要 GUI 环境/外部服务（在纯 CLI 回归中不可执行），已标记为 `self_referential_safe: false`。
 
 其中 **34 个被完全跳过**（无 `self_referential_safe_scenarios`），
-**14 个被部分执行**（仅限列出的安全场景）。
+**13 个被部分执行**（仅限列出的安全场景）。
 
-#### docs/qa/orchestrator/（43 个）
+#### docs/qa/orchestrator/（42 个）
 
 **完全跳过（29 个）：**
 
@@ -120,14 +120,13 @@ self_referential_safe: false
 | `121b-gui-i18n-ux.md` | 需要 GUI 环境（Tauri） |
 | `smoke-orchestrator.md` | `cargo build --release` |
 
-**部分执行（14 个，仅限列出的安全场景）：**
+**部分执行（13 个，仅限列出的安全场景）：**
 
 | 文件 | 安全场景 | 危险操作（跳过的场景） |
 |------|---------|----------------------|
 | `20-structured-output-worker-scheduler.md` | S1, S2, S3 | kill daemon, task create/start |
 | `22-performance-io-queue-optimizations.md` | S1, S2, S3 | kill daemon, task create/start |
 | `54-step-execution-profiles.md` | S2, S3 | force delete, task create/start |
-| `64-secretstore-key-lifecycle.md` | S5 | apply resources |
 | `94b-trigger-resource-advanced.md` | S2 | apply resources |
 | `99-long-lived-command-guard.md` | S5 | task create/start |
 | `107-parallel-dispatch-completeness-guard.md` | S2, S3, S4 | S1: `delete --force`, `task create`, `cargo build`（自引用危险操作） |
@@ -164,9 +163,9 @@ self_referential_safe: false
 
 | 类别 | 数量 | 说明 |
 |------|------|------|
-| 显式 `self_referential_safe: true` | 86 | 完全执行 |
+| 显式 `self_referential_safe: true` | 87 | 完全执行 |
 | 无 frontmatter 标记（默认 safe） | 16 | 完全执行 |
-| `false` + 有 `scenarios` | 14 | 部分执行（仅安全场景） |
+| `false` + 有 `scenarios` | 13 | 部分执行（仅安全场景） |
 | **合计可执行** | **116** | |
 
 可执行文档包括：
@@ -228,7 +227,7 @@ orchestrator task create \
 
 > 不指定 `-t`，系统自动扫描 `qa_targets` 配置的 `docs/qa/` 下所有 `.md` 文件。
 > 预计约 171 个 item，其中约 34 个会被 prehook 完全跳过（`self_referential_safe: false` 且无 scenarios），
-> 约 14 个部分执行（仅安全场景），实际全量执行约 123 个。
+> 约 13 个部分执行（仅安全场景），实际全量执行约 124 个。
 
 记录返回的 `<task_id>`。
 
@@ -297,7 +296,7 @@ orchestrator event list --task <task_id> --type step_skipped -o json
 
 - [ ] `full-qa.yaml` workspace 的 `self_referential: true` 已生效
 - [ ] 34 个完全不安全的 QA 文档被 prehook 跳过（`step_skipped` 事件）
-- [ ] 14 个部分安全文档仅执行了指定场景
+- [ ] 13 个部分安全文档仅执行了指定场景
 - [ ] daemon 进程在整个执行过程中保持稳定（PID 不变）
 - [ ] 无 `cargo build --release -p orchestratord` 被执行
 
@@ -337,7 +336,7 @@ orchestrator event list --task <task_id> --type step_skipped -o json
 
 1. orchestrator 完整跑完 `full-qa` workflow，在 `loop_guard` 正常收口。
 2. 安全 QA 场景通过率 ≥ 90%（允许部分环境依赖的场景失败）。
-3. 34 个完全不安全文档全部被正确跳过，14 个部分安全文档仅执行了安全场景。
+3. 34 个完全不安全文档全部被正确跳过，13 个部分安全文档仅执行了安全场景。
 4. 所有 ticket 被 ticket_fix 处理（修复或明确标记无法修复）。
 5. `align_tests` 确认单测和编译无回归。
 6. `doc_governance` 确认文档无漂移。

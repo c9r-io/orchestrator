@@ -45,8 +45,8 @@ FR-082
 
 ## Checklist
 
-- [ ] Scenario 1: Integrations repo exists
-- [ ] Scenario 2: Slack package completeness
-- [ ] Scenario 3: GitHub package completeness
-- [ ] Scenario 4: LINE package completeness
-- [ ] Scenario 5: Manifest syntax valid
+- [x] Scenario 1: Integrations repo exists
+- [x] Scenario 2: Slack package completeness
+- [x] Scenario 3: GitHub package completeness
+- [x] Scenario 4: LINE package completeness
+- [x] Scenario 5: Manifest syntax valid

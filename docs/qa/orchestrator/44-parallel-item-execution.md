@@ -212,8 +212,8 @@ Verify the database uses a writer+reader connection model with WAL mode and busy
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | max_parallel Config Round-Trip via YAML and Serde | PASS | 2026-03-20 | | max_parallel in WorkflowConfig/WorkflowStepConfig (workflow.rs:67,175; execution.rs:73,197); 23 serde tests pass. Doc path `crates/orchestrator-config/src/config/execution.rs` is wrong — correct: `crates/orchestrator-config/src/config/execution.rs` |
-| 2 | ScopeSegment Resolves max_parallel From Step and Plan | PASS | 2026-03-20 | | build_segments 5/5 pass; `scope_segment`/`parallel` test filters return 0 (patterns not present in current codebase — doc drift) |
-| 3 | RunningTask::fork() Shares Stop Flag | PASS | 2026-03-20 | | fork() uses Arc::clone for stop_flag, new child slot; 4/4 tests pass |
-| 4 | Sequential Path Unchanged When max_parallel Absent | PASS | 2026-03-21 | | Rewritten: code review + build_segments unit test verifies sequential default path |
-| 5 | Database Connection Model and WAL Configuration | PASS | 2026-03-20 | | 2-conn model (writer+reader); SQLITE_BUSY_TIMEOUT_MS=5000; 2/2 tests pass |
+| 1 | max_parallel Config Round-Trip via YAML and Serde | PASS | 2026-03-29 | Claude | max_parallel in WorkflowConfig/WorkflowStepConfig (workflow.rs:67,179; execution.rs:73,201); 23 serde tests pass |
+| 2 | ScopeSegment Resolves max_parallel From Step and Plan | PASS | 2026-03-29 | Claude | build_segments 5/5 pass; `scope_segment`/`parallel` test filters return 0 (doc drift — patterns not present) |
+| 3 | RunningTask::fork() Shares Stop Flag | PASS | 2026-03-29 | Claude | fork() uses Arc::clone for stop_flag, new child slot; 4/4 tests pass |
+| 4 | Sequential Path Unchanged When max_parallel Absent | PASS | 2026-03-29 | Claude | Sequential default path: segment.rs:63 `step.max_parallel.or(plan_default).unwrap_or(1)`; build_segments 5/5 pass |
+| 5 | Database Connection Model and WAL Configuration | PASS | 2026-03-29 | Claude | 2-conn model (writer+reader); SQLITE_BUSY_TIMEOUT_MS=5000; 3/3 async_database tests pass |

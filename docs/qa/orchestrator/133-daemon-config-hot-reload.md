@@ -12,6 +12,8 @@ FR-086
 
 Read-only code inspection. No daemon interaction required.
 
+**Build check:** `cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings` — all tests pass, no clippy warnings.
+
 ## Verification Scenarios
 
 ### Scenario 1: ArcSwap update in persist path
@@ -49,14 +51,6 @@ Read-only code inspection. No daemon interaction required.
 
 **Expected:** `fire_trigger()` calls `read_active_config(state)` which loads from `config_runtime` ArcSwap.
 
-### Scenario 6: Compilation and unit tests
-
-**Steps:**
-1. `cargo test --workspace`
-2. `cargo clippy --workspace --all-targets -- -D warnings`
-
-**Expected:** All tests pass, no clippy warnings. Existing trigger engine unit tests (`trigger_engine::tests`) validate cron scheduling mechanics.
-
 ## Checklist
 
 - [x] S1: ArcSwap update in persist path — **PASS**
@@ -64,4 +58,4 @@ Read-only code inspection. No daemon interaction required.
 - [x] S3: Trigger reload notification after apply — **PASS**
 - [x] S4: Webhook handler reads from ArcSwap — **PASS**
 - [x] S5: fire_trigger reads from config_runtime — **PASS**
-- [x] S6: Compilation and unit tests — **PASS**
+- [x] Build: `cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings` — **PASS**

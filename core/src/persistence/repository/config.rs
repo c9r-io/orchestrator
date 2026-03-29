@@ -401,6 +401,14 @@ fn load_all_resources(
                 // Write DecryptFailed audit event (best-effort)
                 if kind == "SecretStore" {
                     emit_decrypt_failed_audit(&conn, &project, &name, &e);
+                    let inner = e.to_string();
+                    if inner.contains("secret key is unavailable")
+                        || inner.contains("no decryption key")
+                    {
+                        return Err(e).with_context(|| format!(
+                            "SecretStore write blocked: cannot load {project}/{name} — no active encryption key (run `orchestrator secret key list` to check key state)"
+                        ));
+                    }
                 }
                 return Err(e)
                     .with_context(|| format!("failed to load resource {kind}/{project}/{name}"));

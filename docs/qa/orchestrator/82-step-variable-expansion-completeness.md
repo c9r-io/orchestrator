@@ -193,8 +193,8 @@ Verify the diagnostic backstop catches persisted commands that still contain tem
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Basic template renderer covers core placeholders | PASS | 2026-03-21 | Claude | 6/6 tests pass — all in qa_utils.rs |
-| 2 | Agent context renders runtime, pipeline, and escape-sensitive values | PASS | 2026-03-21 | Claude | 3/3 tests pass — all in collab/context.rs |
-| 3 | Runtime propagation expands large pipeline variables without leaving placeholders | PASS | 2026-03-21 | Claude | 8/8 tests pass — auto_capture (3) + spill_large_var (5) in orchestrator-scheduler |
-| 4 | Every known step ID maps to a covered rendering entry point | PASS | 2026-03-21 | Claude | Code review — all 23 step IDs verified, rendering paths confirmed |
-| 5 | Task trace flags leftover unexpanded placeholders | PASS | 2026-03-21 | Claude | detect_unexpanded_template_var_anomaly test passes in trace/tests.rs |
+| 1 | Basic template renderer covers core placeholders | PASS | 2026-03-29 | Claude | 6/6 tests pass — all in qa_utils.rs |
+| 2 | Agent context renders runtime, pipeline, and escape-sensitive values | PASS | 2026-03-29 | Claude | 3/3 tests pass — all in crates/orchestrator-collab/src/context.rs |
+| 3 | Runtime propagation expands large pipeline variables without leaving placeholders | PASS | 2026-03-29 | Claude | 8/8 tests pass — auto_capture (3) + spill_large_var (5) in orchestrator-scheduler; PIPELINE_VAR_INLINE_LIMIT=4096 confirmed |
+| 4 | Every known step ID maps to a covered rendering entry point | FAIL | 2026-03-29 | Claude | Doc claims 23 step IDs but step.rs test_validate_step_type_known_ids has 21; see ticket qa-130 |
+| 5 | Task trace flags leftover unexpanded placeholders | PASS | 2026-03-29 | Claude | detect_unexpanded_template_var_anomaly test passes in scheduler/trace/tests.rs |

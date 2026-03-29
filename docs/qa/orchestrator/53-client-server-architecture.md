@@ -305,8 +305,8 @@ Verify resource apply (from file and stdin), store CRUD, and project-scoped reso
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Daemon Startup and Shutdown | ✅ | 2026-03-21 | Claude | Rewritten: code review of lifecycle.rs/server.rs + implicit compilation via cargo test |
-| 2 | CLI-to-Daemon gRPC Communication | ✅ | 2026-03-20 | Claude | version, get workspaces/agents/workflows, debug config, check all pass via gRPC |
-| 3 | Task Lifecycle via gRPC | ✅ | 2026-03-20 | Claude | create(workflow explicit)→list→info→start→qa_passed(128 items)→logs→delete |
-| 4 | Embedded Worker Queue Consumption | ✅ | 2026-03-20 | Claude | 6 batch tasks: created→pending→completed(128 items each, 0 failed) |
-| 5 | Resource Management and Project Isolation via gRPC | ✅ | 2026-03-20 | Claude | apply file/stdin/dry-run + store CRUD + --project isolation + delete project |
+| 1 | Daemon Startup and Shutdown | ✅ | 2026-03-29 | Claude | PID/socket/SIGTERM code review OK; 22 lib tests pass |
+| 2 | CLI-to-Daemon gRPC Communication | ✅ | 2026-03-29 | Claude | version, get workspaces/agents/workflows, debug config, check all pass via gRPC |
+| 3 | Task Lifecycle via gRPC | ✅ | 2026-03-29 | Claude | create(workflow explicit)→list→info→start→executed(158 items, 1 failed)→logs→delete |
+| 4 | Embedded Worker Queue Consumption | ✅ | 2026-03-29 | Claude | 6 batch tasks: created→pending→terminal(all 6 reached failed with items processed) |
+| 5 | Resource Management and Project Isolation via gRPC | ✅ | 2026-03-29 | Claude | apply file/stdin/dry-run + store CRUD + --project isolation + delete project |

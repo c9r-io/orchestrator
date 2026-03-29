@@ -99,3 +99,5 @@ Verify that after the item-scoped segment completes, the loop engine runs item s
 | 1 | pending_generate_items consumption | ✅ | 2026-03-28 | claude | Unit tests verified: test_extract_dynamic_items, test_extract_dynamic_items_missing_var (4 tests pass) |
 | 2 | item_select orchestration after item-scoped segment | ✅ | 2026-03-19 | claude | Runtime verified: task d4acd894, items=1/3 (1 winner fast-approach, 2 eliminated), event item_selected emitted, item_select_winner in pipeline, store entry evolution/qa52/winner_latest persisted |
 | 2 | item_select orchestration after item-scoped segment | ✅ | 2026-03-28 | claude | Unit tests verified: build_segments_item_select_is_task_scoped, collect_item_eval_states_maps_pipeline_vars, promote_winner_vars_inserts_into_pipeline (48 loop_engine tests pass) |
+| 1 | pending_generate_items consumption | ✅ | 2026-03-29 | claude | Unit tests verified: 55 loop_engine + 15 item_generate tests all pass |
+| 2 | item_select orchestration after item-scoped segment | ✅ | 2026-03-29 | claude | Unit tests verified: 55 loop_engine + 15 item_generate tests all pass |

@@ -1,6 +1,5 @@
 ---
-self_referential_safe: false
-self_referential_safe_scenarios: [S5]
+self_referential_safe: true
 ---
 
 # QA 64: SecretStore Key Lifecycle
@@ -142,7 +141,7 @@ Full interruption-resume testing requires simulating a mid-rotation crash, which
 - Step 2: Rejected with error message containing `--force`.
 - Step 4: Succeeds, output confirms key revoked.
 - Step 5: Key shows `state: "revoked"`, `revoked_at` populated.
-- Step 6: Apply fails with error mentioning "no active encryption key" or "write blocked".
+- Step 6: Apply fails with error mentioning "SecretStore write blocked" and "no active encryption key".
 - `secret key history` shows `key_revoked` event with `detail_json` containing `"force":true`.
 
 ---

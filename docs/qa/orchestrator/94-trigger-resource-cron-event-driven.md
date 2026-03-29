@@ -92,6 +92,6 @@ cargo test --package agent-orchestrator --lib trigger_yaml_roundtrip_cron
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ⚠️ | 2026-03-21: S1=6 ✅, S2=20 ✅, S3=1 ✅, S4=2049+1 doctest FAIL (qa120), S5=3 ✅ |
+| 1 | All scenarios verified | ✅ | 2026-03-29: S1=6 ✅, S2=25 ✅, S3=1 ✅, S4=2100+ ✅, S5=3 ✅ |
 
 See also: `docs/qa/orchestrator/94b-trigger-resource-advanced.md` for suspend/resume and preflight scenarios.

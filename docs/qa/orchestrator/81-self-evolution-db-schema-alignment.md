@@ -94,10 +94,21 @@ Verified on 2026-03-12:
 - All three monitoring queries are valid against current schema
 - `cargo test --workspace`: passed
 
+**Re-verified 2026-03-29:**
+
+- S-01: `task_items` columns confirmed (dynamic_vars_json, label, source)
+- S-02: `workflow_store_entries` table confirmed with correct PK and columns
+- S-03: `events` table confirmed with required columns
+- S-04: `items_generated` event emission confirmed in segment.rs
+- S-05: Query valid against live DB (empty result set)
+- S-06: Query valid against live DB (empty result set)
+- S-07: Query valid against live DB (1 row returned from evolution store)
+- S-08: `cargo test --workspace --lib`: 435 passed, 0 failed
+
 ---
 
 ## Checklist
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☑ | S-01–S-08: PASS (2026-03-21); S-08: 409 passed, 0 failed; S-05: 11 rows, S-06: 20 rows, S-07: 12 rows |
+| 1 | All scenarios verified | ☑ | S-01–S-08: PASS (2026-03-29); S-08: 435 passed, 0 failed |
