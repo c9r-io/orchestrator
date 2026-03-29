@@ -5,9 +5,9 @@
 [![docs](https://img.shields.io/badge/docs-docs.c9r.io-blue)](https://docs.c9r.io)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-An orchestration platform **built for AI agents, by AI agents**. It enables any shell-based agent (Claude Code, OpenCode, Codex, Gemini CLI, etc.) to collaborate on complex, multi-step software development tasks through Kubernetes-style YAML manifests.
+Agent Orchestrator is a **Harness Engineering control plane** for agent-first software delivery. It turns shell-native coding agents such as Claude Code, OpenCode, Codex, and Gemini CLI into governed execution units that can participate in long-running, multi-step engineering workflows through Kubernetes-style YAML manifests.
 
-While human developers can use it directly via the CLI, the platform is designed agent-first: the CLI is machine-parseable, configuration is Kubernetes-style YAML (apiVersion, kind, metadata, spec — no imperative code), and the skill system provides structured context that agents can discover and follow autonomously.
+OpenAI recently described this shift as [Harness Engineering](https://openai.com/index/harness-engineering/): humans spend less time hand-writing code and more time designing environments, specifying intent, and building feedback loops that let agents do reliable work. This project adopts that framing directly. Instead of treating agents as isolated chat tools, it gives them a shared control plane with workflows, triggers, guard steps, secrets, observability, and recovery paths.
 
 ```
 orchestrator (CLI) ──gRPC/UDS──> orchestratord (daemon)
@@ -46,13 +46,20 @@ orchestrator task list
 orchestrator task logs <task_id>
 ```
 
-## Agent-First Design
+## Why This Exists
+
+- **Harness, not wrapper** — The goal is not to invoke an agent once, but to define the environment, workflow, policy, and feedback loop around agent execution.
+- **Humans steer, agents execute** — Developers specify goals, constraints, and acceptance criteria; the control plane coordinates execution.
+- **Repository-local system of record** — YAML manifests, docs, skills, and QA artifacts become versioned workflow assets that agents can discover and follow.
+- **Long-running loops** — The runtime is designed for plan -> implement -> test -> review -> fix cycles that can continue for hours or days, not just one-shot generations.
+
+## Harness Engineering Control Plane
 
 - **CLI** — Machine-parseable output (`-o json`), structured error codes, no interactive prompts
 - **Manifests** — Declarative YAML, no imperative code; agents read and apply without interpretation
 - **Skills** — `.claude/skills/` provide structured execution plans that agents follow autonomously
 - **Showcases** — `docs/showcases/` contain end-to-end execution plans designed for agents to read and execute
-- **Any shell agent** — Any tool that accepts a prompt and runs shell commands can be an orchestrator agent
+- **Any shell agent** — Any tool that accepts a prompt and runs shell commands can be an orchestrator agent under the same control plane
 
 ## Integrations
 
@@ -62,16 +69,18 @@ Slack, GitHub, LINE — each with per-trigger signature verification, CEL payloa
 
 ## Key Features
 
-- **Declarative workflows** — YAML manifests with loop control, guard steps, DAG execution
-- **Agent orchestration** — capability matching, health scoring, rotation, load balancing
+- **Declarative control plane** — YAML manifests with loop control, guard steps, DAG execution, and reusable resource definitions
+- **Agent orchestration** — capability matching, health scoring, rotation, and load balancing across heterogeneous shell agents
 - **CEL prehooks** — dynamic control flow (Run/Skip/Branch/DynamicAdd/Transform)
-- **Built-in security** — mTLS, RBAC, sandbox (macOS Seatbelt / Linux namespaces), output redaction
+- **Built-in policy and security** — mTLS, RBAC, sandbox (macOS Seatbelt / Linux namespaces), output redaction, and secret lifecycle management
+- **Long-running automation** — task persistence, event streams, trigger-based task creation, and guarded workflow loops
 - **Single binary** — Rust, embedded SQLite, no external dependencies
 
 ## Documentation
 
 Full documentation: **[docs.c9r.io](https://docs.c9r.io)** (EN / ZH)
 
+- [Vision](docs/guide/00-vision.md)
 - [Quick Start](docs/guide/01-quickstart.md)
 - [Resource Model](docs/guide/02-resource-model.md)
 - [Workflow Configuration](docs/guide/03-workflow-configuration.md)

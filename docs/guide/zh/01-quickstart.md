@@ -1,6 +1,8 @@
 # 01 - 快速开始
 
-5 分钟跑通你的第一个工作流。
+5 分钟启动你的第一个本地 Harness Engineering control plane。
+
+在这个快速开始里，你会启动 daemon、加载 manifest，并让控制面通过声明式 workflow 调度一个基于 shell 的 agent。
 
 ## 前置条件
 

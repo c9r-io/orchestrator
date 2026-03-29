@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   title: 'Agent Orchestrator',
-  description: 'AI-native SDLC automation — declarative workflow and agent orchestration',
+  description: 'Harness Engineering control plane for agent-first software delivery',
 
   locales: {
     en: {
@@ -11,6 +11,7 @@ export default defineConfig({
       link: '/en/',
       themeConfig: {
         nav: [
+          { text: 'Vision', link: '/en/guide/vision' },
           { text: 'Guide', link: '/en/guide/quickstart' },
           { text: 'Showcases', link: '/en/showcases/hello-world' },
         ],
@@ -19,6 +20,7 @@ export default defineConfig({
             {
               text: 'Guide',
               items: [
+                { text: 'Vision', link: '/en/guide/vision' },
                 { text: 'Quick Start', link: '/en/guide/quickstart' },
                 { text: 'Resource Model', link: '/en/guide/resource-model' },
                 { text: 'Workflow Configuration', link: '/en/guide/workflow-configuration' },
@@ -67,6 +69,7 @@ export default defineConfig({
       link: '/zh/',
       themeConfig: {
         nav: [
+          { text: '愿景', link: '/zh/guide/vision' },
           { text: '指南', link: '/zh/guide/quickstart' },
           { text: '示例', link: '/zh/showcases/hello-world' },
         ],
@@ -75,6 +78,7 @@ export default defineConfig({
             {
               text: '指南',
               items: [
+                { text: '愿景', link: '/zh/guide/vision' },
                 { text: '快速开始', link: '/zh/guide/quickstart' },
                 { text: '资源模型', link: '/zh/guide/resource-model' },
                 { text: '工作流配置', link: '/zh/guide/workflow-configuration' },

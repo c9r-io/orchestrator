@@ -3,43 +3,55 @@ layout: home
 
 hero:
   name: Agent Orchestrator
-  text: 为 Agent 而生，由 Agent 驱动
-  tagline: 一个编排平台，让任何基于 Shell 的 AI Agent 可以通过 Kubernetes 风格的 YAML 清单协作完成复杂的多步骤软件开发任务。
+  text: "Harness Engineering Control Plane"
+  tagline: "一个本地优先的控制面，把 Claude Code、Codex、OpenCode、Gemini CLI 和各类 shell 工具纳入同一个可治理的工程 harness，用于承载长时间运行的软件交付闭环。"
   actions:
     - theme: brand
+      text: 阅读愿景
+      link: /zh/guide/vision
+    - theme: alt
       text: 快速开始
       link: /zh/guide/quickstart
-    - theme: alt
-      text: 示例
-      link: /zh/showcases/benchmark-multi-model-execution
     - theme: alt
       text: GitHub
       link: https://github.com/c9r-io/orchestrator
 
 features:
   - icon: "\U0001F916"
-    title: Agent 优先设计
-    details: CLI 输出机器可解析的 JSON，配置是 Kubernetes 风格的 YAML（apiVersion、kind、metadata、spec），Skills 提供结构化的执行计划供 Agent 自主遵循。任何基于 Shell 的 Agent 都可以参与协作。
+    title: "原生面向 Harness Engineering"
+    details: "它围绕一个核心前提构建：人类定义目标和约束，agent 在 workflow、skills、trigger 和 guardrail 组成的 harness 中执行。"
   - icon: "\U0001F91D"
-    title: 多 Agent 协作
-    details: 具备不同能力的 Agent（规划、实现、测试、审查）通过编排器协作。内置能力匹配、健康评分和轮换机制。
+    title: "统一 Agent 运行时"
+    details: "Claude Code、Codex、OpenCode、Gemini CLI 以及其他 shell-based 工具，都可以通过 capability 和 command template 纳入同一个运行时。"
   - icon: "\U0001F4CB"
-    title: 声明式工作流
-    details: 通过 YAML 定义多步骤工作流，支持循环控制、守卫步骤、DAG 执行和动态步骤池。无需编写命令式代码。
+    title: "声明式控制面"
+    details: "Workspace、Agent、Workflow、Trigger、Secret、Policy 都以可版本化的 YAML 资源定义，而不是散落在脚本和临时 prompt 里。"
   - icon: "\u26A1"
-    title: CEL 前置钩子
-    details: 通过 CEL 表达式实现动态控制流 — 运行时决策：Run、Skip、Branch、DynamicAdd、Transform。
+    title: "长时间运行工作流闭环"
+    details: "plan、implement、test、review、fix 可以作为带状态的闭环持续运行，支持 repeatable steps、DAG、dynamic step pool 和 trigger 驱动任务创建。"
   - icon: "\U0001F512"
-    title: 内置安全
-    details: mTLS 认证、RBAC 授权、沙箱执行（macOS Seatbelt / Linux 命名空间）、输出脱敏。
+    title: "Policy 与恢复护栏"
+    details: "mTLS、RBAC、沙箱、secret 生命周期、loop guard、持久任务状态，让 agent 执行具备更强的工程边界与恢复能力。"
   - icon: "\U0001F310"
-    title: 任意 Agent，任意模型
-    details: "Claude Code、OpenCode、Codex、Gemini CLI — 任何接受 prompt 并执行 Shell 命令的工具都可以作为编排器 Agent。通过环境变量切换模型。"
+    title: "默认可观测"
+    details: "结构化事件、执行日志、任务状态、机器可读输出，让长时间运行的 agent workflow 可以被审计、追踪和运维。"
 ---
+
+## 这是什么
+
+Agent Orchestrator 不是单纯的 agent wrapper，而是面向软件工程系统的 harness 层。
+
+OpenAI 最近把这种思路称为 [Harness Engineering](https://openai.com/index/harness-engineering/)：工程师把更多精力放在环境、反馈回路和控制系统上，让 agent 能持续完成可靠工作。这个项目就是把这套方法落到基于 shell 的 coding agent 和本地优先的软件交付流程上。
+
+## 这能带来什么
+
+- 把零散的 agent 用法沉淀为可复用的 manifest、skills 和 workflow 资产
+- 跑持续的 plan -> implement -> test -> review -> fix 闭环，而不是一次性调用 agent
+- 在底层模型、shell 和 prompt 快速变化时，仍然保留稳定的控制面
 
 ## 快速开始
 
-直接运行以下命令，或让你的 AI 编码 Agent 代为执行 — CLI 为两者而设计。
+直接运行以下命令，或让你的 AI 编码 Agent 代为执行。你启动的是一个本地控制面，而不只是一次 CLI 调用。
 
 ```bash
 # 安装

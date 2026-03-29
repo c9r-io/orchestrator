@@ -1,6 +1,8 @@
 # 01 - Quick Start
 
-Run your first workflow in 5 minutes.
+Boot your first local Harness Engineering control plane in 5 minutes.
+
+In this quick start, you will start the daemon, load a manifest, and let the control plane dispatch a shell-based agent through a declarative workflow.
 
 ## Prerequisites
 

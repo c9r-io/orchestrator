@@ -3,43 +3,55 @@ layout: home
 
 hero:
   name: Agent Orchestrator
-  text: Built for Agents, by Agents
-  tagline: An orchestration platform that enables any shell-based AI agent to collaborate on complex, multi-step software development tasks through Kubernetes-style YAML manifests.
+  text: "Harness Engineering Control Plane"
+  tagline: "A local-first control plane that turns Claude Code, Codex, OpenCode, Gemini CLI, and shell tooling into a governed engineering harness for long-running software delivery loops."
   actions:
     - theme: brand
+      text: Read the Vision
+      link: /en/guide/vision
+    - theme: alt
       text: Get Started
       link: /en/guide/quickstart
-    - theme: alt
-      text: Showcases
-      link: /en/showcases/benchmark-multi-model-execution
     - theme: alt
       text: GitHub
       link: https://github.com/c9r-io/orchestrator
 
 features:
   - icon: "\U0001F916"
-    title: Agent-First Design
-    details: CLI outputs machine-parseable JSON, configuration is Kubernetes-style YAML, and skills provide structured plans that agents follow autonomously. Any shell-based agent can participate.
+    title: "Harness Engineering Native"
+    details: "Built around a simple idea: humans define intent and constraints, while agents execute inside a reusable harness of workflows, skills, triggers, and guardrails."
   - icon: "\U0001F91D"
-    title: Multi-Agent Collaboration
-    details: Agents with different capabilities (plan, implement, test, review) collaborate through the orchestrator. Capability matching, health scoring, and rotation are built in.
+    title: "Unified Agent Runtime"
+    details: "Claude Code, Codex, OpenCode, Gemini CLI, and other shell-based tools can be abstracted into the same runtime through capabilities and command templates."
   - icon: "\U0001F4CB"
-    title: Declarative Workflows
-    details: Define multi-step workflows in YAML with loop control, guard steps, DAG execution, and dynamic step pools. No imperative code needed.
+    title: "Declarative Control Plane"
+    details: "Workspaces, agents, workflows, triggers, secrets, and policies are defined as versioned YAML resources instead of scattered scripts and ad hoc prompts."
   - icon: "\u26A1"
-    title: CEL Prehooks
-    details: Dynamic control flow via CEL expressions — Run, Skip, Branch, DynamicAdd, and Transform decisions at runtime.
+    title: "Long-Running Workflow Loops"
+    details: "Plan, implement, test, review, and fix can run as guarded, stateful loops with repeatable steps, DAG execution, dynamic step pools, and trigger-based task creation."
   - icon: "\U0001F512"
-    title: Built-in Security
-    details: mTLS authentication, RBAC authorization, sandbox enforcement (macOS Seatbelt / Linux namespaces), and output redaction.
+    title: "Policy and Recovery Rails"
+    details: "mTLS, RBAC, sandboxing, secret lifecycle management, loop guards, and persistent task state give agent execution stronger operational boundaries."
   - icon: "\U0001F310"
-    title: Any Agent, Any Model
-    details: "Claude Code, OpenCode, Codex, Gemini CLI — any tool that accepts a prompt and runs shell commands can be an orchestrator agent. Switch models via environment variables."
+    title: "Observable by Default"
+    details: "Structured events, execution logs, task state, and machine-readable outputs make long-running agent workflows auditable and operable."
 ---
+
+## What This Project Is
+
+Agent Orchestrator is not just an agent wrapper. It is a harness layer for software engineering systems.
+
+OpenAI recently described this shift as [Harness Engineering](https://openai.com/index/harness-engineering/): engineers spend more effort designing environments, feedback loops, and control systems so agents can do reliable work. This project applies that idea to shell-native coding agents and local-first software delivery.
+
+## What This Enables
+
+- Institutionalize ad hoc agent usage into reusable manifests, skills, and workflow assets
+- Run durable plan -> implement -> test -> review -> fix loops instead of one-off agent calls
+- Keep one control plane while models, shells, and prompts change underneath
 
 ## Quick Start
 
-Run these commands directly, or let your AI coding agent handle it — the CLI is designed for both.
+Run these commands directly, or let your AI coding agent handle it. You are booting a local control plane, not just invoking a CLI once.
 
 ```bash
 # Install

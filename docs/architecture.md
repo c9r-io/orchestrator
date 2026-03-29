@@ -1,16 +1,17 @@
 # Agent Orchestrator Architecture
 
-This document describes the architecture of the agent orchestrator system, a local tool designed to automate the AI-native development lifecycle through intelligent agent orchestration. The system is composed of a core library crate (`agent-orchestrator`), a daemon binary (`orchestratord`), and a CLI client binary (`orchestrator`).
+This document describes the architecture of Agent Orchestrator as a **local-first Harness Engineering control plane**. The system is designed to operationalize agent-first software delivery by turning shell-native coding agents into governed execution units with workflows, triggers, policies, persistence, and observability. The runtime is composed of a core library crate (`agent-orchestrator`), a daemon binary (`orchestratord`), and a CLI client binary (`orchestrator`).
 
 ## 1. Project Overview
 
-**Goal:** To provide a deterministic, reproducible, and observable environment for AI agents to execute development tasks (QA, Coding, Testing) within a local workspace.
+**Goal:** To provide a deterministic, reproducible, and observable control plane where humans specify intent and constraints while agents execute software delivery work (QA, coding, testing, review, repair) inside a governed local workspace.
 
 **Key Features:**
 - **CLI-First:** All interactions are driven by a command-line interface.
 - **Local Execution:** Runs directly on the host machine, managing local processes.
 - **Stateful Orchestration:** Persists task state, logs, and events to a local SQLite database.
 - **Agent Abstraction:** Treats AI agents (or scripts) as interchangeable, capable execution units defined by shell templates.
+- **Harness Layer:** Encodes workflow logic, triggers, secrets, policies, and observability around agent execution instead of relying on one-off prompts.
 
 ## 2. Directory Layout
 
@@ -130,7 +131,7 @@ proto/
 
 ### 3.3 Orchestrator Core Internals
 
-The `core/` service implements an intelligent agent orchestrator responsible for managing the AI-native development lifecycle.
+The `core/` service implements the control-plane logic for a Harness Engineering runtime responsible for managing the AI-native development lifecycle.
 
 #### Resource Model
 

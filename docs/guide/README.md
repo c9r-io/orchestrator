@@ -1,17 +1,19 @@
 # Agent Orchestrator User Guide
 
-This guide helps you understand and use the Agent Orchestrator — a CLI tool for automating AI-native development lifecycles through intelligent agent orchestration.
+This guide helps you understand and use Agent Orchestrator as a **Harness Engineering control plane** for agent-first software delivery.
 
 ## Who Is This For?
 
 - **New users** wanting to get started quickly
-- **Workflow authors** designing custom SDLC pipelines
+- **Workflow authors** designing reusable agent harnesses and SDLC pipelines
+- **Platform builders** operationalizing shell-based agents across teams
 - **Advanced users** exploring CRDs, persistent stores, and self-bootstrap
 
 ## Guide Structure
 
 | Chapter | Topic | Difficulty |
 |---------|-------|------------|
+| [00 - Vision](00-vision.md) | Understand the Harness Engineering control plane direction | Beginner |
 | [01 - Quick Start](01-quickstart.md) | Run your first workflow in 5 minutes | Beginner |
 | [02 - Resource Model](02-resource-model.md) | Workspace, Agent, Workflow, StepTemplate | Beginner |
 | [03 - Workflow Configuration](03-workflow-configuration.md) | Steps, scopes, loops, finalize rules | Intermediate |
@@ -26,10 +28,11 @@ This guide helps you understand and use the Agent Orchestrator — a CLI tool fo
 - **QA Test Docs**: `docs/qa/` — scenario-based validation (120+ documents)
 - **Design Docs**: `docs/design_doc/` — detailed feature designs
 - **Fixture Manifests**: `fixtures/manifests/bundles/` — real YAML examples
+- **OpenAI framing**: [Harness Engineering](https://openai.com/index/harness-engineering/) — the engineering model this project is explicitly leaning into
 
 ## Entry Points
 
-The orchestrator uses a C/S architecture where a long-running daemon holds all state and the CLI is a lightweight gRPC client:
+The orchestrator uses a C/S architecture where a long-running daemon acts as the local control plane, holds all state, and the CLI is a lightweight gRPC client:
 
 ```bash
 # Start daemon (background workers auto-consume enqueued tasks)
