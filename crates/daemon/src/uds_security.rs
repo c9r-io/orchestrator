@@ -31,8 +31,8 @@ use crate::control_plane::Role;
 pub struct UdsPeerInfo {
     /// User ID of the connecting process.
     pub uid: u32,
-    /// Group ID of the connecting process.
-    pub gid: u32,
+    /// Group ID of the connecting process (reserved for future policy use).
+    pub _gid: u32,
     /// Process ID (available on Linux and macOS; `None` on some BSDs).
     pub pid: Option<i32>,
 }
@@ -123,8 +123,8 @@ pub fn validate_peer(stream: &UnixStream) -> io::Result<UdsPeerInfo> {
     let cred = stream.peer_cred()?;
     let peer = UdsPeerInfo {
         uid: cred.uid(),
-        gid: cred.gid(),
-        pid: cred.pid().map(|p| p as i32),
+        _gid: cred.gid(),
+        pid: cred.pid(),
     };
 
     // SAFETY: libc::getuid is always safe to call.
