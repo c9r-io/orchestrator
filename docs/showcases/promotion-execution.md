@@ -1,5 +1,7 @@
 # 项目推广内容自动生成与分发执行计划
 
+> **Harness Engineering 执行计划**：本文档是一个 agent 可执行场景，用来展示 orchestrator 这个 control plane 如何组织环境、工作流、约束与反馈闭环，而不是一次性的 prompt 调用。
+>
 > **Agent 协作**：本文档是一个 Agent 可执行的计划。在 AI 编码 Agent（Claude Code、OpenCode、Codex 等）中打开本项目，Agent 读取本计划后，通过 orchestrator CLI 调度其他 Agent 协作完成任务 — 从资源部署、任务执行到结果验证，全程自主完成。
 
 本文档是 orchestrator 的第 4 类 showcase：**项目推广** — 自动化内容创建与多平台分发。与前三类 showcase（自举、自进化、全量 QA）不同，本工作流展示 orchestrator 处理**面向外部的自动化任务**的能力，而非 SDLC 内部循环。

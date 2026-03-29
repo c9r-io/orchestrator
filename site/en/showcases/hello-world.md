@@ -1,5 +1,7 @@
 # Hello World Template
 
+> **Harness Engineering template**: this showcase demonstrates one concrete capability slice of orchestrator as a control plane for agent-first software delivery.
+>
 > **Purpose**: The simplest runnable workflow — one Workspace, one Agent, one Workflow. Zero API cost.
 
 ## Use Cases

@@ -1,5 +1,7 @@
 # Plan-Execute 模板
 
+> **Harness Engineering 模板**：这个 showcase 展示 orchestrator 作为 agent-first 软件交付控制面的一个能力切片，把 agent、workflow、policy 和反馈闭环固化为可复用的工程资产。
+>
 > **模板用途**：计划→实现→验证三阶段迭代 — 展示 StepTemplate、多 Agent 协作和变量传递。
 
 ## 适用场景

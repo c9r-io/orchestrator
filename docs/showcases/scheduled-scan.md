@@ -1,5 +1,7 @@
 # Scheduled Scan 模板
 
+> **Harness Engineering 模板**：这个 showcase 展示 orchestrator 作为 agent-first 软件交付控制面的一个能力切片，把 agent、workflow、policy 和反馈闭环固化为可复用的工程资产。
+>
 > **模板用途**：定时触发的安全审计 — 展示 Trigger 资源、cron 调度和 agent 驱动的安全分析。
 
 ## 适用场景

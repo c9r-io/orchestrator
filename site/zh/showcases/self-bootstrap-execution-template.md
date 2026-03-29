@@ -1,5 +1,7 @@
 # self-bootstrap 课题执行计划模板
 
+> **Harness Engineering 执行计划**：本文档是一个 agent 可执行场景，用来展示 orchestrator 这个 control plane 如何组织环境、工作流、约束与反馈闭环，而不是一次性的 prompt 调用。
+>
 > **Agent 协作**：本文档是一个 Agent 可执行的计划。在 AI 编码 Agent（Claude Code、OpenCode、Codex 等）中打开本项目，Agent 读取本计划后，通过 orchestrator CLI 调度其他 Agent 协作完成任务 — 从资源部署、任务执行到结果验证，全程自主完成。
 
 本文档是通用模板，用于把某个课题直接交给 orchestrator 的 `self-bootstrap` workflow 执行。使用方式是复制本文件，替换占位符，把课题目标传给 orchestrator；人工只负责启动、监控、记录，并在异常时介入。

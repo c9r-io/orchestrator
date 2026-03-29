@@ -1,5 +1,7 @@
 # Plan-Execute Template
 
+> **Harness Engineering template**: this showcase demonstrates one concrete capability slice of orchestrator as a control plane for agent-first software delivery.
+>
 > **Purpose**: Plan → implement → verify three-phase iteration — demonstrates StepTemplate, multi-agent collaboration, and variable propagation.
 
 ## Use Cases

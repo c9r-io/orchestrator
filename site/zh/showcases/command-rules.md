@@ -1,5 +1,7 @@
 # Command Rules 模板
 
+> **Harness Engineering 模板**：这个 showcase 展示 orchestrator 作为 agent-first 软件交付控制面的一个能力切片，把 agent、workflow、policy 和反馈闭环固化为可复用的工程资产。
+>
 > **模板用途**：Agent Session 复用与隔离 — 通过 command_rules 和 step_vars 实现跨步骤 session 共享，同时让 QA 步骤独立分析。
 
 ## 适用场景

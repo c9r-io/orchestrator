@@ -1,5 +1,7 @@
 # Command Rules Template
 
+> **Harness Engineering template**: this showcase demonstrates one concrete capability slice of orchestrator as a control plane for agent-first software delivery.
+>
 > **Purpose**: Agent session reuse and isolation — share session context across steps via `command_rules`, while isolating QA with `step_vars`.
 
 ## Use Cases

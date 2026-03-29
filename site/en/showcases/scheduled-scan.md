@@ -1,5 +1,7 @@
 # Scheduled Scan Template
 
+> **Harness Engineering template**: this showcase demonstrates one concrete capability slice of orchestrator as a control plane for agent-first software delivery.
+>
 > **Purpose**: Cron-triggered security audit — demonstrates agent-driven security analysis, static checks, and the Trigger resource.
 
 ## Use Cases

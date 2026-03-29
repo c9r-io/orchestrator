@@ -1,5 +1,7 @@
 # QA Loop Template
 
+> **Harness Engineering template**: this showcase demonstrates one concrete capability slice of orchestrator as a control plane for agent-first software delivery.
+>
 > **Purpose**: QA test → fix → retest cycle — demonstrates multi-step workflows and capability-based agent selection.
 
 ## Use Cases

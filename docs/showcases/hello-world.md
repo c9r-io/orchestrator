@@ -1,5 +1,7 @@
 # Hello World 模板
 
+> **Harness Engineering 模板**：这个 showcase 展示 orchestrator 作为 agent-first 软件交付控制面的一个能力切片，把 agent、workflow、policy 和反馈闭环固化为可复用的工程资产。
+>
 > **模板用途**：最小可运行 workflow — 一个 Workspace、一个 Agent、一个 Workflow，零 API 成本。
 
 ## 适用场景

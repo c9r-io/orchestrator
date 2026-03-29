@@ -1,5 +1,7 @@
 # FR Watch Template
 
+> **Harness Engineering template**: this showcase demonstrates one concrete capability slice of orchestrator as a control plane for agent-first software delivery.
+>
 > **Purpose**: Monitor FR document creation via native filesystem trigger, automating FR governance — demonstrates filesystem Trigger and CEL payload filtering.
 
 ## Use Cases
