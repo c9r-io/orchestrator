@@ -17,7 +17,7 @@ The orchestrator combines workflow engines with agent coordination to enable:
 - **Declarative workflow definitions**: Steps can be builtin (`init_once`, `ticket_scan`, `loop_guard`) or capability-based
 - **Repeatable steps**: Control whether steps execute in every loop cycle
 - **Guard steps**: Steps that can terminate the workflow loop based on their output
-- **Dynamic Orchestration**: PrehookDecision (Run/Skip/Branch/DynamicAdd/Transform) for runtime step control
+- **Dynamic Orchestration**: DAG execution engine, adaptive planner, dynamic step pools for runtime workflow control
 - **DAG Execution Engine**: Topological sort, cycle detection, conditional edges
 - **Dynamic Step Pool**: Runtime step selection based on context and priority
 - Built-in observability and debugging (real-time logs, event tracking)

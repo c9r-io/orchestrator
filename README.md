@@ -71,7 +71,7 @@ Slack, GitHub, LINE — each with per-trigger signature verification, CEL payloa
 
 - **Declarative control plane** — YAML manifests with loop control, guard steps, DAG execution, and reusable resource definitions
 - **Agent orchestration** — capability matching, health scoring, rotation, and load balancing across heterogeneous shell agents
-- **CEL prehooks** — dynamic control flow (Run/Skip/Branch/DynamicAdd/Transform)
+- **CEL prehooks** — conditional step execution via CEL bool expressions
 - **Built-in policy and security** — mTLS, RBAC, sandbox (macOS Seatbelt / Linux namespaces), output redaction, and secret lifecycle management
 - **Long-running automation** — task persistence, event streams, trigger-based task creation, and guarded workflow loops
 - **Single binary** — Rust, embedded SQLite, no external dependencies

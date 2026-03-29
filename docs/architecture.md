@@ -153,7 +153,7 @@ A **Task** is the unit of execution, binding a Workspace and Workflow to a set o
 2.  **Orchestration Cycle**: The task runs in cycles until completion or manual stop.
     *   **Item Discovery**: The orchestrator identifies **Task Items** (e.g., source files, QA docs) to process.
     *   **Step Execution**: Steps are grouped into contiguous **scope segments**. Task-scoped steps (plan, implement, self_test, qa_doc_gen, align_tests, doc_governance) run **once per cycle**; item-scoped steps (qa_testing, ticket_fix, ticket_scan, fix, retest) fan out **per item**.
-        *   **Prehooks**: Dynamic conditions (CEL-based) evaluate whether to Run, Skip, or Branch a step.
+        *   **Prehooks**: CEL expressions that evaluate to bool, determining whether to run or skip a step.
         *   **Agent Selection**: The system dynamically selects an Agent that satisfies the step's `required_capability`.
         *   **Command Execution**: The agent's template is rendered and executed as a shell command.
         *   **Result Capture**: Exit codes, stdout/stderr, and artifacts are captured.

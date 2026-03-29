@@ -135,7 +135,7 @@ Initial release of the Agent Orchestrator platform.
 
 #### Core Engine
 - DAG execution engine with topological sort, cycle detection, and conditional edges
-- CEL (Common Expression Language) prehook decisions: Run, Skip, Branch, DynamicAdd, Transform
+- CEL (Common Expression Language) prehooks: conditional step execution via bool expressions
 - Capability-driven agent selection with health scoring and load balancing
 - Dynamic step pools with runtime step selection based on context and priority
 - Pipeline variables with CEL expression interpolation

@@ -5,8 +5,8 @@ self_referential_safe: true
 # Orchestrator - Dynamic Orchestration & Adaptive Workflow
 
 **Module**: orchestrator
-**Scope**: Validate dynamic prehook decisions, explicit `dynamic_dag` execution mode, dynamic step pool, and adaptive runtime planning
-**Scenarios**: 5
+**Scope**: Validate explicit `dynamic_dag` execution mode, dynamic step pool, and adaptive runtime planning
+**Scenarios**: 4
 **Priority**: High
 
 ---
@@ -14,7 +14,6 @@ self_referential_safe: true
 ## Background
 
 This document tests the dynamic orchestration feature set:
-- PrehookDecision with extended decision types (Run/Skip/Branch/DynamicAdd/Transform)
 - DynamicStepPool for runtime step selection
 - explicit `dynamic_dag` mainline execution mode
 - Conditional edge evaluation
@@ -28,43 +27,7 @@ Entry point: `orchestrator` CLI, config file modifications, Rust unit tests
 
 ---
 
-## Scenario 1: PrehookDecision Extended Types
-
-### Preconditions
-
-- Orchestrator binary built successfully
-- Unit tests available: `cargo test dynamic_orchestration`
-
-### Steps
-
-1. Run unit tests for PrehookDecision:
-   ```bash
-   cd core && cargo test test_prehook_decision_from_bool
-   ```
-
-2. Verify test output shows Run/Skip behavior:
-   ```
-   test dynamic_orchestration::tests::test_prehook_decision_from_bool ... ok
-   ```
-
-3. Check PrehookDecision enum in code:
-   ```bash
-   rg -n "enum PrehookDecision" core/src/dynamic_orchestration
-   ```
-
-### Expected
-
-- `PrehookDecision::from(true)` returns `Run` variant
-- `PrehookDecision::from(false)` returns `Skip` variant with reason
-- `should_run()` method returns true for Run/DynamicAdd/Transform variants
-
-### DB Checks
-
-N/A - Unit test verification
-
----
-
-## Scenario 2: DynamicStepPool Matching
+## Scenario 1: DynamicStepPool Matching
 
 ### Preconditions
 
@@ -101,7 +64,7 @@ N/A - Unit test verification
 
 ---
 
-## Scenario 3: DAG Topological Sort
+## Scenario 2: DAG Topological Sort
 
 ### Preconditions
 
@@ -136,7 +99,7 @@ N/A - Unit test verification
 
 ---
 
-## Scenario 4: Cycle Detection
+## Scenario 3: Cycle Detection
 
 ### Preconditions
 
@@ -171,7 +134,7 @@ N/A - Unit test verification
 
 ---
 
-## Scenario 5: Adaptive Planner Runtime, Validation, And Fallback
+## Scenario 4: Adaptive Planner Runtime, Validation, And Fallback
 
 ### Preconditions
 
@@ -222,8 +185,7 @@ N/A - Unit test verification
 
 | Scenario | Status | Notes |
 |----------|--------|-------|
-| 1. PrehookDecision Extended Types | PASS | `test_prehook_decision_from_bool` passed; enum found at `src/dynamic_orchestration/prehook.rs` |
-| 2. DynamicStepPool Matching | PASS | 8 step pool tests passed; `DynamicStepConfig` and `dynamic_steps` verified |
-| 3. DAG Topological Sort | PASS | 5 DAG sort tests passed including diamond, empty, cycle error cases |
-| 4. Cycle Detection | PASS | `test_dag_cycle_detection` passed; cycle detection verified |
-| 5. Adaptive Planner Runtime, Validation, And Fallback | PASS | 7 adaptive + 27 workflow_convert + 36 validate tests passed; event names and validation logic verified |
+| 1. DynamicStepPool Matching | PASS | 8 step pool tests passed; `DynamicStepConfig` and `dynamic_steps` verified |
+| 2. DAG Topological Sort | PASS | 5 DAG sort tests passed including diamond, empty, cycle error cases |
+| 3. Cycle Detection | PASS | `test_dag_cycle_detection` passed; cycle detection verified |
+| 4. Adaptive Planner Runtime, Validation, And Fallback | PASS | 7 adaptive + 27 workflow_convert + 36 validate tests passed; event names and validation logic verified |
