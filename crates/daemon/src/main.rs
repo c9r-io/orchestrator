@@ -14,6 +14,7 @@ mod fs_watcher;
 mod lifecycle;
 mod protection;
 mod server;
+mod uds_security;
 mod webhook;
 
 use std::path::PathBuf;
@@ -626,10 +627,15 @@ fn main() -> Result<()> {
             args.control_plane_dir.as_deref(),
         )?);
 
+        let uds_policy = uds_security::load_uds_policy(
+            &inner.data_dir,
+            args.control_plane_dir.as_deref(),
+        )?;
         let service = server::OrchestratorServer::new(
             inner.clone(),
             shutdown_notify.clone(),
             None,
+            uds_policy,
         );
 
         // Shutdown future: listen for OS signals, restart request, or RPC shutdown
@@ -670,6 +676,7 @@ fn main() -> Result<()> {
                         inner.clone(),
                         shutdown_notify.clone(),
                         Some(secure.security),
+                        None,
                     ))
                     .max_encoding_message_size(64 * 1024 * 1024),
                 )
@@ -702,9 +709,41 @@ fn main() -> Result<()> {
                 // Remove stale socket
                 let _ = std::fs::remove_file(&socket_path);
                 let uds = UnixListener::bind(&socket_path).context("failed to bind UDS")?;
-                let uds_stream = tokio_stream::wrappers::UnixListenerStream::new(uds);
 
-                info!(socket = %socket_path.display(), "listening on UDS");
+                // Harden socket permissions to owner-only regardless of umask.
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    std::fs::set_permissions(
+                        &socket_path,
+                        std::fs::Permissions::from_mode(0o600),
+                    )
+                    .context("failed to set UDS socket permissions to 0600")?;
+                }
+
+                // Wrap accepted connections with peer-credential validation.
+                // Connections from a different UID are dropped before entering
+                // the gRPC layer.  Valid connections are wrapped as UdsStream so
+                // that UdsPeerInfo is available via request extensions.
+                use futures::StreamExt;
+                let uds_stream =
+                    tokio_stream::wrappers::UnixListenerStream::new(uds).filter_map(
+                        |result| async {
+                            match result {
+                                Ok(stream) => match uds_security::validate_peer(&stream) {
+                                    Ok(peer) => {
+                                        Some(Ok(uds_security::UdsStream::new(stream, peer)))
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!(error = %e, "rejected UDS connection");
+                                        None
+                                    }
+                                },
+                                Err(e) => Some(Err(e)),
+                            }
+                        },
+                    );
+
+                info!(socket = %socket_path.display(), mode = "0600", "listening on UDS");
                 emit_daemon_event(&inner, "daemon_socket_ready", serde_json::json!({
                     "socket": socket_path.to_string_lossy(),
                 })).await;

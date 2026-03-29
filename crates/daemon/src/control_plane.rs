@@ -688,7 +688,7 @@ fn server_sans(bind_addr: &SocketAddr) -> Result<Vec<SanType>> {
     Ok(sans)
 }
 
-fn required_role_for_rpc(rpc: &str) -> Role {
+pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
     match rpc {
         "Ping" | "TaskList" | "TaskInfo" | "TaskLogs" | "TaskFollow" | "TaskWatch" | "Get"
         | "Describe" | "StoreGet" | "StoreList" | "WorkerStatus" | "Check" | "ManifestExport" => {

@@ -15,7 +15,8 @@ use orchestrator_proto::*;
 use tokio::sync::Notify;
 use tonic::{Request, Response, Status};
 
-use crate::control_plane::{AuthzError, ControlPlaneSecurity};
+use crate::control_plane::{AuthzError, ControlPlaneSecurity, Role, required_role_for_rpc};
+use crate::uds_security::{UdsAuthPolicy, UdsPeerInfo};
 
 /// gRPC service implementation — thin translation layer from gRPC requests
 /// to core service calls.
@@ -23,6 +24,7 @@ pub struct OrchestratorServer {
     pub(crate) state: Arc<InnerState>,
     pub(crate) shutdown_notify: Arc<Notify>,
     pub(crate) control_plane: Option<Arc<ControlPlaneSecurity>>,
+    pub(crate) uds_auth_policy: Option<UdsAuthPolicy>,
 }
 
 impl OrchestratorServer {
@@ -31,11 +33,13 @@ impl OrchestratorServer {
         state: Arc<InnerState>,
         shutdown_notify: Arc<Notify>,
         control_plane: Option<Arc<ControlPlaneSecurity>>,
+        uds_auth_policy: Option<UdsAuthPolicy>,
     ) -> Self {
         Self {
             state,
             shutdown_notify,
             control_plane,
+            uds_auth_policy,
         }
     }
 
@@ -63,8 +67,63 @@ pub(crate) fn authorize<T>(
 ) -> std::result::Result<(), AuthzError> {
     match &server.control_plane {
         Some(control_plane) => control_plane.authorize(request, rpc),
-        None => Ok(()),
+        None => {
+            let required = required_role_for_rpc(rpc);
+            let peer = request.extensions().get::<UdsPeerInfo>();
+
+            // Phase 4: optional UDS authorization policy
+            if let Some(policy) = &server.uds_auth_policy {
+                if !policy.max_role.allows(required) {
+                    uds_audit(
+                        &server.state.db_path,
+                        rpc,
+                        peer,
+                        "denied",
+                        Some("uds_policy_denied"),
+                    );
+                    return Err(AuthzError::PermissionDenied(
+                        "UDS policy restricts this operation",
+                    ));
+                }
+            }
+
+            // Phase 3: audit mutating operations on UDS
+            if required != Role::ReadOnly {
+                uds_audit(&server.state.db_path, rpc, peer, "allowed", None);
+            }
+
+            Ok(())
+        }
     }
+}
+
+fn uds_audit(
+    db_path: &std::path::Path,
+    rpc: &str,
+    peer: Option<&UdsPeerInfo>,
+    authz_result: &str,
+    rejection_stage: Option<&str>,
+) {
+    use agent_orchestrator::db::{ControlPlaneAuditRecord, insert_control_plane_audit};
+    let _ = insert_control_plane_audit(
+        db_path,
+        &ControlPlaneAuditRecord {
+            transport: "uds".into(),
+            remote_addr: peer.and_then(|p| p.pid.map(|pid| format!("pid:{pid}"))),
+            rpc: rpc.into(),
+            subject_id: peer.map(|p| format!("uid:{}", p.uid)),
+            authn_result: "peer_cred".into(),
+            authz_result: authz_result.into(),
+            role: None,
+            reason: rejection_stage.map(|s| s.to_string()),
+            tls_fingerprint: None,
+            rejection_stage: rejection_stage.map(|s| s.to_string()),
+            traffic_class: None,
+            limit_scope: None,
+            decision: None,
+            reason_code: None,
+        },
+    );
 }
 
 fn map_core_error(error: OrchestratorError) -> Status {
