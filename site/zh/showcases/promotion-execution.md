@@ -1,30 +1,30 @@
-# 项目推广内容自动生成与分发执行计划
+# 项目更新分享内容自动生成与分发执行计划
 
 > **Harness Engineering 执行计划**：本文档是一个 agent 可执行场景，用来展示 orchestrator 这个 control plane 如何组织环境、工作流、约束与反馈闭环，而不是一次性的 prompt 调用。
 >
 > **Agent 协作**：本文档是一个 Agent 可执行的计划。在 AI 编码 Agent（Claude Code、OpenCode、Codex 等）中打开本项目，Agent 读取本计划后，通过 orchestrator CLI 调度其他 Agent 协作完成任务 — 从资源部署、任务执行到结果验证，全程自主完成。
 
-本文档是 orchestrator 的第 4 类 showcase：**项目推广** — 自动化内容创建与多平台分发。与前三类 showcase（自举、自进化、全量 QA）不同，本工作流展示 orchestrator 处理**面向外部的自动化任务**的能力，而非 SDLC 内部循环。
+本文档是 orchestrator 的第 4 类 showcase：**项目更新分享** — 自动化内容创建与多平台分发。与前三类 showcase（自举、自进化、全量 QA）不同，本工作流展示 orchestrator 处理**面向外部的沟通任务**的能力，而非 SDLC 内部循环。
 
-适用场景：项目发布重要功能后的宣传、定期周报推广、里程碑达成后的内容分发。
+适用场景：项目发布重要功能后的对外说明、定期周报分享、里程碑达成后的内容分发。
 
 ---
 
 ## 1. 任务目标
 
-> 课题名称：`项目推广内容自动生成`
+> 课题名称：`项目更新分享内容自动生成`
 >
 > 背景：
-> orchestrator 作为 AI 原生 SDLC 自动化工具，需要定期向技术社区推广项目进展。
-> 手工为多个平台撰写推广内容耗时且容易遗漏，适合用 orchestrator 自身来编排自动化。
+> orchestrator 作为 AI 原生 SDLC 自动化工具，需要定期向技术社区分享项目进展与构建经验。
+> 手工为多个平台整理这些内容耗时且容易遗漏，适合用 orchestrator 自身来编排自动化。
 >
 > 本轮任务目标：
-> 收集最近的项目变更，由 AI 分析亮点，生成 Dev.to / Hashnode / Twitter / LinkedIn / HN
-> 等平台的推广内容，自动发布到有 API 的平台，保存手动平台的草稿。
+> 收集最近的项目变更，由 AI 分析其中真正值得分享的部分，生成 Dev.to / Hashnode /
+> Twitter / LinkedIn / HN 等平台的内容草稿；对支持安全 API 的平台执行草稿发布，其余平台保留人工审核稿。
 >
 > 约束：
-> 1. 不修改项目代码，仅生成推广内容。
-> 2. 通过 WorkflowStore 跟踪已发布内容，避免重复推广相同提交。
+> 1. 不修改项目代码，仅生成对外分享内容。
+> 2. 通过 WorkflowStore 跟踪已处理内容，避免重复围绕相同提交生成更新。
 > 3. HN / Reddit 仅生成草稿，需人工审核后手动提交。
 > 4. Dev.to 发布为 `published: false` 草稿状态，需人工确认后发布。
 
@@ -32,7 +32,7 @@
 
 由 orchestrator 自主产出：
 
-1. `docs/promotion/drafts/` 下的多平台推广草稿（JSON 格式，含 title/body/metadata）。
+1. `docs/promotion/drafts/` 下的多平台分享草稿（JSON 格式，含 title/body/metadata）。
 2. Dev.to 上的草稿文章（如配置了 `DEVTO_API_KEY`）。
 3. WorkflowStore 中的发布记录（`last_published_sha` + 日期索引）。
 
@@ -46,7 +46,7 @@ gather_updates(command) → analyze_highlights(agent) → generate_content(agent
 
 - 不自动发布到 Hacker News 或 Reddit（无安全 API，且反垃圾机制严格）。
 - 不生成视频、播客等非文本内容。
-- 不评估推广效果（阅读量、点赞数等）—— 可作为后续迭代。
+- 不评估传播效果（阅读量、点赞数等）—— 可作为后续迭代。
 
 ---
 
@@ -112,7 +112,7 @@ orchestrator task create \
   -n "promotion-weekly" \
   -w promotion -W promotion \
   --project promotion \
-  -g "收集最近项目更新，分析亮点，为 Dev.to/Hashnode/Twitter/LinkedIn/HN 生成推广内容草稿"
+  -g "收集最近项目更新，分析其中真正值得分享的内容，为 Dev.to/Hashnode/Twitter/LinkedIn/HN 生成对外草稿"
 ```
 
 记录返回的 `<task_id>`。任务会立即被 worker 认领并开始执行。
@@ -186,7 +186,7 @@ orchestrator store get promotion last_published_sha --project promotion
 - [ ] 输出为有效 JSON
 - [ ] `highlights` 数组有 1-3 个条目
 - [ ] `platforms` 数组有 3-5 个条目
-- [ ] 每个 platform 的 `api_publishable` 字段正确（devto/hashnode 为 true）
+- [ ] 每个 platform 的 `api_publishable` 字段正确，仅在存在安全草稿发布路径时为 true
 - [ ] `generate_items` post-action 成功生成 items
 
 ### 5.3 Generate Content 检查点
@@ -196,7 +196,7 @@ orchestrator store get promotion last_published_sha --project promotion
 - [ ] 每个平台生成了格式正确的内容
 - [ ] Dev.to/Hashnode 内容为完整博文（800+ 字）
 - [ ] Twitter 内容为 3-7 条推文线程
-- [ ] HN 内容语气克制、无营销话术
+- [ ] HN 内容语气克制、无营销话术、无强行竞品比较
 - [ ] 所有内容包含项目 URL
 
 ### 5.4 Publish 检查点
@@ -209,7 +209,7 @@ orchestrator store get promotion last_published_sha --project promotion
 
 ## 6. 成功判定
 
-当以下条件同时成立，可判定本轮推广执行完成：
+当以下条件同时成立，可判定本轮更新分享执行完成：
 
 1. orchestrator 完整跑完 promotion 流程，loop_guard 正常收口。
 2. `docs/promotion/drafts/` 下至少有 3 个平台的草稿文件。
@@ -223,7 +223,7 @@ orchestrator store get promotion last_published_sha --project promotion
 
 | 异常 | 判断方式 | 处理 |
 |------|---------|------|
-| 无新变更可推广 | `analyze_highlights` 返回空 `highlights` | 正常终止，不生成内容 |
+| 无新变更可分享 | `analyze_highlights` 返回空 `highlights` | 正常终止，不生成内容 |
 | API key 未配置 | `publish` 步骤输出 "not set" | 忽略发布，草稿已保存 |
 | AI 生成无效 JSON | `generate_content` captures 失败 | 检查 agent 日志，调整 prompt |
 | Dev.to API 返回 401 | curl 输出 Unauthorized | 检查 `DEVTO_API_KEY` 是否有效 |
@@ -247,4 +247,4 @@ orchestrator store get promotion last_published_sha --project promotion
    - LinkedIn：阅读短文草稿，手动发布。
 5. **异常处理**：在内容质量不达标时中断并调整。
 
-人工不提前替 orchestrator 写推广内容，不预设平台选择。内容策略由 AI 分析项目变更后自主决定，人工只审核最终产出。
+人工不提前替 orchestrator 写宣传文案，不预设平台选择。内容角度由 AI 分析项目变更后自主决定，人工只审核最终产出。

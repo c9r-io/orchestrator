@@ -1,31 +1,31 @@
-# Automated Promotion Content Generation and Distribution Execution Plan
+# Automated Project Update Storytelling and Distribution Execution Plan
 
 > **Harness Engineering execution plan**: this is an agent-executable scenario that shows how the control plane coordinates environment, workflow, guardrails, and feedback loops rather than a one-off agent call.
 >
 > **Agent Collaboration**: This document is an agent-executable plan. Open this project in an AI coding agent (Claude Code, OpenCode, Codex, etc.) — the agent reads this plan and orchestrates other agents via the orchestrator CLI to collaboratively complete the task, from resource deployment and execution to result verification, fully autonomously.
 
 
-This document is the 4th category of orchestrator showcase: **Project Promotion** — automated content creation and multi-platform distribution. Unlike the first three showcase categories (self-bootstrap, self-evolution, full QA), this workflow demonstrates the orchestrator's ability to handle **externally-facing automation tasks** rather than internal SDLC loops.
+This document is the 4th category of orchestrator showcase: **Project Update Storytelling** — automated content creation and multi-platform distribution. Unlike the first three showcase categories (self-bootstrap, self-evolution, full QA), this workflow demonstrates the orchestrator's ability to handle **externally-facing communication tasks** rather than internal SDLC loops.
 
-Applicable scenarios: publicity after shipping major features, periodic weekly promotion, and content distribution after reaching milestones.
+Applicable scenarios: sharing major shipped features, periodic weekly project updates, and milestone-based external communication.
 
 ---
 
 ## 1. Task Objective
 
-> Topic name: `Automated Project Promotion Content Generation`
+> Topic name: `Automated Project Update Storytelling`
 >
 > Background:
-> As an AI-native SDLC automation tool, orchestrator needs to periodically promote project progress to the technical community.
-> Manually writing promotion content for multiple platforms is time-consuming and error-prone, making it a good fit for orchestrator-driven automation.
+> As an AI-native SDLC automation tool, orchestrator needs to periodically share project progress and lessons learned with the technical community.
+> Manually turning project changes into thoughtful community-facing updates for multiple platforms is time-consuming and error-prone, making it a good fit for orchestrator-driven automation.
 >
 > Objectives for this round:
-> Collect recent project changes, have AI analyze highlights, generate promotion content for
-> Dev.to / Hashnode / Twitter / LinkedIn / HN platforms, automatically publish to platforms with APIs, and save drafts for manual platforms.
+> Collect recent project changes, have AI identify what is genuinely worth sharing, generate platform-specific update drafts for
+> Dev.to / Hashnode / Twitter / LinkedIn / HN, publish only to platforms with safe API draft flows, and save drafts for manual platforms.
 >
 > Constraints:
-> 1. Do not modify project code; only generate promotion content.
-> 2. Track published content via WorkflowStore to avoid re-promoting the same commits.
+> 1. Do not modify project code; only generate community-facing update content.
+> 2. Track processed content via WorkflowStore to avoid generating repeated updates around the same commits.
 > 3. HN / Reddit are draft-only; human review and manual submission required.
 > 4. Dev.to publishes with `published: false` draft status; human confirmation required before publishing.
 
@@ -33,7 +33,7 @@ Applicable scenarios: publicity after shipping major features, periodic weekly p
 
 Produced autonomously by the orchestrator:
 
-1. Multi-platform promotion drafts under `docs/promotion/drafts/` (JSON format with title/body/metadata).
+1. Multi-platform community-update drafts under `docs/promotion/drafts/` (JSON format with title/body/metadata).
 2. Draft articles on Dev.to (if `DEVTO_API_KEY` is configured).
 3. Publication records in WorkflowStore (`last_published_sha` + date index).
 
@@ -113,7 +113,7 @@ orchestrator task create \
   -n "promotion-weekly" \
   -w promotion -W promotion \
   --project promotion \
-  -g "Collect recent project updates, analyze highlights, and generate promotion content drafts for Dev.to/Hashnode/Twitter/LinkedIn/HN"
+  -g "Collect recent project updates, identify what is genuinely worth sharing, and generate external-facing drafts for Dev.to/Hashnode/Twitter/LinkedIn/HN"
 ```
 
 Record the returned `<task_id>`. The task will be immediately claimed by a worker and begin execution.
@@ -187,7 +187,7 @@ Confirm the AI analysis results are reasonable:
 - [ ] Output is valid JSON
 - [ ] `highlights` array has 1-3 entries
 - [ ] `platforms` array has 3-5 entries
-- [ ] Each platform's `api_publishable` field is correct (true for devto/hashnode)
+- [ ] Each platform's `api_publishable` field is correct, and only true when a safe draft-publishing path exists
 - [ ] `generate_items` post-action successfully generates items
 
 ### 5.3 Generate Content Checkpoint
@@ -197,7 +197,7 @@ Confirm content quality:
 - [ ] Each platform has correctly formatted content
 - [ ] Dev.to/Hashnode content is a full blog post (800+ words)
 - [ ] Twitter content is a 3-7 tweet thread
-- [ ] HN content is restrained in tone with no marketing language
+- [ ] HN content is restrained in tone, avoids marketing language, and does not force competitor framing
 - [ ] All content includes the project URL
 
 ### 5.4 Publish Checkpoint
@@ -224,7 +224,7 @@ The promotion execution is considered complete when all of the following conditi
 
 | Error | Detection Method | Resolution |
 |-------|-----------------|------------|
-| No new changes to promote | `analyze_highlights` returns empty `highlights` | Normal termination, no content generated |
+| No new changes worth sharing | `analyze_highlights` returns empty `highlights` | Normal termination, no content generated |
 | API key not configured | `publish` step outputs "not set" | Skip publishing; drafts are already saved |
 | AI generates invalid JSON | `generate_content` captures fail | Check agent logs, adjust prompt |
 | Dev.to API returns 401 | curl output shows Unauthorized | Check whether `DEVTO_API_KEY` is valid |
@@ -248,4 +248,4 @@ In this plan, the human role is strictly limited to:
    - LinkedIn: Read the short-form draft, manually publish.
 5. **Error handling**: Interrupt and adjust when content quality is insufficient.
 
-Humans do not pre-write promotion content for the orchestrator and do not prescribe platform selection. Content strategy is determined autonomously by AI after analyzing project changes; humans only review the final output.
+Humans do not pre-write launch copy for the orchestrator and do not prescribe platform selection. The content angle is determined autonomously by AI after analyzing project changes; humans only review the final output.
