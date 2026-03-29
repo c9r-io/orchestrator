@@ -71,6 +71,7 @@
 | FR-084 | Agent 条件命令规则 + Session 复用 | P1 | Closed |
 | FR-085 | Filesystem Trigger — 文件系统变更原生触发器 | P1 | Closed |
 | FR-086 | CLI Command to Simulate Agent Selection Logic | P3 | Closed |
+| FR-087 | Agent Health Policy CLI 测试夹具 — 自定义策略 QA 可验证性 | P2 | Proposed |
 
 ## 说明
 

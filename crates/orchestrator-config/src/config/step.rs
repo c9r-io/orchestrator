@@ -346,6 +346,8 @@ json_path: $.total_score
             "self_test",
             "self_restart",
             "smoke_chain",
+            "evaluate",
+            "item_select",
         ] {
             assert!(validate_step_type(id).is_ok(), "expected valid for {}", id);
         }

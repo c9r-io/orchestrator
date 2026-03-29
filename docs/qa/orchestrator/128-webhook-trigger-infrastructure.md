@@ -26,14 +26,28 @@ Daemon must already be running (webhook server enabled by default on `127.0.0.1:
 
 **Steps:**
 1. Apply a trigger manifest with `source: webhook`
-2. `curl -X POST http://127.0.0.1:19090/webhook/<trigger_name> -d '{"key":"value"}'`
+2. Fire the webhook. When `--webhook-secret` (or per-trigger `webhook.secret.fromRef`) is configured, include a valid HMAC-SHA256 signature:
+   ```bash
+   # Compute signature (replace <secret> with configured webhook secret):
+   SIG=$(printf '{"key":"value"}' | openssl dgst -sha256 -hmac '<secret>' | awk '{print $2}')
+   curl -X POST http://127.0.0.1:19090/webhook/<trigger_name> \
+     -d '{"key":"value"}' \
+     -H "X-Webhook-Signature: sha256=${SIG}"
+   ```
+   If no webhook secret is configured, the signature header can be omitted.
 
 **Expected:** Returns 200 with `{"task_id":"...","trigger":"...","status":"fired"}`.
 
 ### Scenario 3: Webhook with project scope
 
 **Steps:**
-1. `curl -X POST http://127.0.0.1:19090/webhook/myproject/my-trigger -d '{}'`
+1. Fire a project-scoped webhook. Include HMAC signature when secret is configured (see S2 for computation):
+   ```bash
+   SIG=$(printf '{}' | openssl dgst -sha256 -hmac '<secret>' | awk '{print $2}')
+   curl -X POST http://127.0.0.1:19090/webhook/myproject/my-trigger \
+     -d '{}' \
+     -H "X-Webhook-Signature: sha256=${SIG}"
+   ```
 
 **Expected:** Trigger fires in project "myproject".
 

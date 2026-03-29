@@ -23,7 +23,23 @@ Daemon must already be running (webhook server enabled by default on `127.0.0.1:
 ## Scenario 2: Webhook source with webhook config accepted
 
 **Steps:**
-1. Validate a manifest with `event.source: webhook` and `webhook.secret.fromRef`:
+1. Create or use an existing trigger manifest with per-trigger webhook config:
+   ```yaml
+   apiVersion: orchestrator.dev/v2
+   kind: Trigger
+   metadata:
+     name: test-webhook-config
+   spec:
+     event:
+       source: webhook
+       webhook:
+         secret:
+           fromRef: test-secret-store
+     action:
+       workflow: test-workflow
+       workspace: default
+   ```
+2. Validate:
    ```bash
    orchestrator manifest validate -f <manifest>
    ```

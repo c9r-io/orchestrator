@@ -81,7 +81,7 @@ Verify bounded output reads track truncation metadata without polluting persiste
 
 2. **Code review** — verify output capture redaction:
    ```bash
-   rg -n "streaming_redactor|output_capture" core/src/output_capture.rs | head -10
+   rg -n "streaming_redactor|output_capture" crates/orchestrator-runner/src/output_capture.rs | head -10
    ```
 
 3. **Unit test** — run spill and bounded read tests:

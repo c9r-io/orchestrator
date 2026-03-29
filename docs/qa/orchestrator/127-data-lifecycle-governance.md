@@ -67,10 +67,10 @@ FR-079
 
 ## Checklist
 
-- [x] S1: db status shows sizes — **FAIL** (no size fields in output)
-- [x] S2: db status JSON includes size fields — **FAIL** (no size bytes in JSON)
-- [x] S3: db vacuum — **FAIL** (subcommand not implemented)
-- [x] S4: db cleanup — **FAIL** (subcommand not implemented)
+- [x] S1: db status shows sizes — **PASS** (DB Size, Logs Size, Archive Size in human-readable format)
+- [x] S2: db status JSON includes size fields — **PASS** (db_size_bytes, logs_size_bytes, archive_size_bytes present)
+- [x] S3: db vacuum — **PASS** (shows size before, size after, freed space)
+- [x] S4: db cleanup — **PASS** (shows files deleted and bytes freed)
 - [x] S5: daemon auto log cleanup — **BLOCKED** (daemon already running, cannot restart with flags)
 - [x] S6: daemon auto task cleanup — **BLOCKED** (daemon already running, cannot restart with flags)
 - [x] S7: log-retention-days=0 disables cleanup — **BLOCKED** (daemon already running, cannot restart with flags)

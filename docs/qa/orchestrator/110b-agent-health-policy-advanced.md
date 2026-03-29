@@ -32,6 +32,9 @@ cargo test -p agent-orchestrator -- test_diseased_agent_with_passing_capability_
 
 ## 场景 2：orchestrator check 展示 health policy
 
+> **已知限制**: CLI 暂无机制注册带有自定义 health_policy 的 Agent 测试夹具。
+> 默认策略展示已验证；自定义阈值和 `disease DISABLED` 场景待 FR-087 落地后完整验证。
+
 **步骤**
 1. 注册多个 Agent，部分包含自定义 health_policy
 2. 运行 `orchestrator check`
