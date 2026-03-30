@@ -4,6 +4,11 @@
 
 FR-079
 
+## Prerequisites
+
+- CLI binary must be built from current source: `cargo build --release --bin orchestrator`
+- Features added in commit `e917583` (2026-03-25); binaries built before this date lack `db vacuum` and `db cleanup` subcommands.
+
 ## Verification Scenarios
 
 ### Scenario 1: db status shows sizes

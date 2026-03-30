@@ -19,9 +19,9 @@ Coverage model:
 
 | Step family | Known step IDs | Rendering path |
 |--------|------|-------|
-| Builtin or builtin-command steps | `init_once`, `loop_guard`, `self_test`, `self_restart`, `item_select` | `crates/orchestrator-scheduler/src/scheduler/item_executor/dispatch.rs` + `AgentContext::render_template_with_pipeline()` |
+| Builtin or builtin-command steps | `init_once`, `loop_guard`, `self_test`, `self_restart`, `item_select`, `ticket_scan` | `crates/orchestrator-scheduler/src/scheduler/item_executor/dispatch.rs` + `AgentContext::render_template_with_pipeline()` |
 | Task-scoped capability/template steps | `plan`, `build`, `test`, `lint`, `implement`, `review`, `git_ops`, `qa_doc_gen`, `align_tests`, `doc_governance`, `smoke_chain`, `evaluate` | `crates/orchestrator-scheduler/src/scheduler/phase_runner/mod.rs` + `AgentContext::render_template_with_pipeline()` |
-| Item-scoped capability/template steps | `qa`, `ticket_scan`, `fix`, `retest`, `qa_testing`, `ticket_fix` | `crates/orchestrator-scheduler/src/scheduler/phase_runner/mod.rs` basic placeholders + pipeline context |
+| Item-scoped capability/template steps | `qa`, `fix`, `retest`, `qa_testing`, `ticket_fix` | `crates/orchestrator-scheduler/src/scheduler/phase_runner/mod.rs` basic placeholders + pipeline context |
 
 Placeholder families covered by this document:
 
@@ -193,8 +193,8 @@ Verify the diagnostic backstop catches persisted commands that still contain tem
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Basic template renderer covers core placeholders | PASS | 2026-03-29 | Claude | 6/6 tests pass — all in qa_utils.rs |
-| 2 | Agent context renders runtime, pipeline, and escape-sensitive values | PASS | 2026-03-29 | Claude | 3/3 tests pass — all in crates/orchestrator-collab/src/context.rs |
-| 3 | Runtime propagation expands large pipeline variables without leaving placeholders | PASS | 2026-03-29 | Claude | 8/8 tests pass — auto_capture (3) + spill_large_var (5) in orchestrator-scheduler; PIPELINE_VAR_INLINE_LIMIT=4096 confirmed |
-| 4 | Every known step ID maps to a covered rendering entry point | FAIL | 2026-03-29 | Claude | Doc claims 23 step IDs but step.rs test_validate_step_type_known_ids has 21; see ticket qa-130 |
-| 5 | Task trace flags leftover unexpanded placeholders | PASS | 2026-03-29 | Claude | detect_unexpanded_template_var_anomaly test passes in scheduler/trace/tests.rs |
+| 1 | Basic template renderer covers core placeholders | PASS | 2026-03-30 | Claude | 6/6 tests pass — all in qa_utils.rs |
+| 2 | Agent context renders runtime, pipeline, and escape-sensitive values | PASS | 2026-03-30 | Claude | 3/3 tests pass — all in crates/orchestrator-collab/src/context.rs |
+| 3 | Runtime propagation expands large pipeline variables without leaving placeholders | PASS | 2026-03-30 | Claude | 8/8 tests pass — auto_capture (3) + spill_large_var (5) in orchestrator-scheduler; PIPELINE_VAR_INLINE_LIMIT=4096 confirmed |
+| 4 | Every known step ID maps to a covered rendering entry point | PASS | 2026-03-30 | Claude | Background table corrected: `ticket_scan` moved to Builtin row (dispatch.rs:753) |
+| 5 | Task trace flags leftover unexpanded placeholders | PASS | 2026-03-30 | Claude | detect_unexpanded_template_var_anomaly test passes in scheduler/trace/tests.rs |

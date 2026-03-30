@@ -137,22 +137,15 @@ and that prehook logic can skip downstream phases when no failures occur in QA.
    rg -n "fn build_segments_groups_contiguous_scopes" crates/orchestrator-scheduler/src/scheduler/loop_engine/tests.rs
    ```
 
-2. Review prehook skip logic (downstream phases skipped when not needed):
-   ```bash
-   rg -n "fn test_prehook_decision_skip_does_not_run" core/src/dynamic_orchestration/prehook.rs
-   rg -n "fn test_prehook_decision_default_is_run" core/src/dynamic_orchestration/prehook.rs
-   ```
-
-3. Review finalize rule evaluation for retest variables:
+2. Review finalize rule evaluation for retest variables:
    ```bash
    rg -n "fn test_evaluate_finalize_rule_retest_variables" core/src/prehook/tests.rs
    rg -n "fn test_evaluate_finalize_rule_retest_new_ticket_count" core/src/prehook/tests.rs
    ```
 
-4. Run the unit tests:
+3. Run the unit tests:
    ```bash
    cargo test -p orchestrator-scheduler --lib build_segments_groups_contiguous_scopes
-   cargo test -p agent-orchestrator --lib test_prehook_decision
    cargo test -p agent-orchestrator --lib test_evaluate_finalize_rule_retest
    ```
 
@@ -160,14 +153,16 @@ and that prehook logic can skip downstream phases when no failures occur in QA.
 
 - `build_segments_groups_contiguous_scopes` passes: confirms three contiguous
   scopes (QA, Fix, Retest) are grouped into proper segments.
-- `test_prehook_decision_skip_does_not_run` passes: confirms that a prehook
-  returning Skip prevents the phase from executing.
-- `test_prehook_decision_default_is_run` passes: confirms the default prehook
-  decision allows phases to run.
 - `test_evaluate_finalize_rule_retest_variables` passes: confirms retest-phase
   variables are available in finalize rule CEL expressions.
 - `test_evaluate_finalize_rule_retest_new_ticket_count` passes: confirms the
   `new_ticket_count` variable is correctly bound for retest decisions.
+
+> **Note:** Prehook decision behavior (skip/run) is validated through the
+> `test_evaluate_finalize_rule_*` tests in Scenario 2 (27 tests). There are no
+> dedicated `test_prehook_decision_skip_*` or `test_prehook_decision_default_*`
+> test functions; the prehook logic lives in `core/src/prehook/`, not
+> `core/src/dynamic_orchestration/prehook.rs`.
 
 ---
 
@@ -210,6 +205,7 @@ from future candidate selection.
    ```bash
    cargo test -p agent-orchestrator --lib test_create_ticket_for_qa_failure
    cargo test -p agent-orchestrator --lib is_agent_healthy_diseased
+   cargo test -p agent-orchestrator --lib is_capability_healthy_diseased
    cargo test -p agent-orchestrator --lib test_diseased_agent_filtered
    cargo test -p agent-orchestrator --lib test_is_active_ticket_status
    ```
@@ -284,9 +280,8 @@ one cycle.
 
 | # | Scenario | Status | Date | Tester | Notes |
 |---|----------|--------|------|--------|-------|
-| 1 | qa_only Workflow | PASS | 2026-03-28 | Claude | `once_mode_always_stops` (scheduler); `strict_phase_accepts_json`, `strict_phase_requires_json` (agent-orchestrator) |
-| 2 | qa_fix Workflow | PASS | 2026-03-28 | Claude | `build_segments_groups_contiguous_scopes` (scheduler); 27 finalize rule tests (agent-orchestrator) |
-| 3 | qa_fix_retest Workflow | PASS | 2026-03-28 | Claude | `build_segments_groups_contiguous_scopes` (scheduler); 9 prehook decision tests + 5 retest finalize rule tests (agent-orchestrator) |
-| 4 | QA Failure and Ticket Creation | PASS | 2026-03-28 | Claude | 5 ticket + 2 health + 1 selection filter + 7 ticket status = 15 tests (agent-orchestrator) |
-| 5 | Loop Mode (max_cycles) | PASS | 2026-03-28 | Claude | `infinite_mode_respects_max_cycles`, `fixed_mode_stops_at_max_cycles`, `fixed_mode_defaults_to_one_cycle` (scheduler) |
-| 5 | Loop Mode (max_cycles) | PASS | 2026-03-28 | Claude | Re-confirmed: 3/3 loop mode tests |
+| 1 | qa_only Workflow | PASS | 2026-03-30 | Claude | `once_mode_always_stops` (scheduler); `strict_phase_accepts_json`, `strict_phase_requires_json` (agent-orchestrator) |
+| 2 | qa_fix Workflow | PASS | 2026-03-30 | Claude | `build_segments_groups_contiguous_scopes` (scheduler); 27 finalize rule tests (agent-orchestrator) |
+| 3 | qa_fix_retest Workflow | PASS | 2026-03-30 | Claude | `build_segments_groups_contiguous_scopes` (scheduler); retest finalize rule tests (agent-orchestrator). Prehook decision behavior covered by S2 finalize rule tests. |
+| 4 | QA Failure and Ticket Creation | PASS | 2026-03-30 | Claude | 5 ticket + 3 health (2 agent + 1 capability) + 1 selection + 7 ticket status = 16 tests (agent-orchestrator) |
+| 5 | Loop Mode (max_cycles) | PASS | 2026-03-30 | Claude | `infinite_mode_respects_max_cycles`, `fixed_mode_stops_at_max_cycles`, `fixed_mode_defaults_to_one_cycle` (scheduler) |

@@ -61,7 +61,7 @@ orchestrator trigger fire test-cron
 
 2. Unit test — preflight sandbox 检查:
    ```bash
-   cargo test -p agent-orchestrator --lib test_sandbox_backend_preflight_issues_reports_macos_allowlist_gap
+   cargo test -p agent-orchestrator --lib sandbox
    ```
 
 3. Unit test — manifest validate 在 self-test 中可用:
@@ -85,11 +85,11 @@ orchestrator trigger fire test-cron
 
 **S2 Results** (2026-03-28 re-verified):
 - Code review: `trigger_workflow_ref` / `trigger_workspace_ref` validation found at `crates/orchestrator-scheduler/src/scheduler/check/mod.rs:255-289`
-- `cargo test -p agent-orchestrator --lib test_sandbox_backend_preflight_issues_reports_macos_allowlist_gap` — **PASSED** (1/1)
+- `cargo test -p agent-orchestrator --lib sandbox` — **PASSED** (15/15)
 - `cargo test -p orchestrator-scheduler --lib test_execute_self_test_step_success_with_manifest_validate` — **PASSED** (1/1)
 - `cargo test --package agent-orchestrator --lib trigger` — **25/25 PASSED**
 - `cargo test -p orchestrator-scheduler --lib check` — **29/29 PASSED**
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | S2 (preflight validation) executed | ✅ | S1 skipped (self-referential unsafe); S2 verified: code review + 4 unit test suites passed (1 + 1 + 25 + 29 = 56 tests) |
+| 1 | S2 (preflight validation) executed | ✅ | S1 skipped (self-referential unsafe); S2 verified: code review + 4 unit test suites passed (15 + 1 + 25 + 29 = 70 tests) |

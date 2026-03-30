@@ -54,7 +54,7 @@ clippy, fmt, or code-review gate and does not rely on daemon control-plane inter
 
    ```bash
    cargo test -p agent-orchestrator resource::export::tests -- --nocapture
-   cargo test -p agent-orchestrator secret_key_lifecycle::tests -- --nocapture
+   cargo test -p orchestrator-security secret_key_lifecycle::tests -- --nocapture
    ```
 
    Expected:

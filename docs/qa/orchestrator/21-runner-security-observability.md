@@ -176,7 +176,7 @@ Verify the scheduler terminal path includes metrics persistence logic, via code 
 
 ## Scenario 5: QA Doctor Exposes Observability Metrics
 
-> **Skip**: `orchestrator qa doctor` command is not yet implemented. This scenario is blocked until the CLI subcommand is added.
+> **Skip**: `orchestrator qa doctor` command is not yet implemented (FR-088). This scenario is blocked until the CLI subcommand is added.
 
 ### Preconditions
 
@@ -215,4 +215,4 @@ Ensure `qa doctor` exposes new metrics fields in JSON and table outputs.
 | 2 | Runtime Policy Blocks Disallowed Shell | ✅ | 2026-03-29 | claude | 6 runner config tests pass; 25 runtime_policy tests pass; `enforce_runner_policy` called before `Command::new()` in `spawn_with_runner` |
 | 3 | Structured Output and Log Redaction | ✅ | 2026-03-29 | claude | 6 redact_text + 2 streaming_redactor + 1 e2e test pass; `pipe_and_redact` applies redaction before persistence |
 | 4 | task_execution_metrics Persistence | ✅ | 2026-03-29 | claude | INSERT confirmed in `db.rs:272`; migration creates table with all 8 expected columns; 55 loop_engine tests pass |
-| 5 | QA Doctor Exposes Observability Metrics | ❌ | 2026-03-18 | claude | `orchestrator qa` subcommand does not exist (unrecognized subcommand); data preconditions met (514 rows in task_execution_metrics); ticket: qa21_s5_doctor_subcommand_20260318 |
+| 5 | QA Doctor Exposes Observability Metrics | ❌ | 2026-03-30 | claude | `orchestrator qa` subcommand not yet implemented — feature gap tracked as FR-088; data preconditions met (514 rows in task_execution_metrics) |

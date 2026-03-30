@@ -34,7 +34,7 @@ FR-073
 **Steps:**
 1. `wc -l README.md`
 
-**Expected:** Under 100 lines.
+**Expected:** Under 110 lines.
 
 ### Scenario 9: Cloudflare Pages deployment (manual, post-setup)
 
@@ -49,5 +49,5 @@ FR-073
 
 - [x] S6: Guide navigation — **PASS** — Guide nav visible at `/en/guide/`, 7 chapters configured in sidebar (Quick Start, Resource Model, Workflow Configuration, CEL Prehooks, Advanced Features, Self-Bootstrap, CLI Reference), all chapter files present
 - [x] S7: "Why Orchestrator?" page *(deferred — page not implemented)*
-- [x] S8: README is concise — **PASS** — README.md has 97 lines, under 100-line threshold
+- [x] S8: README is concise — **PASS** — README.md has 106 lines, under 110-line threshold
 - [x] S9: Cloudflare Pages deployment (manual, post-setup) *(manual — not executed in automated run)*

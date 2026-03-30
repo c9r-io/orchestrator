@@ -70,10 +70,10 @@ FR-072
 ### Scenario 5: crates.io metadata completeness
 
 **Steps:**
-1. For each publishable crate (proto, orchestrator-config, agent-orchestrator, orchestrator-scheduler, orchestrator-cli, orchestratord):
+1. For each publishable crate (proto, orchestrator-config, orchestrator-collab, orchestrator-security, orchestrator-runner, agent-orchestrator, orchestrator-scheduler, orchestrator-client, orchestrator-cli, orchestratord):
    - `grep -E '^(description|repository|keywords|categories|license)' <crate>/Cargo.toml`
 
-**Expected:** All five fields present in each publishable crate.
+**Expected:** All five fields present in each of the 10 publishable crates.
 
 ### Scenario 6: Non-publishable crates excluded
 

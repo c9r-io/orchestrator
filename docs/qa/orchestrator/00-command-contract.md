@@ -62,6 +62,7 @@ Daemon lifecycle:
 3. Confirm `task` subcommands:
    - `list`
    - `create`
+   - `items`
    - `info`
    - `start`
    - `pause`
@@ -69,9 +70,9 @@ Daemon lifecycle:
    - `logs`
    - `delete`
    - `retry`
+   - `recover`
    - `watch`
    - `trace`
-   - `recover`
 
 ### Expected Result
 
@@ -110,7 +111,7 @@ Code review + unit test verification. The CLI argument parsing contract is verif
 - `describe workspace` accepts positional workspace name (clap derive verified)
 - Output format flags `-o json`/`-o yaml` defined for commands that support them
 - `task create --no-start` is defined; `--detach`/`--attach` are absent
-- Resource operation unit tests pass
+- Resource operation unit tests pass (78 `resource::tests` + 3 `apply_result` tests)
 
 ---
 
@@ -181,7 +182,7 @@ Code review + unit test verification.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Valid Top-Level Command Surface | ✅ | 2026-03-27 | Claude | All 17 top-level commands and 12 task subcommands verified |
-| 2 | Parameter Contract Check | ✅ | 2026-03-27 | Claude | 253 resource tests + 3 apply_result tests pass |
-| 3 | kubectl-Style Surface Contract | ✅ | 2026-03-27 | Claude | Unit tests for resource_dispatch and registered_resource pass |
-| 4 | Banned Patterns Guard | ✅ | 2026-03-27 | Claude | qa-doc-lint.sh exits 0 with warnings for UI docs only |
+| 1 | Valid Top-Level Command Surface | ✅ | 2026-03-30 | Claude | 17 top-level commands OK; task has 13 subcommands |
+| 2 | Parameter Contract Check | ✅ | 2026-03-30 | Claude | 78 resource::tests + 3 apply_result tests pass |
+| 3 | kubectl-Style Surface Contract | ✅ | 2026-03-30 | Claude | 3 resource_dispatch + 10 registered_resource tests pass |
+| 4 | Banned Patterns Guard | ✅ | 2026-03-30 | Claude | qa-doc-lint.sh exits 0 |
