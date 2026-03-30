@@ -72,7 +72,7 @@
 | FR-085 | Filesystem Trigger — 文件系统变更原生触发器 | P1 | Closed |
 | FR-086 | CLI Command to Simulate Agent Selection Logic | P3 | Closed |
 | FR-087 | Agent Health Policy CLI 测试夹具 — 自定义策略 QA 可验证性 | P2 | Proposed |
-| FR-088 | QA Doctor CLI — 可观测性指标暴露 | P2 | Proposed |
+| FR-088 | QA Doctor CLI — 可观测性指标暴露 | P2 | Closed |
 
 ## 说明
 
@@ -163,3 +163,4 @@
 - FR-086 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/94-agent-selection-threshold-verification.md` 与 `docs/qa/orchestrator/110b-agent-health-policy-advanced.md` 承载（采用 Option 2 单元测试验证路径：`is_capability_healthy_custom_threshold` + `test_diseased_agent_with_passing_capability_threshold_is_selected` 确定性证明 diseased agent 在自定义 `capability_success_threshold` 下的选中行为）
 - FR-086（原 daemon config hot reload 议题）已闭环；其设计与验证信息现由 `docs/design_doc/orchestrator/92-daemon-config-hot-reload.md` 与 `docs/qa/orchestrator/133-daemon-config-hot-reload.md` 承载（ArcSwap 原子快照机制实现无重启配置热加载，`persist_config_and_reload()` 在 apply 响应前同步更新 `config_runtime`；QA 128 S2/S3 限制已移除）
 - QA-106 inflight wait test fixture 已闭环删除（原 FR-085 编号冲突）；其设计与验证信息现由 `docs/design_doc/orchestrator/93-long-running-agent-test-fixture.md` 与 `docs/qa/orchestrator/106-inflight-wait-heartbeat-aware-timeout.md` 承载（3 项集成测试直接验证 `wait_for_inflight_runs()` 的 heartbeat 重置、超时回收、诊断事件；S1-S5 全部 ☑）
+- FR-088 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/qa-doctor-observability.md` 与 `docs/qa/orchestrator/134-qa-doctor-observability.md` 承载

@@ -493,6 +493,13 @@ impl OrchestratorService for OrchestratorServer {
     ) -> Result<Response<TriggerFireResponse>, Status> {
         trigger::trigger_fire(self, request).await
     }
+
+    async fn qa_doctor(
+        &self,
+        request: Request<QaDoctorRequest>,
+    ) -> Result<Response<QaDoctorResponse>, Status> {
+        system::qa_doctor(self, request).await
+    }
 }
 
 #[cfg(test)]

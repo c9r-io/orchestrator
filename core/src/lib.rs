@@ -94,6 +94,8 @@ pub mod output_validation;
 pub mod persistence;
 /// Prehook execution models and support helpers.
 pub mod prehook;
+/// QA doctor observability queries for `task_execution_metrics`.
+pub mod qa_doctor;
 /// QA document parsing and validation utilities.
 pub mod qa_utils;
 /// Declarative resource CRUD support and manifest rendering.

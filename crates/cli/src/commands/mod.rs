@@ -5,6 +5,7 @@ pub mod daemon;
 mod db;
 mod event;
 mod manifest;
+mod qa;
 mod resource;
 mod secret;
 mod store;
@@ -96,6 +97,7 @@ pub async fn dispatch(
             Ok(())
         }
 
+        Commands::Qa(cmd) => qa::dispatch(client, cmd).await,
         Commands::Manifest(cmd) => manifest::dispatch(client, cmd).await,
 
         // Handled before dispatch

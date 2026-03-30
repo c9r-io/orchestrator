@@ -75,6 +75,9 @@ service OrchestratorService {
   rpc TriggerResume(TriggerResumeRequest)       returns (TriggerResumeResponse);
   rpc TriggerFire(TriggerFireRequest)           returns (TriggerFireResponse);
 
+  // QA observability
+  rpc QaDoctor(QaDoctorRequest)                 returns (QaDoctorResponse);
+
 }
 
 // ─── Task messages ────────────────────────────────────────────
@@ -795,4 +798,14 @@ message TriggerFireRequest {
 message TriggerFireResponse {
   string task_id = 1;
   string message = 2;
+}
+
+// ─── QA observability ────────────────────────────────────────
+
+message QaDoctorRequest {}
+
+message QaDoctorResponse {
+  uint64 task_execution_metrics_total = 1;
+  uint64 task_execution_metrics_last_24h = 2;
+  double task_completion_rate = 3;
 }

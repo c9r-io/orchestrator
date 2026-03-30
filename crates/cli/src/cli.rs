@@ -178,6 +178,10 @@ pub enum Commands {
     #[command(alias = "tg", subcommand)]
     Trigger(TriggerCommands),
 
+    /// QA observability tools
+    #[command(subcommand)]
+    Qa(QaCommands),
+
     /// Daemon lifecycle operations (stop, status)
     #[command(subcommand)]
     Daemon(DaemonCommands),
@@ -205,6 +209,17 @@ pub enum DaemonCommands {
         /// Disable maintenance mode
         #[arg(long, conflicts_with = "enable")]
         disable: bool,
+    },
+}
+
+/// QA observability commands.
+#[derive(Subcommand, Debug, Clone)]
+pub enum QaCommands {
+    /// Show observability health metrics from task_execution_metrics
+    Doctor {
+        /// Output encoding.
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
     },
 }
 

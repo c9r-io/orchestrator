@@ -299,6 +299,21 @@ pub(crate) async fn task_events(
     }))
 }
 
+pub(crate) async fn qa_doctor(
+    server: &OrchestratorServer,
+    request: Request<QaDoctorRequest>,
+) -> Result<Response<QaDoctorResponse>, Status> {
+    super::authorize(server, &request, "QaDoctor").map_err(Status::from)?;
+    let stats = agent_orchestrator::qa_doctor::qa_doctor_stats(&server.state.async_database)
+        .await
+        .map_err(|e| Status::internal(e.to_string()))?;
+    Ok(Response::new(QaDoctorResponse {
+        task_execution_metrics_total: stats.task_execution_metrics_total,
+        task_execution_metrics_last_24h: stats.task_execution_metrics_last_24h,
+        task_completion_rate: stats.task_completion_rate,
+    }))
+}
+
 pub(crate) async fn manifest_validate(
     server: &OrchestratorServer,
     request: Request<ManifestValidateRequest>,
