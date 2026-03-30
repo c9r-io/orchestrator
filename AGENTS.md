@@ -1,45 +1,63 @@
-# AI Dev Platform Index
+# Agent Orchestrator — AI Dev Platform Index
 
 ## Project Overview
 
-This project is an **Agent Orchestrator** (code in `core/` folder) designed to provide both **workflow orchestration** and **agent orchestration** capabilities in a unified platform.
+This project is an **Agent Orchestrator** — a Harness Engineering control plane for agent-first software delivery. It turns shell-native coding agents (Claude Code, OpenCode, Codex, Gemini CLI, etc.) into governed execution units that participate in long-running, multi-step engineering workflows through Kubernetes-style YAML manifests.
 
 ### Core Capabilities
 
-- **Workflow Orchestration**: Define, manage, and execute complex multi-step workflows with built-in state management, error handling, and retry mechanisms
-- **Agent Orchestration**: Coordinate multiple specialized agents to work together on complex tasks, with intelligent task delegation and result aggregation
+- **Workflow Orchestration**: Declarative multi-step workflows with loop control, guard steps, DAG execution, and CEL-based prehooks
+- **Agent Orchestration**: Capability matching, health scoring, rotation, and load balancing across heterogeneous shell agents
+- **Long-running Automation**: Task persistence, event streams, trigger-based task creation (cron/event/webhook), and guarded workflow loops
 
 ### Architecture
 
-The orchestrator combines workflow engines with agent coordination to enable:
-- **Capability-driven orchestration**: Steps declare required capabilities, agents declare supported capabilities
-- **Dynamic agent selection**: Based on capability matching and preference scoring
-- **Declarative workflow definitions**: Steps can be builtin (`init_once`, `ticket_scan`, `loop_guard`) or capability-based
-- **Repeatable steps**: Control whether steps execute in every loop cycle
-- **Guard steps**: Steps that can terminate the workflow loop based on their output
-- **Dynamic Orchestration**: DAG execution engine, adaptive planner, dynamic step pools for runtime workflow control
-- **DAG Execution Engine**: Topological sort, cycle detection, conditional edges
-- **Dynamic Step Pool**: Runtime step selection based on context and priority
-- Built-in observability and debugging (real-time logs, event tracking)
+```
+orchestrator (CLI) ──gRPC/UDS──> orchestratord (daemon)
+                                    ├── gRPC server (tonic)
+                                    ├── Embedded workers
+                                    ├── SQLite persistence
+                                    └── Sandbox enforcement
+```
 
-### Config Format
+Key design principles:
+- **Capability-driven orchestration**: Steps declare required capabilities, agents declare supported capabilities
+- **Dynamic agent selection**: Strategies include CapabilityAware, CostBased, SuccessRateWeighted, PerformanceFirst, Adaptive, LoadBalanced
+- **Declarative workflow definitions**: Steps can be builtin (`init_once`, `ticket_scan`, `self_test`, `self_restart`, `item_select`, `loop_guard`) or capability-based
+- **CEL prehooks**: Conditional step execution via CEL boolean expressions
+- **Guard steps**: Steps that can terminate the workflow loop based on their output
+- **Dynamic step pools**: Runtime step selection based on context and priority
+- **DAG execution engine**: Topological sort, cycle detection, conditional edges
+- Built-in observability (structured logs, event streams, task lifecycle tracking)
+
+### Manifest Format
+
+All resources use the Kubernetes-style envelope with `apiVersion: orchestrator.dev/v2`:
 
 ```yaml
-agents:
-  opencode:
-    metadata:
-      name: opencode
-    capabilities:
-    - qa
-    - fix
-    - retest
-    templates:
-      qa: "opencode run {rel_path}"
-      fix: "opencode run {ticket_paths}"
-
-workflows:
-  my_workflow:
-    steps:
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets: [docs/qa]
+  ticket_dir: docs/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: coder
+spec:
+  capabilities: [implement, fix]
+  command: 'claude -p "{prompt}" --output-format stream-json'
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: qa-loop
+spec:
+  steps:
     - id: init
       builtin: init_once
       repeatable: false
@@ -50,27 +68,39 @@ workflows:
       builtin: loop_guard
       is_guard: true
       repeatable: true
-    loop:
-      mode: infinite
-      guard:
-        stop_when_no_unresolved: true
-    # Optional: Dynamic steps pool for runtime selection
-    dynamic_steps:
-    - id: quick_fix
-      step_type: fix
-      trigger: "qa_confidence > 0.8 && active_ticket_count < 3"
-      priority: 10
+  loop:
+    mode: infinite
+    max_cycles: 10
+    stop_when_no_unresolved: true
 ```
+
+#### Resource Kinds
+
+| Kind | Purpose |
+|------|---------|
+| **Workspace** | File system context — `root_path`, `qa_targets`, `ticket_dir`, `health_policy` |
+| **Agent** | Execution unit — `command` (with `{prompt}` placeholder), `capabilities`, `selection`, `env`, `command_rules` |
+| **Workflow** | Process flow — `steps`, `loop`, `finalize`, `safety`, `dynamic_steps` |
+| **StepTemplate** | Reusable prompt templates with pipeline variables (`{goal}`, `{source_tree}`, `{diff}`, etc.) |
+| **ExecutionProfile** | Sandbox/host execution boundary — `fs_mode`, `network_mode`, resource limits |
+| **EnvStore** | Non-sensitive environment variable sets |
+| **SecretStore** | Sensitive secrets (auto-redacted from logs) |
+| **Trigger** | Automatic task creation via cron schedule, filesystem events, or webhooks |
+| **Project** | Isolation domain for resources |
+| **RuntimePolicy** | Runner behavior, resume strategy, observability |
+
+See `docs/workflow/` for production-ready manifest templates: `hello-world.yaml`, `qa-loop.yaml`, `scheduled-scan.yaml`, `command-rules.yaml`, `execution-profiles.yaml`, `self-bootstrap.yaml`, `fr-watch.yaml`, etc.
 
 ### Tech Stack
 
 - **Backend**: Rust (Cargo workspace)
 - **Database**: SQLite for task/item lifecycle tracking
-- **CLI**: kubectl-style interface for task management
+- **CLI**: kubectl-style interface with machine-parseable output (`-o json`)
 - **RPC**: gRPC (tonic + prost) for client/server mode
 - **Transport**: Unix Domain Socket (default) or TCP
+- **Security**: Sandbox (macOS Seatbelt / Linux namespaces), output redaction, secret lifecycle management
 
-### Execution Modes
+### Execution Mode
 
 - **Client/Server**: `orchestratord` (daemon) + `orchestrator` (CLI client) — daemon holds state, CLI communicates via gRPC over UDS
 
@@ -88,4 +118,3 @@ Recommended workflow:
 4. Generate reproducible QA docs under `docs/qa/` via `qa-doc-gen`.
 5. Execute QA via `qa-testing`; file failures under `docs/ticket/`.
 6. Fix end-to-end via `ticket-fix` and re-verify.
-
