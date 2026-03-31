@@ -1,3 +1,8 @@
+---
+self_referential_safe: false
+self_referential_safe_scenarios: [S3]
+---
+
 # QA Doc 106: Inflight Wait Heartbeat-Aware Timeout (FR-052)
 
 **关联**: Design Doc 64, FR-038 (Design Doc 50)
