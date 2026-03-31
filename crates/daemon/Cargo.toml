@@ -40,7 +40,7 @@ http-body = "1"
 pin-project-lite = "0.2"
 tower = "0.5"
 axum = "0.8"
-hmac = "0.12"
+hmac = "0.13"
 hex = "0.4"
 notify = { version = "7", default-features = false, features = ["macos_fsevent"] }
 notify-debouncer-full = "0.4"
