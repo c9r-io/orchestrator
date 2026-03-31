@@ -16,11 +16,8 @@ self_referential_safe: false
 > 在执行 S3/S4 前，需要先初始化该项目：
 > ```bash
 > orchestrator init
-> # 使用 full-qa workflow 为 wish-pool 项目创建 workspace + agent + workflow
-> orchestrator apply --project wish-pool -f docs/workflow/full-qa.yaml
-> # 同时加载所需的 secret 和 execution profile
-> orchestrator apply --project wish-pool -f docs/workflow/claude-secret.yaml
-> orchestrator apply --project wish-pool -f docs/workflow/execution-profiles.yaml
+> # 使用 mock fixture 为 wish-pool 项目创建 workspace + agent + workflow
+> orchestrator apply --project wish-pool -f fixtures/manifests/bundles/self-bootstrap-mock.yaml
 > ```
 > 验证项目已创建：`orchestrator task list --project wish-pool`（应返回空列表而非报错）。
 

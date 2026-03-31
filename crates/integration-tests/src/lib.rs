@@ -1244,10 +1244,9 @@ impl OrchestratorService for TestOrchestratorServer {
         request: Request<QaDoctorRequest>,
     ) -> Result<Response<QaDoctorResponse>, Status> {
         let _ = request.into_inner();
-        let stats =
-            agent_orchestrator::qa_doctor::qa_doctor_stats(&self.state.async_database)
-                .await
-                .map_err(|e| Status::internal(e.to_string()))?;
+        let stats = agent_orchestrator::qa_doctor::qa_doctor_stats(&self.state.async_database)
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?;
         Ok(Response::new(QaDoctorResponse {
             task_execution_metrics_total: stats.task_execution_metrics_total,
             task_execution_metrics_last_24h: stats.task_execution_metrics_last_24h,

@@ -139,8 +139,8 @@ Verify that `verify_binary_snapshot` returns an error when the release binary is
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | verify_binary_snapshot Returns Match When Binaries Are Identical | ✅ | 2026-03-21 | claude-opus-4-6-20260321 | test_verify_binary_snapshot_matches |
-| 2 | verify_binary_snapshot Detects Modified Binary | ✅ | 2026-03-21 | claude-opus-4-6-20260321 | test_verify_binary_snapshot_mismatch |
-| 3 | Integration Test - Full Snapshot → Modify → Restore → Verify Cycle | ✅ | 2026-03-21 | claude-opus-4-6-20260321 | test_snapshot_binary_success, test_restore_binary_snapshot_success |
-| 4 | verify_binary_snapshot Errors When Stable Missing | ✅ | 2026-03-21 | claude-opus-4-6-20260321 | test_verify_binary_snapshot_missing_stable |
-| 5 | verify_binary_snapshot Errors When Binary Missing | ✅ | 2026-03-21 | claude-opus-4-6-20260321 | test_verify_binary_snapshot_missing_binary |
+| 1 | verify_binary_snapshot Returns Match When Binaries Are Identical | ✅ | 2026-03-31 | claude-haiku-4-5-20260331 | test_verify_binary_snapshot_matches |
+| 2 | verify_binary_snapshot Detects Modified Binary | ✅ | 2026-03-31 | claude-haiku-4-5-20260331 | test_verify_binary_snapshot_mismatch |
+| 3 | Integration Test - Full Snapshot → Modify → Restore → Verify Cycle | ✅ | 2026-03-31 | claude-haiku-4-5-20260331 | test_snapshot_binary_success, test_restore_binary_snapshot_success |
+| 4 | verify_binary_snapshot Errors When Stable Missing | ✅ | 2026-03-31 | claude-haiku-4-5-20260331 | test_verify_binary_snapshot_missing_stable |
+| 5 | verify_binary_snapshot Errors When Binary Missing | ✅ | 2026-03-31 | claude-haiku-4-5-20260331 | test_verify_binary_snapshot_missing_binary |

@@ -69,4 +69,4 @@ cd {source_tree} && cargo test -p orchestrator-scheduler test_extract_dynamic_it
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☑ | 2026-03-28: S1 ✅ S2 ✅ S3 ✅ S4 ✅ S5 ✅ |
+| 1 | All scenarios verified | ☑ | 2026-03-28: S1 ✅ S2 ✅ S3 ✅ S4 ✅ S5 ✅ ·· 2026-03-31: S1 ✅ S2 ✅ S3 ✅ S4 ✅ S5 ✅ |

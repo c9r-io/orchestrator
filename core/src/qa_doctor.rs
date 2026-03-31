@@ -19,11 +19,10 @@ pub async fn qa_doctor_stats(db: &AsyncDatabase) -> Result<QaDoctorStats> {
     let stats = db
         .reader()
         .call(|conn| {
-            let total: i64 = conn.query_row(
-                "SELECT COUNT(*) FROM task_execution_metrics",
-                [],
-                |row| row.get(0),
-            )?;
+            let total: i64 =
+                conn.query_row("SELECT COUNT(*) FROM task_execution_metrics", [], |row| {
+                    row.get(0)
+                })?;
 
             let last_24h: i64 = conn.query_row(
                 "SELECT COUNT(*) FROM task_execution_metrics \

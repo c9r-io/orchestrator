@@ -224,8 +224,10 @@ Code review + unit test verification.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Structured AgentOutput Persistence | ✅ PASS | 2026-03-28 | QA | 8 tests passed (4 agent-orchestrator + 3 scheduler + 1 strict_phase_accepts_json) |
-| 2 | Strict Phase Validation Behavior | ✅ PASS | 2026-03-28 | QA | 4 tests passed |
-| 3 | Phase Execution Trace Observability | ✅ PASS | 2026-03-28 | QA | 7 trace tests passed (4 build_trace + single_cycle + multi_cycle + skipped_step) |
+| 1 | Structured AgentOutput Persistence | ✅ PASS | 2026-03-31 | QA | 4 agent_output tests + 1 apply_captures_exit_code + 3 apply_captures_stdout_json_path tests |
+| 2 | Strict Phase Validation Behavior | ✅ PASS | 2026-03-31 | QA | 4 strict_phase + 2 sdlc_phases tests |
+| 3 | Phase Execution Trace Observability | ✅ PASS | 2026-03-31 | QA | 7 trace tests passed (4 build_trace + single_cycle + multi_cycle + skipped_step) |
+| 4 | Scheduler Template Placeholders | ✅ PASS | 2026-03-31 | QA | 1 template escaping test passed |
+| 5 | StepPrehookContext Structured Fields | ✅ PASS | 2026-03-31 | QA | 196 prehook tests passed (180 cli + 5 config + 11 scheduler) |
 | 4 | Scheduler Template Placeholders | ✅ PASS | 2026-03-28 | QA | 1 template escaping test passed |
 | 5 | StepPrehookContext Structured Fields | ✅ PASS | 2026-03-28 | QA | 53 prehook CEL tests passed (28 evaluate + 25 context) |

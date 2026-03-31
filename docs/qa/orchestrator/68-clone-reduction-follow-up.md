@@ -93,7 +93,7 @@ clippy, fmt, or code-review gate and does not rely on daemon control-plane inter
 | # | Scenario | Status | Notes |
 |---|----------|--------|-------|
 | 1 | Scheduler chain-step and fan-out regressions | ✅ PASS | 72 scheduler + 20 step_pool + 8 adaptive tests passed |
-| 2 | Graph materialization and replay regressions | ✅ PASS | 22 DAG + 2 graph + 58 trace tests passed |
+| 2 | Graph materialization and replay regressions | ✅ PASS | 22 DAG + 2 graph + 61 trace tests passed |
 | 3 | Db-write ownership regressions | ✅ PASS | 44 db_write tests passed |
 | 4 | Export and secret-key lifecycle regressions | ✅ PASS | 10 export + 6 secret_key_lifecycle tests passed |
-| 5 | Workspace verification | ✅ PASS | 1979 workspace tests + clippy + fmt green |
+| 5 | Workspace verification | ✅ PASS | 2027 workspace lib tests + clippy + fmt green (fmt fixed in qa_doctor.rs, integration-tests/src/lib.rs) |

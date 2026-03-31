@@ -180,8 +180,8 @@ Verify that event backfill is handled automatically via database migration (m000
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Backfill Infers Step Scope From Item Binding | ✅ | 2026-03-29 | Claude | `m0002_backfills_event_step_scope_from_task_item_id` passes |
-| 2 | Backfill Is Idempotent | ✅ | 2026-03-29 | Claude | `backfill_is_noop_and_returns_zero_stats` passes |
-| 3 | Display Semantic Changed From "unknown" to "unspecified" | ✅ | 2026-03-29 | Claude | `observed_step_scope_label_returns_unspecified_for_none` passes |
-| 4 | Verbose Trace Explains Legacy Scope | ✅ | 2026-03-29 | Claude | Code review: watch.rs → "~" at line 304; test `render_watch_frame_shows_unspecified_scope_marker_for_missing_scope_event` passes; 71 trace tests pass |
-| 5 | Automatic Backfill via Database Migration | ✅ | 2026-03-29 | Claude | `backfill_is_noop_and_returns_zero_stats`, `backfill_promoted_populates_from_json`, `m0002_backfills_empty_agent_id`, `backfill_default_scope_data_updates_blank_task_and_command_run_fields` all pass |
+| 1 | Backfill Infers Step Scope From Item Binding | ✅ | 2026-03-30 | Claude | `m0002_backfills_event_step_scope_from_task_item_id` passes |
+| 2 | Backfill Is Idempotent | ✅ | 2026-03-30 | Claude | `backfill_is_noop_and_returns_zero_stats` passes |
+| 3 | Display Semantic Changed From "unknown" to "unspecified" | ✅ | 2026-03-30 | Claude | `observed_step_scope_label_returns_unspecified_for_none` passes |
+| 4 | Verbose Trace Explains Legacy Scope | ✅ | 2026-03-30 | Claude | Code review: trace/builder.rs → "unspecified" at line 38; watch.rs → "~" at line 304; 71 trace tests pass |
+| 5 | Automatic Backfill via Database Migration | ✅ | 2026-03-30 | Claude | 5 backfill tests pass including `backfill_is_noop_and_returns_zero_stats`, `m0002_backfills_event_step_scope_from_task_item_id`, `backfill_promoted_populates_from_json` |

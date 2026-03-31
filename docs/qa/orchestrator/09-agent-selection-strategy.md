@@ -282,8 +282,8 @@ works correctly — via code review and unit tests.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Cost-Based Scoring | PASS | 2026-03-28 | Claude | 2 tests: test_cost_differential_lower_cost_scores_higher + test_selection_strategy_cost_based passed |
-| 2 | Quality Scoring | PASS | 2026-03-28 | Claude | 2 tests: test_selection_strategy_success_rate_weighted + test_metrics_impact_high_success_rate_preferred passed |
-| 3 | Health Degradation | PASS | 2026-03-28 | Claude | 1 health penalty + 1 diseased filter + 6 capability health + 4 agent health = 12 tests passed |
-| 4 | Retry Status Transitions | PASS | 2026-03-28 | Claude | 2 status + 2 started_at + 5 orphaned = 9 tests passed |
-| 5 | Load Balancing | PASS | 2026-03-28 | Claude | 3 tests: test_load_balanced_low_load_scores_higher + test_selection_strategy_load_balanced + test_load_balanced_score_never_negative passed |
+| 1 | Cost-Based Scoring | PASS | 2026-03-31 | Claude | 2 tests: test_cost_differential_lower_cost_scores_higher + test_selection_strategy_cost_based passed |
+| 2 | Quality Scoring | PASS | 2026-03-31 | Claude | 2 tests: test_selection_strategy_success_rate_weighted + test_metrics_impact_high_success_rate_preferred passed |
+| 3 | Health Degradation | PASS | 2026-03-31 | Claude | 1 health penalty + 1 diseased filter + 6 capability health + 4 agent health = 12 tests passed |
+| 4 | Retry Status Transitions | PASS | 2026-03-31 | Claude | 2 status + 2 started_at + 5 orphaned = 9 tests passed |
+| 5 | Load Balancing | PASS | 2026-03-31 | Claude | 3 tests: test_load_balanced_low_load_scores_higher + test_selection_strategy_load_balanced + test_load_balanced_score_never_negative passed |

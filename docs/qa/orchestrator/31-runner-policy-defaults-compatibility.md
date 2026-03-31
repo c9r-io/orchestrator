@@ -111,5 +111,5 @@ Ensure that `policy: legacy` in YAML manifests is accepted as a backward-compati
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Explicit Unsafe Mode Remains Functional | ✔ PASS | 2026-03-29 | Claude | All 6 unit tests passed; newline tests 6a/6b were implemented since last run |
-| 2 | Legacy Alias Backward Compatibility | ✔ PASS | 2026-03-29 | Claude | All 3 unit tests + code review passed |
+| 1 | Explicit Unsafe Mode Remains Functional | ✔ PASS | 2026-03-31 | Claude | All 8 unit tests passed — 6 from doc + 2 runner enforcement tests |
+| 2 | Legacy Alias Backward Compatibility | ✔ PASS | 2026-03-31 | Claude | All 3 unit tests + code review passed; legacy alias at runtime_policy.rs:134 |

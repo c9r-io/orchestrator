@@ -49,7 +49,7 @@ rg -n "fn proactive_max_cycles" crates/orchestrator-scheduler/src/scheduler/loop
 ```bash
 # 确保 daemon 运行
 orchestrator init
-orchestrator apply -f docs/workflow/self-bootstrap.yaml --project self-bootstrap
+orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project self-bootstrap
 
 # 创建 task，记录返回的 task_id
 orchestrator task create \

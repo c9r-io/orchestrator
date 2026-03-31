@@ -87,6 +87,26 @@
 | S4: 失败 item 正确计入 | Task `91f40162` with fail agent: `Status: failed`, `Progress: 10/10 items`, `Failed: 10`. All 10 items counted in progress including failures. | 91f40162 | ✅ |
 | S5: 批量 finalize 幂等 | DB event log shows no `UNIQUE constraint` errors or `duplicate key` errors. Incremental `item_finalize_evaluated` events (item status: pending → qa_passed) coexist with batch finalize pass without冲突. Daemon log grep confirms no finalize-related errors. | 8a605cb6, 91f40162 | ✅ |
 
+## 验证记录 (2026-03-30)
+
+| Scenario | Verification | Task ID | Result |
+|----------|--------------|---------|--------|
+| S1: Progress 实时递增 | Slow variant (`increment-test-slow` with 3s sleep) shows progress incrementing in real-time via `orchestrator task watch`: 0→5→7→9→10. Confirms incremental update during execution, not batched at end. | 73413f01 | ✅ |
+| S2: Step 级进度 Table | Completed task shows `Progress: 10/10 items` with `qa_testing: 10 completed` — correct format. | 73413f01 | ✅ |
+| S3: Step 级进度 JSON | JSON output contains `step_progress: [{"phase": "qa_testing", "completed": 10, "running": 0}]` — correct structure. | 73413f01 | ✅ |
+| S4: 失败 item 正确计入 | Fail variant task: `Status: failed`, `Progress: 10/10 items`, `Failed: 4`. All 10 items counted (6 passed + 4 failed). Progress correctly includes failed items. | 94db5f45 | ✅ |
+| S5: 批量 finalize 幂等 | Event log shows multiple `item_finalize_evaluated` per item (incremental + batch). No `UNIQUE constraint` or `duplicate key` errors in daemon log. Incremental and batch finalize co-exist without conflict. | 94db5f45 | ✅ |
+
+## 验证记录 (2026-03-31)
+
+| Scenario | Verification | Task ID | Result |
+|----------|--------------|---------|--------|
+| S1: Progress 实时递增 | Task `91dbf15d` shows progress incrementing mid-execution: `Progress: 5/10 items` during run, then `Progress: 10/10 items` at completion. Incremental update confirmed. | 91dbf15d | ✅ |
+| S2: Step 级进度 Table | Running task shows `qa_testing: 7 completed`, completed task shows `qa_testing: 10 completed`. Step progress counts CommandRuns correctly per note in doc. | 91dbf15d | ✅ |
+| S3: Step 级进度 JSON | JSON output contains `step_progress: [{"phase": "qa_testing", "completed": 10, "running": 0}]` — correct structure during execution. | 91dbf15d | ✅ |
+| S4: 失败 item 正确计入 | Task `91dbf15d`: `Status: failed`, `Progress: 10/10 items`, `Failed: 7`. All 10 items counted in progress including 7 failed runs. | 91dbf15d | ✅ |
+| S5: 批量 finalize 幂等 | Daemon logs show no `duplicate key` or `UNIQUE constraint` errors. Event log confirms incremental `item_finalize_evaluated` per item (events 62686-62695). | 91dbf15d | ✅ |
+
 ## 关联
 
 - 设计文档: `docs/design_doc/orchestrator/66-incremental-item-progress.md`

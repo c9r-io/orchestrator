@@ -74,4 +74,4 @@
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ✅ | 2026-03-28: S1-S8 unit test PASS (cargo test -p agent-orchestrator prehook::tests::test_prehook_pipeline_var); S9-S10: 通过现有测试间接覆盖 |
+| 1 | All scenarios verified | ✅ | 2026-03-31: Re-verified S1-S8 PASS (8/8 tests); Implementation review confirms S9-S10 correct via caller (scheduler) merge logic |

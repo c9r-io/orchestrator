@@ -144,6 +144,8 @@ Full interruption-resume testing requires simulating a mid-rotation crash, which
 - Step 6: Apply fails with error mentioning "SecretStore write blocked" and "no active encryption key".
 - `secret key history` shows `key_revoked` event with `detail_json` containing `"force":true`.
 
+> **Known limitation (FR-089)**: After S4 revokes the only active key, the system has no CLI recovery path. All keys are in terminal state (retired/revoked), and `secret key rotate` fails because it requires an active key. Recovery currently requires direct DB intervention. See FR-089 for the proposed `secret key bootstrap` / `secret key activate` mechanism.
+
 ---
 
 ## Scenario 5: Audit History Query
@@ -173,8 +175,8 @@ Full interruption-resume testing requires simulating a mid-rotation crash, which
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Legacy Key Migration | ☐ | | | |
-| 2 | Key Rotation Forward Path | ☐ | | | |
-| 3 | Resume and No-op Resume Guard | ☐ | | | |
-| 4 | Key Revocation Safety | ☐ | | | |
-| 5 | Audit History Query | ⚠ PARTIAL | 2026-03-28 | QA-S5-only | Only S5 executed per frontmatter `self_referential_safe_scenarios: [S5]`; filtering/pagination verified; history incomplete (S1-S4 not run → missing rotate/revoke events) |
+| 1 | Legacy Key Migration | ✅ PASS | 2026-03-30 | QA-harness | |
+| 2 | Key Rotation Forward Path | ✅ PASS | 2026-03-30 | QA-harness | |
+| 3 | Resume and No-op Resume Guard | ✅ PASS | 2026-03-30 | QA-harness | |
+| 4 | Key Revocation Safety | ✅ PASS | 2026-03-30 | QA-harness | |
+| 5 | Audit History Query | ✅ PASS | 2026-03-30 | QA-harness | Full history after S1-S4; filtering/pagination verified |

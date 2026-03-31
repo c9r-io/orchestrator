@@ -27,20 +27,25 @@ Verify that adaptive workflow configuration survives YAML serialization/deserial
 
 ### Steps
 
-1. **Unit test** — verify adaptive workflow validation (owned agents):
+1. **Unit test** — verify adaptive workflow validation (owned agents, 7 tests):
    ```bash
    cargo test -p agent-orchestrator --lib adaptive_none_returns_ok
    cargo test -p agent-orchestrator --lib adaptive_disabled_returns_ok
    cargo test -p agent-orchestrator --lib adaptive_missing_planner_agent_errors
    cargo test -p agent-orchestrator --lib adaptive_unknown_agent_errors
    cargo test -p agent-orchestrator --lib adaptive_valid_config_passes
+   cargo test -p agent-orchestrator --lib adaptive_empty_planner_agent_errors
+   cargo test -p agent-orchestrator --lib adaptive_agent_missing_capability_errors
    ```
 
-2. **Unit test** — verify adaptive workflow validation (borrowed agent refs):
+2. **Unit test** — verify adaptive workflow validation (borrowed agent refs, 6 tests):
    ```bash
    cargo test -p agent-orchestrator --lib adaptive_refs_valid_config_passes
    cargo test -p agent-orchestrator --lib adaptive_refs_unknown_agent_errors
    cargo test -p agent-orchestrator --lib adaptive_refs_agent_missing_capability_errors
+   cargo test -p agent-orchestrator --lib adaptive_refs_none_returns_ok
+   cargo test -p agent-orchestrator --lib adaptive_refs_disabled_returns_ok
+   cargo test -p agent-orchestrator --lib adaptive_refs_missing_planner_agent_errors
    ```
 
 3. **Unit test** — verify adaptive planner generates valid plans:
@@ -73,4 +78,4 @@ Verify that adaptive workflow configuration survives YAML serialization/deserial
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | YAML Configuration Integration for Dynamic Fields | ✅ | 2026-03-28 | Claude | All 13 adaptive tests pass (5 owned + 3 refs + 2 planner + 2 export); export roundtrip preserves fields; `skip_serializing_if = "Option::is_none"` confirmed at workflow.rs:172 |
+| 1 | YAML Configuration Integration for Dynamic Fields | ✅ | 2026-03-30 | Claude | All 13 adaptive tests pass (5 owned + 3 refs + 2 planner + 2 export); export roundtrip preserves fields; `skip_serializing_if = "Option::is_none"` confirmed at workflow.rs:172 |

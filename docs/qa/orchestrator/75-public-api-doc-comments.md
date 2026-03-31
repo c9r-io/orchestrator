@@ -69,6 +69,6 @@ rg -n '#!\\[deny\\(missing_docs\\)\\]' core/src/lib.rs crates/cli/src/main.rs cr
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☑ | S1-S5 PASS (2026-03-28); S1-S4 safe (code review + deny attrs + CI gate); cargo test --workspace --lib: 429 passed; cargo test --doc -p agent-orchestrator: 1 passed; CI clippy -D warnings verified |
+| 1 | All scenarios verified | ☑ | S1-S5 PASS (2026-03-30); S1: 22 tests passed; S3: 1 doc test passed; S5: deny(missing_docs) confirmed in all 3 crate roots; CI clippy -D warnings verified |
 
 See also: `docs/qa/orchestrator/75b-public-api-doc-comments-legacy.md` for legacy exemption cleanup verification.

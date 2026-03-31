@@ -83,9 +83,9 @@ self_referential_safe: true
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | S1: convergence_expr 驱动收敛 | ☑ | PASS: `convergence_expr_stops_loop` integration test passed (2026-03-29) |
-| 2 | S2: 缺省行为不变 | ☑ | PASS: 3/3 loop_engine unit tests + `multi_cycle_loop` regression test passed (2026-03-29) |
-| 3 | S3: 短路求值 | ☑ | PASS: code review confirms short-circuit (for+break in continuation.rs:150-158); 3/3 convergence_expr validation tests passed (2026-03-29) |
-| 4 | S4: CEL 编译校验 | ☑ | PASS: 3/3 validation tests passed (rejects_invalid, accepts_valid, rejects_empty_when) (2026-03-29) |
-| 5 | S5: pipeline 变量注入 | ☑ | PASS: code review confirms pipeline vars injected in build_convergence_cel_context (context.rs:469-482+); convergence_expr tests passed (2026-03-29) |
-| 6 | S6: max_cycles 硬上限 | ☑ | PASS: 4/4 max_cycles tests passed (fixed_mode_stops + 2 proactive_max_cycles variants + infinite_mode_respects) (2026-03-29) |
+| 1 | S1: convergence_expr 驱动收敛 | ☑ | PASS: `convergence_expr_stops_loop` integration test passed (2026-03-30) |
+| 2 | S2: 缺省行为不变 | ☑ | PASS: 3/3 loop_engine unit tests passed (2026-03-30) |
+| 3 | S3: 短路求值 | ☑ | PASS: code review confirms short-circuit (for+break in continuation.rs:151-158); 3/3 convergence_expr validation tests passed (2026-03-30) |
+| 4 | S4: CEL 编译校验 | ☑ | PASS: 3/3 validation tests passed (rejects_invalid, accepts_valid, rejects_empty_when) (2026-03-30) |
+| 5 | S5: pipeline 变量注入 | ☑ | PASS: code review confirms pipeline vars injected in build_convergence_cel_context (context.rs:469+); convergence_expr tests passed (2026-03-30) |
+| 6 | S6: max_cycles 硬上限 | ☑ | PASS: 4/4 max_cycles tests passed (fixed_mode_stops + 2 proactive_max_cycles variants + infinite_mode_respects) (2026-03-30) |

@@ -69,3 +69,14 @@ Build check: `cargo test --workspace && cargo clippy --workspace --all-targets -
 1. `rg 'pub mod qa_doctor' core/src/lib.rs`
 
 **Expected:** `qa_doctor` module is publicly exported from the core crate.
+
+## Checklist
+
+- [ ] Scenario 1: Proto definition exists
+- [ ] Scenario 2: Response message fields
+- [ ] Scenario 3: Core query function handles empty table
+- [ ] Scenario 4: CLI subcommand parses
+- [ ] Scenario 5: JSON output structure
+- [ ] Scenario 6: Table output format
+- [ ] Scenario 7: Daemon handler wiring
+- [ ] Scenario 8: Core module exported
