@@ -20,6 +20,8 @@ pub enum KeyAuditEventKind {
     KeyRevoked,
     /// Decryption failed because a matching key could not process ciphertext.
     DecryptFailed,
+    /// A new key was bootstrapped to recover from an all-keys-terminal state.
+    KeyBootstrapped,
     /// Audit record describing a missing key or similar diagnostic condition.
     MissingKeyDiagnostic,
 }
@@ -33,6 +35,7 @@ impl KeyAuditEventKind {
             Self::RotateStarted => "rotate_started",
             Self::RotateCompleted => "rotate_completed",
             Self::KeyRevoked => "key_revoked",
+            Self::KeyBootstrapped => "key_bootstrapped",
             Self::DecryptFailed => "decrypt_failed",
             Self::MissingKeyDiagnostic => "missing_key_diagnostic",
         }
@@ -46,6 +49,7 @@ impl KeyAuditEventKind {
             "rotate_started" => Ok(Self::RotateStarted),
             "rotate_completed" => Ok(Self::RotateCompleted),
             "key_revoked" => Ok(Self::KeyRevoked),
+            "key_bootstrapped" => Ok(Self::KeyBootstrapped),
             "decrypt_failed" => Ok(Self::DecryptFailed),
             "missing_key_diagnostic" => Ok(Self::MissingKeyDiagnostic),
             other => anyhow::bail!("unknown key audit event kind: {other}"),

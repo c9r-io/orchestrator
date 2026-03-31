@@ -65,6 +65,15 @@ async fn dispatch_key(
             Ok(())
         }
 
+        SecretKeyCommands::Bootstrap => {
+            let resp = client
+                .secret_key_bootstrap(orchestrator_proto::SecretKeyBootstrapRequest {})
+                .await?
+                .into_inner();
+            println!("{}", resp.message);
+            Ok(())
+        }
+
         SecretKeyCommands::History {
             limit,
             key_id,

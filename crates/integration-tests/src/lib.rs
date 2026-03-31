@@ -995,6 +995,15 @@ impl OrchestratorService for TestOrchestratorServer {
         ))
     }
 
+    async fn secret_key_bootstrap(
+        &self,
+        _request: Request<SecretKeyBootstrapRequest>,
+    ) -> Result<Response<SecretKeyBootstrapResponse>, Status> {
+        Err(Status::unimplemented(
+            "secret_key_bootstrap not available in test harness",
+        ))
+    }
+
     async fn secret_key_history(
         &self,
         _request: Request<SecretKeyHistoryRequest>,

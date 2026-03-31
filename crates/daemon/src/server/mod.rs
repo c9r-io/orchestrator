@@ -417,6 +417,13 @@ impl OrchestratorService for OrchestratorServer {
         secret::secret_key_revoke(self, request).await
     }
 
+    async fn secret_key_bootstrap(
+        &self,
+        request: Request<SecretKeyBootstrapRequest>,
+    ) -> Result<Response<SecretKeyBootstrapResponse>, Status> {
+        secret::secret_key_bootstrap(self, request).await
+    }
+
     async fn secret_key_history(
         &self,
         request: Request<SecretKeyHistoryRequest>,

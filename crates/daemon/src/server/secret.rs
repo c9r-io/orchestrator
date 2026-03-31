@@ -170,6 +170,36 @@ pub(crate) async fn secret_key_rotate(
     }))
 }
 
+pub(crate) async fn secret_key_bootstrap(
+    server: &OrchestratorServer,
+    request: Request<SecretKeyBootstrapRequest>,
+) -> Result<Response<SecretKeyBootstrapResponse>, Status> {
+    authorize(server, &request, "SecretKeyBootstrap").map_err(Status::from)?;
+
+    let conn = agent_orchestrator::db::open_conn(&server.state.db_path).map_err(|e| {
+        map_core_error(agent_orchestrator::error::classify_secret_error(
+            "secret.bootstrap",
+            e,
+        ))
+    })?;
+
+    let record =
+        secret_key_lifecycle::bootstrap_key(&conn, &server.state.data_dir).map_err(|e| {
+            map_core_error(agent_orchestrator::error::classify_secret_error(
+                "secret.bootstrap",
+                e,
+            ))
+        })?;
+
+    Ok(Response::new(SecretKeyBootstrapResponse {
+        message: format!(
+            "bootstrapped new active key '{}'; SecretStore operations restored",
+            record.key_id
+        ),
+        key_id: record.key_id,
+    }))
+}
+
 pub(crate) async fn secret_key_revoke(
     server: &OrchestratorServer,
     request: Request<SecretKeyRevokeRequest>,

@@ -742,6 +742,8 @@ pub enum SecretKeyCommands {
         #[arg(long)]
         force: bool,
     },
+    /// Bootstrap a new key when all keys are in terminal state (emergency recovery)
+    Bootstrap,
     /// Show key audit history
     History {
         /// Maximum events to show

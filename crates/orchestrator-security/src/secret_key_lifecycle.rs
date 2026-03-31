@@ -618,6 +618,74 @@ pub fn resume_rotation(conn: &Connection, data_dir: &Path) -> Result<ReEncryptio
     Ok(report)
 }
 
+// ─── Bootstrap (emergency recovery) ─────────────────────────────
+
+/// Creates a fresh active key when no active key exists (all keys terminal).
+/// This is the recovery path from an all-keys-revoked/retired state.
+pub fn bootstrap_key(conn: &Connection, data_dir: &Path) -> Result<KeyRecord> {
+    if query_active_key_record(conn)?.is_some() {
+        bail!("an active key already exists; bootstrap is only for recovery when no active key is available");
+    }
+
+    let new_key_id = generate_key_id();
+    let keys_dir = data_dir.join("secrets/keys");
+    std::fs::create_dir_all(&keys_dir)
+        .with_context(|| format!("failed to create keys dir {}", keys_dir.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&keys_dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+
+    let new_key_path = keys_dir.join(format!("{new_key_id}.key"));
+    let handle =
+        crate::secret_store_crypto::generate_and_write_key_file(&new_key_path, &new_key_id)?;
+    let now = now_ts();
+
+    let new_file_path = format!("secrets/keys/{new_key_id}.key");
+    let record = KeyRecord {
+        key_id: new_key_id.clone(),
+        state: KeyState::Active,
+        fingerprint: handle.fingerprint().to_string(),
+        file_path: new_file_path.clone(),
+        created_at: now.clone(),
+        activated_at: Some(now.clone()),
+        rotated_out_at: None,
+        retired_at: None,
+        revoked_at: None,
+    };
+
+    conn.execute(
+        "INSERT INTO secret_keys (key_id, state, fingerprint, file_path, created_at, activated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            new_key_id,
+            KeyState::Active.as_str(),
+            handle.fingerprint(),
+            new_file_path,
+            now,
+            now
+        ],
+    )?;
+
+    crate::secret_key_audit::insert_key_audit_event(
+        conn,
+        &crate::secret_key_audit::KeyAuditEvent {
+            event_kind: crate::secret_key_audit::KeyAuditEventKind::KeyBootstrapped,
+            key_id: new_key_id,
+            key_fingerprint: record.fingerprint.clone(),
+            actor: "cli:bootstrap".to_string(),
+            detail_json: serde_json::json!({
+                "reason": "emergency recovery — no active key available"
+            })
+            .to_string(),
+            created_at: now,
+        },
+    )?;
+
+    Ok(record)
+}
+
 // ─── Revoke ──────────────────────────────────────────────────────
 
 /// Revokes a key and optionally allows revoking the currently active key.
@@ -636,6 +704,13 @@ pub fn revoke_key(conn: &Connection, key_id: &str, force: bool) -> Result<()> {
     }
 
     if record.state == KeyState::Active && !force {
+        let active_count = records.iter().filter(|r| r.state == KeyState::Active).count();
+        if active_count <= 1 {
+            bail!(
+                "refusing to revoke the last active key '{key_id}' without --force; \
+                 this will leave SecretStore inoperable. Use 'secret key bootstrap' to recover"
+            );
+        }
         bail!(
             "refusing to revoke active key '{key_id}' without --force; this will block all SecretStore writes"
         );
@@ -852,5 +927,71 @@ mod tests {
             .decrypt_secret_store_spec("default", "test-secret", &spec_json)
             .expect("decrypt");
         assert_eq!(decrypted, spec);
+    }
+
+    #[test]
+    fn bootstrap_creates_key_when_no_active() {
+        let (temp, db_path) = setup_test_db();
+        crate::secret_store_crypto::ensure_secret_key(temp.path(), &db_path).expect("ensure key");
+
+        let conn = crate::open_conn(&db_path).expect("open");
+        import_legacy_key_record(&conn, temp.path()).expect("import legacy");
+
+        // Revoke the only active key to reach all-terminal state
+        let records = query_all_key_records(&conn).expect("query");
+        let active_id = records[0].key_id.clone();
+        revoke_key(&conn, &active_id, true).expect("force revoke");
+
+        // Confirm no active key
+        assert!(query_active_key_record(&conn).expect("query").is_none());
+
+        // Bootstrap should succeed
+        let record = bootstrap_key(&conn, temp.path()).expect("bootstrap");
+        assert_eq!(record.state, KeyState::Active);
+        assert!(record.key_id.starts_with("k-"));
+
+        // Active key now exists
+        let active = query_active_key_record(&conn).expect("query");
+        assert!(active.is_some());
+        assert_eq!(active.unwrap().key_id, record.key_id);
+
+        // Audit event recorded
+        let events =
+            crate::secret_key_audit::query_key_audit_events_for_key(&conn, &record.key_id, 10)
+                .expect("audit");
+        assert!(events
+            .iter()
+            .any(|e| e.event_kind == crate::secret_key_audit::KeyAuditEventKind::KeyBootstrapped));
+    }
+
+    #[test]
+    fn bootstrap_fails_when_active_key_exists() {
+        let (temp, db_path) = setup_test_db();
+        crate::secret_store_crypto::ensure_secret_key(temp.path(), &db_path).expect("ensure key");
+
+        let conn = crate::open_conn(&db_path).expect("open");
+        import_legacy_key_record(&conn, temp.path()).expect("import legacy");
+
+        // Active key exists — bootstrap should fail
+        let err = bootstrap_key(&conn, temp.path()).expect_err("should fail");
+        assert!(err.to_string().contains("active key already exists"));
+    }
+
+    #[test]
+    fn revoke_last_active_key_warns() {
+        let (temp, db_path) = setup_test_db();
+        crate::secret_store_crypto::ensure_secret_key(temp.path(), &db_path).expect("ensure key");
+
+        let conn = crate::open_conn(&db_path).expect("open");
+        import_legacy_key_record(&conn, temp.path()).expect("import legacy");
+
+        let records = query_all_key_records(&conn).expect("query");
+        let active_id = &records[0].key_id;
+
+        // Revoke without force — should mention "last active key" and "bootstrap"
+        let err = revoke_key(&conn, active_id, false).expect_err("should fail");
+        let msg = err.to_string();
+        assert!(msg.contains("last active key"), "error: {msg}");
+        assert!(msg.contains("bootstrap"), "error: {msg}");
     }
 }

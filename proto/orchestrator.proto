@@ -57,6 +57,7 @@ service OrchestratorService {
   rpc SecretKeyList(SecretKeyListRequest)       returns (SecretKeyListResponse);
   rpc SecretKeyRotate(SecretKeyRotateRequest)   returns (SecretKeyRotateResponse);
   rpc SecretKeyRevoke(SecretKeyRevokeRequest)   returns (SecretKeyRevokeResponse);
+  rpc SecretKeyBootstrap(SecretKeyBootstrapRequest) returns (SecretKeyBootstrapResponse);
   rpc SecretKeyHistory(SecretKeyHistoryRequest) returns (SecretKeyHistoryResponse);
 
   // Agent lifecycle (drain/cordon)
@@ -658,6 +659,13 @@ message SecretKeyRevokeRequest {
 
 message SecretKeyRevokeResponse {
   string message = 1;
+}
+
+message SecretKeyBootstrapRequest {}
+
+message SecretKeyBootstrapResponse {
+  string message = 1;
+  string key_id = 2;
 }
 
 message SecretKeyAuditEvent {
