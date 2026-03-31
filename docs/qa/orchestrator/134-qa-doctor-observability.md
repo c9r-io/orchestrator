@@ -72,11 +72,11 @@ Build check: `cargo test --workspace && cargo clippy --workspace --all-targets -
 
 ## Checklist
 
-- [ ] Scenario 1: Proto definition exists
-- [ ] Scenario 2: Response message fields
-- [ ] Scenario 3: Core query function handles empty table
-- [ ] Scenario 4: CLI subcommand parses
-- [ ] Scenario 5: JSON output structure
-- [ ] Scenario 6: Table output format
-- [ ] Scenario 7: Daemon handler wiring
-- [ ] Scenario 8: Core module exported
+- [x] Scenario 1: Proto definition exists
+- [x] Scenario 2: Response message fields
+- [x] Scenario 3: Core query function handles empty table
+- [x] Scenario 4: CLI subcommand parses
+- [x] Scenario 5: JSON output structure
+- [x] Scenario 6: Table output format
+- [x] Scenario 7: Daemon handler wiring
+- [x] Scenario 8: Core module exported

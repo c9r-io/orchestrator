@@ -18,7 +18,7 @@ This document validates the structured logging bootstrap introduced for the Rust
 - `tracing`-based runtime diagnostics
 - Logging level/format is configured via `ObservabilityConfig` (YAML). Environment variable overrides (`ORCHESTRATOR_LOG`, `RUST_LOG`, `ORCHESTRATOR_LOG_FORMAT`) are **not yet implemented** — config parsing exists but runtime bootstrap does not read from env
 - CLI flag `-v, --verbose` for debug-level override
-- daemon log file at `data/daemon.log`
+- daemon log file at `data/logs/daemon.log`
 - preservation of human-readable command results on stdout
 
 Entry point: `orchestrator`
@@ -147,20 +147,20 @@ Ensure runtime logs are persisted to the daemon log file.
 
 1. Verify the daemon log file exists:
    ```bash
-   ls -l data/daemon.log
+   ls -l data/logs/daemon.log
    ```
 2. Inspect the latest log entries:
    ```bash
-   tail -n 20 data/daemon.log
+   tail -n 20 data/logs/daemon.log
    ```
 
 ### Expected
 
-- `data/daemon.log` exists when daemon has been started in daemon mode (not `--foreground`)
+- `data/logs/daemon.log` exists when daemon has been started in daemon mode (not `--foreground`)
 - The file contains tracing subscriber output redirected via stdout/stderr fd redirection
-- In `--foreground` mode, logs go to terminal; in daemon mode, stdout/stderr are redirected to `data/daemon.log` by `daemonize.rs`
+- In `--foreground` mode, logs go to terminal; in daemon mode, stdout/stderr are redirected to `data/logs/daemon.log` by `daemonize.rs`
 
-> **Note**: `data/daemon.log` is populated via fd redirection (stdout/stderr → file), not via an explicit tracing file sink. Content depends on how the daemon was started. If `--foreground` mode was used, this file may contain stale content from a prior daemon invocation or unrelated output.
+> **Note**: `data/logs/daemon.log` is populated via fd redirection (stdout/stderr → file), not via an explicit tracing file sink. Content depends on how the daemon was started. If `--foreground` mode was used, this file may contain stale content from a prior daemon invocation or unrelated output.
 
 ---
 
@@ -195,5 +195,5 @@ Ensure config defaults and CLI override precedence for structured logging remain
 | 1 | Release Build Includes Logging Surface | ✅ | 2026-03-21 | Claude | CLI `-v` flag works; config parsing surface exists; `ORCHESTRATOR_LOG`/`ORCHESTRATOR_LOG_FORMAT` env vars wired in daemon bootstrap (main.rs:122-132) |
 | 2 | `init` Preserves stdout Contract | ✅ | 2026-03-21 | Claude | CLI uses println!/eprintln! correctly; tracing subscriber writes to stderr via make_writer; observability tests pass |
 | 3 | JSON Console Logging Works Via Environment Variable | ✅ | 2026-03-21 | Claude | `LoggingFormat::parse("json")` works; validates config parsing surface; env var wired in daemon bootstrap |
-| 4 | Daemon Log File Is Written | ✅ | 2026-03-21 | Claude | data/daemon.log exists (614 bytes); populated via fd redirection in daemon mode |
-| 5 | Logging Config Resolution Unit Tests Pass | ✅ | 2026-03-21 | Claude | All 4 observability tests pass |
+| 4 | Daemon Log File Is Written | ✅ | 2026-03-31 | Claude | data/logs/daemon.log exists (37 bytes); populated via fd redirection in daemon mode. Doc path fixed (was data/daemon.log) |
+| 5 | Logging Config Resolution Unit Tests Pass | ✅ | 2026-03-31 | Claude | All 4 observability tests pass |

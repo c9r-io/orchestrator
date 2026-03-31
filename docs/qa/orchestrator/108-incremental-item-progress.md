@@ -97,7 +97,7 @@
 | S4: 失败 item 正确计入 | Fail variant task: `Status: failed`, `Progress: 10/10 items`, `Failed: 4`. All 10 items counted (6 passed + 4 failed). Progress correctly includes failed items. | 94db5f45 | ✅ |
 | S5: 批量 finalize 幂等 | Event log shows multiple `item_finalize_evaluated` per item (incremental + batch). No `UNIQUE constraint` or `duplicate key` errors in daemon log. Incremental and batch finalize co-exist without conflict. | 94db5f45 | ✅ |
 
-## 验证记录 (2026-03-31)
+## 验证记录 (2026-03-31) — Prior
 
 | Scenario | Verification | Task ID | Result |
 |----------|--------------|---------|--------|
@@ -106,6 +106,16 @@
 | S3: Step 级进度 JSON | JSON output contains `step_progress: [{"phase": "qa_testing", "completed": 10, "running": 0}]` — correct structure during execution. | 91dbf15d | ✅ |
 | S4: 失败 item 正确计入 | Task `91dbf15d`: `Status: failed`, `Progress: 10/10 items`, `Failed: 7`. All 10 items counted in progress including 7 failed runs. | 91dbf15d | ✅ |
 | S5: 批量 finalize 幂等 | Daemon logs show no `duplicate key` or `UNIQUE constraint` errors. Event log confirms incremental `item_finalize_evaluated` per item (events 62686-62695). | 91dbf15d | ✅ |
+
+## 验证记录 (2026-03-31) — Re-run
+
+| Scenario | Verification | Task ID | Result |
+|----------|--------------|---------|--------|
+| S1: Progress 实时递增 | Slow variant (`ffd5ee8f`) watched via `orchestrator task watch`: progress increments 4→7→9→10 during execution. Confirms real-time incremental update. | ffd5ee8f | ✅ |
+| S2: Step 级进度 Table | Completed slow task shows `Progress: 10/10 items` with `qa_testing: 10 completed` below. Correct table format. | ffd5ee8f | ✅ |
+| S3: Step 级进度 JSON | JSON contains `step_progress: [{"phase": "qa_testing", "completed": 10, "running": 0}]` — correct structure. | 86d201cf | ✅ |
+| S4: 失败 item 正确计入 | Task `7bd3a14c`: `Status: failed`, `Progress: 10/10 items`, `Failed: 3`. **BUG**: 3 items (1e52fea5, f1e5652f, b9129fea) remain `unresolved` in DB after `task_failed`. Should be `qa_failed`. Run exit codes correctly show exit=1 for these items. Ticket: `docs/ticket/qa108_s4_unresolved_after_task_failed_20260331_064500.md` | 7bd3a14c | ❌ |
+| S5: 批量 finalize 幂等 | DB event log shows incremental + batch `item_finalize_evaluated` for all items. No `UNIQUE constraint` or `duplicate key` errors. S4 task daemon log grep confirms no finalize errors. | 7bd3a14c | ✅ |
 
 ## 关联
 

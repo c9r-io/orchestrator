@@ -247,6 +247,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/132c-filesystem-trigger-regression.md` | 2 | FR-085: path safety guards and event payload format (split from doc 132) |
 | orchestrator | `docs/qa/orchestrator/133-daemon-config-hot-reload.md` | 5 | FR-086: ArcSwap atomic config snapshot, persist+notify reload path, trigger/webhook runtime reads |
 | orchestrator | `docs/qa/orchestrator/134-qa-doctor-observability.md` | - | FR-088: `orchestrator qa doctor` CLI for task execution metrics observability |
+| orchestrator | `docs/qa/orchestrator/135-secretstore-key-emergency-recovery.md` | 8 | FR-089: SecretStore key emergency bootstrap recovery |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |

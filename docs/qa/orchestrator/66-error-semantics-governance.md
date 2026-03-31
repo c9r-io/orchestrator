@@ -72,7 +72,7 @@ or code-review gates only; no scenario starts, stops, or mutates a live daemon.
 
 | # | Scenario | Status | Notes |
 |---|----------|--------|-------|
-| 1 | Core classifier regression | ✅ | `error::tests` covers task/resource/system/secret category mapping |
-| 2 | Daemon gRPC status mapping regression | ✅ | `server::tests` covers `NOT_FOUND`, `FAILED_PRECONDITION`, `INVALID_ARGUMENT` |
-| 3 | CLI error rendering regression | ✅ | `commands::common::tests` preserves force hint and not-found message |
-| 4 | Workspace verification | ✅ | `cargo test --workspace` and `cargo clippy --workspace --all-targets --all-features -- -D warnings` |
+| 1 | Core classifier regression | ✅ PASS | 5/5 tests passed: secret rotation, task latest, missing project, manifest policy, invalid target-file |
+| 2 | Daemon gRPC status mapping regression | ✅ PASS | 3/3 tests passed: `NOT_FOUND`, `FAILED_PRECONDITION`, `INVALID_ARGUMENT` |
+| 3 | CLI error rendering regression | ✅ PASS | 2/2 tests passed: force-hint preserved, not-found message intact |
+| 4 | Workspace verification | ✅ PASS | 1337 tests passed; clippy clean with `-D warnings` |

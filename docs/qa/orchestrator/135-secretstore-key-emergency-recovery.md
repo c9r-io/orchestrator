@@ -69,3 +69,18 @@ Build check: `cargo test --workspace && cargo clippy --workspace --all-targets -
 1. `rg "secret key bootstrap" crates/orchestrator-security/src/secret_key_lifecycle.rs`
 
 **Expected:** The revoke error for the last active key mentions `secret key bootstrap` as the recovery path.
+
+---
+
+## Checklist
+
+| # | Scenario | Status | Test Date | Tester | Notes |
+|---|----------|--------|-----------|--------|-------|
+| 1 | `bootstrap_key()` creates active key when all keys are terminal | | | | |
+| 2 | `bootstrap_key()` fails when an active key already exists | | | | |
+| 3 | Revoking last active key without `--force` shows enhanced warning | | | | |
+| 4 | CLI `Bootstrap` subcommand is registered | | | | |
+| 5 | Proto definition for `SecretKeyBootstrap` RPC | | | | |
+| 6 | `KeyBootstrapped` audit event kind exists | | | | |
+| 7 | Daemon handler wired up | | | | |
+| 8 | Revoke error message includes recovery guidance | | | | |

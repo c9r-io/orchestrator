@@ -209,7 +209,7 @@ Ensure old workflows with no `execution_profile` continue to run and resolve to 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
 | 1 | ExecutionProfile Resource Apply and Export Round-Trip | SKIPPED | | | self-referential unsafe |
-| 2 | Non-Agent Step Rejects execution_profile | PASS | 2026-03-31 | Claude | |
-| 3 | Unknown execution_profile Is Rejected | PASS | 2026-03-31 | Claude | |
+| 2 | Non-Agent Step Rejects execution_profile | PASS | 2026-03-31 | Claude | Unit test `exec_profile_rejects_non_agent_step_with_profile` passed; validation logic confirmed at tests.rs:1431 |
+| 3 | Unknown execution_profile Is Rejected | PASS | 2026-03-31 | Claude | Unit test `exec_profile_rejects_unknown_profile_name` passed; validation logic confirmed at tests.rs:1456 |
 | 4 | Mixed Workflow Applies Host and Sandbox Profiles Per Step | SKIPPED | | | self-referential unsafe |
 | 5 | Missing execution_profile Defaults to Host | SKIPPED | | | self-referential unsafe |

@@ -624,7 +624,9 @@ pub fn resume_rotation(conn: &Connection, data_dir: &Path) -> Result<ReEncryptio
 /// This is the recovery path from an all-keys-revoked/retired state.
 pub fn bootstrap_key(conn: &Connection, data_dir: &Path) -> Result<KeyRecord> {
     if query_active_key_record(conn)?.is_some() {
-        bail!("an active key already exists; bootstrap is only for recovery when no active key is available");
+        bail!(
+            "an active key already exists; bootstrap is only for recovery when no active key is available"
+        );
     }
 
     let new_key_id = generate_key_id();
@@ -704,7 +706,10 @@ pub fn revoke_key(conn: &Connection, key_id: &str, force: bool) -> Result<()> {
     }
 
     if record.state == KeyState::Active && !force {
-        let active_count = records.iter().filter(|r| r.state == KeyState::Active).count();
+        let active_count = records
+            .iter()
+            .filter(|r| r.state == KeyState::Active)
+            .count();
         if active_count <= 1 {
             bail!(
                 "refusing to revoke the last active key '{key_id}' without --force; \
@@ -959,9 +964,11 @@ mod tests {
         let events =
             crate::secret_key_audit::query_key_audit_events_for_key(&conn, &record.key_id, 10)
                 .expect("audit");
-        assert!(events
-            .iter()
-            .any(|e| e.event_kind == crate::secret_key_audit::KeyAuditEventKind::KeyBootstrapped));
+        assert!(
+            events.iter().any(
+                |e| e.event_kind == crate::secret_key_audit::KeyAuditEventKind::KeyBootstrapped
+            )
+        );
     }
 
     #[test]

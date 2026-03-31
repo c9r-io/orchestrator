@@ -37,14 +37,22 @@ spec:
     control plane for AI-native SDLC automation.
 
     Canonical project backstory:
-    - The maintainer first used AI coding tools heavily in real software work
+    - The maintainer came into AI-assisted coding from a strong XP / TDD background
+    - Heavy AI usage exposed a bottleneck: code generation sped up, but manual review and QA still
+      depended too much on the maintainer
+    - The maintainer responded by pushing validation further left: AI had to produce test plans
+      before implementation and execute those plans afterwards through browser checks, log checks,
+      database checks, ticket creation, fixes, and retests
     - That repeated practice converged into an AI-native SDLC methodology
-    - Auth9 (https://github.com/c9r-io/auth9) became one serious proof point of that methodology in practice
+    - Auth9 (https://github.com/c9r-io/auth9) became the proving ground for that methodology
+    - Once the methodology was clearly working, the maintainer started building Agent Orchestrator
+      to automate and govern the process more durably
+    - In late February, a high-risk Auth9 refactor replaced headless Keycloak with a native
+      auth9-oidc engine; the early Orchestrator was used during that work, the engine swap took
+      three days, and later iterations helped converge the follow-up technical debt and complete
+      the community OIDC Certification tests
     - At that stage, the maintainer cared most about flow orchestration, which is why the project
       was named Orchestrator
-    - After the methodology produced real results, the maintainer wanted a control plane
-      that could automate the process, keep it running while away or asleep, and make it
-      durable and inspectable
     - Later, OpenAI's "Harness Engineering" framing gave the maintainer a clearer name for the
       broader shape of the work, so Orchestrator was repositioned as a Harness Engineering
       control plane
@@ -52,7 +60,8 @@ spec:
       believes a real methodology should be able to show itself on the control plane too
     - Do not frame the origin story as irritation with "fragile agent sessions"
     - Do not imply that the maintainer coined or previously named the Harness Engineering concept
-    - Frame it as practice -> methodology -> orchestration -> later conceptual alignment
+    - Frame it as XP/TDD background -> AI bottleneck -> validation shift-left -> Auth9 proving
+      ground -> early Orchestrator -> later conceptual alignment
 
     Project URL: https://github.com/c9r-io/orchestrator
 
@@ -102,10 +111,18 @@ spec:
     a marketer writing launch copy.
 
     Canonical project backstory:
-    - Heavy real-world use of AI coding tools led the maintainer to an AI-native SDLC method
-    - Auth9 (https://github.com/c9r-io/auth9) is one concrete result of practicing that method
+    - The maintainer came into AI-assisted coding from a strong XP / TDD background
+    - The first serious bottleneck was not generation quality but verification workload
+    - The method evolved by pushing validation further left: AI had to propose test plans before
+      coding and execute those plans afterwards through browser, log, database, ticket, fix, and
+      retest loops
+    - Auth9 (https://github.com/c9r-io/auth9) is the main proving ground for that method
+    - Once the method was clearly working, the maintainer started building Agent Orchestrator as
+      the control plane that automates and governs the process
+    - In late February, a high-risk Auth9 refactor replaced headless Keycloak with a native
+      auth9-oidc engine using the early Orchestrator; the engine swap took three days and later
+      iterations helped converge technical debt and complete the community OIDC Certification tests
     - The project name "Orchestrator" reflects the maintainer's original focus on flow orchestration
-    - Orchestrator was built afterwards as the control plane that automates the method
     - Later, OpenAI's "Harness Engineering" framing turned out to be highly aligned with this work,
       so the project is now positioned as a Harness Engineering control plane
     - The goal was to let the method keep running more autonomously, including while the

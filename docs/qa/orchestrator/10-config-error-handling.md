@@ -48,7 +48,7 @@ Entry point: `orchestrator <command>`
 
 3. **Unit test** — 运行配置初始化和规范化测试：
    ```bash
-   cargo test --workspace --lib -- normalize_config_populates_builtin reconcile_all_builtins 2>&1 | tail -5
+   cargo test --package agent-orchestrator --lib -- normalize_config_populates_builtin reconcile_all_builtins 2>&1 | tail -5
    ```
 
 ### Expected
@@ -78,12 +78,12 @@ Entry point: `orchestrator <command>`
 
 2. **Unit test** — 运行 apply 操作的状态判定测试：
    ```bash
-   cargo test --workspace --lib -- apply_result_created apply_result_configured apply_result_unchanged apply_to_project 2>&1 | tail -5
+   cargo test --package agent-orchestrator --lib -- apply_result_created apply_result_configured apply_result_unchanged apply_to_project 2>&1 | tail -5
    ```
 
 3. **Unit test** — 验证 config snapshot 同步：
    ```bash
-   cargo test --workspace --lib -- sync_config_snapshot_to_store 2>&1 | tail -5
+   cargo test --package agent-orchestrator --lib -- sync_config_snapshot_to_store 2>&1 | tail -5
    ```
 
 ### Expected
@@ -119,7 +119,7 @@ Entry point: `orchestrator <command>`
 
 3. **Unit test** — 运行 manifest 解析和校验测试：
    ```bash
-   cargo test --workspace --lib -- build_rejects resource_dispatch_rejects validate_resource_name_rejects 2>&1 | tail -5
+   cargo test --package agent-orchestrator --lib -- build_rejects resource_dispatch_rejects validate_resource_name_rejects 2>&1 | tail -5
    ```
 
 ### Expected
@@ -155,7 +155,7 @@ Entry point: `orchestrator <command>`
 
 3. **Unit test** — 运行 manifest 解析测试（覆盖错误路径）：
    ```bash
-   cargo test --workspace --lib -- build_rejects validate_resource 2>&1 | tail -5
+   cargo test --package agent-orchestrator --lib -- build_rejects validate_resource 2>&1 | tail -5
    ```
 
 ### Expected

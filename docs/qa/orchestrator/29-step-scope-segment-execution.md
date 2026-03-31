@@ -108,7 +108,7 @@ Verify that item-scoped steps (qa_testing, ticket_fix) run once per QA file, eac
 
 1. Using the completed task from Scenario 1, query item-level events:
    ```bash
-   sqlite3 data/agent_orchestrator.db \
+   sqlite3 ~/.orchestratord/agent_orchestrator.db \
      "SELECT e.task_item_id, ti.qa_file_path,
              json_extract(e.payload_json, '$.step') AS step
       FROM events e

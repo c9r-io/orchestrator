@@ -253,9 +253,9 @@ Validate that `apply_to_project` auto-creates project entries when they don't ex
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Task Creation with Project | ✅ PASS | 2026-03-20 | Claude | All 6 apply_to_project tests pass; project_id persisted in task_ops.rs:182 |
-| 2 | Explicit Workflow Resolution | ✅ PASS | 2026-03-20 | Claude | Workflow routed to project scope via apply_to_store; 3 CRD scope tests pass |
-| 3 | Project-Level Workspace Resolution | ✅ PASS | 2026-03-20 | Claude | Workspace routed to project scope; idempotent apply passes; "project not found" error confirmed |
-| 4 | CLI Project Flag | ✅ PASS | 2026-03-20 | Claude | --project flag confirmed in CLI (task.rs:15,22,33,43); all 6 apply_to_project tests pass |
-| 5 | Multi-Project Isolation | ✅ PASS | 2026-03-18 | Claude | `two-projects.yaml` validates with exit 0; project-a and project-b each have own workspace/agent/workflow |
-| G1 | Explicit Project Entry Exists | ✅ PASS | 2026-03-20 | Claude | Auto-create test passes; ensure_project() called at apply.rs:26 |
+| 1 | Task Creation with Project | ✅ PASS | 2026-03-31 | Claude | All 6 apply_to_project tests pass; project_id persisted in queries.rs:42,60,207,219,types.rs:49 |
+| 2 | Explicit Workflow Resolution | ✅ PASS | 2026-03-31 | Claude | Workflow routed to project scope; 3 CRD scope tests pass; no global fallback |
+| 3 | Project-Level Workspace Resolution | ✅ PASS | 2026-03-31 | Claude | Workspace routed to project scope; idempotent apply passes; "project not found" at resource.rs:633,920,973 |
+| 4 | CLI Project Flag | ✅ PASS | 2026-03-31 | Claude | --project flag confirmed in CLI task.rs:15,22,33,43; all 6 apply_to_project tests pass |
+| 5 | Multi-Project Isolation | ✅ PASS | 2026-03-31 | Claude | `two-projects.yaml` validates with exit 0; project-a and project-b each have own workspace/agent/workflow |
+| G1 | Explicit Project Entry Exists | ✅ PASS | 2026-03-31 | Claude | Auto-create test passes; ensure_project() called at apply.rs:26 |
