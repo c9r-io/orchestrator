@@ -2,6 +2,8 @@
 pub mod builtin_defs;
 /// Lifecycle hook execution for CRD-backed resources.
 pub mod hooks;
+/// CRD plugin execution engine (interceptors, transformers, cron tasks).
+pub mod plugins;
 /// Helpers that project CRD resources into CLI-facing views.
 pub mod projection;
 /// Lookup helpers for CRDs and custom resources.
@@ -209,6 +211,7 @@ mod tests {
                 hooks: CrdHooks::default(),
                 scope: crate::crd::scope::CrdScope::default(),
                 builtin: false,
+                plugins: vec![],
             },
         }
     }

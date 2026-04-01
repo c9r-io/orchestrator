@@ -25,6 +25,9 @@ pub struct CustomResourceDefinition {
     /// If true, this CRD is a builtin type and cannot be deleted or overwritten by users
     #[serde(default)]
     pub builtin: bool,
+    /// Plugins that extend daemon behavior (interceptors, transformers, cron tasks).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plugins: Vec<CrdPlugin>,
 }
 
 /// A single version definition within a CRD.
@@ -72,6 +75,38 @@ pub struct CrdHooks {
     /// Optional command executed before or after a resource is deleted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_delete: Option<String>,
+}
+
+/// A CRD plugin — a named, typed extension that injects custom logic at a
+/// well-defined phase in the daemon's request or scheduling pipeline.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CrdPlugin {
+    /// Unique name within this CRD (e.g. "verify-signature").
+    pub name: String,
+    /// Plugin type: "interceptor", "transformer", or "cron".
+    #[serde(rename = "type")]
+    pub plugin_type: String,
+    /// Extension phase (required for interceptor/transformer, e.g. "webhook.authenticate").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<String>,
+    /// Shell command to execute.
+    pub command: String,
+    /// Timeout in seconds (default: 5).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout: Option<u64>,
+    /// Cron expression (required for type "cron").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schedule: Option<String>,
+    /// IANA timezone for cron scheduling.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timezone: Option<String>,
+}
+
+impl CrdPlugin {
+    /// Returns the effective timeout in seconds (default 5).
+    pub fn effective_timeout(&self) -> u64 {
+        self.timeout.unwrap_or(5)
+    }
 }
 
 /// A custom resource instance stored in config.
@@ -142,6 +177,9 @@ pub struct CrdSpec {
     #[serde(default)]
     /// Whether the CRD is builtin and protected from user deletion.
     pub builtin: bool,
+    /// Plugins that extend daemon behavior (interceptors, transformers, cron tasks).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plugins: Vec<CrdPlugin>,
 }
 
 impl CrdSpec {
@@ -156,6 +194,7 @@ impl CrdSpec {
             hooks: self.hooks,
             scope: self.scope,
             builtin: self.builtin,
+            plugins: self.plugins,
         }
     }
 }
@@ -193,6 +232,7 @@ mod tests {
             },
             scope: CrdScope::default(),
             builtin: false,
+            plugins: vec![],
         };
 
         let json = serde_json::to_string(&crd).expect("serialize");
@@ -282,6 +322,7 @@ spec:
             hooks: CrdHooks::default(),
             scope: CrdScope::default(),
             builtin: false,
+            plugins: vec![],
         };
         let crd = spec.into_crd();
         assert_eq!(crd.kind, "Foo");

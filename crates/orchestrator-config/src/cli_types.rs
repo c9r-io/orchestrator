@@ -532,6 +532,10 @@ pub struct TriggerWebhookSpec {
         rename = "signatureHeader"
     )]
     pub signature_header: Option<String>,
+
+    /// CRD kind name for plugin lookup in the webhook request path.
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "crdRef")]
+    pub crd_ref: Option<String>,
 }
 
 /// Reference to a SecretStore for webhook secret resolution.

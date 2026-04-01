@@ -67,7 +67,7 @@
 | FR-080 | Webhook Trigger 基础设施 — HTTP 事件入口与通用事件源扩展 | P0 | Closed |
 | FR-081 | Per-Trigger Webhook 认证与 CEL Payload 过滤 | P1 | Closed |
 | FR-082 | 集成 Manifest 包 — Slack / GitHub / Line 预制配置 | P2 | Closed |
-| FR-083 | CRD 插件系统 — Webhook 拦截器与自动化生命周期 | P3 | Proposed |
+| FR-083 | CRD 插件系统 — Webhook 拦截器与自动化生命周期 | P3 | Closed |
 | FR-084 | Agent 条件命令规则 + Session 复用 | P1 | Closed |
 | FR-085 | Filesystem Trigger — 文件系统变更原生触发器 | P1 | Closed |
 | FR-086 | CLI Command to Simulate Agent Selection Logic | P3 | Closed |
@@ -166,3 +166,4 @@
 - QA-106 inflight wait test fixture 已闭环删除（原 FR-085 编号冲突）；其设计与验证信息现由 `docs/design_doc/orchestrator/93-long-running-agent-test-fixture.md` 与 `docs/qa/orchestrator/106-inflight-wait-heartbeat-aware-timeout.md` 承载（3 项集成测试直接验证 `wait_for_inflight_runs()` 的 heartbeat 重置、超时回收、诊断事件；S1-S5 全部 ☑）
 - FR-088 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/qa-doctor-observability.md` 与 `docs/qa/orchestrator/134-qa-doctor-observability.md` 承载
 - FR-089 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/95-secretstore-key-emergency-recovery.md` 与 `docs/qa/orchestrator/135-secretstore-key-emergency-recovery.md` 承载
+- FR-083 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/96-crd-plugin-system.md` 与 `docs/qa/orchestrator/136-crd-plugin-system.md` 承载（通用 CRD 插件系统：interceptor/transformer/cron 三种插件类型，webhook.authenticate/webhook.transform 扩展点，crdRef 触发器关联，内置 orchestrator tool 工具库）

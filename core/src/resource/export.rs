@@ -124,6 +124,7 @@ pub fn export_crd_documents(config: &OrchestratorConfig) -> Vec<serde_yaml::Valu
                     hooks: crd.hooks.clone(),
                     scope: crd.scope,
                     builtin: crd.builtin,
+                    plugins: crd.plugins.clone(),
                 },
             };
             // Wrap with `kind: CustomResourceDefinition`
@@ -358,6 +359,7 @@ mod tests {
                 hooks: Default::default(),
                 scope: Default::default(),
                 builtin: true,
+                plugins: vec![],
             },
         );
 
@@ -384,6 +386,7 @@ mod tests {
                 hooks: Default::default(),
                 scope: Default::default(),
                 builtin: false,
+                plugins: vec![],
             },
         );
 

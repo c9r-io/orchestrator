@@ -87,6 +87,10 @@ pub struct TriggerWebhookConfig {
     /// Custom HTTP header name for the signature (default: `X-Webhook-Signature`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signature_header: Option<String>,
+    /// CRD kind name for plugin lookup. When set, the daemon resolves the CRD's
+    /// plugins and executes interceptors/transformers in the webhook request path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crd_ref: Option<String>,
 }
 
 /// Reference to a SecretStore for webhook secret resolution.

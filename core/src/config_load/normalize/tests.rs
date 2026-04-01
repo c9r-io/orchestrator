@@ -777,6 +777,7 @@ fn normalize_config_does_not_overwrite_user_crds() {
         builtin: false,
         versions: vec![],
         hooks: Default::default(),
+        plugins: vec![],
     };
     config
         .custom_resource_definitions

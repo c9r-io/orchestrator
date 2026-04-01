@@ -133,9 +133,28 @@ impl TriggerEngine {
                 // ── Cron tick ───────────────────────────────────────────
                 () = &mut sleep_fut => {
                     let now = Utc::now();
-                    let fired = collect_due_triggers(&cron_schedule, now);
-                    for (trigger_name, project) in fired {
-                        self.fire_trigger(&trigger_name, &project).await;
+                    let due = collect_due_entries(&cron_schedule, now);
+                    for entry in due {
+                        match &entry.kind {
+                            CronEntryKind::Trigger => {
+                                self.fire_trigger(&entry.trigger_name, &entry.project).await;
+                            }
+                            CronEntryKind::CrdPlugin { crd_kind, plugin } => {
+                                info!(
+                                    crd = crd_kind.as_str(),
+                                    plugin = plugin.name.as_str(),
+                                    "firing CRD cron plugin"
+                                );
+                                if let Err(e) = crate::crd::plugins::execute_cron_plugin(plugin, crd_kind) {
+                                    warn!(
+                                        crd = crd_kind.as_str(),
+                                        plugin = plugin.name.as_str(),
+                                        error = %e,
+                                        "CRD cron plugin failed"
+                                    );
+                                }
+                            }
+                        }
                     }
                     // Recompute schedule after firing.
                     cron_schedule = self.build_cron_schedule();
@@ -214,6 +233,7 @@ impl TriggerEngine {
                                 trigger_name: name.clone(),
                                 project: project_id.clone(),
                                 next_fire: next,
+                                kind: CronEntryKind::Trigger,
                             });
                         }
                         Err(e) => {
@@ -228,6 +248,40 @@ impl TriggerEngine {
                 }
             }
         }
+
+        // ── CRD plugin cron entries ─────────────────────────────────────
+        for (crd_kind, crd) in &config.custom_resource_definitions {
+            for plugin in crate::crd::plugins::cron_plugins(&crd.plugins) {
+                if let Some(ref schedule) = plugin.schedule {
+                    let cron_spec = TriggerCronConfig {
+                        schedule: schedule.clone(),
+                        timezone: plugin.timezone.clone(),
+                    };
+                    match compute_next_fire(&cron_spec, Utc::now()) {
+                        Ok(next) => {
+                            entries.push(CronEntry {
+                                trigger_name: format!("crd:{}:{}", crd_kind, plugin.name),
+                                project: String::new(),
+                                next_fire: next,
+                                kind: CronEntryKind::CrdPlugin {
+                                    crd_kind: crd_kind.clone(),
+                                    plugin: plugin.clone(),
+                                },
+                            });
+                        }
+                        Err(e) => {
+                            warn!(
+                                crd = crd_kind.as_str(),
+                                plugin = plugin.name.as_str(),
+                                error = %e,
+                                "failed to compute next fire time for CRD cron plugin"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
         entries
     }
 
@@ -670,10 +724,23 @@ impl TriggerEngine {
 
 // ── Cron schedule helpers ────────────────────────────────────────────────────
 
+/// Distinguishes trigger-based cron entries from CRD plugin cron entries.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum CronEntryKind {
+    /// A regular trigger cron entry.
+    Trigger,
+    /// A CRD plugin cron entry (executes a plugin command directly).
+    CrdPlugin {
+        crd_kind: String,
+        plugin: crate::crd::types::CrdPlugin,
+    },
+}
+
 struct CronEntry {
     trigger_name: String,
     project: String,
     next_fire: DateTime<Utc>,
+    kind: CronEntryKind,
 }
 
 fn compute_next_fire(spec: &TriggerCronConfig, after: DateTime<Utc>) -> Result<DateTime<Utc>> {
@@ -720,12 +787,8 @@ fn next_cron_sleep(entries: &[CronEntry]) -> std::time::Duration {
         .unwrap_or(std::time::Duration::from_secs(3600))
 }
 
-fn collect_due_triggers(entries: &[CronEntry], now: DateTime<Utc>) -> Vec<(String, String)> {
-    entries
-        .iter()
-        .filter(|e| e.next_fire <= now)
-        .map(|e| (e.trigger_name.clone(), e.project.clone()))
-        .collect()
+fn collect_due_entries(entries: &[CronEntry], now: DateTime<Utc>) -> Vec<&CronEntry> {
+    entries.iter().filter(|e| e.next_fire <= now).collect()
 }
 
 async fn cleanup_history(
@@ -943,7 +1006,7 @@ mod tests {
     }
 
     #[test]
-    fn collect_due_triggers_finds_past_entries() {
+    fn collect_due_entries_finds_past_entries() {
         let now = Utc::now();
         let past = now - chrono::Duration::seconds(10);
         let future = now + chrono::Duration::seconds(300);
@@ -952,15 +1015,17 @@ mod tests {
                 trigger_name: "past".to_string(),
                 project: "p".to_string(),
                 next_fire: past,
+                kind: CronEntryKind::Trigger,
             },
             CronEntry {
                 trigger_name: "future".to_string(),
                 project: "p".to_string(),
                 next_fire: future,
+                kind: CronEntryKind::Trigger,
             },
         ];
-        let due = collect_due_triggers(&entries, now);
+        let due = collect_due_entries(&entries, now);
         assert_eq!(due.len(), 1);
-        assert_eq!(due[0].0, "past");
+        assert_eq!(due[0].trigger_name, "past");
     }
 }

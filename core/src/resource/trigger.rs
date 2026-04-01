@@ -204,6 +204,7 @@ fn to_config(spec: &TriggerSpec) -> TriggerConfig {
                     from_ref: s.from_ref.clone(),
                 }),
                 signature_header: w.signature_header.clone(),
+                crd_ref: w.crd_ref.clone(),
             }),
             filesystem: e.filesystem.as_ref().map(|fs| TriggerFilesystemConfig {
                 paths: fs.paths.clone(),
@@ -255,6 +256,7 @@ fn from_config(cfg: &TriggerConfig) -> TriggerSpec {
                     from_ref: s.from_ref.clone(),
                 }),
                 signature_header: w.signature_header.clone(),
+                crd_ref: w.crd_ref.clone(),
             }),
             filesystem: e.filesystem.as_ref().map(|fs| TriggerFilesystemSpec {
                 paths: fs.paths.clone(),

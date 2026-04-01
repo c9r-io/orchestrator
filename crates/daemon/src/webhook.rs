@@ -83,45 +83,92 @@ fn do_webhook(
             .and_then(|e| e.webhook.as_ref())
     });
 
-    // ── Signature verification (per-trigger → global fallback) ──────────
-    let verification_result = if let Some(wh_cfg) = trigger_webhook_cfg {
-        // Per-trigger secret from SecretStore
-        if let Some(ref secret_ref) = wh_cfg.secret {
-            let header_name = wh_cfg
-                .signature_header
-                .as_deref()
-                .unwrap_or("x-webhook-signature");
-            verify_with_store_secrets(
-                &state.inner,
-                &project,
-                &secret_ref.from_ref,
-                header_name,
-                &headers,
-                &body,
-            )
-        } else {
-            // Per-trigger config exists but no secret → no verification
-            Ok(())
-        }
-    } else if let Some(ref global_secret) = state.secret {
-        // Global fallback
-        verify_with_single_secret(global_secret, "x-webhook-signature", &headers, &body)
-    } else {
-        // No secret configured anywhere → allow
-        Ok(())
-    };
+    // ── Resolve CRD plugins (if crdRef is set) ───────────────────────────
+    let crd_plugins = trigger_webhook_cfg
+        .and_then(|wh_cfg| wh_cfg.crd_ref.as_ref())
+        .and_then(|crd_kind| {
+            active_config.as_ref().and_then(|ac| {
+                ac.config
+                    .custom_resource_definitions
+                    .get(crd_kind)
+                    .map(|crd| crd.plugins.clone())
+            })
+        });
+    let has_crd_interceptor = crd_plugins.as_ref().is_some_and(|ps| {
+        ps.iter().any(|p| {
+            p.phase.as_deref()
+                == Some(agent_orchestrator::crd::plugins::PHASE_WEBHOOK_AUTHENTICATE)
+        })
+    });
 
-    if let Err(msg) = verification_result {
-        warn!(
-            trigger = trigger_name.as_str(),
-            reason = msg.as_str(),
-            "webhook auth failed"
+    // ── Signature verification (CRD interceptor → per-trigger → global) ─
+    if has_crd_interceptor {
+        // CRD interceptor handles authentication — run all authenticate-phase plugins
+        let crd_kind = trigger_webhook_cfg
+            .and_then(|wh_cfg| wh_cfg.crd_ref.as_deref())
+            .unwrap_or("");
+        let plugins = crd_plugins.as_deref().unwrap_or(&[]);
+        let auth_plugins = agent_orchestrator::crd::plugins::plugins_for_phase(
+            plugins,
+            agent_orchestrator::crd::plugins::PHASE_WEBHOOK_AUTHENTICATE,
         );
-        return (StatusCode::UNAUTHORIZED, msg).into_response();
+        let header_map = extract_headers_map(&headers);
+        let body_str = String::from_utf8_lossy(&body);
+        for plugin in auth_plugins {
+            if let Err(e) =
+                agent_orchestrator::crd::plugins::execute_interceptor(
+                    plugin,
+                    crd_kind,
+                    &header_map,
+                    &body_str,
+                )
+            {
+                warn!(
+                    trigger = trigger_name.as_str(),
+                    plugin = plugin.name.as_str(),
+                    reason = %e,
+                    "CRD interceptor rejected webhook"
+                );
+                return (StatusCode::UNAUTHORIZED, e.to_string()).into_response();
+            }
+        }
+    } else {
+        // Standard HMAC verification path
+        let verification_result = if let Some(wh_cfg) = trigger_webhook_cfg {
+            if let Some(ref secret_ref) = wh_cfg.secret {
+                let header_name = wh_cfg
+                    .signature_header
+                    .as_deref()
+                    .unwrap_or("x-webhook-signature");
+                verify_with_store_secrets(
+                    &state.inner,
+                    &project,
+                    &secret_ref.from_ref,
+                    header_name,
+                    &headers,
+                    &body,
+                )
+            } else {
+                Ok(())
+            }
+        } else if let Some(ref global_secret) = state.secret {
+            verify_with_single_secret(global_secret, "x-webhook-signature", &headers, &body)
+        } else {
+            Ok(())
+        };
+
+        if let Err(msg) = verification_result {
+            warn!(
+                trigger = trigger_name.as_str(),
+                reason = msg.as_str(),
+                "webhook auth failed"
+            );
+            return (StatusCode::UNAUTHORIZED, msg).into_response();
+        }
     }
 
     // ── Parse JSON body ─────────────────────────────────────────────────
-    let payload: serde_json::Value = if body.is_empty() {
+    let mut payload: serde_json::Value = if body.is_empty() {
         serde_json::Value::Null
     } else {
         match serde_json::from_slice(&body) {
@@ -131,6 +178,40 @@ fn do_webhook(
             }
         }
     };
+
+    // ── CRD transformer plugins (payload normalization) ─────────────────
+    if let Some(ref plugins) = crd_plugins {
+        let crd_kind = trigger_webhook_cfg
+            .and_then(|wh_cfg| wh_cfg.crd_ref.as_deref())
+            .unwrap_or("");
+        let transform_plugins = agent_orchestrator::crd::plugins::plugins_for_phase(
+            plugins,
+            agent_orchestrator::crd::plugins::PHASE_WEBHOOK_TRANSFORM,
+        );
+        for plugin in transform_plugins {
+            match agent_orchestrator::crd::plugins::execute_transformer(
+                plugin, crd_kind, &payload,
+            ) {
+                Ok(transformed) => {
+                    info!(
+                        trigger = trigger_name.as_str(),
+                        plugin = plugin.name.as_str(),
+                        "CRD transformer applied"
+                    );
+                    payload = transformed;
+                }
+                Err(e) => {
+                    warn!(
+                        trigger = trigger_name.as_str(),
+                        plugin = plugin.name.as_str(),
+                        error = %e,
+                        "CRD transformer failed"
+                    );
+                    return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response();
+                }
+            }
+        }
+    }
 
     // ── Broadcast webhook event to trigger engine ───────────────────────
     broadcast_task_event(
@@ -176,6 +257,14 @@ fn do_webhook(
             (StatusCode::NOT_FOUND, axum::Json(json)).into_response()
         }
     }
+}
+
+/// Extract HTTP headers into a HashMap for plugin env injection.
+fn extract_headers_map(headers: &HeaderMap) -> std::collections::HashMap<String, String> {
+    headers
+        .iter()
+        .filter_map(|(k, v)| v.to_str().ok().map(|val| (k.as_str().to_string(), val.to_string())))
+        .collect()
 }
 
 /// Verify signature against a single secret string.

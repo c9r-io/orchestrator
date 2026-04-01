@@ -186,6 +186,10 @@ pub enum Commands {
     #[command(subcommand)]
     Daemon(DaemonCommands),
 
+    /// Built-in tools for CRD plugin scripts
+    #[command(subcommand)]
+    Tool(ToolCommands),
+
     /// Show version
     Version {
         /// Emit JSON instead of human-readable text.
@@ -209,6 +213,48 @@ pub enum DaemonCommands {
         /// Disable maintenance mode
         #[arg(long, conflicts_with = "enable")]
         disable: bool,
+    },
+}
+
+/// Built-in tools callable from CRD plugin scripts.
+#[derive(Subcommand, Debug, Clone)]
+pub enum ToolCommands {
+    /// Verify an HMAC signature (exit 0 = valid, exit 1 = invalid)
+    #[command(name = "webhook-verify-hmac")]
+    WebhookVerifyHmac {
+        /// HMAC algorithm (sha256)
+        #[arg(long, default_value = "sha256")]
+        algo: String,
+        /// Shared secret
+        #[arg(long)]
+        secret: String,
+        /// Request body to verify
+        #[arg(long)]
+        body: String,
+        /// Expected signature (hex, with optional sha256= prefix)
+        #[arg(long)]
+        signature: String,
+    },
+    /// Extract a value from JSON using a dot-separated path (reads stdin)
+    #[command(name = "payload-extract")]
+    PayloadExtract {
+        /// Dot-separated JSON path (e.g. "event.type")
+        #[arg(long)]
+        path: String,
+    },
+    /// Rotate a key in a SecretStore (requires running daemon)
+    #[command(name = "secret-rotate")]
+    SecretRotate {
+        /// SecretStore name
+        store: String,
+        /// Key to rotate
+        key: String,
+        /// New value
+        #[arg(long)]
+        value: String,
+        /// Project scope
+        #[arg(short, long)]
+        project: Option<String>,
     },
 }
 

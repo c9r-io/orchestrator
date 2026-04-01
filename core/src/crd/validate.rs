@@ -86,6 +86,85 @@ pub fn validate_crd_definition(config: &OrchestratorConfig, manifest: &CrdManife
         }
     }
 
+    // Validate plugins
+    validate_crd_plugins(&spec.plugins)?;
+
+    Ok(())
+}
+
+/// Validate CRD plugin definitions.
+fn validate_crd_plugins(plugins: &[crate::crd::types::CrdPlugin]) -> Result<()> {
+    use std::collections::HashSet;
+
+    let known_types = ["interceptor", "transformer", "cron"];
+    let mut names = HashSet::new();
+
+    for plugin in plugins {
+        // Plugin names must be unique within a CRD
+        if !names.insert(&plugin.name) {
+            return Err(anyhow!(
+                "duplicate plugin name '{}' in CRD",
+                plugin.name
+            ));
+        }
+
+        // Plugin name must not be empty
+        if plugin.name.trim().is_empty() {
+            return Err(anyhow!("plugin name cannot be empty"));
+        }
+
+        // Plugin type must be known
+        if !known_types.contains(&plugin.plugin_type.as_str()) {
+            return Err(anyhow!(
+                "unknown plugin type '{}' for plugin '{}' (expected one of: {})",
+                plugin.plugin_type,
+                plugin.name,
+                known_types.join(", ")
+            ));
+        }
+
+        // Command must not be empty
+        if plugin.command.trim().is_empty() {
+            return Err(anyhow!(
+                "plugin '{}' command cannot be empty",
+                plugin.name
+            ));
+        }
+
+        // interceptor/transformer require a phase
+        if (plugin.plugin_type == "interceptor" || plugin.plugin_type == "transformer")
+            && plugin.phase.is_none()
+        {
+            return Err(anyhow!(
+                "plugin '{}' of type '{}' requires a phase",
+                plugin.name,
+                plugin.plugin_type
+            ));
+        }
+
+        // cron plugins require a schedule
+        if plugin.plugin_type == "cron" {
+            let schedule = plugin.schedule.as_deref().unwrap_or("");
+            if schedule.trim().is_empty() {
+                return Err(anyhow!(
+                    "cron plugin '{}' requires a schedule",
+                    plugin.name
+                ));
+            }
+            // Validate cron expression
+            use cron::Schedule;
+            use std::str::FromStr;
+            Schedule::from_str(schedule).map_err(|e| {
+                anyhow!(
+                    "cron plugin '{}' has invalid schedule '{}': {}",
+                    plugin.name,
+                    schedule,
+                    e
+                )
+            })?;
+        }
+    }
+
     Ok(())
 }
 
@@ -218,6 +297,7 @@ mod tests {
                 hooks: CrdHooks::default(),
                 scope: crate::crd::scope::CrdScope::default(),
                 builtin: false,
+                plugins: vec![],
             },
         }
     }
@@ -309,6 +389,7 @@ mod tests {
                 hooks: CrdHooks::default(),
                 scope: crate::crd::scope::CrdScope::default(),
                 builtin: false,
+                plugins: vec![],
             },
         );
         let manifest = CustomResourceManifest {
@@ -347,6 +428,7 @@ mod tests {
                 hooks: CrdHooks::default(),
                 scope: crate::crd::scope::CrdScope::default(),
                 builtin: false,
+                plugins: vec![],
             },
         );
         let manifest = CustomResourceManifest {
@@ -385,6 +467,7 @@ mod tests {
                 hooks: CrdHooks::default(),
                 scope: crate::crd::scope::CrdScope::default(),
                 builtin: false,
+                plugins: vec![],
             },
         );
         let manifest = CustomResourceManifest {

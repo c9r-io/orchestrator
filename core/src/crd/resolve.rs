@@ -141,6 +141,7 @@ mod tests {
                 hooks: CrdHooks::default(),
                 scope: crate::crd::scope::CrdScope::default(),
                 builtin: false,
+                plugins: vec![],
             },
         );
         config

@@ -41,6 +41,7 @@ fn agent_crd() -> CustomResourceDefinition {
         hooks: CrdHooks::default(),
         scope: CrdScope::Namespaced,
         builtin: true,
+        plugins: vec![],
     }
 }
 
@@ -65,6 +66,7 @@ fn workflow_crd() -> CustomResourceDefinition {
         hooks: CrdHooks::default(),
         scope: CrdScope::Namespaced,
         builtin: true,
+        plugins: vec![],
     }
 }
 
@@ -87,6 +89,7 @@ fn workspace_crd() -> CustomResourceDefinition {
         hooks: CrdHooks::default(),
         scope: CrdScope::Namespaced,
         builtin: true,
+        plugins: vec![],
     }
 }
 
@@ -105,6 +108,7 @@ fn project_crd() -> CustomResourceDefinition {
         hooks: CrdHooks::default(),
         scope: CrdScope::Cluster,
         builtin: true,
+        plugins: vec![],
     }
 }
 
@@ -125,6 +129,7 @@ fn runtime_policy_crd() -> CustomResourceDefinition {
         hooks: CrdHooks::default(),
         scope: CrdScope::Singleton,
         builtin: true,
+        plugins: vec![],
     }
 }
 
@@ -145,6 +150,7 @@ fn step_template_crd() -> CustomResourceDefinition {
         hooks: CrdHooks::default(),
         scope: CrdScope::Cluster,
         builtin: true,
+        plugins: vec![],
     }
 }
 
@@ -174,6 +180,7 @@ fn execution_profile_crd() -> CustomResourceDefinition {
         hooks: CrdHooks::default(),
         scope: CrdScope::Namespaced,
         builtin: true,
+        plugins: vec![],
     }
 }
 
@@ -193,6 +200,7 @@ fn env_store_crd() -> CustomResourceDefinition {
         hooks: CrdHooks::default(),
         scope: CrdScope::Cluster,
         builtin: true,
+        plugins: vec![],
     }
 }
 
@@ -212,6 +220,7 @@ fn secret_store_crd() -> CustomResourceDefinition {
         hooks: CrdHooks::default(),
         scope: CrdScope::Cluster,
         builtin: true,
+        plugins: vec![],
     }
 }
 
@@ -233,6 +242,7 @@ fn workflow_store_crd() -> CustomResourceDefinition {
         hooks: CrdHooks::default(),
         scope: CrdScope::Namespaced,
         builtin: true,
+        plugins: vec![],
     }
 }
 
@@ -252,6 +262,7 @@ fn store_backend_provider_crd() -> CustomResourceDefinition {
         hooks: CrdHooks::default(),
         scope: CrdScope::Cluster,
         builtin: true,
+        plugins: vec![],
     }
 }
 

@@ -12,6 +12,9 @@ mod store;
 mod task;
 mod trigger;
 
+/// Built-in tool commands for CRD plugin scripts.
+pub mod tool;
+
 /// Local debug command implementations.
 pub mod debug;
 /// Version-reporting commands that do not require daemon access.
@@ -101,7 +104,7 @@ pub async fn dispatch(
         Commands::Manifest(cmd) => manifest::dispatch(client, cmd).await,
 
         // Handled before dispatch
-        Commands::Version { .. } | Commands::Daemon(_) => unreachable!(),
+        Commands::Version { .. } | Commands::Daemon(_) | Commands::Tool(_) => unreachable!(),
         Commands::Apply { .. }
         | Commands::Get { .. }
         | Commands::Describe { .. }

@@ -20,7 +20,8 @@ use clap::Parser;
 pub use cli::{
     AgentCommands, Cli, Commands, DaemonCommands, DbCommands, DbMigrationCommands, DebugCommands,
     EventCommands, ManifestCommands, OutputFormat, QaCommands, SandboxProbeCommands,
-    SecretCommands, SecretKeyCommands, StoreCommands, TaskCommands, TriggerCommands,
+    SecretCommands, SecretKeyCommands, StoreCommands, TaskCommands, ToolCommands,
+    TriggerCommands,
 };
 
 fn main() -> Result<()> {
@@ -61,6 +62,7 @@ async fn run(cli: Cli) -> Result<()> {
             command: Some(debug_command),
         } => commands::debug::run_local(debug_command).await,
         Commands::Daemon(cmd) => commands::daemon::dispatch(cmd).await,
+        Commands::Tool(cmd) => commands::tool::dispatch(cmd, control_plane_config.as_deref()).await,
         command => {
             let mut client = client::connect(control_plane_config.as_deref()).await?;
             commands::dispatch(&mut client, command).await
