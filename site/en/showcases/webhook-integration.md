@@ -182,6 +182,45 @@ Webhook request arrives
   -> Trigger workflow
 ```
 
+### Plugin Policy Governance
+
+CRD plugin commands execute as shell processes in the daemon context. To prevent privilege escalation, all plugin commands are subject to a **plugin policy** (`{data_dir}/plugin-policy.yaml`).
+
+**Default behavior**: Allowlist mode with an empty allowlist — all plugin commands are **blocked** until the operator explicitly permits them.
+
+Create `~/.orchestratord/plugin-policy.yaml`:
+
+```yaml
+mode: allowlist                          # deny | allowlist | audit
+allowed_command_prefixes:
+  - scripts/                             # permit scripts/ directory
+  - /usr/local/bin/orchestrator-plugins/ # permit system-installed plugins
+max_timeout_secs: 30                     # cap per-plugin timeout
+enforce_on_hooks: true                   # also enforce on lifecycle hooks
+```
+
+**Policy modes**:
+
+| Mode | Behavior |
+|------|----------|
+| `allowlist` | Only commands matching `allowed_command_prefixes` are accepted. Built-in denied patterns (curl, wget, nc, eval, base64) are always blocked. |
+| `deny` | All CRDs with plugins are rejected. |
+| `audit` | All commands are accepted, but violations are logged as warnings. Use for migration. |
+
+**RBAC elevation**: Applying a CRD that contains plugins or lifecycle hooks requires **Admin** role (not Operator). With the default UDS transport, configure `uds-policy.yaml` to restrict agent access:
+
+```yaml
+# ~/.orchestratord/control-plane/uds-policy.yaml
+max_role: operator   # agents cannot apply CRDs with plugins
+```
+
+**Audit trail**: Every plugin apply and execution is logged to the `plugin_audit` SQLite table:
+
+```sql
+SELECT created_at, action, crd_kind, plugin_name, command, result
+FROM plugin_audit ORDER BY created_at DESC LIMIT 10;
+```
+
 ### Built-in Tool Library
 
 CRD plugin scripts can call `orchestrator tool` built-in utilities:

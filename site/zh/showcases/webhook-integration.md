@@ -182,6 +182,45 @@ Webhook 请求到达
   -> 触发 Workflow
 ```
 
+### 插件策略治理
+
+CRD 插件命令以 shell 进程在 daemon 上下文中执行。为防止越权，所有插件命令都受 **插件策略** (`{data_dir}/plugin-policy.yaml`) 约束。
+
+**默认行为**：Allowlist 模式 + 空白名单 — 所有插件命令默认 **拒绝**，直到运维人员显式许可。
+
+创建 `~/.orchestratord/plugin-policy.yaml`：
+
+```yaml
+mode: allowlist                          # deny | allowlist | audit
+allowed_command_prefixes:
+  - scripts/                             # 允许 scripts/ 目录
+  - /usr/local/bin/orchestrator-plugins/ # 允许系统安装的插件
+max_timeout_secs: 30                     # 单插件最大超时
+enforce_on_hooks: true                   # 同时约束生命周期 hooks
+```
+
+**策略模式**：
+
+| 模式 | 行为 |
+|------|------|
+| `allowlist` | 仅匹配 `allowed_command_prefixes` 的命令被接受。内置黑名单（curl、wget、nc、eval、base64）始终拦截。 |
+| `deny` | 拒绝所有含插件的 CRD。 |
+| `audit` | 接受所有命令，但违规以告警日志记录。适用于迁移过渡期。 |
+
+**RBAC 提权**：Apply 含插件或生命周期 hooks 的 CRD 需要 **Admin** 角色（而非 Operator）。默认 UDS 传输下，通过 `uds-policy.yaml` 限制 agent 访问：
+
+```yaml
+# ~/.orchestratord/control-plane/uds-policy.yaml
+max_role: operator   # agent 无法 apply 含插件的 CRD
+```
+
+**审计追踪**：每次插件 apply 和执行都记录到 `plugin_audit` SQLite 表：
+
+```sql
+SELECT created_at, action, crd_kind, plugin_name, command, result
+FROM plugin_audit ORDER BY created_at DESC LIMIT 10;
+```
+
 ### 内置工具库
 
 CRD 插件脚本可调用 `orchestrator tool` 内置工具：
