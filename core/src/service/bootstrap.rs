@@ -300,6 +300,35 @@ fn run_key_lifecycle_diagnostics(data_dir: &Path, db_path: &Path) {
         }
     }
 
+    // Warn about revoked keys that are still referenced (crash recovery scenario).
+    // The keyring builder already loads these as decrypt-only; this diagnostic
+    // gives the operator a clear signal that `rotate --resume` is needed.
+    let revoked_records: Vec<_> = keyring
+        .all_records()
+        .iter()
+        .filter(|r| r.state == crate::secret_key_lifecycle::KeyState::Revoked)
+        .collect();
+    if !revoked_records.is_empty() {
+        if let Ok(conn) = crate::db::open_conn(db_path) {
+            for rec in &revoked_records {
+                let still_ref: bool = conn
+                    .query_row(
+                        "SELECT EXISTS(SELECT 1 FROM resources WHERE kind='SecretStore' AND instr(spec_json, ?1) > 0)",
+                        rusqlite::params![format!("\"key_id\":\"{}\"", rec.key_id)],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or(false);
+                if still_ref {
+                    tracing::warn!(
+                        key_id = %rec.key_id,
+                        "crash recovery: revoked key still referenced by SecretStore data; \
+                         loaded as decrypt-only. Run `secret key rotate --resume` to complete migration"
+                    );
+                }
+            }
+        }
+    }
+
     // Check for missing active key when encrypted data may exist
     if !keyring.has_active_key() {
         tracing::warn!("no active encryption key available; SecretStore writes will be blocked");

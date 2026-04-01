@@ -59,8 +59,18 @@ rg "fs_watcher_reload_tx" core/src/trigger_engine.rs
 
 ## Checklist
 
-- [x] Scenario 6: TriggerFilesystemSpec serde roundtrip
-- [x] Scenario 7: Unit tests for filesystem validation
-- [x] Scenario 8: FsWatcher config types exist
-- [x] Scenario 9: FsWatcher module exists with lazy lifecycle
-- [x] Scenario 10: Trigger engine notifies fs_watcher on reload
+- [x] Scenario 6: TriggerFilesystemSpec serde roundtrip — **PASSED** (2026-04-01)
+- [x] Scenario 7: Unit tests for filesystem validation — **ALL PASSED** (2026-04-01)
+  - `trigger_validate_accepts_filesystem_source` — PASSED
+  - `trigger_validate_filesystem_requires_paths` — PASSED
+  - `trigger_validate_filesystem_requires_block` — PASSED
+  - `trigger_validate_filesystem_rejects_invalid_events` — PASSED
+- [x] Scenario 8: FsWatcher config types exist — **PASSED** (2026-04-01)
+  - `TriggerFilesystemSpec` at cli_types.rs:502 with `paths`, `events`, `debounce_ms` — CONFIRMED
+  - `TriggerFilesystemConfig` at config/trigger.rs:65 with `paths`, `events`, `debounce_ms` — CONFIRMED
+- [x] Scenario 9: FsWatcher module exists with lazy lifecycle — **PASSED** (2026-04-01)
+  - `fn reload_watches` at fs_watcher.rs:107 — CONFIRMED
+  - `watcher: Option` at fs_watcher.rs:40 — CONFIRMED
+  - "no active filesystem triggers, releasing watcher" at fs_watcher.rs:205 — CONFIRMED
+- [x] Scenario 10: Trigger engine notifies fs_watcher on reload — **PASSED** (2026-04-01)
+  - `fs_watcher_reload_tx` at trigger_engine.rs:876 — CONFIRMED

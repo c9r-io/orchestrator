@@ -168,10 +168,10 @@ Code review + unit test verification.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Task List JSON/YAML | PASS | 2026-03-31 | Claude | JSON valid & parseable by jq; YAML valid |
-| 2 | Task Info JSON/YAML | PASS | 2026-03-31 | Claude | 7/7 tests pass: load_task_detail* (items, runs, events, graph debug bundles) |
-| 3 | Workspace List JSON/YAML | PASS | 2026-03-31 | Claude | 5/5 tests pass: resource_to_yaml (3), resource_trait_to_yaml_serializes_manifest_shape, registered_resource_to_yaml_delegates |
-| 4 | Manifest Export JSON/YAML | PASS | 2026-03-31 | Claude | 5/5 tests pass: execution_profile_to_yaml, env_store, secret_store, step_template + resource_trait_to_yaml |
-| 5 | Workflow/Agent List JSON/YAML | PASS | 2026-03-31 | Claude | 2/2 tests pass: registered_resource_kind_name_for_all_variants, registered_resource_to_yaml_delegates |
+| 1 | Task List JSON/YAML | PASS | 2026-04-01 | Claude | JSON valid & parseable by jq; YAML valid |
+| 2 | Task Info JSON/YAML | PASS | 2026-04-01 | Claude | 7/7 tests pass: load_task_detail* (items, runs, events, graph debug bundles) |
+| 3 | Workspace List JSON/YAML | PASS | 2026-04-01 | Claude | 5/5 tests pass: resource_to_yaml (3), resource_trait_to_yaml_serializes_manifest_shape, registered_resource_to_yaml_delegates |
+| 4 | Manifest Export JSON/YAML | PASS | 2026-04-01 | Claude | 5/5 tests pass: execution_profile_to_yaml, env_store, secret_store, step_template + resource_trait_to_yaml |
+| 5 | Workflow/Agent List JSON/YAML | PASS | 2026-04-01 | Claude | 2/2 tests pass: registered_resource_kind_name_for_all_variants, registered_resource_to_yaml_delegates |
 
-**Last re-verified**: 2026-03-31 (Claude)
+**Last re-verified**: 2026-04-01 (Claude)

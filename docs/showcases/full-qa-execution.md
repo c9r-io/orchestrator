@@ -78,15 +78,15 @@ self_referential_safe: false
 当 workspace 设置 `self_referential: true` 时，系统读取 QA 文档的 frontmatter，
 `self_referential_safe: false`（且无 `self_referential_safe_scenarios`）的文档会被 prehook 跳过，不会被 agent 执行。
 
-### 2.2 标记为不安全的文档（47 个）
+### 2.2 标记为不安全的文档（49 个）
 
-以下文档包含 kill daemon、重启进程、重编译二进制、创建任务、触发 webhook 等危险或干扰操作，
+以下文档包含 kill daemon、重启进程、重编译二进制、创建任务、触发 webhook、密钥轮换/吊销等危险或干扰操作，
 或需要 GUI 环境/外部服务（在纯 CLI 回归中不可执行），已标记为 `self_referential_safe: false`。
 
 其中 **34 个被完全跳过**（无 `self_referential_safe_scenarios`），
-**13 个被部分执行**（仅限列出的安全场景）。
+**15 个被部分执行**（仅限列出的安全场景）。
 
-#### docs/qa/orchestrator/（42 个）
+#### docs/qa/orchestrator/（44 个）
 
 **完全跳过（29 个）：**
 
@@ -122,7 +122,7 @@ self_referential_safe: false
 | `121b-gui-i18n-ux.md` | 需要 GUI 环境（Tauri） |
 | `smoke-orchestrator.md` | `cargo build --release` |
 
-**部分执行（13 个，仅限列出的安全场景）：**
+**部分执行（15 个，仅限列出的安全场景）：**
 
 | 文件 | 安全场景 | 危险操作（跳过的场景） |
 |------|---------|----------------------|
@@ -138,6 +138,8 @@ self_referential_safe: false
 | `128-webhook-trigger-infrastructure.md` | S1, S4, S5, S6, S7, S9 | S2/S3: apply trigger + 触发 webhook；S8: apply trigger 资源 |
 | `129-per-trigger-webhook-auth-cel-filter.md` | S1, S2 | S3/S4/S5: apply SecretStore + Trigger 资源 |
 | `129b-per-trigger-webhook-auth-cel-filter-advanced.md` | S7, S8 | S6: apply trigger + 触发 webhook |
+| `64-secretstore-key-lifecycle.md` | S1, S3, S5 | S2: `secret key rotate`（密钥轮换）；S4: `secret key revoke --force`（强制吊销） |
+| `135-secretstore-key-emergency-recovery.md` | S2, S4, S5, S6, S7, S8 | S1: `bootstrap_key()` 创建新密钥；S3: 强制吊销活跃密钥 |
 | `111-daemon-proper-daemonize.md` | — | kill daemon, signal ops, daemon stop |
 
 > 注：`111-daemon-proper-daemonize.md` 标记为 false 且无 scenarios，归入完全跳过。
@@ -165,9 +167,9 @@ self_referential_safe: false
 
 | 类别 | 数量 | 说明 |
 |------|------|------|
-| 显式 `self_referential_safe: true` | 87 | 完全执行 |
+| 显式 `self_referential_safe: true` | 85 | 完全执行 |
 | 无 frontmatter 标记（默认 safe） | 16 | 完全执行 |
-| `false` + 有 `scenarios` | 13 | 部分执行（仅安全场景） |
+| `false` + 有 `scenarios` | 15 | 部分执行（仅安全场景） |
 | **合计可执行** | **116** | |
 
 可执行文档包括：

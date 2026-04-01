@@ -144,8 +144,8 @@ Verify that WorkflowStore and StoreBackendProvider are registered as builtin CRD
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Store Put / Get / Delete / List | PASS | 2026-03-31 | claude | CRUD round-trip unit test |
-| 2 | WorkflowStore CRD with Schema Validation | PASS | 2026-03-31 | claude | Retention + config serde |
-| 3 | StoreBackendProvider CRD and Command Adapter | PASS | 2026-03-31 | claude | Config serde + CRD projection |
-| 4 | Store List / Output Formats / Project Isolation | PASS | 2026-03-31 | claude | Project-scoped PK + output formats pass; S4 Step 1 file path corrected |
-| 5 | Builtin CRD Count and Describe Validation | PASS | 2026-03-31 | claude | 11 builtin CRDs verified |
+| 1 | Store Put / Get / Delete / List | PASS | 2026-04-01 | claude | CRUD round-trip unit test |
+| 2 | WorkflowStore CRD with Schema Validation | PASS | 2026-04-01 | claude | Retention + config serde |
+| 3 | StoreBackendProvider CRD and Command Adapter | PASS | 2026-04-01 | claude | Config serde + CRD projection |
+| 4 | Store List / Output Formats / Project Isolation | PASS | 2026-04-01 | claude | Project-scoped PK + output formats pass; all 5 store subcommands verified |
+| 5 | Builtin CRD Count and Describe Validation | PASS | 2026-04-01 | claude | 11 builtin CRDs verified |
