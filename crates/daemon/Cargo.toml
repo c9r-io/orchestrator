@@ -43,7 +43,7 @@ axum = "0.8"
 hmac = "0.13"
 hex = "0.4"
 notify = { version = "8", default-features = false, features = ["macos_fsevent"] }
-notify-debouncer-full = "0.4"
+notify-debouncer-full = "0.7"
 chrono = { version = "0.4", features = ["serde"] }
 
 [target.'cfg(unix)'.dependencies]
