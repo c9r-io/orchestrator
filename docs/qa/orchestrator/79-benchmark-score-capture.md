@@ -94,4 +94,4 @@ Verified on 2026-03-12:
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☑ | 2026-03-20: S-01 through S-07 all pass |
+| 1 | All scenarios verified | ☑ | 2026-04-01: S-01 through S-07 all pass |

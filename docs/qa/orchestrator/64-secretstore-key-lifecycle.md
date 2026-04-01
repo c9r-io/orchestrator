@@ -1,5 +1,6 @@
 ---
-self_referential_safe: true
+self_referential_safe: false
+self_referential_safe_scenarios: [S1, S3, S5]
 ---
 
 # QA 64: SecretStore Key Lifecycle

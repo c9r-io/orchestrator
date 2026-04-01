@@ -180,7 +180,7 @@ pub fn load_keyring(data_dir: &Path, db_path: &Path) -> Result<KeyRing> {
         return load_keyring_legacy(data_dir, db_path);
     }
 
-    build_keyring_from_records(data_dir, records)
+    build_keyring_from_records(&conn, data_dir, records)
 }
 
 fn load_keyring_legacy(data_dir: &Path, db_path: &Path) -> Result<KeyRing> {
@@ -208,13 +208,32 @@ fn load_keyring_legacy(data_dir: &Path, db_path: &Path) -> Result<KeyRing> {
     })
 }
 
-fn build_keyring_from_records(data_dir: &Path, records: Vec<KeyRecord>) -> Result<KeyRing> {
+fn build_keyring_from_records(
+    conn: &Connection,
+    data_dir: &Path,
+    records: Vec<KeyRecord>,
+) -> Result<KeyRing> {
     let mut active_key = None;
     let mut decrypt_keys = HashMap::new();
 
     for record in &records {
-        if record.state.is_terminal() {
+        if record.state == KeyState::Retired {
             continue;
+        }
+        if record.state == KeyState::Revoked {
+            // A revoked key should never decrypt — unless data still references it
+            // (e.g. rotation was interrupted by a crash before re-encryption completed).
+            // In that case, load it as decrypt-only so the daemon can start and the
+            // operator can run `secret key rotate --resume` to finish migration.
+            if !is_key_still_referenced(conn, &record.key_id)? {
+                continue;
+            }
+            tracing::warn!(
+                key_id = %record.key_id,
+                "revoked key still referenced by SecretStore data; \
+                 loading as decrypt-only for crash recovery — \
+                 run `secret key rotate --resume` to complete migration"
+            );
         }
         let key_path = resolve_key_file_path(data_dir, &record.file_path);
         if let Some(handle) = load_key_file(&key_path, &record.key_id)? {
@@ -230,6 +249,21 @@ fn build_keyring_from_records(data_dir: &Path, records: Vec<KeyRecord>) -> Resul
         active_key,
         decrypt_keys,
     })
+}
+
+/// Returns `true` if any SecretStore resource still references the given key_id
+/// in its encrypted payload (spec_json).
+fn is_key_still_referenced(conn: &Connection, key_id: &str) -> Result<bool> {
+    let referenced: bool = conn.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM resources
+            WHERE kind = 'SecretStore'
+              AND instr(spec_json, ?1) > 0
+        )",
+        params![format!("\"key_id\":\"{key_id}\"")],
+        |row| row.get(0),
+    )?;
+    Ok(referenced)
 }
 
 fn resolve_key_file_path(data_dir: &Path, file_path: &str) -> PathBuf {
@@ -1000,5 +1034,68 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("last active key"), "error: {msg}");
         assert!(msg.contains("bootstrap"), "error: {msg}");
+    }
+
+    #[test]
+    fn build_keyring_loads_revoked_key_when_still_referenced() {
+        let (temp, db_path) = setup_test_db();
+        let handle =
+            crate::secret_store_crypto::ensure_secret_key(temp.path(), &db_path).expect("ensure");
+        let enc = SecretEncryption::from_key(handle);
+
+        let conn = crate::open_conn(&db_path).expect("open");
+        import_legacy_key_record(&conn, temp.path()).expect("import");
+
+        // Encrypt a SecretStore resource with the current key
+        let spec = serde_json::json!({"data": {"KEY": "val"}});
+        let cipher = enc
+            .encrypt_secret_store_spec("default", "revoke-test", &spec)
+            .expect("encrypt");
+        conn.execute(
+            "INSERT INTO resources (kind, project, name, api_version, spec_json, metadata_json, generation, created_at, updated_at)
+             VALUES ('SecretStore', 'default', 'revoke-test', 'v2', ?1, '{}', 1, datetime('now'), datetime('now'))",
+            params![cipher],
+        ).expect("insert");
+
+        // Force-revoke the key (simulating interrupted rotation)
+        let records = query_all_key_records(&conn).expect("query");
+        let key_id = records[0].key_id.clone();
+        revoke_key(&conn, &key_id, true).expect("force revoke");
+
+        // Create a new active key so the keyring has something
+        bootstrap_key(&conn, temp.path()).expect("bootstrap");
+
+        // Build keyring — the revoked key should be loaded because data still references it
+        let all_records = query_all_key_records(&conn).expect("query");
+        let keyring = build_keyring_from_records(&conn, temp.path(), all_records).expect("build");
+
+        assert!(
+            keyring.decrypt_keys.contains_key(&key_id),
+            "revoked-but-referenced key should be in decrypt_keys"
+        );
+    }
+
+    #[test]
+    fn build_keyring_skips_revoked_key_when_not_referenced() {
+        let (temp, db_path) = setup_test_db();
+        crate::secret_store_crypto::ensure_secret_key(temp.path(), &db_path).expect("ensure");
+
+        let conn = crate::open_conn(&db_path).expect("open");
+        import_legacy_key_record(&conn, temp.path()).expect("import");
+
+        // Force-revoke without any data referencing the key
+        let records = query_all_key_records(&conn).expect("query");
+        let key_id = records[0].key_id.clone();
+        revoke_key(&conn, &key_id, true).expect("force revoke");
+
+        bootstrap_key(&conn, temp.path()).expect("bootstrap");
+
+        let all_records = query_all_key_records(&conn).expect("query");
+        let keyring = build_keyring_from_records(&conn, temp.path(), all_records).expect("build");
+
+        assert!(
+            !keyring.decrypt_keys.contains_key(&key_id),
+            "revoked key with no data references should NOT be in decrypt_keys"
+        );
     }
 }

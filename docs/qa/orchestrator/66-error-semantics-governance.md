@@ -75,4 +75,4 @@ or code-review gates only; no scenario starts, stops, or mutates a live daemon.
 | 1 | Core classifier regression | ✅ PASS | 5/5 tests passed: secret rotation, task latest, missing project, manifest policy, invalid target-file |
 | 2 | Daemon gRPC status mapping regression | ✅ PASS | 3/3 tests passed: `NOT_FOUND`, `FAILED_PRECONDITION`, `INVALID_ARGUMENT` |
 | 3 | CLI error rendering regression | ✅ PASS | 2/2 tests passed: force-hint preserved, not-found message intact |
-| 4 | Workspace verification | ✅ PASS | 1337 tests passed; clippy clean with `-D warnings` |
+| 4 | Workspace verification | ✅ PASS | 2030 tests passed; clippy clean with `-D warnings` |

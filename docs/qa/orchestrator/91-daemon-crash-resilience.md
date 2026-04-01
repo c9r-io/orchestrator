@@ -69,5 +69,37 @@
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☑ | 2026-03-29 | Worker panic 恢复、supervisor 重生、crash 日志、stale PID 检测、runtime snapshot 计数器 |
+| 1 | All scenarios verified | ☑ | 2026-04-01 | Worker panic 恢复、supervisor 重生、crash 日志、stale PID 检测、runtime snapshot 计数器 |
+
+## Verification Results
+
+### Scenario 1: Worker Panic 自动恢复
+- ✅ `worker_iteration()` wrapped in `AssertUnwindSafe(...).catch_unwind()` (main.rs:1081-1087)
+- ✅ Panic triggers `continue` not `break` (main.rs:1116)
+- ✅ `record_worker_restart()` called before recovery (main.rs:1099)
+- ✅ 2s sleep after panic recovery (main.rs:1115)
+- ✅ `worker_panic_recovered` event emitted (main.rs:1107-1112)
+
+### Scenario 2: Worker Supervisor 健康检查与重生
+- ✅ Health check every 30s via `is_finished()` (main.rs:1154, 1171-1178)
+- ✅ 2s sleep before respawn (main.rs:1188)
+- ✅ Same state/shutdown_rx/restart_tx reused on respawn (main.rs:1194-1197)
+- ✅ Warning when `live < configured` workers (main.rs:1211-1218)
+
+### Scenario 3: Panic Hook 写入 Crash 日志
+- ✅ `set_hook()` installed early in main (main.rs:201-220)
+- ✅ Append mode (`OpenOptions::new().append(true)`) (main.rs:206)
+- ✅ Epoch timestamp format `[epoch={ts}]` (main.rs:216)
+- ✅ Default hook called after custom hook (main.rs:218)
+
+### Scenario 4: Stale PID 检测与 Crash Recovery
+- ✅ `detect_stale_pid()` uses `nix::sys::signal::kill(pid, None)` (lifecycle.rs:150-154)
+- ✅ Returns `true` when PID file exists but process dead (lifecycle.rs:152)
+- ✅ `daemon_crash_recovered` event emitted on stale detection (main.rs:290-298)
+- ✅ New PID written after detection (main.rs:267)
+
+### Scenario 5: Runtime Snapshot Worker 重启计数器
+- ✅ `total_worker_restarts: u64` field in `DaemonRuntimeSnapshot` (runtime.rs:67)
+- ✅ `fetch_add(1, SeqCst)` atomic increment (runtime.rs:213)
+- ✅ `snapshot()` reads counter correctly (runtime.rs:129)
 

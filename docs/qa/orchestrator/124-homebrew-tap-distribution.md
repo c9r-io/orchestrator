@@ -86,7 +86,7 @@ FR-072
 
 **Steps:**
 1. `grep -A 25 'crates-io:' .github/workflows/release.yml`
-2. Verify publishing order: proto → config → core → scheduler → cli → daemon
+2. Verify publishing order: proto → config → collab → security → runner → core → scheduler → client → cli → daemon
 3. Verify `CARGO_REGISTRY_TOKEN` secret usage
 4. Verify `needs: publish` dependency
 

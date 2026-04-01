@@ -1,60 +1,58 @@
-# Full QA Regression Test Execution Plan
+# 全量 QA 回归测试执行计划
 
-> **Harness Engineering execution plan**: this is an agent-executable scenario that shows how the control plane coordinates environment, workflow, guardrails, and feedback loops rather than a one-off agent call.
+> **Harness Engineering 执行计划**：本文档是一个 agent 可执行场景，用来展示 orchestrator 这个 control plane 如何组织环境、工作流、约束与反馈闭环，而不是一次性的 prompt 调用。
 >
-> **Agent Collaboration**: This document is an agent-executable plan. Open this project in an AI coding agent (Claude Code, OpenCode, Codex, etc.) — the agent reads this plan and orchestrates other agents via the orchestrator CLI to collaboratively complete the task, from resource deployment and execution to result verification, fully autonomously.
+> **Agent 协作**：本文档是一个 Agent 可执行的计划。在 AI 编码 Agent（Claude Code、OpenCode、Codex 等）中打开本项目，Agent 读取本计划后，通过 orchestrator CLI 调度其他 Agent 协作完成任务 — 从资源部署、任务执行到结果验证，全程自主完成。
 
-
-This document is for performing a **single-iteration, full QA regression test** against the current codebase, with no code modifications involved.
-Applicable scenarios: after large-scale refactoring, before releases, or for periodic regression verification.
+本文档用于对当前代码库进行**单次迭代、全量 QA 回归测试**，不涉及代码改动。
+适用场景：大批量重构后、发布前、或定期回归验证。
 
 ---
 
-## 1. Task Objective
+## 1. 任务目标
 
-> Topic name: `Full QA Regression Test`
+> 课题名称：`全量 QA 回归测试`
 >
-> Background:
-> A comprehensive scenario-level regression test needs to be performed against all QA documents
-> in the current codebase (docs/qa/orchestrator/ + docs/qa/self-bootstrap/)
-> to confirm all feature points are working correctly.
+> 背景：
+> 需要对当前代码库的所有 QA 文档（docs/qa/orchestrator/ + docs/qa/self-bootstrap/）
+> 进行全面的场景级回归测试，确认各功能点均正常工作。
 >
-> Task objective for this round:
-> Iterate through all QA documents, execute scenario verification one by one, create tickets for failures,
-> have ticket_fix attempt repairs, then execute align_tests and doc_governance to close out.
+> 本轮任务目标：
+> 遍历全部 QA 文档，逐一执行场景验证，对失败项创建 ticket，
+> 由 ticket_fix 尝试修复，最后执行 align_tests 和 doc_governance 收口。
 >
-> Constraints:
-> 1. No proactive code changes in this round; only fix issues discovered by QA via ticket_fix.
-> 2. Preserve all existing behavior unchanged.
-> 3. Final goal: all QA scenarios pass or have explicitly recorded reasons for failure.
+> 约束：
+> 1. 本轮不做主动代码改动，仅在 ticket_fix 中修复 QA 发现的问题。
+> 2. 保留所有现有行为不变。
+> 3. 最终目标：所有 QA 场景通过或明确记录未通过原因。
 
-### 1.1 Expected Output
+### 1.1 预期产出
 
-1. Execution results for all QA scenarios (pass/fail/skipped).
-2. Tickets (docs/ticket/) corresponding to failed scenarios.
-3. Automated fixes by ticket_fix for repairable items.
-4. align_tests ensures unit tests are consistent with code.
-5. doc_governance ensures no documentation drift.
+1. 全部 QA 场景的执行结果（pass/fail/skipped）。
+2. 失败场景对应的 ticket（docs/ticket/）。
+3. ticket_fix 对可修复项的自动修复。
+4. align_tests 确保单测与代码一致。
+5. doc_governance 确保文档无漂移。
 
-### 1.2 Execution Pipeline
+### 1.2 执行链路
 
 ```text
 qa_testing(item) → ticket_fix(item) → align_tests(task) → doc_governance(task) → self_test → loop_guard
 ```
 
-Single cycle, no plan/implement/self_restart.
+单 cycle，无 plan/implement/self_restart。
 
 ---
 
-## 2. Safety Mechanisms
+## 2. 安全机制
 
-### 2.1 Dual-Layer Safety Protection
+### 2.1 双层安全防护
 
-The full-qa workflow uses **dual-layer marking** to ensure dangerous operations (kill daemon, restart processes, recompile binaries) are never executed:
+full-qa workflow 通过**双层标记**确保不会执行危险操作（kill daemon、重启进程、重编译二进制）：
 
-**Layer 1 — YAML Workflow prehook (CEL expression)**
+**第一层 — YAML Workflow prehook（CEL 表达式）**
 
-`full-qa.yaml`'s `qa_testing` step prehook:
+`full-qa.yaml` 的 `qa_testing` 步骤 prehook：
 ```yaml
 prehook:
   engine: cel
@@ -64,36 +62,36 @@ prehook:
     && (self_referential_safe || size(self_referential_safe_scenarios) > 0)
 ```
 
-That is: documents with `self_referential_safe: true` are **fully executed**,
-documents with `self_referential_safe_scenarios` are **partially executed** (only the listed scenarios),
-and documents satisfying neither are **completely skipped**.
+即：`self_referential_safe: true` 的文档**全量执行**，
+有 `self_referential_safe_scenarios` 的文档**部分执行**（仅限列出的场景），
+两者均不满足的文档被**完全跳过**。
 
-**Layer 2 — QA Document frontmatter Marking**
+**第二层 — QA 文档 frontmatter 标记**
 
-Dangerous QA documents declare in their file header:
+危险 QA 文档在文件头部声明：
 ```yaml
 ---
 self_referential_safe: false
 ---
 ```
 
-When the workspace has `self_referential: true` set, the system reads the QA document's frontmatter.
-Documents with `self_referential_safe: false` (and no `self_referential_safe_scenarios`) are skipped by the prehook and will not be executed by the agent.
+当 workspace 设置 `self_referential: true` 时，系统读取 QA 文档的 frontmatter，
+`self_referential_safe: false`（且无 `self_referential_safe_scenarios`）的文档会被 prehook 跳过，不会被 agent 执行。
 
-### 2.2 Documents Marked as Unsafe (33 total)
+### 2.2 标记为不安全的文档（49 个）
 
-The following documents contain dangerous or disruptive operations such as kill daemon, restart processes, recompile binaries, create tasks, or modify resources,
-and have been marked as `self_referential_safe: false`.
+以下文档包含 kill daemon、重启进程、重编译二进制、创建任务、触发 webhook、密钥轮换/吊销等危险或干扰操作，
+或需要 GUI 环境/外部服务（在纯 CLI 回归中不可执行），已标记为 `self_referential_safe: false`。
 
-Of these, **26 are completely skipped** (no `self_referential_safe_scenarios`),
-and **7 are partially executed** (only the listed safe scenarios).
+其中 **34 个被完全跳过**（无 `self_referential_safe_scenarios`），
+**15 个被部分执行**（仅限列出的安全场景）。
 
-#### docs/qa/orchestrator/ (28 total)
+#### docs/qa/orchestrator/（44 个）
 
-**Completely skipped (21):**
+**完全跳过（29 个）：**
 
-| File | Dangerous Operations |
-|------|---------------------|
+| 文件 | 危险操作 |
+|------|---------|
 | `01-cli-agent-orchestration.md` | force delete, task create/start, apply resources |
 | `02-cli-task-lifecycle.md` | force delete, task create/start, apply resources |
 | `15-workflow-multi-target-files.md` | force delete, task create/start, apply resources |
@@ -101,7 +99,7 @@ and **7 are partially executed** (only the listed safe scenarios).
 | `26-self-bootstrap-workflow.md` | `cargo build --release`, force delete, apply resources |
 | `28-self-bootstrap-pipeline.md` | force delete, apply resources |
 | `41-project-scoped-agent-selection.md` | force delete, task create/start, apply resources |
-| `45-cli-unsafe-mode.md` | force delete, `--unsafe` mode |
+| `45-cli-unsafe-mode.md` | force delete, `--unsafe` 模式 |
 | `51-primitive-composition.md` | `cargo build --release`, task create/start |
 | `55-sandbox-write-boundaries.md` | force delete, task create/start, apply resources |
 | `56-sandbox-denial-anomaly-trace.md` | force delete, task create/start, apply resources |
@@ -112,119 +110,136 @@ and **7 are partially executed** (only the listed safe scenarios).
 | `65-grpc-control-plane-protection.md` | `cargo build --release`, kill daemon |
 | `84-generate-items-regression-narrowing.md` | force delete, task create/start, apply resources |
 | `87-self-referential-daemon-pid-guard.md` | kill daemon |
-| `96-self-restart-socket-continuity.md` | `cargo build`, `exec()` self-replacement |
+| `96-self-restart-socket-continuity.md` | `cargo build`, `exec()` 自替换 |
 | `100-agent-subprocess-daemon-pid-guard.md` | kill daemon |
+| `116-gui-architecture-tauri-grpc.md` | 需要 GUI 环境（Tauri） |
+| `117-gui-uiux-wish-pool-progress.md` | 需要 GUI 环境（Tauri） |
+| `118-gui-realtime-wish-isolation.md` | 需要 GUI 环境（Tauri） |
+| `119-gui-cli-rpc-parity.md` | 需要 GUI 环境（Tauri） |
+| `120-gui-connection-resilience.md` | 需要 GUI 环境（Tauri） |
+| `120b-gui-notification-error-humanization.md` | 需要 GUI 环境（Tauri） |
+| `121-gui-polish-visual.md` | 需要 GUI 环境（Tauri） |
+| `121b-gui-i18n-ux.md` | 需要 GUI 环境（Tauri） |
 | `smoke-orchestrator.md` | `cargo build --release` |
 
-**Partially executed (7, only the listed safe scenarios):**
+**部分执行（15 个，仅限列出的安全场景）：**
 
-| File | Safe Scenarios | Dangerous Operations (skipped scenarios) |
-|------|---------------|------------------------------------------|
+| 文件 | 安全场景 | 危险操作（跳过的场景） |
+|------|---------|----------------------|
 | `20-structured-output-worker-scheduler.md` | S1, S2, S3 | kill daemon, task create/start |
 | `22-performance-io-queue-optimizations.md` | S1, S2, S3 | kill daemon, task create/start |
 | `54-step-execution-profiles.md` | S2, S3 | force delete, task create/start |
-| `64-secretstore-key-lifecycle.md` | S5 | apply resources |
 | `94b-trigger-resource-advanced.md` | S2 | apply resources |
 | `99-long-lived-command-guard.md` | S5 | task create/start |
+| `107-parallel-dispatch-completeness-guard.md` | S2, S3, S4 | S1: `delete --force`, `task create`, `cargo build`（自引用危险操作） |
+| `124-homebrew-tap-distribution.md` | S1, S3, S4, S5, S6, S7, S8 | S2: 需要已发布 release；S9/S10: 端到端安装需要外部服务 |
+| `125-documentation-site.md` | S1 | S2-S5: 需要 dev server + 浏览器/GUI |
+| `126-task-items-event-list-cli.md` | S2, S3, S4, S5, S6, S7, S8, S9 | S1: task create（创建任务） |
+| `128-webhook-trigger-infrastructure.md` | S1, S4, S5, S6, S7, S9 | S2/S3: apply trigger + 触发 webhook；S8: apply trigger 资源 |
+| `129-per-trigger-webhook-auth-cel-filter.md` | S1, S2 | S3/S4/S5: apply SecretStore + Trigger 资源 |
+| `129b-per-trigger-webhook-auth-cel-filter-advanced.md` | S7, S8 | S6: apply trigger + 触发 webhook |
+| `64-secretstore-key-lifecycle.md` | S1, S3, S5 | S2: `secret key rotate`（密钥轮换）；S4: `secret key revoke --force`（强制吊销） |
+| `135-secretstore-key-emergency-recovery.md` | S2, S4, S5, S6, S7, S8 | S1: `bootstrap_key()` 创建新密钥；S3: 强制吊销活跃密钥 |
 | `111-daemon-proper-daemonize.md` | — | kill daemon, signal ops, daemon stop |
 
-> Note: `111-daemon-proper-daemonize.md` is marked as false with no scenarios, categorized as completely skipped.
-> It is listed here for easy cross-reference; the actual skipped count is 22 orchestrator documents.
+> 注：`111-daemon-proper-daemonize.md` 标记为 false 且无 scenarios，归入完全跳过。
+> 上表为便于对照将其列在此处，实际完全跳过数为 30 个 orchestrator 文档。
+> `126`、`128`、`129`、`129b` 为 2026-03-29 全量 QA 回归中发现的安全漏洞补充标记。
 
-#### docs/qa/self-bootstrap/ (5 total)
+#### docs/qa/self-bootstrap/（5 个）
 
-**Completely skipped (4):**
+**完全跳过（4 个）：**
 
-| File | Dangerous Operations |
-|------|---------------------|
-| `01-survival-binary-checkpoint-self-test.md` | `cargo build --release`, `exec()` self-replacement |
-| `04-cycle2-validation-and-runtime-timestamps.md` | `cargo build --release`, `exec()` self-replacement |
-| `07-self-restart-process-continuity.md` | `cargo build --release`, `exec()` self-replacement |
-| `smoke-self-bootstrap.md` | smoke test (includes daemon interaction) |
+| 文件 | 危险操作 |
+|------|---------|
+| `01-survival-binary-checkpoint-self-test.md` | `cargo build --release`, `exec()` 自替换 |
+| `04-cycle2-validation-and-runtime-timestamps.md` | `cargo build --release`, `exec()` 自替换 |
+| `07-self-restart-process-continuity.md` | `cargo build --release`, `exec()` 自替换 |
+| `smoke-self-bootstrap.md` | smoke 测试（含 daemon 交互） |
 
-**Partially executed (1):**
+**部分执行（1 个）：**
 
-| File | Safe Scenarios | Dangerous Operations (skipped scenarios) |
-|------|---------------|------------------------------------------|
+| 文件 | 安全场景 | 危险操作（跳过的场景） |
+|------|---------|----------------------|
 | `02-survival-enforcement-watchdog.md` | S1, S2, S3 | kill daemon, signal ops, file deletion |
 
-### 2.3 Safe QA Documents (approximately 124)
+### 2.3 安全 QA 文档（约 116 个）
 
-| Category | Count | Description |
-|----------|-------|-------------|
-| Explicit `self_referential_safe: true` | 89 | Fully executed |
-| No frontmatter marking (default safe) | 28 | Fully executed |
-| `false` + has `scenarios` | 7 | Partially executed (safe scenarios only) |
-| **Total executable** | **124** | |
+| 类别 | 数量 | 说明 |
+|------|------|------|
+| 显式 `self_referential_safe: true` | 85 | 完全执行 |
+| 无 frontmatter 标记（默认 safe） | 16 | 完全执行 |
+| `false` + 有 `scenarios` | 15 | 部分执行（仅安全场景） |
+| **合计可执行** | **116** | |
 
-Executable documents include:
-- Pure unit test documents (`cargo test --lib`)
-- CLI command verification (`orchestrator get/apply/check` and other read-only operations)
-- Database query verification (`orchestrator event list` / `orchestrator db status`, etc.)
-- Configuration verification documents
-- Documentation format/structure verification
+可执行文档包括：
+- 纯单元测试文档（`cargo test --lib`）
+- CLI 命令验证（`orchestrator get/apply/check` 等只读操作）
+- 数据库查询验证（`orchestrator event list` / `orchestrator db status` 等）
+- 配置验证文档
+- 文档格式/结构验证
 
-> **Note**: Documents with `self_referential_safe_scenarios` are **partially executed** (only the listed scenarios).
-> In metrics reporting, these documents count as "executed".
+> **注意**：有 `self_referential_safe_scenarios` 的文档会被**部分执行**（仅限列出的场景），
+> 在指标统计中，这类文档计为"已执行"。
 
 ---
 
-## 3. Execution Steps
+## 3. 执行步骤
 
-### 3.1 Build and Confirm Daemon Is Running
+### 3.1 构建并确认 daemon 运行
 
 ```bash
 cd "$ORCHESTRATOR_ROOT"   # your orchestrator project directory
 
-# Confirm daemon is running
+# 确认 daemon 运行
 ps aux | grep orchestratord | grep -v grep
 
-# If not running:
+# 如未运行：
 # nohup ./target/release/orchestratord --foreground --workers 4 > /tmp/orchestratord.log 2>&1 &
 ```
 
-### 3.2 Load full-qa Workflow Resources
+### 3.2 加载 full-qa workflow 资源
 
 ```bash
-# Clean up old project (if starting fresh)
+# 清理旧项目（如需要重新开始）
 # orchestrator delete project/full-qa --force
 
-# Initialize
+# 初始化
 orchestrator init
 
-# Load secrets and execution profiles
+# 加载 secrets 和 execution profiles
 orchestrator apply -f your-secrets.yaml           --project self-bootstrap
 # apply additional secret manifests as needed      --project self-bootstrap
 orchestrator apply -f docs/workflow/execution-profiles.yaml --project self-bootstrap
 
-# Load self-bootstrap StepTemplates (full-qa reuses these templates)
+# 加载 self-bootstrap 的 StepTemplates（full-qa 复用这些模板）
 orchestrator apply -f docs/workflow/self-bootstrap.yaml --project self-bootstrap
 
-# Load full-qa workflow
+# 加载 full-qa workflow
 orchestrator apply -f docs/workflow/full-qa.yaml --project self-bootstrap
 ```
 
-### 3.3 Create Task (Full Scan)
+### 3.3 创建任务（全量扫描）
 
 ```bash
 orchestrator task create \
   -n "full-qa-regression" \
   -w full-qa -W full-qa \
   --project self-bootstrap \
-  -g "Run scenario-level regression tests on all QA documents under docs/qa/, create tickets for failures and attempt fixes, ultimately ensuring all scenarios pass or have explicitly recorded reasons for failure"
+  -g "对 docs/qa/ 下全部 QA 文档执行场景级回归测试，对失败项创建 ticket 并尝试修复，最终确保所有场景通过或明确记录未通过原因"
 ```
 
-> Without specifying `-t`, the system automatically scans all `.md` files under `docs/qa/` as configured in `qa_targets`.
-> Approximately 150 items are expected, of which about 26 will be completely skipped by prehook (`self_referential_safe: false` with no scenarios),
-> about 7 will be partially executed (safe scenarios only), and approximately 117 will be fully executed.
+> 不指定 `-t`，系统自动扫描 `qa_targets` 配置的 `docs/qa/` 下所有 `.md` 文件。
+> 预计约 171 个 item，其中约 34 个会被 prehook 完全跳过（`self_referential_safe: false` 且无 scenarios），
+> 约 13 个部分执行（仅安全场景），实际全量执行约 124 个。
 
-Record the returned `<task_id>`.
+记录返回的 `<task_id>`。
 
 ---
 
-## 4. Monitoring Methods
+## 4. 监控方法
 
-### 4.1 Status Monitoring
+### 4.1 状态监控
 
 ```bash
 orchestrator task list
@@ -233,138 +248,138 @@ orchestrator task trace <task_id>
 orchestrator task watch <task_id>
 ```
 
-Key observations:
+重点观察：
 
-1. Item execution progress (completed / total)
-2. pass/fail/skipped distribution of the qa_testing step
-3. Whether ticket_fix is processing active tickets
-4. Whether any items are stuck for an extended period
-5. Whether the number of unsafe documents skipped by prehook matches expectations
+1. item 执行进度（已完成 / 总数）
+2. qa_testing 步骤的 pass/fail/skipped 分布
+3. ticket_fix 是否正在处理活跃 ticket
+4. 是否有 item 长时间卡住
+5. prehook 跳过的不安全文档数量是否符合预期
 
-### 4.2 Log Monitoring
+### 4.2 日志监控
 
 ```bash
 orchestrator task logs --tail 200 <task_id>
 ```
 
-Key observations:
+重点观察：
 
-1. Execution results for each QA document
-2. Ticket creation and fix status
-3. Self-referential unsafe documents skipped by prehook (should see `step_skipped` events)
+1. 各 QA 文档的执行结果
+2. ticket 创建和修复情况
+3. prehook 跳过的自引用不安全文档（应看到 `step_skipped` 事件）
 
-### 4.3 Process Monitoring
+### 4.3 进程监控
 
 ```bash
-# agent subprocesses
+# agent 子进程
 ps aux | grep "claude -p" | grep -v grep | wc -l
 
-# Expected maximum 4 parallel (workflow max_parallel: 4; ticket_fix step max_parallel: 2)
+# 预期最多 4 个并行（workflow max_parallel: 4；ticket_fix 步骤 max_parallel: 2）
 ```
 
-### 4.4 Mid-Execution Check
+### 4.4 中间检查
 
-When the item segment is approximately 50% complete, you can check:
+当 item segment 完成约 50% 时，可检查：
 
 ```bash
-# View created tickets
+# 查看已创建的 ticket
 ls docs/ticket/
 
-# Count tickets
+# 查看 ticket 数量
 ls docs/ticket/*.md 2>/dev/null | wc -l
 
-# Verify unsafe documents were skipped (count step_skipped events from JSON output)
+# 验证不安全文档被跳过（从 JSON 输出中统计 step_skipped 事件数量）
 orchestrator event list --task <task_id> --type step_skipped -o json
 ```
 
 ---
 
-## 5. Key Checkpoints
+## 5. 关键检查点
 
-### 5.1 Safety Checkpoint
+### 5.1 安全检查点
 
-- [ ] `full-qa.yaml` workspace's `self_referential: true` is in effect
-- [ ] 26 completely unsafe QA documents were skipped by prehook (`step_skipped` events)
-- [ ] 7 partially safe documents executed only the specified scenarios
-- [ ] Daemon process remained stable throughout execution (PID unchanged)
-- [ ] No `cargo build --release -p orchestratord` was executed
+- [ ] `full-qa.yaml` workspace 的 `self_referential: true` 已生效
+- [ ] 34 个完全不安全的 QA 文档被 prehook 跳过（`step_skipped` 事件）
+- [ ] 13 个部分安全文档仅执行了指定场景
+- [ ] daemon 进程在整个执行过程中保持稳定（PID 不变）
+- [ ] 无 `cargo build --release -p orchestratord` 被执行
 
-### 5.2 QA Testing Phase
+### 5.2 QA Testing 阶段
 
-- [ ] All safe QA documents were executed (approximately 124)
-- [ ] Each scenario has a clear pass/fail conclusion
-- [ ] Failed scenarios have corresponding ticket files
+- [ ] 所有安全 QA 文档都被执行（约 116 个）
+- [ ] 每个场景的 pass/fail 有明确结论
+- [ ] 失败场景有对应的 ticket 文件
 
-### 5.3 Ticket Fix Phase
+### 5.3 Ticket Fix 阶段
 
-- [ ] Active tickets were attempted to be fixed
-- [ ] Scenarios pass after fix re-verification
-- [ ] Unfixable tickets are preserved with recorded reasons
+- [ ] 活跃 ticket 被尝试修复
+- [ ] 修复后重新验证场景通过
+- [ ] 无法修复的 ticket 保留并记录原因
 
-### 5.4 Align Tests Phase
+### 5.4 Align Tests 阶段
 
-- [ ] cargo test all pass
-- [ ] cargo clippy has no warnings
-- [ ] Compilation has no warnings
+- [ ] cargo test 全部通过
+- [ ] cargo clippy 无警告
+- [ ] 编译无警告
 
-### 5.5 Doc Governance Phase
+### 5.5 Doc Governance 阶段
 
-- [ ] QA documents have no format drift
-- [ ] README/manifest consistency
+- [ ] QA 文档无格式漂移
+- [ ] README/manifest 一致性
 
-### 5.6 Self Test Phase
+### 5.6 Self Test 阶段
 
-- [ ] `cargo test` compiles successfully
-- [ ] No unit test regressions
-
----
-
-## 6. Success Criteria
-
-The full QA round is considered complete when all of the following conditions are met:
-
-1. orchestrator completed the full `full-qa` workflow and exited normally at `loop_guard`.
-2. Safe QA scenario pass rate >= 90% (some environment-dependent scenario failures are acceptable).
-3. All 26 completely unsafe documents were correctly skipped, and 7 partially safe documents executed only safe scenarios.
-4. All tickets were processed by ticket_fix (fixed or explicitly marked as unfixable).
-5. `align_tests` confirms no unit test or compilation regressions.
-6. `doc_governance` confirms no documentation drift.
-7. `self_test` confirms compilation and tests pass.
+- [ ] `cargo test` 编译通过
+- [ ] 单测无回归
 
 ---
 
-## 7. Exception Handling
+## 6. 成功判定
 
-| Exception | Detection Method | Resolution |
-|-----------|-----------------|------------|
-| Unsafe documents not skipped | `step_skipped` count < 26 | Check workspace `self_referential` setting, QA document frontmatter |
-| Large number of QA documents failing with same pattern | Same-pattern tickets exceed 10 | Likely a systemic issue; pause and investigate root cause |
-| Agent process deadlocked | `claude -p` process has no output for over 10 minutes | Check API quota and network |
-| ticket_fix introduces new issues | align_tests fails after fix | Check ticket_fix change scope |
-| Daemon memory too high | Item concurrency causes memory pressure | Reduce max_parallel to 2 |
-| Daemon unexpectedly killed | PID changes or connection lost | An unsafe document bypassed the prehook; immediately abort the task |
+当以下条件同时成立，可判定本轮全量 QA 完成：
 
----
-
-## 8. Estimated Execution Time
-
-- **Approximately 117 fully executed + 7 partially executed** x **approximately 2-5 minutes each** = approximately 60-310 minutes (4 parallel)
-- 26 unsafe documents skipped (< 1 second)
-- ticket_fix depends on ticket count (max_parallel: 2)
-- align_tests + doc_governance + self_test approximately 10-20 minutes
-
-Total estimate: **1.5 - 6 hours**
+1. orchestrator 完整跑完 `full-qa` workflow，在 `loop_guard` 正常收口。
+2. 安全 QA 场景通过率 ≥ 90%（允许部分环境依赖的场景失败）。
+3. 34 个完全不安全文档全部被正确跳过，13 个部分安全文档仅执行了安全场景。
+4. 所有 ticket 被 ticket_fix 处理（修复或明确标记无法修复）。
+5. `align_tests` 确认单测和编译无回归。
+6. `doc_governance` 确认文档无漂移。
+7. `self_test` 确认编译和测试通过。
 
 ---
 
-## 9. Human Role Boundaries
+## 7. 异常处理
 
-In this plan, the human role is limited to:
+| 异常 | 判断方式 | 处理 |
+|------|---------|------|
+| 不安全文档未被跳过 | `step_skipped` 数量 < 34（完全跳过）或部分执行文档执行了不安全场景 | 检查 workspace `self_referential` 设置、QA 文档 frontmatter |
+| 大量 QA 文档同类失败 | 相同 pattern 的 ticket 超过 10 个 | 可能是系统性问题，暂停排查根因 |
+| agent 进程僵死 | `claude -p` 进程无输出超过 10 分钟 | 检查 API 配额和网络 |
+| ticket_fix 产生新问题 | 修复后 align_tests 失败 | 检查 ticket_fix 的改动范围 |
+| daemon 内存过高 | item 并发导致内存压力 | 降低 max_parallel 到 2 |
+| daemon 被意外 kill | PID 变化或连接断开 | 有不安全文档绕过了 prehook；立即中止任务 |
 
-1. Launching the workflow
-2. Monitoring execution progress
-3. Verifying unsafe documents were correctly skipped
-4. Interrupting when systemic exceptions occur
-5. Recording final results
+---
 
-No manual intervention in specific QA scenario execution or ticket fixing.
+## 8. 预计执行时间
+
+- **约 109 个全量执行 + 7 个部分执行** × **每个约 2-5 分钟** = 约 60-290 分钟（4 并行）
+- 34 个不安全文档被跳过（< 1 秒）
+- ticket_fix 取决于 ticket 数量（max_parallel: 2）
+- align_tests + doc_governance + self_test 约 10-20 分钟
+
+总计预估：**1.5 - 6 小时**
+
+---
+
+## 9. 人工角色边界
+
+本计划中，人工角色限定为：
+
+1. 启动 workflow
+2. 监控执行进度
+3. 验证安全文档被正确跳过
+4. 在系统性异常时中断
+5. 记录最终结果
+
+不人工干预具体 QA 场景的执行和 ticket 修复。

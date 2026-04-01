@@ -52,6 +52,11 @@
 3. **预期**: 任务最终状态正确反映失败（如 `failed`）
 4. **预期**: Progress 数字包含已完成（含失败）的 item
 
+> **Note**: 失败 item 的 DB status 为 `unresolved`（非 `qa_failed`），这是默认 finalize 规则的正确行为。
+> QA 步骤失败（exit≠0）时 `CreateTicket` post-action 创建 ticket，`active_ticket_count > 0`
+> 触发 `fallback_unresolved_with_tickets` 规则，将 status 设为 `unresolved`。
+> `load_task_item_counts` 将 `unresolved` 同时计入 finished 和 failed，因此 Progress 和 Failed 计数均正确。
+
 ### 场景 5: 批量 finalize 兜底
 
 1. 即使增量 finalize 已写入终态，批量 `finalize_items` 仍应正常执行（幂等）
@@ -114,8 +119,18 @@
 | S1: Progress 实时递增 | Slow variant (`ffd5ee8f`) watched via `orchestrator task watch`: progress increments 4→7→9→10 during execution. Confirms real-time incremental update. | ffd5ee8f | ✅ |
 | S2: Step 级进度 Table | Completed slow task shows `Progress: 10/10 items` with `qa_testing: 10 completed` below. Correct table format. | ffd5ee8f | ✅ |
 | S3: Step 级进度 JSON | JSON contains `step_progress: [{"phase": "qa_testing", "completed": 10, "running": 0}]` — correct structure. | 86d201cf | ✅ |
-| S4: 失败 item 正确计入 | Task `7bd3a14c`: `Status: failed`, `Progress: 10/10 items`, `Failed: 3`. **BUG**: 3 items (1e52fea5, f1e5652f, b9129fea) remain `unresolved` in DB after `task_failed`. Should be `qa_failed`. Run exit codes correctly show exit=1 for these items. Ticket: `docs/ticket/qa108_s4_unresolved_after_task_failed_20260331_064500.md` | 7bd3a14c | ❌ |
+| S4: 失败 item 正确计入 | Task `7bd3a14c`: `Status: failed`, `Progress: 10/10 items`, `Failed: 3`. 3 items with exit=1 show `unresolved` in DB — this is correct per default finalize rules (`fallback_unresolved_with_tickets`). Prior ticket was false positive. | 7bd3a14c | ✅ |
 | S5: 批量 finalize 幂等 | DB event log shows incremental + batch `item_finalize_evaluated` for all items. No `UNIQUE constraint` or `duplicate key` errors. S4 task daemon log grep confirms no finalize errors. | 7bd3a14c | ✅ |
+
+## 验证记录 (2026-04-01)
+
+| Scenario | Verification | Task ID | Result |
+|----------|--------------|---------|--------|
+| S1: Progress 实时递增 | Running task `2efdb265` observed via `orchestrator task info`: Progress incremented 19→21 during observation period. Confirms real-time incremental update during execution. | 2efdb265 | ✅ |
+| S2: Step 级进度 Table | Running task shows `Progress: 21/173 items` with `qa_testing: 22 completed` below. Correct table format with step-level stats. | 2efdb265 | ✅ |
+| S3: Step 级进度 JSON | JSON output contains `step_progress: [{"phase": "qa_testing", "completed": 22, "running": 0}]` — correct structure. | 2efdb265 | ✅ |
+| S4: 失败 item 正确计入 | Task `7bd3a14c`: `Status: failed`, `Progress: 10/10 items`, `Failed: 3`. 3 runs with exit_code=1, all correctly show `unresolved` status with tickets per `fallback_unresolved_with_tickets` rule. | 7bd3a14c | ✅ |
+| S5: 批量 finalize 幂等 | Daemon log (`~/.orchestratord/daemon.log`) grep shows no `UNIQUE constraint`, `duplicate key`, or `finalize` errors. Event log for `7bd3a14c` shows duplicate `item_finalize_evaluated` per item (incremental + batch), no conflicts. | 7bd3a14c | ✅ |
 
 ## 关联
 

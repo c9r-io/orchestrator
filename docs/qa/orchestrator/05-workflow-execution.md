@@ -280,8 +280,8 @@ one cycle.
 
 | # | Scenario | Status | Date | Tester | Notes |
 |---|----------|--------|------|--------|-------|
-| 1 | qa_only Workflow | PASS | 2026-03-31 | Claude | `once_mode_always_stops` (scheduler); `strict_phase_accepts_json`, `strict_phase_requires_json` (agent-orchestrator) |
-| 2 | qa_fix Workflow | PASS | 2026-03-31 | Claude | `build_segments_groups_contiguous_scopes` (scheduler); 27 finalize rule tests (agent-orchestrator) |
-| 3 | qa_fix_retest Workflow | PASS | 2026-03-31 | Claude | `build_segments_groups_contiguous_scopes` (scheduler); 5 retest finalize rule tests (agent-orchestrator). Prehook decision behavior covered by S2 finalize rule tests. |
-| 4 | QA Failure and Ticket Creation | PASS | 2026-03-31 | Claude | 5 ticket + 5 health (2 agent + 3 capability) + 1 selection + 7 ticket status = 18 tests (agent-orchestrator) |
-| 5 | Loop Mode (max_cycles) | PASS | 2026-03-31 | Claude | `infinite_mode_respects_max_cycles`, `fixed_mode_stops_at_max_cycles`, `fixed_mode_defaults_to_one_cycle` (scheduler) |
+| 1 | qa_only Workflow | PASS | 2026-04-01 | Claude | `once_mode_always_stops` (scheduler); `strict_phase_accepts_json`, `strict_phase_requires_json` (agent-orchestrator) |
+| 2 | qa_fix Workflow | PASS | 2026-04-01 | Claude | `build_segments_groups_contiguous_scopes` (scheduler); 27 finalize rule tests (agent-orchestrator) |
+| 3 | qa_fix_retest Workflow | PASS | 2026-04-01 | Claude | `build_segments_groups_contiguous_scopes` (scheduler); 5 retest finalize rule tests (agent-orchestrator). Prehook decision behavior covered by S2 finalize rule tests. |
+| 4 | QA Failure and Ticket Creation | PASS | 2026-04-01 | Claude | 5 ticket + 5 health (2 agent + 3 capability) + 1 selection + 7 ticket status = 18 tests (agent-orchestrator) |
+| 5 | Loop Mode (max_cycles) | PASS | 2026-04-01 | Claude | `infinite_mode_respects_max_cycles`, `fixed_mode_stops_at_max_cycles`, `fixed_mode_defaults_to_one_cycle` (scheduler) |

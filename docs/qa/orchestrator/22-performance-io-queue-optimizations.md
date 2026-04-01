@@ -237,8 +237,8 @@ WHERE status = 'running';
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Phase Result Transactional Persistence Completeness | ✅ | 2026-03-30 | claude | Code review + unit test: insert_command_run_with_all_optional_fields, apply_captures_exit_code, extract_event_promoted_fields (7 sub-tests) all pass |
-| 2 | Bounded Phase Output Read Marks Truncated Payload | ✅ | 2026-03-30 | claude | Code review + unit test: spill_to_file*, spill_large_var*, streaming_redactor*, resolve_pipeline_var_content_truncated* (14 tests) all pass |
-| 3 | task logs Tail Works on Large Log File | ✅ | 2026-03-30 | claude | Code review + unit test: tail uses SeekFrom::End, apply_captures_stdout_spills_under_task_logs_dir passes |
+| 1 | Phase Result Transactional Persistence Completeness | ✅ | 2026-04-01 | claude | Code review + unit test: insert_command_run_with_all_optional_fields, apply_captures_exit_code, extract_event_promoted_fields (7 sub-tests) all pass |
+| 2 | Bounded Phase Output Read Marks Truncated Payload | ✅ | 2026-04-01 | claude | Code review + unit test: spill_to_file*, spill_large_var*, streaming_redactor*, resolve_pipeline_var_content_truncated* (14 tests) all pass |
+| 3 | task logs Tail Works on Large Log File | ✅ | 2026-04-01 | claude | Code review + unit test: tail uses SeekFrom::End, apply_captures_stdout_spills_under_task_logs_dir passes |
 | 4 | Atomic Claim Prevents Duplicate Consumption | — | | | UNSAFE — skipped per self_referential_safe_scenarios |
 | 5 | Multi-Worker Throughput Respects Global Concurrency Bound | — | | | UNSAFE — skipped per self_referential_safe_scenarios |

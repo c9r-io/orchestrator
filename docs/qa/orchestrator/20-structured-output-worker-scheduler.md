@@ -92,7 +92,7 @@ Verify structured fields (output_json, artifacts_json, confidence, quality_score
 ### Steps
 1. **Code review** — verify AgentOutput struct fields:
    ```bash
-   rg -n "struct AgentOutput|confidence|quality_score|artifacts" core/src/collab/output.rs
+   rg -n "struct AgentOutput|confidence|quality_score|artifacts" crates/orchestrator-collab/src/output.rs
    ```
 
 2. **Code review** — verify command_run insertion includes structured fields:
