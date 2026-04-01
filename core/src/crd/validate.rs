@@ -544,4 +544,76 @@ mod tests {
         let v = json_to_cel_value(&serde_json::json!({"a": 1}));
         assert!(matches!(v, CelValue::Map(_)));
     }
+
+    // ── Plugin validation tests ─────────────────────────────────────────
+
+    fn make_plugin(name: &str, ptype: &str, phase: Option<&str>, cmd: &str) -> crate::crd::types::CrdPlugin {
+        crate::crd::types::CrdPlugin {
+            name: name.to_string(),
+            plugin_type: ptype.to_string(),
+            phase: phase.map(|s| s.to_string()),
+            command: cmd.to_string(),
+            timeout: None,
+            schedule: None,
+            timezone: None,
+        }
+    }
+
+    #[test]
+    fn validate_plugins_rejects_duplicate_names() {
+        let plugins = vec![
+            make_plugin("dup", "interceptor", Some("webhook.authenticate"), "true"),
+            make_plugin("dup", "transformer", Some("webhook.transform"), "cat"),
+        ];
+        let err = validate_crd_plugins(&plugins).unwrap_err();
+        assert!(err.to_string().contains("duplicate plugin name"));
+    }
+
+    #[test]
+    fn validate_plugins_rejects_unknown_type() {
+        let plugins = vec![make_plugin("x", "unknown", Some("foo"), "true")];
+        let err = validate_crd_plugins(&plugins).unwrap_err();
+        assert!(err.to_string().contains("unknown plugin type"));
+    }
+
+    #[test]
+    fn validate_plugins_rejects_interceptor_without_phase() {
+        let plugins = vec![make_plugin("x", "interceptor", None, "true")];
+        let err = validate_crd_plugins(&plugins).unwrap_err();
+        assert!(err.to_string().contains("requires a phase"));
+    }
+
+    #[test]
+    fn validate_plugins_rejects_cron_without_schedule() {
+        let plugins = vec![make_plugin("x", "cron", None, "true")];
+        let err = validate_crd_plugins(&plugins).unwrap_err();
+        assert!(err.to_string().contains("requires a schedule"));
+    }
+
+    #[test]
+    fn validate_plugins_rejects_invalid_cron_expression() {
+        let mut p = make_plugin("x", "cron", None, "true");
+        p.schedule = Some("not a cron".to_string());
+        let err = validate_crd_plugins(&[p]).unwrap_err();
+        assert!(err.to_string().contains("invalid schedule"));
+    }
+
+    #[test]
+    fn validate_plugins_rejects_empty_command() {
+        let plugins = vec![make_plugin("x", "interceptor", Some("webhook.authenticate"), "  ")];
+        let err = validate_crd_plugins(&plugins).unwrap_err();
+        assert!(err.to_string().contains("command cannot be empty"));
+    }
+
+    #[test]
+    fn validate_plugins_accepts_valid_plugins() {
+        let mut cron = make_plugin("daily", "cron", None, "scripts/rotate.sh");
+        cron.schedule = Some("0 0 * * * *".to_string());
+        let plugins = vec![
+            make_plugin("auth", "interceptor", Some("webhook.authenticate"), "scripts/verify.sh"),
+            make_plugin("transform", "transformer", Some("webhook.transform"), "scripts/norm.sh"),
+            cron,
+        ];
+        assert!(validate_crd_plugins(&plugins).is_ok());
+    }
 }

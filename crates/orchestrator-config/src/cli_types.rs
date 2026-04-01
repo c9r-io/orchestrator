@@ -1350,4 +1350,35 @@ spec:
             panic!("Expected Agent spec");
         }
     }
+
+    #[test]
+    fn parse_trigger_webhook_with_crd_ref() {
+        let yaml = r#"
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: slack-events
+spec:
+  event:
+    source: webhook
+    webhook:
+      crdRef: SlackIntegration
+      secret:
+        fromRef: slack-signing
+      signatureHeader: X-Slack-Signature
+  action:
+    workflow: default
+    workspace: default
+"#;
+        let resource: OrchestratorResource =
+            serde_yaml::from_str(yaml).expect("Failed to parse Trigger YAML with crdRef");
+        assert_eq!(resource.kind, ResourceKind::Trigger);
+        if let ResourceSpec::Trigger(spec) = &resource.spec {
+            let webhook = spec.event.as_ref().unwrap().webhook.as_ref().unwrap();
+            assert_eq!(webhook.crd_ref.as_deref(), Some("SlackIntegration"));
+            assert_eq!(webhook.signature_header.as_deref(), Some("X-Slack-Signature"));
+        } else {
+            panic!("Expected Trigger spec");
+        }
+    }
 }

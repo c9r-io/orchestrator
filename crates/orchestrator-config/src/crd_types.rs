@@ -336,4 +336,65 @@ spec:
         assert!(hooks.on_update.is_none());
         assert!(hooks.on_delete.is_none());
     }
+
+    #[test]
+    fn crd_manifest_yaml_parse_with_plugins() {
+        let yaml = r#"
+apiVersion: orchestrator.dev/v2
+metadata:
+  name: slackintegrations.integrations.orchestrator.dev
+spec:
+  kind: SlackIntegration
+  plural: slackintegrations
+  group: integrations.orchestrator.dev
+  versions:
+    - name: v1
+      schema: { type: object }
+  plugins:
+    - name: verify-sig
+      type: interceptor
+      phase: webhook.authenticate
+      command: "scripts/verify.sh"
+      timeout: 3
+    - name: rotate
+      type: cron
+      schedule: "0 0 * * *"
+      command: "scripts/rotate.sh"
+      timezone: "Asia/Taipei"
+"#;
+        let manifest: CrdManifest = serde_yaml::from_str(yaml).expect("parse CRD with plugins");
+        assert_eq!(manifest.spec.kind, "SlackIntegration");
+        assert_eq!(manifest.spec.plugins.len(), 2);
+
+        let interceptor = &manifest.spec.plugins[0];
+        assert_eq!(interceptor.name, "verify-sig");
+        assert_eq!(interceptor.plugin_type, "interceptor");
+        assert_eq!(interceptor.phase.as_deref(), Some("webhook.authenticate"));
+        assert_eq!(interceptor.command, "scripts/verify.sh");
+        assert_eq!(interceptor.effective_timeout(), 3);
+
+        let cron = &manifest.spec.plugins[1];
+        assert_eq!(cron.name, "rotate");
+        assert_eq!(cron.plugin_type, "cron");
+        assert_eq!(cron.schedule.as_deref(), Some("0 0 * * *"));
+        assert_eq!(cron.timezone.as_deref(), Some("Asia/Taipei"));
+    }
+
+    #[test]
+    fn crd_manifest_yaml_without_plugins_defaults_empty() {
+        let yaml = r#"
+apiVersion: orchestrator.dev/v2
+metadata:
+  name: foos.test.dev
+spec:
+  kind: Foo
+  plural: foos
+  group: test.dev
+  versions:
+    - name: v1
+      schema: { type: object }
+"#;
+        let manifest: CrdManifest = serde_yaml::from_str(yaml).expect("parse CRD without plugins");
+        assert!(manifest.spec.plugins.is_empty());
+    }
 }
