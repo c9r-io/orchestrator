@@ -1,6 +1,6 @@
 [package]
 name = "orchestrator-client"
-version = "0.2.5"
+version = "0.2.6"
 description = "Shared control-plane client types and connection logic for the Agent Orchestrator"
 repository = "https://github.com/c9r-io/orchestrator"
 keywords = ["orchestrator", "client", "grpc", "control-plane"]

@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.6] - 2026-04-01
+
+### Added
+- **CRD plugin system** (FR-083) — generic custom resource definition plugin framework with three plugin types: interceptor, transformer, cron; `webhook.authenticate`/`webhook.transform` extension points; `crdRef` trigger association; built-in orchestrator tool library
+- **QA doctor CLI** (FR-088) — `orchestrator qa doctor` command exposing task execution metrics for observability
+- **SecretStore emergency recovery** (FR-089) — `secret key bootstrap` command for encryption key emergency recovery
+- **Health policy CLI fixtures** (FR-087) — automated QA script for verifying custom health policy display via `orchestrator check`
+- **Dependabot governance skill** — dependency PR lifecycle management
+
+### Fixed
+- Key rotation crash safety — prevent data loss during SecretStore key rotation
+- Mark QA-64/135 as self-referential unsafe
+- Clippy errors — unused gid field and redundant i32 cast
+- SecretStore write-blocked error message when encryption keys revoked
+- Resolved 30+ QA tickets — doc drift, triage, test alignment, feature gap routing
+
+### Changed
+- **Dependency upgrades** — sha2 0.10→0.11, hmac 0.12→0.13, notify 7→8.2, notify-debouncer-full 0.4→0.7, cron 0.15→0.16, picomatch 4.0.3→4.0.4 (CVE fix)
+
 ## [0.2.5] - 2026-03-29
 
 ### Fixed
