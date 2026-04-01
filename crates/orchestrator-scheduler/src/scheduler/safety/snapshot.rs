@@ -46,7 +46,8 @@ pub struct BinaryVerificationResult {
 }
 
 pub(crate) fn sha256_hex(data: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(data))
+    let hash = Sha256::digest(data);
+    hash.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// Verifies that the saved stable snapshot matches the current release binary.
