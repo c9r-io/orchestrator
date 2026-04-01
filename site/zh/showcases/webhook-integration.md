@@ -186,7 +186,7 @@ Webhook 请求到达
 
 CRD 插件命令以 shell 进程在 daemon 上下文中执行。为防止越权，所有插件命令都受 **插件策略** (`{data_dir}/plugin-policy.yaml`) 约束。
 
-**默认行为**：Allowlist 模式 + 空白名单 — 所有插件命令默认 **拒绝**，直到运维人员显式许可。
+**默认行为**：Allowlist 模式 + 空白名单 — 所有插件命令默认 **拒绝**，直到用户显式许可。
 
 创建 `~/.orchestratord/plugin-policy.yaml`：
 

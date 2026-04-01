@@ -3,7 +3,7 @@
 //!
 //! The policy is loaded from `{data_dir}/plugin-policy.yaml`.  When absent the
 //! default is **Allowlist** mode with an empty allowlist, which means all plugin
-//! commands are rejected until the operator explicitly configures permitted
+//! commands are rejected until the user explicitly configures permitted
 //! command prefixes.
 
 use serde::{Deserialize, Serialize};
@@ -76,7 +76,7 @@ fn default_true() -> bool {
     true
 }
 
-/// Built-in denied patterns — always active unless the operator provides an
+/// Built-in denied patterns — always active unless the user provides an
 /// explicit `denied_patterns` list.
 const BUILTIN_DENIED_PATTERNS: &[&str] = &[
     "curl ",
@@ -107,7 +107,7 @@ impl Default for PluginPolicy {
 }
 
 impl PluginPolicy {
-    /// Returns the effective denied-pattern list.  When the operator supplies
+    /// Returns the effective denied-pattern list.  When the user supplies
     /// an explicit list it takes precedence; otherwise the built-in set is used.
     pub fn effective_denied_patterns(&self) -> Vec<&str> {
         if self.denied_patterns.is_empty() {

@@ -186,7 +186,7 @@ Webhook request arrives
 
 CRD plugin commands execute as shell processes in the daemon context. To prevent privilege escalation, all plugin commands are subject to a **plugin policy** (`{data_dir}/plugin-policy.yaml`).
 
-**Default behavior**: Allowlist mode with an empty allowlist — all plugin commands are **blocked** until the operator explicitly permits them.
+**Default behavior**: Allowlist mode with an empty allowlist — all plugin commands are **blocked** until you explicitly permit them.
 
 Create `~/.orchestratord/plugin-policy.yaml`:
 
