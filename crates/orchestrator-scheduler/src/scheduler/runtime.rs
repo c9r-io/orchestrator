@@ -721,6 +721,10 @@ mod tests {
                 base.async_database.clone(),
                 base.data_dir.clone(),
             ),
+            plugin_policy: orchestrator_config::plugin_policy::PluginPolicy {
+                mode: orchestrator_config::plugin_policy::PluginPolicyMode::Audit,
+                ..Default::default()
+            },
             daemon_runtime: agent_orchestrator::runtime::DaemonRuntimeState::new(),
             worker_notify: Arc::new(tokio::sync::Notify::new()),
             trigger_event_tx: tokio::sync::broadcast::channel(64).0,

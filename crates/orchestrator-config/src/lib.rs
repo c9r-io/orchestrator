@@ -25,6 +25,8 @@ pub mod crd_types;
 pub mod dynamic_step;
 /// Environment resolution utilities for command execution.
 pub mod env_resolve;
+/// Plugin security policy — controls which CRD plugin commands are permitted.
+pub mod plugin_policy;
 /// Unified resource store and apply-result types.
 pub mod resource_store;
 /// Agent selection strategy and scoring weight types.

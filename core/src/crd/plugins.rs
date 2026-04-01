@@ -1,6 +1,7 @@
 use anyhow::{Result, anyhow};
 use std::collections::HashMap;
 use std::io::Write;
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
@@ -31,7 +32,9 @@ pub fn execute_interceptor(
     crd_kind: &str,
     headers: &HashMap<String, String>,
     body: &str,
+    db_path: Option<&Path>,
 ) -> Result<()> {
+    audit_plugin_execution(db_path, "plugin_execute", crd_kind, plugin);
     let timeout = Duration::from_secs(plugin.effective_timeout());
 
     let mut cmd = Command::new("sh");
@@ -84,7 +87,9 @@ pub fn execute_transformer(
     plugin: &CrdPlugin,
     crd_kind: &str,
     payload: &serde_json::Value,
+    db_path: Option<&Path>,
 ) -> Result<serde_json::Value> {
+    audit_plugin_execution(db_path, "plugin_execute", crd_kind, plugin);
     let timeout = Duration::from_secs(plugin.effective_timeout());
     let input = serde_json::to_string(payload)
         .map_err(|e| anyhow!("failed to serialize payload for transformer: {}", e))?;
@@ -149,7 +154,8 @@ pub fn execute_transformer(
 ///
 /// The plugin receives env: `PLUGIN_NAME`, `PLUGIN_TYPE`, `CRD_KIND`.
 /// Returns Ok(()) on success, Err on failure (caller should log, not abort).
-pub fn execute_cron_plugin(plugin: &CrdPlugin, crd_kind: &str) -> Result<()> {
+pub fn execute_cron_plugin(plugin: &CrdPlugin, crd_kind: &str, db_path: Option<&Path>) -> Result<()> {
+    audit_plugin_execution(db_path, "plugin_execute", crd_kind, plugin);
     let timeout = Duration::from_secs(plugin.effective_timeout());
 
     let mut cmd = Command::new("sh");
@@ -196,6 +202,28 @@ pub fn cron_plugins(plugins: &[CrdPlugin]) -> Vec<&CrdPlugin> {
         .iter()
         .filter(|p| p.plugin_type == PLUGIN_TYPE_CRON)
         .collect()
+}
+
+// --- audit helper ---
+
+fn audit_plugin_execution(db_path: Option<&Path>, action: &str, crd_kind: &str, plugin: &CrdPlugin) {
+    if let Some(path) = db_path {
+        let _ = crate::db::insert_plugin_audit(
+            path,
+            &crate::db::PluginAuditRecord {
+                action: action.into(),
+                crd_kind: crd_kind.into(),
+                plugin_name: Some(plugin.name.clone()),
+                plugin_type: Some(plugin.plugin_type.clone()),
+                command: plugin.command.clone(),
+                applied_by: None,
+                transport: None,
+                peer_pid: None,
+                result: "allowed".into(),
+                policy_mode: None,
+            },
+        );
+    }
 }
 
 // --- internal helpers ---
@@ -270,14 +298,14 @@ mod tests {
     fn interceptor_accepts_on_exit_zero() {
         let plugin = make_plugin("test", "interceptor", Some("webhook.authenticate"), "true");
         let headers = HashMap::new();
-        assert!(execute_interceptor(&plugin, "Foo", &headers, "{}").is_ok());
+        assert!(execute_interceptor(&plugin, "Foo", &headers, "{}", None).is_ok());
     }
 
     #[test]
     fn interceptor_rejects_on_exit_nonzero() {
         let plugin = make_plugin("test", "interceptor", Some("webhook.authenticate"), "exit 1");
         let headers = HashMap::new();
-        let err = execute_interceptor(&plugin, "Foo", &headers, "{}").unwrap_err();
+        let err = execute_interceptor(&plugin, "Foo", &headers, "{}", None).unwrap_err();
         assert!(err.to_string().contains("rejected request"));
     }
 
@@ -291,7 +319,7 @@ mod tests {
         );
         let mut headers = HashMap::new();
         headers.insert("X-Sig".to_string(), "abc".to_string());
-        assert!(execute_interceptor(&plugin, "Foo", &headers, r#"{"ok":true}"#).is_ok());
+        assert!(execute_interceptor(&plugin, "Foo", &headers, r#"{"ok":true}"#, None).is_ok());
     }
 
     #[test]
@@ -304,7 +332,7 @@ mod tests {
             r#"read input; echo "{\"wrapped\":$input}""#,
         );
         let payload = serde_json::json!({"a": 1});
-        let result = execute_transformer(&plugin, "Foo", &payload).unwrap();
+        let result = execute_transformer(&plugin, "Foo", &payload, None).unwrap();
         assert!(result.get("wrapped").is_some());
     }
 
@@ -317,19 +345,19 @@ mod tests {
             "echo 'not json'",
         );
         let payload = serde_json::json!({});
-        assert!(execute_transformer(&plugin, "Foo", &payload).is_err());
+        assert!(execute_transformer(&plugin, "Foo", &payload, None).is_err());
     }
 
     #[test]
     fn cron_plugin_success() {
         let plugin = make_plugin("daily", "cron", None, "true");
-        assert!(execute_cron_plugin(&plugin, "Foo").is_ok());
+        assert!(execute_cron_plugin(&plugin, "Foo", None).is_ok());
     }
 
     #[test]
     fn cron_plugin_failure() {
         let plugin = make_plugin("daily", "cron", None, "exit 42");
-        assert!(execute_cron_plugin(&plugin, "Foo").is_err());
+        assert!(execute_cron_plugin(&plugin, "Foo", None).is_err());
     }
 
     #[test]
@@ -368,7 +396,7 @@ mod tests {
             timezone: None,
         };
         let headers = HashMap::new();
-        let err = execute_interceptor(&plugin, "Foo", &headers, "{}").unwrap_err();
+        let err = execute_interceptor(&plugin, "Foo", &headers, "{}", None).unwrap_err();
         assert!(err.to_string().contains("timed out"));
     }
 }

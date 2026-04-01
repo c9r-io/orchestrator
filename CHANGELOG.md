@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.7] - 2026-04-02
+
+### Added
+- **Plugin policy governance** (P0-SEC) — layered defense against CRD plugin privilege escalation:
+  - `PluginPolicy` with three modes: `deny`, `allowlist` (default), `audit`
+  - Command allowlist with prefix matching; built-in denied patterns (curl, wget, nc, eval, base64, /dev/tcp)
+  - Timeout cap enforcement (default 30s max per plugin)
+  - Hook command policy enforcement (`enforce_on_hooks: true` by default)
+  - Admin role elevation for CRDs containing plugins or hooks (`ApplyPluginCrd` RPC)
+  - `plugin_audit` SQLite table for immutable audit trail (migration m0022)
+  - Audit logging on CRD apply (allowed/denied) and plugin execution
+  - Policy loaded from `{data_dir}/plugin-policy.yaml`; absent file = Allowlist with empty allowlist (secure-by-default)
+- QA doc 137: plugin policy governance verification (5 scenarios)
+- Integration tests for plugin policy enforcement (6 tests)
+
 ## [0.2.6] - 2026-04-01
 
 ### Added

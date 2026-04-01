@@ -698,7 +698,7 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         | "StorePut" | "StoreDelete" | "StorePrune" | "ManifestValidate" | "Init" | "TaskTrace" => {
             Role::Operator
         }
-        "Shutdown" | "TaskDelete" | "Delete" | "ConfigDebug" => Role::Admin,
+        "Shutdown" | "TaskDelete" | "Delete" | "ConfigDebug" | "ApplyPluginCrd" => Role::Admin,
         _ => Role::Admin,
     }
 }

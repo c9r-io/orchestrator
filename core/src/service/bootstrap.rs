@@ -140,6 +140,13 @@ fn build_managed_state(
     ));
     let store_manager = crate::store::StoreManager::new(async_database.clone(), data_dir.clone());
 
+    let plugin_policy =
+        orchestrator_config::plugin_policy::load_plugin_policy(&data_dir)
+            .unwrap_or_else(|e| {
+                tracing::warn!("failed to load plugin policy, using default (allowlist): {e}");
+                orchestrator_config::plugin_policy::PluginPolicy::default()
+            });
+
     Ok(ManagedState {
         inner: Arc::new(InnerState {
             data_dir,
@@ -162,6 +169,7 @@ fn build_managed_state(
             session_store,
             task_repo,
             store_manager,
+            plugin_policy,
             daemon_runtime: crate::runtime::DaemonRuntimeState::new(),
             worker_notify: Arc::new(Notify::new()),
             trigger_event_tx: tokio::sync::broadcast::channel(64).0,

@@ -97,8 +97,59 @@ pub fn apply_manifests(
             ParsedManifest::Crd(crd_manifest) => {
                 let crd_name = crd_manifest.metadata.name.clone();
                 let crd_kind = crd_manifest.spec.kind.clone();
-                match crd::apply_crd(&mut merged_config, crd_manifest) {
+                let plugins_snapshot: Vec<_> = crd_manifest
+                    .spec
+                    .plugins
+                    .iter()
+                    .map(|p| (p.name.clone(), p.plugin_type.clone(), p.command.clone()))
+                    .collect();
+                let hooks_snapshot: Vec<_> = [
+                    ("on_create", &crd_manifest.spec.hooks.on_create),
+                    ("on_update", &crd_manifest.spec.hooks.on_update),
+                    ("on_delete", &crd_manifest.spec.hooks.on_delete),
+                ]
+                .iter()
+                .filter_map(|(label, cmd)| cmd.as_ref().map(|c| (label.to_string(), c.clone())))
+                .collect();
+
+                let policy_mode = format!("{:?}", state.plugin_policy.mode).to_lowercase();
+                match crd::apply_crd(&mut merged_config, crd_manifest, &state.plugin_policy) {
                     Ok(result) => {
+                        // Audit: log allowed plugins
+                        for (pname, ptype, pcmd) in &plugins_snapshot {
+                            let _ = crate::db::insert_plugin_audit(
+                                &state.db_path,
+                                &crate::db::PluginAuditRecord {
+                                    action: "crd_apply".into(),
+                                    crd_kind: crd_kind.clone(),
+                                    plugin_name: Some(pname.clone()),
+                                    plugin_type: Some(ptype.clone()),
+                                    command: pcmd.clone(),
+                                    applied_by: None,
+                                    transport: None,
+                                    peer_pid: None,
+                                    result: "allowed".into(),
+                                    policy_mode: Some(policy_mode.clone()),
+                                },
+                            );
+                        }
+                        for (label, cmd) in &hooks_snapshot {
+                            let _ = crate::db::insert_plugin_audit(
+                                &state.db_path,
+                                &crate::db::PluginAuditRecord {
+                                    action: "crd_apply".into(),
+                                    crd_kind: crd_kind.clone(),
+                                    plugin_name: Some(label.clone()),
+                                    plugin_type: Some("hook".into()),
+                                    command: cmd.clone(),
+                                    applied_by: None,
+                                    transport: None,
+                                    peer_pid: None,
+                                    result: "allowed".into(),
+                                    policy_mode: Some(policy_mode.clone()),
+                                },
+                            );
+                        }
                         let action = apply_action_label(result);
                         results.push(orchestrator_proto::ApplyResultEntry {
                             kind: format!("crd({})", crd_kind),
@@ -108,6 +159,24 @@ pub fn apply_manifests(
                         });
                     }
                     Err(error) => {
+                        // Audit: log denied plugins
+                        for (pname, ptype, pcmd) in &plugins_snapshot {
+                            let _ = crate::db::insert_plugin_audit(
+                                &state.db_path,
+                                &crate::db::PluginAuditRecord {
+                                    action: "crd_apply".into(),
+                                    crd_kind: crd_kind.clone(),
+                                    plugin_name: Some(pname.clone()),
+                                    plugin_type: Some(ptype.clone()),
+                                    command: pcmd.clone(),
+                                    applied_by: None,
+                                    transport: None,
+                                    peer_pid: None,
+                                    result: "denied".into(),
+                                    policy_mode: Some(policy_mode.clone()),
+                                },
+                            );
+                        }
                         errors.push(format!(
                             "document {} (CRD {}): {}",
                             index + 1,

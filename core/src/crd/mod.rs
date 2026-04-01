@@ -25,6 +25,7 @@ use crate::cli_types::OrchestratorResource;
 use crate::config::OrchestratorConfig;
 use crate::resource::ApplyResult;
 use anyhow::{Result, anyhow};
+use orchestrator_config::plugin_policy::PluginPolicy;
 use types::{CrdManifest, CustomResource, CustomResourceManifest};
 
 /// Tri-state parse result for YAML manifests.
@@ -38,8 +39,12 @@ pub enum ParsedManifest {
 }
 
 /// Apply a CRD definition to the config.
-pub fn apply_crd(config: &mut OrchestratorConfig, manifest: CrdManifest) -> Result<ApplyResult> {
-    validate::validate_crd_definition(config, &manifest)?;
+pub fn apply_crd(
+    config: &mut OrchestratorConfig,
+    manifest: CrdManifest,
+    plugin_policy: &PluginPolicy,
+) -> Result<ApplyResult> {
+    validate::validate_crd_definition(config, &manifest, plugin_policy)?;
 
     let crd = manifest.spec.into_crd();
     let key = crd.kind.clone();
@@ -181,6 +186,14 @@ mod tests {
     use super::*;
     use crate::cli_types::ResourceMetadata;
     use crate::crd::types::{CelValidationRule, CrdHooks, CrdSpec, CrdVersion};
+    use orchestrator_config::plugin_policy::{PluginPolicy, PluginPolicyMode};
+
+    fn audit_policy() -> PluginPolicy {
+        PluginPolicy {
+            mode: PluginPolicyMode::Audit,
+            ..Default::default()
+        }
+    }
 
     fn make_crd_manifest() -> CrdManifest {
         CrdManifest {
@@ -233,7 +246,7 @@ mod tests {
     #[test]
     fn apply_crd_creates() {
         let mut config = OrchestratorConfig::default();
-        let result = apply_crd(&mut config, make_crd_manifest()).expect("apply should succeed");
+        let result = apply_crd(&mut config, make_crd_manifest(), &audit_policy()).expect("apply should succeed");
         assert_eq!(result, ApplyResult::Created);
         assert!(config.custom_resource_definitions.contains_key("Foo"));
     }
@@ -241,25 +254,25 @@ mod tests {
     #[test]
     fn apply_crd_unchanged() {
         let mut config = OrchestratorConfig::default();
-        apply_crd(&mut config, make_crd_manifest()).expect("first apply");
-        let result = apply_crd(&mut config, make_crd_manifest()).expect("second apply");
+        apply_crd(&mut config, make_crd_manifest(), &audit_policy()).expect("first apply");
+        let result = apply_crd(&mut config, make_crd_manifest(), &audit_policy()).expect("second apply");
         assert_eq!(result, ApplyResult::Unchanged);
     }
 
     #[test]
     fn apply_crd_configured() {
         let mut config = OrchestratorConfig::default();
-        apply_crd(&mut config, make_crd_manifest()).expect("first apply");
+        apply_crd(&mut config, make_crd_manifest(), &audit_policy()).expect("first apply");
         let mut manifest = make_crd_manifest();
         manifest.spec.short_names.push("fo".to_string());
-        let result = apply_crd(&mut config, manifest).expect("second apply");
+        let result = apply_crd(&mut config, manifest, &audit_policy()).expect("second apply");
         assert_eq!(result, ApplyResult::Configured);
     }
 
     #[test]
     fn apply_custom_resource_creates() {
         let mut config = OrchestratorConfig::default();
-        apply_crd(&mut config, make_crd_manifest()).expect("apply crd");
+        apply_crd(&mut config, make_crd_manifest(), &audit_policy()).expect("apply crd");
         let result =
             apply_custom_resource(&mut config, make_cr_manifest("my-foo")).expect("apply cr");
         assert_eq!(result, ApplyResult::Created);
@@ -269,7 +282,7 @@ mod tests {
     #[test]
     fn apply_custom_resource_unchanged() {
         let mut config = OrchestratorConfig::default();
-        apply_crd(&mut config, make_crd_manifest()).expect("apply crd");
+        apply_crd(&mut config, make_crd_manifest(), &audit_policy()).expect("apply crd");
         apply_custom_resource(&mut config, make_cr_manifest("my-foo")).expect("first apply");
         let result =
             apply_custom_resource(&mut config, make_cr_manifest("my-foo")).expect("second apply");
@@ -279,7 +292,7 @@ mod tests {
     #[test]
     fn apply_custom_resource_schema_validation_fails() {
         let mut config = OrchestratorConfig::default();
-        apply_crd(&mut config, make_crd_manifest()).expect("apply crd");
+        apply_crd(&mut config, make_crd_manifest(), &audit_policy()).expect("apply crd");
         let manifest = CustomResourceManifest {
             api_version: "test.dev/v1".to_string(),
             kind: "Foo".to_string(),
@@ -297,7 +310,7 @@ mod tests {
     #[test]
     fn delete_custom_resource_ok() {
         let mut config = OrchestratorConfig::default();
-        apply_crd(&mut config, make_crd_manifest()).expect("apply crd");
+        apply_crd(&mut config, make_crd_manifest(), &audit_policy()).expect("apply crd");
         apply_custom_resource(&mut config, make_cr_manifest("del-foo")).expect("apply cr");
         assert!(
             delete_custom_resource(&mut config, "Foo", "del-foo").expect("delete should succeed")
@@ -316,7 +329,7 @@ mod tests {
     #[test]
     fn delete_crd_ok() {
         let mut config = OrchestratorConfig::default();
-        apply_crd(&mut config, make_crd_manifest()).expect("apply crd");
+        apply_crd(&mut config, make_crd_manifest(), &audit_policy()).expect("apply crd");
         assert!(delete_crd(&mut config, "Foo").expect("delete should succeed"));
         assert!(!config.custom_resource_definitions.contains_key("Foo"));
     }
@@ -324,7 +337,7 @@ mod tests {
     #[test]
     fn delete_crd_blocked_by_instances() {
         let mut config = OrchestratorConfig::default();
-        apply_crd(&mut config, make_crd_manifest()).expect("apply crd");
+        apply_crd(&mut config, make_crd_manifest(), &audit_policy()).expect("apply crd");
         apply_custom_resource(&mut config, make_cr_manifest("blocker")).expect("apply cr");
         assert!(delete_crd(&mut config, "Foo").is_err());
     }
@@ -339,7 +352,7 @@ mod tests {
                 rule: r#"size(self.bar) > 2"#.to_string(),
                 message: "bar must be longer than 2 chars".to_string(),
             });
-        apply_crd(&mut config, crd_manifest).expect("apply crd");
+        apply_crd(&mut config, crd_manifest, &audit_policy()).expect("apply crd");
 
         // Valid: bar = "hello" (len > 2)
         let result =

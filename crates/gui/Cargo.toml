@@ -1,14 +1,14 @@
 [package]
 name = "orchestrator-gui"
-version = "0.2.6"
+version = "0.2.7"
 edition.workspace = true
 rust-version.workspace = true
 license = "MIT"
 publish = false
 
 [dependencies]
-orchestrator-client = { path = "../orchestrator-client", version = "0.2.6" }
-orchestrator-proto = { path = "../proto", version = "0.2.6" }
+orchestrator-client = { path = "../orchestrator-client", version = "0.2.7" }
+orchestrator-proto = { path = "../proto", version = "0.2.7" }
 tauri = { version = "2", features = ["rustls-tls"] }
 tauri-plugin-notification = "2"
 tonic = { version = "0.14", features = ["tls-native-roots", "tls-ring"] }

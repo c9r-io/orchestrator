@@ -1,6 +1,6 @@
 [package]
 name = "orchestrator-cli"
-version = "0.2.6"
+version = "0.2.7"
 description = "CLI client for the Agent Orchestrator daemon"
 repository = "https://github.com/c9r-io/orchestrator"
 keywords = ["orchestrator", "cli", "agent", "automation"]
@@ -15,8 +15,8 @@ name = "orchestrator"
 path = "src/main.rs"
 
 [dependencies]
-orchestrator-client = { path = "../orchestrator-client", version = "0.2.6" }
-orchestrator-proto = { path = "../proto", version = "0.2.6" }
+orchestrator-client = { path = "../orchestrator-client", version = "0.2.7" }
+orchestrator-proto = { path = "../proto", version = "0.2.7" }
 anyhow = "1.0"
 clap = { version = "4.6", features = ["derive", "env"] }
 clap_complete = "4.6"
@@ -27,8 +27,8 @@ serde_yaml = "0.9"
 tokio = { version = "1.44", features = ["macros", "rt-multi-thread", "sync", "signal"] }
 tonic = { version = "0.14", features = ["tls-native-roots", "tls-ring"] }
 tokio-stream = "0.1"
-agent-orchestrator = { path = "../../core", version = "0.2.6" }
-orchestrator-config = { path = "../orchestrator-config", version = "0.2.6" }
+agent-orchestrator = { path = "../../core", version = "0.2.7" }
+orchestrator-config = { path = "../orchestrator-config", version = "0.2.7" }
 hmac = "0.13"
 sha2 = "0.11"
 hex = "0.4"

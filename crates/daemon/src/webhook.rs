@@ -121,6 +121,7 @@ fn do_webhook(
                     crd_kind,
                     &header_map,
                     &body_str,
+                    Some(&state.inner.db_path),
                 )
             {
                 warn!(
@@ -190,7 +191,7 @@ fn do_webhook(
         );
         for plugin in transform_plugins {
             match agent_orchestrator::crd::plugins::execute_transformer(
-                plugin, crd_kind, &payload,
+                plugin, crd_kind, &payload, Some(&state.inner.db_path),
             ) {
                 Ok(transformed) => {
                     info!(

@@ -740,6 +740,34 @@ pub(crate) fn m0021_command_rule_index_column(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn m0022_plugin_audit(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS plugin_audit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            action TEXT NOT NULL,
+            crd_kind TEXT NOT NULL,
+            plugin_name TEXT,
+            plugin_type TEXT,
+            command TEXT NOT NULL,
+            applied_by TEXT,
+            transport TEXT,
+            peer_pid INTEGER,
+            result TEXT NOT NULL,
+            policy_mode TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_plugin_audit_created_at
+            ON plugin_audit(created_at);
+
+        CREATE INDEX IF NOT EXISTS idx_plugin_audit_crd_kind
+            ON plugin_audit(crd_kind);
+        "#,
+    )?;
+    Ok(())
+}
+
 pub(crate) fn m0014_task_graph_debug_tables(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"

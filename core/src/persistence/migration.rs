@@ -203,6 +203,11 @@ pub fn registered_migrations() -> Vec<Migration> {
             name: "m0021_command_rule_index_column",
             up: crate::persistence::migration_steps::m0021_command_rule_index_column,
         },
+        Migration {
+            version: 22,
+            name: "m0022_plugin_audit",
+            up: crate::persistence::migration_steps::m0022_plugin_audit,
+        },
     ]
 }
 

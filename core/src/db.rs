@@ -82,6 +82,56 @@ pub struct ControlPlaneAuditRecord {
     pub reason_code: Option<String>,
 }
 
+/// Audit payload for plugin-related authorization and execution decisions.
+#[derive(Debug, Clone)]
+pub struct PluginAuditRecord {
+    /// Action: `crd_apply`, `plugin_execute`, or `hook_execute`.
+    pub action: String,
+    /// CRD kind that owns the plugin.
+    pub crd_kind: String,
+    /// Plugin name (None for hooks).
+    pub plugin_name: Option<String>,
+    /// Plugin type: `interceptor`, `transformer`, `cron`, or `hook`.
+    pub plugin_type: Option<String>,
+    /// Full command string.
+    pub command: String,
+    /// Caller identity (TLS subject_id or `uds:<pid>`).
+    pub applied_by: Option<String>,
+    /// Transport: `tcp` or `uds`.
+    pub transport: Option<String>,
+    /// Peer process ID (UDS only).
+    pub peer_pid: Option<i32>,
+    /// Verdict: `allowed`, `denied`, or `audit_warning`.
+    pub result: String,
+    /// Active policy mode: `deny`, `allowlist`, or `audit`.
+    pub policy_mode: Option<String>,
+}
+
+/// Inserts one plugin-audit record into persistence.
+pub fn insert_plugin_audit(db_path: &Path, record: &PluginAuditRecord) -> Result<()> {
+    let conn = open_conn(db_path)?;
+    conn.execute(
+        "INSERT INTO plugin_audit (
+            created_at, action, crd_kind, plugin_name, plugin_type,
+            command, applied_by, transport, peer_pid, result, policy_mode
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        params![
+            crate::config_load::now_ts(),
+            record.action,
+            record.crd_kind,
+            record.plugin_name,
+            record.plugin_type,
+            record.command,
+            record.applied_by,
+            record.transport,
+            record.peer_pid,
+            record.result,
+            record.policy_mode,
+        ],
+    )?;
+    Ok(())
+}
+
 /// Opens a SQLite connection using the orchestrator persistence defaults.
 pub fn open_conn(db_path: &Path) -> Result<Connection> {
     crate::persistence::sqlite::open_conn(db_path)

