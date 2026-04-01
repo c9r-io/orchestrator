@@ -71,7 +71,7 @@
 | FR-084 | Agent 条件命令规则 + Session 复用 | P1 | Closed |
 | FR-085 | Filesystem Trigger — 文件系统变更原生触发器 | P1 | Closed |
 | FR-086 | CLI Command to Simulate Agent Selection Logic | P3 | Closed |
-| FR-087 | Agent Health Policy CLI 测试夹具 — 自定义策略 QA 可验证性 | P2 | Proposed |
+| FR-087 | Agent Health Policy CLI 测试夹具 — 自定义策略 QA 可验证性 | P2 | Closed |
 | FR-088 | QA Doctor CLI — 可观测性指标暴露 | P2 | Closed |
 | FR-089 | SecretStore 加密密钥紧急恢复机制 | P2 | Closed |
 
@@ -167,3 +167,4 @@
 - FR-088 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/qa-doctor-observability.md` 与 `docs/qa/orchestrator/134-qa-doctor-observability.md` 承载
 - FR-089 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/95-secretstore-key-emergency-recovery.md` 与 `docs/qa/orchestrator/135-secretstore-key-emergency-recovery.md` 承载
 - FR-083 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/96-crd-plugin-system.md` 与 `docs/qa/orchestrator/136-crd-plugin-system.md` 承载（通用 CRD 插件系统：interceptor/transformer/cron 三种插件类型，webhook.authenticate/webhook.transform 扩展点，crdRef 触发器关联，内置 orchestrator tool 工具库）
+- FR-087 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/97-agent-health-policy-cli-fixtures.md` 与 `docs/qa/orchestrator/110b-agent-health-policy-advanced.md` 承载（经审计确认 fixture manifest + `orchestrator apply --project` 完整管线已正确保留 health_policy，新增 `scripts/qa/test-health-policy-check.sh` 自动化验证 3 场景：自定义阈值、disease DISABLED、默认策略基线）
