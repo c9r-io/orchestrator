@@ -229,8 +229,8 @@ Verify extraction selects the correct JSON block containing the target path.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Mixed text — natural language + JSON | ✅ | 2026-03-13 | claude | Unit test `extract_array_from_mixed_text_with_preamble` in `json_extract.rs`. Scan fallback finds `{` and parses |
-| 2 | Fenced code block (` ```json ``` `) | ✅ | 2026-03-13 | claude | Unit tests `extract_array_from_fenced_code_block` and `extract_array_from_unfenced_code_block` |
-| 3 | Pure JSON baseline (regression guard) | ✅ | 2026-03-13 | claude | Unit test `extract_array_pure_json_still_works` + existing `extract_array_simple`, `extract_array_nested` |
-| 4 | Malformed JSON — graceful error | ✅ | 2026-03-13 | claude | Unit test `extract_array_malformed_json_fails`. Returns error, caller logs WARN + fallback |
-| 5 | Multiple JSON objects in text | ✅ | 2026-03-13 | claude | Unit test `extract_array_multiple_json_objects_finds_correct_one`. Uses streaming deserializer to handle trailing text |
+| 1 | Mixed text — natural language + JSON | ✅ | 2026-04-01 | claude | Unit test `extract_array_from_mixed_text_with_preamble` in `json_extract.rs`. Scan fallback finds `{` and parses |
+| 2 | Fenced code block (` ```json ``` `) | ✅ | 2026-04-01 | claude | Unit tests `extract_array_from_fenced_code_block` and `extract_array_from_unfenced_code_block` |
+| 3 | Pure JSON baseline (regression guard) | ✅ | 2026-04-01 | claude | Unit test `extract_array_pure_json_still_works` + existing `extract_array_simple`, `extract_array_nested` |
+| 4 | Malformed JSON — graceful error | ✅ | 2026-04-01 | claude | Unit test `extract_array_truly_unparsable_fails`. Returns error, caller logs WARN + fallback |
+| 5 | Multiple JSON objects in text | ✅ | 2026-04-01 | claude | Unit test `extract_array_multiple_json_objects_finds_correct_one`. Uses streaming deserializer to handle trailing text |

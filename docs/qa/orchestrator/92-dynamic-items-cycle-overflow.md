@@ -49,13 +49,13 @@ rg -n "fn proactive_max_cycles" crates/orchestrator-scheduler/src/scheduler/loop
 ```bash
 # 确保 daemon 运行
 orchestrator init
-orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project self-bootstrap
+orchestrator apply -f fixtures/manifests/bundles/cycle-overflow-test.yaml --project qa92
 
 # 创建 task，记录返回的 task_id
 orchestrator task create \
   -n "qa92-s2-test" \
-  -w self -W self-bootstrap \
-  --project self-bootstrap \
+  -w default -W fixed_with_dynamic_items \
+  --project qa92 \
   -g "QA92 dynamic items cycle overflow verification"
 # 记录返回的 <task_id>
 ```
