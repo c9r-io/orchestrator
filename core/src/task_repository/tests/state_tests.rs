@@ -882,3 +882,425 @@ fn pause_all_running_does_not_affect_paused_tasks() {
         .expect("query item status");
     assert_eq!(item_status, "pending");
 }
+
+// ── reset_unresolved_items ───────────────────────────────────────
+
+#[test]
+fn reset_unresolved_items_resets_unresolved_to_pending() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let item_id = get_item_id(&state, &task_id);
+
+    // Mark item as unresolved with various fields set
+    conn.execute(
+        "UPDATE task_items SET status='unresolved', fix_required=1, fixed=1, last_error='some error', ticket_files_json='[\"a.rs\"]', ticket_content_json='[\"content\"]' WHERE id = ?1",
+        params![item_id.clone()],
+    )
+    .expect("mark item unresolved");
+
+    state::reset_unresolved_items(&conn, &task_id).expect("reset should succeed");
+
+    // Item should be reset to pending with all fields cleared
+    let (status, fix_required, fixed, last_error, ticket_files, ticket_content): (
+        String,
+        i64,
+        i64,
+        String,
+        String,
+        String,
+    ) = conn
+        .query_row(
+            "SELECT status, fix_required, fixed, last_error, ticket_files_json, ticket_content_json FROM task_items WHERE id = ?1",
+            params![item_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)),
+        )
+        .expect("query item");
+    assert_eq!(status, "pending");
+    assert_eq!(fix_required, 0);
+    assert_eq!(fixed, 0);
+    assert_eq!(last_error, "");
+    assert_eq!(ticket_files, "[]");
+    assert_eq!(ticket_content, "[]");
+}
+
+#[test]
+fn reset_unresolved_items_resets_cycle_counter_when_pending_items_exist() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let item_id = get_item_id(&state, &task_id);
+
+    // Set task cycle state
+    conn.execute(
+        "UPDATE tasks SET current_cycle=5, init_done=1 WHERE id = ?1",
+        params![task_id.clone()],
+    )
+    .expect("set cycle state");
+
+    // Mark item as unresolved — after reset it becomes pending
+    conn.execute(
+        "UPDATE task_items SET status='unresolved' WHERE id = ?1",
+        params![item_id.clone()],
+    )
+    .expect("mark item unresolved");
+
+    state::reset_unresolved_items(&conn, &task_id).expect("reset should succeed");
+
+    // Cycle counter should be reset because there are now pending items
+    let (cycle, init_done): (i64, i64) = conn
+        .query_row(
+            "SELECT current_cycle, init_done FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("query task");
+    assert_eq!(cycle, 0, "current_cycle should be reset to 0");
+    assert_eq!(init_done, 0, "init_done should be reset to 0");
+}
+
+#[test]
+fn reset_unresolved_items_no_op_when_no_unresolved() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+
+    // Set task cycle state — items are pending by default (not unresolved)
+    conn.execute(
+        "UPDATE tasks SET current_cycle=5, init_done=1 WHERE id = ?1",
+        params![task_id.clone()],
+    )
+    .expect("set cycle state");
+
+    // Items are already pending, so there are no unresolved items to reset,
+    // but there ARE pending items, so the cycle counter should still be reset.
+    state::reset_unresolved_items(&conn, &task_id).expect("reset should succeed");
+
+    let (cycle, init_done): (i64, i64) = conn
+        .query_row(
+            "SELECT current_cycle, init_done FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("query task");
+    assert_eq!(
+        cycle, 0,
+        "cycle should still be reset because pending items exist"
+    );
+    assert_eq!(init_done, 0);
+}
+
+#[test]
+fn reset_unresolved_items_skips_cycle_reset_when_no_pending() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let item_id = get_item_id(&state, &task_id);
+
+    // Set task cycle state
+    conn.execute(
+        "UPDATE tasks SET current_cycle=5, init_done=1 WHERE id = ?1",
+        params![task_id.clone()],
+    )
+    .expect("set cycle state");
+
+    // Mark item as qa_passed (not unresolved, not pending)
+    conn.execute(
+        "UPDATE task_items SET status='qa_passed' WHERE id = ?1",
+        params![item_id.clone()],
+    )
+    .expect("mark item qa_passed");
+
+    state::reset_unresolved_items(&conn, &task_id).expect("reset should succeed");
+
+    // Cycle counter should NOT be reset because there are no pending items
+    let (cycle, init_done): (i64, i64) = conn
+        .query_row(
+            "SELECT current_cycle, init_done FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("query task");
+    assert_eq!(cycle, 5, "current_cycle should remain unchanged");
+    assert_eq!(init_done, 1, "init_done should remain unchanged");
+}
+
+// ── pause_restart_pending_tasks_and_items ─────────────────────────
+
+#[test]
+fn pause_restart_pending_tasks_and_items_pauses_and_resets() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let item_id = get_item_id(&state, &task_id);
+
+    // Set task to restart_pending with a running item
+    conn.execute(
+        "UPDATE tasks SET status='restart_pending' WHERE id = ?1",
+        params![task_id.clone()],
+    )
+    .expect("mark task restart_pending");
+    conn.execute(
+        "UPDATE task_items SET status='running', started_at='2026-01-01T00:00:00Z' WHERE id = ?1",
+        params![item_id.clone()],
+    )
+    .expect("mark item running");
+
+    let count = state::pause_restart_pending_tasks_and_items(&conn)
+        .expect("pause restart_pending should succeed");
+    assert_eq!(count, 1, "should reset 1 running item");
+
+    // Task should now be paused
+    let task_status: String = conn
+        .query_row(
+            "SELECT status FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| row.get(0),
+        )
+        .expect("query task status");
+    assert_eq!(task_status, "paused");
+
+    // Item should be pending with cleared started_at
+    let (item_status, started_at): (String, Option<String>) = conn
+        .query_row(
+            "SELECT status, started_at FROM task_items WHERE id = ?1",
+            params![item_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("query item");
+    assert_eq!(item_status, "pending");
+    assert!(started_at.is_none(), "started_at should be cleared");
+}
+
+#[test]
+fn pause_restart_pending_does_not_affect_running_tasks() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let item_id = get_item_id(&state, &task_id);
+
+    // Set task to running (not restart_pending) with a running item
+    conn.execute(
+        "UPDATE tasks SET status='running' WHERE id = ?1",
+        params![task_id.clone()],
+    )
+    .expect("mark task running");
+    conn.execute(
+        "UPDATE task_items SET status='running', started_at='2026-01-01T00:00:00Z' WHERE id = ?1",
+        params![item_id.clone()],
+    )
+    .expect("mark item running");
+
+    let count = state::pause_restart_pending_tasks_and_items(&conn)
+        .expect("pause should succeed");
+    assert_eq!(count, 0, "should not reset items for running tasks");
+
+    // Task should remain running
+    let task_status: String = conn
+        .query_row(
+            "SELECT status FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| row.get(0),
+        )
+        .expect("query task status");
+    assert_eq!(task_status, "running");
+
+    // Item should remain running
+    let item_status: String = conn
+        .query_row(
+            "SELECT status FROM task_items WHERE id = ?1",
+            params![item_id],
+            |row| row.get(0),
+        )
+        .expect("query item status");
+    assert_eq!(item_status, "running");
+}
+
+#[test]
+fn pause_restart_pending_returns_zero_when_no_restart_pending_tasks() {
+    let mut fixture = TestState::new();
+    let (state, _task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+
+    // Default task is pending — no restart_pending tasks exist
+    let count = state::pause_restart_pending_tasks_and_items(&conn)
+        .expect("pause should succeed");
+    assert_eq!(count, 0);
+}
+
+// ── recover_orphaned_running_items_for_task: edge cases ──────────
+
+#[test]
+fn recover_orphaned_running_items_for_task_returns_empty_when_no_running_items() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+
+    // Items are pending by default — no running items
+    let recovered =
+        state::recover_orphaned_running_items_for_task(&conn, &task_id).expect("recover");
+    assert!(recovered.is_empty());
+}
+
+#[test]
+fn recover_orphaned_running_items_for_task_skips_non_running_task() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let item_id = get_item_id(&state, &task_id);
+
+    // Task is paused but item is running (edge case)
+    conn.execute(
+        "UPDATE tasks SET status='paused' WHERE id = ?1",
+        params![task_id.clone()],
+    )
+    .expect("mark task paused");
+    conn.execute(
+        "UPDATE task_items SET status='running', started_at='2026-01-01T00:00:00Z' WHERE id = ?1",
+        params![item_id.clone()],
+    )
+    .expect("mark item running");
+
+    let recovered =
+        state::recover_orphaned_running_items_for_task(&conn, &task_id).expect("recover");
+    // Items are still recovered (reset to pending)
+    assert_eq!(recovered, vec![item_id.clone()]);
+
+    // Item should be pending
+    let item_status: String = conn
+        .query_row(
+            "SELECT status FROM task_items WHERE id = ?1",
+            params![item_id],
+            |row| row.get(0),
+        )
+        .expect("query item status");
+    assert_eq!(item_status, "pending");
+
+    // Task should remain paused (UPDATE WHERE status='running' does not match)
+    let task_status: String = conn
+        .query_row(
+            "SELECT status FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| row.get(0),
+        )
+        .expect("query task status");
+    assert_eq!(task_status, "paused");
+}
+
+// ── set_task_status: started_at COALESCE behavior ────────────────
+
+#[test]
+fn set_task_status_running_sets_started_at_when_null() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+
+    // started_at should be null initially
+    let started_at_before: Option<String> = conn
+        .query_row(
+            "SELECT started_at FROM tasks WHERE id = ?1",
+            params![task_id.clone()],
+            |row| row.get(0),
+        )
+        .expect("query started_at");
+    assert!(started_at_before.is_none());
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    repo.set_task_status(&task_id, "running", false)
+        .expect("set status");
+
+    let started_at_after: Option<String> = conn
+        .query_row(
+            "SELECT started_at FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| row.get(0),
+        )
+        .expect("query started_at");
+    assert!(
+        started_at_after.is_some(),
+        "started_at should be set when transitioning to running"
+    );
+}
+
+#[test]
+fn set_task_status_running_preserves_existing_started_at() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+
+    let original_ts = "2025-06-15T10:00:00Z";
+    conn.execute(
+        "UPDATE tasks SET started_at = ?2 WHERE id = ?1",
+        params![task_id.clone(), original_ts],
+    )
+    .expect("set started_at");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    repo.set_task_status(&task_id, "running", false)
+        .expect("set status");
+
+    let started_at: Option<String> = conn
+        .query_row(
+            "SELECT started_at FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| row.get(0),
+        )
+        .expect("query started_at");
+    assert_eq!(
+        started_at,
+        Some(original_ts.to_string()),
+        "started_at should be preserved via COALESCE"
+    );
+}
+
+#[test]
+fn set_task_status_completed_with_set_completed_sets_started_at_when_null() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    repo.set_task_status(&task_id, "completed", true)
+        .expect("set status");
+
+    let (started_at, completed_at): (Option<String>, Option<String>) = conn
+        .query_row(
+            "SELECT started_at, completed_at FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("query task");
+    assert!(started_at.is_some(), "started_at should be set via COALESCE");
+    assert!(completed_at.is_some(), "completed_at should be set");
+}
+
+#[test]
+fn set_task_status_unknown_status_does_not_clear_completed_at() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    conn.execute(
+        "UPDATE tasks SET completed_at='2026-01-01T00:00:00Z' WHERE id = ?1",
+        params![task_id.clone()],
+    )
+    .expect("set completed_at");
+
+    // An arbitrary/unknown status hits the else branch
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    repo.set_task_status(&task_id, "cancelled", false)
+        .expect("set status");
+
+    let (status, completed_at): (String, Option<String>) = conn
+        .query_row(
+            "SELECT status, completed_at FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("query task");
+    assert_eq!(status, "cancelled");
+    assert_eq!(
+        completed_at,
+        Some("2026-01-01T00:00:00Z".to_string()),
+        "else branch should preserve completed_at"
+    );
+}

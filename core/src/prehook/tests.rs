@@ -2520,6 +2520,70 @@ fn validate_command_rules_missing_prompt_placeholder() {
     );
 }
 
+#[test]
+fn validate_command_rules_multiple_valid() {
+    use crate::config::AgentCommandRule;
+    let rules = vec![
+        AgentCommandRule {
+            when: "vars.mode == \"fast\"".to_string(),
+            command: "fast-agent \"{prompt}\"".to_string(),
+        },
+        AgentCommandRule {
+            when: "vars.mode == \"slow\"".to_string(),
+            command: "slow-agent \"{prompt}\"".to_string(),
+        },
+    ];
+    let result = super::validate_agent_command_rules("ag1", &rules);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn validate_command_rules_second_rule_invalid_cel() {
+    use crate::config::AgentCommandRule;
+    let rules = vec![
+        AgentCommandRule {
+            when: "true".to_string(),
+            command: "echo \"{prompt}\"".to_string(),
+        },
+        AgentCommandRule {
+            when: "bad @@@ cel".to_string(),
+            command: "echo \"{prompt}\"".to_string(),
+        },
+    ];
+    let result = super::validate_agent_command_rules("ag1", &rules);
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("command_rules[1]"),
+        "error should reference second rule index, got: {}",
+        err
+    );
+}
+
+#[test]
+fn validate_command_rules_second_rule_missing_prompt() {
+    use crate::config::AgentCommandRule;
+    let rules = vec![
+        AgentCommandRule {
+            when: "true".to_string(),
+            command: "echo \"{prompt}\"".to_string(),
+        },
+        AgentCommandRule {
+            when: "true".to_string(),
+            command: "echo hello".to_string(),
+        },
+    ];
+    let result = super::validate_agent_command_rules("ag1", &rules);
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("command_rules[1]"),
+        "error should reference second rule index, got: {}",
+        err
+    );
+    assert!(err.contains("{prompt} placeholder"));
+}
+
 // ── command rule CEL evaluation with pipeline vars ──────────────────
 
 #[test]

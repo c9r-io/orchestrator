@@ -523,4 +523,336 @@ mod tests {
         // Cleanup
         let _ = std::fs::remove_dir_all(&archive_dir);
     }
+
+    #[tokio::test]
+    async fn cleanup_with_zero_retention_deletes_recent_terminal_events() {
+        let mut ts = TestState::new();
+        let state = ts.build();
+
+        insert_task(&state.async_database, "t-done", "completed").await;
+        // An event from just a second ago — retention_days=0 means "older than now"
+        // so any past event qualifies
+        insert_event(
+            &state.async_database,
+            "t-done",
+            "step_start",
+            "2025-01-01T00:00:00",
+        )
+        .await;
+
+        insert_task(&state.async_database, "t-running", "running").await;
+        insert_event(
+            &state.async_database,
+            "t-running",
+            "step_start",
+            "2025-01-01T00:00:00",
+        )
+        .await;
+
+        assert_eq!(count_events(&state.async_database).await, 2);
+
+        // retention_days=0 means "older than now minus 0 days" — any past event qualifies
+        let deleted = cleanup_old_events(&state.async_database, 0, 1000)
+            .await
+            .unwrap();
+        // The completed task's event should be deleted; running task's should remain
+        assert_eq!(deleted, 1);
+        assert_eq!(count_events(&state.async_database).await, 1);
+    }
+
+    #[tokio::test]
+    async fn event_stats_on_empty_database() {
+        let mut ts = TestState::new();
+        let state = ts.build();
+
+        let stats = event_stats(&state.async_database).await.unwrap();
+        assert_eq!(stats.total_rows, 0);
+        assert_eq!(stats.earliest, None);
+        assert_eq!(stats.latest, None);
+        assert!(stats.by_task_status.is_empty());
+    }
+
+    #[tokio::test]
+    async fn archive_events_with_no_eligible_events() {
+        let mut ts = TestState::new();
+        let state = ts.build();
+        let archive_dir =
+            std::env::temp_dir().join(format!("archive-empty-{}", uuid::Uuid::new_v4()));
+
+        // Running task — not terminal, so nothing to archive
+        insert_task(&state.async_database, "t-run", "running").await;
+        insert_event(
+            &state.async_database,
+            "t-run",
+            "e1",
+            "2020-01-01T00:00:00",
+        )
+        .await;
+
+        let archived = archive_events(&state.async_database, &archive_dir, 1, 1000)
+            .await
+            .unwrap();
+        assert_eq!(archived, 0);
+        assert_eq!(count_events(&state.async_database).await, 1);
+
+        // Archive dir should not have been created since no events were archived
+        assert!(!archive_dir.exists());
+    }
+
+    #[tokio::test]
+    async fn archive_events_groups_by_date() {
+        let mut ts = TestState::new();
+        let state = ts.build();
+        let archive_dir =
+            std::env::temp_dir().join(format!("archive-dates-{}", uuid::Uuid::new_v4()));
+
+        insert_task(&state.async_database, "t-multi", "completed").await;
+        // Events on two different dates
+        insert_event(
+            &state.async_database,
+            "t-multi",
+            "e1",
+            "2020-06-15T10:00:00",
+        )
+        .await;
+        insert_event(
+            &state.async_database,
+            "t-multi",
+            "e2",
+            "2020-06-16T12:00:00",
+        )
+        .await;
+        insert_event(
+            &state.async_database,
+            "t-multi",
+            "e3",
+            "2020-06-15T14:00:00",
+        )
+        .await;
+
+        let archived = archive_events(&state.async_database, &archive_dir, 1, 1000)
+            .await
+            .unwrap();
+        assert_eq!(archived, 3);
+        assert_eq!(count_events(&state.async_database).await, 0);
+
+        // Two separate date files
+        let path_15 = archive_dir.join("t-multi/2020-06-15.jsonl");
+        let path_16 = archive_dir.join("t-multi/2020-06-16.jsonl");
+        assert!(path_15.exists(), "JSONL for 2020-06-15 should exist");
+        assert!(path_16.exists(), "JSONL for 2020-06-16 should exist");
+
+        let content_15 = std::fs::read_to_string(&path_15).unwrap();
+        let lines_15: Vec<&str> = content_15.trim().lines().collect();
+        assert_eq!(lines_15.len(), 2, "Two events on 2020-06-15");
+
+        let content_16 = std::fs::read_to_string(&path_16).unwrap();
+        let lines_16: Vec<&str> = content_16.trim().lines().collect();
+        assert_eq!(lines_16.len(), 1, "One event on 2020-06-16");
+
+        let _ = std::fs::remove_dir_all(&archive_dir);
+    }
+
+    #[tokio::test]
+    async fn count_pending_cleanup_with_zero_results() {
+        let mut ts = TestState::new();
+        let state = ts.build();
+
+        // No tasks or events at all
+        let count = count_pending_cleanup(&state.async_database, 1)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+
+        // Add a running task with old events — still zero eligible
+        insert_task(&state.async_database, "t-run", "running").await;
+        insert_event(
+            &state.async_database,
+            "t-run",
+            "e1",
+            "2020-01-01T00:00:00",
+        )
+        .await;
+        let count = count_pending_cleanup(&state.async_database, 1)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[tokio::test]
+    async fn cleanup_deletes_failed_and_cancelled_tasks() {
+        let mut ts = TestState::new();
+        let state = ts.build();
+
+        insert_task(&state.async_database, "t-fail", "failed").await;
+        insert_event(
+            &state.async_database,
+            "t-fail",
+            "err",
+            "2020-01-01T00:00:00",
+        )
+        .await;
+
+        insert_task(&state.async_database, "t-cancel", "cancelled").await;
+        insert_event(
+            &state.async_database,
+            "t-cancel",
+            "cancel_ev",
+            "2020-01-01T00:00:00",
+        )
+        .await;
+
+        insert_task(&state.async_database, "t-pending", "pending").await;
+        insert_event(
+            &state.async_database,
+            "t-pending",
+            "pending_ev",
+            "2020-01-01T00:00:00",
+        )
+        .await;
+
+        assert_eq!(count_events(&state.async_database).await, 3);
+
+        let deleted = cleanup_old_events(&state.async_database, 1, 1000)
+            .await
+            .unwrap();
+        // failed + cancelled = 2 deleted; pending remains
+        assert_eq!(deleted, 2);
+        assert_eq!(count_events(&state.async_database).await, 1);
+    }
+
+    #[tokio::test]
+    async fn cleanup_with_no_events_returns_zero() {
+        let mut ts = TestState::new();
+        let state = ts.build();
+
+        let deleted = cleanup_old_events(&state.async_database, 1, 1000)
+            .await
+            .unwrap();
+        assert_eq!(deleted, 0);
+    }
+
+    #[tokio::test]
+    async fn list_task_events_without_filter() {
+        let mut ts = TestState::new();
+        let state = ts.build();
+
+        insert_task(&state.async_database, "t-list", "running").await;
+        insert_event(
+            &state.async_database,
+            "t-list",
+            "step_start",
+            "2024-01-01T00:00:00",
+        )
+        .await;
+        insert_event(
+            &state.async_database,
+            "t-list",
+            "step_end",
+            "2024-01-02T00:00:00",
+        )
+        .await;
+
+        let events = list_task_events(&state.async_database, "t-list", None, 50)
+            .await
+            .unwrap();
+        assert_eq!(events.len(), 2);
+        // Results are ordered by id DESC, so most recent first
+        assert_eq!(events[0].event_type, "step_end");
+        assert_eq!(events[1].event_type, "step_start");
+    }
+
+    #[tokio::test]
+    async fn list_task_events_with_type_filter() {
+        let mut ts = TestState::new();
+        let state = ts.build();
+
+        insert_task(&state.async_database, "t-filter", "running").await;
+        insert_event(
+            &state.async_database,
+            "t-filter",
+            "step_start",
+            "2024-01-01T00:00:00",
+        )
+        .await;
+        insert_event(
+            &state.async_database,
+            "t-filter",
+            "step_end",
+            "2024-01-02T00:00:00",
+        )
+        .await;
+        insert_event(
+            &state.async_database,
+            "t-filter",
+            "error_occurred",
+            "2024-01-03T00:00:00",
+        )
+        .await;
+
+        let events =
+            list_task_events(&state.async_database, "t-filter", Some("step"), 50)
+                .await
+                .unwrap();
+        assert_eq!(events.len(), 2);
+        assert!(events.iter().all(|e| e.event_type.starts_with("step")));
+    }
+
+    #[tokio::test]
+    async fn list_task_events_with_zero_limit_defaults_to_50() {
+        let mut ts = TestState::new();
+        let state = ts.build();
+
+        insert_task(&state.async_database, "t-zero", "running").await;
+        insert_event(
+            &state.async_database,
+            "t-zero",
+            "ev1",
+            "2024-01-01T00:00:00",
+        )
+        .await;
+
+        // limit=0 should default to 50 internally and still return the event
+        let events = list_task_events(&state.async_database, "t-zero", None, 0)
+            .await
+            .unwrap();
+        assert_eq!(events.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn list_task_events_for_nonexistent_task() {
+        let mut ts = TestState::new();
+        let state = ts.build();
+
+        let events = list_task_events(&state.async_database, "no-such-task", None, 50)
+            .await
+            .unwrap();
+        assert!(events.is_empty());
+    }
+
+    #[tokio::test]
+    async fn archive_events_across_multiple_tasks() {
+        let mut ts = TestState::new();
+        let state = ts.build();
+        let archive_dir =
+            std::env::temp_dir().join(format!("archive-multi-{}", uuid::Uuid::new_v4()));
+
+        insert_task(&state.async_database, "t-a", "completed").await;
+        insert_task(&state.async_database, "t-b", "failed").await;
+
+        insert_event(&state.async_database, "t-a", "e1", "2020-03-10T08:00:00").await;
+        insert_event(&state.async_database, "t-b", "e2", "2020-03-10T09:00:00").await;
+
+        let archived = archive_events(&state.async_database, &archive_dir, 1, 1000)
+            .await
+            .unwrap();
+        assert_eq!(archived, 2);
+        assert_eq!(count_events(&state.async_database).await, 0);
+
+        // Each task gets its own subdirectory
+        assert!(archive_dir.join("t-a/2020-03-10.jsonl").exists());
+        assert!(archive_dir.join("t-b/2020-03-10.jsonl").exists());
+
+        let _ = std::fs::remove_dir_all(&archive_dir);
+    }
 }

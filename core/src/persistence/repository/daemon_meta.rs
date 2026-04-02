@@ -26,3 +26,26 @@ pub async fn increment_incarnation(db: &Arc<AsyncDatabase>) -> Result<u64> {
         .await
         .map_err(flatten_err)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::TestState;
+
+    #[tokio::test]
+    async fn increment_incarnation_starts_from_one() {
+        let mut ts = TestState::new();
+        let state = ts.build();
+        let result = increment_incarnation(&state.async_database).await.unwrap();
+        assert_eq!(result, 1);
+    }
+
+    #[tokio::test]
+    async fn increment_incarnation_returns_increasing_values() {
+        let mut ts = TestState::new();
+        let state = ts.build();
+        let first = increment_incarnation(&state.async_database).await.unwrap();
+        let second = increment_incarnation(&state.async_database).await.unwrap();
+        assert!(second > first, "second ({second}) should be greater than first ({first})");
+    }
+}

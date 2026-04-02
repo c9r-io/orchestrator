@@ -300,4 +300,288 @@ mod tests {
             other => panic!("expected Entries, got {:?}", other),
         }
     }
+
+    #[tokio::test]
+    async fn list_with_offset_skips_entries() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let backend = FileStoreBackend::new(temp.path().to_path_buf());
+
+        for i in 0..5 {
+            backend
+                .execute(StoreOp::Put {
+                    store_name: "s".to_string(),
+                    project_id: "p".to_string(),
+                    key: format!("k{}", i),
+                    value: format!(r#"{{"v": {}}}"#, i),
+                    task_id: "".to_string(),
+                })
+                .await
+                .expect("put");
+        }
+
+        let result = backend
+            .execute(StoreOp::List {
+                store_name: "s".to_string(),
+                project_id: "p".to_string(),
+                limit: 100,
+                offset: 3,
+            })
+            .await
+            .expect("list with offset");
+        match result {
+            StoreOpResult::Entries(entries) => assert_eq!(entries.len(), 2),
+            other => panic!("expected Entries, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn list_on_nonexistent_directory() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let backend = FileStoreBackend::new(temp.path().to_path_buf());
+
+        let result = backend
+            .execute(StoreOp::List {
+                store_name: "no_such_store".to_string(),
+                project_id: "no_such_project".to_string(),
+                limit: 10,
+                offset: 0,
+            })
+            .await
+            .expect("list nonexistent");
+        match result {
+            StoreOpResult::Entries(entries) => assert!(entries.is_empty()),
+            other => panic!("expected empty Entries, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn prune_with_max_entries() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let backend = FileStoreBackend::new(temp.path().to_path_buf());
+
+        for i in 0..4 {
+            backend
+                .execute(StoreOp::Put {
+                    store_name: "s".to_string(),
+                    project_id: "p".to_string(),
+                    key: format!("k{}", i),
+                    value: format!(r#"{{"v": {}}}"#, i),
+                    task_id: "".to_string(),
+                })
+                .await
+                .expect("put");
+        }
+
+        let result = backend
+            .execute(StoreOp::Prune {
+                store_name: "s".to_string(),
+                project_id: "p".to_string(),
+                max_entries: Some(2),
+                ttl_days: None,
+            })
+            .await
+            .expect("prune");
+        assert!(matches!(result, StoreOpResult::Ok));
+
+        let result = backend
+            .execute(StoreOp::List {
+                store_name: "s".to_string(),
+                project_id: "p".to_string(),
+                limit: 100,
+                offset: 0,
+            })
+            .await
+            .expect("list after prune");
+        match result {
+            StoreOpResult::Entries(entries) => assert_eq!(entries.len(), 2),
+            other => panic!("expected 2 entries after prune, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn prune_on_nonexistent_directory() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let backend = FileStoreBackend::new(temp.path().to_path_buf());
+
+        let result = backend
+            .execute(StoreOp::Prune {
+                store_name: "no_such".to_string(),
+                project_id: "no_such".to_string(),
+                max_entries: Some(5),
+                ttl_days: None,
+            })
+            .await
+            .expect("prune nonexistent");
+        assert!(matches!(result, StoreOpResult::Ok));
+    }
+
+    #[tokio::test]
+    async fn prune_with_none_max_entries_is_noop() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let backend = FileStoreBackend::new(temp.path().to_path_buf());
+
+        for i in 0..3 {
+            backend
+                .execute(StoreOp::Put {
+                    store_name: "s".to_string(),
+                    project_id: "p".to_string(),
+                    key: format!("k{}", i),
+                    value: format!(r#"{{"v": {}}}"#, i),
+                    task_id: "".to_string(),
+                })
+                .await
+                .expect("put");
+        }
+
+        let result = backend
+            .execute(StoreOp::Prune {
+                store_name: "s".to_string(),
+                project_id: "p".to_string(),
+                max_entries: None,
+                ttl_days: None,
+            })
+            .await
+            .expect("prune none");
+        assert!(matches!(result, StoreOpResult::Ok));
+
+        // All 3 entries should still be present.
+        let result = backend
+            .execute(StoreOp::List {
+                store_name: "s".to_string(),
+                project_id: "p".to_string(),
+                limit: 100,
+                offset: 0,
+            })
+            .await
+            .expect("list after no-op prune");
+        match result {
+            StoreOpResult::Entries(entries) => assert_eq!(entries.len(), 3),
+            other => panic!("expected 3 entries, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn delete_nonexistent_key_returns_ok() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let backend = FileStoreBackend::new(temp.path().to_path_buf());
+
+        let result = backend
+            .execute(StoreOp::Delete {
+                store_name: "s".to_string(),
+                project_id: "p".to_string(),
+                key: "nonexistent".to_string(),
+            })
+            .await
+            .expect("delete nonexistent");
+        assert!(matches!(result, StoreOpResult::Ok));
+    }
+
+    #[tokio::test]
+    async fn get_nonexistent_key_returns_none() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let backend = FileStoreBackend::new(temp.path().to_path_buf());
+
+        let result = backend
+            .execute(StoreOp::Get {
+                store_name: "s".to_string(),
+                project_id: "p".to_string(),
+                key: "nonexistent".to_string(),
+            })
+            .await
+            .expect("get nonexistent");
+        assert!(matches!(result, StoreOpResult::Value(None)));
+    }
+
+    #[tokio::test]
+    async fn put_with_nonempty_project_id() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let backend = FileStoreBackend::new(temp.path().to_path_buf());
+
+        let result = backend
+            .execute(StoreOp::Put {
+                store_name: "metrics".to_string(),
+                project_id: "my-project".to_string(),
+                key: "k1".to_string(),
+                value: r#"{"x": 42}"#.to_string(),
+                task_id: "t1".to_string(),
+            })
+            .await
+            .expect("put with project_id");
+        assert!(matches!(result, StoreOpResult::Ok));
+
+        // Verify the file lands under the correct project directory.
+        let expected = temp
+            .path()
+            .join("data/stores/metrics/my-project/k1.json");
+        assert!(expected.exists(), "entry should exist at project-specific path");
+
+        // Confirm retrieval works with the same project_id.
+        let result = backend
+            .execute(StoreOp::Get {
+                store_name: "metrics".to_string(),
+                project_id: "my-project".to_string(),
+                key: "k1".to_string(),
+            })
+            .await
+            .expect("get with project_id");
+        match result {
+            StoreOpResult::Value(Some(v)) => assert_eq!(v["x"], 42),
+            other => panic!("expected Value(Some), got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn empty_project_id_uses_default() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let backend = FileStoreBackend::new(temp.path().to_path_buf());
+
+        // Put with empty project_id — should fall back to DEFAULT_PROJECT_ID.
+        backend
+            .execute(StoreOp::Put {
+                store_name: "s".to_string(),
+                project_id: "".to_string(),
+                key: "k1".to_string(),
+                value: r#"{"v": 1}"#.to_string(),
+                task_id: "".to_string(),
+            })
+            .await
+            .expect("put empty pid");
+
+        let default_path = temp
+            .path()
+            .join("data/stores/s")
+            .join(crate::config::DEFAULT_PROJECT_ID)
+            .join("k1.json");
+        assert!(default_path.exists(), "empty project_id should map to DEFAULT_PROJECT_ID directory");
+
+        // Put with explicit project_id — should use that path instead.
+        backend
+            .execute(StoreOp::Put {
+                store_name: "s".to_string(),
+                project_id: "custom".to_string(),
+                key: "k1".to_string(),
+                value: r#"{"v": 2}"#.to_string(),
+                task_id: "".to_string(),
+            })
+            .await
+            .expect("put custom pid");
+
+        let custom_path = temp.path().join("data/stores/s/custom/k1.json");
+        assert!(custom_path.exists(), "explicit project_id should use its own directory");
+
+        // The two entries are isolated — listing empty pid should return only 1.
+        let result = backend
+            .execute(StoreOp::List {
+                store_name: "s".to_string(),
+                project_id: "".to_string(),
+                limit: 100,
+                offset: 0,
+            })
+            .await
+            .expect("list empty pid");
+        match result {
+            StoreOpResult::Entries(entries) => assert_eq!(entries.len(), 1),
+            other => panic!("expected 1 entry, got {:?}", other),
+        }
+    }
 }
