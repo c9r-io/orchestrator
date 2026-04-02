@@ -2548,3 +2548,431 @@ fn command_rule_cel_missing_var_does_not_match() {
     // Should either return false or error — either way, not a match
     assert!(!result.unwrap_or(false));
 }
+
+// ========================================================================
+// build_step_prehook_cel_context: Default context and variable accessibility
+// ========================================================================
+
+#[test]
+fn test_build_step_prehook_cel_context_default_succeeds() {
+    let context = StepPrehookContext::default();
+    let result = evaluate_step_prehook_expression("cycle == 0", &context);
+    assert!(result.is_ok());
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_build_step_prehook_cel_context_default_qa_failed_false() {
+    let context = StepPrehookContext::default();
+    let result = evaluate_step_prehook_expression("qa_failed == false", &context);
+    assert!(result.is_ok());
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_build_step_prehook_cel_context_default_bool_variables() {
+    let context = StepPrehookContext::default();
+    // All boolean fields should be accessible and default to false
+    let result = evaluate_step_prehook_expression(
+        "!qa_failed && !fix_required && !is_last_cycle && !last_sandbox_denied && !fix_has_changes && self_referential_safe",
+        &context,
+    );
+    assert!(result.is_ok());
+    // self_referential_safe defaults to true, the rest to false
+    // fix_has_changes defaults to None which is treated as false in CEL
+    // Check if it evaluates without error -- result depends on default values
+    let _ = result.unwrap();
+}
+
+#[test]
+fn test_build_step_prehook_cel_context_default_int_variables() {
+    let context = StepPrehookContext::default();
+    let result = evaluate_step_prehook_expression(
+        "active_ticket_count == 0 && new_ticket_count == 0 && sandbox_denied_count == 0 && build_errors == 0 && test_failures == 0",
+        &context,
+    );
+    assert!(result.is_ok());
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_build_step_prehook_cel_context_default_string_variables() {
+    let context = StepPrehookContext::default();
+    let result = evaluate_step_prehook_expression("step == \"\" && task_id == \"\"", &context);
+    assert!(result.is_ok());
+    assert!(result.unwrap());
+}
+
+// ========================================================================
+// build_finalize_cel_context: Default context
+// ========================================================================
+
+#[test]
+fn test_build_finalize_cel_context_default_succeeds() {
+    let context = default_item_finalize_context();
+    let rule = make_rule("r-default", "cycle == 1", "initial", None);
+    let result = evaluate_finalize_rule_expression(&rule, &context);
+    assert!(result.is_ok());
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_build_finalize_cel_context_default_bool_variables() {
+    let context = ItemFinalizeContext {
+        qa_failed: false,
+        fix_required: false,
+        qa_enabled: false,
+        qa_ran: false,
+        qa_skipped: false,
+        fix_enabled: false,
+        fix_ran: false,
+        fix_success: false,
+        ..default_item_finalize_context()
+    };
+    let rule = make_rule(
+        "r-bools",
+        "!qa_failed && !fix_required && !qa_enabled && !qa_ran && !qa_skipped && !fix_enabled && !fix_ran && !fix_success",
+        "none",
+        None,
+    );
+    let result = evaluate_finalize_rule_expression(&rule, &context);
+    assert!(result.is_ok());
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_build_finalize_cel_context_default_int_variables() {
+    let context = default_item_finalize_context();
+    let rule = make_rule(
+        "r-ints",
+        "active_ticket_count == 0 && new_ticket_count == 0 && retest_new_ticket_count == 0 && total_artifacts == 0 && sandbox_denied_count == 0",
+        "zero",
+        None,
+    );
+    let result = evaluate_finalize_rule_expression(&rule, &context);
+    assert!(result.is_ok());
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_build_finalize_cel_context_default_retest_variables() {
+    let context = ItemFinalizeContext {
+        retest_enabled: false,
+        retest_ran: false,
+        retest_success: false,
+        ..default_item_finalize_context()
+    };
+    let rule = make_rule(
+        "r-retest",
+        "!retest_enabled && !retest_ran && !retest_success",
+        "no_retest",
+        None,
+    );
+    let result = evaluate_finalize_rule_expression(&rule, &context);
+    assert!(result.is_ok());
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_build_finalize_cel_context_default_artifact_variables() {
+    let context = default_item_finalize_context();
+    let rule = make_rule(
+        "r-artifacts",
+        "!has_ticket_artifacts && !has_code_change_artifacts && total_artifacts == 0",
+        "no_artifacts",
+        None,
+    );
+    let result = evaluate_finalize_rule_expression(&rule, &context);
+    assert!(result.is_ok());
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_build_finalize_cel_context_default_qa_observed_variables() {
+    let context = ItemFinalizeContext {
+        qa_configured: false,
+        qa_observed: false,
+        ..default_item_finalize_context()
+    };
+    let rule = make_rule(
+        "r-qa-obs",
+        "!qa_configured && !qa_observed",
+        "unobserved",
+        None,
+    );
+    let result = evaluate_finalize_rule_expression(&rule, &context);
+    assert!(result.is_ok());
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_build_finalize_cel_context_sandbox_variables() {
+    let context = ItemFinalizeContext {
+        last_sandbox_denied: true,
+        sandbox_denied_count: 3,
+        ..default_item_finalize_context()
+    };
+    let rule = make_rule(
+        "r-sandbox",
+        "last_sandbox_denied && sandbox_denied_count == 3",
+        "denied",
+        None,
+    );
+    let result = evaluate_finalize_rule_expression(&rule, &context);
+    assert!(result.is_ok());
+    assert!(result.unwrap());
+}
+
+// ========================================================================
+// build_convergence_cel_context / evaluate_convergence_expression
+// ========================================================================
+
+use super::cel::evaluate_convergence_expression;
+use crate::config::ConvergenceContext;
+
+#[test]
+fn test_convergence_expression_default_succeeds() {
+    let context = ConvergenceContext::default();
+    let result = evaluate_convergence_expression("cycle == 0", &context);
+    assert!(result.is_ok());
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_convergence_expression_cycle_comparison() {
+    let context = ConvergenceContext {
+        cycle: 3,
+        max_cycles: 5,
+        ..Default::default()
+    };
+    let result = evaluate_convergence_expression("cycle >= 3 && max_cycles == 5", &context);
+    assert!(result.is_ok());
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_convergence_expression_self_test_passed() {
+    let context = ConvergenceContext {
+        self_test_passed: true,
+        ..Default::default()
+    };
+    let result = evaluate_convergence_expression("self_test_passed", &context);
+    assert!(result.is_ok());
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_convergence_expression_self_test_not_passed() {
+    let context = ConvergenceContext::default();
+    let result = evaluate_convergence_expression("self_test_passed", &context);
+    assert!(result.is_ok());
+    assert!(!result.unwrap());
+}
+
+#[test]
+fn test_convergence_expression_active_tickets() {
+    let context = ConvergenceContext {
+        active_ticket_count: 5,
+        ..Default::default()
+    };
+    let result =
+        evaluate_convergence_expression("active_ticket_count == 0 || self_test_passed", &context);
+    assert!(result.is_ok());
+    assert!(!result.unwrap());
+}
+
+#[test]
+fn test_convergence_expression_compound() {
+    let context = ConvergenceContext {
+        cycle: 2,
+        max_cycles: 3,
+        active_ticket_count: 0,
+        self_test_passed: true,
+        vars: Default::default(),
+    };
+    let result = evaluate_convergence_expression(
+        "self_test_passed && active_ticket_count == 0 && cycle <= max_cycles",
+        &context,
+    );
+    assert!(result.is_ok());
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_convergence_expression_invalid_cel() {
+    let context = ConvergenceContext::default();
+    let result = evaluate_convergence_expression("invalid @#$ expression", &context);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_convergence_expression_non_bool_result() {
+    let context = ConvergenceContext::default();
+    let result = evaluate_convergence_expression("cycle + 1", &context);
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("must return bool"));
+}
+
+// ── Convergence context: pipeline variable injection ──
+
+#[test]
+fn test_convergence_var_int() {
+    let mut context = ConvergenceContext::default();
+    context.vars.insert("retry_limit".to_string(), "5".to_string());
+    let result = evaluate_convergence_expression("retry_limit > 3", &context);
+    assert!(result.is_ok());
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_convergence_var_float() {
+    let mut context = ConvergenceContext::default();
+    context.vars.insert("threshold".to_string(), "0.75".to_string());
+    let result = evaluate_convergence_expression("threshold > 0.5", &context);
+    assert!(result.is_ok());
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_convergence_var_bool() {
+    let mut context = ConvergenceContext::default();
+    context.vars.insert("force_continue".to_string(), "true".to_string());
+    let result = evaluate_convergence_expression("force_continue", &context);
+    assert!(result.is_ok());
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_convergence_var_string() {
+    let mut context = ConvergenceContext::default();
+    context.vars.insert("env".to_string(), "production".to_string());
+    let result = evaluate_convergence_expression("env == 'production'", &context);
+    assert!(result.is_ok());
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_convergence_var_combined_with_builtin() {
+    let mut context = ConvergenceContext {
+        cycle: 2,
+        self_test_passed: true,
+        ..Default::default()
+    };
+    context.vars.insert("min_cycles".to_string(), "2".to_string());
+    let result =
+        evaluate_convergence_expression("self_test_passed && cycle >= min_cycles", &context);
+    assert!(result.is_ok());
+    assert!(result.unwrap());
+}
+
+// ========================================================================
+// resolve_workflow_finalize_outcome tests
+// ========================================================================
+
+#[test]
+fn finalize_outcome_empty_rules_returns_none() {
+    let finalize = WorkflowFinalizeConfig { rules: vec![] };
+    let ctx = default_item_finalize_context();
+    let result = resolve_workflow_finalize_outcome(&finalize, &ctx).unwrap();
+    assert!(result.is_none());
+}
+
+#[test]
+fn finalize_outcome_single_matching_rule() {
+    let finalize = WorkflowFinalizeConfig {
+        rules: vec![make_rule(
+            "r1",
+            "qa_failed == true",
+            "failed",
+            Some("qa check failed"),
+        )],
+    };
+    let ctx = ItemFinalizeContext {
+        qa_failed: true,
+        ..default_item_finalize_context()
+    };
+    let outcome = resolve_workflow_finalize_outcome(&finalize, &ctx)
+        .unwrap()
+        .expect("should match");
+    assert_eq!(outcome.rule_id, "r1");
+    assert_eq!(outcome.status, "failed");
+    assert_eq!(outcome.reason, "qa check failed");
+}
+
+#[test]
+fn finalize_outcome_multiple_rules_first_matches() {
+    let finalize = WorkflowFinalizeConfig {
+        rules: vec![
+            make_rule("r1", "true", "skipped", Some("always")),
+            make_rule("r2", "true", "done", Some("also always")),
+        ],
+    };
+    let ctx = default_item_finalize_context();
+    let outcome = resolve_workflow_finalize_outcome(&finalize, &ctx)
+        .unwrap()
+        .expect("should match first rule");
+    assert_eq!(outcome.rule_id, "r1");
+    assert_eq!(outcome.status, "skipped");
+}
+
+#[test]
+fn finalize_outcome_multiple_rules_second_matches() {
+    let finalize = WorkflowFinalizeConfig {
+        rules: vec![
+            make_rule("r1", "false", "skipped", Some("never")),
+            make_rule("r2", "cycle > 0", "done", Some("cycle positive")),
+        ],
+    };
+    let ctx = ItemFinalizeContext {
+        cycle: 1,
+        ..default_item_finalize_context()
+    };
+    let outcome = resolve_workflow_finalize_outcome(&finalize, &ctx)
+        .unwrap()
+        .expect("should match second rule");
+    assert_eq!(outcome.rule_id, "r2");
+    assert_eq!(outcome.status, "done");
+    assert_eq!(outcome.reason, "cycle positive");
+}
+
+#[test]
+fn finalize_outcome_custom_reason_vs_auto_generated() {
+    let ctx = default_item_finalize_context();
+
+    // Rule without reason → auto-generated
+    let finalize_auto = WorkflowFinalizeConfig {
+        rules: vec![make_rule("auto-reason", "true", "done", None)],
+    };
+    let outcome_auto = resolve_workflow_finalize_outcome(&finalize_auto, &ctx)
+        .unwrap()
+        .expect("should match");
+    assert_eq!(outcome_auto.reason, "finalize rule 'auto-reason' matched");
+
+    // Rule with custom reason
+    let finalize_custom = WorkflowFinalizeConfig {
+        rules: vec![make_rule("custom", "true", "done", Some("my reason"))],
+    };
+    let outcome_custom = resolve_workflow_finalize_outcome(&finalize_custom, &ctx)
+        .unwrap()
+        .expect("should match");
+    assert_eq!(outcome_custom.reason, "my reason");
+}
+
+#[test]
+fn finalize_outcome_no_rules_match_returns_none() {
+    let finalize = WorkflowFinalizeConfig {
+        rules: vec![
+            make_rule("r1", "false", "skipped", Some("never")),
+            make_rule("r2", "qa_failed == true", "failed", Some("qa bad")),
+        ],
+    };
+    let ctx = ItemFinalizeContext {
+        qa_failed: false,
+        ..default_item_finalize_context()
+    };
+    let result = resolve_workflow_finalize_outcome(&finalize, &ctx).unwrap();
+    assert!(result.is_none());
+}

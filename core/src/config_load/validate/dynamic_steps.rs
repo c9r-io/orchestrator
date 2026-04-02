@@ -17,3 +17,60 @@ pub(super) fn validate_dynamic_steps(workflow: &WorkflowConfig, workflow_id: &st
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::WorkflowConfig;
+    use orchestrator_config::dynamic_step::DynamicStepConfig;
+
+    fn make_dynamic_step(id: &str, trigger: Option<&str>) -> DynamicStepConfig {
+        DynamicStepConfig {
+            id: id.to_string(),
+            description: None,
+            step_type: "qa".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: trigger.map(String::from),
+            priority: 0,
+            max_runs: None,
+        }
+    }
+
+    #[test]
+    fn empty_dynamic_steps_ok() {
+        let workflow = WorkflowConfig::default();
+        let result = validate_dynamic_steps(&workflow, "test-wf");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn dynamic_step_no_trigger_ok() {
+        let workflow = WorkflowConfig {
+            dynamic_steps: vec![make_dynamic_step("ds1", None)],
+            ..Default::default()
+        };
+        let result = validate_dynamic_steps(&workflow, "test-wf");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn dynamic_step_valid_cel_trigger_ok() {
+        let workflow = WorkflowConfig {
+            dynamic_steps: vec![make_dynamic_step("ds1", Some("qa_failed == true"))],
+            ..Default::default()
+        };
+        let result = validate_dynamic_steps(&workflow, "test-wf");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn dynamic_step_invalid_cel_trigger_err() {
+        let workflow = WorkflowConfig {
+            dynamic_steps: vec![make_dynamic_step("ds1", Some("invalid @#$ expression"))],
+            ..Default::default()
+        };
+        let result = validate_dynamic_steps(&workflow, "test-wf");
+        assert!(result.is_err());
+    }
+}

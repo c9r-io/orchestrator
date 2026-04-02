@@ -14,23 +14,18 @@ use std::path::Path;
 // ---------------------------------------------------------------------------
 
 /// Determines how plugin commands are evaluated against the policy.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PluginPolicyMode {
     /// Reject every CRD that declares plugins, regardless of command content.
     Deny,
     /// Accept only commands whose prefix appears in `allowed_command_prefixes`.
     /// An empty allowlist rejects everything (secure-by-default).
+    #[default]
     Allowlist,
     /// Accept all commands but emit audit warnings for those that would be
     /// denied under Allowlist mode.  Useful for migration / dry-run.
     Audit,
-}
-
-impl Default for PluginPolicyMode {
-    fn default() -> Self {
-        Self::Allowlist
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +106,7 @@ impl PluginPolicy {
     /// an explicit list it takes precedence; otherwise the built-in set is used.
     pub fn effective_denied_patterns(&self) -> Vec<&str> {
         if self.denied_patterns.is_empty() {
-            BUILTIN_DENIED_PATTERNS.iter().copied().collect()
+            BUILTIN_DENIED_PATTERNS.to_vec()
         } else {
             self.denied_patterns.iter().map(|s| s.as_str()).collect()
         }
