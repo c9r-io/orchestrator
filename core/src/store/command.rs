@@ -273,4 +273,246 @@ mod tests {
             .await;
         assert!(result.is_err());
     }
+
+    #[tokio::test]
+    async fn command_adapter_delete() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let base = temp.path().to_str().expect("path");
+
+        let commands = StoreBackendCommands {
+            get: format!(
+                "cat {}/\"$STORE_NAME\"-\"$KEY\".json 2>/dev/null || true",
+                base
+            ),
+            put: format!("echo \"$VALUE\" > {}/\"$STORE_NAME\"-\"$KEY\".json", base),
+            delete: format!("rm -f {}/\"$STORE_NAME\"-\"$KEY\".json", base),
+            list: "echo '[]'".to_string(),
+            prune: None,
+        };
+
+        let adapter = CommandAdapter;
+
+        // Put a value first
+        adapter
+            .execute(
+                &commands,
+                StoreOp::Put {
+                    store_name: "test".to_string(),
+                    project_id: "".to_string(),
+                    key: "k1".to_string(),
+                    value: r#"{"a":1}"#.to_string(),
+                    task_id: "t1".to_string(),
+                },
+            )
+            .await
+            .expect("put");
+
+        // Delete it
+        let result = adapter
+            .execute(
+                &commands,
+                StoreOp::Delete {
+                    store_name: "test".to_string(),
+                    project_id: "".to_string(),
+                    key: "k1".to_string(),
+                },
+            )
+            .await
+            .expect("delete");
+        assert!(matches!(result, StoreOpResult::Ok));
+
+        // Verify it's gone
+        let result = adapter
+            .execute(
+                &commands,
+                StoreOp::Get {
+                    store_name: "test".to_string(),
+                    project_id: "".to_string(),
+                    key: "k1".to_string(),
+                },
+            )
+            .await
+            .expect("get after delete");
+        assert!(matches!(result, StoreOpResult::Value(None)));
+    }
+
+    #[tokio::test]
+    async fn command_adapter_list_empty() {
+        let commands = StoreBackendCommands {
+            get: "true".to_string(),
+            put: "true".to_string(),
+            delete: "true".to_string(),
+            list: "echo '[]'".to_string(),
+            prune: None,
+        };
+
+        let adapter = CommandAdapter;
+        let result = adapter
+            .execute(
+                &commands,
+                StoreOp::List {
+                    store_name: "s".to_string(),
+                    project_id: "p".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .expect("list");
+        match result {
+            StoreOpResult::Entries(entries) => assert!(entries.is_empty()),
+            other => panic!("expected Entries([]), got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn command_adapter_list_with_entries() {
+        let json = r#"[{"key":"k1","value":{"x":1},"updated_at":"2025-01-01T00:00:00Z"},{"key":"k2","value":"hello","updated_at":"2025-01-02T00:00:00Z"}]"#;
+        let commands = StoreBackendCommands {
+            get: "true".to_string(),
+            put: "true".to_string(),
+            delete: "true".to_string(),
+            list: format!("echo '{}'", json),
+            prune: None,
+        };
+
+        let adapter = CommandAdapter;
+        let result = adapter
+            .execute(
+                &commands,
+                StoreOp::List {
+                    store_name: "s".to_string(),
+                    project_id: "p".to_string(),
+                    limit: 50,
+                    offset: 0,
+                },
+            )
+            .await
+            .expect("list");
+        match result {
+            StoreOpResult::Entries(entries) => {
+                assert_eq!(entries.len(), 2);
+                assert_eq!(entries[0].key, "k1");
+                assert_eq!(entries[0].value, serde_json::json!({"x": 1}));
+                assert_eq!(entries[0].updated_at, "2025-01-01T00:00:00Z");
+                assert_eq!(entries[1].key, "k2");
+                assert_eq!(entries[1].value, serde_json::json!("hello"));
+            }
+            other => panic!("expected Entries, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn command_adapter_prune_supported() {
+        let commands = StoreBackendCommands {
+            get: "true".to_string(),
+            put: "true".to_string(),
+            delete: "true".to_string(),
+            list: "echo '[]'".to_string(),
+            prune: Some("true".to_string()),
+        };
+
+        let adapter = CommandAdapter;
+        let result = adapter
+            .execute(
+                &commands,
+                StoreOp::Prune {
+                    store_name: "s".to_string(),
+                    project_id: "p".to_string(),
+                    max_entries: None,
+                    ttl_days: None,
+                },
+            )
+            .await
+            .expect("prune");
+        assert!(matches!(result, StoreOpResult::Ok));
+    }
+
+    #[tokio::test]
+    async fn command_adapter_prune_with_env_vars() {
+        // The prune command echoes env vars to stderr (ignored) and exits 0.
+        // We verify the adapter passes MAX_ENTRIES and TTL_DAYS correctly.
+        let commands = StoreBackendCommands {
+            get: "true".to_string(),
+            put: "true".to_string(),
+            delete: "true".to_string(),
+            list: "echo '[]'".to_string(),
+            prune: Some(
+                "test \"$MAX_ENTRIES\" = \"100\" && test \"$TTL_DAYS\" = \"30\"".to_string(),
+            ),
+        };
+
+        let adapter = CommandAdapter;
+        let result = adapter
+            .execute(
+                &commands,
+                StoreOp::Prune {
+                    store_name: "s".to_string(),
+                    project_id: "p".to_string(),
+                    max_entries: Some(100),
+                    ttl_days: Some(30),
+                },
+            )
+            .await
+            .expect("prune with env vars");
+        assert!(matches!(result, StoreOpResult::Ok));
+    }
+
+    #[tokio::test]
+    async fn command_adapter_failed_command() {
+        let commands = StoreBackendCommands {
+            get: "echo 'something went wrong' >&2; exit 1".to_string(),
+            put: "true".to_string(),
+            delete: "true".to_string(),
+            list: "echo '[]'".to_string(),
+            prune: None,
+        };
+
+        let adapter = CommandAdapter;
+        let result = adapter
+            .execute(
+                &commands,
+                StoreOp::Get {
+                    store_name: "s".to_string(),
+                    project_id: "".to_string(),
+                    key: "k".to_string(),
+                },
+            )
+            .await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("provider command failed"));
+        assert!(err_msg.contains("something went wrong"));
+    }
+
+    #[tokio::test]
+    async fn command_adapter_list_with_limit_offset() {
+        // Verify LIMIT and OFFSET env vars are set by using them in the command
+        let commands = StoreBackendCommands {
+            get: "true".to_string(),
+            put: "true".to_string(),
+            delete: "true".to_string(),
+            list: "test \"$LIMIT\" = \"5\" && test \"$OFFSET\" = \"10\" && echo '[]'"
+                .to_string(),
+            prune: None,
+        };
+
+        let adapter = CommandAdapter;
+        let result = adapter
+            .execute(
+                &commands,
+                StoreOp::List {
+                    store_name: "s".to_string(),
+                    project_id: "p".to_string(),
+                    limit: 5,
+                    offset: 10,
+                },
+            )
+            .await
+            .expect("list with limit/offset");
+        match result {
+            StoreOpResult::Entries(entries) => assert!(entries.is_empty()),
+            other => panic!("expected Entries([]), got {:?}", other),
+        }
+    }
 }

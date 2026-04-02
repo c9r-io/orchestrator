@@ -2705,6 +2705,320 @@ fn test_build_finalize_cel_context_default_qa_observed_variables() {
     assert!(result.unwrap());
 }
 
+// ========================================================================
+// Vars type inference paths — comprehensive coverage for context.rs
+// ========================================================================
+
+#[test]
+fn test_vars_i64_inference() {
+    let mut ctx = default_step_prehook_context();
+    ctx.vars.insert("count".into(), "42".into());
+    let result = evaluate_step_prehook_expression("count == 42", &ctx);
+    assert!(result.unwrap(), "i64 var should be injected as integer");
+}
+
+#[test]
+fn test_vars_f64_inference() {
+    let mut ctx = default_step_prehook_context();
+    ctx.vars.insert("ratio".into(), "3.14".into());
+    let result = evaluate_step_prehook_expression("ratio > 3.0", &ctx);
+    assert!(result.unwrap(), "f64 var should be injected as double");
+}
+
+#[test]
+fn test_vars_bool_inference() {
+    let mut ctx = default_step_prehook_context();
+    ctx.vars.insert("flag".into(), "true".into());
+    let result = evaluate_step_prehook_expression("flag == true", &ctx);
+    assert!(result.unwrap(), "bool var should be injected as boolean");
+}
+
+#[test]
+fn test_vars_bool_false_inference() {
+    let mut ctx = default_step_prehook_context();
+    ctx.vars.insert("flag".into(), "false".into());
+    let result = evaluate_step_prehook_expression("flag == false", &ctx);
+    assert!(result.unwrap(), "false bool var should be injected as boolean");
+}
+
+#[test]
+fn test_vars_string_inference() {
+    let mut ctx = default_step_prehook_context();
+    ctx.vars.insert("name".into(), "hello".into());
+    let result = evaluate_step_prehook_expression("name == \"hello\"", &ctx);
+    assert!(result.unwrap(), "string var should be injected as string");
+}
+
+#[test]
+fn test_vars_json_array_size() {
+    let mut ctx = default_step_prehook_context();
+    ctx.vars.insert("tags".into(), r#"["a","b"]"#.into());
+    let result = evaluate_step_prehook_expression("size(tags) == 2", &ctx);
+    assert!(result.unwrap(), "JSON array var should be a list with size 2");
+}
+
+#[test]
+fn test_vars_json_array_contains() {
+    let mut ctx = default_step_prehook_context();
+    ctx.vars.insert("tags".into(), r#"["a","b","c"]"#.into());
+    let result = evaluate_step_prehook_expression("\"b\" in tags", &ctx);
+    assert!(result.unwrap(), "JSON array var should support 'in' operator");
+}
+
+#[test]
+fn test_vars_truncated_skipped_is_absent() {
+    let mut ctx = default_step_prehook_context();
+    ctx.vars
+        .insert("big".into(), "data [truncated at limit]".into());
+    // Truncated var should not be in CEL context — referencing it should error
+    let result = evaluate_step_prehook_expression("big == \"anything\"", &ctx);
+    assert!(result.is_err(), "truncated var should not be in CEL context");
+}
+
+#[test]
+fn test_vars_negative_integer() {
+    let mut ctx = default_step_prehook_context();
+    ctx.vars.insert("offset".into(), "-5".into());
+    let result = evaluate_step_prehook_expression("offset == -5", &ctx);
+    assert!(result.unwrap(), "negative i64 var should work");
+}
+
+#[test]
+fn test_vars_negative_float() {
+    let mut ctx = default_step_prehook_context();
+    ctx.vars.insert("temp".into(), "-2.5".into());
+    let result = evaluate_step_prehook_expression("temp < 0.0", &ctx);
+    assert!(result.unwrap(), "negative f64 var should work");
+}
+
+#[test]
+fn test_vars_zero_integer() {
+    let mut ctx = default_step_prehook_context();
+    ctx.vars.insert("zero".into(), "0".into());
+    let result = evaluate_step_prehook_expression("zero == 0", &ctx);
+    assert!(result.unwrap(), "zero i64 var should work");
+}
+
+#[test]
+fn test_vars_empty_json_array() {
+    let mut ctx = default_step_prehook_context();
+    ctx.vars.insert("empty_list".into(), "[]".into());
+    let result = evaluate_step_prehook_expression("size(empty_list) == 0", &ctx);
+    assert!(result.unwrap(), "empty JSON array should have size 0");
+}
+
+#[test]
+fn test_vars_multiple_types_combined() {
+    let mut ctx = default_step_prehook_context();
+    ctx.vars.insert("count".into(), "42".into());
+    ctx.vars.insert("ratio".into(), "3.14".into());
+    ctx.vars.insert("enabled".into(), "true".into());
+    ctx.vars.insert("label".into(), "prod".into());
+    ctx.vars
+        .insert("items".into(), r#"["x","y"]"#.into());
+    let result = evaluate_step_prehook_expression(
+        "count > 10 && ratio > 3.0 && enabled && label == \"prod\" && size(items) == 2",
+        &ctx,
+    );
+    assert!(
+        result.unwrap(),
+        "multiple vars of different types should all be accessible"
+    );
+}
+
+// ========================================================================
+// Non-default StepPrehookContext field values — coverage for context.rs
+// ========================================================================
+
+#[test]
+fn test_step_prehook_non_default_cycle_and_max_cycles() {
+    let ctx = StepPrehookContext {
+        cycle: 5,
+        max_cycles: 10,
+        is_last_cycle: true,
+        ..default_step_prehook_context()
+    };
+    let result =
+        evaluate_step_prehook_expression("cycle == 5 && max_cycles == 10 && is_last_cycle", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_step_prehook_non_default_exit_codes() {
+    let ctx = StepPrehookContext {
+        qa_exit_code: Some(1),
+        fix_exit_code: Some(0),
+        ..default_step_prehook_context()
+    };
+    let result =
+        evaluate_step_prehook_expression("qa_exit_code == 1 && fix_exit_code == 0", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_step_prehook_non_default_error_counts() {
+    let ctx = StepPrehookContext {
+        build_error_count: 3,
+        test_failure_count: 2,
+        ..default_step_prehook_context()
+    };
+    let result =
+        evaluate_step_prehook_expression("build_errors == 3 && test_failures == 2", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_step_prehook_self_referential_safe_false_with_scenarios() {
+    let ctx = StepPrehookContext {
+        self_referential_safe: false,
+        self_referential_safe_scenarios: vec!["s1".into(), "s2".into()],
+        ..default_step_prehook_context()
+    };
+    let result = evaluate_step_prehook_expression(
+        "!self_referential_safe && size(self_referential_safe_scenarios) == 2",
+        &ctx,
+    );
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_step_prehook_combined_non_default_fields() {
+    let ctx = StepPrehookContext {
+        cycle: 5,
+        max_cycles: 10,
+        is_last_cycle: true,
+        qa_exit_code: Some(1),
+        fix_exit_code: Some(0),
+        build_error_count: 3,
+        test_failure_count: 2,
+        self_referential_safe: false,
+        self_referential_safe_scenarios: vec!["s1".into()],
+        ..default_step_prehook_context()
+    };
+    let result = evaluate_step_prehook_expression(
+        "cycle == 5 && max_cycles == 10 && is_last_cycle && qa_exit_code == 1 && fix_exit_code == 0 && build_errors == 3 && test_failures == 2 && !self_referential_safe && size(self_referential_safe_scenarios) == 1",
+        &ctx,
+    );
+    assert!(result.unwrap());
+}
+
+// ========================================================================
+// build_finalize_cel_context: non-default field combinations
+// ========================================================================
+
+#[test]
+fn test_finalize_context_qa_ran_fix_success_true() {
+    let ctx = ItemFinalizeContext {
+        qa_ran: true,
+        qa_failed: true,
+        fix_ran: true,
+        fix_success: true,
+        ..default_item_finalize_context()
+    };
+    let rule = make_rule(
+        "r1",
+        "qa_ran && qa_failed && fix_ran && fix_success",
+        "fixed",
+        None,
+    );
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_context_optional_confidence_scores() {
+    let ctx = ItemFinalizeContext {
+        qa_confidence: Some(0.95),
+        qa_quality_score: Some(0.88),
+        fix_confidence: Some(0.75),
+        fix_quality_score: Some(0.60),
+        ..default_item_finalize_context()
+    };
+    let rule = make_rule(
+        "r1",
+        "qa_confidence > 0.9 && qa_quality_score > 0.8 && fix_confidence > 0.7 && fix_quality_score > 0.5",
+        "high_quality",
+        None,
+    );
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_context_none_confidence_is_null() {
+    let ctx = ItemFinalizeContext {
+        qa_confidence: None,
+        fix_confidence: None,
+        ..default_item_finalize_context()
+    };
+    let rule = make_rule(
+        "r1",
+        "qa_confidence == null && fix_confidence == null",
+        "no_scores",
+        None,
+    );
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_context_sandbox_denial_with_reason() {
+    let ctx = ItemFinalizeContext {
+        last_sandbox_denied: true,
+        sandbox_denied_count: 5,
+        last_sandbox_denial_reason: Some("network access".to_string()),
+        ..default_item_finalize_context()
+    };
+    let rule = make_rule(
+        "r1",
+        "last_sandbox_denied && sandbox_denied_count == 5 && last_sandbox_denial_reason == 'network access'",
+        "blocked",
+        None,
+    );
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_context_artifact_fields_nonzero() {
+    let ctx = ItemFinalizeContext {
+        total_artifacts: 10,
+        has_ticket_artifacts: true,
+        has_code_change_artifacts: true,
+        ..default_item_finalize_context()
+    };
+    let rule = make_rule(
+        "r1",
+        "total_artifacts == 10 && has_ticket_artifacts && has_code_change_artifacts",
+        "rich",
+        None,
+    );
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_context_combined_non_default() {
+    let ctx = ItemFinalizeContext {
+        cycle: 3,
+        is_last_cycle: true,
+        qa_ran: true,
+        qa_failed: false,
+        fix_ran: false,
+        fix_success: false,
+        retest_ran: false,
+        retest_success: false,
+        qa_confidence: Some(0.99),
+        fix_quality_score: Some(0.5),
+        total_artifacts: 2,
+        has_ticket_artifacts: false,
+        has_code_change_artifacts: true,
+        ..default_item_finalize_context()
+    };
+    let rule = make_rule(
+        "r1",
+        "cycle == 3 && is_last_cycle && qa_ran && !qa_failed && qa_confidence > 0.9 && has_code_change_artifacts",
+        "done",
+        None,
+    );
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
 #[test]
 fn test_build_finalize_cel_context_sandbox_variables() {
     let context = ItemFinalizeContext {
