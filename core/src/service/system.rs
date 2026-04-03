@@ -324,7 +324,9 @@ pub fn validate_manifests(
                 );
             }
             ParsedManifest::Crd(crd_manifest) => {
-                if let Err(error) = crd::apply_crd(&mut merged_config, crd_manifest, &state.plugin_policy) {
+                if let Err(error) =
+                    crd::apply_crd(&mut merged_config, crd_manifest, &state.plugin_policy)
+                {
                     let message = format!("document {}: {}", index + 1, error);
                     diagnostics.push(diagnostic_entry_from_error(
                         "crd_apply_failed",

@@ -111,7 +111,11 @@ pub fn validate_crd_definition(
                     ));
                 }
                 if let PluginPolicyVerdict::AuditWarning { ref reason } = verdict {
-                    tracing::warn!(hook = label, reason = reason.as_str(), "plugin policy audit warning for hook");
+                    tracing::warn!(
+                        hook = label,
+                        reason = reason.as_str(),
+                        "plugin policy audit warning for hook"
+                    );
                 }
             }
         }
@@ -133,10 +137,7 @@ fn validate_crd_plugins(
     for plugin in plugins {
         // Plugin names must be unique within a CRD
         if !names.insert(&plugin.name) {
-            return Err(anyhow!(
-                "duplicate plugin name '{}' in CRD",
-                plugin.name
-            ));
+            return Err(anyhow!("duplicate plugin name '{}' in CRD", plugin.name));
         }
 
         // Plugin name must not be empty
@@ -156,10 +157,7 @@ fn validate_crd_plugins(
 
         // Command must not be empty
         if plugin.command.trim().is_empty() {
-            return Err(anyhow!(
-                "plugin '{}' command cannot be empty",
-                plugin.name
-            ));
+            return Err(anyhow!("plugin '{}' command cannot be empty", plugin.name));
         }
 
         // interceptor/transformer require a phase
@@ -177,10 +175,7 @@ fn validate_crd_plugins(
         if plugin.plugin_type == "cron" {
             let schedule = plugin.schedule.as_deref().unwrap_or("");
             if schedule.trim().is_empty() {
-                return Err(anyhow!(
-                    "cron plugin '{}' requires a schedule",
-                    plugin.name
-                ));
+                return Err(anyhow!("cron plugin '{}' requires a schedule", plugin.name));
             }
             // Validate cron expression
             use cron::Schedule;
@@ -616,7 +611,12 @@ mod tests {
 
     // ── Plugin validation tests ─────────────────────────────────────────
 
-    fn make_plugin(name: &str, ptype: &str, phase: Option<&str>, cmd: &str) -> crate::crd::types::CrdPlugin {
+    fn make_plugin(
+        name: &str,
+        ptype: &str,
+        phase: Option<&str>,
+        cmd: &str,
+    ) -> crate::crd::types::CrdPlugin {
         crate::crd::types::CrdPlugin {
             name: name.to_string(),
             plugin_type: ptype.to_string(),
@@ -669,7 +669,12 @@ mod tests {
 
     #[test]
     fn validate_plugins_rejects_empty_command() {
-        let plugins = vec![make_plugin("x", "interceptor", Some("webhook.authenticate"), "  ")];
+        let plugins = vec![make_plugin(
+            "x",
+            "interceptor",
+            Some("webhook.authenticate"),
+            "  ",
+        )];
         let err = validate_crd_plugins(&plugins, &audit_policy()).unwrap_err();
         assert!(err.to_string().contains("command cannot be empty"));
     }
@@ -679,8 +684,18 @@ mod tests {
         let mut cron = make_plugin("daily", "cron", None, "scripts/rotate.sh");
         cron.schedule = Some("0 0 * * * *".to_string());
         let plugins = vec![
-            make_plugin("auth", "interceptor", Some("webhook.authenticate"), "scripts/verify.sh"),
-            make_plugin("transform", "transformer", Some("webhook.transform"), "scripts/norm.sh"),
+            make_plugin(
+                "auth",
+                "interceptor",
+                Some("webhook.authenticate"),
+                "scripts/verify.sh",
+            ),
+            make_plugin(
+                "transform",
+                "transformer",
+                Some("webhook.transform"),
+                "scripts/norm.sh",
+            ),
             cron,
         ];
         assert!(validate_crd_plugins(&plugins, &audit_policy()).is_ok());
@@ -715,7 +730,12 @@ mod tests {
         let mut cron = make_plugin("rotate", "cron", None, "scripts/rotate.sh");
         cron.schedule = Some("0 0 * * * *".into());
         let plugins = vec![
-            make_plugin("auth", "interceptor", Some("webhook.authenticate"), "scripts/verify.sh"),
+            make_plugin(
+                "auth",
+                "interceptor",
+                Some("webhook.authenticate"),
+                "scripts/verify.sh",
+            ),
             cron,
         ];
         assert!(validate_crd_plugins(&plugins, &policy).is_ok());
@@ -762,7 +782,12 @@ mod tests {
             allowed_command_prefixes: vec!["scripts/".into()],
             ..Default::default()
         };
-        let mut plugin = make_plugin("slow", "interceptor", Some("webhook.authenticate"), "scripts/slow.sh");
+        let mut plugin = make_plugin(
+            "slow",
+            "interceptor",
+            Some("webhook.authenticate"),
+            "scripts/slow.sh",
+        );
         plugin.timeout = Some(60);
         let err = validate_crd_plugins(&[plugin], &policy).unwrap_err();
         assert!(err.to_string().contains("exceeds policy maximum"));
@@ -806,6 +831,9 @@ mod tests {
             "scripts/verify.sh",
         )];
         let err = validate_crd_plugins(&plugins, &policy).unwrap_err();
-        assert!(err.to_string().contains("does not match any allowed prefix"));
+        assert!(
+            err.to_string()
+                .contains("does not match any allowed prefix")
+        );
     }
 }

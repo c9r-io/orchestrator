@@ -46,10 +46,7 @@ pub fn execute_interceptor(
         .env("WEBHOOK_BODY", body);
 
     for (key, value) in headers {
-        let env_key = format!(
-            "WEBHOOK_HEADER_{}",
-            key.to_uppercase().replace('-', "_")
-        );
+        let env_key = format!("WEBHOOK_HEADER_{}", key.to_uppercase().replace('-', "_"));
         cmd.env(env_key, value);
     }
 
@@ -154,7 +151,11 @@ pub fn execute_transformer(
 ///
 /// The plugin receives env: `PLUGIN_NAME`, `PLUGIN_TYPE`, `CRD_KIND`.
 /// Returns Ok(()) on success, Err on failure (caller should log, not abort).
-pub fn execute_cron_plugin(plugin: &CrdPlugin, crd_kind: &str, db_path: Option<&Path>) -> Result<()> {
+pub fn execute_cron_plugin(
+    plugin: &CrdPlugin,
+    crd_kind: &str,
+    db_path: Option<&Path>,
+) -> Result<()> {
     audit_plugin_execution(db_path, "plugin_execute", crd_kind, plugin);
     let timeout = Duration::from_secs(plugin.effective_timeout());
 
@@ -206,7 +207,12 @@ pub fn cron_plugins(plugins: &[CrdPlugin]) -> Vec<&CrdPlugin> {
 
 // --- audit helper ---
 
-fn audit_plugin_execution(db_path: Option<&Path>, action: &str, crd_kind: &str, plugin: &CrdPlugin) {
+fn audit_plugin_execution(
+    db_path: Option<&Path>,
+    action: &str,
+    crd_kind: &str,
+    plugin: &CrdPlugin,
+) {
     if let Some(path) = db_path {
         let _ = crate::db::insert_plugin_audit(
             path,
@@ -303,7 +309,12 @@ mod tests {
 
     #[test]
     fn interceptor_rejects_on_exit_nonzero() {
-        let plugin = make_plugin("test", "interceptor", Some("webhook.authenticate"), "exit 1");
+        let plugin = make_plugin(
+            "test",
+            "interceptor",
+            Some("webhook.authenticate"),
+            "exit 1",
+        );
         let headers = HashMap::new();
         let err = execute_interceptor(&plugin, "Foo", &headers, "{}", None).unwrap_err();
         assert!(err.to_string().contains("rejected request"));

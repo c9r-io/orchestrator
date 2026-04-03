@@ -96,8 +96,7 @@ fn do_webhook(
         });
     let has_crd_interceptor = crd_plugins.as_ref().is_some_and(|ps| {
         ps.iter().any(|p| {
-            p.phase.as_deref()
-                == Some(agent_orchestrator::crd::plugins::PHASE_WEBHOOK_AUTHENTICATE)
+            p.phase.as_deref() == Some(agent_orchestrator::crd::plugins::PHASE_WEBHOOK_AUTHENTICATE)
         })
     });
 
@@ -115,15 +114,13 @@ fn do_webhook(
         let header_map = extract_headers_map(&headers);
         let body_str = String::from_utf8_lossy(&body);
         for plugin in auth_plugins {
-            if let Err(e) =
-                agent_orchestrator::crd::plugins::execute_interceptor(
-                    plugin,
-                    crd_kind,
-                    &header_map,
-                    &body_str,
-                    Some(&state.inner.db_path),
-                )
-            {
+            if let Err(e) = agent_orchestrator::crd::plugins::execute_interceptor(
+                plugin,
+                crd_kind,
+                &header_map,
+                &body_str,
+                Some(&state.inner.db_path),
+            ) {
                 warn!(
                     trigger = trigger_name.as_str(),
                     plugin = plugin.name.as_str(),
@@ -191,7 +188,10 @@ fn do_webhook(
         );
         for plugin in transform_plugins {
             match agent_orchestrator::crd::plugins::execute_transformer(
-                plugin, crd_kind, &payload, Some(&state.inner.db_path),
+                plugin,
+                crd_kind,
+                &payload,
+                Some(&state.inner.db_path),
             ) {
                 Ok(transformed) => {
                     info!(
@@ -264,7 +264,11 @@ fn do_webhook(
 fn extract_headers_map(headers: &HeaderMap) -> std::collections::HashMap<String, String> {
     headers
         .iter()
-        .filter_map(|(k, v)| v.to_str().ok().map(|val| (k.as_str().to_string(), val.to_string())))
+        .filter_map(|(k, v)| {
+            v.to_str()
+                .ok()
+                .map(|val| (k.as_str().to_string(), val.to_string()))
+        })
         .collect()
 }
 

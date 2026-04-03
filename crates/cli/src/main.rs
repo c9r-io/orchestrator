@@ -20,8 +20,7 @@ use clap::Parser;
 pub use cli::{
     AgentCommands, Cli, Commands, DaemonCommands, DbCommands, DbMigrationCommands, DebugCommands,
     EventCommands, ManifestCommands, OutputFormat, QaCommands, SandboxProbeCommands,
-    SecretCommands, SecretKeyCommands, StoreCommands, TaskCommands, ToolCommands,
-    TriggerCommands,
+    SecretCommands, SecretKeyCommands, StoreCommands, TaskCommands, ToolCommands, TriggerCommands,
 };
 
 fn main() -> Result<()> {

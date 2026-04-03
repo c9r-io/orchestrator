@@ -24,8 +24,14 @@ pub async fn dispatch(cmd: ToolCommands, control_plane_config: Option<&str>) -> 
             value,
             project,
         } => {
-            secret_rotate_cmd(control_plane_config, &store, &key, &value, project.as_deref())
-                .await
+            secret_rotate_cmd(
+                control_plane_config,
+                &store,
+                &key,
+                &value,
+                project.as_deref(),
+            )
+            .await
         }
     }
 }
@@ -39,8 +45,7 @@ fn verify_hmac_cmd(algo: &str, secret: &str, body: &str, signature: &str) -> Res
     }
 
     let hex_sig = signature.strip_prefix("sha256=").unwrap_or(signature);
-    let expected =
-        hex::decode(hex_sig).map_err(|e| anyhow!("invalid signature hex: {}", e))?;
+    let expected = hex::decode(hex_sig).map_err(|e| anyhow!("invalid signature hex: {}", e))?;
 
     let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
         .map_err(|e| anyhow!("invalid secret: {}", e))?;
@@ -111,8 +116,7 @@ async fn secret_rotate_cmd(
 
     // Parse the existing manifest, update the target key
     let mut manifest: serde_yaml::Value =
-        serde_yaml::from_str(&resp.content)
-            .map_err(|e| anyhow!("failed to parse store: {}", e))?;
+        serde_yaml::from_str(&resp.content).map_err(|e| anyhow!("failed to parse store: {}", e))?;
 
     // Navigate to spec.data and set the key
     let data = manifest
@@ -120,8 +124,7 @@ async fn secret_rotate_cmd(
         .and_then(|s| s.get_mut("data"))
         .ok_or_else(|| anyhow!("SecretStore '{}' has no spec.data", store))?;
 
-    data[serde_yaml::Value::String(key.to_string())] =
-        serde_yaml::Value::String(value.to_string());
+    data[serde_yaml::Value::String(key.to_string())] = serde_yaml::Value::String(value.to_string());
 
     // Re-apply via gRPC
     let yaml_content = serde_yaml::to_string(&manifest)?;

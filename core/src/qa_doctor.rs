@@ -95,8 +95,20 @@ mod tests {
         let mut ts = TestState::new();
         let state = ts.build();
 
-        insert_metric(&state.async_database, "t1", "completed", "2024-01-01T00:00:00").await;
-        insert_metric(&state.async_database, "t2", "completed", "2024-01-01T00:00:00").await;
+        insert_metric(
+            &state.async_database,
+            "t1",
+            "completed",
+            "2024-01-01T00:00:00",
+        )
+        .await;
+        insert_metric(
+            &state.async_database,
+            "t2",
+            "completed",
+            "2024-01-01T00:00:00",
+        )
+        .await;
         insert_metric(&state.async_database, "t3", "failed", "2024-01-01T00:00:00").await;
 
         let stats = qa_doctor_stats(&state.async_database).await.unwrap();
@@ -111,7 +123,13 @@ mod tests {
         let state = ts.build();
 
         // Old row — outside 24h window
-        insert_metric(&state.async_database, "old", "completed", "2020-01-01T00:00:00").await;
+        insert_metric(
+            &state.async_database,
+            "old",
+            "completed",
+            "2020-01-01T00:00:00",
+        )
+        .await;
         // Recent row — use datetime('now') via a direct insert
         state
             .async_database

@@ -581,13 +581,7 @@ mod tests {
 
         // Running task — not terminal, so nothing to archive
         insert_task(&state.async_database, "t-run", "running").await;
-        insert_event(
-            &state.async_database,
-            "t-run",
-            "e1",
-            "2020-01-01T00:00:00",
-        )
-        .await;
+        insert_event(&state.async_database, "t-run", "e1", "2020-01-01T00:00:00").await;
 
         let archived = archive_events(&state.async_database, &archive_dir, 1, 1000)
             .await
@@ -666,13 +660,7 @@ mod tests {
 
         // Add a running task with old events — still zero eligible
         insert_task(&state.async_database, "t-run", "running").await;
-        insert_event(
-            &state.async_database,
-            "t-run",
-            "e1",
-            "2020-01-01T00:00:00",
-        )
-        .await;
+        insert_event(&state.async_database, "t-run", "e1", "2020-01-01T00:00:00").await;
         let count = count_pending_cleanup(&state.async_database, 1)
             .await
             .unwrap();
@@ -790,10 +778,9 @@ mod tests {
         )
         .await;
 
-        let events =
-            list_task_events(&state.async_database, "t-filter", Some("step"), 50)
-                .await
-                .unwrap();
+        let events = list_task_events(&state.async_database, "t-filter", Some("step"), 50)
+            .await
+            .unwrap();
         assert_eq!(events.len(), 2);
         assert!(events.iter().all(|e| e.event_type.starts_with("step")));
     }

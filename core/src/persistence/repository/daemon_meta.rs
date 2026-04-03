@@ -46,6 +46,9 @@ mod tests {
         let state = ts.build();
         let first = increment_incarnation(&state.async_database).await.unwrap();
         let second = increment_incarnation(&state.async_database).await.unwrap();
-        assert!(second > first, "second ({second}) should be greater than first ({first})");
+        assert!(
+            second > first,
+            "second ({second}) should be greater than first ({first})"
+        );
     }
 }

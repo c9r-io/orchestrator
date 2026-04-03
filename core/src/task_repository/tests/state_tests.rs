@@ -1091,8 +1091,7 @@ fn pause_restart_pending_does_not_affect_running_tasks() {
     )
     .expect("mark item running");
 
-    let count = state::pause_restart_pending_tasks_and_items(&conn)
-        .expect("pause should succeed");
+    let count = state::pause_restart_pending_tasks_and_items(&conn).expect("pause should succeed");
     assert_eq!(count, 0, "should not reset items for running tasks");
 
     // Task should remain running
@@ -1123,8 +1122,7 @@ fn pause_restart_pending_returns_zero_when_no_restart_pending_tasks() {
     let conn = open_conn(&state.db_path).expect("open sqlite");
 
     // Default task is pending — no restart_pending tasks exist
-    let count = state::pause_restart_pending_tasks_and_items(&conn)
-        .expect("pause should succeed");
+    let count = state::pause_restart_pending_tasks_and_items(&conn).expect("pause should succeed");
     assert_eq!(count, 0);
 }
 
@@ -1270,7 +1268,10 @@ fn set_task_status_completed_with_set_completed_sets_started_at_when_null() {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .expect("query task");
-    assert!(started_at.is_some(), "started_at should be set via COALESCE");
+    assert!(
+        started_at.is_some(),
+        "started_at should be set via COALESCE"
+    );
     assert!(completed_at.is_some(), "completed_at should be set");
 }
 

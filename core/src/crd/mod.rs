@@ -246,7 +246,8 @@ mod tests {
     #[test]
     fn apply_crd_creates() {
         let mut config = OrchestratorConfig::default();
-        let result = apply_crd(&mut config, make_crd_manifest(), &audit_policy()).expect("apply should succeed");
+        let result = apply_crd(&mut config, make_crd_manifest(), &audit_policy())
+            .expect("apply should succeed");
         assert_eq!(result, ApplyResult::Created);
         assert!(config.custom_resource_definitions.contains_key("Foo"));
     }
@@ -255,7 +256,8 @@ mod tests {
     fn apply_crd_unchanged() {
         let mut config = OrchestratorConfig::default();
         apply_crd(&mut config, make_crd_manifest(), &audit_policy()).expect("first apply");
-        let result = apply_crd(&mut config, make_crd_manifest(), &audit_policy()).expect("second apply");
+        let result =
+            apply_crd(&mut config, make_crd_manifest(), &audit_policy()).expect("second apply");
         assert_eq!(result, ApplyResult::Unchanged);
     }
 

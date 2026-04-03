@@ -34,17 +34,22 @@ pub(crate) async fn apply(
 fn manifests_contain_executable_commands(content: &str) -> bool {
     // Quick substring pre-filter to avoid full YAML parsing in the common case.
     let has_plugins = content.contains("plugins:");
-    let has_hooks = content.contains("on_create:") || content.contains("on_update:") || content.contains("on_delete:");
+    let has_hooks = content.contains("on_create:")
+        || content.contains("on_update:")
+        || content.contains("on_delete:");
     if !has_plugins && !has_hooks {
         return false;
     }
 
     // Parse YAML docs to confirm the presence is inside a CRD (kind: CustomResourceDefinition).
     for doc in content.split("\n---") {
-        if doc.contains("kind: CustomResourceDefinition") && (
-            (has_plugins && doc.contains("plugins:")) ||
-            (has_hooks && (doc.contains("on_create:") || doc.contains("on_update:") || doc.contains("on_delete:")))
-        ) {
+        if doc.contains("kind: CustomResourceDefinition")
+            && ((has_plugins && doc.contains("plugins:"))
+                || (has_hooks
+                    && (doc.contains("on_create:")
+                        || doc.contains("on_update:")
+                        || doc.contains("on_delete:"))))
+        {
             return true;
         }
     }

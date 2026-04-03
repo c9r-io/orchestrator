@@ -1208,7 +1208,10 @@ spec:
     for manifest in manifests {
         if let crd::ParsedManifest::Crd(crd_manifest) = manifest {
             let result = crd::apply_crd(&mut config, crd_manifest, &default_policy);
-            assert!(result.is_err(), "default policy should reject CRD with plugins");
+            assert!(
+                result.is_err(),
+                "default policy should reject CRD with plugins"
+            );
             let err_msg = result.unwrap_err().to_string();
             assert!(
                 err_msg.contains("does not match any allowed prefix"),
@@ -1255,11 +1258,17 @@ spec:
     for manifest in manifests {
         if let crd::ParsedManifest::Crd(crd_manifest) = manifest {
             let result = crd::apply_crd(&mut config, crd_manifest, &policy);
-            assert!(result.is_ok(), "allowlist policy should accept matching prefix: {:?}", result.err());
+            assert!(
+                result.is_ok(),
+                "allowlist policy should accept matching prefix: {:?}",
+                result.err()
+            );
         }
     }
     assert!(
-        config.custom_resource_definitions.contains_key("WebhookReceiver"),
+        config
+            .custom_resource_definitions
+            .contains_key("WebhookReceiver"),
         "CRD should be registered"
     );
 }
@@ -1345,10 +1354,18 @@ spec:
     for manifest in manifests {
         if let crd::ParsedManifest::Crd(crd_manifest) = manifest {
             let result = crd::apply_crd(&mut config, crd_manifest, &policy);
-            assert!(result.is_ok(), "CRD without plugins should always succeed: {:?}", result.err());
+            assert!(
+                result.is_ok(),
+                "CRD without plugins should always succeed: {:?}",
+                result.err()
+            );
         }
     }
-    assert!(config.custom_resource_definitions.contains_key("FeatureFlag"));
+    assert!(
+        config
+            .custom_resource_definitions
+            .contains_key("FeatureFlag")
+    );
 }
 
 #[test]
@@ -1384,7 +1401,10 @@ spec:
     for manifest in manifests {
         if let crd::ParsedManifest::Crd(crd_manifest) = manifest {
             let result = crd::apply_crd(&mut config, crd_manifest, &policy);
-            assert!(result.is_err(), "hook should be denied in Deny mode with enforce_on_hooks");
+            assert!(
+                result.is_err(),
+                "hook should be denied in Deny mode with enforce_on_hooks"
+            );
             assert!(result.unwrap_err().to_string().contains("hook"));
         }
     }
@@ -1439,23 +1459,40 @@ spec:
     // Quick substring detection (same logic as daemon's manifests_contain_executable_commands)
     fn has_executable_commands(content: &str) -> bool {
         let has_plugins = content.contains("plugins:");
-        let has_hooks = content.contains("on_create:") || content.contains("on_update:") || content.contains("on_delete:");
+        let has_hooks = content.contains("on_create:")
+            || content.contains("on_update:")
+            || content.contains("on_delete:");
         if !has_plugins && !has_hooks {
             return false;
         }
         for doc in content.split("\n---") {
-            if doc.contains("kind: CustomResourceDefinition") && (
-                (has_plugins && doc.contains("plugins:")) ||
-                (has_hooks && (doc.contains("on_create:") || doc.contains("on_update:") || doc.contains("on_delete:")))
-            ) {
+            if doc.contains("kind: CustomResourceDefinition")
+                && ((has_plugins && doc.contains("plugins:"))
+                    || (has_hooks
+                        && (doc.contains("on_create:")
+                            || doc.contains("on_update:")
+                            || doc.contains("on_delete:"))))
+            {
                 return true;
             }
         }
         false
     }
 
-    assert!(has_executable_commands(with_plugins), "CRD with plugins should trigger elevation");
-    assert!(!has_executable_commands(without_plugins), "CRD without plugins should not trigger");
-    assert!(has_executable_commands(with_hooks), "CRD with hooks should trigger elevation");
-    assert!(!has_executable_commands(non_crd), "Non-CRD with 'plugins:' keyword should not trigger");
+    assert!(
+        has_executable_commands(with_plugins),
+        "CRD with plugins should trigger elevation"
+    );
+    assert!(
+        !has_executable_commands(without_plugins),
+        "CRD without plugins should not trigger"
+    );
+    assert!(
+        has_executable_commands(with_hooks),
+        "CRD with hooks should trigger elevation"
+    );
+    assert!(
+        !has_executable_commands(non_crd),
+        "Non-CRD with 'plugins:' keyword should not trigger"
+    );
 }

@@ -1376,7 +1376,10 @@ spec:
         if let ResourceSpec::Trigger(spec) = &resource.spec {
             let webhook = spec.event.as_ref().unwrap().webhook.as_ref().unwrap();
             assert_eq!(webhook.crd_ref.as_deref(), Some("SlackIntegration"));
-            assert_eq!(webhook.signature_header.as_deref(), Some("X-Slack-Signature"));
+            assert_eq!(
+                webhook.signature_header.as_deref(),
+                Some("X-Slack-Signature")
+            );
         } else {
             panic!("Expected Trigger spec");
         }

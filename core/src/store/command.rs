@@ -492,8 +492,7 @@ mod tests {
             get: "true".to_string(),
             put: "true".to_string(),
             delete: "true".to_string(),
-            list: "test \"$LIMIT\" = \"5\" && test \"$OFFSET\" = \"10\" && echo '[]'"
-                .to_string(),
+            list: "test \"$LIMIT\" = \"5\" && test \"$OFFSET\" = \"10\" && echo '[]'".to_string(),
             prune: None,
         };
 

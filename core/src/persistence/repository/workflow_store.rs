@@ -252,7 +252,9 @@ mod tests {
         let mut ts = TestState::new();
         let state = ts.build();
         let repo = make_repo(&state);
-        repo.put(STORE, PROJECT, "k1", r#"{"v":1}"#, TASK).await.unwrap();
+        repo.put(STORE, PROJECT, "k1", r#"{"v":1}"#, TASK)
+            .await
+            .unwrap();
         let val = repo.get(STORE, PROJECT, "k1").await.unwrap();
         assert_eq!(val, Some(r#"{"v":1}"#.to_string()));
     }
@@ -283,13 +285,18 @@ mod tests {
     async fn set_updated_at(state: &Arc<crate::state::InnerState>, key: &str, offset: &str) {
         let k = key.to_string();
         let o = offset.to_string();
-        state.async_database.writer().call(move |conn| {
-            conn.execute(
+        state
+            .async_database
+            .writer()
+            .call(move |conn| {
+                conn.execute(
                 "UPDATE workflow_store_entries SET updated_at = datetime('now', ?1) WHERE key = ?2",
                 rusqlite::params![o, k],
             )?;
-            Ok(())
-        }).await.unwrap();
+                Ok(())
+            })
+            .await
+            .unwrap();
     }
 
     #[tokio::test]

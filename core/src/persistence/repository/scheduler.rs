@@ -105,7 +105,12 @@ mod tests {
     use crate::test_utils::TestState;
 
     /// Helper: insert a task row with a given status and created_at.
-    async fn insert_task_with_status(db: &AsyncDatabase, task_id: &str, status: &str, created_at: &str) {
+    async fn insert_task_with_status(
+        db: &AsyncDatabase,
+        task_id: &str,
+        status: &str,
+        created_at: &str,
+    ) {
         let id = task_id.to_owned();
         let st = status.to_owned();
         let ca = created_at.to_owned();
@@ -141,7 +146,13 @@ mod tests {
         let state = ts.build();
         let repo = SqliteSchedulerRepository::new(state.async_database.clone());
 
-        insert_task_with_status(&state.async_database, "task-1", "pending", "2024-06-01T00:00:00").await;
+        insert_task_with_status(
+            &state.async_database,
+            "task-1",
+            "pending",
+            "2024-06-01T00:00:00",
+        )
+        .await;
 
         let next = repo.next_pending_task_id().await.unwrap();
         assert_eq!(next.as_deref(), Some("task-1"));
@@ -153,7 +164,13 @@ mod tests {
         let state = ts.build();
         let repo = SqliteSchedulerRepository::new(state.async_database.clone());
 
-        insert_task_with_status(&state.async_database, "task-c", "pending", "2024-06-01T00:00:00").await;
+        insert_task_with_status(
+            &state.async_database,
+            "task-c",
+            "pending",
+            "2024-06-01T00:00:00",
+        )
+        .await;
 
         let claimed = repo.claim_next_pending_task().await.unwrap();
         assert_eq!(claimed.as_deref(), Some("task-c"));
@@ -170,8 +187,20 @@ mod tests {
         let repo = SqliteSchedulerRepository::new(state.async_database.clone());
 
         // Insert pending first (older), then restart_pending (newer).
-        insert_task_with_status(&state.async_database, "p-task", "pending", "2024-01-01T00:00:00").await;
-        insert_task_with_status(&state.async_database, "rp-task", "restart_pending", "2024-06-01T00:00:00").await;
+        insert_task_with_status(
+            &state.async_database,
+            "p-task",
+            "pending",
+            "2024-01-01T00:00:00",
+        )
+        .await;
+        insert_task_with_status(
+            &state.async_database,
+            "rp-task",
+            "restart_pending",
+            "2024-06-01T00:00:00",
+        )
+        .await;
 
         let claimed = repo.claim_next_pending_task().await.unwrap();
         assert_eq!(claimed.as_deref(), Some("rp-task"));

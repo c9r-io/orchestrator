@@ -510,10 +510,11 @@ mod tests {
         assert!(matches!(result, StoreOpResult::Ok));
 
         // Verify the file lands under the correct project directory.
-        let expected = temp
-            .path()
-            .join("data/stores/metrics/my-project/k1.json");
-        assert!(expected.exists(), "entry should exist at project-specific path");
+        let expected = temp.path().join("data/stores/metrics/my-project/k1.json");
+        assert!(
+            expected.exists(),
+            "entry should exist at project-specific path"
+        );
 
         // Confirm retrieval works with the same project_id.
         let result = backend
@@ -552,7 +553,10 @@ mod tests {
             .join("data/stores/s")
             .join(crate::config::DEFAULT_PROJECT_ID)
             .join("k1.json");
-        assert!(default_path.exists(), "empty project_id should map to DEFAULT_PROJECT_ID directory");
+        assert!(
+            default_path.exists(),
+            "empty project_id should map to DEFAULT_PROJECT_ID directory"
+        );
 
         // Put with explicit project_id — should use that path instead.
         backend
@@ -567,7 +571,10 @@ mod tests {
             .expect("put custom pid");
 
         let custom_path = temp.path().join("data/stores/s/custom/k1.json");
-        assert!(custom_path.exists(), "explicit project_id should use its own directory");
+        assert!(
+            custom_path.exists(),
+            "explicit project_id should use its own directory"
+        );
 
         // The two entries are isolated — listing empty pid should return only 1.
         let result = backend

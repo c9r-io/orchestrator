@@ -130,10 +130,7 @@ impl PluginPolicy {
         // 2. Check denied patterns (applies to both Allowlist and Audit)
         for pattern in self.effective_denied_patterns() {
             if trimmed.contains(pattern) {
-                let reason = format!(
-                    "command contains denied pattern '{}': {}",
-                    pattern, trimmed
-                );
+                let reason = format!("command contains denied pattern '{}': {}", pattern, trimmed);
                 return match self.mode {
                     PluginPolicyMode::Audit => PluginPolicyVerdict::AuditWarning { reason },
                     _ => PluginPolicyVerdict::Denied { reason },
@@ -149,10 +146,7 @@ impl PluginPolicy {
                 .any(|prefix| trimmed.starts_with(prefix.as_str()));
             if !allowed {
                 return PluginPolicyVerdict::Denied {
-                    reason: format!(
-                        "command '{}' does not match any allowed prefix",
-                        trimmed,
-                    ),
+                    reason: format!("command '{}' does not match any allowed prefix", trimmed,),
                 };
             }
         }
@@ -335,9 +329,17 @@ mod tests {
             ..Default::default()
         };
         // curl is no longer denied (builtins overridden)
-        assert!(!policy.evaluate_command("scripts/curl_wrapper.sh").is_denied());
+        assert!(
+            !policy
+                .evaluate_command("scripts/curl_wrapper.sh")
+                .is_denied()
+        );
         // custom pattern IS denied
-        assert!(policy.evaluate_command("scripts/DANGEROUS_thing.sh").is_denied());
+        assert!(
+            policy
+                .evaluate_command("scripts/DANGEROUS_thing.sh")
+                .is_denied()
+        );
     }
 
     #[test]

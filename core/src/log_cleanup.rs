@@ -345,8 +345,7 @@ mod tests {
 
         // Two top-level subdirectories removed + the task directory itself = 3.
         assert_eq!(result.dirs_removed, 3);
-        let expected_bytes =
-            file_a.len() as u64 + file_b.len() as u64 + file_deep.len() as u64;
+        let expected_bytes = file_a.len() as u64 + file_b.len() as u64 + file_deep.len() as u64;
         assert_eq!(result.bytes_freed, expected_bytes);
         assert!(!task_dir.exists());
     }

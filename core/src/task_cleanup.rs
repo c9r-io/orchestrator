@@ -282,6 +282,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(deleted, 1);
-        assert!(!task_log_dir.exists(), "task log directory should be removed after cleanup");
+        assert!(
+            !task_log_dir.exists(),
+            "task log directory should be removed after cleanup"
+        );
     }
 }

@@ -2802,7 +2802,10 @@ fn test_vars_bool_false_inference() {
     let mut ctx = default_step_prehook_context();
     ctx.vars.insert("flag".into(), "false".into());
     let result = evaluate_step_prehook_expression("flag == false", &ctx);
-    assert!(result.unwrap(), "false bool var should be injected as boolean");
+    assert!(
+        result.unwrap(),
+        "false bool var should be injected as boolean"
+    );
 }
 
 #[test]
@@ -2818,7 +2821,10 @@ fn test_vars_json_array_size() {
     let mut ctx = default_step_prehook_context();
     ctx.vars.insert("tags".into(), r#"["a","b"]"#.into());
     let result = evaluate_step_prehook_expression("size(tags) == 2", &ctx);
-    assert!(result.unwrap(), "JSON array var should be a list with size 2");
+    assert!(
+        result.unwrap(),
+        "JSON array var should be a list with size 2"
+    );
 }
 
 #[test]
@@ -2826,7 +2832,10 @@ fn test_vars_json_array_contains() {
     let mut ctx = default_step_prehook_context();
     ctx.vars.insert("tags".into(), r#"["a","b","c"]"#.into());
     let result = evaluate_step_prehook_expression("\"b\" in tags", &ctx);
-    assert!(result.unwrap(), "JSON array var should support 'in' operator");
+    assert!(
+        result.unwrap(),
+        "JSON array var should support 'in' operator"
+    );
 }
 
 #[test]
@@ -2836,7 +2845,10 @@ fn test_vars_truncated_skipped_is_absent() {
         .insert("big".into(), "data [truncated at limit]".into());
     // Truncated var should not be in CEL context — referencing it should error
     let result = evaluate_step_prehook_expression("big == \"anything\"", &ctx);
-    assert!(result.is_err(), "truncated var should not be in CEL context");
+    assert!(
+        result.is_err(),
+        "truncated var should not be in CEL context"
+    );
 }
 
 #[test]
@@ -2878,8 +2890,7 @@ fn test_vars_multiple_types_combined() {
     ctx.vars.insert("ratio".into(), "3.14".into());
     ctx.vars.insert("enabled".into(), "true".into());
     ctx.vars.insert("label".into(), "prod".into());
-    ctx.vars
-        .insert("items".into(), r#"["x","y"]"#.into());
+    ctx.vars.insert("items".into(), r#"["x","y"]"#.into());
     let result = evaluate_step_prehook_expression(
         "count > 10 && ratio > 3.0 && enabled && label == \"prod\" && size(items) == 2",
         &ctx,
@@ -2914,8 +2925,7 @@ fn test_step_prehook_non_default_exit_codes() {
         fix_exit_code: Some(0),
         ..default_step_prehook_context()
     };
-    let result =
-        evaluate_step_prehook_expression("qa_exit_code == 1 && fix_exit_code == 0", &ctx);
+    let result = evaluate_step_prehook_expression("qa_exit_code == 1 && fix_exit_code == 0", &ctx);
     assert!(result.unwrap());
 }
 
@@ -2926,8 +2936,7 @@ fn test_step_prehook_non_default_error_counts() {
         test_failure_count: 2,
         ..default_step_prehook_context()
     };
-    let result =
-        evaluate_step_prehook_expression("build_errors == 3 && test_failures == 2", &ctx);
+    let result = evaluate_step_prehook_expression("build_errors == 3 && test_failures == 2", &ctx);
     assert!(result.unwrap());
 }
 
@@ -3188,10 +3197,7 @@ fn test_convergence_expression_non_bool_result() {
     let context = ConvergenceContext::default();
     let result = evaluate_convergence_expression("cycle + 1", &context);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("must return bool"));
+    assert!(result.unwrap_err().to_string().contains("must return bool"));
 }
 
 // ── Convergence context: pipeline variable injection ──
@@ -3199,7 +3205,9 @@ fn test_convergence_expression_non_bool_result() {
 #[test]
 fn test_convergence_var_int() {
     let mut context = ConvergenceContext::default();
-    context.vars.insert("retry_limit".to_string(), "5".to_string());
+    context
+        .vars
+        .insert("retry_limit".to_string(), "5".to_string());
     let result = evaluate_convergence_expression("retry_limit > 3", &context);
     assert!(result.is_ok());
     assert!(result.unwrap());
@@ -3208,7 +3216,9 @@ fn test_convergence_var_int() {
 #[test]
 fn test_convergence_var_float() {
     let mut context = ConvergenceContext::default();
-    context.vars.insert("threshold".to_string(), "0.75".to_string());
+    context
+        .vars
+        .insert("threshold".to_string(), "0.75".to_string());
     let result = evaluate_convergence_expression("threshold > 0.5", &context);
     assert!(result.is_ok());
     assert!(result.unwrap());
@@ -3217,7 +3227,9 @@ fn test_convergence_var_float() {
 #[test]
 fn test_convergence_var_bool() {
     let mut context = ConvergenceContext::default();
-    context.vars.insert("force_continue".to_string(), "true".to_string());
+    context
+        .vars
+        .insert("force_continue".to_string(), "true".to_string());
     let result = evaluate_convergence_expression("force_continue", &context);
     assert!(result.is_ok());
     assert!(result.unwrap());
@@ -3226,7 +3238,9 @@ fn test_convergence_var_bool() {
 #[test]
 fn test_convergence_var_string() {
     let mut context = ConvergenceContext::default();
-    context.vars.insert("env".to_string(), "production".to_string());
+    context
+        .vars
+        .insert("env".to_string(), "production".to_string());
     let result = evaluate_convergence_expression("env == 'production'", &context);
     assert!(result.is_ok());
     assert!(result.unwrap());
@@ -3239,7 +3253,9 @@ fn test_convergence_var_combined_with_builtin() {
         self_test_passed: true,
         ..Default::default()
     };
-    context.vars.insert("min_cycles".to_string(), "2".to_string());
+    context
+        .vars
+        .insert("min_cycles".to_string(), "2".to_string());
     let result =
         evaluate_convergence_expression("self_test_passed && cycle >= min_cycles", &context);
     assert!(result.is_ok());

@@ -335,12 +335,21 @@ mod tests {
     #[test]
     fn error_category_as_str_all_variants() {
         assert_eq!(ErrorCategory::UserInput.as_str(), "user_input");
-        assert_eq!(ErrorCategory::ConfigValidation.as_str(), "config_validation");
+        assert_eq!(
+            ErrorCategory::ConfigValidation.as_str(),
+            "config_validation"
+        );
         assert_eq!(ErrorCategory::NotFound.as_str(), "not_found");
         assert_eq!(ErrorCategory::InvalidState.as_str(), "invalid_state");
         assert_eq!(ErrorCategory::SecurityDenied.as_str(), "security_denied");
-        assert_eq!(ErrorCategory::ExternalDependency.as_str(), "external_dependency");
-        assert_eq!(ErrorCategory::InternalInvariant.as_str(), "internal_invariant");
+        assert_eq!(
+            ErrorCategory::ExternalDependency.as_str(),
+            "external_dependency"
+        );
+        assert_eq!(
+            ErrorCategory::InternalInvariant.as_str(),
+            "internal_invariant"
+        );
     }
 
     // ---- Builder methods and accessors ----
@@ -560,7 +569,10 @@ mod tests {
 
     #[test]
     fn classify_validation_keyword_as_config_validation() {
-        let err = classify_task_error("op", anyhow::anyhow!("field has category: validation error"));
+        let err = classify_task_error(
+            "op",
+            anyhow::anyhow!("field has category: validation error"),
+        );
         assert_eq!(err.category(), ErrorCategory::ConfigValidation);
     }
 
@@ -665,13 +677,34 @@ mod tests {
     #[test]
     fn convenience_builders_set_correct_category() {
         let cases: Vec<(OrchestratorError, ErrorCategory)> = vec![
-            (OrchestratorError::user_input("op", anyhow::anyhow!("e")), ErrorCategory::UserInput),
-            (OrchestratorError::config_validation("op", anyhow::anyhow!("e")), ErrorCategory::ConfigValidation),
-            (OrchestratorError::not_found("op", anyhow::anyhow!("e")), ErrorCategory::NotFound),
-            (OrchestratorError::invalid_state("op", anyhow::anyhow!("e")), ErrorCategory::InvalidState),
-            (OrchestratorError::security_denied("op", anyhow::anyhow!("e")), ErrorCategory::SecurityDenied),
-            (OrchestratorError::external_dependency("op", anyhow::anyhow!("e")), ErrorCategory::ExternalDependency),
-            (OrchestratorError::internal_invariant("op", anyhow::anyhow!("e")), ErrorCategory::InternalInvariant),
+            (
+                OrchestratorError::user_input("op", anyhow::anyhow!("e")),
+                ErrorCategory::UserInput,
+            ),
+            (
+                OrchestratorError::config_validation("op", anyhow::anyhow!("e")),
+                ErrorCategory::ConfigValidation,
+            ),
+            (
+                OrchestratorError::not_found("op", anyhow::anyhow!("e")),
+                ErrorCategory::NotFound,
+            ),
+            (
+                OrchestratorError::invalid_state("op", anyhow::anyhow!("e")),
+                ErrorCategory::InvalidState,
+            ),
+            (
+                OrchestratorError::security_denied("op", anyhow::anyhow!("e")),
+                ErrorCategory::SecurityDenied,
+            ),
+            (
+                OrchestratorError::external_dependency("op", anyhow::anyhow!("e")),
+                ErrorCategory::ExternalDependency,
+            ),
+            (
+                OrchestratorError::internal_invariant("op", anyhow::anyhow!("e")),
+                ErrorCategory::InternalInvariant,
+            ),
         ];
         for (err, expected) in cases {
             assert_eq!(err.category(), expected);
@@ -709,7 +742,8 @@ mod tests {
 
     #[test]
     fn classify_resource_error_delegates() {
-        let err = classify_resource_error("res.list", anyhow::anyhow!("unknown list resource type"));
+        let err =
+            classify_resource_error("res.list", anyhow::anyhow!("unknown list resource type"));
         assert_eq!(err.category(), ErrorCategory::NotFound);
         assert_eq!(err.operation(), "res.list");
     }

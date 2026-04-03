@@ -121,11 +121,15 @@ mod tests {
 
         // Force SQLite to write the header by creating a table.
         let conn = rusqlite::Connection::open(&db_path).unwrap();
-        conn.execute_batch("CREATE TABLE _empty (id INTEGER)").unwrap();
+        conn.execute_batch("CREATE TABLE _empty (id INTEGER)")
+            .unwrap();
         drop(conn);
 
         let result = vacuum_database(&db_path).unwrap();
-        assert!(result.size_before > 0, "SQLite file should have non-zero size after schema creation");
+        assert!(
+            result.size_before > 0,
+            "SQLite file should have non-zero size after schema creation"
+        );
     }
 
     #[test]
@@ -182,8 +186,7 @@ mod tests {
         fs::write(archive_dir.join("event1.json"), "{}").unwrap();
         fs::write(archive_dir.join("event2.json"), "{}").unwrap();
 
-        let info =
-            database_size_info(&db_path, &logs_dir, Some(&archive_dir)).unwrap();
+        let info = database_size_info(&db_path, &logs_dir, Some(&archive_dir)).unwrap();
 
         assert!(info.db_size > 0);
         assert_eq!(info.logs_size, 0, "empty logs dir");
@@ -208,9 +211,8 @@ mod tests {
 
         let info = database_size_info(&db_path, &logs_dir, None).unwrap();
 
-        let expected = "fake-db-content".len() as u64
-            + "wal-data".len() as u64
-            + "shm".len() as u64;
+        let expected =
+            "fake-db-content".len() as u64 + "wal-data".len() as u64 + "shm".len() as u64;
         assert_eq!(info.db_size, expected);
     }
 
