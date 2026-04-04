@@ -27,8 +27,12 @@ The project structure is organized as follows:
 │   │   └── ...
 │   └── Cargo.toml
 ├── crates/
+│   ├── orchestrator-client/  # Shared gRPC client types and connection logic
+│   ├── orchestrator-collab/  # Collaboration primitives (artifacts, execution context, DAG)
 │   ├── orchestrator-config/  # Configuration models and loading
+│   ├── orchestrator-runner/  # Sandboxed command execution engine
 │   ├── orchestrator-scheduler/ # Scheduler engine (task loop, phases, guards, traces)
+│   ├── orchestrator-security/  # Encryption, key lifecycle, audit logging
 │   ├── proto/            # gRPC codegen (tonic + prost)
 │   │   ├── src/lib.rs    # Generated types + re-exports
 │   │   └── build.rs      # tonic_build
@@ -91,8 +95,12 @@ flowchart TB
 
 ```
 crates/
+  orchestrator-client/     # Shared gRPC client types and connection logic
+  orchestrator-collab/     # Collaboration primitives (artifacts, execution context, DAG)
   orchestrator-config/     # Configuration models and loading
+  orchestrator-runner/     # Sandboxed command execution engine
   orchestrator-scheduler/  # Scheduler engine (task loop, phases, guards, traces)
+  orchestrator-security/   # Encryption, key lifecycle, audit logging
   proto/                   # gRPC service definitions (tonic + prost)
   daemon/                  # orchestratord binary (gRPC server + embedded workers)
   cli/                     # orchestrator binary (lightweight gRPC client)
@@ -188,7 +196,7 @@ Pure business logic embedded by the daemon and exposed through the gRPC server:
 
 ## 4. Tech Stack
 
-- **Language**: Rust (Edition 2021)
+- **Language**: Rust (Edition 2024)
 - **CLI Framework**: `clap`
 - **Database**: `rusqlite` (SQLite)
 - **Async Runtime**: `tokio`
@@ -198,13 +206,17 @@ Pure business logic embedded by the daemon and exposed through the gRPC server:
 
 ## 5. Deployment Model
 
-The Agent Orchestrator is distributed as a Cargo workspace with a core library and two binaries:
+The Agent Orchestrator is distributed as a Cargo workspace with a core library and three binaries:
 
 | Crate | Type | Purpose |
 |-------|------|---------|
 | `core` (`agent-orchestrator`) | Library | Core engine — models, persistence, service layer, state management |
-| `crates/orchestrator-scheduler` | Library | Scheduler engine — task loop, phase runner, guards, traces |
+| `crates/orchestrator-client` | Library | Shared gRPC client — dual-transport (UDS/TLS) connection logic |
+| `crates/orchestrator-collab` | Library | Collaboration primitives — artifacts, execution context, DAG planning |
 | `crates/orchestrator-config` | Library | Configuration models and loading |
+| `crates/orchestrator-runner` | Library | Sandboxed command execution — spawn, capture, network/security policy |
+| `crates/orchestrator-scheduler` | Library | Scheduler engine — task loop, phase runner, guards, traces |
+| `crates/orchestrator-security` | Library | Encryption (AES-256-GCM-SIV), key lifecycle, audit logging |
 | `crates/daemon` (`orchestratord`) | Binary | Daemon — gRPC server + embedded workers |
 | `crates/cli` (`orchestrator`) | Binary | CLI client — lightweight gRPC client |
 | `crates/gui` (`orchestrator-gui`) | Binary | Tauri desktop application |

@@ -74,7 +74,7 @@ Slack, GitHub, LINE — each with per-trigger signature verification, CEL payloa
 - **CEL prehooks** — conditional step execution via CEL bool expressions
 - **Built-in policy and security** — mTLS, RBAC, sandbox (macOS Seatbelt / Linux namespaces), output redaction, and secret lifecycle management
 - **Long-running automation** — task persistence, event streams, trigger-based task creation, and guarded workflow loops
-- **Single binary** — Rust, embedded SQLite, no external dependencies
+- **Rust workspace** — embedded SQLite, no external runtime dependencies
 
 ## Documentation
 
@@ -86,6 +86,7 @@ Full documentation: **[docs.c9r.io](https://docs.c9r.io)** (EN / ZH)
 - [Workflow Configuration](docs/guide/03-workflow-configuration.md)
 - [CEL Prehooks](docs/guide/04-cel-prehooks.md)
 - [Advanced Features](docs/guide/05-advanced-features.md)
+- [Self-Bootstrap](docs/guide/06-self-bootstrap.md)
 - [CLI Reference](docs/guide/07-cli-reference.md)
 - [Architecture](docs/architecture.md)
 
