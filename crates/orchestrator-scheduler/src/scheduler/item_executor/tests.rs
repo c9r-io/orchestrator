@@ -1,5 +1,5 @@
 use super::accumulator::StepExecutionAccumulator;
-use super::dispatch::is_execution_hard_failure;
+use super::dispatch_builtin::is_execution_hard_failure;
 use super::spill::{spill_large_var, spill_to_file};
 use crate::scheduler::item_select::{ItemEvalState, execute_item_select};
 use agent_orchestrator::config::PIPELINE_VAR_INLINE_LIMIT;

@@ -16,7 +16,7 @@ use std::sync::Arc;
 use tracing::{info, warn};
 
 use super::accumulator::StepExecutionAccumulator;
-use super::dispatch::is_execution_hard_failure;
+use super::dispatch_builtin::is_execution_hard_failure;
 
 /// Apply step results: capture outputs, status transitions, post-actions,
 /// artifact collection, confidence/quality scores, and event emission.

@@ -1,6 +1,8 @@
 pub(crate) mod accumulator;
 mod apply;
 mod dispatch;
+mod dispatch_builtin;
+mod dispatch_dynamic;
 mod finalize;
 mod guard;
 pub(crate) mod spill;
@@ -10,7 +12,7 @@ mod tests;
 
 // Public API re-exports (consumed by scheduler.rs and loop_engine.rs)
 pub use accumulator::StepExecutionAccumulator;
-pub(crate) use dispatch::execute_dynamic_step_config;
+pub(crate) use dispatch_dynamic::execute_dynamic_step_config;
 pub use dispatch::{
     OwnedProcessItemRequest, ProcessItemRequest, process_item, process_item_filtered,
     process_item_filtered_owned,
