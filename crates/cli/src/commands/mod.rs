@@ -4,6 +4,8 @@ mod common;
 pub mod daemon;
 mod db;
 mod event;
+/// Self-describing CLI guide for AI agents and users.
+pub mod guide;
 mod manifest;
 mod qa;
 mod resource;
@@ -133,7 +135,10 @@ pub async fn dispatch(
         }
 
         // Handled before dispatch
-        Commands::Version { .. } | Commands::Daemon(_) | Commands::Tool(_) => unreachable!(),
+        Commands::Version { .. }
+        | Commands::Daemon(_)
+        | Commands::Tool(_)
+        | Commands::Guide { .. } => unreachable!(),
         Commands::Apply { .. }
         | Commands::Get { .. }
         | Commands::Describe { .. }

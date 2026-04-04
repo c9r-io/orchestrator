@@ -197,6 +197,22 @@ pub enum Commands {
         json: bool,
     },
 
+    /// Show a guided reference for CLI commands with examples
+    #[command(alias = "gd")]
+    Guide {
+        /// Filter by command name (e.g. "task", "apply", "store get")
+        #[arg(value_name = "COMMAND")]
+        command_filter: Option<String>,
+
+        /// Filter by category (e.g. "resource", "task", "agent")
+        #[arg(short = 'c', long)]
+        category: Option<String>,
+
+        /// Output format
+        #[arg(short, long, default_value = "markdown")]
+        format: GuideFormat,
+    },
+
     /// Execute workflow step(s) synchronously.
     Run {
         /// Workflow identifier (required unless --template is specified).
@@ -1002,4 +1018,13 @@ pub enum OutputFormat {
     Json,
     /// YAML output.
     Yaml,
+}
+
+/// Output format for the `guide` subcommand.
+#[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
+pub enum GuideFormat {
+    /// Markdown output (default, AI-agent friendly).
+    Markdown,
+    /// JSON output for programmatic consumption.
+    Json,
 }

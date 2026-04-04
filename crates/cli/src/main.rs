@@ -19,7 +19,7 @@ use clap::Parser;
 /// Re-exported CLI argument model for integration tests and helper modules.
 pub use cli::{
     AgentCommands, Cli, Commands, DaemonCommands, DbCommands, DbMigrationCommands, DebugCommands,
-    EventCommands, ManifestCommands, OutputFormat, QaCommands, SandboxProbeCommands,
+    EventCommands, GuideFormat, ManifestCommands, OutputFormat, QaCommands, SandboxProbeCommands,
     SecretCommands, SecretKeyCommands, StoreCommands, TaskCommands, ToolCommands, TriggerCommands,
 };
 
@@ -62,6 +62,11 @@ async fn run(cli: Cli) -> Result<()> {
         } => commands::debug::run_local(debug_command).await,
         Commands::Daemon(cmd) => commands::daemon::dispatch(cmd).await,
         Commands::Tool(cmd) => commands::tool::dispatch(cmd, control_plane_config.as_deref()).await,
+        Commands::Guide {
+            command_filter,
+            category,
+            format,
+        } => commands::guide::dispatch(command_filter, category, format),
         command => {
             let mut client = client::connect(control_plane_config.as_deref()).await?;
             commands::dispatch(&mut client, command).await

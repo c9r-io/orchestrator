@@ -16,6 +16,19 @@ description: >-
 
 # Agent Orchestrator Guide
 
+## CLI Command Reference (Dynamic)
+
+Before reading static documentation, query the orchestrator itself:
+
+```bash
+orchestrator guide                         # full categorized command reference
+orchestrator guide task                    # filter by command name
+orchestrator guide --category resource     # filter by category
+orchestrator guide --format json           # machine-readable output
+```
+
+The `guide` subcommand outputs up-to-date command descriptions with usage examples, grouped by functional category. Use it as your primary CLI reference.
+
 ## Architecture (Client/Server)
 
 The orchestrator uses a **client/server** model over gRPC:

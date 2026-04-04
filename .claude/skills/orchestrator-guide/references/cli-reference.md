@@ -1,5 +1,8 @@
 # CLI Command Reference
 
+> **Tip:** Run `orchestrator guide` to get this reference dynamically from the CLI itself.
+> Use `orchestrator guide <command>` to filter by command name or `--category <cat>` to filter by category.
+
 ## Table of Contents
 - [Global Options](#global-options)
 - [Aliases](#aliases)
