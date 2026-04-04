@@ -1,15 +1,15 @@
 [package]
 name = "orchestrator-integration-tests"
-version = "0.2.8"
+version = "0.3.0"
 edition.workspace = true
 rust-version.workspace = true
 license = "MIT"
 publish = false
 
 [dependencies]
-agent-orchestrator = { path = "../../core", version = "0.2.8", features = ["test-harness"] }
-orchestrator-scheduler = { path = "../orchestrator-scheduler", version = "0.2.8", features = ["test-harness"] }
-orchestrator-proto = { path = "../proto", version = "0.2.8" }
+agent-orchestrator = { path = "../../core", version = "0.3.0", features = ["test-harness"] }
+orchestrator-scheduler = { path = "../orchestrator-scheduler", version = "0.3.0", features = ["test-harness"] }
+orchestrator-proto = { path = "../proto", version = "0.3.0" }
 tonic = "0.14"
 tokio = { version = "1.44", features = ["macros", "rt-multi-thread", "time", "sync", "net"] }
 tokio-stream = "0.1"
