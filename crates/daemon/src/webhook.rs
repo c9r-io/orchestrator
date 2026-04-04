@@ -53,7 +53,7 @@ async fn handle_webhook(
     body: axum::body::Bytes,
 ) -> Response {
     let project = agent_orchestrator::config::DEFAULT_PROJECT_ID.to_string();
-    do_webhook(state, headers, trigger_name, project, body)
+    do_webhook(state, headers, trigger_name, project, body).await
 }
 
 async fn handle_webhook_with_project(
@@ -62,10 +62,10 @@ async fn handle_webhook_with_project(
     Path((project, trigger_name)): Path<(String, String)>,
     body: axum::body::Bytes,
 ) -> Response {
-    do_webhook(state, headers, trigger_name, project, body)
+    do_webhook(state, headers, trigger_name, project, body).await
 }
 
-fn do_webhook(
+async fn do_webhook(
     state: WebhookState,
     headers: HeaderMap,
     trigger_name: String,
@@ -120,7 +120,9 @@ fn do_webhook(
                 &header_map,
                 &body_str,
                 Some(&state.inner.db_path),
-            ) {
+            )
+            .await
+            {
                 warn!(
                     trigger = trigger_name.as_str(),
                     plugin = plugin.name.as_str(),
@@ -192,7 +194,9 @@ fn do_webhook(
                 crd_kind,
                 &payload,
                 Some(&state.inner.db_path),
-            ) {
+            )
+            .await
+            {
                 Ok(transformed) => {
                     info!(
                         trigger = trigger_name.as_str(),
