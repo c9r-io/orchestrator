@@ -463,9 +463,7 @@ fn execute_step<'a>(
             BuiltinStepOutcome::EarlyReturn => return Ok(StepExecutionOutcome::EarlyReturn),
             BuiltinStepOutcome::NotBuiltin => {}
             BuiltinStepOutcome::RestartRequested { binary_path } => {
-                return Err(
-                    super::super::safety::RestartRequestedError { binary_path }.into()
-                );
+                return Err(super::super::safety::RestartRequestedError { binary_path }.into());
             }
         }
 

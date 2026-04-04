@@ -133,11 +133,26 @@ fn resource_entries() -> Vec<GuideEntry> {
                           removed resources, and project scoping. Config changes are \
                           hot-reloaded — no daemon restart needed.",
             examples: &[
-                ("orchestrator apply -f manifest.yaml", "Apply a manifest file"),
-                ("orchestrator apply -f manifest.yaml --dry-run", "Validate without persisting"),
-                ("orchestrator apply -f manifest.yaml --prune", "Delete resources not in manifest"),
-                ("orchestrator apply -f manifest.yaml --project my-project", "Apply to a specific project"),
-                ("cat manifest.yaml | orchestrator apply -f -", "Apply from stdin"),
+                (
+                    "orchestrator apply -f manifest.yaml",
+                    "Apply a manifest file",
+                ),
+                (
+                    "orchestrator apply -f manifest.yaml --dry-run",
+                    "Validate without persisting",
+                ),
+                (
+                    "orchestrator apply -f manifest.yaml --prune",
+                    "Delete resources not in manifest",
+                ),
+                (
+                    "orchestrator apply -f manifest.yaml --project my-project",
+                    "Apply to a specific project",
+                ),
+                (
+                    "cat manifest.yaml | orchestrator apply -f -",
+                    "Apply from stdin",
+                ),
             ],
         },
         GuideEntry {
@@ -150,9 +165,18 @@ fn resource_entries() -> Vec<GuideEntry> {
             examples: &[
                 ("orchestrator get workspaces", "List all workspaces"),
                 ("orchestrator get agents -o json", "List agents as JSON"),
-                ("orchestrator get workflows -o yaml", "List workflows as YAML"),
-                ("orchestrator get executionprofiles", "List execution profiles"),
-                ("orchestrator get workspaces -l env=dev", "Filter by label selector"),
+                (
+                    "orchestrator get workflows -o yaml",
+                    "List workflows as YAML",
+                ),
+                (
+                    "orchestrator get executionprofiles",
+                    "List execution profiles",
+                ),
+                (
+                    "orchestrator get workspaces -l env=dev",
+                    "Filter by label selector",
+                ),
             ],
         },
         GuideEntry {
@@ -162,9 +186,18 @@ fn resource_entries() -> Vec<GuideEntry> {
             summary: "Describe a resource",
             description: "Show the full specification of a single resource. Default output is YAML.",
             examples: &[
-                ("orchestrator describe workspace default", "Describe the default workspace"),
-                ("orchestrator describe executionprofile sandbox_write", "Describe an execution profile"),
-                ("orchestrator describe workflow sdlc -o json", "Describe as JSON"),
+                (
+                    "orchestrator describe workspace default",
+                    "Describe the default workspace",
+                ),
+                (
+                    "orchestrator describe executionprofile sandbox_write",
+                    "Describe an execution profile",
+                ),
+                (
+                    "orchestrator describe workflow sdlc -o json",
+                    "Describe as JSON",
+                ),
             ],
         },
         GuideEntry {
@@ -175,9 +208,18 @@ fn resource_entries() -> Vec<GuideEntry> {
             description: "Remove a resource by kind and name. Supports --force to skip \
                           confirmation and --dry-run to preview.",
             examples: &[
-                ("orchestrator delete agent old-agent", "Delete an agent (with confirmation)"),
-                ("orchestrator delete agent old-agent --force", "Delete without confirmation"),
-                ("orchestrator delete agent old-agent --dry-run", "Preview without deleting"),
+                (
+                    "orchestrator delete agent old-agent",
+                    "Delete an agent (with confirmation)",
+                ),
+                (
+                    "orchestrator delete agent old-agent --force",
+                    "Delete without confirmation",
+                ),
+                (
+                    "orchestrator delete agent old-agent --dry-run",
+                    "Preview without deleting",
+                ),
             ],
         },
     ]
@@ -196,7 +238,10 @@ fn task_entries() -> Vec<GuideEntry> {
                 ("orchestrator task list", "List all tasks"),
                 ("orchestrator task list -s running", "List running tasks"),
                 ("orchestrator task list -o json", "List tasks as JSON"),
-                ("orchestrator task list -p my-project", "List tasks in a project"),
+                (
+                    "orchestrator task list -p my-project",
+                    "List tasks in a project",
+                ),
                 ("orchestrator task list -v", "List with verbose detail"),
             ],
         },
@@ -233,8 +278,14 @@ fn task_entries() -> Vec<GuideEntry> {
             summary: "List task items and their status",
             description: "Show work items within a task and their individual status.",
             examples: &[
-                ("orchestrator task items <task_id>", "List all items for a task"),
-                ("orchestrator task items <task_id> -s failed", "Show only failed items"),
+                (
+                    "orchestrator task items <task_id>",
+                    "List all items for a task",
+                ),
+                (
+                    "orchestrator task items <task_id> -s failed",
+                    "Show only failed items",
+                ),
             ],
         },
         GuideEntry {
@@ -244,8 +295,14 @@ fn task_entries() -> Vec<GuideEntry> {
             summary: "Show detailed information for one task",
             description: "Display full task metadata including status, workflow, steps, and timing.",
             examples: &[
-                ("orchestrator task info <task_id>", "Show task details (table)"),
-                ("orchestrator task info <task_id> -o yaml", "Show task details as YAML"),
+                (
+                    "orchestrator task info <task_id>",
+                    "Show task details (table)",
+                ),
+                (
+                    "orchestrator task info <task_id> -o yaml",
+                    "Show task details as YAML",
+                ),
             ],
         },
         GuideEntry {
@@ -256,7 +313,10 @@ fn task_entries() -> Vec<GuideEntry> {
             description: "Start a previously created task, or resume the latest resumable task.",
             examples: &[
                 ("orchestrator task start <task_id>", "Start a specific task"),
-                ("orchestrator task start --latest", "Start the most recent resumable task"),
+                (
+                    "orchestrator task start --latest",
+                    "Start the most recent resumable task",
+                ),
             ],
         },
         GuideEntry {
@@ -276,7 +336,10 @@ fn task_entries() -> Vec<GuideEntry> {
                           blocked items before resuming.",
             examples: &[
                 ("orchestrator task resume <task_id>", "Resume a paused task"),
-                ("orchestrator task resume <task_id> --reset-blocked", "Reset blocked items and resume"),
+                (
+                    "orchestrator task resume <task_id> --reset-blocked",
+                    "Reset blocked items and resume",
+                ),
             ],
         },
         GuideEntry {
@@ -287,9 +350,18 @@ fn task_entries() -> Vec<GuideEntry> {
             description: "Display execution logs for a task. Supports following and tailing.",
             examples: &[
                 ("orchestrator task logs <task_id>", "Show recent logs"),
-                ("orchestrator task logs <task_id> -f", "Follow the log stream"),
-                ("orchestrator task logs <task_id> -n 200", "Tail last 200 lines"),
-                ("orchestrator task logs <task_id> --timestamps", "Show timestamps"),
+                (
+                    "orchestrator task logs <task_id> -f",
+                    "Follow the log stream",
+                ),
+                (
+                    "orchestrator task logs <task_id> -n 200",
+                    "Tail last 200 lines",
+                ),
+                (
+                    "orchestrator task logs <task_id> --timestamps",
+                    "Show timestamps",
+                ),
             ],
         },
         GuideEntry {
@@ -300,8 +372,14 @@ fn task_entries() -> Vec<GuideEntry> {
             description: "Remove tasks by ID or delete all tasks with optional status/project filters.",
             examples: &[
                 ("orchestrator task delete <task_id>", "Delete a single task"),
-                ("orchestrator task delete --all --status completed", "Delete all completed tasks"),
-                ("orchestrator task delete --all --project P --force", "Force delete all tasks in a project"),
+                (
+                    "orchestrator task delete --all --status completed",
+                    "Delete all completed tasks",
+                ),
+                (
+                    "orchestrator task delete --all --project P --force",
+                    "Force delete all tasks in a project",
+                ),
             ],
         },
         GuideEntry {
@@ -311,8 +389,14 @@ fn task_entries() -> Vec<GuideEntry> {
             summary: "Retry a failed task item",
             description: "Re-run a specific failed task item.",
             examples: &[
-                ("orchestrator task retry <task_item_id>", "Retry with confirmation"),
-                ("orchestrator task retry <task_item_id> --force", "Retry without confirmation"),
+                (
+                    "orchestrator task retry <task_item_id>",
+                    "Retry with confirmation",
+                ),
+                (
+                    "orchestrator task retry <task_item_id> --force",
+                    "Retry without confirmation",
+                ),
             ],
         },
         GuideEntry {
@@ -321,7 +405,10 @@ fn task_entries() -> Vec<GuideEntry> {
             category: GuideCategory::TaskLifecycle,
             summary: "Recover orphaned running items",
             description: "Mark orphaned running items (from crashed workers) as retryable.",
-            examples: &[("orchestrator task recover <task_id>", "Recover orphaned items")],
+            examples: &[(
+                "orchestrator task recover <task_id>",
+                "Recover orphaned items",
+            )],
         },
         GuideEntry {
             command: "task watch",
@@ -330,9 +417,18 @@ fn task_entries() -> Vec<GuideEntry> {
             summary: "Watch task status continuously",
             description: "Auto-refreshing status panel. Useful for monitoring long-running tasks.",
             examples: &[
-                ("orchestrator task watch <task_id>", "Watch with 2s refresh (default)"),
-                ("orchestrator task watch <task_id> --interval 5", "Watch with 5s refresh"),
-                ("orchestrator task watch <task_id> --timeout 300", "Stop watching after 5 minutes"),
+                (
+                    "orchestrator task watch <task_id>",
+                    "Watch with 2s refresh (default)",
+                ),
+                (
+                    "orchestrator task watch <task_id> --interval 5",
+                    "Watch with 5s refresh",
+                ),
+                (
+                    "orchestrator task watch <task_id> --timeout 300",
+                    "Stop watching after 5 minutes",
+                ),
             ],
         },
         GuideEntry {
@@ -343,7 +439,10 @@ fn task_entries() -> Vec<GuideEntry> {
             description: "Show execution timeline with step durations and anomaly detection.",
             examples: &[
                 ("orchestrator task trace <task_id>", "Show execution trace"),
-                ("orchestrator task trace <task_id> --verbose", "Include verbose entries"),
+                (
+                    "orchestrator task trace <task_id> --verbose",
+                    "Include verbose entries",
+                ),
                 ("orchestrator task trace <task_id> --json", "Output as JSON"),
             ],
         },
@@ -391,7 +490,10 @@ fn agent_entries() -> Vec<GuideEntry> {
             description: "Show all registered agents with their state, capabilities, and cost.",
             examples: &[
                 ("orchestrator agent list", "List all agents"),
-                ("orchestrator agent list -p my-project -o json", "List project agents as JSON"),
+                (
+                    "orchestrator agent list -p my-project -o json",
+                    "List project agents as JSON",
+                ),
             ],
         },
         GuideEntry {
@@ -420,7 +522,10 @@ fn agent_entries() -> Vec<GuideEntry> {
                           --timeout to force-drain after a duration.",
             examples: &[
                 ("orchestrator agent drain my-agent", "Drain gracefully"),
-                ("orchestrator agent drain my-agent --timeout 60", "Force-drain after 60s"),
+                (
+                    "orchestrator agent drain my-agent --timeout 60",
+                    "Force-drain after 60s",
+                ),
             ],
         },
     ]
@@ -434,7 +539,10 @@ fn store_entries() -> Vec<GuideEntry> {
             category: GuideCategory::StoreOperations,
             summary: "Read one workflow store entry",
             description: "Retrieve a value from a workflow store by key.",
-            examples: &[("orchestrator store get my-store build_hash", "Read a store entry")],
+            examples: &[(
+                "orchestrator store get my-store build_hash",
+                "Read a store entry",
+            )],
         },
         GuideEntry {
             command: "store put",
@@ -453,7 +561,10 @@ fn store_entries() -> Vec<GuideEntry> {
             category: GuideCategory::StoreOperations,
             summary: "Delete one workflow store entry",
             description: "Remove a single key from a workflow store.",
-            examples: &[("orchestrator store delete my-store old_key", "Delete a store entry")],
+            examples: &[(
+                "orchestrator store delete my-store old_key",
+                "Delete a store entry",
+            )],
         },
         GuideEntry {
             command: "store list",
@@ -462,8 +573,14 @@ fn store_entries() -> Vec<GuideEntry> {
             summary: "List workflow store entries",
             description: "Enumerate keys in a workflow store with pagination.",
             examples: &[
-                ("orchestrator store list my-store", "List entries (default 100)"),
-                ("orchestrator store list my-store -l 10 --offset 20", "Paginated listing"),
+                (
+                    "orchestrator store list my-store",
+                    "List entries (default 100)",
+                ),
+                (
+                    "orchestrator store list my-store -l 10 --offset 20",
+                    "Paginated listing",
+                ),
             ],
         },
         GuideEntry {
@@ -472,7 +589,10 @@ fn store_entries() -> Vec<GuideEntry> {
             category: GuideCategory::StoreOperations,
             summary: "Prune workflow store entries",
             description: "Remove entries according to the store's retention rules.",
-            examples: &[("orchestrator store prune my-store", "Prune by retention rules")],
+            examples: &[(
+                "orchestrator store prune my-store",
+                "Prune by retention rules",
+            )],
         },
     ]
 }
@@ -486,8 +606,14 @@ fn manifest_entries() -> Vec<GuideEntry> {
             summary: "Validate a manifest file",
             description: "Check a YAML manifest for errors without applying. Reads from file or stdin.",
             examples: &[
-                ("orchestrator manifest validate -f manifest.yaml", "Validate a file"),
-                ("cat manifest.yaml | orchestrator manifest validate -f -", "Validate from stdin"),
+                (
+                    "orchestrator manifest validate -f manifest.yaml",
+                    "Validate a file",
+                ),
+                (
+                    "cat manifest.yaml | orchestrator manifest validate -f -",
+                    "Validate from stdin",
+                ),
             ],
         },
         GuideEntry {
@@ -534,7 +660,10 @@ fn secret_entries() -> Vec<GuideEntry> {
                           rotation was interrupted.",
             examples: &[
                 ("orchestrator secret key rotate", "Rotate to a new key"),
-                ("orchestrator secret key rotate --resume", "Resume an interrupted rotation"),
+                (
+                    "orchestrator secret key rotate --resume",
+                    "Resume an interrupted rotation",
+                ),
             ],
         },
         GuideEntry {
@@ -545,7 +674,10 @@ fn secret_entries() -> Vec<GuideEntry> {
             description: "Mark a key as revoked. Use --force to revoke the currently active key.",
             examples: &[
                 ("orchestrator secret key revoke <key_id>", "Revoke a key"),
-                ("orchestrator secret key revoke <key_id> --force", "Force-revoke the active key"),
+                (
+                    "orchestrator secret key revoke <key_id> --force",
+                    "Force-revoke the active key",
+                ),
             ],
         },
         GuideEntry {
@@ -565,8 +697,14 @@ fn secret_entries() -> Vec<GuideEntry> {
             description: "Display the audit trail for encryption key lifecycle events.",
             examples: &[
                 ("orchestrator secret key history", "Show last 50 events"),
-                ("orchestrator secret key history -n 100", "Show last 100 events"),
-                ("orchestrator secret key history --key-id <id>", "Filter by key ID"),
+                (
+                    "orchestrator secret key history -n 100",
+                    "Show last 100 events",
+                ),
+                (
+                    "orchestrator secret key history --key-id <id>",
+                    "Filter by key ID",
+                ),
             ],
         },
     ]
@@ -608,8 +746,14 @@ fn db_entries() -> Vec<GuideEntry> {
             summary: "Clean up old log files",
             description: "Delete task log files older than the specified number of days.",
             examples: &[
-                ("orchestrator db cleanup", "Clean up logs older than 30 days (default)"),
-                ("orchestrator db cleanup --older-than 7", "Clean up logs older than 7 days"),
+                (
+                    "orchestrator db cleanup",
+                    "Clean up logs older than 30 days (default)",
+                ),
+                (
+                    "orchestrator db cleanup --older-than 7",
+                    "Clean up logs older than 7 days",
+                ),
             ],
         },
     ]
@@ -624,9 +768,18 @@ fn event_entries() -> Vec<GuideEntry> {
             summary: "Clean up old events",
             description: "Remove events from terminated tasks. Supports dry-run and archiving.",
             examples: &[
-                ("orchestrator event cleanup", "Delete events older than 30 days"),
-                ("orchestrator event cleanup --older-than 7 --dry-run", "Preview cleanup"),
-                ("orchestrator event cleanup --archive", "Archive events before deleting"),
+                (
+                    "orchestrator event cleanup",
+                    "Delete events older than 30 days",
+                ),
+                (
+                    "orchestrator event cleanup --older-than 7 --dry-run",
+                    "Preview cleanup",
+                ),
+                (
+                    "orchestrator event cleanup --archive",
+                    "Archive events before deleting",
+                ),
             ],
         },
         GuideEntry {
@@ -637,9 +790,18 @@ fn event_entries() -> Vec<GuideEntry> {
             description: "Show lifecycle events for a specific task with optional type filtering. \
                           Returns up to 50 events by default; use -l to adjust.",
             examples: &[
-                ("orchestrator event list --task <id>", "List task events (default 50)"),
-                ("orchestrator event list --task <id> --type step", "Filter by event type prefix"),
-                ("orchestrator event list --task <id> -l 100", "List up to 100 events"),
+                (
+                    "orchestrator event list --task <id>",
+                    "List task events (default 50)",
+                ),
+                (
+                    "orchestrator event list --task <id> --type step",
+                    "Filter by event type prefix",
+                ),
+                (
+                    "orchestrator event list --task <id> -l 100",
+                    "List up to 100 events",
+                ),
             ],
         },
         GuideEntry {
@@ -661,7 +823,10 @@ fn trigger_entries() -> Vec<GuideEntry> {
             category: GuideCategory::Trigger,
             summary: "Suspend a trigger",
             description: "Pause a trigger so it stops auto-firing.",
-            examples: &[("orchestrator trigger suspend nightly-qa", "Suspend a trigger")],
+            examples: &[(
+                "orchestrator trigger suspend nightly-qa",
+                "Suspend a trigger",
+            )],
         },
         GuideEntry {
             command: "trigger resume",
@@ -714,8 +879,14 @@ fn daemon_entries() -> Vec<GuideEntry> {
             summary: "Enable or disable maintenance mode",
             description: "Maintenance mode blocks new task creation while existing tasks continue.",
             examples: &[
-                ("orchestrator daemon maintenance --enable", "Enable maintenance mode"),
-                ("orchestrator daemon maintenance --disable", "Disable maintenance mode"),
+                (
+                    "orchestrator daemon maintenance --enable",
+                    "Enable maintenance mode",
+                ),
+                (
+                    "orchestrator daemon maintenance --disable",
+                    "Disable maintenance mode",
+                ),
             ],
         },
     ]
@@ -731,7 +902,10 @@ fn system_entries() -> Vec<GuideEntry> {
             description: "Set up the runtime directory and initial configuration.",
             examples: &[
                 ("orchestrator init", "Initialize in default location"),
-                ("orchestrator init /custom/path", "Initialize in a custom path"),
+                (
+                    "orchestrator init /custom/path",
+                    "Initialize in a custom path",
+                ),
             ],
         },
         GuideEntry {
@@ -742,8 +916,14 @@ fn system_entries() -> Vec<GuideEntry> {
             description: "Validate configuration and connectivity. Optionally filter by workflow.",
             examples: &[
                 ("orchestrator check", "Run preflight checks"),
-                ("orchestrator check --workflow my-wf", "Check a specific workflow"),
-                ("orchestrator check -p my-proj -o json", "Check with project filter (JSON)"),
+                (
+                    "orchestrator check --workflow my-wf",
+                    "Check a specific workflow",
+                ),
+                (
+                    "orchestrator check -p my-proj -o json",
+                    "Check with project filter (JSON)",
+                ),
             ],
         },
         GuideEntry {
@@ -756,7 +936,10 @@ fn system_entries() -> Vec<GuideEntry> {
                           See also: debug sandbox-probe for local sandbox testing.",
             examples: &[
                 ("orchestrator debug", "Show system debug info"),
-                ("orchestrator debug --component daemon", "Show daemon status"),
+                (
+                    "orchestrator debug --component daemon",
+                    "Show daemon status",
+                ),
             ],
         },
         GuideEntry {
@@ -859,8 +1042,14 @@ fn system_entries() -> Vec<GuideEntry> {
             examples: &[
                 ("orchestrator guide", "Show full categorized reference"),
                 ("orchestrator guide task", "Filter by command name"),
-                ("orchestrator guide --category resource", "Filter by category"),
-                ("orchestrator guide --format json", "Machine-readable JSON output"),
+                (
+                    "orchestrator guide --category resource",
+                    "Filter by category",
+                ),
+                (
+                    "orchestrator guide --format json",
+                    "Machine-readable JSON output",
+                ),
             ],
         },
         GuideEntry {
@@ -871,7 +1060,10 @@ fn system_entries() -> Vec<GuideEntry> {
             description: "Display health metrics from task_execution_metrics for QA observability.",
             examples: &[
                 ("orchestrator qa doctor", "Show health metrics"),
-                ("orchestrator qa doctor -o json", "Show health metrics as JSON"),
+                (
+                    "orchestrator qa doctor -o json",
+                    "Show health metrics as JSON",
+                ),
             ],
         },
     ]
@@ -1154,8 +1346,7 @@ mod tests {
         assert!(!filtered.is_empty());
         for e in &filtered {
             assert!(
-                e.command.contains("task")
-                    || e.alias.map(|a| a.contains("task")).unwrap_or(false),
+                e.command.contains("task") || e.alias.map(|a| a.contains("task")).unwrap_or(false),
                 "Entry '{}' should not match 'task'",
                 e.command
             );
@@ -1202,8 +1393,8 @@ mod tests {
     fn guide_subcommand_with_filter() {
         use crate::Cli;
         use clap::Parser;
-        let cli =
-            Cli::try_parse_from(["orchestrator", "guide", "task"]).expect("guide task should parse");
+        let cli = Cli::try_parse_from(["orchestrator", "guide", "task"])
+            .expect("guide task should parse");
         match cli.command {
             crate::Commands::Guide {
                 command_filter,

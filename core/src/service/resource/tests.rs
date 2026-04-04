@@ -322,8 +322,7 @@ fn get_resource_supports_named_queries_describe_and_selector_helpers() {
         &[("env".to_string(), "prod".to_string())]
     ));
 
-    let invalid_selector =
-        parse_label_selector("env").expect_err("invalid selector should fail");
+    let invalid_selector = parse_label_selector("env").expect_err("invalid selector should fail");
     assert!(
         invalid_selector
             .to_string()
@@ -373,9 +372,8 @@ fn delete_resource_covers_force_dry_run_and_actual_delete() {
     )
     .expect("seed alpha project");
 
-    let missing_force =
-        delete_resource(&state, "workflow/delete-me", false, Some("alpha"), false)
-            .expect_err("force should be required");
+    let missing_force = delete_resource(&state, "workflow/delete-me", false, Some("alpha"), false)
+        .expect_err("force should be required");
     assert!(missing_force.to_string().contains("use --force"));
 
     let missing = delete_resource(&state, "workflow/missing", true, Some("alpha"), true)
@@ -492,15 +490,10 @@ fn helper_functions_cover_delete_and_projection_paths() {
     );
     assert!(canonical_project_kind("unknown").is_err());
     assert!(
-        delete_resource_from_project(&mut project, "workspace", "ws")
-            .expect("delete workspace")
+        delete_resource_from_project(&mut project, "workspace", "ws").expect("delete workspace")
     );
-    assert!(
-        delete_resource_from_project(&mut project, "agent", "agent").expect("delete agent")
-    );
-    assert!(
-        delete_resource_from_project(&mut project, "workflow", "wf").expect("delete workflow")
-    );
+    assert!(delete_resource_from_project(&mut project, "agent", "agent").expect("delete agent"));
+    assert!(delete_resource_from_project(&mut project, "workflow", "wf").expect("delete workflow"));
     assert!(
         !delete_resource_from_project(&mut project, "workflow", "missing")
             .expect("missing workflow")

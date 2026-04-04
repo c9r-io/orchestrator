@@ -386,6 +386,5 @@ pub(super) fn loop_mode_as_str(mode: &LoopMode) -> &'static str {
     }
 }
 
-
 #[cfg(test)]
 mod tests;

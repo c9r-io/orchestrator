@@ -1,6 +1,4 @@
-use crate::config_load::{
-    ResourceRemoval, persist_config_for_delete, read_active_config,
-};
+use crate::config_load::{ResourceRemoval, persist_config_for_delete, read_active_config};
 use crate::error::{Result, classify_resource_error};
 use crate::state::InnerState;
 

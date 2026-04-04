@@ -12,9 +12,7 @@ use super::super::RunningTask;
 use super::super::phase_runner::{
     PhaseRunRequest, RotatingPhaseRunRequest, run_phase, run_phase_with_rotation,
 };
-use super::super::safety::{
-    SelfRestartOutcome, execute_self_restart_step, execute_self_test_step,
-};
+use super::super::safety::{SelfRestartOutcome, execute_self_restart_step, execute_self_test_step};
 use super::accumulator::StepExecutionAccumulator;
 use super::spill::{spill_large_var, spill_to_file};
 
