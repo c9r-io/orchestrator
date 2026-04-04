@@ -32,12 +32,13 @@ pub async fn stream_task_logs_impl(
     let redaction_patterns = {
         let active = read_loaded_config(state)?;
         let mut patterns = active.config.runtime_policy().runner.redaction_patterns;
-        if let Some(project) = active
-            .config
-            .projects
-            .get(agent_orchestrator::config::DEFAULT_PROJECT_ID)
-        {
-            patterns.extend(collect_all_sensitive_store_values(&project.secret_stores));
+        if let Ok(summary) = state.task_repo.load_task_summary(&resolved_id).await {
+            let effective = active
+                .config
+                .effective_project_id(Some(&summary.project_id));
+            if let Some(project) = active.config.projects.get(effective) {
+                patterns.extend(collect_all_sensitive_store_values(&project.secret_stores));
+            }
         }
         patterns
     };
@@ -114,12 +115,14 @@ where
     let redaction_patterns = {
         let active = read_loaded_config(state)?;
         let mut patterns = active.config.runtime_policy().runner.redaction_patterns;
-        if let Some(project) = active
-            .config
-            .projects
-            .get(agent_orchestrator::config::DEFAULT_PROJECT_ID)
-        {
-            patterns.extend(collect_all_sensitive_store_values(&project.secret_stores));
+        let resolved_id = resolve_task_id(state, task_id).await?;
+        if let Ok(summary) = state.task_repo.load_task_summary(&resolved_id).await {
+            let effective = active
+                .config
+                .effective_project_id(Some(&summary.project_id));
+            if let Some(project) = active.config.projects.get(effective) {
+                patterns.extend(collect_all_sensitive_store_values(&project.secret_stores));
+            }
         }
         patterns
     };
@@ -796,6 +799,91 @@ mod tests {
         assert!(
             !chunks[0].content.contains("super-secret-value"),
             "raw secret value must not appear in output"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn stream_task_logs_impl_redacts_non_default_project_secret_store_values() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let item_id = first_item_id(&state, &task_id);
+
+        // Point the task at a non-default project via direct SQL update
+        {
+            let conn = agent_orchestrator::db::open_conn(&state.db_path).expect("open db");
+            conn.execute(
+                "UPDATE tasks SET project_id = ?1 WHERE id = ?2",
+                rusqlite::params!["custom-project", &task_id],
+            )
+            .expect("update project_id");
+        }
+
+        // Inject a secret store into the non-default project
+        agent_orchestrator::state::update_config_runtime(&state, |current| {
+            let mut next = current.clone();
+            std::sync::Arc::make_mut(&mut next.active_config)
+                .config
+                .ensure_project(Some("custom-project"))
+                .secret_stores
+                .insert(
+                    "vault".to_string(),
+                    agent_orchestrator::config::SecretStoreConfig {
+                        data: [("DB_PASSWORD".to_string(), "non-default-secret-42".to_string())]
+                            .into(),
+                    },
+                );
+            (next, ())
+        });
+
+        let dir = test_dir("stream-nondefault-secret");
+        let stdout_path = dir.join("nd_out.log");
+        let stderr_path = dir.join("nd_err.log");
+        std::fs::write(&stdout_path, "password=non-default-secret-42 output\n")
+            .expect("write stdout");
+        std::fs::write(&stderr_path, "").expect("write stderr");
+
+        state
+            .task_repo
+            .insert_command_run(NewCommandRun {
+                id: "run-nondefault-secret-1".to_string(),
+                task_item_id: item_id,
+                phase: "qa".to_string(),
+                command: "echo secret".to_string(),
+                command_template: None,
+                cwd: "/tmp".to_string(),
+                workspace_id: "default".to_string(),
+                agent_id: "echo".to_string(),
+                exit_code: 0,
+                stdout_path: stdout_path.to_string_lossy().to_string(),
+                stderr_path: stderr_path.to_string_lossy().to_string(),
+                started_at: now_ts(),
+                ended_at: now_ts(),
+                interrupted: 0,
+                output_json: "{}".to_string(),
+                artifacts_json: "[]".to_string(),
+                confidence: None,
+                quality_score: None,
+                validation_status: "unknown".to_string(),
+                session_id: None,
+                machine_output_source: "stdout".to_string(),
+                output_json_path: None,
+                command_rule_index: None,
+            })
+            .await
+            .expect("insert command run");
+
+        let chunks = stream_task_logs_impl(&state, &task_id, 10, false)
+            .await
+            .expect("stream task logs");
+        assert_eq!(chunks.len(), 1);
+        assert!(
+            chunks[0].content.contains("[REDACTED]"),
+            "non-default project secret store value should be redacted"
+        );
+        assert!(
+            !chunks[0].content.contains("non-default-secret-42"),
+            "raw non-default project secret value must not appear in output"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
