@@ -7,6 +7,7 @@ mod event;
 mod manifest;
 mod qa;
 mod resource;
+mod run;
 mod secret;
 mod store;
 mod task;
@@ -102,6 +103,34 @@ pub async fn dispatch(
 
         Commands::Qa(cmd) => qa::dispatch(client, cmd).await,
         Commands::Manifest(cmd) => manifest::dispatch(client, cmd).await,
+
+        Commands::Run {
+            workflow,
+            step,
+            set,
+            project,
+            workspace,
+            target_file,
+            detach,
+            template,
+            agent_capability,
+            profile,
+        } => {
+            run::dispatch(
+                client,
+                workflow,
+                step,
+                set,
+                project,
+                workspace,
+                target_file,
+                detach,
+                template,
+                agent_capability,
+                profile,
+            )
+            .await
+        }
 
         // Handled before dispatch
         Commands::Version { .. } | Commands::Daemon(_) | Commands::Tool(_) => unreachable!(),

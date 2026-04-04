@@ -204,7 +204,7 @@ pub fn find_latest_resumable_task_id(
 
 pub fn load_task_runtime_row(conn: &Connection, task_id: &str) -> Result<TaskRuntimeRow> {
     let row = conn.query_row(
-        "SELECT workspace_id, workflow_id, workspace_root, ticket_dir, execution_plan_json, current_cycle, init_done, COALESCE(goal,''), COALESCE(project_id,''), pipeline_vars_json, COALESCE(spawn_depth,0) FROM tasks WHERE id = ?1",
+        "SELECT workspace_id, workflow_id, workspace_root, ticket_dir, execution_plan_json, current_cycle, init_done, COALESCE(goal,''), COALESCE(project_id,''), pipeline_vars_json, COALESCE(spawn_depth,0), step_filter_json, initial_vars_json FROM tasks WHERE id = ?1",
         params![task_id],
         |row| {
             Ok(TaskRuntimeRow {
@@ -219,6 +219,8 @@ pub fn load_task_runtime_row(conn: &Connection, task_id: &str) -> Result<TaskRun
                 project_id: row.get(8)?,
                 pipeline_vars_json: row.get(9)?,
                 spawn_depth: row.get(10)?,
+                step_filter_json: row.get(11)?,
+                initial_vars_json: row.get(12)?,
             })
         },
     )?;

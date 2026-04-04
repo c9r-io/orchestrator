@@ -507,6 +507,13 @@ impl OrchestratorService for OrchestratorServer {
     ) -> Result<Response<QaDoctorResponse>, Status> {
         system::qa_doctor(self, request).await
     }
+
+    async fn run_step(
+        &self,
+        request: Request<RunStepRequest>,
+    ) -> Result<Response<RunStepResponse>, Status> {
+        task::run_step(self, request).await
+    }
 }
 
 #[cfg(test)]

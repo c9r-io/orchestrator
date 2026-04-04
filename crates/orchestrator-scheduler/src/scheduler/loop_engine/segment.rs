@@ -49,6 +49,12 @@ pub(super) fn build_scope_segments(
         if step.is_guard || !step.enabled {
             continue;
         }
+        // FR-090: Skip steps excluded by task-level step_filter
+        if let Some(ref filter) = task_ctx.step_filter {
+            if !filter.contains(&step.id) {
+                continue;
+            }
+        }
         let scope = step.resolved_scope();
         if let Some(last) = segments.last_mut() {
             if last.scope == scope {

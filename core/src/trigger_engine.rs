@@ -468,6 +468,8 @@ impl TriggerEngine {
             target_files,
             parent_task_id: None,
             spawn_reason: None,
+            step_filter: None,
+            initial_vars: None,
         };
 
         match crate::task_ops::create_task_as_service(&self.state, payload) {

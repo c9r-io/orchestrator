@@ -873,6 +873,7 @@ mod tests {
             item_step_failures: HashMap::new(),
             item_retry_after: HashMap::new(),
             restart_completed_steps: std::collections::HashSet::new(),
+            step_filter: None,
         };
 
         let result = read_ticket_preview(&task_ctx, "docs/ticket/t1.md");
@@ -1207,6 +1208,7 @@ mod tests {
             item_step_failures: HashMap::new(),
             item_retry_after: HashMap::new(),
             restart_completed_steps: std::collections::HashSet::new(),
+            step_filter: None,
         };
 
         let result =
@@ -1260,6 +1262,7 @@ mod tests {
             item_step_failures: HashMap::new(),
             item_retry_after: HashMap::new(),
             restart_completed_steps: std::collections::HashSet::new(),
+            step_filter: None,
         };
 
         // When looking for UNASSIGNED, should match ticket with empty QA doc
@@ -1324,6 +1327,7 @@ mod tests {
             item_step_failures: HashMap::new(),
             item_retry_after: HashMap::new(),
             restart_completed_steps: std::collections::HashSet::new(),
+            step_filter: None,
         };
 
         let items = vec!["docs/qa/auth.md".to_string()];
@@ -1387,6 +1391,7 @@ mod tests {
             item_step_failures: HashMap::new(),
             item_retry_after: HashMap::new(),
             restart_completed_steps: std::collections::HashSet::new(),
+            step_filter: None,
         };
 
         let items = vec!["docs/qa/auth.md".to_string()];

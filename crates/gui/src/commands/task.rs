@@ -116,6 +116,8 @@ pub async fn task_create(
             workflow_id,
             target_files: target_files.unwrap_or_default(),
             no_start: no_start.unwrap_or(false),
+            step_filter: vec![],
+            initial_vars: Default::default(),
         })
         .await
         .map_err(|e| crate::errors::humanize_grpc_error(&e))?;

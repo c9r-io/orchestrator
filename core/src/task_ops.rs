@@ -2,7 +2,7 @@ use crate::config::LoopMode;
 use crate::config_load::build_execution_plan_for_project;
 use crate::config_load::{now_ts, read_active_config};
 use crate::db::open_conn;
-use crate::dto::{CreateTaskPayload, TaskSummary, UNASSIGNED_QA_FILE_PATH};
+use crate::dto::{CreateRunStepPayload, CreateTaskPayload, TaskSummary, UNASSIGNED_QA_FILE_PATH};
 use crate::task_repository::{SqliteTaskRepository, TaskQueryRepository};
 use crate::ticket::{collect_target_files, collect_target_files_from_active_tickets};
 use anyhow::{Context, Result};
@@ -165,6 +165,39 @@ pub fn create_task_impl(
         LoopMode::Infinite => "infinite",
     };
 
+    // FR-090: Validate step_filter against execution plan
+    let step_filter_json = if let Some(ref filter) = payload.step_filter {
+        if !filter.is_empty() {
+            let known_ids: std::collections::HashSet<&str> =
+                execution_plan.steps.iter().map(|s| s.id.as_str()).collect();
+            for id in filter {
+                if !known_ids.contains(id.as_str()) {
+                    anyhow::bail!(
+                        "unknown step id '{}' in --step filter; available steps: {}",
+                        id,
+                        known_ids.into_iter().collect::<Vec<_>>().join(", ")
+                    );
+                }
+            }
+            serde_json::to_string(filter).unwrap_or_default()
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
+    // FR-090: Serialize initial_vars
+    let initial_vars_json = if let Some(ref vars) = payload.initial_vars {
+        if !vars.is_empty() {
+            serde_json::to_string(vars).unwrap_or_default()
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
     let resolved_targets = resolve_task_targets(&workspace, &execution_plan, payload.target_files)?;
 
     let task_id = Uuid::new_v4().to_string();
@@ -179,7 +212,7 @@ pub fn create_task_impl(
     let conn = open_conn(&state.db_path)?;
     let tx = conn.unchecked_transaction()?;
     tx.execute(
-        "INSERT INTO tasks (id, name, status, started_at, completed_at, goal, target_files_json, mode, project_id, workspace_id, workflow_id, workspace_root, qa_targets_json, ticket_dir, execution_plan_json, loop_mode, current_cycle, init_done, resume_token, created_at, updated_at, parent_task_id, spawn_reason, spawn_depth) VALUES (?1, ?2, 'created', NULL, NULL, ?3, ?4, '', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 0, 0, NULL, ?13, ?13, ?14, ?15, 0)",
+        "INSERT INTO tasks (id, name, status, started_at, completed_at, goal, target_files_json, mode, project_id, workspace_id, workflow_id, workspace_root, qa_targets_json, ticket_dir, execution_plan_json, loop_mode, current_cycle, init_done, resume_token, created_at, updated_at, parent_task_id, spawn_reason, spawn_depth, step_filter_json, initial_vars_json) VALUES (?1, ?2, 'created', NULL, NULL, ?3, ?4, '', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 0, 0, NULL, ?13, ?13, ?14, ?15, 0, ?16, ?17)",
         params![
             task_id,
             task_name,
@@ -196,6 +229,170 @@ pub fn create_task_impl(
             created_at,
             payload.parent_task_id,
             payload.spawn_reason,
+            step_filter_json,
+            initial_vars_json,
+        ],
+    )?;
+
+    for (idx, path) in resolved_targets.task_item_paths.iter().enumerate() {
+        let item_id = Uuid::new_v4().to_string();
+        tx.execute(
+            "INSERT INTO task_items (id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 'pending', '[]', '[]', 0, 0, '', NULL, NULL, ?5, ?5)",
+            params![item_id, task_id, (idx as i64) + 1, path, created_at],
+        )?;
+    }
+    tx.commit()?;
+
+    let repo = SqliteTaskRepository::new(state.db_path.clone());
+    let mut summary = repo.load_task_summary(&task_id)?;
+    let (total, finished, failed) = repo.load_task_item_counts(&task_id)?;
+    summary.total_items = total;
+    summary.finished_items = finished;
+    summary.failed_items = failed;
+    Ok(summary)
+}
+
+/// FR-090 Phase 3: Create a task from a direct step template + agent capability
+/// without requiring a pre-defined workflow.
+pub fn create_run_step_task(
+    state: &crate::state::InnerState,
+    payload: CreateRunStepPayload,
+) -> Result<TaskSummary> {
+    use crate::config::{
+        StepBehavior, TaskExecutionPlan, TaskExecutionStep, WorkflowFinalizeConfig,
+        WorkflowLoopConfig,
+    };
+
+    let active = read_active_config(state)?;
+
+    let project_id = payload
+        .project_id
+        .unwrap_or_else(|| crate::config::DEFAULT_PROJECT_ID.to_string());
+    let project = active
+        .projects
+        .get(&project_id)
+        .with_context(|| format!("project not found: {}", project_id))?;
+
+    let workspace_id = if let Some(ws) = payload.workspace_id {
+        ws
+    } else {
+        resolve_default_resource_id(&project.workspaces, "workspace")?
+    };
+    let workspace = project
+        .workspaces
+        .get(&workspace_id)
+        .cloned()
+        .with_context(|| format!("workspace not found: {}", workspace_id))?;
+
+    // Validate template exists
+    if !project.step_templates.contains_key(&payload.template) {
+        anyhow::bail!(
+            "step template '{}' not found in project '{}'; available templates: {}",
+            payload.template,
+            project_id,
+            project
+                .step_templates
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+
+    // Validate at least one agent has the capability
+    let has_cap = project.agents.values().any(|a| {
+        a.capabilities
+            .iter()
+            .any(|c| c == &payload.agent_capability)
+    });
+    if !has_cap {
+        anyhow::bail!(
+            "no agent in project '{}' has capability '{}'",
+            project_id,
+            payload.agent_capability,
+        );
+    }
+
+    // Build single-step execution plan
+    let step = TaskExecutionStep {
+        id: payload.template.clone(),
+        required_capability: Some(payload.agent_capability),
+        template: Some(payload.template.clone()),
+        execution_profile: payload.execution_profile,
+        builtin: None,
+        enabled: true,
+        repeatable: false,
+        is_guard: false,
+        cost_preference: None,
+        prehook: None,
+        tty: false,
+        outputs: Vec::new(),
+        pipe_to: None,
+        command: None,
+        chain_steps: Vec::new(),
+        scope: None,
+        behavior: StepBehavior::default(),
+        max_parallel: None,
+        stagger_delay_ms: None,
+        timeout_secs: None,
+        stall_timeout_secs: None,
+        item_select_config: None,
+        store_inputs: Vec::new(),
+        store_outputs: Vec::new(),
+        step_vars: None,
+    };
+
+    let execution_plan = TaskExecutionPlan {
+        steps: vec![step],
+        loop_policy: WorkflowLoopConfig {
+            mode: LoopMode::Once,
+            ..Default::default()
+        },
+        finalize: WorkflowFinalizeConfig::default(),
+        max_parallel: None,
+        stagger_delay_ms: None,
+        item_isolation: None,
+    };
+
+    let execution_plan_json =
+        serde_json::to_string(&execution_plan).context("serialize execution plan")?;
+
+    let initial_vars_json = if let Some(ref vars) = payload.initial_vars {
+        if !vars.is_empty() {
+            serde_json::to_string(vars).unwrap_or_default()
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
+    let resolved_targets = resolve_task_targets(&workspace, &execution_plan, payload.target_files)?;
+
+    let task_id = Uuid::new_v4().to_string();
+    let created_at = now_ts();
+    let task_name = format!("run:{}", payload.template);
+    let goal = format!("Direct step execution: {}", payload.template);
+    let workflow_id = format!("_ephemeral:{}", payload.template);
+
+    let conn = open_conn(&state.db_path)?;
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
+        "INSERT INTO tasks (id, name, status, started_at, completed_at, goal, target_files_json, mode, project_id, workspace_id, workflow_id, workspace_root, qa_targets_json, ticket_dir, execution_plan_json, loop_mode, current_cycle, init_done, resume_token, created_at, updated_at, parent_task_id, spawn_reason, spawn_depth, step_filter_json, initial_vars_json) VALUES (?1, ?2, 'created', NULL, NULL, ?3, ?4, '', ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'once', 0, 0, NULL, ?12, ?12, NULL, NULL, 0, '', ?13)",
+        params![
+            task_id,
+            task_name,
+            goal,
+            serde_json::to_string(&resolved_targets.persisted_target_files)?,
+            project_id,
+            workspace_id,
+            workflow_id,
+            workspace.root_path.to_string_lossy().to_string(),
+            serde_json::to_string(&workspace.qa_targets)?,
+            workspace.ticket_dir,
+            execution_plan_json,
+            created_at,
+            initial_vars_json,
         ],
     )?;
 
@@ -443,6 +640,8 @@ mod tests {
             target_files: None,
             parent_task_id: None,
             spawn_reason: None,
+            step_filter: None,
+            initial_vars: None,
         };
         let result = create_task_impl(&state, payload);
         assert!(
@@ -486,6 +685,8 @@ mod tests {
             target_files: None,
             parent_task_id: None,
             spawn_reason: None,
+            step_filter: None,
+            initial_vars: None,
         };
         let result = create_task_impl(&state, payload).expect("create custom task");
         assert_eq!(result.name, "My Custom Task");
@@ -506,6 +707,8 @@ mod tests {
             target_files: None,
             parent_task_id: None,
             spawn_reason: None,
+            step_filter: None,
+            initial_vars: None,
         };
         let result = create_task_impl(&state, payload);
         assert!(result.is_err());
@@ -531,6 +734,8 @@ mod tests {
             target_files: None,
             parent_task_id: None,
             spawn_reason: None,
+            step_filter: None,
+            initial_vars: None,
         };
         let result = create_task_impl(&state, payload);
         assert!(result.is_err());
@@ -557,6 +762,8 @@ mod tests {
             target_files: None,
             parent_task_id: None,
             spawn_reason: None,
+            step_filter: None,
+            initial_vars: None,
         };
         let result = create_task_impl(&state, payload);
         assert!(result.is_err());
@@ -599,6 +806,8 @@ mod tests {
             target_files: Some(vec![rel1, rel2]),
             parent_task_id: None,
             spawn_reason: None,
+            step_filter: None,
+            initial_vars: None,
         };
         let result = create_task_impl(&state, payload).expect("create targeted task");
         assert_eq!(result.total_items, 2, "should have 2 task items");
@@ -631,6 +840,8 @@ mod tests {
             target_files: Some(vec!["src/lib.rs".to_string()]),
             parent_task_id: None,
             spawn_reason: None,
+            step_filter: None,
+            initial_vars: None,
         };
         let result = create_task_impl(&state, payload).expect("create source task");
         assert_eq!(result.total_items, 1);
@@ -653,6 +864,8 @@ mod tests {
             target_files: None,
             parent_task_id: None,
             spawn_reason: None,
+            step_filter: None,
+            initial_vars: None,
         };
         let result = create_task_impl(&state, payload).expect("create task-scoped task");
         assert_eq!(result.total_items, 1);
@@ -685,6 +898,8 @@ mod tests {
             target_files: Some(vec!["src/lib.rs".to_string()]),
             parent_task_id: None,
             spawn_reason: None,
+            step_filter: None,
+            initial_vars: None,
         };
         let result = create_task_impl(&state, payload).expect("create task-only targeted task");
         assert_eq!(result.total_items, 1);
@@ -743,6 +958,8 @@ mod tests {
             target_files: None,
             parent_task_id: None,
             spawn_reason: None,
+            step_filter: None,
+            initial_vars: None,
         };
         let err = create_task_impl(&state, payload).unwrap_err();
         assert!(
@@ -776,6 +993,8 @@ mod tests {
             target_files: Some(vec!["src/a.rs".to_string(), "src/b.rs".to_string()]),
             parent_task_id: None,
             spawn_reason: None,
+            step_filter: None,
+            initial_vars: None,
         };
         let result = create_task_impl(&state, payload);
         assert!(result.is_err());
@@ -801,6 +1020,8 @@ mod tests {
             target_files: None,
             parent_task_id: None,
             spawn_reason: None,
+            step_filter: None,
+            initial_vars: None,
         };
         let result = create_task_impl(&state, payload).expect("create ticket seed empty task");
         assert_eq!(result.total_items, 1);
@@ -840,6 +1061,8 @@ mod tests {
             target_files: None,
             parent_task_id: None,
             spawn_reason: None,
+            step_filter: None,
+            initial_vars: None,
         };
         let result = create_task_impl(&state, payload).expect("create ticket-seed task");
         assert_eq!(result.total_items, 1);
@@ -873,6 +1096,8 @@ mod tests {
             target_files: None,
             parent_task_id: None,
             spawn_reason: None,
+            step_filter: None,
+            initial_vars: None,
         };
         let payload2 = CreateTaskPayload {
             name: Some("Task 2".to_string()),
@@ -883,6 +1108,8 @@ mod tests {
             target_files: None,
             parent_task_id: None,
             spawn_reason: None,
+            step_filter: None,
+            initial_vars: None,
         };
         let t1 = create_task_impl(&state, payload1).expect("create first task");
         let t2 = create_task_impl(&state, payload2).expect("create second task");
@@ -915,6 +1142,8 @@ mod tests {
             target_files: None,
             parent_task_id: None,
             spawn_reason: None,
+            step_filter: None,
+            initial_vars: None,
         };
         let task = create_task_impl(&state, payload).expect("create retry task");
 

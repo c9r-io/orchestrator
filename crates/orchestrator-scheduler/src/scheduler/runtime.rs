@@ -368,6 +368,18 @@ pub async fn load_task_runtime_context(
                 }
                 _ => agent_orchestrator::config::PipelineVariables::default(),
             };
+            // FR-090: Inject initial_vars into pipeline variables (first cycle only)
+            if let Some(ref iv_json) = runtime_row.initial_vars_json {
+                if !iv_json.is_empty() {
+                    if let Ok(iv) =
+                        serde_json::from_str::<std::collections::HashMap<String, String>>(iv_json)
+                    {
+                        for (k, v) in iv {
+                            pv.vars.entry(k).or_insert(v);
+                        }
+                    }
+                }
+            }
             if !task_goal.is_empty() {
                 pv.vars.entry("goal".to_string()).or_insert(task_goal);
             }
@@ -383,6 +395,18 @@ pub async fn load_task_runtime_context(
         item_step_failures: std::collections::HashMap::new(),
         item_retry_after: std::collections::HashMap::new(),
         restart_completed_steps: std::collections::HashSet::new(),
+        // FR-090: Parse task-level step filter
+        step_filter: {
+            match runtime_row.step_filter_json.as_deref() {
+                Some(json) if !json.is_empty() => {
+                    serde_json::from_str::<Vec<String>>(json).ok().map(|ids| {
+                        ids.into_iter()
+                            .collect::<std::collections::HashSet<String>>()
+                    })
+                }
+                _ => None,
+            }
+        },
     })
 }
 

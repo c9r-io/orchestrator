@@ -258,6 +258,9 @@ pub struct TaskRuntimeContext {
     /// Steps that already completed in this cycle before a self_restart.
     /// Populated when resuming from restart_pending to avoid re-running steps.
     pub restart_completed_steps: HashSet<String>,
+    /// FR-090: Task-level step filter. When set, only steps whose ID is in this
+    /// set are executed; all other steps are skipped.
+    pub step_filter: Option<HashSet<String>>,
 }
 
 impl TaskRuntimeContext {

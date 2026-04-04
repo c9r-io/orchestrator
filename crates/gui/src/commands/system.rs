@@ -79,6 +79,8 @@ pub async fn probe_role(state: State<'_, Arc<AppState>>) -> Result<String, Strin
                     workflow_id: None,
                     target_files: vec![],
                     no_start: true,
+                    step_filter: vec![],
+                    initial_vars: Default::default(),
                 })
                 .await;
             match operator_result {

@@ -1010,6 +1010,8 @@ pub fn fire_trigger(
         target_files: None,
         parent_task_id: None,
         spawn_reason: Some(format!("manual fire of trigger '{}'", trigger_name)),
+        step_filter: None,
+        initial_vars: None,
     };
 
     let created = crate::task_ops::create_task_as_service(state, payload)

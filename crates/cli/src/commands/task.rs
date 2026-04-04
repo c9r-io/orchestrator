@@ -35,6 +35,8 @@ pub(crate) async fn dispatch(
             workflow,
             target_file,
             no_start,
+            step,
+            set,
         } => {
             let resp = client
                 .task_create(orchestrator_proto::TaskCreateRequest {
@@ -45,6 +47,8 @@ pub(crate) async fn dispatch(
                     workflow_id: workflow,
                     target_files: target_file,
                     no_start,
+                    step_filter: step,
+                    initial_vars: set.into_iter().collect(),
                 })
                 .await?
                 .into_inner();

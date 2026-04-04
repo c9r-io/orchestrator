@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 
 /// Payload accepted by task-creation APIs.
 #[derive(Debug, Deserialize, Default)]
@@ -21,6 +22,10 @@ pub struct CreateTaskPayload {
     pub parent_task_id: Option<String>,
     /// Human-readable reason for task spawning.
     pub spawn_reason: Option<String>,
+    /// Step IDs to execute (empty/None = all steps).
+    pub step_filter: Option<Vec<String>>,
+    /// Ad-hoc pipeline variables injected at task start.
+    pub initial_vars: Option<HashMap<String, String>>,
 }
 
 /// Snapshot of the active orchestrator configuration exposed by read APIs.
@@ -75,6 +80,26 @@ pub struct TaskSummary {
     pub spawn_reason: Option<String>,
     /// Spawn depth used to prevent runaway recursive task creation.
     pub spawn_depth: i64,
+}
+
+/// Payload for the Phase 3 direct-assembly `RunStep` RPC.
+#[derive(Debug, Deserialize, Default)]
+#[serde(default)]
+pub struct CreateRunStepPayload {
+    /// Project identifier.
+    pub project_id: Option<String>,
+    /// Workspace identifier.
+    pub workspace_id: Option<String>,
+    /// StepTemplate name to execute.
+    pub template: String,
+    /// Required agent capability for the step.
+    pub agent_capability: String,
+    /// Optional execution profile override.
+    pub execution_profile: Option<String>,
+    /// Ad-hoc pipeline variables.
+    pub initial_vars: Option<HashMap<String, String>>,
+    /// Explicit target files.
+    pub target_files: Option<Vec<String>>,
 }
 
 /// Detailed task-item record returned by task detail APIs.

@@ -208,6 +208,11 @@ pub fn registered_migrations() -> Vec<Migration> {
             name: "m0022_plugin_audit",
             up: crate::persistence::migration_steps::m0022_plugin_audit,
         },
+        Migration {
+            version: 23,
+            name: "m0023_task_step_filter_and_initial_vars",
+            up: crate::persistence::migration_steps::m0023_task_step_filter_and_initial_vars,
+        },
     ]
 }
 

@@ -45,6 +45,16 @@ pub(crate) async fn task_create(
         },
         parent_task_id: None,
         spawn_reason: None,
+        step_filter: if req.step_filter.is_empty() {
+            None
+        } else {
+            Some(req.step_filter)
+        },
+        initial_vars: if req.initial_vars.is_empty() {
+            None
+        } else {
+            Some(req.initial_vars)
+        },
     };
 
     let created = orchestrator_scheduler::service::task::create_task(&server.state, payload)
@@ -62,6 +72,58 @@ pub(crate) async fn task_create(
     }
 
     Ok(Response::new(TaskCreateResponse {
+        task_id: created.id,
+        status,
+        message,
+    }))
+}
+
+/// FR-090 Phase 3: Create a task from a direct step template + agent capability.
+pub(crate) async fn run_step(
+    server: &OrchestratorServer,
+    request: Request<RunStepRequest>,
+) -> Result<Response<RunStepResponse>, Status> {
+    super::authorize(server, &request, "RunStep").map_err(Status::from)?;
+    let req = request.into_inner();
+    if !req.no_start {
+        if let Some(status) = server.reject_new_work_during_shutdown("RunStep") {
+            return Err(status);
+        }
+    }
+    let payload = agent_orchestrator::dto::CreateRunStepPayload {
+        project_id: req.project_id,
+        workspace_id: req.workspace_id,
+        template: req.template,
+        agent_capability: req.agent_capability,
+        execution_profile: req.execution_profile,
+        initial_vars: if req.initial_vars.is_empty() {
+            None
+        } else {
+            Some(req.initial_vars)
+        },
+        target_files: if req.target_files.is_empty() {
+            None
+        } else {
+            Some(req.target_files)
+        },
+    };
+
+    let created = agent_orchestrator::task_ops::create_run_step_task(&server.state, payload)
+        .map_err(|err| agent_orchestrator::error::classify_task_error("run_step", err))
+        .map_err(map_core_error)?;
+
+    let mut status = "created".to_string();
+    let mut message = format!("Task created: {}", created.id);
+
+    if !req.no_start {
+        orchestrator_scheduler::service::task::enqueue_task(&server.state, &created.id)
+            .await
+            .map_err(map_core_error)?;
+        status = "enqueued".to_string();
+        message = format!("Task enqueued: {}", created.id);
+    }
+
+    Ok(Response::new(RunStepResponse {
         task_id: created.id,
         status,
         message,

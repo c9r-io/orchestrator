@@ -435,6 +435,7 @@ fn make_task_ctx(
         item_step_failures: HashMap::new(),
         item_retry_after: HashMap::new(),
         restart_completed_steps: std::collections::HashSet::new(),
+        step_filter: None,
     }
 }
 

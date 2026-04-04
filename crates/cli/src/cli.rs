@@ -196,6 +196,57 @@ pub enum Commands {
         #[arg(long)]
         json: bool,
     },
+
+    /// Execute workflow step(s) synchronously.
+    Run {
+        /// Workflow identifier (required unless --template is specified).
+        #[arg(short = 'W', long)]
+        workflow: Option<String>,
+
+        /// Execute only the specified step(s). Repeatable.
+        #[arg(short = 'S', long = "step")]
+        step: Vec<String>,
+
+        /// Inject a pipeline variable (key=value). Repeatable.
+        #[arg(long = "set", value_parser = parse_key_val)]
+        set: Vec<(String, String)>,
+
+        /// Optional project identifier.
+        #[arg(short, long)]
+        project: Option<String>,
+
+        /// Optional workspace identifier.
+        #[arg(short, long)]
+        workspace: Option<String>,
+
+        /// Explicit target files for the task.
+        #[arg(short, long)]
+        target_file: Vec<String>,
+
+        /// Run in background (equivalent to task create).
+        #[arg(long)]
+        detach: bool,
+
+        /// Step template name (Phase 3: direct assembly without workflow).
+        #[arg(long)]
+        template: Option<String>,
+
+        /// Agent capability for direct assembly mode.
+        #[arg(long)]
+        agent_capability: Option<String>,
+
+        /// Execution profile override for direct assembly mode.
+        #[arg(long)]
+        profile: Option<String>,
+    },
+}
+
+/// Parse a key=value pair for --set flags.
+fn parse_key_val(s: &str) -> Result<(String, String), String> {
+    let pos = s
+        .find('=')
+        .ok_or_else(|| format!("invalid key=value: no `=` found in `{s}`"))?;
+    Ok((s[..pos].to_string(), s[pos + 1..].to_string()))
 }
 
 /// Daemon lifecycle commands.
@@ -544,6 +595,14 @@ pub enum TaskCommands {
         /// Create the task without starting it.
         #[arg(long)]
         no_start: bool,
+
+        /// Execute only the specified step(s) from the workflow. Repeatable.
+        #[arg(short = 'S', long = "step")]
+        step: Vec<String>,
+
+        /// Inject a pipeline variable (key=value). Repeatable.
+        #[arg(long = "set", value_parser = parse_key_val)]
+        set: Vec<(String, String)>,
     },
 
     /// List task items and their status.

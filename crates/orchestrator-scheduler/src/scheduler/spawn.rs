@@ -51,6 +51,8 @@ pub fn execute_spawn_task(ctx: &SpawnContext<'_>, action: &SpawnTaskAction) -> R
         target_files: None,
         parent_task_id: Some(ctx.parent_task_id.to_string()),
         spawn_reason: Some("spawn_task".to_string()),
+        step_filter: None,
+        initial_vars: None,
     };
 
     let summary = create_task_impl(ctx.state, payload)?;
@@ -129,6 +131,8 @@ pub fn execute_spawn_tasks(
             target_files: None,
             parent_task_id: Some(ctx.parent_task_id.to_string()),
             spawn_reason: Some("spawn_tasks".to_string()),
+            step_filter: None,
+            initial_vars: None,
         };
 
         match create_task_impl(ctx.state, payload) {

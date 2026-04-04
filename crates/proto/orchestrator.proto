@@ -79,6 +79,9 @@ service OrchestratorService {
   // QA observability
   rpc QaDoctor(QaDoctorRequest)                 returns (QaDoctorResponse);
 
+  // Lightweight step execution
+  rpc RunStep(RunStepRequest)                   returns (RunStepResponse);
+
 }
 
 // ─── Task messages ────────────────────────────────────────────
@@ -91,6 +94,8 @@ message TaskCreateRequest {
   optional string workflow_id = 5;
   repeated string target_files = 6;
   bool no_start = 7;
+  repeated string step_filter = 8;         // step IDs to execute (empty = all)
+  map<string, string> initial_vars = 9;    // ad-hoc pipeline variable injection
 }
 
 message TaskCreateResponse {
@@ -816,4 +821,23 @@ message QaDoctorResponse {
   uint64 task_execution_metrics_total = 1;
   uint64 task_execution_metrics_last_24h = 2;
   double task_completion_rate = 3;
+}
+
+// ─── Lightweight step execution ──────────────────────────────
+
+message RunStepRequest {
+  optional string project_id = 1;
+  optional string workspace_id = 2;
+  string template = 3;
+  string agent_capability = 4;
+  optional string execution_profile = 5;
+  map<string, string> initial_vars = 6;
+  repeated string target_files = 7;
+  bool no_start = 8;
+}
+
+message RunStepResponse {
+  string task_id = 1;
+  string status = 2;
+  string message = 3;
 }

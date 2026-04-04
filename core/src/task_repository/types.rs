@@ -51,6 +51,10 @@ pub struct TaskRuntimeRow {
     pub pipeline_vars_json: Option<String>,
     /// Current task spawn depth.
     pub spawn_depth: i64,
+    /// FR-090: Serialized step filter (JSON array of step IDs).
+    pub step_filter_json: Option<String>,
+    /// FR-090: Serialized initial pipeline variables (JSON map).
+    pub initial_vars_json: Option<String>,
 }
 
 /// Summary row for one command run returned by task-log queries.

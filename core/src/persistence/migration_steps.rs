@@ -768,6 +768,22 @@ pub(crate) fn m0022_plugin_audit(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn m0023_task_step_filter_and_initial_vars(conn: &Connection) -> Result<()> {
+    ensure_column_exists(
+        conn,
+        "tasks",
+        "step_filter_json",
+        "ALTER TABLE tasks ADD COLUMN step_filter_json TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column_exists(
+        conn,
+        "tasks",
+        "initial_vars_json",
+        "ALTER TABLE tasks ADD COLUMN initial_vars_json TEXT NOT NULL DEFAULT ''",
+    )?;
+    Ok(())
+}
+
 pub(crate) fn m0014_task_graph_debug_tables(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"
