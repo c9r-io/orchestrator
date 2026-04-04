@@ -42,6 +42,7 @@ export default defineConfig({
                 { text: 'FR Watch', link: '/en/showcases/fr-watch' },
                 { text: 'Webhook Integration', link: '/en/showcases/webhook-integration' },
                 { text: 'Command Rules', link: '/en/showcases/command-rules' },
+                { text: 'Lightweight Step Run', link: '/en/showcases/lightweight-step-run' },
               ],
             },
             {
@@ -101,6 +102,7 @@ export default defineConfig({
                 { text: 'FR Watch', link: '/zh/showcases/fr-watch' },
                 { text: 'Webhook 集成', link: '/zh/showcases/webhook-integration' },
                 { text: 'Command Rules', link: '/zh/showcases/command-rules' },
+                { text: '轻量化单步执行', link: '/zh/showcases/lightweight-step-run' },
               ],
             },
             {
