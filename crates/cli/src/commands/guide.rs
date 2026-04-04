@@ -1189,7 +1189,7 @@ fn render_markdown(entries: &[GuideEntry]) -> String {
     let mut out = String::with_capacity(4096);
     out.push_str("# orchestrator CLI Guide\n\n");
 
-    for (_key, (category, group)) in &groups {
+    for (category, group) in groups.values() {
         out.push_str(&format!("## {category}\n\n"));
         for entry in group {
             // Heading
