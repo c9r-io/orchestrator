@@ -111,6 +111,9 @@ orchestrator task create \
   --workflow self-bootstrap --project my-project \
   --target-file docs/qa/01.md   # repeatable; -t shorthand
 
+# Step filtering: only run specific steps
+orchestrator task create --workflow sdlc --step fix --set ticket_paths=docs/ticket/T-0042.md
+
 # Control
 orchestrator task pause <id>
 orchestrator task resume <id>
@@ -131,6 +134,30 @@ orchestrator task delete <id> --force
 > **Note**: Tasks are executed only by daemon-embedded workers.
 > `task create` enqueues work for the running daemon, and observer commands such as
 > `task watch` / `task logs` are the supported way to follow progress.
+> `--step` filters to specific step IDs; `--set key=value` injects pipeline variables.
+
+## Lightweight Execution (`run`)
+
+```bash
+# Synchronous: follow logs until task completes, exit with status code
+orchestrator run --workflow sdlc --step fix --set ticket_paths=docs/ticket/T-0042.md
+
+# Background (equivalent to task create)
+orchestrator run --workflow sdlc --step fix --detach
+
+# Direct assembly: StepTemplate + agent capability, no workflow needed
+orchestrator run --template fix-ticket --agent-capability fix --set ticket_paths=docs/ticket/T-0042.md
+```
+
+| Flag | Description |
+|------|-------------|
+| `-W, --workflow` | Workflow ID (required unless `--template`) |
+| `-S, --step` | Step IDs to execute (repeatable) |
+| `--set` | Pipeline variable `key=value` (repeatable) |
+| `--detach` | Run in background (print task ID and return) |
+| `--template` | StepTemplate name (direct assembly mode) |
+| `--agent-capability` | Agent capability (direct assembly mode) |
+| `--profile` | ExecutionProfile override (direct assembly mode) |
 
 ## Persistent Store
 

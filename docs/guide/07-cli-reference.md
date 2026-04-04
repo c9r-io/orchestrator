@@ -162,6 +162,16 @@ orchestrator task create \
   --project my-project \
   --workspace default \
   --target-file docs/qa/01-test.md    # can specify multiple times
+
+# Step filtering: only run specific steps from the workflow
+orchestrator task create \
+  --workflow sdlc --project my-project \
+  --step fix \
+  --set ticket_paths=docs/ticket/T-0042.md
+
+# Multiple steps (executed in workflow order)
+orchestrator task create \
+  --workflow sdlc --step plan --step implement
 ```
 
 | Flag | Description |
@@ -173,6 +183,41 @@ orchestrator task create \
 | `-W, --workflow` | Workflow ID |
 | `-t, --target-file` | Target files (repeatable) |
 | `--no-start` | Create without auto-starting |
+| `-S, --step` | Execute only specified step IDs (repeatable) |
+| `--set` | Inject pipeline variable as `key=value` (repeatable) |
+
+### run
+
+Synchronous step execution — creates a task, follows logs, and exits with status code.
+
+```bash
+# Synchronous execution with step filter
+orchestrator run \
+  --workflow sdlc --step fix \
+  --set ticket_paths=docs/ticket/T-0042.md
+
+# Background mode (equivalent to task create)
+orchestrator run --workflow sdlc --step fix --detach
+
+# Direct assembly mode: execute a StepTemplate without a workflow
+orchestrator run \
+  --template fix-ticket \
+  --agent-capability fix \
+  --set ticket_paths=docs/ticket/T-0042.md
+```
+
+| Flag | Description |
+|------|-------------|
+| `-W, --workflow` | Workflow ID (required unless `--template` is specified) |
+| `-S, --step` | Execute only specified step IDs (repeatable) |
+| `--set` | Inject pipeline variable as `key=value` (repeatable) |
+| `-p, --project` | Project ID |
+| `-w, --workspace` | Workspace ID |
+| `-t, --target-file` | Target files (repeatable) |
+| `--detach` | Run in background (print task ID and return) |
+| `--template` | StepTemplate name (direct assembly mode) |
+| `--agent-capability` | Agent capability for direct assembly mode |
+| `--profile` | ExecutionProfile override for direct assembly mode |
 
 ### task list / info
 
@@ -517,7 +562,9 @@ orchestrator describe <kind/name> [--project <id>]
 orchestrator delete <kind/name> --force [--project <id>]
 
 # Task lifecycle
-orchestrator task create --name X --goal Y [--project <id>] [--workflow Z]
+orchestrator task create --name X --goal Y [--project <id>] [--workflow Z] [--step S] [--set k=v]
+orchestrator run --workflow Z [--step S] [--set k=v]          # synchronous execution
+orchestrator run --template T --agent-capability C [--set k=v] # direct assembly mode
 orchestrator task list [-o json] [--project <id>] [--status <s>]
 orchestrator task info <id> [-o json]
 orchestrator task start <id>

@@ -124,6 +124,14 @@ orchestrator task create \
   --workflow my-workflow --project my-project \
   --target-file docs/qa/01.md   # repeatable; -t shorthand
 
+# Step filtering: only run specific steps from the workflow
+orchestrator task create \
+  --workflow sdlc --project my-project \
+  --step fix --set ticket_paths=docs/ticket/T-0042.md
+
+# Multiple steps (executed in workflow order)
+orchestrator task create --workflow sdlc --step plan --step implement
+
 # Create without auto-starting
 orchestrator task create --name X --goal Y --no-start
 
@@ -150,6 +158,42 @@ orchestrator task delete <id>
 > **Note**: `task create` auto-enqueues to the daemon worker by default.
 > Tasks start executing immediately when a worker picks them up.
 > Use `--no-start` to create without auto-starting.
+> `--step` filters to specific step IDs; `--set key=value` injects pipeline variables.
+
+## Lightweight Execution (`run`)
+
+```bash
+# Synchronous: follow logs until task completes, exit with status code
+orchestrator run \
+  --workflow sdlc --step fix \
+  --set ticket_paths=docs/ticket/T-0042.md
+
+# Background (equivalent to task create)
+orchestrator run --workflow sdlc --step fix --detach
+
+# Direct assembly: StepTemplate + agent capability, no workflow needed
+orchestrator run \
+  --template fix-ticket --agent-capability fix \
+  --set ticket_paths=docs/ticket/T-0042.md
+
+# With execution profile override
+orchestrator run \
+  --template fix-ticket --agent-capability fix \
+  --profile host-unrestricted
+```
+
+| Flag | Description |
+|------|-------------|
+| `-W, --workflow` | Workflow ID (required unless `--template`) |
+| `-S, --step` | Step IDs to execute (repeatable) |
+| `--set` | Pipeline variable `key=value` (repeatable) |
+| `-p, --project` | Project ID |
+| `-w, --workspace` | Workspace ID |
+| `-t, --target-file` | Target files (repeatable) |
+| `--detach` | Run in background (print task ID and return) |
+| `--template` | StepTemplate name (direct assembly mode) |
+| `--agent-capability` | Agent capability (direct assembly mode) |
+| `--profile` | ExecutionProfile override (direct assembly mode) |
 
 ## Agent Management
 

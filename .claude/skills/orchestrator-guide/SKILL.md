@@ -9,8 +9,9 @@ description: >-
   creation), or configuring self-bootstrap workflows.
   Triggers: any mention of orchestrator config, YAML manifests with
   "orchestrator.dev/v2", workflow steps, prehooks, finalize rules, task
-  create/start/pause, agent capabilities, StepTemplate prompts, execution
-  profiles, sandbox configuration, secret management, or trigger/cron scheduling.
+  create/start/pause, orchestrator run, step filtering, direct assembly,
+  agent capabilities, StepTemplate prompts, execution profiles, sandbox
+  configuration, secret management, or trigger/cron scheduling.
 ---
 
 # Agent Orchestrator Guide
@@ -50,6 +51,21 @@ kill <pid>                                        # graceful SIGTERM
 3. `orchestrator apply -f manifest.yaml --project <name>` — load resources (daemon hot-reloads config via RwLock, no restart needed)
 4. `orchestrator task create --name X --goal Y --workflow Z --project <name>` — create and run (auto-enqueues to worker)
 5. `orchestrator task info <id>` / `task trace <id>` / `task logs <id>` — inspect results
+
+### Lightweight Execution (`orchestrator run`)
+
+```bash
+# Synchronous: run specific steps, follow logs, exit with status code
+orchestrator run --workflow sdlc --step fix --set ticket_paths=docs/ticket/T-0042.md
+
+# Background (equivalent to task create)
+orchestrator run --workflow sdlc --step fix --detach
+
+# Direct assembly: execute a StepTemplate without a workflow
+orchestrator run --template fix-ticket --agent-capability fix --set ticket_paths=docs/ticket/T-0042.md
+```
+
+`task create` also supports `--step` (repeatable) and `--set key=value` (repeatable) for step filtering and pipeline variable injection.
 
 ## Resource Kinds
 
