@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.8] - 2026-04-04
+
+### Added
+- **Lightweight step run** (FR-090) — `orchestrator run` command for ad-hoc single-step execution without full workflow scaffolding
+- **Design-first workflow skills** — `design-brief-gen` and `design-governance` skills for structured design-first development
+- 195 new unit tests — coverage improved from 80.9% to 82.3%
+
+### Fixed
+- **CRD plugin process-group isolation** (P1) — plugin child processes now run in dedicated process groups with correct async execution semantics
+- **Cross-platform sandbox capability gaps** (P2) — sandbox capability mismatches are now surfaced at manifest validate time rather than failing silently at runtime
+- **Log read-path per-project secret redaction** (P2) — defense-in-depth redaction now resolves the task's actual project_id instead of hardcoding the default project; prevents cross-project secret leakage on fallback
+- Documentation drift in README and architecture reference
+- Replaced 'operator' terminology with 'user' in plugin policy docs
+
 ## [0.2.7] - 2026-04-02
 
 ### Added
