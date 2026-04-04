@@ -357,18 +357,32 @@ pub fn validate_manifests(
         });
     }
 
+    // Collect platform compatibility warnings before consuming merged_config
+    let platform_warnings =
+        platform_compatibility_warnings(&merged_config, effective_project_id);
+
     // Try to build active config to validate the full configuration
     match crate::config_load::build_active_config_for_project(
         &state.data_dir,
         merged_config,
         effective_project_id,
     ) {
-        Ok(_) => Ok(ManifestValidationReport {
-            valid: true,
-            errors: vec![],
-            message: "Manifest is valid".to_string(),
-            diagnostics: vec![],
-        }),
+        Ok(_) => {
+            let message = if platform_warnings.is_empty() {
+                "Manifest is valid".to_string()
+            } else {
+                format!(
+                    "Manifest is valid ({} platform warning(s))",
+                    platform_warnings.len()
+                )
+            };
+            Ok(ManifestValidationReport {
+                valid: true,
+                errors: vec![],
+                message,
+                diagnostics: platform_warnings,
+            })
+        }
         Err(e) => {
             let message = e.to_string();
             Ok(ManifestValidationReport {
@@ -399,6 +413,62 @@ fn diagnostic_entry_from_error(
         risk: None,
         suggested_fix: None,
     }
+}
+
+fn diagnostic_entry_warning(
+    rule: impl Into<String>,
+    message: impl Into<String>,
+    actual: impl Into<String>,
+    expected: impl Into<String>,
+    risk: impl Into<String>,
+    suggested_fix: impl Into<String>,
+) -> orchestrator_proto::DiagnosticEntry {
+    orchestrator_proto::DiagnosticEntry {
+        source: "manifest_validate".to_string(),
+        rule: rule.into(),
+        severity: "warning".to_string(),
+        passed: false,
+        blocking: false,
+        message: message.into(),
+        context: None,
+        scope: None,
+        actual: Some(actual.into()),
+        expected: Some(expected.into()),
+        risk: Some(risk.into()),
+        suggested_fix: Some(suggested_fix.into()),
+    }
+}
+
+fn platform_compatibility_warnings(
+    config: &crate::config::OrchestratorConfig,
+    project_id: &str,
+) -> Vec<orchestrator_proto::DiagnosticEntry> {
+    let mut warnings = Vec::new();
+    let Some(project) = config.projects.get(project_id) else {
+        return warnings;
+    };
+    for (name, profile) in &project.execution_profiles {
+        if profile.network_mode == crate::config::ExecutionNetworkMode::Allowlist {
+            #[cfg(target_os = "macos")]
+            warnings.push(diagnostic_entry_warning(
+                "platform_unsupported_network_allowlist",
+                format!(
+                    "ExecutionProfile/{name}: network_mode=allowlist is not supported \
+                     by the macOS Seatbelt sandbox backend"
+                ),
+                "sandbox_backend=macos_seatbelt, network_mode=allowlist",
+                "sandbox_backend=linux_native for network_mode=allowlist",
+                "workflow steps using this profile will fail at runtime \
+                 with reason_code=unsupported_backend_feature",
+                "use network_mode=deny on macOS, or run the daemon on Linux \
+                 where network_mode=allowlist is supported",
+            ));
+            // Suppress unused-variable warning on non-macOS platforms
+            #[cfg(not(target_os = "macos"))]
+            let _ = name;
+        }
+    }
+    warnings
 }
 
 #[cfg(test)]

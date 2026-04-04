@@ -116,6 +116,22 @@ Runtime notes:
 - `network_mode: allowlist` still is not supported on macOS; it fails fast with `reason_code=unsupported_backend_feature` instead of silently degrading.
 - `network_mode: allowlist` entries must be exact hostname/IP values with an optional port, for example `api.example.com`, `api.example.com:443`, `10.203.0.1`, or `[::1]:8443`.
 
+#### Sandbox Capability Matrix
+
+| Feature | macOS (Seatbelt) | Linux (native) | Notes |
+|---------|:----------------:|:--------------:|-------|
+| `mode: sandbox` | Yes | Yes | Linux requires `ip`/`nft` and root |
+| `fs_mode: inherit` | Yes | Yes | |
+| `fs_mode: workspace_readonly` | Yes | Yes | |
+| `fs_mode: workspace_rw_scoped` | Yes | Yes | |
+| `network_mode: deny` | Yes | Yes | |
+| `network_mode: allowlist` | **No** | Yes | macOS fails fast with `reason_code=unsupported_backend_feature` |
+| `writable_paths` | Yes | Yes | |
+| Resource limits (`max_memory_mb`, etc.) | Yes | Yes | |
+
+> **Tip:** Run `orchestrator check` to detect platform-specific gaps before runtime.
+> `orchestrator manifest validate` also emits platform warnings when applicable.
+
 ### Known Step IDs
 
 | ID | Default Scope | Default Mode | Description |

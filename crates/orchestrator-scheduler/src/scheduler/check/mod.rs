@@ -114,6 +114,20 @@ impl CheckResult {
             suggested_fix: None,
         }
     }
+
+    fn with_details(
+        mut self,
+        actual: impl Into<String>,
+        expected: impl Into<String>,
+        risk: impl Into<String>,
+        suggested_fix: impl Into<String>,
+    ) -> Self {
+        self.actual = Some(actual.into());
+        self.expected = Some(expected.into());
+        self.risk = Some(risk.into());
+        self.suggested_fix = Some(suggested_fix.into());
+        self
+    }
 }
 
 impl From<PolicyDiagnostic> for CheckResult {

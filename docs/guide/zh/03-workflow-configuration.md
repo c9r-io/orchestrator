@@ -122,6 +122,22 @@ spec:
 - `network_mode: allowlist` 在 macOS 上仍然不受支持；系统会返回 `reason_code=unsupported_backend_feature`，而不是静默降级到宽松网络访问。
 - `network_mode: allowlist` 的条目必须是精确 hostname/IP，可选端口，例如 `api.example.com`、`api.example.com:443`、`10.203.0.1` 或 `[::1]:8443`。
 
+#### 沙箱能力矩阵
+
+| 功能 | macOS (Seatbelt) | Linux (native) | 备注 |
+|------|:----------------:|:--------------:|------|
+| `mode: sandbox` | 支持 | 支持 | Linux 需要 `ip`/`nft` 和 root |
+| `fs_mode: inherit` | 支持 | 支持 | |
+| `fs_mode: workspace_readonly` | 支持 | 支持 | |
+| `fs_mode: workspace_rw_scoped` | 支持 | 支持 | |
+| `network_mode: deny` | 支持 | 支持 | |
+| `network_mode: allowlist` | **不支持** | 支持 | macOS 返回 `reason_code=unsupported_backend_feature` 快速失败 |
+| `writable_paths` | 支持 | 支持 | |
+| 资源限制 (`max_memory_mb` 等) | 支持 | 支持 | |
+
+> **提示：** 运行 `orchestrator check` 可在运行前检测平台限制。
+> `orchestrator manifest validate` 也会在适用时输出平台警告。
+
 ### 已知步骤 ID
 
 | ID | 默认作用域 | 默认模式 | 说明 |

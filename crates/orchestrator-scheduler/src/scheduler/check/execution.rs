@@ -1,6 +1,8 @@
 use super::CheckResult;
 use agent_orchestrator::anomaly::Severity;
-use agent_orchestrator::runner::{ResolvedExecutionProfile, sandbox_backend_preflight_issues};
+use agent_orchestrator::runner::{
+    ResolvedExecutionProfile, sandbox_backend_label, sandbox_backend_preflight_issues,
+};
 use std::path::Path;
 
 pub(super) fn check_execution_profile_backend_support(
@@ -36,6 +38,7 @@ pub(super) fn check_execution_profile_backend_support(
             };
             let resolved =
                 ResolvedExecutionProfile::from_config(profile_name, profile, &workspace_root, &[]);
+            let backend = sandbox_backend_label(&resolved);
             for issue in sandbox_backend_preflight_issues(&resolved) {
                 let severity = if resolved.network_mode
                     == agent_orchestrator::config::ExecutionNetworkMode::Allowlist
@@ -44,16 +47,27 @@ pub(super) fn check_execution_profile_backend_support(
                 } else {
                     Severity::Warning
                 };
-                out.push(CheckResult::simple(
-                    "execution_profile_backend_support",
-                    severity,
-                    false,
-                    format!(
-                        "workflow \"{workflow_id}\" step \"{}\" execution profile \"{profile_name}\": {issue}",
-                        step.id
+                out.push(
+                    CheckResult::simple(
+                        "execution_profile_backend_support",
+                        severity,
+                        false,
+                        format!(
+                            "workflow \"{workflow_id}\" step \"{}\" execution profile \"{profile_name}\": {issue}",
+                            step.id
+                        ),
+                        None,
+                    )
+                    .with_details(
+                        format!(
+                            "network_mode={:?}, sandbox_backend={}",
+                            resolved.network_mode, backend
+                        ),
+                        "sandbox backend supports requested network_mode",
+                        "step will fail at runtime with reason_code=unsupported_backend_feature",
+                        "use network_mode=deny on macOS, or deploy on Linux where network_mode=allowlist is supported",
                     ),
-                    None,
-                ));
+                );
             }
         }
     }
