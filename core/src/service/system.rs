@@ -358,8 +358,7 @@ pub fn validate_manifests(
     }
 
     // Collect platform compatibility warnings before consuming merged_config
-    let platform_warnings =
-        platform_compatibility_warnings(&merged_config, effective_project_id);
+    let platform_warnings = platform_compatibility_warnings(&merged_config, effective_project_id);
 
     // Try to build active config to validate the full configuration
     match crate::config_load::build_active_config_for_project(
@@ -415,6 +414,7 @@ fn diagnostic_entry_from_error(
     }
 }
 
+#[cfg(target_os = "macos")]
 fn diagnostic_entry_warning(
     rule: impl Into<String>,
     message: impl Into<String>,
@@ -443,32 +443,37 @@ fn platform_compatibility_warnings(
     config: &crate::config::OrchestratorConfig,
     project_id: &str,
 ) -> Vec<orchestrator_proto::DiagnosticEntry> {
-    let mut warnings = Vec::new();
-    let Some(project) = config.projects.get(project_id) else {
-        return warnings;
-    };
-    for (name, profile) in &project.execution_profiles {
-        if profile.network_mode == crate::config::ExecutionNetworkMode::Allowlist {
-            #[cfg(target_os = "macos")]
-            warnings.push(diagnostic_entry_warning(
-                "platform_unsupported_network_allowlist",
-                format!(
-                    "ExecutionProfile/{name}: network_mode=allowlist is not supported \
-                     by the macOS Seatbelt sandbox backend"
-                ),
-                "sandbox_backend=macos_seatbelt, network_mode=allowlist",
-                "sandbox_backend=linux_native for network_mode=allowlist",
-                "workflow steps using this profile will fail at runtime \
-                 with reason_code=unsupported_backend_feature",
-                "use network_mode=deny on macOS, or run the daemon on Linux \
-                 where network_mode=allowlist is supported",
-            ));
-            // Suppress unused-variable warning on non-macOS platforms
-            #[cfg(not(target_os = "macos"))]
-            let _ = name;
-        }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (config, project_id);
+        Vec::new()
     }
-    warnings
+
+    #[cfg(target_os = "macos")]
+    {
+        let mut warnings = Vec::new();
+        let Some(project) = config.projects.get(project_id) else {
+            return warnings;
+        };
+        for (name, profile) in &project.execution_profiles {
+            if profile.network_mode == crate::config::ExecutionNetworkMode::Allowlist {
+                warnings.push(diagnostic_entry_warning(
+                    "platform_unsupported_network_allowlist",
+                    format!(
+                        "ExecutionProfile/{name}: network_mode=allowlist is not supported \
+                         by the macOS Seatbelt sandbox backend"
+                    ),
+                    "sandbox_backend=macos_seatbelt, network_mode=allowlist",
+                    "sandbox_backend=linux_native for network_mode=allowlist",
+                    "workflow steps using this profile will fail at runtime \
+                     with reason_code=unsupported_backend_feature",
+                    "use network_mode=deny on macOS, or run the daemon on Linux \
+                     where network_mode=allowlist is supported",
+                ));
+            }
+        }
+        warnings
+    }
 }
 
 #[cfg(test)]

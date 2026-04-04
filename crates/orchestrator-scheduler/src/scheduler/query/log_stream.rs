@@ -829,8 +829,11 @@ mod tests {
                 .insert(
                     "vault".to_string(),
                     agent_orchestrator::config::SecretStoreConfig {
-                        data: [("DB_PASSWORD".to_string(), "non-default-secret-42".to_string())]
-                            .into(),
+                        data: [(
+                            "DB_PASSWORD".to_string(),
+                            "non-default-secret-42".to_string(),
+                        )]
+                        .into(),
                     },
                 );
             (next, ())

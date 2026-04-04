@@ -500,7 +500,9 @@ mod tests {
             if let Ok(pid) = pid_str.trim().parse::<i32>() {
                 #[cfg(unix)]
                 {
-                    // kill(pid, 0) checks if process exists without sending a signal.
+                    // SAFETY: kill(pid, 0) checks if process exists without
+                    // sending a signal. The pid is a valid i32 parsed from the
+                    // grandchild's PID file written earlier in this test.
                     let alive = unsafe { libc::kill(pid, 0) };
                     assert_ne!(alive, 0, "grandchild process {} should be dead", pid);
                 }
