@@ -432,11 +432,21 @@ impl TriggerEngine {
                     || msg.contains("throttled")
                     || msg.contains("Forbid policy")
                 {
-                    debug!(trigger = trigger_name, reason = msg.as_str(), "trigger skipped");
+                    debug!(
+                        trigger = trigger_name,
+                        reason = msg.as_str(),
+                        "trigger skipped"
+                    );
                 } else {
                     error!(trigger = trigger_name, error = %e, "trigger failed to create task");
-                    update_trigger_state(&self.state, trigger_name, project, "", "failed_to_create")
-                        .await;
+                    update_trigger_state(
+                        &self.state,
+                        trigger_name,
+                        project,
+                        "",
+                        "failed_to_create",
+                    )
+                    .await;
                     self.state.emit_event(
                         "",
                         None,
@@ -479,7 +489,6 @@ impl TriggerEngine {
             }
         }
     }
-
 }
 
 // ── Canonical trigger fire (public, free function) ──────────────────────────

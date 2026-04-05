@@ -32,7 +32,12 @@ fn load_trigger_cfg(
         .projects
         .get(project)
         .and_then(|p| p.triggers.get(trigger_name))
-        .unwrap_or_else(|| panic!("trigger '{}' not found in project '{}'", trigger_name, project))
+        .unwrap_or_else(|| {
+            panic!(
+                "trigger '{}' not found in project '{}'",
+                trigger_name, project
+            )
+        })
         .clone()
 }
 
@@ -589,7 +594,8 @@ async fn exclude_trigger_prevents_duplicate_via_broadcast() {
         let state = harness.state();
 
         // Start engine and stabilize.
-        let (engine, handle) = agent_orchestrator::trigger_engine::TriggerEngine::new(state.clone());
+        let (engine, handle) =
+            agent_orchestrator::trigger_engine::TriggerEngine::new(state.clone());
         {
             let mut guard = state.trigger_engine_handle.lock().unwrap();
             *guard = Some(handle.clone());
@@ -664,7 +670,10 @@ async fn exclude_trigger_prevents_duplicate_via_broadcast() {
             tasks.len(),
             tasks
         );
-        assert_eq!(tasks[0], task_id, "the single task should be the directly fired one");
+        assert_eq!(
+            tasks[0], task_id,
+            "the single task should be the directly fired one"
+        );
 
         let _ = shutdown_tx.send(true);
         let _ = engine_task.await;

@@ -44,13 +44,12 @@ pub(super) fn check_execution_profile_backend_support(
                 // blockers (root, missing binaries, unsupported fs_mode) — treat
                 // them as Error, not Warning, so `orchestrator check` clearly
                 // signals that the step will fail at runtime.
-                let severity = if resolved.mode
-                    == agent_orchestrator::config::ExecutionProfileMode::Sandbox
-                {
-                    Severity::Error
-                } else {
-                    Severity::Warning
-                };
+                let severity =
+                    if resolved.mode == agent_orchestrator::config::ExecutionProfileMode::Sandbox {
+                        Severity::Error
+                    } else {
+                        Severity::Warning
+                    };
                 out.push(
                     CheckResult::simple(
                         "execution_profile_backend_support",

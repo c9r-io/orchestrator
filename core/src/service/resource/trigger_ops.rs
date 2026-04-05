@@ -51,9 +51,15 @@ pub async fn fire_trigger(
         )
     })?;
 
-    crate::trigger_engine::fire_trigger_canonical(state, trigger_name, project_id, trigger_cfg, None)
-        .await
-        .map_err(|err| classify_resource_error("trigger.fire", err))
+    crate::trigger_engine::fire_trigger_canonical(
+        state,
+        trigger_name,
+        project_id,
+        trigger_cfg,
+        None,
+    )
+    .await
+    .map_err(|err| classify_resource_error("trigger.fire", err))
 }
 
 fn set_trigger_suspend(

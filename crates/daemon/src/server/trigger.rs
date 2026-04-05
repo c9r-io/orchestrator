@@ -66,15 +66,12 @@ pub(crate) async fn trigger_fire(
         .projects
         .get(&project)
         .ok_or_else(|| Status::not_found(format!("project not found: {}", project)))?;
-    let trigger_cfg = proj_cfg
-        .triggers
-        .get(&req.trigger_name)
-        .ok_or_else(|| {
-            Status::not_found(format!(
-                "trigger '{}' not found in project '{}'",
-                req.trigger_name, project
-            ))
-        })?;
+    let trigger_cfg = proj_cfg.triggers.get(&req.trigger_name).ok_or_else(|| {
+        Status::not_found(format!(
+            "trigger '{}' not found in project '{}'",
+            req.trigger_name, project
+        ))
+    })?;
 
     // ── Parse optional webhook payload ──���───────────────────────────────
     let webhook_payload = req

@@ -57,7 +57,11 @@ struct Args {
     control_plane_dir: Option<PathBuf>,
 
     /// Maximum role for UDS callers when no uds-policy.yaml exists.
-    #[arg(long = "uds-max-role", default_value = "operator", env = "ORCHESTRATOR_UDS_MAX_ROLE")]
+    #[arg(
+        long = "uds-max-role",
+        default_value = "operator",
+        env = "ORCHESTRATOR_UDS_MAX_ROLE"
+    )]
     uds_max_role: control_plane::Role,
 
     /// Number of days to retain events before automatic cleanup (0 = disabled).

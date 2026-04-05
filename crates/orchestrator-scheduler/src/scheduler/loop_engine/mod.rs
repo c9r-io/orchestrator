@@ -370,7 +370,13 @@ async fn run_task_loop_core(
     } else {
         set_task_status(&state, task_id, "completed", true).await?;
         insert_event(&state, task_id, None, "task_completed", json!({})).await?;
-        state.emit_event_with_project(task_id, None, "task_completed", json!({}), Some(task_ctx.project_id.clone()));
+        state.emit_event_with_project(
+            task_id,
+            None,
+            "task_completed",
+            json!({}),
+            Some(task_ctx.project_id.clone()),
+        );
         record_task_execution_metric(
             &state,
             task_id,
