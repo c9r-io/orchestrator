@@ -64,11 +64,29 @@ pub async fn spawn_task_runner(state: Arc<InnerState>, task_id: String) -> Resul
                         json!({"error": err.to_string()}),
                     )
                     .await;
-                    state.emit_event(
+                    // Query project_id for scoped broadcast.
+                    let tid_q = task_id.clone();
+                    let task_project = state
+                        .async_database
+                        .reader()
+                        .call(move |conn| {
+                            Ok(conn
+                                .query_row(
+                                    "SELECT project_id FROM tasks WHERE id = ?1",
+                                    rusqlite::params![tid_q],
+                                    |row| row.get::<_, String>(0),
+                                )
+                                .ok())
+                        })
+                        .await
+                        .ok()
+                        .flatten();
+                    state.emit_event_with_project(
                         &task_id,
                         None,
                         "task_failed",
                         json!({"error": err.to_string()}),
+                        task_project,
                     );
                 }
             }

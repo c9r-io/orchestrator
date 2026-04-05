@@ -59,6 +59,10 @@ pub struct TriggerEventPayload {
     /// Optional project scope. When set, the trigger engine only matches triggers
     /// in this specific project, preventing cross-project trigger leakage.
     pub project: Option<String>,
+    /// When set, the engine skips this (trigger_name, project) during event matching.
+    /// Prevents duplicate firing when a trigger is both directly fired and would
+    /// match via broadcast.
+    pub exclude_trigger: Option<(String, String)>,
 }
 
 /// Notification sent to the engine when trigger configuration changes.
@@ -311,6 +315,12 @@ impl TriggerEngine {
                 if trigger.suspend {
                     continue;
                 }
+                // Skip the trigger that was already directly fired (dedup).
+                if let Some((ref excl_name, ref excl_proj)) = payload.exclude_trigger {
+                    if name == excl_name && project_id == excl_proj {
+                        continue;
+                    }
+                }
                 // Skip triggers not yet stabilized (first seen in most recent reload).
                 if !self
                     .stabilized_triggers
@@ -411,136 +421,32 @@ impl TriggerEngine {
         trigger: &TriggerConfig,
         webhook_payload: Option<&serde_json::Value>,
     ) {
-        // ── Suspend check ────────────────────────────────────────────────
-        if trigger.suspend {
-            self.emit_trigger_event(trigger_name, "trigger_skipped", "suspended");
-            return;
-        }
-
-        // ── Throttle check (event triggers only) ─────────────────────────
-        if let Some(ref throttle) = trigger.throttle {
-            if throttle.min_interval > 0 {
-                if let Some(last) = self.load_last_fired(trigger_name, project).await {
-                    let elapsed = (Utc::now() - last).num_seconds();
-                    if elapsed >= 0 && (elapsed as u64) < throttle.min_interval {
-                        self.emit_trigger_event(trigger_name, "trigger_skipped", "throttled");
-                        return;
-                    }
-                }
-            }
-        }
-
-        // ── Concurrency policy ───────────────────────────────────────────
-        match trigger.concurrency_policy {
-            crate::cli_types::ConcurrencyPolicy::Forbid => {
-                if self.has_active_task(trigger_name, project).await {
-                    self.emit_trigger_event(
-                        trigger_name,
-                        "trigger_skipped",
-                        "concurrent_task_active",
-                    );
-                    return;
-                }
-            }
-            crate::cli_types::ConcurrencyPolicy::Replace => {
-                // Cancel active tasks created by this trigger before creating a new one.
-                self.cancel_active_tasks(trigger_name, project).await;
-            }
-            crate::cli_types::ConcurrencyPolicy::Allow => {}
-        }
-
-        // ── Create task ──────────────────────────────────────────────────
-        let target_files = trigger
-            .action
-            .args
-            .as_ref()
-            .and_then(|a| a.get("target-file"))
-            .cloned();
-
-        let task_name = format!("trigger-{trigger_name}");
-
-        let payload = CreateTaskPayload {
-            name: Some(task_name),
-            goal: Some(build_trigger_goal(trigger_name, webhook_payload)),
-            project_id: Some(project.to_string()),
-            workspace_id: Some(trigger.action.workspace.clone()),
-            workflow_id: Some(trigger.action.workflow.clone()),
-            target_files,
-            parent_task_id: None,
-            spawn_reason: None,
-            step_filter: None,
-            initial_vars: None,
-        };
-
-        match crate::task_ops::create_task_as_service(&self.state, payload) {
-            Ok(summary) => {
-                let task_id = summary.id.clone();
-                info!(
-                    trigger = trigger_name,
-                    task_id = task_id.as_str(),
-                    "trigger fired: task created"
-                );
-
-                // Update trigger state.
-                self.update_trigger_state(trigger_name, project, &task_id, "created")
-                    .await;
-
-                // Emit event.
-                self.state.emit_event(
-                    &task_id,
-                    None,
-                    "trigger_fired",
-                    serde_json::json!({
-                        "trigger": trigger_name,
-                        "source": if trigger.cron.is_some() { "cron" } else { "event" },
-                        "task_id": task_id,
-                    }),
-                );
-
-                // Start the task if action.start is true.
-                if trigger.action.start {
-                    let state = self.state.clone();
-                    let tid = task_id.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = state.task_enqueuer.enqueue_task(&state, &tid).await {
-                            error!(task_id = tid.as_str(), error = %e, "failed to enqueue triggered task");
-                        } else {
-                            state.worker_notify.notify_one();
-                        }
-                    });
-                }
-
-                // History limit cleanup (best-effort, async).
-                if trigger.history_limit.is_some() {
-                    let state = self.state.clone();
-                    let name = trigger_name.to_string();
-                    let proj = project.to_string();
-                    let limit = trigger.history_limit.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = cleanup_history(&state, &name, &proj, limit.as_ref()).await
-                        {
-                            debug!(trigger = name.as_str(), error = %e, "history cleanup failed");
-                        }
-                    });
-                }
-            }
+        match fire_trigger_canonical(&self.state, trigger_name, project, trigger, webhook_payload)
+            .await
+        {
+            Ok(_task_id) => {}
             Err(e) => {
-                error!(
-                    trigger = trigger_name,
-                    error = %e,
-                    "trigger failed to create task"
-                );
-                self.update_trigger_state(trigger_name, project, "", "failed_to_create")
-                    .await;
-                self.state.emit_event(
-                    "",
-                    None,
-                    "trigger_error",
-                    serde_json::json!({
-                        "trigger": trigger_name,
-                        "error": e.to_string(),
-                    }),
-                );
+                let msg = e.to_string();
+                // Skipped triggers (suspended/throttled/forbid) are not errors.
+                if msg.contains("suspended")
+                    || msg.contains("throttled")
+                    || msg.contains("Forbid policy")
+                {
+                    debug!(trigger = trigger_name, reason = msg.as_str(), "trigger skipped");
+                } else {
+                    error!(trigger = trigger_name, error = %e, "trigger failed to create task");
+                    update_trigger_state(&self.state, trigger_name, project, "", "failed_to_create")
+                        .await;
+                    self.state.emit_event(
+                        "",
+                        None,
+                        "trigger_error",
+                        serde_json::json!({
+                            "trigger": trigger_name,
+                            "error": e.to_string(),
+                        }),
+                    );
+                }
             }
         }
     }
@@ -574,154 +480,285 @@ impl TriggerEngine {
         }
     }
 
-    async fn load_last_fired(&self, trigger_name: &str, project: &str) -> Option<DateTime<Utc>> {
-        let name = trigger_name.to_owned();
-        let proj = project.to_owned();
-        let result = self
-            .state
-            .async_database
-            .reader()
-            .call(move |conn| {
-                let mut stmt = conn
-                    .prepare(
-                        "SELECT last_fired_at FROM trigger_state WHERE trigger_name = ?1 AND project = ?2",
-                    )
-                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))?;
-                let ts: Option<String> = stmt
-                    .query_row(rusqlite::params![name, proj], |row| row.get(0))
-                    .ok();
-                Ok(ts)
-            })
-            .await;
+}
 
-        match result {
-            Ok(Some(ts)) => ts.parse::<DateTime<Utc>>().ok(),
-            _ => None,
-        }
+// ── Canonical trigger fire (public, free function) ──────────────────────────
+
+/// Fire a trigger with full engine semantics.
+///
+/// This is the single canonical execution path for all trigger fires — webhook
+/// endpoints, gRPC `TriggerFire`, and the engine's own event/cron paths all
+/// converge here.  It enforces suspend, throttle, concurrency policy, goal
+/// construction, target-file extraction, trigger-state tracking, action.start,
+/// and history-limit cleanup.
+///
+/// Returns the created task ID on success.
+pub async fn fire_trigger_canonical(
+    state: &InnerState,
+    trigger_name: &str,
+    project: &str,
+    trigger: &TriggerConfig,
+    webhook_payload: Option<&serde_json::Value>,
+) -> Result<String> {
+    // ── Suspend check ────────────────────────────────────────────────
+    if trigger.suspend {
+        emit_trigger_skipped(state, trigger_name, "trigger_skipped", "suspended");
+        anyhow::bail!("trigger '{}' is suspended", trigger_name);
     }
 
-    async fn has_active_task(&self, trigger_name: &str, project: &str) -> bool {
-        let name = trigger_name.to_owned();
-        let proj = project.to_owned();
-        let result = self
-            .state
-            .async_database
-            .reader()
-            .call(move |conn| {
-                let last_task_id: Option<String> = conn
-                    .query_row(
-                        "SELECT last_task_id FROM trigger_state WHERE trigger_name = ?1 AND project = ?2",
-                        rusqlite::params![name, proj],
-                        |row| row.get(0),
-                    )
-                    .ok()
-                    .flatten();
-
-                if let Some(ref tid) = last_task_id {
-                    let status: Option<String> = conn
-                        .query_row(
-                            "SELECT status FROM tasks WHERE id = ?1",
-                            rusqlite::params![tid],
-                            |row| row.get(0),
-                        )
-                        .ok();
-                    if let Some(s) = status {
-                        return Ok(matches!(
-                            s.as_str(),
-                            "created" | "pending" | "running" | "restart_pending"
-                        ));
-                    }
+    // ── Throttle check ───────────────────────────────────────────────
+    if let Some(ref throttle) = trigger.throttle {
+        if throttle.min_interval > 0 {
+            if let Some(last) = load_last_fired(state, trigger_name, project).await {
+                let elapsed = (Utc::now() - last).num_seconds();
+                if elapsed >= 0 && (elapsed as u64) < throttle.min_interval {
+                    emit_trigger_skipped(state, trigger_name, "trigger_skipped", "throttled");
+                    anyhow::bail!("trigger '{}' throttled", trigger_name);
                 }
-                Ok(false)
-            })
-            .await;
-
-        result.unwrap_or(false)
-    }
-
-    async fn cancel_active_tasks(&self, trigger_name: &str, project: &str) {
-        let name = trigger_name.to_owned();
-        let proj = project.to_owned();
-        let state = self.state.clone();
-        let result = state
-            .async_database
-            .reader()
-            .call(move |conn| {
-                let tid: Option<String> = conn
-                    .query_row(
-                        "SELECT last_task_id FROM trigger_state WHERE trigger_name = ?1 AND project = ?2",
-                        rusqlite::params![name, proj],
-                        |row| row.get(0),
-                    )
-                    .ok()
-                    .flatten();
-                Ok(tid)
-            })
-            .await;
-
-        if let Ok(Some(task_id)) = result {
-            if let Err(e) = cancel_task_for_trigger(&self.state, &task_id).await {
-                warn!(
-                    trigger = trigger_name,
-                    task_id = task_id.as_str(),
-                    error = %e,
-                    "failed to cancel active task for Replace policy"
-                );
             }
         }
     }
 
-    async fn update_trigger_state(
-        &self,
-        trigger_name: &str,
-        project: &str,
-        task_id: &str,
-        status: &str,
-    ) {
-        let name = trigger_name.to_owned();
-        let proj = project.to_owned();
-        let tid = task_id.to_owned();
-        let st = status.to_owned();
-        let now = Utc::now().to_rfc3339();
-        let now2 = now.clone();
+    // ── Concurrency policy ───────────────────────────────────────────
+    match trigger.concurrency_policy {
+        crate::cli_types::ConcurrencyPolicy::Forbid => {
+            if has_active_task(state, trigger_name, project).await {
+                emit_trigger_skipped(
+                    state,
+                    trigger_name,
+                    "trigger_skipped",
+                    "concurrent_task_active",
+                );
+                anyhow::bail!(
+                    "trigger '{}' skipped: concurrent task active (Forbid policy)",
+                    trigger_name
+                );
+            }
+        }
+        crate::cli_types::ConcurrencyPolicy::Replace => {
+            cancel_active_tasks(state, trigger_name, project).await;
+        }
+        crate::cli_types::ConcurrencyPolicy::Allow => {}
+    }
 
-        if let Err(e) = self
-            .state
-            .async_database
-            .writer()
-            .call(move |conn| {
-                conn.execute(
-                    "INSERT INTO trigger_state (trigger_name, project, last_fired_at, fire_count, last_task_id, last_status, created_at, updated_at)
-                     VALUES (?1, ?2, ?3, 1, ?4, ?5, ?6, ?7)
-                     ON CONFLICT(trigger_name, project) DO UPDATE SET
-                       last_fired_at = ?3,
-                       fire_count = fire_count + 1,
-                       last_task_id = ?4,
-                       last_status = ?5,
-                       updated_at = ?7",
-                    rusqlite::params![name, proj, now, tid, st, now2, now2],
-                )
-                .map_err(|e| tokio_rusqlite::Error::Other(e.into()))?;
-                Ok(())
-            })
-            .await
-        {
-            warn!(trigger = trigger_name, error = %e, "failed to update trigger_state");
+    // ── Create task ──────────────────────────────────────────────────
+    let target_files = trigger
+        .action
+        .args
+        .as_ref()
+        .and_then(|a| a.get("target-file"))
+        .cloned();
+
+    let task_name = format!("trigger-{trigger_name}");
+
+    let payload = CreateTaskPayload {
+        name: Some(task_name),
+        goal: Some(build_trigger_goal(trigger_name, webhook_payload)),
+        project_id: Some(project.to_string()),
+        workspace_id: Some(trigger.action.workspace.clone()),
+        workflow_id: Some(trigger.action.workflow.clone()),
+        target_files,
+        parent_task_id: None,
+        spawn_reason: None,
+        step_filter: None,
+        initial_vars: None,
+    };
+
+    let summary = crate::task_ops::create_task_as_service(state, payload)
+        .context("trigger fire: failed to create task")?;
+    let task_id = summary.id.clone();
+
+    info!(
+        trigger = trigger_name,
+        task_id = task_id.as_str(),
+        "trigger fired: task created"
+    );
+
+    // ── Update trigger state ─────────────────────────────────────────
+    update_trigger_state(state, trigger_name, project, &task_id, "created").await;
+
+    // ── Emit event ───────────────────────────────────────────────────
+    state.emit_event(
+        &task_id,
+        None,
+        "trigger_fired",
+        serde_json::json!({
+            "trigger": trigger_name,
+            "source": if trigger.cron.is_some() { "cron" } else { "event" },
+            "task_id": task_id,
+        }),
+    );
+
+    // ── Start the task if action.start is true ───────────────────────
+    if trigger.action.start {
+        if let Err(e) = state.task_enqueuer.enqueue_task(state, &task_id).await {
+            error!(task_id = task_id.as_str(), error = %e, "failed to enqueue triggered task");
+        } else {
+            state.worker_notify.notify_one();
         }
     }
 
-    fn emit_trigger_event(&self, trigger_name: &str, event_type: &str, reason: &str) {
-        debug!(trigger = trigger_name, event_type, reason, "trigger event");
-        self.state.emit_event(
-            "",
-            None,
-            event_type,
-            serde_json::json!({
-                "trigger": trigger_name,
-                "reason": reason,
-            }),
-        );
+    // ── History limit cleanup (best-effort) ──────────────────────────
+    if trigger.history_limit.is_some() {
+        if let Err(e) =
+            cleanup_history(state, trigger_name, project, trigger.history_limit.as_ref()).await
+        {
+            debug!(trigger = trigger_name, error = %e, "history cleanup failed");
+        }
     }
+
+    Ok(task_id)
+}
+
+// ── Extracted trigger helpers (used by fire_trigger_canonical & TriggerEngine) ─
+
+async fn load_last_fired(
+    state: &InnerState,
+    trigger_name: &str,
+    project: &str,
+) -> Option<DateTime<Utc>> {
+    let name = trigger_name.to_owned();
+    let proj = project.to_owned();
+    let result = state
+        .async_database
+        .reader()
+        .call(move |conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT last_fired_at FROM trigger_state WHERE trigger_name = ?1 AND project = ?2",
+                )
+                .map_err(|e| tokio_rusqlite::Error::Other(e.into()))?;
+            let ts: Option<String> = stmt
+                .query_row(rusqlite::params![name, proj], |row| row.get(0))
+                .ok();
+            Ok(ts)
+        })
+        .await;
+
+    match result {
+        Ok(Some(ts)) => ts.parse::<DateTime<Utc>>().ok(),
+        _ => None,
+    }
+}
+
+async fn has_active_task(state: &InnerState, trigger_name: &str, project: &str) -> bool {
+    let name = trigger_name.to_owned();
+    let proj = project.to_owned();
+    let result = state
+        .async_database
+        .reader()
+        .call(move |conn| {
+            let last_task_id: Option<String> = conn
+                .query_row(
+                    "SELECT last_task_id FROM trigger_state WHERE trigger_name = ?1 AND project = ?2",
+                    rusqlite::params![name, proj],
+                    |row| row.get(0),
+                )
+                .ok()
+                .flatten();
+
+            if let Some(ref tid) = last_task_id {
+                let status: Option<String> = conn
+                    .query_row(
+                        "SELECT status FROM tasks WHERE id = ?1",
+                        rusqlite::params![tid],
+                        |row| row.get(0),
+                    )
+                    .ok();
+                if let Some(s) = status {
+                    return Ok(matches!(
+                        s.as_str(),
+                        "created" | "pending" | "running" | "restart_pending"
+                    ));
+                }
+            }
+            Ok(false)
+        })
+        .await;
+
+    result.unwrap_or(false)
+}
+
+async fn cancel_active_tasks(state: &InnerState, trigger_name: &str, project: &str) {
+    let name = trigger_name.to_owned();
+    let proj = project.to_owned();
+    let result = state
+        .async_database
+        .reader()
+        .call(move |conn| {
+            let tid: Option<String> = conn
+                .query_row(
+                    "SELECT last_task_id FROM trigger_state WHERE trigger_name = ?1 AND project = ?2",
+                    rusqlite::params![name, proj],
+                    |row| row.get(0),
+                )
+                .ok()
+                .flatten();
+            Ok(tid)
+        })
+        .await;
+
+    if let Ok(Some(task_id)) = result {
+        if let Err(e) = cancel_task_for_trigger(state, &task_id).await {
+            warn!(
+                trigger = trigger_name,
+                task_id = task_id.as_str(),
+                error = %e,
+                "failed to cancel active task for Replace policy"
+            );
+        }
+    }
+}
+
+async fn update_trigger_state(
+    state: &InnerState,
+    trigger_name: &str,
+    project: &str,
+    task_id: &str,
+    status: &str,
+) {
+    let name = trigger_name.to_owned();
+    let proj = project.to_owned();
+    let tid = task_id.to_owned();
+    let st = status.to_owned();
+    let now = Utc::now().to_rfc3339();
+    let now2 = now.clone();
+
+    if let Err(e) = state
+        .async_database
+        .writer()
+        .call(move |conn| {
+            conn.execute(
+                "INSERT INTO trigger_state (trigger_name, project, last_fired_at, fire_count, last_task_id, last_status, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, 1, ?4, ?5, ?6, ?7)
+                 ON CONFLICT(trigger_name, project) DO UPDATE SET
+                   last_fired_at = ?3,
+                   fire_count = fire_count + 1,
+                   last_task_id = ?4,
+                   last_status = ?5,
+                   updated_at = ?7",
+                rusqlite::params![name, proj, now, tid, st, now2, now2],
+            )
+            .map_err(|e| tokio_rusqlite::Error::Other(e.into()))?;
+            Ok(())
+        })
+        .await
+    {
+        warn!(trigger = trigger_name, error = %e, "failed to update trigger_state");
+    }
+}
+
+fn emit_trigger_skipped(state: &InnerState, trigger_name: &str, event_type: &str, reason: &str) {
+    debug!(trigger = trigger_name, event_type, reason, "trigger event");
+    state.emit_event(
+        "",
+        None,
+        event_type,
+        serde_json::json!({
+            "trigger": trigger_name,
+            "reason": reason,
+        }),
+    );
 }
 
 // ── Cron schedule helpers ────────────────────────────────────────────────────

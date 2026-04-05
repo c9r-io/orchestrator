@@ -1251,6 +1251,7 @@ impl OrchestratorService for TestOrchestratorServer {
             &req.trigger_name,
             req.project.as_deref(),
         )
+        .await
         .map_err(map_core_error)?;
         Ok(Response::new(TriggerFireResponse {
             task_id: task_id.clone(),

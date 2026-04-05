@@ -18,8 +18,12 @@ pub fn resume_trigger(state: &InnerState, trigger_name: &str, project: Option<&s
 }
 
 /// Manually fire a trigger once, creating (and optionally starting) the task
-/// described by the trigger's action configuration. Returns the new task ID.
-pub fn fire_trigger(
+/// described by the trigger's action configuration.  Uses the canonical engine
+/// path so all semantics (suspend, throttle, concurrency, goal, target-file,
+/// trigger-state, action.start, history-limit) are applied.
+///
+/// Returns the new task ID.
+pub async fn fire_trigger(
     state: &InnerState,
     trigger_name: &str,
     project: Option<&str>,
@@ -47,24 +51,9 @@ pub fn fire_trigger(
         )
     })?;
 
-    let action = &trigger_cfg.action;
-    let payload = crate::dto::CreateTaskPayload {
-        name: Some(format!("trigger-{}", trigger_name)),
-        goal: None,
-        project_id: Some(project_id.to_string()),
-        workspace_id: Some(action.workspace.clone()),
-        workflow_id: Some(action.workflow.clone()),
-        target_files: None,
-        parent_task_id: None,
-        spawn_reason: Some(format!("manual fire of trigger '{}'", trigger_name)),
-        step_filter: None,
-        initial_vars: None,
-    };
-
-    let created = crate::task_ops::create_task_as_service(state, payload)
-        .map_err(|err| classify_resource_error("trigger.fire", err))?;
-
-    Ok(created.id)
+    crate::trigger_engine::fire_trigger_canonical(state, trigger_name, project_id, trigger_cfg, None)
+        .await
+        .map_err(|err| classify_resource_error("trigger.fire", err))
 }
 
 fn set_trigger_suspend(

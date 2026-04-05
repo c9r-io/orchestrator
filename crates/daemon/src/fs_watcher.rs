@@ -336,6 +336,7 @@ fn handle_notify_event(
                 task_id: String::new(),
                 payload: Some(payload),
                 project: None,
+                exclude_trigger: None,
             },
         );
     }

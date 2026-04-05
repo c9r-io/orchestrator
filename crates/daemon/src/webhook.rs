@@ -7,7 +7,9 @@
 //! the named trigger with the payload.
 
 use agent_orchestrator::state::InnerState;
-use agent_orchestrator::trigger_engine::{TriggerEventPayload, broadcast_task_event};
+use agent_orchestrator::trigger_engine::{
+    TriggerEventPayload, broadcast_task_event, fire_trigger_canonical,
+};
 use axum::Router;
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -218,23 +220,31 @@ async fn do_webhook(
         }
     }
 
-    // ── Broadcast webhook event to trigger engine ───────────────────────
-    broadcast_task_event(
-        &state.inner,
-        TriggerEventPayload {
-            event_type: "webhook".to_string(),
-            task_id: String::new(),
-            payload: Some(payload.clone()),
-            project: Some(project.clone()),
-        },
-    );
+    // ── Resolve trigger config for canonical fire ─────────────────────────
+    let trigger_cfg = active_config.as_ref().and_then(|ac| {
+        ac.config
+            .projects
+            .get(&project)
+            .and_then(|p| p.triggers.get(&trigger_name))
+    });
+    let Some(trigger_cfg) = trigger_cfg else {
+        let json = serde_json::json!({
+            "error": format!("trigger '{}' not found in project '{}'", trigger_name, project),
+            "trigger": trigger_name,
+        });
+        return (StatusCode::NOT_FOUND, axum::Json(json)).into_response();
+    };
 
-    // ── Direct trigger fire ─────────────────────────────────────────────
-    match agent_orchestrator::service::resource::fire_trigger(
+    // ── Canonical trigger fire (full engine semantics) ──────────────────
+    match fire_trigger_canonical(
         &state.inner,
         &trigger_name,
-        Some(&project),
-    ) {
+        &project,
+        trigger_cfg,
+        Some(&payload),
+    )
+    .await
+    {
         Ok(task_id) => {
             info!(
                 trigger = trigger_name.as_str(),
@@ -242,6 +252,20 @@ async fn do_webhook(
                 task_id = task_id.as_str(),
                 "webhook trigger fired"
             );
+
+            // Broadcast for other event-driven triggers; exclude the one we just
+            // fired to prevent duplicate task creation.
+            broadcast_task_event(
+                &state.inner,
+                TriggerEventPayload {
+                    event_type: "webhook".to_string(),
+                    task_id: String::new(),
+                    payload: Some(payload),
+                    project: Some(project.clone()),
+                    exclude_trigger: Some((trigger_name.clone(), project.clone())),
+                },
+            );
+
             let json = serde_json::json!({
                 "task_id": task_id,
                 "trigger": trigger_name,

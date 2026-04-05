@@ -117,12 +117,27 @@ impl InnerState {
     ///
     /// When the event is `task_completed` or `task_failed`, it is also broadcast
     /// on `trigger_event_tx` so the trigger engine can evaluate event triggers.
+    /// The broadcast uses `project: None`; prefer [`emit_event_with_project`] when
+    /// the caller knows the task's project.
     pub fn emit_event(
         &self,
         task_id: &str,
         task_item_id: Option<&str>,
         event_type: &str,
         payload: Value,
+    ) {
+        self.emit_event_with_project(task_id, task_item_id, event_type, payload, None);
+    }
+
+    /// Like [`emit_event`] but carries an explicit project scope for the trigger
+    /// engine broadcast, preventing cross-project trigger leakage.
+    pub fn emit_event_with_project(
+        &self,
+        task_id: &str,
+        task_item_id: Option<&str>,
+        event_type: &str,
+        payload: Value,
+        project: Option<String>,
     ) {
         let sink = clone_event_sink(self);
         sink.emit(task_id, task_item_id, event_type, payload);
@@ -135,7 +150,8 @@ impl InnerState {
                     event_type: event_type.to_string(),
                     task_id: task_id.to_string(),
                     payload: None,
-                    project: None,
+                    project,
+                    exclude_trigger: None,
                 },
             );
         }

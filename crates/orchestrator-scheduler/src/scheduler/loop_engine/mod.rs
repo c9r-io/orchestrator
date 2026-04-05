@@ -41,9 +41,13 @@ pub async fn run_task_loop(
 ) -> Result<()> {
     set_task_status(&state, task_id, "running", false).await?;
     let result = run_task_loop_core(state.clone(), task_id, runtime).await;
-    if let Ok(task_ctx) = load_task_runtime_context(&state, task_id).await {
-        let _ = isolation::cleanup_task_isolation(&state, task_id, &task_ctx).await;
-    }
+    let task_project = match load_task_runtime_context(&state, task_id).await {
+        Ok(task_ctx) => {
+            let _ = isolation::cleanup_task_isolation(&state, task_id, &task_ctx).await;
+            Some(task_ctx.project_id.clone())
+        }
+        Err(_) => None,
+    };
     if let Err(ref e) = result {
         // RestartRequestedError is not a failure — the self_restart step already
         // set the task to "restart_pending".  Propagate the error so the daemon
@@ -58,11 +62,12 @@ pub async fn run_task_loop(
                 json!({"error": e.to_string()}),
             )
             .await;
-            state.emit_event(
+            state.emit_event_with_project(
                 task_id,
                 None,
                 "task_failed",
                 json!({"error": e.to_string()}),
+                task_project.clone(),
             );
             let unresolved = count_unresolved_items(&state, task_id).await.unwrap_or(0);
             let _ = record_task_execution_metric(&state, task_id, "failed", 0, unresolved).await;
@@ -347,11 +352,12 @@ async fn run_task_loop_core(
             json!({"unresolved_items": unresolved, "stale_pending_items": stale_pending}),
         )
         .await?;
-        state.emit_event(
+        state.emit_event_with_project(
             task_id,
             None,
             "task_failed",
             json!({"unresolved_items": unresolved, "stale_pending_items": stale_pending}),
+            Some(task_ctx.project_id.clone()),
         );
         record_task_execution_metric(
             &state,
@@ -364,7 +370,7 @@ async fn run_task_loop_core(
     } else {
         set_task_status(&state, task_id, "completed", true).await?;
         insert_event(&state, task_id, None, "task_completed", json!({})).await?;
-        state.emit_event(task_id, None, "task_completed", json!({}));
+        state.emit_event_with_project(task_id, None, "task_completed", json!({}), Some(task_ctx.project_id.clone()));
         record_task_execution_metric(
             &state,
             task_id,

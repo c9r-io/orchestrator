@@ -3287,8 +3287,10 @@ dependencies = [
  "futures",
  "orchestrator-proto",
  "orchestrator-scheduler",
+ "rusqlite",
  "serde_json",
  "tokio",
+ "tokio-rusqlite",
  "tokio-stream",
  "tonic",
 ]
