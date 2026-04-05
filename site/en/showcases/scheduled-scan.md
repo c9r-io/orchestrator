@@ -12,7 +12,7 @@
 
 ## Prerequisites
 
-- `orchestratord` is running (cron triggers require `--webhook-bind`)
+- `orchestratord` is running (webhook server enabled by default on `127.0.0.1:19090`)
 - Database initialized (`orchestrator init`)
 
 ## Steps

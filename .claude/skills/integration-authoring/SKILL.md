@@ -87,7 +87,7 @@ spec:
 
 Each integration README MUST include:
 
-1. **Prerequisites** — orchestrator version, --webhook-bind requirement
+1. **Prerequisites** — orchestrator version, webhook server (enabled by default on `127.0.0.1:19090`)
 2. **Platform Setup** — step-by-step guide to create app/webhook on the platform
 3. **Secret Retrieval** — where to find the signing secret/API key
 4. **Webhook URL** — exact URL format: `http://<host>:<port>/webhook/<trigger-name>`

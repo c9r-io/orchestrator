@@ -17,7 +17,7 @@ Configure a cron trigger to periodically execute a secret sync workflow. The age
 
 ## 3. Prerequisites
 
-- orchestratord is running with `--webhook-bind` configured
+- orchestratord is running (webhook server enabled by default on `127.0.0.1:19090`; use `--webhook-bind <ADDR>` to change or `--webhook-bind none` to disable)
 - The corresponding platform integration package (`orchestrator-integrations`) is deployed
 - The agent has permission to call platform APIs (API token is in the SecretStore)
 

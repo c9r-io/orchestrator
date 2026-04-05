@@ -12,7 +12,7 @@
 
 ## 前置条件
 
-- `orchestratord` 运行中（cron trigger 需要 `--webhook-bind` 参数）
+- `orchestratord` 运行中（webhook 服务默认监听 `127.0.0.1:19090`）
 - 已执行 `orchestrator init`
 
 ## 使用步骤

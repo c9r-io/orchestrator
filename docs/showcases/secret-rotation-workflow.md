@@ -17,7 +17,7 @@
 
 ## 3. 前置条件
 
-- orchestratord 运行中，已配置 `--webhook-bind`
+- orchestratord 运行中（webhook 服务默认监听 `127.0.0.1:19090`；可通过 `--webhook-bind <ADDR>` 更改，`--webhook-bind none` 禁用）
 - 已部署对应平台的集成包（`orchestrator-integrations`）
 - Agent 有权限调用平台 API（API token 在 SecretStore 中）
 

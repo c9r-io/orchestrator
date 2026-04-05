@@ -13,7 +13,7 @@
 
 ## Prerequisites
 
-- `orchestratord` running with `--webhook-bind <addr>` (default `127.0.0.1:19090`)
+- `orchestratord` running (webhook server enabled by default on `127.0.0.1:19090`; use `--webhook-bind <ADDR>` to change)
 - Database initialized (`orchestrator init`)
 - Optional: `orchestrator-integrations` repository cloned
 

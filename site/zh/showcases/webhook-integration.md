@@ -13,7 +13,7 @@
 
 ## 前置条件
 
-- `orchestratord` 运行中，指定 `--webhook-bind <addr>`（默认 `127.0.0.1:19090`）
+- `orchestratord` 运行中（webhook 服务默认监听 `127.0.0.1:19090`；可通过 `--webhook-bind <ADDR>` 更改）
 - 已执行 `orchestrator init`
 - 可选：`orchestrator-integrations` 仓库已克隆
 

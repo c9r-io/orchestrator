@@ -6,7 +6,7 @@
 #   # Manual run:
 #   orchestrator task create --name "scan-1" --goal "Run security audit" --workflow scheduled_scan --project scan
 #
-#   # Or let the cron trigger create tasks automatically (requires --webhook-bind on daemon).
+#   # Or let the cron trigger create tasks automatically (webhook server enabled by default on 127.0.0.1:19090).
 #
 # Demonstrates: Trigger resource with cron schedule, agent-driven security
 # analysis followed by static checks, and automated task creation.
@@ -105,7 +105,7 @@ spec:
 ---
 # ── Trigger ───────────────────────────────────────────────────────────
 # Cron trigger: creates a new task automatically on schedule.
-# Requires daemon started with --webhook-bind to enable the trigger engine.
+# Webhook server enabled by default on 127.0.0.1:19090 (use --webhook-bind to change or --webhook-bind none to disable).
 ---
 apiVersion: orchestrator.dev/v2
 kind: Trigger
