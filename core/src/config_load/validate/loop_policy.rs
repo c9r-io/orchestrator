@@ -25,12 +25,20 @@ pub(super) fn validate_loop_policy<A: AgentLookup>(
             workflow_id
         );
     }
+    // Only require an agent with loop_guard capability when the guard is
+    // enabled, the loop is not `once`, AND no workflow step already provides a
+    // builtin loop_guard (which runs internally without agent dispatch).
+    let has_builtin_guard = workflow
+        .steps
+        .iter()
+        .any(|s| s.builtin.as_deref() == Some("loop_guard"));
     if workflow.loop_policy.guard.enabled
         && !matches!(workflow.loop_policy.mode, LoopMode::Once)
+        && !has_builtin_guard
         && !agents.has_capability("loop_guard")
     {
         anyhow::bail!(
-            "workflow '{}' loop.guard enabled but no agent supports loop_guard capability",
+            "workflow '{}' loop.guard enabled but no builtin loop_guard step or agent with loop_guard capability found",
             workflow_id
         );
     }

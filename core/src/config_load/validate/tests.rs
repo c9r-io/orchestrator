@@ -701,7 +701,24 @@ fn validate_workflow_rejects_guard_enabled_without_loop_guard_agent() {
         result
             .expect_err("operation should fail")
             .to_string()
-            .contains("no agent supports loop_guard capability")
+            .contains("no builtin loop_guard step or agent with loop_guard capability")
+    );
+}
+
+#[test]
+fn validate_workflow_accepts_guard_enabled_with_builtin_loop_guard_step() {
+    let mut workflow = make_workflow(vec![
+        make_builtin_step("self_test", "self_test", true),
+        make_builtin_step("loop_guard", "loop_guard", true),
+    ]);
+    workflow.loop_policy.mode = LoopMode::Infinite;
+    workflow.loop_policy.guard.enabled = true;
+    let config = make_config_with_default_project();
+    let result = validate_workflow_config(&config, &workflow, "test-wf");
+    assert!(
+        result.is_ok(),
+        "builtin loop_guard step should satisfy guard requirement: {:?}",
+        result.err()
     );
 }
 
@@ -1911,7 +1928,26 @@ fn with_agents_rejects_guard_without_loop_guard_agent() {
     let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
     let err = validate_workflow_config_with_agents(&agents, &workflow, "wf1")
         .expect_err("guard without agent should fail");
-    assert!(err.to_string().contains("no agent supports loop_guard"));
+    assert!(err
+        .to_string()
+        .contains("no builtin loop_guard step or agent with loop_guard capability"));
+}
+
+#[test]
+fn with_agents_accepts_guard_with_builtin_loop_guard_step() {
+    let mut workflow = make_workflow(vec![
+        make_builtin_step("self_test", "self_test", true),
+        make_builtin_step("loop_guard", "loop_guard", true),
+    ]);
+    workflow.loop_policy.mode = LoopMode::Infinite;
+    workflow.loop_policy.guard.enabled = true;
+    let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+    let result = validate_workflow_config_with_agents(&agents, &workflow, "wf1");
+    assert!(
+        result.is_ok(),
+        "builtin loop_guard step should pass without agent: {:?}",
+        result.err()
+    );
 }
 
 #[test]
