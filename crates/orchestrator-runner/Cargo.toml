@@ -1,6 +1,6 @@
 [package]
 name = "orchestrator-runner"
-version = "0.3.0"
+version = "0.3.1"
 description = "Command runner, sandbox, output capture, and network allowlist"
 repository = "https://github.com/c9r-io/orchestrator"
 keywords = ["orchestrator", "runner", "sandbox"]
@@ -10,7 +10,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-orchestrator-config = { path = "../orchestrator-config", version = "0.3.0" }
+orchestrator-config = { path = "../orchestrator-config", version = "0.3.1" }
 anyhow = "1.0"
 tokio = { version = "1.44", features = ["fs", "io-util", "macros", "process", "rt", "sync"] }
 tracing = "0.1"

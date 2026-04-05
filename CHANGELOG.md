@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-04-06
+
+### Security
+- **UDS trust boundary hardening** — fix RPC role map, enrich audit metadata, add daemon startup checks
+- **Least-privilege UDS default** — default UDS max role changed from Admin to Operator
+
+### Added
+- **Benchmark evaluation 6-dimension scoring** — upgraded from simple pass/fail to 0-60 composite score
+
+### Fixed
+- **Trigger firing chain** (P1) — eliminate duplicate tasks, bypass, and cross-project leakage in unified fire path
+- **Sandbox capability matrix** — Linux does not support non-inherit `fs_mode`; corrected capability reporting
+- **Loop-guard builtin step** — skip agent capability check when builtin step is present
+
+## [0.3.0] - 2026-04-05
+
+### Added
+- **Self-describing CLI reference** — `orchestrator guide` command for built-in documentation
+
+### Changed
+- **Core module decomposition** — split oversized dispatch, resource service, and workflow convert modules for maintainability
+
 ## [0.2.8] - 2026-04-04
 
 ### Added
