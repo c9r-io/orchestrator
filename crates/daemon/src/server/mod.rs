@@ -70,6 +70,15 @@ pub(crate) fn authorize<T>(
         None => {
             let required = required_role_for_rpc(rpc);
             let peer = request.extensions().get::<UdsPeerInfo>();
+            let effective_role = server
+                .uds_auth_policy
+                .as_ref()
+                .map(|p| p.max_role)
+                .unwrap_or(Role::Admin);
+            let audit_all_reads = server
+                .uds_auth_policy
+                .as_ref()
+                .is_some_and(|p| p.audit_all_reads);
 
             // Phase 4: optional UDS authorization policy
             if let Some(policy) = &server.uds_auth_policy {
@@ -80,6 +89,7 @@ pub(crate) fn authorize<T>(
                         peer,
                         "denied",
                         Some("uds_policy_denied"),
+                        Some(effective_role),
                     );
                     return Err(AuthzError::PermissionDenied(
                         "UDS policy restricts this operation",
@@ -87,9 +97,16 @@ pub(crate) fn authorize<T>(
                 }
             }
 
-            // Phase 3: audit mutating operations on UDS
-            if required != Role::ReadOnly {
-                uds_audit(&server.state.db_path, rpc, peer, "allowed", None);
+            // Phase 3: audit mutating operations on UDS (and read-only if configured)
+            if required != Role::ReadOnly || audit_all_reads {
+                uds_audit(
+                    &server.state.db_path,
+                    rpc,
+                    peer,
+                    "allowed",
+                    None,
+                    Some(effective_role),
+                );
             }
 
             Ok(())
@@ -103,8 +120,12 @@ fn uds_audit(
     peer: Option<&UdsPeerInfo>,
     authz_result: &str,
     rejection_stage: Option<&str>,
+    effective_role: Option<Role>,
 ) {
     use agent_orchestrator::db::{ControlPlaneAuditRecord, insert_control_plane_audit};
+    let peer_exe = peer
+        .and_then(|p| p.pid)
+        .and_then(crate::uds_security::resolve_peer_exe);
     let _ = insert_control_plane_audit(
         db_path,
         &ControlPlaneAuditRecord {
@@ -114,7 +135,7 @@ fn uds_audit(
             subject_id: peer.map(|p| format!("uid:{}", p.uid)),
             authn_result: "peer_cred".into(),
             authz_result: authz_result.into(),
-            role: None,
+            role: effective_role.map(|r| r.as_str().to_string()),
             reason: rejection_stage.map(|s| s.to_string()),
             tls_fingerprint: None,
             rejection_stage: rejection_stage.map(|s| s.to_string()),
@@ -122,6 +143,7 @@ fn uds_audit(
             limit_scope: None,
             decision: None,
             reason_code: None,
+            peer_exe,
         },
     );
 }

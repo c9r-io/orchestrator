@@ -156,6 +156,10 @@ pub struct UdsAuthPolicy {
     /// Maximum role granted to UDS callers.
     #[serde(default = "default_max_role")]
     pub max_role: Role,
+    /// When true, read-only RPCs are also recorded in the audit log.
+    /// Useful in multi-user deployments where forensic coverage matters.
+    #[serde(default)]
+    pub audit_all_reads: bool,
 }
 
 fn default_max_role() -> Role {
@@ -166,6 +170,7 @@ impl Default for UdsAuthPolicy {
     fn default() -> Self {
         Self {
             max_role: default_max_role(),
+            audit_all_reads: false,
         }
     }
 }
@@ -193,6 +198,49 @@ pub fn load_uds_policy(
 }
 
 // ---------------------------------------------------------------------------
+// Peer executable resolution (forensic audit only — NOT for authorization)
+// ---------------------------------------------------------------------------
+
+/// Attempt to resolve the executable path of a peer process by PID.
+///
+/// This is best-effort and used solely for audit enrichment.  The result
+/// must **never** be used for authorization decisions because the
+/// executable could change between credential extraction and this call
+/// (TOCTOU), and a same-UID process can trivially spoof its binary path.
+pub fn resolve_peer_exe(pid: i32) -> Option<String> {
+    resolve_peer_exe_platform(pid)
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_peer_exe_platform(pid: i32) -> Option<String> {
+    std::fs::read_link(format!("/proc/{pid}/exe"))
+        .ok()
+        .map(|p| p.to_string_lossy().into_owned())
+}
+
+#[cfg(target_os = "macos")]
+fn resolve_peer_exe_platform(pid: i32) -> Option<String> {
+    let mut buf = vec![0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+    // SAFETY: `buf` is a valid, non-aliased allocation large enough for
+    // PROC_PIDPATHINFO_MAXSIZE bytes.  `proc_pidpath` writes up to that
+    // many bytes and returns the actual length written, which we use to
+    // truncate the buffer before converting to a String.
+    let ret =
+        unsafe { libc::proc_pidpath(pid, buf.as_mut_ptr() as *mut libc::c_void, buf.len() as u32) };
+    if ret > 0 {
+        buf.truncate(ret as usize);
+        String::from_utf8(buf).ok()
+    } else {
+        None
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+fn resolve_peer_exe_platform(_pid: i32) -> Option<String> {
+    None
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -211,6 +259,7 @@ mod tests {
     fn read_only_policy_denies_operator() {
         let policy = UdsAuthPolicy {
             max_role: Role::ReadOnly,
+            ..Default::default()
         };
         assert!(policy.max_role.allows(Role::ReadOnly));
         assert!(!policy.max_role.allows(Role::Operator));
@@ -221,6 +270,7 @@ mod tests {
     fn operator_policy_allows_operator_denies_admin() {
         let policy = UdsAuthPolicy {
             max_role: Role::Operator,
+            ..Default::default()
         };
         assert!(policy.max_role.allows(Role::ReadOnly));
         assert!(policy.max_role.allows(Role::Operator));

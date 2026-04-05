@@ -80,6 +80,8 @@ pub struct ControlPlaneAuditRecord {
     pub decision: Option<String>,
     /// Stable machine-readable reason code.
     pub reason_code: Option<String>,
+    /// Executable path of the peer process (UDS only, forensic audit).
+    pub peer_exe: Option<String>,
 }
 
 /// Audit payload for plugin-related authorization and execution decisions.
@@ -292,8 +294,8 @@ pub fn insert_control_plane_audit(db_path: &Path, record: &ControlPlaneAuditReco
         "INSERT INTO control_plane_audit (
             created_at, transport, remote_addr, rpc, subject_id, authn_result,
             authz_result, role, reason, tls_fingerprint, rejection_stage,
-            traffic_class, limit_scope, decision, reason_code
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            traffic_class, limit_scope, decision, reason_code, peer_exe
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
         params![
             crate::config_load::now_ts(),
             record.transport,
@@ -310,6 +312,7 @@ pub fn insert_control_plane_audit(db_path: &Path, record: &ControlPlaneAuditReco
             record.limit_scope,
             record.decision,
             record.reason_code,
+            record.peer_exe,
         ],
     )?;
     Ok(())
@@ -916,6 +919,7 @@ mod tests {
             limit_scope: None,
             decision: None,
             reason_code: None,
+            peer_exe: None,
         };
         insert_control_plane_audit(&db_path, &record).expect("insert audit");
 
@@ -953,6 +957,7 @@ mod tests {
             limit_scope: None,
             decision: None,
             reason_code: None,
+            peer_exe: None,
         };
         insert_control_plane_audit(&db_path, &record).expect("insert audit with nones");
 

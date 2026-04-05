@@ -824,3 +824,13 @@ pub(crate) fn m0014_task_graph_debug_tables(conn: &Connection) -> Result<()> {
     )?;
     Ok(())
 }
+
+pub(crate) fn m0024_control_plane_audit_peer_exe(conn: &Connection) -> Result<()> {
+    ensure_column_exists(
+        conn,
+        "control_plane_audit",
+        "peer_exe",
+        "ALTER TABLE control_plane_audit ADD COLUMN peer_exe TEXT",
+    )?;
+    Ok(())
+}

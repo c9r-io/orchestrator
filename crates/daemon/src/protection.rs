@@ -571,6 +571,7 @@ impl ControlPlaneProtection {
                 limit_scope: Some(scope.as_str().to_string()),
                 decision: Some("rejected".to_string()),
                 reason_code: Some(reason_code.to_string()),
+                peer_exe: None,
             },
         );
         status

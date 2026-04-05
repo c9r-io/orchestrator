@@ -213,6 +213,11 @@ pub fn registered_migrations() -> Vec<Migration> {
             name: "m0023_task_step_filter_and_initial_vars",
             up: crate::persistence::migration_steps::m0023_task_step_filter_and_initial_vars,
         },
+        Migration {
+            version: 24,
+            name: "m0024_control_plane_audit_peer_exe",
+            up: crate::persistence::migration_steps::m0024_control_plane_audit_peer_exe,
+        },
     ]
 }
 

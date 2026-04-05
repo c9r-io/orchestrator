@@ -627,10 +627,28 @@ fn main() -> Result<()> {
             args.control_plane_dir.as_deref(),
         )?);
 
+        // Phase 3a: warn if data_dir has overly permissive permissions.
+        check_data_dir_permissions(&inner.data_dir);
+
         let uds_policy = uds_security::load_uds_policy(
             &inner.data_dir,
             args.control_plane_dir.as_deref(),
         )?;
+
+        // Phase 3b: advise when no UDS policy file is present.
+        if uds_policy.is_none() {
+            let policy_path = args
+                .control_plane_dir
+                .as_deref()
+                .map(|d| d.join("uds-policy.yaml"))
+                .unwrap_or_else(|| inner.data_dir.join("control-plane/uds-policy.yaml"));
+            info!(
+                "UDS policy: no uds-policy.yaml found; all local callers get implicit Admin. \
+                 Create {} to restrict.",
+                policy_path.display()
+            );
+        }
+
         let service = server::OrchestratorServer::new(
             inner.clone(),
             shutdown_notify.clone(),
@@ -1243,5 +1261,21 @@ fn shutdown_reason(
         "shutdown"
     } else {
         "unknown"
+    }
+}
+
+/// Warn if the data directory has group or world read/write bits set.
+fn check_data_dir_permissions(data_dir: &std::path::Path) {
+    use std::os::unix::fs::PermissionsExt;
+    if let Ok(meta) = std::fs::metadata(data_dir) {
+        let mode = meta.permissions().mode();
+        if mode & 0o077 != 0 {
+            tracing::warn!(
+                data_dir = %data_dir.display(),
+                mode = format!("{mode:#o}"),
+                "data directory has group/world-accessible permissions; \
+                 consider restricting to 0700 for multi-user hosts"
+            );
+        }
     }
 }

@@ -287,6 +287,7 @@ impl ControlPlaneSecurity {
                 limit_scope: None,
                 decision: None,
                 reason_code: None,
+                peer_exe: None,
             },
         )
     }
@@ -690,16 +691,28 @@ fn server_sans(bind_addr: &SocketAddr) -> Result<Vec<SanType>> {
 
 pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
     match rpc {
+        // ReadOnly: informational queries with no side effects.
         "Ping" | "TaskList" | "TaskInfo" | "TaskLogs" | "TaskFollow" | "TaskWatch" | "Get"
-        | "Describe" | "StoreGet" | "StoreList" | "WorkerStatus" | "Check" | "ManifestExport" => {
-            Role::ReadOnly
-        }
+        | "Describe" | "StoreGet" | "StoreList" | "WorkerStatus" | "Check" | "ManifestExport"
+        | "DbStatus" | "DbMigrationsList" | "SecretKeyStatus" | "SecretKeyList"
+        | "SecretKeyHistory" | "AgentList" | "EventStats" | "TaskEvents" => Role::ReadOnly,
+
+        // Operator: routine mutating operations.
         "TaskCreate" | "TaskStart" | "TaskPause" | "TaskResume" | "TaskRetry" | "Apply"
-        | "StorePut" | "StoreDelete" | "StorePrune" | "ManifestValidate" | "Init" | "TaskTrace" => {
-            Role::Operator
+        | "StorePut" | "StoreDelete" | "StorePrune" | "ManifestValidate" | "Init" | "TaskTrace"
+        | "TaskDeleteBulk" | "TaskRecover" | "RunStep" | "TriggerSuspend" | "TriggerResume"
+        | "TriggerFire" | "AgentCordon" | "AgentUncordon" | "AgentDrain" | "EventCleanup"
+        | "DbLogCleanup" | "DbVacuum" => Role::Operator,
+
+        // Admin: destructive or security-sensitive operations.
+        "Shutdown" | "TaskDelete" | "Delete" | "ConfigDebug" | "ApplyPluginCrd"
+        | "MaintenanceMode" | "SecretKeyRotate" | "SecretKeyBootstrap" | "SecretKeyRevoke"
+        | "QaDoctor" => Role::Admin,
+
+        other => {
+            tracing::warn!(rpc = other, "unmapped RPC defaulting to Admin role");
+            Role::Admin
         }
-        "Shutdown" | "TaskDelete" | "Delete" | "ConfigDebug" | "ApplyPluginCrd" => Role::Admin,
-        _ => Role::Admin,
     }
 }
 
@@ -760,9 +773,30 @@ mod tests {
 
     #[test]
     fn required_role_mapping_is_stable() {
+        // ReadOnly
         assert_eq!(required_role_for_rpc("Ping"), Role::ReadOnly);
+        assert_eq!(required_role_for_rpc("DbStatus"), Role::ReadOnly);
+        assert_eq!(required_role_for_rpc("AgentList"), Role::ReadOnly);
+        assert_eq!(required_role_for_rpc("SecretKeyStatus"), Role::ReadOnly);
+        assert_eq!(required_role_for_rpc("EventStats"), Role::ReadOnly);
+        assert_eq!(required_role_for_rpc("TaskEvents"), Role::ReadOnly);
+
+        // Operator
         assert_eq!(required_role_for_rpc("Apply"), Role::Operator);
+        assert_eq!(required_role_for_rpc("TaskDeleteBulk"), Role::Operator);
+        assert_eq!(required_role_for_rpc("TriggerFire"), Role::Operator);
+        assert_eq!(required_role_for_rpc("AgentCordon"), Role::Operator);
+        assert_eq!(required_role_for_rpc("DbVacuum"), Role::Operator);
+        assert_eq!(required_role_for_rpc("RunStep"), Role::Operator);
+
+        // Admin
         assert_eq!(required_role_for_rpc("Shutdown"), Role::Admin);
+        assert_eq!(required_role_for_rpc("MaintenanceMode"), Role::Admin);
+        assert_eq!(required_role_for_rpc("SecretKeyRotate"), Role::Admin);
+        assert_eq!(required_role_for_rpc("QaDoctor"), Role::Admin);
+
+        // Unmapped RPCs default to Admin
+        assert_eq!(required_role_for_rpc("UnknownFutureRpc"), Role::Admin);
     }
 
     #[test]
