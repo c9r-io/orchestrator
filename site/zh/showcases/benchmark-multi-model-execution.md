@@ -213,7 +213,7 @@ orchestratord --version
 执行 docs/showcases/benchmark-multi-model-execution.md 多模型 benchmark 测试。
 
 ## 背景
-- 变量矩阵为 5 组：A1 (Claude Code+Opus), B1 (OpenCode+Opus), C1 (OpenCode+GLM-5), D1 (Gemini CLI+Gemini 3.1 Pro), E1 (Codex CLI+GPT-5.4)
+- 变量矩阵为 3 组（精简版，可按 section 2 扩展为 5 组）：C1 (OpenCode+MiniMax), D1 (Gemini CLI+Flash), E1 (Codex CLI+GPT-5.4-mini)
 - Agent manifests / SecretStores / Workflow 位于 fixtures/benchmarks/
 - 各 CLI 已认证，遇到认证问题报告给用户
 
@@ -226,7 +226,7 @@ orchestratord --version
 4. mkdir -p results
 
 ## 执行流程
-对 A1 → B1 → C1 → D1 → E1 逐组执行 showcase 文档中的 5.1-5.7 步骤:
+对 C1 → D1 → E1 逐组执行 showcase 文档中的 5.1-5.7 步骤:
 - apply secrets → apply agent → apply workflow
 - task create → task watch --timeout 1800
 - 收集结果 (task info/event list/task items/task trace -o json)

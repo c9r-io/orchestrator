@@ -213,7 +213,7 @@ Once the above is done, paste the following prompt into your AI coding agent (e.
 Execute the multi-model benchmark test per docs/showcases/benchmark-multi-model-execution.md.
 
 ## Context
-- Variable matrix: 5 combos — A1 (Claude Code+Opus), B1 (OpenCode+Opus), C1 (OpenCode+GLM-5), D1 (Gemini CLI+Gemini 3.1 Pro), E1 (Codex CLI+GPT-5.4)
+- Variable matrix: 3 combos (trimmed; expand to 5 per section 2) — C1 (OpenCode+MiniMax), D1 (Gemini CLI+Flash), E1 (Codex CLI+GPT-5.4-mini)
 - Agent manifests / SecretStores / Workflow are in fixtures/benchmarks/
 - All CLIs are authenticated; report auth failures to the user
 
@@ -226,7 +226,7 @@ Execute the multi-model benchmark test per docs/showcases/benchmark-multi-model-
 4. mkdir -p results
 
 ## Execution flow
-Execute showcase doc steps 5.1-5.7 sequentially for A1 → B1 → C1 → D1 → E1:
+Execute showcase doc steps 5.1-5.7 sequentially for C1 → D1 → E1:
 - apply secrets → apply agent → apply workflow
 - task create → task watch --timeout 1800
 - Collect results (task info/event list/task items/task trace -o json)
