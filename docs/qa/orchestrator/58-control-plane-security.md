@@ -386,10 +386,13 @@ Verify the UDS trust boundary hardening: exhaustive RPC role mapping, effective 
    ```
 5. Call a ReadOnly RPC, an Operator RPC, and an Admin RPC:
    ```bash
-   ./target/release/orchestrator db status          # ReadOnly — should succeed
-   ./target/release/orchestrator task list -o json   # ReadOnly — should succeed
-   ./target/release/orchestrator daemon stop         # Admin (Shutdown) — should be denied
+   ./target/release/orchestrator db status          # ReadOnly (DbStatus) — should succeed
+   ./target/release/orchestrator task list -o json   # ReadOnly (TaskList) — should succeed
+   ./target/release/orchestrator db vacuum           # Operator (DbVacuum) — should succeed
+   ./target/release/orchestrator debug --component config  # Admin (ConfigDebug) — should be denied
    ```
+   Note: Use `debug` (gRPC ConfigDebug) instead of `daemon stop` because
+   `daemon stop` sends SIGTERM via the PID file, bypassing gRPC authorization.
 6. Query audit records for enrichment:
    ```bash
    sqlite3 "$QA_DATA/agent_orchestrator.db" \
@@ -404,7 +407,8 @@ Verify the UDS trust boundary hardening: exhaustive RPC role mapping, effective 
 - Startup log shows WARN for data_dir permissions (`0755` has group/world read+execute).
 - Startup log shows INFO advisory about absent `uds-policy.yaml` (first start only).
 - `db status` succeeds under `max_role: operator` because `DbStatus` maps to `ReadOnly`.
-- `daemon stop` (Shutdown) is denied because `Shutdown` maps to `Admin` and policy caps at `operator`.
+- `db vacuum` succeeds because `DbVacuum` maps to `Operator`.
+- `debug --component config` (ConfigDebug) is denied because `ConfigDebug` maps to `Admin` and policy caps at `operator`.
 - Audit records include `role = 'operator'` (effective role from policy) and non-NULL `peer_exe` (the CLI binary path).
 - With `audit_all_reads: true`, even `DbStatus` and `TaskList` produce audit rows.
 
@@ -416,8 +420,8 @@ FROM control_plane_audit
 WHERE transport = 'uds'
 ORDER BY id DESC
 LIMIT 5;
--- Expected: Shutdown → denied (role=operator, rejection_stage=uds_policy_denied),
---           DbStatus/TaskList → allowed (role=operator, has_exe=1)
+-- Expected: ConfigDebug → denied (role=operator, rejection_stage=uds_policy_denied),
+--           DbVacuum/DbStatus/TaskList → allowed (role=operator, has_exe=1)
 ```
 
 ---
@@ -431,4 +435,4 @@ LIMIT 5;
 | 3 | Additional Operator Client Is Denied On Admin RPC | ✅ | 2026-03-12 | Claude | Operator task list allowed; debug denied with "permission denied" |
 | 4 | Insecure TCP Feature Gate And Default Build Rejection | ✅ | 2026-03-12 | Claude | dev-insecure build logs warning; default build rejects flag with exit code 2 |
 | 5 | UDS Fallback, mTLS Enforcement, And Audit Classification | ✅ | 2026-03-12 | Claude | UDS works without TLS; curl rejected at handshake; audit rejection_stage populated correctly |
-| 6 | UDS Trust Boundary Hardening And Audit Enrichment | ⬜ | | | |
+| 6 | UDS Trust Boundary Hardening And Audit Enrichment | ✅ | 2026-04-05 | Claude | data_dir WARN + policy INFO confirmed; DbStatus/TaskList allowed, DbVacuum allowed, ConfigDebug denied under operator cap; audit shows role=operator + peer_exe for all 4 RPCs |
