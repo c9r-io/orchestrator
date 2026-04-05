@@ -243,3 +243,33 @@ After all combos complete, generate results/benchmark-report.md per doc sections
 - Timeout or failure: record status and continue to next combo
 - Auth failure: report to user, wait for fix before continuing
 ````
+
+### 8.3 Actual Execution Results Reference (2026-04-05)
+
+Below are real results from executing the above prompt on orchestrator v0.3.0 with a trimmed matrix (C1/D1/E1):
+
+**Six-Dimension Evaluation Overview**
+
+| Combo | Shell | Model | Status | Duration | Completion | Quality | Tests | Efficiency | Success | Standards | Total(/60) | Notes |
+|-------|-------|-------|--------|----------|------------|---------|-------|------------|---------|-----------|------------|-------|
+| C1 | OpenCode | MiniMax-M2.7 | completed | 5m27s | 2 | 1 | 0 | 8 | 8 | 1 | 20 | Modified 1 test file only, no retry impl |
+| D1 | Gemini CLI | Flash-preview | timeout | >44m | 7 | 6 | 4 | 1 | 3 | 5 | 26 | Full implementation but timed out (30min) |
+| E1 | Codex CLI | GPT-5.4-mini | completed | 5m14s | 9 | 7 | 5 | 9 | 8 | 6 | 44 | Full implementation, fastest |
+
+**Execution Time Breakdown**
+
+| Combo | plan | implement | self_test | eval | Total |
+|-------|------|-----------|-----------|------|-------|
+| C1 | 117s | 92s | 0s | 95s | 327s |
+| D1 | 1094s | >1590s | — | — | >2685s |
+| E1 | 85s | 202s | 0s | 27s | 314s |
+
+**Code Output**
+
+| Combo | Files Changed | Lines +/- | Core Changes |
+|-------|---------------|-----------|--------------|
+| C1 | 1 | +4/-3 | Only modified a test file |
+| D1 | 8 | +278/-76 | connect.rs + CLI integration |
+| E1 | 9 | +267/-73 | connect.rs + CLI + GUI integration |
+
+**Conclusion:** E1 (Codex/GPT-5.4-mini) completed the full workflow in 5m14s with a six-dimension score of 44/60, the clear winner. D1 produced comparable code volume to E1 but timed out; C1 failed to complete the actual task.
