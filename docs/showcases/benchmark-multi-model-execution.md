@@ -166,3 +166,70 @@ Agent 运行项目的 build/test/lint 命令验证后，输出六维 JSON 评分
 - **超时保护**：单次任务 30 分钟超时
 - **成本意识**：三个组合均使用低成本模型（MiniMax-highspeed / Flash / mini），单次任务成本可控
 - **可复现性**：所有 manifest 版本化在 `fixtures/benchmarks/`
+
+## 8. 实例：一键执行 Benchmark
+
+### 8.1 用户前置准备（手动完成）
+
+在将 prompt 交给 AI 编码 Agent 之前，用户需自行完成以下认证和环境准备：
+
+```bash
+# 1. 认证各 Agent CLI（按需选择你要测试的外壳）
+opencode auth          # MiniMax API key
+gemini auth            # Google AI Studio 登录
+codex auth             # OpenAI API key
+
+# 2. 确认 API 密钥已写入 SecretStore manifest
+#    编辑 fixtures/benchmarks/secrets-*.yaml，填入真实密钥
+cat fixtures/benchmarks/secrets-glm5.yaml     # 检查 MiniMax key
+cat fixtures/benchmarks/secrets-gemini.yaml   # 检查 Gemini（通常为空，CLI 自带认证）
+cat fixtures/benchmarks/secrets-openai.yaml   # 检查 OpenAI key
+
+# 3. 确认 orchestrator 已构建安装
+orchestrator --version   # 应输出版本号
+orchestratord --version
+
+# 4. 确认外壳 CLI 已安装
+opencode --version
+gemini --version
+codex --version
+```
+
+### 8.2 可直接执行的 Prompt
+
+完成上述准备后，在 AI 编码 Agent（如 Claude Code）中粘贴以下 prompt 即可启动全流程：
+
+````
+执行 docs/showcases/benchmark-multi-model-execution.md 多模型 benchmark 测试。
+
+## 背景
+- 变量矩阵为 3 组：C1 (OpenCode+MiniMax), D1 (Gemini CLI+Flash), E1 (Codex CLI+GPT-5.4-mini)
+- Agent manifests / SecretStores / Workflow 位于 fixtures/benchmarks/
+- 各 CLI 已认证，遇到认证问题报告给用户
+
+## 执行前清理
+1. 重新构建: cargo build --release -p orchestratord -p orchestrator-cli，安装到 ~/.cargo/bin/
+2. 重启 daemon: kill 旧进程 → orchestratord --foreground --workers 2
+3. 清理 benchmark 项目残留资产:
+   - orchestrator task delete --all -p benchmark -f
+   - orchestrator get agents/workflows/workspaces -p benchmark → 逐个 delete
+4. mkdir -p results
+
+## 执行流程
+对 C1 → D1 → E1 逐组执行 showcase 文档中的 5.1-5.7 步骤:
+- apply secrets → apply agent → apply workflow
+- task create → task watch --timeout 1800
+- 收集结果 (task info/event list/task items/task trace -o json)
+- git diff 保存到 results/<combo_id>-*
+- git checkout/clean 恢复环境（注意保留 results/ 目录）
+- delete 当前组 agent（保留 workflow/workspace 共用；如遇 capability 校验错误则一并删除 workflow 重建）
+
+每组之间清理 agent 以避免 capability 冲突。
+
+## 评估
+全部组合完成后，按文档 6.1-6.3 节的六维评估标准生成 results/benchmark-report.md。
+
+## 异常处理
+- 超时或失败：记录状态后继续下一组
+- 认证失败：报告给用户，等待修复后继续
+````

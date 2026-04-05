@@ -174,3 +174,70 @@ Finally, provide a summary analysis along two dimensions:
 - **Timeout protection**: 30-minute timeout per task
 - **Cost awareness**: Opus is approximately 5x the cost of Sonnet; confirm budget before batch execution
 - **Reproducibility**: All manifests are versioned in `fixtures/benchmarks/`
+
+## 8. Example: One-Click Benchmark Execution
+
+### 8.1 User Prerequisites (Manual Steps)
+
+Before handing the prompt to your AI coding agent, complete the following authentication and setup:
+
+```bash
+# 1. Authenticate each Agent CLI (select the shells you want to test)
+opencode auth          # MiniMax API key
+gemini auth            # Google AI Studio login
+codex auth             # OpenAI API key
+
+# 2. Verify API keys are written into SecretStore manifests
+#    Edit fixtures/benchmarks/secrets-*.yaml with real keys
+cat fixtures/benchmarks/secrets-glm5.yaml     # Check MiniMax key
+cat fixtures/benchmarks/secrets-gemini.yaml   # Check Gemini (usually empty — CLI handles auth)
+cat fixtures/benchmarks/secrets-openai.yaml   # Check OpenAI key
+
+# 3. Verify orchestrator is built and installed
+orchestrator --version   # Should print version
+orchestratord --version
+
+# 4. Verify shell CLIs are installed
+opencode --version
+gemini --version
+codex --version
+```
+
+### 8.2 Ready-to-Execute Prompt
+
+Once the above is done, paste the following prompt into your AI coding agent (e.g., Claude Code) to start the full workflow:
+
+````
+Execute the multi-model benchmark test per docs/showcases/benchmark-multi-model-execution.md.
+
+## Context
+- Variable matrix: 5 combos — A1 (Claude Code+Opus), B1 (OpenCode+Opus), C1 (OpenCode+GLM-5), D1 (Gemini CLI+Gemini 3.1 Pro), E1 (Codex CLI+GPT-5.4)
+- Agent manifests / SecretStores / Workflow are in fixtures/benchmarks/
+- All CLIs are authenticated; report auth failures to the user
+
+## Pre-execution cleanup
+1. Rebuild: cargo build --release -p orchestratord -p orchestrator-cli, install to ~/.cargo/bin/
+2. Restart daemon: kill old process → orchestratord --foreground --workers 2
+3. Clean residual benchmark project assets:
+   - orchestrator task delete --all -p benchmark -f
+   - orchestrator get agents/workflows/workspaces -p benchmark → delete each
+4. mkdir -p results
+
+## Execution flow
+Execute showcase doc steps 5.1-5.7 sequentially for A1 → B1 → C1 → D1 → E1:
+- apply secrets → apply agent → apply workflow
+- task create → task watch --timeout 1800
+- Collect results (task info/event list/task items/task trace -o json)
+- Save git diff to results/<combo_id>-*
+- git checkout/clean to restore environment (preserve results/ directory)
+- Delete current combo's agent (keep workflow/workspace shared; if capability validation errors occur, delete workflow too and recreate)
+
+Clean agent between combos to avoid capability conflicts.
+
+## Evaluation
+After all combos complete, generate results/benchmark-report.md per doc sections 6.1-6.3 using the six-dimension evaluation criteria.
+
+## Error handling
+- Timeout or failure: record status and continue to next combo
+- Auth failure: report to user, wait for fix before continuing
+````
