@@ -6,7 +6,7 @@ self_referential_safe: false
 
 **Module**: orchestrator
 **Scope**: Validate secure TCP daemon bootstrap, host-user client config generation, role-based RPC authorization, insecure TCP escape hatch, and control-plane audit persistence
-**Scenarios**: 6
+**Scenarios**: 9
 **Priority**: Critical
 
 ---
@@ -57,10 +57,10 @@ Related paths:
 
 ### UDS Policy: `{data_dir}/control-plane/uds-policy.yaml`
 
-Optional policy file that restricts the maximum role available to UDS callers.  When absent, all same-UID callers get implicit Admin.
+Optional policy file that restricts the maximum role available to UDS callers.  When absent, the `--uds-max-role` flag determines the effective role (default: `operator`).
 
 ```yaml
-max_role: operator        # read_only | operator | admin (default: admin)
+max_role: operator        # read_only | operator | admin (default: operator)
 audit_all_reads: true     # record ReadOnly RPCs in audit (default: false)
 ```
 
@@ -365,6 +365,7 @@ Verify the UDS trust boundary hardening: exhaustive RPC role mapping, effective 
    ```bash
    grep "group/world-accessible permissions" /tmp/orch-uds.log
    grep "no uds-policy.yaml found" /tmp/orch-uds.log
+   grep "role=operator" /tmp/orch-uds.log
    ```
 3. Call a read-only RPC that was previously implicit Admin (now ReadOnly):
    ```bash
@@ -405,7 +406,7 @@ Verify the UDS trust boundary hardening: exhaustive RPC role mapping, effective 
 
 ### Expected
 - Startup log shows WARN for data_dir permissions (`0755` has group/world read+execute).
-- Startup log shows INFO advisory about absent `uds-policy.yaml` (first start only).
+- Startup log shows INFO advisory about absent `uds-policy.yaml` with `role=operator` (first start only).
 - `db status` succeeds under `max_role: operator` because `DbStatus` maps to `ReadOnly`.
 - `db vacuum` succeeds because `DbVacuum` maps to `Operator`.
 - `debug --component config` (ConfigDebug) is denied because `ConfigDebug` maps to `Admin` and policy caps at `operator`.
@@ -426,6 +427,196 @@ LIMIT 5;
 
 ---
 
+## Scenario 7: UDS Default Operator Role Without Policy File
+
+### Preconditions
+- Release binaries built
+- Isolated data directory with no `uds-policy.yaml`:
+  ```bash
+  export QA_DATA="$(mktemp -d)"
+  ```
+
+### Goal
+Verify that without a `uds-policy.yaml`, UDS callers default to Operator — lifecycle RPCs succeed, security-sensitive RPCs are denied.
+
+### Steps
+1. Start a UDS daemon without any policy file or `--uds-max-role` flag:
+   ```bash
+   ORCHESTRATORD_DATA_DIR="$QA_DATA" \
+     ./target/release/orchestratord --foreground --workers 1 > /tmp/orch-default.log 2>&1 &
+   DAEMON_PID=$!
+   sleep 3
+   ```
+2. Verify startup log shows Operator default:
+   ```bash
+   grep "no uds-policy.yaml found" /tmp/orch-default.log
+   grep "role=operator" /tmp/orch-default.log
+   ```
+3. Call RPCs across all three tiers:
+   ```bash
+   export ORCHESTRATOR_SOCKET="$QA_DATA/orchestrator.sock"
+   # ReadOnly — should succeed
+   ./target/release/orchestrator db status
+   # Operator (reclassified from Admin) — should succeed
+   ./target/release/orchestrator db vacuum
+   # Admin — should be denied
+   ./target/release/orchestrator debug --component config 2>&1 || true
+   ```
+4. Query audit records:
+   ```bash
+   sqlite3 "$QA_DATA/agent_orchestrator.db" \
+     "SELECT rpc, authz_result, role, rejection_stage FROM control_plane_audit ORDER BY id DESC LIMIT 5;"
+   ```
+5. Stop the daemon:
+   ```bash
+   kill "$DAEMON_PID"; wait "$DAEMON_PID" 2>/dev/null
+   ```
+
+### Expected
+- Startup log contains `role=operator` in the UDS policy advisory.
+- `db status` (ReadOnly) succeeds.
+- `db vacuum` (Operator) succeeds — previously required Admin, now Operator is sufficient.
+- `debug --component config` (Admin) is denied with a permission-denied error.
+- Audit records show `role='operator'`; denied row has `rejection_stage='uds_policy_denied'`.
+
+### Expected Data State
+```sql
+SELECT rpc, authz_result, role, rejection_stage
+FROM control_plane_audit
+WHERE transport = 'uds'
+ORDER BY id DESC
+LIMIT 5;
+-- Expected: ConfigDebug → denied (role=operator, rejection_stage=uds_policy_denied),
+--           DbVacuum/DbStatus → allowed (role=operator, rejection_stage=NULL)
+```
+
+---
+
+## Scenario 8: `--uds-max-role admin` Flag Restores Full Admin Access
+
+### Preconditions
+- Release binaries built
+- Isolated data directory with no `uds-policy.yaml`:
+  ```bash
+  export QA_DATA="$(mktemp -d)"
+  ```
+
+### Goal
+Verify that `--uds-max-role admin` overrides the Operator default and grants Admin access to all RPCs.
+
+### Steps
+1. Start a UDS daemon with explicit `--uds-max-role admin`:
+   ```bash
+   ORCHESTRATORD_DATA_DIR="$QA_DATA" \
+     ./target/release/orchestratord --foreground --workers 1 --uds-max-role admin > /tmp/orch-admin.log 2>&1 &
+   DAEMON_PID=$!
+   sleep 3
+   ```
+2. Verify startup log shows Admin role:
+   ```bash
+   grep "role=admin" /tmp/orch-admin.log
+   ```
+3. Call an Admin-only RPC:
+   ```bash
+   export ORCHESTRATOR_SOCKET="$QA_DATA/orchestrator.sock"
+   ./target/release/orchestrator debug --component config
+   ```
+4. Query audit records:
+   ```bash
+   sqlite3 "$QA_DATA/agent_orchestrator.db" \
+     "SELECT rpc, authz_result, role, rejection_stage FROM control_plane_audit ORDER BY id DESC LIMIT 3;"
+   ```
+5. Stop the daemon:
+   ```bash
+   kill "$DAEMON_PID"; wait "$DAEMON_PID" 2>/dev/null
+   ```
+
+### Expected
+- Startup log contains `role=admin` in the UDS policy advisory.
+- `debug --component config` (Admin) succeeds.
+- Audit records show `role='admin'` and `rejection_stage=NULL` (allowed).
+
+### Expected Data State
+```sql
+SELECT rpc, authz_result, role, rejection_stage
+FROM control_plane_audit
+WHERE rpc = 'ConfigDebug'
+ORDER BY id DESC
+LIMIT 1;
+-- Expected: ConfigDebug → allowed (role=admin, rejection_stage=NULL)
+```
+
+---
+
+## Scenario 9: Policy File Takes Precedence Over `--uds-max-role` Flag
+
+### Preconditions
+- Release binaries built
+- Isolated data directory:
+  ```bash
+  export QA_DATA="$(mktemp -d)"
+  ```
+
+### Goal
+Verify that when `uds-policy.yaml` exists, its `max_role` takes precedence over the `--uds-max-role` CLI flag.
+
+### Steps
+1. Create a restrictive policy file:
+   ```bash
+   mkdir -p "$QA_DATA/control-plane"
+   cat > "$QA_DATA/control-plane/uds-policy.yaml" <<'YAML'
+   max_role: read_only
+   audit_all_reads: true
+   YAML
+   ```
+2. Start the daemon with `--uds-max-role admin` (flag should be ignored):
+   ```bash
+   ORCHESTRATORD_DATA_DIR="$QA_DATA" \
+     ./target/release/orchestratord --foreground --workers 1 --uds-max-role admin > /tmp/orch-precedence.log 2>&1 &
+   DAEMON_PID=$!
+   sleep 3
+   ```
+3. Verify startup log does NOT show the "no uds-policy.yaml found" advisory:
+   ```bash
+   ! grep "no uds-policy.yaml found" /tmp/orch-precedence.log
+   ```
+4. Call a ReadOnly RPC and an Operator RPC:
+   ```bash
+   export ORCHESTRATOR_SOCKET="$QA_DATA/orchestrator.sock"
+   # ReadOnly — should succeed
+   ./target/release/orchestrator db status
+   # Operator — should be denied by read_only policy
+   ./target/release/orchestrator db vacuum 2>&1 || true
+   ```
+5. Query audit records:
+   ```bash
+   sqlite3 "$QA_DATA/agent_orchestrator.db" \
+     "SELECT rpc, authz_result, role, rejection_stage FROM control_plane_audit ORDER BY id DESC LIMIT 5;"
+   ```
+6. Stop the daemon:
+   ```bash
+   kill "$DAEMON_PID"; wait "$DAEMON_PID" 2>/dev/null
+   ```
+
+### Expected
+- Startup log does NOT contain the "no uds-policy.yaml found" advisory (policy file was loaded).
+- `db status` (ReadOnly) succeeds because `read_only` allows ReadOnly RPCs.
+- `db vacuum` (Operator) is denied because the policy file caps at `read_only`, regardless of `--uds-max-role admin`.
+- Audit records show `role='read_only'`; denied row has `rejection_stage='uds_policy_denied'`.
+
+### Expected Data State
+```sql
+SELECT rpc, authz_result, role, rejection_stage
+FROM control_plane_audit
+WHERE transport = 'uds'
+ORDER BY id DESC
+LIMIT 5;
+-- Expected: DbVacuum → denied (role=read_only, rejection_stage=uds_policy_denied),
+--           DbStatus → allowed (role=read_only, rejection_stage=NULL)
+```
+
+---
+
 ## Checklist
 
 | # | Scenario | Status | Test Date | Tester | Notes |
@@ -436,3 +627,6 @@ LIMIT 5;
 | 4 | Insecure TCP Feature Gate And Default Build Rejection | ✅ | 2026-03-12 | Claude | dev-insecure build logs warning; default build rejects flag with exit code 2 |
 | 5 | UDS Fallback, mTLS Enforcement, And Audit Classification | ✅ | 2026-03-12 | Claude | UDS works without TLS; curl rejected at handshake; audit rejection_stage populated correctly |
 | 6 | UDS Trust Boundary Hardening And Audit Enrichment | ✅ | 2026-04-05 | Claude | data_dir WARN + policy INFO confirmed; DbStatus/TaskList allowed, DbVacuum allowed, ConfigDebug denied under operator cap; audit shows role=operator + peer_exe for all 4 RPCs |
+| 7 | UDS Default Operator Role Without Policy File | | | | |
+| 8 | `--uds-max-role admin` Flag Restores Full Admin Access | | | | |
+| 9 | Policy File Takes Precedence Over `--uds-max-role` Flag | | | | |
