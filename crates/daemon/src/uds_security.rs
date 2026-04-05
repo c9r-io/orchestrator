@@ -296,4 +296,32 @@ mod tests {
         let policy = load_uds_policy(tmp.path(), None).unwrap().unwrap();
         assert_eq!(policy.max_role, Role::ReadOnly);
     }
+
+    /// Existing policy files that omit max_role should now default to Operator
+    /// (not Admin) via the serde default.
+    #[test]
+    fn policy_file_omitting_max_role_defaults_to_operator() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cp_dir = tmp.path().join("control-plane");
+        std::fs::create_dir_all(&cp_dir).unwrap();
+        let path = cp_dir.join("uds-policy.yaml");
+        std::fs::write(&path, "audit_all_reads: true\n").unwrap();
+
+        let policy = load_uds_policy(tmp.path(), None).unwrap().unwrap();
+        assert_eq!(policy.max_role, Role::Operator);
+        assert!(policy.audit_all_reads);
+    }
+
+    #[test]
+    fn explicit_admin_policy_file_grants_admin() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cp_dir = tmp.path().join("control-plane");
+        std::fs::create_dir_all(&cp_dir).unwrap();
+        let path = cp_dir.join("uds-policy.yaml");
+        std::fs::write(&path, "max_role: admin\n").unwrap();
+
+        let policy = load_uds_policy(tmp.path(), None).unwrap().unwrap();
+        assert_eq!(policy.max_role, Role::Admin);
+        assert!(policy.max_role.allows(Role::Admin));
+    }
 }

@@ -797,13 +797,34 @@ mod tests {
         assert_eq!(required_role_for_rpc("TaskDelete"), Role::Operator);
         assert_eq!(required_role_for_rpc("Delete"), Role::Operator);
 
-        // Admin (security-sensitive only)
+        // Admin (security-sensitive only — exhaustive)
+        assert_eq!(required_role_for_rpc("ConfigDebug"), Role::Admin);
+        assert_eq!(required_role_for_rpc("ApplyPluginCrd"), Role::Admin);
         assert_eq!(required_role_for_rpc("MaintenanceMode"), Role::Admin);
         assert_eq!(required_role_for_rpc("SecretKeyRotate"), Role::Admin);
+        assert_eq!(required_role_for_rpc("SecretKeyBootstrap"), Role::Admin);
+        assert_eq!(required_role_for_rpc("SecretKeyRevoke"), Role::Admin);
         assert_eq!(required_role_for_rpc("QaDoctor"), Role::Admin);
 
         // Unmapped RPCs default to Admin
         assert_eq!(required_role_for_rpc("UnknownFutureRpc"), Role::Admin);
+    }
+
+    /// Operator role allows reclassified lifecycle RPCs but denies Admin-only RPCs.
+    #[test]
+    fn operator_role_boundary() {
+        let operator = Role::Operator;
+        // Operator can perform lifecycle operations
+        assert!(operator.allows(required_role_for_rpc("Shutdown")));
+        assert!(operator.allows(required_role_for_rpc("TaskDelete")));
+        assert!(operator.allows(required_role_for_rpc("Delete")));
+        assert!(operator.allows(required_role_for_rpc("Apply")));
+        assert!(operator.allows(required_role_for_rpc("TaskDeleteBulk")));
+        // Operator cannot perform security-sensitive operations
+        assert!(!operator.allows(required_role_for_rpc("SecretKeyRotate")));
+        assert!(!operator.allows(required_role_for_rpc("ConfigDebug")));
+        assert!(!operator.allows(required_role_for_rpc("MaintenanceMode")));
+        assert!(!operator.allows(required_role_for_rpc("ApplyPluginCrd")));
     }
 
     #[test]
