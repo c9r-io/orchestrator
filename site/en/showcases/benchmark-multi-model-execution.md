@@ -181,26 +181,28 @@ Finally, provide a summary analysis along two dimensions:
 
 Before handing the prompt to your AI coding agent, complete the following authentication and setup:
 
+**Authenticate each Agent CLI** (select the shells you want to test):
+
+| Shell | Authentication |
+|-------|----------------|
+| OpenCode | `opencode auth` — interactive provider and API key setup |
+| Gemini CLI | Complete Google account login inside the tool on first run, or set `GEMINI_API_KEY` env var |
+| Codex CLI | Complete login inside the tool on first run, or set `OPENAI_API_KEY` env var |
+
+**Verify environment is ready**:
+
 ```bash
-# 1. Authenticate each Agent CLI (select the shells you want to test)
-opencode auth          # MiniMax API key
-gemini auth            # Google AI Studio login
-codex auth             # OpenAI API key
-
-# 2. Verify API keys are written into SecretStore manifests
-#    Edit fixtures/benchmarks/secrets-*.yaml with real keys
-cat fixtures/benchmarks/secrets-glm5.yaml     # Check MiniMax key
-cat fixtures/benchmarks/secrets-gemini.yaml   # Check Gemini (usually empty — CLI handles auth)
-cat fixtures/benchmarks/secrets-openai.yaml   # Check OpenAI key
-
-# 3. Verify orchestrator is built and installed
-orchestrator --version   # Should print version
-orchestratord --version
-
-# 4. Verify shell CLIs are installed
+# Confirm each CLI is installed and responds
 opencode --version
 gemini --version
 codex --version
+
+# Confirm orchestrator is built and installed
+orchestrator --version
+orchestratord --version
+
+# Confirm SecretStore manifests have real keys (not placeholders)
+# Edit fixtures/benchmarks/secrets-*.yaml
 ```
 
 ### 8.2 Ready-to-Execute Prompt

@@ -173,26 +173,28 @@ Agent 运行项目的 build/test/lint 命令验证后，输出六维 JSON 评分
 
 在将 prompt 交给 AI 编码 Agent 之前，用户需自行完成以下认证和环境准备：
 
+**认证各 Agent CLI**（按需选择你要测试的外壳）：
+
+| 外壳 | 认证方式 |
+|------|----------|
+| OpenCode | `opencode auth` 交互式配置 provider 和 API key |
+| Gemini CLI | 首次运行 `gemini` 时在工具内完成 Google 账号登录，或设置 `GEMINI_API_KEY` 环境变量 |
+| Codex CLI | 首次运行 `codex` 时在工具内完成登录，或设置 `OPENAI_API_KEY` 环境变量 |
+
+**确认环境就绪**：
+
 ```bash
-# 1. 认证各 Agent CLI（按需选择你要测试的外壳）
-opencode auth          # MiniMax API key
-gemini auth            # Google AI Studio 登录
-codex auth             # OpenAI API key
-
-# 2. 确认 API 密钥已写入 SecretStore manifest
-#    编辑 fixtures/benchmarks/secrets-*.yaml，填入真实密钥
-cat fixtures/benchmarks/secrets-glm5.yaml     # 检查 MiniMax key
-cat fixtures/benchmarks/secrets-gemini.yaml   # 检查 Gemini（通常为空，CLI 自带认证）
-cat fixtures/benchmarks/secrets-openai.yaml   # 检查 OpenAI key
-
-# 3. 确认 orchestrator 已构建安装
-orchestrator --version   # 应输出版本号
-orchestratord --version
-
-# 4. 确认外壳 CLI 已安装
+# 确认各 CLI 已安装且能正常响应
 opencode --version
 gemini --version
 codex --version
+
+# 确认 orchestrator 已构建安装
+orchestrator --version
+orchestratord --version
+
+# 确认 SecretStore manifest 中的密钥已填入（非 placeholder）
+# 编辑 fixtures/benchmarks/secrets-*.yaml
 ```
 
 ### 8.2 可直接执行的 Prompt
