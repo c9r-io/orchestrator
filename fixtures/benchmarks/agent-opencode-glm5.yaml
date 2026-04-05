@@ -1,9 +1,9 @@
-# Benchmark agent: OpenCode shell + GLM-5 model
+# Benchmark agent: OpenCode shell + MiniMax-M2.7-highspeed model
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
-  name: bench-opencode-glm5
-  description: "OpenCode + GLM-5"
+  name: bench-opencode-minimax
+  description: "OpenCode + MiniMax-M2.7-highspeed"
 spec:
   capabilities:
     - plan
@@ -13,9 +13,9 @@ spec:
     - ticket_fix
     - align_tests
     - self_test
-  command: opencode -p "{prompt}" --non-interactive --output-format stream-json
+  command: opencode run "{prompt}" -m minimax-coding-plan/MiniMax-M2.7-highspeed --format json
   env:
-    - fromRef: glm5
+    - fromRef: minimax
   metadata:
     benchmark_shell: "opencode"
-    benchmark_model: "GLM-5"
+    benchmark_model: "MiniMax-M2.7-highspeed"

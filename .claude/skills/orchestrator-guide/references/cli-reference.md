@@ -42,6 +42,36 @@ orchestrator apply -f workflow.yaml --project my-project
 
 Always use `--project` for production workflows to isolate resources.
 
+### Environment Cleanup
+
+To reset a project to a clean empty state (keeping only the `default` workspace), delete resources in reverse-dependency order: tasks → triggers → workflows → agents → workspaces → secrets/env stores.
+
+```bash
+# 1. Delete all tasks in the project
+orchestrator task delete --all -p <project> -f
+
+# 2. Inventory remaining assets
+orchestrator get agents -p <project>
+orchestrator get workflows -p <project>
+orchestrator get workspaces -p <project>
+orchestrator get triggers -p <project>
+
+# 3. Delete each resource kind (repeat for each name)
+orchestrator delete agent <name> -p <project> -f
+orchestrator delete workflow <name> -p <project> -f
+orchestrator delete workspace <name> -p <project> -f      # keep "default"
+orchestrator delete trigger <name> -p <project> -f
+orchestrator delete steptemplate <name> -p <project> -f
+orchestrator delete secretstore <name> -p <project> -f
+orchestrator delete envstore <name> -p <project> -f
+```
+
+**Notes:**
+- The `default` workspace is the project's root context — keep it unless deleting the entire project.
+- Rapid bulk deletes may trigger rate limiting (`rate_limited`); retry with a short pause between calls.
+- `get` supports: agents, workflows, workspaces, triggers. StepTemplate/SecretStore/EnvStore are only addressable by name via `delete` or `describe`.
+- To delete an entire project and all its data: `orchestrator delete project/<name> -f`.
+
 ### Project-Only Deployments
 
 In project-only deployments (no global workspaces), `orchestrator get` may fail.

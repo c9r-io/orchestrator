@@ -8,26 +8,21 @@
 
 通过控制变量法，在相同的任务目标和 Workflow 下，分别替换 **LLM 模型**和 **Agent 外壳**，评估两个独立维度的性能差异：
 
-- **模型维度**：固定外壳（如 Claude Code），替换模型（Opus / Sonnet / GLM-5 / Gemini / GPT-5.4），观察模型能力对任务完成度和代码质量的影响
-- **外壳维度**：固定模型（如 Opus 4.6），替换外壳（Claude Code / OpenCode / Codex / Gemini CLI），观察外壳工具链对执行效率和结果的影响
+- **综合维度**：替换外壳+模型组合（OpenCode/MiniMax, Gemini CLI/Flash, Codex/GPT-5.4-mini），观察不同 Agent 外壳和模型对任务完成度、代码质量的综合影响
 
 ## 2. 变量矩阵
 
 | ID | 外壳 | 模型 | Agent Manifest | SecretStore |
 |----|------|------|----------------|-------------|
-| A1 | Claude Code | Opus 4.6 | `fixtures/benchmarks/agent-claude-opus.yaml` | `fixtures/benchmarks/secrets-claude-opus.yaml` |
-| B1 | OpenCode | Opus 4.6 | `fixtures/benchmarks/agent-opencode-opus.yaml` | `fixtures/benchmarks/secrets-claude-opus.yaml` |
-| C1 | OpenCode | GLM-5 | `fixtures/benchmarks/agent-opencode-glm5.yaml` | `fixtures/benchmarks/secrets-glm5.yaml` |
-| D1 | Gemini CLI | Gemini 3.1 Pro | `fixtures/benchmarks/agent-gemini-pro.yaml` | `fixtures/benchmarks/secrets-gemini.yaml` |
-| E1 | Codex CLI | GPT-5.4 | `fixtures/benchmarks/agent-codex-gpt54.yaml` | `fixtures/benchmarks/secrets-openai.yaml` |
+| C1 | OpenCode | MiniMax-M2.7-highspeed | `fixtures/benchmarks/agent-opencode-glm5.yaml` | `fixtures/benchmarks/secrets-glm5.yaml` |
+| D1 | Gemini CLI | gemini-3-flash-preview | `fixtures/benchmarks/agent-gemini-pro.yaml` | `fixtures/benchmarks/secrets-gemini.yaml` |
+| E1 | Codex CLI | gpt-5.4-mini | `fixtures/benchmarks/agent-codex-gpt54.yaml` | `fixtures/benchmarks/secrets-openai.yaml` |
 
 **控制变量分析组：**
 
 | 对比 | 固定变量 | 变化变量 | 观察目标 |
 |------|----------|----------|----------|
-| A1 vs B1 | Opus 4.6 | Claude Code vs OpenCode | 外壳差异 |
-| B1 vs C1 | OpenCode | Opus 4.6 vs GLM-5 | 模型差异 |
-| A1 vs D1 vs E1 | — | 全组合 | 综合差异 |
+| C1 vs D1 vs E1 | 相同 goal & workflow | 外壳+模型 | 综合差异 |
 
 > 可按需扩展：创建新的 Agent + SecretStore manifest 即可。
 
@@ -37,7 +32,7 @@
 
 - `orchestrator --version` 和 `orchestratord --version` 可执行
 - daemon 正在运行（`orchestrator daemon status`），如未运行则启动：`orchestratord --foreground --workers 2 &`
-- 矩阵中涉及的外壳已安装（`claude --version`、`opencode --version`、`gemini --version`、`codex --version` 等）
+- 矩阵中涉及的外壳已安装（`opencode --version`、`gemini --version`、`codex --version`）
 - `fixtures/benchmarks/secrets-*.yaml` 中的 API 密钥已填入（非 `<placeholder>` 值）
 
 ## 4. 统一任务目标
@@ -153,23 +148,20 @@ git stash pop || true
 ```markdown
 | 组合 | 外壳 | 模型 | 状态 | 耗时 | 轮次 | 编译 | 测试 | Lint | Diff行数 | 代码质量(0-10) | 备注 |
 |------|------|------|------|------|------|------|------|------|----------|---------------|------|
-| A1   | Claude Code  | Opus 4.6      | | | | | | | | | |
-| B1   | OpenCode     | Opus 4.6      | | | | | | | | | |
-| C1   | OpenCode     | GLM-5         | | | | | | | | | |
-| D1   | Gemini CLI   | Gemini 3.1 Pro| | | | | | | | | |
-| E1   | Codex CLI    | GPT-5.4       | | | | | | | | | |
+| C1   | OpenCode     | MiniMax-M2.7-highspeed  | | | | | | | | | |
+| D1   | Gemini CLI   | gemini-3-flash-preview  | | | | | | | | | |
+| E1   | Codex CLI    | gpt-5.4-mini            | | | | | | | | | |
 ```
 
-最后给出总结分析，分两个维度：
+最后给出总结分析：
 
-1. **模型维度**（对比 B1 vs C1：同一外壳 OpenCode，不同模型）：模型能力对结果的影响
-2. **外壳维度**（对比 A1 vs B1：同一模型 Opus，不同外壳）：工具链对执行效率的影响
-3. **综合排名**：所有组合的推荐程度
+1. **综合对比**（C1 vs D1 vs E1）：不同外壳+模型组合的任务完成度、代码质量、执行效率
+2. **综合排名**：所有组合的推荐程度
 
 ## 7. 约束
 
 - **控制变量**：每次只改变一个变量（模型或外壳），workflow 和 goal 保持不变
 - **环境隔离**：每个组合执行前后恢复干净的 git 状态
 - **超时保护**：单次任务 30 分钟超时
-- **成本意识**：Opus ≈ 5× Sonnet 成本；批量执行前确认预算
+- **成本意识**：三个组合均使用低成本模型（MiniMax-highspeed / Flash / mini），单次任务成本可控
 - **可复现性**：所有 manifest 版本化在 `fixtures/benchmarks/`
