@@ -1,33 +1,59 @@
 # Evaluation step template for benchmark scoring.
-# The evaluator agent reviews the task output and produces a structured score.
+# The evaluator agent reviews the task output and produces a structured score
+# using six goal-agnostic dimensions (0-10 each, total 0-60).
 apiVersion: orchestrator.dev/v2
 kind: StepTemplate
 metadata:
   name: benchmark_eval
 spec:
-  description: "Evaluate task output quality with structured scoring"
+  description: "Evaluate task output with 6-dimension structured scoring (0-60)"
   prompt: >-
-    You are an impartial code reviewer evaluating the output of an automated
-    SDLC task. Assess the following criteria on a 0-100 scale:
+    You are an impartial evaluator scoring the output of an automated SDLC task.
 
-    1. **Compilation** (0-25): Does `cargo build --release` succeed?
-    2. **Tests** (0-25): Does `cargo test --workspace` pass?
-    3. **Lint** (0-15): Does `cargo clippy --workspace -- -D warnings` pass?
-    4. **Diff Quality** (0-15): Is the diff focused? Fewer than 200 lines changed?
-       No unnecessary file touches? No debug leftovers?
-    5. **Code Quality** (0-20): Is the implementation clean, idiomatic Rust,
-       well-structured, and maintainable?
+    **Step 0 — Detect empty diff.** Run `git diff --stat`. If the diff is empty
+    (zero files changed), set task_completion to 0 and skip dimensions 2-6
+    (score them 0). Proceed to output.
 
-    Run each check, then output a single JSON object:
+    **Six evaluation dimensions (each 0-10):**
+
+    1. **Task Completion** (0-10): Did the agent produce actual code changes
+       that address the goal? 0 = no diff / goal unmet; 10 = fully implemented.
+
+    2. **Code Quality** (0-10): Is the implementation correct, idiomatic, and
+       concise? Assess readability, structure, and absence of unnecessary changes.
+
+    3. **Test Coverage** (0-10): Are there meaningful unit tests covering the
+       new/changed code? 0 = no tests; 10 = comprehensive edge-case coverage.
+
+    4. **Execution Efficiency** (0-10): Relative wall time vs task complexity.
+       A simple task done in <5 min scores high; >20 min scores low.
+
+    5. **Step Success Rate** (0-10): Did each workflow step (plan, implement,
+       self_test, eval) exit code 0? Deduct for step failures or retries.
+
+    6. **Engineering Standards** (0-10): Error handling, doc comments, safety
+       annotations, lint cleanliness, no debug leftovers.
+
+    Run the project's build, test, and lint commands to verify. Then output a
+    single JSON object:
 
     ```json
     {
-      "compilation": <0-25>,
-      "tests": <0-25>,
-      "lint": <0-15>,
-      "diff_quality": <0-15>,
-      "code_quality": <0-20>,
-      "total_score": <sum>,
+      "task_completion": <0-10>,
+      "code_quality": <0-10>,
+      "test_coverage": <0-10>,
+      "execution_efficiency": <0-10>,
+      "step_success_rate": <0-10>,
+      "engineering_standards": <0-10>,
+      "total_score": <sum, 0-60>,
+      "dimensions": [
+        {"name": "Task Completion", "score": <0-10>},
+        {"name": "Code Quality", "score": <0-10>},
+        {"name": "Test Coverage", "score": <0-10>},
+        {"name": "Execution Efficiency", "score": <0-10>},
+        {"name": "Step Success Rate", "score": <0-10>},
+        {"name": "Engineering Standards", "score": <0-10>}
+      ],
       "notes": "<brief summary of findings>"
     }
     ```

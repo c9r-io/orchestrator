@@ -132,39 +132,40 @@ After all combinations have been executed, the Agent should perform a unified ev
 | Execution cycles | `event list` → `cycle_completed` event count |
 | Step success rate | `event list` → proportion of `step_finished` with `success: true` |
 
-### 6.2 Code Quality Evaluation (Executed Directly by Agent)
+### 6.2 Six-Dimension Evaluation (Executed Directly by Agent)
 
-For each combination's `results/<combo_id>-diff.patch`:
+The agent first runs `git diff --stat`. If the diff is empty, Task Completion scores 0 and remaining dimensions are skipped.
 
-1. **Build check**: Does `cargo build --release` pass
-2. **Test check**: Does `cargo test --workspace` pass
-3. **Lint check**: Does `cargo clippy --workspace -- -D warnings` pass
-4. **Diff review**: Read the patch file and evaluate:
-   - Whether the implementation is correct and complete
-   - Whether the code is concise and idiomatic
-   - Whether there are unnecessary changes
-   - Whether error handling is adequate
-   - Whether test coverage is reasonable
+| Dimension | Score | Criteria |
+|-----------|-------|----------|
+| **Task Completion** | 0-10 | Did the agent produce actual code changes that address the goal |
+| **Code Quality** | 0-10 | Is the implementation correct, idiomatic, and concise |
+| **Test Coverage** | 0-10 | Are there meaningful unit tests covering new/changed code |
+| **Execution Efficiency** | 0-10 | End-to-end wall time relative to task complexity |
+| **Step Success Rate** | 0-10 | Did each workflow step exit normally |
+| **Engineering Standards** | 0-10 | Error handling, doc comments, safety annotations, lint cleanliness |
+
+The agent runs the project's build/test/lint commands, then outputs a six-dimension JSON score (total 0-60).
 
 ### 6.3 Output Evaluation Report
 
-Output the comparison results in markdown table format:
+Output the comparison results in markdown table + radar chart format:
 
 ```markdown
-| Combo | Shell | Model | Status | Duration | Cycles | Build | Tests | Lint | Diff Lines | Code Quality (0-10) | Notes |
-|-------|-------|-------|--------|----------|--------|-------|-------|------|------------|---------------------|-------|
-| A1    | Claude Code  | Opus 4.6      | | | | | | | | | |
-| B1    | OpenCode     | Opus 4.6      | | | | | | | | | |
-| C1    | OpenCode     | GLM-5         | | | | | | | | | |
-| D1    | Gemini CLI   | Gemini 3.1 Pro| | | | | | | | | |
-| E1    | Codex CLI    | GPT-5.4       | | | | | | | | | |
+| Combo | Shell | Model | Status | Duration | Cycles | Completion | Quality | Tests | Efficiency | Success | Standards | Total(/60) | Notes |
+|-------|-------|-------|--------|----------|--------|------------|---------|-------|------------|---------|-----------|------------|-------|
+| A1    | Claude Code  | Opus 4.6      | | | | | | | | | | | |
+| B1    | OpenCode     | Opus 4.6      | | | | | | | | | | | |
+| C1    | OpenCode     | GLM-5         | | | | | | | | | | | |
+| D1    | Gemini CLI   | Gemini 3.1 Pro| | | | | | | | | | | |
+| E1    | Codex CLI    | GPT-5.4       | | | | | | | | | | | |
 ```
 
 Finally, provide a summary analysis along two dimensions:
 
 1. **Model dimension** (comparing B1 vs C1: same shell OpenCode, different models): impact of model capability on results
 2. **Shell dimension** (comparing A1 vs B1: same model Opus, different shells): impact of toolchain on execution efficiency
-3. **Overall ranking**: recommendation ranking of all combinations
+3. **Overall ranking**: six-dimension radar chart comparison, recommendation ranking of all combinations
 
 ## 7. Constraints
 

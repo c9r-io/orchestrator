@@ -48,17 +48,21 @@ kind: StepTemplate
 metadata:
   name: benchmark_eval
 spec:
-  description: "Evaluate output quality with structured scoring"
+  description: "Evaluate task output with 6-dimension structured scoring (0-60)"
   prompt: >-
-    You are an impartial code reviewer. Assess the changes made in this task:
+    You are an impartial evaluator. First run `git diff --stat` — if no files
+    changed, score task_completion=0 and all other dimensions=0.
 
-    1. Compilation (0-25): `cargo build --release`
-    2. Tests (0-25): `cargo test --workspace`
-    3. Lint (0-15): `cargo clippy --workspace -- -D warnings`
-    4. Diff Quality (0-15): focused diff, <200 lines, no debug leftovers
-    5. Code Quality (0-20): clean, idiomatic, maintainable
+    Six dimensions (each 0-10):
+    1. Task Completion: actual code changes addressing the goal
+    2. Code Quality: correct, idiomatic, concise implementation
+    3. Test Coverage: meaningful unit tests for new/changed code
+    4. Execution Efficiency: wall time relative to task complexity
+    5. Step Success Rate: workflow steps exiting normally
+    6. Engineering Standards: error handling, docs, lint, safety
 
-    Output JSON: {"compilation":N,"tests":N,"lint":N,"diff_quality":N,"code_quality":N,"total_score":N,"notes":"..."}
+    Run the project's build/test/lint commands, then output JSON:
+    {"task_completion":N,"code_quality":N,"test_coverage":N,"execution_efficiency":N,"step_success_rate":N,"engineering_standards":N,"total_score":N,"dimensions":[{"name":"Task Completion","score":N},{"name":"Code Quality","score":N},{"name":"Test Coverage","score":N},{"name":"Execution Efficiency","score":N},{"name":"Step Success Rate","score":N},{"name":"Engineering Standards","score":N}],"notes":"..."}
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow
