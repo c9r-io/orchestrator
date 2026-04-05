@@ -40,8 +40,12 @@ pub(super) fn check_execution_profile_backend_support(
                 ResolvedExecutionProfile::from_config(profile_name, profile, &workspace_root, &[]);
             let backend = sandbox_backend_label(&resolved);
             for issue in sandbox_backend_preflight_issues(&resolved) {
-                let severity = if resolved.network_mode
-                    == agent_orchestrator::config::ExecutionNetworkMode::Allowlist
+                // All preflight issues from detect_linux_sandbox_support are hard
+                // blockers (root, missing binaries, unsupported fs_mode) — treat
+                // them as Error, not Warning, so `orchestrator check` clearly
+                // signals that the step will fail at runtime.
+                let severity = if resolved.mode
+                    == agent_orchestrator::config::ExecutionProfileMode::Sandbox
                 {
                     Severity::Error
                 } else {
@@ -60,12 +64,12 @@ pub(super) fn check_execution_profile_backend_support(
                     )
                     .with_details(
                         format!(
-                            "network_mode={:?}, sandbox_backend={}",
-                            resolved.network_mode, backend
+                            "mode={:?}, fs_mode={:?}, network_mode={:?}, sandbox_backend={}",
+                            resolved.mode, resolved.fs_mode, resolved.network_mode, backend
                         ),
-                        "sandbox backend supports requested network_mode",
-                        "step will fail at runtime with reason_code=unsupported_backend_feature",
-                        "use network_mode=deny on macOS, or deploy on Linux where network_mode=allowlist is supported",
+                        "sandbox backend supports requested execution profile",
+                        "step will fail at runtime; the sandbox backend cannot satisfy the profile requirements",
+                        "check platform prerequisites or adjust the execution profile to match backend capabilities",
                     ),
                 );
             }

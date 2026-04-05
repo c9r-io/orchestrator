@@ -254,3 +254,5 @@ sqlite3 data/agent_orchestrator.db \
 | 2 | Sandbox Emits sandbox_network_blocked for network_mode=deny | PASS | 2026-03-11 | codex | macOS verified: `reason_code=network_blocked`, `network_target=example.com` |
 | 3 | Unsupported network_mode=allowlist Fails Fast With Structured Event | PASS | 2026-03-11 | codex | macOS verified: `reason_code=unsupported_backend_feature`, `backend=macos_seatbelt`; CLI broken-pipe defect filed separately |
 | 4 | Linux Allowlist Allows One TCP Target And Blocks Another | NOT RUN | 2026-03-11 | codex | Requires Linux `root` host with `ip` and `nft`; unavailable on this macOS environment |
+
+> **Note:** Resource-limit enforcement (Scenario 1) and network deny (Scenario 2) use platform-neutral code paths (`setrlimit`, network namespace deny). QA verification has run on macOS only; Linux uses the same code but remains unverified by QA pending a Linux CI environment.

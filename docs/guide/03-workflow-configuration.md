@@ -122,15 +122,17 @@ Runtime notes:
 |---------|:----------------:|:--------------:|-------|
 | `mode: sandbox` | Yes | Yes | Linux requires `ip`/`nft` and root |
 | `fs_mode: inherit` | Yes | Yes | |
-| `fs_mode: workspace_readonly` | Yes | Yes | |
-| `fs_mode: workspace_rw_scoped` | Yes | Yes | |
+| `fs_mode: workspace_readonly` | Yes | **No** | Linux requires `fs_mode: inherit` [^1] |
+| `fs_mode: workspace_rw_scoped` | Yes | **No** | Linux requires `fs_mode: inherit` [^1] |
 | `network_mode: deny` | Yes | Yes | |
 | `network_mode: allowlist` | **No** | Yes | macOS fails fast with `reason_code=unsupported_backend_feature` |
-| `writable_paths` | Yes | Yes | |
+| `writable_paths` | Yes | **No** | Requires non-inherit `fs_mode` [^1] |
 | Resource limits (`max_memory_mb`, etc.) | Yes | Yes | |
 
+[^1]: Linux `linux_native` currently requires `fs_mode: inherit` until a filesystem isolation backend is implemented. Run `orchestrator check` to detect this at preflight time.
+
 > **Tip:** Run `orchestrator check` to detect platform-specific gaps before runtime.
-> `orchestrator manifest validate` also emits platform warnings when applicable.
+> `orchestrator manifest validate` checks structural correctness; `orchestrator check` additionally detects platform-specific runtime gaps.
 
 ### Known Step IDs
 

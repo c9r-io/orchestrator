@@ -128,15 +128,17 @@ spec:
 |------|:----------------:|:--------------:|------|
 | `mode: sandbox` | 支持 | 支持 | Linux 需要 `ip`/`nft` 和 root |
 | `fs_mode: inherit` | 支持 | 支持 | |
-| `fs_mode: workspace_readonly` | 支持 | 支持 | |
-| `fs_mode: workspace_rw_scoped` | 支持 | 支持 | |
+| `fs_mode: workspace_readonly` | 支持 | **不支持** | Linux 要求 `fs_mode: inherit` [^1] |
+| `fs_mode: workspace_rw_scoped` | 支持 | **不支持** | Linux 要求 `fs_mode: inherit` [^1] |
 | `network_mode: deny` | 支持 | 支持 | |
 | `network_mode: allowlist` | **不支持** | 支持 | macOS 返回 `reason_code=unsupported_backend_feature` 快速失败 |
-| `writable_paths` | 支持 | 支持 | |
+| `writable_paths` | 支持 | **不支持** | 需要非 inherit 的 `fs_mode` [^1] |
 | 资源限制 (`max_memory_mb` 等) | 支持 | 支持 | |
 
+[^1]: Linux `linux_native` 目前要求 `fs_mode: inherit`，文件系统隔离后端尚未实现。运行 `orchestrator check` 可在预检时发现此限制。
+
 > **提示：** 运行 `orchestrator check` 可在运行前检测平台限制。
-> `orchestrator manifest validate` 也会在适用时输出平台警告。
+> `orchestrator manifest validate` 检查结构正确性；`orchestrator check` 额外检测平台特定的运行时限制。
 
 ### 已知步骤 ID
 
