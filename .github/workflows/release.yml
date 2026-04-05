@@ -95,11 +95,6 @@ jobs:
       - name: Package skills
         run: scripts/package-skills.sh "$RELEASE_TAG"
 
-      - name: Package skill templates
-        run: |
-          scripts/package-skill-templates.sh
-          tar -czf "dist/orchestrator-skill-templates-${RELEASE_TAG}.tar.gz" skill-templates/
-
       - name: Build checksum manifest
         shell: bash
         run: |

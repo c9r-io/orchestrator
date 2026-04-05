@@ -1928,9 +1928,10 @@ fn with_agents_rejects_guard_without_loop_guard_agent() {
     let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
     let err = validate_workflow_config_with_agents(&agents, &workflow, "wf1")
         .expect_err("guard without agent should fail");
-    assert!(err
-        .to_string()
-        .contains("no builtin loop_guard step or agent with loop_guard capability"));
+    assert!(
+        err.to_string()
+            .contains("no builtin loop_guard step or agent with loop_guard capability")
+    );
 }
 
 #[test]
