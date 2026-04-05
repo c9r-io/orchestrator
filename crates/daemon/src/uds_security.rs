@@ -163,7 +163,7 @@ pub struct UdsAuthPolicy {
 }
 
 fn default_max_role() -> Role {
-    Role::Admin
+    Role::Operator
 }
 
 impl Default for UdsAuthPolicy {
@@ -249,10 +249,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_policy_allows_admin() {
+    fn default_policy_allows_operator() {
         let policy = UdsAuthPolicy::default();
-        assert_eq!(policy.max_role, Role::Admin);
-        assert!(policy.max_role.allows(Role::Admin));
+        assert_eq!(policy.max_role, Role::Operator);
+        assert!(policy.max_role.allows(Role::Operator));
+        assert!(!policy.max_role.allows(Role::Admin));
     }
 
     #[test]

@@ -116,9 +116,12 @@ Tightens the UDS security baseline without breaking the zero-config local-first 
    - `data_dir` has group or world read/write bits set (suggests `0700` for multi-user hosts).
    - No `uds-policy.yaml` exists (advises path to create one for restricting implicit Admin).
 
+### Least-privilege reform (post-initial)
+
+- **Default `max_role` changed to `Operator`**: `Shutdown`, `TaskDelete`, and `Delete` were reclassified from Admin to Operator — `Shutdown` is redundant (CLI sends SIGTERM), `TaskDelete` aligns with `TaskDeleteBulk` (already Operator), and `Delete` aligns with `Apply` (already Operator). Only security-sensitive operations (`SecretKey*`, `ConfigDebug`, `MaintenanceMode`, `ApplyPluginCrd`, `QaDoctor`) remain Admin. The `--uds-max-role admin` flag or `uds-policy.yaml` with `max_role: admin` restores full access when needed.
+
 ### What was not changed (and why)
 
-- **Default `max_role` remains `Admin`**: Changing it to `Operator` would break `daemon stop`, `task delete`, and `delete` for all existing users. Opt-in via `uds-policy.yaml` is the intended path.
 - **No PID/exe-based authorization**: Same-UID attacker can trivially spoof binary identity. Record in audit for forensics only.
 - **No UDS token/nonce mechanism**: Would require every CLI invocation to present a token, degrading the local-first experience for marginal security gain.
 

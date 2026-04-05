@@ -74,7 +74,7 @@ pub(crate) fn authorize<T>(
                 .uds_auth_policy
                 .as_ref()
                 .map(|p| p.max_role)
-                .unwrap_or(Role::Admin);
+                .unwrap_or(Role::Operator);
             let audit_all_reads = server
                 .uds_auth_policy
                 .as_ref()

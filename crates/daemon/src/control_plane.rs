@@ -697,15 +697,19 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         | "DbStatus" | "DbMigrationsList" | "SecretKeyStatus" | "SecretKeyList"
         | "SecretKeyHistory" | "AgentList" | "EventStats" | "TaskEvents" => Role::ReadOnly,
 
-        // Operator: routine mutating operations.
+        // Operator: routine mutating operations (includes lifecycle ops that
+        // are destructive but not security-sensitive).
         "TaskCreate" | "TaskStart" | "TaskPause" | "TaskResume" | "TaskRetry" | "Apply"
         | "StorePut" | "StoreDelete" | "StorePrune" | "ManifestValidate" | "Init" | "TaskTrace"
         | "TaskDeleteBulk" | "TaskRecover" | "RunStep" | "TriggerSuspend" | "TriggerResume"
         | "TriggerFire" | "AgentCordon" | "AgentUncordon" | "AgentDrain" | "EventCleanup"
-        | "DbLogCleanup" | "DbVacuum" => Role::Operator,
+        | "DbLogCleanup" | "DbVacuum"
+        // Reclassified from Admin: Shutdown is redundant (CLI sends SIGTERM),
+        // TaskDelete aligns with TaskDeleteBulk, Delete aligns with Apply.
+        | "Shutdown" | "TaskDelete" | "Delete" => Role::Operator,
 
-        // Admin: destructive or security-sensitive operations.
-        "Shutdown" | "TaskDelete" | "Delete" | "ConfigDebug" | "ApplyPluginCrd"
+        // Admin: security-sensitive operations only.
+        "ConfigDebug" | "ApplyPluginCrd"
         | "MaintenanceMode" | "SecretKeyRotate" | "SecretKeyBootstrap" | "SecretKeyRevoke"
         | "QaDoctor" => Role::Admin,
 
@@ -788,9 +792,12 @@ mod tests {
         assert_eq!(required_role_for_rpc("AgentCordon"), Role::Operator);
         assert_eq!(required_role_for_rpc("DbVacuum"), Role::Operator);
         assert_eq!(required_role_for_rpc("RunStep"), Role::Operator);
+        // Reclassified from Admin to Operator (least-privilege reform)
+        assert_eq!(required_role_for_rpc("Shutdown"), Role::Operator);
+        assert_eq!(required_role_for_rpc("TaskDelete"), Role::Operator);
+        assert_eq!(required_role_for_rpc("Delete"), Role::Operator);
 
-        // Admin
-        assert_eq!(required_role_for_rpc("Shutdown"), Role::Admin);
+        // Admin (security-sensitive only)
         assert_eq!(required_role_for_rpc("MaintenanceMode"), Role::Admin);
         assert_eq!(required_role_for_rpc("SecretKeyRotate"), Role::Admin);
         assert_eq!(required_role_for_rpc("QaDoctor"), Role::Admin);

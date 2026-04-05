@@ -56,6 +56,10 @@ struct Args {
     #[arg(long = "control-plane-dir")]
     control_plane_dir: Option<PathBuf>,
 
+    /// Maximum role for UDS callers when no uds-policy.yaml exists.
+    #[arg(long = "uds-max-role", default_value = "operator", env = "ORCHESTRATOR_UDS_MAX_ROLE")]
+    uds_max_role: control_plane::Role,
+
     /// Number of days to retain events before automatic cleanup (0 = disabled).
     #[arg(long = "event-retention-days", default_value_t = 30)]
     event_retention_days: u32,
@@ -635,19 +639,28 @@ fn main() -> Result<()> {
             args.control_plane_dir.as_deref(),
         )?;
 
-        // Phase 3b: advise when no UDS policy file is present.
-        if uds_policy.is_none() {
-            let policy_path = args
-                .control_plane_dir
-                .as_deref()
-                .map(|d| d.join("uds-policy.yaml"))
-                .unwrap_or_else(|| inner.data_dir.join("control-plane/uds-policy.yaml"));
-            info!(
-                "UDS policy: no uds-policy.yaml found; all local callers get implicit Admin. \
-                 Create {} to restrict.",
-                policy_path.display()
-            );
-        }
+        // Phase 3b: when no policy file exists, construct an ephemeral policy
+        // from the --uds-max-role flag (default: Operator).
+        let uds_policy = match uds_policy {
+            Some(p) => Some(p),
+            None => {
+                let policy_path = args
+                    .control_plane_dir
+                    .as_deref()
+                    .map(|d| d.join("uds-policy.yaml"))
+                    .unwrap_or_else(|| inner.data_dir.join("control-plane/uds-policy.yaml"));
+                info!(
+                    role = %args.uds_max_role.as_str(),
+                    "UDS policy: no uds-policy.yaml found; using --uds-max-role default. \
+                     Create {} to configure explicitly.",
+                    policy_path.display()
+                );
+                Some(uds_security::UdsAuthPolicy {
+                    max_role: args.uds_max_role,
+                    audit_all_reads: false,
+                })
+            }
+        };
 
         let service = server::OrchestratorServer::new(
             inner.clone(),
