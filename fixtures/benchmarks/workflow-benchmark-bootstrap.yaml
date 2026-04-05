@@ -68,38 +68,37 @@ spec:
   max_parallel: 1
   steps:
     - id: plan
+      type: plan
       scope: task
-      required_capability: plan
       template: plan
       enabled: true
       repeatable: false
 
     - id: implement
+      type: implement
       scope: task
-      required_capability: implement
       template: implement
       enabled: true
       repeatable: true
 
     - id: self_test
+      type: self_test
       scope: task
-      required_capability: self_test
       template: self_test
       enabled: true
       repeatable: true
 
     - id: benchmark_eval
+      type: qa_testing
       scope: task
-      required_capability: qa_testing
       template: benchmark_eval
       enabled: true
       repeatable: false
 
     - id: loop_guard
-      builtin: loop_guard
+      type: loop_guard
       enabled: true
       repeatable: true
-      is_guard: true
 
   loop:
     mode: fixed
