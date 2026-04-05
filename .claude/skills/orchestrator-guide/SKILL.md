@@ -217,13 +217,7 @@ spec:
 
 ### Secret Key Management
 
-```bash
-orchestrator secret key status    # show active key
-orchestrator secret key list      # list all keys
-orchestrator secret key rotate    # rotate active key
-orchestrator secret key revoke <key_id>
-orchestrator secret key history   # audit trail
-```
+Run `orchestrator guide "secret key"` for the full key lifecycle command reference.
 
 ## Step Definition Quick Reference
 
@@ -267,5 +261,5 @@ Load these as needed for detailed specifications:
 
 - **Resource model, pipeline variables, step fields**: Read [references/resource-and-steps.md](references/resource-and-steps.md)
 - **CEL prehook/finalize variables and patterns**: Read [references/cel-expressions.md](references/cel-expressions.md)
-- **CLI command reference**: Read [references/cli-reference.md](references/cli-reference.md)
+- **CLI command reference**: Run `orchestrator guide` (or see [references/cli-reference.md](references/cli-reference.md) for supplementary notes on daemon binary and apply ordering)
 - **Advanced features (CRD, Store, Spawn, Invariants, Self-Bootstrap)**: Read [references/advanced.md](references/advanced.md)
