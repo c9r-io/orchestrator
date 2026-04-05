@@ -6,7 +6,7 @@ self_referential_safe: false
 
 **Module**: orchestrator
 **Scope**: Validate secure TCP daemon bootstrap, host-user client config generation, role-based RPC authorization, insecure TCP escape hatch, and control-plane audit persistence
-**Scenarios**: 5
+**Scenarios**: 6
 **Priority**: Critical
 
 ---
@@ -49,6 +49,20 @@ Related paths:
 | reason | TEXT | Failure/decision note |
 | tls_fingerprint | TEXT | SHA256 fingerprint of peer certificate |
 | rejection_stage | TEXT | Classification: `cert_validation_failed`, `subject_not_found`, `subject_disabled`, `role_insufficient`, or NULL for allowed |
+| traffic_class | TEXT | Traffic bucket for protection enforcement (m0017) |
+| limit_scope | TEXT | Whether subject-scoped or global limits produced the decision (m0017) |
+| decision | TEXT | Final decision label from the rate limiter (m0017) |
+| reason_code | TEXT | Stable machine-readable reason code (m0017) |
+| peer_exe | TEXT | Executable path of the peer process — UDS only, forensic audit (m0024) |
+
+### UDS Policy: `{data_dir}/control-plane/uds-policy.yaml`
+
+Optional policy file that restricts the maximum role available to UDS callers.  When absent, all same-UID callers get implicit Admin.
+
+```yaml
+max_role: operator        # read_only | operator | admin (default: admin)
+audit_all_reads: true     # record ReadOnly RPCs in audit (default: false)
+```
 
 ---
 
@@ -324,6 +338,90 @@ Verify UDS mode works without client certificates, mandatory mTLS rejects unauth
 
 ---
 
+## Scenario 6: UDS Trust Boundary Hardening And Audit Enrichment
+
+### Preconditions
+- Release binaries built
+- Isolated home directory and data directory:
+  ```bash
+  export QA_HOME="$(mktemp -d)"
+  export HOME="$QA_HOME"
+  export QA_DATA="$(mktemp -d)"
+  ```
+
+### Goal
+Verify the UDS trust boundary hardening: exhaustive RPC role mapping, effective role in audit, `peer_exe` resolution, `audit_all_reads` option, and startup permission/policy advisories.
+
+### Steps
+1. Set overly permissive data directory permissions and start a UDS daemon:
+   ```bash
+   chmod 0755 "$QA_DATA"
+   ORCHESTRATORD_DATA_DIR="$QA_DATA" \
+     ./target/release/orchestratord --foreground --workers 1 > /tmp/orch-uds.log 2>&1 &
+   DAEMON_PID=$!
+   sleep 3
+   ```
+2. Verify startup log contains data_dir permission warning and UDS policy advisory:
+   ```bash
+   grep "group/world-accessible permissions" /tmp/orch-uds.log
+   grep "no uds-policy.yaml found" /tmp/orch-uds.log
+   ```
+3. Call a read-only RPC that was previously implicit Admin (now ReadOnly):
+   ```bash
+   export ORCHESTRATOR_SOCKET="$QA_DATA/orchestrator.sock"
+   ./target/release/orchestrator db status
+   ```
+4. Stop and restart with a UDS policy restricting to operator with full audit:
+   ```bash
+   kill "$DAEMON_PID"; wait "$DAEMON_PID" 2>/dev/null
+   mkdir -p "$QA_DATA/control-plane"
+   cat > "$QA_DATA/control-plane/uds-policy.yaml" <<'YAML'
+   max_role: operator
+   audit_all_reads: true
+   YAML
+   ORCHESTRATORD_DATA_DIR="$QA_DATA" \
+     ./target/release/orchestratord --foreground --workers 1 &
+   DAEMON_PID=$!
+   sleep 3
+   ```
+5. Call a ReadOnly RPC, an Operator RPC, and an Admin RPC:
+   ```bash
+   ./target/release/orchestrator db status          # ReadOnly — should succeed
+   ./target/release/orchestrator task list -o json   # ReadOnly — should succeed
+   ./target/release/orchestrator daemon stop         # Admin (Shutdown) — should be denied
+   ```
+6. Query audit records for enrichment:
+   ```bash
+   sqlite3 "$QA_DATA/agent_orchestrator.db" \
+     "SELECT rpc, authz_result, role, peer_exe FROM control_plane_audit ORDER BY id DESC LIMIT 10;"
+   ```
+7. Stop the daemon:
+   ```bash
+   kill "$DAEMON_PID"; wait "$DAEMON_PID" 2>/dev/null
+   ```
+
+### Expected
+- Startup log shows WARN for data_dir permissions (`0755` has group/world read+execute).
+- Startup log shows INFO advisory about absent `uds-policy.yaml` (first start only).
+- `db status` succeeds under `max_role: operator` because `DbStatus` maps to `ReadOnly`.
+- `daemon stop` (Shutdown) is denied because `Shutdown` maps to `Admin` and policy caps at `operator`.
+- Audit records include `role = 'operator'` (effective role from policy) and non-NULL `peer_exe` (the CLI binary path).
+- With `audit_all_reads: true`, even `DbStatus` and `TaskList` produce audit rows.
+
+### Expected Data State
+```sql
+-- ReadOnly RPCs are audited because audit_all_reads is true
+SELECT rpc, authz_result, role, peer_exe IS NOT NULL AS has_exe
+FROM control_plane_audit
+WHERE transport = 'uds'
+ORDER BY id DESC
+LIMIT 5;
+-- Expected: Shutdown → denied (role=operator, rejection_stage=uds_policy_denied),
+--           DbStatus/TaskList → allowed (role=operator, has_exe=1)
+```
+
+---
+
 ## Checklist
 
 | # | Scenario | Status | Test Date | Tester | Notes |
@@ -333,3 +431,4 @@ Verify UDS mode works without client certificates, mandatory mTLS rejects unauth
 | 3 | Additional Operator Client Is Denied On Admin RPC | ✅ | 2026-03-12 | Claude | Operator task list allowed; debug denied with "permission denied" |
 | 4 | Insecure TCP Feature Gate And Default Build Rejection | ✅ | 2026-03-12 | Claude | dev-insecure build logs warning; default build rejects flag with exit code 2 |
 | 5 | UDS Fallback, mTLS Enforcement, And Audit Classification | ✅ | 2026-03-12 | Claude | UDS works without TLS; curl rejected at handshake; audit rejection_stage populated correctly |
+| 6 | UDS Trust Boundary Hardening And Audit Enrichment | ⬜ | | | |

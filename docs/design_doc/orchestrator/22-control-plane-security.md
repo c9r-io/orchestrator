@@ -5,7 +5,7 @@
 **Related Plan**: Secure TCP control plane with default mTLS, local host client bootstrap, role-based RPC authorization, and dedicated audit storage
 **Related QA**: `docs/qa/orchestrator/58-control-plane-security.md`
 **Created**: 2026-03-10
-**Last Updated**: 2026-03-10
+**Last Updated**: 2026-04-05
 
 ## Background
 
@@ -44,6 +44,9 @@
 
 - New table: `control_plane_audit`
 - Columns: `created_at`, `transport`, `remote_addr`, `rpc`, `subject_id`, `authn_result`, `authz_result`, `role`, `reason`, `tls_fingerprint`
+- Added by FR-010: `rejection_stage` (m0015)
+- Added by protection follow-up: `traffic_class`, `limit_scope`, `decision`, `reason_code` (m0017)
+- Added by UDS hardening: `peer_exe` — resolved executable path of the UDS peer process for forensic audit (m0024)
 - Migration strategy: additive migration only; no proto or task table changes required.
 
 ## Key Design
@@ -102,6 +105,23 @@ FR-010 tightens the security baseline established by FR-002:
 2. **Mandatory mTLS**: Secure TCP mode now uses `client_auth_optional(false)`, meaning connections without a valid client certificate fail at the TLS handshake layer before reaching any RPC handler.
 3. **Audit rejection classification**: The `control_plane_audit` table gains a `rejection_stage` column that categorizes denials into `cert_validation_failed`, `subject_not_found`, `subject_disabled`, and `role_insufficient`. TLS handshake rejections are captured only in tracing logs (connection never enters application layer).
 
+## UDS Trust Boundary Hardening
+
+Tightens the UDS security baseline without breaking the zero-config local-first experience:
+
+1. **Exhaustive RPC role mapping**: All RPC methods are explicitly classified as `ReadOnly`, `Operator`, or `Admin`. The previous catch-all `_ => Admin` silently promoted 25 RPCs (including read-only operations like `DbStatus`, `AgentList`, `EventStats`) to Admin, making `uds-policy.yaml` caps ineffective for routine use. Unmapped future RPCs still default to Admin but now emit a `tracing::warn!`.
+2. **Audit enrichment**: UDS audit records now include `role` (effective role from policy or implicit Admin) and `peer_exe` (resolved executable path of the peer process via `/proc/PID/exe` on Linux, `proc_pidpath` on macOS). `peer_exe` is forensic-only and must not be used for authorization (TOCTOU + trivially spoofable by same-UID processes).
+3. **`audit_all_reads` option**: `UdsAuthPolicy` gains `audit_all_reads: bool` (default `false`). When enabled, read-only RPCs are also recorded in `control_plane_audit`, giving full forensic coverage for multi-user deployments.
+4. **Startup advisories**: The daemon warns on startup if:
+   - `data_dir` has group or world read/write bits set (suggests `0700` for multi-user hosts).
+   - No `uds-policy.yaml` exists (advises path to create one for restricting implicit Admin).
+
+### What was not changed (and why)
+
+- **Default `max_role` remains `Admin`**: Changing it to `Operator` would break `daemon stop`, `task delete`, and `delete` for all existing users. Opt-in via `uds-policy.yaml` is the intended path.
+- **No PID/exe-based authorization**: Same-UID attacker can trivially spoof binary identity. Record in audit for forensics only.
+- **No UDS token/nonce mechanism**: Would require every CLI invocation to present a token, degrading the local-first experience for marginal security gain.
+
 ## Acceptance Criteria
 
 - `--bind` starts a TLS-protected control plane and rejects unauthenticated TCP clients.
@@ -112,3 +132,5 @@ FR-010 tightens the security baseline established by FR-002:
 - Default builds do not expose `--insecure-bind` (FR-010).
 - Secure TCP enforces mTLS at the handshake layer (FR-010).
 - Audit records carry `rejection_stage` classification (FR-010).
+- All RPC methods have explicit role classifications; `uds-policy.yaml` caps work correctly for operator-restricted deployments (UDS hardening).
+- UDS audit records include effective role and peer executable path (UDS hardening).

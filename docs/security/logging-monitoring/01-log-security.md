@@ -55,6 +55,12 @@ Verify critical actions are written to audit logs and there is no API to delete/
 - Audit coverage is complete for sensitive actions
 - No interface exists to delete/modify audit records
 
+### Orchestrator-Specific Notes
+- All RPC authorization decisions (allowed and denied) are persisted to `control_plane_audit` in SQLite.
+- TCP audit records include `tls_fingerprint` (SHA256 of client certificate) and `subject_id` (URI SAN).  UDS audit records include `peer_exe` (resolved executable path, forensic only) and `role` (effective role from policy or implicit Admin).
+- `audit_all_reads: true` in `uds-policy.yaml` enables full audit coverage including read-only RPCs.
+- See `docs/qa/orchestrator/58-control-plane-security.md` Scenario 6 for verification steps.
+
 ---
 
 ## Scenario 3: Sensitive Data Must Not Appear In Logs
