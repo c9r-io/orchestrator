@@ -121,7 +121,9 @@ Repeat steps 5.1–5.7 until all combinations have been executed.
 
 ## 6. Evaluation Phase
 
-After all combinations have been executed, the Agent should perform a unified evaluation of all artifacts in the `results/` directory.
+After all combinations have been executed, the **host agent** (the agent executing this plan — not the target agents being benchmarked) performs a unified evaluation of all artifacts in the `results/` directory.
+
+> **Evaluator independence**: The workflow includes an in-loop `benchmark_eval` step executed by each target agent as a self-check. However, the authoritative six-dimension scores in §6.2 are produced by the host agent examining collected artifacts (diffs, event logs, task traces) post-hoc. This separation ensures the evaluator is independent of the evaluated agent — the same principle as having a referee who isn't also a player.
 
 ### 6.1 Quantitative Metrics (Extracted from JSON Results)
 
@@ -132,20 +134,22 @@ After all combinations have been executed, the Agent should perform a unified ev
 | Execution cycles | `event list` → `cycle_completed` event count |
 | Step success rate | `event list` → proportion of `step_finished` with `success: true` |
 
-### 6.2 Six-Dimension Evaluation (Executed Directly by Agent)
+### 6.2 Six-Dimension Evaluation (Host Agent Post-Hoc)
 
-The agent first runs `git diff --stat`. If the diff is empty, Task Completion scores 0 and remaining dimensions are skipped.
+The **host agent** applies the diff from each combination, runs `git diff --stat`, build/test/lint commands, and inspects the collected JSON artifacts. If the diff is empty, Task Completion scores 0 and remaining dimensions are skipped.
 
-| Dimension | Score | Criteria |
-|-----------|-------|----------|
-| **Task Completion** | 0-10 | Did the agent produce actual code changes that address the goal |
-| **Code Quality** | 0-10 | Is the implementation correct, idiomatic, and concise |
-| **Test Coverage** | 0-10 | Are there meaningful unit tests covering new/changed code |
-| **Execution Efficiency** | 0-10 | End-to-end wall time relative to task complexity |
-| **Step Success Rate** | 0-10 | Did each workflow step exit normally |
-| **Engineering Standards** | 0-10 | Error handling, doc comments, safety annotations, lint cleanliness |
+| Dimension | Score | Scoring Rubric |
+|-----------|-------|----------------|
+| **Task Completion** | 0-10 | 0 = no code changes; 5 = partial implementation missing key requirements; 10 = all requirements addressed with working code |
+| **Code Quality** | 0-10 | 0 = syntax errors or broken build; 5 = compiles but non-idiomatic; 10 = correct, idiomatic, concise |
+| **Test Coverage** | 0-10 | 0 = no tests; 5 = tests exist but miss edge cases; 10 = comprehensive unit tests covering new/changed code |
+| **Execution Efficiency** | 0-10 | Based on wall time from `task info` timestamps: 0 = timeout (>30min); 5 = 10-15min; 10 = under 5min |
+| **Step Success Rate** | 0-10 | From `event list` JSON: proportion of `step_finished` events with `success: true`, linearly mapped to 0-10 |
+| **Engineering Standards** | 0-10 | 0 = lint failures / missing error handling; 5 = compiles clean; 10 = error handling, doc comments, safety annotations, zero warnings |
 
-The agent runs the project's build/test/lint commands, then outputs a six-dimension JSON score (total 0-60).
+The host agent applies each patch, runs `cargo check`, `cargo test`, and `cargo clippy`, then outputs a six-dimension JSON score (total 0-60).
+
+> **Data sources**: Execution Efficiency and Step Success Rate are derived from quantitative data (timestamps, event logs), not subjective judgment. The remaining four dimensions are assessed by the host agent after running the project's toolchain against the actual code output.
 
 ### 6.3 Output Evaluation Report
 
@@ -246,7 +250,11 @@ After all combos complete, generate results/benchmark-report.md per doc sections
 
 ### 8.3 Actual Execution Results Reference (2026-04-05)
 
-Below are real results from executing the above prompt on orchestrator v0.3.0 with a trimmed matrix (C1/D1/E1):
+Below are real results from executing the above prompt on orchestrator v0.3.0 with a trimmed matrix (C1/D1/E1).
+
+> **Evaluation context**: The host agent (Claude Code / Opus 4.6) orchestrated execution of all three target agents, collected artifacts, and produced the final six-dimension scores. The entire flow — from resource deployment through monitoring, artifact collection, and scoring — ran autonomously with zero human intervention.
+>
+> **Reproducibility**: All manifests are versioned in `fixtures/benchmarks/`. Raw artifacts (diffs, event logs, task traces) are in `results/`. The ready-to-execute prompt in §8.2 is the exact prompt used for this run. A1 and B1 are intentionally left unexecuted — see §2 for the full matrix.
 
 **Six-Dimension Evaluation Overview**
 
