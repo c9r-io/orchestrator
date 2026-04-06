@@ -7,7 +7,7 @@ use crate::sandbox_network::{NetworkAllowlistEntry, validate_network_allowlist};
 #[cfg(target_os = "linux")]
 use anyhow::Result;
 #[cfg(target_os = "linux")]
-use orchestrator_config::config::{ExecutionNetworkMode, RunnerConfig};
+use orchestrator_config::config::{ExecutionFsMode, ExecutionNetworkMode, RunnerConfig};
 #[cfg(target_os = "linux")]
 use std::env;
 #[cfg(target_os = "linux")]
@@ -156,11 +156,72 @@ fn build_linux_sandbox_script(
     let runner_shell = shell_quote(&runner.shell);
     let runner_shell_arg = shell_quote(&runner.shell_arg);
     let inner_command = shell_quote(command);
-    lines.push(format!(
-        "ip netns exec \"$NETNS\" {} {} {}",
-        runner_shell, runner_shell_arg, inner_command
-    ));
+
+    if let Some(fs_script) =
+        build_fs_isolation_inner_script(execution_profile, &runner_shell, &runner_shell_arg, &inner_command)
+    {
+        let quoted_fs_script = shell_quote(&fs_script);
+        lines.push(format!(
+            "ip netns exec \"$NETNS\" unshare -m -- /bin/bash -c {}",
+            quoted_fs_script
+        ));
+    } else {
+        lines.push(format!(
+            "ip netns exec \"$NETNS\" {} {} {}",
+            runner_shell, runner_shell_arg, inner_command
+        ));
+    }
+
     lines.join("\n")
+}
+
+/// Builds the inner bash script that runs inside `unshare -m` to enforce
+/// filesystem isolation via bind-mounts.  Returns `None` for `Inherit` (no
+/// mount namespace needed).
+#[cfg(target_os = "linux")]
+pub(crate) fn build_fs_isolation_inner_script(
+    execution_profile: &ResolvedExecutionProfile,
+    runner_shell: &str,
+    runner_shell_arg: &str,
+    inner_command: &str,
+) -> Option<String> {
+    match execution_profile.fs_mode {
+        ExecutionFsMode::Inherit => None,
+        ExecutionFsMode::WorkspaceReadonly | ExecutionFsMode::WorkspaceRwScoped => {
+            let workspace = execution_profile
+                .workspace_root
+                .as_deref()
+                .expect("workspace_root must be set for non-Inherit fs_mode");
+            let ws = workspace.display();
+
+            let mut inner = vec![
+                "set -euo pipefail".to_string(),
+                // Prevent mount propagation to parent namespace.
+                "mount --make-rprivate /".to_string(),
+                // Bind-mount workspace onto itself so we can remount it read-only.
+                format!("mount --bind {ws} {ws}"),
+                format!("mount -o remount,ro,bind {ws} {ws}"),
+            ];
+
+            if execution_profile.fs_mode == ExecutionFsMode::WorkspaceRwScoped {
+                // Re-bind each writable path read-write on top of the read-only workspace.
+                for path in &execution_profile.writable_paths {
+                    let p = path.display();
+                    // Guard with -e so missing optional paths don't abort the script.
+                    inner.push(format!(
+                        "if [ -e {p} ]; then mount --bind {p} {p}; fi"
+                    ));
+                }
+            }
+
+            inner.push(format!(
+                "exec {} {} {}",
+                runner_shell, runner_shell_arg, inner_command
+            ));
+
+            Some(inner.join("\n"))
+        }
+    }
 }
 
 #[cfg(target_os = "linux")]

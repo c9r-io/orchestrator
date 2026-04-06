@@ -403,4 +403,84 @@ mod tests {
             "host profile should always return 'host' backend label"
         );
     }
+
+    // --- Linux filesystem isolation script generation tests ---
+
+    #[cfg(target_os = "linux")]
+    mod linux_fs_isolation {
+        use super::*;
+        use orchestrator_config::config::ExecutionFsMode;
+        use sandbox_linux::build_fs_isolation_inner_script;
+        use std::path::PathBuf;
+
+        fn base_profile(fs_mode: ExecutionFsMode) -> ResolvedExecutionProfile {
+            ResolvedExecutionProfile {
+                name: "test".to_string(),
+                mode: ExecutionProfileMode::Sandbox,
+                fs_mode,
+                writable_paths: Vec::new(),
+                network_mode: ExecutionNetworkMode::Deny,
+                network_allowlist: Vec::new(),
+                max_memory_mb: None,
+                max_cpu_seconds: None,
+                max_processes: None,
+                max_open_files: None,
+                workspace_root: Some(PathBuf::from("/workspace/project")),
+            }
+        }
+
+        #[test]
+        fn test_inherit_returns_none() {
+            let profile = base_profile(ExecutionFsMode::Inherit);
+            assert!(
+                build_fs_isolation_inner_script(&profile, "'/bin/bash'", "'-lc'", "'echo hi'")
+                    .is_none()
+            );
+        }
+
+        #[test]
+        fn test_workspace_readonly_mounts_ro() {
+            let profile = base_profile(ExecutionFsMode::WorkspaceReadonly);
+            let script =
+                build_fs_isolation_inner_script(&profile, "'/bin/bash'", "'-lc'", "'echo hi'")
+                    .expect("should produce script");
+            assert!(script.contains("mount --make-rprivate /"));
+            assert!(script.contains("mount --bind /workspace/project /workspace/project"));
+            assert!(
+                script.contains("mount -o remount,ro,bind /workspace/project /workspace/project")
+            );
+            // No writable re-bind for readonly mode.
+            assert!(!script.contains("if [ -e"));
+            assert!(script.contains("exec '/bin/bash' '-lc' 'echo hi'"));
+        }
+
+        #[test]
+        fn test_workspace_rw_scoped_without_paths() {
+            let profile = base_profile(ExecutionFsMode::WorkspaceRwScoped);
+            let script =
+                build_fs_isolation_inner_script(&profile, "'/bin/bash'", "'-lc'", "'echo hi'")
+                    .expect("should produce script");
+            // Still mounts workspace read-only.
+            assert!(
+                script.contains("mount -o remount,ro,bind /workspace/project /workspace/project")
+            );
+            // No writable re-bind when writable_paths is empty.
+            assert!(!script.contains("if [ -e"));
+        }
+
+        #[test]
+        fn test_workspace_rw_scoped_with_writable_paths() {
+            let mut profile = base_profile(ExecutionFsMode::WorkspaceRwScoped);
+            profile.writable_paths = vec![
+                PathBuf::from("/workspace/project/output"),
+                PathBuf::from("/tmp"),
+            ];
+            let script =
+                build_fs_isolation_inner_script(&profile, "'/bin/bash'", "'-lc'", "'echo hi'")
+                    .expect("should produce script");
+            assert!(script
+                .contains("if [ -e /workspace/project/output ]; then mount --bind /workspace/project/output /workspace/project/output; fi"));
+            assert!(script.contains("if [ -e /tmp ]; then mount --bind /tmp /tmp; fi"));
+        }
+    }
 }

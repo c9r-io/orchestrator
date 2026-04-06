@@ -257,10 +257,14 @@ pub(crate) fn detect_linux_sandbox_support(
             }
         }
         if execution_profile.fs_mode != ExecutionFsMode::Inherit {
-            missing.push(
-                "linux_native currently requires fs_mode=inherit until a Linux filesystem backend is implemented"
-                    .to_string(),
-            );
+            for binary in ["unshare", "mount"] {
+                if !command_exists(binary) {
+                    missing.push(format!(
+                        "linux_native fs_mode={:?} requires '{binary}' in PATH",
+                        execution_profile.fs_mode
+                    ));
+                }
+            }
         }
         if nix::unistd::geteuid().as_raw() != 0 {
             missing.push("linux_native requires the daemon to run as root".to_string());

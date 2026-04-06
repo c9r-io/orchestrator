@@ -75,6 +75,7 @@
 | FR-088 | QA Doctor CLI — 可观测性指标暴露 | P2 | Closed |
 | FR-089 | SecretStore 加密密钥紧急恢复机制 | P2 | Closed |
 | FR-090 | 轻量化单步执行 — `orchestrator run` 命令 | P1 | Closed |
+| FR-091 | Linux Sandbox Filesystem Isolation Backend | P3 | Closed |
 
 ## 说明
 
@@ -170,3 +171,4 @@
 - FR-083 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/96-crd-plugin-system.md` 与 `docs/qa/orchestrator/136-crd-plugin-system.md` 承载（通用 CRD 插件系统：interceptor/transformer/cron 三种插件类型，webhook.authenticate/webhook.transform 扩展点，crdRef 触发器关联，内置 orchestrator tool 工具库）
 - FR-087 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/97-agent-health-policy-cli-fixtures.md` 与 `docs/qa/orchestrator/110b-agent-health-policy-advanced.md` 承载（经审计确认 fixture manifest + `orchestrator apply --project` 完整管线已正确保留 health_policy，新增 `scripts/qa/test-health-policy-check.sh` 自动化验证 3 场景：自定义阈值、disease DISABLED、默认策略基线）
 - FR-090 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/98-lightweight-step-run.md` 与 `docs/qa/orchestrator/138-lightweight-step-run.md` 承载（三阶段轻量化执行：Phase 1 `--step`/`--set` 步骤过滤与变量注入、Phase 2 `orchestrator run` 同步执行命令、Phase 3 `RunStep` RPC 脱离 workflow 直接组装单步执行）
+- FR-091 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/99-linux-sandbox-filesystem-isolation.md` 与 `docs/qa/orchestrator/139-linux-sandbox-filesystem-isolation.md` 承载（Linux mount namespace + bind-mount 文件系统隔离：workspace_readonly / workspace_rw_scoped 两种模式，unshare -m 组合网络命名空间，preflight 动态检测 unshare/mount 二进制）

@@ -197,6 +197,7 @@ mod cases {
             max_cpu_seconds: None,
             max_processes: None,
             max_open_files: None,
+            workspace_root: None,
         }
     }
 

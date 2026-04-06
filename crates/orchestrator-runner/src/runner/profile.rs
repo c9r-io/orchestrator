@@ -26,6 +26,8 @@ pub struct ResolvedExecutionProfile {
     pub max_processes: Option<u64>,
     /// Optional file-descriptor limit.
     pub max_open_files: Option<u64>,
+    /// Workspace root directory (needed by Linux mount-namespace filesystem isolation).
+    pub workspace_root: Option<PathBuf>,
 }
 
 impl ResolvedExecutionProfile {
@@ -42,6 +44,7 @@ impl ResolvedExecutionProfile {
             max_cpu_seconds: None,
             max_processes: None,
             max_open_files: None,
+            workspace_root: None,
         }
     }
 
@@ -72,6 +75,7 @@ impl ResolvedExecutionProfile {
             max_cpu_seconds: config.max_cpu_seconds,
             max_processes: config.max_processes,
             max_open_files: config.max_open_files,
+            workspace_root: Some(workspace_root.to_path_buf()),
         }
     }
 }

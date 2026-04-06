@@ -74,7 +74,7 @@ Additional fields when applicable:
 6. Sandbox classification is centralized in the phase runner utility layer, so recorders and downstream task logic consume a single normalized result shape.
 7. `RunResult` now carries `sandbox_violation_kind`, `sandbox_resource_kind`, and `sandbox_network_target` for downstream diagnostics and future policy hooks.
 8. Linux `linux_native` builds a per-run network namespace and nftables ruleset. `allowlist` entries are resolved up front to exact IPs, with optional TCP port restriction. DNS egress is allowed only to the host resolver set when `network_mode=allowlist`.
-9. Linux `linux_native` is intentionally explicit about prerequisites: `root`, `ip`, and `nft` are required; `fs_mode=inherit` is required until a Linux filesystem boundary is implemented.
+9. Linux `linux_native` is intentionally explicit about prerequisites: `root`, `ip`, and `nft` are required. When `fs_mode` is not `inherit`, `unshare` and `mount` are additionally required for mount-namespace-based filesystem isolation (see design doc 99).
 
 ## Alternatives And Tradeoffs
 
