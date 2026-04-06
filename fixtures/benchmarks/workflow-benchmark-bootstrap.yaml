@@ -30,7 +30,7 @@ spec:
   description: "Implement the plan from the previous step"
   prompt: >-
     Implement the plan produced in the previous step.
-    The plan output is available as context.
+    Read the plan output at: {plan_output_path}
     Write clean, idiomatic Rust code. Run `cargo check` before finishing.
 ---
 apiVersion: orchestrator.dev/v2

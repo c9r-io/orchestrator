@@ -1,9 +1,9 @@
-# Benchmark agent: Codex CLI shell + gpt-5.4-mini model
+# Benchmark agent: Codex CLI shell + gpt-5.4 model
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
-  name: bench-codex-gpt54mini
-  description: "Codex CLI + gpt-5.4-mini"
+  name: bench-codex-gpt54
+  description: "Codex CLI + gpt-5.4"
 spec:
   capabilities:
     - plan
@@ -13,10 +13,10 @@ spec:
     - ticket_fix
     - align_tests
     - self_test
-  command: codex exec "{prompt}" -m gpt-5.4-mini
+  command: codex exec "{prompt}" -m gpt-5.4 --full-auto
   promptDelivery: arg
   env:
     - fromRef: openai-gpt54mini
   metadata:
     benchmark_shell: "codex"
-    benchmark_model: "gpt-5.4-mini"
+    benchmark_model: "gpt-5.4"

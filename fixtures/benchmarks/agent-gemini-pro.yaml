@@ -1,9 +1,9 @@
-# Benchmark agent: Gemini CLI shell + gemini-3-flash-preview model
+# Benchmark agent: Gemini CLI shell + gemini-3.1-pro-preview model
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
-  name: bench-gemini-flash
-  description: "Gemini CLI + gemini-3-flash-preview"
+  name: bench-gemini-pro
+  description: "Gemini CLI + gemini-3.1-pro-preview"
 spec:
   capabilities:
     - plan
@@ -13,10 +13,10 @@ spec:
     - ticket_fix
     - align_tests
     - self_test
-  command: gemini -p "{prompt}" -m gemini-3-flash-preview -o json
+  command: gemini -p "{prompt}" -m gemini-3.1-pro-preview --yolo -o json
   promptDelivery: arg
   env:
     - fromRef: gemini-flash
   metadata:
     benchmark_shell: "gemini-cli"
-    benchmark_model: "gemini-3-flash-preview"
+    benchmark_model: "gemini-3.1-pro-preview"
