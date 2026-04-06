@@ -167,6 +167,7 @@ pub(crate) mod tests {
                 ticket_dir: "fixtures/ticket".to_string(),
                 self_referential: false,
                 health_policy: Default::default(),
+                artifacts_dir: None,
             },
         );
         project.workflows.insert(

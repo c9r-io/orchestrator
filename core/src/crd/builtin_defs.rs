@@ -83,7 +83,8 @@ fn workspace_crd() -> CustomResourceDefinition {
                 "root_path": { "type": "string" },
                 "qa_targets": { "type": "array", "items": { "type": "string" } },
                 "ticket_dir": { "type": "string" },
-                "self_referential": { "type": "boolean" }
+                "self_referential": { "type": "boolean" },
+                "artifacts_dir": { "type": "string" }
             }
         }))],
         hooks: CrdHooks::default(),

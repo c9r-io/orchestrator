@@ -397,6 +397,7 @@ mod cases {
                 ticket_dir: "docs/ticket".to_string(),
                 self_referential: false,
                 health_policy: None,
+                artifacts_dir: None,
             },
         };
 
@@ -421,6 +422,7 @@ mod cases {
             ticket_dir: "t".to_string(),
             self_referential: false,
             health_policy: Default::default(),
+            artifacts_dir: None,
         };
         let meta = metadata_with_name("ws-new");
         let result = apply_to_store(&mut config, "Workspace", "ws-new", &meta, ws.to_cr_spec());
@@ -450,6 +452,7 @@ mod cases {
             ticket_dir: "t".to_string(),
             self_referential: false,
             health_policy: Default::default(),
+            artifacts_dir: None,
         };
         let meta = metadata_with_name("ws-same");
         let spec = ws.to_cr_spec();
@@ -468,6 +471,7 @@ mod cases {
             ticket_dir: "t".to_string(),
             self_referential: false,
             health_policy: Default::default(),
+            artifacts_dir: None,
         };
         let ws2 = crate::config::WorkspaceConfig {
             root_path: "/v2".to_string(),
@@ -475,6 +479,7 @@ mod cases {
             ticket_dir: "t".to_string(),
             self_referential: false,
             health_policy: Default::default(),
+            artifacts_dir: None,
         };
         let meta = metadata_with_name("ws-chg");
         apply_to_store(&mut config, "Workspace", "ws-chg", &meta, ws1.to_cr_spec());
@@ -505,6 +510,7 @@ mod cases {
                 ticket_dir: "t".to_string(),
                 self_referential: false,
                 health_policy: Default::default(),
+                artifacts_dir: None,
             },
         );
         assert!(
@@ -525,6 +531,7 @@ mod cases {
             ticket_dir: "t".to_string(),
             self_referential: false,
             health_policy: Default::default(),
+            artifacts_dir: None,
         };
         let meta = metadata_with_name("snapshot-ws");
         let result = apply_to_store(
@@ -551,6 +558,7 @@ mod cases {
             ticket_dir: "t".to_string(),
             self_referential: false,
             health_policy: Default::default(),
+            artifacts_dir: None,
         };
         let meta = metadata_with_name("ws-gen");
         apply_to_store(&mut config, "Workspace", "ws-gen", &meta, ws.to_cr_spec());
@@ -566,6 +574,7 @@ mod cases {
             ticket_dir: "t".to_string(),
             self_referential: false,
             health_policy: Default::default(),
+            artifacts_dir: None,
         };
         apply_to_store(&mut config, "Workspace", "ws-gen", &meta, ws2.to_cr_spec());
         let gen2 = config
@@ -588,6 +597,7 @@ mod cases {
             ticket_dir: "t".to_string(),
             self_referential: false,
             health_policy: Default::default(),
+            artifacts_dir: None,
         };
         let meta = metadata_with_name("ws-del");
         apply_to_store(&mut config, "Workspace", "ws-del", &meta, ws.to_cr_spec());
@@ -628,6 +638,7 @@ mod cases {
                 ticket_dir: "t".to_string(),
                 self_referential: false,
                 health_policy: Default::default(),
+                artifacts_dir: None,
             },
         );
         let removed = delete_from_store(&mut config, "Workspace", "snapshot-del");
@@ -660,6 +671,7 @@ mod cases {
             ticket_dir: "t".to_string(),
             self_referential: false,
             health_policy: Default::default(),
+            artifacts_dir: None,
         };
         let meta = metadata_from_parts(
             "ws-meta",
@@ -1091,6 +1103,7 @@ mod execution_profile_tests {
                 ticket_dir: "t".to_string(),
                 self_referential: false,
                 health_policy: None,
+                artifacts_dir: None,
             }),
         };
         assert!(build_execution_profile(manifest).is_err());
@@ -1114,6 +1127,7 @@ mod execution_profile_tests {
                 ticket_dir: "t".to_string(),
                 self_referential: false,
                 health_policy: None,
+                artifacts_dir: None,
             }),
         };
         assert!(build_execution_profile(manifest).is_err());

@@ -90,12 +90,27 @@ pub fn resolve_and_validate_workspaces_for_project(
             );
         }
 
+        let artifacts_dir = match &entry.artifacts_dir {
+            Some(rel) => root_path.join(rel),
+            None => root_path.join(".orchestrator/artifacts"),
+        };
+        if !artifacts_dir.exists() {
+            std::fs::create_dir_all(&artifacts_dir).with_context(|| {
+                format!(
+                    "workspace '{}' failed to create artifacts_dir: {}",
+                    id,
+                    artifacts_dir.display()
+                )
+            })?;
+        }
+
         resolved.insert(
             id.clone(),
             ResolvedWorkspace {
                 root_path,
                 qa_targets: entry.qa_targets.clone(),
                 ticket_dir: entry.ticket_dir.clone(),
+                artifacts_dir,
             },
         );
     }
@@ -121,9 +136,13 @@ pub fn resolve_and_validate_projects(
             workspaces.insert(
                 workspace_id.clone(),
                 ResolvedWorkspace {
-                    root_path,
+                    root_path: root_path.clone(),
                     qa_targets: workspace_config.qa_targets.clone(),
                     ticket_dir: workspace_config.ticket_dir.clone(),
+                    artifacts_dir: match &workspace_config.artifacts_dir {
+                        Some(rel) => root_path.join(rel),
+                        None => root_path.join(".orchestrator/artifacts"),
+                    },
                 },
             );
         }
@@ -229,6 +248,7 @@ mod tests {
                             ticket_dir: "tickets".to_string(),
                             self_referential: false,
                             health_policy: Default::default(),
+                            artifacts_dir: None,
                         },
                     )]
                     .into(),
@@ -267,6 +287,7 @@ mod tests {
                             ticket_dir: "tickets".to_string(),
                             self_referential: false,
                             health_policy: Default::default(),
+                            artifacts_dir: None,
                         },
                     )]
                     .into(),
@@ -305,6 +326,7 @@ mod tests {
                             ticket_dir: "tickets".to_string(),
                             self_referential: false,
                             health_policy: Default::default(),
+                            artifacts_dir: None,
                         },
                     )]
                     .into(),
@@ -350,6 +372,7 @@ mod tests {
                             ticket_dir: "tickets".to_string(),
                             self_referential: false,
                             health_policy: Default::default(),
+                            artifacts_dir: None,
                         },
                     )]
                     .into(),
@@ -402,6 +425,7 @@ mod tests {
                             ticket_dir: "tickets".to_string(),
                             self_referential: false,
                             health_policy: Default::default(),
+                            artifacts_dir: None,
                         },
                     )]
                     .into(),
@@ -450,6 +474,7 @@ mod tests {
                 ticket_dir: "tickets".to_string(),
                 self_referential: false,
                 health_policy: Default::default(),
+                artifacts_dir: None,
             },
         );
         projects.insert(

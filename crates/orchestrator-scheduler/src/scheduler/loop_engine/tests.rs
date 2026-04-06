@@ -460,6 +460,7 @@ fn build_segments_groups_contiguous_scopes() {
         item_retry_after: HashMap::new(),
         restart_completed_steps: HashSet::new(),
         step_filter: None,
+        artifacts_dir: std::path::PathBuf::from("/tmp/artifacts"),
     };
 
     let segments = build_scope_segments(&task_ctx);
@@ -571,6 +572,7 @@ fn build_segments_skips_guards() {
         item_retry_after: HashMap::new(),
         restart_completed_steps: HashSet::new(),
         step_filter: None,
+        artifacts_dir: std::path::PathBuf::from("/tmp/artifacts"),
     };
 
     let segments = build_scope_segments(&task_ctx);
@@ -816,6 +818,7 @@ fn collect_remaining_item_step_steps_returns_only_item_steps_after_segment() {
         item_retry_after: HashMap::new(),
         restart_completed_steps: HashSet::new(),
         step_filter: None,
+        artifacts_dir: std::path::PathBuf::from("/tmp/artifacts"),
     };
     let segments = build_scope_segments(&task_ctx);
 
@@ -889,6 +892,7 @@ fn collect_remaining_item_step_steps_skips_non_repeatable_steps_after_first_cycl
         item_retry_after: HashMap::new(),
         restart_completed_steps: HashSet::new(),
         step_filter: None,
+        artifacts_dir: std::path::PathBuf::from("/tmp/artifacts"),
     };
     let segments = build_scope_segments(&task_ctx);
 
@@ -1043,6 +1047,7 @@ fn build_segments_skips_disabled_steps() {
         item_retry_after: HashMap::new(),
         restart_completed_steps: HashSet::new(),
         step_filter: None,
+        artifacts_dir: std::path::PathBuf::from("/tmp/artifacts"),
     };
 
     let segments = build_scope_segments(&task_ctx);
@@ -1083,6 +1088,7 @@ fn build_segments_empty_when_no_steps() {
         item_retry_after: HashMap::new(),
         restart_completed_steps: HashSet::new(),
         step_filter: None,
+        artifacts_dir: std::path::PathBuf::from("/tmp/artifacts"),
     };
 
     let segments = build_scope_segments(&task_ctx);
@@ -1327,6 +1333,7 @@ fn collect_remaining_item_step_steps_from_start_index_2() {
         item_retry_after: HashMap::new(),
         restart_completed_steps: HashSet::new(),
         step_filter: None,
+        artifacts_dir: std::path::PathBuf::from("/tmp/artifacts"),
     };
     let segments = build_scope_segments(&task_ctx);
     assert_eq!(segments.len(), 3);
@@ -1478,6 +1485,7 @@ fn build_segments_item_select_is_task_scoped() {
         item_retry_after: HashMap::new(),
         restart_completed_steps: HashSet::new(),
         step_filter: None,
+        artifacts_dir: std::path::PathBuf::from("/tmp/artifacts"),
     };
 
     let segments = build_scope_segments(&task_ctx);

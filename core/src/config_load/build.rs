@@ -642,6 +642,7 @@ mod tests {
                 ticket_dir: "tickets".to_string(),
                 self_referential: false,
                 health_policy: Default::default(),
+                artifacts_dir: None,
             },
         );
         let mut previous = OrchestratorConfig::default();

@@ -55,6 +55,8 @@ pub struct TaskRuntimeRow {
     pub step_filter_json: Option<String>,
     /// FR-090: Serialized initial pipeline variables (JSON map).
     pub initial_vars_json: Option<String>,
+    /// Resolved artifacts directory for pipeline variable spill files.
+    pub artifacts_dir: String,
 }
 
 /// Summary row for one command run returned by task-log queries.

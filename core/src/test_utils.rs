@@ -49,6 +49,7 @@ fn create_minimal_test_config(temp_root: &Path) -> OrchestratorConfig {
                                 ticket_dir: "docs/ticket".to_string(),
                                 self_referential: false,
                                 health_policy: Default::default(),
+                                artifacts_dir: None,
                             },
                         );
                         ws
@@ -204,6 +205,7 @@ impl TestState {
                     ticket_dir: "docs/ticket".to_string(),
                     self_referential: false,
                     health_policy: Default::default(),
+                    artifacts_dir: None,
                 },
             );
         self

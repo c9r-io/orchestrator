@@ -212,7 +212,7 @@ pub fn create_task_impl(
     let conn = open_conn(&state.db_path)?;
     let tx = conn.unchecked_transaction()?;
     tx.execute(
-        "INSERT INTO tasks (id, name, status, started_at, completed_at, goal, target_files_json, mode, project_id, workspace_id, workflow_id, workspace_root, qa_targets_json, ticket_dir, execution_plan_json, loop_mode, current_cycle, init_done, resume_token, created_at, updated_at, parent_task_id, spawn_reason, spawn_depth, step_filter_json, initial_vars_json) VALUES (?1, ?2, 'created', NULL, NULL, ?3, ?4, '', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 0, 0, NULL, ?13, ?13, ?14, ?15, 0, ?16, ?17)",
+        "INSERT INTO tasks (id, name, status, started_at, completed_at, goal, target_files_json, mode, project_id, workspace_id, workflow_id, workspace_root, qa_targets_json, ticket_dir, execution_plan_json, loop_mode, current_cycle, init_done, resume_token, created_at, updated_at, parent_task_id, spawn_reason, spawn_depth, step_filter_json, initial_vars_json, artifacts_dir) VALUES (?1, ?2, 'created', NULL, NULL, ?3, ?4, '', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 0, 0, NULL, ?13, ?13, ?14, ?15, 0, ?16, ?17, ?18)",
         params![
             task_id,
             task_name,
@@ -231,6 +231,7 @@ pub fn create_task_impl(
             payload.spawn_reason,
             step_filter_json,
             initial_vars_json,
+            workspace.artifacts_dir.to_string_lossy().to_string(),
         ],
     )?;
 
@@ -378,7 +379,7 @@ pub fn create_run_step_task(
     let conn = open_conn(&state.db_path)?;
     let tx = conn.unchecked_transaction()?;
     tx.execute(
-        "INSERT INTO tasks (id, name, status, started_at, completed_at, goal, target_files_json, mode, project_id, workspace_id, workflow_id, workspace_root, qa_targets_json, ticket_dir, execution_plan_json, loop_mode, current_cycle, init_done, resume_token, created_at, updated_at, parent_task_id, spawn_reason, spawn_depth, step_filter_json, initial_vars_json) VALUES (?1, ?2, 'created', NULL, NULL, ?3, ?4, '', ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'once', 0, 0, NULL, ?12, ?12, NULL, NULL, 0, '', ?13)",
+        "INSERT INTO tasks (id, name, status, started_at, completed_at, goal, target_files_json, mode, project_id, workspace_id, workflow_id, workspace_root, qa_targets_json, ticket_dir, execution_plan_json, loop_mode, current_cycle, init_done, resume_token, created_at, updated_at, parent_task_id, spawn_reason, spawn_depth, step_filter_json, initial_vars_json, artifacts_dir) VALUES (?1, ?2, 'created', NULL, NULL, ?3, ?4, '', ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'once', 0, 0, NULL, ?12, ?12, NULL, NULL, 0, '', ?13, ?14)",
         params![
             task_id,
             task_name,
@@ -393,6 +394,7 @@ pub fn create_run_step_task(
             execution_plan_json,
             created_at,
             initial_vars_json,
+            workspace.artifacts_dir.to_string_lossy().to_string(),
         ],
     )?;
 

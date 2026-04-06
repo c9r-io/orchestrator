@@ -261,6 +261,8 @@ pub struct TaskRuntimeContext {
     /// FR-090: Task-level step filter. When set, only steps whose ID is in this
     /// set are executed; all other steps are skipped.
     pub step_filter: Option<HashSet<String>>,
+    /// Absolute path for pipeline variable spill files.
+    pub artifacts_dir: std::path::PathBuf,
 }
 
 impl TaskRuntimeContext {
@@ -486,6 +488,8 @@ pub struct ResolvedWorkspace {
     pub qa_targets: Vec<String>,
     /// Workspace-local ticket directory.
     pub ticket_dir: String,
+    /// Resolved absolute path for pipeline variable spill files.
+    pub artifacts_dir: std::path::PathBuf,
 }
 
 /// Resolved project

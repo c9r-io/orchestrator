@@ -321,6 +321,7 @@ mod tests {
                             ticket_dir: "docs/ticket".to_string(),
                             self_referential: false,
                             health_policy: Default::default(),
+                            artifacts_dir: None,
                         },
                     )]),
                     agents: HashMap::from([(

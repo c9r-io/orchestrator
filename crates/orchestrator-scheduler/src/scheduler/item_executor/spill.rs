@@ -7,14 +7,14 @@ use tracing::warn;
 /// [`PIPELINE_VAR_INLINE_LIMIT`] the inline value is truncated; otherwise the
 /// full value is kept inline as well.
 pub(crate) fn spill_large_var(
-    logs_dir: &Path,
+    artifacts_dir: &Path,
     task_id: &str,
     key: &str,
     value: String,
     pipeline: &mut PipelineVariables,
 ) {
     // Always write to file so downstream steps can reference {key}_path
-    let dir = logs_dir.join(task_id);
+    let dir = artifacts_dir.join(task_id);
     if let Err(e) = std::fs::create_dir_all(&dir) {
         warn!(task_id, key, error = %e, "pipeline var: failed to create spill directory");
     }
@@ -49,7 +49,7 @@ pub(crate) fn spill_large_var(
 /// Write a large value to a spill file and return `(truncated_value, path_string)`.
 /// Returns `None` if the value fits within the inline limit.
 pub(crate) fn spill_to_file(
-    logs_dir: &Path,
+    artifacts_dir: &Path,
     task_id: &str,
     key: &str,
     value: &str,
@@ -57,7 +57,7 @@ pub(crate) fn spill_to_file(
     if value.len() <= PIPELINE_VAR_INLINE_LIMIT {
         return None;
     }
-    let dir = logs_dir.join(task_id);
+    let dir = artifacts_dir.join(task_id);
     if let Err(e) = std::fs::create_dir_all(&dir) {
         warn!(task_id, key, error = %e, "pipeline var: failed to create spill directory");
     }

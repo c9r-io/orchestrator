@@ -286,6 +286,7 @@ mod tests {
             ticket_dir: "tickets".to_string(),
             self_referential: false,
             health_policy: Default::default(),
+            artifacts_dir: None,
         };
         let spec = config.to_cr_spec();
         let back = WorkspaceConfig::from_cr_spec(&spec).expect("should deserialize");

@@ -223,6 +223,11 @@ pub fn registered_migrations() -> Vec<Migration> {
             name: "m0025_plugin_audit_sandbox_columns",
             up: crate::persistence::migration_steps::m0025_plugin_audit_sandbox_columns,
         },
+        Migration {
+            version: 26,
+            name: "m0026_add_artifacts_dir",
+            up: crate::persistence::migration_steps::m0026_add_artifacts_dir,
+        },
     ]
 }
 

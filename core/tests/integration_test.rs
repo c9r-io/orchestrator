@@ -27,6 +27,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                         ticket_dir: "docs/ticket".to_string(),
                         self_referential: false,
                         health_policy: Default::default(),
+                        artifacts_dir: None,
                     },
                 )]
                 .into(),
@@ -370,6 +371,7 @@ fn delete_removes_workspace_from_config() {
             ticket_dir: "docs/ticket".to_string(),
             self_referential: false,
             health_policy: Default::default(),
+            artifacts_dir: None,
         },
     );
 
@@ -677,6 +679,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                         ticket_dir: "docs/ticket".to_string(),
                         self_referential: false,
                         health_policy: Default::default(),
+                        artifacts_dir: None,
                     },
                 )]
                 .into(),

@@ -274,7 +274,7 @@ impl TriggerEngine {
                                 next_fire: next,
                                 kind: CronEntryKind::CrdPlugin {
                                     crd_kind: crd_kind.clone(),
-                                    plugin: plugin.clone(),
+                                    plugin: Box::new(plugin.clone()),
                                 },
                             });
                         }
@@ -785,7 +785,7 @@ enum CronEntryKind {
     /// A CRD plugin cron entry (executes a plugin command directly).
     CrdPlugin {
         crd_kind: String,
-        plugin: crate::crd::types::CrdPlugin,
+        plugin: Box<crate::crd::types::CrdPlugin>,
     },
 }
 

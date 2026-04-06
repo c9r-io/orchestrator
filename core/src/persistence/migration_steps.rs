@@ -850,3 +850,13 @@ pub(crate) fn m0025_plugin_audit_sandbox_columns(conn: &Connection) -> Result<()
     )?;
     Ok(())
 }
+
+pub(crate) fn m0026_add_artifacts_dir(conn: &Connection) -> Result<()> {
+    ensure_column_exists(
+        conn,
+        "tasks",
+        "artifacts_dir",
+        "ALTER TABLE tasks ADD COLUMN artifacts_dir TEXT NOT NULL DEFAULT ''",
+    )?;
+    Ok(())
+}

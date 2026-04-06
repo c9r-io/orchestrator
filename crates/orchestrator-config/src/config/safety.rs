@@ -139,6 +139,10 @@ pub struct WorkspaceConfig {
     /// Default health policy for agents operating in this workspace.
     #[serde(default, skip_serializing_if = "HealthPolicyConfig::is_default")]
     pub health_policy: HealthPolicyConfig,
+    /// Optional directory for pipeline variable spill files, relative to root_path.
+    /// Defaults to `.orchestrator/artifacts` when not set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifacts_dir: Option<String>,
 }
 
 /// Project-level configuration

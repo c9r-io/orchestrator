@@ -139,6 +139,7 @@ pub(crate) fn workspace_spec_to_config(spec: &WorkspaceSpec) -> WorkspaceConfig 
                     .unwrap_or_else(|| HealthPolicyConfig::default().capability_success_threshold),
             })
             .unwrap_or_default(),
+        artifacts_dir: spec.artifacts_dir.clone(),
     }
 }
 
@@ -161,6 +162,7 @@ pub(crate) fn workspace_config_to_spec(config: &WorkspaceConfig) -> WorkspaceSpe
                 ),
             })
         },
+        artifacts_dir: config.artifacts_dir.clone(),
     }
 }
 
@@ -217,6 +219,7 @@ mod tests {
                 ticket_dir: "tickets".to_string(),
                 self_referential: false,
                 health_policy: None,
+                artifacts_dir: None,
             },
         };
         let err = ws.validate().expect_err("operation should fail");
@@ -233,6 +236,7 @@ mod tests {
                 ticket_dir: "  ".to_string(),
                 self_referential: false,
                 health_policy: None,
+                artifacts_dir: None,
             },
         };
         let err = ws.validate().expect_err("operation should fail");
@@ -251,6 +255,7 @@ mod tests {
                 ticket_dir: "t".to_string(),
                 self_referential: false,
                 health_policy: Default::default(),
+                artifacts_dir: None,
             },
         );
         let loaded = WorkspaceResource::get_from(&config, "bare-ws")
@@ -283,6 +288,7 @@ mod tests {
                 ticket_dir: "t".to_string(),
                 self_referential: false,
                 health_policy: None,
+                artifacts_dir: None,
             }),
         };
         let rr = dispatch_resource(resource).expect("dispatch workspace resource");
@@ -318,6 +324,7 @@ mod tests {
                 ticket_dir: "tickets".to_string(),
                 self_referential: false,
                 health_policy: None,
+                artifacts_dir: None,
             },
         };
         let yaml = workspace.to_yaml().expect("should serialize");
@@ -335,6 +342,7 @@ mod tests {
             ticket_dir: "docs/tickets".to_string(),
             self_referential: true,
             health_policy: None,
+            artifacts_dir: None,
         };
         let config = workspace_spec_to_config(&spec);
         assert_eq!(config.root_path, "/my/project");
@@ -366,6 +374,7 @@ mod tests {
                 ticket_dir: "t".to_string(),
                 self_referential: false,
                 health_policy: None,
+                artifacts_dir: None,
             }),
         };
         let rr = dispatch_resource(resource).expect("dispatch workspace resource");

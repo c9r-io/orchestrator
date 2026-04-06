@@ -199,7 +199,7 @@ impl PluginPolicy {
     pub fn effective_execution_profile(&self) -> ExecutionProfileConfig {
         self.execution_profile
             .clone()
-            .unwrap_or_else(ExecutionProfileConfig::default)
+            .unwrap_or_default()
     }
 
     /// Returns the effective environment-variable deny prefixes.

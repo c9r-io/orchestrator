@@ -343,6 +343,10 @@ pub struct WorkspaceSpec {
     /// Default health policy for agents in this workspace.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub health_policy: Option<HealthPolicySpec>,
+
+    /// Optional directory for pipeline variable spill files, relative to root_path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifacts_dir: Option<String>,
 }
 
 /// Step template resource specification.

@@ -346,7 +346,7 @@ impl StepExecutionAccumulator {
     pub fn apply_captures(
         &mut self,
         captures: &[agent_orchestrator::config::CaptureDecl],
-        logs_dir: &Path,
+        artifacts_dir: &Path,
         task_id: &str,
         step_id: &str,
         result: &agent_orchestrator::dto::RunResult,
@@ -382,7 +382,7 @@ impl StepExecutionAccumulator {
                         match value {
                             Some(value) => {
                                 spill_large_var(
-                                    logs_dir,
+                                    artifacts_dir,
                                     task_id,
                                     &cap.var,
                                     value,

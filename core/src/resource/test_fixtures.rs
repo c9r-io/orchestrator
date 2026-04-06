@@ -33,6 +33,7 @@ pub fn workspace_manifest(name: &str, root_path: &str) -> OrchestratorResource {
             ticket_dir: "docs/ticket".to_string(),
             self_referential: false,
             health_policy: None,
+            artifacts_dir: None,
         }),
     }
 }

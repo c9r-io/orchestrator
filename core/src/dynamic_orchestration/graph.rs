@@ -407,6 +407,7 @@ mod tests {
             item_retry_after: HashMap::new(),
             restart_completed_steps: std::collections::HashSet::new(),
             step_filter: None,
+            artifacts_dir: std::path::PathBuf::from("/tmp/artifacts"),
         };
 
         let graph = build_static_execution_graph(&task_ctx).expect("graph");

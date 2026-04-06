@@ -639,7 +639,7 @@ async fn execute_agent_step(
                         )
                         .unwrap_or_else(|| output.stdout.clone());
                     spill_large_var(
-                        &state.logs_dir,
+                        &task_ctx.artifacts_dir,
                         task_id,
                         &output_key,
                         effective_output,

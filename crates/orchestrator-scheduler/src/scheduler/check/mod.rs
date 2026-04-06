@@ -370,6 +370,7 @@ mod tests {
                 ticket_dir: "tickets".into(),
                 self_referential: false,
                 health_policy: Default::default(),
+                artifacts_dir: None,
             },
         );
 

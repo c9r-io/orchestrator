@@ -71,7 +71,7 @@ pub(super) async fn execute_builtin_step_dispatch(
                 .insert("self_test_passed".to_string(), passed.to_string());
             if !self_test_result.error_output.is_empty() {
                 crate::scheduler::item_executor::spill::spill_large_var(
-                    &state.logs_dir,
+                    &task_ctx.artifacts_dir,
                     task_id,
                     "self_test_errors",
                     self_test_result.error_output,
@@ -130,7 +130,7 @@ pub(super) async fn execute_builtin_step_dispatch(
             };
             let _captures_missing = acc.apply_captures(
                 &step.behavior.captures,
-                &state.logs_dir,
+                &task_ctx.artifacts_dir,
                 task_id,
                 &step.id,
                 &synth_result,
@@ -395,7 +395,7 @@ pub(crate) async fn execute_builtin_step(
         pipeline.prev_stdout = output.stdout.clone();
         pipeline.prev_stderr = output.stderr.clone();
         if let Some((trunc, path)) = spill_to_file(
-            &state.logs_dir,
+            &task_ctx.artifacts_dir,
             task_id,
             "prev_stdout",
             &pipeline.prev_stdout,
@@ -404,7 +404,7 @@ pub(crate) async fn execute_builtin_step(
             pipeline.vars.insert("prev_stdout_path".to_string(), path);
         }
         if let Some((trunc, path)) = spill_to_file(
-            &state.logs_dir,
+            &task_ctx.artifacts_dir,
             task_id,
             "prev_stderr",
             &pipeline.prev_stderr,
@@ -418,7 +418,7 @@ pub(crate) async fn execute_builtin_step(
         let output_key = format!("{}_output", phase);
         if !output.stdout.is_empty() {
             spill_large_var(
-                &state.logs_dir,
+                &task_ctx.artifacts_dir,
                 task_id,
                 &output_key,
                 output.stdout.clone(),
@@ -434,7 +434,7 @@ pub(crate) async fn execute_builtin_step(
         .await
     {
         pipeline.diff = String::from_utf8_lossy(&diff_output.stdout).to_string();
-        if let Some((trunc, path)) = spill_to_file(&state.logs_dir, task_id, "diff", &pipeline.diff)
+        if let Some((trunc, path)) = spill_to_file(&task_ctx.artifacts_dir, task_id, "diff", &pipeline.diff)
         {
             pipeline.diff = trunc;
             pipeline.vars.insert("diff_path".to_string(), path);

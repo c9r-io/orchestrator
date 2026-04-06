@@ -359,6 +359,13 @@ pub async fn load_task_runtime_context(
         }
     }
 
+    // FR-092: Resolve artifacts_dir from DB, fallback to workspace default
+    let artifacts_dir = if runtime_row.artifacts_dir.is_empty() {
+        workspace_root.join(".orchestrator/artifacts")
+    } else {
+        PathBuf::from(&runtime_row.artifacts_dir)
+    };
+
     Ok(TaskRuntimeContext {
         workspace_id,
         workspace_root,
@@ -425,6 +432,7 @@ pub async fn load_task_runtime_context(
                 _ => None,
             }
         },
+        artifacts_dir,
     })
 }
 

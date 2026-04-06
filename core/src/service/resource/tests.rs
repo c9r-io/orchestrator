@@ -433,6 +433,7 @@ fn helper_functions_cover_delete_and_projection_paths() {
                 ticket_dir: "docs/ticket".to_string(),
                 self_referential: false,
                 health_policy: Default::default(),
+                artifacts_dir: None,
             },
         )]),
         agents: HashMap::from([(
