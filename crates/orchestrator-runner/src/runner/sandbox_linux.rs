@@ -157,9 +157,12 @@ fn build_linux_sandbox_script(
     let runner_shell_arg = shell_quote(&runner.shell_arg);
     let inner_command = shell_quote(command);
 
-    if let Some(fs_script) =
-        build_fs_isolation_inner_script(execution_profile, &runner_shell, &runner_shell_arg, &inner_command)
-    {
+    if let Some(fs_script) = build_fs_isolation_inner_script(
+        execution_profile,
+        &runner_shell,
+        &runner_shell_arg,
+        &inner_command,
+    ) {
         let quoted_fs_script = shell_quote(&fs_script);
         lines.push(format!(
             "ip netns exec \"$NETNS\" unshare -m -- /bin/bash -c {}",
@@ -208,9 +211,7 @@ pub(crate) fn build_fs_isolation_inner_script(
                 for path in &execution_profile.writable_paths {
                     let p = path.display();
                     // Guard with -e so missing optional paths don't abort the script.
-                    inner.push(format!(
-                        "if [ -e {p} ]; then mount --bind {p} {p}; fi"
-                    ));
+                    inner.push(format!("if [ -e {p} ]; then mount --bind {p} {p}; fi"));
                 }
             }
 

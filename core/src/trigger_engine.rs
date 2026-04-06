@@ -149,7 +149,12 @@ impl TriggerEngine {
                                     plugin = plugin.name.as_str(),
                                     "firing CRD cron plugin"
                                 );
-                                if let Err(e) = crate::crd::plugins::execute_cron_plugin(plugin, crd_kind, Some(&self.state.db_path)).await {
+                                let cron_ctx = crate::crd::plugins::PluginExecutionContext {
+                                    runner: &crate::config::RunnerConfig::default(),
+                                    plugin_policy: &self.state.plugin_policy,
+                                    db_path: Some(&self.state.db_path),
+                                };
+                                if let Err(e) = crate::crd::plugins::execute_cron_plugin(plugin, crd_kind, &cron_ctx).await {
                                     warn!(
                                         crd = crd_kind.as_str(),
                                         plugin = plugin.name.as_str(),

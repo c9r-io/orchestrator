@@ -148,6 +148,8 @@ pub fn apply_manifests(
                                     peer_pid: None,
                                     result: "allowed".into(),
                                     policy_mode: Some(policy_mode.clone()),
+                                    sandbox_profile: None,
+                                    policy_verdict: None,
                                 },
                             );
                         }
@@ -165,6 +167,8 @@ pub fn apply_manifests(
                                     peer_pid: None,
                                     result: "allowed".into(),
                                     policy_mode: Some(policy_mode.clone()),
+                                    sandbox_profile: None,
+                                    policy_verdict: None,
                                 },
                             );
                         }
@@ -192,6 +196,8 @@ pub fn apply_manifests(
                                     peer_pid: None,
                                     result: "denied".into(),
                                     policy_mode: Some(policy_mode.clone()),
+                                    sandbox_profile: None,
+                                    policy_verdict: None,
                                 },
                             );
                         }

@@ -3,6 +3,7 @@ use crate::crd::resolve::{find_crd_for_kind, is_builtin_alias, is_builtin_kind, 
 use crate::crd::schema::{validate_json_schema, validate_schema_definition};
 use crate::crd::types::{CelValidationRule, CrdManifest, CustomResourceManifest};
 use crate::resource::validate_resource_name;
+use crate::runner::{ResolvedExecutionProfile, validate_execution_profile_support};
 use anyhow::{Result, anyhow};
 use cel_interpreter::{Context as CelContext, Program, Value as CelValue};
 use orchestrator_config::plugin_policy::{PluginPolicy, PluginPolicyVerdict};
@@ -217,6 +218,23 @@ fn validate_crd_plugins(
                     policy.max_timeout_secs
                 ));
             }
+        }
+
+        // ── Execution profile validation ──────────────────────────────
+        if let Some(ref ep) = plugin.execution_profile {
+            let resolved = ResolvedExecutionProfile::from_config(
+                &plugin.name,
+                ep,
+                std::path::Path::new("/"),
+                &[],
+            );
+            validate_execution_profile_support(&resolved).map_err(|e| {
+                anyhow!(
+                    "plugin '{}' execution profile is not supported on this host: {}",
+                    plugin.name,
+                    e
+                )
+            })?;
         }
     }
 
@@ -625,6 +643,7 @@ mod tests {
             timeout: None,
             schedule: None,
             timezone: None,
+            execution_profile: None,
         }
     }
 

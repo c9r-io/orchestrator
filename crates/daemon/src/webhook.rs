@@ -115,13 +115,18 @@ async fn do_webhook(
         );
         let header_map = extract_headers_map(&headers);
         let body_str = String::from_utf8_lossy(&body);
+        let plugin_ctx = agent_orchestrator::crd::plugins::PluginExecutionContext {
+            runner: &agent_orchestrator::config::RunnerConfig::default(),
+            plugin_policy: &state.inner.plugin_policy,
+            db_path: Some(&state.inner.db_path),
+        };
         for plugin in auth_plugins {
             if let Err(e) = agent_orchestrator::crd::plugins::execute_interceptor(
                 plugin,
                 crd_kind,
                 &header_map,
                 &body_str,
-                Some(&state.inner.db_path),
+                &plugin_ctx,
             )
             .await
             {
@@ -190,12 +195,17 @@ async fn do_webhook(
             plugins,
             agent_orchestrator::crd::plugins::PHASE_WEBHOOK_TRANSFORM,
         );
+        let transform_ctx = agent_orchestrator::crd::plugins::PluginExecutionContext {
+            runner: &agent_orchestrator::config::RunnerConfig::default(),
+            plugin_policy: &state.inner.plugin_policy,
+            db_path: Some(&state.inner.db_path),
+        };
         for plugin in transform_plugins {
             match agent_orchestrator::crd::plugins::execute_transformer(
                 plugin,
                 crd_kind,
                 &payload,
-                Some(&state.inner.db_path),
+                &transform_ctx,
             )
             .await
             {

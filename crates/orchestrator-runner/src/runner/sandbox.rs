@@ -345,7 +345,10 @@ pub(crate) fn classify_sandbox_spawn_error(
     None
 }
 
-pub(crate) fn build_command_for_profile(
+/// Builds a `tokio::process::Command` that runs the given command string under
+/// the sandbox backend selected by the execution profile (Host, macOS Seatbelt,
+/// or Linux Native).
+pub fn build_command_for_profile(
     runner: &RunnerConfig,
     command: &str,
     cwd: &std::path::Path,

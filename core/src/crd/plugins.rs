@@ -7,6 +7,8 @@ use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
 use crate::crd::types::CrdPlugin;
+use orchestrator_config::config::RunnerConfig;
+use orchestrator_config::plugin_policy::{PluginPolicy, PluginPolicyVerdict};
 
 /// Plugin type: interceptor (gates request processing).
 pub const PLUGIN_TYPE_INTERCEPTOR: &str = "interceptor";
@@ -19,6 +21,16 @@ pub const PLUGIN_TYPE_CRON: &str = "cron";
 pub const PHASE_WEBHOOK_AUTHENTICATE: &str = "webhook.authenticate";
 /// Phase: webhook transformation (normalizes payload before trigger matching).
 pub const PHASE_WEBHOOK_TRANSFORM: &str = "webhook.transform";
+
+/// Runtime context for plugin execution, carrying sandbox and policy state.
+pub struct PluginExecutionContext<'a> {
+    /// Runner configuration (shell, shell_arg, policy).
+    pub runner: &'a RunnerConfig,
+    /// Plugin security policy for runtime re-check and env sanitization.
+    pub plugin_policy: &'a PluginPolicy,
+    /// SQLite database path for audit logging.
+    pub db_path: Option<&'a Path>,
+}
 
 /// Execute an interceptor plugin (e.g. custom signature verification).
 ///
@@ -33,15 +45,26 @@ pub async fn execute_interceptor(
     crd_kind: &str,
     headers: &HashMap<String, String>,
     body: &str,
-    db_path: Option<&Path>,
+    ctx: &PluginExecutionContext<'_>,
 ) -> Result<()> {
-    audit_plugin_execution(db_path, "plugin_execute", crd_kind, plugin);
+    // Runtime policy re-check (closes TOCTOU gap between CRD apply and execute)
+    let verdict = check_runtime_policy(ctx.plugin_policy, plugin)?;
+    let (resolved_profile, profile_name) = resolve_plugin_profile(plugin, ctx);
+
+    audit_plugin_execution(
+        ctx.db_path,
+        "plugin_execute",
+        crd_kind,
+        plugin,
+        &profile_name,
+        &verdict,
+    );
     let timeout = Duration::from_secs(plugin.effective_timeout());
 
-    let mut cmd = Command::new("sh");
-    cmd.arg("-c")
-        .arg(&plugin.command)
-        .env("PLUGIN_NAME", &plugin.name)
+    let mut cmd = build_plugin_command(ctx, plugin, &resolved_profile)?;
+
+    // Plugin-specific environment
+    cmd.env("PLUGIN_NAME", &plugin.name)
         .env("PLUGIN_TYPE", PLUGIN_TYPE_INTERCEPTOR)
         .env("CRD_KIND", crd_kind)
         .env("WEBHOOK_BODY", body);
@@ -54,7 +77,7 @@ pub async fn execute_interceptor(
     let output = run_plugin_with_timeout(&mut cmd, None, timeout)
         .await
         .map_err(|e| {
-            audit_plugin_timeout(db_path, crd_kind, plugin, &e);
+            audit_plugin_timeout(ctx.db_path, crd_kind, plugin);
             anyhow!(
                 "interceptor plugin '{}' for CRD '{}' failed: {}",
                 plugin.name,
@@ -88,24 +111,33 @@ pub async fn execute_transformer(
     plugin: &CrdPlugin,
     crd_kind: &str,
     payload: &serde_json::Value,
-    db_path: Option<&Path>,
+    ctx: &PluginExecutionContext<'_>,
 ) -> Result<serde_json::Value> {
-    audit_plugin_execution(db_path, "plugin_execute", crd_kind, plugin);
+    let verdict = check_runtime_policy(ctx.plugin_policy, plugin)?;
+    let (resolved_profile, profile_name) = resolve_plugin_profile(plugin, ctx);
+
+    audit_plugin_execution(
+        ctx.db_path,
+        "plugin_execute",
+        crd_kind,
+        plugin,
+        &profile_name,
+        &verdict,
+    );
     let timeout = Duration::from_secs(plugin.effective_timeout());
     let input = serde_json::to_string(payload)
         .map_err(|e| anyhow!("failed to serialize payload for transformer: {}", e))?;
 
-    let mut cmd = Command::new("sh");
-    cmd.arg("-c")
-        .arg(&plugin.command)
-        .env("PLUGIN_NAME", &plugin.name)
+    let mut cmd = build_plugin_command(ctx, plugin, &resolved_profile)?;
+
+    cmd.env("PLUGIN_NAME", &plugin.name)
         .env("PLUGIN_TYPE", PLUGIN_TYPE_TRANSFORMER)
         .env("CRD_KIND", crd_kind);
 
     let output = run_plugin_with_timeout(&mut cmd, Some(input.as_bytes()), timeout)
         .await
         .map_err(|e| {
-            audit_plugin_timeout(db_path, crd_kind, plugin, &e);
+            audit_plugin_timeout(ctx.db_path, crd_kind, plugin);
             anyhow!(
                 "transformer plugin '{}' for CRD '{}' failed: {}",
                 plugin.name,
@@ -143,22 +175,31 @@ pub async fn execute_transformer(
 pub async fn execute_cron_plugin(
     plugin: &CrdPlugin,
     crd_kind: &str,
-    db_path: Option<&Path>,
+    ctx: &PluginExecutionContext<'_>,
 ) -> Result<()> {
-    audit_plugin_execution(db_path, "plugin_execute", crd_kind, plugin);
+    let verdict = check_runtime_policy(ctx.plugin_policy, plugin)?;
+    let (resolved_profile, profile_name) = resolve_plugin_profile(plugin, ctx);
+
+    audit_plugin_execution(
+        ctx.db_path,
+        "plugin_execute",
+        crd_kind,
+        plugin,
+        &profile_name,
+        &verdict,
+    );
     let timeout = Duration::from_secs(plugin.effective_timeout());
 
-    let mut cmd = Command::new("sh");
-    cmd.arg("-c")
-        .arg(&plugin.command)
-        .env("PLUGIN_NAME", &plugin.name)
+    let mut cmd = build_plugin_command(ctx, plugin, &resolved_profile)?;
+
+    cmd.env("PLUGIN_NAME", &plugin.name)
         .env("PLUGIN_TYPE", PLUGIN_TYPE_CRON)
         .env("CRD_KIND", crd_kind);
 
     let output = run_plugin_with_timeout(&mut cmd, None, timeout)
         .await
         .map_err(|e| {
-            audit_plugin_timeout(db_path, crd_kind, plugin, &e);
+            audit_plugin_timeout(ctx.db_path, crd_kind, plugin);
             anyhow!(
                 "cron plugin '{}' for CRD '{}' failed: {}",
                 plugin.name,
@@ -197,15 +238,93 @@ pub fn cron_plugins(plugins: &[CrdPlugin]) -> Vec<&CrdPlugin> {
         .collect()
 }
 
-// --- audit helper ---
+// --- internal helpers ---
+
+/// Re-check plugin policy at runtime before execution (TOCTOU defense).
+fn check_runtime_policy(policy: &PluginPolicy, plugin: &CrdPlugin) -> Result<PluginPolicyVerdict> {
+    let verdict = policy.evaluate_command(&plugin.command);
+    if verdict.is_denied() {
+        return Err(anyhow!(
+            "plugin '{}' command denied at runtime by plugin policy: {}",
+            plugin.name,
+            verdict.reason().unwrap_or("unknown")
+        ));
+    }
+    if let PluginPolicyVerdict::AuditWarning { ref reason } = verdict {
+        tracing::warn!(
+            plugin = plugin.name.as_str(),
+            reason = reason.as_str(),
+            "plugin policy audit warning at runtime"
+        );
+    }
+    Ok(verdict)
+}
+
+/// Resolve the effective execution profile for a plugin.
+///
+/// Priority: per-plugin override > policy default > Host (no sandbox).
+fn resolve_plugin_profile(
+    plugin: &CrdPlugin,
+    ctx: &PluginExecutionContext<'_>,
+) -> (crate::runner::ResolvedExecutionProfile, String) {
+    let ep_config = plugin
+        .execution_profile
+        .as_ref()
+        .cloned()
+        .unwrap_or_else(|| ctx.plugin_policy.effective_execution_profile());
+
+    let name = format!("plugin:{}", plugin.name);
+    let resolved = crate::runner::ResolvedExecutionProfile::from_config(
+        &name,
+        &ep_config,
+        std::path::Path::new("/"),
+        &[],
+    );
+    (resolved, name)
+}
+
+/// Build the tokio Command for a plugin, applying sandbox wrapping and
+/// environment sanitization.
+fn build_plugin_command(
+    ctx: &PluginExecutionContext<'_>,
+    plugin: &CrdPlugin,
+    profile: &crate::runner::ResolvedExecutionProfile,
+) -> Result<Command> {
+    let cwd = std::path::Path::new("/");
+    let mut cmd =
+        crate::runner::build_command_for_profile(ctx.runner, &plugin.command, cwd, profile)?;
+
+    // Sanitize environment: strip sensitive variable prefixes
+    for (key, _) in std::env::vars() {
+        let should_deny = ctx
+            .plugin_policy
+            .effective_env_deny_prefixes()
+            .iter()
+            .any(|prefix| key.starts_with(prefix));
+        if should_deny {
+            cmd.env_remove(&key);
+        }
+    }
+
+    Ok(cmd)
+}
+
+// --- audit helpers ---
 
 fn audit_plugin_execution(
     db_path: Option<&Path>,
     action: &str,
     crd_kind: &str,
     plugin: &CrdPlugin,
+    sandbox_profile: &str,
+    verdict: &PluginPolicyVerdict,
 ) {
     if let Some(path) = db_path {
+        let verdict_str = match verdict {
+            PluginPolicyVerdict::Allowed => "allowed",
+            PluginPolicyVerdict::Denied { .. } => "denied",
+            PluginPolicyVerdict::AuditWarning { .. } => "audit_warning",
+        };
         let _ = crate::db::insert_plugin_audit(
             path,
             &crate::db::PluginAuditRecord {
@@ -217,14 +336,14 @@ fn audit_plugin_execution(
                 applied_by: None,
                 transport: None,
                 peer_pid: None,
-                result: "allowed".into(),
+                result: verdict_str.into(),
                 policy_mode: None,
+                sandbox_profile: Some(sandbox_profile.into()),
+                policy_verdict: Some(verdict_str.into()),
             },
         );
     }
 }
-
-// --- internal helpers ---
 
 /// Spawn a plugin process with process-group isolation and async timeout.
 ///
@@ -249,6 +368,10 @@ async fn run_plugin_with_timeout(
     }
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
+
+    // Apply resource limits from the execution profile (already built into the
+    // Command via build_command_for_profile, but process-group and kill_on_drop
+    // are plugin-specific additions).
 
     let mut child = cmd.spawn().map_err(|e| anyhow!("spawn failed: {}", e))?;
 
@@ -290,15 +413,7 @@ async fn run_plugin_with_timeout(
     }
 }
 
-fn audit_plugin_timeout(
-    db_path: Option<&Path>,
-    crd_kind: &str,
-    plugin: &CrdPlugin,
-    error: &anyhow::Error,
-) {
-    if !error.to_string().contains("timed out") {
-        return;
-    }
+fn audit_plugin_timeout(db_path: Option<&Path>, crd_kind: &str, plugin: &CrdPlugin) {
     if let Some(path) = db_path {
         let _ = crate::db::insert_plugin_audit(
             path,
@@ -313,6 +428,8 @@ fn audit_plugin_timeout(
                 peer_pid: None,
                 result: format!("killed_after_{}s", plugin.effective_timeout()),
                 policy_mode: None,
+                sandbox_profile: None,
+                policy_verdict: None,
             },
         );
     }
@@ -332,15 +449,31 @@ mod tests {
             timeout: Some(5),
             schedule: None,
             timezone: None,
+            execution_profile: None,
         }
+    }
+
+    fn test_ctx() -> (RunnerConfig, PluginPolicy) {
+        let runner = RunnerConfig::default();
+        let policy = PluginPolicy {
+            mode: orchestrator_config::plugin_policy::PluginPolicyMode::Audit,
+            ..Default::default()
+        };
+        (runner, policy)
     }
 
     #[tokio::test]
     async fn interceptor_accepts_on_exit_zero() {
         let plugin = make_plugin("test", "interceptor", Some("webhook.authenticate"), "true");
         let headers = HashMap::new();
+        let (runner, policy) = test_ctx();
+        let ctx = PluginExecutionContext {
+            runner: &runner,
+            plugin_policy: &policy,
+            db_path: None,
+        };
         assert!(
-            execute_interceptor(&plugin, "Foo", &headers, "{}", None)
+            execute_interceptor(&plugin, "Foo", &headers, "{}", &ctx)
                 .await
                 .is_ok()
         );
@@ -355,7 +488,13 @@ mod tests {
             "exit 1",
         );
         let headers = HashMap::new();
-        let err = execute_interceptor(&plugin, "Foo", &headers, "{}", None)
+        let (runner, policy) = test_ctx();
+        let ctx = PluginExecutionContext {
+            runner: &runner,
+            plugin_policy: &policy,
+            db_path: None,
+        };
+        let err = execute_interceptor(&plugin, "Foo", &headers, "{}", &ctx)
             .await
             .unwrap_err();
         assert!(err.to_string().contains("rejected request"));
@@ -371,8 +510,14 @@ mod tests {
         );
         let mut headers = HashMap::new();
         headers.insert("X-Sig".to_string(), "abc".to_string());
+        let (runner, policy) = test_ctx();
+        let ctx = PluginExecutionContext {
+            runner: &runner,
+            plugin_policy: &policy,
+            db_path: None,
+        };
         assert!(
-            execute_interceptor(&plugin, "Foo", &headers, r#"{"ok":true}"#, None)
+            execute_interceptor(&plugin, "Foo", &headers, r#"{"ok":true}"#, &ctx)
                 .await
                 .is_ok()
         );
@@ -388,7 +533,13 @@ mod tests {
             r#"read input; echo "{\"wrapped\":$input}""#,
         );
         let payload = serde_json::json!({"a": 1});
-        let result = execute_transformer(&plugin, "Foo", &payload, None)
+        let (runner, policy) = test_ctx();
+        let ctx = PluginExecutionContext {
+            runner: &runner,
+            plugin_policy: &policy,
+            db_path: None,
+        };
+        let result = execute_transformer(&plugin, "Foo", &payload, &ctx)
             .await
             .unwrap();
         assert!(result.get("wrapped").is_some());
@@ -403,8 +554,14 @@ mod tests {
             "echo 'not json'",
         );
         let payload = serde_json::json!({});
+        let (runner, policy) = test_ctx();
+        let ctx = PluginExecutionContext {
+            runner: &runner,
+            plugin_policy: &policy,
+            db_path: None,
+        };
         assert!(
-            execute_transformer(&plugin, "Foo", &payload, None)
+            execute_transformer(&plugin, "Foo", &payload, &ctx)
                 .await
                 .is_err()
         );
@@ -413,13 +570,25 @@ mod tests {
     #[tokio::test]
     async fn cron_plugin_success() {
         let plugin = make_plugin("daily", "cron", None, "true");
-        assert!(execute_cron_plugin(&plugin, "Foo", None).await.is_ok());
+        let (runner, policy) = test_ctx();
+        let ctx = PluginExecutionContext {
+            runner: &runner,
+            plugin_policy: &policy,
+            db_path: None,
+        };
+        assert!(execute_cron_plugin(&plugin, "Foo", &ctx).await.is_ok());
     }
 
     #[tokio::test]
     async fn cron_plugin_failure() {
         let plugin = make_plugin("daily", "cron", None, "exit 42");
-        assert!(execute_cron_plugin(&plugin, "Foo", None).await.is_err());
+        let (runner, policy) = test_ctx();
+        let ctx = PluginExecutionContext {
+            runner: &runner,
+            plugin_policy: &policy,
+            db_path: None,
+        };
+        assert!(execute_cron_plugin(&plugin, "Foo", &ctx).await.is_err());
     }
 
     #[test]
@@ -456,9 +625,16 @@ mod tests {
             timeout: Some(1), // 1 second timeout
             schedule: None,
             timezone: None,
+            execution_profile: None,
         };
         let headers = HashMap::new();
-        let err = execute_interceptor(&plugin, "Foo", &headers, "{}", None)
+        let (runner, policy) = test_ctx();
+        let ctx = PluginExecutionContext {
+            runner: &runner,
+            plugin_policy: &policy,
+            db_path: None,
+        };
+        let err = execute_interceptor(&plugin, "Foo", &headers, "{}", &ctx)
             .await
             .unwrap_err();
         assert!(err.to_string().contains("timed out"));
@@ -485,9 +661,16 @@ mod tests {
             timeout: Some(1),
             schedule: None,
             timezone: None,
+            execution_profile: None,
         };
         let headers = HashMap::new();
-        let err = execute_interceptor(&plugin, "Foo", &headers, "{}", None)
+        let (runner, policy) = test_ctx();
+        let ctx = PluginExecutionContext {
+            runner: &runner,
+            plugin_policy: &policy,
+            db_path: None,
+        };
+        let err = execute_interceptor(&plugin, "Foo", &headers, "{}", &ctx)
             .await
             .unwrap_err();
         assert!(err.to_string().contains("timed out"));
@@ -509,5 +692,64 @@ mod tests {
             }
         }
         let _ = std::fs::remove_file(&pid_file);
+    }
+
+    #[tokio::test]
+    async fn runtime_policy_denial_blocks_execution() {
+        let plugin = make_plugin(
+            "blocked",
+            "interceptor",
+            Some("webhook.authenticate"),
+            "scripts/verify.sh",
+        );
+        let headers = HashMap::new();
+        let runner = RunnerConfig::default();
+        // Deny mode blocks all commands at runtime
+        let policy = PluginPolicy {
+            mode: orchestrator_config::plugin_policy::PluginPolicyMode::Deny,
+            ..Default::default()
+        };
+        let ctx = PluginExecutionContext {
+            runner: &runner,
+            plugin_policy: &policy,
+            db_path: None,
+        };
+        let err = execute_interceptor(&plugin, "Foo", &headers, "{}", &ctx)
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("denied at runtime"));
+    }
+
+    #[test]
+    fn profile_resolution_prefers_plugin_override() {
+        use orchestrator_config::config::{ExecutionProfileConfig, ExecutionProfileMode};
+
+        let runner = RunnerConfig::default();
+        let policy = PluginPolicy::default();
+        let ctx = PluginExecutionContext {
+            runner: &runner,
+            plugin_policy: &policy,
+            db_path: None,
+        };
+
+        // Plugin with explicit sandbox profile
+        let mut plugin = make_plugin(
+            "sandboxed",
+            "interceptor",
+            Some("webhook.authenticate"),
+            "true",
+        );
+        plugin.execution_profile = Some(ExecutionProfileConfig {
+            mode: ExecutionProfileMode::Sandbox,
+            ..Default::default()
+        });
+
+        let (resolved, _name) = resolve_plugin_profile(&plugin, &ctx);
+        assert_eq!(resolved.mode, ExecutionProfileMode::Sandbox);
+
+        // Plugin without override falls back to policy default (Host)
+        let plain = make_plugin("plain", "interceptor", Some("webhook.authenticate"), "true");
+        let (resolved, _name) = resolve_plugin_profile(&plain, &ctx);
+        assert_eq!(resolved.mode, ExecutionProfileMode::Host);
     }
 }

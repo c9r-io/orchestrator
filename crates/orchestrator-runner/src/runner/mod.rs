@@ -12,8 +12,10 @@ mod spawn;
 pub use policy::{DaemonPidGuardBlocked, enforce_runner_policy};
 pub use profile::ResolvedExecutionProfile;
 pub use redact::redact_text;
+#[cfg(unix)]
+pub use resource_limits::apply_unix_resource_limits_to_command;
 pub use sandbox::{
-    SandboxBackendError, SandboxResourceKind, sandbox_backend_label,
+    SandboxBackendError, SandboxResourceKind, build_command_for_profile, sandbox_backend_label,
     sandbox_backend_preflight_issues, validate_execution_profile_support,
 };
 pub use spawn::{

@@ -6,6 +6,7 @@
 //! commands are rejected until the user explicitly configures permitted
 //! command prefixes.
 
+use crate::config::ExecutionProfileConfig;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -62,6 +63,18 @@ pub struct PluginPolicy {
     /// subject to the same command policy.  Default: true.
     #[serde(default = "default_true")]
     pub enforce_on_hooks: bool,
+
+    /// Default execution profile applied to all plugins unless overridden
+    /// per-plugin.  When absent, plugins run with Host mode (no sandbox) for
+    /// backward compatibility.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_profile: Option<ExecutionProfileConfig>,
+
+    /// Environment variable prefixes stripped before plugin execution.
+    /// When empty, a set of built-in prefixes is used (see
+    /// [`PluginPolicy::effective_env_deny_prefixes`]).
+    #[serde(default)]
+    pub env_deny_prefixes: Vec<String>,
 }
 
 fn default_max_timeout() -> u64 {
@@ -70,6 +83,21 @@ fn default_max_timeout() -> u64 {
 fn default_true() -> bool {
     true
 }
+
+/// Built-in environment variable prefixes stripped before plugin execution
+/// unless the user provides an explicit `env_deny_prefixes` list.
+const BUILTIN_ENV_DENY_PREFIXES: &[&str] = &[
+    "AWS_",
+    "SSH_",
+    "GCP_",
+    "GCLOUD_",
+    "AZURE_",
+    "KUBECONFIG",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "GITHUB_TOKEN",
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+];
 
 /// Built-in denied patterns — always active unless the user provides an
 /// explicit `denied_patterns` list.
@@ -97,6 +125,8 @@ impl Default for PluginPolicy {
             denied_patterns: Vec::new(),
             max_timeout_secs: default_max_timeout(),
             enforce_on_hooks: true,
+            execution_profile: None,
+            env_deny_prefixes: Vec::new(),
         }
     }
 }
@@ -160,6 +190,28 @@ impl PluginPolicy {
             return PluginPolicyVerdict::Allowed;
         }
         self.evaluate_command(command)
+    }
+
+    /// Returns the effective execution profile for plugins.
+    ///
+    /// When the policy specifies an explicit profile it is returned; otherwise
+    /// the default Host-mode profile is used, preserving backward compatibility.
+    pub fn effective_execution_profile(&self) -> ExecutionProfileConfig {
+        self.execution_profile
+            .clone()
+            .unwrap_or_else(ExecutionProfileConfig::default)
+    }
+
+    /// Returns the effective environment-variable deny prefixes.
+    ///
+    /// When the user supplies an explicit list it takes precedence; otherwise
+    /// the built-in set is used.
+    pub fn effective_env_deny_prefixes(&self) -> Vec<&str> {
+        if self.env_deny_prefixes.is_empty() {
+            BUILTIN_ENV_DENY_PREFIXES.to_vec()
+        } else {
+            self.env_deny_prefixes.iter().map(|s| s.as_str()).collect()
+        }
     }
 }
 

@@ -4,7 +4,7 @@ self_referential_safe: true
 
 # QA: Plugin Policy Governance (FR-087-SEC)
 
-验证 CRD 插件策略治理系统：命令白名单、拒绝模式、黑名单、超时上限、Hook 策略、审计追踪、RBAC 提权。
+Verifies CRD plugin policy governance: command allowlist, deny mode, denied patterns, timeout cap, hook enforcement, execution profile defaults, env sanitization config, audit trail with sandbox columns, RBAC elevation.
 
 ## Scenario 1: Default policy (Allowlist) blocks all plugin commands
 
@@ -18,6 +18,7 @@ self_referential_safe: true
 **Expected:**
 - Step 2: Rejected with error containing "does not match any allowed prefix"
 - Step 3: Accepted (CRDs without plugins are unaffected by plugin policy)
+- Default policy has `execution_profile: None` and `env_deny_prefixes: []` (uses builtin defaults)
 
 **Verification:**
 ```bash
@@ -70,7 +71,7 @@ cargo test -p orchestrator-config -- plugin_policy::tests::audit_mode_allows_cle
 cargo test -p orchestrator-config -- plugin_policy::tests::audit_mode_warns_but_allows
 ```
 
-## Scenario 4: Timeout cap and hook enforcement
+## Scenario 4: Timeout cap, hook enforcement, and policy config deserialization
 
 **Preconditions:** PluginPolicy with `max_timeout_secs: 10`, `enforce_on_hooks: true`.
 
@@ -79,12 +80,20 @@ cargo test -p orchestrator-config -- plugin_policy::tests::audit_mode_warns_but_
 2. Apply CRD with plugin `timeout: 5` → accepted
 3. Apply CRD with `on_create` hook and `mode: deny`, `enforce_on_hooks: true` → rejected
 4. Apply CRD with `on_create` hook and `mode: deny`, `enforce_on_hooks: false` → accepted (hooks bypass)
+5. Load `plugin-policy.yaml` with new fields:
+   ```yaml
+   mode: allowlist
+   allowed_command_prefixes: ["scripts/"]
+   execution_profile:
+     mode: sandbox
+     network_mode: deny
+   env_deny_prefixes: ["AWS_", "CUSTOM_SECRET_"]
+   ```
+   → Deserialization succeeds; `effective_execution_profile()` returns sandbox mode; `effective_env_deny_prefixes()` returns custom list
 
 **Expected:**
-- Step 1: Rejected — "timeout 60s exceeds policy maximum 10s"
-- Step 2: Accepted
-- Step 3: Rejected — "hook 'on_create' command denied"
-- Step 4: Accepted
+- Steps 1-4: Timeout and hook enforcement work as before
+- Step 5: New fields deserialize correctly; `execution_profile` and `env_deny_prefixes` are accessible via helpers
 
 **Verification:**
 ```bash
@@ -92,6 +101,7 @@ cargo test -p agent-orchestrator -- crd::validate::tests::policy_timeout_cap_rej
 cargo test -p agent-orchestrator -- crd::validate::tests::policy_hook_enforcement_rejects_hook_commands
 cargo test -p agent-orchestrator -- crd::validate::tests::policy_hook_enforcement_skips_when_disabled
 cargo test -p orchestrator-config -- plugin_policy::tests::hook_command_respects_enforce_flag
+cargo test -p orchestrator-config -- plugin_policy::tests::load_policy_from_file
 ```
 
 ## Scenario 5: RBAC elevation — CRDs with plugins require Admin role
@@ -109,23 +119,37 @@ cargo test -p orchestrator-config -- plugin_policy::tests::hook_command_respects
 - Step 3: Same as step 2 — hooks are also executable commands
 
 **Verification:**
-- Unit: `ApplyPluginCrd` maps to `Role::Admin` in `required_role_for_rpc()`
-- Manual: Start daemon with `max_role: operator` UDS policy, apply CRD with plugins via CLI → expect permission denied
 ```bash
 cargo test -p orchestratord -- control_plane::tests::required_role_for_rpc
 ```
+
+---
 
 ## Audit Trail Verification
 
 **Cross-scenario:** After any CRD apply (accepted or rejected), verify `plugin_audit` table:
 ```sql
-SELECT * FROM plugin_audit ORDER BY created_at DESC LIMIT 10;
+SELECT action, crd_kind, plugin_name, command, result, policy_mode,
+       sandbox_profile, policy_verdict
+FROM plugin_audit ORDER BY created_at DESC LIMIT 10;
 ```
 
-**Expected columns:** `action=crd_apply`, `crd_kind`, `plugin_name`, `command`, `result=allowed|denied`, `policy_mode`.
+**Expected columns (post-migration v25):** `action`, `crd_kind`, `plugin_name`, `command`, `result`, `policy_mode`, `sandbox_profile` (nullable), `policy_verdict` (nullable). Apply-time records have `sandbox_profile=NULL`, `policy_verdict=NULL`; runtime execution records populate both.
 
 **Migration verification:**
 ```bash
 cargo test -p agent-orchestrator -- migration::tests::all_migrations_count_matches_expected
 ```
-Expected: 22 migrations (m0022_plugin_audit is the latest).
+Expected: 25 migrations (m0025_plugin_audit_sandbox_columns is the latest).
+
+---
+
+## Checklist
+
+| # | Scenario | Status | Test Date | Tester | Notes |
+|---|----------|--------|-----------|--------|-------|
+| 1 | Default policy blocks all commands | ☐ | | | |
+| 2 | Allowlist permits matching prefixes | ☐ | | | |
+| 3 | Deny/Audit modes | ☐ | | | |
+| 4 | Timeout cap, hooks, config deserialization | ☐ | | | |
+| 5 | RBAC elevation | ☐ | | | |

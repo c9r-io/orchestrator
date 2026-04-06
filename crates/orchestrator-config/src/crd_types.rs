@@ -1,4 +1,5 @@
 use crate::cli_types::ResourceMetadata;
+use crate::config::ExecutionProfileConfig;
 use crate::crd_scope::CrdScope;
 use serde::{Deserialize, Serialize};
 
@@ -100,6 +101,10 @@ pub struct CrdPlugin {
     /// IANA timezone for cron scheduling.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timezone: Option<String>,
+    /// Optional per-plugin execution profile override.  When set, takes
+    /// precedence over the policy-level default execution profile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_profile: Option<ExecutionProfileConfig>,
 }
 
 impl CrdPlugin {

@@ -107,6 +107,10 @@ pub struct PluginAuditRecord {
     pub result: String,
     /// Active policy mode: `deny`, `allowlist`, or `audit`.
     pub policy_mode: Option<String>,
+    /// Name of the sandbox execution profile applied at runtime.
+    pub sandbox_profile: Option<String>,
+    /// Runtime policy verdict: `allowed`, `denied`, or `audit_warning`.
+    pub policy_verdict: Option<String>,
 }
 
 /// Inserts one plugin-audit record into persistence.
@@ -115,8 +119,9 @@ pub fn insert_plugin_audit(db_path: &Path, record: &PluginAuditRecord) -> Result
     conn.execute(
         "INSERT INTO plugin_audit (
             created_at, action, crd_kind, plugin_name, plugin_type,
-            command, applied_by, transport, peer_pid, result, policy_mode
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            command, applied_by, transport, peer_pid, result, policy_mode,
+            sandbox_profile, policy_verdict
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
         params![
             crate::config_load::now_ts(),
             record.action,
@@ -129,6 +134,8 @@ pub fn insert_plugin_audit(db_path: &Path, record: &PluginAuditRecord) -> Result
             record.peer_pid,
             record.result,
             record.policy_mode,
+            record.sandbox_profile,
+            record.policy_verdict,
         ],
     )?;
     Ok(())

@@ -7,8 +7,11 @@ use anyhow::{Result, anyhow};
 #[cfg(unix)]
 use std::io;
 
+/// Applies Unix resource limits (memory, CPU, processes, file descriptors) to a
+/// command based on the resolved execution profile.  Uses `setrlimit` in a
+/// `pre_exec` hook.
 #[cfg(unix)]
-pub(crate) fn apply_unix_resource_limits_to_command(
+pub fn apply_unix_resource_limits_to_command(
     cmd: &mut tokio::process::Command,
     execution_profile: &ResolvedExecutionProfile,
 ) -> Result<()> {

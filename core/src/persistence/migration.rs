@@ -218,6 +218,11 @@ pub fn registered_migrations() -> Vec<Migration> {
             name: "m0024_control_plane_audit_peer_exe",
             up: crate::persistence::migration_steps::m0024_control_plane_audit_peer_exe,
         },
+        Migration {
+            version: 25,
+            name: "m0025_plugin_audit_sandbox_columns",
+            up: crate::persistence::migration_steps::m0025_plugin_audit_sandbox_columns,
+        },
     ]
 }
 

@@ -834,3 +834,19 @@ pub(crate) fn m0024_control_plane_audit_peer_exe(conn: &Connection) -> Result<()
     )?;
     Ok(())
 }
+
+pub(crate) fn m0025_plugin_audit_sandbox_columns(conn: &Connection) -> Result<()> {
+    ensure_column_exists(
+        conn,
+        "plugin_audit",
+        "sandbox_profile",
+        "ALTER TABLE plugin_audit ADD COLUMN sandbox_profile TEXT",
+    )?;
+    ensure_column_exists(
+        conn,
+        "plugin_audit",
+        "policy_verdict",
+        "ALTER TABLE plugin_audit ADD COLUMN policy_verdict TEXT",
+    )?;
+    Ok(())
+}
