@@ -285,16 +285,18 @@ fn workflow_step_config_to_spec(step: &WorkflowStepConfig) -> WorkflowStepSpec {
             .iter()
             .map(workflow_step_config_to_spec)
             .collect(),
-        scope: step.scope.and_then(|s| {
-            let default = CONVENTIONS.default_scope(&step.id);
-            if s != default {
-                Some(match s {
-                    StepScope::Task => "task".to_string(),
-                    StepScope::Item => "item".to_string(),
-                })
-            } else {
-                None
-            }
+        // FR-094: serialize every explicit scope unconditionally.  The
+        // previous implementation dropped the override when it equalled the
+        // id-based default scope, but `default_scope` returns Task for
+        // unknown ids — so a custom step id with explicit `scope: task`
+        // would lose its override and, on the next reload, get rerouted
+        // through the capability fallback in `resolved_scope`.  spec ↔
+        // config must be a structural identity for scope; storage savings
+        // from omitting "default" values are negligible and were causing
+        // semantic drift.
+        scope: step.scope.map(|s| match s {
+            StepScope::Task => "task".to_string(),
+            StepScope::Item => "item".to_string(),
         }),
         max_parallel: step.max_parallel,
         stagger_delay_ms: step.stagger_delay_ms,

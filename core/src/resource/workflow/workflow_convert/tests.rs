@@ -5,8 +5,9 @@ use crate::cli_types::{
 };
 use crate::config::{
     CheckpointStrategy, CostPreference, ExecutionMode, LoopMode, SafetyConfig, StepBehavior,
-    StepHookEngine, StepPrehookConfig, StepScope, WorkflowConfig, WorkflowFinalizeConfig,
-    WorkflowFinalizeRule, WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig,
+    StepHookEngine, StepPrehookConfig, StepScope, TaskExecutionStep, WorkflowConfig,
+    WorkflowFinalizeConfig, WorkflowFinalizeRule, WorkflowLoopConfig, WorkflowLoopGuardConfig,
+    WorkflowStepConfig,
 };
 
 // ── parse_cost_preference tests ─────────────────────────────────
@@ -1298,5 +1299,115 @@ fn workflow_item_isolation_round_trip_through_spec_conversion() {
     assert_eq!(
         roundtrip_isolation.branch_prefix.as_deref(),
         Some("evo-item")
+    );
+}
+
+/// FR-094 regression: an explicit `scope: task` on a custom-id step (e.g.
+/// `id: benchmark_eval, type: qa_testing, scope: task`) must survive a full
+/// spec→config→spec→config round trip and must still resolve to `Task` at
+/// the end.
+///
+/// Before the fix, the spec→config conversion preserved the explicit scope,
+/// but the config→spec conversion dropped it (because Task equalled the
+/// id-based default for the unknown id `benchmark_eval`).  After dropping,
+/// the next deserialize left `scope = None`, and `resolved_scope` then
+/// walked the capability fallback in execution.rs, returning Item.  That
+/// silently flipped the step from Task to Item and triggered
+/// `task_ops::resolve_task_targets` to materialize one task item per
+/// `docs/qa/**.md` file (180 in our repo at the time of v3 retest).
+#[test]
+fn workflow_explicit_scope_survives_round_trip_for_custom_step_id() {
+    let original = WorkflowStepSpec {
+        id: "benchmark_eval".to_string(),
+        // Custom id whose `type` matches an Item-scoped convention.
+        step_type: "qa_testing".to_string(),
+        required_capability: None,
+        template: Some("benchmark_eval".to_string()),
+        execution_profile: None,
+        builtin: None,
+        enabled: true,
+        repeatable: false,
+        is_guard: false,
+        cost_preference: None,
+        prehook: None,
+        tty: false,
+        command: None,
+        chain_steps: vec![],
+        // Author explicitly forces task scope.
+        scope: Some("task".to_string()),
+        max_parallel: None,
+        stagger_delay_ms: None,
+        timeout_secs: None,
+        stall_timeout_secs: None,
+        behavior: Default::default(),
+        item_select_config: None,
+        store_inputs: vec![],
+        store_outputs: vec![],
+        step_vars: None,
+        extra: Default::default(),
+    };
+
+    // First parse: spec → config.  Explicit scope reaches the config layer.
+    let config_step =
+        workflow_step_spec_to_config(&original).expect("spec→config should succeed");
+    assert_eq!(
+        config_step.scope,
+        Some(StepScope::Task),
+        "explicit scope: task should reach the config layer"
+    );
+
+    // Round trip: config → spec.  This is what happens every time the
+    // active config is reloaded from storage (e.g. after `apply` writes a
+    // sibling resource).
+    let respec = workflow_config_to_spec(&WorkflowConfig {
+        steps: vec![config_step.clone()],
+        ..Default::default()
+    });
+    let respec_step = &respec.steps[0];
+    assert_eq!(
+        respec_step.scope.as_deref(),
+        Some("task"),
+        "round trip must preserve explicit scope: task — dropping it is the \
+         root cause of the 180-item QA-directory explosion (FR-094)"
+    );
+
+    // Reparse the round-tripped spec back into config and build a runtime
+    // TaskExecutionStep, then assert resolved_scope still returns Task.
+    // This is the strongest end-to-end assertion that the bug is closed.
+    let reconfig =
+        workflow_step_spec_to_config(respec_step).expect("respec→config should succeed");
+    let reconfig_exec = TaskExecutionStep {
+        id: reconfig.id.clone(),
+        required_capability: reconfig.required_capability.clone(),
+        template: reconfig.template.clone(),
+        execution_profile: reconfig.execution_profile.clone(),
+        builtin: reconfig.builtin.clone(),
+        enabled: reconfig.enabled,
+        repeatable: reconfig.repeatable,
+        is_guard: reconfig.is_guard,
+        cost_preference: reconfig.cost_preference,
+        prehook: reconfig.prehook.clone(),
+        tty: reconfig.tty,
+        outputs: vec![],
+        pipe_to: None,
+        command: reconfig.command.clone(),
+        chain_steps: vec![],
+        scope: reconfig.scope,
+        behavior: reconfig.behavior.clone(),
+        max_parallel: reconfig.max_parallel,
+        stagger_delay_ms: reconfig.stagger_delay_ms,
+        timeout_secs: reconfig.timeout_secs,
+        stall_timeout_secs: reconfig.stall_timeout_secs,
+        item_select_config: reconfig.item_select_config.clone(),
+        store_inputs: vec![],
+        store_outputs: vec![],
+        step_vars: None,
+    };
+
+    assert_eq!(
+        reconfig_exec.resolved_scope(),
+        StepScope::Task,
+        "after a full config↔spec round trip, the benchmark_eval step's \
+         resolved scope must remain Task"
     );
 }
