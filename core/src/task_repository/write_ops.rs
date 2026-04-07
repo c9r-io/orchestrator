@@ -24,6 +24,10 @@ pub(crate) fn extract_event_promoted_fields(
     (step, step_scope, cycle)
 }
 
+/// Inserts a single workflow event row into the `events` table.
+///
+/// Step / step_scope / cycle promoted columns are extracted from the
+/// payload JSON and stored alongside the row.
 pub fn insert_event(conn: &Connection, event: &DbEventRecord) -> Result<()> {
     let (step, step_scope, cycle) = extract_event_promoted_fields(&event.payload_json);
     conn.execute(

@@ -23,7 +23,7 @@ pub use types::{
     DbEventRecord, NewTaskGraphRun, NewTaskGraphSnapshot, TaskLogRunRow, TaskRepositoryConn,
     TaskRepositorySource, TaskRuntimeRow,
 };
-pub use write_ops::{CompletedRunRecord, InflightRunRecord};
+pub use write_ops::{CompletedRunRecord, InflightRunRecord, insert_event as insert_event_row};
 
 use crate::async_database::{AsyncDatabase, flatten_err};
 use crate::dto::{CommandRunDto, EventDto, TaskGraphDebugBundle, TaskItemDto};

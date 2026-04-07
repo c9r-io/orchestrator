@@ -3,12 +3,20 @@ use crate::config_load::build_execution_plan_for_project;
 use crate::config_load::{now_ts, read_active_config};
 use crate::db::open_conn;
 use crate::dto::{CreateRunStepPayload, CreateTaskPayload, TaskSummary, UNASSIGNED_QA_FILE_PATH};
-use crate::task_repository::{SqliteTaskRepository, TaskQueryRepository};
+use crate::task_repository::{
+    DbEventRecord, SqliteTaskRepository, TaskQueryRepository, insert_event_row,
+};
 use crate::ticket::{collect_target_files, collect_target_files_from_active_tickets};
 use anyhow::{Context, Result};
 use chrono::Utc;
 use rusqlite::params;
 use uuid::Uuid;
+
+/// Threshold above which a `QaDirectoryScan` materialization is upgraded
+/// from an `info`-level diagnostic event to a `warning` event.  Picked to
+/// be larger than realistic full-qa runs but small enough to surface the
+/// FR-094 180-item explosion immediately.
+pub(crate) const QA_DIRECTORY_SCAN_OVERSIZE_THRESHOLD: usize = 50;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TargetSeedStrategy {
@@ -22,6 +30,37 @@ enum TargetSeedStrategy {
 struct ResolvedTaskTargets {
     persisted_target_files: Vec<String>,
     task_item_paths: Vec<String>,
+    /// FR-094 observability: when populated, the task creator emits a
+    /// diagnostic event after committing the task so future debugging can
+    /// answer "which step pushed this task into a full QA-directory scan?".
+    qa_directory_scan_diagnostic: Option<QaDirectoryScanDiagnostic>,
+}
+
+/// FR-094 diagnostic payload describing a `QaDirectoryScan` materialization.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct QaDirectoryScanDiagnostic {
+    /// id of the first enabled step whose `resolved_scope() == Item` forced
+    /// the planner to choose `QaDirectoryScan`.
+    trigger_step_id: String,
+    /// `required_capability` of the trigger step (if any), useful for
+    /// distinguishing custom-id wrappers from known SDLC step ids.
+    trigger_capability: Option<String>,
+    /// Number of task items the scan is about to materialize.
+    materialized_count: usize,
+    /// Workspace `qa_targets` that were scanned.
+    qa_targets: Vec<String>,
+}
+
+/// Returns the id (and capability) of the first enabled step that forces
+/// `requires_item_targets` to true.  Used by FR-094 diagnostics so the
+/// emitted event can name the step that triggered a full directory scan.
+fn first_item_scoped_step(
+    plan: &crate::config::TaskExecutionPlan,
+) -> Option<(String, Option<String>)> {
+    plan.steps
+        .iter()
+        .find(|step| step.enabled && step.resolved_scope() == crate::config::StepScope::Item)
+        .map(|step| (step.id.clone(), step.required_capability.clone()))
 }
 
 fn execution_plan_requires_item_targets(plan: &crate::config::TaskExecutionPlan) -> bool {
@@ -65,6 +104,7 @@ fn resolve_task_targets(
                 Ok(ResolvedTaskTargets {
                     persisted_target_files: validated.clone(),
                     task_item_paths: validated,
+                    qa_directory_scan_diagnostic: None,
                 })
             } else {
                 match validated.len() {
@@ -72,6 +112,7 @@ fn resolve_task_targets(
                     1 => Ok(ResolvedTaskTargets {
                         persisted_target_files: validated.clone(),
                         task_item_paths: validated,
+                        qa_directory_scan_diagnostic: None,
                     }),
                     _ => anyhow::bail!("task-scoped workflow accepts at most one --target-file"),
                 }
@@ -88,6 +129,7 @@ fn resolve_task_targets(
             Ok(ResolvedTaskTargets {
                 persisted_target_files: targets.clone(),
                 task_item_paths: targets,
+                qa_directory_scan_diagnostic: None,
             })
         }
         TargetSeedStrategy::QaDirectoryScan => {
@@ -95,16 +137,80 @@ fn resolve_task_targets(
             if targets.is_empty() {
                 anyhow::bail!("No QA/Security markdown files found for item-scoped workflow");
             }
+            // FR-094: capture which step forced the strategy to
+            // QaDirectoryScan so the task creator can emit a diagnostic
+            // event the first thing after committing the task.
+            let (trigger_step_id, trigger_capability) = first_item_scoped_step(plan)
+                .unwrap_or_else(|| ("<unknown>".to_string(), None));
+            let diagnostic = QaDirectoryScanDiagnostic {
+                trigger_step_id,
+                trigger_capability,
+                materialized_count: targets.len(),
+                qa_targets: workspace.qa_targets.clone(),
+            };
             Ok(ResolvedTaskTargets {
                 persisted_target_files: targets.clone(),
                 task_item_paths: targets,
+                qa_directory_scan_diagnostic: Some(diagnostic),
             })
         }
         TargetSeedStrategy::SyntheticAnchor => Ok(ResolvedTaskTargets {
             persisted_target_files: Vec::new(),
             task_item_paths: vec![UNASSIGNED_QA_FILE_PATH.to_string()],
+            qa_directory_scan_diagnostic: None,
         }),
     }
+}
+
+/// FR-094: persists `qa_directory_scan_triggered` (and, when oversize,
+/// `qa_directory_scan_oversize`) events for a freshly committed task.
+///
+/// `conn` should be the same `Connection` used to insert the task and its
+/// items.  Both event rows are stand-alone INSERTs (no transaction needed
+/// on top of the caller's commit) because they are observability-only —
+/// losing them due to an unexpected error would not corrupt task state.
+fn emit_qa_directory_scan_events(
+    conn: &rusqlite::Connection,
+    task_id: &str,
+    diagnostic: &QaDirectoryScanDiagnostic,
+) -> Result<()> {
+    let payload = serde_json::json!({
+        "trigger_step_id": diagnostic.trigger_step_id,
+        "trigger_capability": diagnostic.trigger_capability,
+        "materialized_count": diagnostic.materialized_count,
+        "qa_targets": diagnostic.qa_targets,
+        "level": "info",
+    });
+    insert_event_row(
+        conn,
+        &DbEventRecord {
+            task_id: task_id.to_string(),
+            task_item_id: None,
+            event_type: "qa_directory_scan_triggered".to_string(),
+            payload_json: serde_json::to_string(&payload)?,
+        },
+    )?;
+
+    if diagnostic.materialized_count > QA_DIRECTORY_SCAN_OVERSIZE_THRESHOLD {
+        let oversize_payload = serde_json::json!({
+            "trigger_step_id": diagnostic.trigger_step_id,
+            "trigger_capability": diagnostic.trigger_capability,
+            "materialized_count": diagnostic.materialized_count,
+            "threshold": QA_DIRECTORY_SCAN_OVERSIZE_THRESHOLD,
+            "qa_targets": diagnostic.qa_targets,
+            "level": "warning",
+        });
+        insert_event_row(
+            conn,
+            &DbEventRecord {
+                task_id: task_id.to_string(),
+                task_item_id: None,
+                event_type: "qa_directory_scan_oversize".to_string(),
+                payload_json: serde_json::to_string(&oversize_payload)?,
+            },
+        )?;
+    }
+    Ok(())
 }
 
 /// Creates a task, its execution plan snapshot, and initial task items.
@@ -241,6 +347,11 @@ pub fn create_task_impl(
             "INSERT INTO task_items (id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 'pending', '[]', '[]', 0, 0, '', NULL, NULL, ?5, ?5)",
             params![item_id, task_id, (idx as i64) + 1, path, created_at],
         )?;
+    }
+    // FR-094 observability: emit diagnostic events inside the same
+    // transaction so the task and its diagnostics commit atomically.
+    if let Some(ref diagnostic) = resolved_targets.qa_directory_scan_diagnostic {
+        emit_qa_directory_scan_events(&tx, &task_id, diagnostic)?;
     }
     tx.commit()?;
 
@@ -404,6 +515,10 @@ pub fn create_run_step_task(
             "INSERT INTO task_items (id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 'pending', '[]', '[]', 0, 0, '', NULL, NULL, ?5, ?5)",
             params![item_id, task_id, (idx as i64) + 1, path, created_at],
         )?;
+    }
+    // FR-094 observability: same diagnostic surface as create_task_impl.
+    if let Some(ref diagnostic) = resolved_targets.qa_directory_scan_diagnostic {
+        emit_qa_directory_scan_events(&tx, &task_id, diagnostic)?;
     }
     tx.commit()?;
 
@@ -1198,5 +1313,176 @@ mod tests {
         let state = ts.build();
         let result = reset_task_item_for_retry(&state, "nonexistent-item-id");
         assert!(result.is_err(), "should fail for nonexistent item");
+    }
+
+    // ── FR-094 regression coverage ──────────────────────────────────────
+
+    /// Builds a benchmark-eval-shaped step exactly as the
+    /// `fixtures/benchmarks/workflow-benchmark-bootstrap.yaml` workflow
+    /// declares it after `workflow_step_spec_to_config`: a custom id
+    /// (`benchmark_eval`) wrapping a known Item-scoped capability with an
+    /// explicit `scope: task` override.
+    ///
+    /// We use `qa` here instead of the production workflow's `qa_testing`
+    /// capability solely because `TestState`'s default `echo` agent
+    /// already declares `qa`.  Both `qa` and `qa_testing` have
+    /// `scope: item` in `sdlc_conventions.yaml`, so the FR-094 bug
+    /// surface is structurally identical: a custom-id step whose
+    /// capability has Item default scope.
+    fn benchmark_eval_step() -> WorkflowStepConfig {
+        let mut step = make_step("benchmark_eval", None, Some("qa"));
+        step.scope = Some(crate::config::StepScope::Task);
+        step
+    }
+
+    /// Wraps `benchmark_eval_step` in a single-step workflow that mirrors
+    /// the benchmark workflow's task-scoped, single-cycle shape.
+    fn benchmark_workflow() -> WorkflowConfig {
+        make_workflow(vec![benchmark_eval_step()])
+    }
+
+    /// FR-094 dry-run equivalent of "rerun the D1 benchmark":
+    /// directly calls `create_task_impl` with the benchmark workflow and
+    /// asserts that exactly **one** task item is materialized (the
+    /// `__UNASSIGNED__` synthetic anchor), instead of the 180 items
+    /// observed in the v3 retest.
+    #[test]
+    fn create_task_with_explicit_task_scope_qa_testing_step_does_not_explode() {
+        let mut ts = TestState::new().with_workflow("benchmark_eval_only", benchmark_workflow());
+        let state = ts.build();
+
+        let payload = CreateTaskPayload {
+            name: Some("FR-094 dry-run".to_string()),
+            goal: Some("verify benchmark_eval task scope is honored".to_string()),
+            project_id: None,
+            workspace_id: None,
+            workflow_id: Some("benchmark_eval_only".to_string()),
+            target_files: None,
+            parent_task_id: None,
+            spawn_reason: None,
+            step_filter: None,
+            initial_vars: None,
+        };
+        let result = create_task_impl(&state, payload).expect("create benchmark eval task");
+        assert_eq!(
+            result.total_items, 1,
+            "explicit scope: task on benchmark_eval must yield exactly one synthetic-anchor item, \
+             not a full QA-directory scan"
+        );
+
+        let (target_files, item_paths) = load_task_storage(&state, &result.id);
+        assert!(
+            target_files.is_empty(),
+            "task-scoped synthetic anchor should not persist target files"
+        );
+        assert_eq!(item_paths, vec![UNASSIGNED_QA_FILE_PATH.to_string()]);
+    }
+
+    /// FR-094 round-trip e2e: feed the benchmark workflow through a full
+    /// `workflow_config_to_spec` → `workflow_spec_to_config` cycle (the
+    /// path that fires every time the daemon reloads the active config),
+    /// and assert that creating a task on the round-tripped workflow still
+    /// yields exactly one item.  Before FR-094 this test would have
+    /// produced one item per `docs/qa/**.md` file because the explicit
+    /// `scope: task` was dropped and `resolved_scope` walked the
+    /// capability fallback to Item.
+    #[test]
+    fn create_task_after_workflow_config_round_trip_does_not_explode() {
+        use crate::resource::workflow::{workflow_config_to_spec, workflow_spec_to_config};
+
+        // Round-trip the benchmark workflow through the storage shape.
+        let original = benchmark_workflow();
+        let respec = workflow_config_to_spec(&original);
+        let reconfig = workflow_spec_to_config(&respec).expect("respec → config");
+
+        let mut ts = TestState::new().with_workflow("benchmark_eval_roundtripped", reconfig);
+        let state = ts.build();
+
+        let payload = CreateTaskPayload {
+            name: Some("FR-094 round-trip dry-run".to_string()),
+            goal: None,
+            project_id: None,
+            workspace_id: None,
+            workflow_id: Some("benchmark_eval_roundtripped".to_string()),
+            target_files: None,
+            parent_task_id: None,
+            spawn_reason: None,
+            step_filter: None,
+            initial_vars: None,
+        };
+        let result =
+            create_task_impl(&state, payload).expect("create round-tripped benchmark task");
+        assert_eq!(
+            result.total_items, 1,
+            "after a config↔spec round trip the benchmark_eval step must still resolve as Task"
+        );
+    }
+
+    /// FR-094 observability: when a task legitimately triggers
+    /// `QaDirectoryScan` (e.g. a real `qa` step), the creator must emit a
+    /// `qa_directory_scan_triggered` event whose payload identifies the
+    /// trigger step id and the materialized count.
+    #[test]
+    fn create_task_emits_qa_directory_scan_event_when_triggered() {
+        let mut ts = TestState::new()
+            .with_workflow("qa_only", make_workflow(vec![make_step("qa", None, Some("qa"))]));
+        let state = ts.build();
+
+        // Create a single QA file so the scan has one entry to materialize.
+        let active = crate::config_load::read_active_config(&state).expect("read active config");
+        let ws = active
+            .workspaces
+            .get("default")
+            .expect("default workspace should exist");
+        let qa_dir = &ws.qa_targets[0];
+        let qa_path = ws.root_path.join(qa_dir);
+        std::fs::create_dir_all(&qa_path).ok();
+        std::fs::write(qa_path.join("scenario.md"), "# scenario\n").expect("write qa file");
+        drop(active);
+
+        let payload = CreateTaskPayload {
+            name: Some("FR-094 diagnostic emission".to_string()),
+            goal: None,
+            project_id: None,
+            workspace_id: None,
+            workflow_id: Some("qa_only".to_string()),
+            target_files: None,
+            parent_task_id: None,
+            spawn_reason: None,
+            step_filter: None,
+            initial_vars: None,
+        };
+        let result = create_task_impl(&state, payload).expect("create qa task");
+        assert_eq!(result.total_items, 1);
+
+        // Inspect the events table for the diagnostic row.
+        let conn = open_conn(&state.db_path).expect("open db");
+        let payload_json: String = conn
+            .query_row(
+                "SELECT payload_json FROM events
+                 WHERE task_id = ?1 AND event_type = 'qa_directory_scan_triggered'",
+                params![result.id],
+                |row| row.get(0),
+            )
+            .expect("qa_directory_scan_triggered event must exist");
+        let payload_value: serde_json::Value =
+            serde_json::from_str(&payload_json).expect("payload is JSON");
+        assert_eq!(payload_value["trigger_step_id"], "qa");
+        assert_eq!(payload_value["materialized_count"], 1);
+        assert_eq!(payload_value["level"], "info");
+
+        // Below the oversize threshold, the warn event must NOT be present.
+        let oversize_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM events
+                 WHERE task_id = ?1 AND event_type = 'qa_directory_scan_oversize'",
+                params![result.id],
+                |row| row.get(0),
+            )
+            .expect("count oversize events");
+        assert_eq!(
+            oversize_count, 0,
+            "single-file scan must not emit the oversize warning"
+        );
     }
 }
