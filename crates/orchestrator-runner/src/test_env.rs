@@ -50,13 +50,8 @@ impl EnvGuard {
     /// Acquires [`ENV_LOCK`] and records the current value of each var.
     /// On drop the values are written back exactly as they were.
     pub(crate) fn new(vars: &[&'static str]) -> Self {
-        let lock = ENV_LOCK
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
-        let snapshot = vars
-            .iter()
-            .map(|&k| (k, std::env::var_os(k)))
-            .collect();
+        let lock = ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+        let snapshot = vars.iter().map(|&k| (k, std::env::var_os(k))).collect();
         Self {
             _lock: lock,
             snapshot,
@@ -90,10 +85,7 @@ impl AsyncEnvGuard {
     /// Acquires [`ASYNC_ENV_LOCK`] and records the current value of each var.
     pub(crate) async fn new(vars: &[&'static str]) -> Self {
         let lock = ASYNC_ENV_LOCK.lock().await;
-        let snapshot = vars
-            .iter()
-            .map(|&k| (k, std::env::var_os(k)))
-            .collect();
+        let snapshot = vars.iter().map(|&k| (k, std::env::var_os(k))).collect();
         Self {
             _lock: lock,
             snapshot,

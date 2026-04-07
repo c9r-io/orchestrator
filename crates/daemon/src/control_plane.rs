@@ -793,13 +793,8 @@ mod tests {
 
     impl EnvGuard {
         fn new(vars: &[&'static str]) -> Self {
-            let lock = ENV_LOCK
-                .lock()
-                .unwrap_or_else(|poison| poison.into_inner());
-            let snapshot = vars
-                .iter()
-                .map(|&k| (k, std::env::var_os(k)))
-                .collect();
+            let lock = ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+            let snapshot = vars.iter().map(|&k| (k, std::env::var_os(k))).collect();
             Self {
                 _lock: lock,
                 snapshot,

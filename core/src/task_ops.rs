@@ -140,8 +140,8 @@ fn resolve_task_targets(
             // FR-094: capture which step forced the strategy to
             // QaDirectoryScan so the task creator can emit a diagnostic
             // event the first thing after committing the task.
-            let (trigger_step_id, trigger_capability) = first_item_scoped_step(plan)
-                .unwrap_or_else(|| ("<unknown>".to_string(), None));
+            let (trigger_step_id, trigger_capability) =
+                first_item_scoped_step(plan).unwrap_or_else(|| ("<unknown>".to_string(), None));
             let diagnostic = QaDirectoryScanDiagnostic {
                 trigger_step_id,
                 trigger_capability,
@@ -1424,8 +1424,10 @@ mod tests {
     /// trigger step id and the materialized count.
     #[test]
     fn create_task_emits_qa_directory_scan_event_when_triggered() {
-        let mut ts = TestState::new()
-            .with_workflow("qa_only", make_workflow(vec![make_step("qa", None, Some("qa"))]));
+        let mut ts = TestState::new().with_workflow(
+            "qa_only",
+            make_workflow(vec![make_step("qa", None, Some("qa"))]),
+        );
         let state = ts.build();
 
         // Create a single QA file so the scan has one entry to materialize.

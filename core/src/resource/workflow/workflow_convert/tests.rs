@@ -1348,8 +1348,7 @@ fn workflow_explicit_scope_survives_round_trip_for_custom_step_id() {
     };
 
     // First parse: spec → config.  Explicit scope reaches the config layer.
-    let config_step =
-        workflow_step_spec_to_config(&original).expect("spec→config should succeed");
+    let config_step = workflow_step_spec_to_config(&original).expect("spec→config should succeed");
     assert_eq!(
         config_step.scope,
         Some(StepScope::Task),
@@ -1374,8 +1373,7 @@ fn workflow_explicit_scope_survives_round_trip_for_custom_step_id() {
     // Reparse the round-tripped spec back into config and build a runtime
     // TaskExecutionStep, then assert resolved_scope still returns Task.
     // This is the strongest end-to-end assertion that the bug is closed.
-    let reconfig =
-        workflow_step_spec_to_config(respec_step).expect("respec→config should succeed");
+    let reconfig = workflow_step_spec_to_config(respec_step).expect("respec→config should succeed");
     let reconfig_exec = TaskExecutionStep {
         id: reconfig.id.clone(),
         required_capability: reconfig.required_capability.clone(),
