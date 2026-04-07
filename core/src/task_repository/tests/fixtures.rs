@@ -10,11 +10,16 @@ pub fn seed_task(fixture: &mut TestState) -> (std::sync::Arc<crate::state::Inner
         .data_dir
         .join("workspace/default/docs/qa/repo_test.md");
     std::fs::write(&qa_file, "# repository test\n").expect("seed qa file");
+    // FR-094: pass an explicit target file so task creation goes through
+    // the `Explicit` strategy and does NOT trigger QaDirectoryScan.
+    // Otherwise the diagnostic events emitted by `create_task_impl` would
+    // pollute the events table that downstream tests assert against.
     let created = create_task_impl(
         &state,
         CreateTaskPayload {
             name: Some("repo-test".to_string()),
             goal: Some("repo-test-goal".to_string()),
+            target_files: Some(vec!["docs/qa/repo_test.md".to_string()]),
             ..Default::default()
         },
     )

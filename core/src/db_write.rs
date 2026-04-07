@@ -272,7 +272,19 @@ mod tests {
             .join("workspace/default/docs/qa/db_write_test.md");
         std::fs::write(&qa_file, "# db_write test\n").expect("seed qa file");
 
-        let created = create_task_impl(&state, CreateTaskPayload::default()).expect("create task");
+        // FR-094: pass an explicit target file so task creation goes
+        // through the `Explicit` strategy and does NOT trigger
+        // QaDirectoryScan.  Otherwise the diagnostic events emitted by
+        // `create_task_impl` would pollute the events table that the
+        // db_write tests assert against.
+        let created = create_task_impl(
+            &state,
+            CreateTaskPayload {
+                target_files: Some(vec!["docs/qa/db_write_test.md".to_string()]),
+                ..Default::default()
+            },
+        )
+        .expect("create task");
         let task_id = created.id.clone();
 
         let conn = open_conn(&state.db_path).expect("open sqlite");

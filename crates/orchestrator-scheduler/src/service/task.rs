@@ -345,11 +345,17 @@ mod tests {
             .data_dir
             .join("workspace/default/docs/qa/service-task-fixture.md");
         std::fs::write(&qa_file, "# service task fixture\n").expect("seed qa file");
+        // FR-094: pass an explicit target file so task creation goes
+        // through the `Explicit` strategy and does NOT trigger
+        // QaDirectoryScan.  Otherwise the diagnostic events emitted by
+        // `create_task_impl` would pollute the events table that
+        // downstream service::task tests assert against.
         let created = create_task_impl(
             &state,
             CreateTaskPayload {
                 name: Some("service-task-fixture".to_string()),
                 goal: Some("service-task-goal".to_string()),
+                target_files: Some(vec!["docs/qa/service-task-fixture.md".to_string()]),
                 ..CreateTaskPayload::default()
             },
         )
