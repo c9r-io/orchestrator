@@ -166,9 +166,12 @@ mod tests {
 
     #[test]
     fn from_config_expands_tilde_in_readable_paths() {
-        // SAFETY: tests in this crate run sequentially per-binary by default,
-        // and we restore HOME after the test.
-        let prev = std::env::var("HOME").ok();
+        // EnvGuard takes the crate-wide ENV_LOCK and snapshots HOME so
+        // concurrent tests in this binary (e.g. path_expand::tests) can
+        // not race with us, and HOME is restored even if we panic.
+        let _env = crate::test_env::EnvGuard::new(&["HOME"]);
+        // SAFETY: ENV_LOCK held by `_env` serializes env access across
+        // this crate's test binary.
         unsafe {
             std::env::set_var("HOME", "/users/test");
         }
@@ -179,12 +182,7 @@ mod tests {
             resolved.readable_paths,
             vec![PathBuf::from("/users/test/.orchestratord/logs")]
         );
-        unsafe {
-            match prev {
-                Some(v) => std::env::set_var("HOME", v),
-                None => std::env::remove_var("HOME"),
-            }
-        }
+        // EnvGuard::drop restores HOME.
     }
 
     #[test]

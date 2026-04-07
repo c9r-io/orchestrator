@@ -775,6 +775,54 @@ mod tests {
     use super::*;
     use agent_orchestrator::db::init_schema;
 
+    /// Process-local lock that serializes the single env-mutating test in
+    /// this module (`prepare_secure_server_bootstraps_materials_and_policy`)
+    /// against any future env-touching tests added here, and against
+    /// concurrent reads of `HOME`/`USER` from production code paths
+    /// exercised in unrelated tests within the same binary.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// RAII guard that takes [`ENV_LOCK`], snapshots the listed env vars
+    /// on construction, and restores them on drop.  Mutex poisoning is
+    /// recovered automatically (`into_inner`) so a single panicking test
+    /// does not cascade-fail every other env-using test.
+    struct EnvGuard {
+        _lock: std::sync::MutexGuard<'static, ()>,
+        snapshot: Vec<(&'static str, Option<std::ffi::OsString>)>,
+    }
+
+    impl EnvGuard {
+        fn new(vars: &[&'static str]) -> Self {
+            let lock = ENV_LOCK
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
+            let snapshot = vars
+                .iter()
+                .map(|&k| (k, std::env::var_os(k)))
+                .collect();
+            Self {
+                _lock: lock,
+                snapshot,
+            }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (key, value) in &self.snapshot {
+                // SAFETY: ENV_LOCK is still held (the `_lock` field is
+                // dropped after this body returns), so no other test in
+                // this module can mutate env while we restore it.
+                unsafe {
+                    match value {
+                        Some(v) => std::env::set_var(key, v),
+                        None => std::env::remove_var(key),
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn required_role_mapping_is_stable() {
         // ReadOnly
@@ -843,10 +891,15 @@ mod tests {
 
     #[test]
     fn prepare_secure_server_bootstraps_materials_and_policy() {
+        // EnvGuard takes ENV_LOCK and snapshots HOME/USER so they are
+        // restored on drop.  Before this guard the test leaked the mock
+        // values into the rest of the daemon test binary.
+        let _env = EnvGuard::new(&["HOME", "USER"]);
         let temp = tempfile::tempdir().expect("tempdir");
         let home = temp.path().join("home");
         std::fs::create_dir_all(&home).expect("home");
-        // SAFETY: single-threaded test; no concurrent env reads.
+        // SAFETY: ENV_LOCK held by `_env` serializes env access across
+        // this module.
         unsafe {
             std::env::set_var("HOME", &home);
             std::env::set_var("USER", "tester");

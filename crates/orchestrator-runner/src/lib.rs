@@ -16,3 +16,6 @@ pub mod output_capture;
 pub mod runner;
 /// Sandbox network allowlist parsing and validation.
 pub mod sandbox_network;
+
+#[cfg(test)]
+pub(crate) mod test_env;

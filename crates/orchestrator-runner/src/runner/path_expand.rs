@@ -81,33 +81,51 @@ fn is_var_continue(b: u8) -> bool {
 mod tests {
     use super::*;
 
-    fn with_env<F: FnOnce()>(key: &str, value: &str, f: F) {
-        let prev = std::env::var(key).ok();
-        // SAFETY: tests run sequentially via std::sync::Mutex below
-        unsafe {
-            std::env::set_var(key, value);
+    use crate::test_env::ENV_LOCK;
+
+    /// Set `key` for the duration of `f` and restore it after.  The caller
+    /// must already hold `ENV_LOCK` (typically via `EnvGuard::new`).
+    /// Restoration uses an inner RAII guard so that a panicking `f` body
+    /// still cleans up before the lock is released.
+    fn with_env<F: FnOnce()>(key: &'static str, value: &str, f: F) {
+        struct Restore {
+            key: &'static str,
+            prev: Option<std::ffi::OsString>,
         }
-        f();
-        unsafe {
-            match prev {
-                Some(v) => std::env::set_var(key, v),
-                None => std::env::remove_var(key),
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                // SAFETY: caller holds ENV_LOCK for the lifetime of this
+                // guard, so no other test in this crate can race with us.
+                unsafe {
+                    match &self.prev {
+                        Some(v) => std::env::set_var(self.key, v),
+                        None => std::env::remove_var(self.key),
+                    }
+                }
             }
         }
+        let prev = std::env::var_os(key);
+        // SAFETY: caller holds ENV_LOCK; the inner Restore drop will
+        // run even if `f` panics.
+        unsafe { std::env::set_var(key, value) };
+        let _restore = Restore { key, prev };
+        f();
     }
-
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
     fn no_expansion_when_no_specials() {
-        let _g = ENV_LOCK.lock().unwrap();
+        let _g = ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         assert_eq!(expand_path("/abs/path"), PathBuf::from("/abs/path"));
         assert_eq!(expand_path("relative/path"), PathBuf::from("relative/path"));
     }
 
     #[test]
     fn tilde_only_expands_to_home() {
-        let _g = ENV_LOCK.lock().unwrap();
+        let _g = ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         with_env("HOME", "/users/test", || {
             assert_eq!(expand_path("~"), PathBuf::from("/users/test"));
         });
@@ -115,7 +133,9 @@ mod tests {
 
     #[test]
     fn tilde_slash_expands_to_home_slash_rest() {
-        let _g = ENV_LOCK.lock().unwrap();
+        let _g = ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         with_env("HOME", "/users/test", || {
             assert_eq!(
                 expand_path("~/.orchestratord/logs"),
@@ -126,7 +146,9 @@ mod tests {
 
     #[test]
     fn dollar_var_expands() {
-        let _g = ENV_LOCK.lock().unwrap();
+        let _g = ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         with_env("FR093_TEST", "/var/cache", || {
             assert_eq!(
                 expand_path("$FR093_TEST/items"),
@@ -137,7 +159,9 @@ mod tests {
 
     #[test]
     fn dollar_brace_var_expands() {
-        let _g = ENV_LOCK.lock().unwrap();
+        let _g = ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         with_env("FR093_TEST2", "/srv/data", || {
             assert_eq!(
                 expand_path("${FR093_TEST2}/cache"),
@@ -148,7 +172,9 @@ mod tests {
 
     #[test]
     fn unset_var_left_in_place() {
-        let _g = ENV_LOCK.lock().unwrap();
+        let _g = ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         unsafe {
             std::env::remove_var("FR093_DEFINITELY_UNSET");
         }
@@ -160,7 +186,9 @@ mod tests {
 
     #[test]
     fn mixed_tilde_and_env_var() {
-        let _g = ENV_LOCK.lock().unwrap();
+        let _g = ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         with_env("HOME", "/users/test", || {
             with_env("FR093_SUFFIX", "artifacts", || {
                 assert_eq!(
@@ -173,7 +201,9 @@ mod tests {
 
     #[test]
     fn middle_tilde_not_expanded() {
-        let _g = ENV_LOCK.lock().unwrap();
+        let _g = ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         // Tilde only expands at the start; middle ~ stays literal.
         assert_eq!(expand_path("/foo/~/bar"), PathBuf::from("/foo/~/bar"));
     }

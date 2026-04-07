@@ -254,6 +254,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_spawn_with_runner_allowlist_filters_environment() {
+        // AsyncEnvGuard holds ASYNC_ENV_LOCK across the await on
+        // child.wait() and restores all three env vars on drop.  This
+        // is the only async test in the runner crate that touches env.
+        let _env = crate::test_env::AsyncEnvGuard::new(&[
+            "RUNNER_ALLOWED_TEST",
+            "RUNNER_BLOCKED_TEST",
+            "CLAUDECODE",
+        ])
+        .await;
+
         let temp = tempdir().expect("create tempdir");
         let stdout_path = temp.path().join("stdout.log");
         let stderr_path = temp.path().join("stderr.log");
@@ -264,7 +274,8 @@ mod tests {
         runner.policy = RunnerPolicy::Allowlist;
         runner.env_allowlist = vec!["RUNNER_ALLOWED_TEST".to_string()];
 
-        // SAFETY: test runs single-threaded; no concurrent env reads.
+        // SAFETY: ASYNC_ENV_LOCK held by `_env` serializes async env
+        // access across this crate's test binary.
         unsafe {
             std::env::set_var("RUNNER_ALLOWED_TEST", "visible");
             std::env::set_var("RUNNER_BLOCKED_TEST", "hidden");
@@ -284,12 +295,6 @@ mod tests {
         .expect("spawn with allowlist");
 
         let status = child.wait().await.expect("wait for child");
-        // SAFETY: test runs single-threaded; no concurrent env reads.
-        unsafe {
-            std::env::remove_var("RUNNER_ALLOWED_TEST");
-            std::env::remove_var("RUNNER_BLOCKED_TEST");
-            std::env::remove_var("CLAUDECODE");
-        }
 
         assert!(status.success());
         assert_eq!(
@@ -299,6 +304,7 @@ mod tests {
         let stderr_output = std::fs::read_to_string(&stderr_path).expect("read stderr");
         assert!(!stderr_output.contains("RUNNER_ALLOWED_TEST"));
         assert!(!stderr_output.contains("RUNNER_BLOCKED_TEST"));
+        // AsyncEnvGuard::drop restores all three env vars.
     }
 
     #[test]
