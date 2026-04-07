@@ -78,6 +78,7 @@
 | FR-091 | Linux Sandbox Filesystem Isolation Backend | P3 | Closed |
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
+| FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
 
 ## 说明
 
@@ -176,3 +177,4 @@
 - FR-091 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/99-linux-sandbox-filesystem-isolation.md` 与 `docs/qa/orchestrator/139-linux-sandbox-filesystem-isolation.md` 承载（Linux mount namespace + bind-mount 文件系统隔离：workspace_readonly / workspace_rw_scoped 两种模式，unshare -m 组合网络命名空间，preflight 动态检测 unshare/mount 二进制）
 - FR-092 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/configurable-spill-path.md` 与 `docs/qa/orchestrator/100-configurable-spill-path.md` 承载（Workspace 级 `artifacts_dir` 配置，spill 文件写入工作区内，沙箱 agent 可访问）
 - FR-093 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/sandbox-readable-paths.md` 与 `docs/qa/orchestrator/101-sandbox-readable-paths.md` 承载（ExecutionProfile `readable_paths` 字段、`~`/`$VAR` 路径展开、Linux bind-mount RO 挂载、`ORCHESTRATOR_READABLE_PATHS` 环境变量供 agent wrapper 消费）
+- FR-094 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/step-scope-roundtrip-leak.md` 与 `docs/qa/orchestrator/141-step-scope-roundtrip-leak.md` 承载（自定义 step id 的显式 scope 跨 spec↔config 往返漂移修复：`resolved_scope` capability fallback 限定为 conventions 已知 id、`workflow_step_config_to_spec` 不再省略默认值优化、`task_ops::resolve_task_targets` 在 `QaDirectoryScan` 触发时发出 `qa_directory_scan_triggered` info 事件，超过 50 个 item 升级为 `qa_directory_scan_oversize` warning；6 个回归单测覆盖三层修复 + 一个端到端 round-trip dry-run，复制了 v3 retest 中 D1/E1 的 180-item 爆炸场景）
