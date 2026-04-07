@@ -49,6 +49,11 @@ pub struct ExecutionProfileConfig {
     /// Additional writable paths when `fs_mode` uses scoped write access.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub writable_paths: Vec<String>,
+    /// Additional read-only paths granted to sandboxed agents.
+    /// Supports `~` (home dir) and `$VAR`/`${VAR}` (env var) expansion.
+    /// Only meaningful when `fs_mode` is `WorkspaceReadonly` or `WorkspaceRwScoped`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub readable_paths: Vec<String>,
     /// Defines the network reachability granted to the step.
     #[serde(default)]
     pub network_mode: ExecutionNetworkMode,
@@ -75,6 +80,7 @@ impl Default for ExecutionProfileConfig {
             mode: ExecutionProfileMode::Host,
             fs_mode: ExecutionFsMode::Inherit,
             writable_paths: Vec::new(),
+            readable_paths: Vec::new(),
             network_mode: ExecutionNetworkMode::Inherit,
             network_allowlist: Vec::new(),
             max_memory_mb: None,

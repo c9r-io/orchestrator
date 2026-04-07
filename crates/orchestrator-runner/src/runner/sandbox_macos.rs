@@ -32,6 +32,13 @@ pub(crate) fn build_macos_sandbox_profile(execution_profile: &ResolvedExecutionP
             }
         }
     }
+    // FR-093: `readable_paths` is currently a no-op on macOS because the
+    // profile above unconditionally emits `(allow file-read*)`. The
+    // ORCHESTRATOR_READABLE_PATHS env var is still propagated to agent
+    // wrapper scripts so that agent-CLI-specific sandboxes can apply it.
+    // If the macOS profile ever becomes read-restrictive, emit explicit
+    // `(allow file-read* (subpath ...))` rules for readable_paths here.
+    let _ = &execution_profile.readable_paths;
     lines.join("\n")
 }
 

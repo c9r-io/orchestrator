@@ -110,6 +110,18 @@ pub(super) async fn setup_phase_execution(
             daemon_pid.to_string(),
         );
     }
+    // FR-093: Expose the resolved readable_paths to agent wrapper scripts so
+    // that agent-CLI sandboxes (Codex, OpenCode, etc.) can apply the same
+    // allowlist as the orchestrator's own sandbox.
+    if !execution_profile.readable_paths.is_empty() {
+        let joined = execution_profile
+            .readable_paths
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join(":");
+        resolved_extra_env.insert("ORCHESTRATOR_READABLE_PATHS".to_string(), joined);
+    }
 
     let mut redaction_patterns = runner.redaction_patterns.clone();
     redaction_patterns.extend(sensitive_values);

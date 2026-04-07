@@ -39,6 +39,7 @@ pub(crate) fn validate_execution_profiles_for_project(
             })?;
         if profile.mode == ExecutionProfileMode::Host
             && (!profile.writable_paths.is_empty()
+                || !profile.readable_paths.is_empty()
                 || !profile.network_allowlist.is_empty()
                 || profile.max_memory_mb.is_some()
                 || profile.max_cpu_seconds.is_some()

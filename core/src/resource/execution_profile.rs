@@ -125,6 +125,7 @@ pub(crate) fn execution_profile_spec_to_config(
             _ => crate::config::ExecutionFsMode::Inherit,
         },
         writable_paths: spec.writable_paths.clone(),
+        readable_paths: spec.readable_paths.clone(),
         network_mode: match spec.network_mode.as_str() {
             "deny" => crate::config::ExecutionNetworkMode::Deny,
             "allowlist" => crate::config::ExecutionNetworkMode::Allowlist,
@@ -153,6 +154,7 @@ pub(crate) fn execution_profile_config_to_spec(
             crate::config::ExecutionFsMode::WorkspaceRwScoped => "workspace_rw_scoped".to_string(),
         },
         writable_paths: config.writable_paths.clone(),
+        readable_paths: config.readable_paths.clone(),
         network_mode: match config.network_mode {
             crate::config::ExecutionNetworkMode::Inherit => "inherit".to_string(),
             crate::config::ExecutionNetworkMode::Deny => "deny".to_string(),

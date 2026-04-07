@@ -1519,6 +1519,39 @@ fn exec_profile_rejects_host_mode_with_sandbox_fields() {
     );
 }
 
+// FR-093: readable_paths is also a sandbox-only field; reject on host mode.
+#[test]
+fn exec_profile_rejects_host_mode_with_readable_paths() {
+    use crate::config::{ExecutionProfileConfig, ExecutionProfileMode};
+    let mut step = make_step("qa", true);
+    step.execution_profile = Some("bad-host".to_string());
+
+    let workflow = make_workflow(vec![step]);
+    let mut config = make_config_with_agent("qa", "qa.md");
+    let pid = crate::config::DEFAULT_PROJECT_ID;
+    config
+        .projects
+        .get_mut(pid)
+        .unwrap()
+        .execution_profiles
+        .insert(
+            "bad-host".to_string(),
+            ExecutionProfileConfig {
+                mode: ExecutionProfileMode::Host,
+                readable_paths: vec!["/shared/cache".to_string()],
+                ..ExecutionProfileConfig::default()
+            },
+        );
+
+    let err = validate_execution_profiles_for_project(&config, &workflow, "wf1", pid)
+        .expect_err("host with readable_paths should fail");
+    assert!(
+        err.to_string().contains("sandbox-only fields"),
+        "unexpected: {}",
+        err
+    );
+}
+
 #[test]
 fn exec_profile_accepts_sandbox_mode_with_sandbox_fields() {
     use crate::config::{ExecutionProfileConfig, ExecutionProfileMode};

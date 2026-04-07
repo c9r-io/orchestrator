@@ -77,6 +77,7 @@
 | FR-090 | 轻量化单步执行 — `orchestrator run` 命令 | P1 | Closed |
 | FR-091 | Linux Sandbox Filesystem Isolation Backend | P3 | Closed |
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
+| FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 
 ## 说明
 
@@ -174,3 +175,4 @@
 - FR-090 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/98-lightweight-step-run.md` 与 `docs/qa/orchestrator/138-lightweight-step-run.md` 承载（三阶段轻量化执行：Phase 1 `--step`/`--set` 步骤过滤与变量注入、Phase 2 `orchestrator run` 同步执行命令、Phase 3 `RunStep` RPC 脱离 workflow 直接组装单步执行）
 - FR-091 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/99-linux-sandbox-filesystem-isolation.md` 与 `docs/qa/orchestrator/139-linux-sandbox-filesystem-isolation.md` 承载（Linux mount namespace + bind-mount 文件系统隔离：workspace_readonly / workspace_rw_scoped 两种模式，unshare -m 组合网络命名空间，preflight 动态检测 unshare/mount 二进制）
 - FR-092 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/configurable-spill-path.md` 与 `docs/qa/orchestrator/100-configurable-spill-path.md` 承载（Workspace 级 `artifacts_dir` 配置，spill 文件写入工作区内，沙箱 agent 可访问）
+- FR-093 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/sandbox-readable-paths.md` 与 `docs/qa/orchestrator/101-sandbox-readable-paths.md` 承载（ExecutionProfile `readable_paths` 字段、`~`/`$VAR` 路径展开、Linux bind-mount RO 挂载、`ORCHESTRATOR_READABLE_PATHS` 环境变量供 agent wrapper 消费）

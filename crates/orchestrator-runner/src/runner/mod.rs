@@ -1,3 +1,4 @@
+mod path_expand;
 mod policy;
 mod profile;
 mod redact;
@@ -421,6 +422,7 @@ mod tests {
                 mode: ExecutionProfileMode::Sandbox,
                 fs_mode,
                 writable_paths: Vec::new(),
+                readable_paths: Vec::new(),
                 network_mode: ExecutionNetworkMode::Deny,
                 network_allowlist: Vec::new(),
                 max_memory_mb: None,
@@ -483,6 +485,40 @@ mod tests {
             assert!(script
                 .contains("if [ -e /workspace/project/output ]; then mount --bind /workspace/project/output /workspace/project/output; fi"));
             assert!(script.contains("if [ -e /tmp ]; then mount --bind /tmp /tmp; fi"));
+        }
+
+        // FR-093: readable_paths bind-mount as read-only.
+        #[test]
+        fn test_workspace_readonly_with_readable_paths() {
+            let mut profile = base_profile(ExecutionFsMode::WorkspaceReadonly);
+            profile.readable_paths = vec![
+                PathBuf::from("/shared/artifacts"),
+                PathBuf::from("/var/cache/models"),
+            ];
+            let script =
+                build_fs_isolation_inner_script(&profile, "'/bin/bash'", "'-lc'", "'echo hi'")
+                    .expect("should produce script");
+            assert!(script.contains(
+                "if [ -e /shared/artifacts ]; then mount --bind /shared/artifacts /shared/artifacts && mount -o remount,ro,bind /shared/artifacts /shared/artifacts; fi"
+            ));
+            assert!(script.contains(
+                "if [ -e /var/cache/models ]; then mount --bind /var/cache/models /var/cache/models && mount -o remount,ro,bind /var/cache/models /var/cache/models; fi"
+            ));
+        }
+
+        #[test]
+        fn test_workspace_rw_scoped_with_readable_and_writable_paths() {
+            let mut profile = base_profile(ExecutionFsMode::WorkspaceRwScoped);
+            profile.writable_paths = vec![PathBuf::from("/workspace/project/output")];
+            profile.readable_paths = vec![PathBuf::from("/shared/cache")];
+            let script =
+                build_fs_isolation_inner_script(&profile, "'/bin/bash'", "'-lc'", "'echo hi'")
+                    .expect("should produce script");
+            // Both rules present, writable does not include `remount,ro,bind`.
+            assert!(script.contains("if [ -e /workspace/project/output ]; then mount --bind /workspace/project/output /workspace/project/output; fi"));
+            assert!(script.contains(
+                "if [ -e /shared/cache ]; then mount --bind /shared/cache /shared/cache && mount -o remount,ro,bind /shared/cache /shared/cache; fi"
+            ));
         }
     }
 }

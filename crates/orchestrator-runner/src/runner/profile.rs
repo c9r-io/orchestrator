@@ -1,3 +1,4 @@
+use crate::runner::path_expand::expand_path;
 use orchestrator_config::config::{
     ExecutionFsMode, ExecutionNetworkMode, ExecutionProfileConfig, ExecutionProfileMode,
 };
@@ -14,6 +15,8 @@ pub struct ResolvedExecutionProfile {
     pub fs_mode: ExecutionFsMode,
     /// Paths that remain writable when sandboxing is enabled.
     pub writable_paths: Vec<PathBuf>,
+    /// Additional paths granted read-only access when sandboxing is enabled.
+    pub readable_paths: Vec<PathBuf>,
     /// Network policy enforced by the execution backend.
     pub network_mode: ExecutionNetworkMode,
     /// Raw allowlist entries used when `network_mode=allowlist`.
@@ -38,6 +41,7 @@ impl ResolvedExecutionProfile {
             mode: ExecutionProfileMode::Host,
             fs_mode: ExecutionFsMode::Inherit,
             writable_paths: Vec::new(),
+            readable_paths: Vec::new(),
             network_mode: ExecutionNetworkMode::Inherit,
             network_allowlist: Vec::new(),
             max_memory_mb: None,
@@ -57,18 +61,31 @@ impl ResolvedExecutionProfile {
     ) -> Self {
         let mut writable_paths = always_writable.to_vec();
         writable_paths.extend(config.writable_paths.iter().map(|path| {
-            let raw = PathBuf::from(path);
-            if raw.is_absolute() {
-                raw
+            let expanded = expand_path(path);
+            if expanded.is_absolute() {
+                expanded
             } else {
-                workspace_root.join(raw)
+                workspace_root.join(expanded)
             }
         }));
+        let readable_paths: Vec<PathBuf> = config
+            .readable_paths
+            .iter()
+            .map(|path| {
+                let expanded = expand_path(path);
+                if expanded.is_absolute() {
+                    expanded
+                } else {
+                    workspace_root.join(expanded)
+                }
+            })
+            .collect();
         Self {
             name: name.to_string(),
             mode: config.mode.clone(),
             fs_mode: config.fs_mode.clone(),
             writable_paths,
+            readable_paths,
             network_mode: config.network_mode.clone(),
             network_allowlist: config.network_allowlist.clone(),
             max_memory_mb: config.max_memory_mb,
@@ -109,5 +126,88 @@ impl UnixResourceLimits {
         } else {
             Some(limits)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use orchestrator_config::config::ExecutionProfileConfig;
+
+    fn config_with_paths(writable: Vec<&str>, readable: Vec<&str>) -> ExecutionProfileConfig {
+        ExecutionProfileConfig {
+            writable_paths: writable.into_iter().map(String::from).collect(),
+            readable_paths: readable.into_iter().map(String::from).collect(),
+            ..ExecutionProfileConfig::default()
+        }
+    }
+
+    #[test]
+    fn from_config_resolves_absolute_readable_paths_unchanged() {
+        let cfg = config_with_paths(vec![], vec!["/absolute/path", "/var/cache"]);
+        let resolved = ResolvedExecutionProfile::from_config(
+            "test",
+            &cfg,
+            Path::new("/workspace/proj"),
+            &[],
+        );
+        assert_eq!(
+            resolved.readable_paths,
+            vec![PathBuf::from("/absolute/path"), PathBuf::from("/var/cache")]
+        );
+    }
+
+    #[test]
+    fn from_config_joins_relative_readable_paths_to_workspace() {
+        let cfg = config_with_paths(vec![], vec!["shared/data"]);
+        let resolved = ResolvedExecutionProfile::from_config(
+            "test",
+            &cfg,
+            Path::new("/workspace/proj"),
+            &[],
+        );
+        assert_eq!(
+            resolved.readable_paths,
+            vec![PathBuf::from("/workspace/proj/shared/data")]
+        );
+    }
+
+    #[test]
+    fn from_config_expands_tilde_in_readable_paths() {
+        // SAFETY: tests in this crate run sequentially per-binary by default,
+        // and we restore HOME after the test.
+        let prev = std::env::var("HOME").ok();
+        unsafe {
+            std::env::set_var("HOME", "/users/test");
+        }
+        let cfg = config_with_paths(vec![], vec!["~/.orchestratord/logs"]);
+        let resolved = ResolvedExecutionProfile::from_config(
+            "test",
+            &cfg,
+            Path::new("/workspace/proj"),
+            &[],
+        );
+        assert_eq!(
+            resolved.readable_paths,
+            vec![PathBuf::from("/users/test/.orchestratord/logs")]
+        );
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("HOME", v),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+    }
+
+    #[test]
+    fn from_config_empty_readable_paths_yields_empty_vec() {
+        let cfg = ExecutionProfileConfig::default();
+        let resolved = ResolvedExecutionProfile::from_config(
+            "test",
+            &cfg,
+            Path::new("/workspace/proj"),
+            &[],
+        );
+        assert!(resolved.readable_paths.is_empty());
     }
 }

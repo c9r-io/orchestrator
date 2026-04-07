@@ -215,6 +215,15 @@ pub(crate) fn build_fs_isolation_inner_script(
                 }
             }
 
+            // FR-093: Bind-mount each readable path read-only so it remains
+            // accessible inside the mount namespace and is auditable.
+            for path in &execution_profile.readable_paths {
+                let p = path.display();
+                inner.push(format!(
+                    "if [ -e {p} ]; then mount --bind {p} {p} && mount -o remount,ro,bind {p} {p}; fi"
+                ));
+            }
+
             inner.push(format!(
                 "exec {} {} {}",
                 runner_shell, runner_shell_arg, inner_command

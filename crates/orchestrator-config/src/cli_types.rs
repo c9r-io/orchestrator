@@ -375,6 +375,10 @@ pub struct ExecutionProfileSpec {
     /// Additional writable paths allowed by the profile.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub writable_paths: Vec<String>,
+    /// Additional read-only paths granted to sandboxed agents.
+    /// Supports `~` and `$VAR`/`${VAR}` expansion.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub readable_paths: Vec<String>,
     /// Network isolation mode.
     #[serde(default = "default_execution_network_mode")]
     pub network_mode: String,

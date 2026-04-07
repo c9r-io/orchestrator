@@ -175,6 +175,7 @@ pub fn execution_profile_manifest(name: &str, mode: &str, fs_mode: &str) -> Orch
             mode: mode.to_string(),
             fs_mode: fs_mode.to_string(),
             writable_paths: vec![],
+            readable_paths: Vec::new(),
             network_mode: "inherit".to_string(),
             network_allowlist: vec![],
             max_memory_mb: None,
