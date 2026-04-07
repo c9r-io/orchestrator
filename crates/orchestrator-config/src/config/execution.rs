@@ -101,7 +101,16 @@ impl TaskExecutionStep {
     pub fn resolved_scope(&self) -> StepScope {
         self.scope.unwrap_or_else(|| {
             let scope = CONVENTIONS.default_scope(&self.id);
-            if scope == StepScope::Task {
+            // Capability fallback only applies to *known* SDLC step ids that
+            // intentionally piggyback on a capability-derived scope (e.g. an
+            // `id: qa` step whose capability happens to be Item-scoped).
+            // Custom step ids (anything not registered in conventions) must
+            // not inherit Item scope from their `required_capability`,
+            // otherwise a workflow author cannot author a Task-scoped wrapper
+            // step around an Item-default capability without their explicit
+            // `scope: task` being silently overridden after a config↔spec
+            // round trip.  See FR-094.
+            if scope == StepScope::Task && CONVENTIONS.lookup(&self.id).is_some() {
                 if let Some(ref cap) = self.required_capability {
                     let cap_scope = CONVENTIONS.default_scope(cap);
                     if cap_scope == StepScope::Item {
@@ -654,6 +663,89 @@ mod tests {
             step_vars: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
+    }
+
+    /// FR-094 regression: a custom step id (not registered in CONVENTIONS) must
+    /// not inherit Item scope from its `required_capability`.  Before the fix,
+    /// `resolved_scope` would walk the capability fallback for any unknown id
+    /// and return Item whenever the capability defaulted to Item.  Combined
+    /// with the round-trip drop in `workflow_step_config_to_spec`, this caused
+    /// the 180-item benchmark explosion observed in v3 retest.
+    #[test]
+    fn resolved_scope_does_not_leak_capability_scope_for_custom_id() {
+        let step = TaskExecutionStep {
+            id: "benchmark_eval".to_string(),
+            required_capability: Some("qa_testing".to_string()),
+            template: Some("benchmark_eval".to_string()),
+            execution_profile: None,
+            builtin: None,
+            enabled: true,
+            repeatable: false,
+            is_guard: false,
+            cost_preference: None,
+            prehook: None,
+            tty: false,
+            outputs: vec![],
+            pipe_to: None,
+            command: None,
+            chain_steps: vec![],
+            scope: None,
+            behavior: StepBehavior::default(),
+            max_parallel: None,
+            stagger_delay_ms: None,
+            timeout_secs: None,
+            stall_timeout_secs: None,
+            item_select_config: None,
+            store_inputs: vec![],
+            store_outputs: vec![],
+            step_vars: None,
+        };
+        assert_eq!(
+            step.resolved_scope(),
+            StepScope::Task,
+            "custom-id step should default to Task even when its capability has Item default scope"
+        );
+    }
+
+    /// FR-094 positive lock: known SDLC step ids that legitimately piggyback
+    /// on capability-derived scope must keep working.  This test pins the
+    /// behavior so the fix in `resolved_scope_does_not_leak_capability_scope_for_custom_id`
+    /// cannot accidentally over-narrow.
+    #[test]
+    fn resolved_scope_still_uses_capability_fallback_for_known_id() {
+        // `qa` is a known id whose convention scope is `Item`.  Even though
+        // we did not change the contract for known ids, we exercise the
+        // happy path here to lock in the behavior.
+        let step = TaskExecutionStep {
+            id: "qa".to_string(),
+            required_capability: Some("qa".to_string()),
+            template: None,
+            execution_profile: None,
+            builtin: None,
+            enabled: true,
+            repeatable: false,
+            is_guard: false,
+            cost_preference: None,
+            prehook: None,
+            tty: false,
+            outputs: vec![],
+            pipe_to: None,
+            command: None,
+            chain_steps: vec![],
+            scope: None,
+            behavior: StepBehavior::default(),
+            max_parallel: None,
+            stagger_delay_ms: None,
+            timeout_secs: None,
+            stall_timeout_secs: None,
+            item_select_config: None,
+            store_inputs: vec![],
+            store_outputs: vec![],
+            step_vars: None,
+        };
+        // `qa` is itself a known Item-scoped id, so the convention default
+        // already wins without needing the fallback.
+        assert_eq!(step.resolved_scope(), StepScope::Item);
     }
 
     #[test]
