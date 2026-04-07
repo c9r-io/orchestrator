@@ -128,7 +128,10 @@ mod tests {
     fn dollar_var_expands() {
         let _g = ENV_LOCK.lock().unwrap();
         with_env("FR093_TEST", "/var/cache", || {
-            assert_eq!(expand_path("$FR093_TEST/items"), PathBuf::from("/var/cache/items"));
+            assert_eq!(
+                expand_path("$FR093_TEST/items"),
+                PathBuf::from("/var/cache/items")
+            );
         });
     }
 
@@ -172,9 +175,6 @@ mod tests {
     fn middle_tilde_not_expanded() {
         let _g = ENV_LOCK.lock().unwrap();
         // Tilde only expands at the start; middle ~ stays literal.
-        assert_eq!(
-            expand_path("/foo/~/bar"),
-            PathBuf::from("/foo/~/bar")
-        );
+        assert_eq!(expand_path("/foo/~/bar"), PathBuf::from("/foo/~/bar"));
     }
 }

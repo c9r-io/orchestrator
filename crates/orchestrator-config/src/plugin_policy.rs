@@ -197,9 +197,7 @@ impl PluginPolicy {
     /// When the policy specifies an explicit profile it is returned; otherwise
     /// the default Host-mode profile is used, preserving backward compatibility.
     pub fn effective_execution_profile(&self) -> ExecutionProfileConfig {
-        self.execution_profile
-            .clone()
-            .unwrap_or_default()
+        self.execution_profile.clone().unwrap_or_default()
     }
 
     /// Returns the effective environment-variable deny prefixes.

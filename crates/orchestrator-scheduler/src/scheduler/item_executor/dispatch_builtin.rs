@@ -434,7 +434,8 @@ pub(crate) async fn execute_builtin_step(
         .await
     {
         pipeline.diff = String::from_utf8_lossy(&diff_output.stdout).to_string();
-        if let Some((trunc, path)) = spill_to_file(&task_ctx.artifacts_dir, task_id, "diff", &pipeline.diff)
+        if let Some((trunc, path)) =
+            spill_to_file(&task_ctx.artifacts_dir, task_id, "diff", &pipeline.diff)
         {
             pipeline.diff = trunc;
             pipeline.vars.insert("diff_path".to_string(), path);

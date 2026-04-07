@@ -145,12 +145,8 @@ mod tests {
     #[test]
     fn from_config_resolves_absolute_readable_paths_unchanged() {
         let cfg = config_with_paths(vec![], vec!["/absolute/path", "/var/cache"]);
-        let resolved = ResolvedExecutionProfile::from_config(
-            "test",
-            &cfg,
-            Path::new("/workspace/proj"),
-            &[],
-        );
+        let resolved =
+            ResolvedExecutionProfile::from_config("test", &cfg, Path::new("/workspace/proj"), &[]);
         assert_eq!(
             resolved.readable_paths,
             vec![PathBuf::from("/absolute/path"), PathBuf::from("/var/cache")]
@@ -160,12 +156,8 @@ mod tests {
     #[test]
     fn from_config_joins_relative_readable_paths_to_workspace() {
         let cfg = config_with_paths(vec![], vec!["shared/data"]);
-        let resolved = ResolvedExecutionProfile::from_config(
-            "test",
-            &cfg,
-            Path::new("/workspace/proj"),
-            &[],
-        );
+        let resolved =
+            ResolvedExecutionProfile::from_config("test", &cfg, Path::new("/workspace/proj"), &[]);
         assert_eq!(
             resolved.readable_paths,
             vec![PathBuf::from("/workspace/proj/shared/data")]
@@ -181,12 +173,8 @@ mod tests {
             std::env::set_var("HOME", "/users/test");
         }
         let cfg = config_with_paths(vec![], vec!["~/.orchestratord/logs"]);
-        let resolved = ResolvedExecutionProfile::from_config(
-            "test",
-            &cfg,
-            Path::new("/workspace/proj"),
-            &[],
-        );
+        let resolved =
+            ResolvedExecutionProfile::from_config("test", &cfg, Path::new("/workspace/proj"), &[]);
         assert_eq!(
             resolved.readable_paths,
             vec![PathBuf::from("/users/test/.orchestratord/logs")]
@@ -202,12 +190,8 @@ mod tests {
     #[test]
     fn from_config_empty_readable_paths_yields_empty_vec() {
         let cfg = ExecutionProfileConfig::default();
-        let resolved = ResolvedExecutionProfile::from_config(
-            "test",
-            &cfg,
-            Path::new("/workspace/proj"),
-            &[],
-        );
+        let resolved =
+            ResolvedExecutionProfile::from_config("test", &cfg, Path::new("/workspace/proj"), &[]);
         assert!(resolved.readable_paths.is_empty());
     }
 }
