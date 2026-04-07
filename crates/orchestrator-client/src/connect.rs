@@ -251,6 +251,65 @@ fn discover_control_plane_config(explicit: Option<&str>) -> Result<Option<PathBu
 mod tests {
     use super::*;
 
+    /// Process-local lock that serializes every test in this module which
+    /// either *mutates* or *reads* one of the connect-related environment
+    /// variables (`ORCHESTRATOR_SOCKET`, `ORCHESTRATORD_DATA_DIR`,
+    /// `ORCHESTRATOR_CONTROL_PLANE_CONFIG`).  Cargo runs unit tests in
+    /// parallel by default, and these vars are process-wide state — so
+    /// without this serialization the tests race against each other and
+    /// flake under workspace load (e.g. `local_socket_probe_…` would
+    /// observe `ORCHESTRATOR_SOCKET` set by `connect_prefers_socket_…`
+    /// running concurrently).
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// RAII guard that takes the process-local env lock, snapshots the
+    /// listed environment variables on construction, and restores them on
+    /// drop.  Tests that mutate env vars must construct an `EnvGuard`
+    /// before any `std::env::set_var` / `remove_var` call so that:
+    ///
+    /// 1. concurrent tests in the same module are serialized
+    /// 2. the test cannot leak env-var mutations to subsequent tests even
+    ///    if it panics mid-way through
+    ///
+    /// Mutex poisoning is recovered automatically (`into_inner`) so a
+    /// single panicking test does not cascade-fail every other env-using
+    /// test in the module.
+    struct EnvGuard {
+        _lock: std::sync::MutexGuard<'static, ()>,
+        snapshot: Vec<(&'static str, Option<std::ffi::OsString>)>,
+    }
+
+    impl EnvGuard {
+        fn new(vars: &[&'static str]) -> Self {
+            let lock = ENV_LOCK
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
+            let snapshot = vars
+                .iter()
+                .map(|&k| (k, std::env::var_os(k)))
+                .collect();
+            Self {
+                _lock: lock,
+                snapshot,
+            }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            // SAFETY: ENV_LOCK ensures no other test in this module is
+            // reading or writing the env while we restore it.
+            for (key, value) in &self.snapshot {
+                unsafe {
+                    match value {
+                        Some(v) => std::env::set_var(key, v),
+                        None => std::env::remove_var(key),
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn load_control_plane_config_parses_kubeconfig_shape() {
         let temp = tempfile::tempdir().expect("tempdir");
@@ -302,10 +361,19 @@ contexts:
 
     #[test]
     fn connect_prefers_socket_when_env_is_present_and_no_explicit_config() {
+        // EnvGuard takes ENV_LOCK and restores ORCHESTRATOR_SOCKET on drop,
+        // so concurrent env-var tests cannot race with us.
+        let _env = EnvGuard::new(&["ORCHESTRATOR_SOCKET", "ORCHESTRATORD_DATA_DIR"]);
         let temp = tempfile::tempdir().expect("tempdir");
         let expected = temp.path().join("missing.sock");
-        // SAFETY: test runs single-threaded; no concurrent env reads.
-        unsafe { std::env::set_var("ORCHESTRATOR_SOCKET", &expected) };
+        // SAFETY: ENV_LOCK held by `_env` serializes env access across this
+        // test module.
+        unsafe {
+            std::env::set_var("ORCHESTRATOR_SOCKET", &expected);
+            // Defensive: clear DATA_DIR so a stale value from a prior test
+            // run can't change discover_socket_path's fallback path.
+            std::env::remove_var("ORCHESTRATORD_DATA_DIR");
+        }
 
         let resolved = discover_socket_path();
         assert_eq!(
@@ -316,16 +384,15 @@ contexts:
             !resolved.exists(),
             "socket should not exist — connect_uds would bail with 'daemon socket not found'"
         );
-
-        // SAFETY: single-threaded test cleanup.
-        unsafe { std::env::remove_var("ORCHESTRATOR_SOCKET") };
+        // EnvGuard::drop restores the original env values.
     }
 
     #[test]
     fn discover_explicit_config_returns_none_when_no_explicit() {
-        // With no explicit path and no env, should return None
-        let _guard = std::env::var("ORCHESTRATOR_CONTROL_PLANE_CONFIG");
-        // SAFETY: test runs single-threaded; no concurrent env reads.
+        // With no explicit path and no env, should return None.
+        let _env = EnvGuard::new(&["ORCHESTRATOR_CONTROL_PLANE_CONFIG"]);
+        // SAFETY: ENV_LOCK held by `_env` serializes env access across this
+        // test module.
         unsafe { std::env::remove_var("ORCHESTRATOR_CONTROL_PLANE_CONFIG") };
         let result = discover_explicit_control_plane_config(None).expect("no error");
         assert!(
@@ -352,8 +419,10 @@ contexts:
 
     #[test]
     fn local_socket_probe_precedes_home_config_in_connect_priority() {
+        let _env = EnvGuard::new(&["ORCHESTRATOR_SOCKET", "ORCHESTRATORD_DATA_DIR"]);
         let temp = tempfile::tempdir().expect("tempdir");
-        // SAFETY: test runs single-threaded; no concurrent env reads.
+        // SAFETY: ENV_LOCK held by `_env` serializes env access across this
+        // test module.
         unsafe {
             std::env::remove_var("ORCHESTRATOR_SOCKET");
             std::env::set_var("ORCHESTRATORD_DATA_DIR", temp.path());
@@ -369,8 +438,6 @@ contexts:
         // When the socket exists, connect() step 3 fires before step 4.
         std::fs::write(&socket, "").expect("create socket stub");
         assert!(socket.exists(), "local socket should exist for probe");
-
-        // SAFETY: single-threaded test cleanup.
-        unsafe { std::env::remove_var("ORCHESTRATORD_DATA_DIR") };
+        // EnvGuard::drop restores the original env values.
     }
 }
