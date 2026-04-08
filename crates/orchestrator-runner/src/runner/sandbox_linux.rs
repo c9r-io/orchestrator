@@ -191,10 +191,10 @@ pub(crate) fn build_fs_isolation_inner_script(
     match execution_profile.fs_mode {
         ExecutionFsMode::Inherit => None,
         ExecutionFsMode::WorkspaceReadonly | ExecutionFsMode::WorkspaceRwScoped => {
-            let workspace = execution_profile
-                .workspace_root
-                .as_deref()
-                .expect("workspace_root must be set for non-Inherit fs_mode");
+            // Invariant: callers must set workspace_root for non-Inherit fs_mode.
+            // Defensively bail out as None rather than panicking inside the
+            // sandbox-launch path if that invariant is ever violated.
+            let workspace = execution_profile.workspace_root.as_deref()?;
             let ws = workspace.display();
 
             let mut inner = vec![
