@@ -12,7 +12,7 @@ rust-version.workspace = true
 [dependencies]
 orchestrator-config = { path = "../orchestrator-config", version = "0.3.1" }
 anyhow = "1.0"
-tokio = { version = "1.44", features = ["fs", "io-util", "macros", "process", "rt", "sync"] }
+tokio = { version = "1.51", features = ["fs", "io-util", "macros", "process", "rt", "sync"] }
 tracing = "0.1"
 
 [target.'cfg(unix)'.dependencies]
@@ -22,4 +22,4 @@ uuid = { version = "1.11", features = ["v4"] }
 
 [dev-dependencies]
 tempfile = "3.26.0"
-tokio = { version = "1.44", features = ["fs", "io-util", "macros", "process", "rt-multi-thread", "sync"] }
+tokio = { version = "1.51", features = ["fs", "io-util", "macros", "process", "rt-multi-thread", "sync"] }

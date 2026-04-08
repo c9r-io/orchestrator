@@ -14,7 +14,7 @@ anyhow = "1.0"
 dirs = "6"
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
-tokio = { version = "1.44", features = ["time", "net"] }
+tokio = { version = "1.51", features = ["time", "net"] }
 tonic = { version = "0.14", features = ["tls-native-roots", "tls-ring"] }
 tower = "0.5"
 hyper-util = "0.1"
