@@ -12,7 +12,7 @@ orchestrator-proto = { path = "../proto", version = "0.3.1" }
 tauri = { version = "2", features = ["rustls-tls"] }
 tauri-plugin-notification = "2"
 tonic = { version = "0.14", features = ["tls-native-roots", "tls-ring"] }
-tokio = { version = "1.44", features = ["macros", "rt-multi-thread", "sync", "signal"] }
+tokio = { version = "1.51", features = ["macros", "rt-multi-thread", "sync", "signal"] }
 tokio-util = "0.7"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
