@@ -102,7 +102,7 @@ jobs:
           cat dist/*.sha256 > "dist/orchestrator-${RELEASE_TAG}-sha256sums.txt"
 
       - name: Publish release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           generate_release_notes: true
