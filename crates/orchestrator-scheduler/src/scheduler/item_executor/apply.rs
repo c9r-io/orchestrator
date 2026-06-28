@@ -48,6 +48,15 @@ pub(super) async fn apply_step_results(
     acc.step_ran.insert(step.id.clone(), true);
     acc.apply_run_diagnostics(result);
 
+    // Inject streaming-run signals (tools_called, tool_error_count, run_cost_usd, …)
+    // as typed pipeline vars so prehook / convergence / finalize CEL can drive
+    // coordination from what the agent did. Empty for non-streaming runs.
+    if let Some(output) = result.output.as_ref() {
+        for (key, value) in agent_orchestrator::stream_json::stream_signal_vars(&output.artifacts) {
+            acc.pipeline_vars.vars.insert(key, value);
+        }
+    }
+
     // 4. Status transitions
     if result.is_success() {
         if let OnSuccessAction::SetStatus { status } = &step.behavior.on_success {

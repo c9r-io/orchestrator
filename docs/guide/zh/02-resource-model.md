@@ -211,10 +211,17 @@ kind: RuntimePolicy
 metadata:
   name: default
 spec:
-  runner: { ... }
+  runner:
+    executor: shell    # shell（默认）| streaming
+    # … shell、policy、allowed_shells、env_allowlist、redaction_patterns
   resume: { ... }
   observability: { ... }
 ```
+
+**`runner.executor`** 选择执行后端（全局）：
+
+- `shell`（默认）—— 将每个步骤的命令作为一次性 shell 进程运行，输出按文本/JSON 捕获。
+- `streaming` —— 以 `stream-json` 模式驱动 agent CLI，并提供 orchestrator 自持的 MCP 工具，把结构化信号（`tools_called`、`run_cost_usd` 等）暴露给编排 CEL。见 `docs/design_doc/orchestrator/streaming-runner-pivot-overview.md` 与[演示](../showcases/streaming-mark-done-convergence.md)。
 
 ## 7. ExecutionProfile（执行 Profile）
 

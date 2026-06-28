@@ -1,6 +1,7 @@
 use super::policy::enforce_runner_policy;
 use super::profile::ResolvedExecutionProfile;
 use super::sandbox::{build_command_for_profile, classify_sandbox_spawn_error};
+use super::streaming::StreamingAgentRunner;
 use crate::output_capture::{OutputCaptureHandles, spawn_sanitized_output_capture};
 use anyhow::{Context, Result};
 use orchestrator_config::config::{RunnerConfig, RunnerExecutorKind, RunnerPolicy};
@@ -60,73 +61,98 @@ impl RunnerExecutor for ShellRunnerExecutor {
             pipe_stdin,
             execution_profile,
         } = params;
+        spawn_command_via_shell(
+            runner,
+            command,
+            cwd,
+            stdio_mode,
+            extra_env,
+            pipe_stdin,
+            execution_profile,
+        )
+    }
+}
 
-        enforce_runner_policy(runner, command)?;
+/// Spawns `command` through the configured shell, applying runner policy,
+/// sandbox profile, resource limits, and environment handling.
+///
+/// Shared by [`ShellRunnerExecutor`] and the streaming runner so both go
+/// through the same policy/sandbox/env path; only the command string differs.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_command_via_shell(
+    runner: &RunnerConfig,
+    command: &str,
+    cwd: &Path,
+    stdio_mode: RunnerStdioMode,
+    extra_env: &std::collections::HashMap<String, String>,
+    pipe_stdin: bool,
+    execution_profile: &ResolvedExecutionProfile,
+) -> Result<tokio::process::Child> {
+    enforce_runner_policy(runner, command)?;
 
-        // In self-referential workspaces, guard against commands that would
-        // kill the daemon process.  The presence of ORCHESTRATOR_DAEMON_PID in
-        // extra_env signals that the self-referential guard is active.
-        if let Some(pid_str) = extra_env.get("ORCHESTRATOR_DAEMON_PID") {
-            if let Ok(daemon_pid) = pid_str.parse::<u32>() {
-                super::policy::guard_daemon_pid_kill(command, daemon_pid)?;
+    // In self-referential workspaces, guard against commands that would
+    // kill the daemon process.  The presence of ORCHESTRATOR_DAEMON_PID in
+    // extra_env signals that the self-referential guard is active.
+    if let Some(pid_str) = extra_env.get("ORCHESTRATOR_DAEMON_PID") {
+        if let Ok(daemon_pid) = pid_str.parse::<u32>() {
+            super::policy::guard_daemon_pid_kill(command, daemon_pid)?;
+        }
+    }
+
+    let mut cmd = build_command_for_profile(runner, command, cwd, execution_profile)?;
+
+    match stdio_mode {
+        RunnerStdioMode::Files { stdout, stderr } => {
+            cmd.stdout(Stdio::from(stdout)).stderr(Stdio::from(stderr));
+        }
+        RunnerStdioMode::Piped => {
+            cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+        }
+    }
+
+    cmd.kill_on_drop(true);
+
+    if pipe_stdin {
+        cmd.stdin(Stdio::piped());
+    }
+
+    #[cfg(unix)]
+    {
+        use super::resource_limits::apply_unix_resource_limits_to_command;
+        cmd.process_group(0); // child becomes its own process group leader
+        apply_unix_resource_limits_to_command(&mut cmd, execution_profile)?;
+    }
+
+    if runner.policy == RunnerPolicy::Allowlist {
+        cmd.env_clear();
+        for key in &runner.env_allowlist {
+            if let Ok(value) = std::env::var(key) {
+                cmd.env(key, value);
             }
         }
+    }
 
-        let mut cmd = build_command_for_profile(runner, command, cwd, execution_profile)?;
+    // Inject agent-specific extra env vars (from EnvStore/SecretStore/direct)
+    for (k, v) in extra_env {
+        cmd.env(k, v);
+    }
 
-        match stdio_mode {
-            RunnerStdioMode::Files { stdout, stderr } => {
-                cmd.stdout(Stdio::from(stdout)).stderr(Stdio::from(stderr));
+    // Remove CLAUDECODE env var so spawned `claude -p` processes don't
+    // refuse to start due to nested session detection.
+    cmd.env_remove("CLAUDECODE");
+
+    match cmd.spawn() {
+        Ok(child) => Ok(child),
+        Err(err) => {
+            if let Some(sandbox_err) = classify_sandbox_spawn_error(execution_profile, &err) {
+                return Err(sandbox_err.into());
             }
-            RunnerStdioMode::Piped => {
-                cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-            }
-        }
-
-        cmd.kill_on_drop(true);
-
-        if pipe_stdin {
-            cmd.stdin(Stdio::piped());
-        }
-
-        #[cfg(unix)]
-        {
-            use super::resource_limits::apply_unix_resource_limits_to_command;
-            cmd.process_group(0); // child becomes its own process group leader
-            apply_unix_resource_limits_to_command(&mut cmd, execution_profile)?;
-        }
-
-        if runner.policy == RunnerPolicy::Allowlist {
-            cmd.env_clear();
-            for key in &runner.env_allowlist {
-                if let Ok(value) = std::env::var(key) {
-                    cmd.env(key, value);
-                }
-            }
-        }
-
-        // Inject agent-specific extra env vars (from EnvStore/SecretStore/direct)
-        for (k, v) in extra_env {
-            cmd.env(k, v);
-        }
-
-        // Remove CLAUDECODE env var so spawned `claude -p` processes don't
-        // refuse to start due to nested session detection.
-        cmd.env_remove("CLAUDECODE");
-
-        match cmd.spawn() {
-            Ok(child) => Ok(child),
-            Err(err) => {
-                if let Some(sandbox_err) = classify_sandbox_spawn_error(execution_profile, &err) {
-                    return Err(sandbox_err.into());
-                }
-                Err(err).with_context(|| {
-                    format!(
-                        "failed to spawn runner shell={} shell_arg={}",
-                        runner.shell, runner.shell_arg
-                    )
-                })
-            }
+            Err(err).with_context(|| {
+                format!(
+                    "failed to spawn runner shell={} shell_arg={}",
+                    runner.shell, runner.shell_arg
+                )
+            })
         }
     }
 }
@@ -145,6 +171,15 @@ pub fn spawn_with_runner(
 ) -> Result<tokio::process::Child> {
     match runner.executor {
         RunnerExecutorKind::Shell => ShellRunnerExecutor.spawn(SpawnParams {
+            runner,
+            command,
+            cwd,
+            stdio_mode: RunnerStdioMode::Files { stdout, stderr },
+            extra_env,
+            pipe_stdin,
+            execution_profile,
+        }),
+        RunnerExecutorKind::Streaming => StreamingAgentRunner.spawn(SpawnParams {
             runner,
             command,
             cwd,
@@ -179,6 +214,15 @@ pub fn spawn_with_runner_and_capture(
 ) -> Result<CapturedChild> {
     let mut child = match runner.executor {
         RunnerExecutorKind::Shell => ShellRunnerExecutor.spawn(SpawnParams {
+            runner,
+            command,
+            cwd,
+            stdio_mode: RunnerStdioMode::Piped,
+            extra_env,
+            pipe_stdin,
+            execution_profile,
+        })?,
+        RunnerExecutorKind::Streaming => StreamingAgentRunner.spawn(SpawnParams {
             runner,
             command,
             cwd,

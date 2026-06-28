@@ -92,6 +92,38 @@ All pipeline variables captured by previous steps are available in prehook expre
 
 **Scope merging**: Both task-scoped and item-scoped pipeline variables are available. When names collide, item-scoped values take precedence.
 
+**Availability**: Pipeline variables (including the streaming-run signals below) are bound the same way into prehook, **convergence guard** (`loop.convergence_expr`), and **finalize rule** (`finalize.rules`) expressions.
+
+#### Streaming-Run Signals
+
+When a step runs under the `streaming` runner executor, the agent's `stream-json`
+output is parsed into structured signals and injected as pipeline variables, so
+coordination can be driven by what the agent *did* (which typed tools it called)
+rather than by scraping stdout:
+
+| Variable | CEL Type | Meaning |
+|---|---|---|
+| `tools_called` | `list(string)` | Bare names of tools the agent called this step (MCP prefixes stripped), e.g. `'mark_done' in tools_called` |
+| `tool_error_count` | `int` | Number of tool calls that returned an error |
+| `num_tool_calls` | `int` | Total tool calls in the run |
+| `agent_reported_error` | `bool` | Whether the run's `result` event reported an error |
+| `run_cost_usd` | `double` | Total cost reported by the run (e.g. budget gates: `run_cost_usd > 5.0`) |
+| `run_turns` | `int` | Number of turns the run took |
+
+Example — converge the loop when the agent signals completion via a typed tool:
+
+```yaml
+loop:
+  mode: infinite
+  max_cycles: 3
+  convergence_expr:
+    - engine: cel
+      when: "'mark_done' in tools_called"
+      reason: "agent signaled completion via the mark_done tool"
+```
+
+See `docs/showcases/streaming-mark-done-convergence.md` for an end-to-end run.
+
 #### Example: Filter by Regression Targets
 
 ```yaml

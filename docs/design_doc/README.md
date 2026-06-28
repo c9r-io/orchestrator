@@ -5,6 +5,8 @@ This directory contains design documents captured from confirmed plans (plan mod
 Generation entry point:
 - Before generating `docs/qa/**`, `qa-doc-gen` generates the corresponding `docs/design_doc/**` design docs (same module-based structure).
 
+**Featured narrative:** [Streaming Runner Pivot — Overview](orchestrator/streaming-runner-pivot-overview.md) — a one-page tour of the 101→102→103 arc (replace the shell black-box agent contract with a structured, tool-calling one) and the live demo where a workflow converges on `'mark_done' in tools_called`.
+
 ## Suggested Directory Structure
 
 ```
@@ -67,3 +69,7 @@ docs/design_doc/
 | orchestrator | `docs/design_doc/orchestrator/96-crd-plugin-system.md` | `docs/qa/orchestrator/136-crd-plugin-system.md` | CRD plugin system: interceptor/transformer/cron plugins, policy governance, built-in tools |
 | orchestrator | `docs/design_doc/orchestrator/99-linux-sandbox-filesystem-isolation.md` | `docs/qa/orchestrator/139-linux-sandbox-filesystem-isolation.md` | FR-091: Linux sandbox filesystem isolation via mount namespaces |
 | orchestrator | `docs/design_doc/orchestrator/100-plugin-sandbox-isolation.md` | `docs/qa/orchestrator/140-plugin-sandbox-isolation.md` | Plugin sandbox isolation: TOCTOU defense, execution_profile, env sanitization, audit enhancement |
+| orchestrator | `docs/design_doc/orchestrator/101-streaming-agent-runner-architecture-pivot.md` | TBD | Decision record: replace one-shot shell-text agent contract with bidirectional stream-json + orchestrator-owned MCP tools; collapse coordination out of YAML/CEL; `StreamingAgentRunner` behind existing `RunnerExecutor` seam |
+| orchestrator | `docs/design_doc/orchestrator/102-stream-json-event-ingestion.md` | TBD | Parse stream-json output into structured records: project `tool_use`/`tool_result`/`result` into the `events` table and onto `AgentOutput`; parse in validation, project in `record_phase_results`; additive, no schema change |
+| orchestrator | `docs/design_doc/orchestrator/103-cel-stream-run-signals.md` | TBD | Surface streaming-run signals (`tools_called`, `tool_error_count`, `run_cost_usd`, …) to prehook/convergence/finalize CEL via a unified `bind_pipeline_vars`; coordination driven by what the agent did, not regex-scraped stdout |
+| orchestrator | `docs/design_doc/orchestrator/streaming-runner-pivot-overview.md` | — | Narrative overview tying 101→102→103 + the [showcase](../showcases/streaming-mark-done-convergence.md) into a one-page interview-ready tour |

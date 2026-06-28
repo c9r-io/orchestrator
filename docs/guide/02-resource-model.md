@@ -211,10 +211,17 @@ kind: RuntimePolicy
 metadata:
   name: default
 spec:
-  runner: { ... }
+  runner:
+    executor: shell    # shell (default) | streaming
+    # … shell, policy, allowed_shells, env_allowlist, redaction_patterns
   resume: { ... }
   observability: { ... }
 ```
+
+**`runner.executor`** selects the execution backend (global):
+
+- `shell` (default) — runs each step's command as a one-shot shell process; output is captured as text/JSON.
+- `streaming` — drives the agent CLI in `stream-json` mode with orchestrator-owned MCP tools, exposing structured signals (`tools_called`, `run_cost_usd`, …) to coordination CEL. See `docs/design_doc/orchestrator/streaming-runner-pivot-overview.md` and the [showcase](../showcases/streaming-mark-done-convergence.md).
 
 ## 7. ExecutionProfile
 

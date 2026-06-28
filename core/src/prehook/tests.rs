@@ -434,6 +434,7 @@ fn default_step_prehook_context() -> StepPrehookContext {
 // --- Helper to create a default ItemFinalizeContext ---
 fn default_item_finalize_context() -> crate::config::ItemFinalizeContext {
     crate::config::ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         task_id: "task-1".to_string(),
         task_item_id: "item-1".to_string(),
         cycle: 1,
@@ -757,6 +758,7 @@ fn test_evaluate_finalize_rule_expression_true() {
         None,
     );
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         qa_skipped: true,
         active_ticket_count: 0,
         ..default_item_finalize_context()
@@ -775,6 +777,7 @@ fn test_evaluate_finalize_rule_expression_false() {
         None,
     );
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         qa_skipped: false,
         active_ticket_count: 0,
         ..default_item_finalize_context()
@@ -811,6 +814,7 @@ fn test_evaluate_finalize_rule_expression_non_bool_result() {
 fn test_evaluate_finalize_rule_qa_enabled_variables() {
     let rule = make_rule("r1", "qa_enabled && qa_ran && !qa_skipped", "passed", None);
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         qa_enabled: true,
         qa_ran: true,
         qa_skipped: false,
@@ -825,6 +829,7 @@ fn test_evaluate_finalize_rule_qa_enabled_variables() {
 fn test_evaluate_finalize_rule_fix_variables() {
     let rule = make_rule("r1", "fix_enabled && fix_ran && fix_success", "fixed", None);
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         fix_enabled: true,
         fix_ran: true,
         fix_success: true,
@@ -844,6 +849,7 @@ fn test_evaluate_finalize_rule_retest_variables() {
         None,
     );
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         retest_enabled: true,
         retest_ran: true,
         retest_success: true,
@@ -864,6 +870,7 @@ fn test_evaluate_finalize_rule_is_last_cycle() {
     );
     // Not last cycle -- rule should not match
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         qa_skipped: true,
         active_ticket_count: 0,
         is_last_cycle: false,
@@ -875,6 +882,7 @@ fn test_evaluate_finalize_rule_is_last_cycle() {
 
     // Last cycle -- rule should match
     let context_last = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         is_last_cycle: true,
         ..context
     };
@@ -887,6 +895,7 @@ fn test_evaluate_finalize_rule_is_last_cycle() {
 fn test_evaluate_finalize_rule_retest_new_ticket_count() {
     let rule = make_rule("r1", "retest_new_ticket_count > 0", "needs_review", None);
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         retest_new_ticket_count: 3,
         ..default_item_finalize_context()
     };
@@ -899,6 +908,7 @@ fn test_evaluate_finalize_rule_retest_new_ticket_count() {
 fn test_evaluate_finalize_rule_new_ticket_count() {
     let rule = make_rule("r1", "new_ticket_count > 0 && qa_failed", "failing", None);
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         new_ticket_count: 5,
         qa_failed: true,
         ..default_item_finalize_context()
@@ -917,6 +927,7 @@ fn test_evaluate_finalize_rule_exit_codes() {
         None,
     );
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         qa_exit_code: Some(1),
         fix_exit_code: Some(0),
         ..default_item_finalize_context()
@@ -930,6 +941,7 @@ fn test_evaluate_finalize_rule_exit_codes() {
 fn test_evaluate_finalize_rule_retest_exit_code() {
     let rule = make_rule("r1", "retest_exit_code == 0", "verified", None);
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         retest_exit_code: Some(0),
         ..default_item_finalize_context()
     };
@@ -942,6 +954,7 @@ fn test_evaluate_finalize_rule_retest_exit_code() {
 fn test_evaluate_finalize_rule_fix_required() {
     let rule = make_rule("r1", "fix_required && !fix_ran", "needs_fix", None);
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         fix_required: true,
         fix_ran: false,
         ..default_item_finalize_context()
@@ -960,6 +973,7 @@ fn test_evaluate_finalize_rule_task_and_item_ids() {
         None,
     );
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         task_id: "my-task".to_string(),
         task_item_id: "my-item".to_string(),
         ..default_item_finalize_context()
@@ -973,6 +987,7 @@ fn test_evaluate_finalize_rule_task_and_item_ids() {
 fn test_evaluate_finalize_rule_cycle_variable() {
     let rule = make_rule("r1", "cycle >= 2", "advanced", None);
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         cycle: 3,
         ..default_item_finalize_context()
     };
@@ -981,6 +996,7 @@ fn test_evaluate_finalize_rule_cycle_variable() {
     assert!(result.expect("cycle rule should match"));
 
     let context_early = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         cycle: 1,
         ..default_item_finalize_context()
     };
@@ -993,6 +1009,7 @@ fn test_evaluate_finalize_rule_cycle_variable() {
 fn test_evaluate_finalize_rule_item_status_variable() {
     let rule = make_rule("r1", "item_status == \"completed\"", "done", None);
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         item_status: "completed".to_string(),
         ..default_item_finalize_context()
     };
@@ -1129,6 +1146,7 @@ fn test_resolve_workflow_finalize_outcome_complex_conditions() {
 
     // Case 1: QA skipped, last cycle, no tickets => skip_without_tickets
     let ctx1 = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         qa_skipped: true,
         qa_ran: false,
         active_ticket_count: 0,
@@ -1142,6 +1160,7 @@ fn test_resolve_workflow_finalize_outcome_complex_conditions() {
 
     // Case 2: QA skipped, NOT last cycle => skip rule doesn't match, qa_ran also false
     let ctx2 = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         qa_skipped: true,
         qa_ran: false,
         active_ticket_count: 0,
@@ -1154,6 +1173,7 @@ fn test_resolve_workflow_finalize_outcome_complex_conditions() {
 
     // Case 3: QA ran and passed => qa_passed
     let ctx3 = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         qa_ran: true,
         qa_failed: false,
         qa_skipped: false,
@@ -1166,6 +1186,7 @@ fn test_resolve_workflow_finalize_outcome_complex_conditions() {
 
     // Case 4: QA failed, fix ran and succeeded, retest succeeded
     let ctx4 = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         qa_ran: true,
         qa_failed: true,
         qa_skipped: false,
@@ -1192,6 +1213,7 @@ fn test_fix_skipped_variable_available_in_cel_context() {
         )],
     };
     let ctx = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         fix_enabled: true,
         fix_ran: false,
         fix_skipped: false,
@@ -1206,6 +1228,7 @@ fn test_fix_skipped_variable_available_in_cel_context() {
 
     // When fix_skipped is true, the rule should NOT match
     let ctx_skipped = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         fix_skipped: true,
         ..ctx
     };
@@ -1454,6 +1477,7 @@ fn test_evaluate_finalize_rule_all_bool_flags_false() {
         None,
     );
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         qa_enabled: false,
         qa_ran: false,
         qa_skipped: false,
@@ -1481,6 +1505,7 @@ fn test_evaluate_finalize_rule_all_bool_flags_true() {
         None,
     );
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         qa_enabled: true,
         qa_ran: true,
         qa_skipped: true,
@@ -1620,6 +1645,7 @@ fn test_resolve_workflow_finalize_outcome_first_false_second_matches() {
         ],
     };
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         qa_ran: true,
         qa_skipped: false,
         active_ticket_count: 0,
@@ -1641,6 +1667,7 @@ fn test_resolve_workflow_finalize_outcome_none_match() {
         ],
     };
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         qa_skipped: false,
         fix_ran: false,
         fix_success: false,
@@ -1668,6 +1695,7 @@ fn test_evaluate_finalize_rule_expression_non_bool_return() {
 fn test_evaluate_finalize_rule_retest_new_ticket_count_positive() {
     let rule = make_rule("r1", "retest_new_ticket_count == 3", "unresolved", None);
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         retest_new_ticket_count: 3,
         ..default_item_finalize_context()
     };
@@ -1685,6 +1713,7 @@ fn test_evaluate_finalize_rule_retest_enabled_and_success() {
         None,
     );
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         retest_enabled: true,
         retest_ran: true,
         retest_success: true,
@@ -1699,6 +1728,7 @@ fn test_evaluate_finalize_rule_retest_enabled_and_success() {
 fn test_evaluate_finalize_rule_fix_skipped_variable() {
     let rule = make_rule("r1", "fix_skipped && !fix_ran", "skipped", None);
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         fix_skipped: true,
         fix_ran: false,
         ..default_item_finalize_context()
@@ -1712,6 +1742,7 @@ fn test_evaluate_finalize_rule_fix_skipped_variable() {
 fn test_evaluate_finalize_rule_fix_configured_variable() {
     let rule = make_rule("r1", "fix_configured && !fix_enabled", "pending", None);
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         fix_configured: true,
         fix_enabled: false,
         ..default_item_finalize_context()
@@ -1730,6 +1761,7 @@ fn test_evaluate_finalize_rule_qa_enabled_and_observed() {
         None,
     );
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         qa_enabled: true,
         qa_observed: true,
         qa_failed: false,
@@ -1744,6 +1776,7 @@ fn test_evaluate_finalize_rule_qa_enabled_and_observed() {
 fn test_evaluate_finalize_rule_is_last_cycle_with_qa_ran() {
     let rule = make_rule("r1", "is_last_cycle && qa_ran", "resolved", None);
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         is_last_cycle: true,
         qa_ran: true,
         ..default_item_finalize_context()
@@ -2001,6 +2034,7 @@ fn test_prehook_cel_context_self_test_exit_code_variable() {
 
 fn make_finalize_ctx() -> ItemFinalizeContext {
     ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         task_id: "task-1".to_string(),
         task_item_id: "item-1".to_string(),
         cycle: 2,
@@ -2683,6 +2717,7 @@ fn test_build_finalize_cel_context_default_succeeds() {
 #[test]
 fn test_build_finalize_cel_context_default_bool_variables() {
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         qa_failed: false,
         fix_required: false,
         qa_enabled: false,
@@ -2721,6 +2756,7 @@ fn test_build_finalize_cel_context_default_int_variables() {
 #[test]
 fn test_build_finalize_cel_context_default_retest_variables() {
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         retest_enabled: false,
         retest_ran: false,
         retest_success: false,
@@ -2754,6 +2790,7 @@ fn test_build_finalize_cel_context_default_artifact_variables() {
 #[test]
 fn test_build_finalize_cel_context_default_qa_observed_variables() {
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         qa_configured: false,
         qa_observed: false,
         ..default_item_finalize_context()
@@ -2982,6 +3019,7 @@ fn test_step_prehook_combined_non_default_fields() {
 #[test]
 fn test_finalize_context_qa_ran_fix_success_true() {
     let ctx = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         qa_ran: true,
         qa_failed: true,
         fix_ran: true,
@@ -3000,6 +3038,7 @@ fn test_finalize_context_qa_ran_fix_success_true() {
 #[test]
 fn test_finalize_context_optional_confidence_scores() {
     let ctx = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         qa_confidence: Some(0.95),
         qa_quality_score: Some(0.88),
         fix_confidence: Some(0.75),
@@ -3018,6 +3057,7 @@ fn test_finalize_context_optional_confidence_scores() {
 #[test]
 fn test_finalize_context_none_confidence_is_null() {
     let ctx = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         qa_confidence: None,
         fix_confidence: None,
         ..default_item_finalize_context()
@@ -3034,6 +3074,7 @@ fn test_finalize_context_none_confidence_is_null() {
 #[test]
 fn test_finalize_context_sandbox_denial_with_reason() {
     let ctx = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         last_sandbox_denied: true,
         sandbox_denied_count: 5,
         last_sandbox_denial_reason: Some("network access".to_string()),
@@ -3051,6 +3092,7 @@ fn test_finalize_context_sandbox_denial_with_reason() {
 #[test]
 fn test_finalize_context_artifact_fields_nonzero() {
     let ctx = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         total_artifacts: 10,
         has_ticket_artifacts: true,
         has_code_change_artifacts: true,
@@ -3068,6 +3110,7 @@ fn test_finalize_context_artifact_fields_nonzero() {
 #[test]
 fn test_finalize_context_combined_non_default() {
     let ctx = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         cycle: 3,
         is_last_cycle: true,
         qa_ran: true,
@@ -3095,6 +3138,7 @@ fn test_finalize_context_combined_non_default() {
 #[test]
 fn test_build_finalize_cel_context_sandbox_variables() {
     let context = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         last_sandbox_denied: true,
         sandbox_denied_count: 3,
         ..default_item_finalize_context()
@@ -3285,6 +3329,7 @@ fn finalize_outcome_single_matching_rule() {
         )],
     };
     let ctx = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         qa_failed: true,
         ..default_item_finalize_context()
     };
@@ -3321,6 +3366,7 @@ fn finalize_outcome_multiple_rules_second_matches() {
         ],
     };
     let ctx = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         cycle: 1,
         ..default_item_finalize_context()
     };
@@ -3364,9 +3410,111 @@ fn finalize_outcome_no_rules_match_returns_none() {
         ],
     };
     let ctx = ItemFinalizeContext {
+        vars: std::collections::HashMap::new(),
         qa_failed: false,
         ..default_item_finalize_context()
     };
     let result = resolve_workflow_finalize_outcome(&finalize, &ctx).unwrap();
     assert!(result.is_none());
+}
+
+// ========================================================================
+// Streaming-run signals consumed by prehook / convergence / finalize CEL
+// ========================================================================
+
+#[test]
+fn prehook_consumes_stream_signals() {
+    let mut vars = std::collections::HashMap::new();
+    vars.insert(
+        "tools_called".to_string(),
+        r#"["run_tests","mark_done"]"#.to_string(),
+    );
+    vars.insert("tool_error_count".to_string(), "0".to_string());
+    vars.insert("run_cost_usd".to_string(), "0.02".to_string());
+    let context = StepPrehookContext {
+        task_id: "task-1".to_string(),
+        task_item_id: "item-1".to_string(),
+        cycle: 1,
+        step: "guard".to_string(),
+        qa_file_path: "test.md".to_string(),
+        item_status: "pending".to_string(),
+        task_status: "running".to_string(),
+        qa_exit_code: None,
+        fix_exit_code: None,
+        retest_exit_code: None,
+        active_ticket_count: 0,
+        new_ticket_count: 0,
+        qa_failed: false,
+        fix_required: false,
+        qa_confidence: None,
+        qa_quality_score: None,
+        fix_has_changes: None,
+        upstream_artifacts: vec![],
+        build_error_count: 0,
+        test_failure_count: 0,
+        build_exit_code: None,
+        test_exit_code: None,
+        self_test_exit_code: None,
+        self_test_passed: false,
+        max_cycles: 1,
+        is_last_cycle: true,
+        last_sandbox_denied: false,
+        sandbox_denied_count: 0,
+        last_sandbox_denial_reason: None,
+        self_referential_safe: true,
+        self_referential_safe_scenarios: vec![],
+        vars,
+    };
+    // Drive a gate from what the agent did + run economics.
+    assert!(
+        evaluate_step_prehook_expression(
+            "'mark_done' in tools_called && tool_error_count == 0",
+            &context
+        )
+        .expect("expression evaluates")
+    );
+    assert!(
+        !evaluate_step_prehook_expression("run_cost_usd > 5.0", &context)
+            .expect("budget expression evaluates")
+    );
+}
+
+#[test]
+fn convergence_consumes_tools_called_list() {
+    let mut vars = std::collections::HashMap::new();
+    vars.insert("tools_called".to_string(), r#"["mark_done"]"#.to_string());
+    vars.insert("tool_error_count".to_string(), "0".to_string());
+    let context = ConvergenceContext {
+        vars,
+        ..Default::default()
+    };
+    // Verifies the convergence builder now binds JSON arrays as CEL lists.
+    assert!(
+        evaluate_convergence_expression(
+            "'mark_done' in tools_called && tool_error_count == 0",
+            &context
+        )
+        .expect("convergence expression evaluates")
+    );
+}
+
+#[test]
+fn finalize_consumes_stream_signals() {
+    let rule = make_rule("r-tool", "tool_error_count == 0", "verified", None);
+
+    let mut clean = std::collections::HashMap::new();
+    clean.insert("tool_error_count".to_string(), "0".to_string());
+    let ok_ctx = ItemFinalizeContext {
+        vars: clean,
+        ..default_item_finalize_context()
+    };
+    assert!(evaluate_finalize_rule_expression(&rule, &ok_ctx).expect("rule evaluates"));
+
+    let mut errored = std::collections::HashMap::new();
+    errored.insert("tool_error_count".to_string(), "1".to_string());
+    let fail_ctx = ItemFinalizeContext {
+        vars: errored,
+        ..default_item_finalize_context()
+    };
+    assert!(!evaluate_finalize_rule_expression(&rule, &fail_ctx).expect("rule evaluates"));
 }

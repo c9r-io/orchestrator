@@ -74,6 +74,72 @@
 |------|------|------|
 | `self_referential_safe` | `bool` | 此项是否可安全用于自引用执行 |
 
+### 管道变量（Pipeline Variables）
+
+之前步骤捕获的所有管道变量都可在预钩子表达式中使用。变量按自动类型推断注入：
+
+| 源值 | CEL 类型 | 示例 |
+|---|---|---|
+| `"42"` | `int` | `my_count > 10` |
+| `"3.14"` | `double` | `score >= 0.8` |
+| `"true"` / `"false"` | `bool` | `feature_enabled` |
+| `'["a","b","c"]'` | `list(string)` | `qa_file_path in regression_target_ids` |
+| 其它任何值 | `string` | `my_var == "hello"` |
+
+**优先级**：内置变量（如 `cycle`、`step`）在同名时始终优先于管道变量。
+
+**截断值**：溢出到磁盘（超过 4 KB 内联上限）的变量会自动从 CEL 上下文中排除。
+
+**作用域合并**：task 作用域与 item 作用域的管道变量都可用；同名时 item 作用域优先。
+
+**可用范围**：管道变量（包括下面的流式运行信号）以相同方式绑定进 prehook、**收敛守卫**（`loop.convergence_expr`）和 **finalize 规则**（`finalize.rules`）表达式。
+
+#### 流式运行信号（Streaming-Run Signals）
+
+当步骤在 `streaming` 运行器下执行时，agent 的 `stream-json` 输出会被解析成结构化信号并注入为管道变量，使编排可以**由 agent 实际调用了哪些 typed 工具**驱动，而非靠正则刮 stdout。这些信号与其他管道变量一样，可在 prehook、收敛守卫（`loop.convergence_expr`）和 finalize 规则（`finalize.rules`）表达式中使用：
+
+| 变量 | 类型 | 说明 |
+|------|------|------|
+| `tools_called` | `list(string)` | 本步骤 agent 调用的工具裸名（已剥离 MCP 前缀），例如 `'mark_done' in tools_called` |
+| `tool_error_count` | `int` | 返回错误的工具调用次数 |
+| `num_tool_calls` | `int` | 本次运行的工具调用总数 |
+| `agent_reported_error` | `bool` | 运行的 `result` 事件是否报告错误 |
+| `run_cost_usd` | `double` | 本次运行的总成本（如预算闸：`run_cost_usd > 5.0`） |
+| `run_turns` | `int` | 本次运行的轮次数 |
+
+示例 —— 当 agent 通过 typed 工具发出完成信号时收敛循环：
+
+```yaml
+loop:
+  mode: infinite
+  max_cycles: 3
+  convergence_expr:
+    - engine: cel
+      when: "'mark_done' in tools_called"
+      reason: "agent signaled completion via the mark_done tool"
+```
+
+端到端演示见 `docs/showcases/streaming-mark-done-convergence.md`。
+
+#### 示例：按回归目标过滤
+
+```yaml
+# qa_doc_gen 将 regression_target_ids 捕获为 JSON 数组
+capture:
+  - var: regression_target_ids
+    source: stdout
+    json_path: "$.regression_targets[*].id"
+
+# qa_testing 用捕获的列表过滤项
+prehook:
+  engine: cel
+  when: >-
+    is_last_cycle
+    && qa_file_path in regression_target_ids
+    && self_referential_safe
+  reason: "Filtered by regression targets from qa_doc_gen"
+```
+
 ## 常见模式
 
 ### 延迟到最后一个循环

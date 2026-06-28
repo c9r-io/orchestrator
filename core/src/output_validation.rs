@@ -1,7 +1,10 @@
-use crate::collab::{AgentOutput, parse_artifacts_from_output};
+use crate::collab::{
+    AgentOutput, Artifact, ArtifactKind, ExecutionMetrics, parse_artifacts_from_output,
+};
 use crate::config::{BuildError, BuildErrorLevel, TestFailure};
+use crate::stream_json::{StreamRun, parse_stream_run};
 use anyhow::Result;
-use serde_json::Value;
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 /// Outcome of validating one agent phase output payload.
@@ -101,6 +104,17 @@ pub fn validate_phase_output(
         });
     }
 
+    // Stream-json runs (streaming agent runner / interactive CLI agents) are
+    // parsed structurally rather than as a single JSON blob: tool calls and run
+    // economics are projected onto the output. Keyed on detection, so non-stream
+    // (single-JSON / plain-text) payloads fall through unchanged.
+    let stream = parse_stream_run(stdout);
+    if stream.detected {
+        return Ok(build_streaming_outcome(
+            phase, run_id, agent_id, exit_code, stdout, stderr, stream,
+        ));
+    }
+
     let strict = is_strict_phase(phase);
     let parsed_json = serde_json::from_str::<Value>(stdout);
 
@@ -187,6 +201,95 @@ pub fn validate_phase_output(
         status: "passed",
         error: None,
     })
+}
+
+/// Builds a [`ValidationOutcome`] from a parsed stream-json run.
+///
+/// Tool calls become `ToolCall` artifacts; a `stream_run_summary` artifact
+/// carries run economics for downstream event projection. Success follows the
+/// `result` event's error flag; a truncated stream (no `result`) falls back to
+/// the process exit code.
+fn build_streaming_outcome(
+    phase: &str,
+    run_id: Uuid,
+    agent_id: &str,
+    exit_code: i64,
+    stdout: &str,
+    stderr: &str,
+    stream: StreamRun,
+) -> ValidationOutcome {
+    let truncated = !stream.saw_result;
+
+    let mut artifacts: Vec<Artifact> = stream
+        .tool_calls
+        .iter()
+        .map(|call| {
+            Artifact::new(ArtifactKind::ToolCall {
+                tool: call.name.clone(),
+            })
+            .with_content(json!({
+                "input": call.input,
+                "result": call.result,
+                "is_error": call.is_error,
+            }))
+        })
+        .collect();
+
+    artifacts.push(
+        Artifact::new(ArtifactKind::Data {
+            schema: "stream_run_summary".to_string(),
+        })
+        .with_content(json!({
+            "cost_usd": stream.cost_usd,
+            "num_turns": stream.num_turns,
+            "session_id": stream.session_id,
+            "is_error": stream.is_error,
+            "num_tool_calls": stream.tool_calls.len(),
+            "truncated": truncated,
+        })),
+    );
+
+    let metrics = ExecutionMetrics {
+        api_calls: stream.num_turns,
+        ..ExecutionMetrics::default()
+    };
+
+    let (status, error) = if truncated {
+        if exit_code == 0 {
+            ("passed", None)
+        } else {
+            (
+                "failed",
+                Some("stream truncated before result event".to_string()),
+            )
+        }
+    } else if stream.is_error {
+        (
+            "failed",
+            Some("agent reported error in result event".to_string()),
+        )
+    } else {
+        ("passed", None)
+    };
+
+    let output = AgentOutput::new(
+        run_id,
+        agent_id.to_string(),
+        phase.to_string(),
+        exit_code,
+        stdout.to_string(),
+        stderr.to_string(),
+    )
+    .with_artifacts(artifacts)
+    .with_metrics(metrics)
+    .with_confidence(1.0)
+    .with_quality_score(1.0);
+
+    ValidationOutcome {
+        output,
+        status,
+        error,
+    }
 }
 
 /// Line-scanning parser for compiler/test diagnostic output.
@@ -691,6 +794,49 @@ note: run with `RUST_BACKTRACE=1`";
             failures[0].message.contains("panicked"),
             "should capture the panic message"
         );
+    }
+
+    #[test]
+    fn stream_json_run_projects_tool_calls_and_summary() {
+        let stream = concat!(
+            r#"{"type":"system","subtype":"init","session_id":"s1"}"#,
+            "\n",
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t2","name":"mcp__orch__run_tests","input":{"target":"core"}}]}}"#,
+            "\n",
+            r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t2","content":[{"type":"text","text":"{\"failed\":1}"}]}]}}"#,
+            "\n",
+            r#"{"type":"result","is_error":false,"result":"done","num_turns":2,"total_cost_usd":0.01,"session_id":"s1"}"#,
+            "\n",
+        );
+        let outcome = validate_phase_output("implement", Uuid::new_v4(), "agent", 0, stream, "")
+            .expect("validation outcome");
+        assert_eq!(outcome.status, "passed");
+
+        let tool = outcome.output.artifacts.iter().find_map(|a| match &a.kind {
+            ArtifactKind::ToolCall { tool } => Some(tool.clone()),
+            _ => None,
+        });
+        assert_eq!(tool.as_deref(), Some("mcp__orch__run_tests"));
+
+        let summary = outcome
+            .output
+            .artifacts
+            .iter()
+            .find(|a| {
+                matches!(&a.kind, ArtifactKind::Data { schema } if schema.as_str() == "stream_run_summary")
+            })
+            .expect("summary artifact present");
+        let content = summary.content.as_ref().expect("summary content");
+        assert_eq!(content.get("num_turns").and_then(|v| v.as_u64()), Some(2));
+        assert_eq!(
+            content.get("num_tool_calls").and_then(|v| v.as_u64()),
+            Some(1)
+        );
+        assert_eq!(
+            content.get("truncated").and_then(|v| v.as_bool()),
+            Some(false)
+        );
+        assert_eq!(outcome.output.metrics.api_calls, Some(2));
     }
 
     #[test]

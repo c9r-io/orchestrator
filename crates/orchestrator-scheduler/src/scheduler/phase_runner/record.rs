@@ -116,6 +116,20 @@ pub(super) async fn record_phase_results(
                 }))?,
             });
         }
+        // Project stream-json structured records (from the streaming runner)
+        // into events: one per tool call, plus a run summary. Non-streaming runs
+        // carry no such artifacts, so this is a no-op for them.
+        events.extend(project_stream_events(
+            &validated.redacted_output.artifacts,
+            task_id,
+            item_id,
+            phase,
+            step_id,
+            step_scope,
+            agent_id,
+            &setup.run_id,
+        ));
+
         writer
             .update_command_run_with_owned_events(insert_payload, events)
             .await?;
@@ -187,4 +201,181 @@ pub(super) async fn record_phase_results(
     }
 
     Ok(())
+}
+
+/// Projects stream-json structured artifacts (from the streaming agent runner)
+/// into `events` rows: one `agent_tool_call` per tool call, an `agent_run_summary`,
+/// and `stream_truncated` when the stream was cut off before its result event.
+///
+/// Non-streaming runs carry no such artifacts, so this returns an empty vec.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn project_stream_events(
+    artifacts: &[agent_orchestrator::collab::Artifact],
+    task_id: &str,
+    item_id: &str,
+    step: &str,
+    step_id: &str,
+    step_scope: agent_orchestrator::config::StepScope,
+    agent_id: &str,
+    run_id: &str,
+) -> Vec<agent_orchestrator::db_write::DbEventRecord> {
+    use agent_orchestrator::collab::ArtifactKind;
+    use agent_orchestrator::db_write::DbEventRecord;
+
+    let step_scope_str = match step_scope {
+        agent_orchestrator::config::StepScope::Task => "task",
+        agent_orchestrator::config::StepScope::Item => "item",
+    };
+    let mut events = Vec::new();
+
+    for artifact in artifacts {
+        match &artifact.kind {
+            ArtifactKind::ToolCall { tool } => {
+                events.push(DbEventRecord {
+                    task_id: task_id.to_string(),
+                    task_item_id: Some(item_id.to_string()),
+                    event_type: "agent_tool_call".to_string(),
+                    payload_json: json!({
+                        "step": step,
+                        "step_id": step_id,
+                        "step_scope": step_scope_str,
+                        "agent_id": agent_id,
+                        "run_id": run_id,
+                        "tool": tool,
+                        "detail": artifact.content,
+                    })
+                    .to_string(),
+                });
+            }
+            ArtifactKind::Data { schema } if schema.as_str() == "stream_run_summary" => {
+                let summary = artifact.content.clone().unwrap_or(serde_json::Value::Null);
+                events.push(DbEventRecord {
+                    task_id: task_id.to_string(),
+                    task_item_id: Some(item_id.to_string()),
+                    event_type: "agent_run_summary".to_string(),
+                    payload_json: json!({
+                        "step": step,
+                        "step_id": step_id,
+                        "step_scope": step_scope_str,
+                        "agent_id": agent_id,
+                        "run_id": run_id,
+                        "summary": summary,
+                    })
+                    .to_string(),
+                });
+                if summary.get("truncated").and_then(|v| v.as_bool()) == Some(true) {
+                    events.push(DbEventRecord {
+                        task_id: task_id.to_string(),
+                        task_item_id: Some(item_id.to_string()),
+                        event_type: "stream_truncated".to_string(),
+                        payload_json: json!({
+                            "step": step,
+                            "step_id": step_id,
+                            "run_id": run_id,
+                        })
+                        .to_string(),
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    events
+}
+
+#[cfg(test)]
+mod tests {
+    use super::project_stream_events;
+    use agent_orchestrator::config::StepScope;
+    use agent_orchestrator::db::open_conn;
+    use agent_orchestrator::output_validation::validate_phase_output;
+    use agent_orchestrator::test_utils::TestState;
+    use rusqlite::params;
+
+    // A compact stream-json run: the orchestrator MCP tool call + terminal result.
+    const STREAM: &str = concat!(
+        r#"{"type":"system","subtype":"init","session_id":"s1"}"#,
+        "\n",
+        r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"mcp__orch__run_tests","input":{"target":"core"}}]}}"#,
+        "\n",
+        r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"text","text":"{\"failed\":1,\"failures\":[\"core::selection::picks_healthy_agent\"]}"}]}]}}"#,
+        "\n",
+        r#"{"type":"result","is_error":false,"result":"1 failed","num_turns":3,"total_cost_usd":0.02,"session_id":"s1"}"#,
+        "\n",
+    );
+
+    #[tokio::test]
+    async fn streaming_run_projects_tool_call_events_into_db() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        // Real chain: parse the stream into artifacts, then project events.
+        let outcome =
+            validate_phase_output("implement", uuid::Uuid::new_v4(), "streamer", 0, STREAM, "")
+                .expect("validate streaming output");
+        let events = project_stream_events(
+            &outcome.output.artifacts,
+            "task-stream-events",
+            "item-1",
+            "implement",
+            "implement",
+            StepScope::Item,
+            "streamer",
+            "run-1",
+        );
+
+        // Persist through the real events-insert path (promotes step/scope/cycle).
+        for event in &events {
+            state
+                .db_writer
+                .insert_event(
+                    &event.task_id,
+                    event.task_item_id.as_deref(),
+                    &event.event_type,
+                    &event.payload_json,
+                )
+                .await
+                .expect("insert projected event");
+        }
+
+        // Read back and assert on payload + the promoted `step` column.
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let rows: Vec<(String, String, Option<String>)> = {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT event_type, payload_json, step FROM events
+                     WHERE task_id = 'task-stream-events'
+                       AND event_type IN ('agent_tool_call', 'agent_run_summary')
+                     ORDER BY id",
+                )
+                .expect("prepare events query");
+            stmt.query_map(params![], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+                .expect("query events")
+                .collect::<Result<Vec<_>, _>>()
+                .expect("collect events")
+        };
+
+        let tool_call = rows
+            .iter()
+            .find(|(ty, _, _)| ty == "agent_tool_call")
+            .expect("agent_tool_call row present");
+        let payload: serde_json::Value =
+            serde_json::from_str(&tool_call.1).expect("parse tool_call payload");
+        assert_eq!(payload["tool"], "mcp__orch__run_tests");
+        assert_eq!(
+            tool_call.2.as_deref(),
+            Some("implement"),
+            "step should be promoted into its column"
+        );
+
+        let summary = rows
+            .iter()
+            .find(|(ty, _, _)| ty == "agent_run_summary")
+            .expect("agent_run_summary row present");
+        let summary_payload: serde_json::Value =
+            serde_json::from_str(&summary.1).expect("parse summary payload");
+        assert_eq!(summary_payload["summary"]["num_turns"], 3);
+        assert_eq!(summary_payload["summary"]["num_tool_calls"], 1);
+    }
 }

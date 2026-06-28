@@ -3315,6 +3315,7 @@ dependencies = [
  "libc",
  "nix",
  "orchestrator-config",
+ "serde_json",
  "tempfile",
  "tokio",
  "tracing",

@@ -92,6 +92,12 @@ pub enum ArtifactKind {
         /// Schema or format identifier for the payload.
         schema: String,
     },
+    /// A tool call made by an agent during a streaming run. Structured input and
+    /// result are carried in the artifact's `content`.
+    ToolCall {
+        /// Fully-qualified tool name, e.g. `mcp__orch__run_tests`.
+        tool: String,
+    },
     /// A custom artifact type not covered by builtin variants.
     Custom {
         /// User-defined artifact name.
