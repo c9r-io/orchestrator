@@ -128,6 +128,7 @@ pub mod session_store;
 /// Shared daemon state and state transition helpers.
 pub mod state;
 pub mod store;
+pub mod stream_json;
 /// Auto-cleanup of terminated tasks and associated data.
 pub mod task_cleanup;
 /// High-level task mutation operations.

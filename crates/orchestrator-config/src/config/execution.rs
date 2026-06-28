@@ -475,6 +475,9 @@ pub struct ItemFinalizeContext {
     pub sandbox_denied_count: u32,
     /// Human-readable reason for the latest sandbox denial.
     pub last_sandbox_denial_reason: Option<String>,
+    /// Captured pipeline variables (including streaming-run signals such as
+    /// `tools_called` / `tool_error_count`), bound into CEL with type inference.
+    pub vars: std::collections::HashMap<String, String>,
 }
 
 /// Workflow finalize outcome

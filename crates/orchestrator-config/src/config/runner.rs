@@ -18,6 +18,11 @@ pub enum RunnerExecutorKind {
     /// Execute commands through a shell process.
     #[default]
     Shell,
+    /// Drive an agent CLI in `stream-json` mode with orchestrator-owned MCP
+    /// tools, replacing the one-shot shell-text contract with a structured,
+    /// tool-calling contract. See
+    /// `docs/design_doc/orchestrator/101-streaming-agent-runner-architecture-pivot.md`.
+    Streaming,
 }
 
 /// Configuration for command execution in orchestrated steps.
@@ -137,6 +142,16 @@ mod tests {
     fn test_runner_executor_kind_default() {
         let kind = RunnerExecutorKind::default();
         assert_eq!(kind, RunnerExecutorKind::Shell);
+    }
+
+    #[test]
+    fn test_runner_executor_kind_streaming_serde() {
+        let kind = RunnerExecutorKind::Streaming;
+        let json = serde_json::to_string(&kind).expect("serialize streaming kind");
+        assert_eq!(json, r#""streaming""#);
+        let back: RunnerExecutorKind =
+            serde_json::from_str(&json).expect("deserialize streaming kind");
+        assert_eq!(back, RunnerExecutorKind::Streaming);
     }
 
     #[test]

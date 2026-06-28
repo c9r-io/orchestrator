@@ -253,6 +253,7 @@ impl StepExecutionAccumulator {
                 .any(|s| retest_step_ids.contains(&s.id) && s.enabled);
 
         ItemFinalizeContext {
+            vars: self.pipeline_vars.vars.clone(),
             task_id: task_id.to_string(),
             task_item_id: item.id.clone(),
             cycle: task_ctx.current_cycle,

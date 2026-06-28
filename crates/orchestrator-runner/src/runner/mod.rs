@@ -9,6 +9,7 @@ mod sandbox_linux;
 #[cfg(target_os = "macos")]
 mod sandbox_macos;
 mod spawn;
+mod streaming;
 
 pub use policy::{DaemonPidGuardBlocked, enforce_runner_policy};
 pub use profile::ResolvedExecutionProfile;
@@ -23,6 +24,7 @@ pub use spawn::{
     CapturedChild, RunnerExecutor, RunnerStdioMode, ShellRunnerExecutor, SpawnParams,
     kill_child_process_group, spawn_with_runner, spawn_with_runner_and_capture,
 };
+pub use streaming::StreamingAgentRunner;
 
 #[cfg(test)]
 mod tests {

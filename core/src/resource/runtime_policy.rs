@@ -135,6 +135,7 @@ pub(crate) fn runner_spec_to_config(spec: &RunnerSpec) -> RunnerConfig {
             _ => RunnerPolicy::Allowlist,
         },
         executor: match spec.executor.as_str() {
+            "streaming" => RunnerExecutorKind::Streaming,
             "shell" => RunnerExecutorKind::Shell,
             _ => RunnerExecutorKind::Shell,
         },
@@ -156,6 +157,7 @@ pub(crate) fn runner_config_to_spec(config: &RunnerConfig) -> RunnerSpec {
         },
         executor: match config.executor {
             RunnerExecutorKind::Shell => "shell".to_string(),
+            RunnerExecutorKind::Streaming => "streaming".to_string(),
         },
         allowed_shells: config.allowed_shells.clone(),
         allowed_shell_args: config.allowed_shell_args.clone(),
