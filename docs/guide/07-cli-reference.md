@@ -24,25 +24,27 @@ The daemon holds all state (engine, DB, task queue). The CLI is a thin RPC clien
 
 | Command | Alias |
 |---------|-------|
-| `apply` | `ap` |
-| `get` | `g` |
-| `describe` | `desc` |
-| `delete` | `rm` |
-| `event` | `ev` |
-| `task` | `t` |
-| `task list` | `task ls` |
-| `task create` | `task new` |
-| `task info` | `task get` |
-| `task logs` | `task log` |
-| `task delete` | `task rm` |
-| `check` | `ck` |
-| `debug` | `dbg` |
-| `store list` | `store ls` |
 | `agent` | `ag` |
 | `agent list` | `agent ls` |
-| `trigger` | `tg` |
-| `secret key list` | `secret key ls` |
+| `apply` | `ap` |
+| `check` | `ck` |
 | `db migrations list` | `db migrations ls` |
+| `debug` | `dbg` |
+| `delete` | `rm` |
+| `describe` | `desc` |
+| `event` | `ev` |
+| `event list` | `event ls` |
+| `get` | `g` |
+| `guide` | `gd` |
+| `secret key list` | `secret key ls` |
+| `store list` | `store ls` |
+| `task` | `t` |
+| `task create` | `task new` |
+| `task delete` | `task rm` |
+| `task info` | `task get` |
+| `task list` | `task ls` |
+| `task logs` | `task log` |
+| `trigger` | `tg` |
 
 ## Initialization & Configuration
 
@@ -239,6 +241,21 @@ orchestrator task info <task_id> -o yaml
 | `-o, --output` | Output format: table (default), json, yaml |
 | `-v, --verbose` | Verbose output |
 
+### task items
+
+List the items of a task and their individual status.
+
+```bash
+orchestrator task items <task_id>
+orchestrator task items <task_id> --status running
+orchestrator task items <task_id> -o json
+```
+
+| Flag | Description |
+|------|-------------|
+| `-s, --status` | Filter by item status |
+| `-o, --output` | Output format: table (default), json, yaml |
+
 ### task recover
 
 Recover orphaned running items (e.g. after a crash).
@@ -347,6 +364,7 @@ orchestrator secret key status [-o json]
 orchestrator secret key list [-o json]
 orchestrator secret key rotate [--resume]
 orchestrator secret key revoke <key_id> [--force]
+orchestrator secret key bootstrap                 # emergency recovery when all keys are terminal
 orchestrator secret key history [-n <limit>] [--key-id <id>] [-o json]
 ```
 
@@ -355,6 +373,9 @@ orchestrator secret key history [-n <limit>] [--key-id <id>] [-o json]
 ```bash
 orchestrator db status [-o json]
 orchestrator db migrations list [-o json]
+orchestrator db vacuum                            # reclaim disk space (VACUUM)
+orchestrator db cleanup                           # clean up old log files from terminated tasks
+orchestrator db cleanup --older-than 30           # logs older than N days (default 30)
 ```
 
 ## Project Cleanup
@@ -458,11 +479,20 @@ orchestrator daemon maintenance --disable     # allow task creation again
 
 ```bash
 orchestrator event stats                      # show event table statistics
+orchestrator event list --task <task_id>      # list events for a task
+orchestrator event list --task <task_id> --type item --limit 100   # filter by event type prefix
 orchestrator event cleanup                    # clean up old events
 orchestrator event cleanup --older-than 30    # events older than N days (default 30)
 orchestrator event cleanup --dry-run          # preview without deleting
 orchestrator event cleanup --archive          # archive to JSONL before deleting
 ```
+
+| Flag (list) | Description |
+|-------------|-------------|
+| `--task <TASK>` | Task identifier (required) |
+| `--type <EVENT_TYPE>` | Filter by event type (prefix match) |
+| `-l, --limit` | Maximum events to return (default: 50) |
+| `-o, --output` | Output format: table (default), json, yaml |
 
 ## Trigger Lifecycle
 
@@ -484,6 +514,46 @@ orchestrator version                 # build version + git hash
 orchestrator version --json          # JSON version output
 orchestrator check                   # preflight validation
 orchestrator check -o json           # structured check output
+orchestrator guide                   # guided CLI reference with examples
+orchestrator guide task              # filter by command name
+orchestrator guide -c task -f json   # filter by category, JSON output
+```
+
+### debug sandbox-probe
+
+Run a local sandbox probe without contacting the daemon — exercises resource and
+network limits for sandbox validation.
+
+```bash
+orchestrator debug sandbox-probe write-file --path /tmp/probe.txt
+orchestrator debug sandbox-probe open-files --count 256
+orchestrator debug sandbox-probe cpu-burn
+orchestrator debug sandbox-probe alloc-memory --total-mb 256 --chunk-mb 8
+orchestrator debug sandbox-probe spawn-children --count 64 --sleep-secs 60
+orchestrator debug sandbox-probe dns-resolve --host example.com --port 443
+orchestrator debug sandbox-probe tcp-connect --host 127.0.0.1 --port 8080 --timeout-secs 3
+```
+
+## QA Observability
+
+```bash
+orchestrator qa doctor               # observability health metrics from task_execution_metrics
+orchestrator qa doctor -o json       # structured output
+```
+
+## Built-in Tools
+
+Helper utilities for CRD plugin scripts (invoked from trigger/finalize plugins).
+
+```bash
+# Verify an HMAC signature (exit 0 = valid, exit 1 = invalid)
+orchestrator tool webhook-verify-hmac --secret <secret> --body <body> --signature <sig> [--algo sha256]
+
+# Extract a value from JSON using a dot-separated path (reads stdin)
+echo '{"event":{"type":"push"}}' | orchestrator tool payload-extract --path event.type
+
+# Rotate a key in a SecretStore (requires a running daemon)
+orchestrator tool secret-rotate <store> <key> --value <new_value> [--project <id>]
 ```
 
 ## Output Formats
@@ -520,10 +590,13 @@ The daemon binary that runs the gRPC server and embedded background workers.
 | `--workers <N>` | Number of background workers (default: 1) |
 | `--insecure-bind <addr>` | Insecure TCP bind for development (feature-gated: `dev-insecure`) |
 | `--control-plane-dir <DIR>` | Control plane certificate directory |
+| `--uds-max-role <ROLE>` | Maximum role for UDS callers when no `uds-policy.yaml` exists: `read-only`, `operator`, `admin` (default: operator, env: `ORCHESTRATOR_UDS_MAX_ROLE`) |
 | `--event-retention-days <DAYS>` | Days to retain events (default: 30, 0 = disabled) |
 | `--event-cleanup-interval-secs <SECS>` | Cleanup sweep interval in seconds (default: 3600) |
 | `--event-archive-enabled` | Archive events to JSONL before cleanup |
 | `--event-archive-dir <DIR>` | Override event archive directory |
+| `--log-retention-days <DAYS>` | Days to retain log files before automatic cleanup (default: 30, 0 = disabled) |
+| `--task-retention-days <DAYS>` | Days to retain terminated tasks before automatic cleanup (default: 0 = disabled) |
 | `--stall-timeout-mins <MINS>` | Minutes before a running item is considered stalled (default: 30, 0 = disabled) |
 | `--webhook-bind <ADDR>` | Bind address for HTTP webhook server (default: `127.0.0.1:19090`, `none` to disable). Non-loopback addresses require a secret. |
 | `--webhook-secret <SECRET>` | Shared secret for webhook HMAC-SHA256 verification (env: `ORCHESTRATOR_WEBHOOK_SECRET`) |
@@ -538,9 +611,21 @@ orchestratord control-plane issue-client \
   --bind <addr> --subject <name> [--role <role>]
 ```
 
+`--role` accepts `read-only`, `operator` (default), or `admin`. Optional
+`--home` and `--control-plane-dir` override the certificate locations.
+
 Files created:
 - PID: `~/.orchestratord/daemon.pid`
 - Socket: `~/.orchestratord/orchestrator.sock`
+
+### webhook-secret
+
+Print the webhook HMAC secret derived from the control-plane CA certificate.
+
+```bash
+orchestratord webhook-secret
+orchestratord webhook-secret --control-plane-dir <dir>
+```
 
 ### daemon management
 
@@ -566,6 +651,7 @@ orchestrator task create --name X --goal Y [--project <id>] [--workflow Z] [--st
 orchestrator run --workflow Z [--step S] [--set k=v]          # synchronous execution
 orchestrator run --template T --agent-capability C [--set k=v] # direct assembly mode
 orchestrator task list [-o json] [--project <id>] [--status <s>]
+orchestrator task items <id> [--status <s>] [-o json]
 orchestrator task info <id> [-o json]
 orchestrator task start <id>
 orchestrator task pause <id>
@@ -574,6 +660,7 @@ orchestrator task logs <id> [--tail N] [--follow]
 orchestrator task watch <id>
 orchestrator task trace <id> [--verbose]
 orchestrator task retry <item_id> [--force]
+orchestrator task recover <id>
 orchestrator task delete <id> --force
 
 # Agent lifecycle
@@ -581,6 +668,9 @@ orchestrator agent list [--project <id>] [-o json|yaml]
 orchestrator agent cordon <agent_name> [--project <id>]
 orchestrator agent uncordon <agent_name> [--project <id>]
 orchestrator agent drain <agent_name> [--project <id>] [--timeout <secs>]
+
+# Trigger lifecycle
+orchestrator trigger suspend|resume|fire <name> [--project <id>] [--payload <json>]
 
 # Project cleanup
 orchestrator delete project/<id> --force
@@ -597,11 +687,26 @@ orchestrator manifest validate -f <file>
 orchestrator manifest export [-o yaml|json]
 
 # Secret key management
-orchestrator secret key status|list|rotate|revoke|history
+orchestrator secret key status|list|rotate|revoke|bootstrap|history
 
 # Database
 orchestrator db status [-o json]
 orchestrator db migrations list [-o json]
+orchestrator db vacuum
+orchestrator db cleanup [--older-than <days>]
+
+# Events
+orchestrator event stats
+orchestrator event list --task <id> [-o json]
+orchestrator event cleanup [--older-than <days>] [--dry-run] [--archive]
+
+# Daemon lifecycle
+orchestrator daemon status|stop
+orchestrator daemon maintenance --enable|--disable
+
+# QA & tools
+orchestrator qa doctor [-o json]
+orchestrator tool webhook-verify-hmac|payload-extract|secret-rotate
 
 # System
 orchestrator version

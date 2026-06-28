@@ -550,7 +550,6 @@ pub enum DbCommands {
 pub enum DbMigrationCommands {
     /// List registered migrations and their applied state
     #[command(alias = "ls")]
-    /// List tasks with optional filters.
     List {
         /// Output encoding.
         #[arg(short, long, default_value = "table")]

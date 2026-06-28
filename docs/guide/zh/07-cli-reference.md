@@ -24,25 +24,27 @@ Agent Orchestrator CLI 全部命令速查。
 
 | 命令 | 别名 |
 |------|------|
-| `apply` | `ap` |
-| `get` | `g` |
-| `describe` | `desc` |
-| `delete` | `rm` |
-| `event` | `ev` |
-| `task` | `t` |
-| `task list` | `task ls` |
-| `task create` | `task new` |
-| `task info` | `task get` |
-| `task logs` | `task log` |
-| `task delete` | `task rm` |
-| `check` | `ck` |
-| `debug` | `dbg` |
-| `store list` | `store ls` |
 | `agent` | `ag` |
 | `agent list` | `agent ls` |
-| `trigger` | `tg` |
-| `secret key list` | `secret key ls` |
+| `apply` | `ap` |
+| `check` | `ck` |
 | `db migrations list` | `db migrations ls` |
+| `debug` | `dbg` |
+| `delete` | `rm` |
+| `describe` | `desc` |
+| `event` | `ev` |
+| `event list` | `event ls` |
+| `get` | `g` |
+| `guide` | `gd` |
+| `secret key list` | `secret key ls` |
+| `store list` | `store ls` |
+| `task` | `t` |
+| `task create` | `task new` |
+| `task delete` | `task rm` |
+| `task info` | `task get` |
+| `task list` | `task ls` |
+| `task logs` | `task log` |
+| `trigger` | `tg` |
 
 ## 初始化与配置
 
@@ -162,6 +164,16 @@ orchestrator task create \
   --project my-project \
   --workspace default \
   --target-file docs/qa/01-test.md    # 可指定多次
+
+# 步骤筛选：仅运行工作流中的指定步骤
+orchestrator task create \
+  --workflow sdlc --project my-project \
+  --step fix \
+  --set ticket_paths=docs/ticket/T-0042.md
+
+# 多个步骤（按工作流顺序执行）
+orchestrator task create \
+  --workflow sdlc --step plan --step implement
 ```
 
 | 标志 | 说明 |
@@ -173,6 +185,41 @@ orchestrator task create \
 | `-W, --workflow` | 工作流 ID |
 | `-t, --target-file` | 目标文件（可重复） |
 | `--no-start` | 创建但不自动启动 |
+| `-S, --step` | 仅执行指定的步骤 ID（可重复） |
+| `--set` | 注入流水线变量，格式为 `key=value`（可重复） |
+
+### run
+
+同步执行步骤 — 创建任务、跟踪日志，并以状态码退出。
+
+```bash
+# 带步骤筛选的同步执行
+orchestrator run \
+  --workflow sdlc --step fix \
+  --set ticket_paths=docs/ticket/T-0042.md
+
+# 后台模式（等同于 task create）
+orchestrator run --workflow sdlc --step fix --detach
+
+# 直接组装模式：不经过工作流直接执行 StepTemplate
+orchestrator run \
+  --template fix-ticket \
+  --agent-capability fix \
+  --set ticket_paths=docs/ticket/T-0042.md
+```
+
+| 标志 | 说明 |
+|------|------|
+| `-W, --workflow` | 工作流 ID（除非指定 `--template`，否则必填） |
+| `-S, --step` | 仅执行指定的步骤 ID（可重复） |
+| `--set` | 注入流水线变量，格式为 `key=value`（可重复） |
+| `-p, --project` | 项目 ID |
+| `-w, --workspace` | 工作区 ID |
+| `-t, --target-file` | 目标文件（可重复） |
+| `--detach` | 后台运行（打印任务 ID 并返回） |
+| `--template` | StepTemplate 名称（直接组装模式） |
+| `--agent-capability` | 直接组装模式下的代理能力 |
+| `--profile` | 直接组装模式下的 ExecutionProfile 覆盖 |
 
 ### task list / info
 
@@ -193,6 +240,21 @@ orchestrator task info <task_id> -o yaml
 | `-p, --project` | 项目筛选 |
 | `-o, --output` | 输出格式：table（默认）、json、yaml |
 | `-v, --verbose` | 详细输出 |
+
+### task items
+
+列出任务的各个项目及其状态。
+
+```bash
+orchestrator task items <task_id>
+orchestrator task items <task_id> --status running
+orchestrator task items <task_id> -o json
+```
+
+| 标志 | 说明 |
+|------|------|
+| `-s, --status` | 按项目状态筛选 |
+| `-o, --output` | 输出格式：table（默认）、json、yaml |
 
 ### task recover
 
@@ -302,6 +364,7 @@ orchestrator secret key status [-o json]
 orchestrator secret key list [-o json]
 orchestrator secret key rotate [--resume]
 orchestrator secret key revoke <key_id> [--force]
+orchestrator secret key bootstrap                 # 所有密钥均处于终态时的应急恢复
 orchestrator secret key history [-n <limit>] [--key-id <id>] [-o json]
 ```
 
@@ -310,6 +373,9 @@ orchestrator secret key history [-n <limit>] [--key-id <id>] [-o json]
 ```bash
 orchestrator db status [-o json]
 orchestrator db migrations list [-o json]
+orchestrator db vacuum                            # 回收磁盘空间（VACUUM）
+orchestrator db cleanup                           # 清理已终止任务的旧日志文件
+orchestrator db cleanup --older-than 30           # 清理 N 天前的日志（默认 30）
 ```
 
 ## 项目清理
@@ -412,11 +478,20 @@ orchestrator daemon maintenance --disable     # 恢复任务创建
 
 ```bash
 orchestrator event stats                      # 显示事件表统计信息
+orchestrator event list --task <task_id>      # 列出某任务的事件
+orchestrator event list --task <task_id> --type item --limit 100   # 按事件类型前缀筛选
 orchestrator event cleanup                    # 清理旧事件
 orchestrator event cleanup --older-than 30    # 清理 N 天前的事件（默认 30）
 orchestrator event cleanup --dry-run          # 预览，不实际删除
 orchestrator event cleanup --archive          # 删除前归档为 JSONL
 ```
+
+| 标志 (list) | 说明 |
+|-------------|------|
+| `--task <TASK>` | 任务标识（必填） |
+| `--type <EVENT_TYPE>` | 按事件类型筛选（前缀匹配） |
+| `-l, --limit` | 返回的最大事件数（默认：50） |
+| `-o, --output` | 输出格式：table（默认）、json、yaml |
 
 ## 触发器生命周期
 
@@ -438,6 +513,45 @@ orchestrator version                 # 构建版本 + git 哈希
 orchestrator version --json          # JSON 格式版本输出
 orchestrator check                   # 预检验证
 orchestrator check -o json           # 结构化检查输出
+orchestrator guide                   # 带示例的 CLI 引导参考
+orchestrator guide task              # 按命令名筛选
+orchestrator guide -c task -f json   # 按类别筛选，JSON 输出
+```
+
+### debug sandbox-probe
+
+在不连接守护进程的情况下运行本地沙箱探针 — 用于验证沙箱的资源与网络限制。
+
+```bash
+orchestrator debug sandbox-probe write-file --path /tmp/probe.txt
+orchestrator debug sandbox-probe open-files --count 256
+orchestrator debug sandbox-probe cpu-burn
+orchestrator debug sandbox-probe alloc-memory --total-mb 256 --chunk-mb 8
+orchestrator debug sandbox-probe spawn-children --count 64 --sleep-secs 60
+orchestrator debug sandbox-probe dns-resolve --host example.com --port 443
+orchestrator debug sandbox-probe tcp-connect --host 127.0.0.1 --port 8080 --timeout-secs 3
+```
+
+## QA 可观测性
+
+```bash
+orchestrator qa doctor               # 来自 task_execution_metrics 的可观测性健康指标
+orchestrator qa doctor -o json       # 结构化输出
+```
+
+## 内置工具
+
+供 CRD 插件脚本使用的辅助工具（由触发器/终结插件调用）。
+
+```bash
+# 验证 HMAC 签名（退出码 0 = 有效，1 = 无效）
+orchestrator tool webhook-verify-hmac --secret <secret> --body <body> --signature <sig> [--algo sha256]
+
+# 使用点分路径从 JSON 中提取值（读取标准输入）
+echo '{"event":{"type":"push"}}' | orchestrator tool payload-extract --path event.type
+
+# 轮换 SecretStore 中的某个密钥（需要守护进程运行）
+orchestrator tool secret-rotate <store> <key> --value <new_value> [--project <id>]
 ```
 
 ## 输出格式
@@ -474,10 +588,13 @@ orchestrator check -o json           # 结构化检查输出
 | `--workers <N>` | 后台工作器数量（默认：1） |
 | `--insecure-bind <addr>` | 用于开发的不安全 TCP 绑定（feature-gated：`dev-insecure`） |
 | `--control-plane-dir <DIR>` | 控制面板证书目录 |
+| `--uds-max-role <ROLE>` | 不存在 `uds-policy.yaml` 时 UDS 调用方的最高角色：`read-only`、`operator`、`admin`（默认：operator，环境变量：`ORCHESTRATOR_UDS_MAX_ROLE`） |
 | `--event-retention-days <DAYS>` | 事件保留天数（默认：30，0 = 禁用） |
 | `--event-cleanup-interval-secs <SECS>` | 清理扫描间隔秒数（默认：3600） |
 | `--event-archive-enabled` | 清理前将事件归档为 JSONL |
 | `--event-archive-dir <DIR>` | 覆盖事件归档目录 |
+| `--log-retention-days <DAYS>` | 自动清理前日志文件的保留天数（默认：30，0 = 禁用） |
+| `--task-retention-days <DAYS>` | 自动清理前已终止任务的保留天数（默认：0 = 禁用） |
 | `--stall-timeout-mins <MINS>` | 运行中项目被视为停滞的分钟数（默认：30，0 = 禁用） |
 | `--webhook-bind <ADDR>` | HTTP webhook 服务绑定地址（默认：`127.0.0.1:19090`，`none` 禁用）。非回环地址需要配置密钥。 |
 | `--webhook-secret <SECRET>` | Webhook HMAC-SHA256 签名验证密钥（环境变量：`ORCHESTRATOR_WEBHOOK_SECRET`） |
@@ -490,6 +607,18 @@ orchestrator check -o json           # 结构化检查输出
 ```bash
 orchestratord control-plane issue-client \
   --bind <addr> --subject <name> [--role <role>]
+```
+
+`--role` 可取 `read-only`、`operator`（默认）或 `admin`。可选的
+`--home` 与 `--control-plane-dir` 用于覆盖证书位置。
+
+### webhook-secret
+
+打印从控制面板 CA 证书派生出的 webhook HMAC 密钥。
+
+```bash
+orchestratord webhook-secret
+orchestratord webhook-secret --control-plane-dir <dir>
 ```
 
 ### 守护进程管理
@@ -512,8 +641,11 @@ orchestrator describe <kind/name> [--project <id>]
 orchestrator delete <kind/name> --force [--project <id>]
 
 # 任务生命周期
-orchestrator task create --name X --goal Y [--project <id>] [--workflow Z]
+orchestrator task create --name X --goal Y [--project <id>] [--workflow Z] [--step S] [--set k=v]
+orchestrator run --workflow Z [--step S] [--set k=v]          # 同步执行
+orchestrator run --template T --agent-capability C [--set k=v] # 直接组装模式
 orchestrator task list [-o json] [--project <id>] [--status <s>]
+orchestrator task items <id> [--status <s>] [-o json]
 orchestrator task info <id> [-o json]
 orchestrator task start <id>
 orchestrator task pause <id>
@@ -522,6 +654,7 @@ orchestrator task logs <id> [--tail N] [--follow]
 orchestrator task watch <id>
 orchestrator task trace <id> [--verbose]
 orchestrator task retry <item_id> [--force]
+orchestrator task recover <id>
 orchestrator task delete <id> --force
 
 # 代理生命周期
@@ -529,6 +662,9 @@ orchestrator agent list [--project <id>] [-o json|yaml]
 orchestrator agent cordon <agent_name> [--project <id>]
 orchestrator agent uncordon <agent_name> [--project <id>]
 orchestrator agent drain <agent_name> [--project <id>] [--timeout <secs>]
+
+# 触发器生命周期
+orchestrator trigger suspend|resume|fire <name> [--project <id>] [--payload <json>]
 
 # 项目清理
 orchestrator delete project/<id> --force
@@ -545,11 +681,26 @@ orchestrator manifest validate -f <file>
 orchestrator manifest export [-o yaml|json]
 
 # 密钥管理
-orchestrator secret key status|list|rotate|revoke|history
+orchestrator secret key status|list|rotate|revoke|bootstrap|history
 
 # 数据库
 orchestrator db status [-o json]
 orchestrator db migrations list [-o json]
+orchestrator db vacuum
+orchestrator db cleanup [--older-than <days>]
+
+# 事件
+orchestrator event stats
+orchestrator event list --task <id> [-o json]
+orchestrator event cleanup [--older-than <days>] [--dry-run] [--archive]
+
+# 守护进程生命周期
+orchestrator daemon status|stop
+orchestrator daemon maintenance --enable|--disable
+
+# QA 与工具
+orchestrator qa doctor [-o json]
+orchestrator tool webhook-verify-hmac|payload-extract|secret-rotate
 
 # 系统
 orchestrator version

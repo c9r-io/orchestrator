@@ -124,7 +124,7 @@ proto/
     *   **Scheduler** (`crates/orchestrator-scheduler/`): Task loop execution, enqueue/claim, phase runner, loop guards, traces, checkpoints.
     *   **Task Management**: Creates, starts, pauses, and resumes tasks.
     *   **Cycle Loop**: Manages the iterative execution of workflows.
-    *   **Process Management**: Spawns and monitors agent processes (shell commands).
+    *   **Process Management**: Spawns and monitors agent processes. Two runner executors sit behind the `RunnerExecutor` seam: the default `shell` (one-shot command, text contract) and `streaming`, which drives the agent CLI in `stream-json` mode with orchestrator-owned MCP tools so coordination consumes structured signals instead of scraped stdout. See [Streaming Runner Pivot — Overview](design_doc/orchestrator/streaming-runner-pivot-overview.md).
     *   **Event System**: Emits structured events (`step_started`, `task_failed`) to the database.
 
 3.  **Data Layer (`core/src/db.rs`)**:
