@@ -1,0 +1,91 @@
+# Streaming agent converges a loop by calling the `mark_done` MCP tool.
+#
+# Demonstrates the streaming-runner pivot end to end (design docs 101–103):
+# the agent expresses completion via a typed MCP tool, the orchestrator parses
+# the stream-json into structured signals (`tools_called`), and the loop guard
+# converges on `'mark_done' in tools_called` — coordination driven by what the
+# agent DID, not by regex-scraped stdout.
+#
+# Requires the "streaming" runner executor (RuntimePolicy below) and the
+# `orch-mcp-tools` binary built alongside the daemon (it is resolved next to
+# `orchestratord`, or via $ORCH_MCP_TOOLS_BIN).
+#
+# See docs/showcases/streaming-mark-done-convergence.md for the run + captured output.
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets: [docs/qa]
+  ticket_dir: docs/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: RuntimePolicy
+metadata:
+  name: default
+spec:
+  runner:
+    shell: /bin/bash
+    shell_arg: "-lc"
+    policy: unsafe          # demo convenience: pass full env so `claude` can auth
+    executor: streaming     # ← drives agents via stream-json + orchestrator MCP tools
+    allowed_shells: [/bin/bash, /bin/zsh, /bin/sh]
+    allowed_shell_args: ["-lc", "-c"]
+    env_allowlist: [PATH, HOME, USER, LANG, TERM]
+    redaction_patterns: [token, password, secret, api_key]
+  resume:
+    auto: false
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: signal_done
+spec:
+  description: "Instruct the agent to signal completion via the mark_done MCP tool."
+  # The tool is exposed under its fully-qualified MCP name; name it exactly so
+  # the agent can load it via ToolSearch and call it.
+  prompt: >-
+    Your only task: call the tool named mcp__orch__mark_done exactly once. First
+    load it by running ToolSearch with the query select:mcp__orch__mark_done,
+    then call mcp__orch__mark_done with `summary` set to a one-line note saying
+    the demo step is complete. Do not use any other tool and do not read, create,
+    or modify any files. Then reply with a single short sentence confirming done.
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: streamer
+  description: "Streaming agent that signals completion via the mark_done MCP tool"
+spec:
+  capabilities:
+    - signal
+  command: claude -p "{prompt}" --model haiku
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: mark_done_convergence
+spec:
+  max_parallel: 1
+  steps:
+    - id: signal
+      type: signal
+      scope: task
+      required_capability: signal
+      template: signal_done
+      enabled: true
+      repeatable: true
+    - id: loop_guard
+      type: loop_guard
+      builtin: loop_guard
+      is_guard: true
+      enabled: true
+  loop:
+    mode: infinite          # keep cycling…
+    max_cycles: 3           # …but never more than 3 (safety cap)
+    stop_when_no_unresolved: false
+    convergence_expr:
+      - engine: cel
+        when: "'mark_done' in tools_called"   # …converge as soon as the agent signals done
+        reason: "agent signaled completion via the mark_done tool"
