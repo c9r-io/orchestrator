@@ -173,7 +173,7 @@ impl TemplateEngine for AdvancedTemplateContext {
         }
 
         // Sort by length descending to replace longer patterns first
-        replacements.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+        replacements.sort_by_key(|r| std::cmp::Reverse(r.0.len()));
 
         for (key, value) in replacements {
             result = result.replace(&format!("{{{}}}", key), &value);

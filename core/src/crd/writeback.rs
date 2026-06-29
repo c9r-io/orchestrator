@@ -132,20 +132,19 @@ pub fn seed_store_from_config_snapshot(
                 ));
             }
         }
-        "RuntimePolicy" => {
+        "RuntimePolicy"
             // Read existing RuntimePolicy from store, or seed defaults if absent
             if config
                 .resource_store
                 .project_singleton::<RuntimePolicyProjection>()
                 .is_none()
-            {
+            => {
                 let rp = RuntimePolicyProjection::default();
                 config.resource_store.put(make_cr(
                     Some(crate::crd::store::SYSTEM_PROJECT.to_string()),
                     rp.to_cr_spec(),
                 ));
             }
-        }
         _ => {}
     }
 }
