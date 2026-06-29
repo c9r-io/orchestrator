@@ -50,7 +50,7 @@ impl DynamicStepPool {
             .collect();
 
         // Sort by priority (descending)
-        matches.sort_by(|a, b| b.priority.cmp(&a.priority));
+        matches.sort_by_key(|step| std::cmp::Reverse(step.priority));
         matches
     }
 
