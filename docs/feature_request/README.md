@@ -1,6 +1,6 @@
 # Feature Requests
 
-本目录收录 `orchestrator` 的正式功能需求文档，来源于 2026-03-09 深度项目评估报告中优先级最高的改进建议。
+本目录收录 `orchestrator` 的正式功能需求文档。Agent Process Console 系列的整体依赖与交付顺序见 [产品路线图](agent-process-console-roadmap.md)。
 
 ## 当前条目
 
@@ -79,6 +79,12 @@
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
+| FR-095 | Process Timeline Read Model | P0 | Proposed |
+| FR-096 | Attention Inbox | P0 | Proposed |
+| FR-097 | Handoff Briefing and Safe Resume | P1 | Proposed |
+| FR-098 | Agent Session Control Plane | P1 | Proposed |
+| FR-099 | Source Events and Slack Process Binding | P1 | Proposed |
+| FR-100 | Agent Process Console UI | P1 | Proposed |
 
 ## 说明
 
@@ -88,6 +94,7 @@
 - `In Progress`: 已有部分阶段落地，剩余阶段仍在治理中
 - `Implemented`: 需求已完成并进入维护阶段
 - 已闭环并删除的 FR，应由对应 `docs/design_doc/**` 与 `docs/qa/**` 继续承载设计和验证信息
+- FR-095 至 FR-100 属于 Agent Process Console 路线图，按编号和依赖关系分别治理；未闭环前，proposed design 保留在对应 FR 中
 - FR-011 聚焦内核复杂度治理，不直接引入用户可见新能力
 - FR-012 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/27-secretstore-key-lifecycle.md` 与 `docs/qa/orchestrator/64-secretstore-key-lifecycle.md` 承载
 - FR-013 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/27-grpc-control-plane-protection.md`、`docs/qa/orchestrator/65-grpc-control-plane-protection.md` 与 `scripts/qa/test-fr013-control-plane-protection.sh` 承载
