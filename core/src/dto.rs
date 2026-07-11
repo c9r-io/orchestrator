@@ -183,6 +183,52 @@ pub struct EventDto {
     pub created_at: String,
 }
 
+/// Command-run record enriched with structured evidence for timeline projection.
+#[derive(Debug, Serialize)]
+pub struct TimelineCommandRunDto {
+    /// Stable command-run identifier.
+    pub id: String,
+    /// Task-item identifier that owns the run.
+    pub task_item_id: String,
+    /// Pipeline phase that produced the run.
+    pub phase: String,
+    /// Agent identifier assigned to the run.
+    pub agent_id: String,
+    /// Exit code when the process terminated normally.
+    pub exit_code: Option<i64>,
+    /// Timestamp when execution started.
+    pub started_at: String,
+    /// Timestamp when execution ended.
+    pub ended_at: Option<String>,
+    /// Whether the run was interrupted before completion.
+    pub interrupted: bool,
+    /// Validation status assigned to the structured output.
+    pub validation_status: String,
+    /// Redacted structured artifacts emitted by the agent.
+    pub artifacts: Vec<Value>,
+    /// Optional interactive session identifier.
+    pub session_id: Option<String>,
+    /// Origin label for the machine-readable output.
+    pub machine_output_source: String,
+    /// Optional daemon-owned structured-output spill path.
+    pub output_json_path: Option<String>,
+}
+
+/// Consistent persisted source snapshot used to build a process timeline.
+#[derive(Debug, Serialize)]
+pub struct TaskTimelineSource {
+    /// Top-level task summary captured in the read transaction.
+    pub task: TaskSummary,
+    /// Task items captured in the same read transaction.
+    pub items: Vec<TaskItemDto>,
+    /// Enriched command runs used for evidence projection.
+    pub runs: Vec<TimelineCommandRunDto>,
+    /// Events up to and including the snapshot watermark.
+    pub events: Vec<EventDto>,
+    /// Maximum event identifier included in this snapshot.
+    pub snapshot_max_event_id: i64,
+}
+
 /// Expanded task detail payload returned by `task get` style APIs.
 #[derive(Debug, Serialize)]
 pub struct TaskDetail {

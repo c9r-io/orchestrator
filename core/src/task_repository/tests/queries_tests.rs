@@ -210,6 +210,45 @@ fn load_task_detail_rows_returns_empty_for_unknown_task() {
 }
 
 #[test]
+fn load_task_timeline_source_is_uncapped_and_honors_watermark() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let mut conn = open_conn(&state.db_path).expect("open sqlite");
+    let tx = conn.transaction().expect("begin insert transaction");
+    {
+        let mut stmt = tx
+            .prepare(
+                "INSERT INTO events (id, task_id, task_item_id, event_type, payload_json, created_at) VALUES (?1, ?2, NULL, 'heartbeat', '{}', ?3)",
+            )
+            .expect("prepare event insert");
+        for id in 1..=2001_i64 {
+            stmt.execute(params![
+                id,
+                task_id,
+                format!("2026-01-01T00:00:{:02}Z", id % 60)
+            ])
+            .expect("insert event");
+        }
+    }
+    tx.commit().expect("commit events");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    let full = repo
+        .load_task_timeline_source(&task_id, None)
+        .expect("load full timeline source");
+    assert_eq!(full.events.len(), 2001);
+    assert_eq!(full.snapshot_max_event_id, 2001);
+    assert!(full.task.total_items >= 1);
+
+    let pinned = repo
+        .load_task_timeline_source(&task_id, Some(100))
+        .expect("load pinned timeline source");
+    assert_eq!(pinned.events.len(), 100);
+    assert_eq!(pinned.snapshot_max_event_id, 100);
+    assert!(pinned.events.iter().all(|event| event.id <= 100));
+}
+
+#[test]
 fn load_task_detail_rows_includes_graph_debug_bundles() {
     let mut fixture = TestState::new();
     let (state, task_id) = seed_task(&mut fixture);

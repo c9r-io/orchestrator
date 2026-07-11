@@ -1,5 +1,6 @@
 use crate::dto::{
     CommandRunDto, EventDto, TaskGraphDebugBundle, TaskItemDto, TaskItemRow, TaskSummary,
+    TaskTimelineSource, TimelineCommandRunDto,
 };
 use anyhow::{Context, Result};
 use rusqlite::{OptionalExtension, params};
@@ -155,6 +156,121 @@ pub fn load_task_detail_rows(conn: &Connection, task_id: &str) -> Result<TaskDet
     let graph_debug = load_task_graph_debug_bundles(conn, task_id)?;
 
     Ok((items, runs, events, graph_debug))
+}
+
+/// Loads all persisted inputs required for one deterministic timeline snapshot.
+///
+/// Unlike [`load_task_detail_rows`], this query intentionally does not apply the
+/// legacy 500-run/2000-event diagnostic caps. The optional event watermark pins
+/// subsequent cursor pages to the same source event set while a task is active.
+pub fn load_task_timeline_source(
+    conn: &Connection,
+    task_id: &str,
+    max_event_id: Option<i64>,
+) -> Result<TaskTimelineSource> {
+    let tx = conn.unchecked_transaction()?;
+    let mut task = load_task_summary(&tx, task_id)?;
+    let (total, finished, failed) = load_task_item_counts(&tx, task_id)?;
+    task.total_items = total;
+    task.finished_items = finished;
+    task.failed_items = failed;
+
+    let snapshot_max_event_id = match max_event_id {
+        Some(value) if value >= 0 => value,
+        Some(_) => 0,
+        None => tx.query_row(
+            "SELECT COALESCE(MAX(id), 0) FROM events WHERE task_id = ?1",
+            params![task_id],
+            |row| row.get(0),
+        )?,
+    };
+
+    let items = {
+        let mut stmt = tx.prepare(
+            "SELECT id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, updated_at FROM task_items WHERE task_id = ?1 ORDER BY order_no",
+        )?;
+        stmt.query_map(params![task_id], |row| {
+            let ticket_files_raw: String = row.get(5)?;
+            let ticket_content_raw: String = row.get(6)?;
+            Ok(TaskItemDto {
+                id: row.get(0)?,
+                task_id: row.get(1)?,
+                order_no: row.get(2)?,
+                qa_file_path: row.get(3)?,
+                status: row.get(4)?,
+                ticket_files: serde_json::from_str(&ticket_files_raw).unwrap_or_default(),
+                ticket_content: serde_json::from_str(&ticket_content_raw).unwrap_or_default(),
+                fix_required: row.get::<_, i64>(7)? == 1,
+                fixed: row.get::<_, i64>(8)? == 1,
+                last_error: row.get(9)?,
+                started_at: row.get(10)?,
+                completed_at: row.get(11)?,
+                updated_at: row.get(12)?,
+            })
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?
+    };
+
+    let runs = {
+        let mut stmt = tx.prepare(
+            "SELECT cr.id, cr.task_item_id, cr.phase, cr.agent_id, cr.exit_code, cr.started_at, cr.ended_at, cr.interrupted, cr.validation_status, cr.artifacts_json, cr.session_id, cr.machine_output_source, cr.output_json_path
+             FROM command_runs cr
+             JOIN task_items ti ON ti.id = cr.task_item_id
+             WHERE ti.task_id = ?1
+             ORDER BY cr.started_at ASC, cr.id ASC",
+        )?;
+        stmt.query_map(params![task_id], |row| {
+            let artifacts_raw: String = row.get(9)?;
+            Ok(TimelineCommandRunDto {
+                id: row.get(0)?,
+                task_item_id: row.get(1)?,
+                phase: row.get(2)?,
+                agent_id: row.get(3)?,
+                exit_code: row.get(4)?,
+                started_at: row.get(5)?,
+                ended_at: row.get(6)?,
+                interrupted: row.get::<_, i64>(7)? == 1,
+                validation_status: row.get(8)?,
+                artifacts: serde_json::from_str(&artifacts_raw).unwrap_or_default(),
+                session_id: row.get(10)?,
+                machine_output_source: row.get(11)?,
+                output_json_path: row.get(12)?,
+            })
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?
+    };
+
+    let events = {
+        let mut stmt = tx.prepare(
+            "SELECT id, task_id, task_item_id, event_type, payload_json, created_at
+             FROM events
+             WHERE task_id = ?1 AND id <= ?2
+             ORDER BY id ASC",
+        )?;
+        stmt.query_map(params![task_id, snapshot_max_event_id], |row| {
+            let payload_raw: String = row.get(4)?;
+            let payload = serde_json::from_str(&payload_raw)
+                .unwrap_or_else(|_| Value::Object(serde_json::Map::new()));
+            Ok(EventDto {
+                id: row.get(0)?,
+                task_id: row.get(1)?,
+                task_item_id: row.get(2)?,
+                event_type: row.get(3)?,
+                payload,
+                created_at: row.get(5)?,
+            })
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?
+    };
+
+    tx.commit()?;
+    Ok(TaskTimelineSource {
+        task,
+        items,
+        runs,
+        events,
+        snapshot_max_event_id,
+    })
 }
 
 pub fn load_task_item_counts(conn: &Connection, task_id: &str) -> Result<(i64, i64, i64)> {

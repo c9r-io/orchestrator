@@ -167,6 +167,7 @@ impl OrchestratorService for OrchestratorServer {
     type TaskLogsStream = task::TaskLogsStream;
     type TaskFollowStream = task::TaskFollowStream;
     type TaskWatchStream = task::TaskWatchStream;
+    type TaskTimelineFollowStream = task::TaskTimelineFollowStream;
 
     async fn task_create(
         &self,
@@ -238,6 +239,13 @@ impl OrchestratorService for OrchestratorServer {
         task::task_info(self, request).await
     }
 
+    async fn task_timeline(
+        &self,
+        request: Request<TaskTimelineRequest>,
+    ) -> Result<Response<TaskTimelineResponse>, Status> {
+        task::task_timeline(self, request).await
+    }
+
     async fn task_logs(
         &self,
         request: Request<TaskLogsRequest>,
@@ -257,6 +265,13 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<TaskWatchRequest>,
     ) -> Result<Response<Self::TaskWatchStream>, Status> {
         task::task_watch(self, request).await
+    }
+
+    async fn task_timeline_follow(
+        &self,
+        request: Request<TaskTimelineFollowRequest>,
+    ) -> Result<Response<Self::TaskTimelineFollowStream>, Status> {
+        task::task_timeline_follow(self, request).await
     }
 
     async fn apply(

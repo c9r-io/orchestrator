@@ -6,6 +6,7 @@ use tonic::{Request, Response, Status};
 
 use super::mapping::{
     event_to_proto, graph_debug_to_proto, item_to_proto, run_to_proto, summary_to_proto,
+    timeline_entry_to_proto,
 };
 use super::{OrchestratorServer, map_core_error};
 
@@ -13,6 +14,8 @@ pub(crate) type TaskLogsStream = Pin<Box<dyn Stream<Item = Result<TaskLogChunk, 
 pub(crate) type TaskFollowStream = Pin<Box<dyn Stream<Item = Result<TaskLogLine, Status>> + Send>>;
 pub(crate) type TaskWatchStream =
     Pin<Box<dyn Stream<Item = Result<TaskWatchSnapshot, Status>> + Send>>;
+pub(crate) type TaskTimelineFollowStream =
+    Pin<Box<dyn Stream<Item = Result<TimelineDelta, Status>> + Send>>;
 
 fn boxed_stream<S, T>(stream: S) -> Pin<Box<dyn Stream<Item = Result<T, Status>> + Send>>
 where
@@ -429,6 +432,40 @@ pub(crate) async fn task_info(
     }))
 }
 
+pub(crate) async fn task_timeline(
+    server: &OrchestratorServer,
+    request: Request<TaskTimelineRequest>,
+) -> Result<Response<TaskTimelineResponse>, Status> {
+    super::authorize(server, &request, "TaskTimeline").map_err(Status::from)?;
+    let req = request.into_inner();
+    let page = orchestrator_scheduler::service::task::get_task_timeline(
+        &server.state,
+        &req.task_id,
+        orchestrator_scheduler::scheduler::timeline::TimelineQuery {
+            cursor: req.cursor,
+            limit: if req.limit == 0 {
+                50
+            } else {
+                req.limit as usize
+            },
+            categories: req.categories,
+        },
+    )
+    .await
+    .map_err(map_core_error)?;
+    Ok(Response::new(TaskTimelineResponse {
+        entries: page
+            .entries
+            .into_iter()
+            .map(timeline_entry_to_proto)
+            .collect(),
+        next_cursor: page.next_cursor,
+        has_more: page.has_more,
+        snapshot_max_event_id: page.snapshot_max_event_id,
+        projection_version: page.projection_version,
+    }))
+}
+
 pub(crate) async fn task_logs(
     server: &OrchestratorServer,
     request: Request<TaskLogsRequest>,
@@ -554,6 +591,94 @@ pub(crate) async fn task_watch(
                 break;
             }
 
+            tokio::time::sleep(interval).await;
+        }
+    });
+
+    Ok(Response::new(boxed_stream(
+        tokio_stream::wrappers::ReceiverStream::new(rx),
+    )))
+}
+
+pub(crate) async fn task_timeline_follow(
+    server: &OrchestratorServer,
+    request: Request<TaskTimelineFollowRequest>,
+) -> Result<Response<TaskTimelineFollowStream>, Status> {
+    super::authorize(server, &request, "TaskTimelineFollow").map_err(Status::from)?;
+    let req = request.into_inner();
+    let state = server.state.clone();
+    let interval_millis = if req.interval_millis == 0 {
+        500
+    } else {
+        req.interval_millis.clamp(250, 5_000)
+    };
+    let (tx, rx) = tokio::sync::mpsc::channel(64);
+
+    tokio::spawn(async move {
+        let mut watermark = req.after_event_id.max(0);
+        let interval = std::time::Duration::from_millis(interval_millis);
+        loop {
+            let result = orchestrator_scheduler::service::task::get_task_timeline_updates(
+                &state,
+                &req.task_id,
+                watermark,
+                &req.categories,
+            )
+            .await;
+            let (next_watermark, updates) = match result {
+                Ok(result) => result,
+                Err(error) => {
+                    let _ = tx.send(Err(map_core_error(error))).await;
+                    break;
+                }
+            };
+            if next_watermark > watermark {
+                if updates.len() > 200 {
+                    if tx
+                        .send(Ok(TimelineDelta {
+                            kind: "reset_required".to_string(),
+                            entry: None,
+                            snapshot_max_event_id: next_watermark,
+                        }))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                } else {
+                    for entry in updates {
+                        if tx
+                            .send(Ok(TimelineDelta {
+                                kind: "upsert".to_string(),
+                                entry: Some(timeline_entry_to_proto(entry)),
+                                snapshot_max_event_id: next_watermark,
+                            }))
+                            .await
+                            .is_err()
+                        {
+                            return;
+                        }
+                    }
+                }
+                watermark = next_watermark;
+            }
+
+            let terminal =
+                match orchestrator_scheduler::service::task::load_summary(&state, &req.task_id)
+                    .await
+                {
+                    Ok(summary) => matches!(
+                        summary.status.as_str(),
+                        "completed" | "failed" | "cancelled" | "deleted"
+                    ),
+                    Err(error) => {
+                        let _ = tx.send(Err(map_core_error(error))).await;
+                        break;
+                    }
+                };
+            if terminal {
+                break;
+            }
             tokio::time::sleep(interval).await;
         }
     });

@@ -338,7 +338,7 @@ pub enum QaCommands {
 
 #[cfg(test)]
 mod tests {
-    use super::{Cli, Commands, DbCommands, DbMigrationCommands, EventCommands};
+    use super::{Cli, Commands, DbCommands, DbMigrationCommands, EventCommands, TaskCommands};
     use clap::Parser;
 
     #[test]
@@ -394,6 +394,32 @@ mod tests {
         let cli = Cli::try_parse_from(["orchestrator", "event", "stats"])
             .expect("event stats should parse");
         assert!(matches!(cli.command, Commands::Event(EventCommands::Stats)));
+    }
+
+    #[test]
+    fn task_timeline_subcommand_parses_follow_filters_and_output() {
+        let cli = Cli::try_parse_from([
+            "orchestrator",
+            "task",
+            "timeline",
+            "task-1",
+            "--category",
+            "failure",
+            "--follow",
+            "--output",
+            "json",
+        ])
+        .expect("task timeline should parse");
+        assert!(matches!(
+            cli.command,
+            Commands::Task(TaskCommands::Timeline {
+                task_id,
+                categories,
+                follow: true,
+                output: super::OutputFormat::Json,
+                ..
+            }) if task_id == "task-1" && categories == ["failure"]
+        ));
     }
 }
 
@@ -755,6 +781,32 @@ pub enum TaskCommands {
         /// Emit JSON instead of terminal rendering.
         #[arg(long)]
         json: bool,
+    },
+
+    /// Show the semantic process timeline for a task.
+    Timeline {
+        /// Task identifier.
+        task_id: String,
+
+        /// Continue after this opaque pagination cursor.
+        #[arg(long)]
+        cursor: Option<String>,
+
+        /// Maximum entries to return per page.
+        #[arg(short, long, default_value_t = 50)]
+        limit: u32,
+
+        /// Include only this category; repeat to select multiple categories.
+        #[arg(long = "category")]
+        categories: Vec<String>,
+
+        /// Follow new timeline entries after the initial page.
+        #[arg(short, long)]
+        follow: bool,
+
+        /// Output encoding.
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
     },
 }
 

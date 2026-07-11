@@ -446,6 +446,27 @@ fn task_entries() -> Vec<GuideEntry> {
                 ("orchestrator task trace <task_id> --json", "Output as JSON"),
             ],
         },
+        GuideEntry {
+            command: "task timeline",
+            alias: None,
+            category: GuideCategory::TaskLifecycle,
+            summary: "Show the semantic process timeline",
+            description: "Browse goal, execution, evidence, failure, and state transitions with stable pagination.",
+            examples: &[
+                (
+                    "orchestrator task timeline <task_id>",
+                    "Show the first timeline page",
+                ),
+                (
+                    "orchestrator task timeline <task_id> --category failure --follow",
+                    "Follow failure entries",
+                ),
+                (
+                    "orchestrator task timeline <task_id> -o json",
+                    "Output structured JSON",
+                ),
+            ],
+        },
     ]
 }
 

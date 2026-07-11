@@ -16,6 +16,8 @@ pub mod safety;
 /// Child-task spawning helpers.
 pub mod spawn;
 mod task_state;
+/// Semantic task/process timeline projection.
+pub mod timeline;
 /// Task trace construction and rendering.
 pub mod trace;
 

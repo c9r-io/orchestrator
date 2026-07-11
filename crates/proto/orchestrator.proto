@@ -17,11 +17,13 @@ service OrchestratorService {
   // Task queries
   rpc TaskList(TaskListRequest)       returns (TaskListResponse);
   rpc TaskInfo(TaskInfoRequest)       returns (TaskInfoResponse);
+  rpc TaskTimeline(TaskTimelineRequest) returns (TaskTimelineResponse);
 
   // Task streaming (server-streaming)
   rpc TaskLogs(TaskLogsRequest)       returns (stream TaskLogChunk);
   rpc TaskFollow(TaskFollowRequest)   returns (stream TaskLogLine);
   rpc TaskWatch(TaskWatchRequest)     returns (stream TaskWatchSnapshot);
+  rpc TaskTimelineFollow(TaskTimelineFollowRequest) returns (stream TimelineDelta);
 
   // Resource management
   rpc Apply(ApplyRequest)             returns (ApplyResponse);
@@ -220,6 +222,68 @@ message TaskInfoResponse {
   repeated Event events = 4;
   repeated TaskGraphDebugBundle graph_debug = 5;
   repeated AgentStatus agent_states = 6;
+}
+
+message TaskTimelineRequest {
+  string task_id = 1;
+  optional string cursor = 2;
+  uint32 limit = 3;
+  repeated string categories = 4;
+}
+
+message TaskTimelineResponse {
+  repeated TimelineEntry entries = 1;
+  optional string next_cursor = 2;
+  bool has_more = 3;
+  int64 snapshot_max_event_id = 4;
+  uint32 projection_version = 5;
+}
+
+message TimelineActorRef {
+  string actor_type = 1;
+  string actor_id = 2;
+}
+
+message TimelineEvidenceRef {
+  string kind = 1;
+  string label = 2;
+  optional string uri = 3;
+  optional string content_type = 4;
+  optional string digest = 5;
+  bool redacted = 6;
+}
+
+message TimelineEntry {
+  string id = 1;
+  string task_id = 2;
+  string occurred_at = 3;
+  string category = 4;
+  string title = 5;
+  string summary = 6;
+  optional string status = 7;
+  optional TimelineActorRef actor = 8;
+  optional string step_id = 9;
+  optional string task_item_id = 10;
+  optional string command_run_id = 11;
+  optional string session_id = 12;
+  optional string checkpoint_id = 13;
+  optional string source_event_id = 14;
+  repeated TimelineEvidenceRef evidence = 15;
+  repeated int64 raw_event_ids = 16;
+  uint32 projection_version = 17;
+}
+
+message TaskTimelineFollowRequest {
+  string task_id = 1;
+  int64 after_event_id = 2;
+  repeated string categories = 3;
+  uint64 interval_millis = 4;
+}
+
+message TimelineDelta {
+  string kind = 1; // upsert | reset_required
+  optional TimelineEntry entry = 2;
+  int64 snapshot_max_event_id = 3;
 }
 
 message TaskGraphDebugBundle {

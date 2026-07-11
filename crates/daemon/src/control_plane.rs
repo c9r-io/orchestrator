@@ -692,7 +692,8 @@ fn server_sans(bind_addr: &SocketAddr) -> Result<Vec<SanType>> {
 pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
     match rpc {
         // ReadOnly: informational queries with no side effects.
-        "Ping" | "TaskList" | "TaskInfo" | "TaskLogs" | "TaskFollow" | "TaskWatch" | "Get"
+        "Ping" | "TaskList" | "TaskInfo" | "TaskTimeline" | "TaskLogs" | "TaskFollow"
+        | "TaskWatch" | "TaskTimelineFollow" | "Get"
         | "Describe" | "StoreGet" | "StoreList" | "WorkerStatus" | "Check" | "ManifestExport"
         | "DbStatus" | "DbMigrationsList" | "SecretKeyStatus" | "SecretKeyList"
         | "SecretKeyHistory" | "AgentList" | "EventStats" | "TaskEvents" => Role::ReadOnly,
@@ -827,6 +828,8 @@ mod tests {
         assert_eq!(required_role_for_rpc("SecretKeyStatus"), Role::ReadOnly);
         assert_eq!(required_role_for_rpc("EventStats"), Role::ReadOnly);
         assert_eq!(required_role_for_rpc("TaskEvents"), Role::ReadOnly);
+        assert_eq!(required_role_for_rpc("TaskTimeline"), Role::ReadOnly);
+        assert_eq!(required_role_for_rpc("TaskTimelineFollow"), Role::ReadOnly);
 
         // Operator
         assert_eq!(required_role_for_rpc("Apply"), Role::Operator);

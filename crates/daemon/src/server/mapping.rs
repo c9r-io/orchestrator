@@ -1,4 +1,7 @@
-use orchestrator_proto::{CommandRun, Event, TaskGraphDebugBundle, TaskItem, TaskSummary};
+use orchestrator_proto::{
+    CommandRun, Event, TaskGraphDebugBundle, TaskItem, TaskSummary, TimelineActorRef,
+    TimelineEntry, TimelineEvidenceRef,
+};
 
 pub(super) fn summary_to_proto(t: agent_orchestrator::dto::TaskSummary) -> TaskSummary {
     TaskSummary {
@@ -67,6 +70,44 @@ pub(super) fn event_to_proto(e: agent_orchestrator::dto::EventDto) -> Event {
         event_type: e.event_type,
         payload_json: serde_json::to_string(&e.payload).unwrap_or_default(),
         created_at: e.created_at,
+    }
+}
+
+pub(super) fn timeline_entry_to_proto(
+    entry: orchestrator_scheduler::scheduler::timeline::TimelineEntry,
+) -> TimelineEntry {
+    TimelineEntry {
+        id: entry.id,
+        task_id: entry.task_id,
+        occurred_at: entry.occurred_at,
+        category: entry.category.as_str().to_string(),
+        title: entry.title,
+        summary: entry.summary,
+        status: entry.status,
+        actor: entry.actor.map(|actor| TimelineActorRef {
+            actor_type: actor.actor_type,
+            actor_id: actor.actor_id,
+        }),
+        step_id: entry.step_id,
+        task_item_id: entry.task_item_id,
+        command_run_id: entry.command_run_id,
+        session_id: entry.session_id,
+        checkpoint_id: entry.checkpoint_id,
+        source_event_id: entry.source_event_id,
+        evidence: entry
+            .evidence
+            .into_iter()
+            .map(|evidence| TimelineEvidenceRef {
+                kind: evidence.kind,
+                label: evidence.label,
+                uri: evidence.uri,
+                content_type: evidence.content_type,
+                digest: evidence.digest,
+                redacted: evidence.redacted,
+            })
+            .collect(),
+        raw_event_ids: entry.raw_event_ids,
+        projection_version: entry.projection_version,
     }
 }
 

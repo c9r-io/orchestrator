@@ -17,7 +17,7 @@
 //! | [`EventRepository`] | Event insertion |
 //! | [`TaskGraphRepository`] | Task graph planning records |
 
-use crate::dto::{TaskGraphDebugBundle, TaskItemRow, TaskSummary};
+use crate::dto::{TaskGraphDebugBundle, TaskItemRow, TaskSummary, TaskTimelineSource};
 use anyhow::Result;
 
 use super::TaskDetailRows;
@@ -34,6 +34,12 @@ pub trait TaskQueryRepository {
     fn load_task_summary(&self, task_id: &str) -> Result<TaskSummary>;
     /// Loads the full detail row bundle for a task.
     fn load_task_detail_rows(&self, task_id: &str) -> Result<TaskDetailRows>;
+    /// Loads an uncapped, transactionally consistent timeline source snapshot.
+    fn load_task_timeline_source(
+        &self,
+        task_id: &str,
+        max_event_id: Option<i64>,
+    ) -> Result<TaskTimelineSource>;
     /// Loads `(total, resolved, unresolved)` item counts for a task.
     fn load_task_item_counts(&self, task_id: &str) -> Result<(i64, i64, i64)>;
     /// Lists task identifiers ordered from newest to oldest.

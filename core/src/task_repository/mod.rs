@@ -77,6 +77,15 @@ impl TaskQueryRepository for SqliteTaskRepository {
         queries::load_task_detail_rows(&conn, task_id)
     }
 
+    fn load_task_timeline_source(
+        &self,
+        task_id: &str,
+        max_event_id: Option<i64>,
+    ) -> Result<crate::dto::TaskTimelineSource> {
+        let conn = self.connection()?;
+        queries::load_task_timeline_source(&conn, task_id, max_event_id)
+    }
+
     fn load_task_item_counts(&self, task_id: &str) -> Result<(i64, i64, i64)> {
         let conn = self.connection()?;
         queries::load_task_item_counts(&conn, task_id)
@@ -361,6 +370,23 @@ impl AsyncSqliteTaskRepository {
             .reader()
             .call(move |conn| {
                 queries::load_task_detail_rows(conn, &task_id)
+                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    /// Loads an uncapped timeline source snapshot at an optional event watermark.
+    pub async fn load_task_timeline_source(
+        &self,
+        task_id: &str,
+        max_event_id: Option<i64>,
+    ) -> Result<crate::dto::TaskTimelineSource> {
+        let task_id = task_id.to_owned();
+        self.async_db
+            .reader()
+            .call(move |conn| {
+                queries::load_task_timeline_source(conn, &task_id, max_event_id)
                     .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
             })
             .await

@@ -1,5 +1,6 @@
 mod task_detail;
 mod task_list;
+mod timeline;
 mod value;
 
 use orchestrator_proto::{Event, TaskInfoResponse, TaskItem, TaskSummary};
@@ -15,6 +16,10 @@ pub fn print_task_list(tasks: &[TaskSummary], format: OutputFormat) {
 pub fn print_task_detail(resp: &TaskInfoResponse, format: OutputFormat) {
     task_detail::print(resp, format);
 }
+
+pub use timeline::{
+    print_delta as print_timeline_delta, print_response as print_timeline_response,
+};
 
 /// Render task items in the requested output format.
 pub fn print_task_items(items: &[TaskItem], format: OutputFormat) {

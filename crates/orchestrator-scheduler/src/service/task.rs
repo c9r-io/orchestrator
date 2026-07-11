@@ -4,7 +4,10 @@ use crate::scheduler::{
     resolve_task_id, run_task_loop, stop_task_runtime, stop_task_runtime_for_delete,
     stream_task_logs_impl,
 };
+use agent_orchestrator::config_ext::OrchestratorConfigExt as _;
+use agent_orchestrator::config_load::read_loaded_config;
 use agent_orchestrator::dto::{CreateTaskPayload, LogChunk, TaskDetail, TaskSummary};
+use agent_orchestrator::env_resolve::collect_all_sensitive_store_values;
 use agent_orchestrator::error::{OrchestratorError, Result, classify_task_error};
 use agent_orchestrator::events::insert_event;
 use agent_orchestrator::persistence::repository::{SchedulerRepository, SqliteSchedulerRepository};
@@ -13,6 +16,7 @@ use agent_orchestrator::task_ops::{create_task_impl, reset_task_item_for_retry};
 use anyhow::Context;
 use serde_json::json;
 use std::sync::Arc;
+use std::time::Instant;
 
 /// Create a new task (synchronous — no async DB ops needed).
 pub fn create_task(state: &InnerState, payload: CreateTaskPayload) -> Result<TaskSummary> {
@@ -144,6 +148,80 @@ pub async fn get_task_detail(state: &InnerState, task_id: &str) -> Result<TaskDe
     get_task_details_impl(state, task_id)
         .await
         .map_err(|err| classify_task_error("task.info", err))
+}
+
+/// Builds one cursor-paginated semantic process timeline.
+pub async fn get_task_timeline(
+    state: &InnerState,
+    task_id: &str,
+    query: crate::scheduler::timeline::TimelineQuery,
+) -> Result<crate::scheduler::timeline::TimelinePage> {
+    let started = Instant::now();
+    let resolved_id = resolve_task_id(state, task_id)
+        .await
+        .map_err(|err| classify_task_error("task.timeline", err))?;
+    let watermark = crate::scheduler::timeline::cursor_watermark(query.cursor.as_deref())
+        .map_err(|err| OrchestratorError::user_input("task.timeline", err))?;
+    let source = state
+        .task_repo
+        .load_task_timeline_source(&resolved_id, watermark)
+        .await
+        .map_err(|err| classify_task_error("task.timeline", err))?;
+    let patterns = timeline_redaction_patterns(state, &source.task.project_id)
+        .map_err(|err| classify_task_error("task.timeline", err))?;
+    let page = crate::scheduler::timeline::build_timeline_page(&source, &query, &patterns)
+        .map_err(|err| OrchestratorError::user_input("task.timeline", err))?;
+    tracing::info!(
+        task_id = %resolved_id,
+        source_events = source.events.len(),
+        source_runs = source.runs.len(),
+        entries = page.entries.len(),
+        has_more = page.has_more,
+        projection_version = page.projection_version,
+        duration_ms = started.elapsed().as_millis() as u64,
+        "projected task timeline"
+    );
+    Ok(page)
+}
+
+/// Builds timeline upserts produced by events newer than the supplied watermark.
+pub async fn get_task_timeline_updates(
+    state: &InnerState,
+    task_id: &str,
+    after_event_id: i64,
+    categories: &[String],
+) -> Result<(i64, Vec<crate::scheduler::timeline::TimelineEntry>)> {
+    let resolved_id = resolve_task_id(state, task_id)
+        .await
+        .map_err(|err| classify_task_error("task.timeline_follow", err))?;
+    let source = state
+        .task_repo
+        .load_task_timeline_source(&resolved_id, None)
+        .await
+        .map_err(|err| classify_task_error("task.timeline_follow", err))?;
+    let patterns = timeline_redaction_patterns(state, &source.task.project_id)
+        .map_err(|err| classify_task_error("task.timeline_follow", err))?;
+    let updates = crate::scheduler::timeline::build_timeline_updates(
+        &source,
+        after_event_id,
+        categories,
+        &patterns,
+    )
+    .map_err(|err| OrchestratorError::user_input("task.timeline_follow", err))?;
+    Ok((source.snapshot_max_event_id, updates))
+}
+
+fn timeline_redaction_patterns(
+    state: &InnerState,
+    project_id: &str,
+) -> anyhow::Result<Vec<String>> {
+    let active = read_loaded_config(state)?;
+    let mut patterns = active.config.runtime_policy().runner.redaction_patterns;
+    let effective = active.config.effective_project_id(Some(project_id));
+    if let Some(project) = active.config.projects.get(effective) {
+        patterns.extend(collect_all_sensitive_store_values(&project.secret_stores));
+    }
+    Ok(patterns)
 }
 
 /// Pause a running task.

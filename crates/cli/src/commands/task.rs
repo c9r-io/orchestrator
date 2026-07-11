@@ -343,5 +343,46 @@ pub(crate) async fn dispatch(
             }
             Ok(())
         }
+
+        TaskCommands::Timeline {
+            task_id,
+            cursor,
+            limit,
+            categories,
+            follow,
+            output: format,
+        } => {
+            let resp = client
+                .task_timeline(orchestrator_proto::TaskTimelineRequest {
+                    task_id: task_id.clone(),
+                    cursor,
+                    limit,
+                    categories: categories.clone(),
+                })
+                .await?
+                .into_inner();
+            output::print_timeline_response(&resp, format);
+
+            if !follow {
+                return Ok(());
+            }
+
+            use tokio_stream::StreamExt;
+
+            let mut stream = client
+                .task_timeline_follow(orchestrator_proto::TaskTimelineFollowRequest {
+                    task_id,
+                    after_event_id: resp.snapshot_max_event_id,
+                    categories,
+                    interval_millis: 500,
+                })
+                .await?
+                .into_inner();
+
+            while let Some(delta) = stream.next().await {
+                output::print_timeline_delta(&delta?, format);
+            }
+            Ok(())
+        }
     }
 }

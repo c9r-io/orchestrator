@@ -855,7 +855,7 @@ fn apply_override(
 
 fn classify_rpc(rpc: &str) -> TrafficClass {
     match rpc {
-        "TaskFollow" | "TaskWatch" => TrafficClass::Stream,
+        "TaskFollow" | "TaskWatch" | "TaskTimelineFollow" => TrafficClass::Stream,
         "Shutdown" | "Init" | "TaskDelete" | "TaskDeleteBulk" | "Delete" | "StorePrune"
         | "SecretKeyRotate" | "SecretKeyRevoke" => TrafficClass::Admin,
         "TaskCreate" | "TaskStart" | "TaskPause" | "TaskResume" | "TaskRetry" | "Apply"
@@ -865,7 +865,7 @@ fn classify_rpc(rpc: &str) -> TrafficClass {
 }
 
 fn is_streaming_rpc(rpc: &str) -> bool {
-    matches!(rpc, "TaskFollow" | "TaskWatch")
+    matches!(rpc, "TaskFollow" | "TaskWatch" | "TaskTimelineFollow")
 }
 
 fn rpc_from_path(path: &str) -> Option<&'static str> {
@@ -879,9 +879,11 @@ fn rpc_from_path(path: &str) -> Option<&'static str> {
         "/orchestrator.OrchestratorService/TaskRetry" => Some("TaskRetry"),
         "/orchestrator.OrchestratorService/TaskList" => Some("TaskList"),
         "/orchestrator.OrchestratorService/TaskInfo" => Some("TaskInfo"),
+        "/orchestrator.OrchestratorService/TaskTimeline" => Some("TaskTimeline"),
         "/orchestrator.OrchestratorService/TaskLogs" => Some("TaskLogs"),
         "/orchestrator.OrchestratorService/TaskFollow" => Some("TaskFollow"),
         "/orchestrator.OrchestratorService/TaskWatch" => Some("TaskWatch"),
+        "/orchestrator.OrchestratorService/TaskTimelineFollow" => Some("TaskTimelineFollow"),
         "/orchestrator.OrchestratorService/Apply" => Some("Apply"),
         "/orchestrator.OrchestratorService/Get" => Some("Get"),
         "/orchestrator.OrchestratorService/Describe" => Some("Describe"),
@@ -920,6 +922,8 @@ mod tests {
         assert_eq!(classify_rpc("Ping"), TrafficClass::Read);
         assert_eq!(classify_rpc("TaskCreate"), TrafficClass::Write);
         assert_eq!(classify_rpc("TaskWatch"), TrafficClass::Stream);
+        assert_eq!(classify_rpc("TaskTimeline"), TrafficClass::Read);
+        assert_eq!(classify_rpc("TaskTimelineFollow"), TrafficClass::Stream);
         assert_eq!(classify_rpc("Shutdown"), TrafficClass::Admin);
     }
 
@@ -961,6 +965,10 @@ mod tests {
         assert_eq!(
             rpc_from_path("/orchestrator.OrchestratorService/TaskWatch"),
             Some("TaskWatch")
+        );
+        assert_eq!(
+            rpc_from_path("/orchestrator.OrchestratorService/TaskTimelineFollow"),
+            Some("TaskTimelineFollow")
         );
         assert_eq!(
             rpc_from_path("/orchestrator.OrchestratorService/Unknown"),
