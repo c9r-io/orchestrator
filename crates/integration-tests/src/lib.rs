@@ -95,6 +95,44 @@ fn event_to_proto(e: EventDto) -> Event {
     }
 }
 
+fn timeline_entry_to_proto(
+    entry: orchestrator_scheduler::scheduler::timeline::TimelineEntry,
+) -> TimelineEntry {
+    TimelineEntry {
+        id: entry.id,
+        task_id: entry.task_id,
+        occurred_at: entry.occurred_at,
+        category: entry.category.as_str().to_string(),
+        title: entry.title,
+        summary: entry.summary,
+        status: entry.status,
+        actor: entry.actor.map(|actor| TimelineActorRef {
+            actor_type: actor.actor_type,
+            actor_id: actor.actor_id,
+        }),
+        step_id: entry.step_id,
+        task_item_id: entry.task_item_id,
+        command_run_id: entry.command_run_id,
+        session_id: entry.session_id,
+        checkpoint_id: entry.checkpoint_id,
+        source_event_id: entry.source_event_id,
+        evidence: entry
+            .evidence
+            .into_iter()
+            .map(|evidence| TimelineEvidenceRef {
+                kind: evidence.kind,
+                label: evidence.label,
+                uri: evidence.uri,
+                content_type: evidence.content_type,
+                digest: evidence.digest,
+                redacted: evidence.redacted,
+            })
+            .collect(),
+        raw_event_ids: entry.raw_event_ids,
+        projection_version: entry.projection_version,
+    }
+}
+
 fn graph_debug_to_proto(bundle: TaskGraphDebugBundle) -> orchestrator_proto::TaskGraphDebugBundle {
     orchestrator_proto::TaskGraphDebugBundle {
         graph_run_id: bundle.graph_run_id,
@@ -145,6 +183,7 @@ impl OrchestratorService for TestOrchestratorServer {
     type TaskLogsStream = BoxStream<TaskLogChunk>;
     type TaskFollowStream = BoxStream<TaskLogLine>;
     type TaskWatchStream = BoxStream<TaskWatchSnapshot>;
+    type TaskTimelineFollowStream = BoxStream<TimelineDelta>;
 
     async fn task_create(
         &self,
@@ -458,6 +497,89 @@ impl OrchestratorService for TestOrchestratorServer {
                 .collect(),
             agent_states,
         }))
+    }
+
+    async fn task_timeline(
+        &self,
+        request: Request<TaskTimelineRequest>,
+    ) -> Result<Response<TaskTimelineResponse>, Status> {
+        let request = request.into_inner();
+        let page = orchestrator_scheduler::service::task::get_task_timeline(
+            &self.state,
+            &request.task_id,
+            orchestrator_scheduler::scheduler::timeline::TimelineQuery {
+                cursor: request.cursor,
+                limit: if request.limit == 0 {
+                    50
+                } else {
+                    request.limit as usize
+                },
+                categories: request.categories,
+            },
+        )
+        .await
+        .map_err(map_core_error)?;
+        Ok(Response::new(TaskTimelineResponse {
+            entries: page
+                .entries
+                .into_iter()
+                .map(timeline_entry_to_proto)
+                .collect(),
+            next_cursor: page.next_cursor,
+            has_more: page.has_more,
+            snapshot_max_event_id: page.snapshot_max_event_id,
+            projection_version: page.projection_version,
+        }))
+    }
+
+    async fn task_timeline_follow(
+        &self,
+        request: Request<TaskTimelineFollowRequest>,
+    ) -> Result<Response<Self::TaskTimelineFollowStream>, Status> {
+        let request = request.into_inner();
+        let state = self.state.clone();
+        let (tx, rx) = tokio::sync::mpsc::channel(64);
+        tokio::spawn(async move {
+            let result = orchestrator_scheduler::service::task::get_task_timeline_updates(
+                &state,
+                &request.task_id,
+                request.after_event_id,
+                &request.categories,
+            )
+            .await;
+            match result {
+                Ok((watermark, updates)) if updates.len() > 200 => {
+                    let _ = tx
+                        .send(Ok(TimelineDelta {
+                            kind: "reset_required".to_string(),
+                            entry: None,
+                            snapshot_max_event_id: watermark,
+                        }))
+                        .await;
+                }
+                Ok((watermark, updates)) => {
+                    for entry in updates {
+                        if tx
+                            .send(Ok(TimelineDelta {
+                                kind: "upsert".to_string(),
+                                entry: Some(timeline_entry_to_proto(entry)),
+                                snapshot_max_event_id: watermark,
+                            }))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                }
+                Err(error) => {
+                    let _ = tx.send(Err(map_core_error(error))).await;
+                }
+            }
+        });
+        Ok(Response::new(
+            Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)) as BoxStream<TimelineDelta>,
+        ))
     }
 
     async fn task_logs(

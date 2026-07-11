@@ -1,0 +1,32 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - fixtures/qa
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: timeline_mock_fail
+spec:
+  capabilities:
+    - qa
+  command: >-
+    echo '{"confidence":0.2,"quality_score":0.1,"artifacts":[{"kind":"ticket","severity":"high","category":"regression","content":{"title":"deterministic timeline failure","reason":"assertion mismatch"}}]}' &&
+    exit 1
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: timeline_failure
+spec:
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  loop:
+    mode: once
