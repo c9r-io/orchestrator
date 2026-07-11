@@ -1,7 +1,7 @@
 # Agent Process Console Roadmap
 
-**Status**: Proposed roadmap  
-**Governed FRs**: FR-095 through FR-100  
+**Status**: Active roadmap; Phase 1 closed
+**Governed FRs**: FR-096 through FR-100 (FR-095 closed)
 **Planned closure artifacts**: design docs 105-110 and QA docs 142-147  
 **Created**: 2026-07-12
 
@@ -91,7 +91,7 @@ The roadmap is organized around vertical operational outcomes rather than horizo
 | P0-03 | Freeze additive gRPC compatibility policy | FR-095, FR-096 | Existing CLI and GUI calls remain valid |
 | P0-04 | Define operator RBAC/action audit policy | FR-096, FR-098 | Every mutating action has actor, reason, idempotency key, and audit event |
 
-### Phase 1: Process timeline read model
+### Phase 1: Process timeline read model (Closed)
 
 **Outcome**: operators can understand a task without reading raw logs.
 
@@ -103,7 +103,7 @@ The roadmap is organized around vertical operational outcomes rather than horizo
 | P1-04 | Tauri bridge and React timeline | P1-03 | Task detail explains state transitions and failure cause |
 | P1-05 | Regression and performance tests | P1-01..04 | Existing `TaskInfo`, trace, logs, and watch behavior unchanged |
 
-Governed by [FR-095](FR-095-process-timeline-read-model.md).
+Closed by `docs/design_doc/orchestrator/105-process-timeline-read-model.md` and verified by `docs/qa/orchestrator/142-process-timeline-read-model.md`.
 
 ### Phase 2: Attention Inbox
 

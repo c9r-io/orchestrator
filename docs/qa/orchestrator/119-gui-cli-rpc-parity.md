@@ -76,10 +76,11 @@ self_referential_safe: false
 ### 场景 5: TaskDetail 新按钮
 
 **步骤**:
-1. 进入任务详情 → 点击「跟踪」→ 确认 trace JSON 显示
-2. failed 任务 → 确认「恢复任务」按钮可见 → 点击调用 TaskRecover
+1. 进入任务详情 → 确认默认「进程时间线」可见
+2. 点击「跟踪」→ 确认 trace JSON 仍可显示
+3. failed 任务 → 确认「恢复任务」按钮可见 → 点击调用 TaskRecover
 
-**期望**: 跟踪和恢复功能正常。
+**期望**: 时间线、跟踪和恢复功能正常，原始 trace 未被时间线替代。
 
 ---
 
