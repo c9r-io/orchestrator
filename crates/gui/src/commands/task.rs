@@ -233,6 +233,121 @@ pub struct TaskTraceResult {
     pub trace_json: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct TimelineActor {
+    pub actor_type: String,
+    pub actor_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TimelineEvidence {
+    pub kind: String,
+    pub label: String,
+    pub uri: Option<String>,
+    pub content_type: Option<String>,
+    pub digest: Option<String>,
+    pub redacted: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TimelineEntry {
+    pub id: String,
+    pub task_id: String,
+    pub occurred_at: String,
+    pub category: String,
+    pub title: String,
+    pub summary: String,
+    pub status: Option<String>,
+    pub actor: Option<TimelineActor>,
+    pub step_id: Option<String>,
+    pub task_item_id: Option<String>,
+    pub command_run_id: Option<String>,
+    pub session_id: Option<String>,
+    pub checkpoint_id: Option<String>,
+    pub source_event_id: Option<String>,
+    pub evidence: Vec<TimelineEvidence>,
+    pub raw_event_ids: Vec<i64>,
+    pub projection_version: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TaskTimelinePage {
+    pub entries: Vec<TimelineEntry>,
+    pub next_cursor: Option<String>,
+    pub has_more: bool,
+    pub snapshot_max_event_id: i64,
+    pub projection_version: u32,
+}
+
+pub(crate) fn timeline_entry_from_proto(entry: orchestrator_proto::TimelineEntry) -> TimelineEntry {
+    TimelineEntry {
+        id: entry.id,
+        task_id: entry.task_id,
+        occurred_at: entry.occurred_at,
+        category: entry.category,
+        title: entry.title,
+        summary: entry.summary,
+        status: entry.status,
+        actor: entry.actor.map(|actor| TimelineActor {
+            actor_type: actor.actor_type,
+            actor_id: actor.actor_id,
+        }),
+        step_id: entry.step_id,
+        task_item_id: entry.task_item_id,
+        command_run_id: entry.command_run_id,
+        session_id: entry.session_id,
+        checkpoint_id: entry.checkpoint_id,
+        source_event_id: entry.source_event_id,
+        evidence: entry
+            .evidence
+            .into_iter()
+            .map(|evidence| TimelineEvidence {
+                kind: evidence.kind,
+                label: evidence.label,
+                uri: evidence.uri,
+                content_type: evidence.content_type,
+                digest: evidence.digest,
+                redacted: evidence.redacted,
+            })
+            .collect(),
+        raw_event_ids: entry.raw_event_ids,
+        projection_version: entry.projection_version,
+    }
+}
+
+/// Get one page of the semantic task timeline (read_only+).
+#[tauri::command]
+pub async fn task_timeline(
+    state: State<'_, Arc<AppState>>,
+    task_id: String,
+    cursor: Option<String>,
+    limit: Option<u32>,
+    categories: Option<Vec<String>>,
+) -> Result<TaskTimelinePage, String> {
+    let mut client = state.client().await?;
+    let response = client
+        .task_timeline(orchestrator_proto::TaskTimelineRequest {
+            task_id,
+            cursor,
+            limit: limit.unwrap_or(50),
+            categories: categories.unwrap_or_default(),
+        })
+        .await
+        .map_err(|e| crate::errors::humanize_grpc_error(&e))?
+        .into_inner();
+    Ok(TaskTimelinePage {
+        entries: response
+            .entries
+            .into_iter()
+            .map(timeline_entry_from_proto)
+            .collect(),
+        next_cursor: response.next_cursor,
+        has_more: response.has_more,
+        snapshot_max_event_id: response.snapshot_max_event_id,
+        projection_version: response.projection_version,
+    })
+}
+
 /// Get task execution trace (read_only+).
 #[tauri::command]
 pub async fn task_trace(

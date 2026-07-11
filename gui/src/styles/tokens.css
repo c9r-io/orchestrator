@@ -213,6 +213,146 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
+/* Task process timeline */
+.detail-view-tabs {
+  display: flex;
+  gap: 4px;
+  width: fit-content;
+  margin: 0 0 10px 8px;
+  padding: 3px;
+  border-radius: 14px;
+  background: var(--bg-tertiary);
+}
+
+.timeline-panel:hover {
+  transform: none;
+}
+
+.timeline-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.timeline-header h3 {
+  font-size: 16px;
+}
+
+.timeline-header p {
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.timeline-list {
+  list-style: none;
+}
+
+.timeline-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  min-height: 72px;
+}
+
+.timeline-rail {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.timeline-rail::after {
+  content: "";
+  position: absolute;
+  top: 17px;
+  bottom: -1px;
+  width: 1px;
+  background: var(--glass-border-subtle);
+}
+
+.timeline-row:last-child .timeline-rail::after {
+  display: none;
+}
+
+.timeline-rail span {
+  z-index: 1;
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: var(--bg-secondary);
+}
+
+.timeline-row-failure .timeline-rail span {
+  border-color: var(--danger);
+}
+
+.timeline-content {
+  min-width: 0;
+  padding: 0 0 18px 8px;
+}
+
+.timeline-content strong {
+  display: block;
+  margin: 3px 0;
+  font-size: 14px;
+}
+
+.timeline-content p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.timeline-meta,
+.timeline-context,
+.timeline-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.timeline-category,
+.timeline-status,
+.timeline-context span,
+.timeline-evidence span {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--bg-tertiary);
+}
+
+.timeline-context,
+.timeline-evidence {
+  margin-top: 6px;
+}
+
+.timeline-evidence span {
+  color: var(--text-secondary);
+  background: var(--accent-tint);
+}
+
+.timeline-empty,
+.timeline-error {
+  padding: 24px 0;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.timeline-error {
+  color: var(--danger);
+}
+
+.timeline-more {
+  display: flex;
+  margin: 4px auto 0;
+}
+
 /* Connection banner */
 .connection-banner {
   position: fixed;

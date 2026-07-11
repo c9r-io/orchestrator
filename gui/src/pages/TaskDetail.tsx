@@ -8,6 +8,7 @@ import ProgressBar from "../components/ProgressBar";
 import StatusIcon from "../components/StatusIcon";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ExpertPanel from "../components/ExpertPanel";
+import ProcessTimeline from "../components/ProcessTimeline";
 import i18n from "../lib/i18n";
 import type { TaskDetail as TaskDetailType, LogLine, WatchSnapshot } from "../lib/types";
 
@@ -29,6 +30,7 @@ export default function TaskDetail({ taskId, onBack }: Props) {
   const [actionErr, setActionErr] = useState<string | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [detailView, setDetailView] = useState<"timeline" | "logs">("timeline");
 
   const streamParams = useMemo(() => ({ task_id: taskId }), [taskId]);
   const { data: allLogs, active, start, stop } = useStream<LogLine>(
@@ -320,10 +322,32 @@ export default function TaskDetail({ taskId, onBack }: Props) {
             )}
           </div>
 
-          {/* Expert mode panel OR log streaming */}
+          {/* Expert mode panel OR operator timeline/logs */}
           {expert ? (
             <ExpertPanel taskDetail={displayData} />
           ) : (
+            <>
+              <div className="detail-view-tabs" role="tablist" aria-label={i18n.taskDetail.viewLabel}>
+                <button
+                  role="tab"
+                  aria-selected={detailView === "timeline"}
+                  className={`btn ${detailView === "timeline" ? "btn-primary" : "btn-ghost"}`}
+                  onClick={() => setDetailView("timeline")}
+                >
+                  {i18n.taskDetail.timeline}
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={detailView === "logs"}
+                  className={`btn ${detailView === "logs" ? "btn-primary" : "btn-ghost"}`}
+                  onClick={() => setDetailView("logs")}
+                >
+                  {i18n.taskDetail.liveLog}
+                </button>
+              </div>
+              {detailView === "timeline" ? (
+                <ProcessTimeline taskId={taskId} />
+              ) : (
             <div className="liquid-glass">
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                 <h3 style={{ flex: 1 }}>{i18n.taskDetail.liveLog}</h3>
@@ -411,6 +435,8 @@ export default function TaskDetail({ taskId, onBack }: Props) {
                 </div>
               )}
             </div>
+              )}
+            </>
           )}
         </>
       )}

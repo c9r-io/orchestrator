@@ -49,6 +49,7 @@ pub fn run() {
             commands::task::task_retry,
             commands::task::task_delete,
             commands::task::task_trace,
+            commands::task::task_timeline,
             commands::task::task_recover,
             commands::task::task_delete_bulk,
             // streaming
@@ -57,6 +58,8 @@ pub fn run() {
             commands::stream::start_task_watch,
             commands::stream::stop_task_watch,
             commands::stream::task_logs,
+            commands::stream::start_task_timeline_follow,
+            commands::stream::stop_task_timeline_follow,
             // resource
             commands::resource::resource_get,
             commands::resource::resource_describe,

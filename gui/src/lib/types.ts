@@ -99,5 +99,53 @@ export interface TaskLogChunk {
   started_at: string | null;
 }
 
+export interface TimelineActor {
+  actor_type: string;
+  actor_id: string;
+}
+
+export interface TimelineEvidence {
+  kind: string;
+  label: string;
+  uri: string | null;
+  content_type: string | null;
+  digest: string | null;
+  redacted: boolean;
+}
+
+export interface TimelineEntry {
+  id: string;
+  task_id: string;
+  occurred_at: string;
+  category: string;
+  title: string;
+  summary: string;
+  status: string | null;
+  actor: TimelineActor | null;
+  step_id: string | null;
+  task_item_id: string | null;
+  command_run_id: string | null;
+  session_id: string | null;
+  checkpoint_id: string | null;
+  source_event_id: string | null;
+  evidence: TimelineEvidence[];
+  raw_event_ids: number[];
+  projection_version: number;
+}
+
+export interface TaskTimelinePage {
+  entries: TimelineEntry[];
+  next_cursor: string | null;
+  has_more: boolean;
+  snapshot_max_event_id: number;
+  projection_version: number;
+}
+
+export interface TimelineDelta {
+  kind: "upsert" | "reset_required";
+  entry: TimelineEntry | null;
+  snapshot_max_event_id: number;
+}
+
 /** Wish status derived from task status + workflow context. */
 export type WishStatus = "drafting" | "pending_confirm" | "confirmed" | "failed" | "cancelled";
