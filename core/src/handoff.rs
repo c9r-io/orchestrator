@@ -179,6 +179,23 @@ pub struct ResumeExecutionReservation {
     pub status: String,
 }
 
+/// Trusted and operator-supplied fields required to reserve a resume execution.
+#[derive(Debug, Clone)]
+pub struct ResumeExecutionRequest {
+    /// State version returned by the reviewed plan.
+    pub expected_state_version: String,
+    /// Retry-safe caller key.
+    pub idempotency_key: String,
+    /// Trusted control-plane actor.
+    pub actor: String,
+    /// Required audit reason.
+    pub operator_reason: String,
+    /// Explicit acknowledgement for non-idempotent replay.
+    pub elevated_confirmation: bool,
+    /// Whether project policy permits elevated replay.
+    pub elevated_policy_enabled: bool,
+}
+
 /// SQLite-backed handoff and resume repository.
 #[derive(Clone)]
 pub struct AsyncHandoffRepository {
@@ -274,33 +291,12 @@ impl AsyncHandoffRepository {
     pub async fn reserve_execution(
         &self,
         plan_id: &str,
-        expected_state_version: &str,
-        idempotency_key: &str,
-        actor: &str,
-        operator_reason: &str,
-        elevated_confirmation: bool,
-        elevated_policy_enabled: bool,
+        request: ResumeExecutionRequest,
     ) -> Result<ResumeExecutionReservation> {
         let plan_id = plan_id.to_owned();
-        let expected = expected_state_version.to_owned();
-        let key = idempotency_key.to_owned();
-        let actor = actor.to_owned();
-        let reason = operator_reason.to_owned();
         self.db
             .writer()
-            .call(move |conn| {
-                reserve_execution(
-                    conn,
-                    &plan_id,
-                    &expected,
-                    &key,
-                    &actor,
-                    &reason,
-                    elevated_confirmation,
-                    elevated_policy_enabled,
-                )
-                .map_err(other)
-            })
+            .call(move |conn| reserve_execution(conn, &plan_id, &request).map_err(other))
             .await
             .map_err(flatten_err)
     }
@@ -804,21 +800,16 @@ fn create_plan(
 fn reserve_execution(
     conn: &Connection,
     plan_id: &str,
-    expected_state_version: &str,
-    idempotency_key: &str,
-    actor: &str,
-    operator_reason: &str,
-    elevated_confirmation: bool,
-    elevated_policy_enabled: bool,
+    request: &ResumeExecutionRequest,
 ) -> Result<ResumeExecutionReservation> {
-    if idempotency_key.trim().is_empty() || operator_reason.trim().is_empty() {
+    if request.idempotency_key.trim().is_empty() || request.operator_reason.trim().is_empty() {
         bail!("idempotency_key and operator_reason are required");
     }
     let tx = conn.unchecked_transaction()?;
     if let Some(existing) = tx
         .query_row(
             "SELECT id, status FROM resume_executions WHERE plan_id=?1 AND idempotency_key=?2",
-            params![plan_id, idempotency_key],
+            params![plan_id, request.idempotency_key],
             |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
         )
         .optional()?
@@ -859,18 +850,18 @@ fn reserve_execution(
         bail!("resume plan has expired");
     }
     let current_version = task_state_version(&tx, &task_id)?;
-    if expected_state_version != planned_version || current_version != planned_version {
+    if request.expected_state_version != planned_version || current_version != planned_version {
         bail!("stale resume plan: task state changed; generate a new consequence preview");
     }
-    if elevated != 0 && (!elevated_policy_enabled || !elevated_confirmation) {
+    if elevated != 0 && (!request.elevated_policy_enabled || !request.elevated_confirmation) {
         bail!("non-idempotent replay denied: elevated policy and confirmation are required");
     }
     let request_hash = hash_value(&json!({
         "plan_id": plan_id,
-        "expected_state_version": expected_state_version,
-        "actor": actor,
-        "operator_reason": operator_reason,
-        "elevated_confirmation": elevated_confirmation,
+        "expected_state_version": request.expected_state_version,
+        "actor": request.actor,
+        "operator_reason": request.operator_reason,
+        "elevated_confirmation": request.elevated_confirmation,
     }))?;
     let id = Uuid::new_v4().to_string();
     tx.execute(
@@ -880,9 +871,9 @@ fn reserve_execution(
         params![
             id,
             plan_id,
-            actor,
-            operator_reason,
-            idempotency_key,
+            request.actor,
+            request.operator_reason,
+            request.idempotency_key,
             request_hash,
             now_ts(),
         ],
@@ -1073,12 +1064,14 @@ mod tests {
         let error = repository
             .reserve_execution(
                 &plan.id,
-                &plan.expected_state_version,
-                "key-1",
-                "operator",
-                "retry after review",
-                false,
-                false,
+                ResumeExecutionRequest {
+                    expected_state_version: plan.expected_state_version.clone(),
+                    idempotency_key: "key-1".to_string(),
+                    actor: "operator".to_string(),
+                    operator_reason: "retry after review".to_string(),
+                    elevated_confirmation: false,
+                    elevated_policy_enabled: false,
+                },
             )
             .await
             .expect_err("stale plan must fail");
@@ -1122,12 +1115,14 @@ mod tests {
         let error = repository
             .reserve_execution(
                 &plan.id,
-                &plan.expected_state_version,
-                "key-2",
-                "operator",
-                "deploy again",
-                true,
-                false,
+                ResumeExecutionRequest {
+                    expected_state_version: plan.expected_state_version.clone(),
+                    idempotency_key: "key-2".to_string(),
+                    actor: "operator".to_string(),
+                    operator_reason: "deploy again".to_string(),
+                    elevated_confirmation: true,
+                    elevated_policy_enabled: false,
+                },
             )
             .await
             .expect_err("policy disabled");

@@ -1375,6 +1375,7 @@ fn _exhaustiveness_guard(cmd: crate::Commands) {
         crate::Commands::Agent(_) => {}
         crate::Commands::Event(_) => {}
         crate::Commands::Attention(_) => {}
+        crate::Commands::Handoff(_) | crate::Commands::Resume(_) => {}
         crate::Commands::Trigger(_) => {}
         crate::Commands::Qa(_) => {}
         crate::Commands::Daemon(_) => {}

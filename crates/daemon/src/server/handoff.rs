@@ -201,12 +201,14 @@ pub(crate) async fn resume_execute(
         .handoff_repo
         .reserve_execution(
             &req.plan_id,
-            &req.expected_state_version,
-            &req.idempotency_key,
-            &actor,
-            &req.operator_reason,
-            req.elevated_confirmation,
-            policy.elevated_resume_enabled,
+            agent_orchestrator::handoff::ResumeExecutionRequest {
+                expected_state_version: req.expected_state_version.clone(),
+                idempotency_key: req.idempotency_key.clone(),
+                actor: actor.clone(),
+                operator_reason: req.operator_reason.clone(),
+                elevated_confirmation: req.elevated_confirmation,
+                elevated_policy_enabled: policy.elevated_resume_enabled,
+            },
         )
         .await
         .map_err(status)?;
