@@ -174,6 +174,10 @@ pub enum Commands {
     #[command(alias = "ev", subcommand)]
     Event(EventCommands),
 
+    /// Cross-task human attention queue
+    #[command(alias = "attn", subcommand)]
+    Attention(AttentionCommands),
+
     /// Trigger lifecycle operations (suspend, resume, fire)
     #[command(alias = "tg", subcommand)]
     Trigger(TriggerCommands),
@@ -254,6 +258,114 @@ pub enum Commands {
         /// Execution profile override for direct assembly mode.
         #[arg(long)]
         profile: Option<String>,
+    },
+}
+
+/// Cross-task attention queue operations.
+#[derive(Subcommand, Debug, Clone)]
+pub enum AttentionCommands {
+    /// List attention items with optional filters.
+    #[command(alias = "ls")]
+    List {
+        /// Optional project filter.
+        #[arg(short, long)]
+        project: Option<String>,
+        /// Optional lifecycle state filter.
+        #[arg(long)]
+        state: Option<String>,
+        /// Optional policy kind filter.
+        #[arg(long)]
+        kind: Option<String>,
+        /// Optional severity filter.
+        #[arg(long)]
+        severity: Option<String>,
+        /// Optional assignee (`me`, `unassigned`, or actor ID).
+        #[arg(long)]
+        assignee: Option<String>,
+        /// Optional task filter.
+        #[arg(long)]
+        task: Option<String>,
+        /// Maximum number of results.
+        #[arg(long, default_value_t = 100)]
+        limit: u32,
+        /// Output encoding.
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+    /// Get one attention item.
+    Get {
+        /// Attention item ID.
+        id: String,
+        /// Output encoding.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
+    /// Claim an open attention item.
+    Claim {
+        /// Attention item ID.
+        id: String,
+        /// Current optimistic concurrency version.
+        #[arg(long)]
+        expected_version: i64,
+        /// Optional retry-safe idempotency key.
+        #[arg(long)]
+        idempotency_key: Option<String>,
+    },
+    /// Snooze an open or claimed item.
+    Snooze {
+        /// Attention item ID.
+        id: String,
+        /// Current optimistic concurrency version.
+        #[arg(long)]
+        expected_version: i64,
+        /// RFC3339 wake-up time.
+        #[arg(long)]
+        until: String,
+        /// Optional retry-safe idempotency key.
+        #[arg(long)]
+        idempotency_key: Option<String>,
+    },
+    /// Resolve an attention item.
+    Resolve {
+        /// Attention item ID.
+        id: String,
+        /// Current optimistic concurrency version.
+        #[arg(long)]
+        expected_version: i64,
+        /// Short resolution reason.
+        #[arg(long)]
+        reason: String,
+        /// Optional retry-safe idempotency key.
+        #[arg(long)]
+        idempotency_key: Option<String>,
+    },
+    /// Execute an allowlisted action.
+    Action {
+        /// Attention item ID.
+        id: String,
+        /// Allowlisted action ID.
+        action_id: String,
+        /// Current optimistic concurrency version.
+        #[arg(long)]
+        expected_version: i64,
+        /// Bounded JSON object input.
+        #[arg(long, default_value = "{}")]
+        input: String,
+        /// Optional retry-safe idempotency key.
+        #[arg(long)]
+        idempotency_key: Option<String>,
+    },
+    /// Follow monotonic attention queue changes.
+    Follow {
+        /// Resume after this change sequence.
+        #[arg(long, default_value_t = 0)]
+        after: i64,
+        /// Optional project filter.
+        #[arg(short, long)]
+        project: Option<String>,
+        /// Output encoding for each change.
+        #[arg(short, long, default_value = "json")]
+        output: OutputFormat,
     },
 }
 

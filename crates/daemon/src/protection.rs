@@ -855,17 +855,32 @@ fn apply_override(
 
 fn classify_rpc(rpc: &str) -> TrafficClass {
     match rpc {
-        "TaskFollow" | "TaskWatch" | "TaskTimelineFollow" => TrafficClass::Stream,
+        "TaskFollow" | "TaskWatch" | "TaskTimelineFollow" | "AttentionFollow" => {
+            TrafficClass::Stream
+        }
         "Shutdown" | "Init" | "TaskDelete" | "TaskDeleteBulk" | "Delete" | "StorePrune"
         | "SecretKeyRotate" | "SecretKeyRevoke" => TrafficClass::Admin,
-        "TaskCreate" | "TaskStart" | "TaskPause" | "TaskResume" | "TaskRetry" | "Apply"
-        | "StorePut" | "StoreDelete" => TrafficClass::Write,
+        "TaskCreate"
+        | "TaskStart"
+        | "TaskPause"
+        | "TaskResume"
+        | "TaskRetry"
+        | "Apply"
+        | "StorePut"
+        | "StoreDelete"
+        | "AttentionClaim"
+        | "AttentionSnooze"
+        | "AttentionResolve"
+        | "AttentionExecuteAction" => TrafficClass::Write,
         _ => TrafficClass::Read,
     }
 }
 
 fn is_streaming_rpc(rpc: &str) -> bool {
-    matches!(rpc, "TaskFollow" | "TaskWatch" | "TaskTimelineFollow")
+    matches!(
+        rpc,
+        "TaskFollow" | "TaskWatch" | "TaskTimelineFollow" | "AttentionFollow"
+    )
 }
 
 fn rpc_from_path(path: &str) -> Option<&'static str> {
@@ -884,6 +899,15 @@ fn rpc_from_path(path: &str) -> Option<&'static str> {
         "/orchestrator.OrchestratorService/TaskFollow" => Some("TaskFollow"),
         "/orchestrator.OrchestratorService/TaskWatch" => Some("TaskWatch"),
         "/orchestrator.OrchestratorService/TaskTimelineFollow" => Some("TaskTimelineFollow"),
+        "/orchestrator.OrchestratorService/AttentionList" => Some("AttentionList"),
+        "/orchestrator.OrchestratorService/AttentionGet" => Some("AttentionGet"),
+        "/orchestrator.OrchestratorService/AttentionClaim" => Some("AttentionClaim"),
+        "/orchestrator.OrchestratorService/AttentionSnooze" => Some("AttentionSnooze"),
+        "/orchestrator.OrchestratorService/AttentionResolve" => Some("AttentionResolve"),
+        "/orchestrator.OrchestratorService/AttentionExecuteAction" => {
+            Some("AttentionExecuteAction")
+        }
+        "/orchestrator.OrchestratorService/AttentionFollow" => Some("AttentionFollow"),
         "/orchestrator.OrchestratorService/Apply" => Some("Apply"),
         "/orchestrator.OrchestratorService/Get" => Some("Get"),
         "/orchestrator.OrchestratorService/Describe" => Some("Describe"),

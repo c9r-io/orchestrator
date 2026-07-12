@@ -25,6 +25,15 @@ service OrchestratorService {
   rpc TaskWatch(TaskWatchRequest)     returns (stream TaskWatchSnapshot);
   rpc TaskTimelineFollow(TaskTimelineFollowRequest) returns (stream TimelineDelta);
 
+  // Cross-task human attention queue
+  rpc AttentionList(AttentionListRequest) returns (AttentionListResponse);
+  rpc AttentionGet(AttentionGetRequest) returns (AttentionItem);
+  rpc AttentionClaim(AttentionClaimRequest) returns (AttentionItem);
+  rpc AttentionSnooze(AttentionSnoozeRequest) returns (AttentionItem);
+  rpc AttentionResolve(AttentionResolveRequest) returns (AttentionItem);
+  rpc AttentionExecuteAction(AttentionExecuteActionRequest) returns (AttentionItem);
+  rpc AttentionFollow(AttentionFollowRequest) returns (stream AttentionDelta);
+
   // Resource management
   rpc Apply(ApplyRequest)             returns (ApplyResponse);
   rpc Get(GetRequest)                 returns (GetResponse);
@@ -284,6 +293,99 @@ message TimelineDelta {
   string kind = 1; // upsert | reset_required
   optional TimelineEntry entry = 2;
   int64 snapshot_max_event_id = 3;
+}
+
+message AttentionActionDescriptor {
+  string id = 1;
+  string label = 2;
+  string required_role = 3;
+  string confirmation = 4;
+  string input_schema_json = 5;
+}
+
+message AttentionItem {
+  string id = 1;
+  string project_id = 2;
+  string task_id = 3;
+  optional string task_item_id = 4;
+  optional string step_id = 5;
+  optional string session_id = 6;
+  string kind = 7;
+  string severity = 8;
+  string state = 9;
+  string title = 10;
+  string summary = 11;
+  optional string requested_decision_json = 12;
+  repeated AttentionActionDescriptor actions = 13;
+  optional string assignee = 14;
+  string source_event_id = 15;
+  int64 occurrence_count = 16;
+  int64 reopen_count = 17;
+  int64 version = 18;
+  string created_at = 19;
+  string updated_at = 20;
+  string last_occurred_at = 21;
+  optional string snoozed_until = 22;
+  optional string sla_deadline = 23;
+  optional string resolved_at = 24;
+  optional string resolution_json = 25;
+}
+
+message AttentionListRequest {
+  optional string project_id = 1;
+  optional string state = 2;
+  optional string kind = 3;
+  optional string severity = 4;
+  optional string assignee = 5;
+  optional string task_id = 6;
+  uint32 limit = 7;
+}
+
+message AttentionListResponse {
+  repeated AttentionItem items = 1;
+  int64 latest_change_id = 2;
+}
+
+message AttentionGetRequest { string id = 1; }
+
+message AttentionClaimRequest {
+  string id = 1;
+  int64 expected_version = 2;
+  string idempotency_key = 3;
+}
+
+message AttentionSnoozeRequest {
+  string id = 1;
+  int64 expected_version = 2;
+  string idempotency_key = 3;
+  string until = 4;
+}
+
+message AttentionResolveRequest {
+  string id = 1;
+  int64 expected_version = 2;
+  string idempotency_key = 3;
+  string reason = 4;
+}
+
+message AttentionExecuteActionRequest {
+  string id = 1;
+  int64 expected_version = 2;
+  string idempotency_key = 3;
+  string action_id = 4;
+  string input_json = 5;
+}
+
+message AttentionFollowRequest {
+  int64 after_change_id = 1;
+  optional string project_id = 2;
+  uint64 interval_millis = 3;
+}
+
+message AttentionDelta {
+  string kind = 1;
+  int64 change_id = 2;
+  optional AttentionItem item = 3;
 }
 
 message TaskGraphDebugBundle {

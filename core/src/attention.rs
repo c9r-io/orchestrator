@@ -205,7 +205,7 @@ pub struct AttentionCandidate {
 #[derive(Debug, Clone)]
 pub enum AttentionProjectionOp {
     /// Create, aggregate, or reopen a condition.
-    Upsert(AttentionCandidate),
+    Upsert(Box<AttentionCandidate>),
     /// Resolve matching active step conditions.
     ResolveStep {
         /// Task identifier.
@@ -887,12 +887,18 @@ mod tests {
     #[tokio::test]
     async fn duplicate_projection_aggregates_occurrences() {
         let (_temp, repo) = repo().await;
-        repo.apply_projection_batch(vec![AttentionProjectionOp::Upsert(candidate("a"))], 1)
-            .await
-            .expect("first");
-        repo.apply_projection_batch(vec![AttentionProjectionOp::Upsert(candidate("a"))], 2)
-            .await
-            .expect("second");
+        repo.apply_projection_batch(
+            vec![AttentionProjectionOp::Upsert(Box::new(candidate("a")))],
+            1,
+        )
+        .await
+        .expect("first");
+        repo.apply_projection_batch(
+            vec![AttentionProjectionOp::Upsert(Box::new(candidate("a")))],
+            2,
+        )
+        .await
+        .expect("second");
         let item = repo.get("a").await.expect("get").expect("item");
         assert_eq!(item.occurrence_count, 2);
         assert_eq!(item.version, 2);
@@ -914,9 +920,12 @@ mod tests {
     #[tokio::test]
     async fn optimistic_claim_and_idempotency_are_enforced() {
         let (_temp, repo) = repo().await;
-        repo.apply_projection_batch(vec![AttentionProjectionOp::Upsert(candidate("a"))], 1)
-            .await
-            .expect("project");
+        repo.apply_projection_batch(
+            vec![AttentionProjectionOp::Upsert(Box::new(candidate("a")))],
+            1,
+        )
+        .await
+        .expect("project");
         let claimed = repo
             .mutate("a", 1, "key-1", "actor-a", AttentionMutation::Claim)
             .await

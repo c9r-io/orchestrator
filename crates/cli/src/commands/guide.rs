@@ -501,6 +501,80 @@ fn run_entries() -> Vec<GuideEntry> {
     }]
 }
 
+fn attention_entries() -> Vec<GuideEntry> {
+    vec![
+        GuideEntry {
+            command: "attention list",
+            alias: Some("attn ls"),
+            category: GuideCategory::TaskLifecycle,
+            summary: "List cross-task decisions and blockers",
+            description: "Show only workflow conditions that need human attention, ordered by severity and ownership.",
+            examples: &[
+                ("orchestrator attention list", "List the active inbox"),
+                (
+                    "orchestrator attention list --assignee me",
+                    "Show items assigned to the current authenticated actor",
+                ),
+                (
+                    "orchestrator attention list --state resolved -o json",
+                    "Audit resolved decisions",
+                ),
+            ],
+        },
+        GuideEntry {
+            command: "attention get",
+            alias: Some("attn get"),
+            category: GuideCategory::TaskLifecycle,
+            summary: "Inspect one attention item",
+            description: "Show the redacted condition, optimistic version, task context, and safe allowlisted actions.",
+            examples: &[("orchestrator attention get <id>", "Inspect one item")],
+        },
+        GuideEntry {
+            command: "attention claim|snooze|resolve",
+            alias: Some("attn"),
+            category: GuideCategory::TaskLifecycle,
+            summary: "Manage attention ownership and lifecycle",
+            description: "Apply an authenticated, version-checked and idempotent queue mutation.",
+            examples: &[
+                (
+                    "orchestrator attention claim <id> --expected-version 1",
+                    "Claim an open item",
+                ),
+                (
+                    "orchestrator attention snooze <id> --expected-version 2 --until 2026-07-13T09:00:00Z",
+                    "Snooze until an RFC3339 deadline",
+                ),
+                (
+                    "orchestrator attention resolve <id> --expected-version 2 --reason reviewed",
+                    "Resolve with an audit reason",
+                ),
+            ],
+        },
+        GuideEntry {
+            command: "attention action",
+            alias: Some("attn action"),
+            category: GuideCategory::TaskLifecycle,
+            summary: "Execute an allowlisted recovery or decision action",
+            description: "Reserve and execute only an action advertised by the item, such as retry_failed_item or resume_task.",
+            examples: &[(
+                "orchestrator attention action <id> resume_task --expected-version 1",
+                "Resume and resolve a stalled task",
+            )],
+        },
+        GuideEntry {
+            command: "attention follow",
+            alias: Some("attn follow"),
+            category: GuideCategory::TaskLifecycle,
+            summary: "Follow monotonic inbox changes",
+            description: "Stream upsert and remove deltas from a durable change sequence for reconnect-safe clients.",
+            examples: &[(
+                "orchestrator attention follow --after 42",
+                "Resume a queue stream",
+            )],
+        },
+    ]
+}
+
 fn agent_entries() -> Vec<GuideEntry> {
     vec![
         GuideEntry {
@@ -1139,6 +1213,7 @@ fn all_entries() -> Vec<GuideEntry> {
     let mut entries = Vec::with_capacity(64);
     entries.extend(resource_entries());
     entries.extend(task_entries());
+    entries.extend(attention_entries());
     entries.extend(run_entries());
     entries.extend(agent_entries());
     entries.extend(store_entries());
@@ -1299,6 +1374,7 @@ fn _exhaustiveness_guard(cmd: crate::Commands) {
         crate::Commands::Manifest(_) => {}
         crate::Commands::Agent(_) => {}
         crate::Commands::Event(_) => {}
+        crate::Commands::Attention(_) => {}
         crate::Commands::Trigger(_) => {}
         crate::Commands::Qa(_) => {}
         crate::Commands::Daemon(_) => {}

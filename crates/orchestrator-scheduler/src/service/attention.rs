@@ -117,17 +117,17 @@ fn policy_operations(event: &AttentionSourceEvent) -> Vec<AttentionProjectionOp>
 
     let mut result = Vec::new();
     if let Some((kind, severity, title)) = policy {
-        result.push(AttentionProjectionOp::Upsert(candidate(
+        result.push(AttentionProjectionOp::Upsert(Box::new(candidate(
             event, kind, severity, title,
-        )));
+        ))));
     }
     if is_low_confidence(event) {
-        result.push(AttentionProjectionOp::Upsert(candidate(
+        result.push(AttentionProjectionOp::Upsert(Box::new(candidate(
             event,
             "low_confidence",
             AttentionSeverity::Attention,
             "Agent confidence needs review",
-        )));
+        ))));
     }
     result
 }

@@ -184,6 +184,70 @@ impl OrchestratorService for TestOrchestratorServer {
     type TaskFollowStream = BoxStream<TaskLogLine>;
     type TaskWatchStream = BoxStream<TaskWatchSnapshot>;
     type TaskTimelineFollowStream = BoxStream<TimelineDelta>;
+    type AttentionFollowStream = BoxStream<AttentionDelta>;
+
+    async fn attention_list(
+        &self,
+        _request: Request<AttentionListRequest>,
+    ) -> Result<Response<AttentionListResponse>, Status> {
+        Err(Status::unimplemented(
+            "attention integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn attention_get(
+        &self,
+        _request: Request<AttentionGetRequest>,
+    ) -> Result<Response<AttentionItem>, Status> {
+        Err(Status::unimplemented(
+            "attention integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn attention_claim(
+        &self,
+        _request: Request<AttentionClaimRequest>,
+    ) -> Result<Response<AttentionItem>, Status> {
+        Err(Status::unimplemented(
+            "attention integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn attention_snooze(
+        &self,
+        _request: Request<AttentionSnoozeRequest>,
+    ) -> Result<Response<AttentionItem>, Status> {
+        Err(Status::unimplemented(
+            "attention integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn attention_resolve(
+        &self,
+        _request: Request<AttentionResolveRequest>,
+    ) -> Result<Response<AttentionItem>, Status> {
+        Err(Status::unimplemented(
+            "attention integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn attention_execute_action(
+        &self,
+        _request: Request<AttentionExecuteActionRequest>,
+    ) -> Result<Response<AttentionItem>, Status> {
+        Err(Status::unimplemented(
+            "attention integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn attention_follow(
+        &self,
+        _request: Request<AttentionFollowRequest>,
+    ) -> Result<Response<Self::AttentionFollowStream>, Status> {
+        Err(Status::unimplemented(
+            "attention integration fixture uses the production daemon",
+        ))
+    }
 
     async fn task_create(
         &self,

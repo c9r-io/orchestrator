@@ -1,3 +1,4 @@
+mod attention;
 mod task_detail;
 mod task_list;
 mod timeline;
@@ -17,6 +18,10 @@ pub fn print_task_detail(resp: &TaskInfoResponse, format: OutputFormat) {
     task_detail::print(resp, format);
 }
 
+pub(crate) use attention::{
+    print_delta as print_attention_delta, print_item as print_attention_item,
+    print_list as print_attention_list,
+};
 pub use timeline::{
     print_delta as print_timeline_delta, print_response as print_timeline_response,
 };

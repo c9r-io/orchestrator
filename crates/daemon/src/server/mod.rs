@@ -1,4 +1,5 @@
 mod agent;
+mod attention;
 mod mapping;
 mod resource;
 mod secret;
@@ -114,6 +115,17 @@ pub(crate) fn authorize<T>(
     }
 }
 
+fn trusted_actor<T>(request: &Request<T>) -> String {
+    crate::control_plane::subject_id_from_extensions(request.extensions())
+        .or_else(|| {
+            request
+                .extensions()
+                .get::<UdsPeerInfo>()
+                .map(|peer| format!("uid:{}", peer.uid))
+        })
+        .unwrap_or_else(|| "local-operator".to_string())
+}
+
 fn uds_audit(
     db_path: &std::path::Path,
     rpc: &str,
@@ -168,6 +180,7 @@ impl OrchestratorService for OrchestratorServer {
     type TaskFollowStream = task::TaskFollowStream;
     type TaskWatchStream = task::TaskWatchStream;
     type TaskTimelineFollowStream = task::TaskTimelineFollowStream;
+    type AttentionFollowStream = attention::AttentionFollowStream;
 
     async fn task_create(
         &self,
@@ -272,6 +285,55 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<TaskTimelineFollowRequest>,
     ) -> Result<Response<Self::TaskTimelineFollowStream>, Status> {
         task::task_timeline_follow(self, request).await
+    }
+
+    async fn attention_list(
+        &self,
+        request: Request<AttentionListRequest>,
+    ) -> Result<Response<AttentionListResponse>, Status> {
+        attention::attention_list(self, request).await
+    }
+
+    async fn attention_get(
+        &self,
+        request: Request<AttentionGetRequest>,
+    ) -> Result<Response<AttentionItem>, Status> {
+        attention::attention_get(self, request).await
+    }
+
+    async fn attention_claim(
+        &self,
+        request: Request<AttentionClaimRequest>,
+    ) -> Result<Response<AttentionItem>, Status> {
+        attention::attention_claim(self, request).await
+    }
+
+    async fn attention_snooze(
+        &self,
+        request: Request<AttentionSnoozeRequest>,
+    ) -> Result<Response<AttentionItem>, Status> {
+        attention::attention_snooze(self, request).await
+    }
+
+    async fn attention_resolve(
+        &self,
+        request: Request<AttentionResolveRequest>,
+    ) -> Result<Response<AttentionItem>, Status> {
+        attention::attention_resolve(self, request).await
+    }
+
+    async fn attention_execute_action(
+        &self,
+        request: Request<AttentionExecuteActionRequest>,
+    ) -> Result<Response<AttentionItem>, Status> {
+        attention::attention_execute_action(self, request).await
+    }
+
+    async fn attention_follow(
+        &self,
+        request: Request<AttentionFollowRequest>,
+    ) -> Result<Response<Self::AttentionFollowStream>, Status> {
+        attention::attention_follow(self, request).await
     }
 
     async fn apply(
