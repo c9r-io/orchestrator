@@ -358,6 +358,8 @@ mod tests {
         let back = RuntimePolicyProjection::from_cr_spec(&spec).expect("should deserialize");
         assert!(back.resume.auto);
         assert_eq!(back.runner.shell, "/bin/bash");
+        assert!(back.attention_inbox_enabled);
+        assert!(RuntimePolicyProjection::default().attention_inbox_enabled);
     }
 
     #[test]
