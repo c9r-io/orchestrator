@@ -179,6 +179,18 @@ else
   fail "resume execution audit evidence is missing"
 fi
 
+for _ in {1..20}; do
+  "$ORCH" attention list --task "$TASK_ID" -o json > "$QA_ROOT/source-attention.json"
+  ACTIVE_ATTENTION="$(jq '[.items[] | select(.state != "resolved")] | length' "$QA_ROOT/source-attention.json")"
+  [[ "$ACTIVE_ATTENTION" -eq 0 ]] && break
+  sleep 0.25
+done
+if [[ "$ACTIVE_ATTENTION" -eq 0 ]]; then
+  pass "Attention resolves only after the durable resume execution event"
+else
+  fail "source-task Attention remained active after successful resume execution"
+fi
+
 echo ""
 echo "Handoff and safe resume QA: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]]

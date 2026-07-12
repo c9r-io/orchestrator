@@ -54,7 +54,7 @@ pub async fn reconcile_attention_once(state: &InnerState) -> Result<usize> {
 fn policy_operations(event: &AttentionSourceEvent) -> Vec<AttentionProjectionOp> {
     if matches!(
         event.event_type.as_str(),
-        "task_completed" | "task_finished"
+        "task_completed" | "task_finished" | "resume_executed"
     ) {
         return vec![AttentionProjectionOp::ResolveTask {
             task_id: event.task_id.clone(),
@@ -323,5 +323,14 @@ mod tests {
             policy_operations(&event("task_completed", json!({})))[0],
             AttentionProjectionOp::ResolveTask { .. }
         ));
+    }
+
+    #[test]
+    fn executed_resume_resolves_only_after_durable_state_change_event() {
+        assert!(matches!(
+            policy_operations(&event("resume_executed", json!({})))[0],
+            AttentionProjectionOp::ResolveTask { .. }
+        ));
+        assert!(policy_operations(&event("resume_planned", json!({}))).is_empty());
     }
 }

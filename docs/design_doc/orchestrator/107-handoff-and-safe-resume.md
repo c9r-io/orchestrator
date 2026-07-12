@@ -62,7 +62,7 @@ Task status and semantic timelines explain what happened, but operators still ne
 
 1. Handoff content is structured first. Goal, current state, last success, failure, test/QA/lint evidence, changed-file paths, constraints, decisions, questions, and recommendations are bounded and sensitive keys are removed before canonical hashing.
 2. The content hash excludes ID, actor, and timestamps. Repeating generation at the same event cursor returns the same persisted snapshot.
-3. A task state version hashes task status/cycle/init state, pipeline variables, execution plan, update timestamp, and event watermark. Execute recomputes it after the operator reviews the plan.
+3. A task state version hashes task status/cycle/init state, pipeline variables, execution plan, update timestamp, event watermark, and a git workspace digest covering HEAD, tracked binary diff, and untracked file content. Execute recomputes it after the operator reviews the plan.
 4. `SideEffectClass` is declared on `StepBehavior`: `none`, `workspace_only`, `idempotent_external`, or `non_idempotent_external`. The default is non-idempotent; agent/command steps without an explicit safe declaration fail closed.
 5. Resume boundaries are logical scheduler positions. A checkpoint ID, when present, is reference-only; the resume executor never calls git rollback.
 6. Restart modes create a child through the normal task creation/enqueue path with `parent_task_id`, `spawn_reason`, step filter, and resume correlation variables.
@@ -135,4 +135,3 @@ Task status and semantic timelines explain what happened, but operators still ne
 - `crates/cli/src/commands/handoff.rs`
 - `crates/gui/src/commands/handoff.rs`
 - `gui/src/components/HandoffPanel.tsx`
-

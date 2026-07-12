@@ -143,11 +143,11 @@ Verify task drift and duplicate requests cannot repeat scheduler or workspace ef
 
 3. Verify failure contains `stale resume plan` and child/workspace state is unchanged.
 4. Create and execute a fresh plan; repeat the same execute request/key.
-5. Run `cargo test -p agent-orchestrator handoff::tests --lib`.
+5. Change a tracked workspace file after planning and run `cargo test -p agent-orchestrator handoff::tests --lib`.
 
 ### Expected
 
-- Stale or expired plans fail before execution reservation or enqueue.
+- Task-state, event-watermark, or git workspace drift and expired plans fail before execution reservation or enqueue.
 - Only one caller receives execution ownership for one plan/idempotency key.
 - Replaying the same key returns existing status and cannot create another child.
 - A key reused with different reviewed input is rejected.
@@ -251,6 +251,6 @@ ORDER BY id DESC;
 |---|----------|--------|-----------|--------|-------|
 | 1 | Visible handoff entry and deterministic briefing | PASS | 2026-07-12 | Codex | Isolated same-cursor/redaction assertions passed; visible entry and production build inspected |
 | 2 | Logical boundaries and non-idempotent default denial | PASS | 2026-07-12 | Codex | Workspace-safe classification and disabled elevated replay passed |
-| 3 | Stale and idempotency protection before mutation | PASS | 2026-07-12 | Codex | Stale execution created no child; repository gates passed |
-| 4 | Reviewed restart, correlated child, and audit ordering | PASS | 2026-07-12 | Codex | Correlated child, enqueue, execution row, and resume event passed |
+| 3 | Stale and idempotency protection before mutation | PASS | 2026-07-12 | Codex | Stale execution created no child; DB and tracked-workspace drift gates passed |
+| 4 | Reviewed restart, correlated child, and audit ordering | PASS | 2026-07-12 | Codex | Correlated child, enqueue, execution row, resume event, and post-event Attention resolution passed |
 | 5 | RBAC and accessible consequence dialog | PASS | 2026-07-12 | Codex | Role mapping tests, focus trap/restore implementation, Tauri check, and React build passed |

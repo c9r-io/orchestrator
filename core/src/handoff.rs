@@ -15,6 +15,8 @@ use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
+use std::io::Read as _;
+use std::path::Path;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -579,15 +581,16 @@ fn truncate_text(value: &str) -> String {
 }
 
 fn task_state_version(conn: &Connection, task_id: &str) -> Result<String> {
-    let value: Value = conn.query_row(
+    let (mut value, workspace_root): (Value, String) = conn.query_row(
         "SELECT status, current_cycle, init_done, pipeline_vars_json, execution_plan_json,
-                updated_at, (SELECT COALESCE(MAX(id), 0) FROM events WHERE task_id=tasks.id)
+                updated_at, (SELECT COALESCE(MAX(id), 0) FROM events WHERE task_id=tasks.id),
+                workspace_root
          FROM tasks WHERE id=?1",
         [task_id],
         |row| {
             let pipeline: Option<String> = row.get(3)?;
             let plan: Option<String> = row.get(4)?;
-            Ok(json!({
+            Ok((json!({
                 "status": row.get::<_, String>(0)?,
                 "current_cycle": row.get::<_, i64>(1)?,
                 "init_done": row.get::<_, i64>(2)?,
@@ -595,10 +598,90 @@ fn task_state_version(conn: &Connection, task_id: &str) -> Result<String> {
                 "execution_plan": plan.as_deref().and_then(|raw| serde_json::from_str::<Value>(raw).ok()).unwrap_or_default(),
                 "updated_at": row.get::<_, String>(5)?,
                 "event_cursor": row.get::<_, i64>(6)?,
-            }))
+            }), row.get(7)?))
         },
     )?;
+    if let Some(object) = value.as_object_mut() {
+        object.insert(
+            "workspace_state".to_string(),
+            Value::String(workspace_state_digest(Path::new(&workspace_root))),
+        );
+    }
     hash_value(&value)
+}
+
+fn workspace_state_digest(root: &Path) -> String {
+    let mut digest = Sha256::new();
+    let head = std::process::Command::new("git")
+        .args([
+            "-C",
+            &root.to_string_lossy(),
+            "rev-parse",
+            "--verify",
+            "HEAD",
+        ])
+        .output();
+    let Ok(head) = head else {
+        return "workspace-unavailable".to_string();
+    };
+    if !head.status.success() {
+        return "workspace-non-git".to_string();
+    }
+    digest.update(&head.stdout);
+
+    let diff = std::process::Command::new("git")
+        .args([
+            "-C",
+            &root.to_string_lossy(),
+            "diff",
+            "--no-ext-diff",
+            "--binary",
+            "HEAD",
+            "--",
+        ])
+        .output();
+    let Ok(diff) = diff else {
+        return "workspace-unavailable".to_string();
+    };
+    if !diff.status.success() {
+        return "workspace-unavailable".to_string();
+    }
+    digest.update(&diff.stdout);
+
+    let untracked = std::process::Command::new("git")
+        .args([
+            "-C",
+            &root.to_string_lossy(),
+            "ls-files",
+            "--others",
+            "--exclude-standard",
+            "-z",
+        ])
+        .output();
+    let Ok(untracked) = untracked else {
+        return "workspace-unavailable".to_string();
+    };
+    if !untracked.status.success() {
+        return "workspace-unavailable".to_string();
+    }
+    for raw_path in untracked
+        .stdout
+        .split(|byte| *byte == 0)
+        .filter(|path| !path.is_empty())
+    {
+        digest.update(raw_path);
+        let path = root.join(String::from_utf8_lossy(raw_path).as_ref());
+        if let Ok(mut file) = std::fs::File::open(path) {
+            let mut buffer = [0_u8; 8192];
+            loop {
+                match file.read(&mut buffer) {
+                    Ok(0) | Err(_) => break,
+                    Ok(read) => digest.update(&buffer[..read]),
+                }
+            }
+        }
+    }
+    encode_hex(&digest.finalize())
 }
 
 fn list_boundaries(conn: &Connection, task_id: &str) -> Result<Vec<ResumeBoundary>> {
@@ -1126,5 +1209,80 @@ mod tests {
             .await
             .expect_err("policy disabled");
         assert!(error.to_string().contains("non-idempotent replay denied"));
+    }
+
+    #[tokio::test]
+    async fn tracked_workspace_change_invalidates_reviewed_plan() {
+        let (temp, repository) = repository().await;
+        let workspace = temp.path().join("workspace");
+        std::fs::create_dir_all(&workspace).expect("workspace");
+        std::fs::write(workspace.join("tracked.txt"), "before\n").expect("seed file");
+        let git = |arguments: &[&str]| {
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(&workspace)
+                .args(arguments)
+                .status()
+                .expect("run git")
+        };
+        assert!(git(&["init"]).success());
+        assert!(git(&["add", "tracked.txt"]).success());
+        assert!(
+            git(&[
+                "-c",
+                "user.name=QA",
+                "-c",
+                "user.email=qa@example.invalid",
+                "commit",
+                "-m",
+                "seed",
+            ])
+            .success()
+        );
+        let workspace_root = workspace.to_string_lossy().into_owned();
+        repository
+            .db
+            .writer()
+            .call(move |conn| {
+                conn.execute(
+                    "UPDATE tasks SET workspace_root=?1 WHERE id='task-1'",
+                    [workspace_root],
+                )?;
+                Ok(())
+            })
+            .await
+            .expect("set workspace");
+        let boundary = repository
+            .list_boundaries("task-1")
+            .await
+            .expect("boundaries")
+            .remove(0);
+        let plan = repository
+            .create_plan(
+                "task-1",
+                &boundary.id,
+                ResumeMode::RestartFromBoundary,
+                "operator",
+                None,
+            )
+            .await
+            .expect("plan");
+
+        std::fs::write(workspace.join("tracked.txt"), "after\n").expect("change file");
+        let error = repository
+            .reserve_execution(
+                &plan.id,
+                ResumeExecutionRequest {
+                    expected_state_version: plan.expected_state_version,
+                    idempotency_key: "workspace-key".to_string(),
+                    actor: "operator".to_string(),
+                    operator_reason: "reviewed before workspace changed".to_string(),
+                    elevated_confirmation: false,
+                    elevated_policy_enabled: false,
+                },
+            )
+            .await
+            .expect_err("workspace drift must be stale");
+        assert!(error.to_string().contains("stale resume plan"));
     }
 }
