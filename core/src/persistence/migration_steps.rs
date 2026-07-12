@@ -947,3 +947,77 @@ pub(crate) fn m0027_attention_inbox(conn: &Connection) -> Result<()> {
     .context("m0027_attention_inbox")?;
     Ok(())
 }
+
+pub(crate) fn m0028_handoff_safe_resume(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS handoff_snapshots (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            task_id TEXT NOT NULL,
+            task_item_id TEXT,
+            step_id TEXT,
+            session_id TEXT,
+            checkpoint_id TEXT,
+            source_event_cursor INTEGER NOT NULL,
+            projection_version INTEGER NOT NULL,
+            briefing_json TEXT NOT NULL,
+            content_hash TEXT NOT NULL,
+            state_version TEXT NOT NULL,
+            generated_by TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(task_id, source_event_cursor, content_hash),
+            FOREIGN KEY(task_id) REFERENCES tasks(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_handoff_snapshots_task_cursor
+            ON handoff_snapshots(task_id, source_event_cursor DESC, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS resume_plans (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            task_id TEXT NOT NULL,
+            attention_item_id TEXT,
+            boundary_id TEXT NOT NULL,
+            mode TEXT NOT NULL,
+            expected_state_version TEXT NOT NULL,
+            side_effect_class TEXT NOT NULL,
+            replay_safe INTEGER NOT NULL,
+            elevated_confirmation_required INTEGER NOT NULL,
+            consequence_json TEXT NOT NULL,
+            execution_input_json TEXT NOT NULL DEFAULT '{}',
+            provider_command_run_id TEXT,
+            status TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            created_by TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            executed_at TEXT,
+            FOREIGN KEY(task_id) REFERENCES tasks(id),
+            FOREIGN KEY(attention_item_id) REFERENCES attention_items(id),
+            FOREIGN KEY(provider_command_run_id) REFERENCES command_runs(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_resume_plans_task_created
+            ON resume_plans(task_id, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS resume_executions (
+            id TEXT PRIMARY KEY,
+            plan_id TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            operator_reason TEXT NOT NULL,
+            idempotency_key TEXT NOT NULL,
+            request_hash TEXT NOT NULL,
+            status TEXT NOT NULL,
+            child_task_id TEXT,
+            error_code TEXT,
+            created_at TEXT NOT NULL,
+            completed_at TEXT,
+            UNIQUE(plan_id, idempotency_key),
+            FOREIGN KEY(plan_id) REFERENCES resume_plans(id),
+            FOREIGN KEY(child_task_id) REFERENCES tasks(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_resume_executions_plan_created
+            ON resume_executions(plan_id, created_at DESC);
+        "#,
+    )
+    .context("m0028_handoff_safe_resume")?;
+    Ok(())
+}

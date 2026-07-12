@@ -233,6 +233,11 @@ pub fn registered_migrations() -> Vec<Migration> {
             name: "m0027_attention_inbox",
             up: crate::persistence::migration_steps::m0027_attention_inbox,
         },
+        Migration {
+            version: 28,
+            name: "m0028_handoff_safe_resume",
+            up: crate::persistence::migration_steps::m0028_handoff_safe_resume,
+        },
     ]
 }
 
