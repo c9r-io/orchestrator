@@ -84,6 +84,16 @@ export interface StoreEntry {
 
 export type Role = "read_only" | "operator" | "admin";
 
+export interface AgentSession {
+  session_id: string; task_id: string; task_item_id: string | null; step_id: string;
+  agent_id: string; state: string; pid: number; writer_client_id: string | null;
+  writer_actor: string | null; writer_lease_expires_at: string | null; state_version: number;
+}
+
+export interface SessionOutputChunk {
+  offset: number; next_offset: number; text: string; eof: boolean; redacted: boolean;
+}
+
 /** Connection lifecycle states emitted from the Rust backend. */
 export type ConnectionState =
   | { kind: "Disconnected" }

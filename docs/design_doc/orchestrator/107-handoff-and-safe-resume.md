@@ -22,7 +22,7 @@ Task status and semantic timelines explain what happened, but operators still ne
 
 ## Non-goals
 
-- Live terminal attachment, session input, or takeover; those remain FR-098.
+- Live terminal attachment, session input, or takeover; those are implemented separately by DD-108/QA-145.
 - Reconstructing a full transcript or placing raw prompts/output in the briefing.
 - Git reset, checkout, stash application, or any other workspace rollback.
 - Replacing Attention Inbox, task state, process timeline, or existing low-level CLI lifecycle commands.

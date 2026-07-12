@@ -855,9 +855,8 @@ fn apply_override(
 
 fn classify_rpc(rpc: &str) -> TrafficClass {
     match rpc {
-        "TaskFollow" | "TaskWatch" | "TaskTimelineFollow" | "AttentionFollow" => {
-            TrafficClass::Stream
-        }
+        "TaskFollow" | "TaskWatch" | "TaskTimelineFollow" | "AttentionFollow"
+        | "AgentSessionRead" => TrafficClass::Stream,
         "Shutdown" | "Init" | "TaskDelete" | "TaskDeleteBulk" | "Delete" | "StorePrune"
         | "SecretKeyRotate" | "SecretKeyRevoke" => TrafficClass::Admin,
         "TaskCreate"
@@ -875,6 +874,9 @@ fn classify_rpc(rpc: &str) -> TrafficClass {
         | "HandoffGenerate"
         | "ResumePlan"
         | "ResumeExecute" => TrafficClass::Write,
+        "AgentSessionHeartbeat" | "AgentSessionSendInput" | "AgentSessionClose" => {
+            TrafficClass::Write
+        }
         _ => TrafficClass::Read,
     }
 }
@@ -882,7 +884,7 @@ fn classify_rpc(rpc: &str) -> TrafficClass {
 fn is_streaming_rpc(rpc: &str) -> bool {
     matches!(
         rpc,
-        "TaskFollow" | "TaskWatch" | "TaskTimelineFollow" | "AttentionFollow"
+        "TaskFollow" | "TaskWatch" | "TaskTimelineFollow" | "AttentionFollow" | "AgentSessionRead"
     )
 }
 
@@ -916,6 +918,17 @@ fn rpc_from_path(path: &str) -> Option<&'static str> {
         "/orchestrator.OrchestratorService/ResumeBoundaryList" => Some("ResumeBoundaryList"),
         "/orchestrator.OrchestratorService/ResumePlan" => Some("ResumePlan"),
         "/orchestrator.OrchestratorService/ResumeExecute" => Some("ResumeExecute"),
+        "/orchestrator.OrchestratorService/AgentSessionList" => Some("AgentSessionList"),
+        "/orchestrator.OrchestratorService/AgentSessionGet" => Some("AgentSessionGet"),
+        "/orchestrator.OrchestratorService/AgentSessionAttach" => Some("AgentSessionAttach"),
+        "/orchestrator.OrchestratorService/AgentSessionHeartbeat" => Some("AgentSessionHeartbeat"),
+        "/orchestrator.OrchestratorService/AgentSessionDetach" => Some("AgentSessionDetach"),
+        "/orchestrator.OrchestratorService/AgentSessionSendInput" => Some("AgentSessionSendInput"),
+        "/orchestrator.OrchestratorService/AgentSessionRead" => Some("AgentSessionRead"),
+        "/orchestrator.OrchestratorService/AgentSessionClose" => Some("AgentSessionClose"),
+        "/orchestrator.OrchestratorService/AgentSessionResolvePid" => {
+            Some("AgentSessionResolvePid")
+        }
         "/orchestrator.OrchestratorService/Apply" => Some("Apply"),
         "/orchestrator.OrchestratorService/Get" => Some("Get"),
         "/orchestrator.OrchestratorService/Describe" => Some("Describe"),

@@ -43,6 +43,18 @@ pub struct SessionRow {
     pub output_json_path: Option<String>,
     /// Client currently holding the writer lease.
     pub writer_client_id: Option<String>,
+    /// Trusted actor holding the writer lease.
+    pub writer_actor: Option<String>,
+    /// Writer lease expiration timestamp.
+    pub writer_lease_expires_at: Option<String>,
+    /// Last writer heartbeat timestamp.
+    pub writer_last_heartbeat_at: Option<String>,
+    /// Monotonic token fencing stale writers.
+    pub writer_fencing_token: i64,
+    /// Optimistic concurrency version.
+    pub state_version: i64,
+    /// OS process creation fingerprint used to reject PID reuse.
+    pub process_fingerprint: Option<String>,
     /// Creation timestamp.
     pub created_at: String,
     /// Last update timestamp.
@@ -128,7 +140,7 @@ pub fn update_session_state(
     let now = now_ts();
     let ended_at = if ended { Some(now.clone()) } else { None };
     conn.execute(
-        "UPDATE agent_sessions SET state = ?2, updated_at = ?3, ended_at = COALESCE(?4, ended_at), exit_code = COALESCE(?5, exit_code) WHERE id = ?1",
+        "UPDATE agent_sessions SET state = ?2, state_version=state_version+1, updated_at = ?3, ended_at = COALESCE(?4, ended_at), exit_code = COALESCE(?5, exit_code) WHERE id = ?1",
         params![session_id, state, now, ended_at, exit_code],
     )?;
     Ok(())
@@ -162,14 +174,266 @@ fn row_to_session(r: &rusqlite::Row<'_>) -> rusqlite::Result<SessionRow> {
         transcript_path: r.get(14)?,
         output_json_path: r.get(15)?,
         writer_client_id: r.get(16)?,
-        created_at: r.get(17)?,
-        updated_at: r.get(18)?,
-        ended_at: r.get(19)?,
-        exit_code: r.get(20)?,
+        writer_actor: r.get(17)?,
+        writer_lease_expires_at: r.get(18)?,
+        writer_last_heartbeat_at: r.get(19)?,
+        writer_fencing_token: r.get(20)?,
+        state_version: r.get(21)?,
+        process_fingerprint: r.get(22)?,
+        created_at: r.get(23)?,
+        updated_at: r.get(24)?,
+        ended_at: r.get(25)?,
+        exit_code: r.get(26)?,
     })
 }
 
-const SESSION_COLUMNS: &str = "id, task_id, task_item_id, step_id, phase, agent_id, state, pid, pty_backend, cwd, command, input_fifo_path, stdout_path, stderr_path, transcript_path, output_json_path, writer_client_id, created_at, updated_at, ended_at, exit_code";
+const SESSION_COLUMNS: &str = "id, task_id, task_item_id, step_id, phase, agent_id, state, pid, pty_backend, cwd, command, input_fifo_path, stdout_path, stderr_path, transcript_path, output_json_path, writer_client_id, writer_actor, writer_lease_expires_at, writer_last_heartbeat_at, writer_fencing_token, state_version, process_fingerprint, created_at, updated_at, ended_at, exit_code";
+
+/// Result of a writer lease acquisition or refresh.
+#[derive(Debug, Clone)]
+pub struct WriterLease {
+    /// Monotonically increasing fencing token.
+    pub fencing_token: i64,
+    /// RFC3339 lease expiry.
+    pub expires_at: String,
+}
+
+/// Lists sessions with optional task, agent and state filters.
+pub fn list_sessions(
+    conn: &Connection,
+    task_id: Option<&str>,
+    agent_id: Option<&str>,
+    state: Option<&str>,
+) -> Result<Vec<SessionRow>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {SESSION_COLUMNS} FROM agent_sessions
+         WHERE (?1 IS NULL OR task_id=?1) AND (?2 IS NULL OR agent_id=?2)
+           AND (?3 IS NULL OR state=?3) ORDER BY created_at DESC LIMIT 500"
+    ))?;
+    Ok(stmt
+        .query_map(params![task_id, agent_id, state], row_to_session)?
+        .collect::<std::result::Result<Vec<_>, _>>()?)
+}
+
+/// Resolves a diagnostic PID to all matching persisted sessions.
+pub fn list_sessions_by_pid(conn: &Connection, pid: i64) -> Result<Vec<SessionRow>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {SESSION_COLUMNS} FROM agent_sessions WHERE pid=?1 ORDER BY created_at DESC"
+    ))?;
+    Ok(stmt
+        .query_map([pid], row_to_session)?
+        .collect::<std::result::Result<Vec<_>, _>>()?)
+}
+
+/// Captures a portable process-creation fingerprint for PID reuse protection.
+///
+/// The value is diagnostic metadata only and is never exposed as authority to clients.
+pub fn capture_process_fingerprint(pid: u32) -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+        let close = stat.rfind(')')?;
+        let fields: Vec<&str> = stat[close + 2..].split_whitespace().collect();
+        // Field 22 in proc_pid_stat; the post-comm slice begins at field 3.
+        let start_ticks = fields.get(19)?;
+        let boot_id = std::fs::read_to_string("/proc/sys/kernel/random/boot_id").ok()?;
+        return Some(format!("{pid}:{}:{}", boot_id.trim(), start_ticks));
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let output = std::process::Command::new("ps")
+            .args(["-o", "lstart=", "-p", &pid.to_string()])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let started = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        (!started.is_empty()).then(|| format!("{pid}:{started}"))
+    }
+}
+
+/// Stores a PID together with its creation fingerprint.
+pub fn update_session_process(
+    conn: &Connection,
+    session_id: &str,
+    pid: i64,
+    fingerprint: Option<&str>,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE agent_sessions SET pid=?2, process_fingerprint=?3, state_version=state_version+1, updated_at=?4 WHERE id=?1",
+        params![session_id, pid, fingerprint, now_ts()],
+    )?;
+    Ok(())
+}
+
+/// Atomically acquires an expired/free writer lease and returns its fencing token.
+pub fn acquire_writer_lease(
+    conn: &Connection,
+    session_id: &str,
+    actor: &str,
+    client_id: &str,
+    ttl_secs: u64,
+) -> Result<Option<WriterLease>> {
+    let now = chrono::Utc::now();
+    let now_s = now.to_rfc3339();
+    let expires = (now + chrono::Duration::seconds(ttl_secs.max(1) as i64)).to_rfc3339();
+    let changed = conn.execute(
+        "UPDATE agent_sessions SET writer_client_id=?2, writer_actor=?3,
+         writer_lease_expires_at=?4, writer_last_heartbeat_at=?5,
+         writer_fencing_token=writer_fencing_token+1, state='active',
+         state_version=state_version+1, updated_at=?5
+         WHERE id=?1 AND state IN ('active','detached')
+           AND (writer_client_id IS NULL OR writer_lease_expires_at IS NULL OR writer_lease_expires_at<=?5 OR writer_client_id=?2)",
+        params![session_id, client_id, actor, expires, now_s],
+    )?;
+    if changed == 0 {
+        return Ok(None);
+    }
+    let token: i64 = conn.query_row(
+        "SELECT writer_fencing_token FROM agent_sessions WHERE id=?1",
+        [session_id],
+        |row| row.get(0),
+    )?;
+    conn.execute(
+        "INSERT INTO session_attachments(session_id,client_id,mode,attached_at) VALUES(?1,?2,'writer',?3)",
+        params![session_id, client_id, now_s],
+    )?;
+    Ok(Some(WriterLease {
+        fencing_token: token,
+        expires_at: expires,
+    }))
+}
+
+/// Extends the current writer lease when client and fencing token match.
+pub fn heartbeat_writer(
+    conn: &Connection,
+    session_id: &str,
+    client_id: &str,
+    fencing_token: i64,
+    ttl_secs: u64,
+) -> Result<Option<String>> {
+    let now = chrono::Utc::now();
+    let now_s = now.to_rfc3339();
+    let expires = (now + chrono::Duration::seconds(ttl_secs.max(1) as i64)).to_rfc3339();
+    let changed = conn.execute(
+        "UPDATE agent_sessions SET writer_lease_expires_at=?4, writer_last_heartbeat_at=?5, updated_at=?5
+         WHERE id=?1 AND writer_client_id=?2 AND writer_fencing_token=?3
+           AND writer_lease_expires_at>?5 AND state IN ('active','detached')",
+        params![session_id, client_id, fencing_token, expires, now_s],
+    )?;
+    Ok((changed == 1).then_some(expires))
+}
+
+/// Returns whether a writer token is current and unexpired.
+pub fn validate_writer(
+    conn: &Connection,
+    session_id: &str,
+    client_id: &str,
+    fencing_token: i64,
+) -> Result<bool> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM agent_sessions WHERE id=?1 AND writer_client_id=?2
+         AND writer_fencing_token=?3 AND writer_lease_expires_at>?4 AND state='active'",
+        params![session_id, client_id, fencing_token, now_ts()],
+        |row| row.get(0),
+    )?;
+    Ok(count == 1)
+}
+
+/// Releases an exact writer lease; stale tokens cannot release a newer owner.
+pub fn release_writer(
+    conn: &Connection,
+    session_id: &str,
+    client_id: &str,
+    fencing_token: i64,
+    reason: &str,
+) -> Result<bool> {
+    let now = now_ts();
+    let changed = conn.execute(
+        "UPDATE agent_sessions SET writer_client_id=NULL, writer_actor=NULL,
+         writer_lease_expires_at=NULL, writer_last_heartbeat_at=NULL, state='detached',
+         state_version=state_version+1, updated_at=?4
+         WHERE id=?1 AND writer_client_id=?2 AND writer_fencing_token=?3",
+        params![session_id, client_id, fencing_token, now],
+    )?;
+    if changed == 1 {
+        conn.execute(
+            "UPDATE session_attachments SET detached_at=?3,reason=?4 WHERE session_id=?1 AND client_id=?2 AND mode='writer' AND detached_at IS NULL",
+            params![session_id, client_id, now, reason],
+        )?;
+    }
+    Ok(changed == 1)
+}
+
+/// Expires stale writer leases and returns the affected session IDs.
+pub fn expire_writer_leases(conn: &Connection) -> Result<Vec<String>> {
+    let now = now_ts();
+    let mut stmt = conn.prepare(
+        "SELECT id FROM agent_sessions WHERE writer_client_id IS NOT NULL AND writer_lease_expires_at<=?1",
+    )?;
+    let ids = stmt
+        .query_map([&now], |row| row.get(0))?
+        .collect::<std::result::Result<Vec<String>, _>>()?;
+    drop(stmt);
+    conn.execute(
+        "UPDATE agent_sessions SET writer_client_id=NULL,writer_actor=NULL,
+         writer_lease_expires_at=NULL,writer_last_heartbeat_at=NULL,state='detached',
+         state_version=state_version+1,updated_at=?1
+         WHERE writer_client_id IS NOT NULL AND writer_lease_expires_at<=?1",
+        [&now],
+    )?;
+    Ok(ids)
+}
+
+/// Reconciles non-terminal persisted sessions with OS process identity and transport state.
+pub fn reconcile_sessions(conn: &Connection) -> Result<Vec<(String, String)>> {
+    let rows = list_sessions(conn, None, None, None)?;
+    let mut changes = Vec::new();
+    for row in rows.into_iter().filter(|row| {
+        matches!(
+            row.state.as_str(),
+            "opening" | "active" | "detached" | "draining"
+        )
+    }) {
+        let identity_live = row.pid > 0
+            && row.process_fingerprint.is_some()
+            && capture_process_fingerprint(row.pid as u32) == row.process_fingerprint;
+        let transport_exists = std::path::Path::new(&row.input_fifo_path).exists();
+        let evidence_exists = std::path::Path::new(&row.transcript_path).exists()
+            || std::path::Path::new(&row.stdout_path).exists();
+        let target = if identity_live && transport_exists {
+            if row.state == "draining" {
+                "draining"
+            } else if row.writer_client_id.is_some() {
+                "active"
+            } else {
+                "detached"
+            }
+        } else if !identity_live && evidence_exists {
+            "closed"
+        } else {
+            "failed"
+        };
+        if target != row.state {
+            update_session_state(
+                conn,
+                &row.id,
+                target,
+                row.exit_code,
+                matches!(target, "closed" | "failed"),
+            )?;
+            changes.push((row.id, target.to_owned()));
+        }
+    }
+    let expired = expire_writer_leases(conn)?;
+    changes.extend(
+        expired
+            .into_iter()
+            .map(|id| (id, "lease_expired".to_owned())),
+    );
+    Ok(changes)
+}
 
 /// Loads a session row by session identifier.
 pub fn load_session(conn: &Connection, session_id: &str) -> Result<Option<SessionRow>> {
@@ -250,6 +514,14 @@ pub fn acquire_writer(conn: &Connection, session_id: &str, client_id: &str) -> R
 
 /// Attaches a read-only client to a session.
 pub fn attach_reader(conn: &Connection, session_id: &str, client_id: &str) -> Result<()> {
+    let active: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM session_attachments WHERE session_id=?1 AND mode='reader' AND detached_at IS NULL",
+        [session_id],
+        |row| row.get(0),
+    )?;
+    if active >= 8 {
+        anyhow::bail!("session reader limit reached");
+    }
     conn.execute(
         "INSERT INTO session_attachments (session_id, client_id, mode, attached_at, detached_at, reason) VALUES (?1, ?2, 'reader', ?3, NULL, NULL)",
         params![session_id, client_id, now_ts()],
@@ -260,9 +532,18 @@ pub fn attach_reader(conn: &Connection, session_id: &str, client_id: &str) -> Re
 /// Deletes old terminal sessions and returns the number removed.
 pub fn cleanup_stale_sessions(conn: &Connection, max_age_hours: u64) -> Result<usize> {
     let cutoff = chrono::Utc::now() - chrono::Duration::hours(max_age_hours as i64);
+    let cutoff = cutoff.to_rfc3339();
+    conn.execute(
+        "DELETE FROM session_control_actions WHERE session_id IN (SELECT id FROM agent_sessions WHERE state IN ('exited','closed','failed') AND updated_at < ?1)",
+        [&cutoff],
+    )?;
+    conn.execute(
+        "DELETE FROM session_attachments WHERE session_id IN (SELECT id FROM agent_sessions WHERE state IN ('exited','closed','failed') AND updated_at < ?1)",
+        [&cutoff],
+    )?;
     let deleted = conn.execute(
-        "DELETE FROM agent_sessions WHERE state IN ('exited', 'failed') AND updated_at < ?1",
-        params![cutoff.to_rfc3339()],
+        "DELETE FROM agent_sessions WHERE state IN ('exited', 'closed', 'failed') AND updated_at < ?1",
+        [&cutoff],
     )?;
     Ok(deleted)
 }
@@ -632,6 +913,85 @@ mod tests {
 
         assert_eq!(writer_attachments, 2);
         assert_eq!(detached_attachments, 3);
+    }
+
+    #[test]
+    fn writer_lease_fencing_rejects_stale_tokens() {
+        let (_dir, db_path) = make_db();
+        let conn = open_conn(&db_path).expect("open conn");
+        insert_session(&conn, &make_session("sess-fence", "task-1", "qa", "active"))
+            .expect("insert session");
+
+        let first = acquire_writer_lease(&conn, "sess-fence", "actor-a", "client-a", 30)
+            .expect("acquire first")
+            .expect("first lease");
+        assert!(validate_writer(&conn, "sess-fence", "client-a", first.fencing_token).unwrap());
+        assert!(
+            release_writer(
+                &conn,
+                "sess-fence",
+                "client-a",
+                first.fencing_token,
+                "handoff"
+            )
+            .unwrap()
+        );
+
+        let second = acquire_writer_lease(&conn, "sess-fence", "actor-b", "client-b", 30)
+            .expect("acquire second")
+            .expect("second lease");
+        assert!(second.fencing_token > first.fencing_token);
+        assert!(!validate_writer(&conn, "sess-fence", "client-a", first.fencing_token).unwrap());
+        assert!(
+            !release_writer(
+                &conn,
+                "sess-fence",
+                "client-a",
+                first.fencing_token,
+                "stale"
+            )
+            .unwrap()
+        );
+        assert!(validate_writer(&conn, "sess-fence", "client-b", second.fencing_token).unwrap());
+    }
+
+    #[test]
+    fn process_fingerprint_changes_authority_from_pid_to_identity() {
+        let pid = std::process::id();
+        let fingerprint = capture_process_fingerprint(pid).expect("current process fingerprint");
+        assert!(fingerprint.starts_with(&format!("{pid}:")));
+        assert_eq!(
+            capture_process_fingerprint(pid).as_deref(),
+            Some(fingerprint.as_str())
+        );
+        assert!(capture_process_fingerprint(u32::MAX).is_none());
+    }
+
+    #[test]
+    fn reader_limit_and_expired_writer_are_bounded() {
+        let (_dir, db_path) = make_db();
+        let conn = open_conn(&db_path).expect("open conn");
+        insert_session(
+            &conn,
+            &make_session("sess-bounds", "task-1", "qa", "active"),
+        )
+        .expect("insert session");
+        for index in 0..8 {
+            attach_reader(&conn, "sess-bounds", &format!("reader-{index}"))
+                .expect("reader within bound");
+        }
+        assert!(attach_reader(&conn, "sess-bounds", "reader-9").is_err());
+
+        let lease = acquire_writer_lease(&conn, "sess-bounds", "actor", "writer", 30)
+            .expect("acquire writer")
+            .expect("writer lease");
+        conn.execute(
+            "UPDATE agent_sessions SET writer_lease_expires_at='1970-01-01T00:00:00Z' WHERE id='sess-bounds'",
+            [],
+        )
+        .expect("expire lease");
+        assert_eq!(expire_writer_leases(&conn).unwrap(), vec!["sess-bounds"]);
+        assert!(!validate_writer(&conn, "sess-bounds", "writer", lease.fencing_token).unwrap());
     }
 
     #[tokio::test]

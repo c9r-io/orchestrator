@@ -234,6 +234,12 @@ pub struct RuntimePolicySpec {
     /// Whether elevated replay of non-idempotent steps can be requested.
     #[serde(default)]
     pub elevated_resume_enabled: bool,
+    /// Whether session list/get/read APIs are enabled.
+    #[serde(default = "default_true")]
+    pub session_read_enabled: bool,
+    /// Whether writer lease, input and close mutations are enabled.
+    #[serde(default)]
+    pub session_control_enabled: bool,
 }
 
 /// Runner-policy manifest payload.

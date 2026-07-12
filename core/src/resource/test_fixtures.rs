@@ -249,6 +249,8 @@ pub fn runtime_policy_manifest() -> OrchestratorResource {
             handoff_enabled: true,
             mutating_resume_enabled: false,
             elevated_resume_enabled: false,
+            session_read_enabled: true,
+            session_control_enabled: false,
         }),
     }
 }

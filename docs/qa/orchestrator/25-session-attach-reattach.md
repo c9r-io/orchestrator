@@ -1,25 +1,25 @@
 # Orchestrator - Real Session Attach/Re-attach
 
-**Module**: orchestrator  
-**Status**: Retired as of 2026-03-10  
-**Reason**: The current CLI does not expose `task session ...` or `exec` commands, so this session-attach workflow is not testable as written.
+**Module**: orchestrator
+**Status**: Superseded as of 2026-07-12
+**Reason**: FR-098 introduced the supported `agent session ...` control plane with different identity, lease, and stream semantics.
 
 ---
 
 ## Retirement Note
 
-This document described a session control surface that is not present in the shipped CLI:
+This document described obsolete command names that were never shipped:
 
 - `orchestrator task session list|info|close`
 - `orchestrator exec session/<session_id> -- ...`
 - `orchestrator exec task/<task_id>/step/<step_id> -- ...`
 
-The underlying database tables for sessions still exist, but they are not currently exposed as a supported user-facing QA flow. QA must not treat the absence of these commands as a runtime regression.
+The supported surface is now `orchestrator agent session ...` plus the TaskDetail "Agent session" panel. QA must use QA-145 and must not expect the obsolete `task session` or generic `exec` forms.
 
 ## Replacement Guidance
 
 - Do not run this document as a release gate in the current branch.
-- If session-management commands are reintroduced, author a new QA spec from the implemented CLI help output and end-to-end behavior.
+- Execute `docs/qa/orchestrator/145-agent-session-control-plane.md` for the implemented CLI, gRPC, Tauri, and TaskDetail behavior.
 - For supported coverage, use the maintained task lifecycle and script-based QA documents.
 
 ## Checklist

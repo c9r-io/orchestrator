@@ -1,0 +1,47 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: session-control-mock
+spec:
+  root_path: "."
+  qa_targets: [docs/qa]
+  ticket_dir: docs/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: session-echo
+spec:
+  capabilities: [session_echo]
+  command: >-
+    sh -c 'echo "$1"; while IFS= read -r line; do echo "mock:$line"; [ "$line" = quit ] && break; done' session "{prompt}"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: session-control-mock
+spec:
+  steps:
+    - id: interactive
+      required_capability: session_echo
+      tty: true
+  loop:
+    mode: once
+    max_cycles: 1
+---
+apiVersion: orchestrator.dev/v2
+kind: RuntimePolicy
+metadata:
+  name: default
+spec:
+  runner:
+    shell: /bin/bash
+    shell_arg: -lc
+    policy: allowlist
+    executor: shell
+    allowed_shells: [/bin/bash, /bin/sh, sh]
+    allowed_shell_args: [-lc, -c]
+  resume:
+    auto: false
+  session_read_enabled: true
+  session_control_enabled: true

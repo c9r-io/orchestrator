@@ -698,7 +698,9 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         | "HandoffGet" | "ResumeBoundaryList"
         | "Describe" | "StoreGet" | "StoreList" | "WorkerStatus" | "Check" | "ManifestExport"
         | "DbStatus" | "DbMigrationsList" | "SecretKeyStatus" | "SecretKeyList"
-        | "SecretKeyHistory" | "AgentList" | "EventStats" | "TaskEvents" => Role::ReadOnly,
+        | "SecretKeyHistory" | "AgentList" | "EventStats" | "TaskEvents"
+        | "AgentSessionList" | "AgentSessionGet" | "AgentSessionAttach"
+        | "AgentSessionDetach" | "AgentSessionRead" | "AgentSessionResolvePid" => Role::ReadOnly,
 
         // Operator: routine mutating operations (includes lifecycle ops that
         // are destructive but not security-sensitive).
@@ -709,6 +711,7 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         | "DbLogCleanup" | "DbVacuum"
         | "AttentionClaim" | "AttentionSnooze" | "AttentionResolve" | "AttentionExecuteAction"
         | "HandoffGenerate" | "ResumePlan" | "ResumeExecute"
+        | "AgentSessionHeartbeat" | "AgentSessionSendInput" | "AgentSessionClose"
         // Reclassified from Admin: Shutdown is redundant (CLI sends SIGTERM),
         // TaskDelete aligns with TaskDeleteBulk, Delete aligns with Apply.
         | "Shutdown" | "TaskDelete" | "Delete" => Role::Operator,

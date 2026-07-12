@@ -5,6 +5,7 @@ pub mod handoff;
 pub mod manifest;
 pub mod resource;
 pub mod secret;
+pub mod session;
 pub mod store;
 pub mod stream;
 pub mod system;

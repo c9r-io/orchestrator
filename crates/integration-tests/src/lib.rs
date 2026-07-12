@@ -185,6 +185,80 @@ impl OrchestratorService for TestOrchestratorServer {
     type TaskWatchStream = BoxStream<TaskWatchSnapshot>;
     type TaskTimelineFollowStream = BoxStream<TimelineDelta>;
     type AttentionFollowStream = BoxStream<AttentionDelta>;
+    type AgentSessionReadStream = BoxStream<AgentSessionOutputChunk>;
+
+    async fn agent_session_list(
+        &self,
+        _: Request<AgentSessionListRequest>,
+    ) -> Result<Response<AgentSessionListResponse>, Status> {
+        Err(Status::unimplemented(
+            "session integration fixture uses the production daemon",
+        ))
+    }
+    async fn agent_session_get(
+        &self,
+        _: Request<AgentSessionGetRequest>,
+    ) -> Result<Response<AgentSessionGetResponse>, Status> {
+        Err(Status::unimplemented(
+            "session integration fixture uses the production daemon",
+        ))
+    }
+    async fn agent_session_attach(
+        &self,
+        _: Request<AgentSessionAttachRequest>,
+    ) -> Result<Response<AgentSessionAttachResponse>, Status> {
+        Err(Status::unimplemented(
+            "session integration fixture uses the production daemon",
+        ))
+    }
+    async fn agent_session_heartbeat(
+        &self,
+        _: Request<AgentSessionHeartbeatRequest>,
+    ) -> Result<Response<AgentSessionHeartbeatResponse>, Status> {
+        Err(Status::unimplemented(
+            "session integration fixture uses the production daemon",
+        ))
+    }
+    async fn agent_session_detach(
+        &self,
+        _: Request<AgentSessionDetachRequest>,
+    ) -> Result<Response<AgentSessionDetachResponse>, Status> {
+        Err(Status::unimplemented(
+            "session integration fixture uses the production daemon",
+        ))
+    }
+    async fn agent_session_send_input(
+        &self,
+        _: Request<AgentSessionSendInputRequest>,
+    ) -> Result<Response<AgentSessionSendInputResponse>, Status> {
+        Err(Status::unimplemented(
+            "session integration fixture uses the production daemon",
+        ))
+    }
+    async fn agent_session_read(
+        &self,
+        _: Request<AgentSessionReadRequest>,
+    ) -> Result<Response<Self::AgentSessionReadStream>, Status> {
+        Err(Status::unimplemented(
+            "session integration fixture uses the production daemon",
+        ))
+    }
+    async fn agent_session_close(
+        &self,
+        _: Request<AgentSessionCloseRequest>,
+    ) -> Result<Response<AgentSessionCloseResponse>, Status> {
+        Err(Status::unimplemented(
+            "session integration fixture uses the production daemon",
+        ))
+    }
+    async fn agent_session_resolve_pid(
+        &self,
+        _: Request<AgentSessionResolvePidRequest>,
+    ) -> Result<Response<AgentSessionResolvePidResponse>, Status> {
+        Err(Status::unimplemented(
+            "session integration fixture uses the production daemon",
+        ))
+    }
 
     async fn attention_list(
         &self,

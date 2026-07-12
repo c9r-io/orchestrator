@@ -26,7 +26,7 @@ Task status and the process timeline describe work, but neither answers the oper
 - User-defined attention policy expressions in the first release.
 - Slack delivery, cross-control-plane federation, or on-call scheduling.
 - Arbitrary executable commands stored in action descriptors.
-- Interactive session takeover, which remains owned by FR-098.
+- Interactive session takeover, implemented separately by DD-108/QA-145.
 
 ## Scope
 
@@ -135,4 +135,3 @@ Task status and the process timeline describe work, but neither answers the oper
 - `crates/cli/src/commands/attention.rs`
 - `crates/gui/src/commands/attention.rs`
 - `gui/src/pages/AttentionInbox.tsx`
-

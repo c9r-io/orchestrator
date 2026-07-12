@@ -4,6 +4,7 @@ mod handoff;
 mod mapping;
 mod resource;
 mod secret;
+mod session;
 mod store;
 mod system;
 mod task;
@@ -182,6 +183,7 @@ impl OrchestratorService for OrchestratorServer {
     type TaskWatchStream = task::TaskWatchStream;
     type TaskTimelineFollowStream = task::TaskTimelineFollowStream;
     type AttentionFollowStream = attention::AttentionFollowStream;
+    type AgentSessionReadStream = session::AgentSessionReadStream;
 
     async fn task_create(
         &self,
@@ -335,6 +337,61 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<AttentionFollowRequest>,
     ) -> Result<Response<Self::AttentionFollowStream>, Status> {
         attention::attention_follow(self, request).await
+    }
+
+    async fn agent_session_list(
+        &self,
+        request: Request<AgentSessionListRequest>,
+    ) -> Result<Response<AgentSessionListResponse>, Status> {
+        session::list(self, request).await
+    }
+    async fn agent_session_get(
+        &self,
+        request: Request<AgentSessionGetRequest>,
+    ) -> Result<Response<AgentSessionGetResponse>, Status> {
+        session::get(self, request).await
+    }
+    async fn agent_session_attach(
+        &self,
+        request: Request<AgentSessionAttachRequest>,
+    ) -> Result<Response<AgentSessionAttachResponse>, Status> {
+        session::attach(self, request).await
+    }
+    async fn agent_session_heartbeat(
+        &self,
+        request: Request<AgentSessionHeartbeatRequest>,
+    ) -> Result<Response<AgentSessionHeartbeatResponse>, Status> {
+        session::heartbeat(self, request).await
+    }
+    async fn agent_session_detach(
+        &self,
+        request: Request<AgentSessionDetachRequest>,
+    ) -> Result<Response<AgentSessionDetachResponse>, Status> {
+        session::detach(self, request).await
+    }
+    async fn agent_session_send_input(
+        &self,
+        request: Request<AgentSessionSendInputRequest>,
+    ) -> Result<Response<AgentSessionSendInputResponse>, Status> {
+        session::send_input(self, request).await
+    }
+    async fn agent_session_read(
+        &self,
+        request: Request<AgentSessionReadRequest>,
+    ) -> Result<Response<Self::AgentSessionReadStream>, Status> {
+        session::read(self, request).await
+    }
+    async fn agent_session_close(
+        &self,
+        request: Request<AgentSessionCloseRequest>,
+    ) -> Result<Response<AgentSessionCloseResponse>, Status> {
+        session::close(self, request).await
+    }
+    async fn agent_session_resolve_pid(
+        &self,
+        request: Request<AgentSessionResolvePidRequest>,
+    ) -> Result<Response<AgentSessionResolvePidResponse>, Status> {
+        session::resolve_pid(self, request).await
     }
 
     async fn handoff_generate(

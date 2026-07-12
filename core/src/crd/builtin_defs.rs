@@ -127,6 +127,8 @@ fn runtime_policy_crd() -> CustomResourceDefinition {
                 "resume": { "type": "object" },
                 "attention_inbox_enabled": { "type": "boolean", "default": true },
                 "handoff_enabled": { "type": "boolean", "default": true },
+                "session_read_enabled": { "type": "boolean", "default": true },
+                "session_control_enabled": { "type": "boolean", "default": false },
                 "mutating_resume_enabled": { "type": "boolean", "default": false },
                 "elevated_resume_enabled": { "type": "boolean", "default": false }
             }

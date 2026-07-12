@@ -17,6 +17,8 @@ Sensitive data includes (but is not limited to):
 
 Project-specific overlay: FR-097 provider session tokens are opaque runner-only values. Handoff/protobuf/Tauri/CLI responses may expose command-run references and session availability, but never the provider token, transcript, prompt, raw stdout/stderr, or unbounded error text. Include `handoff_snapshots`, `resume_plans`, `resume_executions`, control-plane audit, and daemon logs in the search described below.
 
+FR-098 overlay: session List/Get/Resolve responses may expose `session_id`, task relationships, canonical state, diagnostic PID, and lease metadata. They must never expose `cwd`, command text, `input_fifo_path`, `transcript_path`, stdout/stderr paths, output JSON paths, input bytes, or unredacted transcript content. Search `session_control_actions`, events, control-plane audit, CLI JSON, Tauri events, and daemon logs; input/transcript content must not be logged.
+
 ---
 
 ## Scenario 1: Sensitive Fields In API Responses

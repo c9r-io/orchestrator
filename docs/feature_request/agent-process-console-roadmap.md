@@ -145,7 +145,7 @@ Governed by [FR-097](FR-097-handoff-and-safe-resume.md).
 | P4-04 | Sessions UI and task-detail embed | P4-01..03, P1 | Live state, transcript, and lease ownership are visible |
 | P4-05 | Crash, stale PID, cleanup, and security tests | P4-01..04 | PID is never accepted as the authoritative write identity |
 
-Governed by [FR-098](FR-098-agent-session-control-plane.md). FR-098 supersedes the proposed implementation ordering in DD-075 while retaining its two-layer mailbox/session distinction.
+Implemented by [DD-108](../design_doc/orchestrator/108-agent-session-control-plane.md) and verified by [QA-145](../qa/orchestrator/145-agent-session-control-plane.md). This implementation supersedes the proposed ordering in DD-075 while retaining its two-layer mailbox/session distinction.
 
 ### Phase 5: External source bindings and Slack pilot
 

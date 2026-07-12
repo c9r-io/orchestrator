@@ -409,6 +409,34 @@ fn main() -> Result<()> {
             });
         }
 
+        // Reconcile persisted interactive sessions with process identity and lease expiry.
+        {
+            let session_state = inner.clone();
+            let mut session_shutdown = shutdown_rx.clone();
+            tokio::spawn(async move {
+                let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                loop {
+                    tokio::select! {
+                        _ = interval.tick() => {
+                            let result = session_state.async_database.writer().call(|conn| {
+                                agent_orchestrator::session_store::reconcile_sessions(conn)
+                                    .map_err(|error| tokio_rusqlite::Error::Other(error.into()))
+                            }).await;
+                            match result {
+                                Ok(changes) if !changes.is_empty() => {
+                                    info!(changes = changes.len(), "interactive session reconciliation updated state");
+                                }
+                                Ok(_) => {}
+                                Err(error) => error!(%error, "interactive session reconciliation failed"),
+                            }
+                        }
+                        _ = session_shutdown.changed() => break,
+                    }
+                }
+            });
+        }
+
         // Project durable task events into the cross-task attention queue.
         {
             let attention_state = inner.clone();

@@ -10,6 +10,7 @@
 
 - `docs/design-system.md` (focus ring, contrast, keyboard accessibility)
 - FR-097 overlay: run dialog scenarios against task detail → "Preview resume". Focus must enter the consequence dialog, cycle within it, close on `Escape`, and return to the trigger. Required operator reason/elevated confirmation must not rely on color alone. See `docs/qa/orchestrator/144-handoff-and-safe-resume.md`.
+- FR-098 overlay: TaskDetail's "Agent session" panel must expose the transcript as an accessible live log, label the session selector and input, communicate follow/lease state without color alone, and keep "Request control", "Release control", and "Close session" keyboard reachable. Read-only users must not receive hidden-but-focusable mutation controls. See `docs/qa/orchestrator/145-agent-session-control-plane.md`.
 
 ## Scenario 1: Core Tasks Are Possible With Keyboard Only
 

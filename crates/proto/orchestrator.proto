@@ -84,6 +84,17 @@ service OrchestratorService {
   rpc AgentUncordon(AgentUncordonRequest)       returns (AgentUncordonResponse);
   rpc AgentDrain(AgentDrainRequest)             returns (AgentDrainResponse);
 
+  // Interactive agent session control plane
+  rpc AgentSessionList(AgentSessionListRequest) returns (AgentSessionListResponse);
+  rpc AgentSessionGet(AgentSessionGetRequest) returns (AgentSessionGetResponse);
+  rpc AgentSessionAttach(AgentSessionAttachRequest) returns (AgentSessionAttachResponse);
+  rpc AgentSessionHeartbeat(AgentSessionHeartbeatRequest) returns (AgentSessionHeartbeatResponse);
+  rpc AgentSessionDetach(AgentSessionDetachRequest) returns (AgentSessionDetachResponse);
+  rpc AgentSessionSendInput(AgentSessionSendInputRequest) returns (AgentSessionSendInputResponse);
+  rpc AgentSessionRead(AgentSessionReadRequest) returns (stream AgentSessionOutputChunk);
+  rpc AgentSessionClose(AgentSessionCloseRequest) returns (AgentSessionCloseResponse);
+  rpc AgentSessionResolvePid(AgentSessionResolvePidRequest) returns (AgentSessionResolvePidResponse);
+
   // Event lifecycle
   rpc EventCleanup(EventCleanupRequest)         returns (EventCleanupResponse);
   rpc EventStats(EventStatsRequest)             returns (EventStatsResponse);
@@ -990,6 +1001,96 @@ message AgentDrainResponse {
   string message = 1;
   string lifecycle_state = 2;
 }
+
+message AgentSession {
+  string session_id = 1;
+  string task_id = 2;
+  optional string task_item_id = 3;
+  string step_id = 4;
+  string phase = 5;
+  string agent_id = 6;
+  string state = 7;
+  int64 pid = 8;
+  optional string writer_client_id = 9;
+  optional string writer_actor = 10;
+  optional string writer_lease_expires_at = 11;
+  int64 writer_fencing_token = 12;
+  int64 state_version = 13;
+  string created_at = 14;
+  string updated_at = 15;
+  optional string ended_at = 16;
+  optional int64 exit_code = 17;
+}
+
+message AgentSessionListRequest {
+  optional string task_id = 1;
+  optional string agent_id = 2;
+  optional string state = 3;
+}
+message AgentSessionListResponse { repeated AgentSession sessions = 1; }
+message AgentSessionGetRequest { string session_id = 1; }
+message AgentSessionGetResponse { AgentSession session = 1; }
+message AgentSessionAttachRequest {
+  string session_id = 1;
+  string client_id = 2;
+  string mode = 3;
+}
+message AgentSessionAttachResponse {
+  string session_id = 1;
+  string client_id = 2;
+  string mode = 3;
+  bool writer_granted = 4;
+  optional int64 fencing_token = 5;
+  optional string lease_expires_at = 6;
+}
+message AgentSessionHeartbeatRequest {
+  string session_id = 1;
+  string client_id = 2;
+  int64 fencing_token = 3;
+}
+message AgentSessionHeartbeatResponse { string lease_expires_at = 1; }
+message AgentSessionDetachRequest {
+  string session_id = 1;
+  string client_id = 2;
+  string mode = 3;
+  optional int64 fencing_token = 4;
+  string reason = 5;
+}
+message AgentSessionDetachResponse { bool detached = 1; }
+message AgentSessionSendInputRequest {
+  string session_id = 1;
+  string client_id = 2;
+  int64 fencing_token = 3;
+  bytes input = 4;
+  string idempotency_key = 5;
+}
+message AgentSessionSendInputResponse { uint64 accepted_bytes = 1; }
+message AgentSessionReadRequest {
+  string session_id = 1;
+  uint64 offset = 2;
+  bool follow = 3;
+  uint32 max_chunk_bytes = 4;
+}
+message AgentSessionOutputChunk {
+  string session_id = 1;
+  uint64 offset = 2;
+  uint64 next_offset = 3;
+  optional string timestamp = 4;
+  string stream = 5;
+  bytes data = 6;
+  string text = 7;
+  bool eof = 8;
+  bool redacted = 9;
+}
+message AgentSessionCloseRequest {
+  string session_id = 1;
+  string reason = 2;
+  string idempotency_key = 3;
+  optional int64 expected_state_version = 4;
+}
+message AgentSessionCloseResponse { AgentSession session = 1; }
+message AgentSessionResolvePidRequest { int64 pid = 1; }
+message AgentSessionResolvePidResponse { repeated AgentSession sessions = 1; }
 
 // ─── Event Lifecycle ─────────────────────────────────────────
 

@@ -18,8 +18,8 @@ use clap::Parser;
 
 /// Re-exported CLI argument model for integration tests and helper modules.
 pub use cli::{
-    AgentCommands, AttentionCommands, Cli, Commands, DaemonCommands, DbCommands,
-    DbMigrationCommands, DebugCommands, EventCommands, GuideFormat, HandoffCommands,
+    AgentCommands, AgentSessionCommands, AttentionCommands, Cli, Commands, DaemonCommands,
+    DbCommands, DbMigrationCommands, DebugCommands, EventCommands, GuideFormat, HandoffCommands,
     ManifestCommands, OutputFormat, QaCommands, ResumeCommands, SandboxProbeCommands,
     SecretCommands, SecretKeyCommands, StoreCommands, TaskCommands, ToolCommands, TriggerCommands,
 };

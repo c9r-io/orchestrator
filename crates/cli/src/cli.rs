@@ -1127,6 +1127,9 @@ pub enum SecretKeyCommands {
 /// Agent lifecycle commands for scheduling control.
 #[derive(Subcommand, Debug, Clone)]
 pub enum AgentCommands {
+    /// Observe and control interactive agent sessions.
+    #[command(subcommand)]
+    Session(AgentSessionCommands),
     /// List agents and their lifecycle state
     #[command(alias = "ls")]
     List {
@@ -1171,6 +1174,124 @@ pub enum AgentCommands {
         /// Timeout in seconds; force-drain after this duration
         #[arg(long)]
         timeout: Option<u64>,
+    },
+}
+
+/// Interactive agent session operations.
+#[derive(Subcommand, Debug, Clone)]
+pub enum AgentSessionCommands {
+    /// List sessions.
+    List {
+        /// Optional task filter.
+        #[arg(long)]
+        task: Option<String>,
+        /// Optional agent filter.
+        #[arg(long)]
+        agent: Option<String>,
+        /// Optional canonical state filter.
+        #[arg(long)]
+        state: Option<String>,
+        /// Output encoding.
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+    /// Get one session.
+    Get {
+        /// Session identifier.
+        session_id: String,
+        /// Output encoding.
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+    /// Attach as a reader or explicitly acquire the writer lease.
+    Attach {
+        /// Session identifier.
+        session_id: String,
+        /// Attachment mode.
+        #[arg(long, default_value = "reader")]
+        mode: String,
+        /// Stable client instance identifier.
+        #[arg(long, default_value = "cli")]
+        client_id: String,
+    },
+    /// Follow or read transcript bytes from an offset.
+    Read {
+        /// Session identifier.
+        session_id: String,
+        /// Continue following appended bytes.
+        #[arg(long)]
+        follow: bool,
+        /// Committed source byte offset.
+        #[arg(long, default_value_t = 0)]
+        offset: u64,
+    },
+    /// Renew a writer lease.
+    Heartbeat {
+        /// Session identifier.
+        session_id: String,
+        /// Writer client identifier.
+        #[arg(long)]
+        client_id: String,
+        /// Current fencing token.
+        #[arg(long)]
+        fencing_token: i64,
+    },
+    /// Send input with the current writer fencing token.
+    SendInput {
+        /// Session identifier.
+        session_id: String,
+        /// Text to send.
+        #[arg(long)]
+        text: String,
+        /// Writer client identifier.
+        #[arg(long)]
+        client_id: String,
+        /// Current fencing token.
+        #[arg(long)]
+        fencing_token: i64,
+        /// Retry-stable idempotency key.
+        #[arg(long)]
+        idempotency_key: Option<String>,
+    },
+    /// Detach a reader or writer.
+    Detach {
+        /// Session identifier.
+        session_id: String,
+        /// Attachment mode.
+        #[arg(long, default_value = "reader")]
+        mode: String,
+        /// Client identifier.
+        #[arg(long, default_value = "cli")]
+        client_id: String,
+        /// Required for writer detach.
+        #[arg(long)]
+        fencing_token: Option<i64>,
+        /// Audited detach reason.
+        #[arg(long, default_value = "client detach")]
+        reason: String,
+    },
+    /// Close the backing session process.
+    Close {
+        /// Session identifier.
+        session_id: String,
+        /// Audited close reason.
+        #[arg(long)]
+        reason: String,
+        /// Optional optimistic state version.
+        #[arg(long)]
+        expected_version: Option<i64>,
+        /// Retry-stable idempotency key.
+        #[arg(long)]
+        idempotency_key: Option<String>,
+    },
+    /// Resolve a diagnostic PID to sessions.
+    Resolve {
+        /// Diagnostic process identifier.
+        #[arg(long)]
+        pid: i64,
+        /// Output encoding.
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
     },
 }
 

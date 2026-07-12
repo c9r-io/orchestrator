@@ -12,7 +12,7 @@ self_referential_safe: true
 
 ## Background
 
-High-risk CLI operations that perform irreversible state changes must require `--force` to prevent accidental execution. This document validates that all destructive commands are gated and that the gate behaves correctly (warning message, non-zero exit, no side effects without `--force`).
+High-risk CLI operations that perform irreversible state changes require an explicit safety gate. Most legacy operations use `--force`; FR-098 session close instead requires operator RBAC, an enabled mutation policy, a non-empty reason, an idempotency key, process fingerprint verification, and optional expected-version concurrency control.
 
 ### Force-Protected Commands Inventory
 
@@ -23,7 +23,7 @@ High-risk CLI operations that perform irreversible state changes must require `-
 | `delete project/<project>` | Deletes project and all its data | ✓ existing |
 | `apply --project <project>` | Overwrites existing project | ✓ existing |
 | `init` | Overwrites existing config | ✓ existing |
-| `task session close <id>` | Kills backing process | ✓ existing |
+| `agent session close <id> --reason <text>` | Signals a fingerprint-verified backing process | governed reason/version/idempotency gate; see QA-145 |
 | `config backfill-events` | Bulk UPDATE all event rows | ✓ new |
 | `task retry <item>` | Resets item execution state | ✓ new |
 

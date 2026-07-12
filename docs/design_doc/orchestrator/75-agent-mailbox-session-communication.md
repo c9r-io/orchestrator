@@ -2,6 +2,8 @@
 
 > 来源：FR-065 | 状态：接口草案（实施前须再次与用户对齐）
 
+> Session implementation note (2026-07-12): DD-108 and QA-145 supersede this document's Session API shape and implementation ordering. This document remains authoritative only for the deferred Mailbox concept and historical context.
+
 ## 1. 背景
 
 orchestrator 当前运行时已具备：
@@ -243,6 +245,8 @@ rpc AgentSessionResolvePid(AgentSessionResolvePidRequest) returns (AgentSessionR
 - `AgentSessionResolvePid`: `pid`, `session_id`, `run_id`, `task_id`, `task_item_id`, `step_id`, `agent_id`, `state`
 
 ## 8. 推荐实施顺序
+
+The Session ordering below is historical and no longer executable guidance. FR-098 implemented Session before Mailbox; see `docs/design_doc/orchestrator/108-agent-session-control-plane.md`.
 
 | 阶段 | 范围 | 说明 |
 |------|------|------|

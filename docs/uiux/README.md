@@ -36,7 +36,7 @@ PORTAL_BASE_URL="http://localhost:3000"   # If there is a Web UI
 ### Accessibility
 | Doc | Description | Scenarios |
 |------|------|--------|
-| `docs/uiux/07-accessibility.md` | Keyboard navigation, focus, contrast, ARIA | 5 |
+| `docs/uiux/07-accessibility.md` | Keyboard navigation, focus, contrast, ARIA, including handoff/session overlays | 5 |
 
 ### Common Components And States
 | Doc | Description | Scenarios |
@@ -51,4 +51,5 @@ PORTAL_BASE_URL="http://localhost:3000"   # If there is a Web UI
 2. New forms/create-edit flows: run at least `08-forms-validation.md` + `07-accessibility.md`.
 3. Visual/token changes: run at least `01-design-consistency.md` + `02-theme-switching.md`.
 4. For the FR-097 consequence dialog, run `07-accessibility.md` + `08-forms-validation.md` + `10-dialogs-notifications.md` with `docs/qa/orchestrator/144-handoff-and-safe-resume.md`.
+5. For the FR-098 TaskDetail session panel, run `07-accessibility.md` with `docs/qa/orchestrator/145-agent-session-control-plane.md`.
 4. Complex animations/glass effects: run at least `04-animations.md` (including performance and reduced motion).

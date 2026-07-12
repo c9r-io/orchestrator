@@ -3,6 +3,8 @@
 > 验证对象：`docs/design_doc/orchestrator/75-agent-mailbox-session-communication.md`
 > 来源：FR-065
 
+> Historical design verification only. DD-108/QA-145 supersede the Session API count, CLI shape, and implementation ordering. Mailbox remains deferred.
+
 ## 概述
 
 本 QA 文档验证 FR-065 接口草案的设计完整性。FR-065 的交付物是正式接口草案文档，不涉及代码实现。验证范围为设计文档的覆盖度与一致性。

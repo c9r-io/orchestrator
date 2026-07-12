@@ -103,7 +103,7 @@ pub(super) async fn spawn_phase_process(
         provider_session_token.as_deref(),
     )?;
     let mut child = captured.child;
-    let output_capture = Some(captured.output_capture);
+    let mut output_capture = Some(captured.output_capture);
 
     // Write prompt to child stdin for stdin delivery mode
     if effective_pipe_stdin {
@@ -118,19 +118,47 @@ pub(super) async fn spawn_phase_process(
 
     if let Some(sid) = session_id.as_deref() {
         if let Some(pid) = child.id() {
+            let fingerprint = session_store::capture_process_fingerprint(pid);
+            let sid_owned = sid.to_owned();
             let _ = state
-                .session_store
-                .update_session_pid(sid, pid as i64)
+                .async_database
+                .writer()
+                .call(move |conn| {
+                    session_store::update_session_process(
+                        conn,
+                        &sid_owned,
+                        pid as i64,
+                        fingerprint.as_deref(),
+                    )
+                    .map_err(|err| tokio_rusqlite::Error::Other(err.into()))
+                })
                 .await;
         }
     }
 
     if tty && session_id.is_some() {
-        std::mem::forget(child);
+        let sid = session_id.clone().unwrap_or_default();
+        let state_for_wait = state.clone();
+        let capture = output_capture.take();
+        tokio::spawn(async move {
+            let status = child.wait().await;
+            if let Some(capture) = capture {
+                let _ = capture.wait().await;
+            }
+            let (session_state, exit_code) = match status {
+                Ok(status) if status.success() => ("closed", status.code()),
+                Ok(status) => ("failed", status.code()),
+                Err(_) => ("failed", None),
+            };
+            let _ = state_for_wait
+                .session_store
+                .update_session_state(&sid, session_state, exit_code.map(i64::from), true)
+                .await;
+        });
         return Ok(SpawnResult {
             session_id,
             child_pid: None,
-            output_capture,
+            output_capture: None,
             tty_early_return: Some(agent_orchestrator::dto::RunResult {
                 success: true,
                 exit_code: 0,

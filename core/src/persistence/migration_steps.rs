@@ -1021,3 +1021,71 @@ pub(crate) fn m0028_handoff_safe_resume(conn: &Connection) -> Result<()> {
     .context("m0028_handoff_safe_resume")?;
     Ok(())
 }
+
+pub(crate) fn m0029_agent_session_control_plane(conn: &Connection) -> Result<()> {
+    ensure_column_exists(
+        conn,
+        "agent_sessions",
+        "state_version",
+        "ALTER TABLE agent_sessions ADD COLUMN state_version INTEGER NOT NULL DEFAULT 1",
+    )?;
+    ensure_column_exists(
+        conn,
+        "agent_sessions",
+        "writer_actor",
+        "ALTER TABLE agent_sessions ADD COLUMN writer_actor TEXT",
+    )?;
+    ensure_column_exists(
+        conn,
+        "agent_sessions",
+        "writer_lease_expires_at",
+        "ALTER TABLE agent_sessions ADD COLUMN writer_lease_expires_at TEXT",
+    )?;
+    ensure_column_exists(
+        conn,
+        "agent_sessions",
+        "writer_last_heartbeat_at",
+        "ALTER TABLE agent_sessions ADD COLUMN writer_last_heartbeat_at TEXT",
+    )?;
+    ensure_column_exists(
+        conn,
+        "agent_sessions",
+        "writer_fencing_token",
+        "ALTER TABLE agent_sessions ADD COLUMN writer_fencing_token INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column_exists(
+        conn,
+        "agent_sessions",
+        "process_fingerprint",
+        "ALTER TABLE agent_sessions ADD COLUMN process_fingerprint TEXT",
+    )?;
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS session_control_actions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            client_id TEXT,
+            action TEXT NOT NULL,
+            idempotency_key TEXT NOT NULL,
+            request_hash TEXT NOT NULL DEFAULT '',
+            result TEXT NOT NULL,
+            reason TEXT,
+            fencing_token INTEGER,
+            created_at TEXT NOT NULL,
+            UNIQUE(session_id, idempotency_key),
+            FOREIGN KEY(session_id) REFERENCES agent_sessions(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_agent_sessions_state_updated
+            ON agent_sessions(state, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_session_control_actions_session_created
+            ON session_control_actions(session_id, created_at DESC);
+        "#,
+    )
+    .context("m0029_agent_session_control_plane")?;
+    conn.execute(
+        "UPDATE agent_sessions SET state='closed' WHERE state='exited'",
+        [],
+    )?;
+    Ok(())
+}

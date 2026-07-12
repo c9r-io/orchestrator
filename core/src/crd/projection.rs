@@ -136,6 +136,12 @@ pub struct RuntimePolicyProjection {
     #[serde(default)]
     /// Whether non-idempotent replay may be elevated by an operator.
     pub elevated_resume_enabled: bool,
+    #[serde(default = "default_handoff_enabled")]
+    /// Whether interactive session reads are enabled.
+    pub session_read_enabled: bool,
+    #[serde(default)]
+    /// Whether interactive session mutations are enabled.
+    pub session_control_enabled: bool,
 }
 
 impl Default for RuntimePolicyProjection {
@@ -148,6 +154,8 @@ impl Default for RuntimePolicyProjection {
             handoff_enabled: true,
             mutating_resume_enabled: false,
             elevated_resume_enabled: false,
+            session_read_enabled: true,
+            session_control_enabled: false,
         }
     }
 }
@@ -181,6 +189,8 @@ impl CrdProjectable for RuntimePolicyProjection {
             handoff_enabled: rp_spec.handoff_enabled,
             mutating_resume_enabled: rp_spec.mutating_resume_enabled,
             elevated_resume_enabled: rp_spec.elevated_resume_enabled,
+            session_read_enabled: rp_spec.session_read_enabled,
+            session_control_enabled: rp_spec.session_control_enabled,
         })
     }
 
@@ -195,6 +205,8 @@ impl CrdProjectable for RuntimePolicyProjection {
             handoff_enabled: self.handoff_enabled,
             mutating_resume_enabled: self.mutating_resume_enabled,
             elevated_resume_enabled: self.elevated_resume_enabled,
+            session_read_enabled: self.session_read_enabled,
+            session_control_enabled: self.session_control_enabled,
         };
         serde_json::to_value(&spec).unwrap_or_default()
     }
@@ -378,6 +390,8 @@ mod tests {
             handoff_enabled: true,
             mutating_resume_enabled: true,
             elevated_resume_enabled: false,
+            session_read_enabled: true,
+            session_control_enabled: false,
         };
         let spec = config.to_cr_spec();
         let back = RuntimePolicyProjection::from_cr_spec(&spec).expect("should deserialize");
@@ -386,6 +400,8 @@ mod tests {
         assert!(back.attention_inbox_enabled);
         assert!(back.handoff_enabled);
         assert!(back.mutating_resume_enabled);
+        assert!(back.session_read_enabled);
+        assert!(!back.session_control_enabled);
         assert!(RuntimePolicyProjection::default().attention_inbox_enabled);
     }
 

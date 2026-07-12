@@ -135,6 +135,11 @@ fn build_managed_state(
     let session_store = Arc::new(crate::session_store::AsyncSessionStore::new(
         async_database.clone(),
     ));
+    if let Ok(conn) = crate::db::open_conn(&db_path) {
+        if let Err(error) = crate::session_store::reconcile_sessions(&conn) {
+            tracing::warn!(%error, "failed to reconcile interactive sessions during bootstrap");
+        }
+    }
     let task_repo = Arc::new(crate::task_repository::AsyncSqliteTaskRepository::new(
         async_database.clone(),
     ));
