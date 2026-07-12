@@ -53,6 +53,7 @@ impl Resource for RuntimePolicyResource {
             runner: incoming_runner,
             resume: incoming_resume,
             observability: crate::config::ObservabilityConfig::default(),
+            attention_inbox_enabled: self.spec.attention_inbox_enabled,
         };
         let spec_value = rp.to_cr_spec();
         Ok(super::apply_to_store(
@@ -89,6 +90,7 @@ impl Resource for RuntimePolicyResource {
                     auto: rp.resume.auto,
                 },
                 observability: serde_json::to_value(&rp.observability).ok(),
+                attention_inbox_enabled: rp.attention_inbox_enabled,
             },
         })
     }

@@ -448,11 +448,62 @@ button:focus-visible {
 }
 
 /* Responsive breakpoints */
+.attention-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.attention-header .page-title { margin-bottom: 4px; }
+.attention-header p, .attention-keyboard { color: var(--text-secondary); font-size: 13px; }
+.attention-counts, .attention-filters, .attention-meta, .attention-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.attention-filters { margin-bottom: 14px; }
+.attention-filters select {
+  min-height: 36px;
+  padding: 0 30px 0 10px;
+  color: var(--text-primary);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border-subtle);
+  border-radius: 10px;
+}
+
+.attention-list { display: flex; flex-direction: column; gap: 10px; }
+.attention-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; padding: 16px; }
+.attention-card:hover { transform: none; }
+.attention-card-selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-tint); }
+.attention-card-title { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+.attention-card-main > p { color: var(--text-secondary); font-size: 13px; line-height: 1.45; }
+.attention-meta { margin-top: 10px; color: var(--text-tertiary); font-size: 11px; }
+.attention-actions { justify-content: flex-end; max-width: 360px; }
+.attention-actions .btn { font-size: 12px; padding: 6px 10px; }
+.attention-actions .btn:disabled { cursor: not-allowed; opacity: 0.45; }
+.attention-severity { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 50%; }
+.attention-severity-intervention { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-tint); }
+.attention-severity-attention { background: var(--warning); }
+.attention-readonly { margin-bottom: 12px; padding: 9px 12px; border-radius: 10px; background: var(--accent-tint); color: var(--accent); font-size: 12px; }
+.attention-error { margin-bottom: 12px; color: var(--danger); }
+.attention-empty { text-align: center; color: var(--text-secondary); }
+.attention-keyboard { margin-top: 14px; text-align: center; }
+
 @media (max-width: 1000px) {
   .page {
     max-width: 100%;
     padding: 16px;
   }
+}
+
+@media (max-width: 760px) {
+  .attention-header { align-items: flex-start; flex-direction: column; }
+  .attention-card { grid-template-columns: 1fr; }
+  .attention-actions { justify-content: flex-start; max-width: none; }
 }
 
 @media (min-width: 1200px) {

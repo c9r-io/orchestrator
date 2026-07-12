@@ -215,6 +215,7 @@ mod tests {
                 },
                 resume: crate::cli_types::ResumeSpec { auto: false },
                 observability: None,
+                attention_inbox_enabled: true,
             }),
         };
         let err = dispatch_resource(resource).expect_err("operation should fail");

@@ -222,6 +222,9 @@ pub struct RuntimePolicySpec {
     /// Optional untyped observability settings forwarded to runtime config.
     #[serde(default)]
     pub observability: Option<serde_json::Value>,
+    /// Whether new events are materialized into the Attention Inbox.
+    #[serde(default = "default_true")]
+    pub attention_inbox_enabled: bool,
 }
 
 /// Runner-policy manifest payload.

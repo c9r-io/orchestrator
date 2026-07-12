@@ -25,12 +25,32 @@ const zh = {
   },
 
   nav: {
+    attention: "Attention Inbox",
     wishPool: "许愿池",
     progress: "进度观察",
     mainNav: "主导航",
-    wishPoolShortcut: "许愿池 (Cmd+1)",
-    progressShortcut: "进度观察 (Cmd+2)",
+    attentionShortcut: "Attention Inbox (Cmd+1)",
+    wishPoolShortcut: "许愿池 (Cmd+2)",
+    progressShortcut: "进度观察 (Cmd+3)",
     currentRole: (role: string) => `当前角色: ${role}`,
+  },
+
+  attention: {
+    title: "Attention Inbox",
+    subtitle: "只展示需要人决策的异常、审批和阻塞",
+    empty: "当前没有需要处理的事项",
+    allStates: "活动状态",
+    allSeverities: "全部级别",
+    mine: "我的事项",
+    unassigned: "未分配",
+    allAssignees: "全部负责人",
+    claim: "认领",
+    snooze: "稍后处理",
+    resolve: "已处理",
+    timeline: "查看进程时间线",
+    occurrences: (count: number) => `发生 ${count} 次`,
+    readOnly: "当前为只读角色，不能执行变更操作",
+    keyboard: "J/K 选择 · C 认领 · R 确认处理 · Enter 查看时间线",
   },
 
   theme: {

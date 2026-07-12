@@ -52,6 +52,13 @@ pub fn run() {
             commands::task::task_timeline,
             commands::task::task_recover,
             commands::task::task_delete_bulk,
+            // attention
+            commands::attention::attention_list,
+            commands::attention::attention_get,
+            commands::attention::attention_claim,
+            commands::attention::attention_snooze,
+            commands::attention::attention_resolve,
+            commands::attention::attention_execute_action,
             // streaming
             commands::stream::start_task_follow,
             commands::stream::stop_task_follow,
@@ -60,6 +67,8 @@ pub fn run() {
             commands::stream::task_logs,
             commands::stream::start_task_timeline_follow,
             commands::stream::stop_task_timeline_follow,
+            commands::stream::start_attention_follow,
+            commands::stream::stop_attention_follow,
             // resource
             commands::resource::resource_get,
             commands::resource::resource_describe,

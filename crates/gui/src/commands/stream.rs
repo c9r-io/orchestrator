@@ -19,6 +19,65 @@ pub struct TimelineDelta {
     pub snapshot_max_event_id: i64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct AttentionDelta {
+    pub kind: String,
+    pub change_id: i64,
+    pub item: Option<super::attention::AttentionItem>,
+}
+
+#[tauri::command]
+pub async fn start_attention_follow(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    after_change_id: Option<i64>,
+    project_id: Option<String>,
+) -> Result<(), String> {
+    let mut client = state.client().await?;
+    let response = client
+        .attention_follow(orchestrator_proto::AttentionFollowRequest {
+            after_change_id: after_change_id.unwrap_or_default(),
+            project_id,
+            interval_millis: 500,
+        })
+        .await
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))?;
+    let mut stream = response.into_inner();
+    let cancel = state.register_stream("attention").await;
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::select! {
+                message = stream.message() => {
+                    match message {
+                        Ok(Some(delta)) => {
+                            let payload = AttentionDelta {
+                                kind: delta.kind,
+                                change_id: delta.change_id,
+                                item: delta.item.map(super::attention::item_from_proto),
+                            };
+                            let _ = app.emit("attention-delta", &payload);
+                        }
+                        Ok(None) => break,
+                        Err(error) => {
+                            let message = crate::errors::humanize_grpc_error(&error);
+                            let _ = app.emit("stream-error-attention", &message);
+                            break;
+                        }
+                    }
+                }
+                _ = cancel.cancelled() => break,
+            }
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn stop_attention_follow(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    state.cancel_stream("attention").await;
+    Ok(())
+}
+
 /// Start streaming semantic timeline updates via Tauri events.
 #[tauri::command]
 pub async fn start_task_timeline_follow(

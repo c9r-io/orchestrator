@@ -124,6 +124,13 @@ pub struct RuntimePolicyProjection {
     #[serde(default)]
     /// Observability policy configuration.
     pub observability: crate::config::ObservabilityConfig,
+    #[serde(default = "default_attention_inbox_enabled")]
+    /// Whether the daemon materializes new Attention Inbox records.
+    pub attention_inbox_enabled: bool,
+}
+
+fn default_attention_inbox_enabled() -> bool {
+    true
 }
 
 impl CrdProjectable for RuntimePolicyProjection {
@@ -143,6 +150,7 @@ impl CrdProjectable for RuntimePolicyProjection {
                 auto: rp_spec.resume.auto,
             },
             observability,
+            attention_inbox_enabled: rp_spec.attention_inbox_enabled,
         })
     }
 
@@ -153,6 +161,7 @@ impl CrdProjectable for RuntimePolicyProjection {
                 auto: self.resume.auto,
             },
             observability: serde_json::to_value(&self.observability).ok(),
+            attention_inbox_enabled: self.attention_inbox_enabled,
         };
         serde_json::to_value(&spec).unwrap_or_default()
     }
@@ -332,6 +341,7 @@ mod tests {
             runner: RunnerConfig::default(),
             resume: ResumeConfig { auto: true },
             observability: crate::config::ObservabilityConfig::default(),
+            attention_inbox_enabled: true,
         };
         let spec = config.to_cr_spec();
         let back = RuntimePolicyProjection::from_cr_spec(&spec).expect("should deserialize");

@@ -12,11 +12,12 @@ import WishPool from "./pages/WishPool";
 import WishDetail from "./pages/WishDetail";
 import ProgressList from "./pages/ProgressList";
 import TaskDetail from "./pages/TaskDetail";
+import AttentionInbox from "./pages/AttentionInbox";
 
-type Tab = "wishes" | "progress";
+type Tab = "attention" | "wishes" | "progress";
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>("wishes");
+  const [tab, setTab] = useState<Tab>("attention");
   const [role, setRole] = useState<Role | null>(null);
   const { connectionState, reconnect } = useConnectionState();
   const [selectedWishId, setSelectedWishId] = useState<string | null>(null);
@@ -68,10 +69,15 @@ export default function App() {
       if (e.metaKey || e.ctrlKey) {
         if (e.key === "1") {
           e.preventDefault();
-          setTab("wishes");
+          setTab("attention");
           setSelectedWishId(null);
           setSelectedTaskId(null);
         } else if (e.key === "2") {
+          e.preventDefault();
+          setTab("wishes");
+          setSelectedWishId(null);
+          setSelectedTaskId(null);
+        } else if (e.key === "3") {
           e.preventDefault();
           setTab("progress");
           setSelectedWishId(null);
@@ -124,6 +130,17 @@ export default function App() {
           aria-label={i18n.nav.mainNav}
         >
           <button
+            className={`btn ${tab === "attention" ? "btn-primary" : "btn-ghost"}`}
+            onClick={() => {
+              setTab("attention");
+              setSelectedWishId(null);
+              setSelectedTaskId(null);
+            }}
+            aria-label={i18n.nav.attentionShortcut}
+          >
+            {i18n.nav.attention}
+          </button>
+          <button
             className={`btn ${tab === "wishes" ? "btn-primary" : "btn-ghost"}`}
             onClick={() => {
               setTab("wishes");
@@ -168,6 +185,15 @@ export default function App() {
         </nav>
 
         {/* Wish Pool tab */}
+        {tab === "attention" && (
+          <AttentionInbox
+            onOpenTask={(id) => {
+              setTab("progress");
+              setSelectedTaskId(id);
+            }}
+          />
+        )}
+
         {tab === "wishes" && !selectedWishId && (
           <WishPool onSelectWish={(id) => setSelectedWishId(id)} />
         )}

@@ -147,5 +147,49 @@ export interface TimelineDelta {
   snapshot_max_event_id: number;
 }
 
+export interface AttentionAction {
+  id: string;
+  label: string;
+  required_role: string;
+  confirmation: string;
+  input_schema_json: string;
+}
+
+export interface AttentionItem {
+  id: string;
+  project_id: string;
+  task_id: string;
+  task_item_id: string | null;
+  step_id: string | null;
+  session_id: string | null;
+  kind: string;
+  severity: "intervention" | "attention";
+  state: "open" | "claimed" | "snoozed" | "resolved";
+  title: string;
+  summary: string;
+  requested_decision_json: string | null;
+  actions: AttentionAction[];
+  assignee: string | null;
+  occurrence_count: number;
+  reopen_count: number;
+  version: number;
+  created_at: string;
+  updated_at: string;
+  last_occurred_at: string;
+  snoozed_until: string | null;
+  resolved_at: string | null;
+}
+
+export interface AttentionListResult {
+  items: AttentionItem[];
+  latest_change_id: number;
+}
+
+export interface AttentionDelta {
+  kind: "upsert" | "remove";
+  change_id: number;
+  item: AttentionItem | null;
+}
+
 /** Wish status derived from task status + workflow context. */
 export type WishStatus = "drafting" | "pending_confirm" | "confirmed" | "failed" | "cancelled";

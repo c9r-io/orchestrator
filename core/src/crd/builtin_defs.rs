@@ -124,7 +124,8 @@ fn runtime_policy_crd() -> CustomResourceDefinition {
             "required": ["runner", "resume"],
             "properties": {
                 "runner": { "type": "object" },
-                "resume": { "type": "object" }
+                "resume": { "type": "object" },
+                "attention_inbox_enabled": { "type": "boolean", "default": true }
             }
         }))],
         hooks: CrdHooks::default(),

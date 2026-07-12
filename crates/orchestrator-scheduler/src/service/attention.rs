@@ -4,6 +4,7 @@ use agent_orchestrator::attention::{
     AttentionActionDescriptor, AttentionCandidate, AttentionProjectionOp, AttentionSeverity,
     AttentionSourceEvent,
 };
+use agent_orchestrator::config_ext::OrchestratorConfigExt as _;
 use agent_orchestrator::config_load::now_ts;
 use agent_orchestrator::state::InnerState;
 use anyhow::Result;
@@ -27,7 +28,17 @@ pub async fn reconcile_attention_once(state: &InnerState) -> Result<usize> {
         return Ok(0);
     };
     let last_event_id = last.id;
-    let operations = events.iter().flat_map(policy_operations).collect();
+    let config = agent_orchestrator::config_load::read_loaded_config(state)?;
+    let operations = events
+        .iter()
+        .filter(|event| {
+            config
+                .config
+                .runtime_policy_for_project(&event.project_id)
+                .attention_inbox_enabled
+        })
+        .flat_map(policy_operations)
+        .collect();
     state
         .attention_repo
         .apply_projection_batch(operations, last_event_id)
