@@ -13,6 +13,7 @@
 //! command string (augmented with `stream-json` + MCP flags) differs. See
 //! `docs/design_doc/orchestrator/101-streaming-agent-runner-architecture-pivot.md`.
 
+use super::session_adapter::{ClaudeStreamingSessionAdapter, RunnerSessionAdapter};
 use super::spawn::{RunnerExecutor, SpawnParams, spawn_command_via_shell};
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
@@ -41,11 +42,16 @@ impl RunnerExecutor for StreamingAgentRunner {
             extra_env,
             pipe_stdin,
             execution_profile,
+            provider_session_token,
         } = params;
 
         let bin = resolve_mcp_tools_bin()?;
         let config_path = write_mcp_config(&bin)?;
-        let streaming_command = build_streaming_command(command, &config_path);
+        let provider_command = match provider_session_token {
+            Some(token) => ClaudeStreamingSessionAdapter.prepare_resume_command(command, token)?,
+            None => command.to_string(),
+        };
+        let streaming_command = build_streaming_command(&provider_command, &config_path);
 
         spawn_command_via_shell(
             runner,
