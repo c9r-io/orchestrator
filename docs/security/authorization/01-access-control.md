@@ -16,6 +16,8 @@ Access control issues are often not "missing authentication", but:
 - Unclear role boundaries leading to privilege escalation
 - Multi-tenant isolation gaps enabling cross-tenant access
 
+Project-specific overlay: for FR-097, verify `HandoffGet` and `ResumeBoundaryList` allow `read_only+`, while `HandoffGenerate`, `ResumePlan`, and `ResumeExecute` require `operator+`. The server must derive the actor from mTLS/UDS identity and ignore any client attempt to self-report an actor or role. See `docs/qa/orchestrator/144-handoff-and-safe-resume.md`.
+
 ---
 
 ## Scenario 1: Resource-Level Authorization (IDOR)
@@ -111,4 +113,3 @@ Verify boundaries are clear and high-risk operations have additional protection.
 ### Expected Secure Behavior
 - Boundary operations return 403
 - High-risk operations have strong auditing (actor, target, IP, before/after values)
-

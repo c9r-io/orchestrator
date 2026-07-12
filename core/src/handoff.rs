@@ -7,7 +7,7 @@
 use crate::async_database::{AsyncDatabase, flatten_err};
 use crate::config::SideEffectClass;
 use crate::config_load::now_ts;
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use chrono::{Duration, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -585,14 +585,14 @@ fn task_state_version(conn: &Connection, task_id: &str) -> Result<String> {
          FROM tasks WHERE id=?1",
         [task_id],
         |row| {
-            let pipeline: String = row.get(3)?;
-            let plan: String = row.get(4)?;
+            let pipeline: Option<String> = row.get(3)?;
+            let plan: Option<String> = row.get(4)?;
             Ok(json!({
                 "status": row.get::<_, String>(0)?,
                 "current_cycle": row.get::<_, i64>(1)?,
                 "init_done": row.get::<_, i64>(2)?,
-                "pipeline_vars": serde_json::from_str::<Value>(&pipeline).unwrap_or_default(),
-                "execution_plan": serde_json::from_str::<Value>(&plan).unwrap_or_default(),
+                "pipeline_vars": pipeline.as_deref().and_then(|raw| serde_json::from_str::<Value>(raw).ok()).unwrap_or_default(),
+                "execution_plan": plan.as_deref().and_then(|raw| serde_json::from_str::<Value>(raw).ok()).unwrap_or_default(),
                 "updated_at": row.get::<_, String>(5)?,
                 "event_cursor": row.get::<_, i64>(6)?,
             }))
@@ -764,8 +764,8 @@ fn create_plan(
           expected_state_version, side_effect_class, replay_safe,
           elevated_confirmation_required, consequence_json, execution_input_json,
           provider_command_run_id, status, expires_at, created_by, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, '{}', ?12,
-                 'planned', ?13, ?14, ?15)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
+                 'planned', ?14, ?15, ?16)",
         params![
             plan_id,
             project_id,
@@ -778,6 +778,7 @@ fn create_plan(
             i64::from(boundary.replay_safe),
             i64::from(elevated),
             serde_json::to_string(&consequence)?,
+            serde_json::to_string(&boundary)?,
             boundary.command_run_id,
             expires_at,
             actor,
@@ -894,8 +895,8 @@ fn reserve_execution(
 fn read_plan(conn: &Connection, id: &str) -> Result<Option<ResumePlan>> {
     let row = conn
         .query_row(
-            "SELECT task_id, boundary_id, mode, expected_state_version, consequence_json,
-                    elevated_confirmation_required, expires_at, status
+            "SELECT task_id, mode, expected_state_version, consequence_json,
+                    execution_input_json, elevated_confirmation_required, expires_at, status
              FROM resume_plans WHERE id=?1",
             [id],
             |row| {
@@ -912,15 +913,13 @@ fn read_plan(conn: &Connection, id: &str) -> Result<Option<ResumePlan>> {
             },
         )
         .optional()?;
-    let Some((task_id, boundary_id, mode, state_version, consequence, elevated, expires, status)) =
+    let Some((task_id, mode, state_version, consequence, boundary_json, elevated, expires, status)) =
         row
     else {
         return Ok(None);
     };
-    let boundary = list_boundaries(conn, &task_id)?
-        .into_iter()
-        .find(|boundary| boundary.id == boundary_id)
-        .ok_or_else(|| anyhow!("resume plan boundary is no longer available"))?;
+    let boundary =
+        serde_json::from_str(&boundary_json).context("resume plan boundary snapshot is invalid")?;
     Ok(Some(ResumePlan {
         id: id.to_string(),
         task_id,

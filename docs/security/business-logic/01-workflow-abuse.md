@@ -15,6 +15,8 @@ Common attacks against business workflows:
 - Reusing one-time tokens (reset/invite/redeem)
 - Missing idempotency causing double charges or duplicate creation
 
+Project-specific overlay: FR-097 resume execution must reject a missing prerequisite plan, expired/stale `expected_state_version`, changed boundary, reused idempotency key with different input, and non-idempotent replay without both project policy and elevated operator confirmation. Planning must not mutate tasks, Attention state, scheduler queues, or the workspace. See `docs/qa/orchestrator/144-handoff-and-safe-resume.md`.
+
 ---
 
 ## Scenario 1: Step Skipping (Bypass Prerequisite Validation)
@@ -87,4 +89,3 @@ Verify failures do not leave exploitable intermediate state (half-completed stat
 ### Expected Secure Behavior
 - Transactions/compensation ensure consistency
 - Intermediate state cannot be exploited externally
-

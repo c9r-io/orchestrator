@@ -4,6 +4,8 @@
 **Scope**: Dialog/drawer usability, focus management, confirmation flows, notification consistency  
 **Scenarios**: 5
 
+FR-097 overlay: use the "Resume consequence preview" dialog as the high-risk reference. It must show logical boundary, side-effect class, no-workspace-rollback statement, expiry, operator reason, and elevated confirmation before enabling "Execute reviewed plan". Long consequence JSON must remain scrollable on narrow screens.
+
 ---
 
 ## Scenario 1: Dialog Open/Close Paths Are Consistent
@@ -83,4 +85,3 @@ Verify success/failure/warning feedback is consistent and does not spam the user
 ### Expected
 - Success feedback does not interrupt flow (short toast or inline).
 - Failure feedback is actionable (retry/learn more) and does not leak sensitive information.
-

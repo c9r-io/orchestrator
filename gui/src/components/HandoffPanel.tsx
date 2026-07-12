@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   HandoffSnapshot,
@@ -32,6 +32,41 @@ export default function HandoffPanel({ taskId, canExecute, onExecuted }: Props) 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ResumeExecution | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const resumeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!dialogOpen) return;
+    const dialog = dialogRef.current;
+    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>(
+      "button:not([disabled]), select:not([disabled]), textarea:not([disabled]), input:not([disabled])"
+    ) ?? []);
+    focusable()[0]?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setDialogOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const controls = focusable();
+      if (controls.length === 0) return;
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    dialog?.addEventListener("keydown", handleKeyDown);
+    return () => {
+      dialog?.removeEventListener("keydown", handleKeyDown);
+      resumeButtonRef.current?.focus();
+    };
+  }, [dialogOpen]);
 
   const generate = async () => {
     setBusy(true);
@@ -116,7 +151,7 @@ export default function HandoffPanel({ taskId, canExecute, onExecuted }: Props) 
             Generate handoff
           </button>
           {canExecute && (
-            <button className="btn btn-primary" onClick={openResume} disabled={busy}>
+            <button ref={resumeButtonRef} className="btn btn-primary" onClick={openResume} disabled={busy}>
               Preview resume
             </button>
           )}
@@ -140,7 +175,7 @@ export default function HandoffPanel({ taskId, canExecute, onExecuted }: Props) 
 
       {dialogOpen && (
         <div className="resume-dialog-backdrop" role="presentation">
-          <div className="resume-dialog liquid-glass" role="dialog" aria-modal="true" aria-labelledby="resume-title">
+          <div ref={dialogRef} className="resume-dialog liquid-glass" role="dialog" aria-modal="true" aria-labelledby="resume-title">
             <div className="handoff-heading-row">
               <h3 id="resume-title">Resume consequence preview</h3>
               <button className="btn btn-ghost" onClick={() => setDialogOpen(false)} aria-label="Close resume dialog">Close</button>

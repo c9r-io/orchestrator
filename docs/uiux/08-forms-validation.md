@@ -4,6 +4,8 @@
 **Scope**: Labels/help text, validation timing, error-state consistency, submission states and idempotency  
 **Scenarios**: 5
 
+FR-097 overlay: in the "Resume consequence preview" form, verify logical boundary and mode have visible labels, operator reason is required, elevated confirmation is required only for unsafe replay, and disabled execution communicates the unmet requirement through adjacent text rather than color alone. See `docs/qa/orchestrator/144-handoff-and-safe-resume.md`.
+
 ---
 
 ## Scenario 1: Field Labels, Help Text, And Required Markers Are Consistent
@@ -85,4 +87,3 @@ Verify cancel/close behavior is consistent and, if the project requires it, warn
 ### Expected
 - If policy requires: show a confirmation prompt to avoid accidental loss.
 - If policy does not require: close behavior is still consistent and leaves no half-state behind.
-

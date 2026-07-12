@@ -85,3 +85,4 @@ API_TOKEN="{bearer_token}"                # If authentication is required
 2. If the project has a Web UI (cookie-based sessions): also run CSRF/XSS/session docs.
 3. If the project has webhooks/URL fetch/callbacks: also run SSRF docs.
 4. If the project has concurrency-sensitive operations (one-time tokens, redemption, payments, invites, quotas): also run business logic and race-condition docs.
+5. For handoff/resume changes, run the overlays in access control, workflow abuse, and sensitive-data docs together with `docs/qa/orchestrator/144-handoff-and-safe-resume.md`.

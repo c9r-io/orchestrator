@@ -74,12 +74,12 @@ self_referential_safe: false
 
 **步骤**:
 1. 进入运行中任务 → 点击「暂停」→ 确认调用 `TaskPause`
-2. 进入已暂停任务 → 点击「恢复」→ 确认调用 `TaskResume`
-3. 进入失败任务 → 点击「重试」→ 确认调用 `TaskRetry`
+2. Enter a paused task → use "Preview resume" → review a `continue_task` plan → confirm `ResumePlan` precedes `ResumeExecute`.
+3. Enter a failed task → use "Preview resume" → review `retry_item` or `restart_from_boundary` → confirm no direct `TaskRetry` bypass is visible.
 4. admin 角色 → 点击「删除」→ 确认弹出确认对话框 → 确认调用 `TaskDelete`
 5. read_only 角色 → 确认操作按钮不可见
 
-**期望**: 按钮功能正确，RBAC 权限映射正确。
+**期望**: Pause/delete controls retain their RPC mapping; resume/retry recovery uses the FR-097 preview/execute flow and RBAC mapping from `docs/qa/orchestrator/144-handoff-and-safe-resume.md`.
 
 ---
 

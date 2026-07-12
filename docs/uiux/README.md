@@ -50,4 +50,5 @@ PORTAL_BASE_URL="http://localhost:3000"   # If there is a Web UI
 1. New pages/routes: run at least `06-navigation-ia.md` + `05-responsive-layout.md`.
 2. New forms/create-edit flows: run at least `08-forms-validation.md` + `07-accessibility.md`.
 3. Visual/token changes: run at least `01-design-consistency.md` + `02-theme-switching.md`.
+4. For the FR-097 consequence dialog, run `07-accessibility.md` + `08-forms-validation.md` + `10-dialogs-notifications.md` with `docs/qa/orchestrator/144-handoff-and-safe-resume.md`.
 4. Complex animations/glass effects: run at least `04-animations.md` (including performance and reduced motion).

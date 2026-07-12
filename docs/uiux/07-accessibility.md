@@ -9,6 +9,7 @@
 ## Constraints
 
 - `docs/design-system.md` (focus ring, contrast, keyboard accessibility)
+- FR-097 overlay: run dialog scenarios against task detail → "Preview resume". Focus must enter the consequence dialog, cycle within it, close on `Escape`, and return to the trigger. Required operator reason/elevated confirmation must not rely on color alone. See `docs/qa/orchestrator/144-handoff-and-safe-resume.md`.
 
 ## Scenario 1: Core Tasks Are Possible With Keyboard Only
 
@@ -95,4 +96,3 @@ Verify text/background contrast meets requirements, especially when translucent 
 ### Expected
 - Primary text meets WCAG AA contrast (or a higher project target).
 - Text on glass surfaces remains readable and does not become too low-contrast due to transparency.
-

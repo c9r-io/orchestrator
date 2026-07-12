@@ -15,6 +15,8 @@ Sensitive data includes (but is not limited to):
 - PII: email, phone, address, id numbers
 - Internal details: DSNs, internal hosts, stack traces, configs
 
+Project-specific overlay: FR-097 provider session tokens are opaque runner-only values. Handoff/protobuf/Tauri/CLI responses may expose command-run references and session availability, but never the provider token, transcript, prompt, raw stdout/stderr, or unbounded error text. Include `handoff_snapshots`, `resume_plans`, `resume_executions`, control-plane audit, and daemon logs in the search described below.
+
 ---
 
 ## Scenario 1: Sensitive Fields In API Responses
@@ -120,4 +122,3 @@ Verify secrets are not hardcoded in code/repo and are not exposed via logs or AP
 ```bash
 rg -n "BEGIN PRIVATE KEY|client_secret|api[_-]?key|password\\s*=" -S .
 ```
-
