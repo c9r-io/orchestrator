@@ -113,7 +113,7 @@ impl CrdProjectable for ProjectConfig {
 }
 
 /// Combined type for RuntimePolicy projection (runner + resume + observability).
-#[derive(Debug, Clone, Default, Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct RuntimePolicyProjection {
     #[serde(default)]
     /// Runner policy configuration.
@@ -127,6 +127,17 @@ pub struct RuntimePolicyProjection {
     #[serde(default = "default_attention_inbox_enabled")]
     /// Whether the daemon materializes new Attention Inbox records.
     pub attention_inbox_enabled: bool,
+}
+
+impl Default for RuntimePolicyProjection {
+    fn default() -> Self {
+        Self {
+            runner: RunnerConfig::default(),
+            resume: ResumeConfig::default(),
+            observability: crate::config::ObservabilityConfig::default(),
+            attention_inbox_enabled: true,
+        }
+    }
 }
 
 fn default_attention_inbox_enabled() -> bool {

@@ -242,55 +242,82 @@ pub(crate) async fn attention_execute_action(
             "action is not allowlisted for this item",
         ));
     }
+    if !matches!(
+        req.action_id.as_str(),
+        "retry_failed_item"
+            | "resume_task"
+            | "approve_decision"
+            | "reject_decision"
+            | "acknowledge"
+    ) {
+        return Err(Status::invalid_argument("unsupported action"));
+    }
 
-    // Claim is the durable reservation. Concurrent callers cannot both pass
-    // the same expected version before an external retry/resume side effect.
-    let reserved = server
+    let reservation = server
         .state
         .attention_repo
-        .mutate(
+        .reserve_action(
             &req.id,
             req.expected_version,
-            &format!("reserve:{}", req.idempotency_key),
+            &req.idempotency_key,
             &actor,
-            AttentionMutation::Claim,
+            &req.action_id,
+            &input,
         )
         .await
         .map_err(mutation_error)?;
+    if !reservation.should_execute {
+        return Ok(Response::new(item_to_proto(reservation.item)));
+    }
 
-    match req.action_id.as_str() {
+    let action_result: Result<(), Status> = match req.action_id.as_str() {
         "retry_failed_item" => {
-            let item_id = item
-                .task_item_id
-                .as_deref()
-                .ok_or_else(|| Status::failed_precondition("item has no failed task item"))?;
-            let task_id =
-                orchestrator_scheduler::service::task::retry_task_item(&server.state, item_id)
-                    .map_err(super::map_core_error)?;
-            orchestrator_scheduler::service::task::enqueue_task(&server.state, &task_id)
-                .await
-                .map_err(super::map_core_error)?;
+            if let Some(item_id) = item.task_item_id.as_deref() {
+                match orchestrator_scheduler::service::task::retry_task_item(&server.state, item_id)
+                    .map_err(super::map_core_error)
+                {
+                    Ok(task_id) => {
+                        orchestrator_scheduler::service::task::enqueue_task(&server.state, &task_id)
+                            .await
+                            .map_err(super::map_core_error)
+                    }
+                    Err(error) => Err(error),
+                }
+            } else {
+                Err(Status::failed_precondition("item has no failed task item"))
+            }
         }
         "resume_task" => {
             orchestrator_scheduler::service::task::enqueue_task(&server.state, &item.task_id)
                 .await
-                .map_err(super::map_core_error)?;
+                .map_err(super::map_core_error)
         }
-        "approve_decision" | "reject_decision" | "acknowledge" => {}
-        _ => return Err(Status::invalid_argument("unsupported action")),
+        "approve_decision" | "reject_decision" | "acknowledge" => Ok(()),
+        _ => unreachable!("supported action validated before reservation"),
+    };
+    if let Err(error) = action_result {
+        let error_code = format!("{:?}", error.code());
+        let _ = server
+            .state
+            .attention_repo
+            .complete_action(
+                &req.id,
+                &req.idempotency_key,
+                &actor,
+                &req.action_id,
+                Some(&error_code),
+            )
+            .await;
+        return Err(error);
     }
 
-    mutate(
-        server,
-        &req.id,
-        reserved.version,
-        &format!("complete:{}", req.idempotency_key),
-        &actor,
-        AttentionMutation::Resolve {
-            reason: format!("action:{}", req.action_id),
-        },
-    )
-    .await
+    let completed = server
+        .state
+        .attention_repo
+        .complete_action(&req.id, &req.idempotency_key, &actor, &req.action_id, None)
+        .await
+        .map_err(mutation_error)?;
+    Ok(Response::new(item_to_proto(completed)))
 }
 
 pub(crate) async fn attention_follow(

@@ -89,10 +89,15 @@ fn policy_operations(event: &AttentionSourceEvent) -> Vec<AttentionProjectionOp>
             AttentionSeverity::Intervention,
             "Automatic retries exhausted",
         )),
-        "policy_blocked" | "sandbox_denied" => Some((
+        "policy_blocked" => Some((
             "policy_blocked",
             AttentionSeverity::Intervention,
             "Execution blocked by policy",
+        )),
+        "sandbox_denied" => Some((
+            "sandbox_denied",
+            AttentionSeverity::Intervention,
+            "Execution denied by sandbox",
         )),
         "budget_threshold" | "budget_exhausted" => Some((
             "budget_threshold",
@@ -108,6 +113,11 @@ fn policy_operations(event: &AttentionSourceEvent) -> Vec<AttentionProjectionOp>
             "task_failed",
             AttentionSeverity::Intervention,
             "Task failed",
+        )),
+        "degenerate_loop" | "degenerate_cycle" => Some((
+            "degenerate_loop",
+            AttentionSeverity::Intervention,
+            "Workflow loop is not making progress",
         )),
         "step_failed" => Some((
             "step_failed",
