@@ -6,7 +6,7 @@ self_referential_safe: false
 
 **Module**: orchestrator
 **Scope**: Validate secure TCP daemon bootstrap, host-user client config generation, role-based RPC authorization, insecure TCP escape hatch, and control-plane audit persistence
-**Scenarios**: 9
+**Scenarios**: 5
 **Priority**: Critical
 
 ---
@@ -338,7 +338,7 @@ Verify UDS mode works without client certificates, mandatory mTLS rejects unauth
 
 ---
 
-## Scenario 6: UDS Trust Boundary Hardening And Audit Enrichment
+## Appendix A: UDS Trust Boundary Hardening Procedure
 
 ### Preconditions
 - Release binaries built
@@ -427,7 +427,7 @@ LIMIT 5;
 
 ---
 
-## Scenario 7: UDS Default Operator Role Without Policy File
+## Appendix B: UDS Default Operator Procedure
 
 ### Preconditions
 - Release binaries built
@@ -492,7 +492,7 @@ LIMIT 5;
 
 ---
 
-## Scenario 8: `--uds-max-role admin` Flag Restores Full Admin Access
+## Appendix C: Explicit Admin Role Procedure
 
 ### Preconditions
 - Release binaries built
@@ -548,7 +548,7 @@ LIMIT 1;
 
 ---
 
-## Scenario 9: Policy File Takes Precedence Over `--uds-max-role` Flag
+## Appendix D: Policy Precedence Procedure
 
 ### Preconditions
 - Release binaries built
@@ -626,7 +626,5 @@ LIMIT 5;
 | 3 | Additional Operator Client Is Denied On Admin RPC | ✅ | 2026-03-12 | Claude | Operator task list allowed; debug denied with "permission denied" |
 | 4 | Insecure TCP Feature Gate And Default Build Rejection | ✅ | 2026-03-12 | Claude | dev-insecure build logs warning; default build rejects flag with exit code 2 |
 | 5 | UDS Fallback, mTLS Enforcement, And Audit Classification | ✅ | 2026-03-12 | Claude | UDS works without TLS; curl rejected at handshake; audit rejection_stage populated correctly |
-| 6 | UDS Trust Boundary Hardening And Audit Enrichment | ✅ | 2026-04-05 | Claude | data_dir WARN + policy INFO confirmed; DbStatus/TaskList allowed, DbVacuum allowed, ConfigDebug denied under operator cap; audit shows role=operator + peer_exe for all 4 RPCs |
-| 7 | UDS Default Operator Role Without Policy File | | | | |
-| 8 | `--uds-max-role admin` Flag Restores Full Admin Access | | | | |
-| 9 | Policy File Takes Precedence Over `--uds-max-role` Flag | | | | |
+
+UDS-specific scenarios are indexed and checked in `docs/qa/orchestrator/58b-control-plane-uds-policy.md`; the appendices above retain their detailed command procedures.

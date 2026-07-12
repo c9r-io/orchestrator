@@ -51,19 +51,14 @@ Verifies the Linux `linux_native` sandbox backend correctly implements filesyste
 
 **Expected:** Preflight validation dynamically checks for required binaries instead of blanket rejection.
 
-## Scenario 6: workspace_root field propagation
+## Checklist
 
-**Steps:**
-1. `rg "workspace_root" crates/orchestrator-runner/src/runner/profile.rs` confirms the field exists in `ResolvedExecutionProfile`
-2. Verify `from_config()` stores `Some(workspace_root.to_path_buf())`
-3. Verify `host()` sets `workspace_root: None`
+| # | Scenario | Status | Test Date | Tester | Notes |
+|---|----------|--------|-----------|--------|-------|
+| 1 | Inherit generates no isolation script | ☐ | | | |
+| 2 | workspace_readonly generates read-only mount script | ☐ | | | |
+| 3 | workspace_rw_scoped re-binds writable paths | ☐ | | | |
+| 4 | workspace_rw_scoped works without writable paths | ☐ | | | |
+| 5 | Preflight checks unshare and mount | ☐ | | | |
 
-**Expected:** workspace_root is correctly propagated for sandbox use.
-
-## Scenario 7: Mount namespace composes inside network namespace
-
-**Steps:**
-1. `rg "unshare -m" crates/orchestrator-runner/src/runner/sandbox_linux.rs` confirms the pattern:
-   `ip netns exec "$NETNS" unshare -m -- /bin/bash -c ...`
-
-**Expected:** Mount namespace is created inside the network namespace, ensuring clean composition and automatic cleanup.
+Field propagation and namespace composition continue in `docs/qa/orchestrator/139b-linux-sandbox-filesystem-isolation-integration.md`.

@@ -112,12 +112,14 @@ rg 'artifacts_dir.*is_empty' crates/orchestrator-scheduler/src/scheduler/runtime
 
 **Expected result:** Tasks created before this migration (empty `artifacts_dir` column) fall back to `{workspace_root}/.orchestrator/artifacts`.
 
-## Scenario 6: Unit tests pass
+## Checklist
 
-**Steps:**
+| # | Scenario | Status | Test Date | Tester | Notes |
+|---|----------|--------|-----------|--------|-------|
+| 1 | Default artifacts_dir | ☐ | | | |
+| 2 | Custom artifacts_dir in workspace spec | ☐ | | | |
+| 3 | Spill functions use artifacts_dir | ☐ | | | |
+| 4 | DB persistence of artifacts_dir | ☐ | | | |
+| 5 | Backward compatibility — empty DB column fallback | ☐ | | | |
 
-```bash
-cargo test --workspace -q 2>&1 | grep "^test result"
-```
-
-**Expected result:** All test suites pass with 0 failures.
+Workspace-level regression coverage moved to `docs/qa/orchestrator/100b-configurable-spill-path-regression.md`.

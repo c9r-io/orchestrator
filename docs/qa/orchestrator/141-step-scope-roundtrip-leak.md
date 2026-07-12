@@ -8,7 +8,7 @@ self_referential_safe: true
 **Scope**: `TaskExecutionStep::resolved_scope` capability fallback;
 `workflow_step_config_to_spec` scope serialization;
 `task_ops::resolve_task_targets` `QaDirectoryScan` diagnostics
-**Scenarios**: 6
+**Scenarios**: 5
 **Priority**: High
 
 ---
@@ -193,44 +193,6 @@ cargo test -p agent-orchestrator --lib \
 
 ---
 
-## Scenario 6: QaDirectoryScan emits a diagnostic event
-
-### Preconditions
-- `TestState` with a workflow whose only step is a real `qa` step (Item
-  scope by convention)
-- One QA file seeded under `docs/qa/scenario.md`
-- No `target_files` in payload (so `QaDirectoryScan` is selected)
-
-### Goal
-Verify that when the resolver legitimately picks `QaDirectoryScan`, the
-task creator emits a `qa_directory_scan_triggered` event whose payload
-identifies the trigger step id and item count.  Below the oversize
-threshold (50), the `qa_directory_scan_oversize` warning must NOT be
-emitted.
-
-### Steps
-1. Register the qa-only workflow
-2. Seed a single QA file
-3. Call `create_task_impl`
-4. Query the `events` table for `event_type='qa_directory_scan_triggered'`
-   on the new task id
-5. Parse the JSON payload
-6. Query for `event_type='qa_directory_scan_oversize'` (must be 0 rows)
-
-### Expected
-- Exactly one `qa_directory_scan_triggered` row exists
-- Payload contains `trigger_step_id="qa"`, `materialized_count=1`,
-  `level="info"`
-- Zero `qa_directory_scan_oversize` rows (count is below the threshold)
-
-### Verification
-```bash
-cargo test -p agent-orchestrator --lib \
-    -- task_ops::tests::create_task_emits_qa_directory_scan_event_when_triggered
-```
-
----
-
 ## Workspace-level verification
 
 After all six scenarios pass individually, the full workspace test suite
@@ -243,6 +205,18 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 Both commands have been verified to pass with the FR-094 changes
 applied.
+
+## Checklist
+
+| # | Scenario | Status | Test Date | Tester | Notes |
+|---|----------|--------|-----------|--------|-------|
+| 1 | Custom id does not leak capability scope | ☐ | | | |
+| 2 | Known SDLC id uses convention scope | ☐ | | | |
+| 3 | Explicit scope survives config/spec round trip | ☐ | | | |
+| 4 | Explicit-task benchmark step creates one item | ☐ | | | |
+| 5 | Round-tripped workflow still creates one item | ☐ | | | |
+
+QaDirectoryScan diagnostics are verified in `docs/qa/orchestrator/141b-step-scope-directory-scan-diagnostics.md`.
 
 ## Related
 

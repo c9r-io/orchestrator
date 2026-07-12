@@ -63,42 +63,14 @@ rg 'readable_paths' crates/orchestrator-runner/src/runner/sandbox_macos.rs
 
 **Expected result:** macOS unconditionally allows `(allow file-read*)`, so `readable_paths` is intentionally a no-op there. The code includes a comment explaining this and a `let _ = &execution_profile.readable_paths` to suppress unused warnings.
 
-## Scenario 6: ORCHESTRATOR_READABLE_PATHS env var injected
+## Checklist
 
-**Steps:**
+| # | Scenario | Status | Test Date | Tester | Notes |
+|---|----------|--------|-----------|--------|-------|
+| 1 | Config field accepts readable_paths | ☐ | | | |
+| 2 | Path expansion utility | ☐ | | | |
+| 3 | Profile resolution applies expansion + workspace join | ☐ | | | |
+| 4 | Linux sandbox bind-mounts readable_paths read-only | ☐ | | | |
+| 5 | macOS Seatbelt profile is unchanged for read access | ☐ | | | |
 
-```bash
-rg 'ORCHESTRATOR_READABLE_PATHS' crates/orchestrator-scheduler/src/scheduler/phase_runner/setup.rs
-```
-
-**Expected result:** `setup.rs` inserts `ORCHESTRATOR_READABLE_PATHS` (colon-joined) into `resolved_extra_env` when `execution_profile.readable_paths` is non-empty.
-
-## Scenario 7: Validation rejects readable_paths on host profile
-
-**Steps:**
-
-```bash
-cargo test -p agent-orchestrator exec_profile_rejects_host_mode_with_readable_paths 2>&1 | tail -5
-```
-
-**Expected result:** Test passes — host-mode profile with `readable_paths` is rejected with "sandbox-only fields" error.
-
-## Scenario 8: Full unit test suite
-
-**Steps:**
-
-```bash
-cargo test --workspace 2>&1 | grep "test result:" | awk '{p+=$4; f+=$6} END {print "Passed:", p, "Failed:", f}'
-```
-
-**Expected result:** All workspace tests pass; 0 failures.
-
-## Scenario 9: Clippy clean
-
-**Steps:**
-
-```bash
-cargo clippy --workspace --all-targets -- -D warnings 2>&1 | tail -3
-```
-
-**Expected result:** `Finished dev profile` with no error/warning output.
+Environment injection, validation, and workspace gates continue in `docs/qa/orchestrator/101b-sandbox-readable-paths-regression.md`.

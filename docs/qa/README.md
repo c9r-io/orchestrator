@@ -152,6 +152,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/56-sandbox-resource-network-enforcement.md` | 3 | Sandbox resource/network enforcement: open-files limit event, network deny event, unsupported allowlist gating |
 | orchestrator | `docs/qa/orchestrator/57-sandbox-resource-limits-extended.md` | 3 | Sandbox resource limits for CPU, memory, processes |
 | orchestrator | `docs/qa/orchestrator/58-control-plane-security.md` | 5 | Secure TCP control plane: mTLS bootstrap, host-user client config, role-based RPC authorization, audit persistence |
+| orchestrator | `docs/qa/orchestrator/58b-control-plane-uds-policy.md` | 4 | UDS role boundary, flag/policy precedence, and audit enrichment |
 | orchestrator | `docs/qa/orchestrator/59-dynamic-dag-mainline-execution.md` | 5 | FR-004: explicit `dynamic_dag` mode, CEL trigger validation, graph materialization, persisted graph debug bundles, and DAG debug view |
 | orchestrator | `docs/qa/orchestrator/60-daemon-lifecycle-runtime-metrics.md` | 4 | FR-005: daemon runtime snapshot, live worker/task counters, graceful drain, and restart-state reset |
 | orchestrator | `docs/qa/orchestrator/61-chain-steps-execution.md` | 4 | FR-008: chain_steps runtime contract, runtime plan preservation, parent/child failure ordering, and trace compatibility |
@@ -250,9 +251,17 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/135-secretstore-key-emergency-recovery.md` | 8 | FR-089: SecretStore key emergency bootstrap recovery |
 | orchestrator | `docs/qa/orchestrator/136-crd-plugin-system.md` | 5 | CRD plugin system: definitions, validation, interceptor/transformer/cron execution with PluginExecutionContext |
 | orchestrator | `docs/qa/orchestrator/137-plugin-policy-governance.md` | 5 | FR-087-SEC: plugin policy governance — allowlist, deny, audit, hooks, execution_profile, env_deny_prefixes, RBAC |
-| orchestrator | `docs/qa/orchestrator/138-lightweight-step-run.md` | - | Lightweight step-run execution |
+| orchestrator | `docs/qa/orchestrator/100-configurable-spill-path.md` | 5 | FR-092 workspace-configured pipeline artifact spill path |
+| orchestrator | `docs/qa/orchestrator/100b-configurable-spill-path-regression.md` | 1 | FR-092 workspace regression gate |
+| orchestrator | `docs/qa/orchestrator/101-sandbox-readable-paths.md` | 5 | FR-093 sandbox read-only access outside the workspace |
+| orchestrator | `docs/qa/orchestrator/101b-sandbox-readable-paths-regression.md` | 4 | FR-093 environment, validation, test, and clippy gates |
+| orchestrator | `docs/qa/orchestrator/138-lightweight-step-run.md` | 5 | Lightweight step filtering and initial-variable persistence |
+| orchestrator | `docs/qa/orchestrator/138b-lightweight-step-run-direct-assembly.md` | 5 | Lightweight synchronous run and direct RunStep assembly |
 | orchestrator | `docs/qa/orchestrator/139-linux-sandbox-filesystem-isolation.md` | 5 | FR-091: Linux sandbox filesystem isolation — mount namespaces, workspace_readonly, workspace_rw_scoped |
+| orchestrator | `docs/qa/orchestrator/139b-linux-sandbox-filesystem-isolation-integration.md` | 2 | FR-091 profile propagation and namespace composition |
 | orchestrator | `docs/qa/orchestrator/140-plugin-sandbox-isolation.md` | 5 | Plugin sandbox isolation — TOCTOU defense, profile precedence, env sanitization, audit enhancement |
+| orchestrator | `docs/qa/orchestrator/141-step-scope-roundtrip-leak.md` | 5 | FR-094 step scope preservation and task-item explosion regression |
+| orchestrator | `docs/qa/orchestrator/141b-step-scope-directory-scan-diagnostics.md` | 1 | FR-094 QaDirectoryScan diagnostic events |
 | orchestrator | `docs/qa/orchestrator/142-process-timeline-read-model.md` | 5 | FR-095 semantic process timeline, evidence, pagination, live GUI reconciliation |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
