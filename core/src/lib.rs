@@ -29,6 +29,8 @@ pub mod anomaly;
 /// (`task_repository`, `persistence/repository`, `session_store`) build on top
 /// of this layer.
 pub mod async_database;
+/// Persistent human-attention queue models and repository operations.
+pub mod attention;
 /// K8s-style declarative resource types shared by the CLI surface.
 pub use orchestrator_config::cli_types;
 pub mod collab;

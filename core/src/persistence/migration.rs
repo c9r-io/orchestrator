@@ -228,6 +228,11 @@ pub fn registered_migrations() -> Vec<Migration> {
             name: "m0026_add_artifacts_dir",
             up: crate::persistence::migration_steps::m0026_add_artifacts_dir,
         },
+        Migration {
+            version: 27,
+            name: "m0027_attention_inbox",
+            up: crate::persistence::migration_steps::m0027_attention_inbox,
+        },
     ]
 }
 

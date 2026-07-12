@@ -138,6 +138,9 @@ fn build_managed_state(
     let task_repo = Arc::new(crate::task_repository::AsyncSqliteTaskRepository::new(
         async_database.clone(),
     ));
+    let attention_repo = Arc::new(crate::attention::AsyncAttentionRepository::new(
+        async_database.clone(),
+    ));
     let store_manager = crate::store::StoreManager::new(async_database.clone(), data_dir.clone());
 
     let plugin_policy = orchestrator_config::plugin_policy::load_plugin_policy(&data_dir)
@@ -167,6 +170,7 @@ fn build_managed_state(
             db_writer,
             session_store,
             task_repo,
+            attention_repo,
             store_manager,
             plugin_policy,
             daemon_runtime: crate::runtime::DaemonRuntimeState::new(),

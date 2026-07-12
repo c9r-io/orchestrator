@@ -88,6 +88,8 @@ pub struct InnerState {
     pub session_store: Arc<crate::session_store::AsyncSessionStore>,
     /// Async task repository wrapper.
     pub task_repo: Arc<crate::task_repository::AsyncSqliteTaskRepository>,
+    /// Persistent cross-task attention queue repository.
+    pub attention_repo: Arc<crate::attention::AsyncAttentionRepository>,
     /// Workflow store manager.
     pub store_manager: crate::store::StoreManager,
     /// Plugin security policy (loaded from `{data_dir}/plugin-policy.yaml`).

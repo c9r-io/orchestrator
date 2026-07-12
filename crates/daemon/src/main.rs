@@ -409,6 +409,29 @@ fn main() -> Result<()> {
             });
         }
 
+        // Project durable task events into the cross-task attention queue.
+        {
+            let attention_state = inner.clone();
+            let mut attention_shutdown = shutdown_rx.clone();
+            tokio::spawn(async move {
+                let mut interval =
+                    tokio::time::interval(std::time::Duration::from_millis(750));
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                loop {
+                    tokio::select! {
+                        _ = interval.tick() => {
+                            if let Err(error) = orchestrator_scheduler::service::attention::reconcile_attention_once(&attention_state).await {
+                                error!(error = %error, "attention inbox reconciliation failed");
+                            }
+                        }
+                        _ = attention_shutdown.changed() => {
+                            break;
+                        }
+                    }
+                }
+            });
+        }
+
         // Spawn event cleanup sweep (TTL-based)
         if args.event_retention_days > 0 {
             let cleanup_state = inner.clone();

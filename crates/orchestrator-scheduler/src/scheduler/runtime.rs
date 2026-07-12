@@ -767,6 +767,7 @@ mod tests {
             db_writer: base.db_writer.clone(),
             session_store: base.session_store.clone(),
             task_repo: base.task_repo.clone(),
+            attention_repo: base.attention_repo.clone(),
             store_manager: agent_orchestrator::store::StoreManager::new(
                 base.async_database.clone(),
                 base.data_dir.clone(),

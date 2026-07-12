@@ -307,6 +307,9 @@ impl TestState {
         let task_repo = Arc::new(crate::task_repository::AsyncSqliteTaskRepository::new(
             async_database.clone(),
         ));
+        let attention_repo = Arc::new(crate::attention::AsyncAttentionRepository::new(
+            async_database.clone(),
+        ));
         let store_manager =
             crate::store::StoreManager::new(async_database.clone(), self.temp_root.clone());
         let state = Arc::new(InnerState {
@@ -327,6 +330,7 @@ impl TestState {
             db_writer: writer,
             session_store,
             task_repo,
+            attention_repo,
             store_manager,
             plugin_policy: orchestrator_config::plugin_policy::PluginPolicy {
                 mode: orchestrator_config::plugin_policy::PluginPolicyMode::Audit,

@@ -860,3 +860,90 @@ pub(crate) fn m0026_add_artifacts_dir(conn: &Connection) -> Result<()> {
     )?;
     Ok(())
 }
+
+pub(crate) fn m0027_attention_inbox(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS attention_items (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            task_id TEXT NOT NULL,
+            task_item_id TEXT,
+            step_id TEXT,
+            session_id TEXT,
+            kind TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            state TEXT NOT NULL,
+            title TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            requested_decision_json TEXT,
+            actions_json TEXT NOT NULL DEFAULT '[]',
+            dedupe_key TEXT NOT NULL,
+            assignee TEXT,
+            source_event_id TEXT NOT NULL,
+            occurrence_count INTEGER NOT NULL DEFAULT 1,
+            reopen_count INTEGER NOT NULL DEFAULT 0,
+            version INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            last_occurred_at TEXT NOT NULL,
+            snoozed_until TEXT,
+            sla_deadline TEXT,
+            resolved_at TEXT,
+            resolution_json TEXT
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_attention_open_dedupe
+            ON attention_items(project_id, dedupe_key)
+            WHERE state IN ('open', 'claimed', 'snoozed');
+        CREATE INDEX IF NOT EXISTS idx_attention_active_order
+            ON attention_items(state, severity, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_attention_project_state
+            ON attention_items(project_id, state, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_attention_task
+            ON attention_items(task_id, updated_at DESC);
+
+        CREATE TABLE IF NOT EXISTS attention_actions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            attention_item_id TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            mutation_kind TEXT NOT NULL,
+            action_id TEXT,
+            idempotency_key TEXT NOT NULL,
+            request_hash TEXT NOT NULL,
+            target_version INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            request_json TEXT NOT NULL DEFAULT '{}',
+            result_json TEXT,
+            error_code TEXT,
+            created_at TEXT NOT NULL,
+            completed_at TEXT,
+            UNIQUE(attention_item_id, idempotency_key),
+            FOREIGN KEY(attention_item_id) REFERENCES attention_items(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_attention_actions_item_created
+            ON attention_actions(attention_item_id, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS attention_projector_state (
+            projector TEXT PRIMARY KEY,
+            last_event_id INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL
+        );
+        INSERT OR IGNORE INTO attention_projector_state(projector, last_event_id, updated_at)
+            VALUES ('builtin', 0, datetime('now'));
+
+        CREATE TABLE IF NOT EXISTS attention_changes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            attention_item_id TEXT NOT NULL,
+            change_kind TEXT NOT NULL,
+            item_version INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(attention_item_id) REFERENCES attention_items(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_attention_changes_id
+            ON attention_changes(id);
+        "#,
+    )
+    .context("m0027_attention_inbox")?;
+    Ok(())
+}
