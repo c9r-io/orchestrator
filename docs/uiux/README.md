@@ -31,7 +31,7 @@ PORTAL_BASE_URL="http://localhost:3000"   # If there is a Web UI
 |------|------|--------|
 | `docs/uiux/04-animations.md` | Duration/easing, reduced motion, performance | 5 |
 | `docs/uiux/05-responsive-layout.md` | Breakpoints, touch targets, layout stability | 5 |
-| `docs/uiux/06-navigation-ia.md` | Navigation consistency, deep links, back behavior, page titles | 5 |
+| `docs/uiux/06-navigation-ia.md` | Navigation consistency, Attention default entry, timeline deep links, back behavior, page titles | 5 |
 
 ### Accessibility
 | Doc | Description | Scenarios |

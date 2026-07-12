@@ -117,7 +117,7 @@ Verify users discover the timeline through normal navigation and can still reach
 
 ### Steps
 
-1. Open "进度观察" and select a task.
+1. From "Attention Inbox", click "查看进程时间线" on an item; if the Inbox is empty, open "进度观察" and select a task.
 2. Confirm "进程时间线" is the selected default tab and entries are visible.
 3. Select "实时日志", click "追踪", and confirm log following still works.
 4. Select "专家" and confirm expert panels remain accessible.
@@ -126,7 +126,7 @@ Verify users discover the timeline through normal navigation and can still reach
 
 ### Expected
 
-- The visible task-detail tab is the normal entry; no direct route or hidden expert action is required.
+- Attention deep links and the visible task-detail tab are normal entries; no direct route or hidden expert action is required.
 - `upsert` deltas merge by stable ID, and `reset_required` reloads the snapshot.
 - Logs and structured trace remain available as separate diagnostic views.
 

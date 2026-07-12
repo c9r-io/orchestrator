@@ -29,13 +29,15 @@ Verify visiting `{route}` directly loads correctly (or redirects to login/403) a
 Verify sidebar/top-nav active state is accurate so users do not get lost.
 
 ### Steps
-1. Visit 5 different navigation pages.
-2. Confirm the corresponding navigation item is highlighted.
-3. For nested routes, verify the parent highlighting strategy.
+1. Launch the Orchestrator desktop GUI and confirm "Attention Inbox" is the active default tab.
+2. Visit "许愿池", "进度观察", and a task timeline deep link from an Attention card.
+3. Confirm the corresponding navigation item is highlighted and no second item appears active.
+4. Verify `Cmd+1`, `Cmd+2`, and `Cmd+3` activate Attention, wishes, and progress respectively.
 
 ### Expected
 - Active styling is clear and matches the design system (color/background/indicator).
 - Avoid multiple items being active at the same time.
+- Attention counters match the destination card set, and the timeline deep link selects "进度观察" plus the target task.
 
 ---
 
@@ -84,4 +86,3 @@ Verify users have a clear exit path on 404/empty states and do not get stuck.
 ### Expected
 - 404 page offers navigation back to home and/or back to the previous page.
 - Empty states provide next-step actions (create/import/refresh) without competing with primary action semantics.
-
