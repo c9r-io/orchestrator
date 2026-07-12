@@ -34,6 +34,13 @@ service OrchestratorService {
   rpc AttentionExecuteAction(AttentionExecuteActionRequest) returns (AttentionItem);
   rpc AttentionFollow(AttentionFollowRequest) returns (stream AttentionDelta);
 
+  // Deterministic handoff and two-stage safe logical resume
+  rpc HandoffGenerate(HandoffGenerateRequest) returns (HandoffSnapshotResponse);
+  rpc HandoffGet(HandoffGetRequest) returns (HandoffSnapshotResponse);
+  rpc ResumeBoundaryList(ResumeBoundaryListRequest) returns (ResumeBoundaryListResponse);
+  rpc ResumePlan(ResumePlanRequest) returns (ResumePlanResponse);
+  rpc ResumeExecute(ResumeExecuteRequest) returns (ResumeExecuteResponse);
+
   // Resource management
   rpc Apply(ApplyRequest)             returns (ApplyResponse);
   rpc Get(GetRequest)                 returns (GetResponse);
@@ -386,6 +393,79 @@ message AttentionDelta {
   string kind = 1;
   int64 change_id = 2;
   optional AttentionItem item = 3;
+}
+
+message HandoffGenerateRequest {
+  string task_id = 1;
+  optional int64 source_event_cursor = 2;
+}
+
+message HandoffGetRequest { string id = 1; }
+
+message HandoffSnapshotResponse {
+  string id = 1;
+  string task_id = 2;
+  int64 source_event_cursor = 3;
+  int64 projection_version = 4;
+  string briefing_json = 5;
+  string content_hash = 6;
+  string state_version = 7;
+  string generated_by = 8;
+  string created_at = 9;
+}
+
+message ResumeBoundaryListRequest { string task_id = 1; }
+
+message ResumeBoundary {
+  string id = 1;
+  string task_id = 2;
+  int64 cycle = 3;
+  optional string step_id = 4;
+  optional string task_item_id = 5;
+  optional string command_run_id = 6;
+  bool provider_session_available = 7;
+  optional string checkpoint_id = 8;
+  string side_effect_class = 9;
+  bool replay_safe = 10;
+  string reason = 11;
+  string state_version = 12;
+}
+
+message ResumeBoundaryListResponse { repeated ResumeBoundary boundaries = 1; }
+
+message ResumePlanRequest {
+  string task_id = 1;
+  string boundary_id = 2;
+  string mode = 3;
+  optional string attention_item_id = 4;
+}
+
+message ResumePlanResponse {
+  string id = 1;
+  string task_id = 2;
+  ResumeBoundary boundary = 3;
+  string mode = 4;
+  string expected_state_version = 5;
+  string consequence_json = 6;
+  bool elevated_confirmation_required = 7;
+  string expires_at = 8;
+  string status = 9;
+}
+
+message ResumeExecuteRequest {
+  string plan_id = 1;
+  string expected_state_version = 2;
+  string operator_reason = 3;
+  string idempotency_key = 4;
+  bool elevated_confirmation = 5;
+}
+
+message ResumeExecuteResponse {
+  string execution_id = 1;
+  string plan_id = 2;
+  bool accepted = 3;
+  string status = 4;
+  optional string child_task_id = 5;
 }
 
 message TaskGraphDebugBundle {

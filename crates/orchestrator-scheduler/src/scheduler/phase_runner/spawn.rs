@@ -1,6 +1,6 @@
 use agent_orchestrator::config::StepScope;
 use agent_orchestrator::events::insert_event;
-use agent_orchestrator::runner::spawn_with_runner_and_capture;
+use agent_orchestrator::runner::spawn_with_runner_and_capture_session;
 use agent_orchestrator::session_store;
 use agent_orchestrator::state::InnerState;
 use anyhow::{Context, Result};
@@ -89,7 +89,8 @@ pub(super) async fn spawn_phase_process(
     };
     // For stdin delivery in TTY mode, we already warned and fell back to arg
     let effective_pipe_stdin = req_pipe_stdin && !tty;
-    let captured = spawn_with_runner_and_capture(
+    let provider_session_token = resolve_provider_session_token(state, task_id).await?;
+    let captured = spawn_with_runner_and_capture_session(
         &setup.runner,
         &command_to_run,
         workspace_root,
@@ -99,6 +100,7 @@ pub(super) async fn spawn_phase_process(
         &setup.resolved_extra_env,
         effective_pipe_stdin,
         &setup.execution_profile,
+        provider_session_token.as_deref(),
     )?;
     let mut child = captured.child;
     let output_capture = Some(captured.output_capture);
@@ -194,6 +196,56 @@ pub(super) async fn spawn_phase_process(
         output_capture,
         tty_early_return: None,
     })
+}
+
+async fn resolve_provider_session_token(
+    state: &InnerState,
+    task_id: &str,
+) -> Result<Option<String>> {
+    let task_id = task_id.to_owned();
+    state
+        .async_database
+        .reader()
+        .call(move |conn| {
+            use rusqlite::OptionalExtension as _;
+            let reference: Option<String> = conn
+                .query_row(
+                    "SELECT resume_token FROM tasks WHERE id=?1",
+                    [&task_id],
+                    |row| row.get(0),
+                )
+                .optional()?
+                .flatten();
+            let Some(reference) = reference else {
+                return Ok(None);
+            };
+            let Some(run_id) = reference.strip_prefix("command-run:") else {
+                return Err(tokio_rusqlite::Error::Other(
+                    anyhow::anyhow!(
+                        "unsupported provider session reference; restart from the logical boundary in a new session"
+                    )
+                    .into(),
+                ));
+            };
+            let token: Option<String> = conn
+                .query_row(
+                    "SELECT session_id FROM command_runs WHERE id=?1",
+                    [run_id],
+                    |row| row.get(0),
+                )
+                .optional()?
+                .flatten();
+            token.map(Some).ok_or_else(|| {
+                tokio_rusqlite::Error::Other(
+                    anyhow::anyhow!(
+                        "provider session is no longer available; restart from the logical boundary in a new session"
+                    )
+                    .into(),
+                )
+            })
+        })
+        .await
+        .map_err(agent_orchestrator::async_database::flatten_err)
 }
 
 /// Create a throwaway file handle used as a placeholder after the real file is moved out.

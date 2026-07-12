@@ -125,6 +125,22 @@ impl ResumeMode {
             Self::ResumeProviderSession => "resume_provider_session",
         }
     }
+
+    /// Parses the stable API/storage label.
+    pub fn parse(value: &str) -> Result<Self> {
+        match value {
+            "continue_task" => Ok(Self::ContinueTask),
+            "retry_item" => Ok(Self::RetryItem),
+            "restart_from_boundary" => Ok(Self::RestartFromBoundary),
+            "resume_provider_session" => Ok(Self::ResumeProviderSession),
+            _ => bail!("unsupported resume mode: {value}"),
+        }
+    }
+
+    /// Returns the stable API/storage label.
+    pub fn label(self) -> &'static str {
+        self.as_str()
+    }
 }
 
 /// Persisted consequence preview produced before mutating execution.
@@ -239,6 +255,16 @@ impl AsyncHandoffRepository {
                 )
                 .map_err(other)
             })
+            .await
+            .map_err(flatten_err)
+    }
+
+    /// Returns one persisted resume plan while its referenced boundary is still available.
+    pub async fn get_plan(&self, id: &str) -> Result<Option<ResumePlan>> {
+        let id = id.to_owned();
+        self.db
+            .reader()
+            .call(move |conn| read_plan(conn, &id).map_err(other))
             .await
             .map_err(flatten_err)
     }
@@ -872,6 +898,49 @@ fn reserve_execution(
         should_execute: true,
         status: "executing".to_string(),
     })
+}
+
+fn read_plan(conn: &Connection, id: &str) -> Result<Option<ResumePlan>> {
+    let row = conn
+        .query_row(
+            "SELECT task_id, boundary_id, mode, expected_state_version, consequence_json,
+                    elevated_confirmation_required, expires_at, status
+             FROM resume_plans WHERE id=?1",
+            [id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, i64>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                ))
+            },
+        )
+        .optional()?;
+    let Some((task_id, boundary_id, mode, state_version, consequence, elevated, expires, status)) =
+        row
+    else {
+        return Ok(None);
+    };
+    let boundary = list_boundaries(conn, &task_id)?
+        .into_iter()
+        .find(|boundary| boundary.id == boundary_id)
+        .ok_or_else(|| anyhow!("resume plan boundary is no longer available"))?;
+    Ok(Some(ResumePlan {
+        id: id.to_string(),
+        task_id,
+        boundary,
+        mode: ResumeMode::parse(&mode)?,
+        expected_state_version: state_version,
+        consequence: serde_json::from_str(&consequence)?,
+        elevated_confirmation_required: elevated != 0,
+        expires_at: expires,
+        status,
+    }))
 }
 
 fn side_effect_label(value: SideEffectClass) -> &'static str {

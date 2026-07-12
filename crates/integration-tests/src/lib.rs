@@ -249,6 +249,51 @@ impl OrchestratorService for TestOrchestratorServer {
         ))
     }
 
+    async fn handoff_generate(
+        &self,
+        _request: Request<HandoffGenerateRequest>,
+    ) -> Result<Response<HandoffSnapshotResponse>, Status> {
+        Err(Status::unimplemented(
+            "handoff integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn handoff_get(
+        &self,
+        _request: Request<HandoffGetRequest>,
+    ) -> Result<Response<HandoffSnapshotResponse>, Status> {
+        Err(Status::unimplemented(
+            "handoff integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn resume_boundary_list(
+        &self,
+        _request: Request<ResumeBoundaryListRequest>,
+    ) -> Result<Response<ResumeBoundaryListResponse>, Status> {
+        Err(Status::unimplemented(
+            "resume integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn resume_plan(
+        &self,
+        _request: Request<ResumePlanRequest>,
+    ) -> Result<Response<ResumePlanResponse>, Status> {
+        Err(Status::unimplemented(
+            "resume integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn resume_execute(
+        &self,
+        _request: Request<ResumeExecuteRequest>,
+    ) -> Result<Response<ResumeExecuteResponse>, Status> {
+        Err(Status::unimplemented(
+            "resume integration fixture uses the production daemon",
+        ))
+    }
+
     async fn task_create(
         &self,
         request: Request<TaskCreateRequest>,

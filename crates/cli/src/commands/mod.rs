@@ -7,6 +7,7 @@ mod db;
 mod event;
 /// Self-describing CLI guide for AI agents and users.
 pub mod guide;
+mod handoff;
 mod manifest;
 mod qa;
 mod resource;
@@ -44,6 +45,8 @@ pub async fn dispatch(
     match command {
         Commands::Agent(cmd) => agent::dispatch(client, cmd).await,
         Commands::Attention(cmd) => attention::dispatch(client, cmd).await,
+        Commands::Handoff(cmd) => handoff::dispatch_handoff(client, cmd).await,
+        Commands::Resume(cmd) => handoff::dispatch_resume(client, cmd).await,
         Commands::Task(cmd) => task::dispatch(client, cmd).await,
         Commands::Store(cmd) => store::dispatch(client, cmd).await,
         Commands::Secret(cmd) => secret::dispatch(client, cmd).await,

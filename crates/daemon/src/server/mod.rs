@@ -1,5 +1,6 @@
 mod agent;
 mod attention;
+mod handoff;
 mod mapping;
 mod resource;
 mod secret;
@@ -334,6 +335,41 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<AttentionFollowRequest>,
     ) -> Result<Response<Self::AttentionFollowStream>, Status> {
         attention::attention_follow(self, request).await
+    }
+
+    async fn handoff_generate(
+        &self,
+        request: Request<HandoffGenerateRequest>,
+    ) -> Result<Response<HandoffSnapshotResponse>, Status> {
+        handoff::handoff_generate(self, request).await
+    }
+
+    async fn handoff_get(
+        &self,
+        request: Request<HandoffGetRequest>,
+    ) -> Result<Response<HandoffSnapshotResponse>, Status> {
+        handoff::handoff_get(self, request).await
+    }
+
+    async fn resume_boundary_list(
+        &self,
+        request: Request<ResumeBoundaryListRequest>,
+    ) -> Result<Response<ResumeBoundaryListResponse>, Status> {
+        handoff::resume_boundary_list(self, request).await
+    }
+
+    async fn resume_plan(
+        &self,
+        request: Request<ResumePlanRequest>,
+    ) -> Result<Response<ResumePlanResponse>, Status> {
+        handoff::resume_plan(self, request).await
+    }
+
+    async fn resume_execute(
+        &self,
+        request: Request<ResumeExecuteRequest>,
+    ) -> Result<Response<ResumeExecuteResponse>, Status> {
+        handoff::resume_execute(self, request).await
     }
 
     async fn apply(

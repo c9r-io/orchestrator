@@ -178,6 +178,14 @@ pub enum Commands {
     #[command(alias = "attn", subcommand)]
     Attention(AttentionCommands),
 
+    /// Generate and inspect immutable task handoffs
+    #[command(subcommand)]
+    Handoff(HandoffCommands),
+
+    /// Preview and execute safe logical resume operations
+    #[command(subcommand)]
+    Resume(ResumeCommands),
+
     /// Trigger lifecycle operations (suspend, resume, fire)
     #[command(alias = "tg", subcommand)]
     Trigger(TriggerCommands),
@@ -365,6 +373,80 @@ pub enum AttentionCommands {
         project: Option<String>,
         /// Output encoding for each change.
         #[arg(short, long, default_value = "json")]
+        output: OutputFormat,
+    },
+}
+
+/// Immutable task handoff operations.
+#[derive(Subcommand, Debug, Clone)]
+pub enum HandoffCommands {
+    /// Generate an immutable snapshot at the latest or selected event cursor.
+    Generate {
+        /// Source task ID.
+        task_id: String,
+        /// Optional deterministic event cursor.
+        #[arg(long)]
+        cursor: Option<i64>,
+        /// Output encoding.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
+    /// Get a previously generated snapshot.
+    Get {
+        /// Snapshot ID.
+        id: String,
+        /// Output encoding.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
+}
+
+/// Two-stage safe logical resume operations.
+#[derive(Subcommand, Debug, Clone)]
+pub enum ResumeCommands {
+    /// List logical boundaries and their side-effect classifications.
+    Boundaries {
+        /// Source task ID.
+        task_id: String,
+        /// Output encoding.
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+    /// Persist an expiring consequence preview without changing task/workspace state.
+    Plan {
+        /// Source task ID.
+        task_id: String,
+        /// Boundary ID returned by `resume boundaries`.
+        #[arg(long)]
+        boundary: String,
+        /// continue_task, retry_item, restart_from_boundary, or resume_provider_session.
+        #[arg(long)]
+        mode: String,
+        /// Optional Attention Inbox item to correlate.
+        #[arg(long)]
+        attention_item: Option<String>,
+        /// Output encoding.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
+    /// Execute a previously reviewed plan with stale-state protection.
+    Execute {
+        /// Resume plan ID.
+        plan_id: String,
+        /// State version returned by `resume plan`.
+        #[arg(long)]
+        expected_state_version: String,
+        /// Required operator reason recorded in audit evidence.
+        #[arg(long)]
+        reason: String,
+        /// Retry-safe idempotency key.
+        #[arg(long)]
+        idempotency_key: String,
+        /// Explicit confirmation for policy-enabled non-idempotent replay.
+        #[arg(long)]
+        elevated_confirmation: bool,
+        /// Output encoding.
+        #[arg(short, long, default_value = "yaml")]
         output: OutputFormat,
     },
 }

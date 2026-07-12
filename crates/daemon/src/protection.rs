@@ -871,7 +871,10 @@ fn classify_rpc(rpc: &str) -> TrafficClass {
         | "AttentionClaim"
         | "AttentionSnooze"
         | "AttentionResolve"
-        | "AttentionExecuteAction" => TrafficClass::Write,
+        | "AttentionExecuteAction"
+        | "HandoffGenerate"
+        | "ResumePlan"
+        | "ResumeExecute" => TrafficClass::Write,
         _ => TrafficClass::Read,
     }
 }
@@ -908,6 +911,11 @@ fn rpc_from_path(path: &str) -> Option<&'static str> {
             Some("AttentionExecuteAction")
         }
         "/orchestrator.OrchestratorService/AttentionFollow" => Some("AttentionFollow"),
+        "/orchestrator.OrchestratorService/HandoffGenerate" => Some("HandoffGenerate"),
+        "/orchestrator.OrchestratorService/HandoffGet" => Some("HandoffGet"),
+        "/orchestrator.OrchestratorService/ResumeBoundaryList" => Some("ResumeBoundaryList"),
+        "/orchestrator.OrchestratorService/ResumePlan" => Some("ResumePlan"),
+        "/orchestrator.OrchestratorService/ResumeExecute" => Some("ResumeExecute"),
         "/orchestrator.OrchestratorService/Apply" => Some("Apply"),
         "/orchestrator.OrchestratorService/Get" => Some("Get"),
         "/orchestrator.OrchestratorService/Describe" => Some("Describe"),

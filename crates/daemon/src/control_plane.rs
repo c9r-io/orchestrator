@@ -695,6 +695,7 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         "Ping" | "TaskList" | "TaskInfo" | "TaskTimeline" | "TaskLogs" | "TaskFollow"
         | "TaskWatch" | "TaskTimelineFollow" | "Get"
         | "AttentionList" | "AttentionGet" | "AttentionFollow"
+        | "HandoffGet" | "ResumeBoundaryList"
         | "Describe" | "StoreGet" | "StoreList" | "WorkerStatus" | "Check" | "ManifestExport"
         | "DbStatus" | "DbMigrationsList" | "SecretKeyStatus" | "SecretKeyList"
         | "SecretKeyHistory" | "AgentList" | "EventStats" | "TaskEvents" => Role::ReadOnly,
@@ -707,6 +708,7 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         | "TriggerFire" | "AgentCordon" | "AgentUncordon" | "AgentDrain" | "EventCleanup"
         | "DbLogCleanup" | "DbVacuum"
         | "AttentionClaim" | "AttentionSnooze" | "AttentionResolve" | "AttentionExecuteAction"
+        | "HandoffGenerate" | "ResumePlan" | "ResumeExecute"
         // Reclassified from Admin: Shutdown is redundant (CLI sends SIGTERM),
         // TaskDelete aligns with TaskDeleteBulk, Delete aligns with Apply.
         | "Shutdown" | "TaskDelete" | "Delete" => Role::Operator,

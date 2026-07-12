@@ -310,6 +310,9 @@ impl TestState {
         let attention_repo = Arc::new(crate::attention::AsyncAttentionRepository::new(
             async_database.clone(),
         ));
+        let handoff_repo = Arc::new(crate::handoff::AsyncHandoffRepository::new(
+            async_database.clone(),
+        ));
         let store_manager =
             crate::store::StoreManager::new(async_database.clone(), self.temp_root.clone());
         let state = Arc::new(InnerState {
@@ -331,6 +334,7 @@ impl TestState {
             session_store,
             task_repo,
             attention_repo,
+            handoff_repo,
             store_manager,
             plugin_policy: orchestrator_config::plugin_policy::PluginPolicy {
                 mode: orchestrator_config::plugin_policy::PluginPolicyMode::Audit,
