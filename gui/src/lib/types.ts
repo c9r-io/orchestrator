@@ -191,5 +191,62 @@ export interface AttentionDelta {
   item: AttentionItem | null;
 }
 
+export interface HandoffBriefing {
+  goal: string;
+  current_state: Record<string, unknown>;
+  last_success: Record<string, unknown> | null;
+  failure: Record<string, unknown> | null;
+  test_evidence: Record<string, unknown>[];
+  changed_files: string[];
+  constraints: string[];
+  decisions: string[];
+  open_questions: string[];
+  recommendations: string[];
+}
+
+export interface HandoffSnapshot {
+  id: string;
+  task_id: string;
+  source_event_cursor: number;
+  projection_version: number;
+  briefing: HandoffBriefing;
+  content_hash: string;
+  state_version: string;
+  created_at: string;
+}
+
+export interface ResumeBoundary {
+  id: string;
+  task_id: string;
+  cycle: number;
+  step_id: string | null;
+  task_item_id: string | null;
+  provider_session_available: boolean;
+  side_effect_class: string;
+  replay_safe: boolean;
+  reason: string;
+  state_version: string;
+}
+
+export interface ResumePlan {
+  id: string;
+  task_id: string;
+  boundary: ResumeBoundary | null;
+  mode: string;
+  expected_state_version: string;
+  consequence: Record<string, unknown>;
+  elevated_confirmation_required: boolean;
+  expires_at: string;
+  status: string;
+}
+
+export interface ResumeExecution {
+  execution_id: string;
+  plan_id: string;
+  accepted: boolean;
+  status: string;
+  child_task_id: string | null;
+}
+
 /** Wish status derived from task status + workflow context. */
 export type WishStatus = "drafting" | "pending_confirm" | "confirmed" | "failed" | "cancelled";

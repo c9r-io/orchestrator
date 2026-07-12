@@ -9,6 +9,7 @@ import StatusIcon from "../components/StatusIcon";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ExpertPanel from "../components/ExpertPanel";
 import ProcessTimeline from "../components/ProcessTimeline";
+import HandoffPanel from "../components/HandoffPanel";
 import i18n from "../lib/i18n";
 import type { TaskDetail as TaskDetailType, LogLine, WatchSnapshot } from "../lib/types";
 
@@ -140,7 +141,6 @@ export default function TaskDetail({ taskId, onBack }: Props) {
   };
 
   const handlePause = () => doAction("task_pause", { task_id: taskId });
-  const handleResume = () => doAction("task_resume", { task_id: taskId });
   const handleRecover = () => doAction("task_recover", { task_id: taskId });
   const handleDelete = async () => {
     setShowDelete(false);
@@ -196,23 +196,6 @@ export default function TaskDetail({ taskId, onBack }: Props) {
             {isRunning && (
               <button className="btn btn-secondary" onClick={handlePause} aria-label={i18n.taskDetail.pauseLabel}>
                 {i18n.taskDetail.pause}
-              </button>
-            )}
-            {isPaused && (
-              <button className="btn btn-secondary" onClick={handleResume} aria-label={i18n.taskDetail.resumeLabel}>
-                {i18n.taskDetail.resume}
-              </button>
-            )}
-            {isFailed && displayData?.items.some((i) => i.status.toLowerCase() === "failed") && (
-              <button
-                className="btn btn-secondary"
-                onClick={() => {
-                  const failedItem = displayData.items.find((i) => i.status.toLowerCase() === "failed");
-                  if (failedItem) doAction("task_retry", { task_item_id: failedItem.id });
-                }}
-                aria-label={i18n.taskDetail.retryLabel}
-              >
-                {i18n.taskDetail.retry}
               </button>
             )}
             {isFailed && (
@@ -321,6 +304,8 @@ export default function TaskDetail({ taskId, onBack }: Props) {
               </div>
             )}
           </div>
+
+          <HandoffPanel taskId={taskId} canExecute={canAccess("operator") && (isPaused || isFailed)} onExecuted={reload} />
 
           {/* Expert mode panel OR operator timeline/logs */}
           {expert ? (

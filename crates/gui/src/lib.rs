@@ -59,6 +59,11 @@ pub fn run() {
             commands::attention::attention_snooze,
             commands::attention::attention_resolve,
             commands::attention::attention_execute_action,
+            // handoff and safe resume
+            commands::handoff::handoff_generate,
+            commands::handoff::resume_boundary_list,
+            commands::handoff::resume_plan,
+            commands::handoff::resume_execute,
             // streaming
             commands::stream::start_task_follow,
             commands::stream::stop_task_follow,

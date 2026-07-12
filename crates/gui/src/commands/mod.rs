@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod attention;
 pub mod event;
+pub mod handoff;
 pub mod manifest;
 pub mod resource;
 pub mod secret;
