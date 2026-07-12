@@ -225,6 +225,15 @@ pub struct RuntimePolicySpec {
     /// Whether new events are materialized into the Attention Inbox.
     #[serde(default = "default_true")]
     pub attention_inbox_enabled: bool,
+    /// Whether immutable handoff snapshots may be generated.
+    #[serde(default = "default_true")]
+    pub handoff_enabled: bool,
+    /// Whether mutating resume execution is enabled.
+    #[serde(default)]
+    pub mutating_resume_enabled: bool,
+    /// Whether elevated replay of non-idempotent steps can be requested.
+    #[serde(default)]
+    pub elevated_resume_enabled: bool,
 }
 
 /// Runner-policy manifest payload.

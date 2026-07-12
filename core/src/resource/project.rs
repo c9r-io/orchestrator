@@ -216,6 +216,9 @@ mod tests {
                 resume: crate::cli_types::ResumeSpec { auto: false },
                 observability: None,
                 attention_inbox_enabled: true,
+                handoff_enabled: true,
+                mutating_resume_enabled: false,
+                elevated_resume_enabled: false,
             }),
         };
         let err = dispatch_resource(resource).expect_err("operation should fail");

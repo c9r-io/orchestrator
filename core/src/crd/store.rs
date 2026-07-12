@@ -257,6 +257,9 @@ mod tests {
             resume: ResumeConfig { auto: true },
             observability: crate::config::ObservabilityConfig::default(),
             attention_inbox_enabled: true,
+            handoff_enabled: true,
+            mutating_resume_enabled: false,
+            elevated_resume_enabled: false,
         };
         store.put(make_cr("RuntimePolicy", "default", rp.to_cr_spec()));
         let projected: Option<RuntimePolicyProjection> = store.project_singleton();

@@ -13,11 +13,39 @@ pub enum StepScope {
     Item,
 }
 
+/// External side-effect classification used to decide whether a step can be replayed safely.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SideEffectClass {
+    /// The step has no observable side effects.
+    None,
+    /// The step only changes files inside the governed workspace.
+    WorkspaceOnly,
+    /// Repeating the external operation is safe by contract.
+    IdempotentExternal,
+    /// Repeating the external operation may duplicate or corrupt external state.
+    #[default]
+    NonIdempotentExternal,
+}
+
+impl SideEffectClass {
+    /// Returns whether replay is allowed without elevated operator confirmation.
+    pub fn replay_safe(self) -> bool {
+        matches!(
+            self,
+            Self::None | Self::WorkspaceOnly | Self::IdempotentExternal
+        )
+    }
+}
+
 // ── Step Behavior declarations ─────────────────────────────────────
 
 /// Declarative behavior attached to each workflow step.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct StepBehavior {
+    /// Declares the strongest side effect this step may produce. Defaults fail closed.
+    #[serde(default)]
+    pub side_effect_class: SideEffectClass,
     /// Action to apply when the step returns a failure status.
     #[serde(default)]
     pub on_failure: OnFailureAction,

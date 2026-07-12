@@ -127,6 +127,15 @@ pub struct RuntimePolicyProjection {
     #[serde(default = "default_attention_inbox_enabled")]
     /// Whether the daemon materializes new Attention Inbox records.
     pub attention_inbox_enabled: bool,
+    #[serde(default = "default_handoff_enabled")]
+    /// Whether immutable handoff snapshots may be generated.
+    pub handoff_enabled: bool,
+    #[serde(default)]
+    /// Whether resume plans may perform state-changing execution.
+    pub mutating_resume_enabled: bool,
+    #[serde(default)]
+    /// Whether non-idempotent replay may be elevated by an operator.
+    pub elevated_resume_enabled: bool,
 }
 
 impl Default for RuntimePolicyProjection {
@@ -136,11 +145,18 @@ impl Default for RuntimePolicyProjection {
             resume: ResumeConfig::default(),
             observability: crate::config::ObservabilityConfig::default(),
             attention_inbox_enabled: true,
+            handoff_enabled: true,
+            mutating_resume_enabled: false,
+            elevated_resume_enabled: false,
         }
     }
 }
 
 fn default_attention_inbox_enabled() -> bool {
+    true
+}
+
+fn default_handoff_enabled() -> bool {
     true
 }
 
@@ -162,6 +178,9 @@ impl CrdProjectable for RuntimePolicyProjection {
             },
             observability,
             attention_inbox_enabled: rp_spec.attention_inbox_enabled,
+            handoff_enabled: rp_spec.handoff_enabled,
+            mutating_resume_enabled: rp_spec.mutating_resume_enabled,
+            elevated_resume_enabled: rp_spec.elevated_resume_enabled,
         })
     }
 
@@ -173,6 +192,9 @@ impl CrdProjectable for RuntimePolicyProjection {
             },
             observability: serde_json::to_value(&self.observability).ok(),
             attention_inbox_enabled: self.attention_inbox_enabled,
+            handoff_enabled: self.handoff_enabled,
+            mutating_resume_enabled: self.mutating_resume_enabled,
+            elevated_resume_enabled: self.elevated_resume_enabled,
         };
         serde_json::to_value(&spec).unwrap_or_default()
     }
@@ -353,12 +375,17 @@ mod tests {
             resume: ResumeConfig { auto: true },
             observability: crate::config::ObservabilityConfig::default(),
             attention_inbox_enabled: true,
+            handoff_enabled: true,
+            mutating_resume_enabled: true,
+            elevated_resume_enabled: false,
         };
         let spec = config.to_cr_spec();
         let back = RuntimePolicyProjection::from_cr_spec(&spec).expect("should deserialize");
         assert!(back.resume.auto);
         assert_eq!(back.runner.shell, "/bin/bash");
         assert!(back.attention_inbox_enabled);
+        assert!(back.handoff_enabled);
+        assert!(back.mutating_resume_enabled);
         assert!(RuntimePolicyProjection::default().attention_inbox_enabled);
     }
 

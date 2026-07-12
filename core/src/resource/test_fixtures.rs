@@ -246,6 +246,9 @@ pub fn runtime_policy_manifest() -> OrchestratorResource {
             resume: ResumeSpec { auto: false },
             observability: None,
             attention_inbox_enabled: true,
+            handoff_enabled: true,
+            mutating_resume_enabled: false,
+            elevated_resume_enabled: false,
         }),
     }
 }

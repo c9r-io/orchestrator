@@ -71,6 +71,8 @@ pub mod event_cleanup;
 pub mod events;
 /// Backfill helpers for reconstructing missing event streams.
 pub mod events_backfill;
+/// Immutable handoff snapshots and safe logical resume planning.
+pub mod handoff;
 /// Health check models and endpoint support code.
 pub mod health;
 /// JSON extraction helpers used by dynamic orchestration and templating.

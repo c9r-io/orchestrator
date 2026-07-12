@@ -54,6 +54,9 @@ impl Resource for RuntimePolicyResource {
             resume: incoming_resume,
             observability: crate::config::ObservabilityConfig::default(),
             attention_inbox_enabled: self.spec.attention_inbox_enabled,
+            handoff_enabled: self.spec.handoff_enabled,
+            mutating_resume_enabled: self.spec.mutating_resume_enabled,
+            elevated_resume_enabled: self.spec.elevated_resume_enabled,
         };
         let spec_value = rp.to_cr_spec();
         Ok(super::apply_to_store(
@@ -91,6 +94,9 @@ impl Resource for RuntimePolicyResource {
                 },
                 observability: serde_json::to_value(&rp.observability).ok(),
                 attention_inbox_enabled: rp.attention_inbox_enabled,
+                handoff_enabled: rp.handoff_enabled,
+                mutating_resume_enabled: rp.mutating_resume_enabled,
+                elevated_resume_enabled: rp.elevated_resume_enabled,
             },
         })
     }

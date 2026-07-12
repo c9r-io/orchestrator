@@ -125,7 +125,10 @@ fn runtime_policy_crd() -> CustomResourceDefinition {
             "properties": {
                 "runner": { "type": "object" },
                 "resume": { "type": "object" },
-                "attention_inbox_enabled": { "type": "boolean", "default": true }
+                "attention_inbox_enabled": { "type": "boolean", "default": true },
+                "handoff_enabled": { "type": "boolean", "default": true },
+                "mutating_resume_enabled": { "type": "boolean", "default": false },
+                "elevated_resume_enabled": { "type": "boolean", "default": false }
             }
         }))],
         hooks: CrdHooks::default(),
