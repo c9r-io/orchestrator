@@ -28,10 +28,12 @@ const zh = {
     attention: "Attention Inbox",
     wishPool: "许愿池",
     progress: "进度观察",
+    sources: "来源",
     mainNav: "主导航",
     attentionShortcut: "Attention Inbox (Cmd+1)",
     wishPoolShortcut: "许愿池 (Cmd+2)",
     progressShortcut: "进度观察 (Cmd+3)",
+    sourcesShortcut: "来源 (Cmd+4)",
     currentRole: (role: string) => `当前角色: ${role}`,
   },
 
@@ -51,6 +53,17 @@ const zh = {
     occurrences: (count: number) => `发生 ${count} 次`,
     readOnly: "当前为只读角色，不能执行变更操作",
     keyboard: "J/K 选择 · C 认领 · R 确认处理 · Enter 查看时间线",
+  },
+
+  sources: {
+    title: "Sources",
+    subtitle: "外部事件、会话关联与路由状态",
+    empty: "尚未接收到外部来源事件",
+    allStates: "全部路由状态",
+    replay: "重新路由",
+    openProcess: "打开进程",
+    taskBindings: "外部来源关联",
+    noBindings: "当前进程没有外部来源关联",
   },
 
   theme: {

@@ -14,6 +14,7 @@ mod fs_watcher;
 mod lifecycle;
 mod protection;
 mod server;
+mod source_router;
 mod uds_security;
 mod webhook;
 
@@ -455,6 +456,27 @@ fn main() -> Result<()> {
                         _ = attention_shutdown.changed() => {
                             break;
                         }
+                    }
+                }
+            });
+        }
+
+        // Route durably accepted external source events after persistence.
+        {
+            let source_state = inner.clone();
+            let mut source_shutdown = shutdown_rx.clone();
+            tokio::spawn(async move {
+                let mut interval =
+                    tokio::time::interval(std::time::Duration::from_millis(500));
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                loop {
+                    tokio::select! {
+                        _ = interval.tick() => {
+                            if let Err(error) = source_router::reconcile_source_once(&source_state).await {
+                                error!(error = %error, "source routing reconciliation failed");
+                            }
+                        }
+                        _ = source_shutdown.changed() => break,
                     }
                 }
             });

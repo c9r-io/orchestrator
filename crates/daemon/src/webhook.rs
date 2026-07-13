@@ -6,6 +6,11 @@
 //! Accepts `POST /webhook/{trigger_name}` with a JSON body and fires
 //! the named trigger with the payload.
 
+use agent_orchestrator::config_ext::OrchestratorConfigExt as _;
+use agent_orchestrator::source::{
+    AsyncSourceRepository, ConversationRef, ExternalActorRef, IngestSourceEvent,
+    NormalizedSourceEvent, SourceCommand, SourceEventKind,
+};
 use agent_orchestrator::state::InnerState;
 use agent_orchestrator::trigger_engine::{
     TriggerEventPayload, broadcast_task_event, fire_trigger_canonical,
@@ -16,7 +21,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use hmac::{Hmac, KeyInit, Mac};
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tracing::{info, warn};
 
@@ -39,9 +44,198 @@ pub fn router(state: WebhookState) -> Router {
             "/webhook/{project}/{trigger_name}",
             post(handle_webhook_with_project),
         )
+        .route(
+            "/source/slack/{project}/{trigger_name}",
+            post(handle_slack_source),
+        )
         .route("/health", axum::routing::get(health))
         .with_state(state)
         .layer(axum::extract::DefaultBodyLimit::max(1024 * 1024)) // 1MB
+}
+
+const SLACK_BODY_LIMIT: usize = 256 * 1024;
+
+async fn handle_slack_source(
+    State(state): State<WebhookState>,
+    headers: HeaderMap,
+    Path((project, trigger_name)): Path<(String, String)>,
+    body: axum::body::Bytes,
+) -> Response {
+    if body.len() > SLACK_BODY_LIMIT {
+        return (
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "Slack body exceeds 262144 bytes",
+        )
+            .into_response();
+    }
+    let content_type = headers
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("");
+    let is_json = content_type.starts_with("application/json");
+    let is_form = content_type.starts_with("application/x-www-form-urlencoded");
+    if !is_json && !is_form {
+        return (
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "unsupported Slack content type",
+        )
+            .into_response();
+    }
+
+    let active = match agent_orchestrator::config_load::read_active_config(&state.inner) {
+        Ok(active) => active,
+        Err(error) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()).into_response();
+        }
+    };
+    if !active
+        .config
+        .runtime_policy_for_project(&project)
+        .source_ingest_enabled
+    {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "source ingestion is disabled",
+        )
+            .into_response();
+    }
+    let trigger = active
+        .config
+        .projects
+        .get(&project)
+        .and_then(|value| value.triggers.get(&trigger_name));
+    let Some(trigger) = trigger else {
+        return (StatusCode::NOT_FOUND, "source trigger not found").into_response();
+    };
+    let Some(webhook) = trigger
+        .event
+        .as_ref()
+        .and_then(|value| value.webhook.as_ref())
+        .filter(|value| value.provider.as_deref() == Some("slack"))
+    else {
+        return (
+            StatusCode::NOT_FOUND,
+            "trigger is not a Slack source installation",
+        )
+            .into_response();
+    };
+    if trigger.suspend {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "source installation is suspended",
+        )
+            .into_response();
+    }
+    let Some(secret_ref) = webhook.secret.as_ref() else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            "Slack signing secret is not configured",
+        )
+            .into_response();
+    };
+    let secrets = match resolve_store_secret_values(&state.inner, &project, &secret_ref.from_ref) {
+        Ok(values) => values,
+        Err(error) => return (StatusCode::UNAUTHORIZED, error).into_response(),
+    };
+    if let Err(error) = verify_slack_signature(
+        &secrets,
+        webhook.timestamp_tolerance_secs,
+        &headers,
+        &body,
+        chrono::Utc::now().timestamp(),
+    ) {
+        warn!(
+            trigger = %trigger_name,
+            project = %project,
+            reason = %error,
+            "Slack source authentication failed"
+        );
+        return (StatusCode::UNAUTHORIZED, error).into_response();
+    }
+
+    let installation_id = webhook
+        .installation_id
+        .as_deref()
+        .unwrap_or(trigger_name.as_str());
+    let normalized = if is_json {
+        let payload: serde_json::Value = match serde_json::from_slice(&body) {
+            Ok(value) => value,
+            Err(_) => return (StatusCode::BAD_REQUEST, "invalid Slack JSON").into_response(),
+        };
+        if payload.get("type").and_then(serde_json::Value::as_str) == Some("url_verification") {
+            let challenge = payload
+                .get("challenge")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+            return (
+                StatusCode::OK,
+                axum::Json(serde_json::json!({"challenge": challenge})),
+            )
+                .into_response();
+        }
+        normalize_slack_event(&payload, installation_id)
+    } else {
+        let form: std::collections::HashMap<String, String> =
+            match serde_urlencoded::from_bytes(&body) {
+                Ok(value) => value,
+                Err(_) => {
+                    return (StatusCode::BAD_REQUEST, "invalid Slack form body").into_response();
+                }
+            };
+        let payload = match form
+            .get("payload")
+            .and_then(|value| serde_json::from_str(value).ok())
+        {
+            Some(value) => value,
+            None => {
+                return (StatusCode::BAD_REQUEST, "missing Slack interaction payload")
+                    .into_response();
+            }
+        };
+        normalize_slack_interaction(&payload, installation_id, &secrets)
+    };
+    let normalized = match normalized {
+        Ok(value) => value,
+        Err(error) => return (StatusCode::BAD_REQUEST, error).into_response(),
+    };
+    let payload_hash = hex::encode(Sha256::digest(&body));
+    let repository = AsyncSourceRepository::new(state.inner.async_database.clone());
+    let result = match repository
+        .ingest(IngestSourceEvent {
+            project_id: project.clone(),
+            event: normalized,
+            payload_hash,
+            raw_payload_ref: None,
+        })
+        .await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            warn!(trigger = %trigger_name, error = %error, "Slack source persistence failed");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "source persistence failed",
+            )
+                .into_response();
+        }
+    };
+    info!(
+        provider = "slack",
+        installation_hash = %short_digest(installation_id),
+        external_event_hash = %short_digest(&result.event.external_event_id),
+        source_event_id = %result.event.id,
+        inserted = result.inserted,
+        "Slack source event durably accepted"
+    );
+    (
+        StatusCode::OK,
+        axum::Json(serde_json::json!({
+            "status": if result.inserted { "accepted" } else { "deduplicated" },
+            "source_event_id": result.event.id,
+            "deep_link": format!("orchestrator://sources/{}", result.event.id),
+        })),
+    )
+        .into_response()
 }
 
 async fn health() -> &'static str {
@@ -298,6 +492,305 @@ async fn do_webhook(
     }
 }
 
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+struct SlackActionToken {
+    attention_item_id: String,
+    expected_version: i64,
+    action: String,
+    expires_at: i64,
+}
+
+fn resolve_store_secret_values(
+    state: &InnerState,
+    project: &str,
+    store_name: &str,
+) -> Result<Vec<String>, String> {
+    let active = agent_orchestrator::config_load::read_active_config(state)
+        .map_err(|error| format!("config error: {error}"))?;
+    let store = active
+        .config
+        .projects
+        .get(project)
+        .and_then(|value| value.secret_stores.get(store_name))
+        .ok_or_else(|| format!("SecretStore '{store_name}' not found"))?;
+    if store.data.is_empty() {
+        return Err(format!("SecretStore '{store_name}' is empty"));
+    }
+    Ok(store.data.values().cloned().collect())
+}
+
+fn verify_slack_signature(
+    secrets: &[String],
+    tolerance_secs: u64,
+    headers: &HeaderMap,
+    body: &[u8],
+    now_unix: i64,
+) -> Result<(), String> {
+    let timestamp = headers
+        .get("x-slack-request-timestamp")
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(|| "missing Slack request timestamp".to_string())?;
+    let timestamp_unix = timestamp
+        .parse::<i64>()
+        .map_err(|_| "invalid Slack request timestamp".to_string())?;
+    if now_unix.abs_diff(timestamp_unix) > tolerance_secs {
+        return Err("stale Slack request timestamp".to_string());
+    }
+    let signature = headers
+        .get("x-slack-signature")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("v0="))
+        .ok_or_else(|| "missing or invalid Slack signature".to_string())?;
+    let expected = hex::decode(signature).map_err(|_| "invalid Slack signature".to_string())?;
+    let mut base = format!("v0:{timestamp}:").into_bytes();
+    base.extend_from_slice(body);
+    for secret in secrets {
+        let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
+            .map_err(|_| "invalid Slack signing secret".to_string())?;
+        mac.update(&base);
+        if mac.verify_slice(&expected).is_ok() {
+            return Ok(());
+        }
+    }
+    Err("invalid Slack signature".to_string())
+}
+
+fn normalize_slack_event(
+    payload: &serde_json::Value,
+    installation_id: &str,
+) -> Result<NormalizedSourceEvent, String> {
+    if payload.get("type").and_then(serde_json::Value::as_str) != Some("event_callback") {
+        return Err("unsupported Slack event envelope".to_string());
+    }
+    let external_event_id = payload
+        .get("event_id")
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "Slack event_id is required".to_string())?;
+    let event = payload
+        .get("event")
+        .and_then(serde_json::Value::as_object)
+        .ok_or_else(|| "Slack event object is required".to_string())?;
+    let event_type = event
+        .get("type")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("system");
+    let actor_id = event
+        .get("user")
+        .or_else(|| event.get("bot_id"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
+    let timestamp = event
+        .get("ts")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("0");
+    let thread = event.get("thread_ts").and_then(serde_json::Value::as_str);
+    let channel = event.get("channel").and_then(serde_json::Value::as_str);
+    let text = event
+        .get("text")
+        .and_then(serde_json::Value::as_str)
+        .map(bounded_summary);
+    let command = text.as_deref().and_then(parse_text_command);
+    let is_bot = event.get("bot_id").is_some()
+        || event.get("subtype").and_then(serde_json::Value::as_str) == Some("bot_message");
+    Ok(NormalizedSourceEvent {
+        provider: "slack".to_string(),
+        installation_id: installation_id.to_string(),
+        external_event_id: external_event_id.to_string(),
+        kind: if is_bot {
+            SourceEventKind::System
+        } else if command.is_some() {
+            SourceEventKind::Command
+        } else if matches!(event_type, "message" | "app_mention") {
+            SourceEventKind::Message
+        } else {
+            SourceEventKind::System
+        },
+        actor: ExternalActorRef {
+            external_id: actor_id.to_string(),
+            display_name: None,
+        },
+        conversation: channel.map(|conversation_id| ConversationRef {
+            conversation_id: conversation_id.to_string(),
+            thread_id: Some(thread.unwrap_or(timestamp).to_string()),
+            top_level: thread.is_none(),
+        }),
+        text_summary: text,
+        command,
+        attachments: Vec::new(),
+        occurred_at: slack_timestamp_to_rfc3339(timestamp),
+    })
+}
+
+fn normalize_slack_interaction(
+    payload: &serde_json::Value,
+    installation_id: &str,
+    secrets: &[String],
+) -> Result<NormalizedSourceEvent, String> {
+    if payload.get("type").and_then(serde_json::Value::as_str) != Some("block_actions") {
+        return Err("unsupported Slack interaction type".to_string());
+    }
+    let action = payload
+        .get("actions")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|values| values.first())
+        .ok_or_else(|| "Slack interaction action is required".to_string())?;
+    let action_id = action
+        .get("action_id")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "Slack action_id is required".to_string())?;
+    let value = action
+        .get("value")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "Slack signed action value is required".to_string())?;
+    let token = verify_slack_action_token(value, secrets, chrono::Utc::now().timestamp())?;
+    if token.action != action_id {
+        return Err("Slack action token does not match action_id".to_string());
+    }
+    let command = match action_id {
+        "approve" | "approve_decision" => SourceCommand::Approve {
+            attention_item_id: token.attention_item_id,
+            expected_version: token.expected_version,
+        },
+        "reject" | "reject_decision" => SourceCommand::Reject {
+            attention_item_id: token.attention_item_id,
+            expected_version: token.expected_version,
+        },
+        "retry" | "retry_failed_item" => SourceCommand::Retry {
+            attention_item_id: token.attention_item_id,
+            expected_version: token.expected_version,
+        },
+        "open_console" => SourceCommand::OpenConsole,
+        _ => return Err("unsupported Slack action".to_string()),
+    };
+    let actor_id = payload
+        .pointer("/user/id")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
+    let channel = payload
+        .pointer("/channel/id")
+        .and_then(serde_json::Value::as_str);
+    let message_ts = payload
+        .pointer("/container/message_ts")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("0");
+    let action_ts = action
+        .get("action_ts")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or(message_ts);
+    let identity = format!(
+        "{}:{}:{}:{}:{}",
+        payload
+            .pointer("/team/id")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("-"),
+        actor_id,
+        channel.unwrap_or("-"),
+        message_ts,
+        action_ts
+    );
+    Ok(NormalizedSourceEvent {
+        provider: "slack".to_string(),
+        installation_id: installation_id.to_string(),
+        external_event_id: format!("interaction-{}", short_digest(&identity)),
+        kind: SourceEventKind::Command,
+        actor: ExternalActorRef {
+            external_id: actor_id.to_string(),
+            display_name: None,
+        },
+        conversation: channel.map(|conversation_id| ConversationRef {
+            conversation_id: conversation_id.to_string(),
+            thread_id: Some(message_ts.to_string()),
+            top_level: false,
+        }),
+        text_summary: Some(format!("Slack interactive action: {action_id}")),
+        command: Some(command),
+        attachments: Vec::new(),
+        occurred_at: slack_timestamp_to_rfc3339(action_ts),
+    })
+}
+
+fn verify_slack_action_token(
+    token: &str,
+    secrets: &[String],
+    now_unix: i64,
+) -> Result<SlackActionToken, String> {
+    let (payload_hex, signature_hex) = token
+        .split_once('.')
+        .ok_or_else(|| "invalid Slack action token".to_string())?;
+    let payload = hex::decode(payload_hex).map_err(|_| "invalid Slack action token".to_string())?;
+    let signature =
+        hex::decode(signature_hex).map_err(|_| "invalid Slack action token".to_string())?;
+    let verified = secrets.iter().any(|secret| {
+        HmacSha256::new_from_slice(secret.as_bytes())
+            .map(|mut mac| {
+                mac.update(&payload);
+                mac.verify_slice(&signature).is_ok()
+            })
+            .unwrap_or(false)
+    });
+    if !verified {
+        return Err("invalid Slack action token signature".to_string());
+    }
+    let parsed: SlackActionToken =
+        serde_json::from_slice(&payload).map_err(|_| "invalid Slack action token".to_string())?;
+    if parsed.expires_at < now_unix {
+        return Err("expired Slack action token".to_string());
+    }
+    Ok(parsed)
+}
+
+#[cfg(test)]
+fn sign_slack_action_token(token: &SlackActionToken, secret: &str) -> String {
+    let payload = serde_json::to_vec(token).expect("serialize test action token");
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).expect("test HMAC secret");
+    mac.update(&payload);
+    format!(
+        "{}.{}",
+        hex::encode(&payload),
+        hex::encode(mac.finalize().into_bytes())
+    )
+}
+
+fn parse_text_command(text: &str) -> Option<SourceCommand> {
+    match text.trim().to_ascii_lowercase().as_str() {
+        "orchestrator branch" | "/orchestrator branch" => Some(SourceCommand::Branch),
+        "orchestrator cancel" | "/orchestrator cancel" => Some(SourceCommand::Cancel),
+        "orchestrator add-context" | "/orchestrator add-context" => Some(SourceCommand::AddContext),
+        "orchestrator open-console" | "/orchestrator open-console" => {
+            Some(SourceCommand::OpenConsole)
+        }
+        _ => None,
+    }
+}
+
+fn bounded_summary(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| !character.is_control() || matches!(character, '\n' | '\t'))
+        .take(500)
+        .collect()
+}
+
+fn slack_timestamp_to_rfc3339(value: &str) -> String {
+    let seconds = value
+        .split('.')
+        .next()
+        .and_then(|part| part.parse::<i64>().ok())
+        .unwrap_or(0);
+    chrono::DateTime::from_timestamp(seconds, 0)
+        .unwrap_or(chrono::DateTime::UNIX_EPOCH)
+        .to_rfc3339()
+}
+
+fn short_digest(value: &str) -> String {
+    Sha256::digest(value.as_bytes())
+        .iter()
+        .take(12)
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
 /// Extract HTTP headers into a HashMap for plugin env injection.
 fn extract_headers_map(headers: &HeaderMap) -> std::collections::HashMap<String, String> {
     headers
@@ -379,4 +872,84 @@ fn verify_hmac(secret: &[u8], body: &[u8], signature: &str) -> bool {
     };
     mac.update(body);
     mac.verify_slice(&expected).is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn slack_headers(secret: &str, timestamp: i64, body: &[u8]) -> HeaderMap {
+        let base = [format!("v0:{timestamp}:").as_bytes(), body].concat();
+        let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC");
+        mac.update(&base);
+        let signature = format!("v0={}", hex::encode(mac.finalize().into_bytes()));
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-slack-request-timestamp",
+            timestamp.to_string().parse().expect("timestamp header"),
+        );
+        headers.insert(
+            "x-slack-signature",
+            signature.parse().expect("signature header"),
+        );
+        headers
+    }
+
+    #[test]
+    fn slack_signature_accepts_valid_and_rejects_stale_or_tampered() {
+        let secret = "signing-secret";
+        let timestamp = 1_700_000_000;
+        let body = br#"{"type":"event_callback"}"#;
+        let headers = slack_headers(secret, timestamp, body);
+        assert!(verify_slack_signature(&[secret.into()], 300, &headers, body, timestamp).is_ok());
+        assert!(
+            verify_slack_signature(&[secret.into()], 300, &headers, body, timestamp + 301)
+                .expect_err("stale")
+                .contains("stale")
+        );
+        assert!(
+            verify_slack_signature(&[secret.into()], 300, &headers, b"tampered", timestamp)
+                .expect_err("tampered")
+                .contains("invalid")
+        );
+    }
+
+    #[test]
+    fn slack_message_normalizes_thread_and_explicit_branch() {
+        let payload = serde_json::json!({
+            "type": "event_callback",
+            "event_id": "Ev01",
+            "event": {
+                "type": "message",
+                "user": "U01",
+                "channel": "C01",
+                "text": "orchestrator branch",
+                "ts": "1700000000.100",
+                "thread_ts": "1699999999.000"
+            }
+        });
+        let event = normalize_slack_event(&payload, "install-1").expect("normalize");
+        assert_eq!(event.provider, "slack");
+        assert_eq!(event.kind, SourceEventKind::Command);
+        assert_eq!(event.command, Some(SourceCommand::Branch));
+        let conversation = event.conversation.expect("conversation");
+        assert_eq!(conversation.thread_id.as_deref(), Some("1699999999.000"));
+        assert!(!conversation.top_level);
+    }
+
+    #[test]
+    fn slack_action_token_is_signed_expiring_and_action_bound() {
+        let token = SlackActionToken {
+            attention_item_id: "attn-1".into(),
+            expected_version: 3,
+            action: "approve".into(),
+            expires_at: 1_700_000_100,
+        };
+        let encoded = sign_slack_action_token(&token, "secret");
+        let parsed = verify_slack_action_token(&encoded, &["secret".into()], 1_700_000_000)
+            .expect("verified token");
+        assert_eq!(parsed.attention_item_id, "attn-1");
+        assert!(verify_slack_action_token(&encoded, &["other".into()], 1_700_000_000).is_err());
+        assert!(verify_slack_action_token(&encoded, &["secret".into()], 1_700_000_101).is_err());
+    }
 }

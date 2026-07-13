@@ -59,6 +59,10 @@ pub fn run() {
             commands::attention::attention_snooze,
             commands::attention::attention_resolve,
             commands::attention::attention_execute_action,
+            // external sources
+            commands::source::source_event_list,
+            commands::source::source_binding_list,
+            commands::source::source_replay,
             // handoff and safe resume
             commands::handoff::handoff_generate,
             commands::handoff::resume_boundary_list,

@@ -91,6 +91,22 @@ pub struct TriggerWebhookConfig {
     /// plugins and executes interceptors/transformers in the webhook request path.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crd_ref: Option<String>,
+    /// Optional provider name enabling durable source-event ingestion.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    /// Stable provider installation identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installation_id: Option<String>,
+    /// External actor to trusted role mapping.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub actor_roles: HashMap<String, String>,
+    /// Allowed request timestamp skew in seconds.
+    #[serde(default = "default_timestamp_tolerance_secs")]
+    pub timestamp_tolerance_secs: u64,
+}
+
+fn default_timestamp_tolerance_secs() -> u64 {
+    300
 }
 
 /// Reference to a SecretStore for webhook secret resolution.

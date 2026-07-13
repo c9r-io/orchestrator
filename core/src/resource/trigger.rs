@@ -101,6 +101,57 @@ impl Resource for TriggerResource {
                     ));
                 }
             }
+
+            if let Some(webhook) = event.webhook.as_ref()
+                && let Some(provider) = webhook.provider.as_deref()
+            {
+                if event.source != "webhook" {
+                    return Err(anyhow!(
+                        "trigger '{}': webhook.provider is only valid for event.source=webhook",
+                        self.name()
+                    ));
+                }
+                if provider.trim().is_empty() || provider.len() > 64 {
+                    return Err(anyhow!(
+                        "trigger '{}': webhook.provider must contain 1-64 characters",
+                        self.name()
+                    ));
+                }
+                if webhook
+                    .installation_id
+                    .as_deref()
+                    .is_none_or(|value| value.trim().is_empty() || value.len() > 128)
+                {
+                    return Err(anyhow!(
+                        "trigger '{}': source webhook requires installationId",
+                        self.name()
+                    ));
+                }
+                if provider == "slack" {
+                    if webhook.secret.is_none() {
+                        return Err(anyhow!(
+                            "trigger '{}': Slack source webhook requires SecretStore signing secret",
+                            self.name()
+                        ));
+                    }
+                    if !(1..=900).contains(&webhook.timestamp_tolerance_secs) {
+                        return Err(anyhow!(
+                            "trigger '{}': timestampToleranceSecs must be between 1 and 900",
+                            self.name()
+                        ));
+                    }
+                }
+                if webhook
+                    .actor_roles
+                    .values()
+                    .any(|role| !matches!(role.as_str(), "read_only" | "operator" | "admin"))
+                {
+                    return Err(anyhow!(
+                        "trigger '{}': actorRoles values must be read_only, operator, or admin",
+                        self.name()
+                    ));
+                }
+            }
         }
 
         // Action fields must be non-empty.
@@ -205,6 +256,10 @@ fn to_config(spec: &TriggerSpec) -> TriggerConfig {
                 }),
                 signature_header: w.signature_header.clone(),
                 crd_ref: w.crd_ref.clone(),
+                provider: w.provider.clone(),
+                installation_id: w.installation_id.clone(),
+                actor_roles: w.actor_roles.clone(),
+                timestamp_tolerance_secs: w.timestamp_tolerance_secs,
             }),
             filesystem: e.filesystem.as_ref().map(|fs| TriggerFilesystemConfig {
                 paths: fs.paths.clone(),
@@ -257,6 +312,10 @@ fn from_config(cfg: &TriggerConfig) -> TriggerSpec {
                 }),
                 signature_header: w.signature_header.clone(),
                 crd_ref: w.crd_ref.clone(),
+                provider: w.provider.clone(),
+                installation_id: w.installation_id.clone(),
+                actor_roles: w.actor_roles.clone(),
+                timestamp_tolerance_secs: w.timestamp_tolerance_secs,
             }),
             filesystem: e.filesystem.as_ref().map(|fs| TriggerFilesystemSpec {
                 paths: fs.paths.clone(),
@@ -420,6 +479,17 @@ spec:
             resource.apply(&mut config).expect("apply"),
             ApplyResult::Unchanged
         );
+    }
+
+    #[test]
+    fn trigger_apply_to_project_honors_explicit_scope() {
+        let mut config = make_config();
+        let resource = dispatch_resource(trigger_event_manifest("scoped", "webhook"))
+            .expect("dispatch should succeed");
+        crate::resource::apply_to_project(&resource, &mut config, "tenant-a")
+            .expect("scoped apply");
+        assert!(config.projects["tenant-a"].triggers.contains_key("scoped"));
+        assert!(!config.projects["default"].triggers.contains_key("scoped"));
     }
 
     #[test]

@@ -34,6 +34,14 @@ service OrchestratorService {
   rpc AttentionExecuteAction(AttentionExecuteActionRequest) returns (AttentionItem);
   rpc AttentionFollow(AttentionFollowRequest) returns (stream AttentionDelta);
 
+  // Provider-neutral external source events and process bindings
+  rpc SourceEventList(SourceEventListRequest) returns (SourceEventListResponse);
+  rpc SourceEventGet(SourceEventGetRequest) returns (SourceEvent);
+  rpc SourceEventIngest(SourceEventIngestRequest) returns (SourceEventIngestResponse);
+  rpc SourceBindingList(SourceBindingListRequest) returns (SourceBindingListResponse);
+  rpc SourceBind(SourceBindRequest) returns (SourceBinding);
+  rpc SourceReplay(SourceReplayRequest) returns (SourceReplayResponse);
+
   // Deterministic handoff and two-stage safe logical resume
   rpc HandoffGenerate(HandoffGenerateRequest) returns (HandoffSnapshotResponse);
   rpc HandoffGet(HandoffGetRequest) returns (HandoffSnapshotResponse);
@@ -405,6 +413,77 @@ message AttentionDelta {
   int64 change_id = 2;
   optional AttentionItem item = 3;
 }
+
+message SourceEvent {
+  string id = 1;
+  string project_id = 2;
+  string provider = 3;
+  string installation_id = 4;
+  string external_event_id = 5;
+  string event_type = 6;
+  optional string external_actor_id = 7;
+  optional string conversation_id = 8;
+  optional string thread_id = 9;
+  string occurred_at = 10;
+  string received_at = 11;
+  string normalized_json = 12;
+  string payload_hash = 13;
+  string routing_state = 14;
+  int64 routing_attempts = 15;
+  optional string routed_task_id = 16;
+  optional string last_error_code = 17;
+}
+
+message SourceEventListRequest {
+  optional string project_id = 1;
+  optional string task_id = 2;
+  optional string routing_state = 3;
+  uint32 limit = 4;
+}
+
+message SourceEventListResponse { repeated SourceEvent events = 1; }
+message SourceEventGetRequest { string id = 1; }
+
+message SourceEventIngestRequest {
+  string project_id = 1;
+  string normalized_json = 2;
+  string payload_hash = 3;
+}
+
+message SourceEventIngestResponse {
+  SourceEvent event = 1;
+  bool inserted = 2;
+}
+
+message SourceBinding {
+  string id = 1;
+  string project_id = 2;
+  string task_id = 3;
+  string provider = 4;
+  string installation_id = 5;
+  optional string conversation_id = 6;
+  optional string thread_id = 7;
+  string binding_type = 8;
+  string created_by_event_id = 9;
+  string created_at = 10;
+}
+
+message SourceBindingListRequest { string task_id = 1; }
+message SourceBindingListResponse { repeated SourceBinding bindings = 1; }
+
+message SourceBindRequest {
+  string project_id = 1;
+  string task_id = 2;
+  string provider = 3;
+  string installation_id = 4;
+  optional string conversation_id = 5;
+  optional string thread_id = 6;
+  string binding_type = 7;
+  string created_by_event_id = 8;
+}
+
+message SourceReplayRequest { string id = 1; }
+message SourceReplayResponse { string id = 1; string status = 2; }
 
 message HandoffGenerateRequest {
   string task_id = 1;

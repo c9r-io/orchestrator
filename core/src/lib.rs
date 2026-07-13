@@ -129,6 +129,8 @@ pub mod self_referential_policy;
 pub mod service;
 /// Session persistence models and repository helpers.
 pub mod session_store;
+/// Provider-neutral external source events, bindings, and routing persistence.
+pub mod source;
 /// Shared daemon state and state transition helpers.
 pub mod state;
 pub mod store;

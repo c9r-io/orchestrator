@@ -575,6 +575,67 @@ fn attention_entries() -> Vec<GuideEntry> {
     ]
 }
 
+fn source_entries() -> Vec<GuideEntry> {
+    vec![
+        GuideEntry {
+            command: "source list|get",
+            alias: Some("src"),
+            category: GuideCategory::Observability,
+            summary: "Inspect durable external source events",
+            description: "Query provider-neutral source events, routing state, provenance, and the resolved process without exposing raw provider payloads.",
+            examples: &[
+                (
+                    "orchestrator source list --state failed",
+                    "List replay candidates",
+                ),
+                (
+                    "orchestrator source get <source-event-id>",
+                    "Inspect one normalized event",
+                ),
+            ],
+        },
+        GuideEntry {
+            command: "source ingest",
+            alias: Some("src ingest"),
+            category: GuideCategory::Trigger,
+            summary: "Ingest a provider-neutral source fixture",
+            description: "Durably insert an authenticated normalized event for adapter development and non-Slack integration testing. Runtime source ingestion must be enabled.",
+            examples: &[(
+                "orchestrator source ingest --project demo --file event.json",
+                "Ingest a normalized source event",
+            )],
+        },
+        GuideEntry {
+            command: "source bindings|bind",
+            alias: Some("src bindings"),
+            category: GuideCategory::TaskLifecycle,
+            summary: "Inspect or create external process bindings",
+            description: "Correlate trusted provider conversation coordinates with an orchestrator task using primary, related, or notification_target bindings.",
+            examples: &[
+                (
+                    "orchestrator source bindings <task-id>",
+                    "List task provenance bindings",
+                ),
+                (
+                    "orchestrator source bind --project demo --task <task-id> --provider fixture --installation install-1 --conversation C1 --thread T1 --source-event <event-id>",
+                    "Create a trusted binding",
+                ),
+            ],
+        },
+        GuideEntry {
+            command: "source replay",
+            alias: Some("src replay"),
+            category: GuideCategory::SystemAdmin,
+            summary: "Replay a failed or attention-blocked source route",
+            description: "Admin-only dead-letter recovery. Requeues the durable event while deterministic task and action identities prevent duplicate side effects.",
+            examples: &[(
+                "orchestrator source replay <source-event-id>",
+                "Requeue one failed route",
+            )],
+        },
+    ]
+}
+
 fn agent_entries() -> Vec<GuideEntry> {
     vec![
         GuideEntry {
@@ -1214,6 +1275,7 @@ fn all_entries() -> Vec<GuideEntry> {
     entries.extend(resource_entries());
     entries.extend(task_entries());
     entries.extend(attention_entries());
+    entries.extend(source_entries());
     entries.extend(run_entries());
     entries.extend(agent_entries());
     entries.extend(store_entries());
@@ -1375,6 +1437,7 @@ fn _exhaustiveness_guard(cmd: crate::Commands) {
         crate::Commands::Agent(_) => {}
         crate::Commands::Event(_) => {}
         crate::Commands::Attention(_) => {}
+        crate::Commands::Source(_) => {}
         crate::Commands::Handoff(_) | crate::Commands::Resume(_) => {}
         crate::Commands::Trigger(_) => {}
         crate::Commands::Qa(_) => {}

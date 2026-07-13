@@ -21,7 +21,8 @@ pub use cli::{
     AgentCommands, AgentSessionCommands, AttentionCommands, Cli, Commands, DaemonCommands,
     DbCommands, DbMigrationCommands, DebugCommands, EventCommands, GuideFormat, HandoffCommands,
     ManifestCommands, OutputFormat, QaCommands, ResumeCommands, SandboxProbeCommands,
-    SecretCommands, SecretKeyCommands, StoreCommands, TaskCommands, ToolCommands, TriggerCommands,
+    SecretCommands, SecretKeyCommands, SourceCommands, StoreCommands, TaskCommands, ToolCommands,
+    TriggerCommands,
 };
 
 fn main() -> Result<()> {

@@ -1,0 +1,62 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: source-fixture
+spec:
+  root_path: "."
+  qa_targets: [docs/qa/orchestrator]
+  ticket_dir: docs/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: source-fixture-agent
+spec:
+  capabilities: [source_fixture]
+  command: >-
+    echo '{"confidence":0.95,"quality_score":0.95,"artifacts":[{"kind":"analysis","findings":[{"title":"source accepted","description":"provider-neutral source fixture processed","severity":"info"}]}]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: source-fixture
+spec:
+  steps:
+    - id: accept_source
+      type: source_fixture
+      required_capability: source_fixture
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: RuntimePolicy
+metadata:
+  name: default
+spec:
+  runner:
+    shell: /bin/bash
+    shell_arg: -lc
+    policy: allowlist
+    executor: shell
+    allowed_shells: [/bin/bash, /bin/sh, sh]
+    allowed_shell_args: [-lc, -c]
+  resume:
+    auto: false
+  source_ingest_enabled: true
+---
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: source-fixture
+spec:
+  event:
+    source: webhook
+    webhook:
+      provider: fixture
+      installationId: fixture-installation
+      actorRoles:
+        fixture-operator: operator
+  action:
+    workflow: source-fixture
+    workspace: source-fixture
+  concurrencyPolicy: Allow

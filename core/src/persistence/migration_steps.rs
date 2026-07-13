@@ -1089,3 +1089,102 @@ pub(crate) fn m0029_agent_session_control_plane(conn: &Connection) -> Result<()>
     )?;
     Ok(())
 }
+
+pub(crate) fn m0030_source_events_and_bindings(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS source_events (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            installation_id TEXT NOT NULL,
+            external_event_id TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            external_actor_id TEXT,
+            conversation_id TEXT,
+            thread_id TEXT,
+            occurred_at TEXT NOT NULL,
+            received_at TEXT NOT NULL,
+            normalized_payload_json TEXT NOT NULL,
+            raw_payload_ref TEXT,
+            payload_hash TEXT NOT NULL,
+            routing_state TEXT NOT NULL,
+            routing_attempts INTEGER NOT NULL DEFAULT 0,
+            routing_claimed_at TEXT,
+            routed_task_id TEXT,
+            last_error_code TEXT,
+            next_attempt_at TEXT,
+            routed_at TEXT,
+            UNIQUE(provider, installation_id, external_event_id),
+            FOREIGN KEY(routed_task_id) REFERENCES tasks(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_source_events_route_queue
+            ON source_events(routing_state, next_attempt_at, received_at);
+        CREATE INDEX IF NOT EXISTS idx_source_events_project_received
+            ON source_events(project_id, received_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_source_events_task
+            ON source_events(routed_task_id, received_at DESC);
+
+        CREATE TABLE IF NOT EXISTS source_bindings (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            task_id TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            installation_id TEXT NOT NULL,
+            conversation_id TEXT,
+            thread_id TEXT,
+            correlation_key TEXT NOT NULL,
+            binding_type TEXT NOT NULL,
+            created_by_event_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(provider, installation_id, correlation_key, binding_type),
+            FOREIGN KEY(task_id) REFERENCES tasks(id),
+            FOREIGN KEY(created_by_event_id) REFERENCES source_events(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_source_bindings_task
+            ON source_bindings(task_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_source_bindings_lookup
+            ON source_bindings(provider, installation_id, conversation_id, thread_id);
+
+        CREATE TABLE IF NOT EXISTS source_routing_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_event_id TEXT NOT NULL,
+            attempt_no INTEGER NOT NULL,
+            result TEXT NOT NULL,
+            task_id TEXT,
+            error_code TEXT,
+            created_at TEXT NOT NULL,
+            completed_at TEXT,
+            UNIQUE(source_event_id, attempt_no),
+            FOREIGN KEY(source_event_id) REFERENCES source_events(id),
+            FOREIGN KEY(task_id) REFERENCES tasks(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_source_routing_attempts_event
+            ON source_routing_attempts(source_event_id, attempt_no DESC);
+
+        CREATE TABLE IF NOT EXISTS source_command_actions (
+            id TEXT PRIMARY KEY,
+            source_event_id TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            resolved_role TEXT NOT NULL,
+            target_type TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            action TEXT NOT NULL,
+            idempotency_key TEXT NOT NULL,
+            request_hash TEXT NOT NULL,
+            status TEXT NOT NULL,
+            result_json TEXT,
+            error_code TEXT,
+            created_at TEXT NOT NULL,
+            completed_at TEXT,
+            UNIQUE(source_event_id, idempotency_key),
+            FOREIGN KEY(source_event_id) REFERENCES source_events(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_source_command_actions_target
+            ON source_command_actions(target_type, target_id, created_at DESC);
+
+        "#,
+    )
+    .context("m0030_source_events_and_bindings")?;
+    Ok(())
+}

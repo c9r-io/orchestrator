@@ -230,94 +230,18 @@ pub(crate) async fn attention_execute_action(
     if !input.is_object() {
         return Err(Status::invalid_argument("action input must be an object"));
     }
-    let item = server
-        .state
-        .attention_repo
-        .get(&req.id)
-        .await
-        .map_err(|error| Status::internal(error.to_string()))?
-        .ok_or_else(|| Status::not_found("attention item not found"))?;
-    if !item.actions.iter().any(|action| action.id == req.action_id) {
-        return Err(Status::invalid_argument(
-            "action is not allowlisted for this item",
-        ));
-    }
-    if !matches!(
-        req.action_id.as_str(),
-        "retry_failed_item"
-            | "resume_task"
-            | "approve_decision"
-            | "reject_decision"
-            | "acknowledge"
-    ) {
-        return Err(Status::invalid_argument("unsupported action"));
-    }
-
-    let reservation = server
-        .state
-        .attention_repo
-        .reserve_action(
-            &req.id,
-            req.expected_version,
-            &req.idempotency_key,
-            &actor,
-            &req.action_id,
-            &input,
-        )
-        .await
-        .map_err(mutation_error)?;
-    if !reservation.should_execute {
-        return Ok(Response::new(item_to_proto(reservation.item)));
-    }
-
-    let action_result: Result<(), Status> = match req.action_id.as_str() {
-        "retry_failed_item" => {
-            if let Some(item_id) = item.task_item_id.as_deref() {
-                match orchestrator_scheduler::service::task::retry_task_item(&server.state, item_id)
-                    .map_err(super::map_core_error)
-                {
-                    Ok(task_id) => {
-                        orchestrator_scheduler::service::task::enqueue_task(&server.state, &task_id)
-                            .await
-                            .map_err(super::map_core_error)
-                    }
-                    Err(error) => Err(error),
-                }
-            } else {
-                Err(Status::failed_precondition("item has no failed task item"))
-            }
-        }
-        "resume_task" => {
-            orchestrator_scheduler::service::task::enqueue_task(&server.state, &item.task_id)
-                .await
-                .map_err(super::map_core_error)
-        }
-        "approve_decision" | "reject_decision" | "acknowledge" => Ok(()),
-        _ => unreachable!("supported action validated before reservation"),
-    };
-    if let Err(error) = action_result {
-        let error_code = format!("{:?}", error.code());
-        let _ = server
-            .state
-            .attention_repo
-            .complete_action(
-                &req.id,
-                &req.idempotency_key,
-                &actor,
-                &req.action_id,
-                Some(&error_code),
-            )
-            .await;
-        return Err(error);
-    }
-
-    let completed = server
-        .state
-        .attention_repo
-        .complete_action(&req.id, &req.idempotency_key, &actor, &req.action_id, None)
-        .await
-        .map_err(mutation_error)?;
-    Ok(Response::new(item_to_proto(completed)))
+    let item = orchestrator_scheduler::service::attention::execute_allowlisted_action(
+        &server.state,
+        &req.id,
+        req.expected_version,
+        &req.idempotency_key,
+        &actor,
+        &req.action_id,
+        &input,
+    )
+    .await
+    .map_err(mutation_error)?;
+    Ok(Response::new(item_to_proto(item)))
 }
 
 pub(crate) async fn attention_follow(

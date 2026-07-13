@@ -412,6 +412,28 @@ impl AsyncAttentionRepository {
             .map_err(flatten_err)
     }
 
+    /// Upserts one provider-originated attention candidate without advancing
+    /// the built-in task-event projector cursor.
+    pub async fn upsert_external_candidate(
+        &self,
+        candidate: AttentionCandidate,
+    ) -> Result<AttentionItem> {
+        let id = candidate.id.clone();
+        self.db
+            .writer()
+            .call(move |conn| {
+                let tx = conn.unchecked_transaction()?;
+                apply_projection_op(&tx, AttentionProjectionOp::Upsert(Box::new(candidate)))
+                    .map_err(other)?;
+                tx.commit()?;
+                read_item(conn, &id)
+                    .map_err(other)?
+                    .ok_or_else(|| other(anyhow!("external attention item missing")))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
     /// Applies an optimistic, idempotent human mutation.
     pub async fn mutate(
         &self,

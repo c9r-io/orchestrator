@@ -218,6 +218,31 @@ pub fn create_task_impl(
     state: &crate::state::InnerState,
     payload: CreateTaskPayload,
 ) -> Result<TaskSummary> {
+    create_task_impl_with_id(state, payload, None)
+}
+
+/// Creates a task with an optional caller-selected deterministic ID.
+///
+/// The deterministic path is reserved for durable source routing. Replaying
+/// the same route returns the existing task instead of repeating creation.
+pub fn create_task_impl_with_id(
+    state: &crate::state::InnerState,
+    payload: CreateTaskPayload,
+    requested_task_id: Option<&str>,
+) -> Result<TaskSummary> {
+    if let Some(task_id) = requested_task_id {
+        if task_id.trim().is_empty() || task_id.len() > 128 {
+            anyhow::bail!("requested task id must contain 1-128 characters");
+        }
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        if let Ok(mut existing) = repo.load_task_summary(task_id) {
+            let (total, finished, failed) = repo.load_task_item_counts(task_id)?;
+            existing.total_items = total;
+            existing.finished_items = finished;
+            existing.failed_items = failed;
+            return Ok(existing);
+        }
+    }
     let active = read_active_config(state)?;
 
     let project_id = payload
@@ -306,7 +331,9 @@ pub fn create_task_impl(
 
     let resolved_targets = resolve_task_targets(&workspace, &execution_plan, payload.target_files)?;
 
-    let task_id = Uuid::new_v4().to_string();
+    let task_id = requested_task_id
+        .map(str::to_owned)
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
     let created_at = now_ts();
     let task_name = payload
         .name

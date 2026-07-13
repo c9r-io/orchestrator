@@ -201,6 +201,35 @@ export interface AttentionDelta {
   item: AttentionItem | null;
 }
 
+export interface SourceEvent {
+  id: string;
+  project_id: string;
+  provider: string;
+  installation_id: string;
+  external_event_id: string;
+  event_type: string;
+  conversation_id: string | null;
+  thread_id: string | null;
+  occurred_at: string;
+  received_at: string;
+  normalized_json: string;
+  routing_state: string;
+  routing_attempts: number;
+  routed_task_id: string | null;
+  last_error_code: string | null;
+}
+
+export interface SourceBinding {
+  id: string;
+  task_id: string;
+  provider: string;
+  installation_id: string;
+  conversation_id: string | null;
+  thread_id: string | null;
+  binding_type: string;
+  created_at: string;
+}
+
 export interface HandoffBriefing {
   goal: string;
   current_state: Record<string, unknown>;

@@ -13,6 +13,7 @@ mod qa;
 mod resource;
 mod run;
 mod secret;
+mod source;
 mod store;
 mod task;
 mod trigger;
@@ -45,6 +46,7 @@ pub async fn dispatch(
     match command {
         Commands::Agent(cmd) => agent::dispatch(client, cmd).await,
         Commands::Attention(cmd) => attention::dispatch(client, cmd).await,
+        Commands::Source(cmd) => source::dispatch(client, cmd).await,
         Commands::Handoff(cmd) => handoff::dispatch_handoff(client, cmd).await,
         Commands::Resume(cmd) => handoff::dispatch_resume(client, cmd).await,
         Commands::Task(cmd) => task::dispatch(client, cmd).await,

@@ -514,6 +514,41 @@ pub async fn fire_trigger_canonical(
     trigger: &TriggerConfig,
     webhook_payload: Option<&serde_json::Value>,
 ) -> Result<String> {
+    fire_trigger_canonical_with_context(
+        state,
+        trigger_name,
+        project,
+        trigger,
+        webhook_payload,
+        TriggerFireContext::default(),
+    )
+    .await
+}
+
+/// Trusted context supplied by a durable source router.
+#[derive(Debug, Clone, Default)]
+pub struct TriggerFireContext {
+    /// Deterministic task ID reserved by the source event.
+    pub requested_task_id: Option<String>,
+    /// Parent task used by explicit branch commands.
+    pub parent_task_id: Option<String>,
+    /// Stable source event correlation ID.
+    pub source_event_id: Option<String>,
+    /// Bounded goal override that excludes raw provider payloads.
+    pub goal: Option<String>,
+    /// Provider-neutral initial variables made available to the workflow.
+    pub initial_vars: Option<std::collections::HashMap<String, String>>,
+}
+
+/// Fires a trigger with a trusted deterministic source-routing context.
+pub async fn fire_trigger_canonical_with_context(
+    state: &InnerState,
+    trigger_name: &str,
+    project: &str,
+    trigger: &TriggerConfig,
+    webhook_payload: Option<&serde_json::Value>,
+    context: TriggerFireContext,
+) -> Result<String> {
     // ── Suspend check ────────────────────────────────────────────────
     if trigger.suspend {
         emit_trigger_skipped(state, trigger_name, "trigger_skipped", "suspended");
@@ -567,19 +602,31 @@ pub async fn fire_trigger_canonical(
 
     let payload = CreateTaskPayload {
         name: Some(task_name),
-        goal: Some(build_trigger_goal(trigger_name, webhook_payload)),
+        goal: Some(
+            context
+                .goal
+                .clone()
+                .unwrap_or_else(|| build_trigger_goal(trigger_name, webhook_payload)),
+        ),
         project_id: Some(project.to_string()),
         workspace_id: Some(trigger.action.workspace.clone()),
         workflow_id: Some(trigger.action.workflow.clone()),
         target_files,
-        parent_task_id: None,
-        spawn_reason: None,
+        parent_task_id: context.parent_task_id.clone(),
+        spawn_reason: context
+            .parent_task_id
+            .as_ref()
+            .map(|_| "source_branch".to_string()),
         step_filter: None,
-        initial_vars: None,
+        initial_vars: context.initial_vars.clone(),
     };
 
-    let summary = crate::task_ops::create_task_as_service(state, payload)
-        .context("trigger fire: failed to create task")?;
+    let summary = crate::task_ops::create_task_impl_with_id(
+        state,
+        payload,
+        context.requested_task_id.as_deref(),
+    )
+    .context("trigger fire: failed to create task")?;
     let task_id = summary.id.clone();
 
     info!(
@@ -600,6 +647,7 @@ pub async fn fire_trigger_canonical(
             "trigger": trigger_name,
             "source": if trigger.cron.is_some() { "cron" } else { "event" },
             "task_id": task_id,
+            "source_event_id": context.source_event_id,
         }),
     );
 

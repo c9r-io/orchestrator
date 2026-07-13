@@ -5,6 +5,7 @@ mod mapping;
 mod resource;
 mod secret;
 mod session;
+mod source;
 mod store;
 mod system;
 mod task;
@@ -337,6 +338,48 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<AttentionFollowRequest>,
     ) -> Result<Response<Self::AttentionFollowStream>, Status> {
         attention::attention_follow(self, request).await
+    }
+
+    async fn source_event_list(
+        &self,
+        request: Request<SourceEventListRequest>,
+    ) -> Result<Response<SourceEventListResponse>, Status> {
+        source::event_list(self, request).await
+    }
+
+    async fn source_event_get(
+        &self,
+        request: Request<SourceEventGetRequest>,
+    ) -> Result<Response<SourceEvent>, Status> {
+        source::event_get(self, request).await
+    }
+
+    async fn source_event_ingest(
+        &self,
+        request: Request<SourceEventIngestRequest>,
+    ) -> Result<Response<SourceEventIngestResponse>, Status> {
+        source::event_ingest(self, request).await
+    }
+
+    async fn source_binding_list(
+        &self,
+        request: Request<SourceBindingListRequest>,
+    ) -> Result<Response<SourceBindingListResponse>, Status> {
+        source::binding_list(self, request).await
+    }
+
+    async fn source_bind(
+        &self,
+        request: Request<SourceBindRequest>,
+    ) -> Result<Response<SourceBinding>, Status> {
+        source::bind(self, request).await
+    }
+
+    async fn source_replay(
+        &self,
+        request: Request<SourceReplayRequest>,
+    ) -> Result<Response<SourceReplayResponse>, Status> {
+        source::replay(self, request).await
     }
 
     async fn agent_session_list(

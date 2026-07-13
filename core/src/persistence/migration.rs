@@ -243,6 +243,11 @@ pub fn registered_migrations() -> Vec<Migration> {
             name: "m0029_agent_session_control_plane",
             up: crate::persistence::migration_steps::m0029_agent_session_control_plane,
         },
+        Migration {
+            version: 30,
+            name: "m0030_source_events_and_bindings",
+            up: crate::persistence::migration_steps::m0030_source_events_and_bindings,
+        },
     ]
 }
 

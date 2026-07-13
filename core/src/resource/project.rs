@@ -221,6 +221,7 @@ mod tests {
                 elevated_resume_enabled: false,
                 session_read_enabled: true,
                 session_control_enabled: false,
+                source_ingest_enabled: false,
             }),
         };
         let err = dispatch_resource(resource).expect_err("operation should fail");

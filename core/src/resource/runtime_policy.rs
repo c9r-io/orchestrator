@@ -59,6 +59,7 @@ impl Resource for RuntimePolicyResource {
             elevated_resume_enabled: self.spec.elevated_resume_enabled,
             session_read_enabled: self.spec.session_read_enabled,
             session_control_enabled: self.spec.session_control_enabled,
+            source_ingest_enabled: self.spec.source_ingest_enabled,
         };
         let spec_value = rp.to_cr_spec();
         Ok(super::apply_to_store(
@@ -101,6 +102,7 @@ impl Resource for RuntimePolicyResource {
                 elevated_resume_enabled: rp.elevated_resume_enabled,
                 session_read_enabled: rp.session_read_enabled,
                 session_control_enabled: rp.session_control_enabled,
+                source_ingest_enabled: rp.source_ingest_enabled,
             },
         })
     }

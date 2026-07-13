@@ -695,6 +695,7 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         "Ping" | "TaskList" | "TaskInfo" | "TaskTimeline" | "TaskLogs" | "TaskFollow"
         | "TaskWatch" | "TaskTimelineFollow" | "Get"
         | "AttentionList" | "AttentionGet" | "AttentionFollow"
+        | "SourceEventList" | "SourceEventGet" | "SourceBindingList"
         | "HandoffGet" | "ResumeBoundaryList"
         | "Describe" | "StoreGet" | "StoreList" | "WorkerStatus" | "Check" | "ManifestExport"
         | "DbStatus" | "DbMigrationsList" | "SecretKeyStatus" | "SecretKeyList"
@@ -710,6 +711,7 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         | "TriggerFire" | "AgentCordon" | "AgentUncordon" | "AgentDrain" | "EventCleanup"
         | "DbLogCleanup" | "DbVacuum"
         | "AttentionClaim" | "AttentionSnooze" | "AttentionResolve" | "AttentionExecuteAction"
+        | "SourceEventIngest" | "SourceBind"
         | "HandoffGenerate" | "ResumePlan" | "ResumeExecute"
         | "AgentSessionHeartbeat" | "AgentSessionSendInput" | "AgentSessionClose"
         // Reclassified from Admin: Shutdown is redundant (CLI sends SIGTERM),
@@ -719,7 +721,7 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         // Admin: security-sensitive operations only.
         "ConfigDebug" | "ApplyPluginCrd"
         | "MaintenanceMode" | "SecretKeyRotate" | "SecretKeyBootstrap" | "SecretKeyRevoke"
-        | "QaDoctor" => Role::Admin,
+        | "QaDoctor" | "SourceReplay" => Role::Admin,
 
         other => {
             tracing::warn!(rpc = other, "unmapped RPC defaulting to Admin role");

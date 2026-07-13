@@ -13,8 +13,9 @@ import WishDetail from "./pages/WishDetail";
 import ProgressList from "./pages/ProgressList";
 import TaskDetail from "./pages/TaskDetail";
 import AttentionInbox from "./pages/AttentionInbox";
+import Sources from "./pages/Sources";
 
-type Tab = "attention" | "wishes" | "progress";
+type Tab = "attention" | "wishes" | "progress" | "sources";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("attention");
@@ -80,6 +81,11 @@ export default function App() {
         } else if (e.key === "3") {
           e.preventDefault();
           setTab("progress");
+          setSelectedWishId(null);
+          setSelectedTaskId(null);
+        } else if (e.key === "4") {
+          e.preventDefault();
+          setTab("sources");
           setSelectedWishId(null);
           setSelectedTaskId(null);
         }
@@ -162,6 +168,17 @@ export default function App() {
           >
             {i18n.nav.progress}
           </button>
+          <button
+            className={`btn ${tab === "sources" ? "btn-primary" : "btn-ghost"}`}
+            onClick={() => {
+              setTab("sources");
+              setSelectedWishId(null);
+              setSelectedTaskId(null);
+            }}
+            aria-label={i18n.nav.sourcesShortcut}
+          >
+            {i18n.nav.sources}
+          </button>
 
           <span style={{ flex: 1 }} />
 
@@ -214,6 +231,12 @@ export default function App() {
             taskId={selectedTaskId}
             onBack={() => setSelectedTaskId(null)}
           />
+        )}
+        {tab === "sources" && !selectedTaskId && (
+          <Sources onOpenTask={(id) => setSelectedTaskId(id)} />
+        )}
+        {tab === "sources" && selectedTaskId && (
+          <TaskDetail taskId={selectedTaskId} onBack={() => setSelectedTaskId(null)} />
         )}
       </div>
     </RoleContext.Provider>

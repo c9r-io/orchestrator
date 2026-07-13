@@ -142,6 +142,9 @@ pub struct RuntimePolicyProjection {
     #[serde(default)]
     /// Whether interactive session mutations are enabled.
     pub session_control_enabled: bool,
+    #[serde(default)]
+    /// Whether external adapters may ingest source events.
+    pub source_ingest_enabled: bool,
 }
 
 impl Default for RuntimePolicyProjection {
@@ -156,6 +159,7 @@ impl Default for RuntimePolicyProjection {
             elevated_resume_enabled: false,
             session_read_enabled: true,
             session_control_enabled: false,
+            source_ingest_enabled: false,
         }
     }
 }
@@ -191,6 +195,7 @@ impl CrdProjectable for RuntimePolicyProjection {
             elevated_resume_enabled: rp_spec.elevated_resume_enabled,
             session_read_enabled: rp_spec.session_read_enabled,
             session_control_enabled: rp_spec.session_control_enabled,
+            source_ingest_enabled: rp_spec.source_ingest_enabled,
         })
     }
 
@@ -207,6 +212,7 @@ impl CrdProjectable for RuntimePolicyProjection {
             elevated_resume_enabled: self.elevated_resume_enabled,
             session_read_enabled: self.session_read_enabled,
             session_control_enabled: self.session_control_enabled,
+            source_ingest_enabled: self.source_ingest_enabled,
         };
         serde_json::to_value(&spec).unwrap_or_default()
     }
@@ -392,6 +398,7 @@ mod tests {
             elevated_resume_enabled: false,
             session_read_enabled: true,
             session_control_enabled: false,
+            source_ingest_enabled: false,
         };
         let spec = config.to_cr_spec();
         let back = RuntimePolicyProjection::from_cr_spec(&spec).expect("should deserialize");
@@ -402,6 +409,7 @@ mod tests {
         assert!(back.mutating_resume_enabled);
         assert!(back.session_read_enabled);
         assert!(!back.session_control_enabled);
+        assert!(!back.source_ingest_enabled);
         assert!(RuntimePolicyProjection::default().attention_inbox_enabled);
     }
 

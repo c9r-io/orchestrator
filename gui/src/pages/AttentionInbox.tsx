@@ -228,7 +228,7 @@ export default function AttentionInbox({ onOpenTask }: Props) {
                 <button key={action.id} disabled={!canMutate} className="btn btn-primary" onClick={() => execute(item, action.id)}>{action.label}</button>
               ))}
               <button disabled={!canMutate} className="btn btn-ghost" onClick={() => resolve(item)}>{i18n.attention.resolve}</button>
-              <button className="btn btn-ghost" onClick={() => onOpenTask(item.task_id)}>{i18n.attention.timeline}</button>
+              {item.task_id && <button className="btn btn-ghost" onClick={() => onOpenTask(item.task_id)}>{i18n.attention.timeline}</button>}
             </div>
           </article>
         ))}

@@ -178,6 +178,10 @@ pub enum Commands {
     #[command(alias = "attn", subcommand)]
     Attention(AttentionCommands),
 
+    /// External source events and process bindings
+    #[command(alias = "src", subcommand)]
+    Source(SourceCommands),
+
     /// Generate and inspect immutable task handoffs
     #[command(subcommand)]
     Handoff(HandoffCommands),
@@ -374,6 +378,90 @@ pub enum AttentionCommands {
         /// Output encoding for each change.
         #[arg(short, long, default_value = "json")]
         output: OutputFormat,
+    },
+}
+
+/// External source event and binding operations.
+#[derive(Subcommand, Debug, Clone)]
+pub enum SourceCommands {
+    /// List recent source events.
+    #[command(alias = "ls")]
+    List {
+        /// Optional project filter.
+        #[arg(short, long)]
+        project: Option<String>,
+        /// Optional routed task filter.
+        #[arg(long)]
+        task: Option<String>,
+        /// Optional routing state filter.
+        #[arg(long)]
+        state: Option<String>,
+        /// Maximum number of events.
+        #[arg(long, default_value_t = 100)]
+        limit: u32,
+        /// Output encoding.
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+    /// Get one source event.
+    Get {
+        /// Source event ID.
+        id: String,
+        /// Output encoding.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
+    /// Ingest one provider-neutral normalized event fixture.
+    Ingest {
+        /// Project selected by trusted adapter configuration.
+        #[arg(short, long)]
+        project: String,
+        /// JSON file containing NormalizedSourceEvent, or `-` for stdin.
+        #[arg(short, long)]
+        file: String,
+        /// Optional authenticated raw-payload digest.
+        #[arg(long)]
+        payload_hash: Option<String>,
+    },
+    /// List source bindings for one task.
+    Bindings {
+        /// Task/process ID.
+        task_id: String,
+        /// Output encoding.
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+    /// Bind provider conversation coordinates to a task.
+    Bind {
+        /// Project ID.
+        #[arg(short, long)]
+        project: String,
+        /// Task/process ID.
+        #[arg(long)]
+        task: String,
+        /// Provider name.
+        #[arg(long)]
+        provider: String,
+        /// Installation ID.
+        #[arg(long)]
+        installation: String,
+        /// Optional conversation ID.
+        #[arg(long)]
+        conversation: Option<String>,
+        /// Optional thread/root ID.
+        #[arg(long)]
+        thread: Option<String>,
+        /// Binding type.
+        #[arg(long, default_value = "primary")]
+        binding_type: String,
+        /// Source event that authorized/created the binding.
+        #[arg(long)]
+        source_event: String,
+    },
+    /// Replay a failed or attention-blocked route.
+    Replay {
+        /// Source event ID.
+        id: String,
     },
 }
 

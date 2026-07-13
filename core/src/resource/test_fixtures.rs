@@ -251,6 +251,7 @@ pub fn runtime_policy_manifest() -> OrchestratorResource {
             elevated_resume_enabled: false,
             session_read_enabled: true,
             session_control_enabled: false,
+            source_ingest_enabled: false,
         }),
     }
 }

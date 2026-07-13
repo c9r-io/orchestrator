@@ -33,6 +33,7 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "ansi", "env-filter",
 x509-parser = "0.18"
 serde_json = "1.0"
 serde_yaml = "0.9"
+serde_urlencoded = "0.7"
 tokio-stream = { version = "0.1", features = ["net"] }
 futures = "0.3"
 rusqlite = { version = "0.31", features = ["bundled"] }
@@ -57,3 +58,4 @@ dev-insecure = []
 
 [dev-dependencies]
 tempfile = "3.10"
+agent-orchestrator = { path = "../../core", features = ["test-harness"] }

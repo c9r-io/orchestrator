@@ -13,6 +13,85 @@ use sha2::{Digest, Sha256};
 
 const BATCH_SIZE: usize = 500;
 
+/// Executes one allowlisted attention action through the shared service path
+/// used by gRPC, GUI/CLI clients, and verified external source adapters.
+pub async fn execute_allowlisted_action(
+    state: &InnerState,
+    attention_item_id: &str,
+    expected_version: i64,
+    idempotency_key: &str,
+    actor: &str,
+    action_id: &str,
+    input: &Value,
+) -> Result<agent_orchestrator::attention::AttentionItem> {
+    let item = state
+        .attention_repo
+        .get(attention_item_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("attention item not found"))?;
+    if !item.actions.iter().any(|action| action.id == action_id) {
+        anyhow::bail!("action is not allowlisted for this item");
+    }
+    if !matches!(
+        action_id,
+        "retry_failed_item"
+            | "resume_task"
+            | "approve_decision"
+            | "reject_decision"
+            | "acknowledge"
+    ) {
+        anyhow::bail!("unsupported action");
+    }
+
+    let reservation = state
+        .attention_repo
+        .reserve_action(
+            attention_item_id,
+            expected_version,
+            idempotency_key,
+            actor,
+            action_id,
+            input,
+        )
+        .await?;
+    if !reservation.should_execute {
+        return Ok(reservation.item);
+    }
+
+    let execution = match action_id {
+        "retry_failed_item" => {
+            if let Some(item_id) = item.task_item_id.as_deref() {
+                match super::task::retry_task_item(state, item_id) {
+                    Ok(task_id) => super::task::enqueue_task(state, &task_id)
+                        .await
+                        .map_err(Into::into),
+                    Err(error) => Err(error.into()),
+                }
+            } else {
+                Err(anyhow::anyhow!("item has no failed task item"))
+            }
+        }
+        "resume_task" => super::task::enqueue_task(state, &item.task_id)
+            .await
+            .map_err(Into::into),
+        "approve_decision" | "reject_decision" | "acknowledge" => Ok(()),
+        _ => unreachable!("supported action validated before reservation"),
+    };
+    let error_code = execution.as_ref().err().map(|error| error.to_string());
+    let completed = state
+        .attention_repo
+        .complete_action(
+            attention_item_id,
+            idempotency_key,
+            actor,
+            action_id,
+            error_code.as_deref(),
+        )
+        .await?;
+    execution?;
+    Ok(completed)
+}
+
 /// Projects one bounded event batch and wakes expired snoozes.
 ///
 /// The event cursor advances in the same transaction as queue mutations, so a

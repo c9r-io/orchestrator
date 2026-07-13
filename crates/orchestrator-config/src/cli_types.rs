@@ -240,6 +240,9 @@ pub struct RuntimePolicySpec {
     /// Whether writer lease, input and close mutations are enabled.
     #[serde(default)]
     pub session_control_enabled: bool,
+    /// Whether external source adapters may durably ingest new events.
+    #[serde(default)]
+    pub source_ingest_enabled: bool,
 }
 
 /// Runner-policy manifest payload.
@@ -562,6 +565,37 @@ pub struct TriggerWebhookSpec {
     /// CRD kind name for plugin lookup in the webhook request path.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "crdRef")]
     pub crd_ref: Option<String>,
+
+    /// Optional provider name enabling durable source-event ingestion mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+
+    /// Stable provider installation identity used for deduplication and routing.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "installationId"
+    )]
+    pub installation_id: Option<String>,
+
+    /// External actor IDs mapped to trusted control-plane roles.
+    #[serde(
+        default,
+        skip_serializing_if = "HashMap::is_empty",
+        rename = "actorRoles"
+    )]
+    pub actor_roles: HashMap<String, String>,
+
+    /// Allowed Slack request timestamp skew in seconds.
+    #[serde(
+        default = "default_slack_timestamp_tolerance",
+        rename = "timestampToleranceSecs"
+    )]
+    pub timestamp_tolerance_secs: u64,
+}
+
+fn default_slack_timestamp_tolerance() -> u64 {
+    300
 }
 
 /// Reference to a SecretStore for webhook secret resolution.

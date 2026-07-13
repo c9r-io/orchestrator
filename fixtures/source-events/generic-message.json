@@ -1,0 +1,19 @@
+{
+  "provider": "fixture",
+  "installation_id": "fixture-installation",
+  "external_event_id": "fixture-event-001",
+  "kind": "message",
+  "actor": {
+    "external_id": "fixture-user",
+    "display_name": "Fixture User"
+  },
+  "conversation": {
+    "conversation_id": "fixture-conversation",
+    "thread_id": "fixture-thread",
+    "top_level": true
+  },
+  "text_summary": "Provider-neutral source fixture",
+  "command": null,
+  "attachments": [],
+  "occurred_at": "2026-07-14T00:00:00Z"
+}

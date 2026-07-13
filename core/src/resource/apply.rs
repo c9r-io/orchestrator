@@ -106,6 +106,11 @@ pub fn apply_to_project(
                 serde_json::to_value(&rp.spec)?,
             ))
         }
+        RegisteredResource::Trigger(trigger) => {
+            let mut scoped = trigger.clone();
+            scoped.metadata = scoped_metadata(&trigger.metadata, project);
+            scoped.apply(config)
+        }
         _ => resource.apply(config),
     }
 }

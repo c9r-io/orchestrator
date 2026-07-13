@@ -272,6 +272,35 @@ mod tests {
     }
 
     #[test]
+    fn latest_schema_contains_source_routing_tables() {
+        let conn = mem_conn();
+        run_pending(&conn, &all_migrations()).expect("run migrations");
+        for table in [
+            "source_events",
+            "source_bindings",
+            "source_routing_attempts",
+            "source_command_actions",
+        ] {
+            let present: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+                    [table],
+                    |row| row.get(0),
+                )
+                .expect("query source table");
+            assert_eq!(present, 1, "missing table {table}");
+        }
+        let claimed_at: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('source_events') WHERE name='routing_claimed_at'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query source column");
+        assert_eq!(claimed_at, 1);
+    }
+
+    #[test]
     fn events_promote_columns_adds_columns() {
         let conn = mem_conn();
         let migrations = all_migrations();
@@ -786,8 +815,8 @@ mod tests {
         let migrations = all_migrations();
         assert_eq!(
             migrations.len(),
-            29,
-            "expected 29 migrations, got {}",
+            30,
+            "expected 30 migrations, got {}",
             migrations.len()
         );
     }

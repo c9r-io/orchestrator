@@ -262,6 +262,7 @@ mod tests {
             elevated_resume_enabled: false,
             session_read_enabled: true,
             session_control_enabled: false,
+            source_ingest_enabled: false,
         };
         store.put(make_cr("RuntimePolicy", "default", rp.to_cr_spec()));
         let projected: Option<RuntimePolicyProjection> = store.project_singleton();

@@ -6,6 +6,7 @@ pub mod manifest;
 pub mod resource;
 pub mod secret;
 pub mod session;
+pub mod source;
 pub mod store;
 pub mod stream;
 pub mod system;

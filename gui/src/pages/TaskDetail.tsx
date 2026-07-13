@@ -11,6 +11,7 @@ import ExpertPanel from "../components/ExpertPanel";
 import ProcessTimeline from "../components/ProcessTimeline";
 import HandoffPanel from "../components/HandoffPanel";
 import SessionPanel from "../components/SessionPanel";
+import SourcePanel from "../components/SourcePanel";
 import i18n from "../lib/i18n";
 import type { TaskDetail as TaskDetailType, LogLine, WatchSnapshot } from "../lib/types";
 
@@ -308,6 +309,7 @@ export default function TaskDetail({ taskId, onBack }: Props) {
 
           <HandoffPanel taskId={taskId} canExecute={canAccess("operator") && (isPaused || isFailed)} onExecuted={reload} />
           <SessionPanel taskId={taskId} canControl={canAccess("operator")} />
+          <SourcePanel taskId={taskId} />
 
           {/* Expert mode panel OR operator timeline/logs */}
           {expert ? (
