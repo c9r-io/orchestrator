@@ -79,6 +79,9 @@ flowchart TB
     DB[(SQLite DB)]
     FS[File System]
     Agent[Agent Process]
+    ExternalSource[Slack / External Source]
+    SourceHTTP[Verified Source HTTP Adapter]
+    SourceRouter[Durable Source Router]
 
     User -->|Commands| CLIClient
     CLIClient -->|gRPC| GRPC
@@ -89,6 +92,10 @@ flowchart TB
     Worker -->|Spawn/Monitor| Agent
     Agent -->|Modify| FS
     Agent -->|Logs| FS
+    ExternalSource -->|Signed Delivery| SourceHTTP
+    SourceHTTP -->|Persist Before Ack| DB
+    DB -->|Claim Normalized Event| SourceRouter
+    SourceRouter -->|Canonical Trigger / Attention Action| Daemon
 ```
 
 **Workspace layout** (C/S mode):
@@ -126,6 +133,7 @@ proto/
     *   **Cycle Loop**: Manages the iterative execution of workflows.
     *   **Process Management**: Spawns and monitors agent processes. Two runner executors sit behind the `RunnerExecutor` seam: the default `shell` (one-shot command, text contract) and `streaming`, which drives the agent CLI in `stream-json` mode with orchestrator-owned MCP tools so coordination consumes structured signals instead of scraped stdout. See [Streaming Runner Pivot — Overview](design_doc/orchestrator/streaming-runner-pivot-overview.md).
     *   **Event System**: Emits structured events (`step_started`, `task_failed`) to the database.
+    *   **Source Event Boundary**: Provider adapters authenticate and normalize external deliveries, then persist them before acknowledgement. The daemon router correlates provider conversations through `source_bindings` and invokes canonical Trigger or allowlisted Attention services; adapters never mutate task state directly.
 
 3.  **Data Layer (`core/src/db.rs`)**:
     *   **SQLite**: Stores persistent state including:
@@ -133,6 +141,9 @@ proto/
         *   `task_items`: Individual items (files) being processed.
         *   `command_runs`: History of executed commands and exit codes.
         *   `events`: Audit log of all system actions.
+        *   `source_events`: Provider-neutral external deliveries and routing state.
+        *   `source_bindings`: External conversation/artifact to task correlation.
+        *   `source_routing_attempts` and `source_command_actions`: Replay and command audit evidence.
     *   **File System**:
         *   **Config**: YAML manifests for defining Resources.
         *   **Logs**: Raw stdout/stderr capture from agent processes.

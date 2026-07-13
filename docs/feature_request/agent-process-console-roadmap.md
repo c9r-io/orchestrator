@@ -159,7 +159,7 @@ Implemented by [DD-108](../design_doc/orchestrator/108-agent-session-control-pla
 | P5-04 | Slack actions for approve/retry/open-console | P2, P3, P5-03 | Actions use the same audited command path as GUI/CLI |
 | P5-05 | Sources UI and provenance on timeline | P5-01..04, P1 | Every external update links to its process and source |
 
-Governed by [FR-099](FR-099-source-events-and-slack-binding.md).
+Implemented by [DD-109](../design_doc/orchestrator/109-source-events-and-slack-binding.md) and verified by [QA-146](../qa/orchestrator/146-source-events-and-slack-binding.md). The Slack pilot uses the same provider-neutral repository, Trigger semantics, binding model, and audited Attention action service as the non-Slack fixture.
 
 ### Phase 6: Console information architecture and release hardening
 

@@ -952,4 +952,47 @@ mod tests {
         assert!(verify_slack_action_token(&encoded, &["other".into()], 1_700_000_000).is_err());
         assert!(verify_slack_action_token(&encoded, &["secret".into()], 1_700_000_101).is_err());
     }
+
+    #[test]
+    fn slack_interactions_normalize_to_closed_attention_commands() {
+        for (action, expected) in [
+            (
+                "approve",
+                SourceCommand::Approve {
+                    attention_item_id: "attn-1".into(),
+                    expected_version: 3,
+                },
+            ),
+            (
+                "retry_failed_item",
+                SourceCommand::Retry {
+                    attention_item_id: "attn-1".into(),
+                    expected_version: 3,
+                },
+            ),
+        ] {
+            let token = SlackActionToken {
+                attention_item_id: "attn-1".into(),
+                expected_version: 3,
+                action: action.into(),
+                expires_at: chrono::Utc::now().timestamp() + 60,
+            };
+            let payload = serde_json::json!({
+                "type": "block_actions",
+                "team": {"id": "T01"},
+                "user": {"id": "U01"},
+                "channel": {"id": "C01"},
+                "container": {"message_ts": "1700000000.100"},
+                "actions": [{
+                    "action_id": action,
+                    "action_ts": "1700000001.100",
+                    "value": sign_slack_action_token(&token, "secret")
+                }]
+            });
+            let event = normalize_slack_interaction(&payload, "install-1", &["secret".into()])
+                .expect("normalize interaction");
+            assert_eq!(event.kind, SourceEventKind::Command);
+            assert_eq!(event.command, Some(expected));
+        }
+    }
 }

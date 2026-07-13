@@ -21,6 +21,8 @@ orchestrator apply -f fixtures/manifests/bundles/process-timeline-failure.yaml -
 
 The automated script starts an isolated daemon on `127.0.0.1:19196` with a temporary `ORCHESTRATORD_DATA_DIR`; it never changes the active project database.
 
+FR-099 may also materialize `source_routing_ambiguous` items before any task is resolved. Such an item has an empty `task_id`, retains the source event ID as provenance, and must not render "查看进程时间线" until correlation is established. Source approve/retry actions still execute through the same allowlisted Attention action service and audit table covered below.
+
 ## Database Schema Reference
 
 | Table | Purpose |
@@ -225,4 +227,3 @@ Verify users discover actionable work immediately and can complete the primary f
 | 3 | Snooze, auto-resolution, and reopen lifecycle | PASS | 2026-07-12 | Codex | Auto-resolution and audit checks passed; lifecycle paths inspected |
 | 4 | RBAC, feature flag, input boundaries, and response safety | PASS | 2026-07-12 | Codex | Role mapping, config default, validation, and safe summaries verified |
 | 5 | Default GUI entry, filters, keyboard flow, and timeline link | PASS | 2026-07-12 | Codex | Tauri clippy and React production build passed; interaction paths inspected |
-

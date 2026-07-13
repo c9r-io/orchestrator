@@ -1,5 +1,7 @@
 # Webhook Integration 模板
 
+> **Slack source note (FR-099):** production Slack process binding now uses the native durable endpoint `POST /source/slack/{project}/{trigger}` with Slack `v0` signature verification, timestamp replay protection, normalized source events, and asynchronous routing. The generic `/webhook/...` and CRD-plugin examples below remain valid for custom integrations, but they do not provide source-event persistence or thread-to-process bindings. See `docs/design_doc/orchestrator/109-source-events-and-slack-binding.md`.
+
 > **Harness Engineering 模板**：这个 showcase 展示 orchestrator 作为 agent-first 软件交付控制面的一个能力切片，把 agent、workflow、policy 和反馈闭环固化为可复用的工程资产。
 >
 > **模板用途**：Webhook 驱动的外部平台集成 — 展示 Trigger webhook 源、per-trigger 签名认证、CEL payload 过滤、CRD 插件系统和集成 manifest 包。

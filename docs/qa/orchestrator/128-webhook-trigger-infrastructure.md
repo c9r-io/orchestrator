@@ -13,6 +13,8 @@ FR-080
 
 Daemon must already be running (webhook server enabled by default on `127.0.0.1:19090`).
 
+FR-099 compatibility note: `/webhook/{project?}/{trigger}` remains the synchronous generic trigger path tested here. Durable source adapters use `/source/slack/{project}/{trigger}`, persist before routing, and are tested separately in `docs/qa/orchestrator/146-source-events-and-slack-binding.md`; do not expect an immediate `task_id` from the source endpoint.
+
 ## Verification Scenarios
 
 ### Scenario 1: Webhook health endpoint

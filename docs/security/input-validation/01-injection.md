@@ -103,6 +103,12 @@ Verify user input is not executed as a template/expression.
 - Input is treated as plain text
 - Expressions do not execute
 
+### Orchestrator Source-Event Overlay
+
+- External source text is stored only as a bounded, normalized summary and task context event.
+- It cannot select a workflow, modify manifests/execution profiles/secrets, construct shell commands, or add an action outside the closed `SourceCommand` enum.
+- Send shell/template/CEL fragments through the non-Slack fixture and Slack text paths, then verify they remain inert text as specified by `docs/qa/orchestrator/146-source-events-and-slack-binding.md`.
+
 ---
 
 ## Scenario 5: Protocol / CRLF Injection (If Applicable)
@@ -120,4 +126,3 @@ Verify `\r\n` does not cause header splitting or log forging.
 ### Expected Secure Behavior
 - No additional header lines are created
 - User input is escaped/structured in logs as a field value
-

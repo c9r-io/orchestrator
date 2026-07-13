@@ -15,6 +15,8 @@ self_referential_safe: true
 
 `TaskTimeline` is an on-read semantic projection over existing task, item, command-run, and event records. It is additive to `TaskInfo`, `TaskTrace`, `TaskFollow`, and `TaskWatch`.
 
+FR-099 adds `source_context_added`, `source_branch_created`, `source_cancelled`, and `source_open_console` task events. Their timeline payloads use internal source event IDs and bounded summaries; raw provider payloads and signing data must never appear. Source routing before a task is resolved remains visible in the Sources/Attention surfaces rather than being projected onto an arbitrary task.
+
 The daemon scenario uses only the deterministic mock fixture:
 
 ```bash

@@ -19,6 +19,8 @@ Project-specific overlay: FR-097 provider session tokens are opaque runner-only 
 
 FR-098 overlay: session List/Get/Resolve responses may expose `session_id`, task relationships, canonical state, diagnostic PID, and lease metadata. They must never expose `cwd`, command text, `input_fifo_path`, `transcript_path`, stdout/stderr paths, output JSON paths, input bytes, or unredacted transcript content. Search `session_control_actions`, events, control-plane audit, CLI JSON, Tauri events, and daemon logs; input/transcript content must not be logged.
 
+FR-099 overlay: source List/Get/GUI responses may expose normalized provider/install identity, bounded summaries, correlation coordinates, hashes, routing state, and stable errors. They must not expose Slack signing secrets, raw request bodies, action-token signatures, private transcripts, or unbounded provider errors. Search `source_events`, `source_command_actions`, CLI/Tauri payloads, and daemon logs with `docs/qa/orchestrator/146-source-events-and-slack-binding.md`.
+
 ---
 
 ## Scenario 1: Sensitive Fields In API Responses

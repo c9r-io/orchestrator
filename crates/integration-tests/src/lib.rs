@@ -187,6 +187,60 @@ impl OrchestratorService for TestOrchestratorServer {
     type AttentionFollowStream = BoxStream<AttentionDelta>;
     type AgentSessionReadStream = BoxStream<AgentSessionOutputChunk>;
 
+    async fn source_event_list(
+        &self,
+        _: Request<SourceEventListRequest>,
+    ) -> Result<Response<SourceEventListResponse>, Status> {
+        Err(Status::unimplemented(
+            "source integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn source_event_get(
+        &self,
+        _: Request<SourceEventGetRequest>,
+    ) -> Result<Response<SourceEvent>, Status> {
+        Err(Status::unimplemented(
+            "source integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn source_event_ingest(
+        &self,
+        _: Request<SourceEventIngestRequest>,
+    ) -> Result<Response<SourceEventIngestResponse>, Status> {
+        Err(Status::unimplemented(
+            "source integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn source_binding_list(
+        &self,
+        _: Request<SourceBindingListRequest>,
+    ) -> Result<Response<SourceBindingListResponse>, Status> {
+        Err(Status::unimplemented(
+            "source integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn source_bind(
+        &self,
+        _: Request<SourceBindRequest>,
+    ) -> Result<Response<SourceBinding>, Status> {
+        Err(Status::unimplemented(
+            "source integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn source_replay(
+        &self,
+        _: Request<SourceReplayRequest>,
+    ) -> Result<Response<SourceReplayResponse>, Status> {
+        Err(Status::unimplemented(
+            "source integration fixture uses the production daemon",
+        ))
+    }
+
     async fn agent_session_list(
         &self,
         _: Request<AgentSessionListRequest>,

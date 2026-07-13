@@ -266,6 +266,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/143-attention-inbox.md` | 5 | FR-096 persistent attention projection, concurrency, RBAC, actions, and default GUI |
 | orchestrator | `docs/qa/orchestrator/144-handoff-and-safe-resume.md` | 5 | FR-097 immutable handoffs, logical boundaries, stale-safe execution, provider opacity, and GUI preview |
 | orchestrator | `docs/qa/orchestrator/145-agent-session-control-plane.md` | 5 | FR-098 session migration, independent readers, fenced writer control, restart reconciliation, and TaskDetail UI |
+| orchestrator | `docs/qa/orchestrator/146-source-events-and-slack-binding.md` | 5 | FR-099 provider-neutral source ingestion, Slack verification, deterministic process binding, audited actions, and Sources UI |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |

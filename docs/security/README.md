@@ -31,12 +31,12 @@ API_TOKEN="{bearer_token}"                # If authentication is required
 ### Authorization
 | Doc | Description | Scenarios | Risk |
 |------|------|--------|----------|
-| `docs/security/authorization/01-access-control.md` | Access control, IDOR, privilege boundaries | 5 | Critical |
+| `docs/security/authorization/01-access-control.md` | Access control, IDOR, privilege boundaries, source-event RBAC overlay | 5 | Critical |
 
 ### Input Validation
 | Doc | Description | Scenarios | Risk |
 |------|------|--------|----------|
-| `docs/security/input-validation/01-injection.md` | SQL/NoSQL/command injection | 5 | Critical |
+| `docs/security/input-validation/01-injection.md` | SQL/NoSQL/command injection and inert source-text overlay | 5 | Critical |
 | `docs/security/input-validation/02-xss.md` | XSS (stored/reflected/DOM) | 4 | High |
 | `docs/security/input-validation/03-csrf.md` | CSRF (browser context) | 4 | High |
 | `docs/security/input-validation/04-ssrf.md` | SSRF (callbacks/metadata/internal probing) | 4 | Critical |
@@ -55,7 +55,7 @@ API_TOKEN="{bearer_token}"                # If authentication is required
 ### Data Security
 | Doc | Description | Scenarios | Risk |
 |------|------|--------|----------|
-| `docs/security/data-security/01-sensitive-data.md` | Sensitive data exposure and masking, including provider/session control-plane overlays | 5 | Critical |
+| `docs/security/data-security/01-sensitive-data.md` | Sensitive data exposure and masking, including provider/session/source overlays | 5 | Critical |
 
 ### Infrastructure Security
 | Doc | Description | Scenarios | Risk |
@@ -66,7 +66,7 @@ API_TOKEN="{bearer_token}"                # If authentication is required
 ### Logging And Monitoring Security
 | Doc | Description | Scenarios | Risk |
 |------|------|--------|----------|
-| `docs/security/logging-monitoring/01-log-security.md` | Log injection, audit coverage, sensitive data in logs | 5 | High |
+| `docs/security/logging-monitoring/01-log-security.md` | Log injection, audit coverage, source command audit, sensitive data in logs | 5 | High |
 
 ### Business Logic Security
 | Doc | Description | Scenarios | Risk |
@@ -87,3 +87,4 @@ API_TOKEN="{bearer_token}"                # If authentication is required
 4. If the project has concurrency-sensitive operations (one-time tokens, redemption, payments, invites, quotas): also run business logic and race-condition docs.
 5. For handoff/resume changes, run the overlays in access control, workflow abuse, and sensitive-data docs together with `docs/qa/orchestrator/144-handoff-and-safe-resume.md`.
 6. For interactive session changes, run the FR-098 overlay in `data-security/01-sensitive-data.md` with `docs/qa/orchestrator/145-agent-session-control-plane.md`.
+7. For source-adapter changes, run the FR-099 overlays in access control, injection, sensitive-data, and logging docs with `docs/qa/orchestrator/146-source-events-and-slack-binding.md`.
