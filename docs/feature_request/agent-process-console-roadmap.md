@@ -1,7 +1,7 @@
 # Agent Process Console Roadmap
 
-**Status**: Active roadmap; Phase 1 closed
-**Governed FRs**: FR-096 through FR-100 (FR-095 closed)
+**Status**: Complete; Phases 0-6 closed
+**Governed FRs**: FR-095 through FR-100 (closed)
 **Planned closure artifacts**: design docs 105-110 and QA docs 142-147  
 **Created**: 2026-07-12
 
@@ -80,7 +80,7 @@ The roadmap is organized around vertical operational outcomes rather than horizo
 
 ## Roadmap and Dependency Gates
 
-### Phase 0: Semantic foundation
+### Phase 0: Semantic foundation (Closed)
 
 **Outcome**: shared vocabulary, event contract, and compatibility rules are fixed before schema and UI work.
 
@@ -105,7 +105,7 @@ The roadmap is organized around vertical operational outcomes rather than horizo
 
 Closed by `docs/design_doc/orchestrator/105-process-timeline-read-model.md` and verified by `docs/qa/orchestrator/142-process-timeline-read-model.md`.
 
-### Phase 2: Attention Inbox
+### Phase 2: Attention Inbox (Closed)
 
 **Outcome**: the default operational view contains only actionable human work.
 
@@ -117,9 +117,9 @@ Closed by `docs/design_doc/orchestrator/105-process-timeline-read-model.md` and 
 | P2-04 | Attention Inbox UI and notifications | P2-03, P1-04 | Keyboard-first triage and deep-link to timeline work |
 | P2-05 | Noise and recovery tests | P2-01..04 | Repeated loop failures create one actionable item |
 
-Governed by [FR-096](FR-096-attention-inbox.md).
+Implemented by [DD-106](../design_doc/orchestrator/106-attention-inbox.md) and verified by [QA-143](../qa/orchestrator/143-attention-inbox.md).
 
-### Phase 3: Handoff and safe resume
+### Phase 3: Handoff and safe resume (Closed)
 
 **Outcome**: an operator can continue work without manually reconstructing context.
 
@@ -131,9 +131,9 @@ Governed by [FR-096](FR-096-attention-inbox.md).
 | P3-04 | Handoff and resume UI | P3-03 | Operator previews consequences before mutation |
 | P3-05 | Rollback, stale-version, and redaction tests | P3-01..04 | Unsafe or stale resume requests fail closed |
 
-Governed by [FR-097](FR-097-handoff-and-safe-resume.md).
+Implemented by [DD-107](../design_doc/orchestrator/107-handoff-and-safe-resume.md) and verified by [QA-144](../qa/orchestrator/144-handoff-and-safe-resume.md).
 
-### Phase 4: Agent session control plane
+### Phase 4: Agent session control plane (Closed)
 
 **Outcome**: active agent sessions become observable and safely attachable first-class resources.
 
@@ -147,7 +147,7 @@ Governed by [FR-097](FR-097-handoff-and-safe-resume.md).
 
 Implemented by [DD-108](../design_doc/orchestrator/108-agent-session-control-plane.md) and verified by [QA-145](../qa/orchestrator/145-agent-session-control-plane.md). This implementation supersedes the proposed ordering in DD-075 while retaining its two-layer mailbox/session distinction.
 
-### Phase 5: External source bindings and Slack pilot
+### Phase 5: External source bindings and Slack pilot (Closed)
 
 **Outcome**: multiple Slack events correlate into durable processes without coupling process semantics to Slack.
 
@@ -161,7 +161,7 @@ Implemented by [DD-108](../design_doc/orchestrator/108-agent-session-control-pla
 
 Implemented by [DD-109](../design_doc/orchestrator/109-source-events-and-slack-binding.md) and verified by [QA-146](../qa/orchestrator/146-source-events-and-slack-binding.md). The Slack pilot uses the same provider-neutral repository, Trigger semantics, binding model, and audited Attention action service as the non-Slack fixture.
 
-### Phase 6: Console information architecture and release hardening
+### Phase 6: Console information architecture and release hardening (Closed)
 
 **Outcome**: the GUI consistently presents the new operating model and is ready for daily use.
 
@@ -173,7 +173,7 @@ Implemented by [DD-109](../design_doc/orchestrator/109-source-events-and-slack-b
 | P6-04 | Product telemetry and operational dashboards | P2..P5 | Attention and re-entry metrics are observable |
 | P6-05 | Migration, release notes, and rollback runbook | All | Upgrade preserves existing task and session data |
 
-Governed by [FR-100](FR-100-process-console-ui.md).
+Implemented by [DD-110](../design_doc/orchestrator/110-process-console-information-architecture.md) and verified by [QA-147](../qa/orchestrator/147-process-console-ui.md). Privacy-safe local UI metrics complement the daemon's existing operational metrics; this slice does not introduce a hosted analytics backend.
 
 ## Recommended Delivery Increments
 
@@ -187,6 +187,8 @@ The phases are dependency ordered, but releases should stay vertical:
 6. **Console v1**: complete navigation, accessibility, metrics, migration, and runbooks.
 
 Each increment must be demoable against a recorded fixture and a live daemon. A phase is not complete when only schema or UI scaffolding exists.
+
+All six delivery increments are now represented by closed DD/QA artifacts. The Console v1 browser fixture provides the deterministic frontend demonstration, while FR-095 through FR-099 retain the isolated daemon fixtures for their authoritative state transitions.
 
 ## Tradeoffs
 

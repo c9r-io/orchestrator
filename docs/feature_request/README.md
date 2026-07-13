@@ -79,8 +79,6 @@
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
-| FR-097 | Handoff Briefing and Safe Resume | P1 | Proposed |
-| FR-100 | Agent Process Console UI | P1 | Proposed |
 
 ## 说明
 
@@ -91,7 +89,9 @@
 - `Implemented`: 需求已完成并进入维护阶段
 - 已闭环并删除的 FR，应由对应 `docs/design_doc/**` 与 `docs/qa/**` 继续承载设计和验证信息
 - FR-098 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/108-agent-session-control-plane.md`、`docs/qa/orchestrator/145-agent-session-control-plane.md` 与 `fixtures/manifests/bundles/session-control-mock.yaml` 承载
-- FR-097 至 FR-100 属于 Agent Process Console 路线图；FR-097 至 FR-099 已由对应 DD/QA 承载，FR-100 未闭环前继续保留 proposed design
+- FR-095 至 FR-100 的 Agent Process Console 路线图已全部闭环；整体状态与依赖顺序由 `docs/feature_request/agent-process-console-roadmap.md` 持续承载
+- FR-100 已闭环删除；其信息架构、迁移/回滚设计与可复现 UI 验证现由 `docs/design_doc/orchestrator/110-process-console-information-architecture.md`、`docs/qa/orchestrator/147-process-console-ui.md` 与 `scripts/qa/test-process-console-ui.sh` 承载
+- FR-097 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/107-handoff-and-safe-resume.md`、`docs/qa/orchestrator/144-handoff-and-safe-resume.md` 与 `scripts/qa/test-handoff-safe-resume.sh` 承载
 - FR-099 已闭环删除；其设计、验证与 deterministic fixture 现由 `docs/design_doc/orchestrator/109-source-events-and-slack-binding.md`、`docs/qa/orchestrator/146-source-events-and-slack-binding.md`、`fixtures/manifests/bundles/source-events-fixture.yaml` 与 `scripts/qa/test-source-events-slack.sh` 承载
 - FR-096 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/106-attention-inbox.md`、`docs/qa/orchestrator/143-attention-inbox.md` 与 `scripts/qa/test-attention-inbox.sh` 承载
 - FR-095 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/105-process-timeline-read-model.md`、`docs/qa/orchestrator/142-process-timeline-read-model.md` 与 `scripts/qa/test-process-timeline.sh` 承载
