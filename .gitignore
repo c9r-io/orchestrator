@@ -18,6 +18,8 @@ dist/
 .DS_Store
 fixtures/*/*.md
 node_modules/
+gui/test-results/
+gui/playwright-report/
 tmp/
 .wrangler/
 docs/promotion/
