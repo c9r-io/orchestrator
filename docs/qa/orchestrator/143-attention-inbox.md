@@ -188,7 +188,7 @@ ORDER BY id;
 
 ---
 
-## Scenario 5: Default GUI Entry, Filters, Keyboard Flow, And Timeline Link
+## Scenario 5: Entry Visibility, Filters, Keyboard Flow, And Process Link
 
 ### Preconditions
 
@@ -201,20 +201,20 @@ Verify users discover actionable work immediately and can complete the primary f
 
 ### Steps
 
-1. Launch the desktop GUI and confirm "Attention Inbox" is the selected default tab with intervention/attention counters matching visible items.
+1. Launch the desktop GUI and confirm "Attention" is the selected default navigation destination with intervention/attention counters matching visible items.
 2. Change state, severity, and assignee filters; confirm the card set updates.
-3. Use `J`/`K` to select items, `C` to claim, `R` to resolve, and `Enter` to open the task's "进程时间线".
-4. Use "稍后处理", an advertised recovery/decision action, and "查看进程时间线".
+3. Use `J`/`K` to select items, `C` to claim, `R` to resolve, and `Enter` to open the Process Workspace.
+4. Use snooze, an advertised recovery/decision action, and the open-process action.
 5. Reconnect the follow stream and confirm changes resume from `latest_change_id` without duplicated cards.
 6. Repeat with `read_only` and confirm every mutation control is disabled while filters and timeline links remain usable.
 
 ### Expected
 
-- The normal startup flow lands on Attention Inbox; "许愿池" and "进度观察" remain visible tabs.
+- The normal startup flow lands on Attention; Processes and New Process preserve the former progress/wish workflows.
 - Default ordering shows intervention first, then current actor, unassigned, SLA, and creation age.
 - Keyboard focus is visible and cards expose `role="option"`/`aria-selected` state.
 - Stream deltas reconcile by stable item ID.
-- Timeline deep links open the existing task detail and semantic timeline.
+- Process deep links open the integrated Process Workspace and semantic timeline.
 
 ---
 

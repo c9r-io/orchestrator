@@ -8,6 +8,8 @@ self_referential_safe: false
 **分类**: GUI / UX
 **优先级**: P2
 
+> **FR-100 navigation overlay (2026-07-14)**: Theme and reduced-transparency controls now live in the left console preferences area. New Process replaces the permanent wish tab, Processes replaces progress observation, and workflow/log diagnostics remain under Process Workspace → Expert. QA-147 owns current responsive and fallback assertions.
+
 ## Scenario 0: 入口可见性
 
 **入口**: 启动 GUI 后，顶部导航栏右侧有主题切换按钮（月亮/太阳图标）

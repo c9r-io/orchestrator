@@ -46,15 +46,15 @@ orchestrator apply -f fixtures/manifests/bundles/handoff-safe-resume.yaml --proj
 
 ### Goal
 
-Verify operators discover the feature through normal task-detail navigation and repeated same-cursor generation is immutable, bounded, and redacted.
+Verify operators discover the feature through normal Process Workspace navigation and repeated same-cursor generation is immutable, bounded, and redacted.
 
 ### Entry Visibility
 
-The feature must be reachable from the normal task list → task detail flow; a direct route, expert toggle, or Attention Inbox action is not an acceptable substitute.
+The feature must be reachable from Processes → Process Workspace; a direct hidden route or Expert-only toggle is not an acceptable substitute.
 
 ### Steps
 
-1. Open the normal task list, select the failed task, and verify the "Handoff & safe resume" panel appears directly after task summary.
+1. Open Processes, select the failed task, and verify the "Handoff & safe resume" panel appears in the Process Workspace contextual rail.
 2. Select "Generate handoff" and inspect current state, failure, changed files, recommendations, snapshot digest, and evidence count.
 3. Run `./scripts/qa/test-handoff-safe-resume.sh` and confirm both handoff assertions pass.
 4. Generate twice with `orchestrator handoff generate {task_id} --cursor {cursor} -o json`.
@@ -219,7 +219,7 @@ Verify role boundaries, required review fields, visible safety messaging, and ke
 
 ### Steps
 
-1. With `read_only`, open task detail and use "Generate handoff"/boundary reads; verify mutating "Preview resume" is unavailable.
+1. With `read_only`, open Process Workspace and inspect existing handoff/boundary context; verify "Generate handoff" and mutating "Preview resume" are unavailable.
 2. With `operator`, select "Preview resume" and verify focus moves into the dialog.
 3. Choose a boundary/mode, select "Create preview", and inspect side-effect warning, no-rollback statement, expiry, and consequence JSON.
 4. Try executing with an empty reason and, when elevated, without checking confirmation.

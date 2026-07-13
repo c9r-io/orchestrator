@@ -29,16 +29,16 @@ Verify visiting `{route}` directly loads correctly (or redirects to login/403) a
 Verify sidebar/top-nav active state is accurate so users do not get lost.
 
 ### Steps
-1. Launch the Orchestrator desktop GUI and confirm "Attention Inbox" is the active default tab.
-2. Visit "许愿池", "进度观察", "来源", and a task timeline deep link from an Attention or routed Source card.
+1. Launch the Orchestrator desktop GUI and confirm "Attention" is the active default destination.
+2. Visit "Processes", "Sessions", "Sources", "System", and a process-workspace deep link from an Attention or routed Source card; open "New process" separately.
 3. Confirm the corresponding navigation item is highlighted and no second item appears active.
-4. Verify `Cmd+1`, `Cmd+2`, `Cmd+3`, and `Cmd+4` activate Attention, wishes, progress, and Sources respectively.
+4. Verify `Cmd/Ctrl+1..5` activate Attention, Processes, Sessions, Sources, and System; verify `Cmd/Ctrl+N` opens New Process.
 
 ### Expected
 - Active styling is clear and matches the design system (color/background/indicator).
 - Avoid multiple items being active at the same time.
-- Attention counters match the destination card set, and timeline/source deep links select "进度观察" plus the target task.
-- "来源" shows a unique active state; opening a routed source reveals matching provenance in TaskDetail.
+- Attention counters match the actionable card set, and Attention/source deep links open the integrated Process Workspace with the target task.
+- Sources shows a unique active state; opening a routed source reveals matching provenance without losing the Sources navigation context.
 
 ---
 

@@ -32,7 +32,7 @@ Task execution data already existed across `tasks`, `task_items`, `command_runs`
 
 ## UI Interactions
 
-- Page: task detail in `gui/src/pages/TaskDetail.tsx`.
+- Page: implemented in `gui/src/pages/TaskDetail.tsx`, presented by FR-100 as `ProcessWorkspace` under Processes.
 - The default "进程时间线" tab renders semantic entries and evidence.
 - The "实时日志" tab preserves explicit log following.
 - "专家" and "跟踪" preserve expert data and the raw structured trace.

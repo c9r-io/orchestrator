@@ -119,16 +119,16 @@ Verify users discover the timeline through normal navigation and can still reach
 
 ### Steps
 
-1. From "Attention Inbox", click "查看进程时间线" on an item; if the Inbox is empty, open "进度观察" and select a task.
-2. Confirm "进程时间线" is the selected default tab and entries are visible.
-3. Select "实时日志", click "追踪", and confirm log following still works.
-4. Select "专家" and confirm expert panels remain accessible.
+1. From Attention, open a process on an item; if the Inbox is empty, open Processes and select a task.
+2. Confirm the semantic process timeline is the primary workspace view and entries are visible.
+3. Open Expert, select live logs, start following, and confirm log following still works.
+4. Confirm the remaining Expert panels stay accessible.
 5. Click "跟踪" and confirm structured trace JSON remains accessible.
 6. While a task is running, confirm new timeline rows appear without reloading the page.
 
 ### Expected
 
-- Attention deep links and the visible task-detail tab are normal entries; no direct route or hidden expert action is required.
+- Attention deep links and the visible Process Workspace are normal entries; no hidden route or expert action is required.
 - `upsert` deltas merge by stable ID, and `reset_required` reloads the snapshot.
 - Logs and structured trace remain available as separate diagnostic views.
 

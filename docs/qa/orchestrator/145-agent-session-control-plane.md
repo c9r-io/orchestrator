@@ -1,7 +1,7 @@
 # Orchestrator - Agent Session Control Plane
 
 **Module**: orchestrator
-**Scope**: Session migration, observation, fenced control, restart safety, and TaskDetail interaction
+**Scope**: Session migration, observation, fenced control, restart safety, and Process Console interaction
 **Scenarios**: 5
 **Priority**: High
 
@@ -68,12 +68,12 @@ Verify bounded readers can consume independent source offsets and resume without
 1. Attach `reader-a` and `reader-b` with `orchestrator agent session attach {session_id} --mode reader --client-id reader-a` and the equivalent command for `reader-b`.
 2. Read once from offset `0`; record the final returned `next_offset` as `{offset_a}`.
 3. Start another reader at offset `0`, then reconnect the first reader with `orchestrator agent session read {session_id} --offset {offset_a} --follow`.
-4. Disconnect and reconnect the Portal while TaskDetail is displaying the visible "Agent session" panel.
+4. Disconnect and reconnect the Portal while Session Inspector or Process Workspace is displaying the visible session panel.
 
 ### Expected
 - Readers do not alter each other's offsets.
 - Reconnected output begins exactly at the committed offset.
-- TaskDetail automatically resumes and does not append a chunk whose `next_offset` was already committed.
+- The visible session surface automatically resumes and does not append a chunk whose `next_offset` was already committed.
 - A ninth concurrent reader is rejected by the reader bound.
 
 ### Expected Data State
@@ -154,20 +154,20 @@ SELECT state, process_fingerprint, ended_at FROM agent_sessions WHERE id='{sessi
 - Create live, detached, completed, and deliberately inconsistent mock session fixtures.
 
 ### Goal
-Verify startup convergence and the navigation-first TaskDetail experience.
+Verify startup convergence and navigation-first global/process session re-entry.
 
 ### Steps
 1. Stop and restart `orchestratord` while the fixtures are persisted.
 2. List sessions and inspect live/detached/closed/failed outcomes.
-3. Navigate from the normal task list into TaskDetail; do not use a direct hidden route.
-4. Verify the visible "Agent session" panel, read-only transcript, state/PID/writer summary, and operator-only "Request control" and "Close session" actions.
+3. Navigate from Sessions into Session Inspector, follow its process link into Process Workspace, and do not use a hidden route.
+4. Verify the visible transcript, state/PID/writer summary, and operator-only "Request control" and "Close session" actions in the applicable session surface.
 5. Acquire and release control, then disconnect/reconnect the GUI and verify follow resumes.
 
 ### Expected
 - Live verified process plus transport becomes active/detached according to lease ownership.
 - Dead process with output evidence becomes closed; missing/inconsistent identity or transport becomes failed.
 - Expired leases are released and fenced.
-- The feature is discoverable from TaskDetail and read-only users cannot see mutation controls.
+- The feature is discoverable globally and from Process Workspace; read-only users cannot see mutation or input controls.
 
 ### Expected Data State
 ```sql

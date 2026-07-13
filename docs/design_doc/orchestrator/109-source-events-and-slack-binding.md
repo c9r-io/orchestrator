@@ -28,14 +28,14 @@ External conversations are not tasks. A Slack thread, webhook delivery, code-ana
 
 ## Scope
 
-- In scope: migration 30, source repository/router, Trigger source-installation fields, Slack adapter, source RPC/CLI/Tauri surfaces, Sources page, TaskDetail bindings, command audit, fixtures, and automated QA.
+- In scope: migration 30, source repository/router, Trigger source-installation fields, Slack adapter, source RPC/CLI/Tauri surfaces, Sources page, process-workspace bindings, command audit, fixtures, and automated QA.
 - Out of scope: outbound provider notifications, attachment download, merge semantics, and a provider marketplace.
 
 ## UI Interactions
 
 - The visible "来源" navigation entry and `Cmd+4` open the Sources page.
 - The page filters by routing state, opens a resolved process, and exposes "重放" only to admins for `failed` or `needs_attention` events.
-- TaskDetail displays a "来源绑定" panel with provider, installation, binding type, conversation, and thread coordinates.
+- Process Workspace displays a source-binding panel with provider, installation, binding type, conversation, and thread coordinates.
 - Source-created Attention items without a resolved task do not render a misleading timeline action.
 
 ## API

@@ -253,15 +253,15 @@ Verify users discover source operations through visible navigation and privilege
 
 1. Launch the GUI, activate the visible "来源" navigation item, and repeat with `Cmd+4`.
 2. Select each routing-state filter and confirm the list and empty state update.
-3. On a routed source card, choose "打开进程"; confirm TaskDetail opens and its "来源绑定" panel matches the card coordinates.
+3. On a routed source card, choose the open-process action; confirm Process Workspace opens and its source-binding panel matches the card coordinates.
 4. As `read_only`, inspect failed/attention cards and confirm "重放" is absent.
 5. As `admin`, choose "重放" for a failed event, confirm the list refreshes, and verify deterministic routing creates no duplicate process.
 
 ### Expected
 
-- The fourth navigation entry is visible, active state is unique, and `Cmd+1..4` map to Attention, wishes, progress, and Sources.
+- Sources is the fourth navigation entry with a unique active state; `Cmd/Ctrl+1..5` map to Attention, Processes, Sessions, Sources, and System.
 - Provider, installation, routing state, timestamp, conversation/thread, and stable error code are readable without raw message text.
-- "打开进程" selects the Progress/task detail surface and SourcePanel preserves provenance.
+- Opening a process selects the integrated Process Workspace and SourcePanel preserves provenance.
 - Only admins can see/use replay; errors use `role="alert"`, list updates use `aria-live`, and controls are keyboard reachable with visible focus.
 
 ### Expected Data State

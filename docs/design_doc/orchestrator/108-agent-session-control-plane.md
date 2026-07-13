@@ -2,7 +2,7 @@
 
 **Module**: orchestrator
 **Status**: Approved
-**Related Plan**: FR-098; daemon-authoritative session resources, fenced writer leases, resumable transcript streams, CLI/Tauri/TaskDetail integration
+**Related Plan**: FR-098; daemon-authoritative session resources, fenced writer leases, resumable transcript streams, CLI/Tauri/process-console integration
 **Related QA**: `docs/qa/orchestrator/145-agent-session-control-plane.md`
 **Created**: 2026-07-12
 **Last Updated**: 2026-07-12
@@ -16,7 +16,7 @@ TTY execution already persisted `agent_sessions`, FIFO paths, output paths, proc
 - Make `session_id` a first-class observable and controllable identity.
 - Support bounded readers, one explicitly leased writer, fenced input, and governed close.
 - Reconcile persisted state with process identity after daemon restart.
-- Provide CLI, Tauri, and TaskDetail access without disclosing filesystem paths.
+- Provide CLI, Tauri, global Session Inspector, and Process Workspace access without disclosing filesystem paths.
 
 ## Non-goals
 
@@ -25,12 +25,12 @@ TTY execution already persisted `agent_sessions`, FIFO paths, output paths, proc
 
 ## Scope
 
-- In scope: migration 29, session repository/runtime ownership, nine gRPC methods, stream protection, CLI, Tauri, TaskDetail `SessionPanel`, audit events, policy flags, and reconciliation.
+- In scope: migration 29, session repository/runtime ownership, nine gRPC methods, stream protection, CLI, Tauri, the embedded `SessionPanel`, audit events, policy flags, and reconciliation. FR-100 later adds the global list/inspector entry.
 - Out of scope: browser terminal protocol optimization and arbitrary file transfer.
 
 ## UI Interactions
 
-- Page: existing TaskDetail view.
+- Page: embedded TaskDetail implementation, presented by FR-100 as Process Workspace, plus the global Session Inspector.
 - Visible entry: the "Agent session" panel appears when the task has sessions.
 - Actions: "Request control", "Send", "Release control", and "Close session".
 - The transcript viewer starts read-only and resumes from its last committed source offset.
@@ -87,7 +87,7 @@ Migration 29 adds the following columns to `agent_sessions`: `state_version`, `w
 
 - Unit: migration compatibility, process fingerprint, bounded readers, lease acquisition/heartbeat/release, stale fencing, and reconciliation.
 - Integration: RPC roles, stream cursor/reconnect, path non-disclosure, close identity checks, and CLI output.
-- UI: visible TaskDetail entry, read-only default, explicit takeover, heartbeat, detach, and offset reconnect.
+- UI: visible global/process entry, read-only default, explicit takeover, heartbeat, detach, and offset reconnect.
 
 ## QA Docs
 

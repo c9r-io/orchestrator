@@ -18,7 +18,7 @@ Task status and semantic timelines explain what happened, but operators still ne
 - Separate consequence planning from mutation and reject stale, expired, or replayed plans.
 - Fail closed for undeclared and non-idempotent external effects.
 - Reuse provider sessions through an internal runner adapter while keeping provider tokens opaque.
-- Make the reviewed handoff/resume flow visible from task detail and remove direct GUI retry/resume bypasses.
+- Make the reviewed handoff/resume flow visible from the task/process workspace and remove direct GUI retry/resume bypasses.
 
 ## Non-goals
 
@@ -35,7 +35,7 @@ Task status and semantic timelines explain what happened, but operators still ne
 
 ## UI Interactions
 
-- Page: existing task detail in `gui/src/pages/TaskDetail.tsx`.
+- Page: implemented in `gui/src/pages/TaskDetail.tsx`, presented by FR-100 as `ProcessWorkspace` under Processes.
 - Visible entry: "Handoff & safe resume" panel directly after task summary.
 - Key buttons: "Generate handoff", "Preview resume", "Create preview", and "Execute reviewed plan".
 - The dialog exposes boundary, side-effect class, resume mode, no-rollback statement, expiry, operator reason, and elevated confirmation when required.

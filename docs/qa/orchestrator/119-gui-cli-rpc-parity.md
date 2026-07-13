@@ -7,6 +7,8 @@ self_referential_safe: false
 **关联设计**: `docs/design_doc/orchestrator/77-gui-cli-rpc-parity.md`
 **关联 FR**: FR-067（已闭环）
 
+> **FR-100 navigation overlay (2026-07-14)**: System/store/trigger/secret surfaces now live under the top-level **System** destination. Timeline/log/trace behavior lives in **Process Workspace**, with raw diagnostics under **Expert**. Use QA-147 for current reachability and do not infer a direct resume bypass from the historical labels below.
+
 ## 验证场景
 
 ## Scenario 0: 入口可见性

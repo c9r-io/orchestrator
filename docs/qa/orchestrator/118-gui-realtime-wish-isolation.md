@@ -7,6 +7,8 @@ self_referential_safe: false
 **关联设计**: `docs/design_doc/orchestrator/76-gui-realtime-wish-isolation.md`
 **关联 FR**: FR-066（已闭环）
 
+> **FR-100 navigation overlay (2026-07-14)**: The realtime and project-isolation assertions remain valid, but the visible entries are now **New Process**, **Processes**, and **Process Workspace**; Attention is the default destination. Use QA-147 for current navigation and shortcut assertions.
+
 ## 前置条件
 
 > **重要**: 许愿池功能依赖 `wish-pool` 项目。GUI 中 `WishPool.tsx` 硬编码了

@@ -9,9 +9,10 @@
 ## Constraints
 
 - `docs/design-system.md` (focus ring, contrast, keyboard accessibility)
-- FR-097 overlay: run dialog scenarios against task detail → "Preview resume". Focus must enter the consequence dialog, cycle within it, close on `Escape`, and return to the trigger. Required operator reason/elevated confirmation must not rely on color alone. See `docs/qa/orchestrator/144-handoff-and-safe-resume.md`.
-- FR-098 overlay: TaskDetail's "Agent session" panel must expose the transcript as an accessible live log, label the session selector and input, communicate follow/lease state without color alone, and keep "Request control", "Release control", and "Close session" keyboard reachable. Read-only users must not receive hidden-but-focusable mutation controls. See `docs/qa/orchestrator/145-agent-session-control-plane.md`.
-- FR-099 overlay: the Sources page must have a labelled heading/filter, `role="list"`/`listitem` semantics, `aria-live` updates, `role="alert"` errors, keyboard-reachable "打开进程", and an admin-only "重放" control that is absent rather than hidden-but-focusable for lower roles. See `docs/qa/orchestrator/146-source-events-and-slack-binding.md`.
+- FR-097 overlay: run dialog scenarios against Process Workspace → "Preview resume". Focus must enter the consequence dialog, cycle within it, close on `Escape`, and return to the trigger. Required operator reason/elevated confirmation must not rely on color alone. See `docs/qa/orchestrator/144-handoff-and-safe-resume.md`.
+- FR-098 overlay: the top-level Session Inspector and Process Workspace session panel must expose the transcript as an accessible live log, label selectors and permitted input, and communicate follow/lease state without color alone. Read-only users must not receive hidden-but-focusable mutation or input controls. See `docs/qa/orchestrator/145-agent-session-control-plane.md`.
+- FR-099 overlay: the Sources page must have a labelled heading/filter, `role="list"`/`listitem` semantics, `aria-live` updates, `role="alert"` errors, a keyboard-reachable process action, and an admin-only replay control that is absent rather than hidden-but-focusable for lower roles. See `docs/qa/orchestrator/146-source-events-and-slack-binding.md`.
+- FR-100 overlay: the left navigation, mobile menu, Attention listbox, semantic timeline, contextual rail, and reduced-transparency control must remain keyboard reachable with unique active state and visible focus. See `docs/qa/orchestrator/147-process-console-ui.md`.
 
 ## Scenario 1: Core Tasks Are Possible With Keyboard Only
 

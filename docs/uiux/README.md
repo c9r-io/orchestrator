@@ -31,12 +31,12 @@ PORTAL_BASE_URL="http://localhost:3000"   # If there is a Web UI
 |------|------|--------|
 | `docs/uiux/04-animations.md` | Duration/easing, reduced motion, performance | 5 |
 | `docs/uiux/05-responsive-layout.md` | Breakpoints, touch targets, layout stability | 5 |
-| `docs/uiux/06-navigation-ia.md` | Navigation consistency, Attention default entry, Sources/Cmd+4, process deep links, page titles | 5 |
+| `docs/uiux/06-navigation-ia.md` | Attention-first left navigation, stable process/session/source deep links, New Process, page titles | 5 |
 
 ### Accessibility
 | Doc | Description | Scenarios |
 |------|------|--------|
-| `docs/uiux/07-accessibility.md` | Keyboard navigation, focus, contrast, ARIA, including handoff/session/source overlays | 5 |
+| `docs/uiux/07-accessibility.md` | Keyboard navigation, focus, contrast, ARIA, including process-console/handoff/session/source overlays | 5 |
 
 ### Common Components And States
 | Doc | Description | Scenarios |
@@ -51,6 +51,7 @@ PORTAL_BASE_URL="http://localhost:3000"   # If there is a Web UI
 2. New forms/create-edit flows: run at least `08-forms-validation.md` + `07-accessibility.md`.
 3. Visual/token changes: run at least `01-design-consistency.md` + `02-theme-switching.md`.
 4. For the FR-097 consequence dialog, run `07-accessibility.md` + `08-forms-validation.md` + `10-dialogs-notifications.md` with `docs/qa/orchestrator/144-handoff-and-safe-resume.md`.
-5. For the FR-098 TaskDetail session panel, run `07-accessibility.md` with `docs/qa/orchestrator/145-agent-session-control-plane.md`.
-6. For the FR-099 Sources page and TaskDetail provenance panel, run `06-navigation-ia.md` + `07-accessibility.md` with `docs/qa/orchestrator/146-source-events-and-slack-binding.md`.
-7. Complex animations/glass effects: run at least `04-animations.md` (including performance and reduced motion).
+5. For the FR-098 Session Inspector and Process Workspace session panel, run `07-accessibility.md` with `docs/qa/orchestrator/145-agent-session-control-plane.md`.
+6. For the FR-099 Sources page and Process Workspace provenance panel, run `06-navigation-ia.md` + `07-accessibility.md` with `docs/qa/orchestrator/146-source-events-and-slack-binding.md`.
+7. For the FR-100 console shell and Attention/process vertical flow, run `05-responsive-layout.md` + `06-navigation-ia.md` + `07-accessibility.md` with `docs/qa/orchestrator/147-process-console-ui.md`.
+8. Complex animations/glass effects: run at least `04-animations.md` (including performance and reduced motion).

@@ -7,6 +7,8 @@ self_referential_safe: false
 **关联设计**: `docs/design_doc/orchestrator/74-gui-uiux-wish-pool-progress.md`
 **关联 FR**: FR-064（已闭环）
 
+> **FR-100 navigation overlay (2026-07-14)**: This legacy document still verifies the underlying wish, task-list, and Expert behaviors. Current entry points are **New Process**, **Processes**, and **Process Workspace → Expert**; Attention is the default destination. Historical tab labels and shortcuts below must be translated through QA-147 rather than treated as current navigation assertions.
+
 ## 验证场景
 
 ## Scenario 0: 入口可见性

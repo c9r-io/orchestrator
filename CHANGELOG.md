@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Agent Process Console UI** (FR-100) — Attention-first left navigation, integrated semantic process workspace, global session re-entry, stable hash deep links, keyboard triage, role-sensitive actions, responsive/reduced-transparency fallbacks, privacy-safe UI metrics, and request-ID error correlation
+- Frontend Vitest and Playwright coverage for route migration, Attention reconciliation, semantic evidence, read-only gates, narrow navigation, and visual fallbacks
+
+### Changed
+- Wish Pool and Progress Observer are now presented as New Process and Processes; resource administration remains reachable through System and raw diagnostics through Process Expert
+
 ## [0.3.1] - 2026-04-06
 
 ### Security
