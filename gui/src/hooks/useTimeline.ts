@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { TaskTimelinePage, TimelineDelta, TimelineEntry } from "../lib/types";
 
 const PAGE_SIZE = 50;
+const MAX_BUFFERED_ENTRIES = 500;
 
 function mergeEntries(current: TimelineEntry[], incoming: TimelineEntry[]) {
   const merged = [...current];
@@ -17,7 +18,7 @@ function mergeEntries(current: TimelineEntry[], incoming: TimelineEntry[]) {
       merged[position] = entry;
     }
   }
-  return merged;
+  return merged.slice(0, MAX_BUFFERED_ENTRIES);
 }
 
 export function useTimeline(taskId: string, categories: string[] = []) {

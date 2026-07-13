@@ -3,9 +3,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AgentSession, SessionOutputChunk } from "../lib/types";
 
-interface Props { taskId: string; canControl: boolean; }
+interface Props {
+  taskId?: string;
+  sessionId?: string;
+  canControl: boolean;
+  onSelectSession?: (sessionId: string) => void;
+}
 
-export default function SessionPanel({ taskId, canControl }: Props) {
+export default function SessionPanel({ taskId, sessionId, canControl, onSelectSession }: Props) {
   const [sessions, setSessions] = useState<AgentSession[]>([]);
   const [selected, setSelected] = useState<AgentSession | null>(null);
   const [text, setText] = useState("");
@@ -18,10 +23,16 @@ export default function SessionPanel({ taskId, canControl }: Props) {
   const clientId = useRef(`gui-${crypto.randomUUID()}`);
 
   const reload = useCallback(async () => {
-    const rows = await invoke<AgentSession[]>("agent_session_list", { task_id: taskId });
+    const rows = await invoke<AgentSession[]>("agent_session_list", { task_id: taskId ?? null });
     setSessions(rows);
-    setSelected((current) => rows.find((row) => row.session_id === current?.session_id) ?? rows[0] ?? null);
+    setSelected((current) => rows.find((row) => row.session_id === sessionId)
+      ?? rows.find((row) => row.session_id === current?.session_id) ?? rows[0] ?? null);
   }, [taskId]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    setSelected((current) => sessions.find((row) => row.session_id === sessionId) ?? current);
+  }, [sessionId, sessions]);
 
   useEffect(() => { reload().catch((value) => setError(String(value))); }, [reload]);
 
@@ -81,20 +92,23 @@ export default function SessionPanel({ taskId, canControl }: Props) {
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
       <h3 style={{ flex: 1, fontSize: 14 }}>Agent session</h3>
       <span style={{ color: connected ? "var(--success)" : "var(--text-tertiary)", fontSize: 12 }}>{connected ? "Following" : "Disconnected"}</span>
-      <select value={selected?.session_id ?? ""} onChange={(event) => setSelected(sessions.find((row) => row.session_id === event.target.value) ?? null)} aria-label="Select agent session">
+      <select value={selected?.session_id ?? ""} onChange={(event) => {
+        setSelected(sessions.find((row) => row.session_id === event.target.value) ?? null);
+        onSelectSession?.(event.target.value);
+      }} aria-label="Select agent session">
         {sessions.map((row) => <option key={row.session_id} value={row.session_id}>{row.agent_id} · {row.step_id} · {row.state}</option>)}
       </select>
     </div>
-    {selected && <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 }}>State: {selected.state} · PID: {selected.pid} · Writer: {selected.writer_actor ?? "none"}{leaseExpiry ? ` · Lease ${leaseExpiry}` : ""}</div>}
+    {selected && <div className="session-metadata">State: {selected.state} · Task: {selected.task_id} · Step: {selected.step_id} · Agent: {selected.agent_id} · Working directory: governed workspace · Reader: {connected ? "attached" : "detached"} · Writer: {selected.writer_actor ?? "none"}{leaseExpiry ? ` · Lease ${leaseExpiry}` : ""}</div>}
     <pre role="log" aria-live="polite" style={{ background: "var(--bg-secondary)", minHeight: 120, maxHeight: 320, overflow: "auto", padding: 12, borderRadius: 12, whiteSpace: "pre-wrap" }}>{transcript || "No transcript output yet."}</pre>
     {error && <p style={{ color: "var(--danger)", fontSize: 12 }}>{error}</p>}
-    {canControl && selected && <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+    {canControl && selected ? <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
       {fencingToken === null ? <button className="btn btn-secondary" onClick={() => acquire().catch((value) => setError(String(value)))}>Request control</button> : <>
         <input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") send().catch((value) => setError(String(value))); }} aria-label="Session input" style={{ flex: 1 }} />
         <button className="btn btn-primary" onClick={() => send().catch((value) => setError(String(value)))}>Send</button>
         <button className="btn btn-ghost" onClick={() => detach().catch((value) => setError(String(value)))}>Release control</button>
       </>}
       <button className="btn btn-destructive" onClick={() => close().catch((value) => setError(String(value)))}>Close session</button>
-    </div>}
+    </div> : selected && <p className="readonly-reason">Read-only access: writer lease, input and close controls are unavailable.</p>}
   </section>;
 }

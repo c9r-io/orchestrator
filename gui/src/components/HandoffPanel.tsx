@@ -9,6 +9,7 @@ import type {
 
 interface Props {
   taskId: string;
+  canGenerate: boolean;
   canExecute: boolean;
   onExecuted: () => void;
 }
@@ -20,7 +21,7 @@ const modes = [
   ["resume_provider_session", "Resume provider session"],
 ] as const;
 
-export default function HandoffPanel({ taskId, canExecute, onExecuted }: Props) {
+export default function HandoffPanel({ taskId, canGenerate, canExecute, onExecuted }: Props) {
   const [snapshot, setSnapshot] = useState<HandoffSnapshot | null>(null);
   const [boundaries, setBoundaries] = useState<ResumeBoundary[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -147,9 +148,9 @@ export default function HandoffPanel({ taskId, canExecute, onExecuted }: Props) 
           <p>Capture concise evidence, preview consequences, then resume from a logical boundary.</p>
         </div>
         <div className="handoff-actions">
-          <button className="btn btn-secondary" onClick={generate} disabled={busy}>
+          {canGenerate && <button className="btn btn-secondary" onClick={generate} disabled={busy}>
             Generate handoff
-          </button>
+          </button>}
           {canExecute && (
             <button ref={resumeButtonRef} className="btn btn-primary" onClick={openResume} disabled={busy}>
               Preview resume
@@ -159,6 +160,7 @@ export default function HandoffPanel({ taskId, canExecute, onExecuted }: Props) 
       </div>
 
       {error && <p className="handoff-error" role="alert">{error}</p>}
+      {!canGenerate && <p className="readonly-reason">Read-only access: existing handoff context is inspectable, but generating or executing a new handoff is unavailable.</p>}
       {snapshot && (
         <div className="handoff-briefing">
           <p><strong>Current:</strong> {String(snapshot.briefing.current_state.status ?? "unknown")}</p>

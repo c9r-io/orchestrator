@@ -1,9 +1,13 @@
+import { useEffect } from "react";
 import { useTimeline } from "../hooks/useTimeline";
+import { recordUiMetric } from "../lib/telemetry";
 import i18n from "../lib/i18n";
 import type { TimelineEntry } from "../lib/types";
 
 interface Props {
   taskId: string;
+  selectedEntryId?: string | null;
+  onSelectEntry?: (entry: TimelineEntry) => void;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -22,12 +26,12 @@ const CATEGORY_LABELS: Record<string, string> = {
   completion: "完成",
 };
 
-function TimelineRow({ entry }: { entry: TimelineEntry }) {
+function TimelineRow({ entry, selected, onSelect }: { entry: TimelineEntry; selected: boolean; onSelect?: (entry: TimelineEntry) => void }) {
   const isFailure = entry.category === "failure" || entry.status === "failed";
   return (
-    <li className={`timeline-row${isFailure ? " timeline-row-failure" : ""}`}>
+    <li className={`timeline-row${isFailure ? " timeline-row-failure" : ""}${selected ? " timeline-row-selected" : ""}`}>
       <div className="timeline-rail" aria-hidden="true"><span /></div>
-      <div className="timeline-content">
+      <button type="button" className="timeline-content" aria-pressed={selected} onClick={() => onSelect?.(entry)}>
         <div className="timeline-meta">
           <time dateTime={entry.occurred_at}>{new Date(entry.occurred_at).toLocaleString()}</time>
           <span className="timeline-category">{CATEGORY_LABELS[entry.category] ?? entry.category}</span>
@@ -50,13 +54,17 @@ function TimelineRow({ entry }: { entry: TimelineEntry }) {
             ))}
           </div>
         )}
-      </div>
+      </button>
     </li>
   );
 }
 
-export default function ProcessTimeline({ taskId }: Props) {
+export default function ProcessTimeline({ taskId, selectedEntryId, onSelectEntry }: Props) {
   const { entries, hasMore, loading, loadingMore, error, loadMore } = useTimeline(taskId);
+  useEffect(() => {
+    recordUiMetric("timeline_render", { page: "processes", target_id: taskId, result: String(entries.length) });
+    if (!selectedEntryId && entries[0]) onSelectEntry?.(entries[0]);
+  }, [entries, onSelectEntry, selectedEntryId, taskId]);
   return (
     <div className="liquid-glass timeline-panel">
       <div className="timeline-header">
@@ -73,7 +81,7 @@ export default function ProcessTimeline({ taskId }: Props) {
         <p className="timeline-empty">{i18n.taskDetail.timelineEmpty}</p>
       ) : (
         <ol className="timeline-list" aria-label={i18n.taskDetail.timelineLabel}>
-          {entries.map((entry) => <TimelineRow key={entry.id} entry={entry} />)}
+          {entries.map((entry) => <TimelineRow key={entry.id} entry={entry} selected={entry.id === selectedEntryId} onSelect={onSelectEntry} />)}
         </ol>
       )}
       {hasMore && (
