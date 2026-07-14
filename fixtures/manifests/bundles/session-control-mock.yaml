@@ -14,7 +14,7 @@ metadata:
 spec:
   capabilities: [session_echo]
   command: >-
-    sh -c 'echo "$1"; while IFS= read -r line; do echo "mock:$line"; [ "$line" = quit ] && break; done' session "{prompt}"
+    sh -c 'echo "$1"; while true; do if IFS= read -r line; then echo "mock:$line"; [ "$line" = quit ] && break; else sleep 0.05; fi; done' session "{prompt}"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow
@@ -23,6 +23,7 @@ metadata:
 spec:
   steps:
     - id: interactive
+      type: interactive
       required_capability: session_echo
       tty: true
   loop:
