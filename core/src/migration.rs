@@ -160,7 +160,7 @@ mod tests {
         )
         .expect("populate audit row");
 
-        assert_eq!(run_pending(&conn, &migrations).expect("upgrade"), 1);
+        assert_eq!(run_pending(&conn, &migrations).expect("upgrade"), 2);
         let preserved: i64 = conn
             .query_row("SELECT COUNT(*) FROM control_plane_audit", [], |row| {
                 row.get(0)
@@ -875,8 +875,8 @@ mod tests {
         let migrations = all_migrations();
         assert_eq!(
             migrations.len(),
-            31,
-            "expected 31 migrations, got {}",
+            32,
+            "expected 32 migrations, got {}",
             migrations.len()
         );
     }

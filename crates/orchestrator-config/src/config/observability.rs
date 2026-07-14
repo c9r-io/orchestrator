@@ -159,6 +159,45 @@ pub struct ObservabilityConfig {
     /// Logging configuration for the runtime.
     #[serde(default)]
     pub logging: LoggingConfig,
+    /// Local, privacy-safe Process Console metric collection.
+    #[serde(default)]
+    pub process_metrics: ProcessMetricsConfig,
+}
+
+/// Runtime limits for the local Process Console metrics read model.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProcessMetricsConfig {
+    /// Enables durable observations and aggregate queries.
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
+    /// Enables the bounded desktop UI telemetry sink.
+    #[serde(default = "default_enabled")]
+    pub ui_telemetry_enabled: bool,
+    /// Retention for optional observations and materialized rollups.
+    #[serde(default = "default_metrics_retention_days")]
+    pub retention_days: u32,
+    /// Maximum accepted metrics query window.
+    #[serde(default = "default_metrics_max_window_days")]
+    pub max_window_days: u32,
+}
+
+impl Default for ProcessMetricsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            ui_telemetry_enabled: true,
+            retention_days: default_metrics_retention_days(),
+            max_window_days: default_metrics_max_window_days(),
+        }
+    }
+}
+
+fn default_metrics_retention_days() -> u32 {
+    90
+}
+
+fn default_metrics_max_window_days() -> u32 {
+    30
 }
 
 fn default_enabled() -> bool {
@@ -187,6 +226,10 @@ mod tests {
         assert_eq!(cfg.logging.file.format, LoggingFormat::Json);
         assert_eq!(cfg.logging.file.directory, "logs/system");
         assert!(cfg.logging.event_bridge);
+        assert!(cfg.process_metrics.enabled);
+        assert!(cfg.process_metrics.ui_telemetry_enabled);
+        assert_eq!(cfg.process_metrics.retention_days, 90);
+        assert_eq!(cfg.process_metrics.max_window_days, 30);
     }
 
     #[test]

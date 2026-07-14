@@ -1272,3 +1272,83 @@ pub(crate) fn m0031_control_action_audit(conn: &Connection) -> Result<()> {
     .context("m0031_control_action_audit indexes")?;
     Ok(())
 }
+
+pub(crate) fn m0032_process_console_metrics(conn: &Connection) -> Result<()> {
+    ensure_column_exists(
+        conn,
+        "attention_changes",
+        "project_id",
+        "ALTER TABLE attention_changes ADD COLUMN project_id TEXT",
+    )?;
+    ensure_column_exists(
+        conn,
+        "attention_changes",
+        "resulting_state",
+        "ALTER TABLE attention_changes ADD COLUMN resulting_state TEXT",
+    )?;
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS process_metric_observations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id TEXT NOT NULL,
+            metric_name TEXT NOT NULL,
+            dimension_key TEXT NOT NULL DEFAULT '',
+            dimensions_json TEXT NOT NULL DEFAULT '{}',
+            value REAL NOT NULL,
+            occurred_at TEXT NOT NULL,
+            source_kind TEXT NOT NULL,
+            source_key TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(project_id, metric_name, dimension_key, source_kind, source_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_process_metric_observation_window
+            ON process_metric_observations(project_id, metric_name, occurred_at);
+        CREATE INDEX IF NOT EXISTS idx_process_metric_observation_retention
+            ON process_metric_observations(occurred_at);
+
+        CREATE TABLE IF NOT EXISTS process_metric_rollups (
+            project_id TEXT NOT NULL,
+            metric_name TEXT NOT NULL,
+            dimension_key TEXT NOT NULL DEFAULT '',
+            dimensions_json TEXT NOT NULL DEFAULT '{}',
+            bucket_start TEXT NOT NULL,
+            bucket_seconds INTEGER NOT NULL,
+            sample_count INTEGER NOT NULL,
+            sum_value REAL NOT NULL,
+            min_value REAL NOT NULL,
+            max_value REAL NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY(project_id, metric_name, dimension_key, bucket_start, bucket_seconds)
+        );
+        CREATE INDEX IF NOT EXISTS idx_process_metric_rollup_window
+            ON process_metric_rollups(project_id, bucket_seconds, bucket_start, metric_name);
+
+        CREATE TABLE IF NOT EXISTS process_metric_projector_state (
+            projector TEXT NOT NULL,
+            project_id TEXT NOT NULL DEFAULT '',
+            cursor TEXT NOT NULL DEFAULT '',
+            lag_count INTEGER NOT NULL DEFAULT 0,
+            failure_count INTEGER NOT NULL DEFAULT 0,
+            last_error_code TEXT,
+            last_success_at TEXT,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY(projector, project_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_process_metric_projector_updated
+            ON process_metric_projector_state(updated_at);
+
+        CREATE INDEX IF NOT EXISTS idx_attention_changes_project_created
+            ON attention_changes(project_id, created_at, id);
+        "#,
+    )
+    .context("m0032_process_console_metrics")?;
+
+    conn.execute(
+        "UPDATE attention_changes
+         SET project_id=(SELECT project_id FROM attention_items WHERE id=attention_item_id)
+         WHERE project_id IS NULL",
+        [],
+    )
+    .context("m0032 backfill attention project")?;
+    Ok(())
+}

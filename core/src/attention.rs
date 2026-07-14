@@ -831,15 +831,16 @@ fn resolve_matching(
 }
 
 fn append_change(conn: &Connection, id: &str, kind: &str) -> Result<()> {
-    let version: i64 = conn.query_row(
-        "SELECT version FROM attention_items WHERE id=?1",
+    let (version, project_id, state): (i64, String, String) = conn.query_row(
+        "SELECT version,project_id,state FROM attention_items WHERE id=?1",
         params![id],
-        |row| row.get(0),
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
     )?;
     conn.execute(
-        "INSERT INTO attention_changes(attention_item_id,change_kind,item_version,created_at)
-         VALUES(?1,?2,?3,?4)",
-        params![id, kind, version, now_ts()],
+        "INSERT INTO attention_changes
+         (attention_item_id,change_kind,item_version,created_at,project_id,resulting_state)
+         VALUES(?1,?2,?3,?4,?5,?6)",
+        params![id, kind, version, now_ts(), project_id, state],
     )?;
     Ok(())
 }
