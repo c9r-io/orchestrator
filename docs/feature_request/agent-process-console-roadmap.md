@@ -1,9 +1,23 @@
 # Agent Process Console Roadmap
 
-**Status**: Complete; Phases 0-6 closed
-**Governed FRs**: FR-095 through FR-100 (closed)
-**Planned closure artifacts**: design docs 105-110 and QA docs 142-147  
+**Status**: Core slices implemented; follow-up hardening open
+**Original governed FRs**: FR-095 through FR-100 (closed into DD/QA artifacts)
+**Follow-up FRs**: FR-101 through FR-104 (Proposed)
+**Original closure artifacts**: design docs 105-110 and QA docs 142-147
 **Created**: 2026-07-12
+
+## 2026-07-14 Implementation Audit Follow-ups
+
+The original FR files are closed because their approved slice-level acceptance artifacts exist, but a repository audit found roadmap-wide gates that are not yet satisfied. The following follow-up FRs carry those gaps without reopening or overloading DD-105 through DD-110:
+
+| Follow-up | Scope | Roadmap gaps owned | Depends on |
+|---|---|---|---|
+| [FR-101](FR-101-control-plane-action-audit-envelope.md) | Canonical mutation audit envelope | P0-02/P0-04 and cross-cutting request-ID/reason/idempotency audit consistency | Original control-plane slices |
+| [FR-102](FR-102-agent-session-control-plane-hardening.md) | Session hardening and executable acceptance | P4-02/P4-03/P4-05 and unchecked QA-145 scenarios | FR-101 |
+| [FR-103](FR-103-process-console-recovery-notifications-e2e.md) | Recovery UX, Attention notifications, actor-aware filtering, live GUI/daemon E2E | P2-04, P3-04, P6-03 and the complete vertical demonstration | FR-101, FR-102 |
+| [FR-104](FR-104-process-console-operational-metrics.md) | Product metrics, projector observability, performance fixtures, local dashboard | P1-05, P6-04 and roadmap Product Metrics | FR-101 through FR-103 |
+
+Until these FRs close, “Console v1 complete” means the base navigation and domain slices are available, not that every roadmap-wide hardening, observability, and integrated acceptance gate has passed.
 
 ## Background
 
@@ -80,7 +94,7 @@ The roadmap is organized around vertical operational outcomes rather than horizo
 
 ## Roadmap and Dependency Gates
 
-### Phase 0: Semantic foundation (Closed)
+### Phase 0: Semantic foundation (Implemented; FR-101 follow-up open)
 
 **Outcome**: shared vocabulary, event contract, and compatibility rules are fixed before schema and UI work.
 
@@ -91,7 +105,7 @@ The roadmap is organized around vertical operational outcomes rather than horizo
 | P0-03 | Freeze additive gRPC compatibility policy | FR-095, FR-096 | Existing CLI and GUI calls remain valid |
 | P0-04 | Define operator RBAC/action audit policy | FR-096, FR-098 | Every mutating action has actor, reason, idempotency key, and audit event |
 
-### Phase 1: Process timeline read model (Closed)
+### Phase 1: Process timeline read model (Implemented; FR-104 performance follow-up open)
 
 **Outcome**: operators can understand a task without reading raw logs.
 
@@ -105,7 +119,7 @@ The roadmap is organized around vertical operational outcomes rather than horizo
 
 Closed by `docs/design_doc/orchestrator/105-process-timeline-read-model.md` and verified by `docs/qa/orchestrator/142-process-timeline-read-model.md`.
 
-### Phase 2: Attention Inbox (Closed)
+### Phase 2: Attention Inbox (Implemented; FR-103 notification follow-up open)
 
 **Outcome**: the default operational view contains only actionable human work.
 
@@ -119,7 +133,7 @@ Closed by `docs/design_doc/orchestrator/105-process-timeline-read-model.md` and 
 
 Implemented by [DD-106](../design_doc/orchestrator/106-attention-inbox.md) and verified by [QA-143](../qa/orchestrator/143-attention-inbox.md).
 
-### Phase 3: Handoff and safe resume (Closed)
+### Phase 3: Handoff and safe resume (Implemented; FR-103 UI convergence follow-up open)
 
 **Outcome**: an operator can continue work without manually reconstructing context.
 
@@ -133,7 +147,7 @@ Implemented by [DD-106](../design_doc/orchestrator/106-attention-inbox.md) and v
 
 Implemented by [DD-107](../design_doc/orchestrator/107-handoff-and-safe-resume.md) and verified by [QA-144](../qa/orchestrator/144-handoff-and-safe-resume.md).
 
-### Phase 4: Agent session control plane (Closed)
+### Phase 4: Agent session control plane (Implementation present; FR-102 acceptance open)
 
 **Outcome**: active agent sessions become observable and safely attachable first-class resources.
 
@@ -161,7 +175,7 @@ Implemented by [DD-108](../design_doc/orchestrator/108-agent-session-control-pla
 
 Implemented by [DD-109](../design_doc/orchestrator/109-source-events-and-slack-binding.md) and verified by [QA-146](../qa/orchestrator/146-source-events-and-slack-binding.md). The Slack pilot uses the same provider-neutral repository, Trigger semantics, binding model, and audited Attention action service as the non-Slack fixture.
 
-### Phase 6: Console information architecture and release hardening (Closed)
+### Phase 6: Console information architecture and release hardening (Partially complete)
 
 **Outcome**: the GUI consistently presents the new operating model and is ready for daily use.
 
@@ -173,7 +187,7 @@ Implemented by [DD-109](../design_doc/orchestrator/109-source-events-and-slack-b
 | P6-04 | Product telemetry and operational dashboards | P2..P5 | Attention and re-entry metrics are observable |
 | P6-05 | Migration, release notes, and rollback runbook | All | Upgrade preserves existing task and session data |
 
-Implemented by [DD-110](../design_doc/orchestrator/110-process-console-information-architecture.md) and verified by [QA-147](../qa/orchestrator/147-process-console-ui.md). Privacy-safe local UI metrics complement the daemon's existing operational metrics; this slice does not introduce a hosted analytics backend.
+The base information architecture is implemented by [DD-110](../design_doc/orchestrator/110-process-console-information-architecture.md) and covered by [QA-147](../qa/orchestrator/147-process-console-ui.md). FR-103 owns the missing live-daemon vertical UI proof and notification/recovery convergence. FR-104 owns durable product metrics and the local operational dashboard; developer-console telemetry is not sufficient for P6-04.
 
 ## Recommended Delivery Increments
 
@@ -188,7 +202,7 @@ The phases are dependency ordered, but releases should stay vertical:
 
 Each increment must be demoable against a recorded fixture and a live daemon. A phase is not complete when only schema or UI scaffolding exists.
 
-All six delivery increments are now represented by closed DD/QA artifacts. The Console v1 browser fixture provides the deterministic frontend demonstration, while FR-095 through FR-099 retain the isolated daemon fixtures for their authoritative state transitions.
+All six delivery increments have base DD/QA artifacts, and FR-095 through FR-099 retain isolated daemon fixtures for authoritative state transitions. The current Console v1 browser fixture uses a mocked Tauri boundary; FR-103 must add the missing integrated live-daemon demonstration before the final increment is considered fully accepted.
 
 ## Tradeoffs
 
@@ -224,6 +238,8 @@ All six delivery increments are now represented by closed DD/QA artifacts. The C
 - repeated failure and degenerate-loop rates
 
 Metrics must not include prompt text, transcripts, source message bodies, or secrets.
+
+These metric families are requirements, not current implementation claims. FR-104 owns their definitions, durable aggregation, read APIs, performance gates, and local dashboard.
 
 ## Risks and Mitigations
 
