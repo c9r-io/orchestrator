@@ -23,6 +23,8 @@ The automated script starts an isolated daemon on `127.0.0.1:19196` with a tempo
 
 FR-099 may also materialize `source_routing_ambiguous` items before any task is resolved. Such an item has an empty `task_id`, retains the source event ID as provenance, and must not render "查看进程时间线" until correlation is established. Source approve/retry actions still execute through the same allowlisted Attention action service and audit table covered below.
 
+FR-103 adds an authoritative follow overlay: snapshot and stream filters share trusted actor semantics; new/reopened intervention or configured approval versions may carry one bounded notification descriptor; ordinary updates are quiet. Direct retry/resume actions are not rendered as substitutes for the Process Workspace reviewed recovery flow. See QA-150 for live Tauri/gRPC and notification acceptance.
+
 ## Database Schema Reference
 
 | Table | Purpose |
@@ -204,7 +206,7 @@ Verify users discover actionable work immediately and can complete the primary f
 1. Launch the desktop GUI and confirm "Attention" is the selected default navigation destination with intervention/attention counters matching visible items.
 2. Change state, severity, and assignee filters; confirm the card set updates.
 3. Use `J`/`K` to select items, `C` to claim, `R` to resolve, and `Enter` to open the Process Workspace.
-4. Use snooze, an advertised recovery/decision action, and the open-process action.
+4. Use snooze, an advertised non-recovery decision action, and the open-process action; confirm direct retry/resume actions route users to reviewed Process Workspace recovery instead of executing inline.
 5. Reconnect the follow stream and confirm changes resume from `latest_change_id` without duplicated cards.
 6. Repeat with `read_only` and confirm every mutation control is disabled while filters and timeline links remain usable.
 
@@ -214,6 +216,7 @@ Verify users discover actionable work immediately and can complete the primary f
 - Default ordering shows intervention first, then current actor, unassigned, SLA, and creation age.
 - Keyboard focus is visible and cards expose `role="option"`/`aria-selected` state.
 - Stream deltas reconcile by stable item ID.
+- Mine is evaluated against the trusted daemon actor for both snapshots and deltas; reconnect does not duplicate a notification for the same item version.
 - Process deep links open the integrated Process Workspace and semantic timeline.
 
 ---

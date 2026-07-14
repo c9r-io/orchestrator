@@ -1,9 +1,9 @@
 # Agent Process Console Roadmap
 
-**Status**: Core slices and canonical action audit implemented; follow-up hardening open
+**Status**: Recovery, notification, audit, session, and accessibility hardening complete; operational metrics follow-up open
 **Original governed FRs**: FR-095 through FR-100 (closed into DD/QA artifacts)
-**Follow-up FRs**: FR-101 and FR-102 closed; FR-103 through FR-104 proposed
-**Original closure artifacts**: design docs 105-111 and QA docs 142-148
+**Follow-up FRs**: FR-101 through FR-103 closed; FR-104 proposed
+**Closure artifacts**: design docs 105-113 and QA docs 142-150
 **Created**: 2026-07-12
 
 ## 2026-07-14 Implementation Audit Follow-ups
@@ -14,10 +14,10 @@ The original FR files are closed because their approved slice-level acceptance a
 |---|---|---|---|
 | FR-101 (Closed) | Canonical mutation audit envelope | Closed by `docs/design_doc/orchestrator/111-control-plane-action-audit-envelope.md` and `docs/qa/orchestrator/148-control-plane-action-audit-envelope.md` | Original control-plane slices |
 | FR-102 (Closed) | Session hardening and executable acceptance | Closed by `docs/design_doc/orchestrator/112-agent-session-control-plane-hardening.md`, `docs/qa/orchestrator/149-agent-session-control-plane-hardening.md`, and `scripts/qa/test-agent-session-control-plane.sh` | FR-101 |
-| [FR-103](FR-103-process-console-recovery-notifications-e2e.md) | Recovery UX, Attention notifications, actor-aware filtering, live GUI/daemon E2E | P2-04, P3-04, P6-03 and the complete vertical demonstration | FR-101, FR-102 |
+| FR-103 (Closed) | Recovery UX, Attention notifications, actor-aware filtering, live GUI/daemon E2E | P2-04, P3-04, P6-03 and the complete vertical demonstration; closed by DD-113, QA-150, and the vertical-flow script | FR-101, FR-102 |
 | [FR-104](FR-104-process-console-operational-metrics.md) | Product metrics, projector observability, performance fixtures, local dashboard | P1-05, P6-04 and roadmap Product Metrics | FR-101 through FR-103 |
 
-Until FR-103 and FR-104 close, “Console v1 complete” means the base navigation, domain slices, canonical action audit, and session hardening are available, not that every remaining recovery-notification, observability, and integrated acceptance gate has passed.
+FR-103 proves the complete operator journey through real Tauri handlers and an isolated daemon. Until FR-104 closes, “Console v1 complete” excludes the remaining product-metric, projector-observability, performance-fixture, and local-dashboard gates.
 
 ## Background
 
@@ -121,7 +121,7 @@ Closed by `docs/design_doc/orchestrator/111-control-plane-action-audit-envelope.
 
 Closed by `docs/design_doc/orchestrator/105-process-timeline-read-model.md` and verified by `docs/qa/orchestrator/142-process-timeline-read-model.md`.
 
-### Phase 2: Attention Inbox (Implemented; FR-103 notification follow-up open)
+### Phase 2: Attention Inbox (Implemented and notification follow-up closed by FR-103)
 
 **Outcome**: the default operational view contains only actionable human work.
 
@@ -134,8 +134,9 @@ Closed by `docs/design_doc/orchestrator/105-process-timeline-read-model.md` and 
 | P2-05 | Noise and recovery tests | P2-01..04 | Repeated loop failures create one actionable item |
 
 Implemented by [DD-106](../design_doc/orchestrator/106-attention-inbox.md) and verified by [QA-143](../qa/orchestrator/143-attention-inbox.md).
+FR-103 adds daemon-authoritative snapshot/follow filter parity, transition-scoped safe notification descriptors, item/version dedupe, and permission-aware in-app fallback; see [DD-113](../design_doc/orchestrator/113-process-console-recovery-notifications-e2e.md) and [QA-150](../qa/orchestrator/150-process-console-recovery-notifications-e2e.md).
 
-### Phase 3: Handoff and safe resume (Implemented; FR-103 UI convergence follow-up open)
+### Phase 3: Handoff and safe resume (Implemented and UI convergence closed by FR-103)
 
 **Outcome**: an operator can continue work without manually reconstructing context.
 
@@ -148,6 +149,7 @@ Implemented by [DD-106](../design_doc/orchestrator/106-attention-inbox.md) and v
 | P3-05 | Rollback, stale-version, and redaction tests | P3-01..04 | Unsafe or stale resume requests fail closed |
 
 Implemented by [DD-107](../design_doc/orchestrator/107-handoff-and-safe-resume.md) and verified by [QA-144](../qa/orchestrator/144-handoff-and-safe-resume.md).
+FR-103 makes this the canonical failed-process primary action, moves orphan repair to accurately named Expert maintenance, and proves stale rejection plus reviewed execution through production Tauri/gRPC boundaries.
 
 ### Phase 4: Agent session control plane (Implemented and closed by FR-102)
 
@@ -177,7 +179,7 @@ Implemented by [DD-108](../design_doc/orchestrator/108-agent-session-control-pla
 
 Implemented by [DD-109](../design_doc/orchestrator/109-source-events-and-slack-binding.md) and verified by [QA-146](../qa/orchestrator/146-source-events-and-slack-binding.md). The Slack pilot uses the same provider-neutral repository, Trigger semantics, binding model, and audited Attention action service as the non-Slack fixture.
 
-### Phase 6: Console information architecture and release hardening (Partially complete)
+### Phase 6: Console information architecture and release hardening (Accessibility complete; operational metrics open)
 
 **Outcome**: the GUI consistently presents the new operating model and is ready for daily use.
 
@@ -189,7 +191,7 @@ Implemented by [DD-109](../design_doc/orchestrator/109-source-events-and-slack-b
 | P6-04 | Product telemetry and operational dashboards | P2..P5 | Attention and re-entry metrics are observable |
 | P6-05 | Migration, release notes, and rollback runbook | All | Upgrade preserves existing task and session data |
 
-The base information architecture is implemented by [DD-110](../design_doc/orchestrator/110-process-console-information-architecture.md) and covered by [QA-147](../qa/orchestrator/147-process-console-ui.md). FR-103 owns the missing live-daemon vertical UI proof and notification/recovery convergence. FR-104 owns durable product metrics and the local operational dashboard; developer-console telemetry is not sufficient for P6-04.
+The base information architecture is implemented by [DD-110](../design_doc/orchestrator/110-process-console-information-architecture.md) and covered by [QA-147](../qa/orchestrator/147-process-console-ui.md). FR-103 closes P6-03 with focus/keyboard/role/contrast/motion/transparency/narrow-layout automation plus the live-daemon vertical UI proof. FR-104 owns durable product metrics and the local operational dashboard; developer-console telemetry is not sufficient for P6-04.
 
 ## Recommended Delivery Increments
 
@@ -204,7 +206,7 @@ The phases are dependency ordered, but releases should stay vertical:
 
 Each increment must be demoable against a recorded fixture and a live daemon. A phase is not complete when only schema or UI scaffolding exists.
 
-All six delivery increments have base DD/QA artifacts, and FR-095 through FR-099 retain isolated daemon fixtures for authoritative state transitions. The current Console v1 browser fixture uses a mocked Tauri boundary; FR-103 must add the missing integrated live-daemon demonstration before the final increment is considered fully accepted.
+All six delivery increments have DD/QA artifacts, and FR-095 through FR-099 retain isolated daemon fixtures for authoritative state transitions. The fast browser suite continues to use a mocked Tauri boundary, while FR-103's `scripts/qa/test-process-console-vertical-flow.sh` now supplies the integrated production-handler/gRPC demonstration. Only FR-104's operational metric and performance gates remain open.
 
 ## Tradeoffs
 

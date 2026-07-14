@@ -220,17 +220,17 @@ Verify role boundaries, required review fields, visible safety messaging, and ke
 ### Steps
 
 1. With `read_only`, open Process Workspace and inspect existing handoff/boundary context; verify "Generate handoff" and mutating "Preview resume" are unavailable.
-2. With `operator`, select "Preview resume" and verify focus moves into the dialog.
+2. With `operator`, select either the failed-process "Review safe resume" primary action or panel-level "Preview resume" and verify focus moves into the dialog.
 3. Choose a boundary/mode, select "Create preview", and inspect side-effect warning, no-rollback statement, expiry, and consequence JSON.
 4. Try executing with an empty reason and, when elevated, without checking confirmation.
-5. Complete the form by keyboard, cycle focus with `Tab`/`Shift+Tab`, close with `Escape`, and verify focus returns to "Preview resume".
+5. Complete the form by keyboard, cycle focus with `Tab`/`Shift+Tab`, close with `Escape`, and verify focus returns to the actual initiating button.
 
 ### Expected
 
 - `HandoffGet`/`ResumeBoundaryList` require `read_only+`; generation/planning/execution require `operator+`.
 - Direct task-detail "Resume"/"Retry" controls do not bypass the reviewed flow.
 - Required reason and elevated confirmation disable execution until valid.
-- Focus is trapped while open, `Escape` closes, focus returns to the trigger, and visible focus rings use the design token.
+- Focus is trapped while open, `Escape` closes, focus returns to "Review safe resume" or "Preview resume" according to the initiating control, and visible focus rings use the design token.
 - The scrollable dialog remains usable on narrow screens and with long consequence JSON.
 
 ### Expected Data State

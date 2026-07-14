@@ -39,13 +39,13 @@ Use CSS variables to manage tokens (trim as needed per project).
   --glass-illumination: rgba(255, 255, 255, 0.4);
 
   --text-primary: #1d1d1f;
-  --text-secondary: #86868b;
-  --text-tertiary: #aeaeb2;
+  --text-secondary: #595960;
+  --text-tertiary: #65656b;
   --text-inverse: #ffffff;
 
-  --accent: #007aff;
+  --accent: #005ecb;
   --accent-tint: rgba(0, 122, 255, 0.12);
-  --danger: #ff3b30;
+  --danger: #b91c1c;
   --danger-tint: rgba(255, 59, 48, 0.12);
 }
 ```
@@ -68,8 +68,8 @@ Use CSS variables to manage tokens (trim as needed per project).
   --glass-illumination: rgba(255, 255, 255, 0.05);
 
   --text-primary: #ffffff;
-  --text-secondary: #98989d;
-  --text-tertiary: #636366;
+  --text-secondary: #c7c7cc;
+  --text-tertiary: #aeaeb2;
   --text-inverse: #000000;
 
   --accent-tint: rgba(0, 122, 255, 0.2);

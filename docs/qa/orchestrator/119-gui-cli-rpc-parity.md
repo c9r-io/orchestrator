@@ -7,7 +7,7 @@ self_referential_safe: false
 **关联设计**: `docs/design_doc/orchestrator/77-gui-cli-rpc-parity.md`
 **关联 FR**: FR-067（已闭环）
 
-> **FR-100 navigation overlay (2026-07-14)**: System/store/trigger/secret surfaces now live under the top-level **System** destination. Timeline/log/trace behavior lives in **Process Workspace**, with raw diagnostics under **Expert**. Use QA-147 for current reachability and do not infer a direct resume bypass from the historical labels below.
+> **FR-100/FR-103 navigation and recovery overlay (2026-07-14)**: System/store/trigger/secret surfaces now live under the top-level **System** destination. Timeline/log/trace behavior lives in **Process Workspace**, with raw diagnostics under **Expert**. Failed-process recovery now uses "Review safe resume" and the boundary/plan/execute flow; `TaskRecover` is only "Repair orphaned running items" under Expert. Use QA-147 and QA-150 for current behavior.
 
 ## 验证场景
 
@@ -80,9 +80,10 @@ self_referential_safe: false
 **步骤**:
 1. 进入任务详情 → 确认默认「进程时间线」可见
 2. 点击「跟踪」→ 确认 trace JSON 仍可显示
-3. failed 任务 → 确认「恢复任务」按钮可见 → 点击调用 TaskRecover
+3. failed 任务 → 确认「Review safe resume」可见 → 创建并执行审核后的恢复计划
+4. 展开 Expert → 确认「Repair orphaned running items」准确描述 crash residue，并且不是主恢复入口
 
-**期望**: 时间线、跟踪和恢复功能正常，原始 trace 未被时间线替代。
+**期望**: 时间线、跟踪和审核恢复正常，主入口不会调用 `TaskRecover`；原始 trace 与孤立 item 修复仍在 Expert 可达。
 
 ---
 

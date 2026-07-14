@@ -54,4 +54,5 @@ PORTAL_BASE_URL="http://localhost:3000"   # If there is a Web UI
 5. For the FR-098/FR-102 Session Inspector and Process Workspace session panel, run `07-accessibility.md` with `docs/qa/orchestrator/149-agent-session-control-plane-hardening.md`; QA-145 is retained as the original specification.
 6. For the FR-099 Sources page and Process Workspace provenance panel, run `06-navigation-ia.md` + `07-accessibility.md` with `docs/qa/orchestrator/146-source-events-and-slack-binding.md`.
 7. For the FR-100 console shell and Attention/process vertical flow, run `05-responsive-layout.md` + `06-navigation-ia.md` + `07-accessibility.md` with `docs/qa/orchestrator/147-process-console-ui.md`.
-8. Complex animations/glass effects: run at least `04-animations.md` (including performance and reduced motion).
+8. For FR-103 reviewed recovery and native Attention notifications, run `07-accessibility.md` + `10-dialogs-notifications.md` with `docs/qa/orchestrator/150-process-console-recovery-notifications-e2e.md`.
+9. Complex animations/glass effects: run at least `04-animations.md` (including performance and reduced motion).

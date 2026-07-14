@@ -21,6 +21,8 @@ FR-098/FR-102 overlay: session List/Get/Resolve responses may expose `session_id
 
 FR-099 overlay: source List/Get/GUI responses may expose normalized provider/install identity, bounded summaries, correlation coordinates, hashes, routing state, and stable errors. They must not expose Slack signing secrets, raw request bodies, action-token signatures, private transcripts, or unbounded provider errors. Search `source_events`, `source_command_actions`, CLI/Tauri payloads, and daemon logs with `docs/qa/orchestrator/146-source-events-and-slack-binding.md`.
 
+FR-103 overlay: `AttentionDelta.notification` may expose only a dedupe key, Attention item/version, bounded title, severity, process ID, and safe deep link. Native notification bodies and in-app fallback events must never include prompt, transcript, source message, stdout/stderr, token, API key, or raw error content. Run the forbidden-field scan in `docs/qa/orchestrator/150-process-console-recovery-notifications-e2e.md`.
+
 ---
 
 ## Scenario 1: Sensitive Fields In API Responses

@@ -6,6 +6,8 @@
 
 FR-097 overlay: use the "Resume consequence preview" dialog as the high-risk reference. It must show logical boundary, side-effect class, no-workspace-rollback statement, expiry, operator reason, and elevated confirmation before enabling "Execute reviewed plan". Long consequence JSON must remain scrollable on narrow screens.
 
+FR-103 overlay: when the dialog is opened by failed-process "Review safe resume", focus must return to that button rather than the panel's "Preview resume" control. Native Attention notifications are eligible only for daemon-declared new/reopened actionable versions, deduplicated by item/version, bounded to title/severity/process/deep link, and backed by an in-app `aria-live` status when permission or delivery is unavailable. See QA-150.
+
 ---
 
 ## Scenario 1: Dialog Open/Close Paths Are Consistent

@@ -61,6 +61,7 @@ Verify critical actions are written to audit logs and there is no API to delete/
 - `audit_all_reads: true` in `uds-policy.yaml` enables full audit coverage including read-only RPCs.
 - See `docs/qa/orchestrator/58-control-plane-security.md` Scenario 6 for verification steps.
 - FR-099 source logs record provider, source event ID, task ID, routing state, and hashed installation/external IDs, never message bodies or signing secrets. `source_command_actions` must retain authenticated actor, locally resolved role, target, action, status/result, and error code; see `docs/qa/orchestrator/146-source-events-and-slack-binding.md`.
+- FR-103 recovery evidence joins handoff generation, plan creation, rejected execution, and successful execution through non-empty request IDs. Audit and notification evidence must retain ordering and result metadata without prompt, transcript, stdout/stderr, source message, token, API key, or arbitrary error bodies; see `docs/qa/orchestrator/150-process-console-recovery-notifications-e2e.md`.
 
 ---
 

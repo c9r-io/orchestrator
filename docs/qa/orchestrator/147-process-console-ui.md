@@ -13,7 +13,7 @@ self_referential_safe: true
 
 ## Background
 
-FR-100 reorganizes the Tauri/React client without changing daemon state or public RPC contracts. The browser suite installs an in-page mock at the typed Tauri boundary; it never starts a daemon, changes a database, invokes an agent, or performs an external action.
+FR-100 reorganizes the Tauri/React client without changing daemon state or public RPC contracts. The fast browser suite installs an in-page mock at the typed Tauri boundary; it never starts a daemon, changes a database, invokes an agent, or performs an external action. FR-103 retains that fast suite and adds the real Tauri/gRPC isolated-daemon vertical proof in QA-150.
 
 Run the deterministic gate:
 
