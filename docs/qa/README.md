@@ -274,6 +274,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/150-process-console-recovery-notifications-e2e.md` | 5 | FR-103 reviewed recovery routing, actor-aware Attention notifications, real Tauri/gRPC vertical proof, audit privacy, and accessibility |
 | orchestrator | `docs/qa/orchestrator/151-process-console-operational-metrics.md` | 5 | FR-104 exact product metrics, bounded gRPC/CLI, local Operations UI, lifecycle controls, privacy, and release performance |
 | orchestrator | `docs/qa/orchestrator/152-session-runtime-policy-authority.md` | 4 | FR-105 deterministic `_system` policy selection, immediate Session read/control gates, restart persistence, and safety regression |
+| orchestrator | `docs/qa/orchestrator/153-process-console-release-acceptance.md` | 5 | FR-106 clean current-HEAD aggregate gate, migration identity, populated upgrade, integrated recovery, performance, and rollback contract |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |

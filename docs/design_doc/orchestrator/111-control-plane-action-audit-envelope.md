@@ -5,7 +5,7 @@
 **Related Plan**: FR-101 canonical mutation envelope, request correlation, idempotency enforcement, and bounded query surface  
 **Related QA**: `docs/qa/orchestrator/148-control-plane-action-audit-envelope.md`  
 **Created**: 2026-07-14  
-**Last Updated**: 2026-07-14
+**Last Updated**: 2026-07-15
 
 ## Background
 
@@ -103,13 +103,14 @@ Migration is forward-only and preserves populated databases. Rollback disables e
 ## Test Plan
 
 - Unit: validation, canonical key ordering, matching/conflicting retries, concurrent reservation, denial retry isolation, redaction, request-ID validation, heartbeat exemption, RBAC mapping, and CLI parsing/error rendering.
-- Migration: upgrade a populated version-30 database and verify all link columns while preserving data.
+- Migration: upgrade a populated version-30 database and verify all link columns while preserving data; verify migration-31 identity/capability on schema 31, 32, and future additive versions while rejecting a missing row 31.
 - Integration: exercise one mutation per domain plus provider-originated commands and verify canonical/domain/event correlation.
 - E2E: `scripts/qa/test-control-plane-action-audit.sh` runs an isolated daemon and validates success, stale failure, duplicate/conflict, denial evidence, query filters, and bounded output.
 
 ## QA Docs
 
 - `docs/qa/orchestrator/148-control-plane-action-audit-envelope.md`
+- `docs/qa/orchestrator/153-process-console-release-acceptance.md`
 
 ## Acceptance Criteria
 

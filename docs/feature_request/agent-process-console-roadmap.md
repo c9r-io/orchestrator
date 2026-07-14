@@ -1,9 +1,9 @@
 # Agent Process Console Roadmap
 
-**Status**: Console v1 feature surface and policy authority implemented; release acceptance follow-up FR-106 open
+**Status**: Console v1 release-complete; all feature, policy, migration, operations, and aggregate acceptance gates closed
 **Original governed FRs**: FR-095 through FR-100 (closed into DD/QA artifacts)
-**Follow-up FRs**: FR-101 through FR-105 closed; FR-106 proposed
-**Closure artifacts**: design docs 105-115 and QA docs 142-152; planned DD-116 and QA-153
+**Follow-up FRs**: FR-101 through FR-106 closed
+**Closure artifacts**: design docs 105-116, QA docs 142-153, the Console v1 operations guide, and the aggregate release gate
 **Created**: 2026-07-12
 
 ## 2026-07-14 Implementation Audit Follow-ups
@@ -17,9 +17,9 @@ The original FR files are closed because their approved slice-level acceptance a
 | FR-103 (Closed) | Recovery UX, Attention notifications, actor-aware filtering, live GUI/daemon E2E | P2-04, P3-04, P6-03 and the complete vertical demonstration; closed by DD-113, QA-150, and the vertical-flow script | FR-101, FR-102 |
 | FR-104 (Closed) | Product metrics, projector observability, performance fixtures, local dashboard | Closed by `docs/design_doc/orchestrator/114-process-console-operational-metrics.md`, `docs/qa/orchestrator/151-process-console-operational-metrics.md`, and `scripts/qa/test-process-console-metrics.sh` | FR-101 through FR-103 |
 | FR-105 (Closed) | Session RuntimePolicy authority and deterministic global control gates | Closed by `docs/design_doc/orchestrator/115-session-runtime-policy-authority.md`, `docs/qa/orchestrator/152-session-runtime-policy-authority.md`, and the updated Session QA script | FR-102 |
-| FR-106 (Proposed) | Console v1 release acceptance, migration-proof QA, release notes, and rollback runbook | P0 executable QA drift and P6-05 release/operations artifacts | FR-105 |
+| FR-106 (Closed) | Console v1 release acceptance, migration-proof QA, release notes, and rollback runbook | Closed by [DD-116](../design_doc/orchestrator/116-process-console-release-acceptance.md), [QA-153](../qa/orchestrator/153-process-console-release-acceptance.md), the [operations guide](../guide/agent-process-console-v1-operations.md), and aggregate release script | FR-105 |
 
-FR-103 proves the complete operator journey through real Tauri handlers and an isolated daemon. FR-104 closes the product-metric, projector-observability, performance-fixture, and local-dashboard gates. FR-105 closes the nondeterministic global Session feature gate with explicit `_system` authority and 5/5 isolated acceptance. FR-106 now owns the only remaining release-acceptance drift before Console v1 returns to release-complete status.
+FR-103 proves the complete operator journey through real Tauri handlers and an isolated daemon. FR-104 closes the product-metric, projector-observability, performance-fixture, and local-dashboard gates. FR-105 closes the nondeterministic global Session feature gate with explicit `_system` authority and 5/5 isolated acceptance. FR-106 closes the release boundary with forward-compatible migration identity, populated schema-26 upgrade proof, release notes, an operator runbook, and a clean-tree 14/14 aggregate gate.
 
 ## Background
 
@@ -183,7 +183,7 @@ FR-105 closes the global policy-authority gate: `_system.session_read_enabled` a
 
 Implemented by [DD-109](../design_doc/orchestrator/109-source-events-and-slack-binding.md) and verified by [QA-146](../qa/orchestrator/146-source-events-and-slack-binding.md). The Slack pilot uses the same provider-neutral repository, Trigger semantics, binding model, and audited Attention action service as the non-Slack fixture.
 
-### Phase 6: Console information architecture and release hardening (Feature-complete; P6-05 follow-up open)
+### Phase 6: Console information architecture and release hardening (Implemented and release-closed)
 
 **Outcome**: the GUI consistently presents the new operating model and is ready for daily use.
 
@@ -193,11 +193,11 @@ Implemented by [DD-109](../design_doc/orchestrator/109-source-events-and-slack-b
 | P6-02 | Responsive three-pane operating layouts | P1..P5 | Dense views remain usable without blur support |
 | P6-03 | Keyboard command surface and accessibility pass | P6-01..02 | Focus, contrast, labels, and reduced motion pass |
 | P6-04 | Product telemetry and operational dashboards | P2..P5 | Attention and re-entry metrics are observable |
-| P6-05 | Migration, release notes, and rollback runbook | All | Upgrade preserves existing task and session data |
+| P6-05 | Migration, release notes, and rollback runbook | All | Closed by [CHANGELOG](../../CHANGELOG.md), [operations guide](../guide/agent-process-console-v1-operations.md), [DD-116](../design_doc/orchestrator/116-process-console-release-acceptance.md), and [QA-153](../qa/orchestrator/153-process-console-release-acceptance.md); populated upgrade preserves Console state |
 
 The base information architecture is implemented by [DD-110](../design_doc/orchestrator/110-process-console-information-architecture.md) and covered by [QA-147](../qa/orchestrator/147-process-console-ui.md). FR-103 closes P6-03 with focus/keyboard/role/contrast/motion/transparency/narrow-layout automation plus the live-daemon vertical UI proof. FR-104 closes P6-04 with durable local product metrics, projector health, bounded read APIs, and the System → Operations dashboard; see [DD-114](../design_doc/orchestrator/114-process-console-operational-metrics.md) and [QA-151](../qa/orchestrator/151-process-console-operational-metrics.md).
 
-FR-106 owns the remaining P6-05 release boundary: migration-identity-safe QA, fresh-binary aggregate acceptance, complete Console v1 release notes, and one operator upgrade/rollback runbook. The current per-slice DD rollback sections remain valid inputs but are not a substitute for that release artifact.
+FR-106 closes P6-05 with migration-identity-safe QA, current-HEAD aggregate acceptance, complete Console v1 release notes, and one operator upgrade/rollback runbook. Normal rollback disables writers and preserves additive migrations 27-32; database restore is reserved for migration failure or corruption.
 
 ## Recommended Delivery Increments
 
@@ -208,11 +208,11 @@ The phases are dependency ordered, but releases should stay vertical:
 3. **Recovery beta**: handoff plus retry/new-session resume for one failed step family.
 4. **Interactive beta**: live transcript and guarded writer attachment.
 5. **Slack pilot**: one workspace, one routing policy, approve/retry buttons.
-6. **Console v1**: navigation, accessibility, metrics, and Session policy authority implemented; final migration/release/runbook acceptance pending FR-106.
+6. **Console v1**: release-complete with navigation, accessibility, metrics, deterministic Session policy authority, populated upgrade proof, and governed operations/rollback.
 
 Each increment must be demoable against a recorded fixture and a live daemon. A phase is not complete when only schema or UI scaffolding exists.
 
-The feature slices have DD/QA artifacts, and FR-095 through FR-099 retain isolated daemon fixtures for authoritative state transitions. The fast browser suite continues to use a mocked Tauri boundary, while FR-103's `scripts/qa/test-process-console-vertical-flow.sh` supplies the integrated production-handler/gRPC demonstration. FR-104's `scripts/qa/test-process-console-metrics.sh` supplies the exact product-metric, compatibility, UI, and release-performance gates. FR-105's updated Session script supplies deterministic global policy evidence. FR-106 must add the aggregate release evidence before all six increments are considered release-closed.
+The feature slices have DD/QA artifacts, and FR-095 through FR-099 retain isolated daemon fixtures for authoritative state transitions. The fast browser suite continues to use a mocked Tauri boundary, while FR-103's `scripts/qa/test-process-console-vertical-flow.sh` supplies the integrated production-handler/gRPC demonstration. FR-104's `scripts/qa/test-process-console-metrics.sh` supplies exact product-metric, compatibility, UI, and release-performance gates. FR-105's updated Session script supplies deterministic global policy evidence. FR-106's `scripts/qa/test-process-console-release.sh` coordinates all of them; on 2026-07-15 it passed 14/14 gates from a clean worktree in 399 seconds.
 
 ## Tradeoffs
 
@@ -286,7 +286,7 @@ Implementation QA will be authored in:
 - `docs/qa/orchestrator/150-process-console-recovery-notifications-e2e.md`
 - `docs/qa/orchestrator/151-process-console-operational-metrics.md`
 - `docs/qa/orchestrator/152-session-runtime-policy-authority.md`
-- Planned: `docs/qa/orchestrator/153-process-console-release-acceptance.md`
+- `docs/qa/orchestrator/153-process-console-release-acceptance.md`
 
 The roadmap is accepted when:
 

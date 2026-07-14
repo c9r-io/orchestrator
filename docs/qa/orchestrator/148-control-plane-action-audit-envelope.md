@@ -202,7 +202,7 @@ FROM control_action_audit WHERE project_id='qa-action-audit';
 
 ### Goal
 
-Verify old optional clients remain usable in compatibility mode, enforcement rejects missing audit context, and version-30 data survives migration 31.
+Verify old optional clients remain usable in compatibility mode, enforcement rejects missing audit context, version-30 data survives migration 31, and later additive migrations do not invalidate migration-31 capability detection.
 
 ### Steps
 
@@ -214,6 +214,7 @@ Verify old optional clients remain usable in compatibility mode, enforcement rej
 
    ```bash
    cargo test -p agent-orchestrator populated_v30_database_upgrades_with_action_audit_links --lib
+   ./scripts/qa/test-control-plane-action-audit.sh
    ```
 
 ### Expected
@@ -222,12 +223,13 @@ Verify old optional clients remain usable in compatibility mode, enforcement rej
 - Enforced mode rejects missing reason/retry context but keeps heartbeat's documented exemption.
 - Switching back to compatibility disables enforcement without dropping migration 31.
 - Populated rows survive and every projection table has a `request_id` column.
+- Migration-31 identity/capability passes on schema 31, schema 32, and a future additive schema, and fails when catalog row 31 is missing.
 
 ### Expected Data State
 
 ```sql
-SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1;
--- Expected: 31
+SELECT version, name FROM schema_migrations WHERE version=31;
+-- Expected: 31, m0031_control_action_audit (later migrations may also exist)
 
 SELECT COUNT(*) FROM pragma_table_info('control_action_audit');
 -- Expected: greater than 0
@@ -243,4 +245,4 @@ SELECT COUNT(*) FROM pragma_table_info('control_action_audit');
 | 2 | Duplicate and conflicting retry identity fail closed | PASS | 2026-07-14 | Codex | Script plus concurrent/hash unit coverage passed |
 | 3 | Stale, fencing, and authorization failures remain distinguishable | PASS | 2026-07-14 | Codex | Stale failure and read-only UDS denial produced distinct durable evidence |
 | 4 | Project-scoped query and redaction boundaries | PASS | 2026-07-14 | Codex | gRPC integration, CLI filters, cross-project not-found, and redaction checks passed |
-| 5 | Compatibility rollout and populated migration | PASS | 2026-07-14 | Codex | Enforced current client, missing-context resolver, compatibility model, and populated v30 migration passed |
+| 5 | Compatibility rollout and populated migration | PASS | 2026-07-15 | Codex | Enforced/compatibility model, populated v30 migration, and schema 31/32/future identity matrix passed |
