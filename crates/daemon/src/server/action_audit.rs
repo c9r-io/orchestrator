@@ -408,6 +408,13 @@ mod tests {
     }
 
     #[test]
+    fn enforced_mode_rejects_missing_action_context() {
+        let error = resolve_context("req-1", None, &descriptor(false), "enforced")
+            .expect_err("missing action context");
+        assert_eq!(error.code(), Code::InvalidArgument);
+    }
+
+    #[test]
     fn heartbeat_has_explicit_renewable_exemption() {
         let context = ActionAuditContext {
             reason_code: "lease_heartbeat".into(),

@@ -239,8 +239,8 @@ SELECT COUNT(*) FROM pragma_table_info('control_action_audit');
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|---|---|---|---|---|
-| 1 | Successful mutation produces a complete join chain | ☐ | | | |
-| 2 | Duplicate and conflicting retry identity fail closed | ☐ | | | |
-| 3 | Stale, fencing, and authorization failures remain distinguishable | ☐ | | | |
-| 4 | Project-scoped query and redaction boundaries | ☐ | | | |
-| 5 | Compatibility rollout and populated migration | ☐ | | | |
+| 1 | Successful mutation produces a complete join chain | PASS | 2026-07-14 | Codex | Isolated enforced-mode run joined transport, canonical, domain, and event rows |
+| 2 | Duplicate and conflicting retry identity fail closed | PASS | 2026-07-14 | Codex | Script plus concurrent/hash unit coverage passed |
+| 3 | Stale, fencing, and authorization failures remain distinguishable | PASS | 2026-07-14 | Codex | Stale failure and read-only UDS denial produced distinct durable evidence |
+| 4 | Project-scoped query and redaction boundaries | PASS | 2026-07-14 | Codex | gRPC integration, CLI filters, cross-project not-found, and redaction checks passed |
+| 5 | Compatibility rollout and populated migration | PASS | 2026-07-14 | Codex | Enforced current client, missing-context resolver, compatibility model, and populated v30 migration passed |

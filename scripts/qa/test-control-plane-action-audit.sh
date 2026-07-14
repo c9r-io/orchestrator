@@ -79,6 +79,24 @@ fi
 PROJECT="qa-action-audit"
 "$ORCH" apply --project "$PROJECT" \
   -f "$REPO_ROOT/fixtures/manifests/bundles/process-timeline-failure.yaml" >/dev/null
+POLICY="$QA_ROOT/action-audit-policy.yaml"
+printf '%s\n' \
+  'apiVersion: orchestrator.dev/v2' \
+  'kind: RuntimePolicy' \
+  'metadata:' \
+  '  name: default' \
+  'spec:' \
+  '  action_audit_mode: enforced' \
+  '  runner:' \
+  '    shell: /bin/bash' \
+  '    shell_arg: -lc' \
+  '    policy: allowlist' \
+  '    executor: shell' \
+  '    allowed_shells: [/bin/bash, /bin/sh, sh]' \
+  '    allowed_shell_args: [-lc, -c]' \
+  '  resume:' \
+  '    auto: false' > "$POLICY"
+"$ORCH" apply --project "$PROJECT" -f "$POLICY" >/dev/null
 
 CREATE_OUTPUT="$(
   cd "$QA_ROOT"
@@ -120,8 +138,9 @@ JOIN control_plane_audit t ON t.request_id=a.request_id
 JOIN events e ON e.request_id=a.request_id
 WHERE a.request_id='$SUCCESS_REQUEST_ID' AND a.status='succeeded';
 ")"
-if [[ "$JOIN_COUNT" -ge 1 ]] && jq -e '.[0].status == "succeeded" and (.[0].request_hash | length) == 64' "$QA_ROOT/audit-get.json" >/dev/null; then
-  pass "successful mutation joins transport, canonical, domain, and event evidence"
+POLICY_MODE="$(sqlite3 "$DB" "SELECT json_extract(spec_json,'$.action_audit_mode') FROM resources WHERE kind='RuntimePolicy' AND project='$PROJECT' AND name='default';")"
+if [[ "$JOIN_COUNT" -ge 1 && "$POLICY_MODE" == "enforced" ]] && jq -e '.[0].status == "succeeded" and (.[0].request_hash | length) == 64' "$QA_ROOT/audit-get.json" >/dev/null; then
+  pass "current client succeeds in enforced mode and joins all request-id evidence"
 else
   fail "successful mutation request-id join is incomplete"
 fi
