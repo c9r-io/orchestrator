@@ -142,6 +142,8 @@ core/
         *   `source_bindings`: External conversation/artifact to task correlation.
         *   `source_routing_attempts` and `source_command_actions`: Replay and command audit evidence.
         *   `control_action_audit`: Canonical bounded mutation envelope joined to transport, domain, and event evidence by `request_id`.
+        *   `process_metric_observations` and `process_metric_rollups`: Optional privacy-safe Process Console samples and rebuildable fixed-window aggregates.
+        *   `process_metric_projector_state`: Non-authoritative projector cursor, lag, failure category, and freshness.
     *   **File System**:
         *   **Config**: YAML manifests for defining Resources.
         *   **Logs**: Raw stdout/stderr capture from agent processes.
@@ -237,6 +239,7 @@ The Agent Orchestrator is distributed as a Cargo workspace with a core library a
 
 - **Structured Logs**: All significant actions are recorded in the `events` table in SQLite.
 - **Execution Logs**: Detailed stdout/stderr from every agent command is stored in `data/logs/{task_id}/`.
+- **Process Operations**: Versioned project-scoped metrics derive authoritative outcomes from durable state and expose only allowlisted local observations through gRPC/CLI and System → Operations. Metric failure never gates execution.
 - **Debug Command**: The CLI provides a `debug` command to inspect internal state and configuration.
 
 ## 7. Self-Bootstrap & Survival Capabilities
