@@ -202,12 +202,15 @@ apply_manifest _system "$ENABLED_POLICY"
 DISABLED_POLICY="$QA_ROOT/session-disabled.yaml"
 READ_DISABLED_POLICY="$QA_ROOT/session-read-disabled.yaml"
 PROJECT_DISABLED_POLICY="$QA_ROOT/session-project-disabled.yaml"
+INVALID_POLICY="$QA_ROOT/session-invalid.yaml"
 sed 's/session_control_enabled: true/session_control_enabled: false/' \
   "$ENABLED_POLICY" > "$DISABLED_POLICY"
 sed 's/session_read_enabled: true/session_read_enabled: false/' \
   "$ENABLED_POLICY" > "$READ_DISABLED_POLICY"
 sed 's/session_control_enabled: true/session_control_enabled: false/' \
   "$ENABLED_POLICY" > "$PROJECT_DISABLED_POLICY"
+sed 's/session_control_enabled: true/session_control_enabled: invalid/' \
+  "$ENABLED_POLICY" > "$INVALID_POLICY"
 CREATE_OUTPUT="$(
   cd "$QA_ROOT"
   "$ORCH" task create --project "$PROJECT" --workspace session-control-mock \
@@ -324,6 +327,12 @@ fi
 
 POLICY_VERSION_BEFORE="$("$ORCH" agent session get "$SESSION_ID" -o json | jq -r '.[0].state_version')"
 apply_manifest _system "$DISABLED_POLICY"
+if expect_denial "$QA_ROOT/invalid-policy.out" "expected a boolean" \
+  "$ORCH" apply --project _system -f "$INVALID_POLICY"; then
+  INVALID_POLICY_REJECTED=1
+else
+  INVALID_POLICY_REJECTED=0
+fi
 if expect_denial "$QA_ROOT/disabled.out" "session mutation APIs are disabled" \
   "$ORCH" agent session attach "$SESSION_ID" --mode writer --client-id "$NEW_WRITER"; then
   DISABLED_ATTACH_DENIED=1
@@ -466,7 +475,8 @@ PROCESS_STATE="$(ps -o stat= -p "$SESSION_PROCESS_PID" 2>/dev/null | tr -d '[:sp
 
 "$ORCH" audit list --project "$PROJECT" -o json > "$QA_ROOT/audit.json"
 MUTATION_LINKS="$(sqlite3 "$DB" "SELECT COUNT(*) FROM session_control_actions WHERE actor='' OR request_id IS NULL OR request_id='';")"
-if [[ "$DISABLED_ATTACH_DENIED" -eq 1 && "$DISABLED_HEARTBEAT_DENIED" -eq 1 && \
+if [[ "$INVALID_POLICY_REJECTED" -eq 1 && "$DISABLED_ATTACH_DENIED" -eq 1 && \
+      "$DISABLED_HEARTBEAT_DENIED" -eq 1 && \
       "$DISABLED_INPUT_DENIED" -eq 1 && "$DISABLED_DETACH_DENIED" -eq 1 && \
       "$DISABLED_CLOSE_DENIED" -eq 1 && "$POLICY_VERSION_AFTER" == "$POLICY_VERSION_BEFORE" && \
       "$POLICY_WRITER_AFTER" == "$NEW_WRITER" && -n "$SYSTEM_AUTHORITY_TOKEN" && \
