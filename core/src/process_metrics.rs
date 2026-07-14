@@ -341,7 +341,11 @@ fn other(error: anyhow::Error) -> tokio_rusqlite::Error {
 }
 
 fn normalize_error_code(value: &str) -> String {
-    let normalized = value
+    let code = value
+        .split(|character: char| character == ':' || character.is_ascii_whitespace())
+        .next()
+        .unwrap_or_default();
+    let normalized = code
         .chars()
         .take(64)
         .map(|character| {
@@ -1251,6 +1255,75 @@ mod tests {
             })
             .await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn retention_prunes_only_expired_optional_metric_state() {
+        let temp = tempdir().expect("tempdir");
+        let path = temp.path().join("metrics.db");
+        init_schema(&path).expect("schema");
+        let db = Arc::new(AsyncDatabase::open(path).await.expect("db"));
+        let repo = AsyncProcessMetricsRepository::new(db.clone());
+        repo.record(MetricObservation {
+            project_id: "p1".into(),
+            metric_name: "source_event_deduplicated_total".into(),
+            dimensions: labels(&[("provider", "slack")]),
+            value: 1.0,
+            occurred_at: "2000-01-01T00:00:00Z".into(),
+            source_kind: "source_delivery".into(),
+            source_key: "expired-delivery".into(),
+        })
+        .await
+        .expect("record expired observation");
+
+        assert!(repo.prune(30).await.expect("prune") > 0);
+        let remaining: u64 = db
+            .reader()
+            .call(|conn| {
+                conn.query_row(
+                    "SELECT COUNT(*) FROM process_metric_observations",
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(Into::into)
+            })
+            .await
+            .expect("count retained observations");
+        assert_eq!(remaining, 0);
+    }
+
+    #[tokio::test]
+    async fn projector_failure_retains_the_last_successful_cursor() {
+        let temp = tempdir().expect("tempdir");
+        let path = temp.path().join("metrics.db");
+        init_schema(&path).expect("schema");
+        let db = Arc::new(AsyncDatabase::open(path).await.expect("db"));
+        let repo = AsyncProcessMetricsRepository::new(db);
+        repo.projector_success("attention", "p1", "42", 0)
+            .await
+            .expect("projector success");
+        repo.projector_failure("attention", "p1", "SQLITE_BUSY: raw detail", 7)
+            .await
+            .expect("projector failure");
+
+        let snapshot = repo
+            .query(ProcessMetricsQuery {
+                project_id: "p1".into(),
+                window_seconds: 3_600,
+                bucket_seconds: 60,
+                collection_enabled: true,
+            })
+            .await
+            .expect("query projector health");
+        let health = snapshot
+            .projector_health
+            .iter()
+            .find(|health| health.projector == "attention")
+            .expect("attention projector health");
+        assert_eq!(health.cursor, "42");
+        assert_eq!(health.lag_count, 7);
+        assert_eq!(health.failure_count, 1);
+        assert_eq!(health.last_error_code.as_deref(), Some("sqlite_busy"));
     }
 
     #[tokio::test]

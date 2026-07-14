@@ -239,6 +239,18 @@ mod tests {
     }
 
     #[test]
+    fn process_metrics_can_be_disabled_independently() {
+        let cfg: ObservabilityConfig = serde_json::from_str(
+            r#"{"process_metrics":{"enabled":false,"ui_telemetry_enabled":false}}"#,
+        )
+        .expect("deserialize process metrics switch");
+        assert!(!cfg.process_metrics.enabled);
+        assert!(!cfg.process_metrics.ui_telemetry_enabled);
+        assert_eq!(cfg.process_metrics.retention_days, 90);
+        assert_eq!(cfg.process_metrics.max_window_days, 30);
+    }
+
+    #[test]
     fn level_parse_accepts_common_variants() {
         assert_eq!(LogLevel::parse("warning"), Some(LogLevel::Warn));
         assert_eq!(LogLevel::parse("TRACE"), Some(LogLevel::Trace));
