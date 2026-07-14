@@ -186,6 +186,10 @@ pub enum Commands {
     #[command(subcommand)]
     Audit(AuditCommands),
 
+    /// Process Console operational metrics
+    #[command(subcommand)]
+    Metrics(MetricsCommands),
+
     /// Generate and inspect immutable task handoffs
     #[command(subcommand)]
     Handoff(HandoffCommands),
@@ -672,11 +676,43 @@ pub enum QaCommands {
     },
 }
 
+/// Process Console operational metric commands.
+#[derive(Subcommand, Debug, Clone)]
+pub enum MetricsCommands {
+    /// Query one project-scoped Process Console snapshot.
+    Process {
+        /// Required project isolation scope.
+        #[arg(short, long)]
+        project: String,
+        /// Bounded lookback window such as 1h, 24h, or 7d.
+        #[arg(long, default_value = "24h")]
+        window: String,
+        /// Materialized bucket such as 5m, 1h, or 1d.
+        #[arg(long, default_value = "1h")]
+        bucket: String,
+        /// Output encoding.
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+    /// Rebuild retained materialized rollups for one project.
+    Rebuild {
+        /// Required project isolation scope.
+        #[arg(short, long)]
+        project: String,
+    },
+    /// Delete optional metrics older than the retention threshold.
+    Prune {
+        /// Retention in days; zero uses RuntimePolicy.
+        #[arg(long, default_value_t = 0)]
+        retention_days: u32,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         AgentCommands, AgentSessionCommands, AuditCommands, Cli, Commands, DbCommands,
-        DbMigrationCommands, EventCommands, TaskCommands,
+        DbMigrationCommands, EventCommands, MetricsCommands, TaskCommands,
     };
     use clap::Parser;
 
@@ -685,6 +721,29 @@ mod tests {
         let cli = Cli::try_parse_from(["orchestrator", "version", "--json"])
             .expect("version --json should parse");
         assert!(matches!(cli.command, Commands::Version { json: true }));
+    }
+
+    #[test]
+    fn process_metrics_command_requires_project_and_accepts_window() {
+        let cli = Cli::try_parse_from([
+            "orchestrator",
+            "metrics",
+            "process",
+            "--project",
+            "default",
+            "--window",
+            "7d",
+            "--bucket",
+            "6h",
+            "-o",
+            "json",
+        ])
+        .expect("metrics process should parse");
+        assert!(matches!(
+            cli.command,
+            Commands::Metrics(MetricsCommands::Process { project, window, .. })
+                if project == "default" && window == "7d"
+        ));
     }
 
     #[test]

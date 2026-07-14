@@ -3,6 +3,7 @@ mod agent;
 mod attention;
 mod handoff;
 mod mapping;
+pub(crate) mod process_metrics;
 mod resource;
 mod secret;
 mod session;
@@ -766,6 +767,34 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<QaDoctorRequest>,
     ) -> Result<Response<QaDoctorResponse>, Status> {
         system::qa_doctor(self, request).await
+    }
+
+    async fn process_metrics_get(
+        &self,
+        request: Request<ProcessMetricsGetRequest>,
+    ) -> Result<Response<ProcessMetricsGetResponse>, Status> {
+        process_metrics::get(self, request).await
+    }
+
+    async fn process_metric_record(
+        &self,
+        request: Request<ProcessMetricRecordRequest>,
+    ) -> Result<Response<ProcessMetricRecordResponse>, Status> {
+        process_metrics::record(self, request).await
+    }
+
+    async fn process_metrics_rebuild(
+        &self,
+        request: Request<ProcessMetricsRebuildRequest>,
+    ) -> Result<Response<ProcessMetricsMaintenanceResponse>, Status> {
+        process_metrics::rebuild(self, request).await
+    }
+
+    async fn process_metrics_prune(
+        &self,
+        request: Request<ProcessMetricsPruneRequest>,
+    ) -> Result<Response<ProcessMetricsMaintenanceResponse>, Status> {
+        process_metrics::prune(self, request).await
     }
 
     async fn run_step(

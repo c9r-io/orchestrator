@@ -390,6 +390,23 @@ impl AsyncAttentionRepository {
             .map_err(flatten_err)
     }
 
+    /// Returns the number of task events not yet covered by the projector cursor.
+    pub async fn projector_lag(&self) -> Result<u64> {
+        self.db
+            .reader()
+            .call(|conn| {
+                Ok(conn.query_row(
+                    "SELECT MAX(0,
+                       (SELECT COALESCE(MAX(id),0) FROM events) -
+                       (SELECT last_event_id FROM attention_projector_state WHERE projector='builtin'))",
+                    [],
+                    |row| row.get(0),
+                )?)
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
     /// Applies materialization operations and advances the cursor atomically.
     pub async fn apply_projection_batch(
         &self,

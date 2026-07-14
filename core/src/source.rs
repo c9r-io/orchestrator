@@ -337,6 +337,22 @@ impl AsyncSourceRepository {
             .map_err(flatten_err)
     }
 
+    /// Counts source events that still require routing or retry.
+    pub async fn routing_lag(&self) -> Result<u64> {
+        self.db
+            .reader()
+            .call(|conn| {
+                Ok(conn.query_row(
+                    "SELECT COUNT(*) FROM source_events
+                     WHERE routing_state IN ('received','routing','failed') AND routing_attempts < 5",
+                    [],
+                    |row| row.get(0),
+                )?)
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
     /// Completes a claimed routing attempt.
     pub async fn complete_routing(
         &self,

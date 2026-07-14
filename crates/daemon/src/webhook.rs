@@ -219,6 +219,13 @@ async fn handle_slack_source(
                 .into_response();
         }
     };
+    if !result.inserted {
+        crate::server::process_metrics::record_source_dedup(
+            &state.inner,
+            &result.event.project_id,
+            &result.event.provider,
+        );
+    }
     info!(
         provider = "slack",
         installation_hash = %short_digest(installation_id),

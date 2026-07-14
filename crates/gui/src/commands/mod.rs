@@ -3,6 +3,7 @@ pub mod attention;
 pub mod event;
 pub mod handoff;
 pub mod manifest;
+pub mod process_metrics;
 pub mod resource;
 pub mod secret;
 pub mod session;

@@ -125,6 +125,20 @@ fn runtime_policy_crd() -> CustomResourceDefinition {
             "properties": {
                 "runner": { "type": "object" },
                 "resume": { "type": "object" },
+                "observability": {
+                    "type": "object",
+                    "properties": {
+                        "process_metrics": {
+                            "type": "object",
+                            "properties": {
+                                "enabled": { "type": "boolean", "default": true },
+                                "ui_telemetry_enabled": { "type": "boolean", "default": true },
+                                "retention_days": { "type": "integer", "minimum": 1, "maximum": 365, "default": 90 },
+                                "max_window_days": { "type": "integer", "minimum": 1, "maximum": 365, "default": 30 }
+                            }
+                        }
+                    }
+                },
                 "attention_inbox_enabled": { "type": "boolean", "default": true },
                 "handoff_enabled": { "type": "boolean", "default": true },
                 "session_read_enabled": { "type": "boolean", "default": true },

@@ -743,7 +743,8 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         | "DbStatus" | "DbMigrationsList" | "SecretKeyStatus" | "SecretKeyList"
         | "SecretKeyHistory" | "AgentList" | "EventStats" | "TaskEvents"
         | "AgentSessionList" | "AgentSessionGet" | "AgentSessionAttach"
-        | "AgentSessionDetach" | "AgentSessionRead" | "AgentSessionResolvePid" => Role::ReadOnly,
+        | "AgentSessionDetach" | "AgentSessionRead" | "AgentSessionResolvePid"
+        | "ProcessMetricsGet" | "ProcessMetricRecord" => Role::ReadOnly,
 
         // Operator: routine mutating operations (includes lifecycle ops that
         // are destructive but not security-sensitive).
@@ -764,7 +765,7 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         // Admin: security-sensitive operations only.
         "ConfigDebug" | "ApplyPluginCrd"
         | "MaintenanceMode" | "SecretKeyRotate" | "SecretKeyBootstrap" | "SecretKeyRevoke"
-        | "QaDoctor" | "SourceReplay" => Role::Admin,
+        | "QaDoctor" | "SourceReplay" | "ProcessMetricsRebuild" | "ProcessMetricsPrune" => Role::Admin,
 
         other => {
             tracing::warn!(rpc = other, "unmapped RPC defaulting to Admin role");

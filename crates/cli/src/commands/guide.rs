@@ -1572,6 +1572,7 @@ fn _exhaustiveness_guard(cmd: crate::Commands) {
         crate::Commands::Attention(_) => {}
         crate::Commands::Source(_) => {}
         crate::Commands::Audit(_) => {}
+        crate::Commands::Metrics(_) => {}
         crate::Commands::Handoff(_) | crate::Commands::Resume(_) => {}
         crate::Commands::Trigger(_) => {}
         crate::Commands::Qa(_) => {}

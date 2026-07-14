@@ -162,6 +162,13 @@ pub(crate) async fn event_ingest(
                 .await);
         }
     };
+    if !result.inserted {
+        super::process_metrics::record_source_dedup(
+            &server.state,
+            &result.event.project_id,
+            &result.event.provider,
+        );
+    }
     link_source_row(
         server,
         "source_events",

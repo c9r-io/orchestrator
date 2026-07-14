@@ -10,6 +10,7 @@ mod event;
 pub mod guide;
 mod handoff;
 mod manifest;
+mod metrics;
 mod qa;
 mod resource;
 mod run;
@@ -113,6 +114,7 @@ pub async fn dispatch(
         }
 
         Commands::Qa(cmd) => qa::dispatch(client, cmd).await,
+        Commands::Metrics(cmd) => metrics::dispatch(client, cmd).await,
         Commands::Manifest(cmd) => manifest::dispatch(client, cmd).await,
 
         Commands::Run {

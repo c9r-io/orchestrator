@@ -120,6 +120,12 @@ service OrchestratorService {
   // QA observability
   rpc QaDoctor(QaDoctorRequest)                 returns (QaDoctorResponse);
 
+  // Process Console operational metrics
+  rpc ProcessMetricsGet(ProcessMetricsGetRequest) returns (ProcessMetricsGetResponse);
+  rpc ProcessMetricRecord(ProcessMetricRecordRequest) returns (ProcessMetricRecordResponse);
+  rpc ProcessMetricsRebuild(ProcessMetricsRebuildRequest) returns (ProcessMetricsMaintenanceResponse);
+  rpc ProcessMetricsPrune(ProcessMetricsPruneRequest) returns (ProcessMetricsMaintenanceResponse);
+
   // Lightweight step execution
   rpc RunStep(RunStepRequest)                   returns (RunStepResponse);
 
@@ -1329,6 +1335,45 @@ message QaDoctorResponse {
   uint64 task_execution_metrics_total = 1;
   uint64 task_execution_metrics_last_24h = 2;
   double task_completion_rate = 3;
+}
+
+// ─── Process Console operational metrics ────────────────────
+
+message ProcessMetricsGetRequest {
+  string project_id = 1;
+  string window = 2;
+  string bucket = 3;
+}
+
+message ProcessMetricsGetResponse {
+  uint32 schema_version = 1;
+  string metrics_json = 2;
+}
+
+message ProcessMetricRecordRequest {
+  string project_id = 1;
+  string metric_name = 2;
+  map<string, string> dimensions = 3;
+  double value = 4;
+  string source_key = 5;
+}
+
+message ProcessMetricRecordResponse {
+  bool inserted = 1;
+  string recorded_at = 2;
+}
+
+message ProcessMetricsRebuildRequest {
+  string project_id = 1;
+}
+
+message ProcessMetricsPruneRequest {
+  uint32 retention_days = 1;
+}
+
+message ProcessMetricsMaintenanceResponse {
+  uint64 affected_rows = 1;
+  string message = 2;
 }
 
 // ─── Lightweight step execution ──────────────────────────────

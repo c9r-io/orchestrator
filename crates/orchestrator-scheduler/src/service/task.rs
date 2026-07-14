@@ -171,6 +171,14 @@ pub async fn get_task_timeline(
         .map_err(|err| classify_task_error("task.timeline", err))?;
     let page = crate::scheduler::timeline::build_timeline_page(&source, &query, &patterns)
         .map_err(|err| OrchestratorError::user_input("task.timeline", err))?;
+    let duration_seconds = started.elapsed().as_secs_f64();
+    let response_bytes = serde_json::to_vec(&page).map_or(0, |value| value.len()) as f64;
+    record_timeline_metrics(
+        state,
+        &source.task.project_id,
+        duration_seconds,
+        response_bytes,
+    );
     tracing::info!(
         task_id = %resolved_id,
         source_events = source.events.len(),
@@ -178,10 +186,56 @@ pub async fn get_task_timeline(
         entries = page.entries.len(),
         has_more = page.has_more,
         projection_version = page.projection_version,
-        duration_ms = started.elapsed().as_millis() as u64,
+        duration_ms = (duration_seconds * 1_000.0) as u64,
         "projected task timeline"
     );
     Ok(page)
+}
+
+fn record_timeline_metrics(
+    state: &InnerState,
+    project_id: &str,
+    duration_seconds: f64,
+    response_bytes: f64,
+) {
+    let Ok(active) = read_loaded_config(state) else {
+        return;
+    };
+    if !active
+        .config
+        .runtime_policy_for_project(project_id)
+        .observability
+        .process_metrics
+        .enabled
+    {
+        return;
+    }
+    let repository = agent_orchestrator::process_metrics::AsyncProcessMetricsRepository::new(
+        state.async_database.clone(),
+    );
+    let project_id = project_id.to_string();
+    let source_key = uuid::Uuid::new_v4().to_string();
+    tokio::spawn(async move {
+        for (metric_name, value) in [
+            ("timeline_projection_seconds", duration_seconds),
+            ("timeline_response_bytes", response_bytes),
+        ] {
+            if let Err(error) = repository
+                .record(agent_orchestrator::process_metrics::MetricObservation {
+                    project_id: project_id.clone(),
+                    metric_name: metric_name.to_string(),
+                    dimensions: std::collections::BTreeMap::new(),
+                    value,
+                    occurred_at: agent_orchestrator::config_load::now_ts(),
+                    source_kind: "timeline_projection".to_string(),
+                    source_key: source_key.clone(),
+                })
+                .await
+            {
+                tracing::warn!(error = %error, "failed to record timeline metric");
+            }
+        }
+    });
 }
 
 /// Builds timeline upserts produced by events newer than the supplied watermark.
@@ -556,6 +610,48 @@ mod tests {
         assert_eq!(chunks.len(), 1);
         assert!(chunks[0].content.contains("first line"));
         assert!(chunks[0].content.contains("warn line"));
+    }
+
+    #[tokio::test]
+    #[ignore = "release-mode deterministic performance fixture"]
+    async fn large_timeline_meets_projection_budget() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = agent_orchestrator::db::open_conn(&state.db_path).expect("open sqlite");
+        let tx = conn.unchecked_transaction().expect("timeline transaction");
+        for index in 0..50_000_u64 {
+            tx.execute(
+                "INSERT INTO events(task_id,event_type,payload_json,created_at)
+                 VALUES(?1,'step_finished',?2,'2026-07-14T00:00:00Z')",
+                rusqlite::params![task_id, format!(r#"{{"step":"test","sequence":{index}}}"#)],
+            )
+            .expect("seed timeline event");
+        }
+        tx.commit().expect("commit timeline fixture");
+        let started = Instant::now();
+        let page = get_task_timeline(
+            &state,
+            &task_id,
+            crate::scheduler::timeline::TimelineQuery {
+                cursor: None,
+                limit: 200,
+                categories: Vec::new(),
+            },
+        )
+        .await
+        .expect("project large timeline");
+        let elapsed = started.elapsed();
+        let bytes = serde_json::to_vec(&page).expect("serialize timeline").len();
+        assert_eq!(page.entries.len(), 200);
+        assert!(page.has_more);
+        assert!(
+            elapsed <= std::time::Duration::from_millis(750),
+            "timeline projection exceeded 750ms: {elapsed:?}"
+        );
+        assert!(
+            bytes <= 512 * 1024,
+            "timeline response exceeded 512KiB: {bytes}"
+        );
     }
 
     #[tokio::test]

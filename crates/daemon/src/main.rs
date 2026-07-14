@@ -441,6 +441,10 @@ fn main() -> Result<()> {
         // Project durable task events into the cross-task attention queue.
         {
             let attention_state = inner.clone();
+            let attention_metrics =
+                agent_orchestrator::process_metrics::AsyncProcessMetricsRepository::new(
+                    inner.async_database.clone(),
+                );
             let mut attention_shutdown = shutdown_rx.clone();
             tokio::spawn(async move {
                 let mut interval =
@@ -449,8 +453,22 @@ fn main() -> Result<()> {
                 loop {
                     tokio::select! {
                         _ = interval.tick() => {
-                            if let Err(error) = orchestrator_scheduler::service::attention::reconcile_attention_once(&attention_state).await {
-                                error!(error = %error, "attention inbox reconciliation failed");
+                            match orchestrator_scheduler::service::attention::reconcile_attention_once(&attention_state).await {
+                                Ok(processed) if processed > 0 => {
+                                    let cursor = attention_state.attention_repo.projector_cursor().await.unwrap_or_default();
+                                    let lag = attention_state.attention_repo.projector_lag().await.unwrap_or_default();
+                                    if let Err(error) = attention_metrics.projector_success("attention", "", &cursor.to_string(), lag).await {
+                                        error!(error = %error, "attention projector health update failed");
+                                    }
+                                }
+                                Ok(_) => {}
+                                Err(error) => {
+                                    let lag = attention_state.attention_repo.projector_lag().await.unwrap_or_default();
+                                    if let Err(metrics_error) = attention_metrics.projector_failure("attention", "", "reconcile_failed", lag).await {
+                                        error!(error = %metrics_error, "attention projector failure metric update failed");
+                                    }
+                                    error!(error = %error, "attention inbox reconciliation failed");
+                                }
                             }
                         }
                         _ = attention_shutdown.changed() => {
@@ -464,6 +482,10 @@ fn main() -> Result<()> {
         // Route durably accepted external source events after persistence.
         {
             let source_state = inner.clone();
+            let source_metrics =
+                agent_orchestrator::process_metrics::AsyncProcessMetricsRepository::new(
+                    inner.async_database.clone(),
+                );
             let mut source_shutdown = shutdown_rx.clone();
             tokio::spawn(async move {
                 let mut interval =
@@ -472,8 +494,23 @@ fn main() -> Result<()> {
                 loop {
                     tokio::select! {
                         _ = interval.tick() => {
-                            if let Err(error) = source_router::reconcile_source_once(&source_state).await {
-                                error!(error = %error, "source routing reconciliation failed");
+                            match source_router::reconcile_source_once(&source_state).await {
+                                Ok(processed) if processed > 0 => {
+                                    let repository = agent_orchestrator::source::AsyncSourceRepository::new(source_state.async_database.clone());
+                                    let lag = repository.routing_lag().await.unwrap_or_default();
+                                    if let Err(error) = source_metrics.projector_success("source_router", "", "queue", lag).await {
+                                        error!(error = %error, "source projector health update failed");
+                                    }
+                                }
+                                Ok(_) => {}
+                                Err(error) => {
+                                    let repository = agent_orchestrator::source::AsyncSourceRepository::new(source_state.async_database.clone());
+                                    let lag = repository.routing_lag().await.unwrap_or_default();
+                                    if let Err(metrics_error) = source_metrics.projector_failure("source_router", "", "reconcile_failed", lag).await {
+                                        error!(error = %metrics_error, "source projector failure metric update failed");
+                                    }
+                                    error!(error = %error, "source routing reconciliation failed");
+                                }
                             }
                         }
                         _ = source_shutdown.changed() => break,

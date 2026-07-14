@@ -39,6 +39,8 @@ pub fn run() {
             commands::system::db_status,
             commands::system::shutdown,
             commands::system::maintenance_mode,
+            commands::process_metrics::process_metrics_get,
+            commands::process_metrics::process_metric_record,
             // task
             commands::task::task_list,
             commands::task::task_info,

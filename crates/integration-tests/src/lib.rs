@@ -1700,6 +1700,98 @@ impl OrchestratorService for TestOrchestratorServer {
         }))
     }
 
+    async fn process_metrics_get(
+        &self,
+        request: Request<ProcessMetricsGetRequest>,
+    ) -> Result<Response<ProcessMetricsGetResponse>, Status> {
+        let req = request.into_inner();
+        let (window_seconds, bucket_seconds) =
+            agent_orchestrator::process_metrics::validate_window_bucket(
+                &req.window,
+                &req.bucket,
+                30,
+            )
+            .map_err(|error| Status::invalid_argument(error.to_string()))?;
+        let metrics = agent_orchestrator::process_metrics::AsyncProcessMetricsRepository::new(
+            self.state.async_database.clone(),
+        )
+        .query(agent_orchestrator::process_metrics::ProcessMetricsQuery {
+            project_id: req.project_id,
+            window_seconds,
+            bucket_seconds,
+            collection_enabled: true,
+        })
+        .await
+        .map_err(|error| Status::internal(error.to_string()))?;
+        Ok(Response::new(ProcessMetricsGetResponse {
+            schema_version: metrics.schema_version,
+            metrics_json: serde_json::to_string(&metrics)
+                .map_err(|error| Status::internal(error.to_string()))?,
+        }))
+    }
+
+    async fn process_metric_record(
+        &self,
+        request: Request<ProcessMetricRecordRequest>,
+    ) -> Result<Response<ProcessMetricRecordResponse>, Status> {
+        let req = request.into_inner();
+        let recorded_at = agent_orchestrator::config_load::now_ts();
+        let inserted = agent_orchestrator::process_metrics::AsyncProcessMetricsRepository::new(
+            self.state.async_database.clone(),
+        )
+        .record(agent_orchestrator::process_metrics::MetricObservation {
+            project_id: req.project_id,
+            metric_name: req.metric_name,
+            dimensions: req.dimensions.into_iter().collect(),
+            value: req.value,
+            occurred_at: recorded_at.clone(),
+            source_kind: "integration".into(),
+            source_key: req.source_key,
+        })
+        .await
+        .map_err(|error| Status::invalid_argument(error.to_string()))?;
+        Ok(Response::new(ProcessMetricRecordResponse {
+            inserted,
+            recorded_at,
+        }))
+    }
+
+    async fn process_metrics_rebuild(
+        &self,
+        request: Request<ProcessMetricsRebuildRequest>,
+    ) -> Result<Response<ProcessMetricsMaintenanceResponse>, Status> {
+        let project_id = request.into_inner().project_id;
+        let affected_rows =
+            agent_orchestrator::process_metrics::AsyncProcessMetricsRepository::new(
+                self.state.async_database.clone(),
+            )
+            .rebuild(&project_id)
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
+        Ok(Response::new(ProcessMetricsMaintenanceResponse {
+            affected_rows,
+            message: "rebuilt".into(),
+        }))
+    }
+
+    async fn process_metrics_prune(
+        &self,
+        request: Request<ProcessMetricsPruneRequest>,
+    ) -> Result<Response<ProcessMetricsMaintenanceResponse>, Status> {
+        let retention_days = request.into_inner().retention_days.max(1);
+        let affected_rows =
+            agent_orchestrator::process_metrics::AsyncProcessMetricsRepository::new(
+                self.state.async_database.clone(),
+            )
+            .prune(retention_days)
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
+        Ok(Response::new(ProcessMetricsMaintenanceResponse {
+            affected_rows,
+            message: "pruned".into(),
+        }))
+    }
+
     async fn run_step(
         &self,
         request: Request<RunStepRequest>,

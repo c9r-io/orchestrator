@@ -4,6 +4,8 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
+#[cfg(test)]
+use chrono::Timelike;
 use chrono::{DateTime, Duration, NaiveDateTime, TimeZone, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -1249,5 +1251,280 @@ mod tests {
             })
             .await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn deterministic_fixture_produces_exact_process_metrics() {
+        let temp = tempdir().expect("tempdir");
+        let path = temp.path().join("metrics.db");
+        init_schema(&path).expect("schema");
+        let db = Arc::new(AsyncDatabase::open(path).await.expect("db"));
+        let base = (Utc::now() - Duration::hours(1))
+            .with_nanosecond(0)
+            .expect("whole second");
+        let times = (0..=400)
+            .map(|offset| (base + Duration::seconds(offset)).to_rfc3339())
+            .collect::<Vec<_>>();
+        db.writer()
+            .call(
+                move |conn: &mut rusqlite::Connection| -> tokio_rusqlite::Result<()> {
+                for task in ["t1", "t2", "t3", "t4"] {
+                    conn.execute(
+                        "INSERT INTO tasks
+                         (id,name,status,started_at,completed_at,goal,target_files_json,mode,
+                          workspace_id,workflow_id,project_id,workspace_root,qa_targets_json,
+                          ticket_dir,execution_plan_json,loop_mode,current_cycle,init_done,
+                          created_at,updated_at)
+                         VALUES(?1,?1,'completed',?2,?3,'fixture','[]','default','default',
+                                'default','p1','/tmp','[]','docs/ticket','{}','once',1,1,?2,?3)",
+                        params![task, times[0], times[300]],
+                    )?;
+                }
+                conn.execute(
+                    "INSERT INTO task_items
+                     (id,task_id,order_no,qa_file_path,status,ticket_files_json,ticket_content_json,
+                      fix_required,fixed,last_error,created_at,updated_at)
+                     VALUES('item-1','t1',0,'fixture.md','completed','[]','[]',0,0,'',?1,?1)",
+                    params![times[0]],
+                )?;
+                for (index, exit_code) in [1_i64, 1, 1, 0].into_iter().enumerate() {
+                    conn.execute(
+                        "INSERT INTO command_runs
+                         (id,task_item_id,phase,command,cwd,workspace_id,agent_id,project_id,
+                          exit_code,stdout_path,stderr_path,output_json,artifacts_json,
+                          validation_status,started_at,ended_at)
+                         VALUES(?1,'item-1','test','fixture','/tmp','default','fixture','p1',?2,
+                                '/tmp/out','/tmp/err','{}','[]','valid',?3,?3)",
+                        params![format!("run-{index}"), exit_code, times[10 + index]],
+                    )?;
+                }
+                conn.execute(
+                    "INSERT INTO attention_items
+                     (id,project_id,task_id,kind,severity,state,title,summary,actions_json,
+                      dedupe_key,source_event_id,occurrence_count,reopen_count,version,
+                      created_at,updated_at,last_occurred_at,resolved_at)
+                     VALUES('attn-1','p1','t1','step_failed','intervention','resolved','Failure',
+                            'Fixture','[]','fixture','event-1',2,1,6,?1,?2,?2,?2)",
+                    params![times[0], times[80]],
+                )?;
+                for (index, (kind, state, offset)) in [
+                    ("open", "open", 0_usize),
+                    ("upsert", "claimed", 10),
+                    ("remove", "resolved", 40),
+                    ("reopen", "open", 60),
+                    ("upsert", "claimed", 65),
+                    ("remove", "resolved", 80),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    conn.execute(
+                        "INSERT INTO attention_changes
+                         (attention_item_id,change_kind,item_version,created_at,project_id,resulting_state)
+                         VALUES('attn-1',?1,?2,?3,'p1',?4)",
+                        params![kind, index as i64 + 1, times[offset], state],
+                    )?;
+                }
+                for (request_id, target_type, target_id, action, created, completed) in [
+                    ("audit-retry", "task", "t4", "task.retry", 240_usize, 250_usize),
+                    (
+                        "audit-handoff",
+                        "task",
+                        "t1",
+                        "handoff.generate",
+                        90,
+                        92,
+                    ),
+                    (
+                        "audit-resume",
+                        "resume_plan",
+                        "plan-1",
+                        "resume.execute",
+                        180,
+                        181,
+                    ),
+                ] {
+                    conn.execute(
+                        "INSERT INTO control_action_audit
+                         (request_id,schema_version,project_id,transport,target_type,target_id,
+                          action,reason_code,request_hash,status,created_at,updated_at,completed_at)
+                         VALUES(?1,1,'p1','uds',?2,?3,?4,'fixture','hash','succeeded',?5,?6,?6)",
+                        params![request_id, target_type, target_id, action, times[created], times[completed]],
+                    )?;
+                }
+                conn.execute(
+                    "INSERT INTO handoff_snapshots
+                     (id,project_id,task_id,source_event_cursor,projection_version,briefing_json,
+                      content_hash,state_version,generated_by,created_at)
+                     VALUES('handoff-1','p1','t1',0,1,'{}','hash','v1','fixture',?1)",
+                    params![times[100]],
+                )?;
+                conn.execute(
+                    "INSERT INTO events(task_id,event_type,payload_json,created_at)
+                     VALUES('t1','step_started','{}',?1)",
+                    params![times[120]],
+                )?;
+                conn.execute(
+                    "INSERT INTO resume_plans
+                     (id,project_id,task_id,boundary_id,mode,expected_state_version,
+                      side_effect_class,replay_safe,elevated_confirmation_required,
+                      consequence_json,execution_input_json,status,expires_at,created_by,created_at)
+                     VALUES('plan-1','p1','t4','boundary-1','restart_step','v1','idempotent',1,0,
+                            '{}','{}','executed',?1,'fixture',?2)",
+                    params![times[400], times[170]],
+                )?;
+                conn.execute(
+                    "INSERT INTO agent_sessions
+                     (id,task_id,step_id,phase,agent_id,state,pid,pty_backend,cwd,command,
+                      input_fifo_path,stdout_path,stderr_path,transcript_path,created_at,updated_at)
+                     VALUES('session-1','t2','implement','implement','fixture','active',0,'script',
+                            '/tmp','fixture','/tmp/in','/tmp/out','/tmp/err','/tmp/transcript',?1,?1)",
+                    params![times[140]],
+                )?;
+                conn.execute(
+                    "INSERT INTO session_attachments(session_id,client_id,mode,attached_at)
+                     VALUES('session-1','client-1','reader',?1)",
+                    params![times[150]],
+                )?;
+                    Ok(())
+                },
+            )
+            .await
+            .expect("seed deterministic metrics");
+
+        let repository = AsyncProcessMetricsRepository::new(db);
+        repository
+            .record(MetricObservation {
+                project_id: "p1".into(),
+                metric_name: "source_event_deduplicated_total".into(),
+                dimensions: labels(&[("provider", "slack")]),
+                value: 1.0,
+                occurred_at: (base + Duration::seconds(200)).to_rfc3339(),
+                source_kind: "source_delivery".into(),
+                source_key: "duplicate-1".into(),
+            })
+            .await
+            .expect("record source dedup");
+        let snapshot = repository
+            .query(ProcessMetricsQuery {
+                project_id: "p1".into(),
+                window_seconds: 86_400,
+                bucket_seconds: 3_600,
+                collection_enabled: true,
+            })
+            .await
+            .expect("query exact fixture");
+        let find = |name: &str| {
+            snapshot
+                .metrics
+                .iter()
+                .find(|metric| metric.name == name)
+                .unwrap_or_else(|| panic!("missing metric {name}"))
+        };
+        assert_eq!(find("attention_open_total").value, 2.0);
+        assert_eq!(find("attention_time_to_claim_seconds").sum, 15.0);
+        assert_eq!(find("attention_time_to_resolution_seconds").sum, 60.0);
+        assert_eq!(find("process_human_attention_seconds").sum, 60.0);
+        assert_eq!(
+            find("process_autonomous_completion_ratio").numerator,
+            Some(3)
+        );
+        assert_eq!(
+            find("process_autonomous_completion_ratio").denominator,
+            Some(4)
+        );
+        assert_eq!(find("handoff_generation_seconds").sum, 2.0);
+        assert_eq!(find("handoff_to_productive_action_seconds").sum, 20.0);
+        assert_eq!(find("resume_attempt_total").value, 1.0);
+        assert_eq!(find("session_attachment_total").value, 1.0);
+        assert_eq!(find("source_event_deduplicated_total").value, 1.0);
+        assert_eq!(find("process_repeated_failure_rate").numerator, Some(3));
+        assert_eq!(find("process_repeated_failure_rate").denominator, Some(4));
+        assert_eq!(find("process_degenerate_loop_rate").numerator, Some(1));
+        assert_eq!(find("process_degenerate_loop_rate").denominator, Some(1));
+    }
+
+    #[tokio::test]
+    #[ignore = "release-mode deterministic performance fixture"]
+    async fn large_fixture_query_meets_process_metrics_budget() {
+        let temp = tempdir().expect("tempdir");
+        let path = temp.path().join("metrics-performance.db");
+        init_schema(&path).expect("schema");
+        let db = Arc::new(AsyncDatabase::open(path).await.expect("db"));
+        let now = Utc::now().with_nanosecond(0).expect("whole second");
+        let created_at = (now - Duration::hours(1)).to_rfc3339();
+        db.writer()
+            .call(
+                move |conn: &mut rusqlite::Connection| -> tokio_rusqlite::Result<()> {
+                    let tx = conn.unchecked_transaction()?;
+                    tx.execute(
+                        "INSERT INTO tasks
+                         (id,name,status,goal,target_files_json,mode,workspace_id,workflow_id,
+                          project_id,workspace_root,qa_targets_json,ticket_dir,execution_plan_json,
+                          loop_mode,current_cycle,init_done,created_at,updated_at)
+                         VALUES('perf-task','perf-task','running','fixture','[]','default','default',
+                                'default','perf','/tmp','[]','docs/ticket','{}','once',1,1,?1,?1)",
+                        params![created_at],
+                    )?;
+                    for index in 0..50_000_u64 {
+                        tx.execute(
+                            "INSERT INTO events(task_id,event_type,payload_json,created_at)
+                             VALUES('perf-task','step_finished','{}',?1)",
+                            params![created_at],
+                        )?;
+                        if index < 5_000 {
+                            let id = format!("attention-{index}");
+                            tx.execute(
+                                "INSERT INTO attention_items
+                                 (id,project_id,task_id,kind,severity,state,title,summary,actions_json,
+                                  dedupe_key,source_event_id,created_at,updated_at,last_occurred_at)
+                                 VALUES(?1,'perf','perf-task','step_failed','attention','open','Failure',
+                                        'Fixture','[]',?1,?1,?2,?2,?2)",
+                                params![id, created_at],
+                            )?;
+                            tx.execute(
+                                "INSERT INTO attention_changes
+                                 (attention_item_id,change_kind,item_version,created_at,project_id,resulting_state)
+                                 VALUES(?1,'open',1,?2,'perf','open')",
+                                params![id, created_at],
+                            )?;
+                        }
+                    }
+                    tx.execute(
+                        "INSERT INTO process_metric_rollups
+                         (project_id,metric_name,dimension_key,dimensions_json,bucket_start,
+                          bucket_seconds,sample_count,sum_value,min_value,max_value,updated_at)
+                         VALUES('perf','timeline_projection_seconds','','{}',?1,3600,50000,2500,0.01,0.2,?1)",
+                        params![created_at],
+                    )?;
+                    tx.commit()?;
+                    Ok(())
+                },
+            )
+            .await
+            .expect("seed large fixture");
+        let repository = AsyncProcessMetricsRepository::new(db);
+        let started = std::time::Instant::now();
+        let snapshot = repository
+            .query(ProcessMetricsQuery {
+                project_id: "perf".into(),
+                window_seconds: 86_400,
+                bucket_seconds: 3_600,
+                collection_enabled: true,
+            })
+            .await
+            .expect("query large fixture");
+        let elapsed = started.elapsed();
+        let bytes = serde_json::to_vec(&snapshot)
+            .expect("serialize snapshot")
+            .len();
+        assert!(
+            elapsed <= std::time::Duration::from_millis(300),
+            "metrics query exceeded 300ms: {elapsed:?}"
+        );
+        assert!(
+            bytes <= 256 * 1024,
+            "metrics response exceeded 256KiB: {bytes}"
+        );
     }
 }
