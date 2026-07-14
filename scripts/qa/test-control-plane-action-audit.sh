@@ -56,6 +56,16 @@ wait_for_daemon() {
   return 1
 }
 
+has_action_audit_migration() {
+  local database="$1"
+  local latest migration table columns
+  latest="$(sqlite3 "$database" "SELECT COALESCE(MAX(version),0) FROM schema_migrations;")"
+  migration="$(sqlite3 "$database" "SELECT COUNT(*) FROM schema_migrations WHERE version=31 AND name='m0031_control_action_audit';")"
+  table="$(sqlite3 "$database" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='control_action_audit';")"
+  columns="$(sqlite3 "$database" "SELECT COUNT(*) FROM pragma_table_info('control_action_audit') WHERE name IN ('request_id','project_id','action','status','request_hash','created_at','completed_at');")"
+  [[ "$latest" -ge 31 && "$migration" -eq 1 && "$table" -eq 1 && "$columns" -eq 7 ]]
+}
+
 export HOME="$QA_HOME"
 export ORCHESTRATORD_DATA_DIR="$QA_ROOT/data"
 unset ORCHESTRATOR_SOCKET
@@ -220,11 +230,31 @@ fi
 
 "$ORCH" audit list --project "$PROJECT" --status denied -o json > "$QA_ROOT/denied-audit.json"
 if jq -e --arg id "$DENIED_REQUEST_ID" 'any(.request_id == $id and .status == "denied")' "$QA_ROOT/denied-audit.json" >/dev/null && \
-   [[ "$(sqlite3 "$DB" "SELECT COUNT(*) FROM pragma_table_info('control_action_audit');")" -gt 0 ]] && \
-   [[ "$(sqlite3 "$DB" "SELECT MAX(version) FROM schema_migrations;")" == "31" ]]; then
-  pass "project-scoped audit query and migration-31 schema are available under read-only role"
+   has_action_audit_migration "$DB"; then
+  pass "project-scoped audit query and migration-31 capability are available under read-only role"
 else
   fail "audit query RBAC, project filter, or migration schema check failed"
+fi
+
+stop_daemon
+SCHEMA31_DB="$QA_ROOT/schema-31.db"
+SCHEMA32_DB="$QA_ROOT/schema-32.db"
+FUTURE_DB="$QA_ROOT/schema-future.db"
+MISSING31_DB="$QA_ROOT/schema-missing-31.db"
+for target in "$SCHEMA31_DB" "$SCHEMA32_DB" "$FUTURE_DB" "$MISSING31_DB"; do
+  sqlite3 "$DB" ".backup '$target'"
+done
+sqlite3 "$SCHEMA31_DB" "DELETE FROM schema_migrations WHERE version > 31;"
+sqlite3 "$FUTURE_DB" \
+  "INSERT INTO schema_migrations(version,name,applied_at) VALUES(33,'m0033_future_additive_fixture',datetime('now'));"
+sqlite3 "$MISSING31_DB" "DELETE FROM schema_migrations WHERE version=31;"
+if has_action_audit_migration "$SCHEMA31_DB" && \
+   has_action_audit_migration "$SCHEMA32_DB" && \
+   has_action_audit_migration "$FUTURE_DB" && \
+   ! has_action_audit_migration "$MISSING31_DB"; then
+  pass "migration identity accepts schema 31, 32, and future additive versions but rejects missing 31"
+else
+  fail "migration identity/capability matrix is incorrect"
 fi
 
 echo ""

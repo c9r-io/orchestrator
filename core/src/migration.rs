@@ -21,10 +21,16 @@ pub fn all_migrations() -> Vec<Migration> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::async_database::AsyncDatabase;
     use crate::db::configure_conn;
     use crate::persistence::migration_steps::{
         HISTORICAL_AGENT_PLACEHOLDER, m0001_baseline_schema, m0009_normalize_unspecified_agent_ids,
     };
+    use crate::process_metrics::{
+        AsyncProcessMetricsRepository, MetricObservation, SUPPORTED_BUCKET_SECONDS,
+    };
+    use std::collections::BTreeMap;
+    use std::sync::Arc;
     use tempfile::tempdir;
 
     fn mem_conn() -> Connection {
@@ -196,6 +202,219 @@ mod tests {
                 .expect("request_id column");
             assert_eq!(count, 1, "missing request_id on {table}");
         }
+    }
+
+    #[tokio::test]
+    async fn populated_v26_process_console_upgrade_preserves_entities_and_rebuilds_metrics() {
+        let (_temp, db_path, conn) = file_conn("populated-v26-process-console.db");
+        let migrations = all_migrations();
+        run_pending(&conn, &migrations[..26]).expect("seed console predecessor schema");
+        conn.execute_batch(
+            r#"
+            INSERT INTO tasks
+            (id,name,status,goal,target_files_json,mode,workspace_id,workflow_id,project_id,
+             workspace_root,qa_targets_json,ticket_dir,created_at,updated_at)
+            VALUES('console-task','console task','failed','preserve me','[]','once','default',
+                   'fixture','console-project','/tmp/console','[]','docs/ticket',
+                   '2026-07-15T00:00:00Z','2026-07-15T00:00:00Z');
+            INSERT INTO events(task_id,event_type,payload_json,created_at)
+            VALUES('console-task','step_failed','{}','2026-07-15T00:00:01Z');
+            INSERT INTO agent_sessions
+            (id,task_id,step_id,phase,agent_id,state,pid,pty_backend,cwd,command,
+             input_fifo_path,stdout_path,stderr_path,transcript_path,created_at,updated_at)
+            VALUES('console-session','console-task','implement','implement','fixture','exited',0,
+                   'script','/private/work','private command','/private/input','/private/stdout',
+                   '/private/stderr','/private/transcript','2026-07-15T00:00:00Z',
+                   '2026-07-15T00:00:00Z');
+            "#,
+        )
+        .expect("seed pre-console task, event, and session");
+
+        run_pending(&conn, &migrations[..27]).expect("apply attention migration");
+        conn.execute_batch(
+            r#"
+            INSERT INTO attention_items
+            (id,project_id,task_id,kind,severity,state,title,summary,actions_json,dedupe_key,
+             source_event_id,created_at,updated_at,last_occurred_at)
+            VALUES('console-attention','console-project','console-task','step_failed','high','open',
+                   'fixture failure','bounded summary','[]','console-dedupe','event-1',
+                   '2026-07-15T00:00:01Z','2026-07-15T00:00:01Z','2026-07-15T00:00:01Z');
+            INSERT INTO attention_actions
+            (attention_item_id,actor,mutation_kind,idempotency_key,request_hash,target_version,
+             status,created_at)
+            VALUES('console-attention','operator','claim','console-claim','hash',1,'succeeded',
+                   '2026-07-15T00:00:02Z');
+            INSERT INTO attention_changes
+            (attention_item_id,change_kind,item_version,created_at)
+            VALUES('console-attention','open',1,'2026-07-15T00:00:01Z');
+            "#,
+        )
+        .expect("seed attention data");
+
+        run_pending(&conn, &migrations[..28]).expect("apply handoff migration");
+        conn.execute(
+            "INSERT INTO handoff_snapshots
+             (id,project_id,task_id,source_event_cursor,projection_version,briefing_json,
+              content_hash,state_version,generated_by,created_at)
+             VALUES('console-handoff','console-project','console-task',1,1,'{}','content-hash',
+                    'state-v1','operator','2026-07-15T00:00:03Z')",
+            [],
+        )
+        .expect("seed handoff");
+
+        run_pending(&conn, &migrations[..29]).expect("apply session control migration");
+        conn.execute(
+            "INSERT INTO session_control_actions
+             (session_id,actor,client_id,action,idempotency_key,request_hash,result,created_at)
+             VALUES('console-session','operator','writer','writer_attach','console-session-action',
+                    'hash','succeeded','2026-07-15T00:00:04Z')",
+            [],
+        )
+        .expect("seed session action");
+
+        run_pending(&conn, &migrations[..30]).expect("apply source migration");
+        conn.execute_batch(
+            r#"
+            INSERT INTO source_events
+            (id,project_id,provider,installation_id,external_event_id,event_type,occurred_at,
+             received_at,normalized_payload_json,payload_hash,routing_state,routed_task_id)
+            VALUES('console-source','console-project','fixture','installation','external-1','message',
+                   '2026-07-15T00:00:05Z','2026-07-15T00:00:05Z','{}','payload-hash','routed',
+                   'console-task');
+            INSERT INTO source_bindings
+            (id,project_id,task_id,provider,installation_id,conversation_id,correlation_key,
+             binding_type,created_by_event_id,created_at)
+            VALUES('console-binding','console-project','console-task','fixture','installation',
+                   'conversation','correlation','conversation','console-source',
+                   '2026-07-15T00:00:05Z');
+            "#,
+        )
+        .expect("seed source event and binding");
+
+        run_pending(&conn, &migrations[..31]).expect("apply action audit migration");
+        conn.execute_batch(
+            r#"
+            INSERT INTO control_action_audit
+            (request_id,project_id,actor,resolved_role,transport,target_type,target_id,action,
+             reason_code,idempotency_key,request_hash,status,created_at,updated_at,completed_at)
+            VALUES('req-console','console-project','operator','operator','uds','attention',
+                   'console-attention','attention.claim','accepted','console-claim','hash','succeeded',
+                   '2026-07-15T00:00:02Z','2026-07-15T00:00:02Z','2026-07-15T00:00:02Z');
+            UPDATE attention_actions SET request_id='req-console'
+            WHERE attention_item_id='console-attention';
+            UPDATE session_control_actions SET request_id='req-console'
+            WHERE session_id='console-session';
+            UPDATE source_events SET request_id='req-console' WHERE id='console-source';
+            UPDATE source_bindings SET request_id='req-console' WHERE id='console-binding';
+            UPDATE events SET request_id='req-console' WHERE task_id='console-task';
+            "#,
+        )
+        .expect("seed canonical audit joins");
+
+        assert_eq!(
+            run_pending(&conn, &migrations).expect("upgrade to latest"),
+            1
+        );
+        assert_eq!(current_version(&conn).expect("latest version"), 32);
+        for (table, id) in [
+            ("tasks", "console-task"),
+            ("agent_sessions", "console-session"),
+            ("attention_items", "console-attention"),
+            ("handoff_snapshots", "console-handoff"),
+            ("source_events", "console-source"),
+            ("source_bindings", "console-binding"),
+        ] {
+            let count: i64 = conn
+                .query_row(
+                    &format!("SELECT COUNT(*) FROM {table} WHERE id=?1"),
+                    [id],
+                    |row| row.get(0),
+                )
+                .expect("query preserved entity");
+            assert_eq!(count, 1, "{table}.{id} was not preserved");
+        }
+        let session: (String, i64) = conn
+            .query_row(
+                "SELECT state,state_version FROM agent_sessions WHERE id='console-session'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("query migrated session");
+        assert_eq!(session, ("closed".to_string(), 1));
+        let joined: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM control_action_audit a
+                 JOIN attention_actions aa ON aa.request_id=a.request_id
+                 JOIN session_control_actions sa ON sa.request_id=a.request_id
+                 JOIN source_bindings sb ON sb.request_id=a.request_id
+                 JOIN events e ON e.request_id=a.request_id
+                 WHERE a.request_id='req-console'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query preserved audit joins");
+        assert_eq!(joined, 1);
+        let attention_project: String = conn
+            .query_row(
+                "SELECT project_id FROM attention_changes WHERE attention_item_id='console-attention'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query attention change backfill");
+        assert_eq!(attention_project, "console-project");
+
+        drop(conn);
+        let async_db = Arc::new(
+            AsyncDatabase::open(&db_path)
+                .await
+                .expect("open upgraded db"),
+        );
+        let metrics = AsyncProcessMetricsRepository::new(Arc::clone(&async_db));
+        assert!(
+            metrics
+                .record(MetricObservation {
+                    project_id: "console-project".to_string(),
+                    metric_name: "timeline_projection_seconds".to_string(),
+                    dimensions: BTreeMap::new(),
+                    value: 0.25,
+                    occurred_at: "2026-07-15T00:00:06Z".to_string(),
+                    source_kind: "release_fixture".to_string(),
+                    source_key: "console-upgrade".to_string(),
+                })
+                .await
+                .expect("record post-upgrade metric")
+        );
+        async_db
+            .writer()
+            .call(|conn| {
+                conn.execute(
+                    "DELETE FROM process_metric_rollups WHERE project_id='console-project'",
+                    [],
+                )?;
+                Ok(())
+            })
+            .await
+            .expect("clear rebuildable rollups");
+        assert_eq!(
+            metrics
+                .rebuild("console-project")
+                .await
+                .expect("rebuild metrics"),
+            1
+        );
+        let rollups: i64 = async_db
+            .reader()
+            .call(|conn| {
+                Ok(conn.query_row(
+                    "SELECT COUNT(*) FROM process_metric_rollups
+                     WHERE project_id='console-project'",
+                    [],
+                    |row| row.get(0),
+                )?)
+            })
+            .await
+            .expect("query rebuilt rollups");
+        assert_eq!(rollups, SUPPORTED_BUCKET_SECONDS.len() as i64);
     }
 
     #[test]
