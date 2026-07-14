@@ -145,6 +145,9 @@ pub struct RuntimePolicyProjection {
     #[serde(default)]
     /// Whether external adapters may ingest source events.
     pub source_ingest_enabled: bool,
+    #[serde(default = "default_action_audit_mode")]
+    /// Canonical mutation audit enforcement mode.
+    pub action_audit_mode: String,
 }
 
 impl Default for RuntimePolicyProjection {
@@ -160,6 +163,7 @@ impl Default for RuntimePolicyProjection {
             session_read_enabled: true,
             session_control_enabled: false,
             source_ingest_enabled: false,
+            action_audit_mode: default_action_audit_mode(),
         }
     }
 }
@@ -170,6 +174,10 @@ fn default_attention_inbox_enabled() -> bool {
 
 fn default_handoff_enabled() -> bool {
     true
+}
+
+fn default_action_audit_mode() -> String {
+    "compatibility".to_string()
 }
 
 impl CrdProjectable for RuntimePolicyProjection {
@@ -196,6 +204,7 @@ impl CrdProjectable for RuntimePolicyProjection {
             session_read_enabled: rp_spec.session_read_enabled,
             session_control_enabled: rp_spec.session_control_enabled,
             source_ingest_enabled: rp_spec.source_ingest_enabled,
+            action_audit_mode: rp_spec.action_audit_mode,
         })
     }
 
@@ -213,6 +222,7 @@ impl CrdProjectable for RuntimePolicyProjection {
             session_read_enabled: self.session_read_enabled,
             session_control_enabled: self.session_control_enabled,
             source_ingest_enabled: self.source_ingest_enabled,
+            action_audit_mode: self.action_audit_mode.clone(),
         };
         serde_json::to_value(&spec).unwrap_or_default()
     }
@@ -399,6 +409,7 @@ mod tests {
             session_read_enabled: true,
             session_control_enabled: false,
             source_ingest_enabled: false,
+            action_audit_mode: "enforced".to_string(),
         };
         let spec = config.to_cr_spec();
         let back = RuntimePolicyProjection::from_cr_spec(&spec).expect("should deserialize");
@@ -410,6 +421,7 @@ mod tests {
         assert!(back.session_read_enabled);
         assert!(!back.session_control_enabled);
         assert!(!back.source_ingest_enabled);
+        assert_eq!(back.action_audit_mode, "enforced");
         assert!(RuntimePolicyProjection::default().attention_inbox_enabled);
     }
 

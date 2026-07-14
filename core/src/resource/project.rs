@@ -222,6 +222,7 @@ mod tests {
                 session_read_enabled: true,
                 session_control_enabled: false,
                 source_ingest_enabled: false,
+                action_audit_mode: "compatibility".to_string(),
             }),
         };
         let err = dispatch_resource(resource).expect_err("operation should fail");

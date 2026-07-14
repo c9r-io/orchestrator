@@ -1188,3 +1188,80 @@ pub(crate) fn m0030_source_events_and_bindings(conn: &Connection) -> Result<()> 
     .context("m0030_source_events_and_bindings")?;
     Ok(())
 }
+
+pub(crate) fn m0031_control_action_audit(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS control_action_audit (
+            request_id TEXT PRIMARY KEY,
+            schema_version INTEGER NOT NULL DEFAULT 1,
+            project_id TEXT NOT NULL,
+            actor TEXT,
+            resolved_role TEXT,
+            transport TEXT NOT NULL,
+            target_type TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            action TEXT NOT NULL,
+            reason_code TEXT NOT NULL,
+            operator_reason TEXT,
+            idempotency_key TEXT,
+            expected_version TEXT,
+            fencing_token INTEGER,
+            request_hash TEXT NOT NULL,
+            status TEXT NOT NULL,
+            error_code TEXT,
+            result_type TEXT,
+            result_id TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            completed_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_control_action_audit_project_created
+            ON control_action_audit(project_id, created_at DESC, request_id DESC);
+        CREATE INDEX IF NOT EXISTS idx_control_action_audit_actor_created
+            ON control_action_audit(actor, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_control_action_audit_target_created
+            ON control_action_audit(target_type, target_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_control_action_audit_action_status
+            ON control_action_audit(action, status, created_at DESC);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_control_action_audit_retry_identity
+            ON control_action_audit(project_id, target_type, target_id, action, idempotency_key)
+            WHERE idempotency_key IS NOT NULL;
+        "#,
+    )
+    .context("m0031_control_action_audit")?;
+
+    for (table, column) in [
+        ("control_plane_audit", "request_id"),
+        ("attention_actions", "request_id"),
+        ("resume_executions", "request_id"),
+        ("session_control_actions", "request_id"),
+        ("source_command_actions", "request_id"),
+        ("events", "request_id"),
+    ] {
+        ensure_column_exists(
+            conn,
+            table,
+            column,
+            &format!("ALTER TABLE {table} ADD COLUMN {column} TEXT"),
+        )?;
+    }
+    conn.execute_batch(
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_control_plane_audit_request_id
+            ON control_plane_audit(request_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_attention_actions_request_id
+            ON attention_actions(request_id) WHERE request_id IS NOT NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_resume_executions_request_id
+            ON resume_executions(request_id) WHERE request_id IS NOT NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_session_control_actions_request_id
+            ON session_control_actions(request_id) WHERE request_id IS NOT NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_source_command_actions_request_id
+            ON source_command_actions(request_id) WHERE request_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_events_request_id
+            ON events(request_id) WHERE request_id IS NOT NULL;
+        "#,
+    )
+    .context("m0031_control_action_audit indexes")?;
+    Ok(())
+}

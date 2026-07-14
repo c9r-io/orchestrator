@@ -40,6 +40,14 @@ impl Resource for RuntimePolicyResource {
                 return Err(anyhow!(errors.join("; ")));
             }
         }
+        if !matches!(
+            self.spec.action_audit_mode.as_str(),
+            "compatibility" | "enforced"
+        ) {
+            return Err(anyhow!(
+                "action_audit_mode must be compatibility or enforced"
+            ));
+        }
         Ok(())
     }
 
@@ -60,6 +68,7 @@ impl Resource for RuntimePolicyResource {
             session_read_enabled: self.spec.session_read_enabled,
             session_control_enabled: self.spec.session_control_enabled,
             source_ingest_enabled: self.spec.source_ingest_enabled,
+            action_audit_mode: self.spec.action_audit_mode.clone(),
         };
         let spec_value = rp.to_cr_spec();
         Ok(super::apply_to_store(
@@ -103,6 +112,7 @@ impl Resource for RuntimePolicyResource {
                 session_read_enabled: rp.session_read_enabled,
                 session_control_enabled: rp.session_control_enabled,
                 source_ingest_enabled: rp.source_ingest_enabled,
+                action_audit_mode: rp.action_audit_mode,
             },
         })
     }

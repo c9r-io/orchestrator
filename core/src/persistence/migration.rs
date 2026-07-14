@@ -248,6 +248,11 @@ pub fn registered_migrations() -> Vec<Migration> {
             name: "m0030_source_events_and_bindings",
             up: crate::persistence::migration_steps::m0030_source_events_and_bindings,
         },
+        Migration {
+            version: 31,
+            name: "m0031_control_action_audit",
+            up: crate::persistence::migration_steps::m0031_control_action_audit,
+        },
     ]
 }
 

@@ -30,9 +30,12 @@ pub(crate) fn extract_event_promoted_fields(
 /// payload JSON and stored alongside the row.
 pub fn insert_event(conn: &Connection, event: &DbEventRecord) -> Result<()> {
     let (step, step_scope, cycle) = extract_event_promoted_fields(&event.payload_json);
+    let request_id = serde_json::from_str::<serde_json::Value>(&event.payload_json)
+        .ok()
+        .and_then(|value| value["request_id"].as_str().map(str::to_owned));
     conn.execute(
-        "INSERT INTO events (task_id, task_item_id, event_type, payload_json, created_at, step, step_scope, cycle)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        "INSERT INTO events (task_id, task_item_id, event_type, payload_json, created_at, step, step_scope, cycle, request_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
             event.task_id,
             event.task_item_id,
@@ -41,7 +44,8 @@ pub fn insert_event(conn: &Connection, event: &DbEventRecord) -> Result<()> {
             now_ts(),
             step,
             step_scope,
-            cycle
+            cycle,
+            request_id,
         ],
     )?;
     Ok(())

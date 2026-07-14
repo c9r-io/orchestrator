@@ -243,6 +243,9 @@ pub struct RuntimePolicySpec {
     /// Whether external source adapters may durably ingest new events.
     #[serde(default)]
     pub source_ingest_enabled: bool,
+    /// Canonical mutation audit enforcement: `compatibility` or `enforced`.
+    #[serde(default = "default_action_audit_mode")]
+    pub action_audit_mode: String,
 }
 
 /// Runner-policy manifest payload.
@@ -1022,6 +1025,10 @@ pub struct WorkflowStepSpec {
 
 fn default_true() -> bool {
     true
+}
+
+fn default_action_audit_mode() -> String {
+    "compatibility".to_string()
 }
 
 /// Workflow prehook specification for conditional execution.

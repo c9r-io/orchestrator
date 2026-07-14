@@ -19,6 +19,8 @@
 #![deny(missing_docs)]
 #![deny(clippy::undocumented_unsafe_blocks)]
 
+/// Canonical control-plane mutation audit envelope and query repository.
+pub mod action_audit;
 pub mod agent_lifecycle;
 /// Anomaly classification types for scheduler traces and runtime diagnostics.
 pub mod anomaly;

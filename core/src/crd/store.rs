@@ -263,6 +263,7 @@ mod tests {
             session_read_enabled: true,
             session_control_enabled: false,
             source_ingest_enabled: false,
+            action_audit_mode: "compatibility".to_string(),
         };
         store.put(make_cr("RuntimePolicy", "default", rp.to_cr_spec()));
         let projected: Option<RuntimePolicyProjection> = store.project_singleton();

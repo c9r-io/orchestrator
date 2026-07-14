@@ -252,6 +252,7 @@ pub fn runtime_policy_manifest() -> OrchestratorResource {
             session_read_enabled: true,
             session_control_enabled: false,
             source_ingest_enabled: false,
+            action_audit_mode: "compatibility".to_string(),
         }),
     }
 }
