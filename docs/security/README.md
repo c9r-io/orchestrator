@@ -86,6 +86,6 @@ API_TOKEN="{bearer_token}"                # If authentication is required
 3. If the project has webhooks/URL fetch/callbacks: also run SSRF docs.
 4. If the project has concurrency-sensitive operations (one-time tokens, redemption, payments, invites, quotas): also run business logic and race-condition docs.
 5. For handoff/resume changes, run the overlays in access control, workflow abuse, and sensitive-data docs together with `docs/qa/orchestrator/144-handoff-and-safe-resume.md`.
-6. For interactive session changes, run the FR-098/FR-102 overlays in `authorization/01-access-control.md`, `business-logic/02-race-conditions.md`, and `data-security/01-sensitive-data.md` with `docs/qa/orchestrator/149-agent-session-control-plane-hardening.md`; QA-145 is the original specification.
+6. For interactive session changes, run the FR-098/FR-102 overlays in `authorization/01-access-control.md`, `business-logic/02-race-conditions.md`, and `data-security/01-sensitive-data.md` with `docs/qa/orchestrator/149-agent-session-control-plane-hardening.md`; use `docs/qa/orchestrator/152-session-runtime-policy-authority.md` for FR-105 global gate authority. QA-145 is the original specification.
 7. For source-adapter changes, run the FR-099 overlays in access control, injection, sensitive-data, and logging docs with `docs/qa/orchestrator/146-source-events-and-slack-binding.md`.
 8. For FR-103 recovery/notification changes, run sensitive-data and logging overlays with `docs/qa/orchestrator/150-process-console-recovery-notifications-e2e.md`.

@@ -79,7 +79,6 @@
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
-| FR-105 | Session RuntimePolicy 权威语义与确定性控制开关 | P0 | Proposed |
 | FR-106 | Agent Process Console 发布验收与回滚手册 | P1 | Proposed |
 
 ## 说明
@@ -91,7 +90,8 @@
 - `Implemented`: 需求已完成并进入维护阶段
 - 已闭环并删除的 FR，应由对应 `docs/design_doc/**` 与 `docs/qa/**` 继续承载设计和验证信息
 - FR-098 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/108-agent-session-control-plane.md`、`docs/qa/orchestrator/145-agent-session-control-plane.md` 与 `fixtures/manifests/bundles/session-control-mock.yaml` 承载
-- FR-095 至 FR-104 已闭环为 DD/QA 与可执行验收产物；后续审计发现的 Session policy authority 与 Console v1 发布验收缺口由 FR-105、FR-106 承载，整体状态与依赖顺序见 `docs/feature_request/agent-process-console-roadmap.md`
+- FR-095 至 FR-105 已闭环为 DD/QA 与可执行验收产物；Console v1 剩余发布验收缺口由 FR-106 承载，整体状态与依赖顺序见 `docs/feature_request/agent-process-console-roadmap.md`
+- FR-105 已闭环删除；其确定性 `_system` RuntimePolicy 权威语义、热更新/重启验证与 Session 回归证据现由 `docs/design_doc/orchestrator/115-session-runtime-policy-authority.md`、`docs/qa/orchestrator/152-session-runtime-policy-authority.md` 与 `scripts/qa/test-agent-session-control-plane.sh` 承载
 - FR-104 已闭环删除；其精确产品指标、本地运营视图、投影健康、生命周期与性能证据现由 `docs/design_doc/orchestrator/114-process-console-operational-metrics.md`、`docs/qa/orchestrator/151-process-console-operational-metrics.md` 与 `scripts/qa/test-process-console-metrics.sh` 承载
 - FR-103 已闭环删除；其审核恢复、Attention 通知、真实 Tauri/gRPC 垂直验收与可访问性证据现由 `docs/design_doc/orchestrator/113-process-console-recovery-notifications-e2e.md`、`docs/qa/orchestrator/150-process-console-recovery-notifications-e2e.md` 与 `scripts/qa/test-process-console-vertical-flow.sh` 承载
 - FR-101 已闭环删除；其统一 Action Audit Envelope、迁移/兼容设计与可复现验证现由 `docs/design_doc/orchestrator/111-control-plane-action-audit-envelope.md`、`docs/qa/orchestrator/148-control-plane-action-audit-envelope.md` 与 `scripts/qa/test-control-plane-action-audit.sh` 承载

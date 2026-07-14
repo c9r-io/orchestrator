@@ -13,7 +13,7 @@ self_referential_safe: true
 
 ## Background
 
-This document is the executable closure evidence for FR-102 and supersedes the unchecked execution status in QA-145. Use the deterministic shell agent only; do not attach to a live AI provider or a developer daemon.
+This document is the executable closure evidence for FR-102 and supersedes the unchecked execution status in QA-145. QA-152 is authoritative for deterministic `_system` RuntimePolicy selection and hot rollout/rollback behavior. Use the deterministic shell agent only; do not attach to a live AI provider or a developer daemon.
 
 ```bash
 cargo build -p orchestratord -p orchestrator-cli
@@ -62,8 +62,8 @@ Verify populated v28 session rows survive migrations 29-31 and lifecycle reconci
 ### Expected Data State
 
 ```sql
-SELECT MAX(version) FROM schema_migrations;
--- Expected: 31
+SELECT COUNT(*) FROM schema_migrations WHERE version IN (29, 30, 31);
+-- Expected: 3; later additive migrations are allowed
 
 SELECT id, state, state_version FROM agent_sessions ORDER BY id;
 -- Expected: every seeded id retained; no ambiguous legacy exited state
@@ -163,7 +163,7 @@ Verify global feature gating, dynamic role elevation, fail-closed process identi
 
 ### Steps
 
-1. Disable `_system` `RuntimePolicy.spec.session_control_enabled`; attempt writer attach as operator, then restore it.
+1. Run QA-152's conflicting-policy matrix; disable `_system` `RuntimePolicy.spec.session_control_enabled`, attempt every writer mutation as operator, then restore it.
 2. Under read-only UDS, run List/Get/Read and reader Attach; attempt writer Attach, SendInput, and Close.
 3. Replace the stored process fingerprint while retaining the live PID; attempt input and close and verify `kill -0` still succeeds.
 4. Restore a verified fingerprint and close by `session_id` with reason/idempotency/version.
@@ -171,7 +171,7 @@ Verify global feature gating, dynamic role elevation, fail-closed process identi
 
 ### Expected
 
-- The global control flag denies mutations while reads remain available.
+- The `_system` global control flag denies mutations while reads remain available, regardless of ordinary project policy or insertion order.
 - Read-only observation succeeds; writer/input/close are denied with correlated request IDs.
 - A mismatched live PID performs no input or signal; verified close transitions through draining and terminates only the fixture PID.
 - Every domain mutation row has trusted actor and `request_id`; no input/transcript marker appears in daemon or audit output.
@@ -234,5 +234,5 @@ FROM agent_sessions WHERE id='{session_id}';
 | 1 | Populated migration and deterministic reconciliation | PASS | 2026-07-14 | Codex | Default isolated script ran all targeted migration/lifecycle regressions |
 | 2 | Independent bounded readers and UI offset re-entry | PASS | 2026-07-14 | Codex | Reader idempotency/offset checks, permit tests, and Playwright reconnect passed |
 | 3 | Writer race, heartbeat, fencing, and atomic idempotent input | PASS | 2026-07-14 | Codex | One winner, increasing token, accepted replay, conflict, and single fixture write passed |
-| 4 | Policy, RBAC, PID identity, close, and redaction | PASS | 2026-07-14 | Codex | Global flag, read-only UDS denials, live mismatch, request joins, and marker scan passed |
+| 4 | Policy, RBAC, PID identity, close, and redaction | PASS | 2026-07-15 | Codex | QA-152 global authority matrix, read-only UDS denials, live mismatch, request joins, and marker scan passed |
 | 5 | Restart convergence and Session Inspector entry visibility | PASS | 2026-07-14 | Codex | UDS/TCP restart fixture and five Playwright scenarios passed |

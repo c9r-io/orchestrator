@@ -164,6 +164,8 @@ The orchestrator manages resources organized hierarchically:
     *   **Loop Policy**: Controls iteration (Once or Infinite) and termination conditions.
     *   **Finalize Rules**: Determines the final status of items and tasks.
 
+`RuntimePolicy` has two explicit resolution scopes. Process-wide consumers use only the `_system` policy and fall back to safe defaults. Project-scoped consumers resolve the named project, then `_system`, then defaults. Global Session rollout gates (`session_read_enabled` and `session_control_enabled`) never select an ordinary project policy by store iteration order; project-owned redaction and execution behavior continue to use project resolution.
+
 #### Execution Model
 
 A **Task** is the unit of execution, binding a Workspace and Workflow to a set of target files.

@@ -5,7 +5,7 @@
 **Related Plan**: FR-102 session lifecycle, stream, fencing, process-identity, and UI acceptance hardening  
 **Related QA**: `docs/qa/orchestrator/149-agent-session-control-plane-hardening.md`  
 **Created**: 2026-07-14  
-**Last Updated**: 2026-07-14
+**Last Updated**: 2026-07-15
 
 ## Background
 
@@ -91,6 +91,7 @@ FR-102 closes those gaps without changing the public session abstraction. The ha
 ## QA Docs
 
 - `docs/qa/orchestrator/149-agent-session-control-plane-hardening.md`
+- `docs/qa/orchestrator/152-session-runtime-policy-authority.md` supersedes QA-149 only for deterministic `_system` rollout/rollback authority.
 - Supersedes the unexecuted status in `docs/qa/orchestrator/145-agent-session-control-plane.md` while retaining that document as the original FR-098 specification.
 
 ## Acceptance Criteria
@@ -104,3 +105,7 @@ FR-102 closes those gaps without changing the public session abstraction. The ha
 - Restart and lease reconciliation converge every supported state without terminal resurrection.
 - Session Inspector reconnect and read-only focusability are verified in browser E2E.
 - The default isolated QA script reports five passes and zero failures.
+
+## Follow-up
+
+DD-115 makes `_system` the deterministic authority for the global Session read/control flags and extends the same isolated script with conflict-order, hot-apply, and restart assertions. All lifecycle, fencing, process-identity, RBAC, UI, audit, and redaction contracts in this document remain unchanged.

@@ -135,7 +135,7 @@ Verify the dynamic role boundary and fail-closed process identity.
 ### Steps
 1. As `read_only`, run List/Get/Read, reader Attach, and ResolvePid.
 2. As `read_only`, request writer Attach, SendInput, and Close.
-3. Disable `session_control_enabled` and repeat mutations as `operator`; re-enable it afterward.
+3. Disable `_system.session_control_enabled` and repeat mutations as `operator`; re-enable it afterward. Run QA-152 for conflicting project policies, insertion order, hot apply, and restart authority.
 4. Replace the stored fingerprint with a stale value while retaining the PID, then attempt SendInput and Close.
 5. Restore the real fingerprint and close by `session_id` with a reason and expected version; verify no mutation command accepts PID.
 
@@ -190,5 +190,5 @@ FROM agent_sessions WHERE id IN ('{live_id}','{detached_id}','{closed_id}','{fai
 | 1 | Migration compatibility and public observation | PASS | 2026-07-14 | Codex | Superseded execution: QA-149 Scenario 1 and isolated script PASS |
 | 2 | Independent readers and offset reconnect | PASS | 2026-07-14 | Codex | Superseded execution: QA-149 Scenario 2 and browser reconnect PASS |
 | 3 | Writer heartbeat, fencing, and idempotent input | PASS | 2026-07-14 | Codex | Superseded execution: QA-149 Scenario 3 and atomic replay PASS |
-| 4 | RBAC, policy, PID reuse, and close | PASS | 2026-07-14 | Codex | Superseded execution: QA-149 Scenario 4 and UDS/PID checks PASS |
+| 4 | RBAC, policy, PID reuse, and close | PASS | 2026-07-15 | Codex | Superseded execution: QA-149 Scenario 4 plus QA-152 deterministic policy authority PASS |
 | 5 | Restart reconciliation and UI entry visibility | PASS | 2026-07-14 | Codex | Superseded execution: QA-149 Scenario 5 and Playwright entry PASS |

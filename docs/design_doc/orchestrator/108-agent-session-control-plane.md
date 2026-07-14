@@ -93,10 +93,13 @@ Migration 29 adds the following columns to `agent_sessions`: `state_version`, `w
 
 - `docs/qa/orchestrator/145-agent-session-control-plane.md`
 - `docs/qa/orchestrator/149-agent-session-control-plane-hardening.md` (FR-102 executable closure)
+- `docs/qa/orchestrator/152-session-runtime-policy-authority.md` (FR-105 deterministic global policy authority)
 
 ## Hardening Closure
 
 DD-112 preserves this public design while tightening restart reconciliation, per-session stream occupancy, atomic 4096-byte input, canonical/domain retry replay, process-incarnation checks, Tauri stream replacement, and committed-offset GUI reconnect. The provider-free acceptance entry point is `scripts/qa/test-agent-session-control-plane.sh`.
+
+DD-115 fixes the rollout authority behind this design: global Session read/control gates resolve only the `_system` RuntimePolicy, while project policy remains relevant to project-scoped consumers such as transcript redaction. The public Session contract is unchanged.
 
 ## Acceptance Criteria
 
