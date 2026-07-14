@@ -137,6 +137,7 @@ async fn dispatch_session(
             session_id,
             follow,
             offset,
+            chunks_json,
         } => {
             use std::io::Write as _;
             let mut stream = client
@@ -150,7 +151,22 @@ async fn dispatch_session(
                 .into_inner();
             let mut out = std::io::stdout().lock();
             while let Some(chunk) = stream.message().await? {
-                if !chunk.data.is_empty() {
+                if chunks_json {
+                    serde_json::to_writer(
+                        &mut out,
+                        &serde_json::json!({
+                            "session_id": chunk.session_id,
+                            "offset": chunk.offset,
+                            "next_offset": chunk.next_offset,
+                            "stream": chunk.stream,
+                            "text": chunk.text,
+                            "eof": chunk.eof,
+                            "redacted": chunk.redacted,
+                        }),
+                    )?;
+                    writeln!(out)?;
+                    out.flush()?;
+                } else if !chunk.data.is_empty() {
                     out.write_all(&chunk.data)?;
                     out.flush()?;
                 }

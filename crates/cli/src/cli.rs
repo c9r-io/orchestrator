@@ -675,7 +675,8 @@ pub enum QaCommands {
 #[cfg(test)]
 mod tests {
     use super::{
-        AuditCommands, Cli, Commands, DbCommands, DbMigrationCommands, EventCommands, TaskCommands,
+        AgentCommands, AgentSessionCommands, AuditCommands, Cli, Commands, DbCommands,
+        DbMigrationCommands, EventCommands, TaskCommands,
     };
     use clap::Parser;
 
@@ -784,6 +785,30 @@ mod tests {
             }) if project == "demo" && status == "failed"
         ));
         assert!(Cli::try_parse_from(["orchestrator", "audit", "list"]).is_err());
+    }
+
+    #[test]
+    fn agent_session_read_parses_committed_offset_output() {
+        let cli = Cli::try_parse_from([
+            "orchestrator",
+            "agent",
+            "session",
+            "read",
+            "session-1",
+            "--offset",
+            "42",
+            "--chunks-json",
+        ])
+        .expect("session read should parse");
+        assert!(matches!(
+            cli.command,
+            Commands::Agent(AgentCommands::Session(AgentSessionCommands::Read {
+                session_id,
+                offset: 42,
+                chunks_json: true,
+                ..
+            })) if session_id == "session-1"
+        ));
     }
 }
 
@@ -1394,6 +1419,9 @@ pub enum AgentSessionCommands {
         /// Committed source byte offset.
         #[arg(long, default_value_t = 0)]
         offset: u64,
+        /// Emit one JSON object per chunk, including next_offset, instead of raw transcript text.
+        #[arg(long)]
+        chunks_json: bool,
     },
     /// Renew a writer lease.
     Heartbeat {

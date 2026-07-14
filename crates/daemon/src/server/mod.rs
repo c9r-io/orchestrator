@@ -30,6 +30,7 @@ pub struct OrchestratorServer {
     pub(crate) shutdown_notify: Arc<Notify>,
     pub(crate) control_plane: Option<Arc<ControlPlaneSecurity>>,
     pub(crate) uds_auth_policy: Option<UdsAuthPolicy>,
+    pub(crate) session_read_limits: session::SessionReadLimits,
 }
 
 impl OrchestratorServer {
@@ -45,6 +46,7 @@ impl OrchestratorServer {
             shutdown_notify,
             control_plane,
             uds_auth_policy,
+            session_read_limits: session::SessionReadLimits::default(),
         }
     }
 

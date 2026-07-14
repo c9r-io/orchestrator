@@ -717,6 +717,105 @@ fn agent_entries() -> Vec<GuideEntry> {
                 ),
             ],
         },
+        GuideEntry {
+            command: "agent session list",
+            alias: None,
+            category: GuideCategory::AgentManagement,
+            summary: "List observable interactive agent sessions",
+            description: "Filter daemon-authoritative sessions without exposing transport paths or command text.",
+            examples: &[(
+                "orchestrator agent session list --state detached -o json",
+                "List detached sessions as bounded JSON",
+            )],
+        },
+        GuideEntry {
+            command: "agent session get",
+            alias: None,
+            category: GuideCategory::AgentManagement,
+            summary: "Inspect one interactive agent session",
+            description: "Show public lifecycle, process, and writer lease metadata for a session ID.",
+            examples: &[(
+                "orchestrator agent session get SESSION_ID -o json",
+                "Inspect one session",
+            )],
+        },
+        GuideEntry {
+            command: "agent session attach",
+            alias: None,
+            category: GuideCategory::AgentManagement,
+            summary: "Attach a reader or request the fenced writer lease",
+            description: "Reader attachment is read-only; writer attachment requires operator authority and an enabled session-control policy.",
+            examples: &[(
+                "orchestrator agent session attach SESSION_ID --mode writer --client-id terminal-a",
+                "Request exclusive writer control",
+            )],
+        },
+        GuideEntry {
+            command: "agent session read",
+            alias: None,
+            category: GuideCategory::AgentManagement,
+            summary: "Read transcript chunks from a client-owned offset",
+            description: "Use structured chunk output to commit next_offset before reconnecting a transcript stream.",
+            examples: &[(
+                "orchestrator agent session read SESSION_ID --offset 0 --chunks-json",
+                "Read chunks with reconnect offsets",
+            )],
+        },
+        GuideEntry {
+            command: "agent session heartbeat",
+            alias: None,
+            category: GuideCategory::AgentManagement,
+            summary: "Renew the current writer lease",
+            description: "Only the current unexpired client and fencing token can extend a writer lease.",
+            examples: &[(
+                "orchestrator agent session heartbeat SESSION_ID --client-id terminal-a --fencing-token 1",
+                "Renew a writer lease",
+            )],
+        },
+        GuideEntry {
+            command: "agent session send-input",
+            alias: None,
+            category: GuideCategory::AgentManagement,
+            summary: "Send retry-safe bounded input to a live session",
+            description: "Input requires the current fencing token and a retry-stable idempotency key.",
+            examples: &[(
+                "orchestrator agent session send-input SESSION_ID --client-id terminal-a --fencing-token 1 --text hello --idempotency-key input-1",
+                "Send one idempotent input payload",
+            )],
+        },
+        GuideEntry {
+            command: "agent session detach",
+            alias: None,
+            category: GuideCategory::AgentManagement,
+            summary: "Detach a session reader or writer",
+            description: "Writer detach requires the exact current fencing token; stale tokens cannot release a new owner.",
+            examples: &[(
+                "orchestrator agent session detach SESSION_ID --mode writer --client-id terminal-a --fencing-token 1",
+                "Release writer control",
+            )],
+        },
+        GuideEntry {
+            command: "agent session close",
+            alias: None,
+            category: GuideCategory::AgentManagement,
+            summary: "Close a fingerprint-verified session process",
+            description: "Close is session-ID addressed, version-aware, audited, and never authorizes a mutation by PID alone.",
+            examples: &[(
+                "orchestrator agent session close SESSION_ID --reason done --expected-version 2 --idempotency-key close-1",
+                "Request a governed close",
+            )],
+        },
+        GuideEntry {
+            command: "agent session resolve",
+            alias: None,
+            category: GuideCategory::AgentManagement,
+            summary: "Resolve a diagnostic PID to session resources",
+            description: "PID resolution is read-only and never creates mutation authority.",
+            examples: &[(
+                "orchestrator agent session resolve --pid 1234 -o json",
+                "Find sessions carrying a diagnostic PID",
+            )],
+        },
     ]
 }
 

@@ -1,6 +1,7 @@
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::unix::fs::OpenOptionsExt;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 
 use agent_orchestrator::config_ext::OrchestratorConfigExt;
@@ -17,8 +18,30 @@ use super::action_audit::{self, ActionDescriptor};
 use super::{OrchestratorServer, authorize, trusted_actor};
 
 const LEASE_TTL_SECS: u64 = 30;
-const MAX_INPUT_BYTES: usize = 64 * 1024;
+const MAX_INPUT_BYTES: usize = 4 * 1024;
 const MAX_CHUNK_BYTES: usize = 64 * 1024;
+const MAX_SESSION_READERS: usize = 8;
+
+/// Per-session reader occupancy whose permits are released when streams end or disconnect.
+#[derive(Default)]
+pub(crate) struct SessionReadLimits {
+    sessions: tokio::sync::Mutex<std::collections::HashMap<String, Arc<tokio::sync::Semaphore>>>,
+}
+
+impl SessionReadLimits {
+    async fn acquire(&self, session_id: &str) -> Result<tokio::sync::OwnedSemaphorePermit, Status> {
+        let semaphore = self
+            .sessions
+            .lock()
+            .await
+            .entry(session_id.to_string())
+            .or_insert_with(|| Arc::new(tokio::sync::Semaphore::new(MAX_SESSION_READERS)))
+            .clone();
+        semaphore
+            .try_acquire_owned()
+            .map_err(|_| Status::resource_exhausted("session reader limit reached"))
+    }
+}
 
 fn ensure_read_enabled(server: &OrchestratorServer) -> Result<(), Status> {
     let enabled = read_active_config(&server.state)
@@ -457,7 +480,7 @@ pub(crate) async fn send_input(
     ensure_control_enabled(server)?;
     if request.get_ref().input.is_empty() || request.get_ref().input.len() > MAX_INPUT_BYTES {
         return Err(Status::invalid_argument(
-            "input must be between 1 and 65536 bytes",
+            "input must be between 1 and 4096 bytes",
         ));
     }
     if request.get_ref().idempotency_key.trim().is_empty() {
@@ -537,10 +560,10 @@ pub(crate) async fn send_input(
     let request_hash = hex::encode(Sha256::digest(&req.input));
     let insert_hash = request_hash.clone();
     let audit_request_id = attempt.request_id.clone();
-    let inserted=server.state.async_database.writer().call(move|conn|{
+    let mut owns_reservation=server.state.async_database.writer().call(move|conn|{
         let n=conn.execute("INSERT OR IGNORE INTO session_control_actions(session_id,actor,client_id,action,idempotency_key,request_hash,result,fencing_token,created_at,request_id) VALUES(?1,?2,?3,'send_input',?4,?5,'reserved',?6,?7,?8)",rusqlite::params![sid,actor2,client2,key,insert_hash,token,agent_orchestrator::config_load::now_ts(),audit_request_id])?;Ok(n==1)
     }).await.map_err(agent_orchestrator::async_database::flatten_err).map_err(|e|Status::internal(e.to_string()))?;
-    if !inserted {
+    if !owns_reservation {
         let sid = req.session_id.clone();
         let key = req.idempotency_key.clone();
         let (stored_hash,result)=server.state.async_database.reader().call(move|conn|Ok(conn.query_row("SELECT request_hash,result FROM session_control_actions WHERE session_id=?1 AND idempotency_key=?2",rusqlite::params![sid,key],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?))
@@ -550,23 +573,57 @@ pub(crate) async fn send_input(
                 "idempotency key was used for different input",
             ));
         }
-        return match result.as_str() {
-            "accepted" => Ok(Response::new(AgentSessionSendInputResponse {
-                accepted_bytes: len,
-            })),
-            "reserved" => Err(Status::aborted(
-                "matching input request is still in progress",
-            )),
-            _ => Err(Status::unavailable(
-                "previous matching input request failed",
-            )),
-        };
+        match result.as_str() {
+            "accepted" => {
+                return Ok(Response::new(AgentSessionSendInputResponse {
+                    accepted_bytes: len,
+                }));
+            }
+            "reserved" => {
+                return Err(Status::aborted(
+                    "matching input request is still in progress",
+                ));
+            }
+            "failed" => {
+                let sid = req.session_id.clone();
+                let key = req.idempotency_key.clone();
+                let request_id = attempt.request_id.clone();
+                owns_reservation = server
+                    .state
+                    .async_database
+                    .writer()
+                    .call(move |conn| {
+                        let changed = conn.execute(
+                            "UPDATE session_control_actions
+                         SET result='reserved',request_id=?3,created_at=?4
+                         WHERE session_id=?1 AND idempotency_key=?2 AND result='failed'",
+                            rusqlite::params![
+                                sid,
+                                key,
+                                request_id,
+                                agent_orchestrator::config_load::now_ts()
+                            ],
+                        )?;
+                        Ok(changed == 1)
+                    })
+                    .await
+                    .map_err(agent_orchestrator::async_database::flatten_err)
+                    .map_err(|error| Status::internal(error.to_string()))?;
+                if !owns_reservation {
+                    return Err(Status::aborted(
+                        "matching input request was concurrently retried",
+                    ));
+                }
+            }
+            _ => {
+                return Err(Status::unavailable(
+                    "previous matching input request is unknown",
+                ));
+            }
+        }
     }
-    let mut options = std::fs::OpenOptions::new();
-    options.write(true).custom_flags(libc::O_NONBLOCK);
-    let write_result = options
-        .open(&row.input_fifo_path)
-        .and_then(|mut fifo| fifo.write_all(&req.input));
+    debug_assert!(owns_reservation);
+    let write_result = write_fifo_atomically(&row.input_fifo_path, &req.input);
     let sid = req.session_id.clone();
     let key = req.idempotency_key.clone();
     let result = if write_result.is_ok() {
@@ -607,6 +664,7 @@ pub(crate) async fn read(
     ensure_read_enabled(server)?;
     let req = request.into_inner();
     let row = load(server, &req.session_id).await?;
+    let reader_permit = server.session_read_limits.acquire(&req.session_id).await?;
     let path = if std::path::Path::new(&row.transcript_path).exists() {
         row.transcript_path.clone()
     } else {
@@ -626,20 +684,10 @@ pub(crate) async fn read(
     let terminal = matches!(row.state.as_str(), "closed" | "failed" | "exited");
     let session_store = server.state.session_store.clone();
     tokio::spawn(async move {
+        let _reader_permit = reader_permit;
         let mut offset = req.offset;
         loop {
-            let result = (|| -> std::io::Result<Option<Vec<u8>>> {
-                let mut f = std::fs::File::open(&path)?;
-                let len = f.metadata()?.len();
-                if offset >= len {
-                    return Ok(None);
-                }
-                f.seek(SeekFrom::Start(offset))?;
-                let mut buf = vec![0; chunk.min((len - offset) as usize)];
-                let n = f.read(&mut buf)?;
-                buf.truncate(n);
-                Ok(Some(buf))
-            })();
+            let result = read_transcript_chunk(std::path::Path::new(&path), offset, chunk);
             match result {
                 Ok(Some(bytes)) => {
                     let raw = String::from_utf8_lossy(&bytes);
@@ -710,6 +758,43 @@ pub(crate) async fn read(
     Ok(Response::new(Box::pin(
         tokio_stream::wrappers::ReceiverStream::new(rx),
     )))
+}
+
+fn read_transcript_chunk(
+    path: &std::path::Path,
+    offset: u64,
+    max_chunk_bytes: usize,
+) -> std::io::Result<Option<Vec<u8>>> {
+    let mut file = std::fs::File::open(path)?;
+    let len = file.metadata()?.len();
+    if offset >= len {
+        return Ok(None);
+    }
+    file.seek(SeekFrom::Start(offset))?;
+    let mut buffer = vec![0; max_chunk_bytes.min((len - offset) as usize)];
+    let count = file.read(&mut buffer)?;
+    buffer.truncate(count);
+    Ok(Some(buffer))
+}
+
+fn write_fifo_atomically(path: &str, input: &[u8]) -> std::io::Result<()> {
+    if input.is_empty() || input.len() > MAX_INPUT_BYTES {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "session input exceeds the atomic FIFO write boundary",
+        ));
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).custom_flags(libc::O_NONBLOCK);
+    let mut fifo = options.open(path)?;
+    let written = fifo.write(input)?;
+    if written != input.len() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::WriteZero,
+            "session input transport accepted a partial atomic write",
+        ));
+    }
+    Ok(())
 }
 
 pub(crate) async fn close(
@@ -814,15 +899,39 @@ pub(crate) async fn close(
         .update_session_state(&row.id, "draining", None, false)
         .await
         .map_err(|e| attempt.status(Status::internal(e.to_string())))?;
-    nix::sys::signal::kill(
+    let signal_result = nix::sys::signal::kill(
         nix::unistd::Pid::from_raw(row.pid as i32),
         nix::sys::signal::Signal::SIGTERM,
-    )
-    .map_err(|e| {
-        attempt.status(Status::unavailable(format!(
-            "failed to close session process: {e}"
-        )))
-    })?;
+    );
+    if let Err(error) = signal_result {
+        let original_state = row.state.clone();
+        let _ = server
+            .state
+            .session_store
+            .update_session_state(&row.id, &original_state, None, false)
+            .await;
+        let sid = req.session_id.clone();
+        let key = req.idempotency_key.clone();
+        let _ = server
+            .state
+            .async_database
+            .writer()
+            .call(move |conn| {
+                conn.execute(
+                    "UPDATE session_control_actions SET result='failed'
+                     WHERE session_id=?1 AND idempotency_key=?2",
+                    rusqlite::params![sid, key],
+                )?;
+                Ok(())
+            })
+            .await;
+        return Err(attempt
+            .failed(
+                server,
+                Status::unavailable(format!("failed to close session process: {error}")),
+            )
+            .await);
+    }
     let sid = req.session_id.clone();
     let key = req.idempotency_key.clone();
     let _=server.state.async_database.writer().call(move|conn|{conn.execute("UPDATE session_control_actions SET result='accepted' WHERE session_id=?1 AND idempotency_key=?2",rusqlite::params![sid,key])?;Ok(())}).await;
@@ -865,13 +974,8 @@ pub(crate) async fn resolve_pid(
 }
 
 fn process_identity_matches(row: &SessionRow) -> bool {
-    if row.pid <= 0 {
-        return false;
-    }
-    let Some(expected) = row.process_fingerprint.as_deref() else {
-        return false;
-    };
-    session_store::capture_process_fingerprint(row.pid as u32).as_deref() == Some(expected)
+    session_store::process_identity_status(row.pid, row.process_fingerprint.as_deref())
+        == session_store::ProcessIdentityStatus::VerifiedLive
 }
 
 fn session_project(server: &OrchestratorServer, row: &SessionRow) -> Result<String, Status> {
@@ -956,4 +1060,66 @@ async fn emit(
         payload,
     )
     .await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn per_session_reader_limit_releases_on_stream_drop() {
+        let limits = SessionReadLimits::default();
+        let mut permits = Vec::new();
+        for _ in 0..MAX_SESSION_READERS {
+            permits.push(limits.acquire("session-a").await.expect("reader permit"));
+        }
+        let denied = limits.acquire("session-a").await.unwrap_err();
+        assert_eq!(denied.code(), tonic::Code::ResourceExhausted);
+
+        drop(permits.pop());
+        let _released_reader = limits
+            .acquire("session-a")
+            .await
+            .expect("disconnected reader releases occupancy");
+        let _independent_reader = limits
+            .acquire("session-b")
+            .await
+            .expect("different session has an independent bound");
+    }
+
+    #[test]
+    fn transcript_offsets_are_independent_and_chunk_bounded() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("transcript.log");
+        std::fs::write(&path, b"alpha-beta-gamma").expect("write transcript");
+
+        let reader_a = read_transcript_chunk(&path, 0, 5)
+            .expect("reader a")
+            .expect("reader a bytes");
+        let reader_b = read_transcript_chunk(&path, 6, 4)
+            .expect("reader b")
+            .expect("reader b bytes");
+        let reader_a_reconnect = read_transcript_chunk(&path, reader_a.len() as u64, 64)
+            .expect("reader a reconnect")
+            .expect("remaining bytes");
+
+        assert_eq!(reader_a, b"alpha");
+        assert_eq!(reader_b, b"beta");
+        assert_eq!(reader_a_reconnect, b"-beta-gamma");
+        assert!(read_transcript_chunk(&path, 16, 64).unwrap().is_none());
+    }
+
+    #[test]
+    fn atomic_input_boundary_rejects_oversized_payload_before_write() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("capture");
+        std::fs::write(&path, []).expect("create capture");
+
+        write_fifo_atomically(path.to_str().unwrap(), b"hello").expect("bounded write");
+        assert_eq!(std::fs::read(&path).unwrap(), b"hello");
+        let error = write_fifo_atomically(path.to_str().unwrap(), &vec![b'x'; MAX_INPUT_BYTES + 1])
+            .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        assert_eq!(std::fs::read(&path).unwrap(), b"hello");
+    }
 }

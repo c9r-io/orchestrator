@@ -980,6 +980,15 @@ mod tests {
             .expect("acquire first")
             .expect("first lease");
         assert!(validate_writer(&conn, "sess-fence", "client-a", first.fencing_token).unwrap());
+        let renewed = heartbeat_writer(&conn, "sess-fence", "client-a", first.fencing_token, 60)
+            .expect("heartbeat")
+            .expect("current writer renews");
+        assert!(renewed > first.expires_at);
+        assert!(
+            heartbeat_writer(&conn, "sess-fence", "client-b", first.fencing_token, 60,)
+                .unwrap()
+                .is_none()
+        );
         assert!(
             release_writer(
                 &conn,
@@ -1007,6 +1016,36 @@ mod tests {
             .unwrap()
         );
         assert!(validate_writer(&conn, "sess-fence", "client-b", second.fencing_token).unwrap());
+    }
+
+    #[test]
+    fn concurrent_writer_race_grants_exactly_one_client() {
+        let (_dir, db_path) = make_db();
+        let conn = open_conn(&db_path).expect("open conn");
+        insert_session(&conn, &make_session("sess-race", "task-1", "qa", "active"))
+            .expect("insert session");
+        drop(conn);
+
+        let barrier = Arc::new(std::sync::Barrier::new(3));
+        let mut handles = Vec::new();
+        for client in ["client-a", "client-b"] {
+            let path = db_path.clone();
+            let barrier = barrier.clone();
+            handles.push(std::thread::spawn(move || {
+                let conn = open_conn(&path).expect("open racing connection");
+                barrier.wait();
+                acquire_writer_lease(&conn, "sess-race", client, client, 30)
+                    .expect("race acquisition")
+                    .is_some()
+            }));
+        }
+        barrier.wait();
+        let granted = handles
+            .into_iter()
+            .map(|handle| handle.join().expect("writer thread"))
+            .filter(|granted| *granted)
+            .count();
+        assert_eq!(granted, 1);
     }
 
     #[test]
