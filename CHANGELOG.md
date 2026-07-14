@@ -8,11 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- **Agent Process Console UI** (FR-100) — Attention-first left navigation, integrated semantic process workspace, global session re-entry, stable hash deep links, keyboard triage, role-sensitive actions, responsive/reduced-transparency fallbacks, privacy-safe UI metrics, and request-ID error correlation
-- Frontend Vitest and Playwright coverage for route migration, Attention reconciliation, semantic evidence, read-only gates, narrow navigation, and visual fallbacks
+- **Agent Process Console v1** (FR-095 through FR-105) — deterministic process timelines and evidence, cross-task Attention Inbox, immutable handoff briefings and reviewed safe resume, governed Session re-entry/control, provider-neutral source bindings with a Slack adapter, canonical mutation audit, and local privacy-safe operational metrics
+- **Agent Process Console UI** (FR-100) — Attention-first navigation, integrated Process Workspace, global Session re-entry, stable hash deep links, keyboard triage, role-sensitive actions, responsive/reduced-transparency fallbacks, and request-ID error correlation
+- Console release acceptance with populated schema-26 upgrade coverage, nine independently owned slice gates, a real Tauri-to-gRPC recovery flow, release performance fixtures, and the [operator runbook](docs/guide/agent-process-console-v1-operations.md)
+- Frontend Vitest and Playwright coverage for route migration, Attention reconciliation, semantic evidence, read-only gates, narrow navigation, accessibility, and visual fallbacks
 
 ### Changed
 - Wish Pool and Progress Observer are now presented as New Process and Processes; resource administration remains reachable through System and raw diagnostics through Process Expert
+- Session read and control rollout is globally authoritative from the `_system` RuntimePolicy; ordinary project policies cannot override the fail-closed control gate
+- Process Console mutations support `action_audit_mode=compatibility|enforced`; rollout begins in compatibility mode and moves to enforced only after clients send canonical action context
+
+### Compatibility And Migrations
+- Migrations 27-32 add Attention/change feeds, handoff/resume state, Session control fencing, source events/bindings, canonical action audit, and Process Console metric observations/rollups. They are additive, forward-only, restart-safe, and preserve existing task and Session identity.
+- Existing task, trace, log, watch, CLI, and additive gRPC clients remain compatible. No persisted `Task` rename or destructive schema conversion is included.
+- Normal rollback disables source/session/resume writers and optional projectors before deploying the previous binaries; it retains migrations 27-32 and all Console tables. Database restore is reserved for migration failure or corruption.
+
+### Known Non-goals
+- Desktop application packaging/distribution (FR-076), hosted multi-tenant SaaS, down migrations, arbitrary checkpoint rollback, and unreviewed non-idempotent replay are not part of Console v1.
 
 ## [0.3.1] - 2026-04-06
 
