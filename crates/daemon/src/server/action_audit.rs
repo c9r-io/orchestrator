@@ -133,27 +133,33 @@ pub(crate) async fn begin<T>(
     let resolved = resolve_context(&request_id, context, &descriptor, &mode)
         .map_err(|status| status_with_request_id(status, &request_id))?;
 
-    let reservation = AsyncActionAuditRepository::new(server.state.async_database.clone())
-        .reserve(ActionAuditReservation {
-            request_id: request_id.clone(),
-            project_id: descriptor.project_id.to_string(),
-            actor: Some(actor),
-            resolved_role: role,
-            transport: transport.to_string(),
-            target_type: descriptor.target_type.to_string(),
-            target_id: descriptor.target_id.to_string(),
-            action: descriptor.action.to_string(),
-            reason_code: resolved.reason_code,
-            operator_reason: resolved.operator_reason,
-            idempotency_key: resolved.idempotency_key,
-            expected_version: descriptor.expected_version,
-            fencing_token: descriptor.fencing_token,
-            canonical_request: descriptor.canonical_request,
-        })
-        .await
-        .map_err(|error| {
-            status_with_request_id(Status::already_exists(error.to_string()), &request_id)
-        })?;
+    let repository = AsyncActionAuditRepository::new(server.state.async_database.clone());
+    let input = ActionAuditReservation {
+        request_id: request_id.clone(),
+        project_id: descriptor.project_id.to_string(),
+        actor: Some(actor),
+        resolved_role: role,
+        transport: transport.to_string(),
+        target_type: descriptor.target_type.to_string(),
+        target_id: descriptor.target_id.to_string(),
+        action: descriptor.action.to_string(),
+        reason_code: resolved.reason_code,
+        operator_reason: resolved.operator_reason,
+        idempotency_key: resolved.idempotency_key,
+        expected_version: descriptor.expected_version,
+        fencing_token: descriptor.fencing_token,
+        canonical_request: descriptor.canonical_request,
+    };
+    let reservation = match repository.reserve(input.clone()).await {
+        Ok(reservation) => reservation,
+        Err(error) => {
+            let _ = repository.fail_attempt(input, "idempotency_conflict").await;
+            return Err(status_with_request_id(
+                Status::already_exists(error.to_string()),
+                &request_id,
+            ));
+        }
+    };
     Ok(ActionAttempt {
         request_id: reservation.record.request_id,
         should_execute: reservation.should_execute,

@@ -1227,7 +1227,7 @@ pub(crate) fn m0031_control_action_audit(conn: &Connection) -> Result<()> {
         DROP INDEX IF EXISTS idx_control_action_audit_retry_identity;
         CREATE UNIQUE INDEX idx_control_action_audit_retry_identity
             ON control_action_audit(project_id, target_type, target_id, action, idempotency_key)
-            WHERE idempotency_key IS NOT NULL AND status != 'denied';
+            WHERE idempotency_key IS NOT NULL AND status IN ('reserved','succeeded');
         "#,
     )
     .context("m0031_control_action_audit")?;

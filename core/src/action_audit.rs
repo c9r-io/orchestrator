@@ -165,7 +165,25 @@ impl AsyncActionAuditRepository {
         self.db
             .writer()
             .call(move |conn| {
-                deny(conn, input, &error_code)
+                insert_terminal(conn, input, "denied", &error_code)
+                    .map_err(|error| tokio_rusqlite::Error::Other(error.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    /// Persists a failed pre-mutation attempt, including idempotency conflicts, under its own
+    /// request identifier.
+    pub async fn fail_attempt(
+        &self,
+        input: ActionAuditReservation,
+        error_code: &str,
+    ) -> Result<ActionAuditRecord> {
+        let error_code = error_code.to_owned();
+        self.db
+            .writer()
+            .call(move |conn| {
+                insert_terminal(conn, input, "failed", &error_code)
                     .map_err(|error| tokio_rusqlite::Error::Other(error.into()))
             })
             .await
@@ -349,12 +367,16 @@ fn reserve(
     })
 }
 
-fn deny(
+fn insert_terminal(
     conn: &Connection,
     input: ActionAuditReservation,
+    status: &str,
     error_code: &str,
 ) -> Result<ActionAuditRecord> {
     validate(&input)?;
+    if !matches!(status, "failed" | "denied") {
+        bail!("invalid direct terminal action audit status");
+    }
     if error_code.trim().is_empty() || error_code.len() > 64 {
         bail!("error_code must contain 1-64 characters");
     }
@@ -365,7 +387,7 @@ fn deny(
          (request_id,schema_version,project_id,actor,resolved_role,transport,target_type,target_id,
           action,reason_code,operator_reason,idempotency_key,expected_version,fencing_token,
           request_hash,status,error_code,created_at,updated_at,completed_at)
-         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,'denied',?16,?17,?17,?17)",
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?18,?18)",
         params![
             input.request_id,
             SCHEMA_VERSION,
@@ -382,11 +404,12 @@ fn deny(
             input.expected_version,
             input.fencing_token,
             request_hash,
+            status,
             error_code,
             now,
         ],
     )?;
-    read_by_request_id(conn, &input.request_id)?.context("denied action audit missing")
+    read_by_request_id(conn, &input.request_id)?.context("terminal action audit missing")
 }
 
 fn complete(
@@ -458,7 +481,8 @@ fn read_by_retry_identity(
                 fencing_token,request_hash,status,error_code,result_type,result_id,created_at,
                 updated_at,completed_at
          FROM control_action_audit
-         WHERE project_id=?1 AND target_type=?2 AND target_id=?3 AND action=?4 AND idempotency_key=?5",
+         WHERE project_id=?1 AND target_type=?2 AND target_id=?3 AND action=?4
+           AND idempotency_key=?5 AND status IN ('reserved','succeeded')",
         params![project_id, target_type, target_id, action, key],
         map_record,
     )
@@ -608,6 +632,19 @@ mod tests {
             .await
             .expect_err("conflict");
         assert!(error.to_string().contains("different canonical request"));
+        repository
+            .fail_attempt(
+                input("req-2", "retry-1", serde_json::json!({"version":2})),
+                "idempotency_conflict",
+            )
+            .await
+            .expect("record conflict");
+        let conflict = repository
+            .get("default", "req-2")
+            .await
+            .expect("get conflict")
+            .expect("conflict row");
+        assert_eq!(conflict.status, "failed");
     }
 
     #[tokio::test]
