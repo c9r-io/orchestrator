@@ -53,7 +53,7 @@ Task status and the process timeline describe work, but neither answers the oper
 ## Database Changes
 
 - `attention_items` stores materialized state, active dedupe key, safe presentation fields, version, occurrence/reopen counts, snooze/resolution fields, and source correlation.
-- `attention_actions` is the append-only mutation/action audit with actor, action ID, idempotency key, target version, request hash, status, result/error, and timestamps.
+- `attention_actions` is the domain mutation/idempotency projection with actor, action ID, target version, result/error, timestamps, and the canonical `request_id`. FR-101's `control_action_audit` is the shared durable envelope.
 - `attention_projector_state` stores the durable source-event cursor.
 - `attention_changes` provides a monotonic follow sequence.
 - `idx_attention_open_dedupe` is a partial unique index across `open`, `claimed`, and `snoozed` records.

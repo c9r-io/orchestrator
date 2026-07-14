@@ -36,7 +36,7 @@ cargo build -p orchestratord -p orchestrator-cli
 | `source_events` | Normalized delivery identity and routing state |
 | `source_bindings` | Provider conversation/artifact to task correlation |
 | `source_routing_attempts` | Durable attempt and dead-letter evidence |
-| `source_command_actions` | Actor/role/target/action idempotency and audit |
+| `source_command_actions` | Actor/role/target/action idempotency linked to FR-101 canonical audit by `request_id` |
 
 ---
 
@@ -217,7 +217,7 @@ Verify external commands cannot bypass role mapping, optimistic concurrency, act
 - Expected version, advertised action, role, and idempotency key remain enforced; a duplicate executes no second side effect.
 - Unknown actors resolve to `read_only`; privileged commands fail with `actor_not_authorized`.
 - Expired, mismatched, or unsupported actions are rejected before command execution.
-- Audit records include actor, resolved role, target, action, request hash, status/result, and stable error code.
+- Audit records include actor, resolved role, target, action, request hash, status/result, stable error code, and the request ID shared with `control_action_audit`.
 
 ### Expected Data State
 

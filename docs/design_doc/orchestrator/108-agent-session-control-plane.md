@@ -54,7 +54,7 @@ Migration 29 adds the following columns to `agent_sessions`: `state_version`, `w
 3. TTY children remain owned by a daemon task instead of being forgotten. A persisted process fingerprint uses Linux boot ID/start ticks or platform process start time to reject PID reuse.
 4. State is `opening -> active -> detached -> draining -> closed`, with `failed` as the inconsistent/abnormal terminal state. Bootstrap reconciliation is fail-closed.
 5. Transcript cursors are committed source-byte offsets. The server returns explicit `next_offset`, bounded chunks, cancellation, and EOF only after terminal state or non-follow reads.
-6. FIFO and output paths remain server-private. The daemon validates, redacts, audits, and performs I/O.
+6. FIFO and output paths remain server-private. The daemon validates, redacts, audits, and performs I/O. Session control rows project FR-101's canonical `request_id`; input audit evidence stores length and digest, never terminal bytes.
 
 ## Alternatives And Tradeoffs
 

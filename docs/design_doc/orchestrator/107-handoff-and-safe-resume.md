@@ -55,7 +55,7 @@ Task status and semantic timelines explain what happened, but operators still ne
 
 - `handoff_snapshots`: immutable structured briefing, event cursor, projection version, canonical SHA-256, state version, actor, and timestamp. `UNIQUE(task_id, source_event_cursor, content_hash)` makes same-cursor generation convergent.
 - `resume_plans`: boundary, mode, expected version, consequence JSON, side-effect class, expiry, provider command-run reference, and lifecycle status.
-- `resume_executions`: actor, required reason, idempotency key, request hash, terminal result, and optional correlated child task. `UNIQUE(plan_id, idempotency_key)` prevents repeated scheduler effects.
+- `resume_executions`: actor, required reason, idempotency key, request hash, terminal result, optional correlated child task, and canonical `request_id`. `UNIQUE(plan_id, idempotency_key)` prevents repeated scheduler effects; FR-101 supplies the shared envelope.
 - Migration 28 is additive and leaves existing task, event, Attention, and checkpoint state unchanged.
 
 ## Key Design

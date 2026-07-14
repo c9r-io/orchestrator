@@ -21,7 +21,7 @@ The public surface is `orchestrator agent session ...` and the nine `AgentSessio
 
 ## Database Schema Reference
 
-Migration 29 extends `agent_sessions` with `state_version`, writer lease/fencing fields, and `process_fingerprint`. `session_control_actions` stores idempotency/audit reservations. Internal path columns must never appear in gRPC, CLI JSON, Tauri, or UI payloads.
+Migration 29 extends `agent_sessions` with `state_version`, writer lease/fencing fields, and `process_fingerprint`. `session_control_actions` stores domain idempotency reservations and migration 31 links each mutation to the FR-101 canonical envelope by `request_id`. Internal path columns and terminal input bytes must never appear in gRPC audit output, CLI JSON, Tauri, or UI payloads.
 
 ---
 

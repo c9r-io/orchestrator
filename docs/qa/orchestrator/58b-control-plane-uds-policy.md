@@ -5,7 +5,7 @@ self_referential_safe: false
 # Orchestrator - Control Plane UDS Policy
 
 **Module**: Orchestrator
-**Scope**: UDS trust boundary, role defaults, overrides, and audit enrichment
+**Scope**: UDS trust boundary, role defaults, overrides, audit enrichment, and FR-101 request-ID correlation
 **Scenarios**: 4
 **Priority**: Critical
 
@@ -19,7 +19,7 @@ Detailed shell commands and SQL are retained in Appendices A-D of `docs/qa/orche
 ### Expected
 - Permission and absent-policy advisories are logged.
 - ReadOnly and Operator RPCs succeed under the operator cap; Admin RPCs fail.
-- Audit rows include effective role and `peer_exe`.
+- Audit rows include effective role and `peer_exe`; mutation rows also carry the request ID shared with `control_action_audit`.
 
 ## Scenario 2: Default UDS Role Is Operator
 

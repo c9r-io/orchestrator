@@ -29,9 +29,9 @@ orchestrator apply -f fixtures/manifests/bundles/handoff-safe-resume.yaml --proj
 |---|---|
 | `handoff_snapshots` | Immutable canonical briefing and cursor/hash/version evidence |
 | `resume_plans` | Expiring consequence preview and expected state version |
-| `resume_executions` | Idempotent execution reservation and terminal audit |
+| `resume_executions` | Idempotent execution projection linked to FR-101 canonical audit by `request_id` |
 | `tasks` | Source/child correlation, step filter, variables, and opaque command-run reference |
-| `events` | Source evidence and post-mutation `resume_executed` audit |
+| `events` | Source evidence and post-mutation `resume_executed` audit with promoted `request_id` |
 
 ---
 

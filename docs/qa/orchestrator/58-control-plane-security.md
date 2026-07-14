@@ -21,7 +21,7 @@ The control-plane security change makes `orchestratord --bind <addr>` secure by 
 - Applies RPC role checks from `data/control-plane/policy.yaml`
 - Persists decisions to `control_plane_audit`
 
-For request-rate, concurrency, and stream-occupancy protections added after the initial security hardening, see `docs/qa/orchestrator/65-grpc-control-plane-protection.md`.
+For request-rate, concurrency, and stream-occupancy protections added after the initial security hardening, see `docs/qa/orchestrator/65-grpc-control-plane-protection.md`. For the canonical mutation envelope joined to this transport decision by `request_id`, see `docs/qa/orchestrator/148-control-plane-action-audit-envelope.md`.
 
 Related paths:
 
@@ -54,6 +54,7 @@ Related paths:
 | decision | TEXT | Final decision label from the rate limiter (m0017) |
 | reason_code | TEXT | Stable machine-readable reason code (m0017) |
 | peer_exe | TEXT | Executable path of the peer process — UDS only, forensic audit (m0024) |
+| request_id | TEXT | FR-101 mutation correlation to `control_action_audit`, domain projection, and event evidence (m0031) |
 
 ### UDS Policy: `{data_dir}/control-plane/uds-policy.yaml`
 

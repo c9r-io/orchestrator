@@ -55,7 +55,7 @@ Migration 30 creates:
 - `source_events`: normalized payload, authenticated hash, routing state/attempts, stale-claim recovery timestamp, resolved task, stable error code, and unique `(provider, installation_id, external_event_id)`.
 - `source_bindings`: task correlation with null-safe `correlation_key`, binding type, creator event, and unique provider/install/key/type.
 - `source_routing_attempts`: append-only attempt result and error history.
-- `source_command_actions`: actor, resolved role, target, action, request hash, idempotency key, and terminal result.
+- `source_command_actions`: actor, resolved role, target, action, request hash, idempotency key, terminal result, and FR-101 canonical `request_id`. Source events and bindings also retain request-ID projections for operator mutations.
 
 Foreign keys preserve task/event provenance. Migration is additive; existing trigger and task data require no rewrite.
 
@@ -94,7 +94,7 @@ Major code touchpoints are `core/src/source.rs`, `crates/daemon/src/source_route
 
 - Logs record provider, hashed installation/external IDs, source event ID, routing state, task ID, and stable errors; message bodies and signing secrets are excluded.
 - Durable operational counters are derivable from `source_events`, `source_bindings`, `source_routing_attempts`, and `source_command_actions`; `source list --state failed` is the dead-letter view.
-- Each command audit records authenticated actor, locally resolved role, target, action, status, result, and error code.
+- Each command audit records authenticated actor, locally resolved role, target, action, status, result, error code, and the request ID shared with `control_action_audit`.
 - No distributed tracing backend is introduced. Source event ID and task ID are the correlation attributes for existing structured logs and task events.
 
 ## Operations / Release

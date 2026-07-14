@@ -28,7 +28,7 @@ FR-099 may also materialize `source_routing_ambiguous` items before any task is 
 | Table | Purpose |
 |---|---|
 | `attention_items` | Mutable materialized queue state and active dedupe key |
-| `attention_actions` | Append-only mutation/action audit and idempotency state |
+| `attention_actions` | Domain mutation/idempotency state linked to FR-101 `control_action_audit` by `request_id` |
 | `attention_projector_state` | Durable source event cursor |
 | `attention_changes` | Monotonic stream reconciliation sequence |
 

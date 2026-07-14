@@ -34,6 +34,7 @@ The project structure is organized as follows:
 │   ├── orchestrator-scheduler/ # Scheduler engine (task loop, phases, guards, traces)
 │   ├── orchestrator-security/  # Encryption, key lifecycle, audit logging
 │   ├── proto/            # gRPC codegen (tonic + prost)
+│   │   ├── orchestrator.proto # Canonical gRPC service definition
 │   │   ├── src/lib.rs    # Generated types + re-exports
 │   │   └── build.rs      # tonic_build
 │   ├── daemon/           # orchestratord binary
@@ -48,8 +49,6 @@ The project structure is organized as follows:
 │   │       └── commands/ # Command handlers
 │   ├── gui/              # Tauri desktop application
 │   └── integration-tests/ # Integration test suite
-├── proto/
-│   └── orchestrator.proto  # gRPC service definition
 ├── ~/.orchestratord/     # Default runtime data directory (override via ORCHESTRATORD_DATA_DIR)
 │   ├── agent_orchestrator.db  # SQLite database
 │   ├── orchestrator.sock # Daemon Unix socket (C/S mode)
@@ -108,15 +107,13 @@ crates/
   orchestrator-runner/     # Sandboxed command execution engine
   orchestrator-scheduler/  # Scheduler engine (task loop, phases, guards, traces)
   orchestrator-security/   # Encryption, key lifecycle, audit logging
-  proto/                   # gRPC service definitions (tonic + prost)
+  proto/                   # Canonical orchestrator.proto + tonic/prost codegen
   daemon/                  # orchestratord binary (gRPC server + embedded workers)
   cli/                     # orchestrator binary (lightweight gRPC client)
   gui/                     # Tauri desktop application
   integration-tests/       # Integration test suite
 core/
   src/service/             # Pure business logic layer (task, resource, store, system)
-proto/
-  orchestrator.proto       # Protocol buffer definitions
 ```
 
 ### 3.2 Core Components
@@ -144,6 +141,7 @@ proto/
         *   `source_events`: Provider-neutral external deliveries and routing state.
         *   `source_bindings`: External conversation/artifact to task correlation.
         *   `source_routing_attempts` and `source_command_actions`: Replay and command audit evidence.
+        *   `control_action_audit`: Canonical bounded mutation envelope joined to transport, domain, and event evidence by `request_id`.
     *   **File System**:
         *   **Config**: YAML manifests for defining Resources.
         *   **Logs**: Raw stdout/stderr capture from agent processes.

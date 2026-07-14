@@ -160,6 +160,7 @@ kind: RuntimePolicy
 metadata:
   name: default
 spec:
+  action_audit_mode: compatibility # compatibility | enforced
   runner:
     shell: "/bin/bash"
     policy_mode: strict
@@ -168,6 +169,11 @@ spec:
   resume:
     auto: true
 ```
+
+`action_audit_mode` defaults to `compatibility` so older clients receive daemon-generated
+`legacy_client` context. Use `enforced` after all mutation clients send an explicit reason code
+and idempotency key. Renewable session heartbeats are the documented exception: request ID,
+expected version, and fencing token provide their correlation contract.
 
 ## Trigger
 
