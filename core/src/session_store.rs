@@ -6,6 +6,19 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+/// Result of comparing a persisted process fingerprint with the current OS process.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProcessIdentityStatus {
+    /// The PID is live and its creation fingerprint matches the persisted value.
+    VerifiedLive,
+    /// No process currently exists for the persisted PID.
+    Dead,
+    /// The numeric PID is live but belongs to a different process incarnation.
+    Mismatch,
+    /// The PID is live, but this platform cannot produce a trustworthy fingerprint.
+    Unsupported,
+}
+
 /// Persisted interactive session row.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionRow {
@@ -253,6 +266,31 @@ pub fn capture_process_fingerprint(pid: u32) -> Option<String> {
     }
 }
 
+/// Determines whether a PID currently refers to a live process without granting authority.
+pub fn process_exists(pid: u32) -> bool {
+    if pid == 0 || pid > i32::MAX as u32 {
+        return false;
+    }
+    // SAFETY: signal 0 performs an existence/permission check and does not signal the process.
+    let result = unsafe { libc::kill(pid as i32, 0) };
+    result == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+}
+
+/// Compares the live process incarnation with a persisted fingerprint.
+pub fn process_identity_status(pid: i64, expected: Option<&str>) -> ProcessIdentityStatus {
+    if pid <= 0 || !process_exists(pid as u32) {
+        return ProcessIdentityStatus::Dead;
+    }
+    let Some(expected) = expected else {
+        return ProcessIdentityStatus::Unsupported;
+    };
+    match capture_process_fingerprint(pid as u32) {
+        Some(actual) if actual == expected => ProcessIdentityStatus::VerifiedLive,
+        Some(_) => ProcessIdentityStatus::Mismatch,
+        None => ProcessIdentityStatus::Unsupported,
+    }
+}
+
 /// Stores a PID together with its creation fingerprint.
 pub fn update_session_process(
     conn: &Connection,
@@ -378,7 +416,8 @@ pub fn expire_writer_leases(conn: &Connection) -> Result<Vec<String>> {
     drop(stmt);
     conn.execute(
         "UPDATE agent_sessions SET writer_client_id=NULL,writer_actor=NULL,
-         writer_lease_expires_at=NULL,writer_last_heartbeat_at=NULL,state='detached',
+         writer_lease_expires_at=NULL,writer_last_heartbeat_at=NULL,
+         state=CASE WHEN state IN ('active','detached') THEN 'detached' ELSE state END,
          state_version=state_version+1,updated_at=?1
          WHERE writer_client_id IS NOT NULL AND writer_lease_expires_at<=?1",
         [&now],
@@ -396,24 +435,30 @@ pub fn reconcile_sessions(conn: &Connection) -> Result<Vec<(String, String)>> {
             "opening" | "active" | "detached" | "draining"
         )
     }) {
-        let identity_live = row.pid > 0
-            && row.process_fingerprint.is_some()
-            && capture_process_fingerprint(row.pid as u32) == row.process_fingerprint;
+        let identity = process_identity_status(row.pid, row.process_fingerprint.as_deref());
         let transport_exists = std::path::Path::new(&row.input_fifo_path).exists();
         let evidence_exists = std::path::Path::new(&row.transcript_path).exists()
             || std::path::Path::new(&row.stdout_path).exists();
-        let target = if identity_live && transport_exists {
-            if row.state == "draining" {
-                "draining"
-            } else if row.writer_client_id.is_some() {
-                "active"
-            } else {
-                "detached"
+        let lease_is_current = row
+            .writer_lease_expires_at
+            .as_deref()
+            .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+            .is_some_and(|expires| expires > chrono::Utc::now());
+        let target = match identity {
+            ProcessIdentityStatus::VerifiedLive if transport_exists => {
+                if row.state == "draining" {
+                    "draining"
+                } else if row.writer_client_id.is_some() && lease_is_current {
+                    "active"
+                } else {
+                    "detached"
+                }
             }
-        } else if !identity_live && evidence_exists {
-            "closed"
-        } else {
-            "failed"
+            ProcessIdentityStatus::Dead if evidence_exists => "closed",
+            ProcessIdentityStatus::VerifiedLive
+            | ProcessIdentityStatus::Dead
+            | ProcessIdentityStatus::Mismatch
+            | ProcessIdentityStatus::Unsupported => "failed",
         };
         if target != row.state {
             update_session_state(
@@ -514,6 +559,15 @@ pub fn acquire_writer(conn: &Connection, session_id: &str, client_id: &str) -> R
 
 /// Attaches a read-only client to a session.
 pub fn attach_reader(conn: &Connection, session_id: &str, client_id: &str) -> Result<()> {
+    let existing: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM session_attachments
+         WHERE session_id=?1 AND client_id=?2 AND mode='reader' AND detached_at IS NULL",
+        params![session_id, client_id],
+        |row| row.get(0),
+    )?;
+    if existing > 0 {
+        return Ok(());
+    }
     let active: i64 = conn.query_row(
         "SELECT COUNT(*) FROM session_attachments WHERE session_id=?1 AND mode='reader' AND detached_at IS NULL",
         [session_id],
@@ -965,6 +1019,22 @@ mod tests {
             Some(fingerprint.as_str())
         );
         assert!(capture_process_fingerprint(u32::MAX).is_none());
+        assert_eq!(
+            process_identity_status(pid as i64, Some(&fingerprint)),
+            ProcessIdentityStatus::VerifiedLive
+        );
+        assert_eq!(
+            process_identity_status(pid as i64, Some("stale-fingerprint")),
+            ProcessIdentityStatus::Mismatch
+        );
+        assert_eq!(
+            process_identity_status(pid as i64, None),
+            ProcessIdentityStatus::Unsupported
+        );
+        assert_eq!(
+            process_identity_status(u32::MAX as i64, Some("missing")),
+            ProcessIdentityStatus::Dead
+        );
     }
 
     #[test]
@@ -980,7 +1050,17 @@ mod tests {
             attach_reader(&conn, "sess-bounds", &format!("reader-{index}"))
                 .expect("reader within bound");
         }
+        attach_reader(&conn, "sess-bounds", "reader-0").expect("same reader is idempotent");
         assert!(attach_reader(&conn, "sess-bounds", "reader-9").is_err());
+        let active_readers: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM session_attachments
+                 WHERE session_id='sess-bounds' AND mode='reader' AND detached_at IS NULL",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count active readers");
+        assert_eq!(active_readers, 8);
 
         let lease = acquire_writer_lease(&conn, "sess-bounds", "actor", "writer", 30)
             .expect("acquire writer")
@@ -992,6 +1072,83 @@ mod tests {
         .expect("expire lease");
         assert_eq!(expire_writer_leases(&conn).unwrap(), vec!["sess-bounds"]);
         assert!(!validate_writer(&conn, "sess-bounds", "writer", lease.fencing_token).unwrap());
+    }
+
+    #[test]
+    fn expired_writer_cleanup_never_resurrects_terminal_session() {
+        let (_dir, db_path) = make_db();
+        let conn = open_conn(&db_path).expect("open conn");
+        insert_session(
+            &conn,
+            &make_session("sess-terminal", "task-1", "qa", "closed"),
+        )
+        .expect("insert terminal session");
+        conn.execute(
+            "UPDATE agent_sessions
+             SET writer_client_id='old-writer', writer_actor='operator',
+                 writer_lease_expires_at='1970-01-01T00:00:00Z'
+             WHERE id='sess-terminal'",
+            [],
+        )
+        .expect("seed expired terminal lease");
+
+        assert_eq!(expire_writer_leases(&conn).unwrap(), vec!["sess-terminal"]);
+        let row = load_session(&conn, "sess-terminal")
+            .expect("load session")
+            .expect("session exists");
+        assert_eq!(row.state, "closed");
+        assert!(row.writer_client_id.is_none());
+    }
+
+    #[test]
+    fn reconciliation_distinguishes_dead_process_from_live_identity_mismatch() {
+        let (dir, db_path) = make_db();
+        let conn = open_conn(&db_path).expect("open conn");
+        let transport = dir.path().join("input.fifo");
+        let evidence = dir.path().join("transcript.log");
+        std::fs::write(&transport, "transport").expect("create transport marker");
+        std::fs::write(&evidence, "evidence").expect("create transcript evidence");
+
+        insert_session(
+            &conn,
+            &make_session("sess-mismatch", "task-1", "qa", "active"),
+        )
+        .expect("insert mismatch session");
+        conn.execute(
+            "UPDATE agent_sessions
+             SET pid=?2, process_fingerprint='stale-fingerprint',
+                 input_fifo_path=?3, transcript_path=?4, stdout_path=?4
+             WHERE id=?1",
+            params![
+                "sess-mismatch",
+                std::process::id() as i64,
+                transport.to_string_lossy(),
+                evidence.to_string_lossy()
+            ],
+        )
+        .expect("seed live mismatch");
+
+        insert_session(&conn, &make_session("sess-dead", "task-1", "qa", "active"))
+            .expect("insert dead session");
+        conn.execute(
+            "UPDATE agent_sessions
+             SET pid=?2, process_fingerprint='missing', transcript_path=?3, stdout_path=?3
+             WHERE id=?1",
+            params!["sess-dead", u32::MAX as i64, evidence.to_string_lossy()],
+        )
+        .expect("seed dead session");
+
+        let changes = reconcile_sessions(&conn).expect("reconcile sessions");
+        assert!(changes.contains(&("sess-mismatch".into(), "failed".into())));
+        assert!(changes.contains(&("sess-dead".into(), "closed".into())));
+        assert_eq!(
+            load_session(&conn, "sess-mismatch").unwrap().unwrap().state,
+            "failed"
+        );
+        assert_eq!(
+            load_session(&conn, "sess-dead").unwrap().unwrap().state,
+            "closed"
+        );
     }
 
     #[tokio::test]

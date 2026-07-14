@@ -415,4 +415,55 @@ mod tests {
             }]
         );
     }
+
+    #[test]
+    fn populated_v28_sessions_upgrade_without_loss_or_state_ambiguity() {
+        let conn = Connection::open_in_memory().expect("open in-memory sqlite");
+        let migrations = registered_migrations();
+        run_pending(&conn, &migrations[..28]).expect("apply through migration 28");
+        for (id, state) in [
+            ("legacy-active", "active"),
+            ("legacy-detached", "detached"),
+            ("legacy-exited", "exited"),
+        ] {
+            conn.execute(
+                "INSERT INTO agent_sessions
+                 (id,task_id,step_id,phase,agent_id,state,pid,pty_backend,cwd,command,
+                  input_fifo_path,stdout_path,stderr_path,transcript_path,created_at,updated_at)
+                 VALUES(?1,'legacy-task','implement','implement','fixture',?2,0,'script',
+                        '/private/work','secret command','/private/input.fifo','/private/stdout',
+                        '/private/stderr','/private/transcript','2026-01-01T00:00:00Z',
+                        '2026-01-01T00:00:00Z')",
+                rusqlite::params![id, state],
+            )
+            .expect("insert legacy session");
+        }
+
+        let summary = run_pending(&conn, &migrations).expect("upgrade populated database");
+        assert_eq!(summary.applied.first().map(|item| item.version), Some(29));
+        assert_eq!(current_version(&conn).unwrap(), 31);
+        let rows: Vec<(String, String, i64)> = conn
+            .prepare(
+                "SELECT id,state,state_version FROM agent_sessions
+                 WHERE id LIKE 'legacy-%' ORDER BY id",
+            )
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .unwrap()
+            .collect::<std::result::Result<_, _>>()
+            .unwrap();
+        assert_eq!(rows.len(), 3);
+        assert!(rows.contains(&("legacy-active".into(), "active".into(), 1)));
+        assert!(rows.contains(&("legacy-detached".into(), "detached".into(), 1)));
+        assert!(rows.contains(&("legacy-exited".into(), "closed".into(), 1)));
+        let action_columns: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('session_control_actions')
+                 WHERE name IN ('request_id','request_hash','result')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(action_columns, 3);
+    }
 }
