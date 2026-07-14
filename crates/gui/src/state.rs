@@ -124,10 +124,14 @@ impl AppState {
     /// Register a streaming subscription and return its cancellation token.
     pub async fn register_stream(&self, key: &str) -> CancellationToken {
         let token = CancellationToken::new();
-        self.active_streams
+        if let Some(previous) = self
+            .active_streams
             .write()
             .await
-            .insert(key.to_string(), token.clone());
+            .insert(key.to_string(), token.clone())
+        {
+            previous.cancel();
+        }
         token
     }
 

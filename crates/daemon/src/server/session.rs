@@ -10,6 +10,7 @@ use agent_orchestrator::events::insert_event;
 use agent_orchestrator::session_store::{self, SessionRow};
 use futures::Stream;
 use orchestrator_proto::*;
+use rusqlite::OptionalExtension;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use tonic::{Request, Response, Status};
@@ -495,6 +496,7 @@ pub(crate) async fn send_input(
     let key = request.get_ref().idempotency_key.clone();
     let input_len = request.get_ref().input.len();
     let input_fingerprint = hex::encode(Sha256::digest(&request.get_ref().input));
+    let replay_fingerprint = input_fingerprint.clone();
     let attempt = action_audit::begin(
         server,
         &mut request,
@@ -516,9 +518,46 @@ pub(crate) async fn send_input(
     )
     .await?;
     if !attempt.should_execute {
-        return Err(attempt.status(Status::already_exists(
-            "matching session input already audited",
-        )));
+        let replay_session_id = session_id.clone();
+        let replay_key = key.clone();
+        let replay = server
+            .state
+            .async_database
+            .reader()
+            .call(move |conn| {
+                Ok(conn
+                    .query_row(
+                        "SELECT request_hash,result FROM session_control_actions
+                         WHERE session_id=?1 AND idempotency_key=?2",
+                        rusqlite::params![replay_session_id, replay_key],
+                        |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+                    )
+                    .optional()?)
+            })
+            .await
+            .map_err(agent_orchestrator::async_database::flatten_err)
+            .map_err(|error| attempt.status(Status::internal(error.to_string())))?;
+        return match replay {
+            Some((stored_hash, result))
+                if stored_hash == replay_fingerprint && result == "accepted" =>
+            {
+                Ok(attempt.response(AgentSessionSendInputResponse {
+                    accepted_bytes: input_len as u64,
+                }))
+            }
+            Some((stored_hash, _)) if stored_hash != replay_fingerprint => Err(attempt.status(
+                Status::aborted("idempotency key was used for different input"),
+            )),
+            Some((_, result)) if result == "reserved" => Err(attempt.status(Status::aborted(
+                "matching input request is still in progress",
+            ))),
+            Some((_, result)) if result == "failed" => Err(attempt.status(Status::unavailable(
+                "previous matching input request failed before retry could be audited",
+            ))),
+            _ => Err(attempt.status(Status::already_exists(
+                "matching session input already audited",
+            ))),
+        };
     }
     let actor = trusted_actor(&request);
     let req = request.into_inner();

@@ -19,7 +19,8 @@ export default function SessionPanel({ taskId, sessionId, canControl, onSelectSe
   const [leaseExpiry, setLeaseExpiry] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
-  const offsetRef = useRef(0);
+  const offsetsRef = useRef(new Map<string, number>());
+  const transcriptsRef = useRef(new Map<string, string>());
   const clientId = useRef(`gui-${crypto.randomUUID()}`);
 
   const reload = useCallback(async () => {
@@ -27,7 +28,7 @@ export default function SessionPanel({ taskId, sessionId, canControl, onSelectSe
     setSessions(rows);
     setSelected((current) => rows.find((row) => row.session_id === sessionId)
       ?? rows.find((row) => row.session_id === current?.session_id) ?? rows[0] ?? null);
-  }, [taskId]);
+  }, [sessionId, taskId]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -41,28 +42,67 @@ export default function SessionPanel({ taskId, sessionId, canControl, onSelectSe
     let disposed = false;
     let unlistenOutput: (() => void) | undefined;
     let unlistenError: (() => void) | undefined;
+    let retryTimer: number | undefined;
+    const id = selected.session_id;
+    const scheduleReconnect = () => {
+      if (disposed || retryTimer !== undefined) return;
+      retryTimer = window.setTimeout(() => {
+        retryTimer = undefined;
+        void connect();
+      }, 1000);
+    };
+    const connect = async () => {
+      try {
+        await invoke("start_agent_session_read", {
+          session_id: id,
+          offset: offsetsRef.current.get(id) ?? 0,
+        });
+        if (!disposed) setConnected(true);
+      } catch (value) {
+        if (!disposed) {
+          setConnected(false);
+          setError(String(value));
+          scheduleReconnect();
+        }
+      }
+    };
     const start = async () => {
-      unlistenOutput = await listen<SessionOutputChunk>(`agent-session-output-${selected.session_id}`, ({ payload }) => {
-        if (payload.next_offset <= offsetRef.current) return;
-        setTranscript((current) => current + payload.text);
-        offsetRef.current = payload.next_offset;
+      unlistenOutput = await listen<SessionOutputChunk>(`agent-session-output-${id}`, ({ payload }) => {
+        const committed = offsetsRef.current.get(id) ?? 0;
+        if (payload.next_offset <= committed) return;
+        const nextTranscript = (transcriptsRef.current.get(id) ?? "") + payload.text;
+        transcriptsRef.current.set(id, nextTranscript);
+        offsetsRef.current.set(id, payload.next_offset);
+        setTranscript(nextTranscript);
         setConnected(!payload.eof);
       });
-      unlistenError = await listen<string>(`stream-error-agent-session-${selected.session_id}`, ({ payload }) => {
-        setConnected(false); setError(payload);
-        if (!disposed) window.setTimeout(() => invoke("start_agent_session_read", { session_id: selected.session_id, offset: offsetRef.current }).catch(() => {}), 1000);
+      unlistenError = await listen<string>(`stream-error-agent-session-${id}`, ({ payload }) => {
+        setConnected(false);
+        setError(payload);
+        scheduleReconnect();
       });
-      await invoke("start_agent_session_read", { session_id: selected.session_id, offset: offsetRef.current });
-      setConnected(true);
+      await connect();
     };
-    setTranscript(""); offsetRef.current = 0; setError(null);
-    start().catch((value) => setError(String(value)));
-    return () => { disposed = true; unlistenOutput?.(); unlistenError?.(); invoke("stop_agent_session_read", { session_id: selected.session_id }).catch(() => {}); };
+    setTranscript(transcriptsRef.current.get(id) ?? "");
+    setError(null);
+    start().catch((value) => {
+      setError(String(value));
+      scheduleReconnect();
+    });
+    return () => {
+      disposed = true;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      unlistenOutput?.();
+      unlistenError?.();
+      invoke("stop_agent_session_read", { session_id: id }).catch(() => {});
+    };
   }, [selected?.session_id]);
 
   useEffect(() => {
     if (!selected || fencingToken === null) return;
-    const timer = window.setInterval(() => invoke<string>("agent_session_heartbeat", { session_id: selected.session_id, client_id: clientId.current, fencing_token: fencingToken }).then(setLeaseExpiry).catch((value) => { setError(String(value)); setFencingToken(null); }), 10_000);
+    const timer = window.setInterval(() => invoke<string>("agent_session_heartbeat", { session_id: selected.session_id, client_id: clientId.current, fencing_token: fencingToken }).then(setLeaseExpiry).catch((value) => {
+      setError(String(value)); setFencingToken(null); setLeaseExpiry(null); void reload();
+    }), 10_000);
     return () => window.clearInterval(timer);
   }, [selected, fencingToken]);
 
