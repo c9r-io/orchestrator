@@ -118,8 +118,19 @@ pub async fn source_binding_list(
 #[tauri::command]
 pub async fn source_replay(state: State<'_, Arc<AppState>>, id: String) -> Result<String, String> {
     let mut client = state.client().await?;
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
     client
-        .source_replay(orchestrator_proto::SourceReplayRequest { id })
+        .source_replay(orchestrator_proto::SourceReplayRequest {
+            id,
+            audit: Some(orchestrator_proto::ActionAuditContext {
+                reason_code: "operator_source_replay".into(),
+                operator_reason: None,
+                idempotency_key: Some(format!("gui-source-replay-{nonce}")),
+            }),
+        })
         .await
         .map(|response| response.into_inner().status)
         .map_err(|error| crate::errors::humanize_grpc_error(&error))

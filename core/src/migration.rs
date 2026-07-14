@@ -139,6 +139,66 @@ mod tests {
     }
 
     #[test]
+    fn populated_v30_database_upgrades_with_action_audit_links() {
+        let (_temp, _db_path, conn) = file_conn("populated-v30-action-audit.db");
+        let migrations = all_migrations();
+        let through_v30 = migrations
+            .iter()
+            .take_while(|migration| migration.version <= 30)
+            .map(|migration| Migration {
+                version: migration.version,
+                name: migration.name,
+                up: migration.up,
+            })
+            .collect::<Vec<_>>();
+        run_pending(&conn, &through_v30).expect("seed v30");
+        conn.execute(
+            "INSERT INTO control_plane_audit
+             (created_at,transport,rpc,authn_result,authz_result)
+             VALUES('2026-07-14T00:00:00Z','uds','AttentionClaim','authenticated','allowed')",
+            [],
+        )
+        .expect("populate audit row");
+
+        assert_eq!(run_pending(&conn, &migrations).expect("upgrade"), 1);
+        let preserved: i64 = conn
+            .query_row("SELECT COUNT(*) FROM control_plane_audit", [], |row| {
+                row.get(0)
+            })
+            .expect("preserved row");
+        assert_eq!(preserved, 1);
+        let canonical_exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='control_action_audit'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("canonical table");
+        assert_eq!(canonical_exists, 1);
+        for table in [
+            "control_plane_audit",
+            "attention_actions",
+            "resume_executions",
+            "session_control_actions",
+            "source_command_actions",
+            "source_events",
+            "source_bindings",
+            "events",
+        ] {
+            let count: i64 = conn
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name='request_id'"
+                    ),
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("request_id column");
+            assert_eq!(count, 1, "missing request_id on {table}");
+        }
+    }
+
+    #[test]
     fn partial_then_full_applies_remaining() {
         let conn = mem_conn();
         let all = all_migrations();
@@ -815,8 +875,8 @@ mod tests {
         let migrations = all_migrations();
         assert_eq!(
             migrations.len(),
-            30,
-            "expected 30 migrations, got {}",
+            31,
+            "expected 31 migrations, got {}",
             migrations.len()
         );
     }

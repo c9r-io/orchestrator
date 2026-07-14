@@ -18,11 +18,11 @@ use clap::Parser;
 
 /// Re-exported CLI argument model for integration tests and helper modules.
 pub use cli::{
-    AgentCommands, AgentSessionCommands, AttentionCommands, Cli, Commands, DaemonCommands,
-    DbCommands, DbMigrationCommands, DebugCommands, EventCommands, GuideFormat, HandoffCommands,
-    ManifestCommands, OutputFormat, QaCommands, ResumeCommands, SandboxProbeCommands,
-    SecretCommands, SecretKeyCommands, SourceCommands, StoreCommands, TaskCommands, ToolCommands,
-    TriggerCommands,
+    AgentCommands, AgentSessionCommands, AttentionCommands, AuditCommands, Cli, Commands,
+    DaemonCommands, DbCommands, DbMigrationCommands, DebugCommands, EventCommands, GuideFormat,
+    HandoffCommands, ManifestCommands, OutputFormat, QaCommands, ResumeCommands,
+    SandboxProbeCommands, SecretCommands, SecretKeyCommands, SourceCommands, StoreCommands,
+    TaskCommands, ToolCommands, TriggerCommands,
 };
 
 fn main() -> Result<()> {
@@ -71,7 +71,23 @@ async fn run(cli: Cli) -> Result<()> {
         } => commands::guide::dispatch(command_filter, category, format),
         command => {
             let mut client = client::connect(control_plane_config.as_deref()).await?;
-            commands::dispatch(&mut client, command).await
+            commands::dispatch(&mut client, command)
+                .await
+                .map_err(annotate_request_id)
         }
     }
+}
+
+fn annotate_request_id(error: anyhow::Error) -> anyhow::Error {
+    let Some(status) = error.downcast_ref::<tonic::Status>() else {
+        return error;
+    };
+    let Some(request_id) = status
+        .metadata()
+        .get("x-request-id")
+        .and_then(|value| value.to_str().ok())
+    else {
+        return error;
+    };
+    anyhow::anyhow!("{} (request_id: {})", status.message(), request_id)
 }

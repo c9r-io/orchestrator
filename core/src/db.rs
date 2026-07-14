@@ -52,6 +52,8 @@ pub struct TaskExecutionMetric {
 /// Audit payload written for one control-plane authorization decision.
 #[derive(Debug, Clone)]
 pub struct ControlPlaneAuditRecord {
+    /// Correlation identifier shared with canonical action audit when available.
+    pub request_id: Option<String>,
     /// Transport used by the incoming RPC, such as `tcp`.
     pub transport: String,
     /// Remote peer address when known.
@@ -301,8 +303,8 @@ pub fn insert_control_plane_audit(db_path: &Path, record: &ControlPlaneAuditReco
         "INSERT INTO control_plane_audit (
             created_at, transport, remote_addr, rpc, subject_id, authn_result,
             authz_result, role, reason, tls_fingerprint, rejection_stage,
-            traffic_class, limit_scope, decision, reason_code, peer_exe
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            traffic_class, limit_scope, decision, reason_code, peer_exe, request_id
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
         params![
             crate::config_load::now_ts(),
             record.transport,
@@ -320,6 +322,7 @@ pub fn insert_control_plane_audit(db_path: &Path, record: &ControlPlaneAuditReco
             record.decision,
             record.reason_code,
             record.peer_exe,
+            record.request_id,
         ],
     )?;
     Ok(())
@@ -912,6 +915,7 @@ mod tests {
         init_schema(&db_path).expect("init_schema");
 
         let record = ControlPlaneAuditRecord {
+            request_id: None,
             transport: "grpc".to_string(),
             remote_addr: Some("127.0.0.1:5000".to_string()),
             rpc: "CreateTask".to_string(),
@@ -950,6 +954,7 @@ mod tests {
         init_schema(&db_path).expect("init_schema");
 
         let record = ControlPlaneAuditRecord {
+            request_id: None,
             transport: "uds".to_string(),
             remote_addr: None,
             rpc: "ListTasks".to_string(),

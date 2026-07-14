@@ -2,6 +2,18 @@ use serde::Serialize;
 use std::sync::Arc;
 use tauri::State;
 
+fn audit_context(
+    reason_code: &str,
+    operator_reason: Option<String>,
+    idempotency_key: &str,
+) -> Option<orchestrator_proto::ActionAuditContext> {
+    Some(orchestrator_proto::ActionAuditContext {
+        reason_code: reason_code.to_string(),
+        operator_reason,
+        idempotency_key: Some(idempotency_key.to_string()),
+    })
+}
+
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize)]
@@ -135,6 +147,7 @@ pub async fn attention_claim(
     let mut client = state.client().await?;
     client
         .attention_claim(orchestrator_proto::AttentionClaimRequest {
+            audit: audit_context("operator_triage", None, &idempotency_key),
             id,
             expected_version,
             idempotency_key,
@@ -155,6 +168,7 @@ pub async fn attention_snooze(
     let mut client = state.client().await?;
     client
         .attention_snooze(orchestrator_proto::AttentionSnoozeRequest {
+            audit: audit_context("operator_snooze", None, &idempotency_key),
             id,
             expected_version,
             idempotency_key,
@@ -176,6 +190,7 @@ pub async fn attention_resolve(
     let mut client = state.client().await?;
     client
         .attention_resolve(orchestrator_proto::AttentionResolveRequest {
+            audit: audit_context("operator_resolve", Some(reason.clone()), &idempotency_key),
             id,
             expected_version,
             idempotency_key,
@@ -198,6 +213,7 @@ pub async fn attention_execute_action(
     let mut client = state.client().await?;
     client
         .attention_execute_action(orchestrator_proto::AttentionExecuteActionRequest {
+            audit: audit_context("operator_action", None, &idempotency_key),
             id,
             expected_version,
             idempotency_key,

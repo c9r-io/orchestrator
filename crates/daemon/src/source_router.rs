@@ -1,5 +1,6 @@
 //! Provider-neutral durable source routing worker.
 
+use agent_orchestrator::action_audit::{ActionAuditReservation, AsyncActionAuditRepository};
 use agent_orchestrator::attention::{
     AttentionActionDescriptor, AttentionCandidate, AttentionSeverity,
 };
@@ -224,9 +225,34 @@ async fn execute_bound_command(
     let actor = format!("{}:{}:{}", event.provider, event.installation_id, actor_id);
     let (target_type, target_id, action) = command_audit_target(command, task_id);
     let idempotency_key = format!("source-command:{}", event.id);
-    let request_hash = short_hash(&serde_json::to_string(command)?);
+    let canonical_request = serde_json::to_value(command)?;
+    let request_hash = short_hash(&serde_json::to_string(&canonical_request)?);
+    let request_id = format!("req-source-{}", short_hash(&event.id));
+    let common_audit = AsyncActionAuditRepository::new(state.async_database.clone());
+    let reservation = common_audit
+        .reserve(ActionAuditReservation {
+            request_id: request_id.clone(),
+            project_id: event.project_id.clone(),
+            actor: Some(actor.clone()),
+            resolved_role: Some(role.to_string()),
+            transport: format!("{}_adapter", event.provider),
+            target_type: target_type.to_string(),
+            target_id: target_id.to_string(),
+            action: format!("source.command.{action}"),
+            reason_code: "provider_command".to_string(),
+            operator_reason: None,
+            idempotency_key: Some(idempotency_key.clone()),
+            expected_version: command_expected_version(command),
+            fencing_token: None,
+            canonical_request,
+        })
+        .await?;
+    if !reservation.should_execute {
+        return Ok(());
+    }
     let reserved = repository
         .begin_command_action(SourceCommandActionInput {
+            request_id: request_id.clone(),
             source_event_id: event.id.clone(),
             actor: actor.clone(),
             resolved_role: role.to_string(),
@@ -238,6 +264,9 @@ async fn execute_bound_command(
         })
         .await?;
     if !reserved {
+        common_audit
+            .complete(&request_id, "succeeded", None, Some("task"), Some(task_id))
+            .await?;
         return Ok(());
     }
     if !matches!(role, "operator" | "admin") && !matches!(command, SourceCommand::OpenConsole) {
@@ -248,6 +277,15 @@ async fn execute_bound_command(
                 "failed",
                 None,
                 Some("actor_not_authorized"),
+            )
+            .await?;
+        common_audit
+            .complete(
+                &request_id,
+                "denied",
+                Some("authorization_denied"),
+                None,
+                None,
             )
             .await?;
         bail!("source actor is not authorized for privileged command");
@@ -308,6 +346,7 @@ async fn execute_bound_command(
                     "source_cancelled",
                     serde_json::json!({
                         "source_event_id": event.id,
+                        "request_id": request_id,
                         "actor_id": actor,
                         "status": "paused",
                     }),
@@ -350,6 +389,7 @@ async fn execute_bound_command(
                     "source_branch_created",
                     serde_json::json!({
                         "source_event_id": event.id,
+                        "request_id": request_id,
                         "child_task_id": child,
                         "actor_id": actor,
                     }),
@@ -362,6 +402,7 @@ async fn execute_bound_command(
                     "source_open_console",
                     serde_json::json!({
                         "source_event_id": event.id,
+                        "request_id": request_id,
                         "actor_id": actor,
                         "deep_link": format!("orchestrator://tasks/{task_id}"),
                     }),
@@ -382,6 +423,9 @@ async fn execute_bound_command(
                     None,
                 )
                 .await?;
+            common_audit
+                .complete(&request_id, "succeeded", None, Some("task"), Some(task_id))
+                .await?;
             Ok(())
         }
         Err(error) => {
@@ -394,8 +438,32 @@ async fn execute_bound_command(
                     Some(stable_error_code(&error)),
                 )
                 .await?;
+            common_audit
+                .complete(
+                    &request_id,
+                    "failed",
+                    Some(stable_error_code(&error)),
+                    None,
+                    None,
+                )
+                .await?;
             Err(error)
         }
+    }
+}
+
+fn command_expected_version(command: &SourceCommand) -> Option<String> {
+    match command {
+        SourceCommand::Approve {
+            expected_version, ..
+        }
+        | SourceCommand::Reject {
+            expected_version, ..
+        }
+        | SourceCommand::Retry {
+            expected_version, ..
+        } => Some(expected_version.to_string()),
+        _ => None,
     }
 }
 

@@ -13,6 +13,7 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use tonic::{Request, Response, Status};
 
+use super::action_audit::{self, ActionDescriptor};
 use super::{OrchestratorServer, authorize, trusted_actor};
 
 const LEASE_TTL_SECS: u64 = 30;
@@ -118,34 +119,29 @@ pub(crate) async fn get(
 
 pub(crate) async fn attach(
     server: &OrchestratorServer,
-    request: Request<AgentSessionAttachRequest>,
+    mut request: Request<AgentSessionAttachRequest>,
 ) -> Result<Response<AgentSessionAttachResponse>, Status> {
-    authorize(server, &request, "AgentSessionAttach").map_err(Status::from)?;
     ensure_read_enabled(server)?;
-    let actor = trusted_actor(&request);
     let requested_mode = if request.get_ref().mode.is_empty() {
         "reader"
     } else {
         request.get_ref().mode.as_str()
     };
-    if requested_mode == "writer" {
-        ensure_control_enabled(server)?;
-        authorize(server, &request, "AgentSessionSendInput").map_err(Status::from)?;
+    if requested_mode == "reader" {
+        authorize(server, &request, "AgentSessionAttach").map_err(Status::from)?;
+    } else if requested_mode != "writer" {
+        return Err(Status::invalid_argument("mode must be reader or writer"));
     }
-    let req = request.into_inner();
-    if req.client_id.trim().is_empty() {
+    if request.get_ref().client_id.trim().is_empty() {
         return Err(Status::invalid_argument("client_id is required"));
     }
-    let mode = if req.mode.is_empty() {
-        "reader"
-    } else {
-        req.mode.as_str()
-    };
-    let row = load(server, &req.session_id).await?;
+    let row = load(server, &request.get_ref().session_id).await?;
     if !matches!(row.state.as_str(), "active" | "detached") {
         return Err(Status::failed_precondition("session is not attachable"));
     }
-    if mode == "reader" {
+    let actor = trusted_actor(&request);
+    if requested_mode == "reader" {
+        let req = request.into_inner();
         server
             .state
             .session_store
@@ -162,19 +158,47 @@ pub(crate) async fn attach(
         return Ok(Response::new(AgentSessionAttachResponse {
             session_id: req.session_id,
             client_id: req.client_id,
-            mode: mode.into(),
+            mode: "reader".into(),
             writer_granted: false,
             fencing_token: None,
             lease_expires_at: None,
         }));
     }
-    if mode != "writer" {
-        return Err(Status::invalid_argument("mode must be reader or writer"));
+    ensure_control_enabled(server)?;
+    let context = request.get_ref().audit.clone();
+    let session_id = request.get_ref().session_id.clone();
+    let client_id = request.get_ref().client_id.clone();
+    let project = session_project(server, &row)?;
+    let attempt = action_audit::begin(
+        server,
+        &mut request,
+        "AgentSessionWriterAttach",
+        context.as_ref(),
+        ActionDescriptor {
+            project_id: &project,
+            target_type: "session",
+            target_id: &session_id,
+            action: "session.writer_attach",
+            expected_version: Some(row.state_version.to_string()),
+            fencing_token: None,
+            canonical_request: json!({"client_id":client_id,"state_version":row.state_version}),
+            fallback_reason_code: "legacy_client",
+            fallback_operator_reason: None,
+            fallback_idempotency_key: None,
+            renewable_exemption: false,
+        },
+    )
+    .await?;
+    if !attempt.should_execute {
+        return Err(attempt.status(Status::already_exists(
+            "matching writer attach already audited",
+        )));
     }
+    let req = request.into_inner();
     let id = req.session_id.clone();
     let client = req.client_id.clone();
     let actor2 = actor.clone();
-    let lease = server
+    let lease = match server
         .state
         .async_database
         .writer()
@@ -184,20 +208,52 @@ pub(crate) async fn attach(
         })
         .await
         .map_err(agent_orchestrator::async_database::flatten_err)
-        .map_err(|e| Status::internal(e.to_string()))?;
-    let lease = lease
-        .ok_or_else(|| Status::resource_exhausted("writer lease is held by another client"))?;
+    {
+        Ok(lease) => lease,
+        Err(error) => {
+            return Err(attempt
+                .failed(server, Status::internal(error.to_string()))
+                .await);
+        }
+    };
+    let Some(lease) = lease else {
+        return Err(attempt
+            .failed(
+                server,
+                Status::resource_exhausted("writer lease is held by another client"),
+            )
+            .await);
+    };
+    record_session_action(
+        server,
+        &row.id,
+        &actor,
+        Some(&req.client_id),
+        "writer_attach",
+        attempt
+            .idempotency_key
+            .as_deref()
+            .unwrap_or(&attempt.request_id),
+        &attempt.request_id,
+        Some(lease.fencing_token),
+        None,
+        "accepted",
+    )
+    .await?;
     emit(
         server,
         &row,
         "session_writer_acquired",
-        json!({"actor":actor,"client_id":req.client_id,"fencing_token":lease.fencing_token}),
+        json!({"actor":actor,"client_id":req.client_id,"fencing_token":lease.fencing_token,"request_id":attempt.request_id}),
     )
     .await;
-    Ok(Response::new(AgentSessionAttachResponse {
+    attempt
+        .succeeded(server, Some("session_control_action"), Some(&row.id))
+        .await?;
+    Ok(attempt.response(AgentSessionAttachResponse {
         session_id: req.session_id,
         client_id: req.client_id,
-        mode: mode.into(),
+        mode: "writer".into(),
         writer_granted: true,
         fencing_token: Some(lease.fencing_token),
         lease_expires_at: Some(lease.expires_at),
@@ -206,14 +262,40 @@ pub(crate) async fn attach(
 
 pub(crate) async fn heartbeat(
     server: &OrchestratorServer,
-    request: Request<AgentSessionHeartbeatRequest>,
+    mut request: Request<AgentSessionHeartbeatRequest>,
 ) -> Result<Response<AgentSessionHeartbeatResponse>, Status> {
-    authorize(server, &request, "AgentSessionHeartbeat").map_err(Status::from)?;
     ensure_control_enabled(server)?;
+    let row = load(server, &request.get_ref().session_id).await?;
+    let project = session_project(server, &row)?;
+    let context = request.get_ref().audit.clone();
+    let session_id = request.get_ref().session_id.clone();
+    let client_id = request.get_ref().client_id.clone();
+    let fencing_token = request.get_ref().fencing_token;
+    let attempt = action_audit::begin(
+        server,
+        &mut request,
+        "AgentSessionHeartbeat",
+        context.as_ref(),
+        ActionDescriptor {
+            project_id: &project,
+            target_type: "session",
+            target_id: &session_id,
+            action: "session.heartbeat",
+            expected_version: Some(row.state_version.to_string()),
+            fencing_token: Some(fencing_token),
+            canonical_request: json!({"client_id":client_id,"state_version":row.state_version}),
+            fallback_reason_code: "lease_heartbeat",
+            fallback_operator_reason: None,
+            fallback_idempotency_key: None,
+            renewable_exemption: true,
+        },
+    )
+    .await?;
+    let actor = trusted_actor(&request);
     let req = request.into_inner();
     let id = req.session_id.clone();
     let client = req.client_id.clone();
-    let expires = server
+    let expires = match server
         .state
         .async_database
         .writer()
@@ -223,76 +305,207 @@ pub(crate) async fn heartbeat(
         })
         .await
         .map_err(agent_orchestrator::async_database::flatten_err)
-        .map_err(|e| Status::internal(e.to_string()))?
-        .ok_or_else(|| Status::failed_precondition("writer lease is stale or expired"))?;
-    Ok(Response::new(AgentSessionHeartbeatResponse {
+    {
+        Ok(Some(expires)) => expires,
+        Ok(None) => {
+            return Err(attempt
+                .failed(
+                    server,
+                    Status::failed_precondition("writer lease is stale or expired"),
+                )
+                .await);
+        }
+        Err(error) => {
+            return Err(attempt
+                .failed(server, Status::internal(error.to_string()))
+                .await);
+        }
+    };
+    record_session_action(
+        server,
+        &row.id,
+        &actor,
+        Some(&req.client_id),
+        "heartbeat",
+        &attempt.request_id,
+        &attempt.request_id,
+        Some(req.fencing_token),
+        None,
+        "accepted",
+    )
+    .await?;
+    attempt
+        .succeeded(server, Some("session_control_action"), Some(&row.id))
+        .await?;
+    Ok(attempt.response(AgentSessionHeartbeatResponse {
         lease_expires_at: expires,
     }))
 }
 
 pub(crate) async fn detach(
     server: &OrchestratorServer,
-    request: Request<AgentSessionDetachRequest>,
+    mut request: Request<AgentSessionDetachRequest>,
 ) -> Result<Response<AgentSessionDetachResponse>, Status> {
-    authorize(server, &request, "AgentSessionDetach").map_err(Status::from)?;
-    if request.get_ref().mode == "writer" {
-        ensure_control_enabled(server)?;
-        authorize(server, &request, "AgentSessionSendInput").map_err(Status::from)?;
-    }
-    let req = request.into_inner();
-    if req.mode == "writer" {
-        let token = req.fencing_token.ok_or_else(|| {
-            Status::invalid_argument("fencing_token is required for writer detach")
-        })?;
-        let id = req.session_id.clone();
-        let client = req.client_id.clone();
-        let reason = req.reason.clone();
-        let detached = server
-            .state
-            .async_database
-            .writer()
-            .call(move |conn| {
-                session_store::release_writer(conn, &id, &client, token, &reason)
-                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
-            })
-            .await
-            .map_err(agent_orchestrator::async_database::flatten_err)
-            .map_err(|e| Status::internal(e.to_string()))?;
-        if !detached {
-            return Err(Status::failed_precondition("writer lease is stale"));
-        }
+    if request.get_ref().mode != "writer" {
+        authorize(server, &request, "AgentSessionDetach").map_err(Status::from)?;
+        let req = request.into_inner();
+        let id = req.session_id;
+        let client = req.client_id;
+        let reason = req.reason;
+        server.state.async_database.writer().call(move|conn|{
+            conn.execute("UPDATE session_attachments SET detached_at=?3,reason=?4 WHERE session_id=?1 AND client_id=?2 AND mode='reader' AND detached_at IS NULL",rusqlite::params![id,client,agent_orchestrator::config_load::now_ts(),reason])?;Ok(())
+        }).await.map_err(agent_orchestrator::async_database::flatten_err).map_err(|e|Status::internal(e.to_string()))?;
         return Ok(Response::new(AgentSessionDetachResponse { detached: true }));
     }
-    let id = req.session_id;
-    let client = req.client_id;
-    let reason = req.reason;
-    server.state.async_database.writer().call(move|conn|{
-        conn.execute("UPDATE session_attachments SET detached_at=?3,reason=?4 WHERE session_id=?1 AND client_id=?2 AND mode='reader' AND detached_at IS NULL",rusqlite::params![id,client,agent_orchestrator::config_load::now_ts(),reason])?;Ok(())
-    }).await.map_err(agent_orchestrator::async_database::flatten_err).map_err(|e|Status::internal(e.to_string()))?;
-    Ok(Response::new(AgentSessionDetachResponse { detached: true }))
+    ensure_control_enabled(server)?;
+    let token = request
+        .get_ref()
+        .fencing_token
+        .ok_or_else(|| Status::invalid_argument("fencing_token is required for writer detach"))?;
+    let row = load(server, &request.get_ref().session_id).await?;
+    let project = session_project(server, &row)?;
+    let context = request.get_ref().audit.clone();
+    let session_id = request.get_ref().session_id.clone();
+    let client_id = request.get_ref().client_id.clone();
+    let reason = request.get_ref().reason.clone();
+    let attempt = action_audit::begin(
+        server,
+        &mut request,
+        "AgentSessionWriterDetach",
+        context.as_ref(),
+        ActionDescriptor {
+            project_id: &project,
+            target_type: "session",
+            target_id: &session_id,
+            action: "session.writer_detach",
+            expected_version: Some(row.state_version.to_string()),
+            fencing_token: Some(token),
+            canonical_request: json!({"client_id":client_id,"reason":reason,"state_version":row.state_version}),
+            fallback_reason_code: "legacy_client",
+            fallback_operator_reason: Some(&reason),
+            fallback_idempotency_key: None,
+            renewable_exemption: false,
+        },
+    )
+    .await?;
+    if !attempt.should_execute {
+        return Err(attempt.status(Status::already_exists(
+            "matching writer detach already audited",
+        )));
+    }
+    let actor = trusted_actor(&request);
+    let req = request.into_inner();
+    let id = req.session_id.clone();
+    let client = req.client_id.clone();
+    let reason = req.reason.clone();
+    let detached = match server
+        .state
+        .async_database
+        .writer()
+        .call(move |conn| {
+            session_store::release_writer(conn, &id, &client, token, &reason)
+                .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
+        })
+        .await
+        .map_err(agent_orchestrator::async_database::flatten_err)
+    {
+        Ok(detached) => detached,
+        Err(error) => {
+            return Err(attempt
+                .failed(server, Status::internal(error.to_string()))
+                .await);
+        }
+    };
+    if !detached {
+        return Err(attempt
+            .failed(server, Status::failed_precondition("writer lease is stale"))
+            .await);
+    }
+    record_session_action(
+        server,
+        &row.id,
+        &actor,
+        Some(&req.client_id),
+        "writer_detach",
+        attempt
+            .idempotency_key
+            .as_deref()
+            .unwrap_or(&attempt.request_id),
+        &attempt.request_id,
+        Some(token),
+        Some(&req.reason),
+        "accepted",
+    )
+    .await?;
+    emit(
+        server,
+        &row,
+        "session_writer_detached",
+        json!({"actor":actor,"client_id":req.client_id,"fencing_token":token,"request_id":attempt.request_id}),
+    )
+    .await;
+    attempt
+        .succeeded(server, Some("session_control_action"), Some(&row.id))
+        .await?;
+    Ok(attempt.response(AgentSessionDetachResponse { detached: true }))
 }
 
 pub(crate) async fn send_input(
     server: &OrchestratorServer,
-    request: Request<AgentSessionSendInputRequest>,
+    mut request: Request<AgentSessionSendInputRequest>,
 ) -> Result<Response<AgentSessionSendInputResponse>, Status> {
-    authorize(server, &request, "AgentSessionSendInput").map_err(Status::from)?;
     ensure_control_enabled(server)?;
-    let actor = trusted_actor(&request);
-    let req = request.into_inner();
-    if req.input.is_empty() || req.input.len() > MAX_INPUT_BYTES {
+    if request.get_ref().input.is_empty() || request.get_ref().input.len() > MAX_INPUT_BYTES {
         return Err(Status::invalid_argument(
             "input must be between 1 and 65536 bytes",
         ));
     }
-    if req.idempotency_key.trim().is_empty() {
+    if request.get_ref().idempotency_key.trim().is_empty() {
         return Err(Status::invalid_argument("idempotency_key is required"));
     }
-    let row = load(server, &req.session_id).await?;
+    let row = load(server, &request.get_ref().session_id).await?;
+    let project = session_project(server, &row)?;
+    let context = request.get_ref().audit.clone();
+    let session_id = request.get_ref().session_id.clone();
+    let client_id = request.get_ref().client_id.clone();
+    let token = request.get_ref().fencing_token;
+    let key = request.get_ref().idempotency_key.clone();
+    let input_len = request.get_ref().input.len();
+    let input_fingerprint = hex::encode(Sha256::digest(&request.get_ref().input));
+    let attempt = action_audit::begin(
+        server,
+        &mut request,
+        "AgentSessionSendInput",
+        context.as_ref(),
+        ActionDescriptor {
+            project_id: &project,
+            target_type: "session",
+            target_id: &session_id,
+            action: "session.send_input",
+            expected_version: Some(row.state_version.to_string()),
+            fencing_token: Some(token),
+            canonical_request: json!({"client_id":client_id,"input_bytes":input_len,"input_fingerprint":input_fingerprint}),
+            fallback_reason_code: "legacy_client",
+            fallback_operator_reason: None,
+            fallback_idempotency_key: Some(&key),
+            renewable_exemption: false,
+        },
+    )
+    .await?;
+    if !attempt.should_execute {
+        return Err(attempt.status(Status::already_exists(
+            "matching session input already audited",
+        )));
+    }
+    let actor = trusted_actor(&request);
+    let req = request.into_inner();
     if !process_identity_matches(&row) {
-        return Err(Status::failed_precondition(
-            "session process identity cannot be verified",
-        ));
+        return Err(attempt
+            .failed(
+                server,
+                Status::failed_precondition("session process identity cannot be verified"),
+            )
+            .await);
     }
     let id = req.session_id.clone();
     let client = req.client_id.clone();
@@ -307,11 +520,14 @@ pub(crate) async fn send_input(
         })
         .await
         .map_err(agent_orchestrator::async_database::flatten_err)
-        .map_err(|e| Status::internal(e.to_string()))?;
+        .map_err(|e| attempt.status(Status::internal(e.to_string())))?;
     if !valid {
-        return Err(Status::failed_precondition(
-            "writer fencing token is stale or expired",
-        ));
+        return Err(attempt
+            .failed(
+                server,
+                Status::failed_precondition("writer fencing token is stale or expired"),
+            )
+            .await);
     }
     let sid = req.session_id.clone();
     let key = req.idempotency_key.clone();
@@ -320,8 +536,9 @@ pub(crate) async fn send_input(
     let len = req.input.len() as u64;
     let request_hash = hex::encode(Sha256::digest(&req.input));
     let insert_hash = request_hash.clone();
+    let audit_request_id = attempt.request_id.clone();
     let inserted=server.state.async_database.writer().call(move|conn|{
-        let n=conn.execute("INSERT OR IGNORE INTO session_control_actions(session_id,actor,client_id,action,idempotency_key,request_hash,result,fencing_token,created_at) VALUES(?1,?2,?3,'send_input',?4,?5,'reserved',?6,?7)",rusqlite::params![sid,actor2,client2,key,insert_hash,token,agent_orchestrator::config_load::now_ts()])?;Ok(n==1)
+        let n=conn.execute("INSERT OR IGNORE INTO session_control_actions(session_id,actor,client_id,action,idempotency_key,request_hash,result,fencing_token,created_at,request_id) VALUES(?1,?2,?3,'send_input',?4,?5,'reserved',?6,?7,?8)",rusqlite::params![sid,actor2,client2,key,insert_hash,token,agent_orchestrator::config_load::now_ts(),audit_request_id])?;Ok(n==1)
     }).await.map_err(agent_orchestrator::async_database::flatten_err).map_err(|e|Status::internal(e.to_string()))?;
     if !inserted {
         let sid = req.session_id.clone();
@@ -360,18 +577,24 @@ pub(crate) async fn send_input(
     .to_owned();
     server.state.async_database.writer().call(move|conn|{conn.execute("UPDATE session_control_actions SET result=?3 WHERE session_id=?1 AND idempotency_key=?2",rusqlite::params![sid,key,result])?;Ok(())}).await.map_err(agent_orchestrator::async_database::flatten_err).map_err(|e|Status::internal(e.to_string()))?;
     if let Err(error) = write_result {
-        return Err(Status::unavailable(format!(
-            "session input transport failed: {error}"
-        )));
+        return Err(attempt
+            .failed(
+                server,
+                Status::unavailable(format!("session input transport failed: {error}")),
+            )
+            .await);
     }
     emit(
         server,
         &row,
         "session_input_accepted",
-        json!({"actor":actor,"client_id":req.client_id,"bytes":len,"fencing_token":token}),
+        json!({"actor":actor,"client_id":req.client_id,"bytes":len,"fencing_token":token,"request_id":attempt.request_id}),
     )
     .await;
-    Ok(Response::new(AgentSessionSendInputResponse {
+    attempt
+        .succeeded(server, Some("session_control_action"), Some(&row.id))
+        .await?;
+    Ok(attempt.response(AgentSessionSendInputResponse {
         accepted_bytes: len,
     }))
 }
@@ -491,27 +714,64 @@ pub(crate) async fn read(
 
 pub(crate) async fn close(
     server: &OrchestratorServer,
-    request: Request<AgentSessionCloseRequest>,
+    mut request: Request<AgentSessionCloseRequest>,
 ) -> Result<Response<AgentSessionCloseResponse>, Status> {
-    authorize(server, &request, "AgentSessionClose").map_err(Status::from)?;
-    let actor = trusted_actor(&request);
-    let req = request.into_inner();
     ensure_control_enabled(server)?;
-    if req.reason.trim().is_empty() || req.idempotency_key.trim().is_empty() {
+    if request.get_ref().reason.trim().is_empty()
+        || request.get_ref().idempotency_key.trim().is_empty()
+    {
         return Err(Status::invalid_argument(
             "reason and idempotency_key are required",
         ));
     }
-    let row = load(server, &req.session_id).await?;
+    let row = load(server, &request.get_ref().session_id).await?;
+    let project = session_project(server, &row)?;
+    let context = request.get_ref().audit.clone();
+    let session_id = request.get_ref().session_id.clone();
+    let reason = request.get_ref().reason.clone();
+    let key = request.get_ref().idempotency_key.clone();
+    let expected = request.get_ref().expected_state_version;
+    let attempt = action_audit::begin(
+        server,
+        &mut request,
+        "AgentSessionClose",
+        context.as_ref(),
+        ActionDescriptor {
+            project_id: &project,
+            target_type: "session",
+            target_id: &session_id,
+            action: "session.close",
+            expected_version: expected.map(|value| value.to_string()),
+            fencing_token: None,
+            canonical_request: json!({"reason":reason,"expected_state_version":expected}),
+            fallback_reason_code: "legacy_client",
+            fallback_operator_reason: Some(&reason),
+            fallback_idempotency_key: Some(&key),
+            renewable_exemption: false,
+        },
+    )
+    .await?;
+    if !attempt.should_execute {
+        return Err(attempt.status(Status::already_exists(
+            "matching session close already audited",
+        )));
+    }
+    let actor = trusted_actor(&request);
+    let req = request.into_inner();
     if let Some(v) = req.expected_state_version {
         if v != row.state_version {
-            return Err(Status::aborted("session state version changed"));
+            return Err(attempt
+                .failed(server, Status::aborted("session state version changed"))
+                .await);
         }
     }
     if !process_identity_matches(&row) {
-        return Err(Status::failed_precondition(
-            "session process identity cannot be verified",
-        ));
+        return Err(attempt
+            .failed(
+                server,
+                Status::failed_precondition("session process identity cannot be verified"),
+            )
+            .await);
     }
     let request_hash = hex::encode(Sha256::digest(
         format!("{}:{:?}", req.reason, req.expected_state_version).as_bytes(),
@@ -521,10 +781,11 @@ pub(crate) async fn close(
     let actor2 = actor.clone();
     let reason = req.reason.clone();
     let hash = request_hash.clone();
+    let audit_request_id = attempt.request_id.clone();
     let inserted = server.state.async_database.writer().call(move |conn| {
         let count = conn.execute(
-            "INSERT OR IGNORE INTO session_control_actions(session_id,actor,action,idempotency_key,request_hash,result,reason,created_at) VALUES(?1,?2,'close',?3,?4,'reserved',?5,?6)",
-            rusqlite::params![sid, actor2, key, hash, reason, agent_orchestrator::config_load::now_ts()],
+            "INSERT OR IGNORE INTO session_control_actions(session_id,actor,action,idempotency_key,request_hash,result,reason,created_at,request_id) VALUES(?1,?2,'close',?3,?4,'reserved',?5,?6,?7)",
+            rusqlite::params![sid, actor2, key, hash, reason, agent_orchestrator::config_load::now_ts(),audit_request_id],
         )?;
         Ok(count == 1)
     }).await.map_err(agent_orchestrator::async_database::flatten_err).map_err(|e| Status::internal(e.to_string()))?;
@@ -533,11 +794,17 @@ pub(crate) async fn close(
         let key = req.idempotency_key.clone();
         let stored:String=server.state.async_database.reader().call(move|conn|Ok(conn.query_row("SELECT request_hash FROM session_control_actions WHERE session_id=?1 AND idempotency_key=?2",rusqlite::params![sid,key],|r|r.get(0))?)).await.map_err(agent_orchestrator::async_database::flatten_err).map_err(|e|Status::internal(e.to_string()))?;
         if stored != request_hash {
-            return Err(Status::aborted(
-                "idempotency key was used for a different close request",
-            ));
+            return Err(attempt
+                .failed(
+                    server,
+                    Status::aborted("idempotency key was used for a different close request"),
+                )
+                .await);
         }
-        return Ok(Response::new(AgentSessionCloseResponse {
+        attempt
+            .succeeded(server, Some("session_control_action"), Some(&row.id))
+            .await?;
+        return Ok(attempt.response(AgentSessionCloseResponse {
             session: Some(to_proto(load(server, &row.id).await?)),
         }));
     }
@@ -546,12 +813,16 @@ pub(crate) async fn close(
         .session_store
         .update_session_state(&row.id, "draining", None, false)
         .await
-        .map_err(|e| Status::internal(e.to_string()))?;
+        .map_err(|e| attempt.status(Status::internal(e.to_string())))?;
     nix::sys::signal::kill(
         nix::unistd::Pid::from_raw(row.pid as i32),
         nix::sys::signal::Signal::SIGTERM,
     )
-    .map_err(|e| Status::unavailable(format!("failed to close session process: {e}")))?;
+    .map_err(|e| {
+        attempt.status(Status::unavailable(format!(
+            "failed to close session process: {e}"
+        )))
+    })?;
     let sid = req.session_id.clone();
     let key = req.idempotency_key.clone();
     let _=server.state.async_database.writer().call(move|conn|{conn.execute("UPDATE session_control_actions SET result='accepted' WHERE session_id=?1 AND idempotency_key=?2",rusqlite::params![sid,key])?;Ok(())}).await;
@@ -559,10 +830,13 @@ pub(crate) async fn close(
         server,
         &row,
         "session_close_requested",
-        json!({"actor":actor,"reason":req.reason}),
+        json!({"actor":actor,"reason":req.reason,"request_id":attempt.request_id}),
     )
     .await;
-    Ok(Response::new(AgentSessionCloseResponse {
+    attempt
+        .succeeded(server, Some("session_control_action"), Some(&row.id))
+        .await?;
+    Ok(attempt.response(AgentSessionCloseResponse {
         session: Some(to_proto(load(server, &row.id).await?)),
     }))
 }
@@ -599,6 +873,75 @@ fn process_identity_matches(row: &SessionRow) -> bool {
     };
     session_store::capture_process_fingerprint(row.pid as u32).as_deref() == Some(expected)
 }
+
+fn session_project(server: &OrchestratorServer, row: &SessionRow) -> Result<String, Status> {
+    agent_orchestrator::db::open_conn(&server.state.db_path)
+        .and_then(|conn| {
+            conn.query_row(
+                "SELECT project_id FROM tasks WHERE id=?1",
+                [&row.task_id],
+                |record| record.get(0),
+            )
+            .map_err(Into::into)
+        })
+        .map_err(|error| Status::internal(error.to_string()))
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn record_session_action(
+    server: &OrchestratorServer,
+    session_id: &str,
+    actor: &str,
+    client_id: Option<&str>,
+    action: &str,
+    idempotency_key: &str,
+    request_id: &str,
+    fencing_token: Option<i64>,
+    reason: Option<&str>,
+    result: &str,
+) -> Result<(), Status> {
+    let session_id = session_id.to_string();
+    let actor = actor.to_string();
+    let client_id = client_id.map(str::to_owned);
+    let action = action.to_string();
+    let idempotency_key = idempotency_key.to_string();
+    let request_id = request_id.to_string();
+    let reason = reason.map(str::to_owned);
+    let result = result.to_string();
+    let request_hash = hex::encode(Sha256::digest(
+        format!("{action}:{client_id:?}:{fencing_token:?}:{reason:?}").as_bytes(),
+    ));
+    server
+        .state
+        .async_database
+        .writer()
+        .call(move |conn| {
+            conn.execute(
+                "INSERT INTO session_control_actions
+                 (session_id,actor,client_id,action,idempotency_key,request_hash,result,reason,
+                  fencing_token,created_at,request_id)
+                 VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+                rusqlite::params![
+                    session_id,
+                    actor,
+                    client_id,
+                    action,
+                    idempotency_key,
+                    request_hash,
+                    result,
+                    reason,
+                    fencing_token,
+                    agent_orchestrator::config_load::now_ts(),
+                    request_id,
+                ],
+            )?;
+            Ok(())
+        })
+        .await
+        .map_err(agent_orchestrator::async_database::flatten_err)
+        .map_err(|error| Status::internal(error.to_string()))
+}
+
 async fn emit(
     server: &OrchestratorServer,
     row: &SessionRow,

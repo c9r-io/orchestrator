@@ -26,6 +26,7 @@ prost = "0.14"
 rcgen = { version = "0.14", features = ["pem", "x509-parser"] }
 serde = { version = "1.0", features = ["derive"] }
 sha2 = "0.11"
+uuid = { version = "1.11", features = ["v4"] }
 tokio = { version = "1.51", features = ["fs", "io-util", "macros", "process", "rt-multi-thread", "signal", "sync", "time"] }
 tonic = { version = "0.14", features = ["tls-native-roots", "tls-ring"] }
 tracing = "0.1"

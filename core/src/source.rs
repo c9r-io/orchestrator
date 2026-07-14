@@ -236,6 +236,8 @@ pub struct CreateSourceBinding {
 /// Audit reservation for one allowlisted command received from an external source.
 #[derive(Debug, Clone)]
 pub struct SourceCommandActionInput {
+    /// Canonical request identifier joining this projection to the control-plane audit.
+    pub request_id: String,
     /// Source event carrying the command.
     pub source_event_id: String,
     /// Authenticated provider actor identity.
@@ -717,8 +719,8 @@ fn begin_command_action(conn: &Connection, input: SourceCommandActionInput) -> R
     conn.execute(
         "INSERT INTO source_command_actions
          (id,source_event_id,actor,resolved_role,target_type,target_id,action,idempotency_key,
-          request_hash,status,created_at)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,'running',?10)",
+          request_hash,status,created_at,request_id)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,'running',?10,?11)",
         params![
             format!("source-action-{}", &digest[..24]),
             input.source_event_id,
@@ -730,6 +732,7 @@ fn begin_command_action(conn: &Connection, input: SourceCommandActionInput) -> R
             input.idempotency_key,
             input.request_hash,
             now_ts(),
+            input.request_id,
         ],
     )?;
     Ok(true)

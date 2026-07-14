@@ -7,6 +7,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use tonic::{Request, Response, Status};
 
+use super::action_audit::{self, ActionDescriptor};
 use super::{OrchestratorServer, trusted_actor};
 
 fn status(error: anyhow::Error) -> Status {
@@ -100,21 +101,55 @@ fn runtime_policy(
 
 pub(crate) async fn handoff_generate(
     server: &OrchestratorServer,
-    request: Request<HandoffGenerateRequest>,
+    mut request: Request<HandoffGenerateRequest>,
 ) -> Result<Response<HandoffSnapshotResponse>, Status> {
-    super::authorize(server, &request, "HandoffGenerate").map_err(Status::from)?;
+    let project = task_project(server, &request.get_ref().task_id)?;
+    let context = request.get_ref().audit.clone();
+    let task_id = request.get_ref().task_id.clone();
+    let cursor = request.get_ref().source_event_cursor;
+    let attempt = action_audit::begin(
+        server,
+        &mut request,
+        "HandoffGenerate",
+        context.as_ref(),
+        ActionDescriptor {
+            project_id: &project,
+            target_type: "task",
+            target_id: &task_id,
+            action: "handoff.generate",
+            expected_version: None,
+            fencing_token: None,
+            canonical_request: json!({"source_event_cursor":cursor}),
+            fallback_reason_code: "legacy_client",
+            fallback_operator_reason: None,
+            fallback_idempotency_key: None,
+            renewable_exemption: false,
+        },
+    )
+    .await?;
+    if !attempt.should_execute {
+        return Err(attempt.status(Status::already_exists(
+            "matching handoff generation already audited",
+        )));
+    }
     let actor = trusted_actor(&request);
     let req = request.into_inner();
     if !runtime_policy(server, &req.task_id)?.handoff_enabled {
         return Err(Status::permission_denied("handoff generation is disabled"));
     }
-    let snapshot = server
+    let snapshot = match server
         .state
         .handoff_repo
         .generate_snapshot(&req.task_id, req.source_event_cursor, &actor)
         .await
-        .map_err(status)?;
-    Ok(Response::new(snapshot_to_proto(snapshot)))
+    {
+        Ok(snapshot) => snapshot,
+        Err(error) => return Err(attempt.failed(server, status(error)).await),
+    };
+    attempt
+        .succeeded(server, Some("handoff_snapshot"), Some(&snapshot.id))
+        .await?;
+    Ok(attempt.response(snapshot_to_proto(snapshot)))
 }
 
 pub(crate) async fn handoff_get(
@@ -151,16 +186,46 @@ pub(crate) async fn resume_boundary_list(
 
 pub(crate) async fn resume_plan(
     server: &OrchestratorServer,
-    request: Request<ResumePlanRequest>,
+    mut request: Request<ResumePlanRequest>,
 ) -> Result<Response<ResumePlanResponse>, Status> {
-    super::authorize(server, &request, "ResumePlan").map_err(Status::from)?;
+    let project = task_project(server, &request.get_ref().task_id)?;
+    let context = request.get_ref().audit.clone();
+    let task_id = request.get_ref().task_id.clone();
+    let boundary_id = request.get_ref().boundary_id.clone();
+    let mode_name = request.get_ref().mode.clone();
+    let attention_item_id = request.get_ref().attention_item_id.clone();
+    let attempt = action_audit::begin(
+        server,
+        &mut request,
+        "ResumePlan",
+        context.as_ref(),
+        ActionDescriptor {
+            project_id: &project,
+            target_type: "task",
+            target_id: &task_id,
+            action: "resume.plan",
+            expected_version: None,
+            fencing_token: None,
+            canonical_request: json!({"boundary_id":boundary_id,"mode":mode_name,"attention_item_id":attention_item_id}),
+            fallback_reason_code: "legacy_client",
+            fallback_operator_reason: None,
+            fallback_idempotency_key: None,
+            renewable_exemption: false,
+        },
+    )
+    .await?;
+    if !attempt.should_execute {
+        return Err(attempt.status(Status::already_exists(
+            "matching resume plan already audited",
+        )));
+    }
     let actor = trusted_actor(&request);
     let req = request.into_inner();
     if !runtime_policy(server, &req.task_id)?.mutating_resume_enabled {
         return Err(Status::permission_denied("mutating resume is disabled"));
     }
     let mode = ResumeMode::parse(&req.mode).map_err(status)?;
-    let plan = server
+    let plan = match server
         .state
         .handoff_repo
         .create_plan(
@@ -171,32 +236,69 @@ pub(crate) async fn resume_plan(
             req.attention_item_id.as_deref(),
         )
         .await
-        .map_err(status)?;
-    Ok(Response::new(plan_to_proto(plan)))
+    {
+        Ok(plan) => plan,
+        Err(error) => return Err(attempt.failed(server, status(error)).await),
+    };
+    attempt
+        .succeeded(server, Some("resume_plan"), Some(&plan.id))
+        .await?;
+    Ok(attempt.response(plan_to_proto(plan)))
 }
 
 pub(crate) async fn resume_execute(
     server: &OrchestratorServer,
-    request: Request<ResumeExecuteRequest>,
+    mut request: Request<ResumeExecuteRequest>,
 ) -> Result<Response<ResumeExecuteResponse>, Status> {
-    super::authorize(server, &request, "ResumeExecute").map_err(Status::from)?;
+    let plan = server
+        .state
+        .handoff_repo
+        .get_plan(&request.get_ref().plan_id)
+        .await
+        .map_err(status)?
+        .ok_or_else(|| Status::not_found("resume plan not found"))?;
+    let project = task_project(server, &plan.task_id)?;
+    let context = request.get_ref().audit.clone();
+    let plan_id = request.get_ref().plan_id.clone();
+    let expected = request.get_ref().expected_state_version.clone();
+    let operator_reason = request.get_ref().operator_reason.clone();
+    let key = request.get_ref().idempotency_key.clone();
+    let elevated = request.get_ref().elevated_confirmation;
+    let attempt = action_audit::begin(
+        server,
+        &mut request,
+        "ResumeExecute",
+        context.as_ref(),
+        ActionDescriptor {
+            project_id: &project,
+            target_type: "resume_plan",
+            target_id: &plan_id,
+            action: "resume.execute",
+            expected_version: Some(expected.clone()),
+            fencing_token: None,
+            canonical_request: json!({"expected_state_version":expected,"operator_reason":operator_reason,"elevated_confirmation":elevated}),
+            fallback_reason_code: "legacy_client",
+            fallback_operator_reason: Some(&operator_reason),
+            fallback_idempotency_key: Some(&key),
+            renewable_exemption: false,
+        },
+    )
+    .await?;
+    if !attempt.should_execute {
+        return Err(attempt.status(Status::already_exists(
+            "matching resume execution already audited",
+        )));
+    }
     if let Some(status) = server.reject_new_work_during_shutdown("ResumeExecute") {
         return Err(status);
     }
     let actor = trusted_actor(&request);
     let req = request.into_inner();
-    let plan = server
-        .state
-        .handoff_repo
-        .get_plan(&req.plan_id)
-        .await
-        .map_err(status)?
-        .ok_or_else(|| Status::not_found("resume plan not found"))?;
     let policy = runtime_policy(server, &plan.task_id)?;
     if !policy.mutating_resume_enabled {
         return Err(Status::permission_denied("mutating resume is disabled"));
     }
-    let reservation = server
+    let reservation = match server
         .state
         .handoff_repo
         .reserve_execution(
@@ -211,9 +313,16 @@ pub(crate) async fn resume_execute(
             },
         )
         .await
-        .map_err(status)?;
+    {
+        Ok(reservation) => reservation,
+        Err(error) => return Err(attempt.failed(server, status(error)).await),
+    };
+    link_resume_execution(server, &reservation.id, &attempt.request_id).await?;
     if !reservation.should_execute {
-        return Ok(Response::new(ResumeExecuteResponse {
+        attempt
+            .succeeded(server, Some("resume_execution"), Some(&reservation.id))
+            .await?;
+        return Ok(attempt.response(ResumeExecuteResponse {
             execution_id: reservation.id,
             plan_id: reservation.plan_id,
             accepted: false,
@@ -238,9 +347,9 @@ pub(crate) async fn resume_execute(
         .await
         .map_err(status)?;
     if let Err(error) = outcome {
-        return Err(Status::failed_precondition(format!(
+        return Err(attempt.failed(server, Status::failed_precondition(format!(
             "resume execution failed: {error}; restart from the logical boundary in a new session"
-        )));
+        ))).await);
     }
     agent_orchestrator::events::insert_event(
         &server.state,
@@ -255,18 +364,45 @@ pub(crate) async fn resume_execute(
             "child_task_id": child_task_id,
             "actor": actor,
             "operator_reason": req.operator_reason,
+            "request_id": attempt.request_id,
         }),
     )
     .await
     .map_err(|error| Status::internal(error.to_string()))?;
 
-    Ok(Response::new(ResumeExecuteResponse {
+    attempt
+        .succeeded(server, Some("resume_execution"), Some(&reservation.id))
+        .await?;
+    Ok(attempt.response(ResumeExecuteResponse {
         execution_id: reservation.id,
         plan_id: reservation.plan_id,
         accepted: true,
         status: "succeeded".to_string(),
         child_task_id,
     }))
+}
+
+async fn link_resume_execution(
+    server: &OrchestratorServer,
+    execution_id: &str,
+    request_id: &str,
+) -> Result<(), Status> {
+    let execution_id = execution_id.to_string();
+    let request_id = request_id.to_string();
+    server
+        .state
+        .async_database
+        .writer()
+        .call(move |conn| {
+            conn.execute(
+                "UPDATE resume_executions SET request_id=?2 WHERE id=?1",
+                rusqlite::params![execution_id, request_id],
+            )?;
+            Ok(())
+        })
+        .await
+        .map_err(agent_orchestrator::async_database::flatten_err)
+        .map_err(|error| Status::internal(error.to_string()))
 }
 
 async fn execute_plan(

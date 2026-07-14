@@ -34,6 +34,10 @@ service OrchestratorService {
   rpc AttentionExecuteAction(AttentionExecuteActionRequest) returns (AttentionItem);
   rpc AttentionFollow(AttentionFollowRequest) returns (stream AttentionDelta);
 
+  // Project-scoped canonical mutation audit query surface
+  rpc ActionAuditList(ActionAuditListRequest) returns (ActionAuditListResponse);
+  rpc ActionAuditGet(ActionAuditGetRequest) returns (ActionAuditRecord);
+
   // Provider-neutral external source events and process bindings
   rpc SourceEventList(SourceEventListRequest) returns (SourceEventListResponse);
   rpc SourceEventGet(SourceEventGetRequest) returns (SourceEvent);
@@ -378,6 +382,7 @@ message AttentionClaimRequest {
   string id = 1;
   int64 expected_version = 2;
   string idempotency_key = 3;
+  optional ActionAuditContext audit = 4;
 }
 
 message AttentionSnoozeRequest {
@@ -385,6 +390,7 @@ message AttentionSnoozeRequest {
   int64 expected_version = 2;
   string idempotency_key = 3;
   string until = 4;
+  optional ActionAuditContext audit = 5;
 }
 
 message AttentionResolveRequest {
@@ -392,6 +398,7 @@ message AttentionResolveRequest {
   int64 expected_version = 2;
   string idempotency_key = 3;
   string reason = 4;
+  optional ActionAuditContext audit = 5;
 }
 
 message AttentionExecuteActionRequest {
@@ -400,7 +407,54 @@ message AttentionExecuteActionRequest {
   string idempotency_key = 3;
   string action_id = 4;
   string input_json = 5;
+  optional ActionAuditContext audit = 6;
 }
+
+message ActionAuditContext {
+  string reason_code = 1;
+  optional string operator_reason = 2;
+  optional string idempotency_key = 3;
+}
+
+message ActionAuditRecord {
+  string request_id = 1;
+  int64 schema_version = 2;
+  string project_id = 3;
+  optional string actor = 4;
+  optional string resolved_role = 5;
+  string transport = 6;
+  string target_type = 7;
+  string target_id = 8;
+  string action = 9;
+  string reason_code = 10;
+  optional string operator_reason = 11;
+  optional string idempotency_key = 12;
+  optional string expected_version = 13;
+  optional int64 fencing_token = 14;
+  string request_hash = 15;
+  string status = 16;
+  optional string error_code = 17;
+  optional string result_type = 18;
+  optional string result_id = 19;
+  string created_at = 20;
+  string updated_at = 21;
+  optional string completed_at = 22;
+}
+
+message ActionAuditListRequest {
+  string project_id = 1;
+  optional string actor = 2;
+  optional string target_type = 3;
+  optional string target_id = 4;
+  optional string action = 5;
+  optional string status = 6;
+  optional string from_time = 7;
+  optional string to_time = 8;
+  uint32 limit = 9;
+}
+
+message ActionAuditListResponse { repeated ActionAuditRecord records = 1; }
+message ActionAuditGetRequest { string project_id = 1; string request_id = 2; }
 
 message AttentionFollowRequest {
   int64 after_change_id = 1;
@@ -448,6 +502,7 @@ message SourceEventIngestRequest {
   string project_id = 1;
   string normalized_json = 2;
   string payload_hash = 3;
+  optional ActionAuditContext audit = 4;
 }
 
 message SourceEventIngestResponse {
@@ -480,14 +535,16 @@ message SourceBindRequest {
   optional string thread_id = 6;
   string binding_type = 7;
   string created_by_event_id = 8;
+  optional ActionAuditContext audit = 9;
 }
 
-message SourceReplayRequest { string id = 1; }
+message SourceReplayRequest { string id = 1; optional ActionAuditContext audit = 2; }
 message SourceReplayResponse { string id = 1; string status = 2; }
 
 message HandoffGenerateRequest {
   string task_id = 1;
   optional int64 source_event_cursor = 2;
+  optional ActionAuditContext audit = 3;
 }
 
 message HandoffGetRequest { string id = 1; }
@@ -528,6 +585,7 @@ message ResumePlanRequest {
   string boundary_id = 2;
   string mode = 3;
   optional string attention_item_id = 4;
+  optional ActionAuditContext audit = 5;
 }
 
 message ResumePlanResponse {
@@ -548,6 +606,7 @@ message ResumeExecuteRequest {
   string operator_reason = 3;
   string idempotency_key = 4;
   bool elevated_confirmation = 5;
+  optional ActionAuditContext audit = 6;
 }
 
 message ResumeExecuteResponse {
@@ -1113,6 +1172,7 @@ message AgentSessionAttachRequest {
   string session_id = 1;
   string client_id = 2;
   string mode = 3;
+  optional ActionAuditContext audit = 4;
 }
 message AgentSessionAttachResponse {
   string session_id = 1;
@@ -1126,6 +1186,7 @@ message AgentSessionHeartbeatRequest {
   string session_id = 1;
   string client_id = 2;
   int64 fencing_token = 3;
+  optional ActionAuditContext audit = 4;
 }
 message AgentSessionHeartbeatResponse { string lease_expires_at = 1; }
 message AgentSessionDetachRequest {
@@ -1134,6 +1195,7 @@ message AgentSessionDetachRequest {
   string mode = 3;
   optional int64 fencing_token = 4;
   string reason = 5;
+  optional ActionAuditContext audit = 6;
 }
 message AgentSessionDetachResponse { bool detached = 1; }
 message AgentSessionSendInputRequest {
@@ -1142,6 +1204,7 @@ message AgentSessionSendInputRequest {
   int64 fencing_token = 3;
   bytes input = 4;
   string idempotency_key = 5;
+  optional ActionAuditContext audit = 6;
 }
 message AgentSessionSendInputResponse { uint64 accepted_bytes = 1; }
 message AgentSessionReadRequest {
@@ -1166,6 +1229,7 @@ message AgentSessionCloseRequest {
   string reason = 2;
   string idempotency_key = 3;
   optional int64 expected_state_version = 4;
+  optional ActionAuditContext audit = 5;
 }
 message AgentSessionCloseResponse { AgentSession session = 1; }
 message AgentSessionResolvePidRequest { int64 pid = 1; }

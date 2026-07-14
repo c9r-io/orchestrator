@@ -6,6 +6,7 @@ use orchestrator_proto::*;
 use tonic::{Request, Response, Status};
 
 use super::OrchestratorServer;
+use super::action_audit::{self, ActionDescriptor};
 
 pub(crate) type AttentionFollowStream =
     Pin<Box<dyn Stream<Item = Result<AttentionDelta, Status>> + Send>>;
@@ -129,28 +130,88 @@ pub(crate) async fn attention_get(
 
 pub(crate) async fn attention_claim(
     server: &OrchestratorServer,
-    request: Request<AttentionClaimRequest>,
+    mut request: Request<AttentionClaimRequest>,
 ) -> Result<Response<AttentionItem>, Status> {
-    super::authorize(server, &request, "AttentionClaim").map_err(Status::from)?;
+    let current = load_for_audit(server, &request.get_ref().id).await?;
+    let context = request.get_ref().audit.clone();
+    let key = request.get_ref().idempotency_key.clone();
+    let expected = request.get_ref().expected_version;
+    let attempt = action_audit::begin(
+        server,
+        &mut request,
+        "AttentionClaim",
+        context.as_ref(),
+        ActionDescriptor {
+            project_id: &current.project_id,
+            target_type: "attention_item",
+            target_id: &current.id,
+            action: "attention.claim",
+            expected_version: Some(expected.to_string()),
+            fencing_token: None,
+            canonical_request: serde_json::json!({"expected_version":expected}),
+            fallback_reason_code: "legacy_client",
+            fallback_operator_reason: None,
+            fallback_idempotency_key: Some(&key),
+            renewable_exemption: false,
+        },
+    )
+    .await?;
+    if !attempt.should_execute {
+        return Err(attempt.status(Status::already_exists(
+            "matching attention claim already audited",
+        )));
+    }
     let actor = super::trusted_actor(&request);
     let req = request.into_inner();
     validate_idempotency(&req.idempotency_key)?;
-    mutate(
+    audited_mutate(
         server,
         &req.id,
         req.expected_version,
         &req.idempotency_key,
         &actor,
         AttentionMutation::Claim,
+        &attempt,
+        &current.task_id,
+        "attention_claimed",
     )
     .await
 }
 
 pub(crate) async fn attention_snooze(
     server: &OrchestratorServer,
-    request: Request<AttentionSnoozeRequest>,
+    mut request: Request<AttentionSnoozeRequest>,
 ) -> Result<Response<AttentionItem>, Status> {
-    super::authorize(server, &request, "AttentionSnooze").map_err(Status::from)?;
+    let current = load_for_audit(server, &request.get_ref().id).await?;
+    let context = request.get_ref().audit.clone();
+    let key = request.get_ref().idempotency_key.clone();
+    let expected = request.get_ref().expected_version;
+    let until = request.get_ref().until.clone();
+    let attempt = action_audit::begin(
+        server,
+        &mut request,
+        "AttentionSnooze",
+        context.as_ref(),
+        ActionDescriptor {
+            project_id: &current.project_id,
+            target_type: "attention_item",
+            target_id: &current.id,
+            action: "attention.snooze",
+            expected_version: Some(expected.to_string()),
+            fencing_token: None,
+            canonical_request: serde_json::json!({"expected_version":expected,"until":until}),
+            fallback_reason_code: "legacy_client",
+            fallback_operator_reason: None,
+            fallback_idempotency_key: Some(&key),
+            renewable_exemption: false,
+        },
+    )
+    .await?;
+    if !attempt.should_execute {
+        return Err(attempt.status(Status::already_exists(
+            "matching attention snooze already audited",
+        )));
+    }
     let actor = super::trusted_actor(&request);
     let req = request.into_inner();
     validate_idempotency(&req.idempotency_key)?;
@@ -159,22 +220,54 @@ pub(crate) async fn attention_snooze(
     if until <= chrono::Utc::now() {
         return Err(Status::invalid_argument("until must be in the future"));
     }
-    mutate(
+    audited_mutate(
         server,
         &req.id,
         req.expected_version,
         &req.idempotency_key,
         &actor,
         AttentionMutation::Snooze { until: req.until },
+        &attempt,
+        &current.task_id,
+        "attention_snoozed",
     )
     .await
 }
 
 pub(crate) async fn attention_resolve(
     server: &OrchestratorServer,
-    request: Request<AttentionResolveRequest>,
+    mut request: Request<AttentionResolveRequest>,
 ) -> Result<Response<AttentionItem>, Status> {
-    super::authorize(server, &request, "AttentionResolve").map_err(Status::from)?;
+    let current = load_for_audit(server, &request.get_ref().id).await?;
+    let context = request.get_ref().audit.clone();
+    let key = request.get_ref().idempotency_key.clone();
+    let expected = request.get_ref().expected_version;
+    let reason = request.get_ref().reason.clone();
+    let attempt = action_audit::begin(
+        server,
+        &mut request,
+        "AttentionResolve",
+        context.as_ref(),
+        ActionDescriptor {
+            project_id: &current.project_id,
+            target_type: "attention_item",
+            target_id: &current.id,
+            action: "attention.resolve",
+            expected_version: Some(expected.to_string()),
+            fencing_token: None,
+            canonical_request: serde_json::json!({"expected_version":expected,"reason":reason}),
+            fallback_reason_code: "legacy_client",
+            fallback_operator_reason: Some(&reason),
+            fallback_idempotency_key: Some(&key),
+            renewable_exemption: false,
+        },
+    )
+    .await?;
+    if !attempt.should_execute {
+        return Err(attempt.status(Status::already_exists(
+            "matching attention resolve already audited",
+        )));
+    }
     let actor = super::trusted_actor(&request);
     let req = request.into_inner();
     validate_idempotency(&req.idempotency_key)?;
@@ -183,39 +276,93 @@ pub(crate) async fn attention_resolve(
             "reason must contain 1-500 characters",
         ));
     }
-    mutate(
+    audited_mutate(
         server,
         &req.id,
         req.expected_version,
         &req.idempotency_key,
         &actor,
         AttentionMutation::Resolve { reason: req.reason },
+        &attempt,
+        &current.task_id,
+        "attention_resolved",
     )
     .await
 }
 
-async fn mutate(
+#[allow(clippy::too_many_arguments)]
+async fn audited_mutate(
     server: &OrchestratorServer,
     id: &str,
     expected_version: i64,
     key: &str,
     actor: &str,
     mutation: AttentionMutation,
+    attempt: &action_audit::ActionAttempt,
+    task_id: &str,
+    event_type: &str,
 ) -> Result<Response<AttentionItem>, Status> {
-    let item = server
+    let item = match server
         .state
         .attention_repo
         .mutate(id, expected_version, key, actor, mutation)
         .await
-        .map_err(mutation_error)?;
-    Ok(Response::new(item_to_proto(item)))
+    {
+        Ok(item) => item,
+        Err(error) => return Err(attempt.failed(server, mutation_error(error)).await),
+    };
+    link_domain_action(server, id, key, &attempt.request_id).await?;
+    agent_orchestrator::events::insert_event(
+        &server.state,
+        task_id,
+        item.task_item_id.as_deref(),
+        event_type,
+        serde_json::json!({"request_id":attempt.request_id,"attention_item_id":id,"actor":actor}),
+    )
+    .await
+    .map_err(|error| attempt.status(Status::internal(error.to_string())))?;
+    attempt
+        .succeeded(server, Some("attention_action"), Some(id))
+        .await?;
+    Ok(attempt.response(item_to_proto(item)))
 }
 
 pub(crate) async fn attention_execute_action(
     server: &OrchestratorServer,
-    request: Request<AttentionExecuteActionRequest>,
+    mut request: Request<AttentionExecuteActionRequest>,
 ) -> Result<Response<AttentionItem>, Status> {
-    super::authorize(server, &request, "AttentionExecuteAction").map_err(Status::from)?;
+    let current = load_for_audit(server, &request.get_ref().id).await?;
+    let context = request.get_ref().audit.clone();
+    let key = request.get_ref().idempotency_key.clone();
+    let expected = request.get_ref().expected_version;
+    let action_id = request.get_ref().action_id.clone();
+    let input_json = request.get_ref().input_json.clone();
+    let action = format!("attention.execute.{action_id}");
+    let attempt = action_audit::begin(
+        server,
+        &mut request,
+        "AttentionExecuteAction",
+        context.as_ref(),
+        ActionDescriptor {
+            project_id: &current.project_id,
+            target_type: "attention_item",
+            target_id: &current.id,
+            action: &action,
+            expected_version: Some(expected.to_string()),
+            fencing_token: None,
+            canonical_request: serde_json::json!({"expected_version":expected,"action_id":action_id,"input_json":input_json}),
+            fallback_reason_code: "legacy_client",
+            fallback_operator_reason: None,
+            fallback_idempotency_key: Some(&key),
+            renewable_exemption: false,
+        },
+    )
+    .await?;
+    if !attempt.should_execute {
+        return Err(attempt.status(Status::already_exists(
+            "matching attention action already audited",
+        )));
+    }
     if let Some(status) = server.reject_new_work_during_shutdown("AttentionExecuteAction") {
         return Err(status);
     }
@@ -230,7 +377,7 @@ pub(crate) async fn attention_execute_action(
     if !input.is_object() {
         return Err(Status::invalid_argument("action input must be an object"));
     }
-    let item = orchestrator_scheduler::service::attention::execute_allowlisted_action(
+    let item = match orchestrator_scheduler::service::attention::execute_allowlisted_action(
         &server.state,
         &req.id,
         req.expected_version,
@@ -240,8 +387,62 @@ pub(crate) async fn attention_execute_action(
         &input,
     )
     .await
-    .map_err(mutation_error)?;
-    Ok(Response::new(item_to_proto(item)))
+    {
+        Ok(item) => item,
+        Err(error) => return Err(attempt.failed(server, mutation_error(error)).await),
+    };
+    link_domain_action(server, &req.id, &req.idempotency_key, &attempt.request_id).await?;
+    agent_orchestrator::events::insert_event(
+        &server.state,
+        &current.task_id,
+        current.task_item_id.as_deref(),
+        "attention_action_executed",
+        serde_json::json!({"request_id":attempt.request_id,"attention_item_id":req.id,"action_id":req.action_id,"actor":actor}),
+    )
+    .await
+    .map_err(|error| attempt.status(Status::internal(error.to_string())))?;
+    attempt
+        .succeeded(server, Some("attention_action"), Some(&req.id))
+        .await?;
+    Ok(attempt.response(item_to_proto(item)))
+}
+
+async fn load_for_audit(
+    server: &OrchestratorServer,
+    id: &str,
+) -> Result<agent_orchestrator::attention::AttentionItem, Status> {
+    server
+        .state
+        .attention_repo
+        .get(id)
+        .await
+        .map_err(|error| Status::internal(error.to_string()))?
+        .ok_or_else(|| Status::not_found("attention item not found"))
+}
+
+async fn link_domain_action(
+    server: &OrchestratorServer,
+    id: &str,
+    key: &str,
+    request_id: &str,
+) -> Result<(), Status> {
+    let id = id.to_string();
+    let key = key.to_string();
+    let request_id = request_id.to_string();
+    server
+        .state
+        .async_database
+        .writer()
+        .call(move |conn| {
+            conn.execute(
+                "UPDATE attention_actions SET request_id=?3 WHERE attention_item_id=?1 AND idempotency_key=?2",
+                rusqlite::params![id, key, request_id],
+            )?;
+            Ok(())
+        })
+        .await
+        .map_err(agent_orchestrator::async_database::flatten_err)
+        .map_err(|error| Status::internal(error.to_string()))
 }
 
 pub(crate) async fn attention_follow(

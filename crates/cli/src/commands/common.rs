@@ -12,18 +12,25 @@ pub(crate) fn resolve_resource(resource: &str, name: Option<&str>) -> String {
 /// Strip gRPC protocol noise from error messages for human-friendly output.
 pub(crate) fn format_grpc_error(e: tonic::Status) -> anyhow::Error {
     let msg = e.message().to_string();
+    let request_id = e
+        .metadata()
+        .get("x-request-id")
+        .and_then(|value| value.to_str().ok())
+        .map(|value| format!(" (request_id: {value})"))
+        .unwrap_or_default();
     match e.code() {
         tonic::Code::FailedPrecondition => {
             if msg.starts_with("use --force") {
                 anyhow::anyhow!(
-                    "{}\nhint: check --force to confirm the requested deletion",
-                    msg
+                    "{}{}\nhint: check --force to confirm the requested deletion",
+                    msg,
+                    request_id
                 )
             } else {
-                anyhow::anyhow!("{}", msg)
+                anyhow::anyhow!("{}{}", msg, request_id)
             }
         }
-        _ => anyhow::anyhow!("{}", msg),
+        _ => anyhow::anyhow!("{}{}", msg, request_id),
     }
 }
 
@@ -65,5 +72,15 @@ mod tests {
     fn format_grpc_error_preserves_not_found_message() {
         let err = format_grpc_error(tonic::Status::not_found("task.info: task not found: abc"));
         assert_eq!(err.to_string(), "task.info: task not found: abc");
+    }
+
+    #[test]
+    fn format_grpc_error_includes_action_request_id() {
+        let mut status = tonic::Status::failed_precondition("stale version");
+        status
+            .metadata_mut()
+            .insert("x-request-id", "req-123".parse().expect("metadata"));
+        let rendered = format_grpc_error(status).to_string();
+        assert!(rendered.contains("request_id: req-123"));
     }
 }

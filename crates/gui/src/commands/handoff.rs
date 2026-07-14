@@ -2,6 +2,26 @@ use serde::Serialize;
 use std::sync::Arc;
 use tauri::State;
 
+fn audit_context(
+    reason_code: &str,
+    operator_reason: Option<String>,
+    idempotency_key: String,
+) -> Option<orchestrator_proto::ActionAuditContext> {
+    Some(orchestrator_proto::ActionAuditContext {
+        reason_code: reason_code.to_string(),
+        operator_reason,
+        idempotency_key: Some(idempotency_key),
+    })
+}
+
+fn generated_key(prefix: &str) -> String {
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    format!("gui-{prefix}-{nonce}")
+}
+
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize)]
@@ -75,6 +95,7 @@ pub async fn handoff_generate(
     let mut client = state.client().await?;
     let snapshot = client
         .handoff_generate(orchestrator_proto::HandoffGenerateRequest {
+            audit: audit_context("operator_handoff", None, generated_key("handoff")),
             task_id,
             source_event_cursor: None,
         })
@@ -123,6 +144,7 @@ pub async fn resume_plan(
     let mut client = state.client().await?;
     let plan = client
         .resume_plan(orchestrator_proto::ResumePlanRequest {
+            audit: audit_context("operator_resume_plan", None, generated_key("resume-plan")),
             task_id,
             boundary_id,
             mode,
@@ -156,6 +178,11 @@ pub async fn resume_execute(
     let mut client = state.client().await?;
     let execution = client
         .resume_execute(orchestrator_proto::ResumeExecuteRequest {
+            audit: audit_context(
+                "operator_resume_execute",
+                Some(operator_reason.clone()),
+                idempotency_key.clone(),
+            ),
             plan_id,
             expected_state_version,
             operator_reason,

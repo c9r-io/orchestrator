@@ -557,6 +557,7 @@ impl ControlPlaneProtection {
         let _ = insert_control_plane_audit(
             &self.db_path,
             &ControlPlaneAuditRecord {
+                request_id: None,
                 transport: resolved.transport.to_string(),
                 remote_addr: resolved.remote_addr.clone(),
                 rpc: rpc.to_string(),

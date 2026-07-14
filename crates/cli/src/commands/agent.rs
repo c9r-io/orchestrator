@@ -113,6 +113,11 @@ async fn dispatch_session(
                     session_id,
                     client_id,
                     mode,
+                    audit: Some(ActionAuditContext {
+                        reason_code: "operator_session_attach".into(),
+                        operator_reason: None,
+                        idempotency_key: Some(format!("cli-attach-{}", now_nonce())),
+                    }),
                 })
                 .await?
                 .into_inner();
@@ -165,6 +170,11 @@ async fn dispatch_session(
                     session_id,
                     client_id,
                     fencing_token,
+                    audit: Some(ActionAuditContext {
+                        reason_code: "lease_heartbeat".into(),
+                        operator_reason: None,
+                        idempotency_key: None,
+                    }),
                 })
                 .await?
                 .into_inner();
@@ -185,7 +195,12 @@ async fn dispatch_session(
                     client_id,
                     fencing_token,
                     input: text.into_bytes(),
-                    idempotency_key: key,
+                    idempotency_key: key.clone(),
+                    audit: Some(ActionAuditContext {
+                        reason_code: "operator_session_input".into(),
+                        operator_reason: None,
+                        idempotency_key: Some(key),
+                    }),
                 })
                 .await?
                 .into_inner();
@@ -205,7 +220,12 @@ async fn dispatch_session(
                     client_id,
                     mode,
                     fencing_token,
-                    reason,
+                    reason: reason.clone(),
+                    audit: Some(ActionAuditContext {
+                        reason_code: "operator_session_detach".into(),
+                        operator_reason: Some(reason),
+                        idempotency_key: Some(format!("cli-detach-{}", now_nonce())),
+                    }),
                 })
                 .await?;
             println!("detached");
@@ -221,9 +241,14 @@ async fn dispatch_session(
             let r = client
                 .agent_session_close(AgentSessionCloseRequest {
                     session_id,
-                    reason,
-                    idempotency_key: key,
+                    reason: reason.clone(),
+                    idempotency_key: key.clone(),
                     expected_state_version: expected_version,
+                    audit: Some(ActionAuditContext {
+                        reason_code: "operator_session_close".into(),
+                        operator_reason: Some(reason),
+                        idempotency_key: Some(key),
+                    }),
                 })
                 .await?
                 .into_inner();

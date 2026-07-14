@@ -6,6 +6,7 @@ use orchestrator_proto::*;
 use tonic::{Request, Response, Status};
 
 use super::OrchestratorServer;
+use super::action_audit::{self, ActionDescriptor};
 
 fn event_to_proto(value: agent_orchestrator::source::SourceEventRecord) -> SourceEvent {
     SourceEvent {
@@ -85,9 +86,47 @@ pub(crate) async fn event_get(
 
 pub(crate) async fn event_ingest(
     server: &OrchestratorServer,
-    request: Request<SourceEventIngestRequest>,
+    mut request: Request<SourceEventIngestRequest>,
 ) -> Result<Response<SourceEventIngestResponse>, Status> {
-    super::authorize(server, &request, "SourceEventIngest").map_err(Status::from)?;
+    if request.get_ref().normalized_json.len() > 64 * 1024 {
+        return Err(Status::invalid_argument(
+            "normalized_json exceeds 65536 bytes",
+        ));
+    }
+    let event: NormalizedSourceEvent = serde_json::from_str(&request.get_ref().normalized_json)
+        .map_err(|error| Status::invalid_argument(format!("invalid normalized_json: {error}")))?;
+    let context = request.get_ref().audit.clone();
+    let project_id = request.get_ref().project_id.clone();
+    let payload_hash = request.get_ref().payload_hash.clone();
+    let target_id = format!(
+        "{}:{}:{}",
+        event.provider, event.installation_id, event.external_event_id
+    );
+    let attempt = action_audit::begin(
+        server,
+        &mut request,
+        "SourceEventIngest",
+        context.as_ref(),
+        ActionDescriptor {
+            project_id: &project_id,
+            target_type: "source_delivery",
+            target_id: &target_id,
+            action: "source.ingest",
+            expected_version: None,
+            fencing_token: None,
+            canonical_request: serde_json::json!({"provider":event.provider,"installation_id":event.installation_id,"external_event_id":event.external_event_id,"payload_hash":payload_hash}),
+            fallback_reason_code: "legacy_client",
+            fallback_operator_reason: None,
+            fallback_idempotency_key: None,
+            renewable_exemption: false,
+        },
+    )
+    .await?;
+    if !attempt.should_execute {
+        return Err(attempt.status(Status::already_exists(
+            "matching source ingest already audited",
+        )));
+    }
     if let Some(status) = server.reject_new_work_during_shutdown("SourceEventIngest") {
         return Err(status);
     }
@@ -99,17 +138,15 @@ pub(crate) async fn event_ingest(
         .runtime_policy_for_project(&req.project_id)
         .source_ingest_enabled
     {
-        return Err(Status::failed_precondition("source ingestion is disabled"));
+        return Err(attempt
+            .failed(
+                server,
+                Status::failed_precondition("source ingestion is disabled"),
+            )
+            .await);
     }
-    if req.normalized_json.len() > 64 * 1024 {
-        return Err(Status::invalid_argument(
-            "normalized_json exceeds 65536 bytes",
-        ));
-    }
-    let event: NormalizedSourceEvent = serde_json::from_str(&req.normalized_json)
-        .map_err(|error| Status::invalid_argument(format!("invalid normalized_json: {error}")))?;
     let repository = AsyncSourceRepository::new(server.state.async_database.clone());
-    let result = repository
+    let result = match repository
         .ingest(IngestSourceEvent {
             project_id: req.project_id,
             event,
@@ -117,8 +154,25 @@ pub(crate) async fn event_ingest(
             raw_payload_ref: None,
         })
         .await
-        .map_err(|error| Status::invalid_argument(error.to_string()))?;
-    Ok(Response::new(SourceEventIngestResponse {
+    {
+        Ok(result) => result,
+        Err(error) => {
+            return Err(attempt
+                .failed(server, Status::invalid_argument(error.to_string()))
+                .await);
+        }
+    };
+    link_source_row(
+        server,
+        "source_events",
+        &result.event.id,
+        &attempt.request_id,
+    )
+    .await?;
+    attempt
+        .succeeded(server, Some("source_event"), Some(&result.event.id))
+        .await?;
+    Ok(attempt.response(SourceEventIngestResponse {
         event: Some(event_to_proto(result.event)),
         inserted: result.inserted,
     }))
@@ -141,12 +195,47 @@ pub(crate) async fn binding_list(
 
 pub(crate) async fn bind(
     server: &OrchestratorServer,
-    request: Request<SourceBindRequest>,
+    mut request: Request<SourceBindRequest>,
 ) -> Result<Response<SourceBinding>, Status> {
-    super::authorize(server, &request, "SourceBind").map_err(Status::from)?;
+    let context = request.get_ref().audit.clone();
+    let project_id = request.get_ref().project_id.clone();
+    let task_id = request.get_ref().task_id.clone();
+    let target_id = format!(
+        "{}:{}:{}:{}",
+        request.get_ref().provider,
+        request.get_ref().installation_id,
+        request.get_ref().conversation_id.as_deref().unwrap_or(""),
+        request.get_ref().thread_id.as_deref().unwrap_or("")
+    );
+    let canonical = serde_json::json!({"task_id":task_id,"provider":request.get_ref().provider,"installation_id":request.get_ref().installation_id,"conversation_id":request.get_ref().conversation_id,"thread_id":request.get_ref().thread_id,"binding_type":request.get_ref().binding_type,"created_by_event_id":request.get_ref().created_by_event_id});
+    let attempt = action_audit::begin(
+        server,
+        &mut request,
+        "SourceBind",
+        context.as_ref(),
+        ActionDescriptor {
+            project_id: &project_id,
+            target_type: "source_binding",
+            target_id: &target_id,
+            action: "source.bind",
+            expected_version: None,
+            fencing_token: None,
+            canonical_request: canonical,
+            fallback_reason_code: "legacy_client",
+            fallback_operator_reason: None,
+            fallback_idempotency_key: None,
+            renewable_exemption: false,
+        },
+    )
+    .await?;
+    if !attempt.should_execute {
+        return Err(attempt.status(Status::already_exists(
+            "matching source binding already audited",
+        )));
+    }
     let req = request.into_inner();
     let repository = AsyncSourceRepository::new(server.state.async_database.clone());
-    let binding = repository
+    let binding = match repository
         .create_binding(CreateSourceBinding {
             project_id: req.project_id,
             task_id: req.task_id,
@@ -158,22 +247,95 @@ pub(crate) async fn bind(
             created_by_event_id: req.created_by_event_id,
         })
         .await
-        .map_err(|error| Status::failed_precondition(error.to_string()))?;
-    Ok(Response::new(binding_to_proto(binding)))
+    {
+        Ok(binding) => binding,
+        Err(error) => {
+            return Err(attempt
+                .failed(server, Status::failed_precondition(error.to_string()))
+                .await);
+        }
+    };
+    link_source_row(server, "source_bindings", &binding.id, &attempt.request_id).await?;
+    attempt
+        .succeeded(server, Some("source_binding"), Some(&binding.id))
+        .await?;
+    Ok(attempt.response(binding_to_proto(binding)))
 }
 
 pub(crate) async fn replay(
     server: &OrchestratorServer,
-    request: Request<SourceReplayRequest>,
+    mut request: Request<SourceReplayRequest>,
 ) -> Result<Response<SourceReplayResponse>, Status> {
-    super::authorize(server, &request, "SourceReplay").map_err(Status::from)?;
-    let id = request.into_inner().id;
-    AsyncSourceRepository::new(server.state.async_database.clone())
-        .replay(&id)
+    let repository = AsyncSourceRepository::new(server.state.async_database.clone());
+    let current = repository
+        .get(&request.get_ref().id)
         .await
-        .map_err(|error| Status::failed_precondition(error.to_string()))?;
-    Ok(Response::new(SourceReplayResponse {
+        .map_err(|error| Status::internal(error.to_string()))?
+        .ok_or_else(|| Status::not_found("source event not found"))?;
+    let context = request.get_ref().audit.clone();
+    let id = request.get_ref().id.clone();
+    let attempt = action_audit::begin(
+        server,
+        &mut request,
+        "SourceReplay",
+        context.as_ref(),
+        ActionDescriptor {
+            project_id: &current.project_id,
+            target_type: "source_event",
+            target_id: &id,
+            action: "source.replay",
+            expected_version: Some(current.routing_attempts.to_string()),
+            fencing_token: None,
+            canonical_request: serde_json::json!({"routing_attempts":current.routing_attempts,"routing_state":current.routing_state}),
+            fallback_reason_code: "legacy_client",
+            fallback_operator_reason: None,
+            fallback_idempotency_key: None,
+            renewable_exemption: false,
+        },
+    )
+    .await?;
+    if !attempt.should_execute {
+        return Err(attempt.status(Status::already_exists(
+            "matching source replay already audited",
+        )));
+    }
+    if let Err(error) = repository.replay(&id).await {
+        return Err(attempt
+            .failed(server, Status::failed_precondition(error.to_string()))
+            .await);
+    }
+    link_source_row(server, "source_events", &id, &attempt.request_id).await?;
+    attempt
+        .succeeded(server, Some("source_event"), Some(&id))
+        .await?;
+    Ok(attempt.response(SourceReplayResponse {
         id,
         status: "received".to_string(),
     }))
+}
+
+async fn link_source_row(
+    server: &OrchestratorServer,
+    table: &str,
+    id: &str,
+    request_id: &str,
+) -> Result<(), Status> {
+    let sql = match table {
+        "source_events" => "UPDATE source_events SET request_id=?2 WHERE id=?1",
+        "source_bindings" => "UPDATE source_bindings SET request_id=?2 WHERE id=?1",
+        _ => return Err(Status::internal("invalid source audit table")),
+    };
+    let id = id.to_string();
+    let request_id = request_id.to_string();
+    server
+        .state
+        .async_database
+        .writer()
+        .call(move |conn| {
+            conn.execute(sql, rusqlite::params![id, request_id])?;
+            Ok(())
+        })
+        .await
+        .map_err(agent_orchestrator::async_database::flatten_err)
+        .map_err(|error| Status::internal(error.to_string()))
 }

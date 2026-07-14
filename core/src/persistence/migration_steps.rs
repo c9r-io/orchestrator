@@ -1224,9 +1224,10 @@ pub(crate) fn m0031_control_action_audit(conn: &Connection) -> Result<()> {
             ON control_action_audit(target_type, target_id, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_control_action_audit_action_status
             ON control_action_audit(action, status, created_at DESC);
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_control_action_audit_retry_identity
+        DROP INDEX IF EXISTS idx_control_action_audit_retry_identity;
+        CREATE UNIQUE INDEX idx_control_action_audit_retry_identity
             ON control_action_audit(project_id, target_type, target_id, action, idempotency_key)
-            WHERE idempotency_key IS NOT NULL;
+            WHERE idempotency_key IS NOT NULL AND status != 'denied';
         "#,
     )
     .context("m0031_control_action_audit")?;
@@ -1237,6 +1238,8 @@ pub(crate) fn m0031_control_action_audit(conn: &Connection) -> Result<()> {
         ("resume_executions", "request_id"),
         ("session_control_actions", "request_id"),
         ("source_command_actions", "request_id"),
+        ("source_events", "request_id"),
+        ("source_bindings", "request_id"),
         ("events", "request_id"),
     ] {
         ensure_column_exists(
@@ -1258,6 +1261,10 @@ pub(crate) fn m0031_control_action_audit(conn: &Connection) -> Result<()> {
             ON session_control_actions(request_id) WHERE request_id IS NOT NULL;
         CREATE UNIQUE INDEX IF NOT EXISTS idx_source_command_actions_request_id
             ON source_command_actions(request_id) WHERE request_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_source_events_request_id
+            ON source_events(request_id) WHERE request_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_source_bindings_request_id
+            ON source_bindings(request_id) WHERE request_id IS NOT NULL;
         CREATE INDEX IF NOT EXISTS idx_events_request_id
             ON events(request_id) WHERE request_id IS NOT NULL;
         "#,

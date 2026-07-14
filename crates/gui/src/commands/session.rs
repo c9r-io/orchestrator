@@ -3,6 +3,26 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
+fn audit_context(
+    reason_code: &str,
+    operator_reason: Option<String>,
+    idempotency_key: Option<String>,
+) -> Option<orchestrator_proto::ActionAuditContext> {
+    Some(orchestrator_proto::ActionAuditContext {
+        reason_code: reason_code.to_string(),
+        operator_reason,
+        idempotency_key,
+    })
+}
+
+fn generated_key(prefix: &str) -> String {
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    format!("gui-{prefix}-{nonce}")
+}
+
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize)]
@@ -79,6 +99,11 @@ pub async fn agent_session_attach(
     let mut client = state.client().await?;
     let r = client
         .agent_session_attach(orchestrator_proto::AgentSessionAttachRequest {
+            audit: audit_context(
+                "operator_session_attach",
+                None,
+                Some(generated_key("session-attach")),
+            ),
             session_id,
             client_id,
             mode,
@@ -102,6 +127,7 @@ pub async fn agent_session_heartbeat(
     let mut client = state.client().await?;
     Ok(client
         .agent_session_heartbeat(orchestrator_proto::AgentSessionHeartbeatRequest {
+            audit: audit_context("lease_heartbeat", None, None),
             session_id,
             client_id,
             fencing_token,
@@ -124,6 +150,11 @@ pub async fn agent_session_send_input(
     let mut client = state.client().await?;
     Ok(client
         .agent_session_send_input(orchestrator_proto::AgentSessionSendInputRequest {
+            audit: audit_context(
+                "operator_session_input",
+                None,
+                Some(idempotency_key.clone()),
+            ),
             session_id,
             client_id,
             fencing_token,
@@ -147,6 +178,11 @@ pub async fn agent_session_detach(
     let mut client = state.client().await?;
     Ok(client
         .agent_session_detach(orchestrator_proto::AgentSessionDetachRequest {
+            audit: audit_context(
+                "operator_session_detach",
+                Some("GUI detach".into()),
+                Some(generated_key("session-detach")),
+            ),
             session_id,
             client_id,
             mode,
@@ -170,6 +206,11 @@ pub async fn agent_session_close(
     let mut client = state.client().await?;
     let r = client
         .agent_session_close(orchestrator_proto::AgentSessionCloseRequest {
+            audit: audit_context(
+                "operator_session_close",
+                Some(reason.clone()),
+                Some(idempotency_key.clone()),
+            ),
             session_id,
             reason,
             idempotency_key,

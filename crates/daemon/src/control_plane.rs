@@ -18,6 +18,10 @@ use tonic::{Request, Status};
 use x509_parser::extensions::GeneralName;
 use x509_parser::prelude::{FromDer, X509Certificate};
 
+/// Validated correlation identifier attached to an in-flight gRPC request.
+#[derive(Debug, Clone)]
+pub(crate) struct ActionRequestId(pub String);
+
 /// Authorizes control-plane RPCs using mutual TLS identities and policy state.
 #[derive(Debug, Clone)]
 pub struct ControlPlaneSecurity {
@@ -129,30 +133,48 @@ pub use orchestrator_client::config::{
 };
 
 impl ControlPlaneSecurity {
+    /// Resolves the configured role for an authenticated request without trusting payload fields.
+    pub(crate) fn resolved_role<T>(&self, request: &Request<T>) -> Option<Role> {
+        let subject_id = subject_id_from_extensions(request.extensions())?;
+        load_policy(&self.policy_path)
+            .ok()?
+            .subjects
+            .into_iter()
+            .find(|subject| subject.id == subject_id && !subject.disabled)
+            .map(|subject| subject.role)
+    }
+
     /// Validate the presented client certificate and authorize a specific RPC.
     pub fn authorize<T>(
         &self,
         request: &Request<T>,
         rpc: &'static str,
     ) -> std::result::Result<(), AuthzError> {
+        let request_id = request
+            .extensions()
+            .get::<ActionRequestId>()
+            .map(|value| value.0.clone());
         let required = required_role_for_rpc(rpc);
         let remote_addr = request.remote_addr().map(|addr| addr.to_string());
         let peer_cert = request
             .peer_certs()
             .and_then(|certs| certs.first().cloned())
             .ok_or_else(|| {
-                let _ = self.audit(AuditEvent {
-                    transport: "tcp",
-                    remote_addr: remote_addr.clone(),
-                    rpc,
-                    subject_id: None,
-                    authn_result: "failed",
-                    authz_result: "denied",
-                    role: None,
-                    reason: Some("client certificate required".to_string()),
-                    tls_fingerprint: None,
-                    rejection_stage: Some("cert_validation_failed"),
-                });
+                let _ = self.audit(
+                    request_id.as_deref(),
+                    AuditEvent {
+                        transport: "tcp",
+                        remote_addr: remote_addr.clone(),
+                        rpc,
+                        subject_id: None,
+                        authn_result: "failed",
+                        authz_result: "denied",
+                        role: None,
+                        reason: Some("client certificate required".to_string()),
+                        tls_fingerprint: None,
+                        rejection_stage: Some("cert_validation_failed"),
+                    },
+                );
                 AuthzError::Unauthenticated("client certificate required")
             })?;
 
@@ -160,18 +182,21 @@ impl ControlPlaneSecurity {
         let subject_id = match subject_id_from_der(peer_cert.as_ref()) {
             Ok(subject) => subject,
             Err(error) => {
-                let _ = self.audit(AuditEvent {
-                    transport: "tcp",
-                    remote_addr: remote_addr.clone(),
-                    rpc,
-                    subject_id: None,
-                    authn_result: "failed",
-                    authz_result: "denied",
-                    role: None,
-                    reason: Some(error.to_string()),
-                    tls_fingerprint: Some(fingerprint.clone()),
-                    rejection_stage: Some("cert_validation_failed"),
-                });
+                let _ = self.audit(
+                    request_id.as_deref(),
+                    AuditEvent {
+                        transport: "tcp",
+                        remote_addr: remote_addr.clone(),
+                        rpc,
+                        subject_id: None,
+                        authn_result: "failed",
+                        authz_result: "denied",
+                        role: None,
+                        reason: Some(error.to_string()),
+                        tls_fingerprint: Some(fingerprint.clone()),
+                        rejection_stage: Some("cert_validation_failed"),
+                    },
+                );
                 return Err(AuthzError::Unauthenticated(
                     "client certificate missing URI SAN",
                 ));
@@ -188,91 +213,107 @@ impl ControlPlaneSecurity {
         {
             Some(subject) if !subject.disabled => subject,
             Some(_) => {
-                let _ = self.audit(AuditEvent {
-                    transport: "tcp",
-                    remote_addr,
-                    rpc,
-                    subject_id: Some(subject_id),
-                    authn_result: "succeeded",
-                    authz_result: "denied",
-                    role: None,
-                    reason: Some("subject disabled".to_string()),
-                    tls_fingerprint: Some(fingerprint),
-                    rejection_stage: Some("subject_disabled"),
-                });
+                let _ = self.audit(
+                    request_id.as_deref(),
+                    AuditEvent {
+                        transport: "tcp",
+                        remote_addr,
+                        rpc,
+                        subject_id: Some(subject_id),
+                        authn_result: "succeeded",
+                        authz_result: "denied",
+                        role: None,
+                        reason: Some("subject disabled".to_string()),
+                        tls_fingerprint: Some(fingerprint),
+                        rejection_stage: Some("subject_disabled"),
+                    },
+                );
                 return Err(AuthzError::PermissionDenied("subject disabled"));
             }
             None => {
-                let _ = self.audit(AuditEvent {
-                    transport: "tcp",
-                    remote_addr,
-                    rpc,
-                    subject_id: Some(subject_id),
-                    authn_result: "succeeded",
-                    authz_result: "denied",
-                    role: None,
-                    reason: Some("subject not present in policy".to_string()),
-                    tls_fingerprint: Some(fingerprint),
-                    rejection_stage: Some("subject_not_found"),
-                });
+                let _ = self.audit(
+                    request_id.as_deref(),
+                    AuditEvent {
+                        transport: "tcp",
+                        remote_addr,
+                        rpc,
+                        subject_id: Some(subject_id),
+                        authn_result: "succeeded",
+                        authz_result: "denied",
+                        role: None,
+                        reason: Some("subject not present in policy".to_string()),
+                        tls_fingerprint: Some(fingerprint),
+                        rejection_stage: Some("subject_not_found"),
+                    },
+                );
                 return Err(AuthzError::PermissionDenied("subject not authorized"));
             }
         };
 
         if !subject.role.allows(required) {
-            let _ = self.audit(AuditEvent {
-                transport: "tcp",
-                remote_addr: request.remote_addr().map(|addr| addr.to_string()),
-                rpc,
-                subject_id: Some(subject.id.clone()),
-                authn_result: "succeeded",
-                authz_result: "denied",
-                role: Some(subject.role.as_str().to_string()),
-                reason: Some(format!(
-                    "role {} cannot call {}",
-                    subject.role.as_str(),
-                    rpc
-                )),
-                tls_fingerprint: Some(fingerprint),
-                rejection_stage: Some("role_insufficient"),
-            });
+            let _ = self.audit(
+                request_id.as_deref(),
+                AuditEvent {
+                    transport: "tcp",
+                    remote_addr: request.remote_addr().map(|addr| addr.to_string()),
+                    rpc,
+                    subject_id: Some(subject.id.clone()),
+                    authn_result: "succeeded",
+                    authz_result: "denied",
+                    role: Some(subject.role.as_str().to_string()),
+                    reason: Some(format!(
+                        "role {} cannot call {}",
+                        subject.role.as_str(),
+                        rpc
+                    )),
+                    tls_fingerprint: Some(fingerprint),
+                    rejection_stage: Some("role_insufficient"),
+                },
+            );
             return Err(AuthzError::PermissionDenied("permission denied"));
         }
 
-        let _ = self.audit(AuditEvent {
-            transport: "tcp",
-            remote_addr: request.remote_addr().map(|addr| addr.to_string()),
-            rpc,
-            subject_id: Some(subject.id.clone()),
-            authn_result: "succeeded",
-            authz_result: "allowed",
-            role: Some(subject.role.as_str().to_string()),
-            reason: None,
-            tls_fingerprint: Some(fingerprint),
-            rejection_stage: None,
-        });
-        if required == Role::Admin {
-            let _ = self.audit(AuditEvent {
+        let _ = self.audit(
+            request_id.as_deref(),
+            AuditEvent {
                 transport: "tcp",
                 remote_addr: request.remote_addr().map(|addr| addr.to_string()),
                 rpc,
                 subject_id: Some(subject.id.clone()),
                 authn_result: "succeeded",
-                authz_result: "admin_rpc_called",
+                authz_result: "allowed",
                 role: Some(subject.role.as_str().to_string()),
                 reason: None,
-                tls_fingerprint: None,
+                tls_fingerprint: Some(fingerprint),
                 rejection_stage: None,
-            });
+            },
+        );
+        if required == Role::Admin {
+            let _ = self.audit(
+                request_id.as_deref(),
+                AuditEvent {
+                    transport: "tcp",
+                    remote_addr: request.remote_addr().map(|addr| addr.to_string()),
+                    rpc,
+                    subject_id: Some(subject.id.clone()),
+                    authn_result: "succeeded",
+                    authz_result: "admin_rpc_called",
+                    role: Some(subject.role.as_str().to_string()),
+                    reason: None,
+                    tls_fingerprint: None,
+                    rejection_stage: None,
+                },
+            );
         }
 
         Ok(())
     }
 
-    fn audit(&self, event: AuditEvent<'_>) -> Result<()> {
+    fn audit(&self, request_id: Option<&str>, event: AuditEvent<'_>) -> Result<()> {
         insert_control_plane_audit(
             &self.db_path,
             &ControlPlaneAuditRecord {
+                request_id: request_id.map(str::to_owned),
                 transport: event.transport.to_string(),
                 remote_addr: event.remote_addr,
                 rpc: event.rpc.to_string(),
@@ -695,6 +736,7 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         "Ping" | "TaskList" | "TaskInfo" | "TaskTimeline" | "TaskLogs" | "TaskFollow"
         | "TaskWatch" | "TaskTimelineFollow" | "Get"
         | "AttentionList" | "AttentionGet" | "AttentionFollow"
+        | "ActionAuditList" | "ActionAuditGet"
         | "SourceEventList" | "SourceEventGet" | "SourceBindingList"
         | "HandoffGet" | "ResumeBoundaryList"
         | "Describe" | "StoreGet" | "StoreList" | "WorkerStatus" | "Check" | "ManifestExport"
@@ -714,6 +756,7 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         | "SourceEventIngest" | "SourceBind"
         | "HandoffGenerate" | "ResumePlan" | "ResumeExecute"
         | "AgentSessionHeartbeat" | "AgentSessionSendInput" | "AgentSessionClose"
+        | "AgentSessionWriterAttach" | "AgentSessionWriterDetach"
         // Reclassified from Admin: Shutdown is redundant (CLI sends SIGTERM),
         // TaskDelete aligns with TaskDeleteBulk, Delete aligns with Apply.
         | "Shutdown" | "TaskDelete" | "Delete" => Role::Operator,
@@ -839,6 +882,8 @@ mod tests {
         assert_eq!(required_role_for_rpc("TaskEvents"), Role::ReadOnly);
         assert_eq!(required_role_for_rpc("TaskTimeline"), Role::ReadOnly);
         assert_eq!(required_role_for_rpc("TaskTimelineFollow"), Role::ReadOnly);
+        assert_eq!(required_role_for_rpc("ActionAuditList"), Role::ReadOnly);
+        assert_eq!(required_role_for_rpc("ActionAuditGet"), Role::ReadOnly);
 
         // Operator
         assert_eq!(required_role_for_rpc("Apply"), Role::Operator);
@@ -847,6 +892,11 @@ mod tests {
         assert_eq!(required_role_for_rpc("AgentCordon"), Role::Operator);
         assert_eq!(required_role_for_rpc("DbVacuum"), Role::Operator);
         assert_eq!(required_role_for_rpc("RunStep"), Role::Operator);
+        assert_eq!(required_role_for_rpc("AttentionClaim"), Role::Operator);
+        assert_eq!(
+            required_role_for_rpc("AgentSessionSendInput"),
+            Role::Operator
+        );
         // Reclassified from Admin to Operator (least-privilege reform)
         assert_eq!(required_role_for_rpc("Shutdown"), Role::Operator);
         assert_eq!(required_role_for_rpc("TaskDelete"), Role::Operator);
@@ -860,6 +910,7 @@ mod tests {
         assert_eq!(required_role_for_rpc("SecretKeyBootstrap"), Role::Admin);
         assert_eq!(required_role_for_rpc("SecretKeyRevoke"), Role::Admin);
         assert_eq!(required_role_for_rpc("QaDoctor"), Role::Admin);
+        assert_eq!(required_role_for_rpc("SourceReplay"), Role::Admin);
 
         // Unmapped RPCs default to Admin
         assert_eq!(required_role_for_rpc("UnknownFutureRpc"), Role::Admin);

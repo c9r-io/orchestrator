@@ -1,3 +1,4 @@
+mod action_audit;
 mod agent;
 mod attention;
 mod handoff;
@@ -69,6 +70,10 @@ pub(crate) fn authorize<T>(
     request: &Request<T>,
     rpc: &'static str,
 ) -> std::result::Result<(), AuthzError> {
+    let request_id = request
+        .extensions()
+        .get::<crate::control_plane::ActionRequestId>()
+        .map(|value| value.0.as_str());
     match &server.control_plane {
         Some(control_plane) => control_plane.authorize(request, rpc),
         None => {
@@ -94,6 +99,7 @@ pub(crate) fn authorize<T>(
                         "denied",
                         Some("uds_policy_denied"),
                         Some(effective_role),
+                        request_id,
                     );
                     return Err(AuthzError::PermissionDenied(
                         "UDS policy restricts this operation",
@@ -110,6 +116,7 @@ pub(crate) fn authorize<T>(
                     "allowed",
                     None,
                     Some(effective_role),
+                    request_id,
                 );
             }
 
@@ -136,6 +143,7 @@ fn uds_audit(
     authz_result: &str,
     rejection_stage: Option<&str>,
     effective_role: Option<Role>,
+    request_id: Option<&str>,
 ) {
     use agent_orchestrator::db::{ControlPlaneAuditRecord, insert_control_plane_audit};
     let peer_exe = peer
@@ -144,6 +152,7 @@ fn uds_audit(
     let _ = insert_control_plane_audit(
         db_path,
         &ControlPlaneAuditRecord {
+            request_id: request_id.map(str::to_owned),
             transport: "uds".into(),
             remote_addr: peer.and_then(|p| p.pid.map(|pid| format!("pid:{pid}"))),
             rpc: rpc.into(),
@@ -338,6 +347,20 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<AttentionFollowRequest>,
     ) -> Result<Response<Self::AttentionFollowStream>, Status> {
         attention::attention_follow(self, request).await
+    }
+
+    async fn action_audit_list(
+        &self,
+        request: Request<ActionAuditListRequest>,
+    ) -> Result<Response<ActionAuditListResponse>, Status> {
+        action_audit::list(self, request).await
+    }
+
+    async fn action_audit_get(
+        &self,
+        request: Request<ActionAuditGetRequest>,
+    ) -> Result<Response<ActionAuditRecord>, Status> {
+        action_audit::get(self, request).await
     }
 
     async fn source_event_list(

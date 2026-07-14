@@ -1,8 +1,8 @@
 use anyhow::Result;
 use orchestrator_proto::{
-    AttentionClaimRequest, AttentionExecuteActionRequest, AttentionFollowRequest,
-    AttentionGetRequest, AttentionListRequest, AttentionResolveRequest, AttentionSnoozeRequest,
-    OrchestratorServiceClient,
+    ActionAuditContext, AttentionClaimRequest, AttentionExecuteActionRequest,
+    AttentionFollowRequest, AttentionGetRequest, AttentionListRequest, AttentionResolveRequest,
+    AttentionSnoozeRequest, OrchestratorServiceClient,
 };
 use tokio_stream::StreamExt;
 use tonic::transport::Channel;
@@ -60,11 +60,17 @@ pub(crate) async fn dispatch(
             expected_version,
             idempotency_key: key,
         } => {
+            let key = idempotency_key(key);
             let item = client
                 .attention_claim(AttentionClaimRequest {
                     id,
                     expected_version,
-                    idempotency_key: idempotency_key(key),
+                    idempotency_key: key.clone(),
+                    audit: Some(ActionAuditContext {
+                        reason_code: "operator_triage".into(),
+                        operator_reason: None,
+                        idempotency_key: Some(key),
+                    }),
                 })
                 .await?
                 .into_inner();
@@ -76,12 +82,18 @@ pub(crate) async fn dispatch(
             until,
             idempotency_key: key,
         } => {
+            let key = idempotency_key(key);
             let item = client
                 .attention_snooze(AttentionSnoozeRequest {
                     id,
                     expected_version,
-                    idempotency_key: idempotency_key(key),
+                    idempotency_key: key.clone(),
                     until,
+                    audit: Some(ActionAuditContext {
+                        reason_code: "operator_snooze".into(),
+                        operator_reason: None,
+                        idempotency_key: Some(key),
+                    }),
                 })
                 .await?
                 .into_inner();
@@ -93,12 +105,18 @@ pub(crate) async fn dispatch(
             reason,
             idempotency_key: key,
         } => {
+            let key = idempotency_key(key);
             let item = client
                 .attention_resolve(AttentionResolveRequest {
                     id,
                     expected_version,
-                    idempotency_key: idempotency_key(key),
-                    reason,
+                    idempotency_key: key.clone(),
+                    reason: reason.clone(),
+                    audit: Some(ActionAuditContext {
+                        reason_code: "operator_resolve".into(),
+                        operator_reason: Some(reason),
+                        idempotency_key: Some(key),
+                    }),
                 })
                 .await?
                 .into_inner();
@@ -111,13 +129,19 @@ pub(crate) async fn dispatch(
             input,
             idempotency_key: key,
         } => {
+            let key = idempotency_key(key);
             let item = client
                 .attention_execute_action(AttentionExecuteActionRequest {
                     id,
                     expected_version,
-                    idempotency_key: idempotency_key(key),
+                    idempotency_key: key.clone(),
                     action_id,
                     input_json: input,
+                    audit: Some(ActionAuditContext {
+                        reason_code: "operator_action".into(),
+                        operator_reason: None,
+                        idempotency_key: Some(key),
+                    }),
                 })
                 .await?
                 .into_inner();

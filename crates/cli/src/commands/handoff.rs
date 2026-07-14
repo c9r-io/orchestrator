@@ -1,7 +1,8 @@
 use anyhow::Result;
 use orchestrator_proto::{
-    HandoffGenerateRequest, HandoffGetRequest, HandoffSnapshotResponse, OrchestratorServiceClient,
-    ResumeBoundary, ResumeBoundaryListRequest, ResumeExecuteRequest, ResumePlanRequest,
+    ActionAuditContext, HandoffGenerateRequest, HandoffGetRequest, HandoffSnapshotResponse,
+    OrchestratorServiceClient, ResumeBoundary, ResumeBoundaryListRequest, ResumeExecuteRequest,
+    ResumePlanRequest,
 };
 use tonic::transport::Channel;
 
@@ -21,6 +22,11 @@ pub async fn dispatch_handoff(
                 .handoff_generate(HandoffGenerateRequest {
                     task_id,
                     source_event_cursor: cursor,
+                    audit: Some(audit_context(
+                        "operator_handoff",
+                        None,
+                        generated_key("handoff"),
+                    )),
                 })
                 .await?
                 .into_inner(),
@@ -84,6 +90,11 @@ pub async fn dispatch_resume(
                     boundary_id: boundary,
                     mode,
                     attention_item_id: attention_item,
+                    audit: Some(audit_context(
+                        "operator_resume_plan",
+                        None,
+                        generated_key("resume-plan"),
+                    )),
                 })
                 .await?
                 .into_inner();
@@ -114,9 +125,14 @@ pub async fn dispatch_resume(
                 .resume_execute(ResumeExecuteRequest {
                     plan_id,
                     expected_state_version,
-                    operator_reason: reason,
-                    idempotency_key,
+                    operator_reason: reason.clone(),
+                    idempotency_key: idempotency_key.clone(),
                     elevated_confirmation,
+                    audit: Some(audit_context(
+                        "operator_resume_execute",
+                        Some(reason),
+                        idempotency_key,
+                    )),
                 })
                 .await?
                 .into_inner();
@@ -180,4 +196,24 @@ fn print_value(value: serde_json::Value, format: OutputFormat) {
 
 fn short(value: &str) -> &str {
     value.get(..18).unwrap_or(value)
+}
+
+fn generated_key(prefix: &str) -> String {
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    format!("cli-{prefix}-{nonce}")
+}
+
+fn audit_context(
+    reason_code: &str,
+    operator_reason: Option<String>,
+    idempotency_key: String,
+) -> ActionAuditContext {
+    ActionAuditContext {
+        reason_code: reason_code.to_string(),
+        operator_reason,
+        idempotency_key: Some(idempotency_key),
+    }
 }

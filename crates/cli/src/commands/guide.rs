@@ -636,6 +636,39 @@ fn source_entries() -> Vec<GuideEntry> {
     ]
 }
 
+fn audit_entries() -> Vec<GuideEntry> {
+    vec![
+        GuideEntry {
+            command: "audit list",
+            alias: Some("audit ls"),
+            category: GuideCategory::Observability,
+            summary: "List canonical action audit evidence",
+            description: "Query project-scoped mutation evidence by actor, target, action, status, or time without exposing request bodies or secrets.",
+            examples: &[
+                (
+                    "orchestrator audit list --project demo --status failed",
+                    "List failed mutations",
+                ),
+                (
+                    "orchestrator audit list --project demo --target-type attention_item -o json",
+                    "Filter evidence by target kind",
+                ),
+            ],
+        },
+        GuideEntry {
+            command: "audit get",
+            alias: None,
+            category: GuideCategory::Observability,
+            summary: "Inspect one action by request ID",
+            description: "Retrieve the canonical envelope used to correlate transport authorization, domain mutation, and event evidence.",
+            examples: &[(
+                "orchestrator audit get req-123 --project demo",
+                "Inspect one canonical request",
+            )],
+        },
+    ]
+}
+
 fn agent_entries() -> Vec<GuideEntry> {
     vec![
         GuideEntry {
@@ -1276,6 +1309,7 @@ fn all_entries() -> Vec<GuideEntry> {
     entries.extend(task_entries());
     entries.extend(attention_entries());
     entries.extend(source_entries());
+    entries.extend(audit_entries());
     entries.extend(run_entries());
     entries.extend(agent_entries());
     entries.extend(store_entries());
@@ -1438,6 +1472,7 @@ fn _exhaustiveness_guard(cmd: crate::Commands) {
         crate::Commands::Event(_) => {}
         crate::Commands::Attention(_) => {}
         crate::Commands::Source(_) => {}
+        crate::Commands::Audit(_) => {}
         crate::Commands::Handoff(_) | crate::Commands::Resume(_) => {}
         crate::Commands::Trigger(_) => {}
         crate::Commands::Qa(_) => {}

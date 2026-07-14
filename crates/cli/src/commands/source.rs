@@ -1,8 +1,8 @@
 use anyhow::Result;
 use orchestrator_proto::{
-    OrchestratorServiceClient, SourceBindRequest, SourceBinding, SourceBindingListRequest,
-    SourceEvent, SourceEventGetRequest, SourceEventIngestRequest, SourceEventListRequest,
-    SourceReplayRequest,
+    ActionAuditContext, OrchestratorServiceClient, SourceBindRequest, SourceBinding,
+    SourceBindingListRequest, SourceEvent, SourceEventGetRequest, SourceEventIngestRequest,
+    SourceEventListRequest, SourceReplayRequest,
 };
 use sha2::{Digest, Sha256};
 use tonic::transport::Channel;
@@ -56,6 +56,7 @@ pub(crate) async fn dispatch(
                     project_id: project,
                     normalized_json,
                     payload_hash,
+                    audit: Some(audit_context("operator_source_ingest", "ingest")),
                 })
                 .await?
                 .into_inner();
@@ -96,6 +97,7 @@ pub(crate) async fn dispatch(
                     thread_id: thread,
                     binding_type,
                     created_by_event_id: source_event,
+                    audit: Some(audit_context("operator_source_bind", "bind")),
                 })
                 .await?
                 .into_inner();
@@ -103,13 +105,28 @@ pub(crate) async fn dispatch(
         }
         SourceCommands::Replay { id } => {
             let response = client
-                .source_replay(SourceReplayRequest { id })
+                .source_replay(SourceReplayRequest {
+                    id,
+                    audit: Some(audit_context("operator_source_replay", "replay")),
+                })
                 .await?
                 .into_inner();
             println!("{}\t{}", response.id, response.status);
         }
     }
     Ok(())
+}
+
+fn audit_context(reason_code: &str, prefix: &str) -> ActionAuditContext {
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    ActionAuditContext {
+        reason_code: reason_code.to_string(),
+        operator_reason: None,
+        idempotency_key: Some(format!("cli-source-{prefix}-{nonce}")),
+    }
 }
 
 fn print_events(events: &[SourceEvent], output: OutputFormat) -> Result<()> {

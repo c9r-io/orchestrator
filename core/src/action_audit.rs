@@ -154,6 +154,24 @@ impl AsyncActionAuditRepository {
             .map_err(flatten_err)
     }
 
+    /// Persists an authorization denial without allowing its retry identity to block a later
+    /// authorized attempt.
+    pub async fn deny(
+        &self,
+        input: ActionAuditReservation,
+        error_code: &str,
+    ) -> Result<ActionAuditRecord> {
+        let error_code = error_code.to_owned();
+        self.db
+            .writer()
+            .call(move |conn| {
+                deny(conn, input, &error_code)
+                    .map_err(|error| tokio_rusqlite::Error::Other(error.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
     /// Marks an envelope terminal with an allowlisted result reference.
     pub async fn complete(
         &self,
@@ -329,6 +347,46 @@ fn reserve(
         should_execute: inserted == 1,
         record,
     })
+}
+
+fn deny(
+    conn: &Connection,
+    input: ActionAuditReservation,
+    error_code: &str,
+) -> Result<ActionAuditRecord> {
+    validate(&input)?;
+    if error_code.trim().is_empty() || error_code.len() > 64 {
+        bail!("error_code must contain 1-64 characters");
+    }
+    let request_hash = canonical_request_hash(&input.canonical_request)?;
+    let now = now_ts();
+    conn.execute(
+        "INSERT INTO control_action_audit
+         (request_id,schema_version,project_id,actor,resolved_role,transport,target_type,target_id,
+          action,reason_code,operator_reason,idempotency_key,expected_version,fencing_token,
+          request_hash,status,error_code,created_at,updated_at,completed_at)
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,'denied',?16,?17,?17,?17)",
+        params![
+            input.request_id,
+            SCHEMA_VERSION,
+            input.project_id,
+            input.actor,
+            input.resolved_role,
+            input.transport,
+            input.target_type,
+            input.target_id,
+            input.action,
+            input.reason_code,
+            input.operator_reason,
+            input.idempotency_key,
+            input.expected_version,
+            input.fencing_token,
+            request_hash,
+            error_code,
+            now,
+        ],
+    )?;
+    read_by_request_id(conn, &input.request_id)?.context("denied action audit missing")
 }
 
 fn complete(
@@ -580,5 +638,68 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].status, "succeeded");
         assert_eq!(rows[0].result_id.as_deref(), Some("attn-1"));
+    }
+
+    #[tokio::test]
+    async fn concurrent_matching_retry_has_one_execution_owner() {
+        let (_directory, repository) = repository().await;
+        let left = repository.reserve(input(
+            "req-concurrent-1",
+            "retry-concurrent",
+            serde_json::json!({"version": 1}),
+        ));
+        let right = repository.reserve(input(
+            "req-concurrent-2",
+            "retry-concurrent",
+            serde_json::json!({"version": 1}),
+        ));
+        let (left, right) = tokio::join!(left, right);
+        let owners = [left.expect("left"), right.expect("right")]
+            .into_iter()
+            .filter(|result| result.should_execute)
+            .count();
+        assert_eq!(owners, 1);
+    }
+
+    #[tokio::test]
+    async fn stored_envelope_contains_hash_not_request_body() {
+        let (_directory, repository) = repository().await;
+        let secret = "raw-terminal-input-must-not-survive";
+        let result = repository
+            .reserve(input(
+                "req-redacted",
+                "retry-redacted",
+                serde_json::json!({"input_sha256": canonical_request_hash(&serde_json::json!(secret)).expect("hash")}),
+            ))
+            .await
+            .expect("reserve");
+        let encoded = serde_json::to_string(&result.record).expect("serialize record");
+        assert!(!encoded.contains(secret));
+        assert!(!encoded.contains("canonical_request"));
+    }
+
+    #[tokio::test]
+    async fn denied_retry_identity_does_not_block_later_authorized_attempt() {
+        let (_directory, repository) = repository().await;
+        repository
+            .deny(
+                input(
+                    "req-denied",
+                    "retry-shared",
+                    serde_json::json!({"version": 1}),
+                ),
+                "authorization_denied",
+            )
+            .await
+            .expect("record denial");
+        let authorized = repository
+            .reserve(input(
+                "req-authorized",
+                "retry-shared",
+                serde_json::json!({"version": 1}),
+            ))
+            .await
+            .expect("authorized reservation");
+        assert!(authorized.should_execute);
     }
 }

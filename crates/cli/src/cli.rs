@@ -182,6 +182,10 @@ pub enum Commands {
     #[command(alias = "src", subcommand)]
     Source(SourceCommands),
 
+    /// Query canonical control-plane action audit evidence
+    #[command(subcommand)]
+    Audit(AuditCommands),
+
     /// Generate and inspect immutable task handoffs
     #[command(subcommand)]
     Handoff(HandoffCommands),
@@ -465,6 +469,56 @@ pub enum SourceCommands {
     },
 }
 
+/// Canonical control-plane action audit queries.
+#[derive(Subcommand, Debug, Clone)]
+pub enum AuditCommands {
+    /// List recent action audit records within one project.
+    #[command(alias = "ls")]
+    List {
+        /// Required project isolation scope.
+        #[arg(short, long)]
+        project: String,
+        /// Optional trusted actor filter.
+        #[arg(long)]
+        actor: Option<String>,
+        /// Optional target kind filter.
+        #[arg(long)]
+        target_type: Option<String>,
+        /// Optional target identifier filter.
+        #[arg(long)]
+        target_id: Option<String>,
+        /// Optional closed action filter.
+        #[arg(long)]
+        action: Option<String>,
+        /// Optional terminal status filter.
+        #[arg(long)]
+        status: Option<String>,
+        /// Inclusive RFC3339 lower timestamp bound.
+        #[arg(long)]
+        from: Option<String>,
+        /// Exclusive RFC3339 upper timestamp bound.
+        #[arg(long)]
+        to: Option<String>,
+        /// Maximum number of records.
+        #[arg(long, default_value_t = 100)]
+        limit: u32,
+        /// Output encoding.
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+    /// Get one action audit record by request ID.
+    Get {
+        /// Canonical request identifier.
+        request_id: String,
+        /// Required project isolation scope.
+        #[arg(short, long)]
+        project: String,
+        /// Output encoding.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
+}
+
 /// Immutable task handoff operations.
 #[derive(Subcommand, Debug, Clone)]
 pub enum HandoffCommands {
@@ -620,7 +674,9 @@ pub enum QaCommands {
 
 #[cfg(test)]
 mod tests {
-    use super::{Cli, Commands, DbCommands, DbMigrationCommands, EventCommands, TaskCommands};
+    use super::{
+        AuditCommands, Cli, Commands, DbCommands, DbMigrationCommands, EventCommands, TaskCommands,
+    };
     use clap::Parser;
 
     #[test]
@@ -702,6 +758,32 @@ mod tests {
                 ..
             }) if task_id == "task-1" && categories == ["failure"]
         ));
+    }
+
+    #[test]
+    fn audit_list_requires_project_and_parses_filters() {
+        let cli = Cli::try_parse_from([
+            "orchestrator",
+            "audit",
+            "list",
+            "--project",
+            "demo",
+            "--status",
+            "failed",
+            "--output",
+            "json",
+        ])
+        .expect("audit list should parse");
+        assert!(matches!(
+            cli.command,
+            Commands::Audit(AuditCommands::List {
+                project,
+                status: Some(status),
+                output: super::OutputFormat::Json,
+                ..
+            }) if project == "demo" && status == "failed"
+        ));
+        assert!(Cli::try_parse_from(["orchestrator", "audit", "list"]).is_err());
     }
 }
 
