@@ -46,7 +46,7 @@ impl SessionReadLimits {
 
 fn ensure_read_enabled(server: &OrchestratorServer) -> Result<(), Status> {
     let enabled = read_active_config(&server.state)
-        .map(|active| active.config.runtime_policy().session_read_enabled)
+        .map(|active| active.config.global_runtime_policy().session_read_enabled)
         .unwrap_or(false);
     enabled
         .then_some(())
@@ -55,7 +55,12 @@ fn ensure_read_enabled(server: &OrchestratorServer) -> Result<(), Status> {
 
 fn ensure_control_enabled(server: &OrchestratorServer) -> Result<(), Status> {
     let enabled = read_active_config(&server.state)
-        .map(|active| active.config.runtime_policy().session_control_enabled)
+        .map(|active| {
+            active
+                .config
+                .global_runtime_policy()
+                .session_control_enabled
+        })
         .unwrap_or(false);
     enabled
         .then_some(())
@@ -703,6 +708,7 @@ pub(crate) async fn read(
     ensure_read_enabled(server)?;
     let req = request.into_inner();
     let row = load(server, &req.session_id).await?;
+    let project_id = session_project(server, &row)?;
     let reader_permit = server.session_read_limits.acquire(&req.session_id).await?;
     let path = if std::path::Path::new(&row.transcript_path).exists() {
         row.transcript_path.clone()
@@ -710,7 +716,13 @@ pub(crate) async fn read(
         row.stdout_path.clone()
     };
     let patterns = read_active_config(&server.state)
-        .map(|a| a.config.runtime_policy().runner.redaction_patterns)
+        .map(|active| {
+            active
+                .config
+                .runtime_policy_for_project(&project_id)
+                .runner
+                .redaction_patterns
+        })
         .unwrap_or_default();
     let (tx, rx) = tokio::sync::mpsc::channel(16);
     let session_id = req.session_id.clone();

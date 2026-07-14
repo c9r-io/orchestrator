@@ -142,7 +142,7 @@ pub(crate) async fn prune(
         .map_err(|error| Status::internal(error.to_string()))?;
     let configured = loaded
         .config
-        .runtime_policy()
+        .global_runtime_policy()
         .observability
         .process_metrics
         .retention_days;

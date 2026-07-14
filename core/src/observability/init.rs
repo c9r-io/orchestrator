@@ -190,7 +190,7 @@ pub fn resolve_logging_config(
     overrides: CliLoggingOverrides,
 ) -> ResolvedLoggingConfig {
     let logging = config
-        .map(|cfg| cfg.runtime_policy().observability.logging.clone())
+        .map(|cfg| cfg.global_runtime_policy().observability.logging.clone())
         .unwrap_or_default();
 
     let mut level = logging.level;

@@ -31,16 +31,26 @@ pub async fn stream_task_logs_impl(
     let runs = state.task_repo.list_task_log_runs(&resolved_id, 14).await?;
     let redaction_patterns = {
         let active = read_loaded_config(state)?;
-        let mut patterns = active.config.runtime_policy().runner.redaction_patterns;
         if let Ok(summary) = state.task_repo.load_task_summary(&resolved_id).await {
+            let mut patterns = active
+                .config
+                .runtime_policy_for_project(&summary.project_id)
+                .runner
+                .redaction_patterns;
             let effective = active
                 .config
                 .effective_project_id(Some(&summary.project_id));
             if let Some(project) = active.config.projects.get(effective) {
                 patterns.extend(collect_all_sensitive_store_values(&project.secret_stores));
             }
+            patterns
+        } else {
+            active
+                .config
+                .global_runtime_policy()
+                .runner
+                .redaction_patterns
         }
-        patterns
     };
 
     let mut chunks = Vec::new();
@@ -114,17 +124,27 @@ where
 {
     let redaction_patterns = {
         let active = read_loaded_config(state)?;
-        let mut patterns = active.config.runtime_policy().runner.redaction_patterns;
         let resolved_id = resolve_task_id(state, task_id).await?;
         if let Ok(summary) = state.task_repo.load_task_summary(&resolved_id).await {
+            let mut patterns = active
+                .config
+                .runtime_policy_for_project(&summary.project_id)
+                .runner
+                .redaction_patterns;
             let effective = active
                 .config
                 .effective_project_id(Some(&summary.project_id));
             if let Some(project) = active.config.projects.get(effective) {
                 patterns.extend(collect_all_sensitive_store_values(&project.secret_stores));
             }
+            patterns
+        } else {
+            active
+                .config
+                .global_runtime_policy()
+                .runner
+                .redaction_patterns
         }
-        patterns
     };
 
     let mut stdout_pos: u64 = 0;

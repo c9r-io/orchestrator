@@ -270,7 +270,11 @@ fn timeline_redaction_patterns(
     project_id: &str,
 ) -> anyhow::Result<Vec<String>> {
     let active = read_loaded_config(state)?;
-    let mut patterns = active.config.runtime_policy().runner.redaction_patterns;
+    let mut patterns = active
+        .config
+        .runtime_policy_for_project(project_id)
+        .runner
+        .redaction_patterns;
     let effective = active.config.effective_project_id(Some(project_id));
     if let Some(project) = active.config.projects.get(effective) {
         patterns.extend(collect_all_sensitive_store_values(&project.secret_stores));
