@@ -16,6 +16,8 @@ Race conditions commonly occur in "check then act" flows:
 - Uniqueness constraints (check missing -> create)
 - State transitions (check state -> mutate)
 
+Project-specific FR-102 overlay: race two different writer clients for one agent session and require exactly one lease owner; then retry identical input with one idempotency key and require one FIFO write plus the original `accepted_bytes`. A later owner must receive a greater fencing token, and the stale token must perform neither input nor detach. Run `docs/qa/orchestrator/149-agent-session-control-plane-hardening.md`.
+
 ---
 
 ## Scenario 1: Concurrent Use Of A One-Time Token (If Applicable)
@@ -97,4 +99,3 @@ Verify concurrent transitions do not result in illegal states.
 ### Expected Secure Behavior
 - Final state respects defined transitions
 - Illegal transitions are rejected
-

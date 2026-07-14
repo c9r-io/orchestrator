@@ -79,7 +79,6 @@
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
-| FR-102 | Agent Session Control Plane 硬化与验收 | P1 | Proposed |
 | FR-103 | Process Console 恢复、Attention 通知与 Live E2E | P1 | Proposed |
 | FR-104 | Process Console 产品指标与本地运营视图 | P1 | Proposed |
 
@@ -92,8 +91,9 @@
 - `Implemented`: 需求已完成并进入维护阶段
 - 已闭环并删除的 FR，应由对应 `docs/design_doc/**` 与 `docs/qa/**` 继续承载设计和验证信息
 - FR-098 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/108-agent-session-control-plane.md`、`docs/qa/orchestrator/145-agent-session-control-plane.md` 与 `fixtures/manifests/bundles/session-control-mock.yaml` 承载
-- FR-095 至 FR-101 已闭环为基础 DD/QA 产物；2026-07-14 实现审计识别出的剩余跨切片缺口由 FR-102 至 FR-104 承载，整体状态与依赖顺序见 `docs/feature_request/agent-process-console-roadmap.md`
+- FR-095 至 FR-102 已闭环为基础 DD/QA 产物；2026-07-14 实现审计识别出的剩余跨切片缺口由 FR-103 与 FR-104 承载，整体状态与依赖顺序见 `docs/feature_request/agent-process-console-roadmap.md`
 - FR-101 已闭环删除；其统一 Action Audit Envelope、迁移/兼容设计与可复现验证现由 `docs/design_doc/orchestrator/111-control-plane-action-audit-envelope.md`、`docs/qa/orchestrator/148-control-plane-action-audit-envelope.md` 与 `scripts/qa/test-control-plane-action-audit.sh` 承载
+- FR-102 已闭环删除；其 Session Control Plane 硬化、迁移/重启/并发/RBAC/GUI 验收现由 `docs/design_doc/orchestrator/112-agent-session-control-plane-hardening.md`、`docs/qa/orchestrator/149-agent-session-control-plane-hardening.md` 与 `scripts/qa/test-agent-session-control-plane.sh` 承载
 - FR-100 已闭环删除；其信息架构、迁移/回滚设计与可复现 UI 验证现由 `docs/design_doc/orchestrator/110-process-console-information-architecture.md`、`docs/qa/orchestrator/147-process-console-ui.md` 与 `scripts/qa/test-process-console-ui.sh` 承载
 - FR-097 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/107-handoff-and-safe-resume.md`、`docs/qa/orchestrator/144-handoff-and-safe-resume.md` 与 `scripts/qa/test-handoff-safe-resume.sh` 承载
 - FR-099 已闭环删除；其设计、验证与 deterministic fixture 现由 `docs/design_doc/orchestrator/109-source-events-and-slack-binding.md`、`docs/qa/orchestrator/146-source-events-and-slack-binding.md`、`fixtures/manifests/bundles/source-events-fixture.yaml` 与 `scripts/qa/test-source-events-slack.sh` 承载

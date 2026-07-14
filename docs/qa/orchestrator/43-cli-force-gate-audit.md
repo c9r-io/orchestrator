@@ -23,7 +23,7 @@ High-risk CLI operations that perform irreversible state changes require an expl
 | `delete project/<project>` | Deletes project and all its data | ✓ existing |
 | `apply --project <project>` | Overwrites existing project | ✓ existing |
 | `init` | Overwrites existing config | ✓ existing |
-| `agent session close <id> --reason <text>` | Signals a fingerprint-verified backing process | governed reason/version/idempotency gate; see QA-145 |
+| `agent session close <id> --reason <text>` | Signals a fingerprint-verified backing process | governed reason/version/idempotency gate; see QA-149 |
 | `config backfill-events` | Bulk UPDATE all event rows | ✓ new |
 | `task retry <item>` | Resets item execution state | ✓ new |
 

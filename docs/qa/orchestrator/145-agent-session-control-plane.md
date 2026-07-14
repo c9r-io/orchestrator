@@ -1,9 +1,14 @@
+---
+self_referential_safe: true
+---
+
 # Orchestrator - Agent Session Control Plane
 
 **Module**: orchestrator
 **Scope**: Session migration, observation, fenced control, restart safety, and Process Console interaction
 **Scenarios**: 5
 **Priority**: High
+**Status**: Superseded by `docs/qa/orchestrator/149-agent-session-control-plane-hardening.md`
 
 ---
 
@@ -182,8 +187,8 @@ FROM agent_sessions WHERE id IN ('{live_id}','{detached_id}','{closed_id}','{fai
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Migration compatibility and public observation | ☐ | | | |
-| 2 | Independent readers and offset reconnect | ☐ | | | |
-| 3 | Writer heartbeat, fencing, and idempotent input | ☐ | | | |
-| 4 | RBAC, policy, PID reuse, and close | ☐ | | | |
-| 5 | Restart reconciliation and UI entry visibility | ☐ | | | |
+| 1 | Migration compatibility and public observation | PASS | 2026-07-14 | Codex | Superseded execution: QA-149 Scenario 1 and isolated script PASS |
+| 2 | Independent readers and offset reconnect | PASS | 2026-07-14 | Codex | Superseded execution: QA-149 Scenario 2 and browser reconnect PASS |
+| 3 | Writer heartbeat, fencing, and idempotent input | PASS | 2026-07-14 | Codex | Superseded execution: QA-149 Scenario 3 and atomic replay PASS |
+| 4 | RBAC, policy, PID reuse, and close | PASS | 2026-07-14 | Codex | Superseded execution: QA-149 Scenario 4 and UDS/PID checks PASS |
+| 5 | Restart reconciliation and UI entry visibility | PASS | 2026-07-14 | Codex | Superseded execution: QA-149 Scenario 5 and Playwright entry PASS |

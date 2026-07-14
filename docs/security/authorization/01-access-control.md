@@ -18,6 +18,8 @@ Access control issues are often not "missing authentication", but:
 
 Project-specific overlay: for FR-097, verify `HandoffGet` and `ResumeBoundaryList` allow `read_only+`, while `HandoffGenerate`, `ResumePlan`, and `ResumeExecute` require `operator+`. The server must derive the actor from mTLS/UDS identity and ignore any client attempt to self-report an actor or role. See `docs/qa/orchestrator/144-handoff-and-safe-resume.md`.
 
+FR-098/FR-102 overlay: `AgentSessionList/Get/Read/ResolvePid` and reader Attach allow `read_only+`; writer Attach, Heartbeat, SendInput, writer Detach, and Close require `operator+` and the global `_system` `session_control_enabled` policy. Read-only UI must omit writer, input, and close controls rather than merely hiding them. Verify trusted transport roles, denial request IDs, and the feature gate with `docs/qa/orchestrator/149-agent-session-control-plane-hardening.md`.
+
 FR-099 overlay: `SourceEventList/Get` and `SourceBindingList` require `read_only+`; `SourceEventIngest` and `SourceBind` require `operator+`; `SourceReplay` requires `admin`. Slack actors do not inherit the control-plane caller role: the daemon resolves `actorRoles` from the trusted Trigger installation and defaults unknown users to `read_only`. Verify privileged external commands fail closed and record the resolved role with `docs/qa/orchestrator/146-source-events-and-slack-binding.md`.
 
 ---

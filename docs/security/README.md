@@ -31,7 +31,7 @@ API_TOKEN="{bearer_token}"                # If authentication is required
 ### Authorization
 | Doc | Description | Scenarios | Risk |
 |------|------|--------|----------|
-| `docs/security/authorization/01-access-control.md` | Access control, IDOR, privilege boundaries, source-event RBAC overlay | 5 | Critical |
+| `docs/security/authorization/01-access-control.md` | Access control, IDOR, privilege boundaries, session/source RBAC overlays | 5 | Critical |
 
 ### Input Validation
 | Doc | Description | Scenarios | Risk |
@@ -72,7 +72,7 @@ API_TOKEN="{bearer_token}"                # If authentication is required
 | Doc | Description | Scenarios | Risk |
 |------|------|--------|----------|
 | `docs/security/business-logic/01-workflow-abuse.md` | Workflow abuse/replay/idempotency | 4 | Critical |
-| `docs/security/business-logic/02-race-conditions.md` | Race conditions/TOCTOU | 4 | Critical |
+| `docs/security/business-logic/02-race-conditions.md` | Race conditions/TOCTOU, including session writer and input replay overlay | 4 | Critical |
 
 ### File Security (If Applicable)
 | Doc | Description | Scenarios | Risk |
@@ -86,5 +86,5 @@ API_TOKEN="{bearer_token}"                # If authentication is required
 3. If the project has webhooks/URL fetch/callbacks: also run SSRF docs.
 4. If the project has concurrency-sensitive operations (one-time tokens, redemption, payments, invites, quotas): also run business logic and race-condition docs.
 5. For handoff/resume changes, run the overlays in access control, workflow abuse, and sensitive-data docs together with `docs/qa/orchestrator/144-handoff-and-safe-resume.md`.
-6. For interactive session changes, run the FR-098 overlay in `data-security/01-sensitive-data.md` with `docs/qa/orchestrator/145-agent-session-control-plane.md`.
+6. For interactive session changes, run the FR-098/FR-102 overlays in `authorization/01-access-control.md`, `business-logic/02-race-conditions.md`, and `data-security/01-sensitive-data.md` with `docs/qa/orchestrator/149-agent-session-control-plane-hardening.md`; QA-145 is the original specification.
 7. For source-adapter changes, run the FR-099 overlays in access control, injection, sensitive-data, and logging docs with `docs/qa/orchestrator/146-source-events-and-slack-binding.md`.

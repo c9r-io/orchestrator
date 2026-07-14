@@ -266,10 +266,11 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/142-process-timeline-read-model.md` | 5 | FR-095 semantic process timeline, evidence, pagination, live GUI reconciliation |
 | orchestrator | `docs/qa/orchestrator/143-attention-inbox.md` | 5 | FR-096 persistent attention projection, concurrency, RBAC, actions, and default GUI |
 | orchestrator | `docs/qa/orchestrator/144-handoff-and-safe-resume.md` | 5 | FR-097 immutable handoffs, logical boundaries, stale-safe execution, provider opacity, and GUI preview |
-| orchestrator | `docs/qa/orchestrator/145-agent-session-control-plane.md` | 5 | FR-098 session migration, independent readers, fenced writer control, restart reconciliation, and TaskDetail UI |
+| orchestrator | `docs/qa/orchestrator/145-agent-session-control-plane.md` | 5 | FR-098 original session control specification; execution status superseded by QA-149 |
 | orchestrator | `docs/qa/orchestrator/146-source-events-and-slack-binding.md` | 5 | FR-099 provider-neutral source ingestion, Slack verification, deterministic process binding, audited actions, and Sources UI |
 | orchestrator | `docs/qa/orchestrator/147-process-console-ui.md` | 5 | FR-100 Attention-first console navigation, failed-process evidence flow, role gates, session re-entry, and responsive fallbacks |
 | orchestrator | `docs/qa/orchestrator/148-control-plane-action-audit-envelope.md` | 5 | FR-101 canonical mutation envelope, request-ID joins, retry conflicts, denial evidence, redaction, and rollout enforcement |
+| orchestrator | `docs/qa/orchestrator/149-agent-session-control-plane-hardening.md` | 5 | FR-102 executable closure for migration, bounded readers, fenced atomic input, PID identity, restart, RBAC, and GUI re-entry |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |

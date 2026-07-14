@@ -3,9 +3,9 @@
 **Module**: orchestrator
 **Status**: Approved
 **Related Plan**: FR-098; daemon-authoritative session resources, fenced writer leases, resumable transcript streams, CLI/Tauri/process-console integration
-**Related QA**: `docs/qa/orchestrator/145-agent-session-control-plane.md`
+**Related QA**: `docs/qa/orchestrator/145-agent-session-control-plane.md`; hardened closure in `docs/qa/orchestrator/149-agent-session-control-plane-hardening.md`
 **Created**: 2026-07-12
-**Last Updated**: 2026-07-12
+**Last Updated**: 2026-07-14
 
 ## Background
 
@@ -92,6 +92,11 @@ Migration 29 adds the following columns to `agent_sessions`: `state_version`, `w
 ## QA Docs
 
 - `docs/qa/orchestrator/145-agent-session-control-plane.md`
+- `docs/qa/orchestrator/149-agent-session-control-plane-hardening.md` (FR-102 executable closure)
+
+## Hardening Closure
+
+DD-112 preserves this public design while tightening restart reconciliation, per-session stream occupancy, atomic 4096-byte input, canonical/domain retry replay, process-incarnation checks, Tauri stream replacement, and committed-offset GUI reconnect. The provider-free acceptance entry point is `scripts/qa/test-agent-session-control-plane.sh`.
 
 ## Acceptance Criteria
 

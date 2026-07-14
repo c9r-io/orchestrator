@@ -281,9 +281,15 @@ if ! start_read_only_daemon; then
   sed 's/^/  /' "$QA_ROOT/daemon-uds.log" >&2
   exit 1
 fi
+for _ in {1..40}; do
+  READ_ONLY_STATE="$("$ORCH" agent session get "$SESSION_ID" -o json | jq -r '.[0].state')"
+  [[ "$READ_ONLY_STATE" == "detached" ]] && break
+  sleep 0.25
+done
 "$ORCH" agent session list --task "$TASK_ID" -o json > "$QA_ROOT/read-only-list.json"
 "$ORCH" agent session get "$SESSION_ID" -o json > "$QA_ROOT/read-only-get.json"
 "$ORCH" agent session read "$SESSION_ID" --offset 0 --chunks-json > "$QA_ROOT/read-only-read.jsonl"
+"$ORCH" agent session resolve --pid "$SESSION_PROCESS_PID" -o json > "$QA_ROOT/read-only-resolve.json"
 "$ORCH" agent session attach "$SESSION_ID" --mode reader --client-id read-only-reader >/dev/null
 set +e
 "$ORCH" agent session attach "$SESSION_ID" --mode writer --client-id denied-writer > "$QA_ROOT/denied-writer.out" 2>&1
@@ -303,7 +309,11 @@ if ! start_tcp_daemon; then
   sed 's/^/  /' "$QA_ROOT/daemon-tcp.log" >&2
   exit 1
 fi
-RESTART_STATE="$("$ORCH" agent session get "$SESSION_ID" -o json | jq -r '.[0].state')"
+for _ in {1..40}; do
+  RESTART_STATE="$("$ORCH" agent session get "$SESSION_ID" -o json | jq -r '.[0].state')"
+  [[ "$RESTART_STATE" == "detached" ]] && break
+  sleep 0.25
+done
 VERSION="$("$ORCH" agent session get "$SESSION_ID" -o json | jq -r '.[0].state_version')"
 "$ORCH" agent session close "$SESSION_ID" --reason "complete isolated QA" \
   --expected-version "$VERSION" --idempotency-key fr102-final-close > "$QA_ROOT/final-close.out"
@@ -319,6 +329,7 @@ PROCESS_STATE="$(ps -o stat= -p "$SESSION_PROCESS_PID" 2>/dev/null | tr -d '[:sp
 "$ORCH" audit list --project "$PROJECT" -o json > "$QA_ROOT/audit.json"
 MUTATION_LINKS="$(sqlite3 "$DB" "SELECT COUNT(*) FROM session_control_actions WHERE actor='' OR request_id IS NULL OR request_id='';")"
 if [[ "$DISABLED_STATUS" -ne 0 && "$READ_ONLY_STATE" == "detached" && "$RESTART_STATE" == "detached" && \
+      "$(jq -r '.[0].session_id // empty' "$QA_ROOT/read-only-resolve.json")" == "$SESSION_ID" && \
       "$DENIED_WRITER_STATUS" -ne 0 && "$DENIED_INPUT_STATUS" -ne 0 && "$DENIED_CLOSE_STATUS" -ne 0 && \
       "$PROCESS_CLOSED" -eq 1 && "$MUTATION_LINKS" == "0" ]] && \
    ! rg -q 'FR102_ONCE|FR102_CHANGED|STALE|MISMATCH|DENIED' \

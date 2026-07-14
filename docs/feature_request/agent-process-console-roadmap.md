@@ -2,7 +2,7 @@
 
 **Status**: Core slices and canonical action audit implemented; follow-up hardening open
 **Original governed FRs**: FR-095 through FR-100 (closed into DD/QA artifacts)
-**Follow-up FRs**: FR-101 closed; FR-102 through FR-104 proposed
+**Follow-up FRs**: FR-101 and FR-102 closed; FR-103 through FR-104 proposed
 **Original closure artifacts**: design docs 105-111 and QA docs 142-148
 **Created**: 2026-07-12
 
@@ -13,11 +13,11 @@ The original FR files are closed because their approved slice-level acceptance a
 | Follow-up | Scope | Roadmap gaps owned | Depends on |
 |---|---|---|---|
 | FR-101 (Closed) | Canonical mutation audit envelope | Closed by `docs/design_doc/orchestrator/111-control-plane-action-audit-envelope.md` and `docs/qa/orchestrator/148-control-plane-action-audit-envelope.md` | Original control-plane slices |
-| [FR-102](FR-102-agent-session-control-plane-hardening.md) | Session hardening and executable acceptance | P4-02/P4-03/P4-05 and unchecked QA-145 scenarios | FR-101 |
+| FR-102 (Closed) | Session hardening and executable acceptance | Closed by `docs/design_doc/orchestrator/112-agent-session-control-plane-hardening.md`, `docs/qa/orchestrator/149-agent-session-control-plane-hardening.md`, and `scripts/qa/test-agent-session-control-plane.sh` | FR-101 |
 | [FR-103](FR-103-process-console-recovery-notifications-e2e.md) | Recovery UX, Attention notifications, actor-aware filtering, live GUI/daemon E2E | P2-04, P3-04, P6-03 and the complete vertical demonstration | FR-101, FR-102 |
 | [FR-104](FR-104-process-console-operational-metrics.md) | Product metrics, projector observability, performance fixtures, local dashboard | P1-05, P6-04 and roadmap Product Metrics | FR-101 through FR-103 |
 
-Until FR-102 through FR-104 close, “Console v1 complete” means the base navigation, domain slices, and canonical action audit are available, not that every remaining hardening, observability, and integrated acceptance gate has passed.
+Until FR-103 and FR-104 close, “Console v1 complete” means the base navigation, domain slices, canonical action audit, and session hardening are available, not that every remaining recovery-notification, observability, and integrated acceptance gate has passed.
 
 ## Background
 
@@ -149,7 +149,7 @@ Implemented by [DD-106](../design_doc/orchestrator/106-attention-inbox.md) and v
 
 Implemented by [DD-107](../design_doc/orchestrator/107-handoff-and-safe-resume.md) and verified by [QA-144](../qa/orchestrator/144-handoff-and-safe-resume.md).
 
-### Phase 4: Agent session control plane (Implementation present; FR-102 acceptance open)
+### Phase 4: Agent session control plane (Implemented and closed by FR-102)
 
 **Outcome**: active agent sessions become observable and safely attachable first-class resources.
 
@@ -161,7 +161,7 @@ Implemented by [DD-107](../design_doc/orchestrator/107-handoff-and-safe-resume.m
 | P4-04 | Sessions UI and task-detail embed | P4-01..03, P1 | Live state, transcript, and lease ownership are visible |
 | P4-05 | Crash, stale PID, cleanup, and security tests | P4-01..04 | PID is never accepted as the authoritative write identity |
 
-Implemented by [DD-108](../design_doc/orchestrator/108-agent-session-control-plane.md) and verified by [QA-145](../qa/orchestrator/145-agent-session-control-plane.md). This implementation supersedes the proposed ordering in DD-075 while retaining its two-layer mailbox/session distinction.
+Implemented by [DD-108](../design_doc/orchestrator/108-agent-session-control-plane.md), hardened by [DD-112](../design_doc/orchestrator/112-agent-session-control-plane-hardening.md), and verified by [QA-149](../qa/orchestrator/149-agent-session-control-plane-hardening.md) plus `scripts/qa/test-agent-session-control-plane.sh`. QA-145 remains the original FR-098 specification. The closure covers P4-01 through P4-05, including populated migration, independent bounded streams, exactly-once fenced input, live PID mismatch defense, restart convergence, and Session Inspector re-entry.
 
 ### Phase 5: External source bindings and Slack pilot (Closed)
 
@@ -274,6 +274,7 @@ Implementation QA will be authored in:
 - `docs/qa/orchestrator/146-source-events-and-slack-binding.md`
 - `docs/qa/orchestrator/147-process-console-ui.md`
 - `docs/qa/orchestrator/148-control-plane-action-audit-envelope.md`
+- `docs/qa/orchestrator/149-agent-session-control-plane-hardening.md`
 
 The roadmap is accepted when:
 

@@ -14,12 +14,12 @@ This document described obsolete command names that were never shipped:
 - `orchestrator exec session/<session_id> -- ...`
 - `orchestrator exec task/<task_id>/step/<step_id> -- ...`
 
-The supported surface is now `orchestrator agent session ...` plus the top-level Session Inspector and Process Workspace session panel. QA must use QA-145 and must not expect the obsolete `task session` or generic `exec` forms.
+The supported surface is now `orchestrator agent session ...` plus the top-level Session Inspector and Process Workspace session panel. QA must use QA-149 and must not expect the obsolete `task session` or generic `exec` forms.
 
 ## Replacement Guidance
 
 - Do not run this document as a release gate in the current branch.
-- Execute `docs/qa/orchestrator/145-agent-session-control-plane.md` for the implemented CLI, gRPC, Tauri, Session Inspector, and Process Workspace behavior.
+- Execute `docs/qa/orchestrator/149-agent-session-control-plane-hardening.md` for the current CLI, gRPC, Tauri, Session Inspector, Process Workspace, restart, and fencing behavior. QA-145 remains the original FR-098 specification.
 - For supported coverage, use the maintained task lifecycle and script-based QA documents.
 
 ## Checklist
