@@ -7,6 +7,9 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 
+use agent_orchestrator::action_audit::{
+    ActionAuditFilter, ActionAuditRecord as CoreActionAuditRecord, AsyncActionAuditRepository,
+};
 use agent_orchestrator::dto::{
     CommandRunDto, EventDto, TaskGraphDebugBundle, TaskItemDto, TaskSummary,
 };
@@ -165,6 +168,33 @@ fn map_core_error(error: OrchestratorError) -> Status {
     }
 }
 
+fn action_audit_to_proto(record: CoreActionAuditRecord) -> ActionAuditRecord {
+    ActionAuditRecord {
+        request_id: record.request_id,
+        schema_version: record.schema_version,
+        project_id: record.project_id,
+        actor: record.actor,
+        resolved_role: record.resolved_role,
+        transport: record.transport,
+        target_type: record.target_type,
+        target_id: record.target_id,
+        action: record.action,
+        reason_code: record.reason_code,
+        operator_reason: record.operator_reason,
+        idempotency_key: record.idempotency_key,
+        expected_version: record.expected_version,
+        fencing_token: record.fencing_token,
+        request_hash: record.request_hash,
+        status: record.status,
+        error_code: record.error_code,
+        result_type: record.result_type,
+        result_id: record.result_id,
+        created_at: record.created_at,
+        updated_at: record.updated_at,
+        completed_at: record.completed_at,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Test gRPC server — thin delegation to core service functions
 // ---------------------------------------------------------------------------
@@ -186,6 +216,43 @@ impl OrchestratorService for TestOrchestratorServer {
     type TaskTimelineFollowStream = BoxStream<TimelineDelta>;
     type AttentionFollowStream = BoxStream<AttentionDelta>;
     type AgentSessionReadStream = BoxStream<AgentSessionOutputChunk>;
+
+    async fn action_audit_list(
+        &self,
+        request: Request<ActionAuditListRequest>,
+    ) -> Result<Response<ActionAuditListResponse>, Status> {
+        let request = request.into_inner();
+        let records = AsyncActionAuditRepository::new(self.state.async_database.clone())
+            .list(ActionAuditFilter {
+                project_id: request.project_id,
+                actor: request.actor,
+                target_type: request.target_type,
+                target_id: request.target_id,
+                action: request.action,
+                status: request.status,
+                from_time: request.from_time,
+                to_time: request.to_time,
+                limit: request.limit as usize,
+            })
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
+        Ok(Response::new(ActionAuditListResponse {
+            records: records.into_iter().map(action_audit_to_proto).collect(),
+        }))
+    }
+
+    async fn action_audit_get(
+        &self,
+        request: Request<ActionAuditGetRequest>,
+    ) -> Result<Response<ActionAuditRecord>, Status> {
+        let request = request.into_inner();
+        let record = AsyncActionAuditRepository::new(self.state.async_database.clone())
+            .get(&request.project_id, &request.request_id)
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?
+            .ok_or_else(|| Status::not_found("action audit record not found"))?;
+        Ok(Response::new(action_audit_to_proto(record)))
+    }
 
     async fn source_event_list(
         &self,
