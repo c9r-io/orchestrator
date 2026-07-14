@@ -1,9 +1,9 @@
 # Agent Process Console Roadmap
 
-**Status**: Core slices implemented; follow-up hardening open
+**Status**: Core slices and canonical action audit implemented; follow-up hardening open
 **Original governed FRs**: FR-095 through FR-100 (closed into DD/QA artifacts)
-**Follow-up FRs**: FR-101 through FR-104 (Proposed)
-**Original closure artifacts**: design docs 105-110 and QA docs 142-147
+**Follow-up FRs**: FR-101 closed; FR-102 through FR-104 proposed
+**Original closure artifacts**: design docs 105-111 and QA docs 142-148
 **Created**: 2026-07-12
 
 ## 2026-07-14 Implementation Audit Follow-ups
@@ -12,12 +12,12 @@ The original FR files are closed because their approved slice-level acceptance a
 
 | Follow-up | Scope | Roadmap gaps owned | Depends on |
 |---|---|---|---|
-| [FR-101](FR-101-control-plane-action-audit-envelope.md) | Canonical mutation audit envelope | P0-02/P0-04 and cross-cutting request-ID/reason/idempotency audit consistency | Original control-plane slices |
+| FR-101 (Closed) | Canonical mutation audit envelope | Closed by `docs/design_doc/orchestrator/111-control-plane-action-audit-envelope.md` and `docs/qa/orchestrator/148-control-plane-action-audit-envelope.md` | Original control-plane slices |
 | [FR-102](FR-102-agent-session-control-plane-hardening.md) | Session hardening and executable acceptance | P4-02/P4-03/P4-05 and unchecked QA-145 scenarios | FR-101 |
 | [FR-103](FR-103-process-console-recovery-notifications-e2e.md) | Recovery UX, Attention notifications, actor-aware filtering, live GUI/daemon E2E | P2-04, P3-04, P6-03 and the complete vertical demonstration | FR-101, FR-102 |
 | [FR-104](FR-104-process-console-operational-metrics.md) | Product metrics, projector observability, performance fixtures, local dashboard | P1-05, P6-04 and roadmap Product Metrics | FR-101 through FR-103 |
 
-Until these FRs close, “Console v1 complete” means the base navigation and domain slices are available, not that every roadmap-wide hardening, observability, and integrated acceptance gate has passed.
+Until FR-102 through FR-104 close, “Console v1 complete” means the base navigation, domain slices, and canonical action audit are available, not that every remaining hardening, observability, and integrated acceptance gate has passed.
 
 ## Background
 
@@ -94,7 +94,7 @@ The roadmap is organized around vertical operational outcomes rather than horizo
 
 ## Roadmap and Dependency Gates
 
-### Phase 0: Semantic foundation (Implemented; FR-101 follow-up open)
+### Phase 0: Semantic foundation (Implemented and closed by FR-101)
 
 **Outcome**: shared vocabulary, event contract, and compatibility rules are fixed before schema and UI work.
 
@@ -104,6 +104,8 @@ The roadmap is organized around vertical operational outcomes rather than horizo
 | P0-02 | Define canonical event envelope additions | FR-095 | Required correlation fields and schema-version policy agreed |
 | P0-03 | Freeze additive gRPC compatibility policy | FR-095, FR-096 | Existing CLI and GUI calls remain valid |
 | P0-04 | Define operator RBAC/action audit policy | FR-096, FR-098 | Every mutating action has actor, reason, idempotency key, and audit event |
+
+Closed by `docs/design_doc/orchestrator/111-control-plane-action-audit-envelope.md`, verified by `docs/qa/orchestrator/148-control-plane-action-audit-envelope.md`, and continuously executable through `scripts/qa/test-control-plane-action-audit.sh`.
 
 ### Phase 1: Process timeline read model (Implemented; FR-104 performance follow-up open)
 
@@ -271,6 +273,7 @@ Implementation QA will be authored in:
 - `docs/qa/orchestrator/145-agent-session-control-plane.md`
 - `docs/qa/orchestrator/146-source-events-and-slack-binding.md`
 - `docs/qa/orchestrator/147-process-console-ui.md`
+- `docs/qa/orchestrator/148-control-plane-action-audit-envelope.md`
 
 The roadmap is accepted when:
 
