@@ -1,14 +1,16 @@
 import { useState } from "react";
 import ExpertAgents from "../components/ExpertAgents";
+import ExpertOperations from "../components/ExpertOperations";
 import ExpertResources from "../components/ExpertResources";
 import ExpertSecret from "../components/ExpertSecret";
 import ExpertStore from "../components/ExpertStore";
 import ExpertSystem from "../components/ExpertSystem";
 import ExpertTrigger from "../components/ExpertTrigger";
 
-type Section = "agents" | "resources" | "triggers" | "stores" | "secrets" | "runtime";
+type Section = "operations" | "agents" | "resources" | "triggers" | "stores" | "secrets" | "runtime";
 
 const sections: Array<[Section, string]> = [
+  ["operations", "Operations"],
   ["agents", "Agents"], ["resources", "Workflows & Resources"], ["triggers", "Triggers"],
   ["stores", "Stores"], ["secrets", "Secrets"], ["runtime", "Runtime & Connection"],
 ];
@@ -25,6 +27,7 @@ export default function System({ initialSection }: { initialSection?: string }) 
         {sections.map(([key, label]) => <button key={key} className={`btn ${section === key ? "btn-primary" : "btn-ghost"}`} onClick={() => setSection(key)}>{label}</button>)}
       </nav>
       <section className="liquid-glass system-panel" aria-live="polite">
+        {section === "operations" && <ExpertOperations />}
         {section === "agents" && <ExpertAgents />}
         {section === "resources" && <ExpertResources />}
         {section === "triggers" && <ExpertTrigger />}

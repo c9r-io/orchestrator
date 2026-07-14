@@ -132,14 +132,13 @@ export default function AttentionInbox({ initialAttentionId, nativeNotifications
 
   const confirmPending = useCallback(async () => {
     if (!pending || !canMutate) return;
-    const action = pending; setPending(null); recordUiMetric("action_confirmed", { page: "attention", target_id: action.item.id });
+    const action = pending; setPending(null);
     try {
       const updated = action.kind === "resolve"
         ? await invoke<AttentionItem>("attention_resolve", { id: action.item.id, expected_version: action.item.version, idempotency_key: mutationKey(), reason: "acknowledged_in_attention_inbox" })
         : await invoke<AttentionItem>("attention_execute_action", { id: action.item.id, expected_version: action.item.version, idempotency_key: mutationKey(), action_id: action.action.id, input_json: "{}" });
       setItems((existing) => reconcileAttentionDelta(existing, { kind: "upsert", change_id: changeId.current, item: updated }, filters));
-      recordUiMetric("action_result", { page: "attention", target_id: action.item.id, result: "succeeded" });
-    } catch (cause) { setError(String(cause)); recordUiMetric("action_result", { page: "attention", target_id: action.item.id, result: "failed" }); await load(); }
+    } catch (cause) { setError(String(cause)); await load(); }
   }, [canMutate, filters, load, pending]);
 
   useEffect(() => {
@@ -200,6 +199,6 @@ export default function AttentionInbox({ initialAttentionId, nativeNotifications
       </aside>
     </div>
     <p className="attention-keyboard">J/K or ↑/↓ select · C claim · S snooze · R resolve · Enter open process</p>
-    <ConfirmDialog open={!!pending} title={pending?.kind === "execute" ? "Confirm process action" : "Confirm resolution"} message={pending?.kind === "execute" ? `Execute “${pending.action.label}”. This can change process execution state and will be audited.` : "Resolve this item and remove it from the open Attention queue. The audit history remains available."} confirmLabel={pending?.kind === "execute" ? "Execute reviewed action" : "Resolve item"} destructive onConfirm={() => void confirmPending()} onCancel={() => { recordUiMetric("action_cancelled", { page: "attention", target_id: pending?.item.id }); setPending(null); }} />
+    <ConfirmDialog open={!!pending} title={pending?.kind === "execute" ? "Confirm process action" : "Confirm resolution"} message={pending?.kind === "execute" ? `Execute “${pending.action.label}”. This can change process execution state and will be audited.` : "Resolve this item and remove it from the open Attention queue. The audit history remains available."} confirmLabel={pending?.kind === "execute" ? "Execute reviewed action" : "Resolve item"} destructive onConfirm={() => void confirmPending()} onCancel={() => setPending(null)} />
   </main>;
 }

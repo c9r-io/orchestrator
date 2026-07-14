@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { useTimeline } from "../hooks/useTimeline";
-import { recordUiMetric } from "../lib/telemetry";
 import i18n from "../lib/i18n";
 import type { TimelineEntry } from "../lib/types";
 
@@ -62,7 +61,6 @@ function TimelineRow({ entry, selected, onSelect }: { entry: TimelineEntry; sele
 export default function ProcessTimeline({ taskId, selectedEntryId, onSelectEntry }: Props) {
   const { entries, hasMore, loading, loadingMore, error, loadMore } = useTimeline(taskId);
   useEffect(() => {
-    recordUiMetric("timeline_render", { page: "processes", target_id: taskId, result: String(entries.length) });
     if (!selectedEntryId && entries[0]) onSelectEntry?.(entries[0]);
   }, [entries, onSelectEntry, selectedEntryId, taskId]);
   return (

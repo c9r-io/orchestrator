@@ -32,6 +32,32 @@ async function installTauriMock(page: Page, role: "read_only" | "operator" = "op
         return null;
       }
       if (command === "probe_role") return roleName;
+      if (command === "process_metric_record") return true;
+      if (command === "process_metrics_get") {
+        const metric = (name: string, value: number, sampleCount = 1, extra: Record<string, unknown> = {}) => ({
+          name, labels: {}, sample_count: sampleCount, sum: value, min: value, max: value,
+          value, numerator: null, denominator: null, histogram: {}, buckets: [], ...extra,
+        });
+        return {
+          schema_version: 1, project_id: String(args.project_id),
+          window_start: "2026-07-13T00:00:00Z", window_end: "2026-07-14T00:00:00Z",
+          generated_at: new Date().toISOString(), coverage_start: "2026-07-01T00:00:00Z",
+          partial: false, collection_enabled: true,
+          metrics: [
+            metric("attention_open_total", 4, 4), metric("attention_active", 2, 2),
+            metric("attention_time_to_claim_seconds", 12, 2), metric("process_human_attention_seconds", 60, 2),
+            metric("process_autonomous_completion_ratio", 0.75, 0, { numerator: 3, denominator: 4 }),
+            metric("handoff_to_productive_action_seconds", 20), metric("resume_attempt_total", 2, 2, { labels: { mode: "restart_step", result: "succeeded" } }),
+            metric("session_attachment_total", 3, 3, { labels: { mode: "writer", result: "succeeded" } }),
+            metric("source_event_deduplicated_total", 2, 2, { labels: { provider: "slack" } }),
+            metric("process_repeated_failure_rate", 0.25, 0, { numerator: 1, denominator: 4 }),
+            metric("process_degenerate_loop_rate", 0.1, 0, { numerator: 1, denominator: 10 }),
+            metric("timeline_projection_seconds", 0.08, 2), metric("timeline_response_bytes", 4096, 2),
+            metric("stream_reconnect_total", 1),
+          ],
+          projector_health: [{ projector: "attention", project_id: "", cursor: "42", lag_count: 0, failure_count: 0, last_error_code: null, last_success_at: "2026-07-14T00:00:00Z", updated_at: "2026-07-14T00:00:00Z" }],
+        };
+      }
       if (command === "attention_list") return { items: attentionRows, latest_change_id: 2 };
       if (command === "attention_claim") return { ...attentionRows.find((item) => item.id === args.id), state: "claimed", version: 2 };
       if (command === "task_list") return [{ id: "task-1", name: "Fix payment failure", status: "failed", total_items: 1, finished_items: 0, failed_items: 1, created_at: "2026-07-14T00:00:00Z", updated_at: "2026-07-14T00:01:00Z", project_id: "project-1", workflow_id: "qa-loop", goal: "Restore the failed payment test" }];
@@ -162,6 +188,21 @@ test("narrow layout exposes the menu and reduced-transparency fallback", async (
   await expect(page.locator("html")).toHaveAttribute("data-transparency", "reduced");
   await page.getByRole("link", { name: /Sessions/ }).click();
   await expect(page.getByRole("heading", { name: "Sessions" })).toBeVisible();
+});
+
+test("read-only Operations renders process health, switches windows, and remains accessible", async ({ page }) => {
+  await installTauriMock(page, "read_only");
+  await page.goto("/#/system/operations");
+  await expect(page.getByRole("heading", { name: "Operations" })).toBeVisible();
+  await expect(page.getByText("75%")).toBeVisible();
+  await expect(page.getByText("Fresh snapshot")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "attention" })).toBeVisible();
+  await page.getByRole("button", { name: "7 days" }).click();
+  await expect.poll(() => page.evaluate(() => {
+    const calls = (window as any).__PROCESS_TEST__.calls.filter((call: any) => call.command === "process_metrics_get");
+    return calls.at(-1)?.args.window;
+  })).toBe("7d");
+  expect((await new AxeBuilder({ page }).analyze()).violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))).toEqual([]);
 });
 
 test("session inspector commits offsets, controls one writer, and links to its process", async ({ page }) => {
