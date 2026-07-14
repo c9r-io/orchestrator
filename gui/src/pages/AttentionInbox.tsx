@@ -177,7 +177,7 @@ export default function AttentionInbox({ initialAttentionId, nativeNotifications
       <section className="attention-list-pane" aria-label="Actionable attention items">
         {loading && <p className="empty-state">{i18n.common.loading}</p>}
         {!loading && items.length === 0 && <p className="empty-state">{i18n.attention.empty}</p>}
-        <div role="listbox" tabIndex={0} aria-activedescendant={selectedId ? `attention-${selectedId}` : undefined}>
+        <div role="listbox" aria-label="Attention queue" tabIndex={0} aria-activedescendant={selectedId ? `attention-${selectedId}` : undefined}>
           {items.map((item) => <button id={`attention-${item.id}`} key={item.id} className={`attention-row ${item.id === selectedId ? "selected" : ""}`} role="option" aria-selected={item.id === selectedId} onClick={() => setSelectedId(item.id)}>
             <span className={`attention-severity attention-severity-${item.severity}`} aria-hidden="true" /><span className="attention-row-copy"><strong>{item.title}</strong><small>{item.task_id || "Unbound source"} · {requestedDecision(item)}</small></span><span className="attention-age">{ageLabel(item.last_occurred_at)}</span>
           </button>)}

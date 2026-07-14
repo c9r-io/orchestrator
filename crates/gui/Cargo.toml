@@ -24,6 +24,9 @@ libc = { workspace = true }
 [build-dependencies]
 tauri-build = "2"
 
+[dev-dependencies]
+tauri = { version = "2", features = ["test"] }
+
 [lib]
 name = "orchestrator_gui_lib"
 path = "src/lib.rs"

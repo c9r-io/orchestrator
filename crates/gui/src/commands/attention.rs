@@ -94,7 +94,7 @@ pub(crate) fn item_from_proto(item: orchestrator_proto::AttentionItem) -> Attent
     }
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 #[allow(clippy::too_many_arguments)]
 pub async fn attention_list(
     state: State<'_, Arc<AppState>>,
@@ -127,7 +127,7 @@ pub async fn attention_list(
     })
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn attention_get(
     state: State<'_, Arc<AppState>>,
     id: String,
@@ -140,7 +140,7 @@ pub async fn attention_get(
         .map_err(|error| crate::errors::humanize_grpc_error(&error))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn attention_claim(
     state: State<'_, Arc<AppState>>,
     id: String,
@@ -160,7 +160,7 @@ pub async fn attention_claim(
         .map_err(|error| crate::errors::humanize_grpc_error(&error))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn attention_snooze(
     state: State<'_, Arc<AppState>>,
     id: String,
@@ -182,7 +182,7 @@ pub async fn attention_snooze(
         .map_err(|error| crate::errors::humanize_grpc_error(&error))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn attention_resolve(
     state: State<'_, Arc<AppState>>,
     id: String,
@@ -204,7 +204,7 @@ pub async fn attention_resolve(
         .map_err(|error| crate::errors::humanize_grpc_error(&error))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn attention_execute_action(
     state: State<'_, Arc<AppState>>,
     id: String,

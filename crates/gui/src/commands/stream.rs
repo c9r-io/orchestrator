@@ -38,7 +38,7 @@ pub struct AttentionNotification {
     pub deep_link: String,
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 #[allow(clippy::too_many_arguments)]
 pub async fn start_attention_follow(
     app: AppHandle,
@@ -140,14 +140,14 @@ pub async fn start_attention_follow(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn stop_attention_follow(state: State<'_, Arc<AppState>>) -> Result<(), String> {
     state.cancel_stream("attention").await;
     Ok(())
 }
 
 /// Start streaming semantic timeline updates via Tauri events.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn start_task_timeline_follow(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
@@ -200,7 +200,7 @@ pub async fn start_task_timeline_follow(
 }
 
 /// Stop streaming semantic timeline updates.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn stop_task_timeline_follow(
     state: State<'_, Arc<AppState>>,
     task_id: String,
@@ -212,7 +212,7 @@ pub async fn stop_task_timeline_follow(
 /// Start streaming task logs via Tauri events.
 ///
 /// Each log line is emitted as a `task-follow-{task_id}` event.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn start_task_follow(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
@@ -260,7 +260,7 @@ pub async fn start_task_follow(
 }
 
 /// Stop streaming task logs.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn stop_task_follow(
     state: State<'_, Arc<AppState>>,
     task_id: String,
@@ -279,7 +279,7 @@ pub struct WatchSnapshot {
 /// Start watching task status updates via Tauri events.
 ///
 /// Each snapshot is emitted as a `task-watch-{task_id}` event.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn start_task_watch(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
@@ -386,7 +386,7 @@ fn send_task_notification(app: &AppHandle, task_name: &str, status: &str, projec
 }
 
 /// Stop watching task status updates.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn stop_task_watch(
     state: State<'_, Arc<AppState>>,
     task_id: String,
@@ -406,7 +406,7 @@ pub struct TaskLogChunk {
 }
 
 /// Get historical task logs (collects all chunks from the streaming RPC).
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn task_logs(
     state: State<'_, Arc<AppState>>,
     task_id: String,

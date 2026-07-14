@@ -36,6 +36,7 @@ export default function HandoffPanel({ taskId, canGenerate, canExecute, reviewRe
   const [result, setResult] = useState<ResumeExecution | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const resumeButtonRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!dialogOpen) return;
@@ -66,7 +67,7 @@ export default function HandoffPanel({ taskId, canGenerate, canExecute, reviewRe
     dialog?.addEventListener("keydown", handleKeyDown);
     return () => {
       dialog?.removeEventListener("keydown", handleKeyDown);
-      resumeButtonRef.current?.focus();
+      (previousFocusRef.current ?? resumeButtonRef.current)?.focus();
     };
   }, [dialogOpen]);
 
@@ -83,6 +84,7 @@ export default function HandoffPanel({ taskId, canGenerate, canExecute, reviewRe
   };
 
   const openResume = useCallback(async () => {
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
     setBusy(true);
     setError(null);
     try {

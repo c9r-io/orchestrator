@@ -1,0 +1,53 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: process-console-vertical
+spec:
+  root_path: "."
+  qa_targets: [fixtures/qa]
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: RuntimePolicy
+metadata:
+  name: default
+spec:
+  runner:
+    shell: /bin/bash
+    shell_arg: "-lc"
+    policy: unsafe
+    executor: shell
+    allowed_shells: [/bin/bash, /bin/zsh, /bin/sh]
+    allowed_shell_args: ["-lc", "-c"]
+    env_allowlist: [PATH, HOME, USER, LANG]
+    redaction_patterns: [token, password, secret, api_key]
+  resume:
+    auto: false
+  attention_inbox_enabled: true
+  handoff_enabled: true
+  mutating_resume_enabled: true
+  elevated_resume_enabled: false
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: process_console_mock_fail
+spec:
+  capabilities: [qa]
+  command: >-
+    echo '{"confidence":0.2,"quality_score":0.1,"artifacts":[{"kind":"test","content":{"summary":"deterministic FR-103 assertion failure"}}]}' &&
+    exit 1
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: process-console-vertical
+spec:
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+      behavior:
+        side_effect_class: workspace_only
+  loop:
+    mode: once

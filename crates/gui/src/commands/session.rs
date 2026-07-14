@@ -71,7 +71,7 @@ pub struct SessionOutputChunk {
     pub redacted: bool,
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn agent_session_list(
     state: State<'_, Arc<AppState>>,
     task_id: Option<String>,
@@ -89,7 +89,7 @@ pub async fn agent_session_list(
     Ok(response.sessions.into_iter().map(from_proto).collect())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn agent_session_attach(
     state: State<'_, Arc<AppState>>,
     session_id: String,
@@ -117,7 +117,7 @@ pub async fn agent_session_attach(
     })
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn agent_session_heartbeat(
     state: State<'_, Arc<AppState>>,
     session_id: String,
@@ -138,7 +138,7 @@ pub async fn agent_session_heartbeat(
         .lease_expires_at)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn agent_session_send_input(
     state: State<'_, Arc<AppState>>,
     session_id: String,
@@ -167,7 +167,7 @@ pub async fn agent_session_send_input(
         .accepted_bytes)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn agent_session_detach(
     state: State<'_, Arc<AppState>>,
     session_id: String,
@@ -195,7 +195,7 @@ pub async fn agent_session_detach(
         .detached)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn agent_session_close(
     state: State<'_, Arc<AppState>>,
     session_id: String,
@@ -224,7 +224,7 @@ pub async fn agent_session_close(
         .ok_or_else(|| "daemon returned no session".into())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn start_agent_session_read(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
@@ -254,7 +254,7 @@ pub async fn start_agent_session_read(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn stop_agent_session_read(
     state: State<'_, Arc<AppState>>,
     session_id: String,

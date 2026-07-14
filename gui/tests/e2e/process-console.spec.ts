@@ -1,10 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 
 async function installTauriMock(page: Page, role: "read_only" | "operator" = "operator") {
   await page.addInitScript(({ roleName }) => {
     const callbacks = new Map<number, (payload: unknown) => void>();
     const listeners = new Map<string, number>();
     const sessionCalls: Array<{ command: string; args: Record<string, unknown> }> = [];
+    const processCalls: Array<{ command: string; args: Record<string, unknown> }> = [];
     let nextId = 1;
     const items = [
       { id: "attention-1", title: "Approval required", taskId: "task-1", severity: "intervention" },
@@ -14,12 +16,13 @@ async function installTauriMock(page: Page, role: "read_only" | "operator" = "op
       id: item.id, project_id: "project-1", task_id: item.taskId, task_item_id: null, step_id: "test", session_id: "session-1",
       kind: "step_failed", severity: item.severity, state: "open", title: item.title, summary: "A human decision is required",
       requested_decision_json: JSON.stringify({ question: "Retry from the verified boundary?" }),
-      actions: [{ id: "retry", label: "Retry safely", required_role: "operator", confirmation: "required", input_schema_json: "{}" }],
+      actions: [{ id: "retry_failed_item", label: "Retry safely", required_role: "operator", confirmation: "required", input_schema_json: "{}" }],
       assignee: null, occurrence_count: 1, reopen_count: 0, version: 1,
       created_at: "2026-07-14T00:00:00Z", updated_at: "2026-07-14T00:00:00Z", last_occurred_at: "2026-07-14T00:00:00Z", snoozed_until: null, resolved_at: null,
     }));
     let session = { session_id: "session-1", task_id: "task-1", task_item_id: null, step_id: "test", agent_id: "coder", state: "detached", pid: 42, writer_client_id: null as string | null, writer_actor: null as string | null, writer_lease_expires_at: null as string | null, state_version: 1 };
     const invoke = async (command: string, args: Record<string, unknown> = {}) => {
+      processCalls.push({ command, args });
       if (command === "plugin:event|listen") { listeners.set(String(args.event), Number(args.handler)); return nextId++; }
       if (command === "plugin:event|unlisten") return null;
       if (command.startsWith("start_agent_session") || command.startsWith("stop_agent_session")) { sessionCalls.push({ command, args }); return null; }
@@ -49,7 +52,9 @@ async function installTauriMock(page: Page, role: "read_only" | "operator" = "op
       }
       if (command === "agent_session_close") { sessionCalls.push({ command, args }); session = { ...session, state: "draining", state_version: session.state_version + 1 }; return session; }
       if (command === "source_binding_list" || command === "source_event_list") return [];
-      if (command === "resume_boundary_list") return [];
+      if (command === "resume_boundary_list") return [{ id: "boundary-1", task_id: "task-1", cycle: 1, step_id: "test", task_item_id: "item-1", provider_session_available: false, side_effect_class: "workspace_only", replay_safe: true, reason: "Failed step can be replayed", state_version: "state-1" }];
+      if (command === "resume_plan") return { id: "plan-1", task_id: "task-1", boundary: null, mode: String(args.mode), expected_state_version: "state-1", consequence: { repeated_steps: ["test"], workspace_rollback: false }, elevated_confirmation_required: false, expires_at: "2026-07-14T01:00:00Z", status: "review_required" };
+      if (command === "resume_execute") return { execution_id: "execution-1", plan_id: "plan-1", accepted: true, status: "succeeded", child_task_id: "task-child" };
       return null;
     };
     Object.assign(window, {
@@ -67,6 +72,7 @@ async function installTauriMock(page: Page, role: "read_only" | "operator" = "op
           if (handler) callbacks.get(handler)?.({ event, id: 1, payload });
         },
       },
+      __PROCESS_TEST__: { calls: processCalls },
     });
   }, { roleName: role });
 }
@@ -91,7 +97,60 @@ test("keyboard selection is stable and read-only mutations are disabled", async 
   await page.keyboard.press("ArrowDown");
   await expect(listbox).toHaveAttribute("aria-activedescendant", "attention-attention-2");
   await expect(page.getByRole("button", { name: "Resolve" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Retry safely" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Retry safely" })).toHaveCount(0);
+});
+
+test("failed process uses reviewed resume and never routes the primary action to orphan repair", async ({ page }) => {
+  await installTauriMock(page);
+  await page.goto("/#/processes/task-1");
+  const review = page.getByRole("button", { name: "Review safe resume" });
+  await review.click();
+  const dialog = page.getByRole("dialog", { name: "Resume consequence preview" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Create preview" }).click();
+  await dialog.getByLabel("Operator reason").fill("Reviewed the failed test evidence");
+  await dialog.getByRole("button", { name: "Execute reviewed plan" }).click();
+  await expect(dialog.getByRole("status")).toContainText("succeeded");
+  const commands = await page.evaluate(() => (window as any).__PROCESS_TEST__.calls.map((call: any) => call.command));
+  expect(commands).toEqual(expect.arrayContaining(["resume_boundary_list", "resume_plan", "resume_execute"]));
+  expect(commands).not.toContain("task_recover");
+  await dialog.getByRole("button", { name: "Close resume dialog" }).click();
+  await expect(review).toBeFocused();
+});
+
+test("confirmation dialogs trap focus, close with Escape, and restore focus", async ({ page }) => {
+  await installTauriMock(page);
+  await page.goto("/");
+  const resolve = page.getByRole("button", { name: "Resolve" });
+  await resolve.click();
+  const dialog = page.getByRole("dialog", { name: "Confirm resolution" });
+  const cancel = dialog.getByRole("button", { name: "取消" });
+  const confirm = dialog.getByRole("button", { name: "Resolve item" });
+  await expect(cancel).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(confirm).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(cancel).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(resolve).toBeFocused();
+});
+
+test("Attention and failed-process workspace have no serious axe violations", async ({ page }) => {
+  await installTauriMock(page);
+  await page.goto("/");
+  expect((await new AxeBuilder({ page }).analyze()).violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))).toEqual([]);
+  await page.goto("/#/processes/task-1");
+  await expect(page.getByRole("heading", { name: "Fix payment failure" })).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))).toEqual([]);
+});
+
+test("reduced-motion preference suppresses UI transitions", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await installTauriMock(page);
+  await page.goto("/");
+  const duration = await page.getByRole("button", { name: "Refresh snapshot" }).evaluate((element) => getComputedStyle(element).transitionDuration);
+  expect(Number.parseFloat(duration)).toBeLessThanOrEqual(0.00001);
 });
 
 test("narrow layout exposes the menu and reduced-transparency fallback", async ({ page }) => {

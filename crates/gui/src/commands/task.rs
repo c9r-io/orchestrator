@@ -45,7 +45,7 @@ pub struct TaskItemSummary {
 }
 
 /// List all tasks with optional status filter.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn task_list(
     state: State<'_, Arc<AppState>>,
     status_filter: Option<String>,
@@ -94,7 +94,7 @@ pub struct TaskActionResult {
 }
 
 /// Create a new task (wish pool → FR drafting or development).
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 #[allow(clippy::too_many_arguments)]
 pub async fn task_create(
     state: State<'_, Arc<AppState>>,
@@ -130,7 +130,7 @@ pub async fn task_create(
 }
 
 /// Start a pending task.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn task_start(
     state: State<'_, Arc<AppState>>,
     task_id: Option<String>,
@@ -153,7 +153,7 @@ pub async fn task_start(
 }
 
 /// Pause a running task (operator+).
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn task_pause(
     state: State<'_, Arc<AppState>>,
     task_id: String,
@@ -169,7 +169,7 @@ pub async fn task_pause(
 }
 
 /// Resume a paused task (operator+).
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn task_resume(
     state: State<'_, Arc<AppState>>,
     task_id: String,
@@ -189,7 +189,7 @@ pub async fn task_resume(
 }
 
 /// Retry a failed task item (operator+).
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn task_retry(
     state: State<'_, Arc<AppState>>,
     task_item_id: String,
@@ -209,7 +209,7 @@ pub async fn task_retry(
 }
 
 /// Delete a task (admin).
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn task_delete(
     state: State<'_, Arc<AppState>>,
     task_id: String,
@@ -316,7 +316,7 @@ pub(crate) fn timeline_entry_from_proto(entry: orchestrator_proto::TimelineEntry
 }
 
 /// Get one page of the semantic task timeline (read_only+).
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn task_timeline(
     state: State<'_, Arc<AppState>>,
     task_id: String,
@@ -349,7 +349,7 @@ pub async fn task_timeline(
 }
 
 /// Get task execution trace (read_only+).
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn task_trace(
     state: State<'_, Arc<AppState>>,
     task_id: String,
@@ -376,7 +376,7 @@ pub struct TaskRecoverResult {
 }
 
 /// Recover a task from error state (operator+).
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn task_recover(
     state: State<'_, Arc<AppState>>,
     task_id: String,
@@ -403,7 +403,7 @@ pub struct BulkDeleteResult {
 }
 
 /// Bulk delete tasks (admin).
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn task_delete_bulk(
     state: State<'_, Arc<AppState>>,
     task_ids: Option<Vec<String>>,
@@ -431,7 +431,7 @@ pub async fn task_delete_bulk(
 }
 
 /// Get detailed info for a single task.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn task_info(
     state: State<'_, Arc<AppState>>,
     task_id: String,

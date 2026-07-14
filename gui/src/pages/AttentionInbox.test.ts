@@ -32,4 +32,29 @@ describe("Attention snapshot reconciliation", () => {
     const filters = { ...active, severity: "attention" };
     expect(reconcileAttentionDelta([], { kind: "upsert", change_id: 1, item: item() }, filters)).toEqual([]);
   });
+
+  it("matches Mine only for the trusted current actor when an actor is available", () => {
+    const mine = { ...active, assignee: "me" };
+    expect(matchesAttentionFilters(item({ assignee: "spiffe://operator/alice" }), mine, "spiffe://operator/alice")).toBe(true);
+    expect(matchesAttentionFilters(item({ assignee: "spiffe://operator/bob" }), mine, "spiffe://operator/alice")).toBe(false);
+    expect(matchesAttentionFilters(item({ assignee: null }), mine, "spiffe://operator/alice")).toBe(false);
+  });
+
+  it("applies remove deltas even when a notification descriptor is present", () => {
+    const result = reconcileAttentionDelta([item()], {
+      kind: "remove",
+      change_id: 3,
+      item: item({ version: 2 }),
+      notification: {
+        title: "Tests failed",
+        dedupe_key: "attention-1:2",
+        attention_item_id: "attention-1",
+        item_version: 2,
+        severity: "intervention",
+        process_id: "task-1",
+        deep_link: "#/attention/attention-1",
+      },
+    }, active);
+    expect(result).toEqual([]);
+  });
 });

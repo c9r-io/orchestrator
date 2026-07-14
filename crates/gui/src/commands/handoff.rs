@@ -87,7 +87,7 @@ fn boundary_from_proto(boundary: orchestrator_proto::ResumeBoundary) -> ResumeBo
     }
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn handoff_generate(
     state: State<'_, Arc<AppState>>,
     task_id: String,
@@ -114,7 +114,7 @@ pub async fn handoff_generate(
     })
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn resume_boundary_list(
     state: State<'_, Arc<AppState>>,
     task_id: String,
@@ -134,7 +134,7 @@ pub async fn resume_boundary_list(
         .map_err(|error| crate::errors::humanize_grpc_error(&error))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn resume_plan(
     state: State<'_, Arc<AppState>>,
     task_id: String,
@@ -166,7 +166,7 @@ pub async fn resume_plan(
     })
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn resume_execute(
     state: State<'_, Arc<AppState>>,
     plan_id: String,

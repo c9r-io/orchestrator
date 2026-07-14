@@ -68,7 +68,7 @@ fn binding_from_proto(value: orchestrator_proto::SourceBinding) -> SourceBinding
     }
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn source_event_list(
     state: State<'_, Arc<AppState>>,
     project_id: Option<String>,
@@ -95,7 +95,7 @@ pub async fn source_event_list(
         .map_err(|error| crate::errors::humanize_grpc_error(&error))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn source_binding_list(
     state: State<'_, Arc<AppState>>,
     task_id: String,
@@ -115,7 +115,7 @@ pub async fn source_binding_list(
         .map_err(|error| crate::errors::humanize_grpc_error(&error))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn source_replay(state: State<'_, Arc<AppState>>, id: String) -> Result<String, String> {
     let mut client = state.client().await?;
     let nonce = std::time::SystemTime::now()
