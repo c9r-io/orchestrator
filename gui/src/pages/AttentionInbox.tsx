@@ -7,7 +7,7 @@ import { recordUiMetric } from "../lib/telemetry";
 import i18n from "../lib/i18n";
 import type { AttentionAction, AttentionDelta, AttentionItem, AttentionListResult, Role } from "../lib/types";
 
-interface Props { initialAttentionId?: string; onOpenTask: (taskId: string) => void; }
+interface Props { initialAttentionId?: string; nativeNotificationsEnabled: boolean; onOpenTask: (taskId: string) => void; }
 interface Filters { state: string; severity: string; assignee: string; }
 type PendingAction = { kind: "resolve"; item: AttentionItem } | { kind: "execute"; item: AttentionItem; action: AttentionAction };
 
@@ -15,10 +15,10 @@ function mutationKey(): string {
   return typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `gui-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-export function matchesAttentionFilters(item: AttentionItem, filters: Filters): boolean {
+export function matchesAttentionFilters(item: AttentionItem, filters: Filters, currentActor?: string): boolean {
   const stateMatches = filters.state === "active" ? item.state !== "resolved" : item.state === filters.state;
   const assigneeMatches = !filters.assignee
-    || (filters.assignee === "unassigned" ? !item.assignee : filters.assignee === "me" ? !!item.assignee : item.assignee === filters.assignee);
+    || (filters.assignee === "unassigned" ? !item.assignee : filters.assignee === "me" ? currentActor === undefined || item.assignee === currentActor : item.assignee === filters.assignee);
   return stateMatches && (!filters.severity || item.severity === filters.severity) && assigneeMatches;
 }
 
@@ -50,7 +50,7 @@ function ageLabel(value: string): string {
   return `${Math.floor(minutes / 1440)}d`;
 }
 
-export default function AttentionInbox({ initialAttentionId, onOpenTask }: Props) {
+export default function AttentionInbox({ initialAttentionId, nativeNotificationsEnabled, onOpenTask }: Props) {
   const { canAccess } = useRole();
   const canMutate = canAccess("operator");
   const [items, setItems] = useState<AttentionItem[]>([]);
@@ -59,6 +59,7 @@ export default function AttentionInbox({ initialAttentionId, onOpenTask }: Props
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
+  const [notificationFallback, setNotificationFallback] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const changeId = useRef(0);
 
@@ -67,6 +68,7 @@ export default function AttentionInbox({ initialAttentionId, onOpenTask }: Props
     try {
       const result = await invoke<AttentionListResult>("attention_list", {
         item_state: filters.state === "active" ? null : filters.state,
+        active_only: filters.state === "active",
         severity: filters.severity || null, assignee: filters.assignee || null,
         project_id: null, kind: null, task_id: null,
       });
@@ -80,6 +82,7 @@ export default function AttentionInbox({ initialAttentionId, onOpenTask }: Props
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
     let unlistenError: UnlistenFn | undefined;
+    let unlistenFallback: UnlistenFn | undefined;
     let disposed = false;
     (async () => {
       await load();
@@ -87,15 +90,28 @@ export default function AttentionInbox({ initialAttentionId, onOpenTask }: Props
       unlisten = await listen<AttentionDelta>("attention-delta", ({ payload }) => {
         changeId.current = payload.change_id;
         setItems((current) => reconcileAttentionDelta(current, payload, filters));
-        if (payload.item) setAnnouncement(`Attention item updated: ${payload.item.title}`);
+        if (payload.notification) setAnnouncement(`New attention item: ${payload.notification.title}`);
       });
       unlistenError = await listen<string>("stream-error-attention", ({ payload }) => {
         recordUiMetric("stream_reconnect", { page: "attention", result: "error" }); setError(payload);
       });
-      await invoke("start_attention_follow", { after_change_id: changeId.current });
+      unlistenFallback = await listen<string>("attention-notification-fallback", ({ payload }) => {
+        setNotificationFallback(payload); setAnnouncement(payload);
+      });
+      await invoke("start_attention_follow", {
+        after_change_id: changeId.current,
+        project_id: null,
+        item_state: filters.state === "active" ? null : filters.state,
+        kind: null,
+        severity: filters.severity || null,
+        assignee: filters.assignee || null,
+        task_id: null,
+        active_only: filters.state === "active",
+        native_notifications_enabled: nativeNotificationsEnabled,
+      });
     })().catch((cause) => setError(String(cause)));
-    return () => { disposed = true; unlisten?.(); unlistenError?.(); invoke("stop_attention_follow").catch(() => undefined); };
-  }, [filters, load]);
+    return () => { disposed = true; unlisten?.(); unlistenError?.(); unlistenFallback?.(); invoke("stop_attention_follow").catch(() => undefined); };
+  }, [filters, load, nativeNotificationsEnabled]);
 
   useEffect(() => {
     if (selectedId && items.some((item) => item.id === selectedId)) return;
@@ -148,6 +164,7 @@ export default function AttentionInbox({ initialAttentionId, onOpenTask }: Props
   return <main aria-labelledby="attention-title">
     <header className="attention-header"><div><h1 id="attention-title" className="page-title">Attention</h1><p>{i18n.attention.subtitle}</p></div><div className="attention-counts"><span className="badge badge-danger">◆ {counts.intervention} intervention</span><span className="badge badge-warning">● {counts.attention} attention</span></div></header>
     <div className="sr-live" aria-live="polite" aria-atomic="true">{announcement}</div>
+    {(!nativeNotificationsEnabled || notificationFallback) && <p className="attention-notification-fallback" role="status">{notificationFallback ?? "Desktop notifications are unavailable; in-app Attention remains active."}</p>}
     {error && <p className="attention-error" role="alert">{error}</p>}
     <div className="attention-workbench">
       <aside className="attention-filter-pane" aria-label="Attention filters">
@@ -175,7 +192,7 @@ export default function AttentionInbox({ initialAttentionId, onOpenTask }: Props
           <div className="decision-actions">
             {current.state === "open" && <button className="btn btn-secondary" disabled={!canMutate} title={!canMutate ? "Requires operator role" : undefined} onClick={() => void mutate("claim", current)}>Claim</button>}
             <button className="btn btn-ghost" disabled={!canMutate} onClick={() => void mutate("snooze", current)}>Snooze 1h</button>
-            {current.actions.filter((action) => action.id !== "acknowledge").map((action) => <button key={action.id} className="btn btn-primary" disabled={!actionAllowed(action)} title={!actionAllowed(action) ? `Requires ${action.required_role}` : undefined} onClick={() => setPending({ kind: "execute", item: current, action })}>{action.label}</button>)}
+            {current.actions.filter((action) => !["acknowledge", "retry_failed_item", "resume_task"].includes(action.id)).map((action) => <button key={action.id} className="btn btn-primary" disabled={!actionAllowed(action)} title={!actionAllowed(action) ? `Requires ${action.required_role}` : undefined} onClick={() => setPending({ kind: "execute", item: current, action })}>{action.label}</button>)}
             <button className="btn btn-ghost" disabled={!canMutate} onClick={() => setPending({ kind: "resolve", item: current })}>Resolve</button>
             {current.task_id && <button className="btn btn-secondary" onClick={() => onOpenTask(current.task_id)}>Open process</button>}
           </div>

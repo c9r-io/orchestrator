@@ -24,14 +24,34 @@ pub struct AttentionDelta {
     pub kind: String,
     pub change_id: i64,
     pub item: Option<super::attention::AttentionItem>,
+    pub notification: Option<AttentionNotification>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AttentionNotification {
+    pub dedupe_key: String,
+    pub attention_item_id: String,
+    pub item_version: i64,
+    pub title: String,
+    pub severity: String,
+    pub process_id: String,
+    pub deep_link: String,
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn start_attention_follow(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
     after_change_id: Option<i64>,
     project_id: Option<String>,
+    item_state: Option<String>,
+    kind: Option<String>,
+    severity: Option<String>,
+    assignee: Option<String>,
+    task_id: Option<String>,
+    active_only: Option<bool>,
+    native_notifications_enabled: Option<bool>,
 ) -> Result<(), String> {
     let mut client = state.client().await?;
     let response = client
@@ -39,23 +59,71 @@ pub async fn start_attention_follow(
             after_change_id: after_change_id.unwrap_or_default(),
             project_id,
             interval_millis: 500,
+            state: item_state,
+            kind,
+            severity,
+            assignee,
+            task_id,
+            active_only: active_only.unwrap_or(false),
         })
         .await
         .map_err(|error| crate::errors::humanize_grpc_error(&error))?;
     let mut stream = response.into_inner();
     let cancel = state.register_stream("attention").await;
+    let app_state = state.inner().clone();
     tauri::async_runtime::spawn(async move {
         loop {
             tokio::select! {
                 message = stream.message() => {
                     match message {
                         Ok(Some(delta)) => {
+                            let notification = delta.notification.map(|value| AttentionNotification {
+                                dedupe_key: value.dedupe_key,
+                                attention_item_id: value.attention_item_id,
+                                item_version: value.item_version,
+                                title: value.title,
+                                severity: value.severity,
+                                process_id: value.process_id,
+                                deep_link: value.deep_link,
+                            });
                             let payload = AttentionDelta {
                                 kind: delta.kind,
                                 change_id: delta.change_id,
                                 item: delta.item.map(super::attention::item_from_proto),
+                                notification: notification.clone(),
                             };
                             let _ = app.emit("attention-delta", &payload);
+                            if let Some(notification) = notification {
+                                let first_delivery = app_state
+                                    .record_attention_notification(notification.dedupe_key.clone())
+                                    .await;
+                                if first_delivery {
+                                    if native_notifications_enabled.unwrap_or(false) {
+                                        let body = format!(
+                                            "{} · process {}",
+                                            notification.severity, notification.process_id
+                                        );
+                                        let result = app
+                                            .notification()
+                                            .builder()
+                                            .title(&notification.title)
+                                            .body(body)
+                                            .extra("deep_link", &notification.deep_link)
+                                            .show();
+                                        if result.is_err() {
+                                            let _ = app.emit(
+                                                "attention-notification-fallback",
+                                                "Desktop notification failed; in-app Attention remains active.",
+                                            );
+                                        }
+                                    } else {
+                                        let _ = app.emit(
+                                            "attention-notification-fallback",
+                                            "Desktop notifications are unavailable; in-app Attention remains active.",
+                                        );
+                                    }
+                                }
+                            }
                         }
                         Ok(None) => break,
                         Err(error) => {

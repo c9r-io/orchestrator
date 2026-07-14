@@ -1,6 +1,6 @@
 use std::pin::Pin;
 
-use agent_orchestrator::attention::{AttentionFilter, AttentionMutation};
+use agent_orchestrator::attention::{AttentionFilter, AttentionMutation, attention_filter_matches};
 use futures::Stream;
 use orchestrator_proto::*;
 use tonic::{Request, Response, Status};
@@ -51,6 +51,28 @@ fn item_to_proto(item: agent_orchestrator::attention::AttentionItem) -> Attentio
     }
 }
 
+fn notification_descriptor(
+    change: &agent_orchestrator::attention::AttentionChange,
+    item: &agent_orchestrator::attention::AttentionItem,
+) -> Option<AttentionNotificationDescriptor> {
+    if !matches!(change.change_kind.as_str(), "open" | "reopen")
+        || item.state == "resolved"
+        || (item.severity != "intervention" && item.kind != "approval_required")
+    {
+        return None;
+    }
+    let title = item.title.chars().take(96).collect::<String>();
+    Some(AttentionNotificationDescriptor {
+        dedupe_key: format!("{}:{}", item.id, change.item_version),
+        attention_item_id: item.id.clone(),
+        item_version: change.item_version,
+        title,
+        severity: item.severity.clone(),
+        process_id: item.task_id.clone(),
+        deep_link: format!("#/attention/{}", item.id),
+    })
+}
+
 fn validate_idempotency(key: &str) -> Result<(), Status> {
     if key.is_empty() || key.len() > 128 {
         return Err(Status::invalid_argument(
@@ -87,6 +109,7 @@ pub(crate) async fn attention_list(
             AttentionFilter {
                 project_id: req.project_id,
                 state: req.state,
+                active_only: req.active_only,
                 kind: req.kind,
                 severity: req.severity,
                 assignee: req.assignee,
@@ -450,7 +473,18 @@ pub(crate) async fn attention_follow(
     request: Request<AttentionFollowRequest>,
 ) -> Result<Response<AttentionFollowStream>, Status> {
     super::authorize(server, &request, "AttentionFollow").map_err(Status::from)?;
+    let actor = super::trusted_actor(&request);
     let req = request.into_inner();
+    let filter = AttentionFilter {
+        project_id: req.project_id,
+        state: req.state,
+        active_only: req.active_only,
+        kind: req.kind,
+        severity: req.severity,
+        assignee: req.assignee,
+        task_id: req.task_id,
+        limit: 200,
+    };
     let state = server.state.clone();
     let interval = std::time::Duration::from_millis(if req.interval_millis == 0 {
         500
@@ -478,18 +512,16 @@ pub(crate) async fn attention_follow(
                     }
                 };
                 if let Some(item) = item {
-                    if req
-                        .project_id
-                        .as_ref()
-                        .is_some_and(|project| project != &item.project_id)
-                    {
-                        continue;
-                    }
+                    let matches = attention_filter_matches(&item, &filter, Some(&actor));
+                    let notification = matches
+                        .then(|| notification_descriptor(&change, &item))
+                        .flatten();
                     if tx
                         .send(Ok(AttentionDelta {
-                            kind: change.change_kind,
+                            kind: if matches { "upsert" } else { "remove" }.to_string(),
                             change_id: change.id,
                             item: Some(item_to_proto(item)),
+                            notification,
                         }))
                         .await
                         .is_err()
@@ -504,4 +536,64 @@ pub(crate) async fn attention_follow(
     Ok(Response::new(Box::pin(
         tokio_stream::wrappers::ReceiverStream::new(rx),
     )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_orchestrator::attention::{AttentionChange, AttentionItem as CoreAttentionItem};
+
+    fn item() -> CoreAttentionItem {
+        CoreAttentionItem {
+            id: "attention-1".into(),
+            project_id: "project-1".into(),
+            task_id: "process-1".into(),
+            task_item_id: None,
+            step_id: Some("qa".into()),
+            session_id: None,
+            kind: "step_failed".into(),
+            severity: "intervention".into(),
+            state: "open".into(),
+            title: format!("{} secret body", "A".repeat(100)),
+            summary: "must never enter notification".into(),
+            requested_decision: None,
+            actions: Vec::new(),
+            dedupe_key: "failure".into(),
+            assignee: None,
+            source_event_id: "event-1".into(),
+            occurrence_count: 1,
+            reopen_count: 0,
+            version: 1,
+            created_at: "2026-07-14T00:00:00Z".into(),
+            updated_at: "2026-07-14T00:00:00Z".into(),
+            last_occurred_at: "2026-07-14T00:00:00Z".into(),
+            snoozed_until: None,
+            sla_deadline: None,
+            resolved_at: None,
+            resolution: None,
+        }
+    }
+
+    #[test]
+    fn descriptor_is_bounded_allowlisted_and_transition_scoped() {
+        let open = AttentionChange {
+            id: 1,
+            attention_item_id: "attention-1".into(),
+            change_kind: "open".into(),
+            item_version: 1,
+        };
+        let descriptor = notification_descriptor(&open, &item()).expect("descriptor");
+        assert_eq!(descriptor.dedupe_key, "attention-1:1");
+        assert_eq!(descriptor.process_id, "process-1");
+        assert_eq!(descriptor.deep_link, "#/attention/attention-1");
+        assert_eq!(descriptor.title.chars().count(), 96);
+        assert!(!descriptor.title.contains("secret body"));
+
+        let update = AttentionChange {
+            change_kind: "upsert".into(),
+            item_version: 2,
+            ..open
+        };
+        assert!(notification_descriptor(&update, &item()).is_none());
+    }
 }

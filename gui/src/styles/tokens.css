@@ -741,6 +741,7 @@ button:focus-visible {
 .attention-severity-attention { background: var(--warning); }
 .attention-readonly { margin-bottom: 12px; padding: 9px 12px; border-radius: 10px; background: var(--accent-tint); color: var(--accent); font-size: 12px; }
 .attention-error { margin-bottom: 12px; color: var(--danger); }
+.attention-notification-fallback { margin-bottom: 12px; padding: 8px 11px; border: 1px solid var(--glass-border-subtle); border-radius: 10px; background: var(--accent-tint); color: var(--text-secondary); font-size: 12px; }
 .attention-empty { text-align: center; color: var(--text-secondary); }
 .attention-keyboard { margin-top: 14px; text-align: center; }
 

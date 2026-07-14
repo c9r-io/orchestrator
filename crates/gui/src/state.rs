@@ -1,13 +1,37 @@
 use orchestrator_proto::OrchestratorServiceClient;
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 use tonic::transport::Channel;
 
 use crate::client::{self, TransportKind};
+
+const MAX_ATTENTION_NOTIFICATION_KEYS: usize = 512;
+
+#[derive(Default)]
+struct AttentionNotificationLedger {
+    keys: HashSet<String>,
+    order: VecDeque<String>,
+}
+
+impl AttentionNotificationLedger {
+    fn record(&mut self, key: String) -> bool {
+        if self.keys.contains(&key) {
+            return false;
+        }
+        self.keys.insert(key.clone());
+        self.order.push_back(key);
+        while self.order.len() > MAX_ATTENTION_NOTIFICATION_KEYS {
+            if let Some(expired) = self.order.pop_front() {
+                self.keys.remove(&expired);
+            }
+        }
+        true
+    }
+}
 
 /// Connection lifecycle states emitted to the frontend.
 #[derive(Debug, Clone, Serialize)]
@@ -30,6 +54,8 @@ pub struct AppState {
     active_streams: Arc<RwLock<HashMap<String, CancellationToken>>>,
     /// Cached RBAC role for the current connection.
     role: Arc<RwLock<Option<String>>>,
+    /// Bounded per-app ledger preventing notification replay after reconnect.
+    attention_notification_ledger: Arc<Mutex<AttentionNotificationLedger>>,
     /// Current connection state.
     connection_state: Arc<RwLock<ConnectionState>>,
     /// Tauri AppHandle for emitting events.
@@ -51,6 +77,9 @@ impl AppState {
             transport: Arc::new(RwLock::new(None)),
             active_streams: Arc::new(RwLock::new(HashMap::new())),
             role: Arc::new(RwLock::new(None)),
+            attention_notification_ledger: Arc::new(Mutex::new(
+                AttentionNotificationLedger::default(),
+            )),
             connection_state: Arc::new(RwLock::new(ConnectionState::Disconnected)),
             app_handle: Arc::new(RwLock::new(None)),
             heartbeat_cancel: CancellationToken::new(),
@@ -152,6 +181,11 @@ impl AppState {
         self.role.read().await.clone()
     }
 
+    /// Returns true exactly once for each daemon-authored item/version key.
+    pub async fn record_attention_notification(&self, key: String) -> bool {
+        self.attention_notification_ledger.lock().await.record(key)
+    }
+
     /// Start a background heartbeat task that pings every 5 seconds.
     ///
     /// On connection loss: attempts 3 reconnects at 1s intervals, emitting
@@ -227,5 +261,24 @@ impl AppState {
                 }
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn notification_ledger_deduplicates_and_stays_bounded() {
+        let mut ledger = AttentionNotificationLedger::default();
+        assert!(ledger.record("attention-1:1".into()));
+        assert!(!ledger.record("attention-1:1".into()));
+        assert!(ledger.record("attention-1:2".into()));
+        for version in 3..=(MAX_ATTENTION_NOTIFICATION_KEYS + 3) {
+            assert!(ledger.record(format!("attention-1:{version}")));
+        }
+        assert_eq!(ledger.keys.len(), MAX_ATTENTION_NOTIFICATION_KEYS);
+        assert_eq!(ledger.order.len(), MAX_ATTENTION_NOTIFICATION_KEYS);
+        assert!(ledger.record("attention-1:1".into()));
     }
 }

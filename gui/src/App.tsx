@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification";
+import { isPermissionGranted, onAction, requestPermission } from "@tauri-apps/plugin-notification";
 import { RoleContext, hasAccess } from "./hooks/useRole";
 import { useConnectionState } from "./hooks/useConnectionState";
 import { useTheme } from "./hooks/useTheme";
@@ -35,6 +35,7 @@ function routeFor(page: ConsoleFeature): ConsoleRoute { return { page } as Conso
 export default function App() {
   const [role, setRole] = useState<Role | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [nativeNotificationsEnabled, setNativeNotificationsEnabled] = useState(false);
   const { connectionState, reconnect } = useConnectionState();
   const { theme, toggleTheme } = useTheme();
   const { transparency, toggleTransparency } = useTransparency();
@@ -48,9 +49,25 @@ export default function App() {
         setRole(await invoke<Role>("probe_role", {}));
       } catch { /* ConnectionStatus owns retry presentation. */ }
       try {
-        if (!await isPermissionGranted()) await requestPermission();
-      } catch { /* Native notifications are optional. */ }
+        const granted = await isPermissionGranted();
+        setNativeNotificationsEnabled(granted || await requestPermission() === "granted");
+      } catch { setNativeNotificationsEnabled(false); }
     })();
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    let unregister: (() => Promise<void>) | undefined;
+    onAction((notification) => {
+      const deepLink = notification.extra?.deep_link;
+      if (typeof deepLink === "string" && /^#\/(attention|processes)\//.test(deepLink)) {
+        window.location.hash = deepLink.slice(1);
+      }
+    }).then((listener) => {
+      if (disposed) void listener.unregister();
+      else unregister = () => listener.unregister();
+    }).catch(() => undefined);
+    return () => { disposed = true; if (unregister) void unregister(); };
   }, []);
 
   useEffect(() => {
@@ -93,7 +110,7 @@ export default function App() {
       return <section className="liquid-glass"><h1>Feature unavailable</h1><p>This console page is disabled by its rollout flag.</p></section>;
     }
     switch (route.page) {
-      case "attention": return <AttentionInbox initialAttentionId={route.attentionId} onOpenTask={(taskId) => go({ page: "processes", taskId })} />;
+      case "attention": return <AttentionInbox initialAttentionId={route.attentionId} nativeNotificationsEnabled={nativeNotificationsEnabled} onOpenTask={(taskId) => go({ page: "processes", taskId })} />;
       case "processes": return route.taskId
         ? <ProcessWorkspace taskId={route.taskId} onBack={() => go({ page: "processes" })} />
         : <ProcessList onSelect={(taskId) => go({ page: "processes", taskId })} />;

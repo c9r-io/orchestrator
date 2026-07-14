@@ -199,6 +199,17 @@ export interface AttentionDelta {
   kind: "upsert" | "remove";
   change_id: number;
   item: AttentionItem | null;
+  notification?: AttentionNotification | null;
+}
+
+export interface AttentionNotification {
+  dedupe_key: string;
+  attention_item_id: string;
+  item_version: number;
+  title: string;
+  severity: string;
+  process_id: string;
+  deep_link: string;
 }
 
 export interface SourceEvent {

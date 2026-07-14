@@ -43,6 +43,7 @@ pub(crate) async fn dispatch(
                     assignee,
                     task_id: task,
                     limit,
+                    active_only: false,
                 })
                 .await?
                 .into_inner();
@@ -157,6 +158,12 @@ pub(crate) async fn dispatch(
                     after_change_id: after,
                     project_id: project,
                     interval_millis: 500,
+                    state: None,
+                    kind: None,
+                    severity: None,
+                    assignee: None,
+                    task_id: None,
+                    active_only: false,
                 })
                 .await?
                 .into_inner();

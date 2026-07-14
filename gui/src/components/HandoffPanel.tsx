@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   HandoffSnapshot,
@@ -11,6 +11,7 @@ interface Props {
   taskId: string;
   canGenerate: boolean;
   canExecute: boolean;
+  reviewRequest: number;
   onExecuted: () => void;
 }
 
@@ -21,7 +22,7 @@ const modes = [
   ["resume_provider_session", "Resume provider session"],
 ] as const;
 
-export default function HandoffPanel({ taskId, canGenerate, canExecute, onExecuted }: Props) {
+export default function HandoffPanel({ taskId, canGenerate, canExecute, reviewRequest, onExecuted }: Props) {
   const [snapshot, setSnapshot] = useState<HandoffSnapshot | null>(null);
   const [boundaries, setBoundaries] = useState<ResumeBoundary[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -81,7 +82,7 @@ export default function HandoffPanel({ taskId, canGenerate, canExecute, onExecut
     }
   };
 
-  const openResume = async () => {
+  const openResume = useCallback(async () => {
     setBusy(true);
     setError(null);
     try {
@@ -96,7 +97,11 @@ export default function HandoffPanel({ taskId, canGenerate, canExecute, onExecut
     } finally {
       setBusy(false);
     }
-  };
+  }, [taskId]);
+
+  useEffect(() => {
+    if (reviewRequest > 0 && canExecute) void openResume();
+  }, [canExecute, openResume, reviewRequest]);
 
   const preview = async () => {
     setBusy(true);

@@ -133,6 +133,8 @@ pub struct AttentionFilter {
     pub project_id: Option<String>,
     /// State filter.
     pub state: Option<String>,
+    /// Whether only non-resolved lifecycle states are included.
+    pub active_only: bool,
     /// Kind filter.
     pub kind: Option<String>,
     /// Severity filter.
@@ -329,7 +331,7 @@ impl AsyncAttentionRepository {
                 }
                 let mut items = loaded
                     .into_iter()
-                    .filter(|item| filter_matches(item, &filter, actor.as_deref()))
+                    .filter(|item| attention_filter_matches(item, &filter, actor.as_deref()))
                     .collect::<Vec<_>>();
                 items.sort_by(|left, right| attention_order(left, right, actor.as_deref()));
                 items.truncate(filter.limit.clamp(1, 500));
@@ -612,11 +614,20 @@ fn read_item(conn: &Connection, id: &str) -> Result<Option<AttentionItem>> {
     .context("load attention item")
 }
 
-fn filter_matches(item: &AttentionItem, filter: &AttentionFilter, actor: Option<&str>) -> bool {
+/// Returns whether an item matches the complete actor-aware query contract.
+///
+/// Snapshot and streaming callers share this predicate so filters cannot drift
+/// when ownership or lifecycle state changes after the initial list request.
+pub fn attention_filter_matches(
+    item: &AttentionItem,
+    filter: &AttentionFilter,
+    actor: Option<&str>,
+) -> bool {
     filter
         .project_id
         .as_ref()
         .is_none_or(|v| &item.project_id == v)
+        && (!filter.active_only || item.state != AttentionState::Resolved.as_str())
         && filter.state.as_ref().is_none_or(|v| &item.state == v)
         && filter.kind.as_ref().is_none_or(|v| &item.kind == v)
         && filter.severity.as_ref().is_none_or(|v| &item.severity == v)
@@ -728,7 +739,8 @@ fn upsert_candidate(conn: &Connection, candidate: &AttentionCandidate) -> Result
         params![candidate.project_id, candidate.dedupe_key], |row| row.get(0),
     ).optional()?;
     let id = resolved_id.unwrap_or_else(|| candidate.id.clone());
-    if read_item(conn, &id)?.is_some() {
+    let reopened = read_item(conn, &id)?.is_some();
+    if reopened {
         conn.execute(
             "UPDATE attention_items SET state='open', severity=?2, title=?3, summary=?4,
              requested_decision_json=?5, actions_json=?6, assignee=NULL, source_event_id=?7,
@@ -775,7 +787,7 @@ fn upsert_candidate(conn: &Connection, candidate: &AttentionCandidate) -> Result
             ],
         )?;
     }
-    append_change(conn, &id, "upsert")
+    append_change(conn, &id, if reopened { "reopen" } else { "open" })
 }
 
 fn resolve_matching(
@@ -1116,6 +1128,9 @@ mod tests {
         let item = repo.get("a").await.expect("get").expect("item");
         assert_eq!(item.occurrence_count, 2);
         assert_eq!(item.version, 2);
+        let changes = repo.changes_since(0, 10).await.expect("changes");
+        assert_eq!(changes[0].change_kind, "open");
+        assert_eq!(changes[1].change_kind, "upsert");
         assert_eq!(
             repo.list(
                 AttentionFilter {
@@ -1128,6 +1143,73 @@ mod tests {
             .expect("list")
             .len(),
             1
+        );
+    }
+
+    #[tokio::test]
+    async fn reopen_and_actor_aware_filters_share_stable_semantics() {
+        let (_temp, repo) = repo().await;
+        repo.apply_projection_batch(
+            vec![AttentionProjectionOp::Upsert(Box::new(candidate("a")))],
+            1,
+        )
+        .await
+        .expect("open");
+        let claimed = repo
+            .mutate("a", 1, "claim", "actor-a", AttentionMutation::Claim)
+            .await
+            .expect("claim");
+        assert!(attention_filter_matches(
+            &claimed,
+            &AttentionFilter {
+                assignee: Some("me".into()),
+                active_only: true,
+                limit: 10,
+                ..Default::default()
+            },
+            Some("actor-a")
+        ));
+        assert!(!attention_filter_matches(
+            &claimed,
+            &AttentionFilter {
+                assignee: Some("me".into()),
+                active_only: true,
+                limit: 10,
+                ..Default::default()
+            },
+            Some("actor-b")
+        ));
+
+        repo.apply_projection_batch(
+            vec![AttentionProjectionOp::ResolveTask {
+                task_id: "t".into(),
+                source_event_id: "2".into(),
+            }],
+            2,
+        )
+        .await
+        .expect("resolve");
+        let resolved = repo.get("a").await.expect("get").expect("item");
+        assert!(!attention_filter_matches(
+            &resolved,
+            &AttentionFilter {
+                active_only: true,
+                limit: 10,
+                ..Default::default()
+            },
+            Some("actor-a")
+        ));
+
+        repo.apply_projection_batch(
+            vec![AttentionProjectionOp::Upsert(Box::new(candidate("a")))],
+            3,
+        )
+        .await
+        .expect("reopen");
+        let changes = repo.changes_since(0, 10).await.expect("changes");
+        assert_eq!(
+            changes.last().map(|change| change.change_kind.as_str()),
+            Some("reopen")
         );
     }
 

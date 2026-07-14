@@ -26,7 +26,8 @@ export default function TaskDetail({ taskId, onBack }: Props) {
   const [expert, setExpert] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<TimelineEntry | null>(null);
   const [showDelete, setShowDelete] = useState(false);
-  const [showRecover, setShowRecover] = useState(false);
+  const [showOrphanRepair, setShowOrphanRepair] = useState(false);
+  const [resumeReviewRequest, setResumeReviewRequest] = useState(0);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [actionErr, setActionErr] = useState<string | null>(null);
   const [traceJson, setTraceJson] = useState<string | null>(null);
@@ -113,7 +114,7 @@ export default function TaskDetail({ taskId, onBack }: Props) {
       <div><button className="btn btn-ghost" onClick={onBack} aria-label={i18n.taskDetail.backLabel}>← Processes</button><h1 id="process-title" className="page-title">{displayData?.name || displayData?.id || "Process"}</h1></div>
       <div className="process-actions">
         {canAccess("operator") && isRunning && <button className="btn btn-secondary" onClick={() => void doAction("task_pause", { task_id: taskId })}>Pause</button>}
-        {canAccess("operator") && isFailed && <button className="btn btn-primary" onClick={() => setShowRecover(true)}>Review recovery</button>}
+        {canAccess("operator") && isFailed && <button className="btn btn-primary" onClick={() => setResumeReviewRequest((value) => value + 1)}>Review safe resume</button>}
         <button className={`btn ${expert ? "btn-primary" : "btn-ghost"}`} onClick={() => setExpert((value) => !value)} aria-pressed={expert}>Expert {expert ? "on" : "off"}</button>
         {canAccess("admin") && <button className="btn btn-destructive" onClick={() => setShowDelete(true)}>Delete</button>}
       </div>
@@ -132,7 +133,7 @@ export default function TaskDetail({ taskId, onBack }: Props) {
         <section className="process-timeline-column"><ProcessTimeline taskId={taskId} selectedEntryId={selectedEntry?.id} onSelectEntry={setSelectedEntry} /></section>
         <aside className="process-context-rail" aria-label="Process context and controls">
           <EvidencePanel entry={selectedEntry} />
-          <HandoffPanel taskId={taskId} canGenerate={canAccess("operator")} canExecute={canAccess("operator") && (isPaused || isFailed)} onExecuted={reload} />
+          <HandoffPanel taskId={taskId} canGenerate={canAccess("operator")} canExecute={canAccess("operator") && (isPaused || isFailed)} reviewRequest={resumeReviewRequest} onExecuted={reload} />
           <SessionPanel taskId={taskId} canControl={canAccess("operator")} />
           <SourcePanel taskId={taskId} />
         </aside>
@@ -140,6 +141,7 @@ export default function TaskDetail({ taskId, onBack }: Props) {
         <div className="expert-utilities">
           <button className="btn btn-secondary" onClick={() => void handleTrace()}>Load trace JSON</button>
           {!active ? <button className="btn btn-primary" onClick={start}>Follow raw logs</button> : <button className="btn btn-secondary" onClick={stop}>Stop raw logs</button>}
+          {canAccess("operator") && <button className="btn btn-secondary" onClick={() => setShowOrphanRepair(true)}>Repair orphaned running items</button>}
         </div>
         {traceJson && <div className="liquid-glass expert-raw"><div><h3>Trace JSON</h3><button className="btn btn-ghost" onClick={() => setTraceJson(null)}>Close</button></div><pre>{traceJson}</pre></div>}
         <div className="liquid-glass expert-raw"><div><h3>Raw task logs</h3><span>{allLogs.length > LOG_LIMIT ? `Latest ${LOG_LIMIT}` : `${logs.length} lines`}</span></div><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={i18n.taskDetail.searchPlaceholder} aria-label="Search raw logs" />
@@ -150,7 +152,7 @@ export default function TaskDetail({ taskId, onBack }: Props) {
       </section>}
     </>}
 
-    <ConfirmDialog open={showRecover} title="Review process recovery" message="Recovering re-enqueues execution from the daemon-approved task boundary. Workspace files are not rolled back; inspect the handoff panel for a boundary-specific resume." confirmLabel="Recover process" onConfirm={() => { setShowRecover(false); void doAction("task_recover", { task_id: taskId }); }} onCancel={() => setShowRecover(false)} />
+    <ConfirmDialog open={showOrphanRepair} title="Repair orphaned running items" message="This maintenance action marks running items left behind by a crashed worker as retryable. It does not resume from a logical boundary or roll back workspace files." confirmLabel="Repair orphaned items" onConfirm={() => { setShowOrphanRepair(false); void doAction("task_recover", { task_id: taskId }); }} onCancel={() => setShowOrphanRepair(false)} />
     <ConfirmDialog open={showDelete} title={i18n.taskDetail.deleteTitle} message={i18n.taskDetail.deleteMessage} confirmLabel={i18n.taskDetail.deleteConfirm} destructive onConfirm={() => void handleDelete()} onCancel={() => setShowDelete(false)} />
   </main>;
 }

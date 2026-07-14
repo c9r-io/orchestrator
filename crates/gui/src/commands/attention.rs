@@ -95,6 +95,7 @@ pub(crate) fn item_from_proto(item: orchestrator_proto::AttentionItem) -> Attent
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn attention_list(
     state: State<'_, Arc<AppState>>,
     project_id: Option<String>,
@@ -103,6 +104,7 @@ pub async fn attention_list(
     severity: Option<String>,
     assignee: Option<String>,
     task_id: Option<String>,
+    active_only: Option<bool>,
 ) -> Result<AttentionListResult, String> {
     let mut client = state.client().await?;
     let response = client
@@ -114,6 +116,7 @@ pub async fn attention_list(
             assignee,
             task_id,
             limit: 200,
+            active_only: active_only.unwrap_or(false),
         })
         .await
         .map_err(|error| crate::errors::humanize_grpc_error(&error))?

@@ -369,6 +369,7 @@ message AttentionListRequest {
   optional string assignee = 5;
   optional string task_id = 6;
   uint32 limit = 7;
+  bool active_only = 8;
 }
 
 message AttentionListResponse {
@@ -460,12 +461,29 @@ message AttentionFollowRequest {
   int64 after_change_id = 1;
   optional string project_id = 2;
   uint64 interval_millis = 3;
+  optional string state = 4;
+  optional string kind = 5;
+  optional string severity = 6;
+  optional string assignee = 7;
+  optional string task_id = 8;
+  bool active_only = 9;
+}
+
+message AttentionNotificationDescriptor {
+  string dedupe_key = 1;
+  string attention_item_id = 2;
+  int64 item_version = 3;
+  string title = 4;
+  string severity = 5;
+  string process_id = 6;
+  string deep_link = 7;
 }
 
 message AttentionDelta {
   string kind = 1;
   int64 change_id = 2;
   optional AttentionItem item = 3;
+  optional AttentionNotificationDescriptor notification = 4;
 }
 
 message SourceEvent {
