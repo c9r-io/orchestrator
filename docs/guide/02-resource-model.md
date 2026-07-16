@@ -1,6 +1,6 @@
 # 02 - Resource Model
 
-The orchestrator manages ten core resource kinds, plus extensible Custom Resource Definitions (CRDs). All resources follow a Kubernetes-style manifest format.
+The orchestrator manages eleven core resource kinds, plus extensible Custom Resource Definitions (CRDs). All resources follow a Kubernetes-style manifest format.
 
 ## Manifest Structure
 
@@ -327,6 +327,42 @@ orchestrator trigger fire <name>       # manually fire (create task immediately)
 orchestrator get triggers              # list all triggers
 orchestrator delete trigger/<name>     # remove trigger
 ```
+
+## 11. SourceTaskTemplate
+
+A SourceTaskTemplate is a project-scoped recipe for turning verified source evidence into a future task goal and action. It is separate from StepTemplate: SourceTaskTemplate describes task creation, while StepTemplate describes an agent prompt inside a workflow step.
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskTemplate
+metadata:
+  name: docs-from-slack
+spec:
+  skill:
+    name: docs
+    invocation: "$docs"
+    args: ["--concise"]
+  action:
+    workflow: slack-documentation
+    workspace: main
+    start: true
+    initial_vars:
+      origin: slack
+  goalTemplate: >-
+    {skill_invocation}: use {source_message_url} as the source request
+  allowedVariables: [skill_invocation, source_message_url]
+```
+
+The renderer accepts only exact allowlisted variables, evaluates once, and requires Slack sample URLs to be HTTPS `slack.com` permalinks under `/archives/`. Preview uses the same daemon renderer as future live routing and does not create a task or source record:
+
+```bash
+orchestrator source template preview docs-from-slack \
+  --project my-project --provider slack --installation primary \
+  --message-url https://example.slack.com/archives/C123/p1234567890000100 \
+  -o json
+```
+
+Normal deletion is blocked while a `SourceTaskBinding` references the template. Administrators can explicitly remove the template and references atomically with `--force --force-references`; that operation is audited.
 
 ## Resource Lifecycle
 

@@ -61,7 +61,7 @@ kill <pid>                                        # graceful SIGTERM
 
 1. Start the daemon: `orchestratord --foreground --workers 2`
 2. `orchestrator init` — initialize orchestrator runtime (creates `~/.orchestratord/` with DB, secrets, etc.)
-3. `orchestrator apply -f manifest.yaml --project <name>` — load resources (daemon hot-reloads config via RwLock, no restart needed)
+3. `orchestrator apply -f manifest.yaml --project <name>` — load resources (daemon atomically hot-reloads an `ArcSwap` config snapshot, no restart needed)
 4. `orchestrator task create --name X --goal Y --workflow Z --project <name>` — create and run (auto-enqueues to worker)
 5. `orchestrator task info <id>` / `task trace <id>` / `task logs <id>` — inspect results
 
@@ -95,6 +95,7 @@ All resources use `apiVersion: orchestrator.dev/v2` with `metadata.name` and `sp
 | EnvStore | project | Plain key-value pairs for environment variables |
 | WorkflowStore | project | Cross-task persistent key-value store (WP01) |
 | Trigger | project | Cron-scheduled or event-driven automatic task creation |
+| SourceTaskTemplate | project | Trusted Skill + task action + allowlisted source-goal renderer and preview |
 | RuntimePolicy | singleton | Runner shell config, resume behavior, observability, redaction patterns |
 | Project | cluster | Namespace for organizing resources |
 | CustomResourceDefinition | cluster | Extensible resource types with JSON Schema + CEL validation |

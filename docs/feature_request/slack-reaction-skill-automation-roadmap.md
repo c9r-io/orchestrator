@@ -146,9 +146,9 @@ Authority remains in the daemon:
 | FR | Deliverable | Depends on | Exit gate |
 |---|---|---|---|
 | FR-107 (Closed): [design](../design_doc/orchestrator/118-slack-reaction-source-event-contract.md), [QA](../qa/orchestrator/155-slack-reaction-source-event-contract.md) | Provider-neutral reaction contract and Slack normalization | FR-099 closure artifacts | Signed `reaction_added` is durable, queryable and never creates a task by itself |
-| [FR-108](FR-108-source-task-template-skill-invocation.md) | SourceTaskTemplate resource, validation, snapshot and preview renderer | Existing resource/task model | A Skill + message URL template can be applied, round-tripped and rendered deterministically |
+| FR-108 (Closed): [design](../design_doc/orchestrator/119-source-task-template-skill-invocation.md), [QA](../qa/orchestrator/156-source-task-template-skill-invocation.md) | SourceTaskTemplate resource, validation, snapshot and preview renderer | Existing resource/task model | A Skill + message URL template can be applied, round-tripped and rendered deterministically |
 
-FR-107 is closed. FR-108 remains independently implementable; neither slice introduces automatic task mutation alone.
+FR-107 and FR-108 are closed, so Phase A is complete. Neither slice introduces automatic task mutation alone.
 
 ### Phase B: Binding and first vertical task
 

@@ -1,6 +1,6 @@
 # 02 - 资源模型
 
-编排器管理十种核心资源类型，以及可扩展的自定义资源定义（CRD）。所有资源遵循 Kubernetes 风格的清单格式。
+编排器管理十一种核心资源类型，以及可扩展的自定义资源定义（CRD）。所有资源遵循 Kubernetes 风格的清单格式。
 
 ## 清单结构
 
@@ -327,6 +327,42 @@ orchestrator trigger fire <name>       # 手动触发（立即创建任务）
 orchestrator get triggers              # 列出所有触发器
 orchestrator delete trigger/<name>     # 删除触发器
 ```
+
+## 11. SourceTaskTemplate（来源任务模板）
+
+SourceTaskTemplate 是项目级的来源到任务配方：它描述经过验证的来源信息将如何形成未来任务的目标和动作。它与 StepTemplate 不同：SourceTaskTemplate 面向任务创建，StepTemplate 面向工作流内部某一步的 agent 提示词。
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskTemplate
+metadata:
+  name: docs-from-slack
+spec:
+  skill:
+    name: docs
+    invocation: "$docs"
+    args: ["--concise"]
+  action:
+    workflow: slack-documentation
+    workspace: main
+    start: true
+    initial_vars:
+      origin: slack
+  goalTemplate: >-
+    {skill_invocation}: use {source_message_url} as the source request
+  allowedVariables: [skill_invocation, source_message_url]
+```
+
+渲染器只接受显式白名单中的精确变量，且只执行一轮替换。Slack 示例 URL 必须是 HTTPS、属于 `slack.com`，并使用 `/archives/` permalink 路径。预览与未来实时路由共用 daemon 渲染器，且不会创建任务或来源记录：
+
+```bash
+orchestrator source template preview docs-from-slack \
+  --project my-project --provider slack --installation primary \
+  --message-url https://example.slack.com/archives/C123/p1234567890000100 \
+  -o json
+```
+
+当 `SourceTaskBinding` 仍引用模板时，普通删除会被拒绝。管理员可以显式使用 `--force --force-references` 原子删除模板及引用；该操作会进入审计记录。
 
 ## 资源生命周期
 

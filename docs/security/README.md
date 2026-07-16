@@ -36,7 +36,7 @@ API_TOKEN="{bearer_token}"                # If authentication is required
 ### Input Validation
 | Doc | Description | Scenarios | Risk |
 |------|------|--------|----------|
-| `docs/security/input-validation/01-injection.md` | SQL/NoSQL/command injection and inert source-text overlay | 5 | Critical |
+| `docs/security/input-validation/01-injection.md` | SQL/NoSQL/command injection and inert source/template rendering overlays | 5 | Critical |
 | `docs/security/input-validation/02-xss.md` | XSS (stored/reflected/DOM) | 4 | High |
 | `docs/security/input-validation/03-csrf.md` | CSRF (browser context) | 4 | High |
 | `docs/security/input-validation/04-ssrf.md` | SSRF (callbacks/metadata/internal probing) | 4 | Critical |
@@ -55,7 +55,7 @@ API_TOKEN="{bearer_token}"                # If authentication is required
 ### Data Security
 | Doc | Description | Scenarios | Risk |
 |------|------|--------|----------|
-| `docs/security/data-security/01-sensitive-data.md` | Sensitive data exposure and masking, including provider/session/source overlays | 5 | Critical |
+| `docs/security/data-security/01-sensitive-data.md` | Sensitive data exposure and masking, including provider/session/source/template overlays | 5 | Critical |
 
 ### Infrastructure Security
 | Doc | Description | Scenarios | Risk |
@@ -87,6 +87,6 @@ API_TOKEN="{bearer_token}"                # If authentication is required
 4. If the project has concurrency-sensitive operations (one-time tokens, redemption, payments, invites, quotas): also run business logic and race-condition docs.
 5. For handoff/resume changes, run the overlays in access control, workflow abuse, and sensitive-data docs together with `docs/qa/orchestrator/144-handoff-and-safe-resume.md`.
 6. For interactive session changes, run the FR-098/FR-102 overlays in `authorization/01-access-control.md`, `business-logic/02-race-conditions.md`, and `data-security/01-sensitive-data.md` with `docs/qa/orchestrator/149-agent-session-control-plane-hardening.md`; use `docs/qa/orchestrator/152-session-runtime-policy-authority.md` for FR-105 global gate authority. QA-145 is the original specification.
-7. For source-adapter changes, run the FR-099 overlays in access control, injection, sensitive-data, and logging docs with `docs/qa/orchestrator/146-source-events-and-slack-binding.md`; reaction adapters additionally run `docs/qa/orchestrator/155-slack-reaction-source-event-contract.md`.
+7. For source-adapter changes, run the FR-099 overlays in access control, injection, sensitive-data, and logging docs with `docs/qa/orchestrator/146-source-events-and-slack-binding.md`; reaction adapters additionally run `docs/qa/orchestrator/155-slack-reaction-source-event-contract.md`, and source-template changes run the injection/sensitive-data overlays with `docs/qa/orchestrator/156-source-task-template-skill-invocation.md`.
 8. For FR-103 recovery/notification changes, run sensitive-data and logging overlays with `docs/qa/orchestrator/150-process-console-recovery-notifications-e2e.md`.
 9. Before a Process Console v1 release, run the domain overlays above and the clean-tree aggregate gate in `docs/qa/orchestrator/153-process-console-release-acceptance.md`; the gate retains canonical audit and privacy assertions from each owning slice.

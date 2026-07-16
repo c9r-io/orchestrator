@@ -109,6 +109,7 @@ Verify user input is not executed as a template/expression.
 - It cannot select a workflow, modify manifests/execution profiles/secrets, construct shell commands, or add an action outside the closed `SourceCommand` enum.
 - Send shell/template/CEL fragments through the non-Slack fixture and Slack text paths, then verify they remain inert text as specified by `docs/qa/orchestrator/146-source-events-and-slack-binding.md`.
 - FR-107 reaction names accept only bounded Slack emoji-name characters, and target references never become template, Skill, workflow, command, or URL input. Verify rejection and non-mutation with `docs/qa/orchestrator/155-slack-reaction-source-event-contract.md`.
+- FR-108 SourceTaskTemplate rendering accepts only exact allowlisted variables, performs one substitution pass, treats braces from source values as inert text, and rejects unsafe Slack URL schemes/hosts/credentials/paths and bounded-field violations. Skill invocation is trusted task data, never a source-selected shell fragment. Verify with `docs/qa/orchestrator/156-source-task-template-skill-invocation.md`.
 
 ---
 

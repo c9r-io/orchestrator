@@ -166,6 +166,8 @@ The orchestrator manages resources organized hierarchically:
 
 `RuntimePolicy` has two explicit resolution scopes. Process-wide consumers use only the `_system` policy and fall back to safe defaults. Project-scoped consumers resolve the named project, then `_system`, then defaults. Global Session rollout gates (`session_read_enabled` and `session_control_enabled`) never select an ordinary project policy by store iteration order; project-owned redaction and execution behavior continue to use project resolution.
 
+`SourceTaskTemplate` is a project-scoped source-to-task recipe distinct from workflow `StepTemplate`. It stores a trusted Skill descriptor and task action, then a pure core renderer combines them with bounded, explicitly allowlisted source variables. The daemon preview path reads one immutable `ArcSwap` snapshot, applies RuntimePolicy redaction, and performs no task/source mutation. Badge matching and live task creation remain separate routing capabilities.
+
 #### Execution Model
 
 A **Task** is the unit of execution, binding a Workspace and Workflow to a set of target files.

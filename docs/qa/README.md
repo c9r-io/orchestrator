@@ -277,6 +277,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/153-process-console-release-acceptance.md` | 5 | FR-106 clean current-HEAD aggregate gate, migration identity, populated upgrade, integrated recovery, performance, and rollback contract |
 | orchestrator | `docs/qa/orchestrator/154-process-console-functional-ui-regression.md` | 5 | Post-release Process Console unit/UI coverage expansion across navigation, mutations, timeline, handoff, Sources, Sessions, accessibility, and coverage reporting |
 | orchestrator | `docs/qa/orchestrator/155-slack-reaction-source-event-contract.md` | 5 | FR-107 typed reaction ingestion, Slack validation, deduplication, non-mutating routing, bounded reads, and Sources UI evidence |
+| orchestrator | `docs/qa/orchestrator/156-source-task-template-skill-invocation.md` | 5 | FR-108 native template lifecycle, safe deterministic preview, zero mutation, restart stability, and governed deletion |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |

@@ -8,6 +8,7 @@
 - [SecretStore & EnvStore](#secretstore--envstore)
 - [RuntimePolicy](#runtimepolicy)
 - [Trigger](#trigger)
+- [SourceTaskTemplate](#sourcetasktemplate)
 - [Pipeline Variables](#pipeline-variables)
 - [Step Fields](#step-fields)
 - [Known Step IDs](#known-step-ids)
@@ -228,6 +229,41 @@ orchestrator trigger fire <name>      # manually fire (create task now)
 orchestrator get triggers             # list all triggers
 orchestrator delete trigger/<name>    # remove trigger
 ```
+
+## SourceTaskTemplate
+
+A project-scoped source-to-task recipe. It does not replace StepTemplate and does not itself match badges or create tasks.
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskTemplate
+metadata:
+  name: docs-from-slack
+spec:
+  skill:
+    name: docs
+    invocation: "$docs"
+    args: ["--concise"]
+  action:
+    workflow: slack-documentation
+    workspace: main
+    start: true
+    initial_vars:
+      origin: slack
+  goalTemplate: "{skill_invocation}: review {source_message_url}"
+  allowedVariables: [skill_invocation, source_message_url]
+```
+
+Supported source variables are `source_message_url`, `source_provider`, `source_installation_id`, `source_event_id`, `source_reaction`, and `source_target_id`; trusted Skill variables are `skill_name` and `skill_invocation`. Tokens are exact and rendered once. Use `{{` and `}}` for literal braces.
+
+```bash
+orchestrator source template preview docs-from-slack \
+  --project my-project --provider slack --installation primary \
+  --message-url https://example.slack.com/archives/C123/p1234567890000100 \
+  -o json
+```
+
+Preview is read-only and returns a deterministic content hash/revision plus a warning when the sample URL cannot be verified against an installation. Public fields use RuntimePolicy redaction.
 
 ## Pipeline Variables
 

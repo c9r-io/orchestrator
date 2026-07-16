@@ -23,6 +23,8 @@ FR-099 overlay: source List/Get/GUI responses may expose normalized provider/ins
 
 FR-107 overlay: reaction reads may additionally expose the closed event type, bounded normalized emoji name, target kind, and stable target ID. They must not expose the source message body, transcript, attachment/file content, target URL, Slack secret, or raw envelope. An ignored reaction card must not imply a task relationship. Run `docs/qa/orchestrator/155-slack-reaction-source-event-contract.md`.
 
+FR-108 overlay: SourceTaskTemplate preview may expose the trusted Skill descriptor, rendered bounded goal, action, revision/hash, and verification warnings. RuntimePolicy redaction must cover every public text field, including initial variables. Audit may retain only canonical hashes and resource identifiers; it must not contain the source URL, rendered goal, source body, provider secret, or sensitive configured values. Preview must not fetch provider content or create durable source/task rows. Run `docs/qa/orchestrator/156-source-task-template-skill-invocation.md`.
+
 FR-103 overlay: `AttentionDelta.notification` may expose only a dedupe key, Attention item/version, bounded title, severity, process ID, and safe deep link. Native notification bodies and in-app fallback events must never include prompt, transcript, source message, stdout/stderr, token, API key, or raw error content. Run the forbidden-field scan in `docs/qa/orchestrator/150-process-console-recovery-notifications-e2e.md`.
 
 ---
