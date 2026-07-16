@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use super::{
     AgentConfig, EnvStoreConfig, ExecutionProfileConfig, HealthPolicyConfig, InvariantConfig,
-    SecretStoreConfig, StepTemplateConfig, TriggerConfig, WorkflowConfig,
+    SecretStoreConfig, SourceTaskTemplateConfig, StepTemplateConfig, TriggerConfig, WorkflowConfig,
 };
 
 /// Safety configuration for self-bootstrap and dangerous operations
@@ -163,6 +163,9 @@ pub struct ProjectConfig {
     #[serde(default)]
     /// Named step templates reusable by workflows in the project.
     pub step_templates: HashMap<String, StepTemplateConfig>,
+    #[serde(default)]
+    /// Source event templates that produce governed task creation inputs.
+    pub source_task_templates: HashMap<String, SourceTaskTemplateConfig>,
     #[serde(default)]
     /// Environment stores scoped to the project.
     pub env_stores: HashMap<String, EnvStoreConfig>,

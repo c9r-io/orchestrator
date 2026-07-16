@@ -28,6 +28,7 @@ pub fn is_project_scoped(kind: &str) -> bool {
             | "Workflow"
             | "Workspace"
             | "StepTemplate"
+            | "SourceTaskTemplate"
             | "ExecutionProfile"
             | "EnvStore"
             | "SecretStore"

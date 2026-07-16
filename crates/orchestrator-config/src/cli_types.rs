@@ -76,6 +76,11 @@ impl<'de> Deserialize<'de> for OrchestratorResource {
                     serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
                 ResourceSpec::StepTemplate(s)
             }
+            ResourceKind::SourceTaskTemplate => {
+                let s: SourceTaskTemplateSpec =
+                    serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
+                ResourceSpec::SourceTaskTemplate(s)
+            }
             ResourceKind::ExecutionProfile => {
                 let s: ExecutionProfileSpec =
                     serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
@@ -137,6 +142,8 @@ pub enum ResourceKind {
     RuntimePolicy,
     /// Step-template manifest.
     StepTemplate,
+    /// Source-to-task template manifest.
+    SourceTaskTemplate,
     /// Execution-profile manifest.
     ExecutionProfile,
     /// Environment-store manifest.
@@ -189,6 +196,9 @@ pub enum ResourceSpec {
 
     /// Step template resource spec
     StepTemplate(StepTemplateSpec),
+
+    /// Source task template resource spec.
+    SourceTaskTemplate(SourceTaskTemplateSpec),
 
     /// Execution profile resource spec
     ExecutionProfile(ExecutionProfileSpec),
@@ -384,6 +394,50 @@ pub struct StepTemplateSpec {
     /// Optional description of what this template does
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+}
+
+/// Trusted skill invocation in a source task template.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SourceTaskTemplateSkillSpec {
+    /// Stable skill name.
+    pub name: String,
+    /// Trusted skill invocation text.
+    pub invocation: String,
+    /// Ordered trusted arguments.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<String>,
+}
+
+/// Task action in a source task template.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SourceTaskTemplateActionSpec {
+    /// Referenced workflow.
+    pub workflow: String,
+    /// Referenced workspace.
+    pub workspace: String,
+    /// Whether a future binding starts the created task immediately.
+    #[serde(default)]
+    pub start: bool,
+    /// Trusted task variables.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub initial_vars: std::collections::BTreeMap<String, String>,
+}
+
+/// Project-scoped source-to-task template specification.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct SourceTaskTemplateSpec {
+    /// Trusted skill invocation.
+    pub skill: SourceTaskTemplateSkillSpec,
+    /// Trusted task action.
+    pub action: SourceTaskTemplateActionSpec,
+    /// Goal template using exact `{variable}` tokens.
+    pub goal_template: String,
+    /// Exact variables allowed in the goal template.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allowed_variables: Vec<String>,
 }
 
 /// Execution profile resource specification.

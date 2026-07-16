@@ -135,6 +135,8 @@ pub mod service;
 pub mod session_store;
 /// Provider-neutral external source events, bindings, and routing persistence.
 pub mod source;
+/// Governed source-to-task template validation and rendering.
+pub mod source_task_template;
 /// Shared daemon state and state transition helpers.
 pub mod state;
 pub mod store;

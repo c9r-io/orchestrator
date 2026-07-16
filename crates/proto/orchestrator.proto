@@ -45,6 +45,7 @@ service OrchestratorService {
   rpc SourceBindingList(SourceBindingListRequest) returns (SourceBindingListResponse);
   rpc SourceBind(SourceBindRequest) returns (SourceBinding);
   rpc SourceReplay(SourceReplayRequest) returns (SourceReplayResponse);
+  rpc SourceTaskTemplatePreview(SourceTaskTemplatePreviewRequest) returns (SourceTaskTemplatePreviewResponse);
 
   // Deterministic handoff and two-stage safe logical resume
   rpc HandoffGenerate(HandoffGenerateRequest) returns (HandoffSnapshotResponse);
@@ -565,6 +566,33 @@ message SourceBindRequest {
 message SourceReplayRequest { string id = 1; optional ActionAuditContext audit = 2; }
 message SourceReplayResponse { string id = 1; string status = 2; }
 
+message SourceTaskTemplatePreviewRequest {
+  string name = 1;
+  string project_id = 2;
+  string provider = 3;
+  string installation_id = 4;
+  string message_url = 5;
+  optional string event_id = 6;
+  optional string reaction = 7;
+  optional string target_id = 8;
+}
+
+message SourceTaskTemplatePreviewResponse {
+  string name = 1;
+  string project_id = 2;
+  string skill_name = 3;
+  string skill_invocation = 4;
+  repeated string skill_args = 5;
+  string goal = 6;
+  string workflow = 7;
+  string workspace = 8;
+  bool start = 9;
+  map<string, string> initial_vars = 10;
+  string content_hash = 11;
+  string revision = 12;
+  repeated string warnings = 13;
+}
+
 message HandoffGenerateRequest {
   string task_id = 1;
   optional int64 source_event_cursor = 2;
@@ -786,6 +814,8 @@ message DeleteRequest {
   bool force = 2;
   optional string project = 3;
   bool dry_run = 4;
+  bool force_references = 5;
+  optional ActionAuditContext audit = 6;
 }
 
 message DeleteResponse {

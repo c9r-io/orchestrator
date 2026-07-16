@@ -308,6 +308,15 @@ impl OrchestratorService for TestOrchestratorServer {
         ))
     }
 
+    async fn source_task_template_preview(
+        &self,
+        _: Request<SourceTaskTemplatePreviewRequest>,
+    ) -> Result<Response<SourceTaskTemplatePreviewResponse>, Status> {
+        Err(Status::unimplemented(
+            "source template integration fixture uses the production daemon",
+        ))
+    }
+
     async fn agent_session_list(
         &self,
         _: Request<AgentSessionListRequest>,

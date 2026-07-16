@@ -66,6 +66,16 @@ pub fn apply_to_project(
                 serde_json::to_value(&template.spec)?,
             ))
         }
+        RegisteredResource::SourceTaskTemplate(template) => {
+            let metadata = scoped_metadata(&template.metadata, project);
+            Ok(apply_to_store(
+                config,
+                "SourceTaskTemplate",
+                template.name(),
+                &metadata,
+                serde_json::to_value(&template.spec)?,
+            ))
+        }
         RegisteredResource::EnvStore(store) => {
             let metadata = scoped_metadata(&store.metadata, project);
             Ok(apply_to_store(

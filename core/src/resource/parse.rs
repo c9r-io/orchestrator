@@ -8,8 +8,8 @@ use serde::Deserialize;
 
 use super::{
     AgentResource, EnvStoreResource, ExecutionProfileResource, ProjectResource, Resource,
-    RuntimePolicyResource, SecretStoreResource, StepTemplateResource, TriggerResource,
-    WorkflowResource, WorkspaceResource,
+    RuntimePolicyResource, SecretStoreResource, SourceTaskTemplateResource, StepTemplateResource,
+    TriggerResource, WorkflowResource, WorkspaceResource,
 };
 
 /// Parse YAML into builtin OrchestratorResource types only (backward-compatible).
@@ -81,6 +81,9 @@ pub fn delete_resource_by_kind(
         "steptemplate" | "step_template" | "step-template" => {
             Ok(StepTemplateResource::delete_from(config, name))
         }
+        "sourcetasktemplate" | "source_task_template" | "source-task-template" | "stt" => {
+            Ok(SourceTaskTemplateResource::delete_from(config, name))
+        }
         "executionprofile" | "execution-profile" | "execution_profile" => {
             Ok(ExecutionProfileResource::delete_from(config, name))
         }
@@ -100,7 +103,7 @@ pub fn delete_resource_by_kind(
                 return crate::crd::delete_custom_resource(config, &crd_kind, name);
             }
             Err(anyhow!(
-                "unknown resource type: {} (supported: workspace, agent, workflow, project, runtimepolicy, steptemplate, executionprofile, envstore, secretstore, or CRD-defined types)",
+                "unknown resource type: {} (supported: workspace, agent, workflow, project, runtimepolicy, steptemplate, sourcetasktemplate, executionprofile, envstore, secretstore, or CRD-defined types)",
                 kind
             ))
         }
@@ -116,6 +119,7 @@ pub fn kind_as_str(kind: ResourceKind) -> &'static str {
         ResourceKind::Project => "project",
         ResourceKind::RuntimePolicy => "runtimepolicy",
         ResourceKind::StepTemplate => "steptemplate",
+        ResourceKind::SourceTaskTemplate => "sourcetasktemplate",
         ResourceKind::ExecutionProfile => "executionprofile",
         ResourceKind::EnvStore => "envstore",
         ResourceKind::SecretStore => "secretstore",

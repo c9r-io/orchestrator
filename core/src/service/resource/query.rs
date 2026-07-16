@@ -66,6 +66,9 @@ fn get_single_resource(
         "wf" | "workflow" => "Workflow",
         "agent" => "Agent",
         "trigger" | "tg" => "Trigger",
+        "sourcetasktemplate" | "source-task-template" | "source_task_template" | "stt" => {
+            "SourceTaskTemplate"
+        }
         _ => {
             // CRD-defined custom resource fallback (skip kinds with dedicated ProjectConfig
             // projections — those are handled by the match arms above)
@@ -131,6 +134,15 @@ fn get_single_resource(
             })?;
             format_output(trigger, output_format)
         }
+        "sourcetasktemplate" | "source-task-template" | "source_task_template" | "stt" => {
+            let template = project.source_task_templates.get(name).ok_or_else(|| {
+                classify_resource_error(
+                    "resource.get",
+                    anyhow::anyhow!("source task template not found: {}", name),
+                )
+            })?;
+            format_output(template, output_format)
+        }
         _ => unreachable!(),
     }
 }
@@ -149,6 +161,14 @@ fn get_list_resource(
         "agent" | "agents" => (project.agents.keys().collect(), "Agent"),
         "wf" | "workflow" | "workflows" => (project.workflows.keys().collect(), "Workflow"),
         "trigger" | "triggers" | "tg" => (project.triggers.keys().collect(), "Trigger"),
+        "sourcetasktemplate"
+        | "source-task-template"
+        | "source_task_template"
+        | "sourcetasktemplates"
+        | "stt" => (
+            project.source_task_templates.keys().collect(),
+            "SourceTaskTemplate",
+        ),
         _ => {
             // CRD-defined custom resource list fallback (skip kinds with dedicated ProjectConfig
             // projections — those are handled by the match arms above)

@@ -21,11 +21,13 @@ pub trait CrdProjectable: Sized + Serialize + DeserializeOwned {
 
 use crate::cli_types::{
     AgentSpec, EnvStoreSpec, ExecutionProfileSpec, ProjectSpec, RuntimePolicySpec, SecretStoreSpec,
+    SourceTaskTemplateActionSpec, SourceTaskTemplateSkillSpec, SourceTaskTemplateSpec,
     StepTemplateSpec, WorkspaceSpec,
 };
 use crate::config::{
     AgentConfig, EnvStoreConfig, ExecutionProfileConfig, ProjectConfig, ResumeConfig, RunnerConfig,
-    SecretStoreConfig, StepTemplateConfig, StoreBackendProviderConfig, WorkflowConfig,
+    SecretStoreConfig, SourceTaskTemplateActionConfig, SourceTaskTemplateConfig,
+    SourceTaskTemplateSkillConfig, StepTemplateConfig, StoreBackendProviderConfig, WorkflowConfig,
     WorkflowStoreConfig, WorkspaceConfig,
 };
 use crate::resource::agent::{agent_config_to_spec, agent_spec_to_config};
@@ -97,6 +99,7 @@ impl CrdProjectable for ProjectConfig {
             agents: Default::default(),
             workflows: Default::default(),
             step_templates: Default::default(),
+            source_task_templates: Default::default(),
             env_stores: Default::default(),
             secret_stores: Default::default(),
             execution_profiles: Default::default(),
@@ -247,6 +250,50 @@ impl CrdProjectable for StepTemplateConfig {
             description: self.description.clone(),
         };
         serde_json::to_value(&spec).unwrap_or_default()
+    }
+}
+
+impl CrdProjectable for SourceTaskTemplateConfig {
+    fn crd_kind() -> &'static str {
+        "SourceTaskTemplate"
+    }
+
+    fn from_cr_spec(spec: &serde_json::Value) -> Result<Self> {
+        let value: SourceTaskTemplateSpec = serde_json::from_value(spec.clone())?;
+        Ok(Self {
+            skill: SourceTaskTemplateSkillConfig {
+                name: value.skill.name,
+                invocation: value.skill.invocation,
+                args: value.skill.args,
+            },
+            action: SourceTaskTemplateActionConfig {
+                workflow: value.action.workflow,
+                workspace: value.action.workspace,
+                start: value.action.start,
+                initial_vars: value.action.initial_vars,
+            },
+            goal_template: value.goal_template,
+            allowed_variables: value.allowed_variables,
+        })
+    }
+
+    fn to_cr_spec(&self) -> serde_json::Value {
+        let spec = SourceTaskTemplateSpec {
+            skill: SourceTaskTemplateSkillSpec {
+                name: self.skill.name.clone(),
+                invocation: self.skill.invocation.clone(),
+                args: self.skill.args.clone(),
+            },
+            action: SourceTaskTemplateActionSpec {
+                workflow: self.action.workflow.clone(),
+                workspace: self.action.workspace.clone(),
+                start: self.action.start,
+                initial_vars: self.action.initial_vars.clone(),
+            },
+            goal_template: self.goal_template.clone(),
+            allowed_variables: self.allowed_variables.clone(),
+        };
+        serde_json::to_value(spec).unwrap_or_default()
     }
 }
 
@@ -433,6 +480,7 @@ mod tests {
             agents: Default::default(),
             workflows: Default::default(),
             step_templates: Default::default(),
+            source_task_templates: Default::default(),
             env_stores: Default::default(),
             secret_stores: Default::default(),
             execution_profiles: Default::default(),
@@ -591,7 +639,7 @@ mod tests {
     }
 
     #[test]
-    fn all_eleven_kinds_are_unique() {
+    fn all_eleven_projectable_kinds_are_unique() {
         let kinds = [
             AgentConfig::crd_kind(),
             WorkflowConfig::crd_kind(),
@@ -599,6 +647,7 @@ mod tests {
             ProjectConfig::crd_kind(),
             RuntimePolicyProjection::crd_kind(),
             StepTemplateConfig::crd_kind(),
+            SourceTaskTemplateConfig::crd_kind(),
             EnvStoreConfig::crd_kind(),
             SecretStoreConfig::crd_kind(),
             WorkflowStoreConfig::crd_kind(),
@@ -608,7 +657,7 @@ mod tests {
         for kind in &kinds {
             assert!(set.insert(*kind), "duplicate kind: {}", kind);
         }
-        assert_eq!(set.len(), 10);
+        assert_eq!(set.len(), 11);
     }
 
     #[test]

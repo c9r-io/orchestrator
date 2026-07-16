@@ -1,6 +1,7 @@
 use crate::cli_types::{
     AgentSpec, OrchestratorResource, ProjectSpec, ResourceKind, ResourceMetadata, ResourceSpec,
-    ResumeSpec, RunnerSpec, RuntimePolicySpec, SafetySpec, StepTemplateSpec,
+    ResumeSpec, RunnerSpec, RuntimePolicySpec, SafetySpec, SourceTaskTemplateActionSpec,
+    SourceTaskTemplateSkillSpec, SourceTaskTemplateSpec, StepTemplateSpec,
     WorkflowFinalizeRuleSpec, WorkflowFinalizeSpec, WorkflowLoopSpec, WorkflowSpec,
     WorkflowStepSpec, WorkspaceSpec,
 };
@@ -156,6 +157,37 @@ pub fn step_template_manifest(name: &str, prompt: &str) -> OrchestratorResource 
         spec: ResourceSpec::StepTemplate(StepTemplateSpec {
             prompt: prompt.to_string(),
             description: None,
+        }),
+    }
+}
+
+pub fn source_task_template_manifest(name: &str) -> OrchestratorResource {
+    OrchestratorResource {
+        api_version: API_VERSION.to_string(),
+        kind: ResourceKind::SourceTaskTemplate,
+        metadata: ResourceMetadata {
+            name: name.to_string(),
+            project: None,
+            labels: None,
+            annotations: None,
+        },
+        spec: ResourceSpec::SourceTaskTemplate(SourceTaskTemplateSpec {
+            skill: SourceTaskTemplateSkillSpec {
+                name: "docs".to_string(),
+                invocation: "$docs".to_string(),
+                args: vec!["--concise".to_string()],
+            },
+            action: SourceTaskTemplateActionSpec {
+                workflow: "basic".to_string(),
+                workspace: "default".to_string(),
+                start: true,
+                initial_vars: Default::default(),
+            },
+            goal_template: "{skill_invocation} use {source_message_url}".to_string(),
+            allowed_variables: vec![
+                "skill_invocation".to_string(),
+                "source_message_url".to_string(),
+            ],
         }),
     }
 }

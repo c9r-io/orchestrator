@@ -136,6 +136,7 @@ fn create_minimal_test_config(temp_root: &Path) -> OrchestratorConfig {
                         workflows
                     },
                     step_templates: HashMap::new(),
+                    source_task_templates: HashMap::new(),
                     env_stores: HashMap::new(),
                     secret_stores: HashMap::new(),
                     execution_profiles: HashMap::new(),

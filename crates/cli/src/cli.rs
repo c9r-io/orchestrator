@@ -103,6 +103,10 @@ pub enum Commands {
         #[arg(short, long)]
         force: bool,
 
+        /// Atomically remove SourceTaskBinding references (requires Admin authorization).
+        #[arg(long, requires = "force")]
+        force_references: bool,
+
         /// Validate and render without deleting.
         #[arg(long)]
         dry_run: bool,
@@ -392,6 +396,12 @@ pub enum AttentionCommands {
 /// External source event and binding operations.
 #[derive(Subcommand, Debug, Clone)]
 pub enum SourceCommands {
+    /// Manage and preview governed source-to-task templates.
+    Template {
+        /// Template operation.
+        #[command(subcommand)]
+        command: SourceTemplateCommands,
+    },
     /// List recent source events.
     #[command(alias = "ls")]
     List {
@@ -470,6 +480,40 @@ pub enum SourceCommands {
     Replay {
         /// Source event ID.
         id: String,
+    },
+}
+
+/// Governed source-to-task template operations.
+#[derive(Subcommand, Debug, Clone)]
+pub enum SourceTemplateCommands {
+    /// Render a side-effect-free sample using the daemon's active configuration.
+    Preview {
+        /// SourceTaskTemplate name.
+        name: String,
+        /// Project namespace.
+        #[arg(short, long, default_value = "default")]
+        project: String,
+        /// Source provider, currently `slack`.
+        #[arg(long)]
+        provider: String,
+        /// Trusted installation identifier used for the sample.
+        #[arg(long)]
+        installation: String,
+        /// Canonical source message permalink.
+        #[arg(long)]
+        message_url: String,
+        /// Optional provider event identifier.
+        #[arg(long)]
+        event_id: Option<String>,
+        /// Optional reaction or badge value.
+        #[arg(long)]
+        reaction: Option<String>,
+        /// Optional provider-neutral target identifier.
+        #[arg(long)]
+        target_id: Option<String>,
+        /// Output encoding.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
     },
 }
 

@@ -3,8 +3,8 @@ use crate::config::OrchestratorConfig;
 
 use super::{
     API_VERSION, AgentResource, EnvStoreResource, ExecutionProfileResource, ProjectResource,
-    RegisteredResource, Resource, RuntimePolicyResource, SecretStoreResource, StepTemplateResource,
-    WorkflowResource, WorkspaceResource,
+    RegisteredResource, Resource, RuntimePolicyResource, SecretStoreResource,
+    SourceTaskTemplateResource, StepTemplateResource, WorkflowResource, WorkspaceResource,
 };
 
 fn project_metadata(
@@ -64,6 +64,28 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
                     description: template.description.clone(),
                 },
             }));
+        }
+        for (name, template) in &project.source_task_templates {
+            resources.push(RegisteredResource::SourceTaskTemplate(
+                SourceTaskTemplateResource {
+                    metadata: project_metadata(config, "SourceTaskTemplate", project_id, name),
+                    spec: crate::cli_types::SourceTaskTemplateSpec {
+                        skill: crate::cli_types::SourceTaskTemplateSkillSpec {
+                            name: template.skill.name.clone(),
+                            invocation: template.skill.invocation.clone(),
+                            args: template.skill.args.clone(),
+                        },
+                        action: crate::cli_types::SourceTaskTemplateActionSpec {
+                            workflow: template.action.workflow.clone(),
+                            workspace: template.action.workspace.clone(),
+                            start: template.action.start,
+                            initial_vars: template.action.initial_vars.clone(),
+                        },
+                        goal_template: template.goal_template.clone(),
+                        allowed_variables: template.allowed_variables.clone(),
+                    },
+                },
+            ));
         }
         for (name, profile) in &project.execution_profiles {
             resources.push(RegisteredResource::ExecutionProfile(
@@ -203,6 +225,12 @@ pub fn export_manifest_documents(config: &OrchestratorConfig) -> Vec<Orchestrato
                 kind: ResourceKind::StepTemplate,
                 metadata: item.metadata,
                 spec: ResourceSpec::StepTemplate(item.spec),
+            },
+            RegisteredResource::SourceTaskTemplate(item) => OrchestratorResource {
+                api_version: API_VERSION.to_string(),
+                kind: ResourceKind::SourceTaskTemplate,
+                metadata: item.metadata,
+                spec: ResourceSpec::SourceTaskTemplate(item.spec),
             },
             RegisteredResource::ExecutionProfile(item) => OrchestratorResource {
                 api_version: API_VERSION.to_string(),
@@ -488,6 +516,7 @@ mod tests {
                 agents: Default::default(),
                 workflows: Default::default(),
                 step_templates: Default::default(),
+                source_task_templates: Default::default(),
                 env_stores: Default::default(),
                 secret_stores: Default::default(),
                 execution_profiles: Default::default(),

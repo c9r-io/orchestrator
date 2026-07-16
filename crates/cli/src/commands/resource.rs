@@ -99,6 +99,7 @@ pub(crate) async fn dispatch(
             resource,
             name,
             force,
+            force_references,
             dry_run,
             project,
         } => {
@@ -109,6 +110,20 @@ pub(crate) async fn dispatch(
                     force,
                     dry_run,
                     project,
+                    force_references,
+                    audit: force_references.then(|| orchestrator_proto::ActionAuditContext {
+                        reason_code: "operator_force_reference_cleanup".to_string(),
+                        operator_reason: Some(
+                            "atomically delete SourceTaskTemplate binding references".to_string(),
+                        ),
+                        idempotency_key: Some(format!(
+                            "cli-resource-delete-references-{}",
+                            std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map(|duration| duration.as_nanos())
+                                .unwrap_or_default()
+                        )),
+                    }),
                 })
                 .await
                 .map_err(format_grpc_error)?

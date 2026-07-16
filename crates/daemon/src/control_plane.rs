@@ -738,6 +738,7 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         | "AttentionList" | "AttentionGet" | "AttentionFollow"
         | "ActionAuditList" | "ActionAuditGet"
         | "SourceEventList" | "SourceEventGet" | "SourceBindingList"
+        | "SourceTaskTemplatePreview"
         | "HandoffGet" | "ResumeBoundaryList"
         | "Describe" | "StoreGet" | "StoreList" | "WorkerStatus" | "Check" | "ManifestExport"
         | "DbStatus" | "DbMigrationsList" | "SecretKeyStatus" | "SecretKeyList"
@@ -763,7 +764,7 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         | "Shutdown" | "TaskDelete" | "Delete" => Role::Operator,
 
         // Admin: security-sensitive operations only.
-        "ConfigDebug" | "ApplyPluginCrd"
+        "ConfigDebug" | "ApplyPluginCrd" | "DeleteReferences"
         | "MaintenanceMode" | "SecretKeyRotate" | "SecretKeyBootstrap" | "SecretKeyRevoke"
         | "QaDoctor" | "SourceReplay" | "ProcessMetricsRebuild" | "ProcessMetricsPrune" => Role::Admin,
 

@@ -94,6 +94,16 @@ pub fn seed_store_from_config_snapshot(
                 }
             }
         }
+        "SourceTaskTemplate" => {
+            for (pid, project) in &config.projects {
+                if let Some(v) = project.source_task_templates.get(name) {
+                    config
+                        .resource_store
+                        .put(make_cr(Some(pid.clone()), v.to_cr_spec()));
+                    return;
+                }
+            }
+        }
         "ExecutionProfile" => {
             for (pid, project) in &config.projects {
                 if let Some(v) = project.execution_profiles.get(name) {
@@ -157,7 +167,8 @@ pub fn reconcile_single_resource(
     name: &str,
 ) {
     use crate::config::{
-        AgentConfig, ProjectConfig, StepTemplateConfig, WorkflowConfig, WorkspaceConfig,
+        AgentConfig, ProjectConfig, SourceTaskTemplateConfig, StepTemplateConfig, WorkflowConfig,
+        WorkspaceConfig,
     };
     use crate::crd::store::is_project_scoped;
 
@@ -216,6 +227,14 @@ pub fn reconcile_single_resource(
                 config
                     .ensure_project(cr.metadata.project.as_deref())
                     .step_templates
+                    .insert(name.to_string(), v);
+            }
+        }
+        "SourceTaskTemplate" => {
+            if let Ok(v) = SourceTaskTemplateConfig::from_cr_spec(&spec) {
+                config
+                    .ensure_project(cr.metadata.project.as_deref())
+                    .source_task_templates
                     .insert(name.to_string(), v);
             }
         }
@@ -305,6 +324,19 @@ pub fn remove_from_config_snapshot(
             } else {
                 for project in config.projects.values_mut() {
                     if project.step_templates.remove(name).is_some() {
+                        return;
+                    }
+                }
+            }
+        }
+        "SourceTaskTemplate" => {
+            if let Some(project_id) = project {
+                if let Some(project) = config.projects.get_mut(project_id) {
+                    project.source_task_templates.remove(name);
+                }
+            } else {
+                for project in config.projects.values_mut() {
+                    if project.source_task_templates.remove(name).is_some() {
                         return;
                     }
                 }
@@ -450,6 +482,15 @@ pub fn sync_config_snapshot_to_store(config: &mut OrchestratorConfig) {
         for (name, tmpl) in &project.step_templates {
             config.resource_store.put(make_cr(
                 "StepTemplate",
+                name,
+                Some(project_id.clone()),
+                tmpl.to_cr_spec(),
+                &now,
+            ));
+        }
+        for (name, tmpl) in &project.source_task_templates {
+            config.resource_store.put(make_cr(
+                "SourceTaskTemplate",
                 name,
                 Some(project_id.clone()),
                 tmpl.to_cr_spec(),

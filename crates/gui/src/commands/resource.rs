@@ -97,6 +97,8 @@ pub async fn resource_delete(
             force: false,
             project: None,
             dry_run: false,
+            force_references: false,
+            audit: None,
         })
         .await
         .map_err(|e| crate::errors::humanize_grpc_error(&e))?;

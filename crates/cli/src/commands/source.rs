@@ -2,18 +2,67 @@ use anyhow::Result;
 use orchestrator_proto::{
     ActionAuditContext, OrchestratorServiceClient, SourceBindRequest, SourceBinding,
     SourceBindingListRequest, SourceEvent, SourceEventGetRequest, SourceEventIngestRequest,
-    SourceEventListRequest, SourceReplayRequest,
+    SourceEventListRequest, SourceReplayRequest, SourceTaskTemplatePreviewRequest,
 };
 use sha2::{Digest, Sha256};
 use tonic::transport::Channel;
 
-use crate::{OutputFormat, SourceCommands};
+use crate::{OutputFormat, SourceCommands, SourceTemplateCommands};
 
 pub(crate) async fn dispatch(
     client: &mut OrchestratorServiceClient<Channel>,
     command: SourceCommands,
 ) -> Result<()> {
     match command {
+        SourceCommands::Template { command } => match command {
+            SourceTemplateCommands::Preview {
+                name,
+                project,
+                provider,
+                installation,
+                message_url,
+                event_id,
+                reaction,
+                target_id,
+                output,
+            } => {
+                let preview = client
+                    .source_task_template_preview(SourceTaskTemplatePreviewRequest {
+                        name,
+                        project_id: project,
+                        provider,
+                        installation_id: installation,
+                        message_url,
+                        event_id,
+                        reaction,
+                        target_id,
+                    })
+                    .await?
+                    .into_inner();
+                print_value(
+                    serde_json::json!({
+                        "name": preview.name,
+                        "project_id": preview.project_id,
+                        "skill": {
+                            "name": preview.skill_name,
+                            "invocation": preview.skill_invocation,
+                            "args": preview.skill_args,
+                        },
+                        "goal": preview.goal,
+                        "action": {
+                            "workflow": preview.workflow,
+                            "workspace": preview.workspace,
+                            "start": preview.start,
+                            "initial_vars": preview.initial_vars,
+                        },
+                        "content_hash": preview.content_hash,
+                        "revision": preview.revision,
+                        "warnings": preview.warnings,
+                    }),
+                    output,
+                )?;
+            }
+        },
         SourceCommands::List {
             project,
             task,

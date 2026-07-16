@@ -53,7 +53,7 @@ mod cases {
     #[test]
     fn resource_registry_includes_execution_profile() {
         let registry = resource_registry();
-        assert_eq!(registry.len(), 10);
+        assert_eq!(registry.len(), 11);
         let kinds: Vec<ResourceKind> = registry.iter().map(|r| r.kind).collect();
         assert!(kinds.contains(&ResourceKind::Workspace));
         assert!(kinds.contains(&ResourceKind::Agent));
@@ -62,6 +62,7 @@ mod cases {
         assert!(kinds.contains(&ResourceKind::RuntimePolicy));
         assert!(kinds.contains(&ResourceKind::ExecutionProfile));
         assert!(kinds.contains(&ResourceKind::StepTemplate));
+        assert!(kinds.contains(&ResourceKind::SourceTaskTemplate));
         assert!(kinds.contains(&ResourceKind::EnvStore));
         assert!(kinds.contains(&ResourceKind::SecretStore));
     }

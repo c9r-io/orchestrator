@@ -99,18 +99,80 @@ pub(crate) async fn describe(
 
 pub(crate) async fn delete(
     server: &OrchestratorServer,
-    request: Request<DeleteRequest>,
+    mut request: Request<DeleteRequest>,
 ) -> Result<Response<DeleteResponse>, Status> {
     super::authorize(server, &request, "Delete").map_err(Status::from)?;
+    if request.get_ref().force_references && !request.get_ref().force {
+        return Err(Status::invalid_argument(
+            "force_references requires force confirmation",
+        ));
+    }
+    if request.get_ref().force_references && request.get_ref().audit.is_none() {
+        return Err(Status::invalid_argument(
+            "force_references requires ActionAuditContext",
+        ));
+    }
+    let project_id = request
+        .get_ref()
+        .project
+        .as_deref()
+        .unwrap_or(agent_orchestrator::config::DEFAULT_PROJECT_ID)
+        .to_string();
+    let target_id = request.get_ref().resource.clone();
+    let dry_run = request.get_ref().dry_run;
+    let context = request.get_ref().audit.clone();
+    let attempt = if request.get_ref().force_references {
+        Some(
+            super::action_audit::begin(
+                server,
+                &mut request,
+                "DeleteReferences",
+                context.as_ref(),
+                super::action_audit::ActionDescriptor {
+                    project_id: &project_id,
+                    target_type: "source_task_template",
+                    target_id: &target_id,
+                    action: "delete_references",
+                    expected_version: None,
+                    fencing_token: None,
+                    canonical_request: serde_json::json!({
+                        "resource": target_id.clone(),
+                        "project_id": project_id.clone(),
+                        "force": true,
+                        "force_references": true,
+                        "dry_run": dry_run,
+                    }),
+                    fallback_reason_code: "operator_force_reference_cleanup",
+                    fallback_operator_reason: None,
+                    fallback_idempotency_key: None,
+                    renewable_exemption: false,
+                },
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
     let req = request.into_inner();
-    agent_orchestrator::service::resource::delete_resource(
+    if let Some(replayed) = attempt.as_ref().filter(|attempt| !attempt.should_execute) {
+        return Ok(replayed.response(DeleteResponse {
+            message: format!("{} reference cleanup already completed", req.resource),
+        }));
+    }
+    if let Err(error) = agent_orchestrator::service::resource::delete_resource_with_references(
         &server.state,
         &req.resource,
         req.force,
         req.project.as_deref(),
         req.dry_run,
-    )
-    .map_err(map_core_error)?;
+        req.force_references,
+    ) {
+        let status = map_core_error(error);
+        return Err(match &attempt {
+            Some(attempt) => attempt.failed(server, status).await,
+            None => status,
+        });
+    }
     let scope = req
         .project
         .map(|p| format!(" (project: {})", p))
@@ -120,9 +182,17 @@ pub(crate) async fn delete(
     } else {
         "deleted"
     };
-    Ok(Response::new(DeleteResponse {
+    let response = DeleteResponse {
         message: format!("{} {}{}", req.resource, verb, scope),
-    }))
+    };
+    if let Some(attempt) = attempt {
+        attempt
+            .succeeded(server, Some("source_task_template"), Some(&req.resource))
+            .await?;
+        Ok(attempt.response(response))
+    } else {
+        Ok(Response::new(response))
+    }
 }
 
 pub(crate) async fn manifest_export(

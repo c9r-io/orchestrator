@@ -14,6 +14,7 @@ mod parse;
 mod project;
 pub(crate) mod runtime_policy;
 mod secret_store;
+mod source_task_template;
 mod step_template;
 mod trigger;
 pub(crate) mod workflow;
@@ -38,6 +39,7 @@ pub use parse::{
 pub use project::ProjectResource;
 pub use runtime_policy::RuntimePolicyResource;
 pub use secret_store::SecretStoreResource;
+pub use source_task_template::SourceTaskTemplateResource;
 pub use step_template::StepTemplateResource;
 pub use trigger::TriggerResource;
 pub use workflow::WorkflowResource;

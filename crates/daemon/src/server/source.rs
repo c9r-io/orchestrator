@@ -84,6 +84,64 @@ pub(crate) async fn event_get(
     Ok(Response::new(event_to_proto(event)))
 }
 
+pub(crate) async fn task_template_preview(
+    server: &OrchestratorServer,
+    request: Request<SourceTaskTemplatePreviewRequest>,
+) -> Result<Response<SourceTaskTemplatePreviewResponse>, Status> {
+    super::authorize(server, &request, "SourceTaskTemplatePreview").map_err(Status::from)?;
+    let req = request.into_inner();
+    let project_id = if req.project_id.trim().is_empty() {
+        agent_orchestrator::config::DEFAULT_PROJECT_ID.to_string()
+    } else {
+        req.project_id.clone()
+    };
+    let active = agent_orchestrator::config_load::read_active_config(&server.state)
+        .map_err(|error| Status::failed_precondition(error.to_string()))?;
+    let rendered =
+        agent_orchestrator::source_task_template::render_source_task_template_from_config(
+            &active.config,
+            &project_id,
+            &req.name,
+            &agent_orchestrator::source_task_template::SourceTaskTemplateRenderInput {
+                provider: req.provider,
+                installation_id: req.installation_id,
+                message_url: req.message_url,
+                event_id: req.event_id,
+                reaction: req.reaction,
+                target_id: req.target_id,
+                installation_verified: false,
+            },
+        )
+        .map_err(|error| {
+            let message = error.to_string();
+            if message.contains("not found") {
+                Status::not_found(message)
+            } else {
+                Status::invalid_argument(message)
+            }
+        })?;
+    let policy = active.config.runtime_policy_for_project(&project_id);
+    let public = agent_orchestrator::source_task_template::redact_rendered_source_task_template(
+        &rendered,
+        &policy.runner.redaction_patterns,
+    );
+    Ok(Response::new(SourceTaskTemplatePreviewResponse {
+        name: req.name,
+        project_id,
+        skill_name: public.skill_name,
+        skill_invocation: public.skill_invocation,
+        skill_args: public.skill_args,
+        goal: public.goal,
+        workflow: public.action.workflow,
+        workspace: public.action.workspace,
+        start: public.action.start,
+        initial_vars: public.action.initial_vars.into_iter().collect(),
+        content_hash: public.content_hash,
+        revision: public.revision,
+        warnings: public.warnings,
+    }))
+}
+
 pub(crate) async fn event_ingest(
     server: &OrchestratorServer,
     mut request: Request<SourceEventIngestRequest>,

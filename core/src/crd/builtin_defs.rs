@@ -12,6 +12,7 @@ pub fn builtin_crd_definitions() -> Vec<CustomResourceDefinition> {
         project_crd(),
         runtime_policy_crd(),
         step_template_crd(),
+        source_task_template_crd(),
         execution_profile_crd(),
         env_store_crd(),
         secret_store_crd(),
@@ -176,6 +177,33 @@ fn step_template_crd() -> CustomResourceDefinition {
     }
 }
 
+fn source_task_template_crd() -> CustomResourceDefinition {
+    CustomResourceDefinition {
+        kind: "SourceTaskTemplate".to_string(),
+        plural: "sourcetasktemplates".to_string(),
+        short_names: vec![
+            "source-task-template".to_string(),
+            "source_task_template".to_string(),
+            "stt".to_string(),
+        ],
+        group: BUILTIN_GROUP.to_string(),
+        versions: vec![builtin_version(serde_json::json!({
+            "type": "object",
+            "required": ["skill", "action", "goalTemplate", "allowedVariables"],
+            "properties": {
+                "skill": { "type": "object" },
+                "action": { "type": "object" },
+                "goalTemplate": { "type": "string", "maxLength": 16384 },
+                "allowedVariables": { "type": "array", "items": { "type": "string" } }
+            }
+        }))],
+        hooks: CrdHooks::default(),
+        scope: CrdScope::Namespaced,
+        builtin: true,
+        plugins: vec![],
+    }
+}
+
 fn execution_profile_crd() -> CustomResourceDefinition {
     CustomResourceDefinition {
         kind: "ExecutionProfile".to_string(),
@@ -303,23 +331,23 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
-    fn returns_eleven_definitions() {
+    fn returns_twelve_definitions() {
         let defs = builtin_crd_definitions();
-        assert_eq!(defs.len(), 11);
+        assert_eq!(defs.len(), 12);
     }
 
     #[test]
     fn all_kinds_unique() {
         let defs = builtin_crd_definitions();
         let kinds: HashSet<&str> = defs.iter().map(|d| d.kind.as_str()).collect();
-        assert_eq!(kinds.len(), 11);
+        assert_eq!(kinds.len(), 12);
     }
 
     #[test]
     fn all_plurals_unique() {
         let defs = builtin_crd_definitions();
         let plurals: HashSet<&str> = defs.iter().map(|d| d.plural.as_str()).collect();
-        assert_eq!(plurals.len(), 11);
+        assert_eq!(plurals.len(), 12);
     }
 
     #[test]

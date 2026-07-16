@@ -408,6 +408,13 @@ impl OrchestratorService for OrchestratorServer {
         source::replay(self, request).await
     }
 
+    async fn source_task_template_preview(
+        &self,
+        request: Request<SourceTaskTemplatePreviewRequest>,
+    ) -> Result<Response<SourceTaskTemplatePreviewResponse>, Status> {
+        source::task_template_preview(self, request).await
+    }
+
     async fn agent_session_list(
         &self,
         request: Request<AgentSessionListRequest>,

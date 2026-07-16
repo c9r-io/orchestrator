@@ -479,6 +479,7 @@ fn load_config_from_resources_table(
         "Workflow",
         "Workspace",
         "StepTemplate",
+        "SourceTaskTemplate",
         "ExecutionProfile",
         "EnvStore",
         "SecretStore",
