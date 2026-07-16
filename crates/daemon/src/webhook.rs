@@ -8,8 +8,8 @@
 
 use agent_orchestrator::config_ext::OrchestratorConfigExt as _;
 use agent_orchestrator::source::{
-    AsyncSourceRepository, ConversationRef, ExternalActorRef, IngestSourceEvent,
-    NormalizedSourceEvent, SourceCommand, SourceEventKind,
+    AsyncSourceRepository, ConversationRef, ExternalActorRef, ExternalArtifactRef,
+    IngestSourceEvent, NormalizedSourceEvent, SourceCommand, SourceEventKind, SourceReactionRef,
 };
 use agent_orchestrator::state::InnerState;
 use agent_orchestrator::trigger_engine::{
@@ -582,6 +582,9 @@ fn normalize_slack_event(
         .get("type")
         .and_then(serde_json::Value::as_str)
         .unwrap_or("system");
+    if event_type == "reaction_added" {
+        return normalize_slack_reaction_added(external_event_id, event, installation_id);
+    }
     let actor_id = event
         .get("user")
         .or_else(|| event.get("bot_id"))
@@ -613,6 +616,7 @@ fn normalize_slack_event(
         } else {
             SourceEventKind::System
         },
+        reaction: None,
         actor: ExternalActorRef {
             external_id: actor_id.to_string(),
             display_name: None,
@@ -627,6 +631,112 @@ fn normalize_slack_event(
         attachments: Vec::new(),
         occurred_at: slack_timestamp_to_rfc3339(timestamp),
     })
+}
+
+fn normalize_slack_reaction_added(
+    external_event_id: &str,
+    event: &serde_json::Map<String, serde_json::Value>,
+    installation_id: &str,
+) -> Result<NormalizedSourceEvent, String> {
+    let actor_id = required_slack_string(event.get("user"), "slack_reaction_missing_actor")?;
+    let reaction_name =
+        required_slack_string(event.get("reaction"), "slack_reaction_missing_name")?;
+    if reaction_name.len() > 128
+        || !reaction_name.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '_' | '+' | '-')
+        })
+    {
+        return Err("slack_reaction_invalid_name".to_string());
+    }
+    let item = event
+        .get("item")
+        .and_then(serde_json::Value::as_object)
+        .ok_or_else(|| "slack_reaction_missing_item".to_string())?;
+    let target_kind =
+        required_slack_string(item.get("type"), "slack_reaction_missing_target_type")?;
+    let (target_external_id, conversation) = match target_kind {
+        "message" => {
+            let channel = required_slack_string(
+                item.get("channel"),
+                "slack_reaction_missing_message_channel",
+            )?;
+            let message_ts =
+                required_slack_string(item.get("ts"), "slack_reaction_missing_message_ts")?;
+            if !is_valid_slack_timestamp(message_ts) {
+                return Err("slack_reaction_invalid_message_ts".to_string());
+            }
+            (
+                format!("{channel}:{message_ts}"),
+                Some(ConversationRef {
+                    conversation_id: channel.to_string(),
+                    thread_id: Some(message_ts.to_string()),
+                    top_level: false,
+                }),
+            )
+        }
+        "file" => (
+            required_slack_string(item.get("file"), "slack_reaction_missing_file_id")?.to_string(),
+            None,
+        ),
+        "file_comment" => {
+            let file = required_slack_string(item.get("file"), "slack_reaction_missing_file_id")?;
+            let comment = required_slack_string(
+                item.get("file_comment"),
+                "slack_reaction_missing_file_comment_id",
+            )?;
+            (format!("{file}:{comment}"), None)
+        }
+        _ => return Err("slack_reaction_unsupported_target".to_string()),
+    };
+    let event_ts = required_slack_string(event.get("event_ts"), "slack_reaction_missing_event_ts")?;
+    if !is_valid_slack_timestamp(event_ts) {
+        return Err("slack_reaction_invalid_event_ts".to_string());
+    }
+    Ok(NormalizedSourceEvent {
+        provider: "slack".to_string(),
+        installation_id: installation_id.to_string(),
+        external_event_id: external_event_id.to_string(),
+        kind: SourceEventKind::ReactionAdded,
+        reaction: Some(SourceReactionRef {
+            name: reaction_name.to_string(),
+            target: ExternalArtifactRef {
+                kind: target_kind.to_string(),
+                external_id: target_external_id,
+                url: None,
+            },
+        }),
+        actor: ExternalActorRef {
+            external_id: actor_id.to_string(),
+            display_name: None,
+        },
+        conversation,
+        text_summary: None,
+        command: None,
+        attachments: Vec::new(),
+        occurred_at: slack_timestamp_to_rfc3339(event_ts),
+    })
+}
+
+fn required_slack_string<'a>(
+    value: Option<&'a serde_json::Value>,
+    error_code: &str,
+) -> Result<&'a str, String> {
+    value
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| error_code.to_string())
+}
+
+fn is_valid_slack_timestamp(value: &str) -> bool {
+    let Some((seconds, fraction)) = value.split_once('.') else {
+        return false;
+    };
+    !seconds.is_empty()
+        && seconds.chars().all(|character| character.is_ascii_digit())
+        && seconds.parse::<i64>().is_ok_and(|seconds| seconds > 0)
+        && !fraction.is_empty()
+        && fraction.len() <= 9
+        && fraction.chars().all(|character| character.is_ascii_digit())
 }
 
 fn normalize_slack_interaction(
@@ -701,6 +811,7 @@ fn normalize_slack_interaction(
         installation_id: installation_id.to_string(),
         external_event_id: format!("interaction-{}", short_digest(&identity)),
         kind: SourceEventKind::Command,
+        reaction: None,
         actor: ExternalActorRef {
             external_id: actor_id.to_string(),
             display_name: None,
@@ -780,12 +891,15 @@ fn bounded_summary(value: &str) -> String {
 }
 
 fn slack_timestamp_to_rfc3339(value: &str) -> String {
-    let seconds = value
-        .split('.')
-        .next()
-        .and_then(|part| part.parse::<i64>().ok())
-        .unwrap_or(0);
-    chrono::DateTime::from_timestamp(seconds, 0)
+    let (seconds, nanos) = value
+        .split_once('.')
+        .and_then(|(seconds, fraction)| {
+            let seconds = seconds.parse::<i64>().ok()?;
+            let nanos = format!("{fraction:0<9}").parse::<u32>().ok()?;
+            Some((seconds, nanos))
+        })
+        .unwrap_or((0, 0));
+    chrono::DateTime::from_timestamp(seconds, nanos)
         .unwrap_or(chrono::DateTime::UNIX_EPOCH)
         .to_rfc3339()
 }
@@ -942,6 +1056,96 @@ mod tests {
         let conversation = event.conversation.expect("conversation");
         assert_eq!(conversation.thread_id.as_deref(), Some("1699999999.000"));
         assert!(!conversation.top_level);
+    }
+
+    fn slack_reaction_payload() -> serde_json::Value {
+        serde_json::json!({
+            "type": "event_callback",
+            "event_id": "Ev-reaction-01",
+            "event": {
+                "type": "reaction_added",
+                "user": "U-reactor",
+                "reaction": "agent_docs",
+                "item": {
+                    "type": "message",
+                    "channel": "C-source",
+                    "ts": "1700000000.000001"
+                },
+                "event_ts": "1700000001.000002"
+            }
+        })
+    }
+
+    #[test]
+    fn slack_reaction_normalizes_actor_name_message_target_and_occurrence() {
+        let event =
+            normalize_slack_event(&slack_reaction_payload(), "install-1").expect("normalize");
+        assert_eq!(event.kind, SourceEventKind::ReactionAdded);
+        assert_eq!(event.actor.external_id, "U-reactor");
+        assert_eq!(event.occurred_at, "2023-11-14T22:13:21.000002+00:00");
+        assert!(event.text_summary.is_none());
+        assert!(event.command.is_none());
+        let reaction = event.reaction.expect("reaction");
+        assert_eq!(reaction.name, "agent_docs");
+        assert_eq!(reaction.target.kind, "message");
+        assert_eq!(reaction.target.external_id, "C-source:1700000000.000001");
+        assert!(reaction.target.url.is_none());
+        let conversation = event.conversation.expect("conversation");
+        assert_eq!(conversation.conversation_id, "C-source");
+        assert_eq!(conversation.thread_id.as_deref(), Some("1700000000.000001"));
+        assert!(!conversation.top_level);
+    }
+
+    #[test]
+    fn slack_file_reaction_is_typed_without_conversation_or_body() {
+        let mut payload = slack_reaction_payload();
+        payload["event"]["item"] = serde_json::json!({
+            "type": "file",
+            "file": "F-source"
+        });
+        let event = normalize_slack_event(&payload, "install-1").expect("normalize");
+        assert_eq!(event.kind, SourceEventKind::ReactionAdded);
+        assert!(event.conversation.is_none());
+        assert!(event.text_summary.is_none());
+        let target = event.reaction.expect("reaction").target;
+        assert_eq!(target.kind, "file");
+        assert_eq!(target.external_id, "F-source");
+    }
+
+    #[test]
+    fn slack_reaction_missing_or_invalid_fields_return_stable_codes() {
+        let mut missing_actor = slack_reaction_payload();
+        missing_actor["event"]
+            .as_object_mut()
+            .expect("event")
+            .remove("user");
+        let mut missing_reaction = slack_reaction_payload();
+        missing_reaction["event"]
+            .as_object_mut()
+            .expect("event")
+            .remove("reaction");
+        let mut missing_channel = slack_reaction_payload();
+        missing_channel["event"]["item"]
+            .as_object_mut()
+            .expect("item")
+            .remove("channel");
+        let mut invalid_name = slack_reaction_payload();
+        invalid_name["event"]["reaction"] = serde_json::json!(":agent docs:");
+        let mut invalid_event_ts = slack_reaction_payload();
+        invalid_event_ts["event"]["event_ts"] = serde_json::json!("not-a-timestamp");
+
+        for (payload, expected) in [
+            (missing_actor, "slack_reaction_missing_actor"),
+            (missing_reaction, "slack_reaction_missing_name"),
+            (missing_channel, "slack_reaction_missing_message_channel"),
+            (invalid_name, "slack_reaction_invalid_name"),
+            (invalid_event_ts, "slack_reaction_invalid_event_ts"),
+        ] {
+            assert_eq!(
+                normalize_slack_event(&payload, "install-1").expect_err(expected),
+                expected
+            );
+        }
     }
 
     #[test]

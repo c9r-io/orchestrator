@@ -12,6 +12,9 @@ pub struct SourceEvent {
     pub installation_id: String,
     pub external_event_id: String,
     pub event_type: String,
+    pub reaction_name: Option<String>,
+    pub reaction_target_kind: Option<String>,
+    pub reaction_target_id: Option<String>,
     pub conversation_id: Option<String>,
     pub thread_id: Option<String>,
     pub occurred_at: String,
@@ -36,6 +39,25 @@ pub struct SourceBinding {
 }
 
 fn event_from_proto(value: orchestrator_proto::SourceEvent) -> SourceEvent {
+    let reaction = serde_json::from_str::<serde_json::Value>(&value.normalized_json)
+        .ok()
+        .and_then(|normalized| normalized.get("reaction").cloned());
+    let reaction_field = |field: &str| {
+        reaction
+            .as_ref()
+            .and_then(|value| value.get(field))
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+    };
+    let reaction_target_field = |field: &str| {
+        reaction
+            .as_ref()
+            .and_then(|value| value.get("target"))
+            .and_then(|target| target.get(field))
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+    };
+
     SourceEvent {
         id: value.id,
         project_id: value.project_id,
@@ -43,6 +65,9 @@ fn event_from_proto(value: orchestrator_proto::SourceEvent) -> SourceEvent {
         installation_id: value.installation_id,
         external_event_id: value.external_event_id,
         event_type: value.event_type,
+        reaction_name: reaction_field("name"),
+        reaction_target_kind: reaction_target_field("kind"),
+        reaction_target_id: reaction_target_field("external_id"),
         conversation_id: value.conversation_id,
         thread_id: value.thread_id,
         occurred_at: value.occurred_at,
@@ -52,6 +77,50 @@ fn event_from_proto(value: orchestrator_proto::SourceEvent) -> SourceEvent {
         routing_attempts: value.routing_attempts,
         routed_task_id: value.routed_task_id,
         last_error_code: value.last_error_code,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn projects_only_bounded_reaction_provenance() {
+        let event = event_from_proto(orchestrator_proto::SourceEvent {
+            event_type: "reaction_added".into(),
+            normalized_json: serde_json::json!({
+                "reaction": {
+                    "name": "agent_fix",
+                    "target": {
+                        "kind": "message",
+                        "external_id": "C123:1712345678.000100",
+                        "url": "https://example.invalid/private"
+                    }
+                },
+                "text_summary": "private body"
+            })
+            .to_string(),
+            ..Default::default()
+        });
+
+        assert_eq!(event.reaction_name.as_deref(), Some("agent_fix"));
+        assert_eq!(event.reaction_target_kind.as_deref(), Some("message"));
+        assert_eq!(
+            event.reaction_target_id.as_deref(),
+            Some("C123:1712345678.000100")
+        );
+    }
+
+    #[test]
+    fn malformed_normalized_json_has_no_reaction_projection() {
+        let event = event_from_proto(orchestrator_proto::SourceEvent {
+            normalized_json: "not-json".into(),
+            ..Default::default()
+        });
+
+        assert!(event.reaction_name.is_none());
+        assert!(event.reaction_target_kind.is_none());
+        assert!(event.reaction_target_id.is_none());
     }
 }
 

@@ -62,6 +62,7 @@ export default function Sources({ onOpenTask }: Props) {
           <article key={event.id} role="listitem" className="liquid-glass">
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <span className="badge badge-info">{event.provider}</span>
+              <span className="badge">{event.event_type}</span>
               <strong>{event.installation_id}</strong>
               <span className="badge">{event.routing_state}</span>
               <time style={{ marginLeft: "auto", color: "var(--text-tertiary)" }}>{event.received_at}</time>
@@ -69,6 +70,14 @@ export default function Sources({ onOpenTask }: Props) {
             <p style={{ marginTop: 8, color: "var(--text-secondary)", overflowWrap: "anywhere" }}>
               {event.conversation_id ?? "—"} / {event.thread_id ?? "—"}
             </p>
+            {event.reaction_name && (
+              <p style={{ marginTop: 8, color: "var(--text-secondary)", overflowWrap: "anywhere" }}>
+                <strong>:{event.reaction_name}:</strong>
+                {event.reaction_target_kind && event.reaction_target_id && (
+                  <> · {event.reaction_target_kind} / {event.reaction_target_id}</>
+                )}
+              </p>
+            )}
             {event.last_error_code && <p style={{ color: "var(--danger)" }}>{event.last_error_code}</p>}
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
               {event.routed_task_id && <button className="btn btn-ghost" onClick={() => onOpenTask(event.routed_task_id!)}>{i18n.sources.openProcess}</button>}

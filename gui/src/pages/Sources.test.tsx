@@ -11,12 +11,20 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 const events: SourceEvent[] = [
   { id: "source-1", project_id: "project-1", provider: "slack", installation_id: "workspace-demo",
     external_event_id: "evt-1", event_type: "message", conversation_id: "channel-1", thread_id: "thread-1",
+    reaction_name: null, reaction_target_kind: null, reaction_target_id: null,
     occurred_at: "2026-07-14T00:00:00Z", received_at: "2026-07-14T00:00:01Z", normalized_json: "{}",
     routing_state: "needs_attention", routing_attempts: 1, routed_task_id: "task-1", last_error_code: "trigger_ambiguous" },
   { id: "source-2", project_id: "project-1", provider: "github", installation_id: "repo-demo",
     external_event_id: "evt-2", event_type: "pull_request", conversation_id: "pr-42", thread_id: null,
+    reaction_name: null, reaction_target_kind: null, reaction_target_id: null,
     occurred_at: "2026-07-14T00:02:00Z", received_at: "2026-07-14T00:02:01Z", normalized_json: "{}",
     routing_state: "routed", routing_attempts: 1, routed_task_id: "task-2", last_error_code: null },
+  { id: "source-3", project_id: "project-1", provider: "slack", installation_id: "workspace-demo",
+    external_event_id: "evt-3", event_type: "reaction_added", reaction_name: "agent_fix",
+    reaction_target_kind: "message", reaction_target_id: "channel-1:1712345678.000100",
+    conversation_id: "channel-1", thread_id: "1712345678.000100",
+    occurred_at: "2026-07-14T00:03:00Z", received_at: "2026-07-14T00:03:01Z", normalized_json: "{}",
+    routing_state: "ignored", routing_attempts: 1, routed_task_id: null, last_error_code: "reaction_routing_not_enabled" },
 ];
 
 function renderAs(role: Role, onOpenTask = vi.fn()) {
@@ -43,7 +51,7 @@ describe("Sources", () => {
 
   it("keeps task correlation visible to read-only users without exposing replay", async () => {
     const { onOpenTask } = renderAs("read_only");
-    expect(await screen.findAllByRole("listitem")).toHaveLength(2);
+    expect(await screen.findAllByRole("listitem")).toHaveLength(3);
     expect(screen.queryByRole("button", { name: "重新路由" })).not.toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: "打开进程" })[0]);
     expect(onOpenTask).toHaveBeenCalledWith("task-1");
@@ -51,10 +59,22 @@ describe("Sources", () => {
 
   it("filters authoritatively and lets admins replay only actionable routing failures", async () => {
     renderAs("admin");
-    expect(await screen.findAllByRole("listitem")).toHaveLength(2);
+    expect(await screen.findAllByRole("listitem")).toHaveLength(3);
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "needs_attention" } });
     await waitFor(() => expect(screen.getAllByRole("listitem")).toHaveLength(1));
     fireEvent.click(screen.getByRole("button", { name: "重新路由" }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("source_replay", { id: "source-1" }));
+  });
+
+  it("shows bounded reaction provenance without task or replay actions", async () => {
+    renderAs("admin");
+    const reactionType = await screen.findByText("reaction_added");
+    const reactionCard = reactionType.closest("article");
+
+    expect(reactionCard).toHaveTextContent(":agent_fix:");
+    expect(reactionCard).toHaveTextContent("message / channel-1:1712345678.000100");
+    expect(reactionCard).toHaveTextContent("reaction_routing_not_enabled");
+    expect(reactionCard).not.toHaveTextContent("private body");
+    expect(reactionCard?.querySelectorAll("button")).toHaveLength(0);
   });
 });

@@ -55,6 +55,8 @@ pub enum SourceEventKind {
     Command,
     /// External artifact update.
     Artifact,
+    /// A verified actor added a named reaction to an external artifact.
+    ReactionAdded,
     /// Provider lifecycle notification with no process mutation.
     System,
 }
@@ -65,6 +67,7 @@ impl SourceEventKind {
             Self::Message => "message",
             Self::Command => "command",
             Self::Artifact => "artifact",
+            Self::ReactionAdded => "reaction_added",
             Self::System => "system",
         }
     }
@@ -101,6 +104,15 @@ pub struct ExternalArtifactRef {
     pub url: Option<String>,
 }
 
+/// Provider-neutral description of a reaction and its target artifact.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SourceReactionRef {
+    /// Canonical provider reaction name without presentation delimiters.
+    pub name: String,
+    /// Artifact that received the reaction.
+    pub target: ExternalArtifactRef,
+}
+
 /// Normalized event contract shared by Slack and non-Slack adapters.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NormalizedSourceEvent {
@@ -112,6 +124,9 @@ pub struct NormalizedSourceEvent {
     pub external_event_id: String,
     /// Semantic event kind.
     pub kind: SourceEventKind,
+    /// Reaction metadata, present only when `kind` is `reaction_added`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reaction: Option<SourceReactionRef>,
     /// External actor reference.
     pub actor: ExternalActorRef,
     /// Optional conversation coordinates.
@@ -538,6 +553,14 @@ fn ingest(conn: &Connection, input: IngestSourceEvent) -> Result<IngestResult> {
     if input.event.command.is_some() && input.event.kind != SourceEventKind::Command {
         bail!("source command requires kind=command");
     }
+    match (&input.event.kind, &input.event.reaction) {
+        (SourceEventKind::ReactionAdded, Some(reaction)) => validate_reaction(reaction)?,
+        (SourceEventKind::ReactionAdded, None) => {
+            bail!("source reaction_added requires reaction metadata")
+        }
+        (_, Some(_)) => bail!("source reaction metadata requires kind=reaction_added"),
+        _ => {}
+    }
     let normalized_payload_json = serde_json::to_string(&input.event)?;
     if normalized_payload_json.len() > MAX_NORMALIZED_PAYLOAD_BYTES {
         bail!("normalized source payload exceeds 65536 bytes");
@@ -586,6 +609,39 @@ fn ingest(conn: &Connection, input: IngestSourceEvent) -> Result<IngestResult> {
         bail!("external event id was reused with a different payload");
     }
     Ok(IngestResult { event, inserted })
+}
+
+fn validate_reaction(reaction: &SourceReactionRef) -> Result<()> {
+    if reaction.name.is_empty()
+        || reaction.name.len() > 128
+        || !reaction.name.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '_' | '+' | '-')
+        })
+    {
+        bail!(
+            "source reaction name must contain 1-128 ASCII alphanumeric, '_', '+', or '-' characters"
+        );
+    }
+    if reaction.target.kind.is_empty()
+        || reaction.target.kind.len() > 64
+        || !reaction.target.kind.chars().all(|character| {
+            character.is_ascii_lowercase()
+                || character.is_ascii_digit()
+                || matches!(character, '_' | '-')
+        })
+    {
+        bail!(
+            "source reaction target kind must contain 1-64 lowercase alphanumeric, '_', or '-' characters"
+        );
+    }
+    validate_identifier(
+        "source reaction target external_id",
+        &reaction.target.external_id,
+    )?;
+    if reaction.target.url.is_some() {
+        bail!("source reaction target URL must be resolved by a provider adapter");
+    }
+    Ok(())
 }
 
 fn claim_pending(conn: &Connection, limit: usize) -> Result<Vec<SourceEventRecord>> {
@@ -857,6 +913,7 @@ mod tests {
                 installation_id: "test-installation".into(),
                 external_event_id: external_event_id.into(),
                 kind: SourceEventKind::Message,
+                reaction: None,
                 actor: ExternalActorRef {
                     external_id: "actor-1".into(),
                     display_name: None,
@@ -874,6 +931,21 @@ mod tests {
             payload_hash: "hash-1".into(),
             raw_payload_ref: None,
         }
+    }
+
+    fn reaction_fixture(external_event_id: &str, target_kind: &str) -> IngestSourceEvent {
+        let mut input = fixture(external_event_id);
+        input.event.kind = SourceEventKind::ReactionAdded;
+        input.event.reaction = Some(SourceReactionRef {
+            name: "agent_docs".into(),
+            target: ExternalArtifactRef {
+                kind: target_kind.into(),
+                external_id: "conversation-1:1700000000.000001".into(),
+                url: None,
+            },
+        });
+        input.event.text_summary = None;
+        input
     }
 
     async fn repository() -> (tempfile::TempDir, AsyncSourceRepository) {
@@ -911,6 +983,98 @@ mod tests {
             repo.list(None, None, None, 10).await.expect("list").len(),
             1
         );
+    }
+
+    #[tokio::test]
+    async fn reaction_ingest_round_trips_provider_neutral_metadata() {
+        let (_temp, repo) = repository().await;
+        let first = repo
+            .ingest(reaction_fixture("reaction-1", "message"))
+            .await
+            .expect("reaction ingest");
+        let duplicate = repo
+            .ingest(reaction_fixture("reaction-1", "message"))
+            .await
+            .expect("reaction replay");
+        assert!(first.inserted);
+        assert!(!duplicate.inserted);
+        assert_eq!(first.event.event_type, "reaction_added");
+        assert_eq!(first.event.normalized.kind, SourceEventKind::ReactionAdded);
+        assert_eq!(
+            first
+                .event
+                .normalized
+                .reaction
+                .as_ref()
+                .expect("reaction")
+                .target
+                .kind,
+            "message"
+        );
+        let json = serde_json::to_value(&first.event.normalized).expect("normalized JSON");
+        assert_eq!(json["reaction"]["name"], "agent_docs");
+        assert!(json.get("slack").is_none());
+    }
+
+    #[tokio::test]
+    async fn reaction_contract_rejects_missing_mismatched_or_unsafe_metadata() {
+        let (_temp, repo) = repository().await;
+
+        let mut missing = reaction_fixture("reaction-missing", "message");
+        missing.event.reaction = None;
+        assert!(
+            repo.ingest(missing)
+                .await
+                .expect_err("missing reaction")
+                .to_string()
+                .contains("requires reaction metadata")
+        );
+
+        let mut mismatched = fixture("reaction-mismatched");
+        mismatched.event.reaction = reaction_fixture("unused", "message").event.reaction;
+        assert!(
+            repo.ingest(mismatched)
+                .await
+                .expect_err("mismatched reaction")
+                .to_string()
+                .contains("requires kind=reaction_added")
+        );
+
+        let mut unsafe_name = reaction_fixture("reaction-unsafe-name", "message");
+        unsafe_name.event.reaction.as_mut().expect("reaction").name = ":agent docs:".into();
+        assert!(
+            repo.ingest(unsafe_name)
+                .await
+                .expect_err("unsafe name")
+                .to_string()
+                .contains("source reaction name")
+        );
+
+        let mut pre_resolved_url = reaction_fixture("reaction-url", "message");
+        pre_resolved_url
+            .event
+            .reaction
+            .as_mut()
+            .expect("reaction")
+            .target
+            .url = Some("https://example.invalid/message".into());
+        assert!(
+            repo.ingest(pre_resolved_url)
+                .await
+                .expect_err("pre-resolved URL")
+                .to_string()
+                .contains("must be resolved by a provider adapter")
+        );
+    }
+
+    #[test]
+    fn normalized_message_without_reaction_field_remains_compatible() {
+        let input = fixture("legacy-message");
+        let mut json = serde_json::to_value(&input.event).expect("serialize");
+        json.as_object_mut().expect("object").remove("reaction");
+        let decoded: NormalizedSourceEvent = serde_json::from_value(json).expect("legacy decode");
+        assert_eq!(decoded.kind, SourceEventKind::Message);
+        assert!(decoded.reaction.is_none());
     }
 
     #[tokio::test]

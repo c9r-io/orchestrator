@@ -219,6 +219,9 @@ export interface SourceEvent {
   installation_id: string;
   external_event_id: string;
   event_type: string;
+  reaction_name: string | null;
+  reaction_target_kind: string | null;
+  reaction_target_id: string | null;
   conversation_id: string | null;
   thread_id: string | null;
   occurred_at: string;

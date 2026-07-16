@@ -131,12 +131,13 @@ fn audit_context(reason_code: &str, prefix: &str) -> ActionAuditContext {
 
 fn print_events(events: &[SourceEvent], output: OutputFormat) -> Result<()> {
     if output == OutputFormat::Table {
-        println!("ID\tPROVIDER\tINSTALLATION\tSTATE\tTASK\tRECEIVED");
+        println!("ID\tPROVIDER\tTYPE\tINSTALLATION\tSTATE\tTASK\tRECEIVED");
         for event in events {
             println!(
-                "{}\t{}\t{}\t{}\t{}\t{}",
+                "{}\t{}\t{}\t{}\t{}\t{}\t{}",
                 event.id,
                 event.provider,
+                event.event_type,
                 event.installation_id,
                 event.routing_state,
                 event.routed_task_id.as_deref().unwrap_or("-"),

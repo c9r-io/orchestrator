@@ -43,6 +43,22 @@ async fn route_one(
     repository: &AsyncSourceRepository,
     event: &SourceEventRecord,
 ) -> Result<()> {
+    if event.normalized.kind == agent_orchestrator::source::SourceEventKind::ReactionAdded {
+        let reason = event
+            .normalized
+            .reaction
+            .as_ref()
+            .map(|reaction| reaction.target.kind.as_str())
+            .filter(|kind| *kind == "message")
+            .map_or(
+                "unsupported_reaction_target",
+                |_| "reaction_routing_not_enabled",
+            );
+        repository
+            .complete_routing(&event.id, "ignored", None, Some(reason))
+            .await?;
+        return Ok(());
+    }
     if event.normalized.kind == agent_orchestrator::source::SourceEventKind::System {
         repository
             .complete_routing(&event.id, "ignored", None, Some("provider_system_event"))
@@ -607,8 +623,8 @@ mod tests {
     };
     use agent_orchestrator::dto::CreateTaskPayload;
     use agent_orchestrator::source::{
-        ConversationRef, ExternalActorRef, IngestSourceEvent, NormalizedSourceEvent,
-        SourceEventKind,
+        ConversationRef, ExternalActorRef, ExternalArtifactRef, IngestSourceEvent,
+        NormalizedSourceEvent, SourceEventKind, SourceReactionRef,
     };
     use agent_orchestrator::state::update_config_runtime;
     use agent_orchestrator::test_utils::TestState;
@@ -651,6 +667,7 @@ mod tests {
                 installation_id: "install-1".into(),
                 external_event_id: id.into(),
                 kind: SourceEventKind::Message,
+                reaction: None,
                 actor: ExternalActorRef {
                     external_id: "actor-1".into(),
                     display_name: None,
@@ -675,6 +692,21 @@ mod tests {
         input.event.kind = SourceEventKind::Command;
         input.event.actor.external_id = actor_id.to_string();
         input.event.command = Some(command);
+        input
+    }
+
+    fn reaction_event(id: &str, target_kind: &str) -> IngestSourceEvent {
+        let mut input = event(id, false);
+        input.event.kind = SourceEventKind::ReactionAdded;
+        input.event.reaction = Some(SourceReactionRef {
+            name: "agent_docs".into(),
+            target: ExternalArtifactRef {
+                kind: target_kind.into(),
+                external_id: "conversation-1:thread-1".into(),
+                url: None,
+            },
+        });
+        input.event.text_summary = None;
         input
     }
 
@@ -782,6 +814,126 @@ mod tests {
             .routed_task_id
             .expect("reply task");
         assert_eq!(root_task, reply_task);
+    }
+
+    #[tokio::test]
+    async fn reaction_is_ignored_without_task_binding_or_duplicate_attempt() {
+        let (_fixture, state) = state_with_trigger();
+        let repository = AsyncSourceRepository::new(state.async_database.clone());
+        let first = repository
+            .ingest(reaction_event("reaction-1", "message"))
+            .await
+            .expect("reaction");
+        let duplicate = repository
+            .ingest(reaction_event("reaction-1", "message"))
+            .await
+            .expect("duplicate");
+        assert!(first.inserted);
+        assert!(!duplicate.inserted);
+        reconcile_source_once(&state).await.expect("route reaction");
+        reconcile_source_once(&state).await.expect("empty replay");
+
+        let routed = repository
+            .get(&first.event.id)
+            .await
+            .expect("get")
+            .expect("event");
+        assert_eq!(routed.routing_state, "ignored");
+        assert_eq!(
+            routed.last_error_code.as_deref(),
+            Some("reaction_routing_not_enabled")
+        );
+        assert_eq!(routed.routing_attempts, 1);
+        assert!(routed.routed_task_id.is_none());
+        let (tasks, bindings) = state
+            .async_database
+            .reader()
+            .call(|conn| {
+                Ok((
+                    conn.query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get::<_, i64>(0))?,
+                    conn.query_row("SELECT COUNT(*) FROM source_bindings", [], |row| {
+                        row.get::<_, i64>(0)
+                    })?,
+                ))
+            })
+            .await
+            .expect("counts");
+        assert_eq!((tasks, bindings), (0, 0));
+    }
+
+    #[tokio::test]
+    async fn reaction_does_not_append_to_matching_bound_thread() {
+        let (_fixture, state) = state_with_trigger();
+        let repository = AsyncSourceRepository::new(state.async_database.clone());
+        repository
+            .ingest(event("event-root", true))
+            .await
+            .expect("root");
+        reconcile_source_once(&state).await.expect("route root");
+        let before = state
+            .async_database
+            .reader()
+            .call(|conn| {
+                Ok(conn.query_row(
+                    "SELECT COUNT(*) FROM events WHERE event_type='source_context_added'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )?)
+            })
+            .await
+            .expect("context count");
+
+        let reaction = repository
+            .ingest(reaction_event("reaction-bound", "message"))
+            .await
+            .expect("reaction");
+        reconcile_source_once(&state)
+            .await
+            .expect("ignore reaction");
+        let after = state
+            .async_database
+            .reader()
+            .call(|conn| {
+                Ok(conn.query_row(
+                    "SELECT COUNT(*) FROM events WHERE event_type='source_context_added'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )?)
+            })
+            .await
+            .expect("context count");
+        let routed = repository
+            .get(&reaction.event.id)
+            .await
+            .expect("get")
+            .expect("event");
+        assert_eq!(before, after);
+        assert_eq!(routed.routing_state, "ignored");
+        assert!(routed.routed_task_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn non_message_reaction_is_ignored_with_target_reason() {
+        let (_fixture, state) = state_with_trigger();
+        let repository = AsyncSourceRepository::new(state.async_database.clone());
+        let reaction = repository
+            .ingest(reaction_event("reaction-file", "file"))
+            .await
+            .expect("reaction");
+        reconcile_source_once(&state)
+            .await
+            .expect("ignore reaction");
+        let routed = repository
+            .get(&reaction.event.id)
+            .await
+            .expect("get")
+            .expect("event");
+        assert_eq!(routed.routing_state, "ignored");
+        assert_eq!(
+            routed.last_error_code.as_deref(),
+            Some("unsupported_reaction_target")
+        );
+        assert!(routed.routed_task_id.is_none());
     }
 
     #[tokio::test]
