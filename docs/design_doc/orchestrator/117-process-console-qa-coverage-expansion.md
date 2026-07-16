@@ -5,7 +5,7 @@
 **Related Plan**: Post-release functional analysis and risk-based expansion of unit, browser UI, accessibility, and coverage reporting
 **Related QA**: `docs/qa/orchestrator/154-process-console-functional-ui-regression.md`
 **Created**: 2026-07-16
-**Last Updated**: 2026-07-16
+**Last Updated**: 2026-07-17
 
 ## Background
 
@@ -81,7 +81,7 @@ There are no runtime interfaces or data changes. The testing interface adds:
 
 ## Test Plan
 
-- Unit/component: 21 Vitest scenarios across routes, roles, Attention reconciliation, evidence, Operations, timeline following, handoff safety, and Sources authorization.
+- Unit/component: 61 Vitest scenarios across the Console shell, routes, roles, Attention reconciliation and mutations, process recovery controls, evidence, Operations, timeline following, handoff safety, Sources authorization, Session control, task watching, runtime streams, connection state, preferences, and dialogs.
 - E2E: 15 Playwright journeys across primary navigation, recovery, Sessions, Sources, responsiveness, accessibility, preferences, and role gates.
 - Build: TypeScript plus production Vite build.
 - Live integration: retain `./scripts/qa/test-process-console-vertical-flow.sh` as the daemon-backed authority.
@@ -94,6 +94,6 @@ There are no runtime interfaces or data changes. The testing interface adds:
 ## Acceptance Criteria
 
 - `npm run test:coverage` passes and collects all eligible GUI runtime sources.
-- 21 Vitest scenarios and 15 Playwright journeys pass deterministically.
+- 61 Vitest scenarios and 15 Playwright journeys pass deterministically.
 - Processes, Attention mutations, Sources, handoff safety, timeline resilience, global navigation, roles, and accessibility have explicit automated assertions.
 - No test calls an external agent/provider or mutates the developer's running demo daemon.

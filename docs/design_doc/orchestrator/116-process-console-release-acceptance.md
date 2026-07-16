@@ -94,7 +94,7 @@ The migration kernel remains forward-only. A normal binary rollback keeps migrat
 - Unit/migration: populated schema-26 upgrade through latest with entity, relationship, backfill, and rollup assertions.
 - Script regression: migration 31/32/future accepted and missing-31 rejected.
 - Aggregate: clean current-HEAD builds, workspace tests, strict Clippy, documentation lint, and nine owning scripts.
-- Integrated UI: 21 Vitest tests, 15 Playwright tests, source-wide frontend coverage reporting, production build, accessibility checks, and real Tauri handler to gRPC flow.
+- Integrated UI: 61 Vitest tests, 15 Playwright tests, source-wide frontend coverage reporting, production build, accessibility checks, and real Tauri handler to gRPC flow.
 - Performance: 50,000-event timeline and Process Console metric fixtures execute in release mode under DD-114 budgets.
 
 ## QA Docs

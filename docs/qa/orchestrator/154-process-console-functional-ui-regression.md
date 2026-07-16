@@ -139,7 +139,7 @@ Verify re-entry, constrained visual modes, automated accessibility, source-wide 
 
 ### Expected
 
-- 21 Vitest scenarios and 15 Playwright journeys pass.
+- 61 Vitest scenarios and 15 Playwright journeys pass.
 - Coverage collects all eligible runtime TypeScript/TSX files and writes only ignored local output.
 - Session output is offset-deduplicated; writer controls remain role-gated and the process link is reachable.
 - Attention, Process Workspace, and Operations have no serious/critical axe violations.
@@ -155,4 +155,4 @@ Verify re-entry, constrained visual modes, automated accessibility, source-wide 
 | 2 | Attention mutation closure and semantic process evidence | PASS | 2026-07-16 | Codex | Guarded claim/resolve and linked evidence journey pass |
 | 3 | Timeline resilience and risk-aware handoff | PASS | 2026-07-16 | Codex | Snapshot/follow/reset/pagination and elevated replay gates pass |
 | 4 | Sources correlation, filtering, and role boundary | PASS | 2026-07-16 | Codex | Unit and browser tests cover admin replay and read-only inspection |
-| 5 | Sessions, accessibility, responsive fallbacks, coverage, and build | PASS | 2026-07-16 | Codex | 21 Vitest and 15 Playwright scenarios pass; final build/audit verified by UI gate |
+| 5 | Sessions, accessibility, responsive fallbacks, coverage, and build | PASS | 2026-07-17 | Codex | 61 Vitest and 15 Playwright scenarios pass; Lines coverage increased from 15.31% to 57.42% and production build passed |
