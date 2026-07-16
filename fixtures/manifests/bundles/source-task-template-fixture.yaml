@@ -1,0 +1,73 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: source-template-fixture
+spec:
+  root_path: "."
+  qa_targets: [docs/qa/orchestrator]
+  ticket_dir: docs/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: RuntimePolicy
+metadata:
+  name: default
+spec:
+  runner:
+    shell: /bin/bash
+    shell_arg: "-lc"
+    policy: unsafe
+    executor: shell
+    allowed_shells: [/bin/bash, /bin/zsh, /bin/sh]
+    allowed_shell_args: ["-lc", "-c"]
+    env_allowlist: [PATH, HOME, USER, LANG]
+    redaction_patterns: [token, password, secret, api_key, qa-sensitive]
+  resume:
+    auto: false
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: source-template-fixture
+spec:
+  capabilities: [source_template_fixture]
+  command: >-
+    echo '{"confidence":1.0,"quality_score":1.0,"artifacts":[]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: source-template-fixture
+spec:
+  steps:
+    - id: inspect_source
+      type: source_template_fixture
+      required_capability: source_template_fixture
+      enabled: true
+      behavior:
+        side_effect_class: none
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskTemplate
+metadata:
+  name: slack-docs
+spec:
+  skill:
+    name: docs
+    invocation: "$docs"
+    args: ["--concise"]
+  action:
+    workflow: source-template-fixture
+    workspace: source-template-fixture
+    start: true
+    initial_vars:
+      provenance: qa-sensitive-value
+  goalTemplate: >-
+    {{source}} {skill_invocation}: review {source_message_url} from
+    {source_provider}/{source_installation_id}
+  allowedVariables:
+    - skill_invocation
+    - source_message_url
+    - source_provider
+    - source_installation_id
