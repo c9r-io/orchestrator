@@ -10,6 +10,7 @@ workspace/*
 data/
 .playwright-cli
 .playwright-mcp
+/.orchestrator/
 docs/workflow/minimax-secret.yaml
 .stable.json
 output.json
@@ -20,6 +21,7 @@ fixtures/*/*.md
 node_modules/
 gui/test-results/
 gui/playwright-report/
+gui/coverage/
 tmp/
 .wrangler/
 docs/promotion/

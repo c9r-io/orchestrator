@@ -21,6 +21,7 @@
 | [05 - 高级特性](05-advanced-features.md) | CRD、持久化存储、任务派生、不变量约束 | 高级 |
 | [06 - 自引导](06-self-bootstrap.md) | 自修改工作流与生存机制 | 高级 |
 | [07 - CLI 参考](07-cli-reference.md) | 命令速查表 | 参考 |
+| [08 - Agent Process Console](08-agent-process-console.md) | Attention、Timeline、Handoff、安全恢复、Session 接管与日常操作 | 入门到高级 |
 
 ## 补充资源
 

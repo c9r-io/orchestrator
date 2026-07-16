@@ -16,7 +16,7 @@ echo "Process Console UI QA"
 
 (
   cd "$REPO_ROOT/gui"
-  npm test
+  npm run test:coverage
   npm run test:e2e
   npm run build
   npm audit

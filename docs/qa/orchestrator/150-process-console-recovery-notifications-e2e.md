@@ -177,7 +177,7 @@ Verify FR-103 preserves the rest of the Process Console and repository quality g
 ### Expected
 
 - Workspace tests and strict Clippy pass.
-- GUI unit tests, nine Playwright scenarios, TypeScript, and production Vite build pass.
+- GUI unit tests, 15 Playwright scenarios, TypeScript, and production Vite build pass.
 - Tauri snake-case argument contracts match the existing frontend calls at the real IPC boundary.
 - Existing navigation, logs, trace, Sources, Sessions, System, and New Process remain reachable.
 
@@ -188,7 +188,7 @@ Verify FR-103 preserves the rest of the Process Console and repository quality g
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|---|---|---|---|---|
 | 1 | Authoritative Attention filters and notification transitions | PASS | 2026-07-14 | Codex | Core/daemon/React transition, actor, descriptor, and removal tests passed |
-| 2 | Canonical recovery UI and automated accessibility | PASS | 2026-07-14 | Codex | Nine Playwright scenarios passed, including no TaskRecover bypass, focus, axe, motion, transparency, narrow, and roles |
+| 2 | Canonical recovery UI and automated accessibility | PASS | 2026-07-16 | Codex | 15 Playwright scenarios passed, including no TaskRecover bypass, focus, axe, motion, transparency, narrow, roles, Sources, navigation, and Attention mutations |
 | 3 | Live failure to durable reviewed resume | PASS | 2026-07-14 | Codex | Real Tauri/gRPC isolated flow passed from deterministic failure through resolved Attention |
 | 4 | Audit ordering, correlation, and notification privacy | PASS | 2026-07-14 | Codex | Request IDs, stale rejection, handoff-before-resume order, and forbidden-field scan passed |
 | 5 | Full regression and reachability gate | PASS | 2026-07-14 | Codex | Workspace tests, strict Clippy, GUI test:all, build, and all primary destinations passed |

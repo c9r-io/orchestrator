@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
-async function installTauriMock(page: Page, role: "read_only" | "operator" = "operator") {
+async function installTauriMock(page: Page, role: "read_only" | "operator" | "admin" = "operator") {
   await page.addInitScript(({ roleName }) => {
     const callbacks = new Map<number, (payload: unknown) => void>();
     const listeners = new Map<string, number>();
@@ -12,7 +12,7 @@ async function installTauriMock(page: Page, role: "read_only" | "operator" = "op
       { id: "attention-1", title: "Approval required", taskId: "task-1", severity: "intervention" },
       { id: "attention-2", title: "Choose recovery", taskId: "task-2", severity: "attention" },
     ];
-    const attentionRows = items.map((item) => ({
+    let attentionRows = items.map((item) => ({
       id: item.id, project_id: "project-1", task_id: item.taskId, task_item_id: null, step_id: "test", session_id: "session-1",
       kind: "step_failed", severity: item.severity, state: "open", title: item.title, summary: "A human decision is required",
       requested_decision_json: JSON.stringify({ question: "Retry from the verified boundary?" }),
@@ -20,6 +20,15 @@ async function installTauriMock(page: Page, role: "read_only" | "operator" = "op
       assignee: null, occurrence_count: 1, reopen_count: 0, version: 1,
       created_at: "2026-07-14T00:00:00Z", updated_at: "2026-07-14T00:00:00Z", last_occurred_at: "2026-07-14T00:00:00Z", snoozed_until: null, resolved_at: null,
     }));
+    const tasks = [
+      { id: "task-running", name: "Active implementation", status: "running", total_items: 4, finished_items: 2, failed_items: 0, created_at: "2026-07-14T00:00:00Z", updated_at: "2026-07-14T00:03:00Z", project_id: "project-1", workflow_id: "delivery-loop", goal: "Ship the active change" },
+      { id: "task-1", name: "Fix payment failure", status: "failed", total_items: 1, finished_items: 0, failed_items: 1, created_at: "2026-07-14T00:00:00Z", updated_at: "2026-07-14T00:01:00Z", project_id: "project-1", workflow_id: "qa-loop", goal: "Restore the failed payment test" },
+      { id: "task-complete", name: "Completed documentation", status: "completed", total_items: 2, finished_items: 2, failed_items: 0, created_at: "2026-07-13T00:00:00Z", updated_at: "2026-07-14T00:02:00Z", project_id: "project-1", workflow_id: "docs-loop", goal: "Publish the operator guide" },
+    ];
+    const sourceEvents = [
+      { id: "source-1", project_id: "project-1", provider: "slack", installation_id: "workspace-demo", external_event_id: "evt-1", event_type: "message", conversation_id: "channel-1", thread_id: "thread-1", occurred_at: "2026-07-14T00:00:00Z", received_at: "2026-07-14T00:00:01Z", normalized_json: "{}", routing_state: "needs_attention", routing_attempts: 1, routed_task_id: "task-1", last_error_code: "trigger_ambiguous" },
+      { id: "source-2", project_id: "project-1", provider: "github", installation_id: "repo-demo", external_event_id: "evt-2", event_type: "pull_request", conversation_id: "pr-42", thread_id: null, occurred_at: "2026-07-14T00:02:00Z", received_at: "2026-07-14T00:02:01Z", normalized_json: "{}", routing_state: "routed", routing_attempts: 1, routed_task_id: "task-complete", last_error_code: null },
+    ];
     let session = { session_id: "session-1", task_id: "task-1", task_item_id: null, step_id: "test", agent_id: "coder", state: "detached", pid: 42, writer_client_id: null as string | null, writer_actor: null as string | null, writer_lease_expires_at: null as string | null, state_version: 1 };
     const invoke = async (command: string, args: Record<string, unknown> = {}) => {
       processCalls.push({ command, args });
@@ -32,6 +41,7 @@ async function installTauriMock(page: Page, role: "read_only" | "operator" = "op
         return null;
       }
       if (command === "probe_role") return roleName;
+      if (command === "agent_list") return [];
       if (command === "process_metric_record") return true;
       if (command === "process_metrics_get") {
         const metric = (name: string, value: number, sampleCount = 1, extra: Record<string, unknown> = {}) => ({
@@ -59,8 +69,13 @@ async function installTauriMock(page: Page, role: "read_only" | "operator" = "op
         };
       }
       if (command === "attention_list") return { items: attentionRows, latest_change_id: 2 };
-      if (command === "attention_claim") return { ...attentionRows.find((item) => item.id === args.id), state: "claimed", version: 2 };
-      if (command === "task_list") return [{ id: "task-1", name: "Fix payment failure", status: "failed", total_items: 1, finished_items: 0, failed_items: 1, created_at: "2026-07-14T00:00:00Z", updated_at: "2026-07-14T00:01:00Z", project_id: "project-1", workflow_id: "qa-loop", goal: "Restore the failed payment test" }];
+      if (["attention_claim", "attention_snooze", "attention_resolve"].includes(command)) {
+        const nextState = command === "attention_claim" ? "claimed" : command === "attention_snooze" ? "snoozed" : "resolved";
+        const updated = { ...attentionRows.find((item) => item.id === args.id)!, state: nextState, version: 2 };
+        attentionRows = attentionRows.map((item) => item.id === args.id ? updated : item);
+        return updated;
+      }
+      if (command === "task_list") return tasks;
       if (command === "task_info") return { id: "task-1", name: "Fix payment failure", status: "failed", goal: "Restore the failed payment test", total_items: 1, finished_items: 0, failed_items: 1, created_at: "2026-07-14T00:00:00Z", updated_at: "2026-07-14T00:01:00Z", project_id: "project-1", workflow_id: "qa-loop", items: [{ id: "item-1", qa_file_path: "tests/payment.rs", status: "failed", order_no: 1 }] };
       if (command === "task_timeline") return { entries: [{ id: "entry-1", task_id: "task-1", occurred_at: "2026-07-14T00:00:00Z", category: "failure", title: "Test failed", summary: "The payment fixture assertion failed", status: "failed", actor: null, step_id: "test", task_item_id: "item-1", command_run_id: "run-1", session_id: "session-1", checkpoint_id: "checkpoint-1", source_event_id: null, evidence: [{ kind: "test", label: "cargo test payment", uri: null, content_type: "text/plain", digest: null, redacted: false }], raw_event_ids: [1], projection_version: 1 }], next_cursor: null, has_more: false, snapshot_max_event_id: 1, projection_version: 1 };
       if (command === "agent_session_list") return [session];
@@ -77,7 +92,14 @@ async function installTauriMock(page: Page, role: "read_only" | "operator" = "op
         return true;
       }
       if (command === "agent_session_close") { sessionCalls.push({ command, args }); session = { ...session, state: "draining", state_version: session.state_version + 1 }; return session; }
-      if (command === "source_binding_list" || command === "source_event_list") return [];
+      if (command === "source_binding_list") return [];
+      if (command === "source_event_list") return sourceEvents.filter((event) => !args.routing_state || event.routing_state === args.routing_state);
+      if (command === "source_replay") return true;
+      if (command === "handoff_generate") return {
+        id: "handoff-1", task_id: "task-1", source_event_cursor: 42, projection_version: 1,
+        briefing: { goal: "Restore the failed payment test", current_state: { status: "failed" }, last_success: null, failure: { step: "test" }, test_evidence: [], changed_files: ["tests/payment.rs"], constraints: [], decisions: [], open_questions: [], recommendations: ["Retry from the verified test boundary"] },
+        content_hash: "abcdef1234567890", state_version: "state-1", created_at: "2026-07-14T00:00:00Z",
+      };
       if (command === "resume_boundary_list") return [{ id: "boundary-1", task_id: "task-1", cycle: 1, step_id: "test", task_item_id: "item-1", provider_session_available: false, side_effect_class: "workspace_only", replay_safe: true, reason: "Failed step can be replayed", state_version: "state-1" }];
       if (command === "resume_plan") return { id: "plan-1", task_id: "task-1", boundary: null, mode: String(args.mode), expected_state_version: "state-1", consequence: { repeated_steps: ["test"], workspace_rollback: false }, elevated_confirmation_required: false, expires_at: "2026-07-14T01:00:00Z", status: "review_required" };
       if (command === "resume_execute") return { execution_id: "execution-1", plan_id: "plan-1", accepted: true, status: "succeeded", child_task_id: "task-child" };
@@ -244,4 +266,74 @@ test("read-only session inspector has no focusable mutation controls", async ({ 
   await expect(page.getByRole("button", { name: "Request control" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Close session" })).toHaveCount(0);
   await expect(page.getByLabel("Session input")).toHaveCount(0);
+});
+
+test("Processes prioritizes active and failed work while preserving keyboard reachability", async ({ page }) => {
+  await installTauriMock(page);
+  await page.goto("/#/processes");
+  await expect(page.getByRole("heading", { name: "进度观察" })).toBeVisible();
+  const processCards = page.locator('[role="button"][aria-label^="任务:"]');
+  await expect(processCards).toHaveCount(3);
+  await expect(processCards.nth(0)).toHaveAccessibleName("任务: Active implementation");
+  await expect(processCards.nth(1)).toHaveAccessibleName("任务: Fix payment failure");
+  await expect(processCards.nth(2)).toHaveAccessibleName("任务: Completed documentation");
+  await processCards.nth(1).focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/#\/processes\/task-1/);
+});
+
+test("Attention mutations use guarded commands and resolved work leaves the open queue", async ({ page }) => {
+  await installTauriMock(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Claim" }).click();
+  await expect(page.getByText("claim succeeded for Approval required")).toBeAttached();
+  await page.getByRole("button", { name: "Resolve" }).click();
+  await page.getByRole("dialog", { name: "Confirm resolution" }).getByRole("button", { name: "Resolve item" }).click();
+  await expect(page.getByRole("heading", { name: "Approval required" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Choose recovery" })).toBeVisible();
+  const mutationCalls = await page.evaluate(() => (window as any).__PROCESS_TEST__.calls
+    .filter((call: any) => call.command.startsWith("attention_"))
+    .map((call: any) => ({ command: call.command, args: call.args })));
+  expect(mutationCalls.map((call: any) => call.command)).toEqual(expect.arrayContaining(["attention_claim", "attention_resolve"]));
+  expect(mutationCalls.find((call: any) => call.command === "attention_claim").args.idempotency_key).toBeTruthy();
+});
+
+test("Sources supports routing filters, process correlation, and admin-only replay", async ({ page }) => {
+  await installTauriMock(page, "admin");
+  await page.goto("/#/sources");
+  await expect(page.getByRole("heading", { name: "Sources" })).toBeVisible();
+  await expect(page.getByRole("listitem")).toHaveCount(2);
+  await page.getByRole("combobox").selectOption("needs_attention");
+  await expect(page.getByRole("listitem")).toHaveCount(1);
+  await page.getByRole("button", { name: "重新路由" }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__PROCESS_TEST__.calls.some((call: any) => call.command === "source_replay" && call.args.id === "source-1"))).toBe(true);
+  await page.getByRole("button", { name: "打开进程" }).click();
+  await expect(page).toHaveURL(/#\/sources\/task-1/);
+  await expect(page.getByRole("heading", { name: "Fix payment failure" })).toBeVisible();
+});
+
+test("read-only Sources exposes correlation without replay controls", async ({ page }) => {
+  await installTauriMock(page, "read_only");
+  await page.goto("/#/sources");
+  await expect(page.getByRole("button", { name: "打开进程" })).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "重新路由" })).toHaveCount(0);
+});
+
+test("global shortcuts, visible navigation, theme, and handoff remain integrated", async ({ page }) => {
+  await installTauriMock(page);
+  await page.goto("/");
+  await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("link")).toHaveCount(5);
+  await page.keyboard.press("Control+5");
+  await expect(page).toHaveURL(/#\/system/);
+  await expect(page.getByRole("heading", { name: "System" })).toBeVisible();
+  await page.keyboard.press("Control+3");
+  await expect(page.getByRole("heading", { name: "Sessions" })).toBeVisible();
+  await page.getByRole("button", { name: "切换到深色模式" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+
+  await page.goto("/#/processes/task-1");
+  await page.getByRole("button", { name: "Generate handoff" }).click();
+  await expect(page.getByText("Changed files:")).toBeVisible();
+  await expect(page.getByText("tests/payment.rs")).toBeVisible();
+  await expect(page.getByText("Snapshot abcdef123456")).toBeVisible();
 });

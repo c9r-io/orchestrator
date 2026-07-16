@@ -124,7 +124,7 @@ Verify the complete operator loop and release budgets across real client boundar
 ### Expected
 
 - Request IDs correlate handoff review, rejected stale execution, successful resume, and Attention resolution without exposing payload content.
-- 12 frontend unit tests and 10 Playwright tests pass.
+- 21 frontend unit/component tests and 15 Playwright tests pass.
 - Metrics and timeline remain within the DD-114 latency and response-size budgets.
 
 ## Scenario 5: Release Notes And Rollback Contract Are Complete
@@ -159,6 +159,5 @@ Ensure operators can upgrade, stop one failing domain, or roll back without dest
 | 1 | Migration identity is forward-compatible | PASS | 2026-07-15 | Codex | Schema 31/32/future accepted; missing migration 31 rejected; action-audit QA 7/7 |
 | 2 | Populated schema-26 upgrade preserves Console state | PASS | 2026-07-15 | Codex | Task, Session, Attention, handoff, source, audit joins, backfill, and six rollups preserved |
 | 3 | Clean current-HEAD aggregate gate preserves slice ownership | PASS | 2026-07-15 | Codex | 14/14 gates passed in 399 seconds from a clean worktree |
-| 4 | Integrated recovery, UI, privacy, and performance | PASS | 2026-07-15 | Codex | Real Tauri/gRPC flow, 12 Vitest, 10 Playwright, builds, accessibility, and both release fixtures passed |
+| 4 | Integrated recovery, UI, privacy, and performance | PASS | 2026-07-16 | Codex | Real Tauri/gRPC flow, 21 Vitest, 15 Playwright, builds, accessibility, and both release fixtures passed |
 | 5 | Release notes and rollback contract are complete | PASS | 2026-07-15 | Codex | Forward-only runbook separates normal binary rollback from disaster restore |
-

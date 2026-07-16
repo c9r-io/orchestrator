@@ -7,8 +7,9 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "test:all": "npm test && npm run test:e2e && npm run build"
+    "test:all": "npm run test:coverage && npm run test:e2e && npm run build"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
@@ -24,6 +25,7 @@
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
+    "@vitest/coverage-v8": "^4.1.10",
     "jsdom": "^29.1.1",
     "typescript": "^5.6.2",
     "vite": "^6.0.0",

@@ -147,4 +147,4 @@ Ensure the authority fix changes only policy selection and preserves Session saf
 | 1 | Deterministic global and project resolution | PASS | 2026-07-15 | Codex | Both insertion orders, project fallback, and missing-global safe default passed |
 | 2 | Immediate global mutation denial without state change | PASS | 2026-07-15 | Codex | Invalid apply stayed fail-closed; five mutation families were denied with unchanged state |
 | 3 | Read gate hot restore and restart persistence | PASS | 2026-07-15 | Codex | List/Get/Read/reader Attach denial, immediate restore, and UDS/TCP restart authority passed |
-| 4 | Existing safety, privacy, and client regression | PASS | 2026-07-15 | Codex | Isolated QA 5/5, workspace tests, strict Clippy, 12 Vitest, 10 Playwright, and build passed |
+| 4 | Existing safety, privacy, and client regression | PASS | 2026-07-16 | Codex | Isolated QA 5/5, workspace tests, strict Clippy, 21 Vitest, 15 Playwright, and build passed |

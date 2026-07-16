@@ -210,6 +210,6 @@ Verify large histories remain bounded and the new product metrics do not change 
 |---|---|---|---|---|---|
 | 1 | Exact formula golden, privacy, and project isolation | PASS | 2026-07-14 | Codex | Exact-value, allowlist, idempotency, and privacy tests passed |
 | 2 | Bounded gRPC/CLI contract and rebuild | PASS | 2026-07-14 | Codex | Isolated integration test and invalid 31d rejection passed |
-| 3 | Discoverable read-only Operations UI and accessibility | PASS | 2026-07-14 | Codex | React/build and 10 Playwright scenarios passed, including Operations axe/window checks |
+| 3 | Discoverable read-only Operations UI and accessibility | PASS | 2026-07-16 | Codex | React/build and 15 Playwright scenarios passed, including Operations axe/window checks |
 | 4 | Migration, retention, disable, cursor recovery, and rollback | PASS | 2026-07-14 | Codex | Additive migration, rebuild, prune, disable, and cursor tests passed |
 | 5 | Release performance and backward-compatibility gate | PASS | 2026-07-14 | Codex | Both release budgets, workspace tests, and strict Clippy passed |
