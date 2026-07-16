@@ -1113,6 +1113,22 @@ mod tests {
     }
 
     #[test]
+    fn slack_file_comment_reaction_has_a_stable_typed_target() {
+        let mut payload = slack_reaction_payload();
+        payload["event"]["item"] = serde_json::json!({
+            "type": "file_comment",
+            "file": "F-source",
+            "file_comment": "Fc-source"
+        });
+        let event = normalize_slack_event(&payload, "install-1").expect("normalize");
+        assert!(event.conversation.is_none());
+        assert!(event.text_summary.is_none());
+        let target = event.reaction.expect("reaction").target;
+        assert_eq!(target.kind, "file_comment");
+        assert_eq!(target.external_id, "F-source:Fc-source");
+    }
+
+    #[test]
     fn slack_reaction_missing_or_invalid_fields_return_stable_codes() {
         let mut missing_actor = slack_reaction_payload();
         missing_actor["event"]
@@ -1129,6 +1145,33 @@ mod tests {
             .as_object_mut()
             .expect("item")
             .remove("channel");
+        let mut missing_item = slack_reaction_payload();
+        missing_item["event"]
+            .as_object_mut()
+            .expect("event")
+            .remove("item");
+        let mut missing_target_type = slack_reaction_payload();
+        missing_target_type["event"]["item"]
+            .as_object_mut()
+            .expect("item")
+            .remove("type");
+        let mut missing_message_ts = slack_reaction_payload();
+        missing_message_ts["event"]["item"]
+            .as_object_mut()
+            .expect("item")
+            .remove("ts");
+        let mut invalid_message_ts = slack_reaction_payload();
+        invalid_message_ts["event"]["item"]["ts"] = serde_json::json!("not-a-timestamp");
+        let mut missing_event_ts = slack_reaction_payload();
+        missing_event_ts["event"]
+            .as_object_mut()
+            .expect("event")
+            .remove("event_ts");
+        let mut missing_file_comment = slack_reaction_payload();
+        missing_file_comment["event"]["item"] = serde_json::json!({
+            "type": "file_comment",
+            "file": "F-source"
+        });
         let mut invalid_name = slack_reaction_payload();
         invalid_name["event"]["reaction"] = serde_json::json!(":agent docs:");
         let mut invalid_event_ts = slack_reaction_payload();
@@ -1137,7 +1180,16 @@ mod tests {
         for (payload, expected) in [
             (missing_actor, "slack_reaction_missing_actor"),
             (missing_reaction, "slack_reaction_missing_name"),
+            (missing_item, "slack_reaction_missing_item"),
+            (missing_target_type, "slack_reaction_missing_target_type"),
             (missing_channel, "slack_reaction_missing_message_channel"),
+            (missing_message_ts, "slack_reaction_missing_message_ts"),
+            (invalid_message_ts, "slack_reaction_invalid_message_ts"),
+            (missing_event_ts, "slack_reaction_missing_event_ts"),
+            (
+                missing_file_comment,
+                "slack_reaction_missing_file_comment_id",
+            ),
             (invalid_name, "slack_reaction_invalid_name"),
             (invalid_event_ts, "slack_reaction_invalid_event_ts"),
         ] {
