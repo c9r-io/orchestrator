@@ -1,6 +1,6 @@
 # Feature Requests
 
-本目录收录 `orchestrator` 的正式功能需求文档。Agent Process Console 系列的整体依赖与交付顺序见 [产品路线图](agent-process-console-roadmap.md)。
+本目录收录 `orchestrator` 的正式功能需求文档。Agent Process Console v1 已完成闭环；产品结构与发布边界分别由[信息架构](../design_doc/orchestrator/110-process-console-information-architecture.md)和[发布验收设计](../design_doc/orchestrator/116-process-console-release-acceptance.md)持续承载。当前 Slack reaction 驱动的 Skill 任务自动化规划见 [Slack Reaction Skill Automation Roadmap](slack-reaction-skill-automation-roadmap.md)。
 
 ## 当前条目
 
@@ -79,6 +79,13 @@
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
+| FR-107 | Slack Reaction Source Event Contract | P1 | Proposed |
+| FR-108 | Source Task Template And Skill Invocation Resource | P1 | Proposed |
+| FR-109 | Source Task Binding And Badge Matching Resource | P1 | Proposed |
+| FR-110 | Slack Permalink Resolution And Canonical Task Routing | P0 | Proposed |
+| FR-111 | Source Automation Reliability, Policy, And Operations | P1 | Proposed |
+| FR-112 | Process Console Source Automation UI | P1 | Proposed |
+| FR-113 | Slack Reaction Skill Automation Release Acceptance | P1 | Proposed |
 
 ## 说明
 
@@ -89,7 +96,7 @@
 - `Implemented`: 需求已完成并进入维护阶段
 - 已闭环并删除的 FR，应由对应 `docs/design_doc/**` 与 `docs/qa/**` 继续承载设计和验证信息
 - FR-098 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/108-agent-session-control-plane.md`、`docs/qa/orchestrator/145-agent-session-control-plane.md` 与 `fixtures/manifests/bundles/session-control-mock.yaml` 承载
-- FR-095 至 FR-106 已全部闭环为 DD/QA、运维手册与可执行验收产物；Console v1 已达到 release-complete，整体状态与证据见 `docs/feature_request/agent-process-console-roadmap.md`
+- FR-095 至 FR-106 已全部闭环为 DD/QA、运维手册与可执行验收产物；Console v1 已达到 release-complete，整体状态与证据由 `docs/design_doc/orchestrator/116-process-console-release-acceptance.md`、`docs/qa/orchestrator/153-process-console-release-acceptance.md`、`docs/guide/agent-process-console-v1-operations.md` 与 `scripts/qa/test-process-console-release.sh` 承载
 - FR-106 已闭环删除；其 migration identity、populated upgrade、聚合发布门禁和 forward-only 运维/回滚证据现由 `docs/design_doc/orchestrator/116-process-console-release-acceptance.md`、`docs/qa/orchestrator/153-process-console-release-acceptance.md`、`docs/guide/agent-process-console-v1-operations.md` 与 `scripts/qa/test-process-console-release.sh` 承载
 - FR-105 已闭环删除；其确定性 `_system` RuntimePolicy 权威语义、热更新/重启验证与 Session 回归证据现由 `docs/design_doc/orchestrator/115-session-runtime-policy-authority.md`、`docs/qa/orchestrator/152-session-runtime-policy-authority.md` 与 `scripts/qa/test-agent-session-control-plane.sh` 承载
 - FR-104 已闭环删除；其精确产品指标、本地运营视图、投影健康、生命周期与性能证据现由 `docs/design_doc/orchestrator/114-process-console-operational-metrics.md`、`docs/qa/orchestrator/151-process-console-operational-metrics.md` 与 `scripts/qa/test-process-console-metrics.sh` 承载

@@ -764,6 +764,6 @@ orchestrator audit get <request-id> --project <project>
 - [02 - 资源模型](02-resource-model.md)：理解 Project、Workspace、Agent 和 Workflow。
 - [07 - CLI 参考](07-cli-reference.md)：CLI 命令速查。
 - [Agent Process Console v1 Operations](../agent-process-console-v1-operations.md)：升级、发布、stop-loss、回滚和灾难恢复。
-- [Agent Process Console Roadmap](../../feature_request/agent-process-console-roadmap.md)：产品范围、阶段和闭环证据。
+- [Process Console Release Acceptance Design](../../design_doc/orchestrator/116-process-console-release-acceptance.md)：发布范围、兼容边界、迁移和回滚设计。
 - [Process Console Information Architecture](../../design_doc/orchestrator/110-process-console-information-architecture.md)：UI 信息架构与权限设计。
 - [Process Console Release Acceptance](../../qa/orchestrator/153-process-console-release-acceptance.md)：当前发布验收证据。
