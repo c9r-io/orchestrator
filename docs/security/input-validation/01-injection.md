@@ -108,6 +108,7 @@ Verify user input is not executed as a template/expression.
 - External source text is stored only as a bounded, normalized summary and task context event.
 - It cannot select a workflow, modify manifests/execution profiles/secrets, construct shell commands, or add an action outside the closed `SourceCommand` enum.
 - Send shell/template/CEL fragments through the non-Slack fixture and Slack text paths, then verify they remain inert text as specified by `docs/qa/orchestrator/146-source-events-and-slack-binding.md`.
+- FR-107 reaction names accept only bounded Slack emoji-name characters, and target references never become template, Skill, workflow, command, or URL input. Verify rejection and non-mutation with `docs/qa/orchestrator/155-slack-reaction-source-event-contract.md`.
 
 ---
 

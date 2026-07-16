@@ -79,7 +79,6 @@
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
-| FR-107 | Slack Reaction Source Event Contract | P1 | Proposed |
 | FR-108 | Source Task Template And Skill Invocation Resource | P1 | Proposed |
 | FR-109 | Source Task Binding And Badge Matching Resource | P1 | Proposed |
 | FR-110 | Slack Permalink Resolution And Canonical Task Routing | P0 | Proposed |
@@ -95,6 +94,7 @@
 - `In Progress`: 已有部分阶段落地，剩余阶段仍在治理中
 - `Implemented`: 需求已完成并进入维护阶段
 - 已闭环并删除的 FR，应由对应 `docs/design_doc/**` 与 `docs/qa/**` 继续承载设计和验证信息
+- FR-107 已闭环删除；其 provider-neutral reaction contract、Slack normalization、非变更路由闸门与 Sources 验证现由 `docs/design_doc/orchestrator/118-slack-reaction-source-event-contract.md`、`docs/qa/orchestrator/155-slack-reaction-source-event-contract.md` 与 `scripts/qa/test-slack-reaction-source.sh` 承载
 - FR-098 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/108-agent-session-control-plane.md`、`docs/qa/orchestrator/145-agent-session-control-plane.md` 与 `fixtures/manifests/bundles/session-control-mock.yaml` 承载
 - FR-095 至 FR-106 已全部闭环为 DD/QA、运维手册与可执行验收产物；Console v1 已达到 release-complete，整体状态与证据由 `docs/design_doc/orchestrator/116-process-console-release-acceptance.md`、`docs/qa/orchestrator/153-process-console-release-acceptance.md`、`docs/guide/agent-process-console-v1-operations.md` 与 `scripts/qa/test-process-console-release.sh` 承载
 - FR-106 已闭环删除；其 migration identity、populated upgrade、聚合发布门禁和 forward-only 运维/回滚证据现由 `docs/design_doc/orchestrator/116-process-console-release-acceptance.md`、`docs/qa/orchestrator/153-process-console-release-acceptance.md`、`docs/guide/agent-process-console-v1-operations.md` 与 `scripts/qa/test-process-console-release.sh` 承载

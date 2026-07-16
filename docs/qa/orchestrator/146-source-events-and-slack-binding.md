@@ -22,6 +22,8 @@ orchestrator apply -f fixtures/manifests/bundles/source-events-fixture.yaml --pr
 Slack endpoint: `POST /source/slack/{project}/{trigger_name}`  
 CLI: `orchestrator source list|get|ingest|bindings|bind|replay`
 
+Compatibility note: FR-107 adds typed `reaction_added` input but deliberately bypasses the fixed Trigger action and thread binding used in this document. Validate that non-mutating branch with `docs/qa/orchestrator/155-slack-reaction-source-event-contract.md`; all message, command, binding, and replay behavior below remains authoritative.
+
 The automated test starts a temporary daemon and database; it does not use live agents or Slack credentials:
 
 ```bash
