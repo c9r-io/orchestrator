@@ -271,12 +271,41 @@ async fn route_reaction_automation(
             .await?;
         return Ok(());
     }
-    let channel_id = event
-        .normalized
-        .conversation
-        .as_ref()
-        .map(|conversation| conversation.conversation_id.clone())
-        .unwrap_or_default();
+    let Some(conversation) = event.normalized.conversation.as_ref() else {
+        source_repository
+            .complete_routing(
+                &event.id,
+                "ignored",
+                None,
+                Some("reaction_message_identity_invalid"),
+            )
+            .await?;
+        return Ok(());
+    };
+    let channel_id = conversation.conversation_id.clone();
+    let Some(message_ts) = conversation.thread_id.clone() else {
+        source_repository
+            .complete_routing(
+                &event.id,
+                "ignored",
+                None,
+                Some("reaction_message_identity_invalid"),
+            )
+            .await?;
+        return Ok(());
+    };
+    let message_identity = format!("{channel_id}:{message_ts}");
+    if reaction.target.external_id != message_identity {
+        source_repository
+            .complete_routing(
+                &event.id,
+                "ignored",
+                None,
+                Some("reaction_message_identity_invalid"),
+            )
+            .await?;
+        return Ok(());
+    }
     let active = read_active_config(state)?;
     let match_result = agent_orchestrator::source_task_binding::match_source_task_binding(
         &active.config,
@@ -335,7 +364,6 @@ async fn route_reaction_automation(
         .and_then(|trigger_event| trigger_event.webhook.as_ref())
         .and_then(|webhook| webhook.outbound_credential.as_ref())
         .context("Slack outbound credential reference missing")?;
-    let message_identity = format!("{channel_id}:{}", reaction.target.external_id);
     let reservation = route_repository
         .reserve(ReserveSourceAutomationRoute {
             project_id: event.project_id.clone(),
@@ -344,7 +372,7 @@ async fn route_reaction_automation(
             installation_id: event.installation_id.clone(),
             message_identity,
             channel_id,
-            message_ts: reaction.target.external_id.clone(),
+            message_ts,
             reaction: reaction.name.clone(),
             resolved_role: match_result
                 .resolved_role
@@ -1412,11 +1440,20 @@ mod tests {
                 listener,
                 axum::Router::new().route(
                     "/api/chat.getPermalink",
-                    axum::routing::get(|| async {
-                        axum::Json(serde_json::json!({
-                            "ok": true,
-                            "permalink": "https://acme.slack.com/archives/conversation-1/p171234000100"
-                        }))
+                    axum::routing::get(|axum::extract::Query(query): axum::extract::Query<HashMap<String, String>>| async move {
+                        if query.get("channel").map(String::as_str) == Some("conversation-1")
+                            && query.get("message_ts").map(String::as_str) == Some("thread-1")
+                        {
+                            axum::Json(serde_json::json!({
+                                "ok": true,
+                                "permalink": "https://acme.slack.com/archives/conversation-1/p171234000100"
+                            }))
+                        } else {
+                            axum::Json(serde_json::json!({
+                                "ok": false,
+                                "error": "message_not_found"
+                            }))
+                        }
                     }),
                 ),
             )

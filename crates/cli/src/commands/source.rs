@@ -372,6 +372,11 @@ fn event_value(event: &SourceEvent) -> serde_json::Value {
         "routing_attempts": event.routing_attempts,
         "routed_task_id": event.routed_task_id,
         "last_error_code": event.last_error_code,
+        "automation_route_id": event.automation_route_id,
+        "automation_status": event.automation_status,
+        "automation_binding_name": event.automation_binding_name,
+        "automation_template_name": event.automation_template_name,
+        "automation_template_hash": event.automation_template_hash,
     })
 }
 

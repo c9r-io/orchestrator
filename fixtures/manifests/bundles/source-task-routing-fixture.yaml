@@ -1,0 +1,114 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: source-routing-fixture
+spec:
+  root_path: "."
+  qa_targets: [docs/qa/orchestrator]
+  ticket_dir: docs/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: source-routing-fixture
+spec:
+  capabilities: [source_routing_fixture]
+  command: >-
+    echo '{"confidence":1.0,"quality_score":1.0,"artifacts":[]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: source-routing-fixture
+spec:
+  steps:
+    - id: inspect_source
+      type: source_routing_fixture
+      required_capability: source_routing_fixture
+      enabled: true
+      behavior:
+        side_effect_class: none
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: RuntimePolicy
+metadata:
+  name: default
+spec:
+  runner:
+    shell: /bin/bash
+    shell_arg: -lc
+    policy: allowlist
+    executor: shell
+    allowed_shells: [/bin/bash, /bin/sh, sh]
+    allowed_shell_args: [-lc, -c]
+  resume:
+    auto: false
+  source_ingest_enabled: true
+---
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskTemplate
+metadata:
+  name: implement-from-slack
+spec:
+  skill:
+    name: docs
+    invocation: "$docs"
+    args: ["--concise"]
+  action:
+    workflow: source-routing-fixture
+    workspace: source-routing-fixture
+    start: false
+  goalTemplate: "{skill_invocation}: inspect {source_message_url}"
+  allowedVariables: [skill_invocation, source_message_url]
+---
+apiVersion: orchestrator.dev/v2
+kind: SecretStore
+metadata:
+  name: slack-routing-secret
+spec:
+  data:
+    signing: qa-source-routing-signing-secret
+    bot-token: qa-source-routing-fake-token
+---
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: slack-routing
+spec:
+  event:
+    source: webhook
+    webhook:
+      provider: slack
+      installationId: T_QA_ROUTING
+      timestampToleranceSecs: 300
+      actorRoles:
+        U_OPERATOR: operator
+        U_READER: read_only
+      reactionRouting: bindings
+      secret:
+        fromRef: slack-routing-secret
+      outboundCredential:
+        fromRef: slack-routing-secret
+        key: bot-token
+  action:
+    workflow: source-routing-fixture
+    workspace: source-routing-fixture
+    start: false
+  concurrencyPolicy: Allow
+---
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskBinding
+metadata:
+  name: slack-implement
+spec:
+  triggerRef: slack-routing
+  match:
+    eventKind: reaction_added
+    reaction: agent-implement
+    targetKind: message
+    channels: [C_QA_ROUTING]
+  templateRef: implement-from-slack
+  allowedActorRoles: [operator]
+  suspend: false

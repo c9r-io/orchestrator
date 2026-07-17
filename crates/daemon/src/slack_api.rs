@@ -277,7 +277,7 @@ fn api_base_url() -> Result<reqwest::Url, SlackApiError> {
         if !loopback || url.scheme() != "http" {
             return Err(SlackApiError::permanent("slack_api_base_override_rejected"));
         }
-        return Ok(url);
+        Ok(url)
     }
     #[cfg(not(any(debug_assertions, feature = "dev-insecure")))]
     {
