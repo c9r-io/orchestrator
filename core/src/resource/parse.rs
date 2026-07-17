@@ -8,8 +8,9 @@ use serde::Deserialize;
 
 use super::{
     AgentResource, EnvStoreResource, ExecutionProfileResource, ProjectResource, Resource,
-    RuntimePolicyResource, SecretStoreResource, SourceTaskTemplateResource, StepTemplateResource,
-    TriggerResource, WorkflowResource, WorkspaceResource,
+    RuntimePolicyResource, SecretStoreResource, SourceTaskBindingResource,
+    SourceTaskTemplateResource, StepTemplateResource, TriggerResource, WorkflowResource,
+    WorkspaceResource,
 };
 
 /// Parse YAML into builtin OrchestratorResource types only (backward-compatible).
@@ -84,6 +85,9 @@ pub fn delete_resource_by_kind(
         "sourcetasktemplate" | "source_task_template" | "source-task-template" | "stt" => {
             Ok(SourceTaskTemplateResource::delete_from(config, name))
         }
+        "sourcetaskbinding" | "source_task_binding" | "source-task-binding" | "stb" => {
+            Ok(SourceTaskBindingResource::delete_from(config, name))
+        }
         "executionprofile" | "execution-profile" | "execution_profile" => {
             Ok(ExecutionProfileResource::delete_from(config, name))
         }
@@ -103,7 +107,7 @@ pub fn delete_resource_by_kind(
                 return crate::crd::delete_custom_resource(config, &crd_kind, name);
             }
             Err(anyhow!(
-                "unknown resource type: {} (supported: workspace, agent, workflow, project, runtimepolicy, steptemplate, sourcetasktemplate, executionprofile, envstore, secretstore, or CRD-defined types)",
+                "unknown resource type: {} (supported: workspace, agent, workflow, project, runtimepolicy, steptemplate, sourcetasktemplate, sourcetaskbinding, executionprofile, envstore, secretstore, or CRD-defined types)",
                 kind
             ))
         }
@@ -120,6 +124,7 @@ pub fn kind_as_str(kind: ResourceKind) -> &'static str {
         ResourceKind::RuntimePolicy => "runtimepolicy",
         ResourceKind::StepTemplate => "steptemplate",
         ResourceKind::SourceTaskTemplate => "sourcetasktemplate",
+        ResourceKind::SourceTaskBinding => "sourcetaskbinding",
         ResourceKind::ExecutionProfile => "executionprofile",
         ResourceKind::EnvStore => "envstore",
         ResourceKind::SecretStore => "secretstore",

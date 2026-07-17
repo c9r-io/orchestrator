@@ -69,6 +69,9 @@ fn get_single_resource(
         "sourcetasktemplate" | "source-task-template" | "source_task_template" | "stt" => {
             "SourceTaskTemplate"
         }
+        "sourcetaskbinding" | "source-task-binding" | "source_task_binding" | "stb" => {
+            "SourceTaskBinding"
+        }
         _ => {
             // CRD-defined custom resource fallback (skip kinds with dedicated ProjectConfig
             // projections — those are handled by the match arms above)
@@ -143,6 +146,15 @@ fn get_single_resource(
             })?;
             format_output(template, output_format)
         }
+        "sourcetaskbinding" | "source-task-binding" | "source_task_binding" | "stb" => {
+            let binding = project.source_task_bindings.get(name).ok_or_else(|| {
+                classify_resource_error(
+                    "resource.get",
+                    anyhow::anyhow!("source task binding not found: {}", name),
+                )
+            })?;
+            format_output(binding, output_format)
+        }
         _ => unreachable!(),
     }
 }
@@ -168,6 +180,14 @@ fn get_list_resource(
         | "stt" => (
             project.source_task_templates.keys().collect(),
             "SourceTaskTemplate",
+        ),
+        "sourcetaskbinding"
+        | "source-task-binding"
+        | "source_task_binding"
+        | "sourcetaskbindings"
+        | "stb" => (
+            project.source_task_bindings.keys().collect(),
+            "SourceTaskBinding",
         ),
         _ => {
             // CRD-defined custom resource list fallback (skip kinds with dedicated ProjectConfig

@@ -480,6 +480,7 @@ fn helper_functions_cover_delete_and_projection_paths() {
         )]),
         step_templates: HashMap::new(),
         source_task_templates: HashMap::new(),
+        source_task_bindings: HashMap::new(),
         env_stores: HashMap::new(),
         secret_stores: HashMap::new(),
         execution_profiles: HashMap::new(),

@@ -4,12 +4,14 @@ use anyhow::{Result, anyhow};
 
 use super::{
     AgentResource, EnvStoreResource, ExecutionProfileResource, ProjectResource,
-    RuntimePolicyResource, SecretStoreResource, SourceTaskTemplateResource, StepTemplateResource,
-    TriggerResource, WorkflowResource, WorkspaceResource,
+    RuntimePolicyResource, SecretStoreResource, SourceTaskBindingResource,
+    SourceTaskTemplateResource, StepTemplateResource, TriggerResource, WorkflowResource,
+    WorkspaceResource,
 };
 use super::{
     ApplyResult, Resource, agent, env_store, execution_profile, project, runtime_policy,
-    secret_store, source_task_template, step_template, trigger, workflow, workspace,
+    secret_store, source_task_binding, source_task_template, step_template, trigger, workflow,
+    workspace,
 };
 
 #[derive(Debug, Clone)]
@@ -29,6 +31,8 @@ pub enum RegisteredResource {
     StepTemplate(StepTemplateResource),
     /// Source task template resource.
     SourceTaskTemplate(SourceTaskTemplateResource),
+    /// Source task binding resource.
+    SourceTaskBinding(SourceTaskBindingResource),
     /// Execution profile resource.
     ExecutionProfile(ExecutionProfileResource),
     /// Environment store resource.
@@ -49,7 +53,7 @@ pub struct ResourceRegistration {
 }
 
 /// Returns the static registry for builtin manifest resource kinds.
-pub fn resource_registry() -> [ResourceRegistration; 11] {
+pub fn resource_registry() -> [ResourceRegistration; 12] {
     [
         ResourceRegistration {
             kind: ResourceKind::Workspace,
@@ -78,6 +82,10 @@ pub fn resource_registry() -> [ResourceRegistration; 11] {
         ResourceRegistration {
             kind: ResourceKind::SourceTaskTemplate,
             build: source_task_template::build_source_task_template,
+        },
+        ResourceRegistration {
+            kind: ResourceKind::SourceTaskBinding,
+            build: source_task_binding::build_source_task_binding,
         },
         ResourceRegistration {
             kind: ResourceKind::ExecutionProfile,
@@ -109,6 +117,7 @@ impl RegisteredResource {
             Self::RuntimePolicy(r) => &r.metadata,
             Self::StepTemplate(r) => &r.metadata,
             Self::SourceTaskTemplate(r) => &r.metadata,
+            Self::SourceTaskBinding(r) => &r.metadata,
             Self::ExecutionProfile(r) => &r.metadata,
             Self::EnvStore(r) => &r.metadata,
             Self::SecretStore(r) => &r.metadata,
@@ -139,6 +148,7 @@ impl Resource for RegisteredResource {
             Self::RuntimePolicy(_) => ResourceKind::RuntimePolicy,
             Self::StepTemplate(_) => ResourceKind::StepTemplate,
             Self::SourceTaskTemplate(_) => ResourceKind::SourceTaskTemplate,
+            Self::SourceTaskBinding(_) => ResourceKind::SourceTaskBinding,
             Self::ExecutionProfile(_) => ResourceKind::ExecutionProfile,
             Self::EnvStore(_) => ResourceKind::EnvStore,
             Self::SecretStore(_) => ResourceKind::SecretStore,
@@ -155,6 +165,7 @@ impl Resource for RegisteredResource {
             Self::RuntimePolicy(resource) => &resource.metadata.name,
             Self::StepTemplate(resource) => &resource.metadata.name,
             Self::SourceTaskTemplate(resource) => &resource.metadata.name,
+            Self::SourceTaskBinding(resource) => &resource.metadata.name,
             Self::ExecutionProfile(resource) => &resource.metadata.name,
             Self::EnvStore(resource) => &resource.metadata.name,
             Self::SecretStore(resource) => &resource.metadata.name,
@@ -171,6 +182,7 @@ impl Resource for RegisteredResource {
             Self::RuntimePolicy(resource) => resource.validate(),
             Self::StepTemplate(resource) => resource.validate(),
             Self::SourceTaskTemplate(resource) => resource.validate(),
+            Self::SourceTaskBinding(resource) => resource.validate(),
             Self::ExecutionProfile(resource) => resource.validate(),
             Self::EnvStore(resource) => resource.validate(),
             Self::SecretStore(resource) => resource.validate(),
@@ -187,6 +199,7 @@ impl Resource for RegisteredResource {
             Self::RuntimePolicy(resource) => resource.apply(config),
             Self::StepTemplate(resource) => resource.apply(config),
             Self::SourceTaskTemplate(resource) => resource.apply(config),
+            Self::SourceTaskBinding(resource) => resource.apply(config),
             Self::ExecutionProfile(resource) => resource.apply(config),
             Self::EnvStore(resource) => resource.apply(config),
             Self::SecretStore(resource) => resource.apply(config),
@@ -203,6 +216,7 @@ impl Resource for RegisteredResource {
             Self::RuntimePolicy(resource) => resource.to_yaml(),
             Self::StepTemplate(resource) => resource.to_yaml(),
             Self::SourceTaskTemplate(resource) => resource.to_yaml(),
+            Self::SourceTaskBinding(resource) => resource.to_yaml(),
             Self::ExecutionProfile(resource) => resource.to_yaml(),
             Self::EnvStore(resource) => resource.to_yaml(),
             Self::SecretStore(resource) => resource.to_yaml(),
@@ -236,6 +250,11 @@ impl Resource for RegisteredResource {
             SourceTaskTemplateResource::get_from_project(config, name, project_id)
         {
             return Some(Self::SourceTaskTemplate(source_task_template));
+        }
+        if let Some(source_task_binding) =
+            SourceTaskBindingResource::get_from_project(config, name, project_id)
+        {
+            return Some(Self::SourceTaskBinding(source_task_binding));
         }
         if let Some(execution_profile) =
             ExecutionProfileResource::get_from_project(config, name, project_id)
@@ -284,6 +303,9 @@ impl Resource for RegisteredResource {
             return true;
         }
         if SourceTaskTemplateResource::delete_from_project(config, name, project_id) {
+            return true;
+        }
+        if SourceTaskBindingResource::delete_from_project(config, name, project_id) {
             return true;
         }
         if ExecutionProfileResource::delete_from_project(config, name, project_id) {

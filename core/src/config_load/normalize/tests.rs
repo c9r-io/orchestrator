@@ -893,5 +893,5 @@ fn normalize_config_idempotent_double_call() {
             .get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "idem-ag")
             .is_some()
     );
-    assert_eq!(second.custom_resource_definitions.len(), 12);
+    assert_eq!(second.custom_resource_definitions.len(), 13);
 }

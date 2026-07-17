@@ -8,6 +8,7 @@ mod loop_policy;
 mod probe;
 mod root_path;
 mod self_referential;
+mod source_task_bindings;
 mod source_task_templates;
 #[cfg(test)]
 mod tests;
@@ -19,6 +20,9 @@ pub use agent_env::{
 };
 pub use root_path::ensure_within_root;
 pub use self_referential::validate_self_referential_safety;
+pub use source_task_bindings::{
+    validate_source_task_bindings, validate_source_task_bindings_for_project,
+};
 pub use source_task_templates::{
     validate_source_task_templates, validate_source_task_templates_for_project,
 };

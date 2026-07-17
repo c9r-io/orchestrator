@@ -23,6 +23,17 @@ pub(crate) async fn dispatch(
                     dry_run,
                     project,
                     prune,
+                    audit: Some(orchestrator_proto::ActionAuditContext {
+                        reason_code: "operator_resource_apply".to_string(),
+                        operator_reason: None,
+                        idempotency_key: Some(format!(
+                            "cli-resource-apply-{}",
+                            std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map(|duration| duration.as_nanos())
+                                .unwrap_or_default()
+                        )),
+                    }),
                 })
                 .await
                 .map_err(format_grpc_error)?
@@ -111,8 +122,12 @@ pub(crate) async fn dispatch(
                     dry_run,
                     project,
                     force_references,
-                    audit: force_references.then(|| orchestrator_proto::ActionAuditContext {
-                        reason_code: "operator_force_reference_cleanup".to_string(),
+                    audit: Some(orchestrator_proto::ActionAuditContext {
+                        reason_code: if force_references {
+                            "operator_force_reference_cleanup".to_string()
+                        } else {
+                            "operator_resource_delete".to_string()
+                        },
                         operator_reason: Some(
                             "atomically delete SourceTaskTemplate binding references".to_string(),
                         ),

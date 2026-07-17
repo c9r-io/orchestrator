@@ -317,6 +317,33 @@ impl OrchestratorService for TestOrchestratorServer {
         ))
     }
 
+    async fn source_task_binding_simulate(
+        &self,
+        _: Request<SourceTaskBindingSimulateRequest>,
+    ) -> Result<Response<SourceTaskBindingSimulateResponse>, Status> {
+        Err(Status::unimplemented(
+            "source binding integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn source_task_binding_suspend(
+        &self,
+        _: Request<SourceTaskBindingMutationRequest>,
+    ) -> Result<Response<SourceTaskBindingMutationResponse>, Status> {
+        Err(Status::unimplemented(
+            "source binding integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn source_task_binding_resume(
+        &self,
+        _: Request<SourceTaskBindingMutationRequest>,
+    ) -> Result<Response<SourceTaskBindingMutationResponse>, Status> {
+        Err(Status::unimplemented(
+            "source binding integration fixture uses the production daemon",
+        ))
+    }
+
     async fn agent_session_list(
         &self,
         _: Request<AgentSessionListRequest>,

@@ -48,14 +48,17 @@ pub fn delete_resource_with_references(
         kind,
         "sourcetasktemplate" | "source-task-template" | "source_task_template" | "stt"
     );
-    if force_references && !is_source_template {
+    let is_trigger = matches!(kind, "trigger" | "tg");
+    if force_references && !is_source_template && !is_trigger {
         return Err(classify_resource_error(
             "resource.delete",
-            anyhow::anyhow!("--force-references is only valid for SourceTaskTemplate deletion"),
+            anyhow::anyhow!(
+                "--force-references is only valid for SourceTaskTemplate or Trigger deletion"
+            ),
         ));
     }
-    let binding_references = if is_source_template {
-        source_task_binding_references(&config, project_id, name)
+    let binding_references = if is_source_template || is_trigger {
+        source_task_binding_references(&config, project_id, name, is_trigger)
     } else {
         Vec::new()
     };
@@ -63,7 +66,12 @@ pub fn delete_resource_with_references(
         return Err(crate::error::OrchestratorError::invalid_state(
             "resource.delete",
             anyhow::anyhow!(
-                "SourceTaskTemplate '{}/{}' is referenced by SourceTaskBinding(s): {}; use --force-references with Admin authorization to remove them atomically",
+                "{} '{}/{}' is referenced by SourceTaskBinding(s): {}; use --force-references with Admin authorization to remove them atomically",
+                if is_trigger {
+                    "Trigger"
+                } else {
+                    "SourceTaskTemplate"
+                },
                 project_id,
                 name,
                 binding_references.join(", ")
@@ -126,6 +134,9 @@ pub fn delete_resource_with_references(
             "sourcetasktemplate" | "source-task-template" | "source_task_template" | "stt" => {
                 proj_cfg.source_task_templates.contains_key(name)
             }
+            "sourcetaskbinding" | "source-task-binding" | "source_task_binding" | "stb" => {
+                proj_cfg.source_task_bindings.contains_key(name)
+            }
             "envstore" | "env-store" | "env_store" | "secretstore" | "secret-store"
             | "secret_store" => proj_cfg.env_stores.contains_key(name),
             "trigger" | "tg" => proj_cfg.triggers.contains_key(name),
@@ -142,7 +153,7 @@ pub fn delete_resource_with_references(
 
     let mut config = config;
     if force_references {
-        remove_source_task_binding_references(&mut config, project_id, name);
+        remove_source_task_binding_references(&mut config, project_id, name, is_trigger);
     }
 
     // Handle CRD and custom resource deletion (not project-scoped)
@@ -262,46 +273,80 @@ pub fn delete_resource_with_references(
 fn source_task_binding_references(
     config: &crate::config::OrchestratorConfig,
     project_id: &str,
-    template_name: &str,
+    referenced_name: &str,
+    trigger_reference: bool,
 ) -> Vec<String> {
+    let field = if trigger_reference {
+        "triggerRef"
+    } else {
+        "templateRef"
+    };
+    let snake_field = if trigger_reference {
+        "trigger_ref"
+    } else {
+        "template_ref"
+    };
     let mut names: Vec<String> = config
-        .resource_store
-        .list_by_kind_for_project("SourceTaskBinding", project_id)
+        .projects
+        .get(project_id)
         .into_iter()
-        .filter(|resource| {
-            resource
-                .spec
-                .get("templateRef")
-                .or_else(|| resource.spec.get("template_ref"))
-                .and_then(serde_json::Value::as_str)
-                == Some(template_name)
+        .flat_map(|project| project.source_task_bindings.iter())
+        .filter(|(_, binding)| {
+            if trigger_reference {
+                binding.trigger_ref == referenced_name
+            } else {
+                binding.template_ref == referenced_name
+            }
         })
-        .map(|resource| resource.metadata.name.clone())
+        .map(|(name, _)| name.clone())
         .collect();
+    names.extend(
+        config
+            .resource_store
+            .list_by_kind_for_project("SourceTaskBinding", project_id)
+            .into_iter()
+            .filter(|resource| {
+                resource
+                    .spec
+                    .get(field)
+                    .or_else(|| resource.spec.get(snake_field))
+                    .and_then(serde_json::Value::as_str)
+                    == Some(referenced_name)
+            })
+            .map(|resource| resource.metadata.name.clone()),
+    );
     for resource in config.custom_resources.values() {
         if resource.kind == "SourceTaskBinding"
             && resource.metadata.project.as_deref() == Some(project_id)
             && resource
                 .spec
-                .get("templateRef")
-                .or_else(|| resource.spec.get("template_ref"))
+                .get(field)
+                .or_else(|| resource.spec.get(snake_field))
                 .and_then(serde_json::Value::as_str)
-                == Some(template_name)
+                == Some(referenced_name)
             && !names.contains(&resource.metadata.name)
         {
             names.push(resource.metadata.name.clone());
         }
     }
     names.sort();
+    names.dedup();
     names
 }
 
 fn remove_source_task_binding_references(
     config: &mut crate::config::OrchestratorConfig,
     project_id: &str,
-    template_name: &str,
+    referenced_name: &str,
+    trigger_reference: bool,
 ) {
-    let names = source_task_binding_references(config, project_id, template_name);
+    let names =
+        source_task_binding_references(config, project_id, referenced_name, trigger_reference);
+    if let Some(project) = config.projects.get_mut(project_id) {
+        for name in &names {
+            project.source_task_bindings.remove(name);
+        }
+    }
     for name in &names {
         config
             .resource_store
@@ -329,6 +374,9 @@ pub(super) fn delete_resource_from_project(
         "sourcetasktemplate" | "source-task-template" | "source_task_template" | "stt" => {
             Ok(proj.source_task_templates.remove(name).is_some())
         }
+        "sourcetaskbinding" | "source-task-binding" | "source_task_binding" | "stb" => {
+            Ok(proj.source_task_bindings.remove(name).is_some())
+        }
         "executionprofile" | "execution-profile" | "execution_profile" => {
             Ok(proj.execution_profiles.remove(name).is_some())
         }
@@ -350,6 +398,9 @@ pub(super) fn canonical_project_kind(kind: &str) -> Result<&'static str> {
         "steptemplate" | "step-template" | "step_template" => Ok("StepTemplate"),
         "sourcetasktemplate" | "source-task-template" | "source_task_template" | "stt" => {
             Ok("SourceTaskTemplate")
+        }
+        "sourcetaskbinding" | "source-task-binding" | "source_task_binding" | "stb" => {
+            Ok("SourceTaskBinding")
         }
         "executionprofile" | "execution-profile" | "execution_profile" => Ok("ExecutionProfile"),
         "envstore" | "env-store" | "env_store" => Ok("EnvStore"),
@@ -390,10 +441,10 @@ mod source_template_reference_tests {
         });
 
         assert_eq!(
-            source_task_binding_references(&config, "alpha", "docs"),
+            source_task_binding_references(&config, "alpha", "docs", false),
             vec!["slack-docs"]
         );
-        remove_source_task_binding_references(&mut config, "alpha", "docs");
-        assert!(source_task_binding_references(&config, "alpha", "docs").is_empty());
+        remove_source_task_binding_references(&mut config, "alpha", "docs", false);
+        assert!(source_task_binding_references(&config, "alpha", "docs", false).is_empty());
     }
 }

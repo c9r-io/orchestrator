@@ -21,13 +21,15 @@ pub trait CrdProjectable: Sized + Serialize + DeserializeOwned {
 
 use crate::cli_types::{
     AgentSpec, EnvStoreSpec, ExecutionProfileSpec, ProjectSpec, RuntimePolicySpec, SecretStoreSpec,
-    SourceTaskTemplateActionSpec, SourceTaskTemplateSkillSpec, SourceTaskTemplateSpec,
-    StepTemplateSpec, WorkspaceSpec,
+    SourceTaskBindingMatchSpec, SourceTaskBindingSpec, SourceTaskTemplateActionSpec,
+    SourceTaskTemplateSkillSpec, SourceTaskTemplateSpec, StepTemplateSpec, TriggerSpec,
+    WorkspaceSpec,
 };
 use crate::config::{
     AgentConfig, EnvStoreConfig, ExecutionProfileConfig, ProjectConfig, ResumeConfig, RunnerConfig,
-    SecretStoreConfig, SourceTaskTemplateActionConfig, SourceTaskTemplateConfig,
-    SourceTaskTemplateSkillConfig, StepTemplateConfig, StoreBackendProviderConfig, WorkflowConfig,
+    SecretStoreConfig, SourceTaskBindingConfig, SourceTaskBindingMatchConfig,
+    SourceTaskTemplateActionConfig, SourceTaskTemplateConfig, SourceTaskTemplateSkillConfig,
+    StepTemplateConfig, StoreBackendProviderConfig, TriggerConfig, WorkflowConfig,
     WorkflowStoreConfig, WorkspaceConfig,
 };
 use crate::resource::agent::{agent_config_to_spec, agent_spec_to_config};
@@ -37,6 +39,7 @@ use crate::resource::execution_profile::{
 use crate::resource::runtime_policy::{runner_config_to_spec, runner_spec_to_config};
 use crate::resource::workflow::{workflow_config_to_spec, workflow_spec_to_config};
 use crate::resource::workspace::{workspace_config_to_spec, workspace_spec_to_config};
+use crate::resource::{trigger_config_to_spec, trigger_spec_to_config};
 
 impl CrdProjectable for AgentConfig {
     fn crd_kind() -> &'static str {
@@ -100,6 +103,7 @@ impl CrdProjectable for ProjectConfig {
             workflows: Default::default(),
             step_templates: Default::default(),
             source_task_templates: Default::default(),
+            source_task_bindings: Default::default(),
             env_stores: Default::default(),
             secret_stores: Default::default(),
             execution_profiles: Default::default(),
@@ -297,6 +301,61 @@ impl CrdProjectable for SourceTaskTemplateConfig {
     }
 }
 
+impl CrdProjectable for SourceTaskBindingConfig {
+    fn crd_kind() -> &'static str {
+        "SourceTaskBinding"
+    }
+
+    fn from_cr_spec(spec: &serde_json::Value) -> Result<Self> {
+        let value: SourceTaskBindingSpec = serde_json::from_value(spec.clone())?;
+        Ok(Self {
+            trigger_ref: value.trigger_ref,
+            match_rule: SourceTaskBindingMatchConfig {
+                event_kind: value.match_rule.event_kind,
+                reaction: value.match_rule.reaction,
+                target_kind: value.match_rule.target_kind,
+                channels: value.match_rule.channels,
+                all_channels: value.match_rule.all_channels,
+            },
+            template_ref: value.template_ref,
+            allowed_actor_roles: value.allowed_actor_roles,
+            suspend: value.suspend,
+        })
+    }
+
+    fn to_cr_spec(&self) -> serde_json::Value {
+        let spec = SourceTaskBindingSpec {
+            trigger_ref: self.trigger_ref.clone(),
+            match_rule: SourceTaskBindingMatchSpec {
+                event_kind: self.match_rule.event_kind.clone(),
+                reaction: self.match_rule.reaction.clone(),
+                target_kind: self.match_rule.target_kind.clone(),
+                channels: self.match_rule.channels.clone(),
+                all_channels: self.match_rule.all_channels,
+            },
+            template_ref: self.template_ref.clone(),
+            allowed_actor_roles: self.allowed_actor_roles.clone(),
+            suspend: self.suspend,
+        };
+        serde_json::to_value(spec).unwrap_or_default()
+    }
+}
+
+impl CrdProjectable for TriggerConfig {
+    fn crd_kind() -> &'static str {
+        "Trigger"
+    }
+
+    fn from_cr_spec(spec: &serde_json::Value) -> Result<Self> {
+        let value: TriggerSpec = serde_json::from_value(spec.clone())?;
+        Ok(trigger_spec_to_config(&value))
+    }
+
+    fn to_cr_spec(&self) -> serde_json::Value {
+        serde_json::to_value(trigger_config_to_spec(self)).unwrap_or_default()
+    }
+}
+
 impl CrdProjectable for ExecutionProfileConfig {
     fn crd_kind() -> &'static str {
         "ExecutionProfile"
@@ -481,6 +540,7 @@ mod tests {
             workflows: Default::default(),
             step_templates: Default::default(),
             source_task_templates: Default::default(),
+            source_task_bindings: Default::default(),
             env_stores: Default::default(),
             secret_stores: Default::default(),
             execution_profiles: Default::default(),
@@ -639,7 +699,7 @@ mod tests {
     }
 
     #[test]
-    fn all_eleven_projectable_kinds_are_unique() {
+    fn all_fourteen_projectable_kinds_are_unique() {
         let kinds = [
             AgentConfig::crd_kind(),
             WorkflowConfig::crd_kind(),
@@ -648,6 +708,9 @@ mod tests {
             RuntimePolicyProjection::crd_kind(),
             StepTemplateConfig::crd_kind(),
             SourceTaskTemplateConfig::crd_kind(),
+            SourceTaskBindingConfig::crd_kind(),
+            ExecutionProfileConfig::crd_kind(),
+            TriggerConfig::crd_kind(),
             EnvStoreConfig::crd_kind(),
             SecretStoreConfig::crd_kind(),
             WorkflowStoreConfig::crd_kind(),
@@ -657,7 +720,7 @@ mod tests {
         for kind in &kinds {
             assert!(set.insert(*kind), "duplicate kind: {}", kind);
         }
-        assert_eq!(set.len(), 11);
+        assert_eq!(set.len(), 14);
     }
 
     #[test]

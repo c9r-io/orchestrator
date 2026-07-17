@@ -14,6 +14,7 @@ use super::{
     serialize_config_snapshot, validate_agent_command_rules,
     validate_agent_command_rules_for_project, validate_agent_env_store_refs,
     validate_agent_env_store_refs_for_project, validate_execution_profiles_for_project,
+    validate_source_task_bindings, validate_source_task_bindings_for_project,
     validate_source_task_templates, validate_source_task_templates_for_project,
     validate_workflow_config, validate_workflow_config_with_agents,
 };
@@ -37,6 +38,7 @@ pub fn build_active_config(data_dir: &Path, config: OrchestratorConfig) -> Resul
     validate_agent_env_store_refs(&config)?;
     validate_agent_command_rules(&config)?;
     validate_source_task_templates(&config)?;
+    validate_source_task_bindings(&config)?;
     Ok(ActiveConfig {
         workspaces,
         projects,
@@ -59,6 +61,7 @@ pub fn build_active_config_for_project(
     validate_agent_env_store_refs_for_project(&config, target_project)?;
     validate_agent_command_rules_for_project(&config, target_project)?;
     validate_source_task_templates_for_project(&config, target_project)?;
+    validate_source_task_bindings_for_project(&config, target_project)?;
     Ok(ActiveConfig {
         workspaces,
         projects,

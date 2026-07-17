@@ -72,6 +72,7 @@ pub async fn resource_apply(
             dry_run: false,
             project: None,
             prune: false,
+            audit: None,
         })
         .await
         .map_err(|e| crate::errors::humanize_grpc_error(&e))?;

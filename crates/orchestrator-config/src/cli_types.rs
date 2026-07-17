@@ -81,6 +81,11 @@ impl<'de> Deserialize<'de> for OrchestratorResource {
                     serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
                 ResourceSpec::SourceTaskTemplate(s)
             }
+            ResourceKind::SourceTaskBinding => {
+                let s: SourceTaskBindingSpec =
+                    serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
+                ResourceSpec::SourceTaskBinding(s)
+            }
             ResourceKind::ExecutionProfile => {
                 let s: ExecutionProfileSpec =
                     serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
@@ -144,6 +149,8 @@ pub enum ResourceKind {
     StepTemplate,
     /// Source-to-task template manifest.
     SourceTaskTemplate,
+    /// Source-to-task binding manifest.
+    SourceTaskBinding,
     /// Execution-profile manifest.
     ExecutionProfile,
     /// Environment-store manifest.
@@ -199,6 +206,9 @@ pub enum ResourceSpec {
 
     /// Source task template resource spec.
     SourceTaskTemplate(SourceTaskTemplateSpec),
+
+    /// Source task binding resource spec.
+    SourceTaskBinding(SourceTaskBindingSpec),
 
     /// Execution profile resource spec
     ExecutionProfile(ExecutionProfileSpec),
@@ -440,6 +450,42 @@ pub struct SourceTaskTemplateSpec {
     pub allowed_variables: Vec<String>,
 }
 
+/// Exact normalized reaction match in a source task binding.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct SourceTaskBindingMatchSpec {
+    /// Source event kind. V1 supports `reaction_added`.
+    pub event_kind: String,
+    /// Exact reaction name.
+    pub reaction: String,
+    /// Target kind. V1 supports `message`.
+    pub target_kind: String,
+    /// Explicit channel allowlist.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub channels: Vec<String>,
+    /// Explicitly allow every channel for the installation.
+    #[serde(default)]
+    pub all_channels: bool,
+}
+
+/// Project-scoped source reaction to SourceTaskTemplate binding.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct SourceTaskBindingSpec {
+    /// Referenced Slack webhook Trigger.
+    pub trigger_ref: String,
+    /// Exact normalized source match rule.
+    #[serde(rename = "match")]
+    pub match_rule: SourceTaskBindingMatchSpec,
+    /// Referenced SourceTaskTemplate.
+    pub template_ref: String,
+    /// Explicit trusted actor roles.
+    pub allowed_actor_roles: Vec<String>,
+    /// Whether matching is suspended.
+    #[serde(default)]
+    pub suspend: bool,
+}
+
 /// Execution profile resource specification.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -643,6 +689,10 @@ pub struct TriggerWebhookSpec {
     )]
     pub actor_roles: HashMap<String, String>,
 
+    /// Reaction routing rollout mode: `disabled` (default) or `bindings`.
+    #[serde(default = "default_reaction_routing", rename = "reactionRouting")]
+    pub reaction_routing: String,
+
     /// Allowed Slack request timestamp skew in seconds.
     #[serde(
         default = "default_slack_timestamp_tolerance",
@@ -653,6 +703,10 @@ pub struct TriggerWebhookSpec {
 
 fn default_slack_timestamp_tolerance() -> u64 {
     300
+}
+
+fn default_reaction_routing() -> String {
+    "disabled".to_string()
 }
 
 /// Reference to a SecretStore for webhook secret resolution.

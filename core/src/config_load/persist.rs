@@ -344,10 +344,30 @@ mod tests {
                     )]),
                     step_templates: HashMap::new(),
                     source_task_templates: HashMap::new(),
+                    source_task_bindings: HashMap::new(),
                     env_stores: HashMap::new(),
                     secret_stores: HashMap::new(),
                     execution_profiles: HashMap::new(),
-                    triggers: HashMap::new(),
+                    triggers: HashMap::from([(
+                        "shared-trigger".to_string(),
+                        crate::config::TriggerConfig {
+                            cron: Some(crate::config::TriggerCronConfig {
+                                schedule: "0 * * * *".to_string(),
+                                timezone: None,
+                            }),
+                            event: None,
+                            action: crate::config::TriggerActionConfig {
+                                workflow: "shared-wf".to_string(),
+                                workspace: "shared-ws".to_string(),
+                                args: None,
+                                start: false,
+                            },
+                            concurrency_policy: Default::default(),
+                            suspend: false,
+                            history_limit: None,
+                            throttle: None,
+                        },
+                    )]),
                 },
             );
         }
@@ -366,6 +386,8 @@ mod tests {
         assert!(beta.agents.contains_key("shared-agent"));
         assert!(alpha.workflows.contains_key("shared-wf"));
         assert!(beta.workflows.contains_key("shared-wf"));
+        assert!(alpha.triggers.contains_key("shared-trigger"));
+        assert!(beta.triggers.contains_key("shared-trigger"));
     }
 
     #[test]

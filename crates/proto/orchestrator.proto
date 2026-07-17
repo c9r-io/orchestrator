@@ -46,6 +46,9 @@ service OrchestratorService {
   rpc SourceBind(SourceBindRequest) returns (SourceBinding);
   rpc SourceReplay(SourceReplayRequest) returns (SourceReplayResponse);
   rpc SourceTaskTemplatePreview(SourceTaskTemplatePreviewRequest) returns (SourceTaskTemplatePreviewResponse);
+  rpc SourceTaskBindingSimulate(SourceTaskBindingSimulateRequest) returns (SourceTaskBindingSimulateResponse);
+  rpc SourceTaskBindingSuspend(SourceTaskBindingMutationRequest) returns (SourceTaskBindingMutationResponse);
+  rpc SourceTaskBindingResume(SourceTaskBindingMutationRequest) returns (SourceTaskBindingMutationResponse);
 
   // Deterministic handoff and two-stage safe logical resume
   rpc HandoffGenerate(HandoffGenerateRequest) returns (HandoffSnapshotResponse);
@@ -593,6 +596,47 @@ message SourceTaskTemplatePreviewResponse {
   repeated string warnings = 13;
 }
 
+message SourceTaskBindingSimulateRequest {
+  string project_id = 1;
+  string provider = 2;
+  string installation_id = 3;
+  string event_kind = 4;
+  string reaction = 5;
+  string target_kind = 6;
+  string channel_id = 7;
+  string external_actor_id = 8;
+}
+
+message SourceTaskBindingCandidate {
+  string binding_id = 1;
+  string reason = 2;
+  string revision = 3;
+}
+
+message SourceTaskBindingSimulateResponse {
+  string status = 1;
+  string reason = 2;
+  optional string trigger_name = 3;
+  optional string resolved_role = 4;
+  optional string binding_id = 5;
+  optional string template_ref = 6;
+  optional string binding_revision = 7;
+  repeated SourceTaskBindingCandidate candidates = 8;
+}
+
+message SourceTaskBindingMutationRequest {
+  string name = 1;
+  string project_id = 2;
+  optional ActionAuditContext audit = 3;
+}
+
+message SourceTaskBindingMutationResponse {
+  string name = 1;
+  bool suspend = 2;
+  string revision = 3;
+  string message = 4;
+}
+
 message HandoffGenerateRequest {
   string task_id = 1;
   optional int64 source_event_cursor = 2;
@@ -770,6 +814,7 @@ message ApplyRequest {
   bool dry_run = 2;
   optional string project = 3;
   bool prune = 4;
+  optional ActionAuditContext audit = 5;
 }
 
 message ApplyResultEntry {

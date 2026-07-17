@@ -142,6 +142,166 @@ pub(crate) async fn task_template_preview(
     }))
 }
 
+pub(crate) async fn task_binding_simulate(
+    server: &OrchestratorServer,
+    request: Request<SourceTaskBindingSimulateRequest>,
+) -> Result<Response<SourceTaskBindingSimulateResponse>, Status> {
+    super::authorize(server, &request, "SourceTaskBindingSimulate").map_err(Status::from)?;
+    let req = request.into_inner();
+    for (field, value) in [
+        ("project_id", req.project_id.as_str()),
+        ("provider", req.provider.as_str()),
+        ("installation_id", req.installation_id.as_str()),
+        ("event_kind", req.event_kind.as_str()),
+        ("reaction", req.reaction.as_str()),
+        ("target_kind", req.target_kind.as_str()),
+        ("channel_id", req.channel_id.as_str()),
+        ("external_actor_id", req.external_actor_id.as_str()),
+    ] {
+        if value.is_empty() || value.len() > 256 {
+            return Err(Status::invalid_argument(format!(
+                "{field} must contain 1-256 bytes"
+            )));
+        }
+    }
+    let active = agent_orchestrator::config_load::read_active_config(&server.state)
+        .map_err(|error| Status::failed_precondition(error.to_string()))?;
+    let result = agent_orchestrator::source_task_binding::match_source_task_binding(
+        &active.config,
+        &req.project_id,
+        &agent_orchestrator::source_task_binding::SourceTaskBindingMatchInput {
+            provider: req.provider,
+            installation_id: req.installation_id,
+            event_kind: req.event_kind,
+            reaction: req.reaction,
+            target_kind: req.target_kind,
+            channel_id: req.channel_id,
+            external_actor_id: req.external_actor_id,
+        },
+    )
+    .map_err(|error| Status::failed_precondition(error.to_string()))?;
+    Ok(Response::new(SourceTaskBindingSimulateResponse {
+        status: result.status,
+        reason: result.reason,
+        trigger_name: result.trigger_name,
+        resolved_role: result.resolved_role,
+        binding_id: result.binding_id,
+        template_ref: result.template_ref,
+        binding_revision: result.binding_revision,
+        candidates: result
+            .candidates
+            .into_iter()
+            .map(|candidate| SourceTaskBindingCandidate {
+                binding_id: candidate.binding_id,
+                reason: candidate.reason,
+                revision: candidate.revision,
+            })
+            .collect(),
+    }))
+}
+
+pub(crate) async fn task_binding_suspend(
+    server: &OrchestratorServer,
+    request: Request<SourceTaskBindingMutationRequest>,
+) -> Result<Response<SourceTaskBindingMutationResponse>, Status> {
+    mutate_task_binding(server, request, true).await
+}
+
+pub(crate) async fn task_binding_resume(
+    server: &OrchestratorServer,
+    request: Request<SourceTaskBindingMutationRequest>,
+) -> Result<Response<SourceTaskBindingMutationResponse>, Status> {
+    mutate_task_binding(server, request, false).await
+}
+
+async fn mutate_task_binding(
+    server: &OrchestratorServer,
+    mut request: Request<SourceTaskBindingMutationRequest>,
+    suspend: bool,
+) -> Result<Response<SourceTaskBindingMutationResponse>, Status> {
+    let rpc = if suspend {
+        "SourceTaskBindingSuspend"
+    } else {
+        "SourceTaskBindingResume"
+    };
+    let action = if suspend {
+        "source.binding.suspend"
+    } else {
+        "source.binding.resume"
+    };
+    let project_id = if request.get_ref().project_id.trim().is_empty() {
+        agent_orchestrator::config::DEFAULT_PROJECT_ID.to_string()
+    } else {
+        request.get_ref().project_id.clone()
+    };
+    let name = request.get_ref().name.clone();
+    if name.is_empty() || name.len() > 253 {
+        return Err(Status::invalid_argument("name must contain 1-253 bytes"));
+    }
+    let context = request.get_ref().audit.clone();
+    let attempt = action_audit::begin(
+        server,
+        &mut request,
+        rpc,
+        context.as_ref(),
+        ActionDescriptor {
+            project_id: &project_id,
+            target_type: "source_task_binding",
+            target_id: &name,
+            action,
+            expected_version: None,
+            fencing_token: None,
+            canonical_request: serde_json::json!({"name":name,"project_id":project_id,"suspend":suspend}),
+            fallback_reason_code: "legacy_client",
+            fallback_operator_reason: None,
+            fallback_idempotency_key: None,
+            renewable_exemption: false,
+        },
+    )
+    .await?;
+    if !attempt.should_execute {
+        return Err(attempt.status(Status::already_exists(
+            "matching SourceTaskBinding mutation already audited",
+        )));
+    }
+    let result = if suspend {
+        agent_orchestrator::service::resource::suspend_source_task_binding(
+            &server.state,
+            &name,
+            Some(&project_id),
+        )
+    } else {
+        agent_orchestrator::service::resource::resume_source_task_binding(
+            &server.state,
+            &name,
+            Some(&project_id),
+        )
+    };
+    let result = match result {
+        Ok(result) => result,
+        Err(error) => {
+            return Err(attempt.failed(server, super::map_core_error(error)).await);
+        }
+    };
+    attempt
+        .succeeded(server, Some("source_task_binding"), Some(&result.revision))
+        .await?;
+    Ok(attempt.response(SourceTaskBindingMutationResponse {
+        name: result.name.clone(),
+        suspend: result.suspend,
+        revision: result.revision,
+        message: format!(
+            "SourceTaskBinding '{}' {}",
+            result.name,
+            if result.suspend {
+                "suspended"
+            } else {
+                "resumed"
+            }
+        ),
+    }))
+}
+
 pub(crate) async fn event_ingest(
     server: &OrchestratorServer,
     mut request: Request<SourceEventIngestRequest>,

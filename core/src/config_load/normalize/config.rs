@@ -15,6 +15,7 @@ pub(crate) fn normalize_config(mut config: OrchestratorConfig) -> OrchestratorCo
             workflows: Default::default(),
             step_templates: Default::default(),
             source_task_templates: Default::default(),
+            source_task_bindings: Default::default(),
             env_stores: Default::default(),
             secret_stores: Default::default(),
             execution_profiles: Default::default(),

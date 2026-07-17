@@ -1071,6 +1071,7 @@ mod tests {
                         workflows: HashMap::new(),
                         step_templates: HashMap::new(),
                         source_task_templates: HashMap::new(),
+                        source_task_bindings: HashMap::new(),
                         env_stores: HashMap::new(),
                         secret_stores: HashMap::new(),
                         execution_profiles: HashMap::new(),

@@ -415,6 +415,27 @@ impl OrchestratorService for OrchestratorServer {
         source::task_template_preview(self, request).await
     }
 
+    async fn source_task_binding_simulate(
+        &self,
+        request: Request<SourceTaskBindingSimulateRequest>,
+    ) -> Result<Response<SourceTaskBindingSimulateResponse>, Status> {
+        source::task_binding_simulate(self, request).await
+    }
+
+    async fn source_task_binding_suspend(
+        &self,
+        request: Request<SourceTaskBindingMutationRequest>,
+    ) -> Result<Response<SourceTaskBindingMutationResponse>, Status> {
+        source::task_binding_suspend(self, request).await
+    }
+
+    async fn source_task_binding_resume(
+        &self,
+        request: Request<SourceTaskBindingMutationRequest>,
+    ) -> Result<Response<SourceTaskBindingMutationResponse>, Status> {
+        source::task_binding_resume(self, request).await
+    }
+
     async fn agent_session_list(
         &self,
         request: Request<AgentSessionListRequest>,

@@ -1,5 +1,6 @@
 mod delete;
 mod query;
+mod source_task_binding_ops;
 mod trigger_ops;
 
 #[cfg(test)]
@@ -8,6 +9,9 @@ mod tests;
 // Re-export public API (preserves agent_orchestrator::service::resource::* paths)
 pub use delete::{delete_resource, delete_resource_with_references};
 pub use query::{describe_resource, get_resource};
+pub use source_task_binding_ops::{
+    SourceTaskBindingMutation, resume_source_task_binding, suspend_source_task_binding,
+};
 pub use trigger_ops::{fire_trigger, resume_trigger, suspend_trigger};
 
 // Re-import private helpers for test visibility via `use super::*`
@@ -303,6 +307,7 @@ fn prunable_resource_kind(resource: &crate::resource::RegisteredResource) -> Opt
         crate::cli_types::ResourceKind::Workflow => Some("Workflow"),
         crate::cli_types::ResourceKind::StepTemplate => Some("StepTemplate"),
         crate::cli_types::ResourceKind::SourceTaskTemplate => Some("SourceTaskTemplate"),
+        crate::cli_types::ResourceKind::SourceTaskBinding => Some("SourceTaskBinding"),
         crate::cli_types::ResourceKind::ExecutionProfile => Some("ExecutionProfile"),
         crate::cli_types::ResourceKind::EnvStore => Some("EnvStore"),
         crate::cli_types::ResourceKind::SecretStore => Some("SecretStore"),
@@ -372,6 +377,13 @@ fn plan_prune_for_project(
                 project_id,
                 &mut deletions,
             ),
+            "SourceTaskBinding" => prune_map_entries(
+                &mut candidate_project.source_task_bindings,
+                declared_names,
+                kind,
+                project_id,
+                &mut deletions,
+            ),
             "ExecutionProfile" => prune_map_entries(
                 &mut candidate_project.execution_profiles,
                 declared_names,
@@ -411,6 +423,13 @@ fn plan_prune_for_project(
                     });
                 }
             }
+            "Trigger" => prune_map_entries(
+                &mut candidate_project.triggers,
+                declared_names,
+                kind,
+                project_id,
+                &mut deletions,
+            ),
             _ => {}
         }
     }
@@ -492,6 +511,7 @@ fn autofill_defaults_for_manifest_mode(config: &mut crate::config::OrchestratorC
             workflows: Default::default(),
             step_templates: Default::default(),
             source_task_templates: Default::default(),
+            source_task_bindings: Default::default(),
             env_stores: Default::default(),
             secret_stores: Default::default(),
             execution_profiles: Default::default(),

@@ -4,7 +4,8 @@ use crate::config::OrchestratorConfig;
 use super::{
     API_VERSION, AgentResource, EnvStoreResource, ExecutionProfileResource, ProjectResource,
     RegisteredResource, Resource, RuntimePolicyResource, SecretStoreResource,
-    SourceTaskTemplateResource, StepTemplateResource, WorkflowResource, WorkspaceResource,
+    SourceTaskBindingResource, SourceTaskTemplateResource, StepTemplateResource, TriggerResource,
+    WorkflowResource, WorkspaceResource,
 };
 
 fn project_metadata(
@@ -87,6 +88,26 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
                 },
             ));
         }
+        for (name, binding) in &project.source_task_bindings {
+            resources.push(RegisteredResource::SourceTaskBinding(
+                SourceTaskBindingResource {
+                    metadata: project_metadata(config, "SourceTaskBinding", project_id, name),
+                    spec: crate::cli_types::SourceTaskBindingSpec {
+                        trigger_ref: binding.trigger_ref.clone(),
+                        match_rule: crate::cli_types::SourceTaskBindingMatchSpec {
+                            event_kind: binding.match_rule.event_kind.clone(),
+                            reaction: binding.match_rule.reaction.clone(),
+                            target_kind: binding.match_rule.target_kind.clone(),
+                            channels: binding.match_rule.channels.clone(),
+                            all_channels: binding.match_rule.all_channels,
+                        },
+                        template_ref: binding.template_ref.clone(),
+                        allowed_actor_roles: binding.allowed_actor_roles.clone(),
+                        suspend: binding.suspend,
+                    },
+                },
+            ));
+        }
         for (name, profile) in &project.execution_profiles {
             resources.push(RegisteredResource::ExecutionProfile(
                 ExecutionProfileResource {
@@ -111,6 +132,12 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
                 spec: crate::cli_types::SecretStoreSpec {
                     data: store.data.clone(),
                 },
+            }));
+        }
+        for (name, trigger) in &project.triggers {
+            resources.push(RegisteredResource::Trigger(TriggerResource {
+                metadata: project_metadata(config, "Trigger", project_id, name),
+                spec: super::trigger::trigger_config_to_spec(trigger),
             }));
         }
     }
@@ -231,6 +258,12 @@ pub fn export_manifest_documents(config: &OrchestratorConfig) -> Vec<Orchestrato
                 kind: ResourceKind::SourceTaskTemplate,
                 metadata: item.metadata,
                 spec: ResourceSpec::SourceTaskTemplate(item.spec),
+            },
+            RegisteredResource::SourceTaskBinding(item) => OrchestratorResource {
+                api_version: API_VERSION.to_string(),
+                kind: ResourceKind::SourceTaskBinding,
+                metadata: item.metadata,
+                spec: ResourceSpec::SourceTaskBinding(item.spec),
             },
             RegisteredResource::ExecutionProfile(item) => OrchestratorResource {
                 api_version: API_VERSION.to_string(),
@@ -517,6 +550,7 @@ mod tests {
                 workflows: Default::default(),
                 step_templates: Default::default(),
                 source_task_templates: Default::default(),
+                source_task_bindings: Default::default(),
                 env_stores: Default::default(),
                 secret_stores: Default::default(),
                 execution_profiles: Default::default(),

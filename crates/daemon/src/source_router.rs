@@ -44,16 +44,54 @@ async fn route_one(
     event: &SourceEventRecord,
 ) -> Result<()> {
     if event.normalized.kind == agent_orchestrator::source::SourceEventKind::ReactionAdded {
-        let reason = event
-            .normalized
-            .reaction
-            .as_ref()
-            .map(|reaction| reaction.target.kind.as_str())
-            .filter(|kind| *kind == "message")
-            .map_or(
-                "unsupported_reaction_target",
-                |_| "reaction_routing_not_enabled",
-            );
+        let Some(reaction) = event.normalized.reaction.as_ref() else {
+            repository
+                .complete_routing(
+                    &event.id,
+                    "ignored",
+                    None,
+                    Some("reaction_metadata_missing"),
+                )
+                .await?;
+            return Ok(());
+        };
+        if reaction.target.kind != "message" {
+            repository
+                .complete_routing(
+                    &event.id,
+                    "ignored",
+                    None,
+                    Some("unsupported_reaction_target"),
+                )
+                .await?;
+            return Ok(());
+        }
+        let active = read_active_config(state)?;
+        let match_result = agent_orchestrator::source_task_binding::match_source_task_binding(
+            &active.config,
+            &event.project_id,
+            &agent_orchestrator::source_task_binding::SourceTaskBindingMatchInput {
+                provider: event.provider.clone(),
+                installation_id: event.installation_id.clone(),
+                event_kind: "reaction_added".to_string(),
+                reaction: reaction.name.clone(),
+                target_kind: reaction.target.kind.clone(),
+                channel_id: event
+                    .normalized
+                    .conversation
+                    .as_ref()
+                    .map(|conversation| conversation.conversation_id.clone())
+                    .unwrap_or_default(),
+                external_actor_id: event.external_actor_id.clone().unwrap_or_default(),
+            },
+        )?;
+        let reason = if match_result.reason == "reaction_automation_disabled" {
+            "reaction_routing_not_enabled"
+        } else if match_result.status == "matched" {
+            "reaction_binding_matched_task_routing_not_enabled"
+        } else {
+            match_result.reason.as_str()
+        };
         repository
             .complete_routing(&event.id, "ignored", None, Some(reason))
             .await?;
@@ -619,7 +657,8 @@ fn stable_error_code(error: &anyhow::Error) -> &'static str {
 mod tests {
     use super::*;
     use agent_orchestrator::config::{
-        TriggerActionConfig, TriggerConfig, TriggerEventConfig, TriggerWebhookConfig,
+        SourceTaskBindingConfig, SourceTaskBindingMatchConfig, TriggerActionConfig, TriggerConfig,
+        TriggerEventConfig, TriggerWebhookConfig,
     };
     use agent_orchestrator::dto::CreateTaskPayload;
     use agent_orchestrator::source::{
@@ -642,6 +681,7 @@ mod tests {
                     provider: Some("fixture".into()),
                     installation_id: Some("install-1".into()),
                     actor_roles: HashMap::from([("operator-1".into(), "operator".into())]),
+                    reaction_routing: "disabled".into(),
                     timestamp_tolerance_secs: 300,
                 }),
                 filesystem: None,
@@ -859,6 +899,80 @@ mod tests {
             .await
             .expect("counts");
         assert_eq!((tasks, bindings), (0, 0));
+    }
+
+    #[tokio::test]
+    async fn reaction_live_route_uses_same_matcher_and_stops_before_task_creation() {
+        let (_fixture, state) = state_with_trigger();
+        update_config_runtime(&state, |current| {
+            let mut next = current.clone();
+            let project = Arc::make_mut(&mut next.active_config)
+                .config
+                .projects
+                .get_mut("default")
+                .expect("default project");
+            let webhook = project
+                .triggers
+                .get_mut("source-trigger")
+                .and_then(|trigger| trigger.event.as_mut())
+                .and_then(|event| event.webhook.as_mut())
+                .expect("webhook");
+            webhook.reaction_routing = "bindings".into();
+            webhook
+                .actor_roles
+                .insert("actor-1".into(), "operator".into());
+            project.source_task_bindings.insert(
+                "docs".into(),
+                SourceTaskBindingConfig {
+                    trigger_ref: "source-trigger".into(),
+                    match_rule: SourceTaskBindingMatchConfig {
+                        event_kind: "reaction_added".into(),
+                        reaction: "agent_docs".into(),
+                        target_kind: "message".into(),
+                        channels: vec!["conversation-1".into()],
+                        all_channels: false,
+                    },
+                    template_ref: "docs-template".into(),
+                    allowed_actor_roles: vec!["operator".into()],
+                    suspend: false,
+                },
+            );
+            (next, ())
+        });
+        let active = read_active_config(&state).expect("active config");
+        let simulated = agent_orchestrator::source_task_binding::match_source_task_binding(
+            &active.config,
+            "default",
+            &agent_orchestrator::source_task_binding::SourceTaskBindingMatchInput {
+                provider: "fixture".into(),
+                installation_id: "install-1".into(),
+                event_kind: "reaction_added".into(),
+                reaction: "agent_docs".into(),
+                target_kind: "message".into(),
+                channel_id: "conversation-1".into(),
+                external_actor_id: "actor-1".into(),
+            },
+        )
+        .expect("simulate");
+        assert_eq!(simulated.status, "matched");
+
+        let repository = AsyncSourceRepository::new(state.async_database.clone());
+        let reaction = repository
+            .ingest(reaction_event("reaction-enabled", "message"))
+            .await
+            .expect("reaction");
+        reconcile_source_once(&state).await.expect("route reaction");
+        let routed = repository
+            .get(&reaction.event.id)
+            .await
+            .expect("get")
+            .expect("event");
+        assert_eq!(routed.routing_state, "ignored");
+        assert_eq!(
+            routed.last_error_code.as_deref(),
+            Some("reaction_binding_matched_task_routing_not_enabled")
+        );
+        assert!(routed.routed_task_id.is_none());
     }
 
     #[tokio::test]

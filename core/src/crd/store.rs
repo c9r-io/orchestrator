@@ -181,15 +181,22 @@ mod tests {
     #[test]
     fn cross_kind_key_isolation() {
         let mut store = ResourceStore::default();
-        // Use Trigger (cluster-scoped) and Project (cluster-scoped) to test
-        // cross-kind key isolation without project-scoping complications.
-        store.put(make_cr("Trigger", "alpha", serde_json::json!({"a": 1})));
+        // Use two cluster-scoped kinds to test cross-kind key isolation without
+        // project-scoping complications.
+        store.put(make_cr(
+            "StoreBackendProvider",
+            "alpha",
+            serde_json::json!({"a": 1}),
+        ));
         store.put(make_cr("Project", "alpha", serde_json::json!({"w": 2})));
         assert_eq!(store.len(), 2);
-        assert_eq!(store.get("Trigger", "alpha").unwrap().spec["a"], 1);
+        assert_eq!(
+            store.get("StoreBackendProvider", "alpha").unwrap().spec["a"],
+            1
+        );
         assert_eq!(store.get("Project", "alpha").unwrap().spec["w"], 2);
-        store.remove("Trigger", "alpha");
-        assert!(store.get("Trigger", "alpha").is_none());
+        store.remove("StoreBackendProvider", "alpha");
+        assert!(store.get("StoreBackendProvider", "alpha").is_none());
         assert!(store.get("Project", "alpha").is_some());
     }
 

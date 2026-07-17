@@ -2,12 +2,13 @@ use anyhow::Result;
 use orchestrator_proto::{
     ActionAuditContext, OrchestratorServiceClient, SourceBindRequest, SourceBinding,
     SourceBindingListRequest, SourceEvent, SourceEventGetRequest, SourceEventIngestRequest,
-    SourceEventListRequest, SourceReplayRequest, SourceTaskTemplatePreviewRequest,
+    SourceEventListRequest, SourceReplayRequest, SourceTaskBindingMutationRequest,
+    SourceTaskBindingSimulateRequest, SourceTaskTemplatePreviewRequest,
 };
 use sha2::{Digest, Sha256};
 use tonic::transport::Channel;
 
-use crate::{OutputFormat, SourceCommands, SourceTemplateCommands};
+use crate::{OutputFormat, SourceBindingCommands, SourceCommands, SourceTemplateCommands};
 
 pub(crate) async fn dispatch(
     client: &mut OrchestratorServiceClient<Channel>,
@@ -60,6 +61,94 @@ pub(crate) async fn dispatch(
                         "warnings": preview.warnings,
                     }),
                     output,
+                )?;
+            }
+        },
+        SourceCommands::Binding { command } => match command {
+            SourceBindingCommands::Simulate {
+                project,
+                provider,
+                installation,
+                event_kind,
+                reaction,
+                target_kind,
+                channel,
+                actor,
+                output,
+            } => {
+                let result = client
+                    .source_task_binding_simulate(SourceTaskBindingSimulateRequest {
+                        project_id: project,
+                        provider,
+                        installation_id: installation,
+                        event_kind,
+                        reaction,
+                        target_kind,
+                        channel_id: channel,
+                        external_actor_id: actor,
+                    })
+                    .await?
+                    .into_inner();
+                print_value(
+                    serde_json::json!({
+                        "status": result.status,
+                        "reason": result.reason,
+                        "trigger_name": result.trigger_name,
+                        "resolved_role": result.resolved_role,
+                        "binding_id": result.binding_id,
+                        "template_ref": result.template_ref,
+                        "binding_revision": result.binding_revision,
+                        "candidates": result.candidates.into_iter().map(|candidate| serde_json::json!({
+                            "binding_id": candidate.binding_id,
+                            "reason": candidate.reason,
+                            "revision": candidate.revision,
+                        })).collect::<Vec<_>>(),
+                    }),
+                    output,
+                )?;
+            }
+            SourceBindingCommands::Suspend { name, project } => {
+                let result = client
+                    .source_task_binding_suspend(SourceTaskBindingMutationRequest {
+                        name,
+                        project_id: project,
+                        audit: Some(audit_context(
+                            "operator_source_binding_suspend",
+                            "binding-suspend",
+                        )),
+                    })
+                    .await?
+                    .into_inner();
+                print_value(
+                    serde_json::json!({
+                        "name": result.name,
+                        "suspend": result.suspend,
+                        "revision": result.revision,
+                        "message": result.message,
+                    }),
+                    OutputFormat::Yaml,
+                )?;
+            }
+            SourceBindingCommands::Resume { name, project } => {
+                let result = client
+                    .source_task_binding_resume(SourceTaskBindingMutationRequest {
+                        name,
+                        project_id: project,
+                        audit: Some(audit_context(
+                            "operator_source_binding_resume",
+                            "binding-resume",
+                        )),
+                    })
+                    .await?
+                    .into_inner();
+                print_value(
+                    serde_json::json!({
+                        "name": result.name,
+                        "suspend": result.suspend,
+                        "revision": result.revision,
+                        "message": result.message,
+                    }),
+                    OutputFormat::Yaml,
                 )?;
             }
         },

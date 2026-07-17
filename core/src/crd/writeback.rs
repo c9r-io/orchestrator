@@ -104,6 +104,26 @@ pub fn seed_store_from_config_snapshot(
                 }
             }
         }
+        "SourceTaskBinding" => {
+            for (pid, project) in &config.projects {
+                if let Some(v) = project.source_task_bindings.get(name) {
+                    config
+                        .resource_store
+                        .put(make_cr(Some(pid.clone()), v.to_cr_spec()));
+                    return;
+                }
+            }
+        }
+        "Trigger" => {
+            for (pid, project) in &config.projects {
+                if let Some(v) = project.triggers.get(name) {
+                    config
+                        .resource_store
+                        .put(make_cr(Some(pid.clone()), v.to_cr_spec()));
+                    return;
+                }
+            }
+        }
         "ExecutionProfile" => {
             for (pid, project) in &config.projects {
                 if let Some(v) = project.execution_profiles.get(name) {
@@ -167,8 +187,8 @@ pub fn reconcile_single_resource(
     name: &str,
 ) {
     use crate::config::{
-        AgentConfig, ProjectConfig, SourceTaskTemplateConfig, StepTemplateConfig, WorkflowConfig,
-        WorkspaceConfig,
+        AgentConfig, ProjectConfig, SourceTaskBindingConfig, SourceTaskTemplateConfig,
+        StepTemplateConfig, TriggerConfig, WorkflowConfig, WorkspaceConfig,
     };
     use crate::crd::store::is_project_scoped;
 
@@ -235,6 +255,22 @@ pub fn reconcile_single_resource(
                 config
                     .ensure_project(cr.metadata.project.as_deref())
                     .source_task_templates
+                    .insert(name.to_string(), v);
+            }
+        }
+        "SourceTaskBinding" => {
+            if let Ok(v) = SourceTaskBindingConfig::from_cr_spec(&spec) {
+                config
+                    .ensure_project(cr.metadata.project.as_deref())
+                    .source_task_bindings
+                    .insert(name.to_string(), v);
+            }
+        }
+        "Trigger" => {
+            if let Ok(v) = TriggerConfig::from_cr_spec(&spec) {
+                config
+                    .ensure_project(cr.metadata.project.as_deref())
+                    .triggers
                     .insert(name.to_string(), v);
             }
         }
@@ -337,6 +373,32 @@ pub fn remove_from_config_snapshot(
             } else {
                 for project in config.projects.values_mut() {
                     if project.source_task_templates.remove(name).is_some() {
+                        return;
+                    }
+                }
+            }
+        }
+        "SourceTaskBinding" => {
+            if let Some(project_id) = project {
+                if let Some(project) = config.projects.get_mut(project_id) {
+                    project.source_task_bindings.remove(name);
+                }
+            } else {
+                for project in config.projects.values_mut() {
+                    if project.source_task_bindings.remove(name).is_some() {
+                        return;
+                    }
+                }
+            }
+        }
+        "Trigger" => {
+            if let Some(project_id) = project {
+                if let Some(project) = config.projects.get_mut(project_id) {
+                    project.triggers.remove(name);
+                }
+            } else {
+                for project in config.projects.values_mut() {
+                    if project.triggers.remove(name).is_some() {
                         return;
                     }
                 }
@@ -494,6 +556,24 @@ pub fn sync_config_snapshot_to_store(config: &mut OrchestratorConfig) {
                 name,
                 Some(project_id.clone()),
                 tmpl.to_cr_spec(),
+                &now,
+            ));
+        }
+        for (name, binding) in &project.source_task_bindings {
+            config.resource_store.put(make_cr(
+                "SourceTaskBinding",
+                name,
+                Some(project_id.clone()),
+                binding.to_cr_spec(),
+                &now,
+            ));
+        }
+        for (name, trigger) in &project.triggers {
+            config.resource_store.put(make_cr(
+                "Trigger",
+                name,
+                Some(project_id.clone()),
+                trigger.to_cr_spec(),
                 &now,
             ));
         }

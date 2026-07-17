@@ -35,6 +35,7 @@ impl Resource for ProjectResource {
             workflows: std::collections::HashMap::new(),
             step_templates: std::collections::HashMap::new(),
             source_task_templates: std::collections::HashMap::new(),
+            source_task_bindings: std::collections::HashMap::new(),
             env_stores: std::collections::HashMap::new(),
             secret_stores: std::collections::HashMap::new(),
             execution_profiles: std::collections::HashMap::new(),

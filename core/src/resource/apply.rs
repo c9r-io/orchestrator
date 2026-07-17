@@ -76,6 +76,16 @@ pub fn apply_to_project(
                 serde_json::to_value(&template.spec)?,
             ))
         }
+        RegisteredResource::SourceTaskBinding(binding) => {
+            let metadata = scoped_metadata(&binding.metadata, project);
+            Ok(apply_to_store(
+                config,
+                "SourceTaskBinding",
+                binding.name(),
+                &metadata,
+                serde_json::to_value(&binding.spec)?,
+            ))
+        }
         RegisteredResource::EnvStore(store) => {
             let metadata = scoped_metadata(&store.metadata, project);
             Ok(apply_to_store(

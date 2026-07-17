@@ -402,6 +402,12 @@ pub enum SourceCommands {
         #[command(subcommand)]
         command: SourceTemplateCommands,
     },
+    /// Match and control governed source-to-task bindings.
+    Binding {
+        /// Binding operation.
+        #[command(subcommand)]
+        command: SourceBindingCommands,
+    },
     /// List recent source events.
     #[command(alias = "ls")]
     List {
@@ -480,6 +486,57 @@ pub enum SourceCommands {
     Replay {
         /// Source event ID.
         id: String,
+    },
+}
+
+/// Governed SourceTaskBinding operations.
+#[derive(Subcommand, Debug, Clone)]
+pub enum SourceBindingCommands {
+    /// Simulate deterministic matching without side effects or provider API calls.
+    Simulate {
+        /// Project namespace.
+        #[arg(short, long, default_value = "default")]
+        project: String,
+        /// Source provider, currently `slack`.
+        #[arg(long, default_value = "slack")]
+        provider: String,
+        /// Trusted installation identifier.
+        #[arg(long)]
+        installation: String,
+        /// Normalized event kind.
+        #[arg(long, default_value = "reaction_added")]
+        event_kind: String,
+        /// Exact normalized reaction name without colons.
+        #[arg(long)]
+        reaction: String,
+        /// Normalized target kind.
+        #[arg(long, default_value = "message")]
+        target_kind: String,
+        /// Source channel identifier.
+        #[arg(long)]
+        channel: String,
+        /// Authenticated external actor identifier.
+        #[arg(long)]
+        actor: String,
+        /// Output encoding.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
+    /// Suspend a binding immediately.
+    Suspend {
+        /// SourceTaskBinding name.
+        name: String,
+        /// Project namespace.
+        #[arg(short, long, default_value = "default")]
+        project: String,
+    },
+    /// Resume a binding after conflict validation.
+    Resume {
+        /// SourceTaskBinding name.
+        name: String,
+        /// Project namespace.
+        #[arg(short, long, default_value = "default")]
+        project: String,
     },
 }
 

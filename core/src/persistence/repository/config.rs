@@ -480,9 +480,11 @@ fn load_config_from_resources_table(
         "Workspace",
         "StepTemplate",
         "SourceTaskTemplate",
+        "SourceTaskBinding",
         "ExecutionProfile",
         "EnvStore",
         "SecretStore",
+        "Trigger",
     ] {
         let resources: Vec<(Option<String>, String)> = config
             .resource_store

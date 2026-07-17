@@ -151,6 +151,18 @@ impl Resource for TriggerResource {
                         self.name()
                     ));
                 }
+                if !matches!(webhook.reaction_routing.as_str(), "disabled" | "bindings") {
+                    return Err(anyhow!(
+                        "trigger '{}': reactionRouting must be disabled or bindings",
+                        self.name()
+                    ));
+                }
+                if webhook.reaction_routing == "bindings" && provider != "slack" {
+                    return Err(anyhow!(
+                        "trigger '{}': reactionRouting=bindings requires provider=slack",
+                        self.name()
+                    ));
+                }
             }
         }
 
@@ -172,7 +184,7 @@ impl Resource for TriggerResource {
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult> {
-        let incoming = to_config(&self.spec);
+        let incoming = trigger_spec_to_config(&self.spec);
         let project = config.ensure_project(self.metadata.project.as_deref());
         Ok(super::helpers::apply_to_map(
             &mut project.triggers,
@@ -200,7 +212,7 @@ impl Resource for TriggerResource {
             .get(name)
             .map(|cfg| Self {
                 metadata: super::metadata_with_name(name),
-                spec: from_config(cfg),
+                spec: trigger_config_to_spec(cfg),
             })
     }
 
@@ -238,7 +250,7 @@ pub(super) fn build_trigger(resource: OrchestratorResource) -> Result<Registered
 
 // ── Spec ↔ Config conversions ────────────────────────────────────────────────
 
-fn to_config(spec: &TriggerSpec) -> TriggerConfig {
+pub(crate) fn trigger_spec_to_config(spec: &TriggerSpec) -> TriggerConfig {
     TriggerConfig {
         cron: spec.cron.as_ref().map(|c| TriggerCronConfig {
             schedule: c.schedule.clone(),
@@ -259,6 +271,7 @@ fn to_config(spec: &TriggerSpec) -> TriggerConfig {
                 provider: w.provider.clone(),
                 installation_id: w.installation_id.clone(),
                 actor_roles: w.actor_roles.clone(),
+                reaction_routing: w.reaction_routing.clone(),
                 timestamp_tolerance_secs: w.timestamp_tolerance_secs,
             }),
             filesystem: e.filesystem.as_ref().map(|fs| TriggerFilesystemConfig {
@@ -288,7 +301,7 @@ fn to_config(spec: &TriggerSpec) -> TriggerConfig {
     }
 }
 
-fn from_config(cfg: &TriggerConfig) -> TriggerSpec {
+pub(crate) fn trigger_config_to_spec(cfg: &TriggerConfig) -> TriggerSpec {
     use crate::cli_types::{
         TriggerActionSpec, TriggerCronSpec, TriggerEventFilter, TriggerEventSpec,
         TriggerFilesystemSpec, TriggerHistoryLimit, TriggerThrottleSpec, TriggerWebhookSpec,
@@ -315,6 +328,7 @@ fn from_config(cfg: &TriggerConfig) -> TriggerSpec {
                 provider: w.provider.clone(),
                 installation_id: w.installation_id.clone(),
                 actor_roles: w.actor_roles.clone(),
+                reaction_routing: w.reaction_routing.clone(),
                 timestamp_tolerance_secs: w.timestamp_tolerance_secs,
             }),
             filesystem: e.filesystem.as_ref().map(|fs| TriggerFilesystemSpec {

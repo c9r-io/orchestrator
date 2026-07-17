@@ -100,6 +100,9 @@ pub struct TriggerWebhookConfig {
     /// External actor to trusted role mapping.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub actor_roles: HashMap<String, String>,
+    /// Reaction routing rollout mode: `disabled` (default) or `bindings`.
+    #[serde(default = "default_reaction_routing")]
+    pub reaction_routing: String,
     /// Allowed request timestamp skew in seconds.
     #[serde(default = "default_timestamp_tolerance_secs")]
     pub timestamp_tolerance_secs: u64,
@@ -107,6 +110,10 @@ pub struct TriggerWebhookConfig {
 
 fn default_timestamp_tolerance_secs() -> u64 {
     300
+}
+
+fn default_reaction_routing() -> String {
+    "disabled".to_string()
 }
 
 /// Reference to a SecretStore for webhook secret resolution.

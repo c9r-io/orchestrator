@@ -13,6 +13,7 @@ pub fn builtin_crd_definitions() -> Vec<CustomResourceDefinition> {
         runtime_policy_crd(),
         step_template_crd(),
         source_task_template_crd(),
+        source_task_binding_crd(),
         execution_profile_crd(),
         env_store_crd(),
         secret_store_crd(),
@@ -204,6 +205,34 @@ fn source_task_template_crd() -> CustomResourceDefinition {
     }
 }
 
+fn source_task_binding_crd() -> CustomResourceDefinition {
+    CustomResourceDefinition {
+        kind: "SourceTaskBinding".to_string(),
+        plural: "sourcetaskbindings".to_string(),
+        short_names: vec![
+            "source-task-binding".to_string(),
+            "source_task_binding".to_string(),
+            "stb".to_string(),
+        ],
+        group: BUILTIN_GROUP.to_string(),
+        versions: vec![builtin_version(serde_json::json!({
+            "type": "object",
+            "required": ["triggerRef", "match", "templateRef", "allowedActorRoles"],
+            "properties": {
+                "triggerRef": { "type": "string" },
+                "match": { "type": "object" },
+                "templateRef": { "type": "string" },
+                "allowedActorRoles": { "type": "array", "items": { "type": "string" } },
+                "suspend": { "type": "boolean", "default": false }
+            }
+        }))],
+        hooks: CrdHooks::default(),
+        scope: CrdScope::Namespaced,
+        builtin: true,
+        plugins: vec![],
+    }
+}
+
 fn execution_profile_crd() -> CustomResourceDefinition {
     CustomResourceDefinition {
         kind: "ExecutionProfile".to_string(),
@@ -331,23 +360,23 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
-    fn returns_twelve_definitions() {
+    fn returns_thirteen_definitions() {
         let defs = builtin_crd_definitions();
-        assert_eq!(defs.len(), 12);
+        assert_eq!(defs.len(), 13);
     }
 
     #[test]
     fn all_kinds_unique() {
         let defs = builtin_crd_definitions();
         let kinds: HashSet<&str> = defs.iter().map(|d| d.kind.as_str()).collect();
-        assert_eq!(kinds.len(), 12);
+        assert_eq!(kinds.len(), 13);
     }
 
     #[test]
     fn all_plurals_unique() {
         let defs = builtin_crd_definitions();
         let plurals: HashSet<&str> = defs.iter().map(|d| d.plural.as_str()).collect();
-        assert_eq!(plurals.len(), 12);
+        assert_eq!(plurals.len(), 13);
     }
 
     #[test]
@@ -378,6 +407,7 @@ mod tests {
         assert_eq!(map["Project"], CrdScope::Cluster);
         assert_eq!(map["RuntimePolicy"], CrdScope::Singleton);
         assert_eq!(map["StepTemplate"], CrdScope::Cluster);
+        assert_eq!(map["SourceTaskBinding"], CrdScope::Namespaced);
         assert_eq!(map["EnvStore"], CrdScope::Cluster);
         assert_eq!(map["SecretStore"], CrdScope::Cluster);
         assert_eq!(map["WorkflowStore"], CrdScope::Namespaced);
