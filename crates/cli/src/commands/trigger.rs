@@ -14,6 +14,7 @@ pub(crate) async fn dispatch(
                 .trigger_suspend(orchestrator_proto::TriggerSuspendRequest {
                     trigger_name: name,
                     project,
+                    audit: Some(trigger_audit("operator_trigger_suspend", "suspend")),
                 })
                 .await?
                 .into_inner();
@@ -25,6 +26,7 @@ pub(crate) async fn dispatch(
                 .trigger_resume(orchestrator_proto::TriggerResumeRequest {
                     trigger_name: name,
                     project,
+                    audit: Some(trigger_audit("operator_trigger_resume", "resume")),
                 })
                 .await?
                 .into_inner();
@@ -47,5 +49,17 @@ pub(crate) async fn dispatch(
             println!("{}", resp.message);
             Ok(())
         }
+    }
+}
+
+fn trigger_audit(reason_code: &str, action: &str) -> orchestrator_proto::ActionAuditContext {
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    orchestrator_proto::ActionAuditContext {
+        reason_code: reason_code.to_string(),
+        operator_reason: None,
+        idempotency_key: Some(format!("cli-trigger-{action}-{nonce}")),
     }
 }

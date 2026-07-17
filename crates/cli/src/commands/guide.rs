@@ -627,10 +627,70 @@ fn source_entries() -> Vec<GuideEntry> {
             alias: Some("src replay"),
             category: GuideCategory::SystemAdmin,
             summary: "Replay a failed or attention-blocked source route",
-            description: "Admin-only dead-letter recovery. Requeues the durable event while deterministic task and action identities prevent duplicate side effects.",
+            description: "Admin-only recovery for generic source events. Events linked to a badge automation route must use source automation replay so route version, generation, and task fences remain authoritative.",
             examples: &[(
                 "orchestrator source replay <source-event-id>",
                 "Requeue one failed route",
+            )],
+        },
+        GuideEntry {
+            command: "source automation list|get|watch",
+            alias: Some("src automation"),
+            category: GuideCategory::Observability,
+            summary: "Inspect durable badge automation routes",
+            description: "Query safe route projections and bounded attempt history, or resume a monotonic transition stream. Operational output omits Slack message coordinates, bodies, credentials, and permalinks.",
+            examples: &[
+                (
+                    "orchestrator source automation list --project demo --state needs_attention -o json",
+                    "List actionable routes",
+                ),
+                (
+                    "orchestrator source automation get <route-id> --attempt-limit 20",
+                    "Inspect one route and retry history",
+                ),
+                (
+                    "orchestrator source automation watch --project demo --after 42",
+                    "Reconnect to route transitions",
+                ),
+            ],
+        },
+        GuideEntry {
+            command: "source automation simulate",
+            alias: None,
+            category: GuideCategory::Trigger,
+            summary: "Preview badge matching and task rendering",
+            description: "Run the same matcher and renderer used by live routing against caller-supplied safe evidence. Simulation does not read credentials, call Slack, reserve a route, create Attention, or create a task.",
+            examples: &[(
+                "orchestrator source automation simulate --project demo --installation T1 --reaction agent-analyze --channel C1 --actor U1 --message-url https://acme.slack.com/archives/C1/p123 --target-id C1:1.23",
+                "Preview the selected binding and rendered task",
+            )],
+        },
+        GuideEntry {
+            command: "source automation replay|ignore",
+            alias: None,
+            category: GuideCategory::SystemAdmin,
+            summary: "Resolve an actionable automation route",
+            description: "Audited operator controls require a reason, optimistic route version, and idempotency key. Replay keeps the pinned generation unless --adopt-current-config is explicitly requested; ignore resolves the matching Attention item.",
+            examples: &[
+                (
+                    "orchestrator source automation replay <route-id> --expected-version 7 --reason 'credential rotated' --idempotency-key replay-20260717",
+                    "Replay from the durable checkpoint",
+                ),
+                (
+                    "orchestrator source automation ignore <route-id> --expected-version 8 --reason 'obsolete request' --idempotency-key ignore-20260717",
+                    "Close a route without task creation",
+                ),
+            ],
+        },
+        GuideEntry {
+            command: "source automation status",
+            alias: None,
+            category: GuideCategory::Observability,
+            summary: "Report source automation worker health",
+            description: "Show backlog, oldest age, active leases, retrying routes, Attention count, and low-cardinality failure families without exposing installation or message identifiers.",
+            examples: &[(
+                "orchestrator source automation status --project demo -o json",
+                "Inspect route worker health",
             )],
         },
     ]
@@ -1110,7 +1170,7 @@ fn trigger_entries() -> Vec<GuideEntry> {
             alias: None,
             category: GuideCategory::Trigger,
             summary: "Suspend a trigger",
-            description: "Pause a trigger so it stops auto-firing.",
+            description: "Pause a trigger through an audited mutation. Matching unleased source automation routes are suspended immediately at installation scope while in-flight leases finish their bounded transition.",
             examples: &[(
                 "orchestrator trigger suspend nightly-qa",
                 "Suspend a trigger",
@@ -1121,7 +1181,7 @@ fn trigger_entries() -> Vec<GuideEntry> {
             alias: None,
             category: GuideCategory::Trigger,
             summary: "Resume a suspended trigger",
-            description: "Re-enable a previously suspended trigger.",
+            description: "Re-enable a previously suspended trigger and requeue routes suspended by that installation scope.",
             examples: &[("orchestrator trigger resume nightly-qa", "Resume a trigger")],
         },
         GuideEntry {

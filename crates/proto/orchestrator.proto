@@ -42,6 +42,13 @@ service OrchestratorService {
   rpc SourceEventList(SourceEventListRequest) returns (SourceEventListResponse);
   rpc SourceEventGet(SourceEventGetRequest) returns (SourceEvent);
   rpc SourceAutomationRouteGet(SourceAutomationRouteGetRequest) returns (SourceAutomationRoute);
+  rpc SourceAutomationList(SourceAutomationListRequest) returns (SourceAutomationListResponse);
+  rpc SourceAutomationGet(SourceAutomationGetRequest) returns (SourceAutomationDetail);
+  rpc SourceAutomationWatch(SourceAutomationWatchRequest) returns (stream SourceAutomationDelta);
+  rpc SourceAutomationSimulate(SourceAutomationSimulateRequest) returns (SourceAutomationSimulateResponse);
+  rpc SourceAutomationReplay(SourceAutomationMutationRequest) returns (SourceAutomationRoute);
+  rpc SourceAutomationIgnore(SourceAutomationMutationRequest) returns (SourceAutomationRoute);
+  rpc SourceAutomationStatusGet(SourceAutomationStatusRequest) returns (SourceAutomationStatusResponse);
   rpc SourceEventIngest(SourceEventIngestRequest) returns (SourceEventIngestResponse);
   rpc SourceBindingList(SourceBindingListRequest) returns (SourceBindingListResponse);
   rpc SourceBind(SourceBindRequest) returns (SourceBinding);
@@ -370,6 +377,8 @@ message AttentionItem {
   optional string sla_deadline = 23;
   optional string resolved_at = 24;
   optional string resolution_json = 25;
+  optional string source_route_id = 26;
+  optional string source_binding_name = 27;
 }
 
 message AttentionListRequest {
@@ -551,6 +560,115 @@ message SourceAutomationRoute {
   string request_id = 14;
   string created_at = 15;
   optional string completed_at = 16;
+  optional string error_category = 17;
+  int64 generation = 18;
+  int64 version = 19;
+  int64 attempt_count = 20;
+  int64 max_attempts = 21;
+  optional string next_attempt_at = 22;
+  optional string lease_expires_at = 23;
+  optional string suspended_scope = 24;
+  optional string last_attempt_at = 25;
+  string updated_at = 26;
+}
+
+message SourceAutomationListRequest {
+  optional string project_id = 1;
+  optional string state = 2;
+  optional string provider = 3;
+  optional string binding_name = 4;
+  optional string task_id = 5;
+  uint32 page_size = 6;
+  optional string page_token = 7;
+}
+
+message SourceAutomationListResponse {
+  repeated SourceAutomationRoute routes = 1;
+  optional string next_page_token = 2;
+}
+
+message SourceAutomationGetRequest {
+  string route_id = 1;
+  uint32 attempt_limit = 2;
+}
+
+message SourceAutomationRouteAttempt {
+  int64 id = 1;
+  string route_id = 2;
+  int64 generation = 3;
+  int64 attempt_no = 4;
+  string started_at = 5;
+  optional string completed_at = 6;
+  optional string result_state = 7;
+  optional string error_code = 8;
+  optional string error_category = 9;
+  optional int64 retry_after_seconds = 10;
+}
+
+message SourceAutomationDetail {
+  SourceAutomationRoute route = 1;
+  repeated SourceAutomationRouteAttempt attempts = 2;
+}
+
+message SourceAutomationWatchRequest {
+  optional string project_id = 1;
+  int64 after_cursor = 2;
+  uint32 interval_millis = 3;
+}
+
+message SourceAutomationDelta {
+  int64 cursor = 1;
+  int64 route_version = 2;
+  string state = 3;
+  optional string error_code = 4;
+  SourceAutomationRoute route = 5;
+  string changed_at = 6;
+}
+
+message SourceAutomationSimulateRequest {
+  string project_id = 1;
+  string provider = 2;
+  string installation_id = 3;
+  string event_kind = 4;
+  string reaction = 5;
+  string target_kind = 6;
+  string channel_id = 7;
+  string external_actor_id = 8;
+  string message_url = 9;
+  optional string event_id = 10;
+  string target_id = 11;
+}
+
+message SourceAutomationSimulateResponse {
+  SourceTaskBindingSimulateResponse match_result = 1;
+  optional SourceTaskTemplatePreviewResponse rendered = 2;
+  bool mutation_performed = 3;
+  bool network_performed = 4;
+}
+
+message SourceAutomationMutationRequest {
+  string route_id = 1;
+  int64 expected_version = 2;
+  string reason = 3;
+  string idempotency_key = 4;
+  bool adopt_current_config = 5;
+}
+
+message SourceAutomationFailureCount {
+  string category = 1;
+  uint64 count = 2;
+}
+
+message SourceAutomationStatusRequest { string project_id = 1; }
+
+message SourceAutomationStatusResponse {
+  string project_id = 1;
+  uint64 backlog_count = 2;
+  uint64 oldest_age_seconds = 3;
+  uint64 active_leases = 4;
+  uint64 retrying_count = 5;
+  uint64 needs_attention_count = 6;
+  repeated SourceAutomationFailureCount failure_categories = 7;
 }
 
 message SourceEventIngestRequest {
@@ -1403,6 +1521,7 @@ message TaskEventsResponse {
 message TriggerSuspendRequest {
   string trigger_name = 1;
   optional string project = 2;
+  optional ActionAuditContext audit = 3;
 }
 
 message TriggerSuspendResponse {
@@ -1412,6 +1531,7 @@ message TriggerSuspendResponse {
 message TriggerResumeRequest {
   string trigger_name = 1;
   optional string project = 2;
+  optional ActionAuditContext audit = 3;
 }
 
 message TriggerResumeResponse {

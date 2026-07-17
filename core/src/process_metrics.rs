@@ -567,6 +567,7 @@ fn query_snapshot(
     collect_handoff_productivity(conn, &query.project_id, from, generated, &mut aggregates)?;
     collect_session_metrics(conn, &query.project_id, from, generated, &mut aggregates)?;
     collect_loop_metrics(conn, &query.project_id, from, generated, &mut aggregates)?;
+    collect_source_automation_metrics(conn, &query.project_id, from, generated, &mut aggregates)?;
     let coverage_start = conn.query_row(
         "SELECT MIN(occurred_at) FROM process_metric_observations WHERE project_id=?1",
         params![query.project_id],
@@ -1135,6 +1136,208 @@ fn collect_loop_metrics(
     Ok(())
 }
 
+fn add_counter(metric: &mut MetricAggregate, count: u64) {
+    metric.sample_count += count;
+    metric.sum += count as f64;
+    metric.value += count as f64;
+}
+
+fn safe_source_provider(value: &str) -> &str {
+    match value {
+        "slack" => "slack",
+        "fixture" => "fixture",
+        _ => "other",
+    }
+}
+
+fn collect_source_automation_metrics(
+    conn: &Connection,
+    project_id: &str,
+    from: DateTime<Utc>,
+    to: DateTime<Utc>,
+    aggregates: &mut HashMap<String, MetricAggregate>,
+) -> Result<()> {
+    let mut received = conn.prepare(
+        "SELECT provider,COUNT(*) FROM source_events
+         WHERE project_id=?1 AND event_type='reaction_added'
+           AND received_at>=?2 AND received_at<?3 GROUP BY provider",
+    )?;
+    for row in received.query_map(
+        params![project_id, from.to_rfc3339(), to.to_rfc3339()],
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, u64>(1)?)),
+    )? {
+        let (provider, count) = row?;
+        add_counter(
+            aggregate(
+                aggregates,
+                "source_reaction_received_total",
+                labels(&[
+                    ("provider", safe_source_provider(&provider)),
+                    ("result", "accepted"),
+                ]),
+            ),
+            count,
+        );
+    }
+
+    let mut matches = conn.prepare(
+        "SELECT provider,
+          CASE
+            WHEN automation_route_id IS NOT NULL THEN 'matched'
+            WHEN routing_state='needs_attention' AND last_error_code IN ('binding_ambiguous','trigger_ambiguous') THEN 'ambiguous'
+            ELSE 'no_match' END AS result,
+          COUNT(*)
+         FROM source_events
+         WHERE project_id=?1 AND event_type='reaction_added'
+           AND received_at>=?2 AND received_at<?3
+         GROUP BY provider,result",
+    )?;
+    for row in matches.query_map(
+        params![project_id, from.to_rfc3339(), to.to_rfc3339()],
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, u64>(2)?,
+            ))
+        },
+    )? {
+        let (provider, result, count) = row?;
+        add_counter(
+            aggregate(
+                aggregates,
+                "source_binding_match_total",
+                labels(&[
+                    ("provider", safe_source_provider(&provider)),
+                    ("result", &result),
+                ]),
+            ),
+            count,
+        );
+    }
+
+    let mut transitions = conn.prepare(
+        "SELECT r.provider,c.state,COUNT(*)
+         FROM source_automation_route_changes c
+         JOIN source_automation_routes r ON r.id=c.route_id
+         WHERE r.project_id=?1 AND c.created_at>=?2 AND c.created_at<?3
+           AND c.state IN ('rendered','creating','routed','needs_attention','failed')
+         GROUP BY r.provider,c.state",
+    )?;
+    for row in transitions.query_map(
+        params![project_id, from.to_rfc3339(), to.to_rfc3339()],
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, u64>(2)?,
+            ))
+        },
+    )? {
+        let (provider, state, count) = row?;
+        match state.as_str() {
+            "rendered" => add_counter(
+                aggregate(
+                    aggregates,
+                    "source_permalink_resolution_total",
+                    labels(&[
+                        ("provider", safe_source_provider(&provider)),
+                        ("result", "resolved"),
+                    ]),
+                ),
+                count,
+            ),
+            "creating" => add_counter(
+                aggregate(
+                    aggregates,
+                    "source_task_render_total",
+                    labels(&[("result", "rendered")]),
+                ),
+                count,
+            ),
+            "routed" => add_counter(
+                aggregate(
+                    aggregates,
+                    "source_task_creation_total",
+                    labels(&[
+                        ("provider", safe_source_provider(&provider)),
+                        ("result", "created"),
+                    ]),
+                ),
+                count,
+            ),
+            "needs_attention" | "failed" => add_counter(
+                aggregate(
+                    aggregates,
+                    "source_task_creation_total",
+                    labels(&[
+                        ("provider", safe_source_provider(&provider)),
+                        ("result", "failed"),
+                    ]),
+                ),
+                count,
+            ),
+            _ => {}
+        }
+    }
+
+    let mut retries = conn.prepare(
+        "SELECT COALESCE(a.error_category,'unknown'),COUNT(*)
+         FROM source_automation_route_attempts a
+         JOIN source_automation_routes r ON r.id=a.route_id
+         WHERE r.project_id=?1 AND a.result_state='retrying'
+           AND a.completed_at>=?2 AND a.completed_at<?3
+         GROUP BY COALESCE(a.error_category,'unknown')",
+    )?;
+    for row in retries.query_map(
+        params![project_id, from.to_rfc3339(), to.to_rfc3339()],
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, u64>(1)?)),
+    )? {
+        let (reason, count) = row?;
+        add_counter(
+            aggregate(
+                aggregates,
+                "source_route_retry_total",
+                labels(&[("reason", &normalize_error_code(&reason))]),
+            ),
+            count,
+        );
+    }
+
+    let mut latency = conn.prepare(
+        "SELECT provider,created_at,completed_at FROM source_automation_routes
+         WHERE project_id=?1 AND status='routed' AND completed_at>=?2 AND completed_at<?3
+           AND completed_at IS NOT NULL LIMIT ?4",
+    )?;
+    for row in latency.query_map(
+        params![
+            project_id,
+            from.to_rfc3339(),
+            to.to_rfc3339(),
+            MAX_SCAN_ROWS as i64
+        ],
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        },
+    )? {
+        let (provider, created_at, completed_at) = row?;
+        aggregate(
+            aggregates,
+            "source_route_latency_seconds",
+            labels(&[
+                ("provider", safe_source_provider(&provider)),
+                ("result", "routed"),
+            ]),
+        )
+        .sample(seconds_between(&created_at, &completed_at)?, true);
+    }
+    Ok(())
+}
+
 fn ratio(numerator: u64, denominator: u64) -> f64 {
     if denominator == 0 {
         0.0
@@ -1515,6 +1718,109 @@ mod tests {
         assert_eq!(find("process_repeated_failure_rate").denominator, Some(4));
         assert_eq!(find("process_degenerate_loop_rate").numerator, Some(1));
         assert_eq!(find("process_degenerate_loop_rate").denominator, Some(1));
+    }
+
+    #[tokio::test]
+    async fn source_automation_metrics_are_authoritative_and_privacy_safe() {
+        let temp = tempdir().expect("tempdir");
+        let path = temp.path().join("source-automation-metrics.db");
+        init_schema(&path).expect("schema");
+        let db = Arc::new(AsyncDatabase::open(path).await.expect("db"));
+        let base = (Utc::now() - Duration::minutes(10))
+            .with_nanosecond(0)
+            .expect("whole second");
+        let received = base.to_rfc3339();
+        let rendered = (base + Duration::seconds(5)).to_rfc3339();
+        let creating = (base + Duration::seconds(10)).to_rfc3339();
+        let completed = (base + Duration::seconds(20)).to_rfc3339();
+        db.writer()
+            .call(
+                move |conn: &mut rusqlite::Connection| -> tokio_rusqlite::Result<()> {
+                    conn.execute(
+                        "INSERT INTO source_events
+                         (id,project_id,provider,installation_id,external_event_id,event_type,
+                          occurred_at,received_at,normalized_payload_json,payload_hash,routing_state,
+                          automation_route_id)
+                         VALUES('event-private','p-source','slack','T_SECRET','external-private',
+                                'reaction_added',?1,?1,'{}','hash','routed','route-private')",
+                        params![received],
+                    )?;
+                    conn.execute(
+                        "INSERT INTO source_automation_routes
+                         (id,project_id,automation_key,source_event_id,provider,installation_id,
+                          message_identity,channel_id,message_ts,reaction,resolved_role,binding_name,
+                          binding_revision,template_name,template_hash,binding_snapshot_json,
+                          template_snapshot_json,credential_store,credential_key,request_id,
+                          deterministic_task_id,status,created_at,updated_at,completed_at)
+                         VALUES('route-private','p-source','key-private','event-private','slack',
+                                'T_SECRET','C_SECRET:1.23','C_SECRET','1.23','agent-analyze',
+                                'operator','binding-private','revision-private','template-private',
+                                'template-hash','{}','{}','secret-store','TOKEN','request-private',
+                                'task-private','routed',?1,?2,?2)",
+                        params![received, completed],
+                    )?;
+                    for (version, state, at) in [
+                        (2_i64, "rendered", rendered.as_str()),
+                        (3_i64, "creating", creating.as_str()),
+                        (4_i64, "routed", completed.as_str()),
+                    ] {
+                        conn.execute(
+                            "INSERT INTO source_automation_route_changes
+                             (route_id,route_version,state,created_at)
+                             VALUES('route-private',?1,?2,?3)",
+                            params![version, state, at],
+                        )?;
+                    }
+                    conn.execute(
+                        "INSERT INTO source_automation_route_attempts
+                         (route_id,generation,attempt_no,lease_token,started_at,completed_at,
+                          result_state,error_code,error_category,retry_after_seconds)
+                         VALUES('route-private',1,1,'lease-private',?1,?2,'retrying',
+                                'slack_rate_limited','rate_limit',30)",
+                        params![received, rendered],
+                    )?;
+                    Ok(())
+                },
+            )
+            .await
+            .expect("seed source automation metrics");
+
+        let snapshot = AsyncProcessMetricsRepository::new(db)
+            .query(ProcessMetricsQuery {
+                project_id: "p-source".into(),
+                window_seconds: 3_600,
+                bucket_seconds: 60,
+                collection_enabled: true,
+            })
+            .await
+            .expect("query metrics");
+        for expected in [
+            "source_reaction_received_total",
+            "source_binding_match_total",
+            "source_permalink_resolution_total",
+            "source_task_render_total",
+            "source_task_creation_total",
+            "source_route_retry_total",
+            "source_route_latency_seconds",
+        ] {
+            assert!(
+                snapshot
+                    .metrics
+                    .iter()
+                    .any(|metric| metric.name == expected),
+                "missing {expected}"
+            );
+        }
+        let encoded = serde_json::to_string(&snapshot).expect("serialize metrics");
+        for secret_identity in [
+            "T_SECRET",
+            "C_SECRET",
+            "binding-private",
+            "template-private",
+            "secret-store",
+        ] {
+            assert!(!encoded.contains(secret_identity));
+        }
     }
 
     #[tokio::test]

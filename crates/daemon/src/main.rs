@@ -513,6 +513,24 @@ fn main() -> Result<()> {
                                     error!(error = %error, "source routing reconciliation failed");
                                 }
                             }
+                            match source_router::reconcile_source_automation_once(&source_state).await {
+                                Ok(processed) if processed > 0 => {
+                                    let repository = agent_orchestrator::source::AsyncSourceRepository::new(source_state.async_database.clone());
+                                    let lag = repository.routing_lag().await.unwrap_or_default();
+                                    if let Err(error) = source_metrics.projector_success("source_automation", "", "queue", lag).await {
+                                        error!(error = %error, "source automation health update failed");
+                                    }
+                                }
+                                Ok(_) => {}
+                                Err(error) => {
+                                    let repository = agent_orchestrator::source::AsyncSourceRepository::new(source_state.async_database.clone());
+                                    let lag = repository.routing_lag().await.unwrap_or_default();
+                                    if let Err(metrics_error) = source_metrics.projector_failure("source_automation", "", "reconcile_failed", lag).await {
+                                        error!(error = %metrics_error, "source automation failure metric update failed");
+                                    }
+                                    error!(error = %error, "source automation reconciliation failed");
+                                }
+                            }
                         }
                         _ = source_shutdown.changed() => break,
                     }
@@ -558,6 +576,14 @@ fn main() -> Result<()> {
                             };
                             if let Err(e) = result {
                                 tracing::warn!(error = %e, "event cleanup sweep failed");
+                            }
+                            if let Err(error) = agent_orchestrator::source_automation::AsyncSourceAutomationRepository::new(
+                                cleanup_state.async_database.clone(),
+                            )
+                            .cleanup_metadata(retention_days, 1000)
+                            .await
+                            {
+                                tracing::warn!(error = %error, "source automation metadata cleanup failed");
                             }
                         }
                         _ = cleanup_shutdown.changed() => {

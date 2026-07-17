@@ -48,6 +48,8 @@ fn item_to_proto(item: agent_orchestrator::attention::AttentionItem) -> Attentio
         sla_deadline: item.sla_deadline,
         resolved_at: item.resolved_at,
         resolution_json: item.resolution.map(|value| value.to_string()),
+        source_route_id: item.source_route_id,
+        source_binding_name: item.source_binding_name,
     }
 }
 
@@ -561,6 +563,8 @@ mod tests {
             dedupe_key: "failure".into(),
             assignee: None,
             source_event_id: "event-1".into(),
+            source_route_id: None,
+            source_binding_name: None,
             occurrence_count: 1,
             reopen_count: 0,
             version: 1,

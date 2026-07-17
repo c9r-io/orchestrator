@@ -166,7 +166,7 @@ mod tests {
         )
         .expect("populate audit row");
 
-        assert_eq!(run_pending(&conn, &migrations).expect("upgrade"), 3);
+        assert_eq!(run_pending(&conn, &migrations).expect("upgrade"), 4);
         let preserved: i64 = conn
             .query_row("SELECT COUNT(*) FROM control_plane_audit", [], |row| {
                 row.get(0)
@@ -313,9 +313,9 @@ mod tests {
 
         assert_eq!(
             run_pending(&conn, &migrations).expect("upgrade to latest"),
-            2
+            3
         );
-        assert_eq!(current_version(&conn).expect("latest version"), 33);
+        assert_eq!(current_version(&conn).expect("latest version"), 34);
         for (table, id) in [
             ("tasks", "console-task"),
             ("agent_sessions", "console-session"),
@@ -1094,8 +1094,8 @@ mod tests {
         let migrations = all_migrations();
         assert_eq!(
             migrations.len(),
-            33,
-            "expected 33 migrations, got {}",
+            34,
+            "expected 34 migrations, got {}",
             migrations.len()
         );
     }

@@ -196,6 +196,7 @@ impl OrchestratorService for OrchestratorServer {
     type TaskWatchStream = task::TaskWatchStream;
     type TaskTimelineFollowStream = task::TaskTimelineFollowStream;
     type AttentionFollowStream = attention::AttentionFollowStream;
+    type SourceAutomationWatchStream = source::SourceAutomationWatchStream;
     type AgentSessionReadStream = session::AgentSessionReadStream;
 
     async fn task_create(
@@ -385,6 +386,55 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<SourceAutomationRouteGetRequest>,
     ) -> Result<Response<SourceAutomationRoute>, Status> {
         source::automation_route_get(self, request).await
+    }
+
+    async fn source_automation_list(
+        &self,
+        request: Request<SourceAutomationListRequest>,
+    ) -> Result<Response<SourceAutomationListResponse>, Status> {
+        source::automation_list(self, request).await
+    }
+
+    async fn source_automation_get(
+        &self,
+        request: Request<SourceAutomationGetRequest>,
+    ) -> Result<Response<SourceAutomationDetail>, Status> {
+        source::automation_get(self, request).await
+    }
+
+    async fn source_automation_watch(
+        &self,
+        request: Request<SourceAutomationWatchRequest>,
+    ) -> Result<Response<Self::SourceAutomationWatchStream>, Status> {
+        source::automation_watch(self, request).await
+    }
+
+    async fn source_automation_simulate(
+        &self,
+        request: Request<SourceAutomationSimulateRequest>,
+    ) -> Result<Response<SourceAutomationSimulateResponse>, Status> {
+        source::automation_simulate(self, request).await
+    }
+
+    async fn source_automation_replay(
+        &self,
+        request: Request<SourceAutomationMutationRequest>,
+    ) -> Result<Response<SourceAutomationRoute>, Status> {
+        source::automation_replay(self, request).await
+    }
+
+    async fn source_automation_ignore(
+        &self,
+        request: Request<SourceAutomationMutationRequest>,
+    ) -> Result<Response<SourceAutomationRoute>, Status> {
+        source::automation_ignore(self, request).await
+    }
+
+    async fn source_automation_status_get(
+        &self,
+        request: Request<SourceAutomationStatusRequest>,
+    ) -> Result<Response<SourceAutomationStatusResponse>, Status> {
+        source::automation_status_get(self, request).await
     }
 
     async fn source_event_ingest(

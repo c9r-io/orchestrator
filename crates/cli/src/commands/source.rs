@@ -1,6 +1,8 @@
 use anyhow::Result;
 use orchestrator_proto::{
-    ActionAuditContext, OrchestratorServiceClient, SourceAutomationRouteGetRequest,
+    ActionAuditContext, OrchestratorServiceClient, SourceAutomationGetRequest,
+    SourceAutomationListRequest, SourceAutomationMutationRequest, SourceAutomationRouteGetRequest,
+    SourceAutomationSimulateRequest, SourceAutomationStatusRequest, SourceAutomationWatchRequest,
     SourceBindRequest, SourceBinding, SourceBindingListRequest, SourceEvent, SourceEventGetRequest,
     SourceEventIngestRequest, SourceEventListRequest, SourceReplayRequest,
     SourceTaskBindingMutationRequest, SourceTaskBindingSimulateRequest,
@@ -9,7 +11,10 @@ use orchestrator_proto::{
 use sha2::{Digest, Sha256};
 use tonic::transport::Channel;
 
-use crate::{OutputFormat, SourceBindingCommands, SourceCommands, SourceTemplateCommands};
+use crate::{
+    OutputFormat, SourceAutomationCommands, SourceBindingCommands, SourceCommands,
+    SourceTemplateCommands,
+};
 
 pub(crate) async fn dispatch(
     client: &mut OrchestratorServiceClient<Channel>,
@@ -150,6 +155,243 @@ pub(crate) async fn dispatch(
                         "message": result.message,
                     }),
                     OutputFormat::Yaml,
+                )?;
+            }
+        },
+        SourceCommands::Automation { command } => match command {
+            SourceAutomationCommands::List {
+                project,
+                state,
+                provider,
+                binding,
+                task,
+                page_size,
+                page_token,
+                output,
+            } => {
+                let response = client
+                    .source_automation_list(SourceAutomationListRequest {
+                        project_id: project,
+                        state,
+                        provider,
+                        binding_name: binding,
+                        task_id: task,
+                        page_size,
+                        page_token,
+                    })
+                    .await?
+                    .into_inner();
+                if output == OutputFormat::Table {
+                    println!("ID\tSTATE\tPROVIDER\tBINDING\tATTEMPTS\tTASK\tUPDATED");
+                    for route in &response.routes {
+                        println!(
+                            "{}\t{}\t{}\t{}\t{}/{}\t{}\t{}",
+                            route.id,
+                            route.status,
+                            route.provider,
+                            route.binding_name,
+                            route.attempt_count,
+                            route.max_attempts,
+                            route.task_id.as_deref().unwrap_or("-"),
+                            route.updated_at,
+                        );
+                    }
+                    if let Some(token) = response.next_page_token {
+                        eprintln!("next_page_token={token}");
+                    }
+                } else {
+                    print_value(
+                        serde_json::json!({
+                            "routes": response.routes.iter().map(automation_route_value).collect::<Vec<_>>(),
+                            "next_page_token": response.next_page_token,
+                        }),
+                        output,
+                    )?;
+                }
+            }
+            SourceAutomationCommands::Get {
+                route_id,
+                attempt_limit,
+                output,
+            } => {
+                let detail = client
+                    .source_automation_get(SourceAutomationGetRequest {
+                        route_id,
+                        attempt_limit,
+                    })
+                    .await?
+                    .into_inner();
+                print_value(
+                    serde_json::json!({
+                        "route": detail.route.as_ref().map(automation_route_value),
+                        "attempts": detail.attempts.into_iter().map(|attempt| serde_json::json!({
+                            "id": attempt.id,
+                            "route_id": attempt.route_id,
+                            "generation": attempt.generation,
+                            "attempt_no": attempt.attempt_no,
+                            "started_at": attempt.started_at,
+                            "completed_at": attempt.completed_at,
+                            "result_state": attempt.result_state,
+                            "error_code": attempt.error_code,
+                            "error_category": attempt.error_category,
+                            "retry_after_seconds": attempt.retry_after_seconds,
+                        })).collect::<Vec<_>>(),
+                    }),
+                    output,
+                )?;
+            }
+            SourceAutomationCommands::Watch {
+                project,
+                after,
+                output,
+            } => {
+                let mut stream = client
+                    .source_automation_watch(SourceAutomationWatchRequest {
+                        project_id: project,
+                        after_cursor: after,
+                        interval_millis: 500,
+                    })
+                    .await?
+                    .into_inner();
+                while let Some(delta) = stream.message().await? {
+                    print_value(
+                        serde_json::json!({
+                            "cursor": delta.cursor,
+                            "route_version": delta.route_version,
+                            "state": delta.state,
+                            "error_code": delta.error_code,
+                            "changed_at": delta.changed_at,
+                            "route": delta.route.as_ref().map(automation_route_value),
+                        }),
+                        output,
+                    )?;
+                }
+            }
+            SourceAutomationCommands::Simulate {
+                project,
+                provider,
+                installation,
+                reaction,
+                channel,
+                actor,
+                message_url,
+                target_id,
+                event_id,
+                output,
+            } => {
+                let simulation = client
+                    .source_automation_simulate(SourceAutomationSimulateRequest {
+                        project_id: project,
+                        provider,
+                        installation_id: installation,
+                        event_kind: "reaction_added".to_string(),
+                        reaction,
+                        target_kind: "message".to_string(),
+                        channel_id: channel,
+                        external_actor_id: actor,
+                        message_url,
+                        event_id,
+                        target_id,
+                    })
+                    .await?
+                    .into_inner();
+                let matched = simulation.match_result;
+                let rendered = simulation.rendered;
+                print_value(
+                    serde_json::json!({
+                        "match": matched.map(|value| serde_json::json!({
+                            "status": value.status,
+                            "reason": value.reason,
+                            "trigger_name": value.trigger_name,
+                            "resolved_role": value.resolved_role,
+                            "binding_id": value.binding_id,
+                            "template_ref": value.template_ref,
+                            "binding_revision": value.binding_revision,
+                            "candidates": value.candidates.into_iter().map(|candidate| serde_json::json!({
+                                "binding_id": candidate.binding_id,
+                                "reason": candidate.reason,
+                                "revision": candidate.revision,
+                            })).collect::<Vec<_>>(),
+                        })),
+                        "rendered": rendered.map(|value| serde_json::json!({
+                            "skill_name": value.skill_name,
+                            "skill_invocation": value.skill_invocation,
+                            "skill_args": value.skill_args,
+                            "goal": value.goal,
+                            "workflow": value.workflow,
+                            "workspace": value.workspace,
+                            "start": value.start,
+                            "initial_vars": value.initial_vars,
+                            "content_hash": value.content_hash,
+                            "revision": value.revision,
+                            "warnings": value.warnings,
+                        })),
+                        "mutation_performed": simulation.mutation_performed,
+                        "network_performed": simulation.network_performed,
+                    }),
+                    output,
+                )?;
+            }
+            SourceAutomationCommands::Replay {
+                route_id,
+                expected_version,
+                reason,
+                idempotency_key,
+                adopt_current_config,
+                output,
+            } => {
+                let route = client
+                    .source_automation_replay(SourceAutomationMutationRequest {
+                        route_id,
+                        expected_version,
+                        reason,
+                        idempotency_key,
+                        adopt_current_config,
+                    })
+                    .await?
+                    .into_inner();
+                print_value(automation_route_value(&route), output)?;
+            }
+            SourceAutomationCommands::Ignore {
+                route_id,
+                expected_version,
+                reason,
+                idempotency_key,
+                output,
+            } => {
+                let route = client
+                    .source_automation_ignore(SourceAutomationMutationRequest {
+                        route_id,
+                        expected_version,
+                        reason,
+                        idempotency_key,
+                        adopt_current_config: false,
+                    })
+                    .await?
+                    .into_inner();
+                print_value(automation_route_value(&route), output)?;
+            }
+            SourceAutomationCommands::Status { project, output } => {
+                let status = client
+                    .source_automation_status_get(SourceAutomationStatusRequest {
+                        project_id: project,
+                    })
+                    .await?
+                    .into_inner();
+                print_value(
+                    serde_json::json!({
+                        "project_id": status.project_id,
+                        "backlog_count": status.backlog_count,
+                        "oldest_age_seconds": status.oldest_age_seconds,
+                        "active_leases": status.active_leases,
+                        "retrying_count": status.retrying_count,
+                        "needs_attention_count": status.needs_attention_count,
+                        "failure_categories": status.failure_categories.into_iter().map(|value| serde_json::json!({
+                            "category": value.category,
+                            "count": value.count,
+                        })).collect::<Vec<_>>(),
+                    }),
+                    output,
                 )?;
             }
         },
@@ -377,6 +619,37 @@ fn event_value(event: &SourceEvent) -> serde_json::Value {
         "automation_binding_name": event.automation_binding_name,
         "automation_template_name": event.automation_template_name,
         "automation_template_hash": event.automation_template_hash,
+    })
+}
+
+fn automation_route_value(route: &orchestrator_proto::SourceAutomationRoute) -> serde_json::Value {
+    serde_json::json!({
+        "id": route.id,
+        "project_id": route.project_id,
+        "source_event_id": route.source_event_id,
+        "provider": route.provider,
+        "reaction": route.reaction,
+        "binding_name": route.binding_name,
+        "binding_revision": route.binding_revision,
+        "template_name": route.template_name,
+        "template_hash": route.template_hash,
+        "status": route.status,
+        "error_code": route.error_code,
+        "error_category": route.error_category,
+        "task_id": route.task_id,
+        "permalink": route.permalink,
+        "request_id": route.request_id,
+        "generation": route.generation,
+        "version": route.version,
+        "attempt_count": route.attempt_count,
+        "max_attempts": route.max_attempts,
+        "next_attempt_at": route.next_attempt_at,
+        "lease_expires_at": route.lease_expires_at,
+        "suspended_scope": route.suspended_scope,
+        "last_attempt_at": route.last_attempt_at,
+        "created_at": route.created_at,
+        "updated_at": route.updated_at,
+        "completed_at": route.completed_at,
     })
 }
 

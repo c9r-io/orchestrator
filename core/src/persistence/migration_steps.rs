@@ -1423,3 +1423,159 @@ pub(crate) fn m0033_source_automation_routes(conn: &Connection) -> Result<()> {
     .context("m0033_source_automation_routes indexes")?;
     Ok(())
 }
+
+pub(crate) fn m0034_source_automation_operations(conn: &Connection) -> Result<()> {
+    for (column, ddl) in [
+        (
+            "generation",
+            "ALTER TABLE source_automation_routes ADD COLUMN generation INTEGER NOT NULL DEFAULT 1",
+        ),
+        (
+            "version",
+            "ALTER TABLE source_automation_routes ADD COLUMN version INTEGER NOT NULL DEFAULT 1",
+        ),
+        (
+            "attempt_count",
+            "ALTER TABLE source_automation_routes ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0",
+        ),
+        (
+            "max_attempts",
+            "ALTER TABLE source_automation_routes ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 5",
+        ),
+        (
+            "next_attempt_at",
+            "ALTER TABLE source_automation_routes ADD COLUMN next_attempt_at TEXT",
+        ),
+        (
+            "error_category",
+            "ALTER TABLE source_automation_routes ADD COLUMN error_category TEXT",
+        ),
+        (
+            "lease_owner",
+            "ALTER TABLE source_automation_routes ADD COLUMN lease_owner TEXT",
+        ),
+        (
+            "lease_token",
+            "ALTER TABLE source_automation_routes ADD COLUMN lease_token TEXT",
+        ),
+        (
+            "lease_expires_at",
+            "ALTER TABLE source_automation_routes ADD COLUMN lease_expires_at TEXT",
+        ),
+        (
+            "suspended_scope",
+            "ALTER TABLE source_automation_routes ADD COLUMN suspended_scope TEXT",
+        ),
+        (
+            "last_attempt_at",
+            "ALTER TABLE source_automation_routes ADD COLUMN last_attempt_at TEXT",
+        ),
+    ] {
+        ensure_column_exists(conn, "source_automation_routes", column, ddl)?;
+    }
+    ensure_column_exists(
+        conn,
+        "attention_items",
+        "source_route_id",
+        "ALTER TABLE attention_items ADD COLUMN source_route_id TEXT",
+    )?;
+    ensure_column_exists(
+        conn,
+        "attention_items",
+        "source_binding_name",
+        "ALTER TABLE attention_items ADD COLUMN source_binding_name TEXT",
+    )?;
+    conn.execute_batch(
+        r#"
+        UPDATE source_automation_routes SET status=CASE status
+            WHEN 'reserved' THEN 'matched'
+            WHEN 'rendering' THEN 'rendered'
+            WHEN 'completed' THEN 'routed'
+            ELSE status
+        END;
+
+        CREATE TABLE IF NOT EXISTS source_automation_route_generations (
+            route_id TEXT NOT NULL,
+            generation INTEGER NOT NULL,
+            binding_name TEXT NOT NULL,
+            binding_revision TEXT NOT NULL,
+            template_name TEXT NOT NULL,
+            template_hash TEXT NOT NULL,
+            binding_snapshot_json TEXT NOT NULL,
+            template_snapshot_json TEXT NOT NULL,
+            credential_store TEXT NOT NULL,
+            credential_key TEXT NOT NULL,
+            request_id TEXT NOT NULL,
+            deterministic_task_id TEXT NOT NULL,
+            created_by_request_id TEXT,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY(route_id, generation),
+            FOREIGN KEY(route_id) REFERENCES source_automation_routes(id)
+        );
+
+        INSERT OR IGNORE INTO source_automation_route_generations
+            (route_id,generation,binding_name,binding_revision,template_name,template_hash,
+             binding_snapshot_json,template_snapshot_json,credential_store,credential_key,
+             request_id,deterministic_task_id,created_at)
+        SELECT id,1,binding_name,binding_revision,template_name,template_hash,
+               binding_snapshot_json,template_snapshot_json,credential_store,credential_key,
+               request_id,deterministic_task_id,created_at
+        FROM source_automation_routes;
+
+        CREATE TABLE IF NOT EXISTS source_automation_route_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            route_id TEXT NOT NULL,
+            generation INTEGER NOT NULL,
+            attempt_no INTEGER NOT NULL,
+            lease_token TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            result_state TEXT,
+            error_code TEXT,
+            error_category TEXT,
+            retry_after_seconds INTEGER,
+            UNIQUE(route_id, generation, attempt_no),
+            FOREIGN KEY(route_id) REFERENCES source_automation_routes(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS source_automation_route_changes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            route_id TEXT NOT NULL,
+            route_version INTEGER NOT NULL,
+            state TEXT NOT NULL,
+            error_code TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(route_id) REFERENCES source_automation_routes(id)
+        );
+
+        INSERT INTO source_automation_route_changes(route_id,route_version,state,error_code,created_at)
+        SELECT r.id,r.version,r.status,r.error_code,r.updated_at
+        FROM source_automation_routes r
+        WHERE NOT EXISTS (
+            SELECT 1 FROM source_automation_route_changes c WHERE c.route_id=r.id
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_source_automation_routes_due
+            ON source_automation_routes(status,next_attempt_at,lease_expires_at,created_at);
+        CREATE INDEX IF NOT EXISTS idx_source_automation_routes_filters
+            ON source_automation_routes(project_id,provider,status,binding_name,created_at DESC,id DESC);
+        CREATE INDEX IF NOT EXISTS idx_source_automation_routes_installation_lease
+            ON source_automation_routes(installation_id,lease_expires_at)
+            WHERE lease_token IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_source_automation_attempts_route
+            ON source_automation_route_attempts(route_id,generation,attempt_no DESC);
+        CREATE INDEX IF NOT EXISTS idx_source_automation_attempts_retention
+            ON source_automation_route_attempts(completed_at)
+            WHERE completed_at IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_source_automation_changes_route
+            ON source_automation_route_changes(route_id,id DESC);
+        CREATE INDEX IF NOT EXISTS idx_source_automation_changes_retention
+            ON source_automation_route_changes(created_at);
+        CREATE INDEX IF NOT EXISTS idx_attention_source_route
+            ON attention_items(source_route_id)
+            WHERE source_route_id IS NOT NULL;
+        "#,
+    )
+    .context("m0034_source_automation_operations")?;
+    Ok(())
+}

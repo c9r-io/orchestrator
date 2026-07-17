@@ -3400,6 +3400,7 @@ dependencies = [
  "agent-orchestrator",
  "anyhow",
  "axum",
+ "base64 0.22.1",
  "chrono",
  "clap",
  "futures",

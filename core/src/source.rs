@@ -358,8 +358,12 @@ impl AsyncSourceRepository {
             .reader()
             .call(|conn| {
                 Ok(conn.query_row(
-                    "SELECT COUNT(*) FROM source_events
-                     WHERE routing_state IN ('received','routing','failed') AND routing_attempts < 5",
+                    "SELECT
+                       (SELECT COUNT(*) FROM source_events
+                        WHERE routing_state IN ('received','routing','failed') AND routing_attempts < 5)
+                       +
+                       (SELECT COUNT(*) FROM source_automation_routes
+                        WHERE status IN ('matched','resolving','rendered','creating','retrying','suspended'))",
                     [],
                     |row| row.get(0),
                 )?)
@@ -385,6 +389,111 @@ impl AsyncSourceRepository {
             .call(move |conn| {
                 complete_routing(conn, &id, &state, task_id.as_deref(), error_code.as_deref())
                     .map_err(other)
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    /// Transfers a matched reaction from the delivery claim to the independent
+    /// durable automation route worker.
+    pub async fn defer_to_automation(&self, id: &str, route_id: &str) -> Result<()> {
+        let id = id.to_owned();
+        let route_id = route_id.to_owned();
+        self.db
+            .writer()
+            .call(move |conn| {
+                let tx = conn.unchecked_transaction()?;
+                let changed = tx.execute(
+                    "UPDATE source_events SET routing_state='automation_pending',
+                     automation_route_id=?2,last_error_code=NULL,next_attempt_at=NULL,
+                     routing_claimed_at=NULL WHERE id=?1 AND routing_state='routing'",
+                    params![id, route_id],
+                )?;
+                if changed != 1 {
+                    return Err(other(anyhow::anyhow!(
+                        "source event is not in routing state"
+                    )));
+                }
+                tx.execute(
+                    "UPDATE source_routing_attempts SET result='automation_pending',
+                     automation_route_id=?2,completed_at=?3
+                     WHERE source_event_id=?1
+                       AND attempt_no=(SELECT routing_attempts FROM source_events WHERE id=?1)",
+                    params![id, route_id, now_ts()],
+                )?;
+                tx.commit()?;
+                Ok(())
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    /// Projects one terminal automation route outcome onto every provider
+    /// delivery attached to the same stable automation identity.
+    pub async fn complete_automation_route(
+        &self,
+        route_id: &str,
+        state: &str,
+        task_id: Option<&str>,
+        error_code: Option<&str>,
+    ) -> Result<()> {
+        if !matches!(state, "routed" | "ignored" | "needs_attention" | "failed") {
+            bail!("invalid automation terminal state: {state}");
+        }
+        let route_id = route_id.to_owned();
+        let state = state.to_owned();
+        let task_id = task_id.map(str::to_owned);
+        let error_code = error_code.map(str::to_owned);
+        self.db
+            .writer()
+            .call(move |conn| {
+                let tx = conn.unchecked_transaction()?;
+                let ids = {
+                    let mut stmt = tx.prepare(
+                        "SELECT id FROM source_events WHERE automation_route_id=?1",
+                    )?;
+                    stmt.query_map([&route_id], |row| row.get::<_, String>(0))?
+                        .collect::<std::result::Result<Vec<_>, _>>()?
+                };
+                let now = now_ts();
+                for id in ids {
+                    tx.execute(
+                        "UPDATE source_events SET routing_state=?2,
+                         routed_task_id=COALESCE(?3,routed_task_id),last_error_code=?4,
+                         next_attempt_at=NULL,routing_claimed_at=NULL,routed_at=?5
+                         WHERE id=?1",
+                        params![id, state, task_id, error_code, now],
+                    )?;
+                    tx.execute(
+                        "UPDATE source_routing_attempts SET result=?2,task_id=?3,error_code=?4,
+                         automation_route_id=?5,completed_at=COALESCE(completed_at,?6)
+                         WHERE source_event_id=?1 AND attempt_no=(
+                           SELECT MAX(attempt_no) FROM source_routing_attempts WHERE source_event_id=?1)",
+                        params![id, state, task_id, error_code, route_id, now],
+                    )?;
+                }
+                tx.commit()?;
+                Ok(())
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    /// Returns every delivery attached to a replayed route to the independent
+    /// automation-pending projection without consuming a delivery retry.
+    pub async fn requeue_automation_route(&self, route_id: &str) -> Result<()> {
+        let route_id = route_id.to_owned();
+        self.db
+            .writer()
+            .call(move |conn| {
+                conn.execute(
+                    "UPDATE source_events SET routing_state='automation_pending',
+                     routed_task_id=NULL,last_error_code=NULL,next_attempt_at=NULL,
+                     routing_claimed_at=NULL,routed_at=NULL
+                     WHERE automation_route_id=?1",
+                    [&route_id],
+                )?;
+                Ok(())
             })
             .await
             .map_err(flatten_err)

@@ -104,6 +104,10 @@ pub struct AttentionItem {
     pub assignee: Option<String>,
     /// Source event identifier.
     pub source_event_id: String,
+    /// Optional durable source automation route.
+    pub source_route_id: Option<String>,
+    /// Optional stable SourceTaskBinding resource name.
+    pub source_binding_name: Option<String>,
     /// Number of occurrences aggregated into this item.
     pub occurrence_count: i64,
     /// Number of resolved-to-open transitions.
@@ -197,6 +201,10 @@ pub struct AttentionCandidate {
     pub dedupe_key: String,
     /// Source event ID.
     pub source_event_id: String,
+    /// Optional durable source automation route.
+    pub source_route_id: Option<String>,
+    /// Optional stable SourceTaskBinding resource name.
+    pub source_binding_name: Option<String>,
     /// Source timestamp.
     pub occurred_at: String,
     /// Optional SLA deadline.
@@ -453,6 +461,36 @@ impl AsyncAttentionRepository {
             .map_err(flatten_err)
     }
 
+    /// Resolves one active provider-originated condition by its stable dedupe
+    /// key. This is used when a source replay succeeds or an operator
+    /// deliberately ignores the condition.
+    pub async fn resolve_external_candidate(
+        &self,
+        project_id: &str,
+        dedupe_key: &str,
+        source_event_id: &str,
+        reason: &str,
+    ) -> Result<Option<AttentionItem>> {
+        let project_id = project_id.to_owned();
+        let dedupe_key = dedupe_key.to_owned();
+        let source_event_id = source_event_id.to_owned();
+        let reason = reason.to_owned();
+        self.db
+            .writer()
+            .call(move |conn| {
+                resolve_external_candidate(
+                    conn,
+                    &project_id,
+                    &dedupe_key,
+                    &source_event_id,
+                    &reason,
+                )
+                .map_err(other)
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
     /// Applies an optimistic, idempotent human mutation.
     pub async fn mutate(
         &self,
@@ -590,7 +628,7 @@ fn read_item(conn: &Connection, id: &str) -> Result<Option<AttentionItem>> {
                 state, title, summary, requested_decision_json, actions_json, dedupe_key,
                 assignee, source_event_id, occurrence_count, reopen_count, version, created_at,
                 updated_at, last_occurred_at, snoozed_until, sla_deadline, resolved_at,
-                resolution_json
+                resolution_json, source_route_id, source_binding_name
          FROM attention_items WHERE id=?1",
         params![id],
         |row| {
@@ -624,6 +662,8 @@ fn read_item(conn: &Connection, id: &str) -> Result<Option<AttentionItem>> {
                 sla_deadline: row.get(23)?,
                 resolved_at: row.get(24)?,
                 resolution: resolution.and_then(|value| serde_json::from_str(&value).ok()),
+                source_route_id: row.get(26)?,
+                source_binding_name: row.get(27)?,
             })
         },
     )
@@ -733,7 +773,8 @@ fn upsert_candidate(conn: &Connection, candidate: &AttentionCandidate) -> Result
             "UPDATE attention_items SET severity=?2, title=?3, summary=?4,
              requested_decision_json=?5, actions_json=?6, source_event_id=?7,
              occurrence_count=occurrence_count+1, version=version+1, updated_at=?8,
-             last_occurred_at=?9, sla_deadline=?10 WHERE id=?1",
+             last_occurred_at=?9, sla_deadline=?10,source_route_id=?11,
+             source_binding_name=?12 WHERE id=?1",
             params![
                 id,
                 candidate.severity.as_str(),
@@ -744,7 +785,9 @@ fn upsert_candidate(conn: &Connection, candidate: &AttentionCandidate) -> Result
                 candidate.source_event_id,
                 now,
                 candidate.occurred_at,
-                candidate.sla_deadline
+                candidate.sla_deadline,
+                candidate.source_route_id,
+                candidate.source_binding_name
             ],
         )?;
         append_change(conn, &id, "upsert")?;
@@ -763,7 +806,8 @@ fn upsert_candidate(conn: &Connection, candidate: &AttentionCandidate) -> Result
              requested_decision_json=?5, actions_json=?6, assignee=NULL, source_event_id=?7,
              occurrence_count=occurrence_count+1, reopen_count=reopen_count+1, version=version+1,
              updated_at=?8, last_occurred_at=?9, snoozed_until=NULL, sla_deadline=?10,
-             resolved_at=NULL, resolution_json=NULL WHERE id=?1",
+             resolved_at=NULL, resolution_json=NULL,source_route_id=?11,
+             source_binding_name=?12 WHERE id=?1",
             params![
                 id,
                 candidate.severity.as_str(),
@@ -774,15 +818,18 @@ fn upsert_candidate(conn: &Connection, candidate: &AttentionCandidate) -> Result
                 candidate.source_event_id,
                 now,
                 candidate.occurred_at,
-                candidate.sla_deadline
+                candidate.sla_deadline,
+                candidate.source_route_id,
+                candidate.source_binding_name
             ],
         )?;
     } else {
         conn.execute(
             "INSERT INTO attention_items(id,project_id,task_id,task_item_id,step_id,session_id,
              kind,severity,state,title,summary,requested_decision_json,actions_json,dedupe_key,
-             source_event_id,created_at,updated_at,last_occurred_at,sla_deadline)
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,'open',?9,?10,?11,?12,?13,?14,?15,?15,?16,?17)",
+             source_event_id,created_at,updated_at,last_occurred_at,sla_deadline,
+             source_route_id,source_binding_name)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,'open',?9,?10,?11,?12,?13,?14,?15,?15,?16,?17,?18,?19)",
             params![
                 id,
                 candidate.project_id,
@@ -800,11 +847,47 @@ fn upsert_candidate(conn: &Connection, candidate: &AttentionCandidate) -> Result
                 candidate.source_event_id,
                 now,
                 candidate.occurred_at,
-                candidate.sla_deadline
+                candidate.sla_deadline,
+                candidate.source_route_id,
+                candidate.source_binding_name
             ],
         )?;
     }
     append_change(conn, &id, if reopened { "reopen" } else { "open" })
+}
+
+fn resolve_external_candidate(
+    conn: &Connection,
+    project_id: &str,
+    dedupe_key: &str,
+    source_event_id: &str,
+    reason: &str,
+) -> Result<Option<AttentionItem>> {
+    let id: Option<String> = conn
+        .query_row(
+            "SELECT id FROM attention_items WHERE project_id=?1 AND dedupe_key=?2
+             AND state IN ('open','claimed','snoozed') LIMIT 1",
+            params![project_id, dedupe_key],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(id) = id else {
+        return Ok(None);
+    };
+    let now = now_ts();
+    conn.execute(
+        "UPDATE attention_items SET state='resolved',assignee=NULL,resolved_at=?2,
+         updated_at=?2,snoozed_until=NULL,resolution_json=?3,source_event_id=?4,
+         version=version+1 WHERE id=?1",
+        params![
+            id,
+            now,
+            serde_json::json!({"reason":reason}).to_string(),
+            source_event_id,
+        ],
+    )?;
+    append_change(conn, &id, "remove")?;
+    read_item(conn, &id)
 }
 
 fn resolve_matching(
@@ -1115,6 +1198,8 @@ mod tests {
             actions: vec![],
             dedupe_key: "step_failed:i:qa".into(),
             source_event_id: "1".into(),
+            source_route_id: None,
+            source_binding_name: None,
             occurred_at: "2026-01-01T00:00:00Z".into(),
             sla_deadline: None,
         }
@@ -1162,6 +1247,63 @@ mod tests {
             .len(),
             1
         );
+    }
+
+    #[tokio::test]
+    async fn source_automation_attention_deduplicates_resolves_and_reopens() {
+        let (_temp, repo) = repo().await;
+        let mut source_candidate = candidate("source-attention");
+        source_candidate.task_id.clear();
+        source_candidate.task_item_id = None;
+        source_candidate.step_id = None;
+        source_candidate.kind = "source_automation_needs_attention".into();
+        source_candidate.dedupe_key = "source-automation:stable-route".into();
+        source_candidate.source_route_id = Some("route-1".into());
+        source_candidate.source_binding_name = Some("analyze".into());
+
+        repo.upsert_external_candidate(source_candidate.clone())
+            .await
+            .expect("open");
+        repo.upsert_external_candidate(source_candidate.clone())
+            .await
+            .expect("dedupe");
+        let aggregated = repo
+            .get("source-attention")
+            .await
+            .expect("get")
+            .expect("item");
+        assert_eq!(aggregated.occurrence_count, 2);
+        assert_eq!(aggregated.source_route_id.as_deref(), Some("route-1"));
+        assert_eq!(aggregated.source_binding_name.as_deref(), Some("analyze"));
+
+        assert!(
+            repo.resolve_external_candidate(
+                "p",
+                "source-automation:stable-route",
+                "source-event-success",
+                "route_replayed_successfully",
+            )
+            .await
+            .expect("resolve")
+            .is_some()
+        );
+        assert_eq!(
+            repo.get("source-attention").await.unwrap().unwrap().state,
+            "resolved"
+        );
+
+        source_candidate.source_event_id = "source-event-retry".into();
+        repo.upsert_external_candidate(source_candidate)
+            .await
+            .expect("reopen");
+        let reopened = repo
+            .get("source-attention")
+            .await
+            .expect("get")
+            .expect("item");
+        assert_eq!(reopened.state, "open");
+        assert_eq!(reopened.reopen_count, 1);
+        assert_eq!(reopened.occurrence_count, 3);
     }
 
     #[tokio::test]

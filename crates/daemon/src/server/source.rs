@@ -3,9 +3,14 @@ use agent_orchestrator::source::{
     AsyncSourceRepository, CreateSourceBinding, IngestSourceEvent, NormalizedSourceEvent,
 };
 use agent_orchestrator::source_automation::{
-    AsyncSourceAutomationRepository, SourceAutomationRoute as CoreSourceAutomationRoute,
+    AdoptSourceAutomationGeneration, AsyncSourceAutomationRepository,
+    SourceAutomationRoute as CoreSourceAutomationRoute, SourceAutomationRouteFilter,
 };
+use base64::Engine as _;
+use futures::Stream;
 use orchestrator_proto::*;
+use serde::{Deserialize, Serialize};
+use std::pin::Pin;
 use tonic::{Request, Response, Status};
 
 use super::OrchestratorServer;
@@ -41,7 +46,13 @@ fn event_to_proto(
     }
 }
 
-fn automation_route_to_proto(value: CoreSourceAutomationRoute) -> SourceAutomationRoute {
+pub(crate) type SourceAutomationWatchStream =
+    Pin<Box<dyn Stream<Item = Result<SourceAutomationDelta, Status>> + Send>>;
+
+fn automation_route_to_proto(
+    value: CoreSourceAutomationRoute,
+    include_permalink: bool,
+) -> SourceAutomationRoute {
     SourceAutomationRoute {
         id: value.id,
         project_id: value.project_id,
@@ -55,10 +66,20 @@ fn automation_route_to_proto(value: CoreSourceAutomationRoute) -> SourceAutomati
         status: value.status,
         error_code: value.error_code,
         task_id: value.task_id,
-        permalink: value.permalink,
+        permalink: include_permalink.then_some(value.permalink).flatten(),
         request_id: value.request_id,
         created_at: value.created_at,
         completed_at: value.completed_at,
+        error_category: value.error_category,
+        generation: value.generation,
+        version: value.version,
+        attempt_count: value.attempt_count,
+        max_attempts: value.max_attempts,
+        next_attempt_at: value.next_attempt_at,
+        lease_expires_at: value.lease_expires_at,
+        suspended_scope: value.suspended_scope,
+        last_attempt_at: value.last_attempt_at,
+        updated_at: value.updated_at,
     }
 }
 
@@ -145,7 +166,553 @@ pub(crate) async fn automation_route_get(
         .await
         .map_err(|error| Status::internal(error.to_string()))?
         .ok_or_else(|| Status::not_found("source automation route not found"))?;
-    Ok(Response::new(automation_route_to_proto(route)))
+    Ok(Response::new(automation_route_to_proto(route, true)))
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct RoutePageToken {
+    created_at: String,
+    id: String,
+}
+
+fn decode_route_page_token(value: Option<&str>) -> Result<Option<(String, String)>, Status> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    if value.len() > 1024 {
+        return Err(Status::invalid_argument("page_token exceeds 1024 bytes"));
+    }
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(value)
+        .map_err(|_| Status::invalid_argument("page_token is invalid"))?;
+    let token: RoutePageToken = serde_json::from_slice(&bytes)
+        .map_err(|_| Status::invalid_argument("page_token is invalid"))?;
+    Ok(Some((token.created_at, token.id)))
+}
+
+fn encode_route_page_token(route: &CoreSourceAutomationRoute) -> Result<String, Status> {
+    let bytes = serde_json::to_vec(&RoutePageToken {
+        created_at: route.created_at.clone(),
+        id: route.id.clone(),
+    })
+    .map_err(|error| Status::internal(error.to_string()))?;
+    Ok(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes))
+}
+
+pub(crate) async fn automation_list(
+    server: &OrchestratorServer,
+    request: Request<SourceAutomationListRequest>,
+) -> Result<Response<SourceAutomationListResponse>, Status> {
+    super::authorize(server, &request, "SourceAutomationList").map_err(Status::from)?;
+    let req = request.into_inner();
+    let page_size = if req.page_size == 0 {
+        50
+    } else {
+        req.page_size.clamp(1, 200) as usize
+    };
+    let before = decode_route_page_token(req.page_token.as_deref())?;
+    let routes = AsyncSourceAutomationRepository::new(server.state.async_database.clone())
+        .list(SourceAutomationRouteFilter {
+            project_id: req.project_id,
+            state: req.state,
+            provider: req.provider,
+            binding_name: req.binding_name,
+            task_id: req.task_id,
+            before,
+            limit: page_size,
+        })
+        .await
+        .map_err(|error| Status::internal(error.to_string()))?;
+    let next_page_token = if routes.len() == page_size {
+        routes.last().map(encode_route_page_token).transpose()?
+    } else {
+        None
+    };
+    Ok(Response::new(SourceAutomationListResponse {
+        routes: routes
+            .into_iter()
+            .map(|route| automation_route_to_proto(route, false))
+            .collect(),
+        next_page_token,
+    }))
+}
+
+pub(crate) async fn automation_get(
+    server: &OrchestratorServer,
+    request: Request<SourceAutomationGetRequest>,
+) -> Result<Response<SourceAutomationDetail>, Status> {
+    super::authorize(server, &request, "SourceAutomationGet").map_err(Status::from)?;
+    let req = request.into_inner();
+    if req.route_id.is_empty() || req.route_id.len() > 128 {
+        return Err(Status::invalid_argument(
+            "route_id must contain 1-128 bytes",
+        ));
+    }
+    let repository = AsyncSourceAutomationRepository::new(server.state.async_database.clone());
+    let route = repository
+        .get(&req.route_id)
+        .await
+        .map_err(|error| Status::internal(error.to_string()))?
+        .ok_or_else(|| Status::not_found("source automation route not found"))?;
+    let attempts = repository
+        .attempts(
+            &req.route_id,
+            if req.attempt_limit == 0 {
+                50
+            } else {
+                req.attempt_limit as usize
+            },
+        )
+        .await
+        .map_err(|error| Status::internal(error.to_string()))?;
+    Ok(Response::new(SourceAutomationDetail {
+        route: Some(automation_route_to_proto(route, false)),
+        attempts: attempts
+            .into_iter()
+            .map(|attempt| SourceAutomationRouteAttempt {
+                id: attempt.id,
+                route_id: attempt.route_id,
+                generation: attempt.generation,
+                attempt_no: attempt.attempt_no,
+                started_at: attempt.started_at,
+                completed_at: attempt.completed_at,
+                result_state: attempt.result_state,
+                error_code: attempt.error_code,
+                error_category: attempt.error_category,
+                retry_after_seconds: attempt.retry_after_seconds,
+            })
+            .collect(),
+    }))
+}
+
+pub(crate) async fn automation_watch(
+    server: &OrchestratorServer,
+    request: Request<SourceAutomationWatchRequest>,
+) -> Result<Response<SourceAutomationWatchStream>, Status> {
+    super::authorize(server, &request, "SourceAutomationWatch").map_err(Status::from)?;
+    let req = request.into_inner();
+    let repository = AsyncSourceAutomationRepository::new(server.state.async_database.clone());
+    let interval = std::time::Duration::from_millis(if req.interval_millis == 0 {
+        500
+    } else {
+        req.interval_millis.clamp(250, 5_000) as u64
+    });
+    let (tx, rx) = tokio::sync::mpsc::channel(64);
+    tokio::spawn(async move {
+        let mut cursor = req.after_cursor.max(0);
+        loop {
+            let changes = match repository
+                .changes_since(req.project_id.as_deref(), cursor, 200)
+                .await
+            {
+                Ok(changes) => changes,
+                Err(error) => {
+                    let _ = tx.send(Err(Status::internal(error.to_string()))).await;
+                    return;
+                }
+            };
+            for change in changes {
+                cursor = change.id;
+                let route = match repository.get(&change.route_id).await {
+                    Ok(Some(route)) => route,
+                    Ok(None) => continue,
+                    Err(error) => {
+                        let _ = tx.send(Err(Status::internal(error.to_string()))).await;
+                        return;
+                    }
+                };
+                if tx
+                    .send(Ok(SourceAutomationDelta {
+                        cursor: change.id,
+                        route_version: change.route_version,
+                        state: change.state,
+                        error_code: change.error_code,
+                        route: Some(automation_route_to_proto(route, false)),
+                        changed_at: change.created_at,
+                    }))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+            }
+            tokio::time::sleep(interval).await;
+        }
+    });
+    Ok(Response::new(Box::pin(
+        tokio_stream::wrappers::ReceiverStream::new(rx),
+    )))
+}
+
+pub(crate) async fn automation_simulate(
+    server: &OrchestratorServer,
+    request: Request<SourceAutomationSimulateRequest>,
+) -> Result<Response<SourceAutomationSimulateResponse>, Status> {
+    super::authorize(server, &request, "SourceAutomationSimulate").map_err(Status::from)?;
+    let req = request.into_inner();
+    for (field, value) in [
+        ("project_id", req.project_id.as_str()),
+        ("provider", req.provider.as_str()),
+        ("installation_id", req.installation_id.as_str()),
+        ("event_kind", req.event_kind.as_str()),
+        ("reaction", req.reaction.as_str()),
+        ("target_kind", req.target_kind.as_str()),
+        ("channel_id", req.channel_id.as_str()),
+        ("external_actor_id", req.external_actor_id.as_str()),
+        ("message_url", req.message_url.as_str()),
+        ("target_id", req.target_id.as_str()),
+    ] {
+        if value.is_empty() || value.len() > 2048 {
+            return Err(Status::invalid_argument(format!(
+                "{field} must contain 1-2048 bytes"
+            )));
+        }
+    }
+    let active = agent_orchestrator::config_load::read_active_config(&server.state)
+        .map_err(|error| Status::failed_precondition(error.to_string()))?;
+    let simulation = agent_orchestrator::source_automation::simulate_source_automation(
+        &active.config,
+        &agent_orchestrator::source_automation::SourceAutomationSimulationInput {
+            project_id: req.project_id.clone(),
+            match_input: agent_orchestrator::source_task_binding::SourceTaskBindingMatchInput {
+                provider: req.provider,
+                installation_id: req.installation_id,
+                event_kind: req.event_kind,
+                reaction: req.reaction,
+                target_kind: req.target_kind,
+                channel_id: req.channel_id,
+                external_actor_id: req.external_actor_id,
+            },
+            message_url: req.message_url,
+            event_id: req.event_id,
+            target_id: req.target_id,
+        },
+    )
+    .map_err(|error| Status::failed_precondition(error.to_string()))?;
+    let match_result = simulation.match_result;
+    let public_rendered = simulation.rendered.map(|rendered| {
+        let policy = active.config.runtime_policy_for_project(&req.project_id);
+        agent_orchestrator::source_task_template::redact_rendered_source_task_template(
+            &rendered,
+            &policy.runner.redaction_patterns,
+        )
+    });
+    Ok(Response::new(SourceAutomationSimulateResponse {
+        match_result: Some(SourceTaskBindingSimulateResponse {
+            status: match_result.status,
+            reason: match_result.reason,
+            trigger_name: match_result.trigger_name,
+            resolved_role: match_result.resolved_role,
+            binding_id: match_result.binding_id,
+            template_ref: match_result.template_ref,
+            binding_revision: match_result.binding_revision,
+            candidates: match_result
+                .candidates
+                .into_iter()
+                .map(|candidate| SourceTaskBindingCandidate {
+                    binding_id: candidate.binding_id,
+                    reason: candidate.reason,
+                    revision: candidate.revision,
+                })
+                .collect(),
+        }),
+        rendered: public_rendered.map(|rendered| SourceTaskTemplatePreviewResponse {
+            name: String::new(),
+            project_id: req.project_id,
+            skill_name: rendered.skill_name,
+            skill_invocation: rendered.skill_invocation,
+            skill_args: rendered.skill_args,
+            goal: rendered.goal,
+            workflow: rendered.action.workflow,
+            workspace: rendered.action.workspace,
+            start: rendered.action.start,
+            initial_vars: rendered.action.initial_vars.into_iter().collect(),
+            content_hash: rendered.content_hash,
+            revision: rendered.revision,
+            warnings: rendered.warnings,
+        }),
+        mutation_performed: false,
+        network_performed: false,
+    }))
+}
+
+pub(crate) async fn automation_replay(
+    server: &OrchestratorServer,
+    request: Request<SourceAutomationMutationRequest>,
+) -> Result<Response<SourceAutomationRoute>, Status> {
+    mutate_automation_route(server, request, false).await
+}
+
+pub(crate) async fn automation_ignore(
+    server: &OrchestratorServer,
+    request: Request<SourceAutomationMutationRequest>,
+) -> Result<Response<SourceAutomationRoute>, Status> {
+    mutate_automation_route(server, request, true).await
+}
+
+async fn mutate_automation_route(
+    server: &OrchestratorServer,
+    mut request: Request<SourceAutomationMutationRequest>,
+    ignore: bool,
+) -> Result<Response<SourceAutomationRoute>, Status> {
+    let req = request.get_ref();
+    if req.route_id.is_empty() || req.route_id.len() > 128 {
+        return Err(Status::invalid_argument(
+            "route_id must contain 1-128 bytes",
+        ));
+    }
+    if req.expected_version < 1 {
+        return Err(Status::invalid_argument(
+            "expected_version must be positive",
+        ));
+    }
+    if req.reason.trim().is_empty() || req.reason.len() > 500 {
+        return Err(Status::invalid_argument("reason must contain 1-500 bytes"));
+    }
+    if req.idempotency_key.is_empty() || req.idempotency_key.len() > 128 {
+        return Err(Status::invalid_argument(
+            "idempotency_key must contain 1-128 bytes",
+        ));
+    }
+    if ignore && req.adopt_current_config {
+        return Err(Status::invalid_argument(
+            "adopt_current_config is only valid for replay",
+        ));
+    }
+    let repository = AsyncSourceAutomationRepository::new(server.state.async_database.clone());
+    let current = repository
+        .get(&req.route_id)
+        .await
+        .map_err(|error| Status::internal(error.to_string()))?
+        .ok_or_else(|| Status::not_found("source automation route not found"))?;
+    let context = ActionAuditContext {
+        reason_code: if ignore {
+            "operator_source_automation_ignore".to_string()
+        } else {
+            "operator_source_automation_replay".to_string()
+        },
+        operator_reason: Some(req.reason.clone()),
+        idempotency_key: Some(req.idempotency_key.clone()),
+    };
+    let action = if ignore {
+        "source.automation.ignore"
+    } else {
+        "source.automation.replay"
+    };
+    let rpc = if ignore {
+        "SourceAutomationIgnore"
+    } else {
+        "SourceAutomationReplay"
+    };
+    let route_id = req.route_id.clone();
+    let expected_version = req.expected_version;
+    let adopt_current_config = req.adopt_current_config;
+    let attempt = action_audit::begin(
+        server,
+        &mut request,
+        rpc,
+        Some(&context),
+        ActionDescriptor {
+            project_id: &current.project_id,
+            target_type: "source_automation_route",
+            target_id: &route_id,
+            action,
+            expected_version: Some(expected_version.to_string()),
+            fencing_token: None,
+            canonical_request: serde_json::json!({
+                "route_id":route_id,
+                "expected_version":expected_version,
+                "generation":current.generation,
+                "adopt_current_config":adopt_current_config
+            }),
+            fallback_reason_code: "legacy_client",
+            fallback_operator_reason: None,
+            fallback_idempotency_key: context.idempotency_key.as_deref(),
+            renewable_exemption: false,
+        },
+    )
+    .await?;
+    if !attempt.should_execute {
+        let route = repository
+            .get(&route_id)
+            .await
+            .map_err(|error| attempt.status(Status::internal(error.to_string())))?
+            .ok_or_else(|| attempt.status(Status::not_found("route not found")))?;
+        return Ok(attempt.response(automation_route_to_proto(route, false)));
+    }
+    let mutation = if ignore {
+        repository.ignore(&route_id, expected_version).await
+    } else if adopt_current_config {
+        adopt_current_route_generation(
+            server,
+            &repository,
+            &current,
+            expected_version,
+            &attempt.request_id,
+        )
+        .await
+    } else {
+        repository.replay(&route_id, expected_version).await
+    };
+    let mutation = match mutation {
+        Ok(value) => value,
+        Err(error) => {
+            let message = error.to_string();
+            let status = if message.contains("version conflict") {
+                Status::aborted(message)
+            } else {
+                Status::failed_precondition(message)
+            };
+            return Err(attempt.failed(server, status).await);
+        }
+    };
+    let source_repository = AsyncSourceRepository::new(server.state.async_database.clone());
+    if ignore {
+        source_repository
+            .complete_automation_route(
+                &route_id,
+                "ignored",
+                mutation.route.task_id.as_deref(),
+                mutation.route.error_code.as_deref(),
+            )
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
+        server
+            .state
+            .attention_repo
+            .resolve_external_candidate(
+                &mutation.route.project_id,
+                &format!("source-automation:{}", mutation.route.automation_key),
+                &mutation.route.source_event_id,
+                "operator_ignored_route",
+            )
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
+    } else {
+        source_repository
+            .requeue_automation_route(&route_id)
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
+    }
+    attempt
+        .succeeded(server, Some("source_automation_route"), Some(&route_id))
+        .await?;
+    Ok(attempt.response(automation_route_to_proto(mutation.route, false)))
+}
+
+async fn adopt_current_route_generation(
+    server: &OrchestratorServer,
+    repository: &AsyncSourceAutomationRepository,
+    route: &CoreSourceAutomationRoute,
+    expected_version: i64,
+    request_id: &str,
+) -> anyhow::Result<agent_orchestrator::source_automation::SourceAutomationMutationResult> {
+    let source = AsyncSourceRepository::new(server.state.async_database.clone())
+        .get(&route.source_event_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("source event missing"))?;
+    let reaction = source
+        .normalized
+        .reaction
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("source reaction metadata missing"))?;
+    let active = agent_orchestrator::config_load::read_active_config(&server.state)?;
+    let matched = agent_orchestrator::source_task_binding::match_source_task_binding(
+        &active.config,
+        &route.project_id,
+        &agent_orchestrator::source_task_binding::SourceTaskBindingMatchInput {
+            provider: route.provider.clone(),
+            installation_id: route.installation_id.clone(),
+            event_kind: "reaction_added".to_string(),
+            reaction: reaction.name.clone(),
+            target_kind: reaction.target.kind.clone(),
+            channel_id: route.channel_id.clone(),
+            external_actor_id: source.external_actor_id.clone().unwrap_or_default(),
+        },
+    )?;
+    if matched.status != "matched" || matched.binding_id.as_deref() != Some(&route.binding_name) {
+        anyhow::bail!("current policy no longer authorizes the same binding");
+    }
+    let project = active
+        .config
+        .projects
+        .get(&route.project_id)
+        .ok_or_else(|| anyhow::anyhow!("project missing"))?;
+    let binding = project
+        .source_task_bindings
+        .get(&route.binding_name)
+        .ok_or_else(|| anyhow::anyhow!("binding missing"))?;
+    let template_name = matched
+        .template_ref
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("template selection missing"))?;
+    let template = project
+        .source_task_templates
+        .get(template_name)
+        .ok_or_else(|| anyhow::anyhow!("template missing"))?;
+    let trigger_name = matched
+        .trigger_name
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("trigger selection missing"))?;
+    let credential = project
+        .triggers
+        .get(trigger_name)
+        .and_then(|trigger| trigger.event.as_ref())
+        .and_then(|event| event.webhook.as_ref())
+        .and_then(|webhook| webhook.outbound_credential.as_ref())
+        .ok_or_else(|| anyhow::anyhow!("outbound credential reference missing"))?;
+    repository
+        .adopt_generation(AdoptSourceAutomationGeneration {
+            route_id: route.id.clone(),
+            expected_version,
+            resolved_role: matched
+                .resolved_role
+                .ok_or_else(|| anyhow::anyhow!("resolved role missing"))?,
+            binding_name: route.binding_name.clone(),
+            binding_revision: matched
+                .binding_revision
+                .ok_or_else(|| anyhow::anyhow!("binding revision missing"))?,
+            template_name: template_name.to_string(),
+            template_hash: agent_orchestrator::source_task_template::template_content_hash(
+                template,
+            )?,
+            binding_snapshot: serde_json::to_value(binding)?,
+            template_snapshot: serde_json::to_value(template)?,
+            credential_store: credential.from_ref.clone(),
+            credential_key: credential.key.clone(),
+            created_by_request_id: request_id.to_string(),
+        })
+        .await
+}
+
+pub(crate) async fn automation_status_get(
+    server: &OrchestratorServer,
+    request: Request<SourceAutomationStatusRequest>,
+) -> Result<Response<SourceAutomationStatusResponse>, Status> {
+    super::authorize(server, &request, "SourceAutomationStatusGet").map_err(Status::from)?;
+    let project_id = request.into_inner().project_id;
+    if project_id.is_empty() || project_id.len() > 128 {
+        return Err(Status::invalid_argument(
+            "project_id must contain 1-128 bytes",
+        ));
+    }
+    let status = AsyncSourceAutomationRepository::new(server.state.async_database.clone())
+        .status(&project_id, chrono::Utc::now())
+        .await
+        .map_err(|error| Status::internal(error.to_string()))?;
+    Ok(Response::new(SourceAutomationStatusResponse {
+        project_id: status.project_id,
+        backlog_count: status.backlog_count,
+        oldest_age_seconds: status.oldest_age_seconds,
+        active_leases: status.active_leases,
+        retrying_count: status.retrying_count,
+        needs_attention_count: status.needs_attention_count,
+        failure_categories: status
+            .failure_categories
+            .into_iter()
+            .map(|(category, count)| SourceAutomationFailureCount { category, count })
+            .collect(),
+    }))
 }
 
 pub(crate) async fn task_template_preview(
@@ -347,6 +914,23 @@ async fn mutate_task_binding(
             return Err(attempt.failed(server, super::map_core_error(error)).await);
         }
     };
+    let route_repository =
+        AsyncSourceAutomationRepository::new(server.state.async_database.clone());
+    let scope = format!("binding:{name}");
+    let route_projection = if suspend {
+        route_repository
+            .suspend_scope(&project_id, None, Some(&name), &scope)
+            .await
+    } else {
+        route_repository
+            .resume_scope(&project_id, None, Some(&name), &scope)
+            .await
+    };
+    if let Err(error) = route_projection {
+        return Err(attempt
+            .failed(server, Status::internal(error.to_string()))
+            .await);
+    }
     attempt
         .succeeded(server, Some("source_task_binding"), Some(&result.revision))
         .await?;
@@ -561,6 +1145,16 @@ pub(crate) async fn replay(
         .await
         .map_err(|error| Status::internal(error.to_string()))?
         .ok_or_else(|| Status::not_found("source event not found"))?;
+    if AsyncSourceAutomationRepository::new(server.state.async_database.clone())
+        .get_for_event(&current.id)
+        .await
+        .map_err(|error| Status::internal(error.to_string()))?
+        .is_some()
+    {
+        return Err(Status::failed_precondition(
+            "source event belongs to a durable automation route; use `source automation replay`",
+        ));
+    }
     let context = request.get_ref().audit.clone();
     let id = request.get_ref().id.clone();
     let attempt = action_audit::begin(

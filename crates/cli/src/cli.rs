@@ -408,6 +408,12 @@ pub enum SourceCommands {
         #[command(subcommand)]
         command: SourceBindingCommands,
     },
+    /// Inspect and control durable source automation routes.
+    Automation {
+        /// Automation route operation.
+        #[command(subcommand)]
+        command: SourceAutomationCommands,
+    },
     /// List recent source events.
     #[command(alias = "ls")]
     List {
@@ -494,6 +500,141 @@ pub enum SourceCommands {
     Replay {
         /// Source event ID.
         id: String,
+    },
+}
+
+/// Durable source automation operations.
+#[derive(Subcommand, Debug, Clone)]
+pub enum SourceAutomationCommands {
+    /// List routes with bounded keyset pagination.
+    #[command(alias = "ls")]
+    List {
+        /// Optional project filter.
+        #[arg(short, long)]
+        project: Option<String>,
+        /// Optional route state filter.
+        #[arg(long)]
+        state: Option<String>,
+        /// Optional provider filter.
+        #[arg(long)]
+        provider: Option<String>,
+        /// Optional binding-name filter.
+        #[arg(long)]
+        binding: Option<String>,
+        /// Optional canonical task filter.
+        #[arg(long)]
+        task: Option<String>,
+        /// Maximum routes in one page.
+        #[arg(long, default_value_t = 50)]
+        page_size: u32,
+        /// Opaque next-page token.
+        #[arg(long)]
+        page_token: Option<String>,
+        /// Output encoding.
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+    /// Get one route and its bounded attempt history.
+    Get {
+        /// Durable route ID.
+        route_id: String,
+        /// Maximum attempt rows.
+        #[arg(long, default_value_t = 50)]
+        attempt_limit: u32,
+        /// Output encoding.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
+    /// Follow reconnectable route transitions.
+    Watch {
+        /// Optional project filter.
+        #[arg(short, long)]
+        project: Option<String>,
+        /// Resume after this monotonic cursor.
+        #[arg(long, default_value_t = 0)]
+        after: i64,
+        /// Output encoding for each transition.
+        #[arg(short, long, default_value = "json")]
+        output: OutputFormat,
+    },
+    /// Simulate live matcher and renderer logic without side effects.
+    Simulate {
+        /// Project namespace.
+        #[arg(short, long, default_value = "default")]
+        project: String,
+        /// Source provider.
+        #[arg(long, default_value = "slack")]
+        provider: String,
+        /// Trusted installation identifier.
+        #[arg(long)]
+        installation: String,
+        /// Normalized reaction name.
+        #[arg(long)]
+        reaction: String,
+        /// Source channel identifier.
+        #[arg(long)]
+        channel: String,
+        /// Authenticated external actor identifier.
+        #[arg(long)]
+        actor: String,
+        /// Caller-supplied sample Slack message URL.
+        #[arg(long)]
+        message_url: String,
+        /// Stable provider-neutral target ID.
+        #[arg(long)]
+        target_id: String,
+        /// Optional sample event ID.
+        #[arg(long)]
+        event_id: Option<String>,
+        /// Output encoding.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
+    /// Replay an actionable route from its durable checkpoint.
+    Replay {
+        /// Durable route ID.
+        route_id: String,
+        /// Required optimistic route version.
+        #[arg(long)]
+        expected_version: i64,
+        /// Required operator reason.
+        #[arg(long)]
+        reason: String,
+        /// Required idempotency key.
+        #[arg(long)]
+        idempotency_key: String,
+        /// Adopt the currently authorized revision as a new generation.
+        #[arg(long)]
+        adopt_current_config: bool,
+        /// Output encoding.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
+    /// Deliberately ignore an actionable route and resolve its Attention item.
+    Ignore {
+        /// Durable route ID.
+        route_id: String,
+        /// Required optimistic route version.
+        #[arg(long)]
+        expected_version: i64,
+        /// Required operator reason.
+        #[arg(long)]
+        reason: String,
+        /// Required idempotency key.
+        #[arg(long)]
+        idempotency_key: String,
+        /// Output encoding.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
+    /// Report backlog, lease, retry, and failure-family health.
+    Status {
+        /// Required project scope.
+        #[arg(short, long, default_value = "default")]
+        project: String,
+        /// Output encoding.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
     },
 }
 
@@ -821,7 +962,8 @@ pub enum MetricsCommands {
 mod tests {
     use super::{
         AgentCommands, AgentSessionCommands, AuditCommands, Cli, Commands, DbCommands,
-        DbMigrationCommands, EventCommands, MetricsCommands, TaskCommands,
+        DbMigrationCommands, EventCommands, MetricsCommands, SourceAutomationCommands,
+        SourceCommands, TaskCommands,
     };
     use clap::Parser;
 
@@ -852,6 +994,85 @@ mod tests {
             cli.command,
             Commands::Metrics(MetricsCommands::Process { project, window, .. })
                 if project == "default" && window == "7d"
+        ));
+    }
+
+    #[test]
+    fn source_automation_list_parses_filters_and_cursor() {
+        let cli = Cli::try_parse_from([
+            "orchestrator",
+            "source",
+            "automation",
+            "list",
+            "--project",
+            "demo",
+            "--state",
+            "retrying",
+            "--binding",
+            "analyze",
+            "--page-size",
+            "25",
+            "--page-token",
+            "opaque",
+            "-o",
+            "json",
+        ])
+        .expect("automation list should parse");
+        assert!(matches!(
+            cli.command,
+            Commands::Source(SourceCommands::Automation {
+                command: SourceAutomationCommands::List {
+                    project: Some(project),
+                    state: Some(state),
+                    binding: Some(binding),
+                    page_size: 25,
+                    page_token: Some(token),
+                    output: super::OutputFormat::Json,
+                    ..
+                }
+            }) if project == "demo" && state == "retrying" && binding == "analyze" && token == "opaque"
+        ));
+    }
+
+    #[test]
+    fn source_automation_replay_requires_governance_arguments() {
+        assert!(
+            Cli::try_parse_from([
+                "orchestrator",
+                "source",
+                "automation",
+                "replay",
+                "route-1",
+                "--expected-version",
+                "3",
+            ])
+            .is_err()
+        );
+        let cli = Cli::try_parse_from([
+            "orchestrator",
+            "source",
+            "automation",
+            "replay",
+            "route-1",
+            "--expected-version",
+            "3",
+            "--reason",
+            "credential rotated",
+            "--idempotency-key",
+            "replay-1",
+            "--adopt-current-config",
+        ])
+        .expect("governed replay should parse");
+        assert!(matches!(
+            cli.command,
+            Commands::Source(SourceCommands::Automation {
+                command: SourceAutomationCommands::Replay {
+                    route_id,
+                    expected_version: 3,
+                    adopt_current_config: true,
+                    ..
+                }
+            }) if route_id == "route-1"
         ));
     }
 

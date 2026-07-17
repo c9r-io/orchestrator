@@ -264,6 +264,8 @@ fn candidate(
         actions: actions_for(kind, event.task_item_id.is_some()),
         dedupe_key,
         source_event_id: event.id.to_string(),
+        source_route_id: None,
+        source_binding_name: None,
         occurred_at: event.created_at.clone(),
         sla_deadline: None,
     }

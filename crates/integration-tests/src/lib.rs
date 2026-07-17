@@ -215,6 +215,7 @@ impl OrchestratorService for TestOrchestratorServer {
     type TaskWatchStream = BoxStream<TaskWatchSnapshot>;
     type TaskTimelineFollowStream = BoxStream<TimelineDelta>;
     type AttentionFollowStream = BoxStream<AttentionDelta>;
+    type SourceAutomationWatchStream = BoxStream<SourceAutomationDelta>;
     type AgentSessionReadStream = BoxStream<AgentSessionOutputChunk>;
 
     async fn action_audit_list(
@@ -278,6 +279,69 @@ impl OrchestratorService for TestOrchestratorServer {
     ) -> Result<Response<SourceAutomationRoute>, Status> {
         Err(Status::unimplemented(
             "source integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn source_automation_list(
+        &self,
+        _: Request<SourceAutomationListRequest>,
+    ) -> Result<Response<SourceAutomationListResponse>, Status> {
+        Err(Status::unimplemented(
+            "source automation integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn source_automation_get(
+        &self,
+        _: Request<SourceAutomationGetRequest>,
+    ) -> Result<Response<SourceAutomationDetail>, Status> {
+        Err(Status::unimplemented(
+            "source automation integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn source_automation_watch(
+        &self,
+        _: Request<SourceAutomationWatchRequest>,
+    ) -> Result<Response<Self::SourceAutomationWatchStream>, Status> {
+        Err(Status::unimplemented(
+            "source automation integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn source_automation_simulate(
+        &self,
+        _: Request<SourceAutomationSimulateRequest>,
+    ) -> Result<Response<SourceAutomationSimulateResponse>, Status> {
+        Err(Status::unimplemented(
+            "source automation integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn source_automation_replay(
+        &self,
+        _: Request<SourceAutomationMutationRequest>,
+    ) -> Result<Response<SourceAutomationRoute>, Status> {
+        Err(Status::unimplemented(
+            "source automation integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn source_automation_ignore(
+        &self,
+        _: Request<SourceAutomationMutationRequest>,
+    ) -> Result<Response<SourceAutomationRoute>, Status> {
+        Err(Status::unimplemented(
+            "source automation integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn source_automation_status_get(
+        &self,
+        _: Request<SourceAutomationStatusRequest>,
+    ) -> Result<Response<SourceAutomationStatusResponse>, Status> {
+        Err(Status::unimplemented(
+            "source automation integration fixture uses the production daemon",
         ))
     }
 

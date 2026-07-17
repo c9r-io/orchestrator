@@ -46,6 +46,90 @@ pub async fn reconcile_source_once(state: &Arc<InnerState>) -> Result<usize> {
     Ok(events.len())
 }
 
+/// Claims and executes one bounded batch from the independent durable source
+/// automation queue. Provider retries and daemon restarts therefore do not
+/// depend on a new Slack delivery.
+pub async fn reconcile_source_automation_once(state: &Arc<InnerState>) -> Result<usize> {
+    let source_repository = AsyncSourceRepository::new(state.async_database.clone());
+    let route_repository = AsyncSourceAutomationRepository::new(state.async_database.clone());
+    let routes = route_repository
+        .claim_due("source-automation", 25, chrono::Utc::now(), 60)
+        .await?;
+    for route in &routes {
+        if route.status != "creating"
+            && let Some(scope) = active_automation_suspension(state, route)?
+        {
+            route_repository
+                .suspend_leased(
+                    &route.id,
+                    route
+                        .lease_token
+                        .as_deref()
+                        .context("claimed route lease token missing")?,
+                    &scope,
+                )
+                .await?;
+            continue;
+        }
+        let Some(event) = source_repository.get(&route.source_event_id).await? else {
+            handle_automation_failure(
+                state,
+                &source_repository,
+                &route_repository,
+                None,
+                route,
+                "source_event_missing",
+                "orphaned_reservation",
+                false,
+                None,
+            )
+            .await?;
+            continue;
+        };
+        execute_reserved_automation_route(
+            state,
+            &source_repository,
+            &route_repository,
+            &event,
+            route.clone(),
+        )
+        .await?;
+    }
+    Ok(routes.len())
+}
+
+fn active_automation_suspension(
+    state: &InnerState,
+    route: &SourceAutomationRoute,
+) -> Result<Option<String>> {
+    let active = read_active_config(state)?;
+    let Some(project) = active.config.projects.get(&route.project_id) else {
+        return Ok(None);
+    };
+    if project
+        .source_task_bindings
+        .get(&route.binding_name)
+        .is_some_and(|binding| binding.suspend)
+    {
+        return Ok(Some(format!("binding:{}", route.binding_name)));
+    }
+    if project.triggers.values().any(|trigger| {
+        trigger.suspend
+            && trigger
+                .event
+                .as_ref()
+                .and_then(|event| event.webhook.as_ref())
+                .is_some_and(|webhook| {
+                    webhook.provider.as_deref() == Some(route.provider.as_str())
+                        && webhook.installation_id.as_deref()
+                            == Some(route.installation_id.as_str())
+                })
+    }) {
+        return Ok(Some(format!("installation:{}", route.installation_id)));
+    }
+    Ok(None)
+}
+
 async fn route_one(
     state: &Arc<InnerState>,
     repository: &AsyncSourceRepository,
@@ -216,37 +300,7 @@ async fn route_reaction_automation(
 ) -> Result<()> {
     let route_repository = AsyncSourceAutomationRepository::new(state.async_database.clone());
     if let Some(existing) = route_repository.get_for_event(&event.id).await? {
-        let reservation = route_repository.claim_existing(&existing.id).await?;
-        if reservation.route.status == "completed" {
-            source_repository
-                .complete_routing(
-                    &event.id,
-                    "routed",
-                    reservation.route.task_id.as_deref(),
-                    None,
-                )
-                .await?;
-            return Ok(());
-        }
-        if !reservation.should_execute {
-            source_repository
-                .complete_routing(
-                    &event.id,
-                    "failed",
-                    None,
-                    Some("automation_route_in_progress"),
-                )
-                .await?;
-            return Ok(());
-        }
-        return execute_reserved_automation_route(
-            state,
-            source_repository,
-            &route_repository,
-            event,
-            reservation.route,
-        )
-        .await;
+        return project_existing_automation_route(source_repository, event, &existing).await;
     }
 
     let Some(reaction) = event.normalized.reaction.as_ref() else {
@@ -320,6 +374,25 @@ async fn route_reaction_automation(
             external_actor_id: event.external_actor_id.clone().unwrap_or_default(),
         },
     )?;
+    if match_result.status == "ambiguous" {
+        materialize_reaction_ambiguity(
+            state,
+            event,
+            &message_identity,
+            &reaction.name,
+            &match_result.reason,
+        )
+        .await?;
+        source_repository
+            .complete_routing(
+                &event.id,
+                "needs_attention",
+                None,
+                Some(&match_result.reason),
+            )
+            .await?;
+        return Ok(());
+    }
     if match_result.status != "matched" {
         let reason = if match_result.reason == "reaction_automation_disabled" {
             "reaction_routing_not_enabled"
@@ -349,10 +422,26 @@ async fn route_reaction_automation(
         .template_ref
         .as_deref()
         .context("matched template name missing")?;
-    let template = project
-        .source_task_templates
-        .get(template_name)
-        .context("matched template snapshot missing")?;
+    let Some(template) = project.source_task_templates.get(template_name) else {
+        materialize_reaction_configuration_failure(
+            state,
+            event,
+            &message_identity,
+            &reaction.name,
+            Some(binding_name),
+            "source_template_missing",
+        )
+        .await?;
+        source_repository
+            .complete_routing(
+                &event.id,
+                "needs_attention",
+                None,
+                Some("source_template_missing"),
+            )
+            .await?;
+        return Ok(());
+    };
     let trigger_name = match_result
         .trigger_name
         .as_deref()
@@ -362,8 +451,27 @@ async fn route_reaction_automation(
         .get(trigger_name)
         .and_then(|trigger| trigger.event.as_ref())
         .and_then(|trigger_event| trigger_event.webhook.as_ref())
-        .and_then(|webhook| webhook.outbound_credential.as_ref())
-        .context("Slack outbound credential reference missing")?;
+        .and_then(|webhook| webhook.outbound_credential.as_ref());
+    let Some(credential) = credential else {
+        materialize_reaction_configuration_failure(
+            state,
+            event,
+            &message_identity,
+            &reaction.name,
+            Some(binding_name),
+            "slack_credential_reference_missing",
+        )
+        .await?;
+        source_repository
+            .complete_routing(
+                &event.id,
+                "needs_attention",
+                None,
+                Some("slack_credential_reference_missing"),
+            )
+            .await?;
+        return Ok(());
+    };
     let reservation = route_repository
         .reserve(ReserveSourceAutomationRoute {
             project_id: event.project_id.clone(),
@@ -389,36 +497,111 @@ async fn route_reaction_automation(
             credential_key: credential.key.clone(),
         })
         .await?;
-    if reservation.route.status == "completed" {
-        source_repository
-            .complete_routing(
-                &event.id,
-                "routed",
-                reservation.route.task_id.as_deref(),
-                None,
-            )
-            .await?;
-        return Ok(());
+    project_existing_automation_route(source_repository, event, &reservation.route).await
+}
+
+async fn materialize_reaction_ambiguity(
+    state: &InnerState,
+    event: &SourceEventRecord,
+    message_identity: &str,
+    reaction: &str,
+    error_code: &str,
+) -> Result<()> {
+    let identity = short_hash(&format!(
+        "{}:{}:{}:{}",
+        event.project_id, event.installation_id, message_identity, reaction
+    ));
+    state
+        .attention_repo
+        .upsert_external_candidate(AttentionCandidate {
+            id: format!("attn-source-auto-match-{identity}"),
+            project_id: event.project_id.clone(),
+            task_id: String::new(),
+            task_item_id: None,
+            step_id: None,
+            session_id: None,
+            kind: "source_automation_binding_ambiguous".to_string(),
+            severity: AttentionSeverity::Intervention,
+            title: "Source automation binding is ambiguous".to_string(),
+            summary: format!("A reaction could not select exactly one binding ({error_code})."),
+            requested_decision: None,
+            actions: vec![],
+            dedupe_key: format!("source-automation-match:{identity}"),
+            source_event_id: event.id.clone(),
+            source_route_id: None,
+            source_binding_name: None,
+            occurred_at: event.received_at.clone(),
+            sla_deadline: None,
+        })
+        .await?;
+    Ok(())
+}
+
+async fn materialize_reaction_configuration_failure(
+    state: &InnerState,
+    event: &SourceEventRecord,
+    message_identity: &str,
+    reaction: &str,
+    binding_name: Option<&str>,
+    error_code: &str,
+) -> Result<()> {
+    let identity = short_hash(&format!(
+        "{}:{}:{}:{}:{}",
+        event.project_id, event.installation_id, message_identity, reaction, error_code
+    ));
+    state
+        .attention_repo
+        .upsert_external_candidate(AttentionCandidate {
+            id: format!("attn-source-auto-config-{identity}"),
+            project_id: event.project_id.clone(),
+            task_id: String::new(),
+            task_item_id: None,
+            step_id: None,
+            session_id: None,
+            kind: "source_automation_configuration_invalid".to_string(),
+            severity: AttentionSeverity::Intervention,
+            title: "Source automation configuration needs attention".to_string(),
+            summary: format!("A matched reaction could not be reserved ({error_code})."),
+            requested_decision: None,
+            actions: vec![],
+            dedupe_key: format!("source-automation-config:{identity}"),
+            source_event_id: event.id.clone(),
+            source_route_id: None,
+            source_binding_name: binding_name.map(str::to_owned),
+            occurred_at: event.received_at.clone(),
+            sla_deadline: None,
+        })
+        .await?;
+    Ok(())
+}
+
+async fn project_existing_automation_route(
+    source_repository: &AsyncSourceRepository,
+    event: &SourceEventRecord,
+    route: &SourceAutomationRoute,
+) -> Result<()> {
+    match route.status.as_str() {
+        "routed" => {
+            source_repository
+                .complete_routing(&event.id, "routed", route.task_id.as_deref(), None)
+                .await
+        }
+        "needs_attention" | "ignored" | "failed" => {
+            source_repository
+                .complete_routing(
+                    &event.id,
+                    &route.status,
+                    route.task_id.as_deref(),
+                    route.error_code.as_deref(),
+                )
+                .await
+        }
+        _ => {
+            source_repository
+                .defer_to_automation(&event.id, &route.id)
+                .await
+        }
     }
-    if !reservation.should_execute {
-        source_repository
-            .complete_routing(
-                &event.id,
-                "failed",
-                None,
-                Some("automation_route_in_progress"),
-            )
-            .await?;
-        return Ok(());
-    }
-    execute_reserved_automation_route(
-        state,
-        source_repository,
-        &route_repository,
-        event,
-        reservation.route,
-    )
-    .await
 }
 
 async fn execute_reserved_automation_route(
@@ -429,7 +612,15 @@ async fn execute_reserved_automation_route(
     route: SourceAutomationRoute,
 ) -> Result<()> {
     let route_id = route.id.clone();
-    match execute_automation_route(state, source_repository, route_repository, event, route).await {
+    match execute_automation_route(
+        state,
+        source_repository,
+        route_repository,
+        event,
+        route.clone(),
+    )
+    .await
+    {
         Ok(()) => Ok(()),
         Err(error) => {
             tracing::warn!(
@@ -438,17 +629,18 @@ async fn execute_reserved_automation_route(
                 error = %error,
                 "source automation execution failed"
             );
-            let _ = route_repository
-                .fail(&route_id, "automation_task_route_failed", None)
-                .await;
-            source_repository
-                .complete_routing(
-                    &event.id,
-                    "failed",
-                    None,
-                    Some("automation_task_route_failed"),
-                )
-                .await
+            handle_automation_failure(
+                state,
+                source_repository,
+                route_repository,
+                Some(event),
+                &route,
+                "automation_task_route_failed",
+                "internal",
+                true,
+                None,
+            )
+            .await
         }
     }
 }
@@ -460,6 +652,10 @@ async fn execute_automation_route(
     event: &SourceEventRecord,
     route: SourceAutomationRoute,
 ) -> Result<()> {
+    let lease_token = route
+        .lease_token
+        .as_deref()
+        .context("automation route has no active lease token")?;
     let snapshot = route_repository
         .execution_snapshot(&route.id)
         .await?
@@ -473,12 +669,15 @@ async fn execute_automation_route(
         .and_then(|store| store.data.get(&snapshot.credential_key))
         .cloned();
     let Some(token) = token else {
-        return fail_automation_route(
-            route_repository,
+        return handle_automation_failure(
+            state,
             source_repository,
-            event,
-            &route.id,
+            route_repository,
+            Some(event),
+            &route,
             "slack_credential_missing",
+            "credential",
+            false,
             None,
         )
         .await;
@@ -492,12 +691,15 @@ async fn execute_automation_route(
         let client = match SlackApiClient::new() {
             Ok(client) => client,
             Err(error) => {
-                return fail_automation_route(
-                    route_repository,
+                return handle_automation_failure(
+                    state,
                     source_repository,
-                    event,
-                    &route.id,
+                    route_repository,
+                    Some(event),
+                    &route,
                     error.code(),
+                    "provider_configuration",
+                    false,
                     None,
                 )
                 .await;
@@ -509,20 +711,21 @@ async fn execute_automation_route(
         {
             Ok(permalink) => {
                 route_repository
-                    .record_permalink(&route.id, &permalink.url)
+                    .record_permalink(&route.id, lease_token, &permalink.url)
                     .await?;
                 permalink.url
             }
             Err(error) => {
-                let retry_after = error.retry_after().map(|value| value.as_secs().to_string());
-                let _is_transient = error.is_transient();
-                return fail_automation_route(
-                    route_repository,
+                return handle_automation_failure(
+                    state,
                     source_repository,
-                    event,
-                    &route.id,
+                    route_repository,
+                    Some(event),
+                    &route,
                     error.code(),
-                    retry_after.as_deref(),
+                    slack_error_category(error.code()),
+                    error.is_transient(),
+                    error.retry_after().map(|value| value.as_secs()),
                 )
                 .await;
             }
@@ -545,12 +748,15 @@ async fn execute_automation_route(
     ) {
         Ok(rendered) => rendered,
         Err(_) => {
-            return fail_automation_route(
-                route_repository,
+            return handle_automation_failure(
+                state,
                 source_repository,
-                event,
-                &route.id,
+                route_repository,
+                Some(event),
+                &route,
                 "source_template_render_failed",
+                "template",
+                false,
                 None,
             )
             .await;
@@ -593,23 +799,33 @@ async fn execute_automation_route(
             .record
             .result_id
             .context("succeeded automation audit has no task result")?;
-        route_repository.complete(&route.id, &task_id).await?;
-        source_repository
-            .complete_routing(&event.id, "routed", Some(&task_id), None)
+        route_repository
+            .complete(&route.id, lease_token, &task_id)
             .await?;
+        source_repository
+            .complete_automation_route(&route.id, "routed", Some(&task_id), None)
+            .await?;
+        resolve_automation_attention(state, &route, "route_replayed_successfully").await?;
         return Ok(());
     }
     if audit.record.status != "reserved" {
-        return fail_automation_route(
-            route_repository,
+        return handle_automation_failure(
+            state,
             source_repository,
-            event,
-            &route.id,
+            route_repository,
+            Some(event),
+            &route,
             "automation_audit_not_executable",
+            "orphaned_reservation",
+            false,
             None,
         )
         .await;
     }
+
+    route_repository
+        .mark_creating(&route.id, lease_token)
+        .await?;
 
     let mut initial_vars = rendered
         .action
@@ -682,26 +898,208 @@ async fn execute_automation_route(
             Some(&task_id),
         )
         .await?;
-    route_repository.complete(&route.id, &task_id).await?;
+    route_repository
+        .complete(&route.id, lease_token, &task_id)
+        .await?;
     source_repository
-        .complete_routing(&event.id, "routed", Some(&task_id), None)
+        .complete_automation_route(&route.id, "routed", Some(&task_id), None)
+        .await?;
+    resolve_automation_attention(state, &route, "route_replayed_successfully").await?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn handle_automation_failure(
+    state: &Arc<InnerState>,
+    source_repository: &AsyncSourceRepository,
+    route_repository: &AsyncSourceAutomationRepository,
+    event: Option<&SourceEventRecord>,
+    route: &SourceAutomationRoute,
+    error_code: &str,
+    error_category: &str,
+    transient: bool,
+    retry_after_seconds: Option<u64>,
+) -> Result<()> {
+    let lease_token = route
+        .lease_token
+        .as_deref()
+        .context("automation route failure has no lease token")?;
+    if transient && route.attempt_count < route.max_attempts {
+        route_repository
+            .schedule_retry(
+                &route.id,
+                lease_token,
+                error_code,
+                error_category,
+                chrono::Utc::now(),
+                retry_after_seconds,
+            )
+            .await?;
+        return Ok(());
+    }
+
+    let actionable = transient || automation_error_is_actionable(error_code, error_category);
+    if actionable {
+        let category = if transient {
+            "retry_exhausted"
+        } else {
+            error_category
+        };
+        route_repository
+            .needs_attention(&route.id, lease_token, error_code, category)
+            .await?;
+        source_repository
+            .complete_automation_route(
+                &route.id,
+                "needs_attention",
+                route.task_id.as_deref(),
+                Some(error_code),
+            )
+            .await?;
+        materialize_automation_attention(state, event, route, error_code, category).await?;
+    } else {
+        route_repository
+            .fail_terminal(&route.id, lease_token, error_code, error_category)
+            .await?;
+        source_repository
+            .complete_automation_route(
+                &route.id,
+                "failed",
+                route.task_id.as_deref(),
+                Some(error_code),
+            )
+            .await?;
+    }
+    Ok(())
+}
+
+fn automation_error_is_actionable(error_code: &str, error_category: &str) -> bool {
+    matches!(
+        error_category,
+        "credential" | "visibility" | "binding" | "template" | "orphaned_reservation"
+    ) || matches!(
+        error_code,
+        "slack_credential_missing"
+            | "slack_credential_rejected"
+            | "slack_message_not_found"
+            | "slack_message_forbidden"
+            | "source_template_render_failed"
+            | "automation_audit_not_executable"
+    )
+}
+
+fn slack_error_category(error_code: &str) -> &'static str {
+    match error_code {
+        "slack_credential_missing" | "slack_credential_rejected" => "credential",
+        "slack_message_not_found" | "slack_message_forbidden" => "visibility",
+        "slack_rate_limited" => "rate_limit",
+        "slack_request_timeout" | "slack_transport_unavailable" => "network",
+        "slack_http_unavailable" | "slack_api_unavailable" => "provider_unavailable",
+        "slack_permalink_host_rejected"
+        | "slack_permalink_channel_mismatch"
+        | "slack_redirect_rejected" => "security_policy",
+        _ => "provider_contract",
+    }
+}
+
+fn automation_attention_key(route: &SourceAutomationRoute) -> String {
+    format!("source-automation:{}", route.automation_key)
+}
+
+async fn materialize_automation_attention(
+    state: &InnerState,
+    event: Option<&SourceEventRecord>,
+    route: &SourceAutomationRoute,
+    error_code: &str,
+    error_category: &str,
+) -> Result<()> {
+    let source_event_id = event
+        .map(|value| value.id.clone())
+        .unwrap_or_else(|| route.source_event_id.clone());
+    let occurred_at = event
+        .map(|value| value.received_at.clone())
+        .unwrap_or_else(|| route.updated_at.clone());
+    state
+        .attention_repo
+        .upsert_external_candidate(AttentionCandidate {
+            id: format!("attn-source-auto-{}", &route.automation_key[..20]),
+            project_id: route.project_id.clone(),
+            task_id: route.task_id.clone().unwrap_or_default(),
+            task_item_id: None,
+            step_id: None,
+            session_id: None,
+            kind: "source_automation_needs_attention".to_string(),
+            severity: AttentionSeverity::Intervention,
+            title: "Source automation needs operator action".to_string(),
+            summary: format!(
+                "Route {} is blocked by {} ({}).",
+                route.id, error_category, error_code
+            ),
+            requested_decision: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "reason": {"type": "string", "minLength": 1, "maxLength": 512},
+                    "expected_version": {"type": "integer", "minimum": 1}
+                },
+                "required": ["reason", "expected_version"],
+                "additionalProperties": false
+            })),
+            actions: vec![
+                AttentionActionDescriptor {
+                    id: "replay_source_route".to_string(),
+                    label: "Replay route".to_string(),
+                    required_role: "operator".to_string(),
+                    confirmation: "required".to_string(),
+                    input_schema: serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "reason": {"type": "string"},
+                            "expected_version": {"type": "integer"}
+                        },
+                        "required": ["reason", "expected_version"],
+                        "additionalProperties": false
+                    }),
+                },
+                AttentionActionDescriptor {
+                    id: "ignore_source_route".to_string(),
+                    label: "Ignore route".to_string(),
+                    required_role: "operator".to_string(),
+                    confirmation: "required".to_string(),
+                    input_schema: serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "reason": {"type": "string"},
+                            "expected_version": {"type": "integer"}
+                        },
+                        "required": ["reason", "expected_version"],
+                        "additionalProperties": false
+                    }),
+                },
+            ],
+            dedupe_key: automation_attention_key(route),
+            source_event_id,
+            source_route_id: Some(route.id.clone()),
+            source_binding_name: Some(route.binding_name.clone()),
+            occurred_at,
+            sla_deadline: None,
+        })
         .await?;
     Ok(())
 }
 
-async fn fail_automation_route(
-    route_repository: &AsyncSourceAutomationRepository,
-    source_repository: &AsyncSourceRepository,
-    event: &SourceEventRecord,
-    route_id: &str,
-    error_code: &str,
-    retry_after: Option<&str>,
+async fn resolve_automation_attention(
+    state: &InnerState,
+    route: &SourceAutomationRoute,
+    reason: &str,
 ) -> Result<()> {
-    route_repository
-        .fail(route_id, error_code, retry_after)
-        .await?;
-    source_repository
-        .complete_routing(&event.id, "failed", None, Some(error_code))
+    state
+        .attention_repo
+        .resolve_external_candidate(
+            &route.project_id,
+            &automation_attention_key(route),
+            &route.source_event_id,
+            reason,
+        )
         .await?;
     Ok(())
 }
@@ -1068,6 +1466,8 @@ async fn materialize_ambiguity(
             }],
             dedupe_key: format!("source-routing:{}", event.id),
             source_event_id: event.id.clone(),
+            source_route_id: None,
+            source_binding_name: None,
             occurred_at: event.received_at.clone(),
             sla_deadline: None,
         })
@@ -1424,9 +1824,29 @@ mod tests {
             .await
             .expect("get")
             .expect("event");
-        assert_eq!(routed.routing_state, "failed");
-        assert_eq!(routed.last_error_code.as_deref(), Some("routing_failed"));
+        assert_eq!(routed.routing_state, "needs_attention");
+        assert_eq!(
+            routed.last_error_code.as_deref(),
+            Some("source_template_missing")
+        );
         assert!(routed.routed_task_id.is_none());
+        assert_eq!(
+            state
+                .attention_repo
+                .list(
+                    agent_orchestrator::attention::AttentionFilter {
+                        project_id: Some("default".into()),
+                        active_only: true,
+                        limit: 10,
+                        ..Default::default()
+                    },
+                    None,
+                )
+                .await
+                .expect("attention")
+                .len(),
+            1
+        );
     }
 
     #[tokio::test]
@@ -1547,6 +1967,9 @@ mod tests {
         reconcile_source_once(&state)
             .await
             .expect("route reactions");
+        reconcile_source_automation_once(&state)
+            .await
+            .expect("execute automation route");
         crate::slack_api::set_test_api_base(None);
 
         let first = repository

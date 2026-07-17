@@ -263,6 +263,11 @@ pub fn registered_migrations() -> Vec<Migration> {
             name: "m0033_source_automation_routes",
             up: crate::persistence::migration_steps::m0033_source_automation_routes,
         },
+        Migration {
+            version: 34,
+            name: "m0034_source_automation_operations",
+            up: crate::persistence::migration_steps::m0034_source_automation_operations,
+        },
     ]
 }
 
@@ -451,7 +456,7 @@ mod tests {
 
         let summary = run_pending(&conn, &migrations).expect("upgrade populated database");
         assert_eq!(summary.applied.first().map(|item| item.version), Some(29));
-        assert_eq!(current_version(&conn).unwrap(), 33);
+        assert_eq!(current_version(&conn).unwrap(), 34);
         let rows: Vec<(String, String, i64)> = conn
             .prepare(
                 "SELECT id,state,state_version FROM agent_sessions

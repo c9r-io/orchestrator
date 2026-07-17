@@ -207,9 +207,12 @@ fn classify_slack_error(error: Option<&str>) -> SlackApiError {
         Some("invalid_auth") | Some("not_authed") | Some("account_inactive") => {
             SlackApiError::permanent("slack_credential_rejected")
         }
-        Some("channel_not_found") | Some("message_not_found") => {
-            SlackApiError::permanent("slack_message_not_found")
-        }
+        Some("message_not_found") => SlackApiError::permanent("slack_message_not_found"),
+        Some("channel_not_found")
+        | Some("missing_scope")
+        | Some("not_in_channel")
+        | Some("access_denied")
+        | Some("restricted_action") => SlackApiError::permanent("slack_message_forbidden"),
         _ => SlackApiError::permanent("slack_api_rejected"),
     }
 }
@@ -338,6 +341,29 @@ mod tests {
         assert_eq!(
             parse_retry_after(Some(&value)),
             Some(Duration::from_secs(MAX_RETRY_AFTER_SECS))
+        );
+    }
+
+    #[test]
+    fn classifies_visibility_and_credential_failures_as_stable_operator_codes() {
+        for provider_code in [
+            "channel_not_found",
+            "missing_scope",
+            "not_in_channel",
+            "access_denied",
+            "restricted_action",
+        ] {
+            let error = classify_slack_error(Some(provider_code));
+            assert_eq!(error.code(), "slack_message_forbidden");
+            assert!(!error.is_transient());
+        }
+        assert_eq!(
+            classify_slack_error(Some("message_not_found")).code(),
+            "slack_message_not_found"
+        );
+        assert_eq!(
+            classify_slack_error(Some("invalid_auth")).code(),
+            "slack_credential_rejected"
         );
     }
 
