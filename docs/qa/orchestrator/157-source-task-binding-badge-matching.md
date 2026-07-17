@@ -103,7 +103,7 @@ Verify exact evidence selects one template and untrusted/mismatched evidence fai
 - Valid evidence returns `matched/binding_matched`, binding `slack-code-analysis`, template `analyze-from-slack`, and resolved role `operator`.
 - Wrong evidence returns `no_match` with stable field-specific reasons.
 - Role is resolved from Trigger `actorRoles`; no simulation field can supply a role.
-- Live matcher equivalence test selects the same binding but ends before task creation with `reaction_binding_matched_task_routing_not_enabled`.
+- Pure simulation selects the same binding without provider or task effects. Live enabled routing reuses that matcher before the FR-110 permalink/task path; its vertical behavior is verified in QA 158.
 
 ### Expected Data State
 

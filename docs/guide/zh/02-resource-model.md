@@ -397,6 +397,8 @@ event:
     installationId: T012345
     actorRoles: {U012345: operator}
     reactionRouting: bindings
+    secret: {fromRef: slack-signing}
+    outboundCredential: {fromRef: slack-api, key: BOT_TOKEN}
 ```
 
 `reactionRouting` 默认是 `disabled`。可以先进行无副作用验证：
@@ -409,7 +411,16 @@ orchestrator source binding suspend slack-code-analysis --project my-project
 orchestrator source binding resume slack-code-analysis --project my-project
 ```
 
-FR-109 的模拟和实时匹配不会调用 Slack、渲染模板或创建任务。普通删除仍被引用的 Trigger 或 SourceTaskTemplate 会被拒绝；管理员使用 `--force --force-references` 可以原子清理引用并留下审计证据。
+模拟不会调用 Slack、渲染模板或创建任务。当 `reactionRouting: bindings` 启用后，经过签名验证的实时 reaction 会在异步路由中通过 Slack `chat.getPermalink` 解析 `channel + message_ts`，使用冻结的模板渲染目标，并创建唯一、确定性的 canonical task。重复投递和 daemon 重启都会收敛到同一个 message/reaction/binding route 与 task。
+
+签名 `secret` 与 `outboundCredential` 是两个独立的同项目 SecretStore 引用。Daemon 只在 Slack API 调用时解析 outbound token；公开 source 摘要、audit、timeline 和 task 输入都不包含 token。只读用户可以查看安全的自动化状态、template 与 binding 信息，Operator 可以显式读取受保护的 Slack 链接：
+
+```bash
+orchestrator source list --project my-project -o json
+orchestrator source route <source-event-id> -o json
+```
+
+将 `reactionRouting` 改回 `disabled` 会停止新的 badge 路由，但保留既有 task 与证据。普通删除仍被引用的 Trigger 或 SourceTaskTemplate 会被拒绝；管理员使用 `--force --force-references` 可以原子清理引用并留下审计证据。
 
 ## 资源生命周期
 

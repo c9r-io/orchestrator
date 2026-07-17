@@ -397,6 +397,8 @@ event:
     installationId: T012345
     actorRoles: {U012345: operator}
     reactionRouting: bindings
+    secret: {fromRef: slack-signing}
+    outboundCredential: {fromRef: slack-api, key: BOT_TOKEN}
 ```
 
 `reactionRouting` defaults to `disabled`. Validate a rollout without side effects:
@@ -409,7 +411,16 @@ orchestrator source binding suspend slack-code-analysis --project my-project
 orchestrator source binding resume slack-code-analysis --project my-project
 ```
 
-Simulation and FR-109 live matching do not call Slack, render a template, or create a task. Normal deletion of a referenced Trigger or SourceTaskTemplate is blocked; Admin `--force --force-references` removes the references atomically and records audit evidence.
+Simulation never calls Slack, renders a template, or creates a task. When `reactionRouting: bindings` is active, a live signed reaction asynchronously resolves `channel + message_ts` through Slack `chat.getPermalink`, renders the selected frozen template, and creates one deterministic canonical task. Duplicate deliveries and daemon restart converge on the same message/reaction/binding route and task.
+
+The signing `secret` and `outboundCredential` are separate same-project SecretStore references. The daemon resolves the outbound token only for the Slack API call; public source summaries, audit, timeline, and task inputs never contain it. Read-only users can inspect safe automation status/template/binding fields. Operators can explicitly retrieve the protected Slack link:
+
+```bash
+orchestrator source list --project my-project -o json
+orchestrator source route <source-event-id> -o json
+```
+
+Set `reactionRouting: disabled` to stop new badge routes without deleting existing tasks or evidence. Normal deletion of a referenced Trigger or SourceTaskTemplate is blocked; Admin `--force --force-references` removes the references atomically and records audit evidence.
 
 ## Resource Lifecycle
 

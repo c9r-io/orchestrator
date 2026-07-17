@@ -155,11 +155,11 @@ FR-107 and FR-108 are closed, so Phase A is complete. Neither slice introduces a
 | FR | Deliverable | Depends on | Exit gate |
 |---|---|---|---|
 | FR-109 (Closed): [design](../design_doc/orchestrator/120-source-task-binding-badge-matching.md), [QA](../qa/orchestrator/157-source-task-binding-badge-matching.md) | SourceTaskBinding resource, badge matching, conflict detection and policy fields | FR-107, FR-108 | Exactly one binding is selected or routing fails closed with a stable reason |
-| [FR-110](FR-110-slack-permalink-canonical-task-routing.md) | Slack permalink resolution, safe rendering and canonical task creation | FR-107 through FR-109, FR-101 audit envelope | One signed badge event creates one task with correct Skill, URL and provenance |
+| FR-110 (Closed): [design](../design_doc/orchestrator/121-slack-permalink-canonical-task-routing.md), [QA](../qa/orchestrator/158-slack-permalink-canonical-task-routing.md) | Slack permalink resolution, safe rendering and canonical task creation | FR-107 through FR-109, FR-101 audit envelope | One signed badge event creates one task with correct Skill, URL and provenance |
 
-FR-110 is the MVP boundary. It must be demoable with an isolated daemon and fake Slack API before any management UI is required.
+FR-110 is closed and the MVP boundary is demonstrable with an isolated daemon and fake Slack API before any management UI is required.
 
-FR-109 is closed, so the binding and deterministic matching foundation of Phase B is complete; permalink resolution and canonical task mutation remain exclusively in FR-110.
+FR-109 and FR-110 are closed, so Phase B now provides deterministic binding, permalink resolution, canonical task mutation, provenance, and role-aware deep links. Daily retry/Attention operations remain in FR-111.
 
 ### Phase C: Daily operations
 

@@ -20,6 +20,8 @@ Common targets:
 - Internal services: `127.0.0.1`, `10.0.0.0/8`, `192.168.0.0/16`
 - DNS rebinding / redirect chains
 
+Project-specific FR-110 overlay: Slack permalink resolution does not accept a caller-provided fetch URL. Production always calls `https://slack.com/api/chat.getPermalink`, disables redirects, enforces TLS/time/body bounds, and validates that the returned URL is HTTPS on `slack.com` or a `*.slack.com` host with `/archives/{expected_channel}`. `ORCHESTRATOR_SLACK_API_BASE_URL` is accepted only as loopback HTTP in debug or explicit `dev-insecure` builds. Verify redirect, host, channel, timeout, and response-bound fixtures with `docs/qa/orchestrator/158-slack-permalink-canonical-task-routing.md` Scenario 4.
+
 ---
 
 ## Scenario 1: Block Internal And Local Addresses
@@ -89,4 +91,3 @@ Verify only necessary protocols (http/https) are allowed and ports are restricte
 
 ### Expected Secure Behavior
 - Disallowed protocols/ports are rejected
-

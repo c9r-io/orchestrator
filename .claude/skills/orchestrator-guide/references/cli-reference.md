@@ -70,7 +70,7 @@ orchestrator delete sourcetasktemplate <name> -p <project> -f
 **Notes:**
 - The `default` workspace is the project's root context — keep it unless deleting the entire project.
 - Rapid bulk deletes may trigger rate limiting (`rate_limited`); retry with a short pause between calls.
-- `get` supports native resources including agents, workflows, workspaces, triggers, SourceTaskTemplates, and SourceTaskBindings. Use `source template preview` for safe rendering and `source binding simulate` for side-effect-free exact match diagnostics. Binding `suspend`/`resume` are audited lifecycle mutations.
+- `get` supports native resources including agents, workflows, workspaces, triggers, SourceTaskTemplates, and SourceTaskBindings. Use `source template preview` for safe rendering and `source binding simulate` for side-effect-free exact match diagnostics. Binding `suspend`/`resume` are audited lifecycle mutations. `source list|get` exposes safe automation summaries; `source route <source-event-id> -o json` is an Operator read for protected Slack permalink and route/audit/task provenance.
 - To delete an entire project and all its data: `orchestrator delete project/<name> -f`.
 
 ### Project-Only Deployments

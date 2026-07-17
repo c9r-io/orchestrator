@@ -96,7 +96,7 @@ All resources use `apiVersion: orchestrator.dev/v2` with `metadata.name` and `sp
 | WorkflowStore | project | Cross-task persistent key-value store (WP01) |
 | Trigger | project | Cron-scheduled or event-driven automatic task creation |
 | SourceTaskTemplate | project | Trusted Skill + task action + allowlisted source-goal renderer and preview |
-| SourceTaskBinding | project | Exact authenticated reaction/channel/role policy selecting one SourceTaskTemplate |
+| SourceTaskBinding | project | Exact authenticated reaction/channel/role policy selecting one SourceTaskTemplate; enabled Slack routing resolves a permalink and creates one canonical task |
 | RuntimePolicy | singleton | Runner shell config, resume behavior, observability, redaction patterns |
 | Project | cluster | Namespace for organizing resources |
 | CustomResourceDefinition | cluster | Extensible resource types with JSON Schema + CEL validation |

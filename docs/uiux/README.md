@@ -52,7 +52,7 @@ PORTAL_BASE_URL="http://localhost:3000"   # If there is a Web UI
 3. Visual/token changes: run at least `01-design-consistency.md` + `02-theme-switching.md`.
 4. For the FR-097 consequence dialog, run `07-accessibility.md` + `08-forms-validation.md` + `10-dialogs-notifications.md` with `docs/qa/orchestrator/144-handoff-and-safe-resume.md`.
 5. For the FR-098/FR-102 Session Inspector and Process Workspace session panel, run `07-accessibility.md` with `docs/qa/orchestrator/149-agent-session-control-plane-hardening.md`; QA-145 is retained as the original specification.
-6. For the FR-099 Sources page and Process Workspace provenance panel, run `06-navigation-ia.md` + `07-accessibility.md` with `docs/qa/orchestrator/146-source-events-and-slack-binding.md`; reaction-card changes also run `docs/qa/orchestrator/155-slack-reaction-source-event-contract.md`.
+6. For the Sources page and Process Workspace provenance panel, run `06-navigation-ia.md` + `07-accessibility.md` with `docs/qa/orchestrator/146-source-events-and-slack-binding.md`; reaction-card changes also run `docs/qa/orchestrator/155-slack-reaction-source-event-contract.md`, and role-aware Slack deep links run `docs/qa/orchestrator/158-slack-permalink-canonical-task-routing.md`.
 7. For the FR-100 console shell and Attention/process vertical flow, run `05-responsive-layout.md` + `06-navigation-ia.md` + `07-accessibility.md` with `docs/qa/orchestrator/147-process-console-ui.md`.
 8. For FR-103 reviewed recovery and native Attention notifications, run `07-accessibility.md` + `10-dialogs-notifications.md` with `docs/qa/orchestrator/150-process-console-recovery-notifications-e2e.md`.
 9. Complex animations/glass effects: run at least `04-animations.md` (including performance and reduced motion).

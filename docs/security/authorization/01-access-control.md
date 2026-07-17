@@ -8,6 +8,8 @@
 
 Project-specific FR-109 overlay: `SourceTaskBinding` read/simulate uses read access; apply/delete/suspend/resume requires Operator authority and canonical audit. Admin authority plus explicit `--force --force-references` is required to atomically remove bindings that reference a Trigger or SourceTaskTemplate. Matching never trusts a request role: the external actor ID is mapped through the same-project Trigger `actorRoles`, and unknown actors inherit no privilege. See `docs/qa/orchestrator/157-source-task-binding-badge-matching.md`.
 
+FR-110 overlay: `SourceEventList/Get` may expose route status, binding/template identity, and hashes to `read_only+`, but never the Slack permalink. `SourceAutomationRouteGet` requires `operator+` and is the only source-automation read that returns the protected permalink. Sources/timeline UI must omit the route fetch and link entirely for read-only users; daemon RBAC remains authoritative. The outbound Slack actor role is derived from Trigger `actorRoles`, not the UI/control-plane caller. See `docs/qa/orchestrator/158-slack-permalink-canonical-task-routing.md` Scenario 4.
+
 ---
 
 ## Background

@@ -287,7 +287,18 @@ spec:
   suspend: false
 ```
 
-The referenced Trigger must be a same-project Slack webhook with `installationId`; the template must also be in the same project. Two enabled rules that can match the same reaction/channel/role are rejected rather than ranked. Trigger `reactionRouting` defaults to `disabled`; explicitly set it to `bindings` only after simulation.
+The referenced Trigger must be a same-project Slack webhook with `installationId`; the template must also be in the same project. Two enabled rules that can match the same reaction/channel/role are rejected rather than ranked. Trigger `reactionRouting` defaults to `disabled`; explicitly set it to `bindings` only after simulation. Enabled routing also requires a dedicated SecretStore-backed `outboundCredential` alongside the signing secret:
+
+```yaml
+event:
+  source: webhook
+  webhook:
+    provider: slack
+    installationId: T012345
+    reactionRouting: bindings
+    secret: {fromRef: slack-signing}
+    outboundCredential: {fromRef: slack-api, key: BOT_TOKEN}
+```
 
 ```bash
 orchestrator source binding simulate --project my-project \
@@ -297,7 +308,7 @@ orchestrator source binding suspend slack-code-analysis --project my-project
 orchestrator source binding resume slack-code-analysis --project my-project
 ```
 
-Simulation and FR-109 live matching do not contact Slack, render a template, or create a task.
+Simulation has no side effects. A live signed match reserves one durable message/reaction/binding identity, resolves and validates a Slack permalink, renders the frozen SourceTaskTemplate, and creates the deterministic canonical task. Inspect safe source summaries with `source list|get`; Operators can use `source route <source-event-id>` for the protected permalink and route provenance. Set `reactionRouting: disabled` to stop new routes while retaining existing evidence.
 
 ## Pipeline Variables
 

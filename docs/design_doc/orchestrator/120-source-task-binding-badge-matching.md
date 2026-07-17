@@ -120,7 +120,7 @@ orchestrator source binding suspend slack-code-analysis --project my-project
 orchestrator source binding resume slack-code-analysis --project my-project
 ```
 
-Simulation has no provider call, permalink input, template render, task mutation, or route persistence. Live reaction routing builds the identical match input from the authenticated normalized source row and calls the same matcher. A successful FR-109 live match ends as `ignored/reaction_binding_matched_task_routing_not_enabled`; FR-110 will consume the selected template and revision.
+Simulation has no provider call, permalink input, template render, task mutation, or route persistence. Live reaction routing builds the identical match input from the authenticated normalized source row and calls the same matcher. In the original FR-109 slice a successful live match stopped before mutation; FR-110 now consumes the selected template and revision through the durable permalink/task route documented in design 121 and QA 158.
 
 ## Data And Persistence
 
@@ -167,7 +167,7 @@ The binding revision is a lowercase SHA-256 over normalized resource content. Ch
 
 ## Observability
 
-- Source route state: terminal `ignored` plus stable matcher reason; successful pre-FR-110 selection uses `reaction_binding_matched_task_routing_not_enabled`.
+- Source route state: disabled/no-match paths retain stable terminal reasons; an enabled successful match proceeds into the FR-110 durable automation route.
 - Audit actions: `source.binding.apply`, `source.binding.delete`, `source.binding.suspend`, and `source.binding.resume`; reference cleanup remains `delete_references`.
 - Logs: provider event identifiers and installation values retain the existing hashed logging policy; no message content is added.
 - Metrics: no new metric in this slice; existing RPC, routing-state, and action-audit queries provide operational evidence.
@@ -177,7 +177,7 @@ The binding revision is a lowercase SHA-256 over normalized resource content. Ch
 - Config: no new environment variable, secret, or migration.
 - Rollout: deploy daemon and CLI together, apply Trigger with default disabled behavior, apply bindings, validate with simulation, then explicitly set `reactionRouting: bindings`.
 - Rollback: set `reactionRouting: disabled`, export/remove binding resources, then roll back the binary. Existing source events and tasks require no migration.
-- Compatibility: fixed Trigger routing for non-reaction source events is unchanged; reactions remain non-mutating until FR-110.
+- Compatibility: fixed Trigger routing for non-reaction source events is unchanged; reaction automation remains opt-in through `reactionRouting: bindings`.
 
 ## Test Plan
 
@@ -200,4 +200,4 @@ The binding revision is a lowercase SHA-256 over normalized resource content. Ch
 - Suspend/resume is immediate, restart-safe, and audited.
 - Referenced Trigger/template deletion is blocked or explicitly cleaned atomically.
 - Simulation and live routing share one matcher.
-- Existing reactions remain ignored until explicit rollout, and matched reactions create no task in FR-109.
+- Existing reactions remain ignored until explicit rollout; enabled matched reactions are owned by FR-110 design 121 and QA 158.
