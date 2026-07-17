@@ -221,6 +221,16 @@ pub fn create_task_impl(
     create_task_impl_with_id(state, payload, None)
 }
 
+/// Result of deterministic task creation, including whether this invocation
+/// inserted the task or reconciled an existing crash-safe identity.
+#[derive(Debug)]
+pub struct DeterministicTaskCreation {
+    /// Canonical task summary.
+    pub task: TaskSummary,
+    /// True only when this invocation inserted the task.
+    pub created: bool,
+}
+
 /// Creates a task with an optional caller-selected deterministic ID.
 ///
 /// The deterministic path is reserved for durable source routing. Replaying
@@ -230,6 +240,15 @@ pub fn create_task_impl_with_id(
     payload: CreateTaskPayload,
     requested_task_id: Option<&str>,
 ) -> Result<TaskSummary> {
+    Ok(create_task_impl_with_id_outcome(state, payload, requested_task_id)?.task)
+}
+
+/// Creates or reconciles a caller-selected deterministic task identity.
+pub fn create_task_impl_with_id_outcome(
+    state: &crate::state::InnerState,
+    payload: CreateTaskPayload,
+    requested_task_id: Option<&str>,
+) -> Result<DeterministicTaskCreation> {
     if let Some(task_id) = requested_task_id {
         if task_id.trim().is_empty() || task_id.len() > 128 {
             anyhow::bail!("requested task id must contain 1-128 characters");
@@ -240,7 +259,10 @@ pub fn create_task_impl_with_id(
             existing.total_items = total;
             existing.finished_items = finished;
             existing.failed_items = failed;
-            return Ok(existing);
+            return Ok(DeterministicTaskCreation {
+                task: existing,
+                created: false,
+            });
         }
     }
     let active = read_active_config(state)?;
@@ -388,7 +410,10 @@ pub fn create_task_impl_with_id(
     summary.total_items = total;
     summary.finished_items = finished;
     summary.failed_items = failed;
-    Ok(summary)
+    Ok(DeterministicTaskCreation {
+        task: summary,
+        created: true,
+    })
 }
 
 /// FR-090 Phase 3: Create a task from a direct step template + agent capability

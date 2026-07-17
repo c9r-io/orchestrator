@@ -435,6 +435,14 @@ pub enum SourceCommands {
         #[arg(short, long, default_value = "yaml")]
         output: OutputFormat,
     },
+    /// Inspect one protected automation route and its Slack deep link.
+    Route {
+        /// Source event ID linked to the route.
+        source_event_id: String,
+        /// Output encoding.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
     /// Ingest one provider-neutral normalized event fixture.
     Ingest {
         /// Project selected by trusted adapter configuration.

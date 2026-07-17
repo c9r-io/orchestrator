@@ -84,6 +84,10 @@ pub struct TriggerWebhookConfig {
     /// All values in the store are tried (supports key rotation).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secret: Option<TriggerSecretRef>,
+    /// Dedicated SecretStore key used for outbound provider API calls.
+    /// This is intentionally separate from the inbound signing secret.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outbound_credential: Option<TriggerOutboundCredentialRef>,
     /// Custom HTTP header name for the signature (default: `X-Webhook-Signature`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signature_header: Option<String>,
@@ -121,6 +125,15 @@ fn default_reaction_routing() -> String {
 pub struct TriggerSecretRef {
     /// Name of the SecretStore to resolve.
     pub from_ref: String,
+}
+
+/// Reference to one outbound provider credential in a SecretStore.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TriggerOutboundCredentialRef {
+    /// Name of the SecretStore to resolve on every route attempt.
+    pub from_ref: String,
+    /// Exact key containing the outbound bearer token.
+    pub key: String,
 }
 
 /// Stored event filter.

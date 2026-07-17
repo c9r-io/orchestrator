@@ -2,13 +2,19 @@ use agent_orchestrator::config_ext::OrchestratorConfigExt as _;
 use agent_orchestrator::source::{
     AsyncSourceRepository, CreateSourceBinding, IngestSourceEvent, NormalizedSourceEvent,
 };
+use agent_orchestrator::source_automation::{
+    AsyncSourceAutomationRepository, SourceAutomationRoute as CoreSourceAutomationRoute,
+};
 use orchestrator_proto::*;
 use tonic::{Request, Response, Status};
 
 use super::OrchestratorServer;
 use super::action_audit::{self, ActionDescriptor};
 
-fn event_to_proto(value: agent_orchestrator::source::SourceEventRecord) -> SourceEvent {
+fn event_to_proto(
+    value: agent_orchestrator::source::SourceEventRecord,
+    route: Option<&CoreSourceAutomationRoute>,
+) -> SourceEvent {
     SourceEvent {
         id: value.id,
         project_id: value.project_id,
@@ -27,6 +33,32 @@ fn event_to_proto(value: agent_orchestrator::source::SourceEventRecord) -> Sourc
         routing_attempts: value.routing_attempts,
         routed_task_id: value.routed_task_id,
         last_error_code: value.last_error_code,
+        automation_route_id: route.map(|route| route.id.clone()),
+        automation_status: route.map(|route| route.status.clone()),
+        automation_binding_name: route.map(|route| route.binding_name.clone()),
+        automation_template_name: route.map(|route| route.template_name.clone()),
+        automation_template_hash: route.map(|route| route.template_hash.clone()),
+    }
+}
+
+fn automation_route_to_proto(value: CoreSourceAutomationRoute) -> SourceAutomationRoute {
+    SourceAutomationRoute {
+        id: value.id,
+        project_id: value.project_id,
+        source_event_id: value.source_event_id,
+        provider: value.provider,
+        reaction: value.reaction,
+        binding_name: value.binding_name,
+        binding_revision: value.binding_revision,
+        template_name: value.template_name,
+        template_hash: value.template_hash,
+        status: value.status,
+        error_code: value.error_code,
+        task_id: value.task_id,
+        permalink: value.permalink,
+        request_id: value.request_id,
+        created_at: value.created_at,
+        completed_at: value.completed_at,
     }
 }
 
@@ -65,8 +97,17 @@ pub(crate) async fn event_list(
         )
         .await
         .map_err(|error| Status::internal(error.to_string()))?;
+    let automation = AsyncSourceAutomationRepository::new(server.state.async_database.clone());
+    let mut public_events = Vec::with_capacity(events.len());
+    for event in events {
+        let route = automation
+            .get_for_event(&event.id)
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
+        public_events.push(event_to_proto(event, route.as_ref()));
+    }
     Ok(Response::new(SourceEventListResponse {
-        events: events.into_iter().map(event_to_proto).collect(),
+        events: public_events,
     }))
 }
 
@@ -81,7 +122,30 @@ pub(crate) async fn event_get(
         .await
         .map_err(|error| Status::internal(error.to_string()))?
         .ok_or_else(|| Status::not_found("source event not found"))?;
-    Ok(Response::new(event_to_proto(event)))
+    let route = AsyncSourceAutomationRepository::new(server.state.async_database.clone())
+        .get_for_event(&event.id)
+        .await
+        .map_err(|error| Status::internal(error.to_string()))?;
+    Ok(Response::new(event_to_proto(event, route.as_ref())))
+}
+
+pub(crate) async fn automation_route_get(
+    server: &OrchestratorServer,
+    request: Request<SourceAutomationRouteGetRequest>,
+) -> Result<Response<SourceAutomationRoute>, Status> {
+    super::authorize(server, &request, "SourceAutomationRouteGet").map_err(Status::from)?;
+    let source_event_id = request.into_inner().source_event_id;
+    if source_event_id.trim().is_empty() || source_event_id.len() > 128 {
+        return Err(Status::invalid_argument(
+            "source_event_id must contain 1-128 bytes",
+        ));
+    }
+    let route = AsyncSourceAutomationRepository::new(server.state.async_database.clone())
+        .get_for_event(&source_event_id)
+        .await
+        .map_err(|error| Status::internal(error.to_string()))?
+        .ok_or_else(|| Status::not_found("source automation route not found"))?;
+    Ok(Response::new(automation_route_to_proto(route)))
 }
 
 pub(crate) async fn task_template_preview(
@@ -398,7 +462,7 @@ pub(crate) async fn event_ingest(
         .succeeded(server, Some("source_event"), Some(&result.event.id))
         .await?;
     Ok(attempt.response(SourceEventIngestResponse {
-        event: Some(event_to_proto(result.event)),
+        event: Some(event_to_proto(result.event, None)),
         inserted: result.inserted,
     }))
 }

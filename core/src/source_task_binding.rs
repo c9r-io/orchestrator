@@ -369,6 +369,7 @@ mod tests {
                     filter: None,
                     webhook: Some(TriggerWebhookConfig {
                         secret: None,
+                        outbound_credential: None,
                         signature_header: None,
                         crd_ref: None,
                         provider: Some("slack".to_string()),

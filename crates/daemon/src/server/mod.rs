@@ -380,6 +380,13 @@ impl OrchestratorService for OrchestratorServer {
         source::event_get(self, request).await
     }
 
+    async fn source_automation_route_get(
+        &self,
+        request: Request<SourceAutomationRouteGetRequest>,
+    ) -> Result<Response<SourceAutomationRoute>, Status> {
+        source::automation_route_get(self, request).await
+    }
+
     async fn source_event_ingest(
         &self,
         request: Request<SourceEventIngestRequest>,

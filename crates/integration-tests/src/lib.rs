@@ -272,6 +272,15 @@ impl OrchestratorService for TestOrchestratorServer {
         ))
     }
 
+    async fn source_automation_route_get(
+        &self,
+        _: Request<SourceAutomationRouteGetRequest>,
+    ) -> Result<Response<SourceAutomationRoute>, Status> {
+        Err(Status::unimplemented(
+            "source integration fixture uses the production daemon",
+        ))
+    }
+
     async fn source_event_ingest(
         &self,
         _: Request<SourceEventIngestRequest>,

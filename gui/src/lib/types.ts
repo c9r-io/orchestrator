@@ -231,6 +231,22 @@ export interface SourceEvent {
   routing_attempts: number;
   routed_task_id: string | null;
   last_error_code: string | null;
+  automation_route_id: string | null;
+  automation_status: string | null;
+  automation_binding_name: string | null;
+  automation_template_name: string | null;
+  automation_template_hash: string | null;
+}
+
+export interface SourceAutomationRoute {
+  id: string;
+  source_event_id: string;
+  reaction: string;
+  binding_name: string;
+  template_name: string;
+  status: string;
+  task_id: string | null;
+  permalink: string | null;
 }
 
 export interface SourceBinding {

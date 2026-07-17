@@ -756,7 +756,7 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         | "TriggerFire" | "AgentCordon" | "AgentUncordon" | "AgentDrain" | "EventCleanup"
         | "DbLogCleanup" | "DbVacuum"
         | "AttentionClaim" | "AttentionSnooze" | "AttentionResolve" | "AttentionExecuteAction"
-        | "SourceEventIngest" | "SourceBind"
+        | "SourceEventIngest" | "SourceBind" | "SourceAutomationRouteGet"
         | "SourceTaskBindingSuspend" | "SourceTaskBindingResume"
         | "HandoffGenerate" | "ResumePlan" | "ResumeExecute"
         | "AgentSessionHeartbeat" | "AgentSessionSendInput" | "AgentSessionClose"
@@ -898,6 +898,10 @@ mod tests {
         assert_eq!(required_role_for_rpc("RunStep"), Role::Operator);
         assert_eq!(required_role_for_rpc("AttentionClaim"), Role::Operator);
         assert_eq!(
+            required_role_for_rpc("SourceAutomationRouteGet"),
+            Role::Operator
+        );
+        assert_eq!(
             required_role_for_rpc("AgentSessionSendInput"),
             Role::Operator
         );
@@ -930,6 +934,8 @@ mod tests {
         assert!(operator.allows(required_role_for_rpc("Delete")));
         assert!(operator.allows(required_role_for_rpc("Apply")));
         assert!(operator.allows(required_role_for_rpc("TaskDeleteBulk")));
+        assert!(operator.allows(required_role_for_rpc("SourceAutomationRouteGet")));
+        assert!(!Role::ReadOnly.allows(required_role_for_rpc("SourceAutomationRouteGet")));
         // Operator cannot perform security-sensitive operations
         assert!(!operator.allows(required_role_for_rpc("SecretKeyRotate")));
         assert!(!operator.allows(required_role_for_rpc("ConfigDebug")));

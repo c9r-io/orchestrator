@@ -1,8 +1,8 @@
 use crate::cli_types::{OrchestratorResource, ResourceKind, ResourceSpec, TriggerSpec};
 use crate::config::{
     OrchestratorConfig, TriggerActionConfig, TriggerConfig, TriggerCronConfig, TriggerEventConfig,
-    TriggerEventFilterConfig, TriggerFilesystemConfig, TriggerHistoryLimitConfig, TriggerSecretRef,
-    TriggerThrottleConfig, TriggerWebhookConfig,
+    TriggerEventFilterConfig, TriggerFilesystemConfig, TriggerHistoryLimitConfig,
+    TriggerOutboundCredentialRef, TriggerSecretRef, TriggerThrottleConfig, TriggerWebhookConfig,
 };
 use anyhow::{Result, anyhow};
 
@@ -163,6 +163,20 @@ impl Resource for TriggerResource {
                         self.name()
                     ));
                 }
+                if webhook.reaction_routing == "bindings" {
+                    let outbound = webhook.outbound_credential.as_ref().ok_or_else(|| {
+                        anyhow!(
+                            "trigger '{}': reactionRouting=bindings requires outboundCredential",
+                            self.name()
+                        )
+                    })?;
+                    if outbound.from_ref.trim().is_empty() || outbound.key.trim().is_empty() {
+                        return Err(anyhow!(
+                            "trigger '{}': outboundCredential.fromRef and key cannot be empty",
+                            self.name()
+                        ));
+                    }
+                }
             }
         }
 
@@ -266,6 +280,12 @@ pub(crate) fn trigger_spec_to_config(spec: &TriggerSpec) -> TriggerConfig {
                 secret: w.secret.as_ref().map(|s| TriggerSecretRef {
                     from_ref: s.from_ref.clone(),
                 }),
+                outbound_credential: w.outbound_credential.as_ref().map(|credential| {
+                    TriggerOutboundCredentialRef {
+                        from_ref: credential.from_ref.clone(),
+                        key: credential.key.clone(),
+                    }
+                }),
                 signature_header: w.signature_header.clone(),
                 crd_ref: w.crd_ref.clone(),
                 provider: w.provider.clone(),
@@ -305,7 +325,7 @@ pub(crate) fn trigger_config_to_spec(cfg: &TriggerConfig) -> TriggerSpec {
     use crate::cli_types::{
         TriggerActionSpec, TriggerCronSpec, TriggerEventFilter, TriggerEventSpec,
         TriggerFilesystemSpec, TriggerHistoryLimit, TriggerThrottleSpec, TriggerWebhookSpec,
-        WebhookSecretRef,
+        WebhookOutboundCredentialRef, WebhookSecretRef,
     };
 
     TriggerSpec {
@@ -322,6 +342,12 @@ pub(crate) fn trigger_config_to_spec(cfg: &TriggerConfig) -> TriggerSpec {
             webhook: e.webhook.as_ref().map(|w| TriggerWebhookSpec {
                 secret: w.secret.as_ref().map(|s| WebhookSecretRef {
                     from_ref: s.from_ref.clone(),
+                }),
+                outbound_credential: w.outbound_credential.as_ref().map(|credential| {
+                    WebhookOutboundCredentialRef {
+                        from_ref: credential.from_ref.clone(),
+                        key: credential.key.clone(),
+                    }
                 }),
                 signature_header: w.signature_header.clone(),
                 crd_ref: w.crd_ref.clone(),
@@ -423,6 +449,42 @@ spec:
         let resource = dispatch_resource(trigger_event_manifest("on-complete", "task_completed"))
             .expect("dispatch should succeed");
         assert!(resource.validate().is_ok());
+    }
+
+    #[test]
+    fn reaction_routing_requires_dedicated_outbound_credential() {
+        let missing = r#"
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata: {name: slack-main}
+spec:
+  event:
+    source: webhook
+    webhook:
+      provider: slack
+      installationId: T1
+      reactionRouting: bindings
+      secret: {fromRef: slack-signing}
+  action: {workflow: docs, workspace: default}
+"#;
+        let manifest: OrchestratorResource = serde_yaml::from_str(missing).expect("manifest");
+        let error = dispatch_resource(manifest)
+            .expect("dispatch")
+            .validate()
+            .expect_err("outbound credential required");
+        assert!(error.to_string().contains("requires outboundCredential"));
+
+        let valid = missing.replace(
+            "      secret: {fromRef: slack-signing}",
+            "      secret: {fromRef: slack-signing}\n      outboundCredential: {fromRef: slack-api, key: BOT_TOKEN}",
+        );
+        let manifest: OrchestratorResource = serde_yaml::from_str(&valid).expect("manifest");
+        assert!(
+            dispatch_resource(manifest)
+                .expect("dispatch")
+                .validate()
+                .is_ok()
+        );
     }
 
     #[test]

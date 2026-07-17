@@ -54,6 +54,7 @@ metadata:
 spec:
   data:
     signing: qa-source-binding-signing-secret
+    bot-token: qa-source-binding-fake-token
 ---
 apiVersion: orchestrator.dev/v2
 kind: Trigger
@@ -72,6 +73,9 @@ spec:
       reactionRouting: bindings
       secret:
         fromRef: slack-binding-secret
+      outboundCredential:
+        fromRef: slack-binding-secret
+        key: bot-token
   action:
     workflow: source-binding-fixture
     workspace: source-binding-fixture

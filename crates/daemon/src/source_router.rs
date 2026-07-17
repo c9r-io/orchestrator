@@ -9,12 +9,20 @@ use agent_orchestrator::source::{
     AsyncSourceRepository, CreateSourceBinding, SourceCommand, SourceCommandActionInput,
     SourceEventRecord, deterministic_task_id,
 };
+use agent_orchestrator::source_automation::{
+    AsyncSourceAutomationRepository, ReserveSourceAutomationRoute, SourceAutomationRoute,
+};
+use agent_orchestrator::source_task_template::{
+    SourceTaskTemplateRenderInput, render_source_task_template, template_content_hash,
+};
 use agent_orchestrator::state::InnerState;
 use agent_orchestrator::trigger_engine::{TriggerFireContext, fire_trigger_canonical_with_context};
 use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::Arc;
+
+use crate::slack_api::SlackApiClient;
 
 /// Routes one bounded batch of durably accepted source events.
 pub async fn reconcile_source_once(state: &Arc<InnerState>) -> Result<usize> {
@@ -44,58 +52,7 @@ async fn route_one(
     event: &SourceEventRecord,
 ) -> Result<()> {
     if event.normalized.kind == agent_orchestrator::source::SourceEventKind::ReactionAdded {
-        let Some(reaction) = event.normalized.reaction.as_ref() else {
-            repository
-                .complete_routing(
-                    &event.id,
-                    "ignored",
-                    None,
-                    Some("reaction_metadata_missing"),
-                )
-                .await?;
-            return Ok(());
-        };
-        if reaction.target.kind != "message" {
-            repository
-                .complete_routing(
-                    &event.id,
-                    "ignored",
-                    None,
-                    Some("unsupported_reaction_target"),
-                )
-                .await?;
-            return Ok(());
-        }
-        let active = read_active_config(state)?;
-        let match_result = agent_orchestrator::source_task_binding::match_source_task_binding(
-            &active.config,
-            &event.project_id,
-            &agent_orchestrator::source_task_binding::SourceTaskBindingMatchInput {
-                provider: event.provider.clone(),
-                installation_id: event.installation_id.clone(),
-                event_kind: "reaction_added".to_string(),
-                reaction: reaction.name.clone(),
-                target_kind: reaction.target.kind.clone(),
-                channel_id: event
-                    .normalized
-                    .conversation
-                    .as_ref()
-                    .map(|conversation| conversation.conversation_id.clone())
-                    .unwrap_or_default(),
-                external_actor_id: event.external_actor_id.clone().unwrap_or_default(),
-            },
-        )?;
-        let reason = if match_result.reason == "reaction_automation_disabled" {
-            "reaction_routing_not_enabled"
-        } else if match_result.status == "matched" {
-            "reaction_binding_matched_task_routing_not_enabled"
-        } else {
-            match_result.reason.as_str()
-        };
-        repository
-            .complete_routing(&event.id, "ignored", None, Some(reason))
-            .await?;
-        return Ok(());
+        return route_reaction_automation(state, repository, event).await;
     }
     if event.normalized.kind == agent_orchestrator::source::SourceEventKind::System {
         repository
@@ -249,6 +206,475 @@ async fn route_one(
         routing_state = "routed",
         "source event routed"
     );
+    Ok(())
+}
+
+async fn route_reaction_automation(
+    state: &Arc<InnerState>,
+    source_repository: &AsyncSourceRepository,
+    event: &SourceEventRecord,
+) -> Result<()> {
+    let route_repository = AsyncSourceAutomationRepository::new(state.async_database.clone());
+    if let Some(existing) = route_repository.get_for_event(&event.id).await? {
+        let reservation = route_repository.claim_existing(&existing.id).await?;
+        if reservation.route.status == "completed" {
+            source_repository
+                .complete_routing(
+                    &event.id,
+                    "routed",
+                    reservation.route.task_id.as_deref(),
+                    None,
+                )
+                .await?;
+            return Ok(());
+        }
+        if !reservation.should_execute {
+            source_repository
+                .complete_routing(
+                    &event.id,
+                    "failed",
+                    None,
+                    Some("automation_route_in_progress"),
+                )
+                .await?;
+            return Ok(());
+        }
+        return execute_reserved_automation_route(
+            state,
+            source_repository,
+            &route_repository,
+            event,
+            reservation.route,
+        )
+        .await;
+    }
+
+    let Some(reaction) = event.normalized.reaction.as_ref() else {
+        source_repository
+            .complete_routing(
+                &event.id,
+                "ignored",
+                None,
+                Some("reaction_metadata_missing"),
+            )
+            .await?;
+        return Ok(());
+    };
+    if reaction.target.kind != "message" {
+        source_repository
+            .complete_routing(
+                &event.id,
+                "ignored",
+                None,
+                Some("unsupported_reaction_target"),
+            )
+            .await?;
+        return Ok(());
+    }
+    let channel_id = event
+        .normalized
+        .conversation
+        .as_ref()
+        .map(|conversation| conversation.conversation_id.clone())
+        .unwrap_or_default();
+    let active = read_active_config(state)?;
+    let match_result = agent_orchestrator::source_task_binding::match_source_task_binding(
+        &active.config,
+        &event.project_id,
+        &agent_orchestrator::source_task_binding::SourceTaskBindingMatchInput {
+            provider: event.provider.clone(),
+            installation_id: event.installation_id.clone(),
+            event_kind: "reaction_added".to_string(),
+            reaction: reaction.name.clone(),
+            target_kind: reaction.target.kind.clone(),
+            channel_id: channel_id.clone(),
+            external_actor_id: event.external_actor_id.clone().unwrap_or_default(),
+        },
+    )?;
+    if match_result.status != "matched" {
+        let reason = if match_result.reason == "reaction_automation_disabled" {
+            "reaction_routing_not_enabled"
+        } else {
+            match_result.reason.as_str()
+        };
+        source_repository
+            .complete_routing(&event.id, "ignored", None, Some(reason))
+            .await?;
+        return Ok(());
+    }
+
+    let project = active
+        .config
+        .projects
+        .get(&event.project_id)
+        .context("source automation project missing")?;
+    let binding_name = match_result
+        .binding_id
+        .as_deref()
+        .context("matched binding name missing")?;
+    let binding = project
+        .source_task_bindings
+        .get(binding_name)
+        .context("matched binding snapshot missing")?;
+    let template_name = match_result
+        .template_ref
+        .as_deref()
+        .context("matched template name missing")?;
+    let template = project
+        .source_task_templates
+        .get(template_name)
+        .context("matched template snapshot missing")?;
+    let trigger_name = match_result
+        .trigger_name
+        .as_deref()
+        .context("matched trigger name missing")?;
+    let credential = project
+        .triggers
+        .get(trigger_name)
+        .and_then(|trigger| trigger.event.as_ref())
+        .and_then(|trigger_event| trigger_event.webhook.as_ref())
+        .and_then(|webhook| webhook.outbound_credential.as_ref())
+        .context("Slack outbound credential reference missing")?;
+    let message_identity = format!("{channel_id}:{}", reaction.target.external_id);
+    let reservation = route_repository
+        .reserve(ReserveSourceAutomationRoute {
+            project_id: event.project_id.clone(),
+            source_event_id: event.id.clone(),
+            provider: event.provider.clone(),
+            installation_id: event.installation_id.clone(),
+            message_identity,
+            channel_id,
+            message_ts: reaction.target.external_id.clone(),
+            reaction: reaction.name.clone(),
+            resolved_role: match_result
+                .resolved_role
+                .context("matched actor role missing")?,
+            binding_name: binding_name.to_string(),
+            binding_revision: match_result
+                .binding_revision
+                .context("matched binding revision missing")?,
+            template_name: template_name.to_string(),
+            template_hash: template_content_hash(template)?,
+            binding_snapshot: serde_json::to_value(binding)?,
+            template_snapshot: serde_json::to_value(template)?,
+            credential_store: credential.from_ref.clone(),
+            credential_key: credential.key.clone(),
+        })
+        .await?;
+    if reservation.route.status == "completed" {
+        source_repository
+            .complete_routing(
+                &event.id,
+                "routed",
+                reservation.route.task_id.as_deref(),
+                None,
+            )
+            .await?;
+        return Ok(());
+    }
+    if !reservation.should_execute {
+        source_repository
+            .complete_routing(
+                &event.id,
+                "failed",
+                None,
+                Some("automation_route_in_progress"),
+            )
+            .await?;
+        return Ok(());
+    }
+    execute_reserved_automation_route(
+        state,
+        source_repository,
+        &route_repository,
+        event,
+        reservation.route,
+    )
+    .await
+}
+
+async fn execute_reserved_automation_route(
+    state: &Arc<InnerState>,
+    source_repository: &AsyncSourceRepository,
+    route_repository: &AsyncSourceAutomationRepository,
+    event: &SourceEventRecord,
+    route: SourceAutomationRoute,
+) -> Result<()> {
+    let route_id = route.id.clone();
+    match execute_automation_route(state, source_repository, route_repository, event, route).await {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            tracing::warn!(
+                source_event_id = %event.id,
+                automation_route_id = %route_id,
+                error = %error,
+                "source automation execution failed"
+            );
+            let _ = route_repository
+                .fail(&route_id, "automation_task_route_failed", None)
+                .await;
+            source_repository
+                .complete_routing(
+                    &event.id,
+                    "failed",
+                    None,
+                    Some("automation_task_route_failed"),
+                )
+                .await
+        }
+    }
+}
+
+async fn execute_automation_route(
+    state: &Arc<InnerState>,
+    source_repository: &AsyncSourceRepository,
+    route_repository: &AsyncSourceAutomationRepository,
+    event: &SourceEventRecord,
+    route: SourceAutomationRoute,
+) -> Result<()> {
+    let snapshot = route_repository
+        .execution_snapshot(&route.id)
+        .await?
+        .context("automation execution snapshot missing")?;
+    let fresh = read_active_config(state)?;
+    let token = fresh
+        .config
+        .projects
+        .get(&route.project_id)
+        .and_then(|project| project.secret_stores.get(&snapshot.credential_store))
+        .and_then(|store| store.data.get(&snapshot.credential_key))
+        .cloned();
+    let Some(token) = token else {
+        return fail_automation_route(
+            route_repository,
+            source_repository,
+            event,
+            &route.id,
+            "slack_credential_missing",
+            None,
+        )
+        .await;
+    };
+    let permalink = if route.permalink_status == "resolved" {
+        route
+            .permalink
+            .clone()
+            .context("resolved automation route has no permalink")?
+    } else {
+        let client = match SlackApiClient::new() {
+            Ok(client) => client,
+            Err(error) => {
+                return fail_automation_route(
+                    route_repository,
+                    source_repository,
+                    event,
+                    &route.id,
+                    error.code(),
+                    None,
+                )
+                .await;
+            }
+        };
+        match client
+            .get_permalink(&token, &route.channel_id, &route.message_ts)
+            .await
+        {
+            Ok(permalink) => {
+                route_repository
+                    .record_permalink(&route.id, &permalink.url)
+                    .await?;
+                permalink.url
+            }
+            Err(error) => {
+                let retry_after = error.retry_after().map(|value| value.as_secs().to_string());
+                let _is_transient = error.is_transient();
+                return fail_automation_route(
+                    route_repository,
+                    source_repository,
+                    event,
+                    &route.id,
+                    error.code(),
+                    retry_after.as_deref(),
+                )
+                .await;
+            }
+        }
+    };
+    let template: agent_orchestrator::config::SourceTaskTemplateConfig =
+        serde_json::from_value(snapshot.template).context("frozen source template is invalid")?;
+    let source_message_url = permalink.clone();
+    let rendered = match render_source_task_template(
+        &template,
+        &SourceTaskTemplateRenderInput {
+            provider: route.provider.clone(),
+            installation_id: route.installation_id.clone(),
+            message_url: source_message_url.clone(),
+            event_id: Some(route.source_event_id.clone()),
+            reaction: Some(route.reaction.clone()),
+            target_id: Some(route.message_identity.clone()),
+            installation_verified: true,
+        },
+    ) {
+        Ok(rendered) => rendered,
+        Err(_) => {
+            return fail_automation_route(
+                route_repository,
+                source_repository,
+                event,
+                &route.id,
+                "source_template_render_failed",
+                None,
+            )
+            .await;
+        }
+    };
+
+    let actor = event
+        .external_actor_id
+        .as_ref()
+        .map(|actor| format!("{}:{}:{actor}", route.provider, route.installation_id));
+    let audit_repository = AsyncActionAuditRepository::new(state.async_database.clone());
+    let audit = audit_repository
+        .reserve(ActionAuditReservation {
+            request_id: route.request_id.clone(),
+            project_id: route.project_id.clone(),
+            actor,
+            resolved_role: Some(route.resolved_role.clone()),
+            transport: "slack_adapter".to_string(),
+            target_type: "source_automation_route".to_string(),
+            target_id: route.id.clone(),
+            action: "source.automation.create_task".to_string(),
+            reason_code: "matched_source_task_binding".to_string(),
+            operator_reason: None,
+            idempotency_key: Some(route.automation_key.clone()),
+            expected_version: Some(route.binding_revision.clone()),
+            fencing_token: None,
+            canonical_request: serde_json::json!({
+                "route_id": &route.id,
+                "source_event_id": &route.source_event_id,
+                "binding_name": &route.binding_name,
+                "binding_revision": &route.binding_revision,
+                "template_name": &route.template_name,
+                "template_hash": &route.template_hash,
+                "task_id": &route.deterministic_task_id,
+            }),
+        })
+        .await?;
+    if audit.record.status == "succeeded" {
+        let task_id = audit
+            .record
+            .result_id
+            .context("succeeded automation audit has no task result")?;
+        route_repository.complete(&route.id, &task_id).await?;
+        source_repository
+            .complete_routing(&event.id, "routed", Some(&task_id), None)
+            .await?;
+        return Ok(());
+    }
+    if audit.record.status != "reserved" {
+        return fail_automation_route(
+            route_repository,
+            source_repository,
+            event,
+            &route.id,
+            "automation_audit_not_executable",
+            None,
+        )
+        .await;
+    }
+
+    let mut initial_vars = rendered
+        .action
+        .initial_vars
+        .clone()
+        .into_iter()
+        .collect::<HashMap<_, _>>();
+    initial_vars.insert("source_event_id".to_string(), route.source_event_id.clone());
+    initial_vars.insert("source_provider".to_string(), route.provider.clone());
+    initial_vars.insert("source_reaction".to_string(), route.reaction.clone());
+    initial_vars.insert("source_message_url".to_string(), source_message_url);
+    initial_vars.insert("source_template".to_string(), route.template_name.clone());
+    initial_vars.insert("source_binding".to_string(), route.binding_name.clone());
+    let creation = agent_orchestrator::task_ops::create_task_impl_with_id_outcome(
+        state,
+        agent_orchestrator::dto::CreateTaskPayload {
+            name: Some(format!("source-{}-{}", route.reaction, route.binding_name)),
+            goal: Some(rendered.goal.clone()),
+            project_id: Some(route.project_id.clone()),
+            workspace_id: Some(rendered.action.workspace.clone()),
+            workflow_id: Some(rendered.action.workflow.clone()),
+            target_files: None,
+            parent_task_id: None,
+            spawn_reason: Some("source_automation".to_string()),
+            step_filter: None,
+            initial_vars: Some(initial_vars),
+        },
+        Some(&route.deterministic_task_id),
+    )?;
+    let task_id = creation.task.id.clone();
+    if rendered.action.start && creation.task.status == "created" {
+        state.task_enqueuer.enqueue_task(state, &task_id).await?;
+        state.worker_notify.notify_one();
+    }
+    source_repository
+        .create_binding(CreateSourceBinding {
+            project_id: route.project_id.clone(),
+            task_id: task_id.clone(),
+            provider: route.provider.clone(),
+            installation_id: route.installation_id.clone(),
+            conversation_id: Some(route.channel_id.clone()),
+            thread_id: Some(route.message_ts.clone()),
+            binding_type: "automation".to_string(),
+            created_by_event_id: route.source_event_id.clone(),
+        })
+        .await?;
+    state.emit_event(
+        &task_id,
+        None,
+        "source_automation_routed",
+        serde_json::json!({
+            "source_event_id": &route.source_event_id,
+            "automation_route_id": &route.id,
+            "request_id": &route.request_id,
+            "reaction": &route.reaction,
+            "binding_name": &route.binding_name,
+            "binding_revision": &route.binding_revision,
+            "template_name": &route.template_name,
+            "template_hash": &route.template_hash,
+            "message": format!("Slack badge '{}' routed with template '{}'", route.reaction, route.template_name),
+            "status": "routed",
+        }),
+    );
+    audit_repository
+        .complete(
+            &route.request_id,
+            "succeeded",
+            None,
+            Some("task"),
+            Some(&task_id),
+        )
+        .await?;
+    route_repository.complete(&route.id, &task_id).await?;
+    source_repository
+        .complete_routing(&event.id, "routed", Some(&task_id), None)
+        .await?;
+    Ok(())
+}
+
+async fn fail_automation_route(
+    route_repository: &AsyncSourceAutomationRepository,
+    source_repository: &AsyncSourceRepository,
+    event: &SourceEventRecord,
+    route_id: &str,
+    error_code: &str,
+    retry_after: Option<&str>,
+) -> Result<()> {
+    route_repository
+        .fail(route_id, error_code, retry_after)
+        .await?;
+    source_repository
+        .complete_routing(&event.id, "failed", None, Some(error_code))
+        .await?;
     Ok(())
 }
 
@@ -657,8 +1083,10 @@ fn stable_error_code(error: &anyhow::Error) -> &'static str {
 mod tests {
     use super::*;
     use agent_orchestrator::config::{
-        SourceTaskBindingConfig, SourceTaskBindingMatchConfig, TriggerActionConfig, TriggerConfig,
-        TriggerEventConfig, TriggerWebhookConfig,
+        SecretStoreConfig, SourceTaskBindingConfig, SourceTaskBindingMatchConfig,
+        SourceTaskTemplateActionConfig, SourceTaskTemplateConfig, SourceTaskTemplateSkillConfig,
+        TriggerActionConfig, TriggerConfig, TriggerEventConfig, TriggerOutboundCredentialRef,
+        TriggerWebhookConfig,
     };
     use agent_orchestrator::dto::CreateTaskPayload;
     use agent_orchestrator::source::{
@@ -676,6 +1104,7 @@ mod tests {
                 filter: None,
                 webhook: Some(TriggerWebhookConfig {
                     secret: None,
+                    outbound_credential: None,
                     signature_header: None,
                     crd_ref: None,
                     provider: Some("fixture".into()),
@@ -902,7 +1331,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reaction_live_route_uses_same_matcher_and_stops_before_task_creation() {
+    async fn matched_reaction_with_missing_template_fails_closed_without_task() {
         let (_fixture, state) = state_with_trigger();
         update_config_runtime(&state, |current| {
             let mut next = current.clone();
@@ -967,12 +1396,156 @@ mod tests {
             .await
             .expect("get")
             .expect("event");
-        assert_eq!(routed.routing_state, "ignored");
-        assert_eq!(
-            routed.last_error_code.as_deref(),
-            Some("reaction_binding_matched_task_routing_not_enabled")
-        );
+        assert_eq!(routed.routing_state, "failed");
+        assert_eq!(routed.last_error_code.as_deref(), Some("routing_failed"));
         assert!(routed.routed_task_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn matched_slack_badge_creates_one_canonical_task_for_duplicate_deliveries() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("fake Slack bind");
+        let address = listener.local_addr().expect("fake Slack address");
+        tokio::spawn(async move {
+            axum::serve(
+                listener,
+                axum::Router::new().route(
+                    "/api/chat.getPermalink",
+                    axum::routing::get(|| async {
+                        axum::Json(serde_json::json!({
+                            "ok": true,
+                            "permalink": "https://acme.slack.com/archives/conversation-1/p171234000100"
+                        }))
+                    }),
+                ),
+            )
+            .await
+            .expect("fake Slack server");
+        });
+        crate::slack_api::set_test_api_base(Some(format!("http://{address}/api/")));
+
+        let (_fixture, state) = state_with_trigger();
+        update_config_runtime(&state, |current| {
+            let mut next = current.clone();
+            let project = Arc::make_mut(&mut next.active_config)
+                .config
+                .projects
+                .get_mut("default")
+                .expect("default project");
+            let webhook = project
+                .triggers
+                .get_mut("source-trigger")
+                .and_then(|trigger| trigger.event.as_mut())
+                .and_then(|event| event.webhook.as_mut())
+                .expect("webhook");
+            webhook.provider = Some("slack".into());
+            webhook.installation_id = Some("T_TEST".into());
+            webhook.reaction_routing = "bindings".into();
+            webhook.outbound_credential = Some(TriggerOutboundCredentialRef {
+                from_ref: "slack-api".into(),
+                key: "BOT_TOKEN".into(),
+            });
+            webhook
+                .actor_roles
+                .insert("actor-1".into(), "operator".into());
+            project.secret_stores.insert(
+                "slack-api".into(),
+                SecretStoreConfig {
+                    data: HashMap::from([("BOT_TOKEN".into(), "xoxb-never-persist".into())]),
+                },
+            );
+            project.source_task_templates.insert(
+                "docs-template".into(),
+                SourceTaskTemplateConfig {
+                    skill: SourceTaskTemplateSkillConfig {
+                        name: "docs".into(),
+                        invocation: "$docs".into(),
+                        args: vec![],
+                    },
+                    action: SourceTaskTemplateActionConfig {
+                        workflow: "basic".into(),
+                        workspace: "default".into(),
+                        start: false,
+                        initial_vars: Default::default(),
+                    },
+                    goal_template: "{skill_invocation} {source_message_url}".into(),
+                    allowed_variables: vec!["skill_invocation".into(), "source_message_url".into()],
+                },
+            );
+            project.source_task_bindings.insert(
+                "docs".into(),
+                SourceTaskBindingConfig {
+                    trigger_ref: "source-trigger".into(),
+                    match_rule: SourceTaskBindingMatchConfig {
+                        event_kind: "reaction_added".into(),
+                        reaction: "agent_docs".into(),
+                        target_kind: "message".into(),
+                        channels: vec!["conversation-1".into()],
+                        all_channels: false,
+                    },
+                    template_ref: "docs-template".into(),
+                    allowed_actor_roles: vec!["operator".into()],
+                    suspend: false,
+                },
+            );
+            (next, ())
+        });
+        let repository = AsyncSourceRepository::new(state.async_database.clone());
+        let mut first_input = reaction_event("reaction-delivery-1", "message");
+        first_input.event.provider = "slack".into();
+        first_input.event.installation_id = "T_TEST".into();
+        let mut second_input = first_input.clone();
+        second_input.event.external_event_id = "reaction-delivery-2".into();
+        second_input.payload_hash = "hash-reaction-delivery-2".into();
+        let first = repository
+            .ingest(first_input)
+            .await
+            .expect("first reaction");
+        let second = repository
+            .ingest(second_input)
+            .await
+            .expect("second reaction");
+
+        reconcile_source_once(&state)
+            .await
+            .expect("route reactions");
+        crate::slack_api::set_test_api_base(None);
+
+        let first = repository
+            .get(&first.event.id)
+            .await
+            .expect("first read")
+            .expect("first event");
+        let second = repository
+            .get(&second.event.id)
+            .await
+            .expect("second read")
+            .expect("second event");
+        assert_eq!(first.routing_state, "routed");
+        assert_eq!(first.routed_task_id, second.routed_task_id);
+        let task_id = first.routed_task_id.expect("automation task");
+        let (tasks, routes, automation_bindings, audits, goal, leaked) = state
+            .async_database
+            .reader()
+            .call(move |conn| {
+                Ok((
+                    conn.query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get::<_, i64>(0))?,
+                    conn.query_row("SELECT COUNT(*) FROM source_automation_routes", [], |row| row.get::<_, i64>(0))?,
+                    conn.query_row("SELECT COUNT(*) FROM source_bindings WHERE binding_type='automation'", [], |row| row.get::<_, i64>(0))?,
+                    conn.query_row("SELECT COUNT(*) FROM control_action_audit WHERE action='source.automation.create_task' AND status='succeeded'", [], |row| row.get::<_, i64>(0))?,
+                    conn.query_row("SELECT goal FROM tasks WHERE id=?1", [&task_id], |row| row.get::<_, String>(0))?,
+                    conn.query_row("SELECT COUNT(*) FROM source_automation_routes WHERE binding_snapshot_json LIKE '%xoxb-never-persist%' OR template_snapshot_json LIKE '%xoxb-never-persist%' OR permalink LIKE '%xoxb-never-persist%'", [], |row| row.get::<_, i64>(0))?,
+                ))
+            })
+            .await
+            .expect("automation evidence");
+        assert_eq!(
+            (tasks, routes, automation_bindings, audits, leaked),
+            (1, 1, 1, 1, 0)
+        );
+        assert!(goal.contains("$docs"));
+        assert!(goal.contains("https://acme.slack.com/archives/conversation-1/"));
     }
 
     #[tokio::test]

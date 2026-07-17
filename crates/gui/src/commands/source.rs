@@ -24,6 +24,23 @@ pub struct SourceEvent {
     pub routing_attempts: i64,
     pub routed_task_id: Option<String>,
     pub last_error_code: Option<String>,
+    pub automation_route_id: Option<String>,
+    pub automation_status: Option<String>,
+    pub automation_binding_name: Option<String>,
+    pub automation_template_name: Option<String>,
+    pub automation_template_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceAutomationRoute {
+    pub id: String,
+    pub source_event_id: String,
+    pub reaction: String,
+    pub binding_name: String,
+    pub template_name: String,
+    pub status: String,
+    pub task_id: Option<String>,
+    pub permalink: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -77,6 +94,11 @@ fn event_from_proto(value: orchestrator_proto::SourceEvent) -> SourceEvent {
         routing_attempts: value.routing_attempts,
         routed_task_id: value.routed_task_id,
         last_error_code: value.last_error_code,
+        automation_route_id: value.automation_route_id,
+        automation_status: value.automation_status,
+        automation_binding_name: value.automation_binding_name,
+        automation_template_name: value.automation_template_name,
+        automation_template_hash: value.automation_template_hash,
     }
 }
 
@@ -180,6 +202,33 @@ pub async fn source_binding_list(
                 .into_iter()
                 .map(binding_from_proto)
                 .collect()
+        })
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_automation_route_get(
+    state: State<'_, Arc<AppState>>,
+    source_event_id: String,
+) -> Result<SourceAutomationRoute, String> {
+    let mut client = state.client().await?;
+    client
+        .source_automation_route_get(orchestrator_proto::SourceAutomationRouteGetRequest {
+            source_event_id,
+        })
+        .await
+        .map(|response| {
+            let value = response.into_inner();
+            SourceAutomationRoute {
+                id: value.id,
+                source_event_id: value.source_event_id,
+                reaction: value.reaction,
+                binding_name: value.binding_name,
+                template_name: value.template_name,
+                status: value.status,
+                task_id: value.task_id,
+                permalink: value.permalink,
+            }
         })
         .map_err(|error| crate::errors::humanize_grpc_error(&error))
 }

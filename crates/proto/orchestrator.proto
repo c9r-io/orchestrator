@@ -41,6 +41,7 @@ service OrchestratorService {
   // Provider-neutral external source events and process bindings
   rpc SourceEventList(SourceEventListRequest) returns (SourceEventListResponse);
   rpc SourceEventGet(SourceEventGetRequest) returns (SourceEvent);
+  rpc SourceAutomationRouteGet(SourceAutomationRouteGetRequest) returns (SourceAutomationRoute);
   rpc SourceEventIngest(SourceEventIngestRequest) returns (SourceEventIngestResponse);
   rpc SourceBindingList(SourceBindingListRequest) returns (SourceBindingListResponse);
   rpc SourceBind(SourceBindRequest) returns (SourceBinding);
@@ -514,6 +515,11 @@ message SourceEvent {
   int64 routing_attempts = 15;
   optional string routed_task_id = 16;
   optional string last_error_code = 17;
+  optional string automation_route_id = 18;
+  optional string automation_status = 19;
+  optional string automation_binding_name = 20;
+  optional string automation_template_name = 21;
+  optional string automation_template_hash = 22;
 }
 
 message SourceEventListRequest {
@@ -525,6 +531,27 @@ message SourceEventListRequest {
 
 message SourceEventListResponse { repeated SourceEvent events = 1; }
 message SourceEventGetRequest { string id = 1; }
+
+message SourceAutomationRouteGetRequest { string source_event_id = 1; }
+
+message SourceAutomationRoute {
+  string id = 1;
+  string project_id = 2;
+  string source_event_id = 3;
+  string provider = 4;
+  string reaction = 5;
+  string binding_name = 6;
+  string binding_revision = 7;
+  string template_name = 8;
+  string template_hash = 9;
+  string status = 10;
+  optional string error_code = 11;
+  optional string task_id = 12;
+  optional string permalink = 13;
+  string request_id = 14;
+  string created_at = 15;
+  optional string completed_at = 16;
+}
 
 message SourceEventIngestRequest {
   string project_id = 1;

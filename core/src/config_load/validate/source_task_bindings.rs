@@ -87,6 +87,34 @@ fn validate_one(
             binding.trigger_ref
         );
     }
+    if webhook.reaction_routing == "bindings" {
+        let credential = webhook.outbound_credential.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "SourceTaskBinding '{}/{}' triggerRef '{}' has no outboundCredential",
+                project_id,
+                name,
+                binding.trigger_ref
+            )
+        })?;
+        let store = project.secret_stores.get(&credential.from_ref).ok_or_else(|| {
+            anyhow::anyhow!(
+                "SourceTaskBinding '{}/{}' outbound credential SecretStore '{}' does not exist in project '{}'",
+                project_id,
+                name,
+                credential.from_ref,
+                project_id
+            )
+        })?;
+        if !store.data.contains_key(&credential.key) {
+            bail!(
+                "SourceTaskBinding '{}/{}' outbound credential key '{}' does not exist in SecretStore '{}'",
+                project_id,
+                name,
+                credential.key,
+                credential.from_ref
+            );
+        }
+    }
     if !project
         .source_task_templates
         .contains_key(&binding.template_ref)

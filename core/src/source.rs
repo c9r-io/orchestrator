@@ -219,7 +219,7 @@ pub struct SourceBinding {
     pub conversation_id: Option<String>,
     /// Optional thread/root ID.
     pub thread_id: Option<String>,
-    /// Binding type (`primary`, `related`, or `notification_target`).
+    /// Binding type (`primary`, `related`, `notification_target`, or `automation`).
     pub binding_type: String,
     /// Source event that created the binding.
     pub created_by_event_id: String,
@@ -719,7 +719,7 @@ fn complete_routing(
 fn create_binding(conn: &Connection, input: CreateSourceBinding) -> Result<SourceBinding> {
     if !matches!(
         input.binding_type.as_str(),
-        "primary" | "related" | "notification_target"
+        "primary" | "related" | "notification_target" | "automation"
     ) {
         bail!("unsupported binding_type");
     }

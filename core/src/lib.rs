@@ -135,6 +135,8 @@ pub mod service;
 pub mod session_store;
 /// Provider-neutral external source events, bindings, and routing persistence.
 pub mod source;
+/// Durable idempotency and provenance for source-triggered task automation.
+pub mod source_automation;
 /// Deterministic source reaction binding validation and matching.
 pub mod source_task_binding;
 /// Governed source-to-task template validation and rendering.

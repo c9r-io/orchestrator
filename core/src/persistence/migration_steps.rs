@@ -1352,3 +1352,74 @@ pub(crate) fn m0032_process_console_metrics(conn: &Connection) -> Result<()> {
     .context("m0032 backfill attention project")?;
     Ok(())
 }
+
+pub(crate) fn m0033_source_automation_routes(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS source_automation_routes (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            automation_key TEXT NOT NULL UNIQUE,
+            source_event_id TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            installation_id TEXT NOT NULL,
+            message_identity TEXT NOT NULL,
+            channel_id TEXT NOT NULL,
+            message_ts TEXT NOT NULL,
+            reaction TEXT NOT NULL,
+            resolved_role TEXT NOT NULL,
+            binding_name TEXT NOT NULL,
+            binding_revision TEXT NOT NULL,
+            template_name TEXT NOT NULL,
+            template_hash TEXT NOT NULL,
+            binding_snapshot_json TEXT NOT NULL,
+            template_snapshot_json TEXT NOT NULL,
+            credential_store TEXT NOT NULL,
+            credential_key TEXT NOT NULL,
+            permalink_status TEXT NOT NULL DEFAULT 'pending',
+            permalink TEXT,
+            request_id TEXT NOT NULL UNIQUE,
+            deterministic_task_id TEXT NOT NULL UNIQUE,
+            task_id TEXT,
+            status TEXT NOT NULL,
+            error_code TEXT,
+            retry_after TEXT,
+            lease_claimed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            completed_at TEXT,
+            FOREIGN KEY(source_event_id) REFERENCES source_events(id),
+            FOREIGN KEY(task_id) REFERENCES tasks(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_source_automation_routes_event
+            ON source_automation_routes(source_event_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_source_automation_routes_task
+            ON source_automation_routes(task_id) WHERE task_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_source_automation_routes_status
+            ON source_automation_routes(status, lease_claimed_at);
+        "#,
+    )
+    .context("m0033_source_automation_routes")?;
+    ensure_column_exists(
+        conn,
+        "source_events",
+        "automation_route_id",
+        "ALTER TABLE source_events ADD COLUMN automation_route_id TEXT",
+    )?;
+    ensure_column_exists(
+        conn,
+        "source_routing_attempts",
+        "automation_route_id",
+        "ALTER TABLE source_routing_attempts ADD COLUMN automation_route_id TEXT",
+    )?;
+    conn.execute_batch(
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_source_events_automation_route
+            ON source_events(automation_route_id) WHERE automation_route_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_source_routing_attempts_automation_route
+            ON source_routing_attempts(automation_route_id) WHERE automation_route_id IS NOT NULL;
+        "#,
+    )
+    .context("m0033_source_automation_routes indexes")?;
+    Ok(())
+}

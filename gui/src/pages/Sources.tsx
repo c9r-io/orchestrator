@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { SourceEvent } from "../lib/types";
+import type { SourceAutomationRoute, SourceEvent } from "../lib/types";
 import { useRole } from "../hooks/useRole";
 import i18n from "../lib/i18n";
 
@@ -9,6 +9,7 @@ interface Props { onOpenTask: (id: string) => void; }
 export default function Sources({ onOpenTask }: Props) {
   const { canAccess } = useRole();
   const [events, setEvents] = useState<SourceEvent[]>([]);
+  const [routes, setRoutes] = useState<Record<string, SourceAutomationRoute>>({});
   const [routingState, setRoutingState] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -17,17 +18,28 @@ export default function Sources({ onOpenTask }: Props) {
     setLoading(true);
     setError(null);
     try {
-      setEvents(await invoke<SourceEvent[]>("source_event_list", {
+      const nextEvents = await invoke<SourceEvent[]>("source_event_list", {
         project_id: null,
         task_id: null,
         routing_state: routingState || null,
-      }));
+      });
+      setEvents(nextEvents);
+      if (canAccess("operator")) {
+        const routeEntries = await Promise.all(nextEvents
+          .filter((event) => event.automation_route_id)
+          .map(async (event) => [event.id, await invoke<SourceAutomationRoute>(
+            "source_automation_route_get", { source_event_id: event.id },
+          )] as const));
+        setRoutes(Object.fromEntries(routeEntries));
+      } else {
+        setRoutes({});
+      }
     } catch (reason) {
       setError(String(reason));
     } finally {
       setLoading(false);
     }
-  }, [routingState]);
+  }, [canAccess, routingState]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -79,8 +91,20 @@ export default function Sources({ onOpenTask }: Props) {
               </p>
             )}
             {event.last_error_code && <p style={{ color: "var(--danger)" }}>{event.last_error_code}</p>}
+            {event.automation_route_id && (
+              <p style={{ marginTop: 8, color: "var(--text-secondary)", overflowWrap: "anywhere" }}>
+                <span className="badge">{event.automation_status}</span>
+                {event.automation_binding_name && <> · {event.automation_binding_name}</>}
+                {event.automation_template_name && <> → {event.automation_template_name}</>}
+              </p>
+            )}
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
               {event.routed_task_id && <button className="btn btn-ghost" onClick={() => onOpenTask(event.routed_task_id!)}>{i18n.sources.openProcess}</button>}
+              {canAccess("operator") && routes[event.id]?.permalink && (
+                <a className="btn btn-ghost" href={routes[event.id].permalink!} target="_blank" rel="noreferrer">
+                  {i18n.sources.openSlack}
+                </a>
+              )}
               {canAccess("admin") && ["failed", "needs_attention"].includes(event.routing_state) && (
                 <button className="btn btn-secondary" onClick={() => replay(event.id)}>{i18n.sources.replay}</button>
               )}

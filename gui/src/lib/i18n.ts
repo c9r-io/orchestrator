@@ -62,6 +62,7 @@ const zh = {
     allStates: "全部路由状态",
     replay: "重新路由",
     openProcess: "打开进程",
+    openSlack: "打开 Slack 消息",
     taskBindings: "外部来源关联",
     noBindings: "当前进程没有外部来源关联",
   },

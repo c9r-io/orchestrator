@@ -657,6 +657,14 @@ pub struct TriggerWebhookSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secret: Option<WebhookSecretRef>,
 
+    /// Dedicated SecretStore key for outbound provider API calls.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "outboundCredential"
+    )]
+    pub outbound_credential: Option<WebhookOutboundCredentialRef>,
+
     /// Custom HTTP header name for the signature.
     #[serde(
         default,
@@ -716,6 +724,17 @@ pub struct WebhookSecretRef {
     /// Name of the SecretStore.
     #[serde(rename = "fromRef")]
     pub from_ref: String,
+}
+
+/// Reference to one outbound provider credential in a SecretStore.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WebhookOutboundCredentialRef {
+    /// Name of the SecretStore.
+    #[serde(rename = "fromRef")]
+    pub from_ref: String,
+    /// Exact key containing the outbound bearer token.
+    pub key: String,
 }
 
 /// Filter conditions for event-based triggers.

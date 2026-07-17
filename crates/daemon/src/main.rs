@@ -14,6 +14,7 @@ mod fs_watcher;
 mod lifecycle;
 mod protection;
 mod server;
+mod slack_api;
 mod source_router;
 mod uds_security;
 mod webhook;

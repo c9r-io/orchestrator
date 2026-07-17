@@ -1,9 +1,10 @@
 use anyhow::Result;
 use orchestrator_proto::{
-    ActionAuditContext, OrchestratorServiceClient, SourceBindRequest, SourceBinding,
-    SourceBindingListRequest, SourceEvent, SourceEventGetRequest, SourceEventIngestRequest,
-    SourceEventListRequest, SourceReplayRequest, SourceTaskBindingMutationRequest,
-    SourceTaskBindingSimulateRequest, SourceTaskTemplatePreviewRequest,
+    ActionAuditContext, OrchestratorServiceClient, SourceAutomationRouteGetRequest,
+    SourceBindRequest, SourceBinding, SourceBindingListRequest, SourceEvent, SourceEventGetRequest,
+    SourceEventIngestRequest, SourceEventListRequest, SourceReplayRequest,
+    SourceTaskBindingMutationRequest, SourceTaskBindingSimulateRequest,
+    SourceTaskTemplatePreviewRequest,
 };
 use sha2::{Digest, Sha256};
 use tonic::transport::Channel;
@@ -176,6 +177,36 @@ pub(crate) async fn dispatch(
                 .await?
                 .into_inner();
             print_value(event_value(&event), output)?;
+        }
+        SourceCommands::Route {
+            source_event_id,
+            output,
+        } => {
+            let route = client
+                .source_automation_route_get(SourceAutomationRouteGetRequest { source_event_id })
+                .await?
+                .into_inner();
+            print_value(
+                serde_json::json!({
+                    "id": route.id,
+                    "project_id": route.project_id,
+                    "source_event_id": route.source_event_id,
+                    "provider": route.provider,
+                    "reaction": route.reaction,
+                    "binding_name": route.binding_name,
+                    "binding_revision": route.binding_revision,
+                    "template_name": route.template_name,
+                    "template_hash": route.template_hash,
+                    "status": route.status,
+                    "error_code": route.error_code,
+                    "task_id": route.task_id,
+                    "permalink": route.permalink,
+                    "request_id": route.request_id,
+                    "created_at": route.created_at,
+                    "completed_at": route.completed_at,
+                }),
+                output,
+            )?;
         }
         SourceCommands::Ingest {
             project,

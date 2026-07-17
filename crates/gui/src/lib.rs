@@ -63,6 +63,7 @@ pub fn run() {
             commands::attention::attention_execute_action,
             // external sources
             commands::source::source_event_list,
+            commands::source::source_automation_route_get,
             commands::source::source_binding_list,
             commands::source::source_replay,
             // handoff and safe resume
