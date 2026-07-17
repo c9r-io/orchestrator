@@ -166,7 +166,9 @@ The orchestrator manages resources organized hierarchically:
 
 `RuntimePolicy` has two explicit resolution scopes. Process-wide consumers use only the `_system` policy and fall back to safe defaults. Project-scoped consumers resolve the named project, then `_system`, then defaults. Global Session rollout gates (`session_read_enabled` and `session_control_enabled`) never select an ordinary project policy by store iteration order; project-owned redaction and execution behavior continue to use project resolution.
 
-`SourceTaskTemplate` is a project-scoped source-to-task recipe distinct from workflow `StepTemplate`. It stores a trusted Skill descriptor and task action, then a pure core renderer combines them with bounded, explicitly allowlisted source variables. The daemon preview path reads one immutable `ArcSwap` snapshot, applies RuntimePolicy redaction, and performs no task/source mutation. Badge matching and live task creation remain separate routing capabilities.
+`SourceTaskTemplate` is a project-scoped source-to-task recipe distinct from workflow `StepTemplate`. It stores a trusted Skill descriptor and task action, then a pure core renderer combines them with bounded, explicitly allowlisted source variables. The daemon preview path reads one immutable `ArcSwap` snapshot, applies RuntimePolicy redaction, and performs no task/source mutation.
+
+`SourceTaskBinding` is the project-scoped policy boundary between an authenticated Slack Trigger installation and a SourceTaskTemplate. Its pure matcher evaluates exact normalized reaction, message target, explicit channel scope, and a role derived from Trigger `actorRoles`. Apply/resume rejects overlapping enabled rules; runtime ambiguity fails closed. Simulation and live reactions use the same matcher from one immutable config snapshot. `reactionRouting` defaults to `disabled`, and even an enabled match remains non-mutating until the FR-110 permalink/render/task-creation slice.
 
 #### Execution Model
 

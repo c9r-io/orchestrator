@@ -364,6 +364,53 @@ orchestrator source template preview docs-from-slack \
 
 Normal deletion is blocked while a `SourceTaskBinding` references the template. Administrators can explicitly remove the template and references atomically with `--force --force-references`; that operation is audited.
 
+## 12. SourceTaskBinding
+
+SourceTaskBinding is a project-scoped exact policy that selects one SourceTaskTemplate from authenticated Slack reaction evidence. It references a same-project Slack webhook Trigger, which owns installation identity and the external-actor-to-role mapping.
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskBinding
+metadata:
+  name: slack-code-analysis
+spec:
+  triggerRef: slack-main
+  match:
+    eventKind: reaction_added
+    reaction: agent-analyze
+    targetKind: message
+    channels: [C01234567]
+  templateRef: analyze-from-slack
+  allowedActorRoles: [operator, admin]
+  suspend: false
+```
+
+Choose exactly one channel policy: a non-empty `channels` list, or explicit `allChannels: true`. Roles are required and are resolved from Trigger `actorRoles`; source requests cannot supply a role. Enabled overlapping rules are rejected instead of ranked.
+
+Trigger reaction routing is opt-in:
+
+```yaml
+event:
+  source: webhook
+  webhook:
+    provider: slack
+    installationId: T012345
+    actorRoles: {U012345: operator}
+    reactionRouting: bindings
+```
+
+`reactionRouting` defaults to `disabled`. Validate a rollout without side effects:
+
+```bash
+orchestrator source binding simulate --project my-project \
+  --provider slack --installation T012345 --reaction agent-analyze \
+  --channel C01234567 --actor U012345 -o json
+orchestrator source binding suspend slack-code-analysis --project my-project
+orchestrator source binding resume slack-code-analysis --project my-project
+```
+
+Simulation and FR-109 live matching do not call Slack, render a template, or create a task. Normal deletion of a referenced Trigger or SourceTaskTemplate is blocked; Admin `--force --force-references` removes the references atomically and records audit evidence.
+
 ## Resource Lifecycle
 
 ### Apply (Create / Update)

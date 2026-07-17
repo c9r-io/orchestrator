@@ -18,6 +18,8 @@ Race conditions commonly occur in "check then act" flows:
 
 Project-specific FR-102 overlay: race two different writer clients for one agent session and require exactly one lease owner; then retry identical input with one idempotency key and require one FIFO write plus the original `accepted_bytes`. A later owner must receive a greater fencing token, and the stale token must perform neither input nor detach. Run `docs/qa/orchestrator/149-agent-session-control-plane-hardening.md`.
 
+FR-109 overlay: binding apply/resume validates a cloned complete project candidate and publishes one immutable `ArcSwap` snapshot. Concurrent simulation/live routing must observe either the complete old or complete new binding set. Apply-time overlap is rejected, and runtime still returns `binding_ambiguous` without selecting a template if invalid legacy/raced state appears.
+
 ---
 
 ## Scenario 1: Concurrent Use Of A One-Time Token (If Applicable)

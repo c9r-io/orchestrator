@@ -170,7 +170,7 @@ Verify each render observes exactly one immutable active-config version and cano
 ### Preconditions
 
 - Use the valid template from Scenario 4.
-- Apply the script's deterministic `SourceTaskBinding` custom resource in `qa-source-template`; it references `slack-docs` through `spec.templateRef`.
+- Apply the script's deterministic native `SourceTaskBinding` and mock Slack Trigger in `qa-source-template`; the binding references `slack-docs` through `spec.templateRef`.
 - Start the isolated daemon with an Admin test policy. Do not use a shared daemon.
 
 ### Goal

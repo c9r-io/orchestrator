@@ -1,0 +1,94 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: source-binding-fixture
+spec:
+  root_path: "."
+  qa_targets: [docs/qa/orchestrator]
+  ticket_dir: docs/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: source-binding-fixture
+spec:
+  capabilities: [source_binding_fixture]
+  command: >-
+    echo '{"confidence":1.0,"quality_score":1.0,"artifacts":[]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: source-binding-fixture
+spec:
+  steps:
+    - id: inspect_source
+      type: source_binding_fixture
+      required_capability: source_binding_fixture
+      enabled: true
+      behavior:
+        side_effect_class: none
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskTemplate
+metadata:
+  name: analyze-from-slack
+spec:
+  skill:
+    name: code-analysis
+    invocation: "$code-analysis"
+    args: ["--concise"]
+  action:
+    workflow: source-binding-fixture
+    workspace: source-binding-fixture
+    start: false
+  goalTemplate: "{skill_invocation}: analyze {source_message_url}"
+  allowedVariables: [skill_invocation, source_message_url]
+---
+apiVersion: orchestrator.dev/v2
+kind: SecretStore
+metadata:
+  name: slack-binding-secret
+spec:
+  data:
+    signing: qa-source-binding-signing-secret
+---
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: slack-main
+spec:
+  event:
+    source: webhook
+    webhook:
+      provider: slack
+      installationId: T_QA_BINDING
+      actorRoles:
+        U_OPERATOR: operator
+        U_ADMIN: admin
+        U_READER: read_only
+      reactionRouting: bindings
+      secret:
+        fromRef: slack-binding-secret
+  action:
+    workflow: source-binding-fixture
+    workspace: source-binding-fixture
+    start: false
+  concurrencyPolicy: Allow
+---
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskBinding
+metadata:
+  name: slack-code-analysis
+spec:
+  triggerRef: slack-main
+  match:
+    eventKind: reaction_added
+    reaction: agent-analyze
+    targetKind: message
+    channels: [C_QA_ALLOWED]
+  templateRef: analyze-from-slack
+  allowedActorRoles: [operator, admin]
+  suspend: false

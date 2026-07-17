@@ -9,6 +9,7 @@
 - [RuntimePolicy](#runtimepolicy)
 - [Trigger](#trigger)
 - [SourceTaskTemplate](#sourcetasktemplate)
+- [SourceTaskBinding](#sourcetaskbinding)
 - [Pipeline Variables](#pipeline-variables)
 - [Step Fields](#step-fields)
 - [Known Step IDs](#known-step-ids)
@@ -264,6 +265,39 @@ orchestrator source template preview docs-from-slack \
 ```
 
 Preview is read-only and returns a deterministic content hash/revision plus a warning when the sample URL cannot be verified against an installation. Public fields use RuntimePolicy redaction.
+
+## SourceTaskBinding
+
+A project-scoped exact policy mapping an authenticated Slack Trigger installation to one SourceTaskTemplate. Channels and roles are explicit secure restrictions; use `allChannels: true` only as a deliberate alternative to `channels`. Roles are derived from Trigger `actorRoles`, never supplied by the source request.
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskBinding
+metadata:
+  name: slack-code-analysis
+spec:
+  triggerRef: slack-main
+  match:
+    eventKind: reaction_added
+    reaction: agent-analyze
+    targetKind: message
+    channels: [C01234567]
+  templateRef: analyze-from-slack
+  allowedActorRoles: [operator, admin]
+  suspend: false
+```
+
+The referenced Trigger must be a same-project Slack webhook with `installationId`; the template must also be in the same project. Two enabled rules that can match the same reaction/channel/role are rejected rather than ranked. Trigger `reactionRouting` defaults to `disabled`; explicitly set it to `bindings` only after simulation.
+
+```bash
+orchestrator source binding simulate --project my-project \
+  --provider slack --installation T012345 --reaction agent-analyze \
+  --channel C01234567 --actor U012345 -o json
+orchestrator source binding suspend slack-code-analysis --project my-project
+orchestrator source binding resume slack-code-analysis --project my-project
+```
+
+Simulation and FR-109 live matching do not contact Slack, render a template, or create a task.
 
 ## Pipeline Variables
 

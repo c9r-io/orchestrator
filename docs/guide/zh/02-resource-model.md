@@ -364,6 +364,53 @@ orchestrator source template preview docs-from-slack \
 
 当 `SourceTaskBinding` 仍引用模板时，普通删除会被拒绝。管理员可以显式使用 `--force --force-references` 原子删除模板及引用；该操作会进入审计记录。
 
+## 12. SourceTaskBinding（来源任务绑定）
+
+SourceTaskBinding 是项目级的精确匹配策略：它根据经过认证的 Slack reaction 证据选择唯一的 SourceTaskTemplate。Binding 引用同项目的 Slack webhook Trigger；installation identity 和外部 actor 到可信角色的映射都由 Trigger 管理。
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskBinding
+metadata:
+  name: slack-code-analysis
+spec:
+  triggerRef: slack-main
+  match:
+    eventKind: reaction_added
+    reaction: agent-analyze
+    targetKind: message
+    channels: [C01234567]
+  templateRef: analyze-from-slack
+  allowedActorRoles: [operator, admin]
+  suspend: false
+```
+
+频道策略必须二选一：非空 `channels` 列表，或显式设置 `allChannels: true`。角色列表不能为空，并且只能从 Trigger `actorRoles` 解析；来源请求不能自行声明角色。两个可能匹配同一事件的 enabled 规则会在 apply/resume 时被拒绝，不使用隐式优先级。
+
+Trigger 的 reaction 路由需要显式开启：
+
+```yaml
+event:
+  source: webhook
+  webhook:
+    provider: slack
+    installationId: T012345
+    actorRoles: {U012345: operator}
+    reactionRouting: bindings
+```
+
+`reactionRouting` 默认是 `disabled`。可以先进行无副作用验证：
+
+```bash
+orchestrator source binding simulate --project my-project \
+  --provider slack --installation T012345 --reaction agent-analyze \
+  --channel C01234567 --actor U012345 -o json
+orchestrator source binding suspend slack-code-analysis --project my-project
+orchestrator source binding resume slack-code-analysis --project my-project
+```
+
+FR-109 的模拟和实时匹配不会调用 Slack、渲染模板或创建任务。普通删除仍被引用的 Trigger 或 SourceTaskTemplate 会被拒绝；管理员使用 `--force --force-references` 可以原子清理引用并留下审计证据。
+
 ## 资源生命周期
 
 ### 应用（创建/更新）

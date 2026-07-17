@@ -6,6 +6,8 @@
 **Risk**: Critical  
 **OWASP ASVS 5.0**: V8 Authorization
 
+Project-specific FR-109 overlay: `SourceTaskBinding` read/simulate uses read access; apply/delete/suspend/resume requires Operator authority and canonical audit. Admin authority plus explicit `--force --force-references` is required to atomically remove bindings that reference a Trigger or SourceTaskTemplate. Matching never trusts a request role: the external actor ID is mapped through the same-project Trigger `actorRoles`, and unknown actors inherit no privilege. See `docs/qa/orchestrator/157-source-task-binding-badge-matching.md`.
+
 ---
 
 ## Background

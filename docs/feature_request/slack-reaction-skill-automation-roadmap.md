@@ -64,7 +64,7 @@
 
 ## 5. Proposed Product Model
 
-下面的 YAML 仅表达目标模型；字段名由 FR-108/FR-109 的设计阶段最终确定。
+下面的 YAML 表达由 FR-108/FR-109 已确定的模板与 binding 配置模型。
 
 ```yaml
 apiVersion: orchestrator.dev/v2
@@ -154,10 +154,12 @@ FR-107 and FR-108 are closed, so Phase A is complete. Neither slice introduces a
 
 | FR | Deliverable | Depends on | Exit gate |
 |---|---|---|---|
-| [FR-109](FR-109-source-task-binding-badge-matching.md) | SourceTaskBinding resource, badge matching, conflict detection and policy fields | FR-107, FR-108 | Exactly one binding is selected or routing fails closed with a stable reason |
+| FR-109 (Closed): [design](../design_doc/orchestrator/120-source-task-binding-badge-matching.md), [QA](../qa/orchestrator/157-source-task-binding-badge-matching.md) | SourceTaskBinding resource, badge matching, conflict detection and policy fields | FR-107, FR-108 | Exactly one binding is selected or routing fails closed with a stable reason |
 | [FR-110](FR-110-slack-permalink-canonical-task-routing.md) | Slack permalink resolution, safe rendering and canonical task creation | FR-107 through FR-109, FR-101 audit envelope | One signed badge event creates one task with correct Skill, URL and provenance |
 
 FR-110 is the MVP boundary. It must be demoable with an isolated daemon and fake Slack API before any management UI is required.
+
+FR-109 is closed, so the binding and deterministic matching foundation of Phase B is complete; permalink resolution and canonical task mutation remain exclusively in FR-110.
 
 ### Phase C: Daily operations
 

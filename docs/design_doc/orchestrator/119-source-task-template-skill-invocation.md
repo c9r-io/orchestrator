@@ -29,7 +29,7 @@ Trigger actions select a workflow and workspace, while StepTemplate controls an 
 ## Scope
 
 - In scope: resource parsing/projection/persistence, project cross-reference validation, pure rendering, public redaction, hot reload, restart persistence, CLI preview, and reference-aware deletion.
-- Out of scope: `SourceTaskBinding` as a native resource, live source routing, task idempotency, provider credentials, and GUI flows.
+- Out of scope for FR-108: native binding matching, live source routing, task idempotency, provider credentials, and GUI flows. FR-109 subsequently adds the native binding matcher without changing template rendering.
 
 ## Resource Interface
 
@@ -89,7 +89,7 @@ The revision is the lowercase SHA-256 hash of canonical serialized content. `all
 
 No schema migration is required. `SourceTaskTemplate` uses the existing unified `resources` table, config version persistence, project config projection, and manifest export path. Active config reload continues through `ArcSwap`; rendering holds one `Arc` snapshot for the full resolution/render operation, so an update yields either the old or new revision, never mixed fields.
 
-Future `SourceTaskBinding` custom resources are recognized only for delete-reference protection. FR-109 owns their native schema and matching behavior.
+Native `SourceTaskBinding` resources now participate in delete-reference protection. FR-109 owns their schema, exact matching, conflict validation, revision, and lifecycle operations.
 
 ## Authorization And Deletion
 
@@ -101,7 +101,7 @@ Normal deletion fails with `FailedPrecondition` when a same-project `SourceTaskB
 2. Rendering is a pure core function used by preview and reserved for future live routing, avoiding client/runtime drift.
 3. Skill invocation remains data in the task goal/context boundary; the source router never interpolates it into a shell command.
 4. Full content hashes were chosen over a local counter so revisions survive export/import and restart and can be independently verified.
-5. Reference scanning supports a future-shaped custom `SourceTaskBinding` but does not prematurely implement FR-109 matching.
+5. Reference scanning was the compatibility seam later replaced by FR-109's native project map while retaining legacy custom-resource cleanup compatibility.
 
 ## Risks And Mitigations
 

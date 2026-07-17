@@ -17,6 +17,8 @@ Common attacks against business workflows:
 
 Project-specific overlay: FR-097 resume execution must reject a missing prerequisite plan, expired/stale `expected_state_version`, changed boundary, reused idempotency key with different input, and non-idempotent replay without both project policy and elevated operator confirmation. Planning must not mutate tasks, Attention state, scheduler queues, or the workspace. See `docs/qa/orchestrator/144-handoff-and-safe-resume.md`.
 
+FR-109 source-routing overlay: exact reaction, target, channel, and Trigger-derived role must produce exactly one enabled `SourceTaskBinding`. Zero matches are explainable no-ops; multiple matches fail closed. Omitted channel/role restrictions, cross-project references, and overlapping rules are rejected before active config publication. Trigger `reactionRouting` defaults to `disabled`, and this slice never creates a task. See `docs/qa/orchestrator/157-source-task-binding-badge-matching.md`.
+
 ---
 
 ## Scenario 1: Step Skipping (Bypass Prerequisite Validation)

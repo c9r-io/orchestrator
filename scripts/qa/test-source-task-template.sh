@@ -44,7 +44,7 @@ cleanup() {
 trap cleanup EXIT
 
 export HOME="$QA_HOME"
-export ORCHESTRATORD_DATA_DIR="$QA_ROOT/data"
+export ORCHESTRATORD_DATA_DIR="$QA_ROOT/runtime"
 unset ORCHESTRATOR_SOCKET
 export ORCHESTRATOR_CONTROL_PLANE_CONFIG="$QA_HOME/.orchestrator/control-plane/config.yaml"
 mkdir -p "$QA_ROOT/docs/qa/orchestrator" "$QA_ROOT/docs/ticket"
@@ -72,7 +72,19 @@ stop_daemon() {
   DAEMON_PID=""
 }
 
+wait_for_active_key() {
+  for _ in {1..60}; do
+    if "$ORCH" secret key status -o json 2>/dev/null | jq -e '.active_key != null' >/dev/null; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  echo "isolated daemon did not publish an active encryption key" >&2
+  return 1
+}
+
 start_daemon
+wait_for_active_key
 PROJECT="qa-source-template"
 FIXTURE="$REPO_ROOT/fixtures/manifests/bundles/source-task-template-fixture.yaml"
 "$ORCH" apply --project "$PROJECT" -f "$FIXTURE" >/dev/null
@@ -93,7 +105,7 @@ else
   fail "SourceTaskTemplate resource lifecycle projection differs"
 fi
 
-DB="$QA_ROOT/data/agent_orchestrator.db"
+DB="$QA_ROOT/runtime/agent_orchestrator.db"
 TASKS_BEFORE="$(sqlite3 "$DB" "SELECT COUNT(*) FROM tasks WHERE project_id='$PROJECT';")"
 EVENTS_BEFORE="$(sqlite3 "$DB" "SELECT COUNT(*) FROM source_events WHERE project_id='$PROJECT';")"
 BINDINGS_BEFORE="$(sqlite3 "$DB" "SELECT COUNT(*) FROM source_bindings WHERE project_id='$PROJECT';")"
@@ -205,31 +217,43 @@ fi
 BINDING_MANIFEST="$QA_ROOT/binding.yaml"
 cat > "$BINDING_MANIFEST" <<'EOF'
 apiVersion: orchestrator.dev/v2
-kind: CustomResourceDefinition
+kind: SecretStore
 metadata:
-  name: sourcetaskbindings.qa.orchestrator.dev
+  name: slack-template-reference-secret
 spec:
-  kind: SourceTaskBinding
-  plural: sourcetaskbindings
-  short_names: [stb]
-  group: qa.orchestrator.dev
-  versions:
-    - name: v1
-      served: true
-      schema:
-        type: object
-        required: [templateRef]
-        properties:
-          templateRef: {type: string}
-          suspend: {type: boolean}
+  data:
+    signing: qa-template-reference-signing-secret
 ---
-apiVersion: qa.orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: slack-template-reference
+spec:
+  event:
+    source: webhook
+    webhook:
+      provider: slack
+      installationId: qa-template-reference
+      actorRoles: {qa-operator: operator}
+      secret:
+        fromRef: slack-template-reference-secret
+  action:
+    workflow: source-template-fixture
+    workspace: source-template-fixture
+---
+apiVersion: orchestrator.dev/v2
 kind: SourceTaskBinding
 metadata:
   name: slack-docs-binding
-  project: qa-source-template
 spec:
+  triggerRef: slack-template-reference
+  match:
+    eventKind: reaction_added
+    reaction: agent-docs
+    targetKind: message
+    channels: [C_TEMPLATE_QA]
   templateRef: slack-docs
+  allowedActorRoles: [operator]
   suspend: false
 EOF
 "$ORCH" apply --project "$PROJECT" -f "$BINDING_MANIFEST" >/dev/null

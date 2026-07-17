@@ -15,7 +15,7 @@ self_referential_safe: true
 
 FR-107 records Slack `reaction_added` deliveries without selecting a badge binding, resolving a permalink, rendering a Skill, or creating a task. The deterministic QA script starts its own daemon, ports, HOME, database, and mock agent configuration:
 
-FR-108 adds a standalone, administrator-invoked SourceTaskTemplate preview, but it does not change this routing gate: receiving or replaying a reaction still cannot select a template or create a task. Template preview compatibility is owned by `docs/qa/orchestrator/156-source-task-template-skill-invocation.md`.
+FR-108 adds a standalone SourceTaskTemplate preview. FR-109 adds optional exact binding selection behind Trigger `reactionRouting: bindings`; the default remains `disabled`, preserving this document's `reaction_routing_not_enabled` result. Even an FR-109 match creates no task and ends at `reaction_binding_matched_task_routing_not_enabled`; see `docs/qa/orchestrator/157-source-task-binding-badge-matching.md`.
 
 ```bash
 cargo build -p orchestratord -p orchestrator-cli
