@@ -20,6 +20,8 @@ Project-specific FR-102 overlay: race two different writer clients for one agent
 
 FR-109 overlay: binding apply/resume validates a cloned complete project candidate and publishes one immutable `ArcSwap` snapshot. Concurrent simulation/live routing must observe either the complete old or complete new binding set. Apply-time overlap is rejected, and runtime still returns `binding_ambiguous` without selecting a template if invalid legacy/raced state appears.
 
+FR-111 overlay: route claim, expired-attempt closure, retry-budget increment, lease fencing, attempt creation, and change append are one transaction. Race multiple workers and require one active route lease, at most one claimed route per installation, stale-token rejection, and a strictly newer token after expiry. Race replay/ignore with the same and different idempotency/version inputs; only one audited transition may win, while the canonical automation key, request fence, and deterministic task ID prevent duplicate task creation across a crash in `creating`. See `docs/qa/orchestrator/159-source-automation-reliability-operations.md` Scenarios 1 and 2.
+
 ---
 
 ## Scenario 1: Concurrent Use Of A One-Time Token (If Applicable)

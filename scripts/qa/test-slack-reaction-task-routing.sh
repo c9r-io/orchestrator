@@ -230,13 +230,13 @@ PERMALINK="https://qa-workspace.slack.com/archives/C_QA_ROUTING/p${MESSAGE_TS//.
 if jq -e --arg task "$TASK_ID" '
     .routing_state == "routed" and
     .routed_task_id == $task and
-    .automation_status == "completed" and
+    .automation_status == "routed" and
     .automation_binding_name == "slack-implement" and
     .automation_template_name == "implement-from-slack" and
     (.automation_template_hash | test("^[0-9a-f]{64}$"))
   ' "$QA_ROOT/source-get.json" >/dev/null &&
   jq -e --arg task "$TASK_ID" --arg permalink "$PERMALINK" '
-    .status == "completed" and .task_id == $task and .permalink == $permalink and
+    .status == "routed" and .task_id == $task and .permalink == $permalink and
     .binding_name == "slack-implement" and .template_name == "implement-from-slack" and
     (.binding_revision | test("^[0-9a-f]{64}$")) and
     (.request_id | length > 0)
@@ -250,7 +250,7 @@ fi
 
 ROUTE_ID="$(jq -r '.id' "$QA_ROOT/route.json")"
 REQUEST_ID="$(jq -r '.request_id' "$QA_ROOT/route.json")"
-if [[ "$(sqlite3 "$DB" "SELECT COUNT(*) FROM source_automation_routes WHERE id='$ROUTE_ID' AND task_id='$TASK_ID' AND request_id='$REQUEST_ID' AND status='completed';")" -eq 1 ]] &&
+if [[ "$(sqlite3 "$DB" "SELECT COUNT(*) FROM source_automation_routes WHERE id='$ROUTE_ID' AND task_id='$TASK_ID' AND request_id='$REQUEST_ID' AND status='routed';")" -eq 1 ]] &&
   [[ "$(sqlite3 "$DB" "SELECT COUNT(*) FROM source_routing_attempts WHERE source_event_id='$SOURCE_ID' AND automation_route_id='$ROUTE_ID' AND task_id='$TASK_ID';")" -eq 1 ]] &&
   [[ "$(sqlite3 "$DB" "SELECT COUNT(*) FROM source_bindings WHERE task_id='$TASK_ID' AND binding_type='automation';")" -eq 1 ]] &&
   [[ "$(sqlite3 "$DB" "SELECT COUNT(*) FROM control_action_audit WHERE request_id='$REQUEST_ID' AND action='source.automation.create_task' AND status='succeeded' AND result_id='$TASK_ID';")" -eq 1 ]] &&

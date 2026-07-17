@@ -59,7 +59,7 @@ The debug-only `ORCHESTRATOR_SLACK_API_BASE_URL` points to the loopback fixture.
 ### Expected
 
 - The fake API is contacted only after durable acknowledgement.
-- The source safe summary names `slack-implement`, `implement-from-slack`, its hash, and completed state without exposing a URL.
+- The source safe summary names `slack-implement`, `implement-from-slack`, its hash, and `routed` state without exposing a URL.
 - The protected route returns a validated `https://*.slack.com/archives/C_QA_ROUTING/...` permalink.
 - Exactly one task is `created`; its goal is `$docs: inspect <permalink>` and contains no message body or token.
 

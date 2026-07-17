@@ -159,14 +159,16 @@ FR-107 and FR-108 are closed, so Phase A is complete. Neither slice introduces a
 
 FR-110 is closed and the MVP boundary is demonstrable with an isolated daemon and fake Slack API before any management UI is required.
 
-FR-109 and FR-110 are closed, so Phase B now provides deterministic binding, permalink resolution, canonical task mutation, provenance, and role-aware deep links. Daily retry/Attention operations remain in FR-111.
+FR-109 and FR-110 are closed, so Phase B provides deterministic binding, permalink resolution, canonical task mutation, provenance, and role-aware deep links. FR-111 subsequently closed the daily retry and Attention operations gap.
 
 ### Phase C: Daily operations
 
 | FR | Deliverable | Depends on | Exit gate |
 |---|---|---|---|
-| [FR-111](FR-111-source-automation-reliability-policy-operations.md) | Retry/rate-limit/restart behavior, route simulation, CLI observability and Attention policy | FR-110 | Operator can explain and safely retry every non-terminal route state |
+| FR-111 (Closed): [design](../design_doc/orchestrator/122-source-automation-reliability-operations.md), [QA](../qa/orchestrator/159-source-automation-reliability-operations.md) | Retry/rate-limit/restart behavior, route simulation, CLI observability and Attention policy | FR-110 | Operator can explain and safely retry every non-terminal route state |
 | [FR-112](FR-112-process-console-source-automation-ui.md) | Template/binding management UI and recent-route inspection | FR-109 through FR-111, Process Console v1 | Operator can create, preview, bind, suspend and diagnose automation without editing files |
+
+FR-111 is closed, so the Operations beta is complete. Phase C now depends only on FR-112 for the management UI.
 
 ### Phase D: Release closure
 

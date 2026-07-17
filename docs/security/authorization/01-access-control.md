@@ -10,6 +10,8 @@ Project-specific FR-109 overlay: `SourceTaskBinding` read/simulate uses read acc
 
 FR-110 overlay: `SourceEventList/Get` may expose route status, binding/template identity, and hashes to `read_only+`, but never the Slack permalink. `SourceAutomationRouteGet` requires `operator+` and is the only source-automation read that returns the protected permalink. Sources/timeline UI must omit the route fetch and link entirely for read-only users; daemon RBAC remains authoritative. The outbound Slack actor role is derived from Trigger `actorRoles`, not the UI/control-plane caller. See `docs/qa/orchestrator/158-slack-permalink-canonical-task-routing.md` Scenario 4.
 
+FR-111 overlay: `SourceAutomationList/Get/Watch/Simulate/StatusGet` require `read_only+` and expose safe operational projections only. `SourceAutomationReplay/Ignore`, binding suspend/resume, and Trigger suspend/resume require `operator+` plus canonical audit context; replay/ignore additionally require a reason, positive expected route version, and idempotency key. Current-config adoption must re-authorize the original external actor and same stable binding. Generic admin `SourceReplay` must reject automation-linked events. See `docs/qa/orchestrator/159-source-automation-reliability-operations.md` Scenarios 2-4.
+
 ---
 
 ## Background

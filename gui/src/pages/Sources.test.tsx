@@ -29,7 +29,7 @@ const events: SourceEvent[] = [
     conversation_id: "channel-1", thread_id: "1712345678.000100",
     occurred_at: "2026-07-14T00:03:00Z", received_at: "2026-07-14T00:03:01Z", normalized_json: "{}",
     routing_state: "routed", routing_attempts: 1, routed_task_id: "task-3", last_error_code: null,
-    automation_route_id: "route-3", automation_status: "completed", automation_binding_name: "fix-binding",
+    automation_route_id: "route-3", automation_status: "routed", automation_binding_name: "fix-binding",
     automation_template_name: "fix-template", automation_template_hash: "hash-3" },
 ];
 

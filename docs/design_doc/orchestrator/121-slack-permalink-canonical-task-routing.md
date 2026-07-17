@@ -87,7 +87,7 @@ Before any provider call, the router freezes:
 - credential store/key reference;
 - deterministic request and task IDs.
 
-The unique reservation is the mutation fence. A completed reservation is attached to later delivery rows. A failed route or a lease older than five minutes can be reclaimed with the same frozen snapshots and deterministic IDs. Task insertion itself is idempotent by the requested task ID, closing the ambiguous crash window between insertion and route completion.
+The unique reservation is the mutation fence. A routed reservation is attached to later delivery rows. FR-111 replaces the original coarse reclaim behavior with bounded leases and retries while preserving the same frozen snapshots and deterministic IDs. Task insertion itself is idempotent by the requested task ID, closing the ambiguous crash window between insertion and route completion.
 
 ## Canonical Task And Audit Flow
 
@@ -139,7 +139,7 @@ The Sources page and selected timeline evidence fetch this protected API only fo
 - `source_bindings.binding_type = automation` joins the task to Slack message coordinates.
 - `source_automation_routed` provides a semantic timeline event containing reaction, binding/template IDs and hashes, route/request IDs, and status—never permalink or token.
 
-FR-111 will build richer operational retry and Attention semantics on this durable state.
+FR-111 added bounded operational retry, lease recovery, safe replay, and Attention semantics on this durable state; see `122-source-automation-reliability-operations.md`.
 
 ## Operations And Rollback
 

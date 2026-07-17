@@ -280,6 +280,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/156-source-task-template-skill-invocation.md` | 5 | FR-108 native template lifecycle, safe deterministic preview, zero mutation, restart stability, and governed deletion |
 | orchestrator | `docs/qa/orchestrator/157-source-task-binding-badge-matching.md` | 5 | FR-109 native binding lifecycle, exact trusted matching, conflict rollback, audited hot mutation, and reference-safe deletion |
 | orchestrator | `docs/qa/orchestrator/158-slack-permalink-canonical-task-routing.md` | 5 | FR-110 signed badge to validated permalink and one canonical task, durable provenance, replay/restart convergence, RBAC, and UI deep links |
+| orchestrator | `docs/qa/orchestrator/159-source-automation-reliability-operations.md` | 5 | FR-111 bounded route leases/retries, Attention recovery, safe operations, suspension, metrics, retention, and compatibility |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
