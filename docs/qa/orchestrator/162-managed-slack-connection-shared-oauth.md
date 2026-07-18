@@ -177,6 +177,6 @@ Open the normal primary navigation path `Sources → Connections`. Connections i
 |---|---|---|---|---|---|
 | 1 | Catalog, OAuth intent, connection, and default Trigger | PARTIAL | 2026-07-18 | Codex | Gateway/SourceConnection focused tests pass; live consent remains |
 | 2 | Multi-workspace isolation, signed delivery, and recovery | PARTIAL | 2026-07-18 | Codex | Gateway owner/delivery/dedupe tests pass; controlled vertical remains |
-| 3 | Disconnect, transfer, migration, and backup | PARTIAL | 2026-07-18 | Codex | Pairing rotation, target claim/ack, Gateway v1→v2, daemon v34→v35 pass; restore drill remains |
-| 4 | CLI/Tauri/GUI/RBAC/accessibility/privacy | PARTIAL | 2026-07-18 | Codex | 4 component and 2 Playwright Connections tests pass; live Tauri vertical remains |
-| 5 | Repository aggregate and live Slack sandbox | PENDING | — | — | Live portion is intentionally non-CI |
+| 3 | Disconnect, transfer, migration, and backup | PARTIAL | 2026-07-18 | Codex | Pairing rotation, target claim/ack, Gateway v1→v2, daemon v34→v35, previous-daemon rollback and forward recovery pass; backup/restore drill remains |
+| 4 | CLI/Tauri/GUI/RBAC/accessibility/privacy | PARTIAL | 2026-07-18 | Codex | 4 Connections component tests, 2 focused and 21 aggregate Playwright tests, build, RBAC/focus/privacy checks pass; live Connections Tauri vertical remains |
+| 5 | Repository aggregate and live Slack sandbox | PARTIAL | 2026-07-18 | Codex | Clean commit `8cc91385`: 12 FR-114 gates pass in 471s, including 16 FR-113 release gates in 418s; live Slack certification remains |

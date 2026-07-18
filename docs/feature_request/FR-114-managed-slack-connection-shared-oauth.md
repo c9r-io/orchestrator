@@ -193,9 +193,9 @@ ReadOnly 可以查看安全状态；connect、reauthorize、disconnect、transfe
 - [ ] `app_uninstalled`/revocation暂停 connection、dedupe Attention并阻止新 task。
 - [x] transfer失败回滚后恰有一个 owner；disconnect清除 credential并保留执行证据。
 - [x] ReadOnly/Operator/Admin UI和直接 RPC 边界一致，所有 privileged mutation经过 audit/CAS/idempotency。
-- [ ] manual mode 与 FR-107 through FR-113 release aggregate无回归。
+- [x] manual mode 与 FR-107 through FR-113 release aggregate无回归。
 - [ ] Gateway/daemon populated upgrade、compat rollback、backup/restore与capability negotiation通过。
-- [ ] Workspace、Clippy、Gateway、GUI unit/build/Playwright、security、doc lint与OAuth aggregate全绿。
+- [x] Workspace、Clippy、Gateway、GUI unit/build/Playwright、security、doc lint与OAuth aggregate全绿。
 - [ ] 受控 Slack sandbox完成非 CI live certification，证据不含 workspace 私有数据或 credentials。
 
 ## Implementation Evidence
@@ -205,8 +205,9 @@ ReadOnly 可以查看安全状态；connect、reauthorize、disconnect、transfe
 - `4b506e78` makes owner transfer a durable target-side claim/ack protocol; the old daemon clears its pairing and never receives the replacement credential.
 - `74086363` and `1ebb4922` add reviewed Connections transfer/reauthorize/disconnect UI, version fencing, focus-safe dialogs, Playwright coverage, and populated v34→v35 migration evidence.
 - The focused FR-114 gate passes Gateway 22 tests, SourceConnection/migration 8 tests, strict managed Clippy, 4 Connections component tests, 2 Connections Playwright tests, GUI build, fixture privacy, and documentation lint.
+- On 2026-07-18, `./scripts/qa/test-slack-managed-shared-oauth.sh` passed from clean commit `8cc91385`: all 12 FR-114 gates in 471 seconds, including the 16-gate FR-113 release aggregate in 418 seconds. The aggregate covered fresh Rust/Web builds, full workspace tests, strict workspace Clippy, 89 frontend tests with coverage, 21 Playwright tests, documentation lint, FR-107 through FR-113 contract/vertical tests, privacy scanning, and previous-daemon compatibility rollback/forward recovery.
 
-Remaining closure evidence is deliberately not inferred: the clean full repository/FR-113 aggregate and a controlled live Slack sandbox certification must still pass. The live record must contain anonymous digests and state/request evidence only, never credentials or workspace-private data.
+Remaining closure evidence is deliberately not inferred: a controlled live Slack sandbox certification must still pass, together with the live multi-workspace/two-daemon recovery, revocation, and backup/restore observations called out by the unchecked criteria. The live record must contain anonymous digests and state/request evidence only, never credentials or workspace-private data.
 
 ## QA Plan
 
