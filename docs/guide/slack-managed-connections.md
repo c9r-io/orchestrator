@@ -251,3 +251,4 @@ orchestrator source connection watch --project default --after {cursor}
 
 真实 Slack sandbox 认证是独立的非 CI 门禁，证据只能记录匿名 digest、commit、manifest digest、request ID、状态转换和结果，不能记录 workspace、用户、channel/message URL 或任何 credential。
 
+完整执行步骤、止损条件、备份恢复和安全证据模板见 [FR-114 受控 Slack Sandbox 实测 Runbook](slack-managed-sandbox-certification-runbook.md)。

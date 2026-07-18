@@ -16,6 +16,7 @@
 - `docs/design_doc/orchestrator/125-managed-slack-connection-shared-oauth.md`
 - `docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md`
 - `docs/guide/slack-managed-connections.md`
+- `docs/guide/slack-managed-sandbox-certification-runbook.md`
 - `fixtures/manifests/bundles/slack-managed-shared-oauth-fixture.yaml`
 - `scripts/qa/test-slack-managed-shared-oauth.sh`
 - `docs/architecture.md`、相关 security 文档与 `CHANGELOG.md`（更新）

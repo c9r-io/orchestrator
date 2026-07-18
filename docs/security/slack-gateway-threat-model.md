@@ -87,6 +87,7 @@ Not assumed: compromise of Slack, the Gateway host/root account, the Gateway mas
 - Run `docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md` together with authentication, authorization, SSRF, sensitive-data, logging, workflow-abuse, and race-condition security suites.
 - Scan binaries' test logs, daemon/Gateway logs, Tauri payloads, DOM, and browser storage for fixture credentials, OAuth state/code, token prefixes, raw bodies, and private Slack URLs.
 - In a controlled Slack sandbox, certify consent, callback, signed event, reinstall, revoke, disconnect, and rotation without retaining private workspace data.
+- Use `docs/guide/slack-managed-sandbox-certification-runbook.md` for the required two-workspace topology, stop-loss rules, offline recovery, ownership transfer, backup/restore, privacy scan, and evidence allowlist.
 - Before production, validate TLS/proxy raw-body behavior, upstream rate limiting, backup restore, enrollment-key rotation, Gateway master-key recovery, and alert delivery.
 
 ## Residual Risks And Recommendations
@@ -96,4 +97,3 @@ Not assumed: compromise of Slack, the Gateway host/root account, the Gateway mas
 3. Add explicit queue retention and gap-Attention enforcement with a tested provider outage budget.
 4. Add distributed rate limiting/WAF controls for horizontally scaled Gateway deployments.
 5. Repeat this threat model when FR-115 adds Slack app creation tokens and private-app provisioning, because that introduces broader Slack configuration authority.
-

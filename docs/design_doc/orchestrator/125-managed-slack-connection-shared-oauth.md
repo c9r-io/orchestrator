@@ -4,8 +4,9 @@
 **Status**: Implemented; live Slack certification pending  
 **Related Plan**: FR-114  
 **Related QA**: `docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md`  
+**Live Runbook**: `docs/guide/slack-managed-sandbox-certification-runbook.md` \
 **Created**: 2026-07-18  
-**Last Updated**: 2026-07-18
+**Last Updated**: 2026-07-19
 
 ## Background
 
@@ -92,8 +93,8 @@ Examples:
 
 ```bash
 orchestrator source connection catalog -o json
-orchestrator source connection connect --project default --label "Team Slack" -o json
-orchestrator source connection status --project default --intent {intent_id} -o json
+orchestrator source connection connect --project default --label "Team Slack" --reason "connect Slack" --idempotency-key connect-default
+orchestrator source connection status {intent_id} --project default -o json
 orchestrator source connection list --project default -o json
 ```
 
@@ -178,5 +179,4 @@ Deploy Gateway with its own database backup, master-key recovery, TLS terminatio
 
 Automated acceptance is defined in `docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md` and `scripts/qa/test-slack-managed-shared-oauth.sh`. It covers schema/state fencing, OAuth failure contracts, provider verification, durable delivery, transfer claim/ack, CLI/Tauri/UI/RBAC/privacy, migration compatibility, FR-113 regression, and repository quality gates.
 
-A controlled Slack sandbox certification remains a separate, non-CI gate because it requires real workspace consent and external credentials. FR-114 must remain In Progress until that evidence is recorded without private workspace data.
-
+A controlled Slack sandbox certification remains a separate, non-CI gate because it requires real workspace consent and external credentials. Execute `docs/guide/slack-managed-sandbox-certification-runbook.md`; FR-114 must remain In Progress until its L0-L11 evidence is recorded without private workspace data.

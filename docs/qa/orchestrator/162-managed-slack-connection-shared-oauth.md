@@ -158,6 +158,8 @@ Open the normal primary navigation path `Sources → Connections`. Connections i
 
 ### Live Sandbox Steps (Non-CI)
 
+Execute the full operator procedure in `docs/guide/slack-managed-sandbox-certification-runbook.md`. The runbook is normative for topology, stop-loss, backup/restore, privacy scanning, and the final evidence record.
+
 1. In a controlled non-production Slack workspace, provision/validate the reviewed official app without retaining the configuration token.
 2. Complete OAuth in the GUI, reload during pending state, and verify one active connection/default disabled Trigger.
 3. Enable two reviewed badge bindings, add the reactions, and verify two distinct deterministic echo tasks.
