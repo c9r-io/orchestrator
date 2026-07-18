@@ -36,7 +36,9 @@ for command in cargo jq mktemp npm rg; do
 done
 
 cd "$REPO_ROOT"
-cargo build -p orchestratord -p orchestrator-cli -p orchestrator-gui
+if [[ "${SKIP_BUILD:-0}" != "1" ]]; then
+  cargo build -p orchestratord -p orchestrator-cli -p orchestrator-gui
+fi
 
 if [[ "${SKIP_FRONTEND:-0}" != "1" ]]; then
   (
@@ -132,7 +134,9 @@ kill "$DAEMON_PID" 2>/dev/null || true
 wait "$DAEMON_PID" 2>/dev/null || true
 DAEMON_PID=""
 
-"$SCRIPT_DIR/test-source-automation-operations.sh"
-pass "durable source automation routing, replay, privacy, and restart gates"
+if [[ "${SKIP_DEPENDENCY_GATES:-0}" != "1" ]]; then
+  "$SCRIPT_DIR/test-source-automation-operations.sh"
+  pass "durable source automation routing, replay, privacy, and restart gates"
+fi
 
 echo "Source automation UI QA passed: $PASS gates"

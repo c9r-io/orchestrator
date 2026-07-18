@@ -508,4 +508,127 @@ mod live_bridge_tests {
         assert!(stale.to_string().contains("重新加载"), "{stale}");
         println!("FR112_BRIDGE_OK=1");
     }
+
+    #[test]
+    fn live_slack_skill_release_crosses_tauri_provenance_boundary() {
+        if std::env::var("FR113_LIVE_E2E").as_deref() != Ok("1") {
+            return;
+        }
+        let project = std::env::var("FR113_PROJECT").expect("FR113_PROJECT");
+        let route_id = std::env::var("FR113_ROUTE_ID").expect("FR113_ROUTE_ID");
+        let task_id = std::env::var("FR113_TASK_ID").expect("FR113_TASK_ID");
+        let app_state = Arc::new(AppState::new());
+        let app = tauri::test::mock_builder()
+            .manage(app_state)
+            .invoke_handler(tauri::generate_handler![
+                commands::system::connect,
+                commands::source::source_automation_list,
+                commands::source::source_automation_get,
+                commands::source::source_automation_route_get,
+                commands::source::source_event_get,
+                commands::source::source_binding_list,
+                commands::task::task_info,
+                commands::task::task_timeline,
+            ])
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app");
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("mock webview");
+
+        invoke(&webview, "connect", json!({})).expect("connect through Tauri");
+        let page = invoke(
+            &webview,
+            "source_automation_list",
+            json!({
+                "project_id": project,
+                "route_state": "routed",
+                "provider": "slack",
+                "binding_name": null,
+                "task_id": task_id,
+                "page_token": null
+            }),
+        )
+        .expect("route list through Tauri");
+        let listed_route = page["routes"]
+            .as_array()
+            .and_then(|routes| routes.iter().find(|route| route["id"] == route_id))
+            .expect("release route in catalog");
+        assert_eq!(listed_route["task_id"], task_id);
+        assert!(listed_route["permalink"].is_null());
+
+        let detail = invoke(
+            &webview,
+            "source_automation_get",
+            json!({"route_id": route_id}),
+        )
+        .expect("route detail through Tauri");
+        let source_event_id = required_string(&detail["route"], "source_event_id").to_string();
+        assert_eq!(detail["route"]["task_id"], task_id);
+        assert_eq!(detail["route"]["status"], "routed");
+        assert!(!required_string(&detail["route"], "request_id").is_empty());
+
+        let protected_route = invoke(
+            &webview,
+            "source_automation_route_get",
+            json!({"source_event_id": source_event_id}),
+        )
+        .expect("protected route through Tauri");
+        assert_eq!(protected_route["id"], route_id);
+        assert_eq!(protected_route["task_id"], task_id);
+        assert!(
+            required_string(&protected_route, "permalink")
+                .starts_with("https://qa-release-workspace.slack.com/")
+        );
+
+        let source = invoke(&webview, "source_event_get", json!({"id": source_event_id}))
+            .expect("source event through Tauri");
+        assert_eq!(source["automation_route_id"], route_id);
+        assert_eq!(source["routed_task_id"], task_id);
+        assert_eq!(source["reaction_name"], "agent-implement");
+
+        let bindings = invoke(&webview, "source_binding_list", json!({"task_id": task_id}))
+            .expect("task source bindings through Tauri");
+        assert!(bindings.as_array().is_some_and(|items| {
+            items.iter().any(|binding| {
+                binding["task_id"] == task_id && binding["binding_type"] == "automation"
+            })
+        }));
+
+        let task = invoke(&webview, "task_info", json!({"task_id": task_id}))
+            .expect("Process Workspace task through Tauri");
+        assert_eq!(task["project_id"], project);
+        assert_eq!(task["workflow_id"], "slack-release-implement");
+        assert_eq!(task["status"], "completed");
+        assert!(required_string(&task, "goal").starts_with("$ticket-fix https://"));
+
+        let timeline = invoke(
+            &webview,
+            "task_timeline",
+            json!({"task_id": task_id, "cursor": null, "limit": 50, "categories": null}),
+        )
+        .expect("Process Workspace timeline through Tauri");
+        assert!(
+            timeline["entries"]
+                .as_array()
+                .is_some_and(|items| !items.is_empty())
+        );
+
+        let projection = json!({
+            "detail": detail,
+            "source": source,
+            "bindings": bindings,
+            "timeline": timeline
+        })
+        .to_string();
+        for forbidden in [
+            "qa-slack-release-signing-secret",
+            "qa-slack-release-valid-token",
+            "normalized_json",
+            "private message body",
+        ] {
+            assert!(!projection.contains(forbidden), "leaked {forbidden}");
+        }
+        println!("FR113_TAURI_OK=1");
+    }
 }

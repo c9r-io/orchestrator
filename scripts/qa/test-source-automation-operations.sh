@@ -29,7 +29,9 @@ run cargo test -p orchestratord source_router::tests --bin orchestratord
 run cargo test -p orchestratord slack_api::tests --bin orchestratord
 run cargo test -p orchestrator-cli source_automation_ --bin orchestrator
 
-run bash "$SCRIPT_DIR/test-slack-reaction-task-routing.sh"
+if [[ "${SKIP_DEPENDENCY_GATES:-0}" != "1" ]]; then
+  run bash "$SCRIPT_DIR/test-slack-reaction-task-routing.sh"
+fi
 
 if rg -n 'permalink: include_permalink|include_permalink\.then_some' \
     crates/daemon/src/server/source.rs >/dev/null &&

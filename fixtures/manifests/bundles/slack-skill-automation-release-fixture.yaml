@@ -1,0 +1,160 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: slack-release-fixture
+spec:
+  root_path: "."
+  qa_targets: [docs/qa/orchestrator]
+  ticket_dir: docs/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: slack-release-fixture
+spec:
+  capabilities: [slack_release_implement, slack_release_docs]
+  command: >-
+    echo '{"confidence":1.0,"quality_score":1.0,"artifacts":[]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: slack-release-implement
+spec:
+  steps:
+    - id: implement_from_slack
+      type: slack_release_implement
+      required_capability: slack_release_implement
+      enabled: true
+      behavior:
+        side_effect_class: none
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: slack-release-docs
+spec:
+  steps:
+    - id: document_from_slack
+      type: slack_release_docs
+      required_capability: slack_release_docs
+      enabled: true
+      behavior:
+        side_effect_class: none
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: RuntimePolicy
+metadata:
+  name: default
+spec:
+  runner:
+    shell: /bin/bash
+    shell_arg: -lc
+    policy: allowlist
+    executor: shell
+    allowed_shells: [/bin/bash, /bin/sh, sh]
+    allowed_shell_args: [-lc, -c]
+  resume:
+    auto: false
+  source_ingest_enabled: true
+---
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskTemplate
+metadata:
+  name: implement-from-slack
+spec:
+  skill:
+    name: ticket-fix
+    invocation: "$ticket-fix"
+    args: []
+  action:
+    workflow: slack-release-implement
+    workspace: slack-release-fixture
+    start: true
+  goalTemplate: "{skill_invocation} {source_message_url}"
+  allowedVariables: [skill_invocation, source_message_url]
+---
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskTemplate
+metadata:
+  name: docs-from-slack
+spec:
+  skill:
+    name: qa-doc-gen
+    invocation: "$qa-doc-gen"
+    args: []
+  action:
+    workflow: slack-release-docs
+    workspace: slack-release-fixture
+    start: true
+  goalTemplate: "{skill_invocation} {source_message_url}"
+  allowedVariables: [skill_invocation, source_message_url]
+---
+apiVersion: orchestrator.dev/v2
+kind: SecretStore
+metadata:
+  name: slack-release-secret
+spec:
+  data:
+    signing: qa-slack-release-signing-secret
+    bot-token: qa-slack-release-valid-token
+---
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: slack-release
+spec:
+  event:
+    source: webhook
+    webhook:
+      provider: slack
+      installationId: T_QA_RELEASE
+      timestampToleranceSecs: 300
+      actorRoles:
+        U_OPERATOR: operator
+        U_READER: read_only
+      reactionRouting: bindings
+      secret:
+        fromRef: slack-release-secret
+      outboundCredential:
+        fromRef: slack-release-secret
+        key: bot-token
+  action:
+    workflow: slack-release-implement
+    workspace: slack-release-fixture
+    start: true
+  concurrencyPolicy: Allow
+---
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskBinding
+metadata:
+  name: slack-implement
+spec:
+  triggerRef: slack-release
+  match:
+    eventKind: reaction_added
+    reaction: agent-implement
+    targetKind: message
+    channels: [C_QA_RELEASE]
+  templateRef: implement-from-slack
+  allowedActorRoles: [operator]
+  suspend: false
+---
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskBinding
+metadata:
+  name: slack-docs
+spec:
+  triggerRef: slack-release
+  match:
+    eventKind: reaction_added
+    reaction: agent-docs
+    targetKind: message
+    channels: [C_QA_RELEASE]
+  templateRef: docs-from-slack
+  allowedActorRoles: [operator]
+  suspend: false

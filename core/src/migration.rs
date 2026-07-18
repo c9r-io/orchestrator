@@ -418,6 +418,121 @@ mod tests {
     }
 
     #[test]
+    fn populated_v33_source_automation_upgrade_preserves_route_and_provenance() {
+        let (_temp, _db_path, conn) = file_conn("populated-v33-source-automation.db");
+        let migrations = all_migrations();
+        run_pending(&conn, &migrations[..33]).expect("seed source automation route schema");
+        conn.execute_batch(
+            r#"
+            INSERT INTO tasks
+            (id,name,status,goal,target_files_json,mode,workspace_id,workflow_id,project_id,
+             workspace_root,qa_targets_json,ticket_dir,created_at,updated_at)
+            VALUES('release-task','release task','completed','bounded goal','[]','once',
+                   'release-workspace','release-workflow','release-project','/tmp/release',
+                   '[]','docs/ticket','2026-07-17T00:00:00Z','2026-07-17T00:00:10Z');
+            INSERT INTO source_events
+            (id,project_id,provider,installation_id,external_event_id,event_type,occurred_at,
+             received_at,normalized_payload_json,payload_hash,routing_state,routed_task_id,
+             request_id,automation_route_id)
+            VALUES('release-source','release-project','slack','T_RELEASE','Ev-release',
+                   'reaction_added','2026-07-17T00:00:01Z','2026-07-17T00:00:01Z',
+                   '{"kind":"reaction_added"}','payload-hash','routed','release-task',
+                   'req-release','release-route');
+            INSERT INTO source_bindings
+            (id,project_id,task_id,provider,installation_id,conversation_id,correlation_key,
+             binding_type,created_by_event_id,request_id,created_at)
+            VALUES('release-binding','release-project','release-task','slack','T_RELEASE',
+                   'C_RELEASE:1.0','automation-key','automation','release-source','req-release',
+                   '2026-07-17T00:00:02Z');
+            INSERT INTO control_action_audit
+            (request_id,project_id,actor,resolved_role,transport,target_type,target_id,action,
+             reason_code,idempotency_key,request_hash,status,result_id,created_at,updated_at,
+             completed_at)
+            VALUES('req-release','release-project','source-router','system','internal','task',
+                   'release-task','source.automation.create_task','accepted','automation-key',
+                   'request-hash','succeeded','release-task','2026-07-17T00:00:02Z',
+                   '2026-07-17T00:00:02Z','2026-07-17T00:00:02Z');
+            INSERT INTO source_automation_routes
+            (id,project_id,automation_key,source_event_id,provider,installation_id,
+             message_identity,channel_id,message_ts,reaction,resolved_role,binding_name,
+             binding_revision,template_name,template_hash,binding_snapshot_json,
+             template_snapshot_json,credential_store,credential_key,permalink_status,permalink,
+             request_id,deterministic_task_id,task_id,status,created_at,updated_at,completed_at)
+            VALUES('release-route','release-project','automation-key','release-source','slack',
+                   'T_RELEASE','C_RELEASE:1.0','C_RELEASE','1.0','agent-implement','operator',
+                   'slack-implement','binding-revision','implement-from-slack','template-hash',
+                   '{"name":"slack-implement"}','{"name":"implement-from-slack"}',
+                   'slack-release-secret','bot-token','resolved',
+                   'https://example.invalid/release','req-release','release-task','release-task',
+                   'completed','2026-07-17T00:00:01Z','2026-07-17T00:00:02Z',
+                   '2026-07-17T00:00:02Z');
+            "#,
+        )
+        .expect("seed populated source automation route");
+
+        assert_eq!(run_pending(&conn, &migrations).expect("upgrade to v34"), 1);
+        assert_eq!(current_version(&conn).expect("latest version"), 34);
+        let route: (String, i64, i64, i64, i64) = conn
+            .query_row(
+                "SELECT status,generation,version,attempt_count,max_attempts
+                 FROM source_automation_routes WHERE id='release-route'",
+                [],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .expect("query upgraded route");
+        assert_eq!(route, ("routed".to_string(), 1, 1, 0, 5));
+        let generation: (String, String, String, String) = conn
+            .query_row(
+                "SELECT binding_name,template_name,request_id,deterministic_task_id
+                 FROM source_automation_route_generations
+                 WHERE route_id='release-route' AND generation=1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("query frozen generation");
+        assert_eq!(
+            generation,
+            (
+                "slack-implement".to_string(),
+                "implement-from-slack".to_string(),
+                "req-release".to_string(),
+                "release-task".to_string(),
+            )
+        );
+        let change: (i64, String) = conn
+            .query_row(
+                "SELECT route_version,state FROM source_automation_route_changes
+                 WHERE route_id='release-route'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("query route change backfill");
+        assert_eq!(change, (1, "routed".to_string()));
+        let provenance_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM source_automation_routes r
+                 JOIN source_events e ON e.id=r.source_event_id
+                 JOIN source_bindings b ON b.task_id=r.task_id
+                 JOIN tasks t ON t.id=r.task_id
+                 JOIN control_action_audit a ON a.request_id=r.request_id
+                 WHERE r.id='release-route' AND e.automation_route_id=r.id
+                   AND b.binding_type='automation' AND a.result_id=t.id",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query preserved provenance");
+        assert_eq!(provenance_count, 1);
+    }
+
+    #[test]
     fn partial_then_full_applies_remaining() {
         let conn = mem_conn();
         let all = all_migrations();
