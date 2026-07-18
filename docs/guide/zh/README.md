@@ -23,6 +23,7 @@
 | [07 - CLI 参考](07-cli-reference.md) | 命令速查表 | 参考 |
 | [08 - Agent Process Console](08-agent-process-console.md) | Attention、Timeline、Handoff、安全恢复、Session 接管与日常操作 | 入门到高级 |
 | [Slack Reaction Skill 自动化](../slack-reaction-skill-automation.md) | Slack app、SecretStore、双 badge 任务、诊断、升级与回滚 | 入门到运维 |
+| [每 Workspace 独立 Slack App](../slack-dedicated-app-provisioning.md) | Configuration Token、manifest 审批、credential 隔离、恢复与实测 | 高级到运维 |
 
 ## 补充资源
 

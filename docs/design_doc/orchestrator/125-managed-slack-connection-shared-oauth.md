@@ -17,7 +17,7 @@ Slack requires public OAuth callback and Events API endpoints, while `orchestrat
 ## Goals
 
 - Offer a visible `Sources → Connections` OAuth flow without credential copy/paste.
-- Keep `managed_shared`, reserved `managed_dedicated`, and compatible `manual` provisioning modes in one SourceConnection contract.
+- Keep `managed_shared`, `managed_dedicated`, and compatible `manual` provisioning modes in one SourceConnection contract. FR-114 establishes the shared baseline; FR-115 and design doc 126 extend that contract with dedicated provisioning.
 - Isolate official app credentials, installation tokens, deliveries, daemon ownership, and projects.
 - Persist OAuth intents, connection lifecycle, normalized deliveries, monotonic cursors, and owner-transfer handoffs.
 - Create one default managed Trigger with `reactionRouting: disabled`; administrators explicitly configure and enable badge bindings later.
@@ -25,7 +25,7 @@ Slack requires public OAuth callback and Events API endpoints, while `orchestrat
 
 ## Non-goals
 
-- Automatically creating a private Slack app per workspace; that is FR-115.
+- Implementing private Slack app creation inside the FR-114 shared-app slice. Dedicated provisioning is specified separately by FR-115 and design doc 126, and reuses this SourceConnection/Gateway boundary.
 - Enterprise Grid org-wide installs, GovSlack, Marketplace distribution, billing, or regional residency.
 - Reading message bodies, attachments, threads, or workspace search.
 - Sending task progress back to Slack.
@@ -44,7 +44,7 @@ In scope:
 Out of scope:
 
 - hosted deployment manifests, production Slack credentials, and live workspace consent evidence;
-- the `managed_dedicated` runtime; the catalog returns an explicit unavailable reason rather than falling back to shared mode.
+- the `managed_dedicated` implementation itself. FR-114 reserves and fail-closes the mode; FR-115/design doc 126 enables it only when the Gateway advertises dedicated provisioning capability.
 
 ## Architecture And Authority
 
@@ -137,7 +137,7 @@ Slack receives success only after durable enqueue. The daemon claims bounded bat
 Connections is the default Sources subsection. Three cards remain visible:
 
 - **Instant — Official Orchestrator App**: available only when Gateway capability negotiation succeeds;
-- **Dedicated — Private app for this workspace**: explicit FR-115 unavailable state;
+- **Dedicated — Private app for this workspace**: unavailable in the FR-114 baseline, but enabled by the separately governed FR-115 capability when Configuration Token provisioning is configured;
 - **Existing app — Manual credentials**: points to the compatible manual setup.
 
 Connection rows expose safe state, generation, scopes, Trigger, lag/error, and role-appropriate actions. Dialogs use labelled controls, keyboard focus management, explicit destructive confirmation, narrow-layout support, and reduced-motion behavior from the project design system. Provider secrets and private workspace names are never rendered.
@@ -145,7 +145,7 @@ Connection rows expose safe state, generation, scopes, Trigger, lag/error, and r
 ## Alternatives And Tradeoffs
 
 - Direct Slack callbacks to each daemon avoid a shared service but break the one-click NAT-safe experience and multiply public secret-bearing endpoints.
-- One private Slack app per workspace improves branding and blast-radius isolation but requires Slack configuration-token lifecycle and asynchronous app provisioning. The stable `managed_dedicated` mode reserves this future without weakening the shared fast path.
+- One private Slack app per workspace improves branding and blast-radius isolation but requires Slack Configuration Token custody and asynchronous app provisioning. FR-115/design doc 126 now implements that path as an optional capability without weakening the shared fast path.
 - Storing OAuth tokens in daemon SecretStore would simplify proxy calls but would spread provider credentials across local installations. Gateway custody keeps the official app boundary centralized and lets the daemon retain only an installation pairing.
 - Returning a replacement pairing to the old owner makes transfer simpler but violates target credential custody. Durable target claim/ack adds a suspended interval and migration, but fail-closes crashes and prevents credential forwarding through the old daemon.
 
@@ -179,4 +179,4 @@ Deploy Gateway with its own database backup, master-key recovery, TLS terminatio
 
 Automated acceptance is defined in `docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md` and `scripts/qa/test-slack-managed-shared-oauth.sh`. It covers schema/state fencing, OAuth failure contracts, provider verification, durable delivery, transfer claim/ack, CLI/Tauri/UI/RBAC/privacy, migration compatibility, FR-113 regression, and repository quality gates.
 
-A controlled Slack sandbox certification remains a separate, non-CI gate because it requires real workspace consent and external credentials. Execute `docs/guide/slack-managed-sandbox-certification-runbook.md`; FR-114 must remain In Progress until its L0-L11 evidence is recorded without private workspace data.
+A controlled Slack sandbox certification remains a separate, non-CI gate because it requires real workspace consent and external credentials. Execute `docs/guide/slack-managed-sandbox-certification-runbook.md`; FR-114 must remain In Progress until its L0-L11 evidence is recorded without private workspace data. Dedicated-app certification is governed separately by `docs/guide/slack-dedicated-app-provisioning.md` and QA-163.

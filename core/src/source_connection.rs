@@ -329,6 +329,17 @@ pub struct DedicatedProvisioning {
     pub updated_at: String,
 }
 
+/// Internal exact App identity envelope used only for governed lifecycle calls.
+#[derive(Debug, Clone)]
+pub struct DedicatedAppIdentityCredential {
+    /// Provisioning/App connection identity used by the Gateway endpoints.
+    pub provisioning_id: String,
+    /// Encrypted exact Slack App ID; never exposed through a safe projection.
+    pub app_id_ciphertext: String,
+    /// Non-reversible App identity used for receipt and projection checks.
+    pub app_id_digest: String,
+}
+
 /// Internal input for creating a dedicated provisioning checkpoint.
 #[derive(Debug, Clone)]
 pub struct StoreDedicatedProvisioning {
@@ -769,6 +780,40 @@ impl AsyncSourceConnectionRepository {
         self.db
             .reader()
             .call(move |conn| read_dedicated_provisioning(conn, &project_id, &id).map_err(other))
+            .await
+            .map_err(flatten_err)
+    }
+
+    /// Resolves the encrypted exact App identity behind one active connection.
+    pub async fn dedicated_app_identity_for_connection(
+        &self,
+        project_id: &str,
+        connection_id: &str,
+    ) -> Result<Option<DedicatedAppIdentityCredential>> {
+        let project_id = project_id.to_string();
+        let connection_id = connection_id.to_string();
+        self.db
+            .reader()
+            .call(move |conn| {
+                conn.query_row(
+                    "SELECT p.id,p.app_id_ciphertext,p.app_id_digest
+                     FROM source_connection_provisioning p
+                     JOIN source_connection_intents i ON i.id=p.oauth_intent_id
+                     JOIN source_connections c ON c.id=i.connection_id AND c.project_id=p.project_id
+                     WHERE p.project_id=?1 AND c.id=?2 AND p.status='completed'
+                       AND c.provisioning_mode='managed_dedicated'",
+                    params![project_id, connection_id],
+                    |row| {
+                        Ok(DedicatedAppIdentityCredential {
+                            provisioning_id: row.get(0)?,
+                            app_id_ciphertext: row.get(1)?,
+                            app_id_digest: row.get(2)?,
+                        })
+                    },
+                )
+                .optional()
+                .map_err(other)
+            })
             .await
             .map_err(flatten_err)
     }
@@ -1652,5 +1697,99 @@ mod tests {
             .expect("read")
             .expect("intent");
         assert_eq!(internal.display_label, "Engineering Slack");
+    }
+
+    #[tokio::test]
+    async fn dedicated_app_identity_is_resolved_only_from_its_completed_connection() {
+        let (_temp, repository) = repository().await;
+        repository
+            .store_dedicated_provisioning(StoreDedicatedProvisioning {
+                id: "dedicated-1".into(),
+                project_id: "project-a".into(),
+                display_label: "Private Slack".into(),
+                owner_daemon_id: "daemon-1".into(),
+                manifest_version: "dedicated-v1".into(),
+                manifest_digest: "manifest-digest".into(),
+                expires_at: "2026-07-19T01:00:00Z".into(),
+            })
+            .await
+            .expect("store provisioning");
+        repository
+            .store_intent(StoreSourceConnectionIntent {
+                id: "intent-dedicated-1".into(),
+                project_id: "project-a".into(),
+                provider: "slack".into(),
+                display_label: "Private Slack".into(),
+                provisioning_mode: SourceConnectionMode::ManagedDedicated,
+                owner_daemon_id: "daemon-1".into(),
+                actor_digest: "actor-digest".into(),
+                gateway_intent_id: "gateway-intent-dedicated-1".into(),
+                authorize_url_ciphertext: "encrypted-authorize-url".into(),
+                poll_secret_ciphertext: "encrypted-poll-secret".into(),
+                expires_at: "2026-07-19T01:00:00Z".into(),
+            })
+            .await
+            .expect("store intent");
+        repository
+            .update_dedicated_provisioning(UpdateDedicatedProvisioning {
+                project_id: "project-a".into(),
+                id: "dedicated-1".into(),
+                expected_status: "awaiting_approval".into(),
+                status: "oauth_pending".into(),
+                app_id_ciphertext: Some("encrypted-app-id".into()),
+                app_id_digest: Some("app-id-digest".into()),
+                oauth_intent_id: Some("intent-dedicated-1".into()),
+                error_code: None,
+            })
+            .await
+            .expect("link intent");
+        let mut dedicated = activation("project-a");
+        dedicated.provisioning_mode = SourceConnectionMode::ManagedDedicated;
+        dedicated.app_ownership = "workspace".into();
+        dedicated.app_id_digest = Some("app-id-digest".into());
+        dedicated.manifest_version = Some("dedicated-v1".into());
+        repository
+            .activate(dedicated)
+            .await
+            .expect("activate dedicated connection");
+        repository
+            .complete_intent(
+                "project-a",
+                "intent-dedicated-1",
+                "completed",
+                Some("conn-install-1"),
+                None,
+            )
+            .await
+            .expect("complete intent");
+        repository
+            .update_dedicated_provisioning(UpdateDedicatedProvisioning {
+                project_id: "project-a".into(),
+                id: "dedicated-1".into(),
+                expected_status: "oauth_pending".into(),
+                status: "completed".into(),
+                app_id_ciphertext: None,
+                app_id_digest: None,
+                oauth_intent_id: None,
+                error_code: None,
+            })
+            .await
+            .expect("complete provisioning");
+
+        let identity = repository
+            .dedicated_app_identity_for_connection("project-a", "conn-install-1")
+            .await
+            .expect("read identity")
+            .expect("identity");
+        assert_eq!(identity.provisioning_id, "dedicated-1");
+        assert_eq!(identity.app_id_ciphertext, "encrypted-app-id");
+        assert_eq!(identity.app_id_digest, "app-id-digest");
+        assert!(
+            repository
+                .dedicated_app_identity_for_connection("project-b", "conn-install-1")
+                .await
+                .expect("cross-project read")
+                .is_none()
+        );
     }
 }

@@ -75,6 +75,7 @@ pub fn router(state: GatewayState) -> Router {
             post(create_dedicated_import_slot),
         )
         .route("/v1/dedicated/import", post(import_dedicated_app))
+        .route("/v1/dedicated/oauth/intents", post(create_dedicated_intent))
         .route(
             "/v1/oauth/intents/{intent_id}",
             get(intent_status).delete(cancel_intent),
@@ -187,6 +188,66 @@ async fn create_intent(
         .store
         .official_app_credentials()
         .map_err(|_| ApiError::new(StatusCode::SERVICE_UNAVAILABLE, "official_app_not_ready"))?;
+    let authorize_url = oauth_authorize_url(
+        &state.config.slack_api_base,
+        &credentials,
+        &created.oauth_state,
+        &redirect_uri,
+        &requested_scopes,
+    )?;
+    Ok(Json(CreateIntentResponse {
+        intent_id: created.id,
+        authorize_url,
+        poll_secret: created.poll_secret,
+        expires_at: created.expires_at,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateDedicatedIntentRequest {
+    connection_id: String,
+    daemon_id: String,
+    project_id: String,
+    actor_id: String,
+}
+
+async fn create_dedicated_intent(
+    State(state): State<GatewayState>,
+    headers: HeaderMap,
+    Json(request): Json<CreateDedicatedIntentRequest>,
+) -> Result<Json<CreateIntentResponse>, ApiError> {
+    authenticate_enrollment(&headers, &state.config.enrollment_key)?;
+    if !state.allow_intent() {
+        return Err(ApiError::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            "intent_rate_limited",
+        ));
+    }
+    let credentials = state
+        .store
+        .dedicated_app_credentials(&request.connection_id)
+        .map_err(map_store_error)?;
+    let redirect_uri = state
+        .config
+        .dedicated_oauth_callback_url(&request.connection_id)
+        .map_err(|_| ApiError::internal())?;
+    let requested_scopes = REQUIRED_SCOPES
+        .iter()
+        .map(|scope| (*scope).to_string())
+        .collect::<Vec<_>>();
+    let created = state
+        .store
+        .create_intent(NewIntent {
+            daemon_id: &request.daemon_id,
+            project_id: &request.project_id,
+            provisioning_mode: "managed_dedicated",
+            app_connection_id: Some(&request.connection_id),
+            actor_id: &request.actor_id,
+            redirect_uri: &redirect_uri,
+            requested_scopes: &requested_scopes,
+            ttl: Duration::from_secs(state.config.intent_ttl_secs),
+        })
+        .map_err(map_store_error)?;
     let authorize_url = oauth_authorize_url(
         &state.config.slack_api_base,
         &credentials,
@@ -1189,6 +1250,82 @@ mod tests {
             .await
             .expect("response");
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn dedicated_reauthorization_uses_only_the_selected_app_identity() {
+        let (_temp, state) = test_state();
+        let slot = state
+            .store
+            .create_dedicated_import_slot(
+                "connection-a",
+                "daemon-a",
+                "default",
+                "v1",
+                "manifest-a",
+                Duration::from_secs(600),
+            )
+            .expect("slot");
+        state
+            .store
+            .import_dedicated_app_credentials(
+                "connection-a",
+                "daemon-a",
+                "default",
+                &slot.import_secret,
+                &OfficialAppCredentials {
+                    app_id: "A-DEDICATED".into(),
+                    client_id: "dedicated-client".into(),
+                    client_secret: "dedicated-secret".into(),
+                    signing_secret: "dedicated-signing".into(),
+                },
+            )
+            .expect("import");
+        let response = router(state.clone())
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/v1/dedicated/oauth/intents")
+                    .header("content-type", "application/json")
+                    .header(
+                        "authorization",
+                        "Bearer 0123456789abcdef0123456789abcdef",
+                    )
+                    .body(axum::body::Body::from(
+                        r#"{"connection_id":"connection-a","daemon_id":"daemon-a","project_id":"default","actor_id":"admin-a"}"#,
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), 8192)
+            .await
+            .expect("body");
+        let text = String::from_utf8(body.to_vec()).expect("utf8");
+        assert!(text.contains("client_id=dedicated-client"));
+        assert!(text.contains("connection-a%2Foauth%2Fcallback"));
+        assert!(!text.contains("dedicated-secret"));
+        assert!(!text.contains("dedicated-signing"));
+
+        let missing = router(state)
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/v1/dedicated/oauth/intents")
+                    .header("content-type", "application/json")
+                    .header(
+                        "authorization",
+                        "Bearer 0123456789abcdef0123456789abcdef",
+                    )
+                    .body(axum::body::Body::from(
+                        r#"{"connection_id":"connection-b","daemon_id":"daemon-a","project_id":"default","actor_id":"admin-a"}"#,
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]

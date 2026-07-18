@@ -37,8 +37,8 @@ async function installTauriMock(page: Page, role: "read_only" | "operator" | "ad
       workflows: ["analysis", "docs"], workspaces: ["main"],
     };
     const automationRoute = { id: "route-1", project_id: "default", source_event_id: "source-1", provider: "slack", reaction: "agent-analyze", binding_name: "analyze-badge", binding_revision: "binding-revision", template_name: "analyze", template_hash: "template-revision", status: "needs_attention", error_code: "task_create_failed", error_category: "internal", task_id: "task-1", permalink: null, request_id: "request-1", generation: 1, version: 4, attempt_count: 1, max_attempts: 3, next_attempt_at: null, suspended_scope: null, created_at: "2026-07-14T00:00:00Z", updated_at: "2026-07-14T00:01:00Z", completed_at: null };
-    const sourceConnectionCatalog = { protocol_version: 1, gateway_configured: true, permalink_proxy: true, modes: [{ mode: "managed_shared", available: true, unavailable_reason: null }, { mode: "managed_dedicated", available: false, unavailable_reason: "fr_115_not_implemented" }, { mode: "manual", available: true, unavailable_reason: null }] };
-    const sourceConnections = [{ id: "conn-installation-1", project_id: "default", provider: "slack", display_label: "Product Slack", provisioning_mode: "managed_shared", installation_id: "installation-1", installation_id_digest: "team-digest", enterprise_id_digest: null, owner_daemon_id: "daemon-1", generation: 1, version: 1, state: "active", capabilities: ["delivery_v1"], scopes: ["reactions:read"], trigger_name: "slack-installation-1", last_delivery_at: null, last_acked_cursor: 0, delivery_lag: 0, last_error_code: null, created_at: "2026-07-18T00:00:00Z", updated_at: "2026-07-18T00:00:00Z", reauthorized_at: null, disconnected_at: null }];
+    const sourceConnectionCatalog = { protocol_version: 1, gateway_configured: true, permalink_proxy: true, modes: [{ mode: "managed_shared", available: true, unavailable_reason: null }, { mode: "managed_dedicated", available: true, unavailable_reason: null }, { mode: "manual", available: true, unavailable_reason: null }] };
+    const sourceConnections = [{ id: "conn-installation-1", project_id: "default", provider: "slack", display_label: "Product Slack", provisioning_mode: "managed_shared", app_ownership: "orchestrator", app_id_digest: null, manifest_version: null, provision_state: null, provision_error_code: null, installation_id: "installation-1", installation_id_digest: "team-digest", enterprise_id_digest: null, owner_daemon_id: "daemon-1", generation: 1, version: 1, state: "active", capabilities: ["delivery_v1"], scopes: ["reactions:read"], trigger_name: "slack-installation-1", last_delivery_at: null, last_acked_cursor: 0, delivery_lag: 0, last_error_code: null, created_at: "2026-07-18T00:00:00Z", updated_at: "2026-07-18T00:00:00Z", reauthorized_at: null, disconnected_at: null }];
     let session = { session_id: "session-1", task_id: "task-1", task_item_id: null, step_id: "test", agent_id: "coder", state: "detached", pid: 42, writer_client_id: null as string | null, writer_actor: null as string | null, writer_lease_expires_at: null as string | null, state_version: 1 };
     const invoke = async (command: string, args: Record<string, unknown> = {}) => {
       processCalls.push({ command, args });
@@ -109,6 +109,10 @@ async function installTauriMock(page: Page, role: "read_only" | "operator" | "ad
       if (command === "source_connection_catalog_get") return sourceConnectionCatalog;
       if (command === "source_connection_list") return sourceConnections;
       if (command === "source_connection_connect") return { id: "intent-1", project_id: "default", provider: "slack", provisioning_mode: "managed_shared", status: "pending", connection_id: null, error_code: null, expires_at: "2026-07-18T01:00:00Z", authorize_url: "https://slack.com/oauth/v2/authorize?state=opaque", connection: null };
+      if (command === "source_connection_dedicated_preview") return { id: "dedicated-1", project_id: "default", status: "awaiting_approval", manifest_version: "orchestrator-slack-dedicated-v1", manifest_digest: "a".repeat(64), diff: [{ field: "oauth_config.scopes.bot", change: "set", before: [], after: ["reactions:read"], permission_expansion: true }], app_id_digest: null, oauth_intent_id: null, authorize_url: null, error_code: null, expires_at: "2026-07-18T01:00:00Z" };
+      if (command === "source_connection_dedicated_approve") return { id: "dedicated-1", project_id: "default", status: "oauth_pending", manifest_version: "orchestrator-slack-dedicated-v1", manifest_digest: "a".repeat(64), diff: [], app_id_digest: "b".repeat(64), oauth_intent_id: "intent-1", authorize_url: "https://slack.com/oauth/v2/authorize?state=dedicated", error_code: null, expires_at: "2026-07-18T01:00:00Z" };
+      if (command === "source_connection_dedicated_get") return { id: "dedicated-1", project_id: "default", status: "attention", manifest_version: "orchestrator-slack-dedicated-v1", manifest_digest: "a".repeat(64), diff: [], app_id_digest: null, oauth_intent_id: null, authorize_url: null, error_code: "provisioning_session_lost", expires_at: "2026-07-18T01:00:00Z" };
+      if (command === "source_connection_dedicated_abandon") return { id: "dedicated-1", project_id: "default", status: "abandoned", manifest_version: "orchestrator-slack-dedicated-v1", manifest_digest: "a".repeat(64), diff: [], app_id_digest: null, oauth_intent_id: null, authorize_url: null, error_code: "provisioning_abandoned", expires_at: "2026-07-18T01:00:00Z" };
       if (command === "source_connection_intent_get") return { id: "intent-1", project_id: "default", provider: "slack", provisioning_mode: "managed_shared", status: "pending", connection_id: null, error_code: null, expires_at: "2026-07-18T01:00:00Z", authorize_url: "https://slack.com/oauth/v2/authorize?state=opaque", connection: null };
       if (command === "source_connection_transfer") return { ...sourceConnections[0], owner_daemon_id: String(args.target_daemon_id), state: "suspended", version: 2, last_error_code: "owner_transfer_pending_acceptance" };
       if (["open_source_connection_oauth", "start_source_connection_watch", "stop_source_connection_watch", "source_connection_cancel"].includes(command)) return true;
@@ -234,7 +238,7 @@ test("Slack connections presents explicit provisioning choices and starts resuma
   await expect(page.getByRole("heading", { name: "Dedicated — Private workspace app" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Existing app — Manual credentials" })).toBeVisible();
   await expect(page.getByText("Product Slack")).toBeVisible();
-  await page.getByLabel("Connection label").fill("Engineering Slack");
+  await page.getByLabel("Connection label", { exact: true }).fill("Engineering Slack");
   await page.getByRole("button", { name: "Connect workspace" }).click();
   await expect(page.getByText("Waiting for Slack consent")).toBeVisible();
   const calls = await page.evaluate(() => (window as any).__PROCESS_TEST__.calls);
@@ -248,6 +252,29 @@ test("Slack connections presents explicit provisioning choices and starts resuma
   await dialog.getByLabel("Audit reason").fill("move to replacement daemon");
   await dialog.getByRole("button", { name: "Transfer ownership" }).click();
   await expect.poll(async () => (await page.evaluate(() => (window as any).__PROCESS_TEST__.calls)).some((call: any) => call.command === "source_connection_transfer" && call.args.target_daemon_id === "daemon-2" && call.args.expected_version === 1)).toBe(true);
+});
+
+test("Slack connections clears dedicated token and requires manifest approval", async ({ page }) => {
+  await installTauriMock(page, "admin");
+  await page.goto("/#/sources/connections");
+  const token = page.getByLabel("One-time Configuration Token");
+  await expect(token).toHaveAttribute("type", "password");
+  await expect(token).toHaveAttribute("autocomplete", "off");
+  await page.getByLabel("Dedicated connection label").fill("Private Engineering");
+  await token.fill("xoxe-browser-only-marker");
+  await page.getByRole("button", { name: "Validate manifest" }).click();
+  await expect(page.getByRole("heading", { name: "Dedicated app provisioning review" })).toBeVisible();
+  await expect(token).toHaveValue("");
+  await expect(page.getByText(/permission expansion/)).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("orchestrator.dedicatedSlackProvisioning.v1"))).toBe(JSON.stringify({ id: "dedicated-1", project: "default" }));
+  expect(await page.locator("body").textContent()).not.toContain("xoxe-browser-only-marker");
+  await page.getByRole("button", { name: "Approve and create app" }).click();
+  const dialog = page.getByRole("dialog", { name: "Create dedicated Slack App" });
+  await expect(dialog.getByRole("button", { name: "Create app" })).toBeDisabled();
+  await dialog.getByLabel("Audit reason").fill("isolate regulated workspace");
+  await dialog.getByRole("button", { name: "Create app" }).click();
+  await expect(page.getByText("Waiting for Slack consent")).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))).toEqual([]);
 });
 
 test("Slack connections keeps credentials and mutations hidden from read-only users", async ({ page }) => {

@@ -869,6 +869,8 @@ button.automation-row { cursor: pointer; }
 }
 
 @media (max-width: 760px) {
+  .connection-mode-grid, .dedicated-diff { grid-template-columns: 1fr; }
+  .connection-card, .connection-intent { align-items: stretch; flex-direction: column; }
   .automation-header { flex-direction: column; }
   .automation-split { grid-template-columns: 1fr; overflow: visible; }
   .automation-list-pane { max-height: 250px; border-right: 0; border-bottom: 1px solid var(--glass-border-subtle); }

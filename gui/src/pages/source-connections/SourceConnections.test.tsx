@@ -51,12 +51,35 @@ describe("SourceConnections", () => {
   afterEach(() => { cleanup(); vi.useRealTimers(); });
 
   it("shows all explicit provisioning modes and safe connection metadata", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "source_connection_catalog_get") return {
+        protocol_version: 1, gateway_configured: true, permalink_proxy: true,
+        modes: [
+          { mode: "managed_shared", available: true, unavailable_reason: null },
+          { mode: "managed_dedicated", available: true, unavailable_reason: null },
+          { mode: "manual", available: true, unavailable_reason: null },
+        ],
+      };
+      if (command === "source_connection_list") return [{
+        ...active,
+        id: "conn-dedicated-1",
+        display_label: "Private Product Slack",
+        provisioning_mode: "managed_dedicated",
+        app_ownership: "workspace",
+        app_id_digest: "dedicated-app-identity-digest",
+        manifest_version: "dedicated-v1",
+        provision_state: "completed",
+      }];
+      if (["start_source_connection_watch", "stop_source_connection_watch"].includes(command)) return null;
+      throw new Error(`unexpected ${command}`);
+    });
     renderAs("read_only");
     expect(await screen.findByRole("heading", { name: "Instant — Official Orchestrator App" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Dedicated — Private workspace app" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Existing app — Manual credentials" })).toBeVisible();
-    expect(screen.getByText("Product Slack")).toBeVisible();
+    expect(screen.getByText("Private Product Slack")).toBeVisible();
     expect(screen.getByText(/generation 2/)).toBeVisible();
+    expect(screen.getByText(/Workspace App dedicated-ap… · manifest dedicated-v1 · provisioning completed/)).toBeVisible();
     expect(screen.queryByRole("button", { name: "Connect workspace" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Disconnect" })).not.toBeInTheDocument();
   });

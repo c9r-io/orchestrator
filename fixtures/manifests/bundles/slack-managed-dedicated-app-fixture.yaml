@@ -1,0 +1,148 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: slack-dedicated-fixture
+spec:
+  root_path: "."
+  qa_targets: [docs/qa/orchestrator]
+  ticket_dir: docs/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: slack-dedicated-fixture
+spec:
+  capabilities: [dedicated_implement, dedicated_docs]
+  command: >-
+    echo '{"confidence":1.0,"quality_score":1.0,"artifacts":[]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: slack-dedicated-implement
+spec:
+  steps:
+    - id: implement_from_dedicated_slack
+      type: dedicated_implement
+      required_capability: dedicated_implement
+      enabled: true
+      behavior:
+        side_effect_class: none
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: slack-dedicated-docs
+spec:
+  steps:
+    - id: document_from_dedicated_slack
+      type: dedicated_docs
+      required_capability: dedicated_docs
+      enabled: true
+      behavior:
+        side_effect_class: none
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: RuntimePolicy
+metadata:
+  name: default
+spec:
+  runner:
+    shell: /bin/bash
+    shell_arg: -lc
+    policy: allowlist
+    executor: shell
+    allowed_shells: [/bin/bash, /bin/sh, sh]
+    allowed_shell_args: [-lc, -c]
+  resume:
+    auto: false
+  source_ingest_enabled: true
+---
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskTemplate
+metadata:
+  name: dedicated-implement-from-slack
+spec:
+  skill:
+    name: ticket-fix
+    invocation: "$ticket-fix"
+    args: []
+  action:
+    workflow: slack-dedicated-implement
+    workspace: slack-dedicated-fixture
+    start: true
+  goalTemplate: "{skill_invocation} {source_message_url}"
+  allowedVariables: [skill_invocation, source_message_url]
+---
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskTemplate
+metadata:
+  name: dedicated-docs-from-slack
+spec:
+  skill:
+    name: qa-doc-gen
+    invocation: "$qa-doc-gen"
+    args: []
+  action:
+    workflow: slack-dedicated-docs
+    workspace: slack-dedicated-fixture
+    start: true
+  goalTemplate: "{skill_invocation} {source_message_url}"
+  allowedVariables: [skill_invocation, source_message_url]
+---
+# A real dedicated OAuth completion creates this disabled Trigger automatically.
+# The fixture is deliberately secret-free and mode-neutral at routing time.
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: slack-dedicated-fixture
+spec:
+  event:
+    source: webhook
+    webhook:
+      provider: slack
+      installationId: I_MANAGED_DEDICATED_FIXTURE
+      connectionRef: conn-managed-dedicated-fixture
+      actorRoles:
+        U_OPERATOR: operator
+        U_READER: read_only
+      reactionRouting: disabled
+  action:
+    workflow: slack-dedicated-implement
+    workspace: slack-dedicated-fixture
+    start: true
+  concurrencyPolicy: Allow
+---
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskBinding
+metadata:
+  name: dedicated-slack-implement
+spec:
+  triggerRef: slack-dedicated-fixture
+  match:
+    eventKind: reaction_added
+    reaction: agent-implement
+    targetKind: message
+    channels: [C_DEDICATED_FIXTURE]
+  templateRef: dedicated-implement-from-slack
+  allowedActorRoles: [operator]
+  suspend: false
+---
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskBinding
+metadata:
+  name: dedicated-slack-docs
+spec:
+  triggerRef: slack-dedicated-fixture
+  match:
+    eventKind: reaction_added
+    reaction: agent-docs
+    targetKind: message
+    channels: [C_DEDICATED_FIXTURE]
+  templateRef: dedicated-docs-from-slack
+  allowedActorRoles: [operator]
+  suspend: false

@@ -80,7 +80,7 @@
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
 | FR-114 | Managed Slack Connection 与官方 App OAuth 快速路径 | P0 | Proposed |
-| FR-115 | 每 Workspace 独立 Slack App 自动 Provisioning | P0 | Proposed |
+| FR-115 | 每 Workspace 独立 Slack App 自动 Provisioning | P0 | In Progress（lifecycle/live certification pending） |
 
 ## 说明
 

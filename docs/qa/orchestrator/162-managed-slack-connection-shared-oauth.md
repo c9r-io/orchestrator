@@ -34,7 +34,7 @@ It does not connect to Slack or claim live certification. Run with a clean workt
 
 ### Steps
 
-1. Verify `source connection catalog` advertises protocol 1, `managed_shared`, reserved unavailable `managed_dedicated`, compatible `manual`, and Gateway permalink capability.
+1. Verify `source connection catalog` advertises protocol 1, available `managed_shared`, capability-negotiated `managed_dedicated`, compatible `manual`, and Gateway permalink capability. An older Gateway must report dedicated unavailable without changing the shared path.
 2. Start a managed shared connection as Admin and inspect the safe intent response and OAuth URL.
 3. Exercise pending status, page/daemon restart resume, cancel, expiry, denial, replay, redirect mismatch, scope mismatch, callback retry, and duplicate/concurrent callback fixtures.
 4. Complete OAuth and verify one active SourceConnection plus one default `connectionRef` Trigger with `reactionRouting: disabled`.
@@ -142,7 +142,7 @@ Open the normal primary navigation path `Sources → Connections`. Connections i
 ### Expected
 
 - ReadOnly can inspect safe status; only Admin can mutate connection credential ownership. GUI visibility and daemon authorization agree.
-- Dedicated mode is clearly unavailable and never silently uses the shared app.
+- Dedicated mode clearly explains its extra Configuration Token/OAuth steps; when capability is unavailable it remains visible and never silently uses the shared app.
 - Local storage contains only the bounded project/intent resume key and clears it at terminal state.
 - No serious/critical accessibility violations or unreachable controls occur at desktop/narrow widths.
 - Privacy scan finds no credential or private provider material.

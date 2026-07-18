@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Slack Reaction Skill Automation** (FR-107 through FR-113) — authenticated `reaction_added` ingestion, versioned Skill task templates, exact badge bindings, Slack permalink resolution, canonical task creation, durable retries/Attention replay, and Sources → Automations management
 - Slack automation release acceptance with two badges selecting distinct Skill/workflow tasks, concurrent identity convergence, rate-limit restart recovery, real Tauri provenance, populated migration, compatible previous-binary rollback, and the [setup/operations guide](docs/guide/slack-reaction-skill-automation.md)
 - **Managed Slack Connections** (FR-114) — one-consent installation of an official shared Orchestrator Slack App, independent internet-facing OAuth/Events Gateway, project-scoped SourceConnection lifecycle, outbound durable delivery, bounded permalink proxy, target-side two-phase ownership transfer, and Sources → Connections management with a [deployment and user guide](docs/guide/slack-managed-connections.md)
+- **Dedicated Slack App Provisioning** (FR-115) — an advanced per-workspace private App path with a fixed reviewed manifest, local-only short-lived Configuration Token custody, one-time receipt-gated credential import, per-connection encrypted App identity, exact-App OAuth/events, provisioning Attention recovery, CLI stdin, and a [dedicated setup guide](docs/guide/slack-dedicated-app-provisioning.md)
 
 ### Changed
 - Wish Pool and Progress Observer are now presented as New Process and Processes; resource administration remains reachable through System and raw diagnostics through Process Expert
@@ -25,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Migrations 27-32 add Attention/change feeds, handoff/resume state, Session control fencing, source events/bindings, canonical action audit, and Process Console metric observations/rollups. They are additive, forward-only, restart-safe, and preserve existing task and Session identity.
 - Migrations 33-34 add durable source automation routes, frozen template/binding generations, optimistic route versions, bounded retry leases, attempt/change history, and Attention correlation. They are additive and forward-only; normal binary rollback keeps their tables and disables reaction writers before using a verified compatible binary.
 - Daemon migration 35 adds SourceConnection, OAuth intent, and monotonic connection-change persistence. Slack Gateway schema versions 1-2 independently add encrypted app/install credentials, normalized delivery/audit state, and target-side transfer handoffs. Both stores are additive, forward-only, and backed up/restored with their own encryption keys.
+- Daemon migration 36 adds safe dedicated App projections and provisioning checkpoints. Slack Gateway schema 3 adds per-App encryption contexts, one-time import capabilities, signed receipt metadata, dedicated OAuth identity, and exact event endpoint mapping; populated shared/manual state remains compatible.
 - Existing task, trace, log, watch, CLI, and additive gRPC clients remain compatible. No persisted `Task` rename or destructive schema conversion is included.
 - Normal rollback disables source/session/resume writers and optional projectors before deploying the previous binaries; it retains migrations 27-32 and all Console tables. Database restore is reserved for migration failure or corruption.
 
@@ -32,10 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Slack Events API configuration requires `reaction_added` delivery and the `reactions:read` scope. Inbound requests use Slack Signing Secret verification; outbound `chat.getPermalink` uses a separately referenced installation token from SecretStore.
 - Slack message bodies, attachments, and thread transcripts are not ingested. Tasks contain the configured Skill invocation plus the protected message permalink; safe source/route/UI projections omit credentials, raw payloads, rendered goals, and permalinks unless an Operator explicitly opens the protected route.
 - Managed shared mode keeps official app and installation tokens encrypted only in the Slack Gateway. The daemon holds an encrypted installation-scoped pairing; OAuth state/code, tokens, raw Slack bodies, private workspace names, and provider URLs are excluded from safe connection projections, browser storage, tasks, metrics, and routine logs.
+- Dedicated mode keeps the Configuration Token only in zeroizing daemon memory and clears it before UI review completes. Newly created App credentials move once into connection-context encrypted Gateway storage; safe state exposes only digests, manifest version, and stable provisioning errors.
 
 ### Known Non-goals
 - Desktop application packaging/distribution (FR-076), hosted multi-tenant SaaS, down migrations, arbitrary checkpoint rollback, and unreviewed non-idempotent replay are not part of Console v1.
-- Per-workspace private Slack App provisioning (FR-115), Marketplace distribution, outbound Slack progress messages, `reaction_removed` task cancellation, message-body ingestion, production Slack release testing, and destructive automation down migrations are not included. FR-114 live certification is limited to a controlled non-production Slack sandbox.
+- Marketplace distribution, Enterprise Grid/GovSlack, outbound Slack progress messages, `reaction_removed` task cancellation, message-body ingestion, production Slack release testing, in-place Slack Signing/Client Secret rotation, and destructive automation down migrations are not included. FR-114/FR-115 live certification is limited to a controlled non-production Slack sandbox.
 
 ## [0.3.1] - 2026-04-06
 

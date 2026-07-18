@@ -1,12 +1,12 @@
 # Slack Integration Gateway Threat Model
 
-**Scope**: FR-114 managed shared Slack OAuth and SourceConnection delivery  
-**Assessment date**: 2026-07-18  
+**Scope**: FR-114 shared OAuth plus FR-115 dedicated Slack App provisioning and SourceConnection delivery
+**Assessment date**: 2026-07-19
 **Target**: `crates/slack-gateway`, daemon Gateway client/reconciler, SourceConnection control plane, and Connections UI
 
 ## Executive Summary
 
-The Slack Integration Gateway is an internet-facing, multi-installation credential boundary. Its highest risks are theft of the official app or installation tokens, cross-workspace event delivery, OAuth confused-deputy/replay, forged Slack events, and ownership-transfer credential exposure. The implementation reduces these risks with separate encrypted persistence, strict OAuth binding, raw-body Slack verification, installation-scoped pairing, owner/generation/version/cursor fencing, minimal normalized storage, a bounded provider proxy, and two-phase target-side transfer adoption.
+The Slack Integration Gateway is an internet-facing, multi-installation and multi-App credential boundary. Its highest risks are theft of official/dedicated App credentials or installation tokens, cross-workspace/App event delivery, OAuth confused-deputy/replay, forged Slack events, broad Configuration Token exposure, partial App creation, and ownership-transfer credential exposure. The implementation reduces these risks with local-only zeroizing Configuration Token use, a fixed manifest, one-time connection-scoped import capabilities, signed durable receipts, per-connection encryption contexts, strict OAuth binding, raw-body Slack verification, App/team cross-checks, installation-scoped pairing, owner/generation/version/cursor fencing, minimal normalized storage, a bounded provider proxy, and two-phase target-side transfer adoption.
 
 The most important deployment assumption is that `SLACK_GATEWAY_ENROLLMENT_KEY` is privileged platform bootstrap material shared only by trusted Orchestrator deployments. It is not tenant authentication. Compromise of that key permits intent creation and pending transfer claim impersonation, although it does not directly authorize normal installation delivery/proxy calls. A future per-daemon enrollment credential would reduce this residual blast radius.
 
@@ -38,6 +38,7 @@ TLS may terminate at a trusted reverse proxy. The proxy must preserve the exact 
 ## Assets
 
 - Official Slack app configuration token, client secret, and signing secret.
+- Short-lived user/workspace App Configuration Token and each dedicated App's client/signing credentials.
 - Per-installation bot tokens and pairing credentials.
 - OAuth state, poll secret, authorization code, and owner mapping.
 - Verified team/enterprise identity, delivery cursor, and normalized reaction metadata.
@@ -71,12 +72,19 @@ Not assumed: compromise of Slack, the Gateway host/root account, the Gateway mas
 | T10 | Private Slack data leaks through normalized events/UI/logs | Workspace confidentiality loss | No message body/raw payload persistence, digested tenant identity, safe proto/UI projections, no URL in safe connection state, stable error codes, DOM/storage/log scans | Channel/message coordinates remain sensitive inside protected source routing evidence |
 | T11 | Gateway request flood or large response | Availability/resource exhaustion | Request body cap, fixed-window intent limiter, provider/client timeouts, bounded response bytes, bounded delivery batch and claim lease | Distributed rate limiting and upstream WAF are deployment responsibilities |
 | T12 | Migration/backup/key failure destroys evidence or credentials | Prolonged outage/data loss | Independent forward-only migrations, populated upgrade tests, SQLite integrity/backup procedures, separate key recovery, no cross-database deletion | Live restore drill and external key backend certification remain pending |
+| T13 | Configuration Token is persisted, logged, forwarded, or reused to manage unrelated Apps | Broad workspace App takeover | GUI password/stdin-only entry, immediate field clearing, local daemon `Zeroizing`, no SecretStore/SQLite/Gateway/audit field, fixed allowlisted Manifest calls, no refresh-token custody, artifact scans | A compromised daemon process can read live memory; use a dedicated admin workstation and revoke promptly |
+| T14 | Create succeeds but response/import fails, causing blind duplicate Apps | Orphan Apps, credential confusion | Durable safe checkpoint, receipt-before-OAuth, exact same-App receipt retry, in-memory import resume, Attention on uncertain/lost sessions, no automatic create retry or user-App scan | A daemon crash after Slack create but before receipt requires human orphan review |
+| T15 | Dedicated event endpoint selects another App's Signing Secret or trusts unverified `api_app_id` | Cross-tenant task creation | Unique connection endpoint selects one candidate secret, HMAC over raw bytes, then verified App/team/mode cross-check; shared and dedicated selectors are disjoint | Gateway host compromise can bypass lookup isolation |
+| T16 | Import capability/receipt is replayed across connection, daemon, project, or manifest | Credential overwrite or OAuth confusion | Random expiring import secret digest, connection/owner/project/manifest binding, one-time transaction, App digest/generation receipt HMAC, changed/cross-boundary retries fail closed | Deployment-wide enrollment key remains a privileged bootstrap root |
+| T17 | Shared↔dedicated replacement produces two active consumers | Duplicate paid work | Unique verified-team installation, one active App connection reference and pairing generation, old endpoint/mode lookup fails after switch, source/route/task idempotency remains mode-neutral | Live failure-injection certification is required before production migration |
 
 ## Security Invariants
 
 - A Slack tenant identity is accepted only after Slack authentication; browser or daemon project fields never determine Slack ingress tenancy.
 - One active installation has exactly one owner daemon/project and one valid pairing generation.
 - Official app secrets and installation tokens never enter daemon config, proto responses, task data, browser storage, or routine logs.
+- Configuration Tokens exist only in the local daemon's bounded live provisioning session; dedicated App credentials cross once into connection-context encrypted Gateway storage and never enter safe projections.
+- An opaque dedicated endpoint is routing context, not authentication; Slack HMAC and verified App/team identity remain mandatory.
 - The old owner never receives the replacement pairing during transfer.
 - Slack success acknowledgement occurs only after durable normalized enqueue.
 - Source task mutation occurs only in the daemon after existing binding/template policy and dedupe checks.
@@ -84,7 +92,7 @@ Not assumed: compromise of Slack, the Gateway host/root account, the Gateway mas
 
 ## Required Verification
 
-- Run `docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md` together with authentication, authorization, SSRF, sensitive-data, logging, workflow-abuse, and race-condition security suites.
+- Run QA-162 and `docs/qa/orchestrator/163-dedicated-slack-app-auto-provisioning.md` together with authentication, authorization, SSRF, sensitive-data, logging, workflow-abuse, and race-condition security suites.
 - Scan binaries' test logs, daemon/Gateway logs, Tauri payloads, DOM, and browser storage for fixture credentials, OAuth state/code, token prefixes, raw bodies, and private Slack URLs.
 - In a controlled Slack sandbox, certify consent, callback, signed event, reinstall, revoke, disconnect, and rotation without retaining private workspace data.
 - Use `docs/guide/slack-managed-sandbox-certification-runbook.md` for the required two-workspace topology, stop-loss rules, offline recovery, ownership transfer, backup/restore, privacy scan, and evidence allowlist.
@@ -96,4 +104,4 @@ Not assumed: compromise of Slack, the Gateway host/root account, the Gateway mas
 2. Add an external KMS/secret-backend adapter for official app and installation tokens in hosted production.
 3. Add explicit queue retention and gap-Attention enforcement with a tested provider outage budget.
 4. Add distributed rate limiting/WAF controls for horizontally scaled Gateway deployments.
-5. Repeat this threat model when FR-115 adds Slack app creation tokens and private-app provisioning, because that introduces broader Slack configuration authority.
+5. Before enabling dedicated provisioning, require the QA-163 secret scan and controlled Slack addendum; treat any orphan App or retained Configuration Token as a security incident until reviewed.

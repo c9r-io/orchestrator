@@ -333,6 +333,73 @@ impl SlackClient {
         })
     }
 
+    /// Exports the exact managed App before a governed update or deletion.
+    pub async fn export_manifest(
+        &self,
+        configuration_token: &str,
+        app_id: &str,
+    ) -> std::result::Result<serde_json::Value, SlackError> {
+        if !valid_slack_id(app_id, 'A') {
+            return Err(SlackError::new("slack_manifest_app_identity_invalid"));
+        }
+        let response = self
+            .client
+            .post(self.endpoint("/api/apps.manifest.export")?)
+            .bearer_auth(configuration_token)
+            .json(&serde_json::json!({"app_id": app_id}))
+            .send()
+            .await
+            .map_err(|_| SlackError::new("slack_manifest_unavailable"))?;
+        parse_manifest_status(response)
+            .await?
+            .manifest
+            .ok_or_else(|| SlackError::new("slack_manifest_invalid_response"))
+    }
+
+    /// Updates only the exact App ID whose current manifest was reviewed.
+    pub async fn update_manifest(
+        &self,
+        configuration_token: &str,
+        app_id: &str,
+        manifest: &serde_json::Value,
+    ) -> std::result::Result<bool, SlackError> {
+        if !valid_slack_id(app_id, 'A') {
+            return Err(SlackError::new("slack_manifest_app_identity_invalid"));
+        }
+        let response = self
+            .client
+            .post(self.endpoint("/api/apps.manifest.update")?)
+            .bearer_auth(configuration_token)
+            .json(&serde_json::json!({"app_id": app_id, "manifest": manifest.to_string()}))
+            .send()
+            .await
+            .map_err(|_| SlackError::new("slack_manifest_unavailable"))?;
+        Ok(parse_manifest_status(response)
+            .await?
+            .permissions_updated
+            .unwrap_or(false))
+    }
+
+    /// Permanently deletes the exact manifest-created App after reviewed confirmation.
+    pub async fn delete_manifest(
+        &self,
+        configuration_token: &str,
+        app_id: &str,
+    ) -> std::result::Result<(), SlackError> {
+        if !valid_slack_id(app_id, 'A') {
+            return Err(SlackError::new("slack_manifest_app_identity_invalid"));
+        }
+        let response = self
+            .client
+            .post(self.endpoint("/api/apps.manifest.delete")?)
+            .bearer_auth(configuration_token)
+            .json(&serde_json::json!({"app_id": app_id}))
+            .send()
+            .await
+            .map_err(|_| SlackError::new("slack_manifest_unavailable"))?;
+        parse_manifest_status(response).await.map(|_| ())
+    }
+
     fn endpoint(&self, path: &str) -> std::result::Result<Url, SlackError> {
         self.base
             .join(path)
@@ -677,6 +744,8 @@ struct ManifestResponse {
     error: Option<String>,
     app_id: Option<String>,
     credentials: Option<ManifestCredentials>,
+    manifest: Option<serde_json::Value>,
+    permissions_updated: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -791,6 +860,7 @@ fn string_array(value: Option<&serde_json::Value>, label: &str) -> Result<Vec<St
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{Json, Router, routing::post};
     use hmac::Mac;
 
     #[test]
@@ -908,6 +978,81 @@ mod tests {
                 .expect_err("channel")
                 .code(),
             "slack_permalink_channel_mismatch"
+        );
+    }
+
+    #[tokio::test]
+    async fn manifest_client_covers_create_export_update_and_delete_contract() {
+        async fn validate() -> Json<serde_json::Value> {
+            Json(serde_json::json!({"ok": true}))
+        }
+        async fn create() -> Json<serde_json::Value> {
+            Json(serde_json::json!({
+                "ok": true,
+                "app_id": "A12345678",
+                "credentials": {
+                    "client_id": "client-id",
+                    "client_secret": "client-secret",
+                    "signing_secret": "signing-secret"
+                }
+            }))
+        }
+        async fn export() -> Json<serde_json::Value> {
+            Json(serde_json::json!({"ok": true, "manifest": {
+                "display_information": {"name": "Orchestrator Dedicated"}
+            }}))
+        }
+        async fn update() -> Json<serde_json::Value> {
+            Json(serde_json::json!({"ok": true, "permissions_updated": true}))
+        }
+        let app = Router::new()
+            .route("/api/apps.manifest.validate", post(validate))
+            .route("/api/apps.manifest.create", post(create))
+            .route("/api/apps.manifest.export", post(export))
+            .route("/api/apps.manifest.update", post(update))
+            .route("/api/apps.manifest.delete", post(validate));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind fake Slack");
+        let origin = format!("http://{}", listener.local_addr().expect("local address"));
+        tokio::spawn(async move { axum::serve(listener, app).await.expect("serve fake Slack") });
+        let client = SlackClient::new(&origin, Duration::from_secs(2)).expect("client");
+        let manifest = serde_json::json!({"display_information":{"name":"test"}});
+
+        client
+            .validate_manifest("xoxe.one-time", &manifest)
+            .await
+            .expect("validate");
+        let created = client
+            .provision_manifest("xoxe.one-time", &manifest)
+            .await
+            .expect("create");
+        assert_eq!(created.app_id, "A12345678");
+        assert!(!format!("{created:?}").contains("client-secret"));
+        assert_eq!(
+            client
+                .export_manifest("xoxe.fresh", "A12345678")
+                .await
+                .expect("export")["display_information"]["name"],
+            "Orchestrator Dedicated"
+        );
+        assert!(
+            client
+                .update_manifest("xoxe.fresh", "A12345678", &manifest)
+                .await
+                .expect("update requires OAuth")
+        );
+        client
+            .delete_manifest("xoxe.fresh", "A12345678")
+            .await
+            .expect("delete");
+        assert_eq!(
+            client
+                .delete_manifest("xoxe.fresh", "not-an-app")
+                .await
+                .expect_err("invalid exact App ID")
+                .code(),
+            "slack_manifest_app_identity_invalid"
         );
     }
 }

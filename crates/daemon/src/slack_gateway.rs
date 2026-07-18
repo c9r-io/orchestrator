@@ -162,6 +162,26 @@ impl SlackGatewayClient {
         .await
     }
 
+    pub(crate) async fn create_dedicated_intent(
+        &self,
+        connection_id: &str,
+        daemon_id: &str,
+        project_id: &str,
+        actor_id: &str,
+    ) -> Result<GatewayIntentCreated> {
+        self.post_json(
+            "v1/dedicated/oauth/intents",
+            Some(&self.enrollment_key),
+            &serde_json::json!({
+                "connection_id": connection_id,
+                "daemon_id": daemon_id,
+                "project_id": project_id,
+                "actor_id": actor_id
+            }),
+        )
+        .await
+    }
+
     pub(crate) async fn create_dedicated_import_slot(
         &self,
         connection_id: &str,

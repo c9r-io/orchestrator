@@ -11,10 +11,12 @@
 | 方式 | 适合谁 | 当前状态 |
 |---|---|---|
 | Instant — Official Orchestrator App | 希望一次 OAuth 授权就完成连接 | 已实现，需要部署 Gateway |
-| Dedicated — Private app for this workspace | 希望每个 workspace 有独立 Slack App | FR-115，当前会明确显示不可用 |
+| Dedicated — Private app for this workspace | 希望每个 workspace 有独立 Slack App | 已实现；需要短期 Configuration Token，见独立指南 |
 | Existing app — Manual credentials | 已经有自己的 Slack App，或完全本地部署 | 保持兼容，参考手工 Slack 指南 |
 
 Instant 模式使用同一个官方 App 服务多个 workspace，但每次安装拥有独立 token、pairing、owner daemon 和 project。Gateway 只处理 OAuth、Slack 签名验证、可靠投递与最小 permalink 代理；badge 匹配、Skill、模板和任务仍在本地 daemon 中执行。
+
+Dedicated 模式的完整安装、恢复、迁移与 sandbox addendum 见[为每个 Slack Workspace 创建独立的 Orchestrator App](slack-dedicated-app-provisioning.md)。
 
 ## 普通项目管理员：连接一个 Workspace
 

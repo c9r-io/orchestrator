@@ -1,5 +1,6 @@
 //! Managed SourceConnection gRPC surface and OAuth intent reconciliation.
 
+use agent_orchestrator::attention::{AttentionCandidate, AttentionSeverity};
 use agent_orchestrator::source_connection::{
     ActivateSourceConnection, AsyncSourceConnectionRepository,
     DedicatedProvisioning as CoreDedicatedProvisioning, SourceConnection as CoreConnection,
@@ -325,26 +326,31 @@ pub(crate) async fn dedicated_get(
         .await
         .map_err(internal)?
         .ok_or_else(|| Status::not_found("dedicated provisioning not found"))?;
-    if matches!(checkpoint.status.as_str(), "creating" | "handoff_pending")
+    let expired = chrono::DateTime::parse_from_rfc3339(&checkpoint.expires_at)
+        .map(|value| value < chrono::Utc::now())
+        .unwrap_or(true);
+    if expired
+        && matches!(
+            checkpoint.status.as_str(),
+            "awaiting_approval" | "creating" | "handoff_pending"
+        )
+    {
+        server
+            .dedicated_sessions
+            .lock()
+            .await
+            .remove(&checkpoint.id);
+        checkpoint =
+            mark_dedicated_attention(server, &checkpoint, "provisioning_session_expired").await?;
+    } else if matches!(checkpoint.status.as_str(), "creating" | "handoff_pending")
         && !server
             .dedicated_sessions
             .lock()
             .await
             .contains_key(&checkpoint.id)
     {
-        checkpoint = repository(server)
-            .update_dedicated_provisioning(UpdateDedicatedProvisioning {
-                project_id: checkpoint.project_id.clone(),
-                id: checkpoint.id.clone(),
-                expected_status: checkpoint.status.clone(),
-                status: "attention".into(),
-                app_id_ciphertext: None,
-                app_id_digest: None,
-                oauth_intent_id: None,
-                error_code: Some("provisioning_session_lost".into()),
-            })
-            .await
-            .map_err(internal)?;
+        checkpoint =
+            mark_dedicated_attention(server, &checkpoint, "provisioning_session_lost").await?;
     }
     Ok(Response::new(dedicated_response(checkpoint, None, None)))
 }
@@ -409,6 +415,13 @@ pub(crate) async fn dedicated_abandon(
         })
         .await
         .map_err(internal)?;
+    resolve_dedicated_attention(
+        server,
+        &checkpoint.project_id,
+        &checkpoint.id,
+        "provisioning_abandoned",
+    )
+    .await?;
     attempt
         .succeeded(
             server,
@@ -438,6 +451,16 @@ pub(crate) async fn dedicated_approve(
     ) {
         return Err(Status::failed_precondition(
             "dedicated provisioning cannot be approved from its current state",
+        ));
+    }
+    let expired = chrono::DateTime::parse_from_rfc3339(&current.expires_at)
+        .map(|value| value < chrono::Utc::now())
+        .unwrap_or(true);
+    if expired {
+        server.dedicated_sessions.lock().await.remove(&current.id);
+        mark_dedicated_attention(server, &current, "provisioning_session_expired").await?;
+        return Err(Status::failed_precondition(
+            "dedicated provisioning session expired",
         ));
     }
     let context = audit_context(&req.reason, &req.idempotency_key);
@@ -679,8 +702,8 @@ async fn mark_dedicated_attention(
     server: &OrchestratorServer,
     checkpoint: &CoreDedicatedProvisioning,
     error_code: &str,
-) -> Result<(), Status> {
-    repository(server)
+) -> Result<CoreDedicatedProvisioning, Status> {
+    let updated = repository(server)
         .update_dedicated_provisioning(UpdateDedicatedProvisioning {
             project_id: checkpoint.project_id.clone(),
             id: checkpoint.id.clone(),
@@ -691,6 +714,62 @@ async fn mark_dedicated_attention(
             oauth_intent_id: None,
             error_code: Some(error_code.into()),
         })
+        .await
+        .map_err(internal)?;
+    let digest = hex::encode(Sha256::digest(updated.id.as_bytes()));
+    server
+        .state
+        .attention_repo
+        .upsert_external_candidate(AttentionCandidate {
+            id: format!("attention-dedicated-{}", &digest[..24]),
+            project_id: updated.project_id.clone(),
+            task_id: String::new(),
+            task_item_id: None,
+            step_id: None,
+            session_id: None,
+            kind: "source_connection_provisioning_attention".into(),
+            severity: AttentionSeverity::Intervention,
+            title: "Dedicated Slack App provisioning needs a decision".into(),
+            summary: format!(
+                "Provisioning checkpoint {} stopped with {}. Resume only when offered or abandon it; automatic App recreation is disabled.",
+                updated.id, error_code
+            ),
+            requested_decision: Some(serde_json::json!({
+                "provisioning_id": updated.id,
+                "safe_error_code": error_code,
+                "choices": ["resume_if_available", "abandon_and_review_orphan_app"]
+            })),
+            actions: vec![],
+            dedupe_key: format!("source-connection-provisioning:{}", updated.id),
+            source_event_id: format!(
+                "dedicated-provisioning:{}:{}",
+                updated.id, updated.updated_at
+            ),
+            source_route_id: None,
+            source_binding_name: None,
+            occurred_at: updated.updated_at.clone(),
+            sla_deadline: None,
+        })
+        .await
+        .map_err(internal)?;
+    Ok(updated)
+}
+
+async fn resolve_dedicated_attention(
+    server: &OrchestratorServer,
+    project_id: &str,
+    provisioning_id: &str,
+    reason: &str,
+) -> Result<(), Status> {
+    server
+        .state
+        .attention_repo
+        .resolve_external_candidate(
+            project_id,
+            &format!("source-connection-provisioning:{provisioning_id}"),
+            &format!("dedicated-provisioning:{provisioning_id}:resolved"),
+            reason,
+        )
         .await
         .map(|_| ())
         .map_err(internal)
@@ -745,6 +824,7 @@ pub(crate) async fn connect(
         &req.project_id,
         &req.display_label,
         &attempt.request_id,
+        None,
     )
     .await;
     match result {
@@ -855,11 +935,28 @@ pub(crate) async fn reauthorize(
     if !attempt.should_execute {
         return Err(attempt.status(Status::already_exists("reauthorization already processed")));
     }
+    let dedicated_identity = if current.provisioning_mode == SourceConnectionMode::ManagedDedicated
+    {
+        Some(
+            repository(server)
+                .dedicated_app_identity_for_connection(&req.project_id, &req.id)
+                .await
+                .map_err(internal)?
+                .ok_or_else(|| {
+                    Status::failed_precondition("dedicated App lifecycle identity is missing")
+                })?,
+        )
+    } else {
+        None
+    };
     let result = create_intent(
         server,
         &req.project_id,
         &current.display_label,
         &attempt.request_id,
+        dedicated_identity
+            .as_ref()
+            .map(|identity| identity.provisioning_id.as_str()),
     )
     .await;
     match result {
@@ -970,6 +1067,7 @@ async fn create_intent(
     project_id: &str,
     display_label: &str,
     request_id: &str,
+    dedicated_provisioning_id: Option<&str>,
 ) -> Result<SourceConnectionIntentResponse, Status> {
     let gateway = server
         .slack_gateway
@@ -977,10 +1075,19 @@ async fn create_intent(
         .ok_or_else(|| Status::failed_precondition("Slack Gateway is not configured"))?;
     let repository = repository(server);
     let daemon_id = repository.daemon_id().await.map_err(internal)?;
-    let created = gateway
-        .create_intent(&daemon_id, project_id, request_id)
-        .await
-        .map_err(unavailable)?;
+    let created = match dedicated_provisioning_id {
+        Some(connection_id) => {
+            gateway
+                .create_dedicated_intent(connection_id, &daemon_id, project_id, request_id)
+                .await
+        }
+        None => {
+            gateway
+                .create_intent(&daemon_id, project_id, request_id)
+                .await
+        }
+    }
+    .map_err(unavailable)?;
     let local_id = format!("intent-{}", Uuid::new_v4());
     let encryption = encryption(server)?;
     let authorize_url_ciphertext = encryption
@@ -996,7 +1103,11 @@ async fn create_intent(
             project_id: project_id.to_string(),
             provider: "slack".to_string(),
             display_label: display_label.to_string(),
-            provisioning_mode: SourceConnectionMode::ManagedShared,
+            provisioning_mode: if dedicated_provisioning_id.is_some() {
+                SourceConnectionMode::ManagedDedicated
+            } else {
+                SourceConnectionMode::ManagedShared
+            },
             owner_daemon_id: daemon_id,
             actor_digest,
             gateway_intent_id: created.intent_id,
@@ -1149,7 +1260,7 @@ async fn reconcile_intent(
             .map_err(internal)?
         {
             if checkpoint.status == "oauth_pending" {
-                repository
+                let completed = repository
                     .update_dedicated_provisioning(UpdateDedicatedProvisioning {
                         project_id: project_id.to_string(),
                         id: provisioning_id.to_string(),
@@ -1162,6 +1273,13 @@ async fn reconcile_intent(
                     })
                     .await
                     .map_err(internal)?;
+                resolve_dedicated_attention(
+                    server,
+                    project_id,
+                    &completed.id,
+                    "dedicated_connection_activated",
+                )
+                .await?;
             }
         }
     }

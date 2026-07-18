@@ -25,6 +25,7 @@ This guide helps you understand and use Agent Orchestrator as a **Harness Engine
 | [Agent Process Console v1 Operations](agent-process-console-v1-operations.md) | Upgrade, rollout, stop-loss, rollback, and disaster restore | Operations |
 | [用 Slack Reaction 创建 Skill 任务](slack-reaction-skill-automation.md) | Slack app、SecretStore、双 badge 自动化、诊断、升级与回滚 | Beginner to Operations |
 | [使用官方 Orchestrator Slack App 一键连接 Workspace](slack-managed-connections.md) | Managed Connection、OAuth、Gateway、转移、诊断与运维 | Beginner to Operations |
+| [为每个 Slack Workspace 创建独立的 Orchestrator App](slack-dedicated-app-provisioning.md) | Dedicated App、Configuration Token、manifest 审批、恢复、迁移与 sandbox 实测 | Advanced to Operations |
 | [FR-114 受控 Slack Sandbox 实测 Runbook](slack-managed-sandbox-certification-runbook.md) | 双 workspace live OAuth、badge、离线恢复、转移、撤销、备份恢复与脱敏证据 | Operations |
 
 ## Complementary Resources
