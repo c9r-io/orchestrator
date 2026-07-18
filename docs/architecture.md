@@ -48,6 +48,7 @@ The project structure is organized as follows:
 │   │       ├── client.rs # UDS/TCP gRPC client
 │   │       └── commands/ # Command handlers
 │   ├── gui/              # Tauri desktop application
+│   ├── slack-gateway/    # Optional public Slack OAuth/events/delivery boundary
 │   └── integration-tests/ # Integration test suite
 ├── ~/.orchestratord/     # Default runtime data directory (override via ORCHESTRATORD_DATA_DIR)
 │   ├── agent_orchestrator.db  # SQLite database
@@ -81,6 +82,7 @@ flowchart TB
     ExternalSource[Slack / External Source]
     SourceHTTP[Verified Source HTTP Adapter]
     SourceRouter[Durable Source Router]
+    SlackGateway[Optional Slack Integration Gateway]
 
     User -->|Commands| CLIClient
     CLIClient -->|gRPC| GRPC
@@ -91,7 +93,9 @@ flowchart TB
     Worker -->|Spawn/Monitor| Agent
     Agent -->|Modify| FS
     Agent -->|Logs| FS
-    ExternalSource -->|Signed Delivery| SourceHTTP
+    ExternalSource -->|Manual signed delivery| SourceHTTP
+    ExternalSource -->|OAuth + signed Events API| SlackGateway
+    SlackGateway -->|Outbound claim / ack / proxy| Daemon
     SourceHTTP -->|Persist Before Ack| DB
     DB -->|Claim Normalized Event| SourceRouter
     SourceRouter -->|Canonical Trigger / Attention Action| Daemon
@@ -111,6 +115,7 @@ crates/
   daemon/                  # orchestratord binary (gRPC server + embedded workers)
   cli/                     # orchestrator binary (lightweight gRPC client)
   gui/                     # Tauri desktop application
+  slack-gateway/           # Optional official Slack App OAuth/events service
   integration-tests/       # Integration test suite
 core/
   src/service/             # Pure business logic layer (task, resource, store, system)
@@ -131,6 +136,7 @@ core/
     *   **Process Management**: Spawns and monitors agent processes. Two runner executors sit behind the `RunnerExecutor` seam: the default `shell` (one-shot command, text contract) and `streaming`, which drives the agent CLI in `stream-json` mode with orchestrator-owned MCP tools so coordination consumes structured signals instead of scraped stdout. See [Streaming Runner Pivot — Overview](design_doc/orchestrator/streaming-runner-pivot-overview.md).
     *   **Event System**: Emits structured events (`step_started`, `task_failed`) to the database.
     *   **Source Event Boundary**: Provider adapters authenticate and normalize external deliveries, then persist them before acknowledgement. The daemon router correlates provider conversations through `source_bindings` and invokes canonical Trigger or allowlisted Attention services; adapters never mutate task state directly.
+    *   **Managed Slack Boundary**: An optional independent `orchestrator-slack-gateway` owns the official Slack App credentials, OAuth callback, raw-body request verification, encrypted installation tokens, durable normalized queue, and bounded permalink proxy. Local daemons use outbound HTTPS only and retain an encrypted installation-scoped pairing. SourceConnection ownership, Trigger association, badge policy, and task mutation remain daemon authority. See [Managed Slack Connection And Shared OAuth](design_doc/orchestrator/125-managed-slack-connection-shared-oauth.md).
 
 3.  **Data Layer (`core/src/db.rs`)**:
     *   **SQLite**: Stores persistent state including:
@@ -141,6 +147,7 @@ core/
         *   `source_events`: Provider-neutral external deliveries and routing state.
         *   `source_bindings`: External conversation/artifact to task correlation.
         *   `source_routing_attempts` and `source_command_actions`: Replay and command audit evidence.
+        *   `source_connections`, `source_connection_intents`, and `source_connection_changes`: Safe managed/manual connection lifecycle, resumable OAuth intent projection, monotonic watch changes, encrypted internal pairing envelope, generation/version fence, and delivery cursor (migration 35).
         *   `control_action_audit`: Canonical bounded mutation envelope joined to transport, domain, and event evidence by `request_id`.
         *   `process_metric_observations` and `process_metric_rollups`: Optional privacy-safe Process Console samples and rebuildable fixed-window aggregates.
         *   `process_metric_projector_state`: Non-authoritative projector cursor, lag, failure category, and freshness.
@@ -169,6 +176,8 @@ The orchestrator manages resources organized hierarchically:
 `SourceTaskTemplate` is a project-scoped source-to-task recipe distinct from workflow `StepTemplate`. It stores a trusted Skill descriptor and task action, then a pure core renderer combines them with bounded, explicitly allowlisted source variables. The daemon preview path reads one immutable `ArcSwap` snapshot, applies RuntimePolicy redaction, and performs no task/source mutation.
 
 `SourceTaskBinding` is the project-scoped policy boundary between an authenticated Slack Trigger installation and a SourceTaskTemplate. Its pure matcher evaluates exact normalized reaction, message target, explicit channel scope, and a role derived from Trigger `actorRoles`. Apply/resume rejects overlapping enabled rules; runtime ambiguity fails closed. Simulation and live reactions use the same matcher from one immutable config snapshot. `reactionRouting` defaults to `disabled`; when explicitly set to `bindings`, the asynchronous source router freezes the selected binding/template revisions, reserves a message/badge/binding automation identity, resolves a Slack permalink with a SecretStore-backed outbound credential, and uses the canonical task/audit path. Readers receive only safe route summaries; Operator authority is required to retrieve the protected permalink.
+
+`SourceConnection` is a durable runtime resource/read model for provider installation state rather than static OAuth secret configuration. A managed Slack Trigger uses `webhook.connectionRef`, which is mutually exclusive with manual `secret` and `outboundCredential`. OAuth completion creates one default disabled Trigger. The Gateway has a separate forward-only schema for app credentials, intents, installations, normalized deliveries, audit, and encrypted target-side ownership-transfer handoffs; it never shares the daemon database or executes SourceTaskBinding logic.
 
 #### Execution Model
 

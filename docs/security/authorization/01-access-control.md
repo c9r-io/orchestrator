@@ -14,6 +14,8 @@ FR-111 overlay: `SourceAutomationList/Get/Watch/Simulate/StatusGet` require `rea
 
 FR-112 overlay: Process Console automation editors may expose safe catalog/config metadata and daemon preview/simulation to `read_only+`, but save, suspend/resume, replay, and ignore controls must be absent below Operator. Direct Tauri/RPC invocation remains daemon-authorized. Protected Slack permalink retrieval stays Operator-only and is never part of catalog/list/get/watch. Reviewed mutations carry reason plus resource revision or route version. See `docs/qa/orchestrator/160-process-console-source-automation-ui.md` Scenarios 2 and 4.
 
+FR-114 overlay: `SourceConnectionCatalog/List/Get/Watch` expose only safe project-scoped state to `read_only+`. Connect, intent status/cancel, reauthorize, disconnect, and transfer require Admin at the daemon even when GUI controls are absent. Installation delivery/proxy additionally requires the exclusive Gateway owner daemon and current pairing/generation. Cross-project list/get/watch, cross-installation claim/proxy/ack, old-owner transfer calls, and target handoff claims must fail closed. Run `docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md` Scenarios 2 and 4.
+
 ---
 
 ## Background

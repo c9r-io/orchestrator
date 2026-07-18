@@ -22,6 +22,8 @@ Common targets:
 
 Project-specific FR-110 overlay: Slack permalink resolution does not accept a caller-provided fetch URL. Production always calls `https://slack.com/api/chat.getPermalink`, disables redirects, enforces TLS/time/body bounds, and validates that the returned URL is HTTPS on `slack.com` or a `*.slack.com` host with `/archives/{expected_channel}`. `ORCHESTRATOR_SLACK_API_BASE_URL` is accepted only as loopback HTTP in debug or explicit `dev-insecure` builds. Verify redirect, host, channel, timeout, and response-bound fixtures with `docs/qa/orchestrator/158-slack-permalink-canonical-task-routing.md` Scenario 4.
 
+FR-114 overlay: Gateway production `SLACK_GATEWAY_SLACK_API_BASE` is fixed to `https://slack.com`; overrides are loopback-only. Manifest endpoint rendering accepts only the reviewed public HTTPS callback/Events origin. Daemon Gateway configuration must be an HTTPS origin without path/query/fragment outside loopback tests, follows no redirects, and bounds time/body. The Gateway provider port exposes only reviewed permalink resolution and validates the returned Slack host plus expected channel coordinate. Run `docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md` Scenarios 2 and 5.
+
 ---
 
 ## Scenario 1: Block Internal And Local Addresses

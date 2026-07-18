@@ -21,6 +21,8 @@ FR-109/FR-110 source-routing overlay: exact reaction, target, channel, and Trigg
 
 FR-112 overlay: unsaved GUI preview/simulation must overlay exactly one expected manifest onto an isolated active-config clone and call the production matcher/renderer without persistence or network access. Frontend fields cannot locally select a Skill or binding outside daemon validation. Replay defaults to the pinned generation and only adopts current configuration after explicit reviewed confirmation. See `docs/qa/orchestrator/160-process-console-source-automation-ui.md` Scenarios 1 and 3.
 
+FR-114 overlay: callers cannot skip OAuth consent by forging an installation/project, reuse state/poll credentials, complete an intent without the exact Slack callback, or enable reaction routing through connect alone. Reauthorize, disconnect, and transfer require current connection version plus canonical Admin action context. A managed Trigger always begins with `reactionRouting: disabled`; badge task mutation remains governed by the existing preview/simulation/enable workflow. See `docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md` Scenarios 1 and 4.
+
 ---
 
 ## Scenario 1: Step Skipping (Bypass Prerequisite Validation)

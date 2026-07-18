@@ -1,0 +1,150 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: slack-managed-fixture
+spec:
+  root_path: "."
+  qa_targets: [docs/qa/orchestrator]
+  ticket_dir: docs/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: slack-managed-fixture
+spec:
+  capabilities: [managed_implement, managed_docs]
+  command: >-
+    echo '{"confidence":1.0,"quality_score":1.0,"artifacts":[]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: slack-managed-implement
+spec:
+  steps:
+    - id: implement_from_managed_slack
+      type: managed_implement
+      required_capability: managed_implement
+      enabled: true
+      behavior:
+        side_effect_class: none
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: slack-managed-docs
+spec:
+  steps:
+    - id: document_from_managed_slack
+      type: managed_docs
+      required_capability: managed_docs
+      enabled: true
+      behavior:
+        side_effect_class: none
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: RuntimePolicy
+metadata:
+  name: default
+spec:
+  runner:
+    shell: /bin/bash
+    shell_arg: -lc
+    policy: allowlist
+    executor: shell
+    allowed_shells: [/bin/bash, /bin/sh, sh]
+    allowed_shell_args: [-lc, -c]
+  resume:
+    auto: false
+  source_ingest_enabled: true
+---
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskTemplate
+metadata:
+  name: managed-implement-from-slack
+spec:
+  skill:
+    name: ticket-fix
+    invocation: "$ticket-fix"
+    args: []
+  action:
+    workflow: slack-managed-implement
+    workspace: slack-managed-fixture
+    start: true
+  goalTemplate: "{skill_invocation} {source_message_url}"
+  allowedVariables: [skill_invocation, source_message_url]
+---
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskTemplate
+metadata:
+  name: managed-docs-from-slack
+spec:
+  skill:
+    name: qa-doc-gen
+    invocation: "$qa-doc-gen"
+    args: []
+  action:
+    workflow: slack-managed-docs
+    workspace: slack-managed-fixture
+    start: true
+  goalTemplate: "{skill_invocation} {source_message_url}"
+  allowedVariables: [skill_invocation, source_message_url]
+---
+# In live OAuth the daemon creates this Trigger automatically with a real
+# connectionRef and reactionRouting disabled. This secret-free fixture pins the
+# reviewed manifest contract used by deterministic QA.
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: slack-managed-fixture
+spec:
+  event:
+    source: webhook
+    webhook:
+      provider: slack
+      installationId: I_MANAGED_SHARED_FIXTURE
+      connectionRef: conn-managed-shared-fixture
+      actorRoles:
+        U_OPERATOR: operator
+        U_READER: read_only
+      reactionRouting: disabled
+  action:
+    workflow: slack-managed-implement
+    workspace: slack-managed-fixture
+    start: true
+  concurrencyPolicy: Allow
+---
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskBinding
+metadata:
+  name: managed-slack-implement
+spec:
+  triggerRef: slack-managed-fixture
+  match:
+    eventKind: reaction_added
+    reaction: agent-implement
+    targetKind: message
+    channels: [C_MANAGED_FIXTURE]
+  templateRef: managed-implement-from-slack
+  allowedActorRoles: [operator]
+  suspend: false
+---
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskBinding
+metadata:
+  name: managed-slack-docs
+spec:
+  triggerRef: slack-managed-fixture
+  match:
+    eventKind: reaction_added
+    reaction: agent-docs
+    targetKind: message
+    channels: [C_MANAGED_FIXTURE]
+  templateRef: managed-docs-from-slack
+  allowedActorRoles: [operator]
+  suspend: false
+

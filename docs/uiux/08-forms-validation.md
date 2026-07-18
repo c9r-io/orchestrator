@@ -8,6 +8,8 @@ FR-097 overlay: in the "Resume consequence preview" form, verify logical boundar
 
 FR-112 overlay: Template and Badge Binding editors use visible labels and daemon `DiagnosticEntry.scope` for field-local errors; global transport/permission/stale errors remain at the editor level. Preview/simulation is explicitly non-mutating. Apply compares `require_absent` or normalized revision, and a stale response reloads authoritative state before another review. See `docs/qa/orchestrator/160-process-console-source-automation-ui.md` Scenarios 1 and 2.
 
+FR-114 overlay: connection project and display label use visible labels; the authorize action is disabled while creating an intent and repeated clicks preserve one idempotency key. Popup-blocked, Gateway unavailable, pending, expired, denied, cancelled, and completed states remain distinguishable and actionable. Reauthorize/disconnect/transfer compare the displayed positive version, require an operator reason, and reload authoritative state after a stale response. See `docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md` Scenario 4.
+
 ---
 
 ## Scenario 1: Field Labels, Help Text, And Required Markers Are Consistent

@@ -2,7 +2,7 @@
 
 ## 优先级: P0
 
-## 状态: Proposed
+## 状态: In Progress
 
 ## 依赖
 
@@ -180,23 +180,33 @@ ReadOnly 可以查看安全状态；connect、reauthorize、disconnect、transfe
 
 ## Acceptance Criteria
 
-- [ ] SourceConnection 三模式 schema/capability、safe projection 与 lifecycle persistence完成；本 FR 启用 `managed_shared`/`manual`，保留 `managed_dedicated` capability slot。
-- [ ] Platform operator 可从版本化 manifest provision/validate official App，secret 不出现在 stdout/log/artifact。
+- [x] SourceConnection 三模式 schema/capability、safe projection 与 lifecycle persistence完成；本 FR 启用 `managed_shared`/`manual`，保留 `managed_dedicated` capability slot。
+- [x] Platform operator 可从版本化 manifest provision/validate official App，secret 不出现在 stdout/log/artifact。
 - [ ] Admin 可从 GUI/CLI 通过一次 Slack OAuth consent 建立 active connection，无需复制 Signing Secret/Bot Token。
 - [ ] 两个 workspace 安装同一 official App 后严格路由到各自 owner daemon/project，无跨租户 list/get/watch/proxy/delivery。
 - [ ] OAuth state 的过期、重放、取消、拒绝、redirect/scope mismatch 和 callback retry均 fail closed且可诊断。
-- [ ] 同 workspace 重复/并发 connect 收敛为一个 connection/Trigger；同一时刻恰有一个 active owner。
+- [x] 同 workspace 重复/并发 connect 收敛为一个 connection/Trigger；同一时刻恰有一个 active owner。
 - [ ] daemon 离线时 Gateway durable ack event；重连从 cursor 恢复且同一 badge 只创建一个 task。
-- [ ] managed shared 下两个 badge 继续选择不同 Skill/template/workflow并保留 source → route → task provenance。
-- [ ] permalink proxy支持 timeout、429、invalid_auth、revocation 和 reviewed recovery。
-- [ ] reauthorize推进 credential generation；旧 generation 停止新 provider request。
+- [x] managed shared 下两个 badge 继续选择不同 Skill/template/workflow并保留 source → route → task provenance。
+- [x] permalink proxy支持 timeout、429、invalid_auth、revocation 和 reviewed recovery。
+- [x] reauthorize推进 credential generation；旧 generation 停止新 provider request。
 - [ ] `app_uninstalled`/revocation暂停 connection、dedupe Attention并阻止新 task。
-- [ ] transfer失败回滚后恰有一个 owner；disconnect清除 credential并保留执行证据。
-- [ ] ReadOnly/Operator/Admin UI和直接 RPC 边界一致，所有 privileged mutation经过 audit/CAS/idempotency。
+- [x] transfer失败回滚后恰有一个 owner；disconnect清除 credential并保留执行证据。
+- [x] ReadOnly/Operator/Admin UI和直接 RPC 边界一致，所有 privileged mutation经过 audit/CAS/idempotency。
 - [ ] manual mode 与 FR-107 through FR-113 release aggregate无回归。
 - [ ] Gateway/daemon populated upgrade、compat rollback、backup/restore与capability negotiation通过。
 - [ ] Workspace、Clippy、Gateway、GUI unit/build/Playwright、security、doc lint与OAuth aggregate全绿。
 - [ ] 受控 Slack sandbox完成非 CI live certification，证据不含 workspace 私有数据或 credentials。
+
+## Implementation Evidence
+
+- `4ed7a22f` adds the independent Slack Integration Gateway, reviewed manifest tooling, OAuth/event/provider contracts, encrypted persistence, durable delivery, and Gateway tests.
+- `f14e8e14` adds daemon migration 35, SourceConnection repository/RPC/CLI/Tauri/GUI, managed Trigger association, outbound reconciliation, and manual-mode compatibility.
+- `4b506e78` makes owner transfer a durable target-side claim/ack protocol; the old daemon clears its pairing and never receives the replacement credential.
+- `74086363` and `1ebb4922` add reviewed Connections transfer/reauthorize/disconnect UI, version fencing, focus-safe dialogs, Playwright coverage, and populated v34→v35 migration evidence.
+- The focused FR-114 gate passes Gateway 22 tests, SourceConnection/migration 8 tests, strict managed Clippy, 4 Connections component tests, 2 Connections Playwright tests, GUI build, fixture privacy, and documentation lint.
+
+Remaining closure evidence is deliberately not inferred: the clean full repository/FR-113 aggregate and a controlled live Slack sandbox certification must still pass. The live record must contain anonymous digests and state/request evidence only, never credentials or workspace-private data.
 
 ## QA Plan
 
@@ -229,4 +239,3 @@ ReadOnly 可以查看安全状态；connect、reauthorize、disconnect、transfe
 - [Slack `oauth.v2.access`](https://api.slack.com/methods/oauth.v2.access)
 - [Slack Events API](https://api.slack.com/events-api)
 - [Slack request verification](https://api.slack.com/authentication/verifying-requests-from-slack)
-

@@ -74,6 +74,11 @@ API_TOKEN="{bearer_token}"                # If authentication is required
 | `docs/security/business-logic/01-workflow-abuse.md` | Workflow abuse/replay/idempotency | 4 | Critical |
 | `docs/security/business-logic/02-race-conditions.md` | Race conditions/TOCTOU, including session writer and input replay overlay | 4 | Critical |
 
+### Threat Models
+| Doc | Description | Risk |
+|------|------|----------|
+| `docs/security/slack-gateway-threat-model.md` | FR-114 internet-facing shared Slack OAuth, credential, tenant, delivery, proxy, and transfer boundary | Critical |
+
 ### File Security (If Applicable)
 | Doc | Description | Scenarios | Risk |
 |------|------|--------|----------|
@@ -92,3 +97,4 @@ API_TOKEN="{bearer_token}"                # If authentication is required
 9. Before a Process Console v1 release, run the domain overlays above and the clean-tree aggregate gate in `docs/qa/orchestrator/153-process-console-release-acceptance.md`; the gate retains canonical audit and privacy assertions from each owning slice.
 10. For the FR-112 Sources → Automations UI, run authorization, workflow abuse, race-condition, and sensitive-data overlays with `docs/qa/orchestrator/160-process-console-source-automation-ui.md`; include the real Tauri bridge and DOM/storage privacy scan.
 11. Before releasing Slack Reaction Skill Automation, run every FR-107 through FR-112 source overlay plus `docs/qa/orchestrator/161-slack-reaction-skill-automation-release.md`; require signed two-badge routing, concurrent/restart convergence, diagnostic redaction, and forward-only compatible rollback.
+12. Before enabling FR-114 managed Slack connections, review `slack-gateway-threat-model.md` and run authentication, authorization, SSRF, sensitive-data, logging, workflow-abuse, and race-condition overlays with `docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md`. A controlled Slack sandbox certification is required outside CI.

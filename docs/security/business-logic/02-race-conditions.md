@@ -24,6 +24,8 @@ FR-111 overlay: route claim, expired-attempt closure, retry-budget increment, le
 
 FR-112 overlay: race two GUI resource editors and require create-if-absent or normalized expected revision to allow one apply only. Binding suspend/resume compares the editor revision under the daemon configuration mutation lock. A stale operation returns `Aborted`, reloads authoritative state, and cannot reuse an old review. Route replay/ignore continues to use FR-111 expected version and idempotency. See `docs/qa/orchestrator/160-process-console-source-automation-ui.md` Scenarios 2 and 3.
 
+FR-114 overlay: race OAuth intent consumption, duplicate callbacks, repeated workspace install, reauthorization, disconnect, and ownership transfer. State/poll credentials are single-use; one verified team digest maps to one logical installation; generation/version CAS fences stale operations. Transfer rotates pairing and changes owner atomically, old daemon clears its credential, and a durable target claim/ack tolerates crashes before and after target persistence without two active pairings. Run `docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md` Scenarios 1 and 3.
+
 ---
 
 ## Scenario 1: Concurrent Use Of A One-Time Token (If Applicable)

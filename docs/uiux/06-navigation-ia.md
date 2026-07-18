@@ -40,6 +40,7 @@ Verify sidebar/top-nav active state is accurate so users do not get lost.
 - Attention counters match the actionable card set, and Attention/source deep links open the integrated Process Workspace with the target task.
 - Sources shows a unique active state; opening a routed source reveals matching provenance without losing the Sources navigation context.
 - FR-112 keeps Events, Process bindings, and Automations under the single Sources active state. Templates, Badge bindings, and Recent routes use stable hash deep links; route detail links to source event, Attention, and Process Workspace, and Attention links back to the route. See `docs/qa/orchestrator/160-process-console-source-automation-ui.md` Scenario 3.
+- FR-114 makes Connections the default Sources subsection and keeps the Instant shared App, reserved Dedicated App, and Existing App choices together. Connection deep links retain the Sources active state; successful OAuth points to Automations as the next step rather than enabling routing implicitly. See `docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md` Scenario 4.
 
 ---
 

@@ -16,6 +16,8 @@ Common failure modes in authentication systems:
 - Missing token binding leading to long-lived lateral movement after theft
 - Misconfigured IdP/OIDC integrations causing token confusion or callback hijacking
 
+FR-114 overlay: the public Slack callback authenticates a short-lived, single-use OAuth state bound to daemon, project, actor, exact redirect, and exact scopes; Slack Events authenticate the timestamp plus HMAC over the exact raw body. Daemon bootstrap calls require the deployment enrollment credential, while delivery/proxy/disconnect/transfer calls require an installation-scoped pairing and owner/generation fences. Test missing/tampered/replayed/expired credentials and verify privacy-safe 401/404 behavior with `docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md` Scenarios 1-3. The deployment enrollment key is privileged platform material, not tenant authentication.
+
 ---
 
 ## Scenario 1: Public Endpoint Allowlist Audit
@@ -116,4 +118,3 @@ Verify callback URL, state/nonce, issuer/audience validation are correct.
 - Strict state/nonce validation
 - `redirect_uri` allowlist is fixed
 - Strict issuer/audience validation
-

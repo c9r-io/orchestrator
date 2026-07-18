@@ -283,6 +283,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/159-source-automation-reliability-operations.md` | 5 | FR-111 bounded route leases/retries, Attention recovery, safe operations, suspension, metrics, retention, and compatibility |
 | orchestrator | `docs/qa/orchestrator/160-process-console-source-automation-ui.md` | 5 | FR-112 Process Console template/badge management, daemon preview/simulation, route diagnosis/replay, CAS/RBAC/privacy, accessibility, and real Tauri bridge |
 | orchestrator | `docs/qa/orchestrator/161-slack-reaction-skill-automation-release.md` | 5 | FR-113 clean-tree aggregate, signed two-badge Skill/workflow routing, concurrency/restart/replay, populated migration, compatible rollback, Tauri/UI, and release documentation |
+| orchestrator | `docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md` | 5 | FR-114 shared official Slack App OAuth, SourceConnection lifecycle, tenant-isolated delivery, target-side transfer, CLI/Tauri/UI/security, and live sandbox certification |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
