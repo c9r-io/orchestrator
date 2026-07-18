@@ -127,8 +127,28 @@ impl Resource for TriggerResource {
                         self.name()
                     ));
                 }
+                if let Some(connection_ref) = webhook.connection_ref.as_deref() {
+                    if provider != "slack" {
+                        return Err(anyhow!(
+                            "trigger '{}': connectionRef currently requires provider=slack",
+                            self.name()
+                        ));
+                    }
+                    if connection_ref.trim().is_empty() || connection_ref.len() > 128 {
+                        return Err(anyhow!(
+                            "trigger '{}': connectionRef must contain 1-128 characters",
+                            self.name()
+                        ));
+                    }
+                    if webhook.secret.is_some() || webhook.outbound_credential.is_some() {
+                        return Err(anyhow!(
+                            "trigger '{}': connectionRef is mutually exclusive with secret and outboundCredential",
+                            self.name()
+                        ));
+                    }
+                }
                 if provider == "slack" {
-                    if webhook.secret.is_none() {
+                    if webhook.connection_ref.is_none() && webhook.secret.is_none() {
                         return Err(anyhow!(
                             "trigger '{}': Slack source webhook requires SecretStore signing secret",
                             self.name()
@@ -163,12 +183,12 @@ impl Resource for TriggerResource {
                         self.name()
                     ));
                 }
-                if webhook.reaction_routing == "bindings" {
+                if webhook.reaction_routing == "bindings" && webhook.connection_ref.is_none() {
                     let outbound = webhook.outbound_credential.as_ref().ok_or_else(|| {
-                        anyhow!(
-                            "trigger '{}': reactionRouting=bindings requires outboundCredential",
-                            self.name()
-                        )
+                            anyhow!(
+                                "trigger '{}': reactionRouting=bindings requires outboundCredential or connectionRef",
+                                self.name()
+                            )
                     })?;
                     if outbound.from_ref.trim().is_empty() || outbound.key.trim().is_empty() {
                         return Err(anyhow!(
@@ -277,6 +297,7 @@ pub(crate) fn trigger_spec_to_config(spec: &TriggerSpec) -> TriggerConfig {
                 condition: f.condition.clone(),
             }),
             webhook: e.webhook.as_ref().map(|w| TriggerWebhookConfig {
+                connection_ref: w.connection_ref.clone(),
                 secret: w.secret.as_ref().map(|s| TriggerSecretRef {
                     from_ref: s.from_ref.clone(),
                 }),
@@ -340,6 +361,7 @@ pub(crate) fn trigger_config_to_spec(cfg: &TriggerConfig) -> TriggerSpec {
                 condition: f.condition.clone(),
             }),
             webhook: e.webhook.as_ref().map(|w| TriggerWebhookSpec {
+                connection_ref: w.connection_ref.clone(),
                 secret: w.secret.as_ref().map(|s| WebhookSecretRef {
                     from_ref: s.from_ref.clone(),
                 }),
@@ -485,6 +507,42 @@ spec:
                 .validate()
                 .is_ok()
         );
+    }
+
+    #[test]
+    fn managed_connection_ref_replaces_both_secret_references() {
+        let managed = r#"
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata: {name: slack-managed}
+spec:
+  event:
+    source: webhook
+    webhook:
+      provider: slack
+      installationId: install-1
+      connectionRef: conn-install-1
+      reactionRouting: bindings
+  action: {workflow: docs, workspace: default}
+"#;
+        let manifest: OrchestratorResource = serde_yaml::from_str(managed).expect("manifest");
+        assert!(
+            dispatch_resource(manifest)
+                .expect("dispatch")
+                .validate()
+                .is_ok()
+        );
+
+        let mixed = managed.replace(
+            "      connectionRef: conn-install-1",
+            "      connectionRef: conn-install-1\n      secret: {fromRef: forbidden}",
+        );
+        let manifest: OrchestratorResource = serde_yaml::from_str(&mixed).expect("manifest");
+        let error = dispatch_resource(manifest)
+            .expect("dispatch")
+            .validate()
+            .expect_err("mixed credential authorities");
+        assert!(error.to_string().contains("mutually exclusive"));
     }
 
     #[test]

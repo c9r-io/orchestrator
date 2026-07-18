@@ -29,6 +29,11 @@ pub struct GatewayConfig {
     #[arg(long, env = "SLACK_GATEWAY_MASTER_KEY", hide_env_values = true)]
     pub master_key: String,
 
+    /// Pre-install daemon enrollment credential. It can create OAuth intents
+    /// but cannot access any installed workspace or provider proxy.
+    #[arg(long, env = "SLACK_GATEWAY_ENROLLMENT_KEY", hide_env_values = true)]
+    pub enrollment_key: String,
+
     /// Slack OAuth and Web API origin. Overrides are accepted only for
     /// loopback test servers.
     #[arg(
@@ -76,6 +81,9 @@ impl GatewayConfig {
         if !(1..=30).contains(&self.provider_timeout_secs) {
             bail!("provider timeout must be between 1 and 30 seconds");
         }
+        if self.enrollment_key.len() < 32 {
+            bail!("gateway enrollment key must contain at least 32 bytes");
+        }
         Ok(())
     }
 
@@ -117,6 +125,7 @@ mod tests {
             public_url: public_url.into(),
             database: PathBuf::from("gateway.db"),
             master_key: "unused".into(),
+            enrollment_key: "0123456789abcdef0123456789abcdef".into(),
             slack_api_base: slack_api_base.into(),
             intent_ttl_secs: 600,
             max_lease_secs: 60,

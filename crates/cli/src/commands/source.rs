@@ -3,9 +3,12 @@ use orchestrator_proto::{
     ActionAuditContext, OrchestratorServiceClient, SourceAutomationGetRequest,
     SourceAutomationListRequest, SourceAutomationMutationRequest, SourceAutomationRouteGetRequest,
     SourceAutomationSimulateRequest, SourceAutomationStatusRequest, SourceAutomationWatchRequest,
-    SourceBindRequest, SourceBinding, SourceBindingListRequest, SourceEvent, SourceEventGetRequest,
-    SourceEventIngestRequest, SourceEventListRequest, SourceReplayRequest,
-    SourceTaskBindingMutationRequest, SourceTaskBindingSimulateRequest,
+    SourceBindRequest, SourceBinding, SourceBindingListRequest, SourceConnectionCatalogRequest,
+    SourceConnectionConnectRequest, SourceConnectionGetRequest, SourceConnectionIntentGetRequest,
+    SourceConnectionIntentMutationRequest, SourceConnectionListRequest,
+    SourceConnectionMutationRequest, SourceConnectionTransferRequest, SourceConnectionWatchRequest,
+    SourceEvent, SourceEventGetRequest, SourceEventIngestRequest, SourceEventListRequest,
+    SourceReplayRequest, SourceTaskBindingMutationRequest, SourceTaskBindingSimulateRequest,
     SourceTaskTemplatePreviewRequest,
 };
 use sha2::{Digest, Sha256};
@@ -13,7 +16,7 @@ use tonic::transport::Channel;
 
 use crate::{
     OutputFormat, SourceAutomationCommands, SourceBindingCommands, SourceCommands,
-    SourceTemplateCommands,
+    SourceConnectionCommands, SourceTemplateCommands,
 };
 
 pub(crate) async fn dispatch(
@@ -21,6 +24,7 @@ pub(crate) async fn dispatch(
     command: SourceCommands,
 ) -> Result<()> {
     match command {
+        SourceCommands::Connection { command } => dispatch_connection(client, command).await?,
         SourceCommands::Template { command } => match command {
             SourceTemplateCommands::Preview {
                 name,
@@ -533,6 +537,302 @@ pub(crate) async fn dispatch(
     Ok(())
 }
 
+async fn dispatch_connection(
+    client: &mut OrchestratorServiceClient<Channel>,
+    command: SourceConnectionCommands,
+) -> Result<()> {
+    match command {
+        SourceConnectionCommands::List {
+            project,
+            provider,
+            include_disconnected,
+            output,
+        } => {
+            let response = client
+                .source_connection_list(SourceConnectionListRequest {
+                    project_id: project,
+                    provider,
+                    include_disconnected,
+                    limit: 200,
+                })
+                .await?
+                .into_inner();
+            if output == OutputFormat::Table {
+                println!("ID\tPROVIDER\tMODE\tSTATE\tGEN\tTRIGGER\tUPDATED");
+                for connection in response.connections {
+                    println!(
+                        "{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                        connection.id,
+                        connection.provider,
+                        connection.provisioning_mode,
+                        connection.state,
+                        connection.generation,
+                        connection.trigger_name.as_deref().unwrap_or("-"),
+                        connection.updated_at,
+                    );
+                }
+            } else {
+                print_value(
+                    serde_json::Value::Array(
+                        response.connections.iter().map(connection_value).collect(),
+                    ),
+                    output,
+                )?;
+            }
+        }
+        SourceConnectionCommands::Get {
+            id,
+            project,
+            output,
+        } => {
+            let connection = client
+                .source_connection_get(SourceConnectionGetRequest {
+                    project_id: project,
+                    id,
+                })
+                .await?
+                .into_inner();
+            print_value(connection_value(&connection), output)?;
+        }
+        SourceConnectionCommands::Watch { project, after } => {
+            let mut stream = client
+                .source_connection_watch(SourceConnectionWatchRequest {
+                    project_id: project,
+                    after_cursor: after,
+                    interval_millis: 500,
+                })
+                .await?
+                .into_inner();
+            while let Some(delta) = stream.message().await? {
+                print_value(
+                    serde_json::json!({
+                        "cursor": delta.cursor,
+                        "connection_version": delta.connection_version,
+                        "state": delta.state,
+                        "error_code": delta.error_code,
+                        "request_id": delta.request_id,
+                        "changed_at": delta.changed_at,
+                        "connection": delta.connection.as_ref().map(connection_value),
+                    }),
+                    OutputFormat::Json,
+                )?;
+            }
+        }
+        SourceConnectionCommands::Catalog { output } => {
+            let catalog = client
+                .source_connection_catalog_get(SourceConnectionCatalogRequest {})
+                .await?
+                .into_inner();
+            print_value(
+                serde_json::json!({
+                    "protocol_version": catalog.protocol_version,
+                    "gateway_configured": catalog.gateway_configured,
+                    "permalink_proxy": catalog.permalink_proxy,
+                    "modes": catalog.modes.into_iter().map(|mode| serde_json::json!({
+                        "mode": mode.mode,
+                        "available": mode.available,
+                        "unavailable_reason": mode.unavailable_reason,
+                    })).collect::<Vec<_>>(),
+                }),
+                output,
+            )?;
+        }
+        SourceConnectionCommands::Connect {
+            project,
+            label,
+            reason,
+            idempotency_key,
+            no_open,
+        } => {
+            let intent = client
+                .source_connection_connect(SourceConnectionConnectRequest {
+                    project_id: project,
+                    provider: "slack".into(),
+                    provisioning_mode: "managed_shared".into(),
+                    display_label: label,
+                    idempotency_key,
+                    reason,
+                })
+                .await?
+                .into_inner();
+            maybe_open_oauth(intent.authorize_url.as_deref(), no_open);
+            print_value(intent_value(&intent), OutputFormat::Yaml)?;
+        }
+        SourceConnectionCommands::Status {
+            intent_id,
+            project,
+            output,
+        } => {
+            let intent = client
+                .source_connection_intent_get(SourceConnectionIntentGetRequest {
+                    project_id: project,
+                    intent_id,
+                })
+                .await?
+                .into_inner();
+            print_value(intent_value(&intent), output)?;
+        }
+        SourceConnectionCommands::Cancel {
+            intent_id,
+            project,
+            reason,
+            idempotency_key,
+        } => {
+            let intent = client
+                .source_connection_cancel(SourceConnectionIntentMutationRequest {
+                    project_id: project,
+                    intent_id,
+                    idempotency_key,
+                    reason,
+                })
+                .await?
+                .into_inner();
+            print_value(intent_value(&intent), OutputFormat::Yaml)?;
+        }
+        SourceConnectionCommands::Reauthorize {
+            id,
+            project,
+            expected_version,
+            reason,
+            idempotency_key,
+            no_open,
+        } => {
+            let intent = client
+                .source_connection_reauthorize(SourceConnectionMutationRequest {
+                    project_id: project,
+                    id,
+                    expected_version,
+                    idempotency_key,
+                    reason,
+                })
+                .await?
+                .into_inner();
+            maybe_open_oauth(intent.authorize_url.as_deref(), no_open);
+            print_value(intent_value(&intent), OutputFormat::Yaml)?;
+        }
+        SourceConnectionCommands::Disconnect {
+            id,
+            project,
+            expected_version,
+            reason,
+            idempotency_key,
+        } => {
+            let connection = client
+                .source_connection_disconnect(SourceConnectionMutationRequest {
+                    project_id: project,
+                    id,
+                    expected_version,
+                    idempotency_key,
+                    reason,
+                })
+                .await?
+                .into_inner();
+            print_value(connection_value(&connection), OutputFormat::Yaml)?;
+        }
+        SourceConnectionCommands::Transfer {
+            id,
+            project,
+            expected_version,
+            target_daemon_id,
+            reason,
+            idempotency_key,
+        } => {
+            let connection = client
+                .source_connection_transfer(SourceConnectionTransferRequest {
+                    project_id: project,
+                    id,
+                    expected_version,
+                    target_daemon_id,
+                    idempotency_key,
+                    reason,
+                })
+                .await?
+                .into_inner();
+            print_value(connection_value(&connection), OutputFormat::Yaml)?;
+        }
+    }
+    Ok(())
+}
+
+fn maybe_open_oauth(url: Option<&str>, no_open: bool) {
+    let Some(url) = url else { return };
+    if no_open || !oauth_authorize_url_allowed(url) {
+        return;
+    }
+    #[cfg(target_os = "macos")]
+    let result = std::process::Command::new("open").arg(url).status();
+    #[cfg(target_os = "linux")]
+    let result = std::process::Command::new("xdg-open").arg(url).status();
+    #[cfg(target_os = "windows")]
+    let result = std::process::Command::new("cmd")
+        .args(["/C", "start", "", url])
+        .status();
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    let result: std::io::Result<std::process::ExitStatus> = Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "browser launch unsupported",
+    ));
+    if !matches!(result, Ok(status) if status.success()) {
+        eprintln!("OAuth URL was not opened automatically; use the authorize_url shown below.");
+    }
+}
+
+fn oauth_authorize_url_allowed(value: &str) -> bool {
+    let Ok(value) = url::Url::parse(value) else {
+        return false;
+    };
+    value.scheme() == "https"
+        && value.host_str() == Some("slack.com")
+        && matches!(value.port(), None | Some(443))
+        && value.path() == "/oauth/v2/authorize"
+        && value.query().is_some()
+        && value.username().is_empty()
+        && value.password().is_none()
+}
+
+fn connection_value(value: &orchestrator_proto::SourceConnection) -> serde_json::Value {
+    serde_json::json!({
+        "id": value.id,
+        "project_id": value.project_id,
+        "provider": value.provider,
+        "display_label": value.display_label,
+        "provisioning_mode": value.provisioning_mode,
+        "installation_id": value.installation_id,
+        "installation_id_digest": value.installation_id_digest,
+        "enterprise_id_digest": value.enterprise_id_digest,
+        "owner_daemon_id": value.owner_daemon_id,
+        "generation": value.generation,
+        "version": value.version,
+        "state": value.state,
+        "capabilities": value.capabilities,
+        "scopes": value.scopes,
+        "trigger_name": value.trigger_name,
+        "last_delivery_at": value.last_delivery_at,
+        "last_acked_cursor": value.last_acked_cursor,
+        "delivery_lag": value.delivery_lag,
+        "last_error_code": value.last_error_code,
+        "created_at": value.created_at,
+        "updated_at": value.updated_at,
+        "reauthorized_at": value.reauthorized_at,
+        "disconnected_at": value.disconnected_at,
+    })
+}
+
+fn intent_value(value: &orchestrator_proto::SourceConnectionIntentResponse) -> serde_json::Value {
+    serde_json::json!({
+        "id": value.id,
+        "project_id": value.project_id,
+        "provider": value.provider,
+        "provisioning_mode": value.provisioning_mode,
+        "status": value.status,
+        "connection_id": value.connection_id,
+        "error_code": value.error_code,
+        "expires_at": value.expires_at,
+        "authorize_url": value.authorize_url,
+        "connection": value.connection.as_ref().map(connection_value),
+    })
+}
+
 fn audit_context(reason_code: &str, prefix: &str) -> ActionAuditContext {
     let nonce = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -671,4 +971,22 @@ fn binding_value(binding: &SourceBinding) -> serde_json::Value {
         "created_by_event_id": binding.created_by_event_id,
         "created_at": binding.created_at,
     })
+}
+
+#[cfg(test)]
+mod managed_connection_tests {
+    use super::oauth_authorize_url_allowed;
+
+    #[test]
+    fn oauth_browser_allowlist_is_exact() {
+        assert!(oauth_authorize_url_allowed(
+            "https://slack.com/oauth/v2/authorize?state=opaque"
+        ));
+        assert!(!oauth_authorize_url_allowed(
+            "https://slack.com.evil.example/oauth/v2/authorize?state=opaque"
+        ));
+        assert!(!oauth_authorize_url_allowed(
+            "https://slack.com/oauth/v2/authorize"
+        ));
+    }
 }

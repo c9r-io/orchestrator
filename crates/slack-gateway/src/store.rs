@@ -551,8 +551,8 @@ impl GatewayStore {
         daemon_id: &str,
         pairing_secret: &str,
     ) -> Result<InstallationProjection> {
-        let digest = self
-            .connection()?
+        let connection = self.connection()?;
+        let digest = connection
             .query_row(
                 "SELECT pairing_digest FROM installations WHERE id=?1 AND owner_daemon_id=?2
                  AND state IN ('active','attention','suspended','revoked')",
@@ -568,6 +568,7 @@ impl GatewayStore {
         {
             bail!("installation_not_found");
         }
+        drop(connection);
         self.installation_projection(installation_id)
     }
 
@@ -689,7 +690,7 @@ impl GatewayStore {
         }
         transaction.execute(
             "UPDATE installations SET last_acked_cursor=MAX(last_acked_cursor,?2),
-             version=version+1,updated_at=?3 WHERE id=?1 AND owner_daemon_id=?4",
+             updated_at=?3 WHERE id=?1 AND owner_daemon_id=?4",
             params![installation_id, max_cursor, now, daemon_id],
         )?;
         transaction.commit()?;
@@ -699,8 +700,8 @@ impl GatewayStore {
     /// Resolves the installation from a verified Slack team identity.
     pub fn installation_for_team(&self, team_id: &str) -> Result<InstallationProjection> {
         let digest = self.crypto.digest("slack-team", team_id);
-        let id = self
-            .connection()?
+        let connection = self.connection()?;
+        let id = connection
             .query_row(
                 "SELECT id FROM installations WHERE team_digest=?1 AND state='active'",
                 [digest],
@@ -708,6 +709,7 @@ impl GatewayStore {
             )
             .optional()?
             .context("unknown_installation")?;
+        drop(connection);
         self.installation_projection(&id)
     }
 
@@ -747,6 +749,98 @@ impl GatewayStore {
         )?;
         transaction.commit()?;
         Ok(Some(id))
+    }
+
+    /// Disconnects an authenticated installation and destroys provider and pairing credentials.
+    pub fn disconnect_installation(
+        &self,
+        installation_id: &str,
+        daemon_id: &str,
+        pairing_secret: &str,
+        expected_version: i64,
+    ) -> Result<InstallationProjection> {
+        self.authenticate_pairing(installation_id, daemon_id, pairing_secret)?;
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+        let changed = transaction.execute(
+            "UPDATE installations SET state='disconnected',version=version+1,
+             bot_token_ciphertext='',pairing_digest='',last_error_code=NULL,updated_at=?4
+             WHERE id=?1 AND owner_daemon_id=?2 AND version=?3 AND state!='disconnected'",
+            params![installation_id, daemon_id, expected_version, now_ts()],
+        )?;
+        if changed != 1 {
+            bail!("installation_version_conflict");
+        }
+        transaction.execute(
+            "UPDATE deliveries SET state='acked',lease_owner=NULL,lease_expires_at=NULL,
+             acked_at=?2,updated_at=?2 WHERE installation_id=?1 AND state!='acked'",
+            params![installation_id, now_ts()],
+        )?;
+        insert_audit(
+            &transaction,
+            installation_id,
+            "installation_disconnected",
+            None,
+            None,
+        )?;
+        transaction.commit()?;
+        drop(connection);
+        self.installation_projection(installation_id)
+    }
+
+    /// Atomically transfers one installation owner after draining active leases.
+    pub fn transfer_installation(
+        &self,
+        installation_id: &str,
+        daemon_id: &str,
+        pairing_secret: &str,
+        expected_version: i64,
+        target_daemon_id: &str,
+    ) -> Result<(InstallationProjection, String)> {
+        validate_identity(target_daemon_id, "target daemon ID")?;
+        self.authenticate_pairing(installation_id, daemon_id, pairing_secret)?;
+        if target_daemon_id == daemon_id {
+            bail!("installation_owner_unchanged");
+        }
+        let replacement_pairing = crate::crypto::random_secret();
+        let replacement_digest = self
+            .crypto
+            .digest("installation-pairing", &replacement_pairing);
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+        transaction.execute(
+            "UPDATE deliveries SET state='pending',lease_owner=NULL,lease_expires_at=NULL,
+             updated_at=?2 WHERE installation_id=?1 AND state='leased'",
+            params![installation_id, now_ts()],
+        )?;
+        let changed = transaction.execute(
+            "UPDATE installations SET owner_daemon_id=?4,pairing_digest=?5,version=version+1,
+             updated_at=?6 WHERE id=?1 AND owner_daemon_id=?2 AND version=?3 AND state='active'",
+            params![
+                installation_id,
+                daemon_id,
+                expected_version,
+                target_daemon_id,
+                replacement_digest,
+                now_ts(),
+            ],
+        )?;
+        if changed != 1 {
+            bail!("installation_version_conflict");
+        }
+        insert_audit(
+            &transaction,
+            installation_id,
+            "installation_transferred",
+            None,
+            None,
+        )?;
+        transaction.commit()?;
+        drop(connection);
+        Ok((
+            self.installation_projection(installation_id)?,
+            replacement_pairing,
+        ))
     }
 
     fn installation_projection(&self, installation_id: &str) -> Result<InstallationProjection> {
@@ -1147,6 +1241,49 @@ mod tests {
     }
 
     #[test]
+    fn transfer_rotates_pairing_and_moves_exactly_one_owner() {
+        let (_temp, store) = setup();
+        let (intent, installation) = create_completed(&store);
+        let first_pairing = store
+            .intent_status(&intent.id, &intent.poll_secret)
+            .expect("status")
+            .pairing_secret
+            .expect("pairing");
+        let (transferred, replacement) = store
+            .transfer_installation(
+                &installation.id,
+                "daemon-a",
+                &first_pairing,
+                installation.version,
+                "daemon-b",
+            )
+            .expect("transfer");
+        assert_eq!(transferred.owner_daemon_id, "daemon-b");
+        assert_eq!(transferred.version, installation.version + 1);
+        assert!(
+            store
+                .installation_credential(&installation.id, "daemon-a", &first_pairing)
+                .is_err()
+        );
+        assert!(
+            store
+                .installation_credential(&installation.id, "daemon-b", &replacement)
+                .is_ok()
+        );
+        assert!(
+            store
+                .transfer_installation(
+                    &installation.id,
+                    "daemon-a",
+                    &first_pairing,
+                    installation.version,
+                    "daemon-c",
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
     fn delivery_claim_and_ack_are_owner_fenced_and_idempotent() {
         let (_temp, store) = setup();
         let (intent, installation) = create_completed(&store);
@@ -1189,5 +1326,13 @@ mod tests {
                 .expect("ack"),
             claimed[0].cursor
         );
+        let after_ack = store
+            .authenticate_pairing(&installation.id, "daemon-a", &pairing)
+            .expect("projection after ack");
+        assert_eq!(after_ack.version, installation.version);
+        let disconnected = store
+            .disconnect_installation(&installation.id, "daemon-a", &pairing, installation.version)
+            .expect("disconnect after delivery");
+        assert_eq!(disconnected.state, "disconnected");
     }
 }

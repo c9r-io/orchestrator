@@ -396,6 +396,12 @@ pub enum AttentionCommands {
 /// External source event and binding operations.
 #[derive(Subcommand, Debug, Clone)]
 pub enum SourceCommands {
+    /// Manage provider connections and OAuth installation intents.
+    Connection {
+        /// SourceConnection operation.
+        #[command(subcommand)]
+        command: SourceConnectionCommands,
+    },
     /// Manage and preview governed source-to-task templates.
     Template {
         /// Template operation.
@@ -500,6 +506,153 @@ pub enum SourceCommands {
     Replay {
         /// Source event ID.
         id: String,
+    },
+}
+
+/// Managed source connection operations.
+#[derive(Subcommand, Debug, Clone)]
+pub enum SourceConnectionCommands {
+    /// List safe SourceConnection projections.
+    #[command(alias = "ls")]
+    List {
+        /// Project isolation scope.
+        #[arg(short, long)]
+        project: String,
+        /// Optional provider filter.
+        #[arg(long)]
+        provider: Option<String>,
+        /// Include disconnected evidence.
+        #[arg(long)]
+        include_disconnected: bool,
+        /// Output encoding.
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+    /// Get one SourceConnection.
+    Get {
+        /// SourceConnection ID.
+        id: String,
+        /// Project isolation scope.
+        #[arg(short, long)]
+        project: String,
+        /// Output encoding.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
+    /// Follow monotonic SourceConnection changes.
+    Watch {
+        /// Project isolation scope.
+        #[arg(short, long)]
+        project: String,
+        /// Resume after this change cursor.
+        #[arg(long, default_value_t = 0)]
+        after: i64,
+    },
+    /// Show managed/manual provisioning capabilities.
+    Catalog {
+        /// Output encoding.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
+    /// Start the official Slack App OAuth flow.
+    Connect {
+        /// Project isolation scope.
+        #[arg(short, long)]
+        project: String,
+        /// Safe local display label.
+        #[arg(long, default_value = "Slack workspace")]
+        label: String,
+        /// Operator reason recorded in canonical audit.
+        #[arg(long)]
+        reason: String,
+        /// Stable retry identity.
+        #[arg(long)]
+        idempotency_key: String,
+        /// Print the OAuth URL without opening the system browser.
+        #[arg(long)]
+        no_open: bool,
+    },
+    /// Poll or resume one OAuth intent.
+    Status {
+        /// OAuth intent ID.
+        intent_id: String,
+        /// Project isolation scope.
+        #[arg(short, long)]
+        project: String,
+        /// Output encoding.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
+    /// Cancel a pending OAuth intent.
+    Cancel {
+        /// OAuth intent ID.
+        intent_id: String,
+        /// Project isolation scope.
+        #[arg(short, long)]
+        project: String,
+        /// Operator reason recorded in canonical audit.
+        #[arg(long)]
+        reason: String,
+        /// Stable retry identity.
+        #[arg(long)]
+        idempotency_key: String,
+    },
+    /// Start OAuth again for an existing connection.
+    Reauthorize {
+        /// SourceConnection ID.
+        id: String,
+        /// Project isolation scope.
+        #[arg(short, long)]
+        project: String,
+        /// Observed optimistic version.
+        #[arg(long)]
+        expected_version: i64,
+        /// Operator reason recorded in canonical audit.
+        #[arg(long)]
+        reason: String,
+        /// Stable retry identity.
+        #[arg(long)]
+        idempotency_key: String,
+        /// Print the OAuth URL without opening the system browser.
+        #[arg(long)]
+        no_open: bool,
+    },
+    /// Disconnect and destroy managed credentials.
+    Disconnect {
+        /// SourceConnection ID.
+        id: String,
+        /// Project isolation scope.
+        #[arg(short, long)]
+        project: String,
+        /// Observed optimistic version.
+        #[arg(long)]
+        expected_version: i64,
+        /// Operator reason recorded in canonical audit.
+        #[arg(long)]
+        reason: String,
+        /// Stable retry identity.
+        #[arg(long)]
+        idempotency_key: String,
+    },
+    /// Transfer exclusive ownership to another daemon.
+    Transfer {
+        /// SourceConnection ID.
+        id: String,
+        /// Project isolation scope.
+        #[arg(short, long)]
+        project: String,
+        /// Observed optimistic version.
+        #[arg(long)]
+        expected_version: i64,
+        /// Target daemon identity.
+        #[arg(long)]
+        target_daemon_id: String,
+        /// Operator reason recorded in canonical audit.
+        #[arg(long)]
+        reason: String,
+        /// Stable retry identity.
+        #[arg(long)]
+        idempotency_key: String,
     },
 }
 

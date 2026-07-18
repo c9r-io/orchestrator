@@ -22,8 +22,8 @@ pub use cli::{
     DaemonCommands, DbCommands, DbMigrationCommands, DebugCommands, EventCommands, GuideFormat,
     HandoffCommands, ManifestCommands, MetricsCommands, OutputFormat, QaCommands, ResumeCommands,
     SandboxProbeCommands, SecretCommands, SecretKeyCommands, SourceAutomationCommands,
-    SourceBindingCommands, SourceCommands, SourceTemplateCommands, StoreCommands, TaskCommands,
-    ToolCommands, TriggerCommands,
+    SourceBindingCommands, SourceCommands, SourceConnectionCommands, SourceTemplateCommands,
+    StoreCommands, TaskCommands, ToolCommands, TriggerCommands,
 };
 
 fn main() -> Result<()> {

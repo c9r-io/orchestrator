@@ -1911,6 +1911,7 @@ mod tests {
                     source: "webhook".into(),
                     filter: None,
                     webhook: Some(TriggerWebhookConfig {
+                        connection_ref: None,
                         secret: None,
                         outbound_credential: None,
                         signature_header: None,

@@ -37,6 +37,8 @@ async function installTauriMock(page: Page, role: "read_only" | "operator" | "ad
       workflows: ["analysis", "docs"], workspaces: ["main"],
     };
     const automationRoute = { id: "route-1", project_id: "default", source_event_id: "source-1", provider: "slack", reaction: "agent-analyze", binding_name: "analyze-badge", binding_revision: "binding-revision", template_name: "analyze", template_hash: "template-revision", status: "needs_attention", error_code: "task_create_failed", error_category: "internal", task_id: "task-1", permalink: null, request_id: "request-1", generation: 1, version: 4, attempt_count: 1, max_attempts: 3, next_attempt_at: null, suspended_scope: null, created_at: "2026-07-14T00:00:00Z", updated_at: "2026-07-14T00:01:00Z", completed_at: null };
+    const sourceConnectionCatalog = { protocol_version: 1, gateway_configured: true, permalink_proxy: true, modes: [{ mode: "managed_shared", available: true, unavailable_reason: null }, { mode: "managed_dedicated", available: false, unavailable_reason: "fr_115_not_implemented" }, { mode: "manual", available: true, unavailable_reason: null }] };
+    const sourceConnections = [{ id: "conn-installation-1", project_id: "default", provider: "slack", display_label: "Product Slack", provisioning_mode: "managed_shared", installation_id: "installation-1", installation_id_digest: "team-digest", enterprise_id_digest: null, owner_daemon_id: "daemon-1", generation: 1, version: 1, state: "active", capabilities: ["delivery_v1"], scopes: ["reactions:read"], trigger_name: "slack-installation-1", last_delivery_at: null, last_acked_cursor: 0, delivery_lag: 0, last_error_code: null, created_at: "2026-07-18T00:00:00Z", updated_at: "2026-07-18T00:00:00Z", reauthorized_at: null, disconnected_at: null }];
     let session = { session_id: "session-1", task_id: "task-1", task_item_id: null, step_id: "test", agent_id: "coder", state: "detached", pid: 42, writer_client_id: null as string | null, writer_actor: null as string | null, writer_lease_expires_at: null as string | null, state_version: 1 };
     const invoke = async (command: string, args: Record<string, unknown> = {}) => {
       processCalls.push({ command, args });
@@ -104,6 +106,11 @@ async function installTauriMock(page: Page, role: "read_only" | "operator" | "ad
       if (command === "source_event_list") return sourceEvents.filter((event) => !args.routing_state || event.routing_state === args.routing_state);
       if (command === "source_event_get") return sourceEvents.find((event) => event.id === args.id);
       if (command === "source_replay") return true;
+      if (command === "source_connection_catalog_get") return sourceConnectionCatalog;
+      if (command === "source_connection_list") return sourceConnections;
+      if (command === "source_connection_connect") return { id: "intent-1", project_id: "default", provider: "slack", provisioning_mode: "managed_shared", status: "pending", connection_id: null, error_code: null, expires_at: "2026-07-18T01:00:00Z", authorize_url: "https://slack.com/oauth/v2/authorize?state=opaque", connection: null };
+      if (command === "source_connection_intent_get") return { id: "intent-1", project_id: "default", provider: "slack", provisioning_mode: "managed_shared", status: "pending", connection_id: null, error_code: null, expires_at: "2026-07-18T01:00:00Z", authorize_url: "https://slack.com/oauth/v2/authorize?state=opaque", connection: null };
+      if (["open_source_connection_oauth", "start_source_connection_watch", "stop_source_connection_watch", "source_connection_cancel"].includes(command)) return true;
       if (command === "source_automation_catalog_get") return automationCatalog;
       if (command === "manifest_validate") return { valid: true, errors: [], message: "valid", diagnostics: [] };
       if (command === "source_task_template_preview") return { name: String(args.name), skill_name: "docs", skill_invocation: "$docs", skill_args: [], goal: `$docs: inspect ${String(args.message_url)}`, workflow: "analysis", workspace: "main", start: false, initial_vars: {}, revision: "draft", warnings: ["sample_url_not_verified_against_installation"] };
@@ -218,6 +225,35 @@ test("reduced-motion preference suppresses UI transitions", async ({ page }) => 
   expect(Number.parseFloat(duration)).toBeLessThanOrEqual(0.00001);
 });
 
+test("Slack connections presents explicit provisioning choices and starts resumable OAuth", async ({ page }) => {
+  await installTauriMock(page, "admin");
+  await page.goto("/#/sources/connections");
+  await expect(page.getByRole("heading", { name: "Slack connections" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Instant — Official Orchestrator App" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dedicated — Private workspace app" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Existing app — Manual credentials" })).toBeVisible();
+  await expect(page.getByText("Product Slack")).toBeVisible();
+  await page.getByLabel("Connection label").fill("Engineering Slack");
+  await page.getByRole("button", { name: "Connect workspace" }).click();
+  await expect(page.getByText("Waiting for Slack consent")).toBeVisible();
+  const calls = await page.evaluate(() => (window as any).__PROCESS_TEST__.calls);
+  expect(calls).toEqual(expect.arrayContaining([
+    expect.objectContaining({ command: "source_connection_connect", args: expect.objectContaining({ project_id: "default", display_label: "Engineering Slack" }) }),
+    expect.objectContaining({ command: "open_source_connection_oauth", args: { authorize_url: "https://slack.com/oauth/v2/authorize?state=opaque" } }),
+  ]));
+});
+
+test("Slack connections keeps credentials and mutations hidden from read-only users", async ({ page }) => {
+  await installTauriMock(page, "read_only");
+  await page.goto("/#/sources/connections");
+  await expect(page.getByText("Product Slack")).toBeVisible();
+  await expect(page.getByText(/generation 1/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Connect workspace" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Reauthorize" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Disconnect" })).toHaveCount(0);
+  expect((await new AxeBuilder({ page }).analyze()).violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))).toEqual([]);
+});
+
 test("narrow layout exposes the menu and reduced-transparency fallback", async ({ page }) => {
   await installTauriMock(page);
   await page.setViewportSize({ width: 640, height: 820 });
@@ -317,7 +353,7 @@ test("Attention mutations use guarded commands and resolved work leaves the open
 
 test("Sources supports routing filters, process correlation, and admin-only replay", async ({ page }) => {
   await installTauriMock(page, "admin");
-  await page.goto("/#/sources");
+  await page.goto("/#/sources/events");
   await expect(page.getByRole("heading", { name: "Sources" })).toBeVisible();
   await expect(page.getByRole("listitem")).toHaveCount(2);
   await page.getByRole("combobox").selectOption("needs_attention");
@@ -331,7 +367,7 @@ test("Sources supports routing filters, process correlation, and admin-only repl
 
 test("read-only Sources exposes correlation without replay controls", async ({ page }) => {
   await installTauriMock(page, "read_only");
-  await page.goto("/#/sources");
+  await page.goto("/#/sources/events");
   await expect(page.getByRole("button", { name: "打开进程" })).toHaveCount(2);
   await expect(page.getByRole("button", { name: "重新路由" })).toHaveCount(0);
 });

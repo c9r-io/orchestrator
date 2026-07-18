@@ -58,6 +58,16 @@ service OrchestratorService {
   rpc SourceTaskBindingSimulate(SourceTaskBindingSimulateRequest) returns (SourceTaskBindingSimulateResponse);
   rpc SourceTaskBindingSuspend(SourceTaskBindingMutationRequest) returns (SourceTaskBindingMutationResponse);
   rpc SourceTaskBindingResume(SourceTaskBindingMutationRequest) returns (SourceTaskBindingMutationResponse);
+  rpc SourceConnectionList(SourceConnectionListRequest) returns (SourceConnectionListResponse);
+  rpc SourceConnectionGet(SourceConnectionGetRequest) returns (SourceConnection);
+  rpc SourceConnectionWatch(SourceConnectionWatchRequest) returns (stream SourceConnectionDelta);
+  rpc SourceConnectionCatalogGet(SourceConnectionCatalogRequest) returns (SourceConnectionCatalogResponse);
+  rpc SourceConnectionConnect(SourceConnectionConnectRequest) returns (SourceConnectionIntentResponse);
+  rpc SourceConnectionIntentGet(SourceConnectionIntentGetRequest) returns (SourceConnectionIntentResponse);
+  rpc SourceConnectionCancel(SourceConnectionIntentMutationRequest) returns (SourceConnectionIntentResponse);
+  rpc SourceConnectionReauthorize(SourceConnectionMutationRequest) returns (SourceConnectionIntentResponse);
+  rpc SourceConnectionDisconnect(SourceConnectionMutationRequest) returns (SourceConnection);
+  rpc SourceConnectionTransfer(SourceConnectionTransferRequest) returns (SourceConnection);
 
   // Deterministic handoff and two-stage safe logical resume
   rpc HandoffGenerate(HandoffGenerateRequest) returns (HandoffSnapshotResponse);
@@ -836,6 +846,122 @@ message SourceTaskBindingMutationResponse {
   bool suspend = 2;
   string revision = 3;
   string message = 4;
+}
+
+message SourceConnection {
+  string id = 1;
+  string project_id = 2;
+  string provider = 3;
+  string display_label = 4;
+  string provisioning_mode = 5;
+  string installation_id = 6;
+  string installation_id_digest = 7;
+  optional string enterprise_id_digest = 8;
+  string owner_daemon_id = 9;
+  int64 generation = 10;
+  int64 version = 11;
+  string state = 12;
+  repeated string capabilities = 13;
+  repeated string scopes = 14;
+  optional string trigger_name = 15;
+  optional string last_delivery_at = 16;
+  int64 last_acked_cursor = 17;
+  int64 delivery_lag = 18;
+  optional string last_error_code = 19;
+  string created_at = 20;
+  string updated_at = 21;
+  optional string reauthorized_at = 22;
+  optional string disconnected_at = 23;
+}
+
+message SourceConnectionListRequest {
+  string project_id = 1;
+  optional string provider = 2;
+  bool include_disconnected = 3;
+  uint32 limit = 4;
+}
+
+message SourceConnectionListResponse { repeated SourceConnection connections = 1; }
+
+message SourceConnectionGetRequest { string project_id = 1; string id = 2; }
+
+message SourceConnectionWatchRequest {
+  string project_id = 1;
+  int64 after_cursor = 2;
+  uint32 interval_millis = 3;
+}
+
+message SourceConnectionDelta {
+  int64 cursor = 1;
+  int64 connection_version = 2;
+  string state = 3;
+  optional string error_code = 4;
+  optional string request_id = 5;
+  SourceConnection connection = 6;
+  string changed_at = 7;
+}
+
+message SourceConnectionCatalogRequest {}
+
+message SourceConnectionModeCapability {
+  string mode = 1;
+  bool available = 2;
+  optional string unavailable_reason = 3;
+}
+
+message SourceConnectionCatalogResponse {
+  uint32 protocol_version = 1;
+  repeated SourceConnectionModeCapability modes = 2;
+  bool gateway_configured = 3;
+  bool permalink_proxy = 4;
+}
+
+message SourceConnectionConnectRequest {
+  string project_id = 1;
+  string provider = 2;
+  string provisioning_mode = 3;
+  string display_label = 4;
+  string idempotency_key = 5;
+  string reason = 6;
+}
+
+message SourceConnectionIntentGetRequest { string project_id = 1; string intent_id = 2; }
+
+message SourceConnectionIntentMutationRequest {
+  string project_id = 1;
+  string intent_id = 2;
+  string idempotency_key = 3;
+  string reason = 4;
+}
+
+message SourceConnectionIntentResponse {
+  string id = 1;
+  string project_id = 2;
+  string provider = 3;
+  string provisioning_mode = 4;
+  string status = 5;
+  optional string connection_id = 6;
+  optional string error_code = 7;
+  string expires_at = 8;
+  optional string authorize_url = 9;
+  optional SourceConnection connection = 10;
+}
+
+message SourceConnectionMutationRequest {
+  string project_id = 1;
+  string id = 2;
+  int64 expected_version = 3;
+  string idempotency_key = 4;
+  string reason = 5;
+}
+
+message SourceConnectionTransferRequest {
+  string project_id = 1;
+  string id = 2;
+  int64 expected_version = 3;
+  string target_daemon_id = 4;
+  string idempotency_key = 5;
+  string reason = 6;
 }
 
 message HandoffGenerateRequest {

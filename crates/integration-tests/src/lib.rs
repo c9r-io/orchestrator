@@ -216,6 +216,7 @@ impl OrchestratorService for TestOrchestratorServer {
     type TaskTimelineFollowStream = BoxStream<TimelineDelta>;
     type AttentionFollowStream = BoxStream<AttentionDelta>;
     type SourceAutomationWatchStream = BoxStream<SourceAutomationDelta>;
+    type SourceConnectionWatchStream = BoxStream<SourceConnectionDelta>;
     type AgentSessionReadStream = BoxStream<AgentSessionOutputChunk>;
 
     async fn action_audit_list(
@@ -279,6 +280,96 @@ impl OrchestratorService for TestOrchestratorServer {
     ) -> Result<Response<SourceAutomationRoute>, Status> {
         Err(Status::unimplemented(
             "source integration fixture uses the production daemon",
+        ))
+    }
+
+    async fn source_connection_list(
+        &self,
+        _: Request<SourceConnectionListRequest>,
+    ) -> Result<Response<SourceConnectionListResponse>, Status> {
+        Err(Status::unimplemented(
+            "managed source connection uses production daemon",
+        ))
+    }
+
+    async fn source_connection_get(
+        &self,
+        _: Request<SourceConnectionGetRequest>,
+    ) -> Result<Response<SourceConnection>, Status> {
+        Err(Status::unimplemented(
+            "managed source connection uses production daemon",
+        ))
+    }
+
+    async fn source_connection_watch(
+        &self,
+        _: Request<SourceConnectionWatchRequest>,
+    ) -> Result<Response<Self::SourceConnectionWatchStream>, Status> {
+        Err(Status::unimplemented(
+            "managed source connection uses production daemon",
+        ))
+    }
+
+    async fn source_connection_catalog_get(
+        &self,
+        _: Request<SourceConnectionCatalogRequest>,
+    ) -> Result<Response<SourceConnectionCatalogResponse>, Status> {
+        Err(Status::unimplemented(
+            "managed source connection uses production daemon",
+        ))
+    }
+
+    async fn source_connection_connect(
+        &self,
+        _: Request<SourceConnectionConnectRequest>,
+    ) -> Result<Response<SourceConnectionIntentResponse>, Status> {
+        Err(Status::unimplemented(
+            "managed source connection uses production daemon",
+        ))
+    }
+
+    async fn source_connection_intent_get(
+        &self,
+        _: Request<SourceConnectionIntentGetRequest>,
+    ) -> Result<Response<SourceConnectionIntentResponse>, Status> {
+        Err(Status::unimplemented(
+            "managed source connection uses production daemon",
+        ))
+    }
+
+    async fn source_connection_cancel(
+        &self,
+        _: Request<SourceConnectionIntentMutationRequest>,
+    ) -> Result<Response<SourceConnectionIntentResponse>, Status> {
+        Err(Status::unimplemented(
+            "managed source connection uses production daemon",
+        ))
+    }
+
+    async fn source_connection_reauthorize(
+        &self,
+        _: Request<SourceConnectionMutationRequest>,
+    ) -> Result<Response<SourceConnectionIntentResponse>, Status> {
+        Err(Status::unimplemented(
+            "managed source connection uses production daemon",
+        ))
+    }
+
+    async fn source_connection_disconnect(
+        &self,
+        _: Request<SourceConnectionMutationRequest>,
+    ) -> Result<Response<SourceConnection>, Status> {
+        Err(Status::unimplemented(
+            "managed source connection uses production daemon",
+        ))
+    }
+
+    async fn source_connection_transfer(
+        &self,
+        _: Request<SourceConnectionTransferRequest>,
+    ) -> Result<Response<SourceConnection>, Status> {
+        Err(Status::unimplemented(
+            "managed source connection uses production daemon",
         ))
     }
 

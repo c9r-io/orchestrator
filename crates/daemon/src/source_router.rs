@@ -24,6 +24,8 @@ use std::sync::Arc;
 
 use crate::slack_api::SlackApiClient;
 
+const MANAGED_CONNECTION_CREDENTIAL_STORE: &str = "@source_connection";
+
 /// Routes one bounded batch of durably accepted source events.
 pub async fn reconcile_source_once(state: &Arc<InnerState>) -> Result<usize> {
     let repository = AsyncSourceRepository::new(state.async_database.clone());
@@ -446,13 +448,29 @@ async fn route_reaction_automation(
         .trigger_name
         .as_deref()
         .context("matched trigger name missing")?;
-    let credential = project
+    let webhook = project
         .triggers
         .get(trigger_name)
         .and_then(|trigger| trigger.event.as_ref())
-        .and_then(|trigger_event| trigger_event.webhook.as_ref())
-        .and_then(|webhook| webhook.outbound_credential.as_ref());
-    let Some(credential) = credential else {
+        .and_then(|trigger_event| trigger_event.webhook.as_ref());
+    let credential_reference = webhook.and_then(|webhook| {
+        webhook
+            .connection_ref
+            .as_ref()
+            .map(|connection| {
+                (
+                    MANAGED_CONNECTION_CREDENTIAL_STORE.to_string(),
+                    connection.clone(),
+                )
+            })
+            .or_else(|| {
+                webhook
+                    .outbound_credential
+                    .as_ref()
+                    .map(|credential| (credential.from_ref.clone(), credential.key.clone()))
+            })
+    });
+    let Some((credential_store, credential_key)) = credential_reference else {
         materialize_reaction_configuration_failure(
             state,
             event,
@@ -493,8 +511,8 @@ async fn route_reaction_automation(
             template_hash: template_content_hash(template)?,
             binding_snapshot: serde_json::to_value(binding)?,
             template_snapshot: serde_json::to_value(template)?,
-            credential_store: credential.from_ref.clone(),
-            credential_key: credential.key.clone(),
+            credential_store,
+            credential_key,
         })
         .await?;
     project_existing_automation_route(source_repository, event, &reservation.route).await
@@ -660,15 +678,20 @@ async fn execute_automation_route(
         .execution_snapshot(&route.id)
         .await?
         .context("automation execution snapshot missing")?;
-    let fresh = read_active_config(state)?;
-    let token = fresh
-        .config
-        .projects
-        .get(&route.project_id)
-        .and_then(|project| project.secret_stores.get(&snapshot.credential_store))
-        .and_then(|store| store.data.get(&snapshot.credential_key))
-        .cloned();
-    let Some(token) = token else {
+    let managed_connection = snapshot.credential_store == MANAGED_CONNECTION_CREDENTIAL_STORE;
+    let token = if managed_connection {
+        None
+    } else {
+        let fresh = read_active_config(state)?;
+        fresh
+            .config
+            .projects
+            .get(&route.project_id)
+            .and_then(|project| project.secret_stores.get(&snapshot.credential_store))
+            .and_then(|store| store.data.get(&snapshot.credential_key))
+            .cloned()
+    };
+    if !managed_connection && token.is_none() {
         return handle_automation_failure(
             state,
             source_repository,
@@ -681,53 +704,97 @@ async fn execute_automation_route(
             None,
         )
         .await;
-    };
+    }
     let permalink = if route.permalink_status == "resolved" {
         route
             .permalink
             .clone()
             .context("resolved automation route has no permalink")?
     } else {
-        let client = match SlackApiClient::new() {
-            Ok(client) => client,
-            Err(error) => {
-                return handle_automation_failure(
-                    state,
-                    source_repository,
-                    route_repository,
-                    Some(event),
-                    &route,
-                    error.code(),
-                    "provider_configuration",
-                    false,
-                    None,
+        if managed_connection {
+            let provider = state
+                .source_connection_provider
+                .read()
+                .map_err(|_| anyhow::anyhow!("managed provider lock poisoned"))?
+                .clone();
+            match provider
+                .permalink(
+                    &route.project_id,
+                    &snapshot.credential_key,
+                    &route.channel_id,
+                    &route.message_ts,
                 )
-                .await;
+                .await
+            {
+                Ok(permalink) => {
+                    route_repository
+                        .record_permalink(&route.id, lease_token, &permalink)
+                        .await?;
+                    permalink
+                }
+                Err(_) => {
+                    return handle_automation_failure(
+                        state,
+                        source_repository,
+                        route_repository,
+                        Some(event),
+                        &route,
+                        "managed_permalink_failed",
+                        "provider_contract",
+                        true,
+                        None,
+                    )
+                    .await;
+                }
             }
-        };
-        match client
-            .get_permalink(&token, &route.channel_id, &route.message_ts)
-            .await
-        {
-            Ok(permalink) => {
-                route_repository
-                    .record_permalink(&route.id, lease_token, &permalink.url)
-                    .await?;
-                permalink.url
-            }
-            Err(error) => {
-                return handle_automation_failure(
-                    state,
-                    source_repository,
-                    route_repository,
-                    Some(event),
-                    &route,
-                    error.code(),
-                    slack_error_category(error.code()),
-                    error.is_transient(),
-                    error.retry_after().map(|value| value.as_secs()),
+        } else {
+            let client = match SlackApiClient::new() {
+                Ok(client) => client,
+                Err(error) => {
+                    return handle_automation_failure(
+                        state,
+                        source_repository,
+                        route_repository,
+                        Some(event),
+                        &route,
+                        error.code(),
+                        "provider_configuration",
+                        false,
+                        None,
+                    )
+                    .await;
+                }
+            };
+            match client
+                .get_permalink(
+                    token
+                        .as_deref()
+                        .context("manual Slack credential missing")?,
+                    &route.channel_id,
+                    &route.message_ts,
                 )
-                .await;
+                .await
+            {
+                Ok(permalink) => {
+                    route_repository
+                        .record_permalink(&route.id, lease_token, &permalink.url)
+                        .await?;
+                    permalink.url
+                }
+                Err(error) => {
+                    return handle_automation_failure(
+                        state,
+                        source_repository,
+                        route_repository,
+                        Some(event),
+                        &route,
+                        error.code(),
+                        slack_error_category(error.code()),
+                        error.is_transient(),
+                        error.retry_after().map(|value| value.as_secs()),
+                    )
+                    .await;
+                }
             }
         }
     };
@@ -1531,6 +1598,7 @@ mod tests {
                 source: "webhook".into(),
                 filter: None,
                 webhook: Some(TriggerWebhookConfig {
+                    connection_ref: None,
                     secret: None,
                     outbound_credential: None,
                     signature_header: None,

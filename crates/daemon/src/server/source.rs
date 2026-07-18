@@ -715,13 +715,23 @@ async fn adopt_current_route_generation(
         .trigger_name
         .as_deref()
         .ok_or_else(|| anyhow::anyhow!("trigger selection missing"))?;
-    let credential = project
+    let webhook = project
         .triggers
         .get(trigger_name)
         .and_then(|trigger| trigger.event.as_ref())
         .and_then(|event| event.webhook.as_ref())
-        .and_then(|webhook| webhook.outbound_credential.as_ref())
-        .ok_or_else(|| anyhow::anyhow!("outbound credential reference missing"))?;
+        .ok_or_else(|| anyhow::anyhow!("source connection credential reference missing"))?;
+    let (credential_store, credential_key) = webhook
+        .connection_ref
+        .as_ref()
+        .map(|connection| ("@source_connection".to_string(), connection.clone()))
+        .or_else(|| {
+            webhook
+                .outbound_credential
+                .as_ref()
+                .map(|credential| (credential.from_ref.clone(), credential.key.clone()))
+        })
+        .ok_or_else(|| anyhow::anyhow!("source connection credential reference missing"))?;
     repository
         .adopt_generation(AdoptSourceAutomationGeneration {
             route_id: route.id.clone(),
@@ -739,8 +749,8 @@ async fn adopt_current_route_generation(
             )?,
             binding_snapshot: serde_json::to_value(binding)?,
             template_snapshot: serde_json::to_value(template)?,
-            credential_store: credential.from_ref.clone(),
-            credential_key: credential.key.clone(),
+            credential_store,
+            credential_key,
             created_by_request_id: request_id.to_string(),
         })
         .await

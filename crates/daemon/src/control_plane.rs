@@ -743,6 +743,8 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         | "SourceAutomationList" | "SourceAutomationGet" | "SourceAutomationWatch"
         | "SourceAutomationSimulate" | "SourceAutomationStatusGet"
         | "SourceAutomationCatalogGet"
+        | "SourceConnectionList" | "SourceConnectionGet" | "SourceConnectionWatch"
+        | "SourceConnectionCatalogGet"
         | "HandoffGet" | "ResumeBoundaryList"
         | "Describe" | "StoreGet" | "StoreList" | "WorkerStatus" | "Check" | "ManifestExport"
         | "DbStatus" | "DbMigrationsList" | "SecretKeyStatus" | "SecretKeyList"
@@ -772,7 +774,10 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         // Admin: security-sensitive operations only.
         "ConfigDebug" | "ApplyPluginCrd" | "DeleteReferences"
         | "MaintenanceMode" | "SecretKeyRotate" | "SecretKeyBootstrap" | "SecretKeyRevoke"
-        | "QaDoctor" | "SourceReplay" | "ProcessMetricsRebuild" | "ProcessMetricsPrune" => Role::Admin,
+        | "QaDoctor" | "SourceReplay" | "ProcessMetricsRebuild" | "ProcessMetricsPrune"
+        | "SourceConnectionConnect" | "SourceConnectionIntentGet" | "SourceConnectionCancel"
+        | "SourceConnectionReauthorize" | "SourceConnectionDisconnect"
+        | "SourceConnectionTransfer" => Role::Admin,
 
         other => {
             tracing::warn!(rpc = other, "unmapped RPC defaulting to Admin role");

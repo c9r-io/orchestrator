@@ -824,6 +824,23 @@ button.automation-row { cursor: pointer; }
 .source-event-heading { align-items: center; flex-wrap: wrap; }
 .source-event-heading time { margin-left: auto; color: var(--text-tertiary); font-size: 11px; }
 .process-bindings { max-width: 760px; }
+.connection-mode-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+.connection-mode-card { display: flex; align-items: flex-start; flex-direction: column; gap: 9px; min-height: 220px; box-shadow: none; }
+.connection-mode-card h3, .connection-mode-card p { margin: 0; }
+.connection-mode-card p { color: var(--text-secondary); font-size: 13px; }
+.connection-mode-card.is-disabled { opacity: .72; }
+.connection-connect { display: flex; width: 100%; flex-direction: column; gap: 8px; margin-top: auto; }
+.connection-connect label { display: flex; flex-direction: column; gap: 5px; color: var(--text-secondary); font-size: 12px; font-weight: 700; }
+.connection-connect input, .source-filter input { width: 100%; min-height: 38px; padding: 8px 10px; color: var(--text-primary); border: 1px solid var(--glass-border-subtle); border-radius: 9px; background: var(--bg-secondary); }
+.connection-intent, .connection-next-steps { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 14px 0; padding: 14px; border: 1px solid var(--accent); border-radius: 12px; background: var(--accent-tint); }
+.connection-intent p, .connection-next-steps p { margin: 4px 0 0; color: var(--text-secondary); font-size: 12px; }
+.connection-list { display: grid; gap: 10px; }
+.connection-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; box-shadow: none; }
+.connection-card.selected { border-color: var(--accent); }
+.connection-card-main { display: flex; min-width: 0; flex: 1; align-items: flex-start; flex-direction: column; gap: 5px; padding: 0; color: var(--text-primary); text-align: left; border: 0; background: transparent; cursor: pointer; }
+.connection-card-main > span { display: flex; align-items: center; gap: 8px; }
+.connection-card-main small { color: var(--text-tertiary); overflow-wrap: anywhere; }
+.connection-next-steps { align-items: flex-start; flex-direction: column; }
 .dialog-content { max-width: 480px; width: min(92vw, 480px); }
 
 @media (max-width: 1000px) {

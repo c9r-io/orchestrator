@@ -653,6 +653,14 @@ fn default_fs_debounce_ms() -> u64 {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct TriggerWebhookSpec {
+    /// Managed SourceConnection reference. Mutually exclusive with credential references.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "connectionRef"
+    )]
+    pub connection_ref: Option<String>,
+
     /// SecretStore reference for signature verification.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secret: Option<WebhookSecretRef>,

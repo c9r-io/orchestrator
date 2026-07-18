@@ -4,7 +4,7 @@ export type ConsoleRoute =
   | { page: "attention"; attentionId?: string }
   | { page: "processes"; taskId?: string }
   | { page: "sessions"; sessionId?: string }
-  | { page: "sources"; taskId?: string; section?: "events" | "bindings" | "automations"; automationView?: "templates" | "bindings" | "routes"; resourceId?: string }
+  | { page: "sources"; taskId?: string; section?: "connections" | "events" | "bindings" | "automations"; automationView?: "templates" | "bindings" | "routes"; resourceId?: string }
   | { page: "system"; section?: string }
   | { page: "new-process"; draftId?: string };
 
@@ -17,6 +17,7 @@ export function parseConsoleRoute(hash: string): ConsoleRoute {
     case "processes": return { page, taskId: decode(id) };
     case "sessions": return { page, sessionId: decode(id) };
     case "sources": {
+      if (id === "connections") return { page, section: "connections", resourceId: decode(child) };
       if (id === "events") return { page, section: "events", resourceId: decode(child) };
       if (id === "bindings") return { page, section: "bindings", resourceId: decode(child) };
       if (id === "automations" && ["templates", "bindings", "routes"].includes(child)) {

@@ -80,6 +80,9 @@ fn default_fs_debounce_ms() -> u64 {
 /// Webhook authentication configuration for per-trigger secret verification.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TriggerWebhookConfig {
+    /// Managed SourceConnection reference. Mutually exclusive with credential references.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connection_ref: Option<String>,
     /// SecretStore reference for signature verification.
     /// All values in the store are tried (supports key rotation).
     #[serde(default, skip_serializing_if = "Option::is_none")]

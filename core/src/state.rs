@@ -114,6 +114,9 @@ pub struct InnerState {
     /// [`NoopTaskEnqueuer`](crate::scheduler_port::NoopTaskEnqueuer) in tests
     /// and CLI-only contexts.
     pub task_enqueuer: Arc<dyn crate::scheduler_port::TaskEnqueuer>,
+    /// Optional managed-source provider proxy, replaced by the daemon at startup.
+    pub source_connection_provider:
+        std::sync::RwLock<Arc<dyn crate::source_connection::SourceConnectionProvider>>,
 }
 
 impl InnerState {

@@ -5,18 +5,21 @@ import type { ConsoleRoute } from "../lib/routes";
 import type { SourceAutomationRoute, SourceEvent } from "../lib/types";
 import i18n from "../lib/i18n";
 import SourceAutomations from "./source-automation/SourceAutomations";
+import SourceConnections from "./source-connections/SourceConnections";
 
 interface Props { route: Extract<ConsoleRoute, { page: "sources" }>; onNavigate: (route: ConsoleRoute) => void; onOpenTask: (id: string) => void; }
 
 export default function Sources({ route, onNavigate, onOpenTask }: Props) {
-  const section = route.section ?? "events";
+  const section = route.section ?? "connections";
   return <main aria-labelledby="sources-title">
     <header className="sources-header"><div><h1 id="sources-title" className="page-title">{i18n.sources.title}</h1><p>{i18n.sources.subtitle}</p></div></header>
     <nav className="source-primary-nav" aria-label="Source management">
+      <a href="#/sources/connections" className={section === "connections" ? "active" : ""} aria-current={section === "connections" ? "page" : undefined}>Connections</a>
       <a href="#/sources/events" className={section === "events" ? "active" : ""} aria-current={section === "events" ? "page" : undefined}>Events</a>
       <a href="#/sources/bindings" className={section === "bindings" ? "active" : ""} aria-current={section === "bindings" ? "page" : undefined}>Process bindings</a>
       <a href="#/sources/automations/templates" className={section === "automations" ? "active" : ""} aria-current={section === "automations" ? "page" : undefined}>Automations</a>
     </nav>
+    {section === "connections" && <SourceConnections selectedId={route.resourceId} onNavigate={onNavigate} />}
     {section === "events" && <SourceEvents selectedId={route.resourceId} onNavigate={onNavigate} onOpenTask={onOpenTask} />}
     {section === "bindings" && <ProcessBindings selectedTaskId={route.resourceId} onOpenTask={onOpenTask} />}
     {section === "automations" && <SourceAutomations view={route.automationView ?? "templates"} resourceId={route.resourceId} onNavigate={onNavigate} onOpenTask={onOpenTask} />}

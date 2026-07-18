@@ -188,6 +188,9 @@ fn build_managed_state(
             trigger_engine_handle: std::sync::Mutex::new(None),
             fs_watcher_reload_tx: std::sync::Mutex::new(None),
             task_enqueuer,
+            source_connection_provider: std::sync::RwLock::new(Arc::new(
+                crate::source_connection::DisabledSourceConnectionProvider,
+            )),
         }),
     })
 }

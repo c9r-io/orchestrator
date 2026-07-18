@@ -87,7 +87,7 @@ fn validate_one(
             binding.trigger_ref
         );
     }
-    if webhook.reaction_routing == "bindings" {
+    if webhook.reaction_routing == "bindings" && webhook.connection_ref.is_none() {
         let credential = webhook.outbound_credential.as_ref().ok_or_else(|| {
             anyhow::anyhow!(
                 "SourceTaskBinding '{}/{}' triggerRef '{}' has no outboundCredential",
@@ -97,13 +97,13 @@ fn validate_one(
             )
         })?;
         let store = project.secret_stores.get(&credential.from_ref).ok_or_else(|| {
-            anyhow::anyhow!(
-                "SourceTaskBinding '{}/{}' outbound credential SecretStore '{}' does not exist in project '{}'",
-                project_id,
-                name,
-                credential.from_ref,
-                project_id
-            )
+                anyhow::anyhow!(
+                    "SourceTaskBinding '{}/{}' outbound credential SecretStore '{}' does not exist in project '{}'",
+                    project_id,
+                    name,
+                    credential.from_ref,
+                    project_id
+                )
         })?;
         if !store.data.contains_key(&credential.key) {
             bail!(

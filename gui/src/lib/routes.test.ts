@@ -22,6 +22,7 @@ describe("console routes", () => {
     expect(parseConsoleRoute("#/sources/automations/routes/route%2F1")).toEqual({ page: "sources", section: "automations", automationView: "routes", resourceId: "route/1" });
     expect(formatConsoleRoute({ page: "sources", section: "automations", automationView: "bindings", resourceId: "badge analyze" })).toBe("#/sources/automations/bindings/badge%20analyze");
     expect(parseConsoleRoute("#/sources/events/event-1")).toEqual({ page: "sources", section: "events", resourceId: "event-1" });
+    expect(parseConsoleRoute("#/sources/connections/conn%2F1")).toEqual({ page: "sources", section: "connections", resourceId: "conn/1" });
     expect(parseConsoleRoute("#/sources/task-legacy")).toEqual({ page: "sources", taskId: "task-legacy" });
   });
 

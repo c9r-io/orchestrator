@@ -12,9 +12,11 @@ mod control_plane;
 mod daemonize;
 mod fs_watcher;
 mod lifecycle;
+mod managed_source;
 mod protection;
 mod server;
 mod slack_api;
+mod slack_gateway;
 mod source_router;
 mod uds_security;
 mod webhook;
@@ -113,6 +115,20 @@ struct Args {
         default_value_t = false
     )]
     webhook_allow_unsigned: bool,
+
+    /// Optional public Slack Integration Gateway origin. Managed Slack remains
+    /// fully disabled when this and the enrollment key are absent.
+    #[arg(long, env = "ORCHESTRATOR_SLACK_GATEWAY_URL")]
+    slack_gateway_url: Option<String>,
+
+    /// Pre-install enrollment credential for creating managed OAuth intents.
+    /// Installation-scoped pairing credentials are used after consent.
+    #[arg(
+        long,
+        env = "ORCHESTRATOR_SLACK_GATEWAY_ENROLLMENT_KEY",
+        hide_env_values = true
+    )]
+    slack_gateway_enrollment_key: Option<String>,
 
     /// Minutes before a running item is considered stalled (0 = disabled).
     #[arg(long = "stall-timeout-mins", default_value_t = 30)]
@@ -247,6 +263,30 @@ fn main() -> Result<()> {
         .context("failed to initialize orchestrator state")?;
         let inner = state.inner.clone();
         inner.daemon_runtime.set_configured_workers(args.workers);
+        let slack_gateway = match (
+            args.slack_gateway_url.as_deref(),
+            args.slack_gateway_enrollment_key.clone(),
+        ) {
+            (Some(origin), Some(enrollment_key)) => Some(Arc::new(
+                slack_gateway::SlackGatewayClient::new(origin, enrollment_key)?,
+            )),
+            (None, None) => None,
+            _ => bail!(
+                "managed Slack requires both --slack-gateway-url and --slack-gateway-enrollment-key"
+            ),
+        };
+        if let Some(gateway) = slack_gateway.as_ref() {
+            let provider: Arc<dyn agent_orchestrator::source_connection::SourceConnectionProvider> =
+                Arc::new(slack_gateway::SlackGatewayProvider::new(
+                    inner.clone(),
+                    gateway.clone(),
+                ));
+            inner
+                .source_connection_provider
+                .write()
+                .map_err(|_| anyhow::anyhow!("managed source provider lock poisoned"))?
+                .clone_from(&provider);
+        }
 
         // Increment persistent incarnation counter on every startup (including exec() restarts)
         let incarnation = agent_orchestrator::persistence::repository::daemon_meta::increment_incarnation(
@@ -364,6 +404,15 @@ fn main() -> Result<()> {
             ))
         };
         info!(workers = args.workers, "worker supervisor started");
+
+        if let Some(gateway) = slack_gateway.clone() {
+            let managed_state = inner.clone();
+            let managed_shutdown = shutdown_rx.clone();
+            tokio::spawn(async move {
+                managed_source::run(managed_state, gateway, managed_shutdown).await;
+            });
+            info!("managed Slack delivery worker started");
+        }
 
         // Spawn trigger engine (cron + event-driven task creation)
         {
@@ -808,6 +857,7 @@ fn main() -> Result<()> {
             shutdown_notify.clone(),
             None,
             uds_policy,
+            slack_gateway.clone(),
         );
 
         // Shutdown future: listen for OS signals, restart request, or RPC shutdown
@@ -849,6 +899,7 @@ fn main() -> Result<()> {
                         shutdown_notify.clone(),
                         Some(secure.security),
                         None,
+                        slack_gateway.clone(),
                     ))
                     .max_encoding_message_size(64 * 1024 * 1024),
                 )

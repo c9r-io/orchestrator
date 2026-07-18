@@ -166,7 +166,7 @@ mod tests {
         )
         .expect("populate audit row");
 
-        assert_eq!(run_pending(&conn, &migrations).expect("upgrade"), 4);
+        assert_eq!(run_pending(&conn, &migrations).expect("upgrade"), 5);
         let preserved: i64 = conn
             .query_row("SELECT COUNT(*) FROM control_plane_audit", [], |row| {
                 row.get(0)
@@ -313,9 +313,9 @@ mod tests {
 
         assert_eq!(
             run_pending(&conn, &migrations).expect("upgrade to latest"),
-            3
+            4
         );
-        assert_eq!(current_version(&conn).expect("latest version"), 34);
+        assert_eq!(current_version(&conn).expect("latest version"), 35);
         for (table, id) in [
             ("tasks", "console-task"),
             ("agent_sessions", "console-session"),
@@ -470,8 +470,8 @@ mod tests {
         )
         .expect("seed populated source automation route");
 
-        assert_eq!(run_pending(&conn, &migrations).expect("upgrade to v34"), 1);
-        assert_eq!(current_version(&conn).expect("latest version"), 34);
+        assert_eq!(run_pending(&conn, &migrations).expect("upgrade to v35"), 2);
+        assert_eq!(current_version(&conn).expect("latest version"), 35);
         let route: (String, i64, i64, i64, i64) = conn
             .query_row(
                 "SELECT status,generation,version,attempt_count,max_attempts
@@ -1209,8 +1209,8 @@ mod tests {
         let migrations = all_migrations();
         assert_eq!(
             migrations.len(),
-            34,
-            "expected 34 migrations, got {}",
+            35,
+            "expected 35 migrations, got {}",
             migrations.len()
         );
     }

@@ -179,6 +179,91 @@ impl SecretEncryption {
         serde_json::from_slice(&plain).context("failed to parse decrypted secret store spec")
     }
 
+    /// Encrypts one internal SourceConnection credential envelope bound to project and ID.
+    pub fn encrypt_source_connection_credential(
+        &self,
+        project: &str,
+        connection_id: &str,
+        credential: &str,
+    ) -> Result<String> {
+        if credential.is_empty() {
+            bail!("SourceConnection credential cannot be empty");
+        }
+        let aad = SecretEnvelopeAad {
+            kind: "SourceConnectionCredential".to_string(),
+            project: project.to_string(),
+            name: connection_id.to_string(),
+        };
+        let cipher = Aes256GcmSiv::new_from_slice(self.key.key_bytes())
+            .map_err(|_| anyhow!("failed to initialize SourceConnection credential cipher"))?;
+        let mut nonce_bytes = [0_u8; NONCE_SIZE_BYTES];
+        rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
+        let aad_json = serde_json::to_vec(&aad).context("failed to serialize credential AAD")?;
+        let ciphertext = cipher
+            .encrypt(
+                aes_gcm_siv::Nonce::from_slice(&nonce_bytes),
+                Payload {
+                    msg: credential.as_bytes(),
+                    aad: &aad_json,
+                },
+            )
+            .map_err(|_| anyhow!("failed to encrypt SourceConnection credential"))?;
+        serde_json::to_string(&SecretEnvelope {
+            encrypted: true,
+            scheme: SECRETSTORE_ENCRYPTION_SCHEME.to_string(),
+            key_id: self.key.key_id().to_string(),
+            nonce: base64::engine::general_purpose::STANDARD.encode(nonce_bytes),
+            ciphertext: base64::engine::general_purpose::STANDARD.encode(ciphertext),
+            aad,
+        })
+        .context("failed to serialize SourceConnection credential envelope")
+    }
+
+    /// Decrypts one internal SourceConnection credential after authenticated identity checks.
+    pub fn decrypt_source_connection_credential(
+        &self,
+        project: &str,
+        connection_id: &str,
+        envelope_json: &str,
+    ) -> Result<String> {
+        let envelope: SecretEnvelope = serde_json::from_str(envelope_json)
+            .context("failed to parse SourceConnection credential envelope")?;
+        if !envelope.encrypted
+            || envelope.scheme != SECRETSTORE_ENCRYPTION_SCHEME
+            || envelope.aad.kind != "SourceConnectionCredential"
+            || envelope.aad.project != project
+            || envelope.aad.name != connection_id
+        {
+            bail!(
+                "SourceConnection credential envelope identity mismatch for {project}/{connection_id}"
+            );
+        }
+        let decrypt_handle = self.resolve_decrypt_key(&envelope.key_id)?;
+        let nonce_bytes = base64::engine::general_purpose::STANDARD
+            .decode(&envelope.nonce)
+            .context("failed to decode SourceConnection credential nonce")?;
+        if nonce_bytes.len() != NONCE_SIZE_BYTES {
+            bail!("invalid SourceConnection credential nonce length");
+        }
+        let ciphertext = base64::engine::general_purpose::STANDARD
+            .decode(&envelope.ciphertext)
+            .context("failed to decode SourceConnection credential ciphertext")?;
+        let aad_json =
+            serde_json::to_vec(&envelope.aad).context("failed to serialize credential AAD")?;
+        let cipher = Aes256GcmSiv::new_from_slice(decrypt_handle.key_bytes())
+            .map_err(|_| anyhow!("failed to initialize SourceConnection credential cipher"))?;
+        let plain = cipher
+            .decrypt(
+                aes_gcm_siv::Nonce::from_slice(&nonce_bytes),
+                Payload {
+                    msg: &ciphertext,
+                    aad: &aad_json,
+                },
+            )
+            .map_err(|_| anyhow!("failed to decrypt SourceConnection credential"))?;
+        String::from_utf8(plain).context("SourceConnection credential is not UTF-8")
+    }
+
     /// Resolve which key handle to use for decryption.
     /// Checks decrypt_keys map first, then falls back to the primary key.
     fn resolve_decrypt_key(&self, key_id: &str) -> Result<&SecretKeyHandle> {

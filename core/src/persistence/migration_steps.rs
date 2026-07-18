@@ -1579,3 +1579,95 @@ pub(crate) fn m0034_source_automation_operations(conn: &Connection) -> Result<()
     .context("m0034_source_automation_operations")?;
     Ok(())
 }
+
+/// Adds the provider-aware managed SourceConnection lifecycle and resumable OAuth intents.
+pub(crate) fn m0035_source_connections(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS source_daemon_identity (
+            singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+            daemon_id TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS source_connections (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            display_label TEXT NOT NULL,
+            provisioning_mode TEXT NOT NULL CHECK(provisioning_mode IN
+                ('managed_shared','managed_dedicated','manual')),
+            installation_id TEXT NOT NULL,
+            installation_id_digest TEXT NOT NULL,
+            enterprise_id_digest TEXT,
+            owner_daemon_id TEXT NOT NULL,
+            generation INTEGER NOT NULL DEFAULT 1 CHECK(generation >= 1),
+            version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1),
+            state TEXT NOT NULL CHECK(state IN
+                ('connecting','active','attention','suspended','revoked','disconnected')),
+            capabilities_json TEXT NOT NULL DEFAULT '[]',
+            scopes_json TEXT NOT NULL DEFAULT '[]',
+            trigger_name TEXT,
+            gateway_origin TEXT,
+            pairing_secret_ciphertext TEXT,
+            last_delivery_at TEXT,
+            last_acked_cursor INTEGER NOT NULL DEFAULT 0 CHECK(last_acked_cursor >= 0),
+            delivery_lag INTEGER NOT NULL DEFAULT 0 CHECK(delivery_lag >= 0),
+            last_error_code TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            reauthorized_at TEXT,
+            disconnected_at TEXT
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_source_connections_active_installation
+            ON source_connections(provider,installation_id)
+            WHERE state NOT IN ('disconnected');
+        CREATE INDEX IF NOT EXISTS idx_source_connections_project
+            ON source_connections(project_id,provider,state,updated_at DESC,id DESC);
+        CREATE INDEX IF NOT EXISTS idx_source_connections_owner
+            ON source_connections(owner_daemon_id,state);
+
+        CREATE TABLE IF NOT EXISTS source_connection_intents (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            display_label TEXT NOT NULL,
+            provisioning_mode TEXT NOT NULL,
+            owner_daemon_id TEXT NOT NULL,
+            actor_digest TEXT NOT NULL,
+            gateway_intent_id TEXT NOT NULL UNIQUE,
+            authorize_url_ciphertext TEXT NOT NULL,
+            poll_secret_ciphertext TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN
+                ('pending','completed','cancelled','expired','failed')),
+            connection_id TEXT,
+            error_code TEXT,
+            expires_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(connection_id) REFERENCES source_connections(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_source_connection_intents_project
+            ON source_connection_intents(project_id,status,created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS source_connection_changes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            connection_id TEXT NOT NULL,
+            project_id TEXT NOT NULL,
+            connection_version INTEGER NOT NULL,
+            state TEXT NOT NULL,
+            error_code TEXT,
+            request_id TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(connection_id) REFERENCES source_connections(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_source_connection_changes_project
+            ON source_connection_changes(project_id,id);
+        CREATE INDEX IF NOT EXISTS idx_source_connection_changes_retention
+            ON source_connection_changes(created_at);
+        "#,
+    )
+    .context("m0035_source_connections")?;
+    Ok(())
+}

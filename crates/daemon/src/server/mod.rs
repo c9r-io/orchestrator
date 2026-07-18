@@ -8,6 +8,7 @@ mod resource;
 mod secret;
 mod session;
 mod source;
+mod source_connection;
 mod store;
 mod system;
 mod task;
@@ -33,6 +34,7 @@ pub struct OrchestratorServer {
     pub(crate) uds_auth_policy: Option<UdsAuthPolicy>,
     pub(crate) session_read_limits: session::SessionReadLimits,
     pub(crate) config_mutation_lock: Arc<Mutex<()>>,
+    pub(crate) slack_gateway: Option<Arc<crate::slack_gateway::SlackGatewayClient>>,
 }
 
 impl OrchestratorServer {
@@ -42,6 +44,7 @@ impl OrchestratorServer {
         shutdown_notify: Arc<Notify>,
         control_plane: Option<Arc<ControlPlaneSecurity>>,
         uds_auth_policy: Option<UdsAuthPolicy>,
+        slack_gateway: Option<Arc<crate::slack_gateway::SlackGatewayClient>>,
     ) -> Self {
         Self {
             state,
@@ -50,6 +53,7 @@ impl OrchestratorServer {
             uds_auth_policy,
             session_read_limits: session::SessionReadLimits::default(),
             config_mutation_lock: Arc::new(Mutex::new(())),
+            slack_gateway,
         }
     }
 
@@ -199,6 +203,7 @@ impl OrchestratorService for OrchestratorServer {
     type TaskTimelineFollowStream = task::TaskTimelineFollowStream;
     type AttentionFollowStream = attention::AttentionFollowStream;
     type SourceAutomationWatchStream = source::SourceAutomationWatchStream;
+    type SourceConnectionWatchStream = source_connection::SourceConnectionWatchStream;
     type AgentSessionReadStream = session::AgentSessionReadStream;
 
     async fn task_create(
@@ -500,6 +505,76 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<SourceTaskBindingMutationRequest>,
     ) -> Result<Response<SourceTaskBindingMutationResponse>, Status> {
         source::task_binding_resume(self, request).await
+    }
+
+    async fn source_connection_list(
+        &self,
+        request: Request<SourceConnectionListRequest>,
+    ) -> Result<Response<SourceConnectionListResponse>, Status> {
+        source_connection::list(self, request).await
+    }
+
+    async fn source_connection_get(
+        &self,
+        request: Request<SourceConnectionGetRequest>,
+    ) -> Result<Response<SourceConnection>, Status> {
+        source_connection::get(self, request).await
+    }
+
+    async fn source_connection_watch(
+        &self,
+        request: Request<SourceConnectionWatchRequest>,
+    ) -> Result<Response<Self::SourceConnectionWatchStream>, Status> {
+        source_connection::watch(self, request).await
+    }
+
+    async fn source_connection_catalog_get(
+        &self,
+        request: Request<SourceConnectionCatalogRequest>,
+    ) -> Result<Response<SourceConnectionCatalogResponse>, Status> {
+        source_connection::catalog(self, request).await
+    }
+
+    async fn source_connection_connect(
+        &self,
+        request: Request<SourceConnectionConnectRequest>,
+    ) -> Result<Response<SourceConnectionIntentResponse>, Status> {
+        source_connection::connect(self, request).await
+    }
+
+    async fn source_connection_intent_get(
+        &self,
+        request: Request<SourceConnectionIntentGetRequest>,
+    ) -> Result<Response<SourceConnectionIntentResponse>, Status> {
+        source_connection::intent_get(self, request).await
+    }
+
+    async fn source_connection_cancel(
+        &self,
+        request: Request<SourceConnectionIntentMutationRequest>,
+    ) -> Result<Response<SourceConnectionIntentResponse>, Status> {
+        source_connection::cancel(self, request).await
+    }
+
+    async fn source_connection_reauthorize(
+        &self,
+        request: Request<SourceConnectionMutationRequest>,
+    ) -> Result<Response<SourceConnectionIntentResponse>, Status> {
+        source_connection::reauthorize(self, request).await
+    }
+
+    async fn source_connection_disconnect(
+        &self,
+        request: Request<SourceConnectionMutationRequest>,
+    ) -> Result<Response<SourceConnection>, Status> {
+        source_connection::disconnect(self, request).await
+    }
+
+    async fn source_connection_transfer(
+        &self,
+        request: Request<SourceConnectionTransferRequest>,
+    ) -> Result<Response<SourceConnection>, Status> {
+        source_connection::transfer(self, request).await
     }
 
     async fn agent_session_list(

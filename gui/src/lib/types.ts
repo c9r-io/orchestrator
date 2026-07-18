@@ -317,6 +317,27 @@ export interface SourceAutomationSimulation {
   mutation_performed: boolean; network_performed: boolean;
 }
 
+export interface SourceConnection {
+  id: string; project_id: string; provider: string; display_label: string;
+  provisioning_mode: string; installation_id: string; installation_id_digest: string;
+  enterprise_id_digest: string | null; owner_daemon_id: string; generation: number;
+  version: number; state: string; capabilities: string[]; scopes: string[];
+  trigger_name: string | null; last_delivery_at: string | null; last_acked_cursor: number;
+  delivery_lag: number; last_error_code: string | null; created_at: string;
+  updated_at: string; reauthorized_at: string | null; disconnected_at: string | null;
+}
+
+export interface SourceConnectionIntent {
+  id: string; project_id: string; provider: string; provisioning_mode: string; status: string;
+  connection_id: string | null; error_code: string | null; expires_at: string;
+  authorize_url: string | null; connection: SourceConnection | null;
+}
+
+export interface SourceConnectionCatalog {
+  protocol_version: number; gateway_configured: boolean; permalink_proxy: boolean;
+  modes: Array<{ mode: string; available: boolean; unavailable_reason: string | null }>;
+}
+
 export interface ManifestDiagnostic {
   source: string; rule: string; severity: string; passed: boolean; blocking: boolean;
   message: string; scope: string | null; suggested_fix: string | null;

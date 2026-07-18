@@ -104,6 +104,73 @@ pub struct SourceAutomationDelta {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct SourceConnection {
+    pub id: String,
+    pub project_id: String,
+    pub provider: String,
+    pub display_label: String,
+    pub provisioning_mode: String,
+    pub installation_id: String,
+    pub installation_id_digest: String,
+    pub enterprise_id_digest: Option<String>,
+    pub owner_daemon_id: String,
+    pub generation: i64,
+    pub version: i64,
+    pub state: String,
+    pub capabilities: Vec<String>,
+    pub scopes: Vec<String>,
+    pub trigger_name: Option<String>,
+    pub last_delivery_at: Option<String>,
+    pub last_acked_cursor: i64,
+    pub delivery_lag: i64,
+    pub last_error_code: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub reauthorized_at: Option<String>,
+    pub disconnected_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceConnectionIntent {
+    pub id: String,
+    pub project_id: String,
+    pub provider: String,
+    pub provisioning_mode: String,
+    pub status: String,
+    pub connection_id: Option<String>,
+    pub error_code: Option<String>,
+    pub expires_at: String,
+    pub authorize_url: Option<String>,
+    pub connection: Option<SourceConnection>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceConnectionCatalog {
+    pub protocol_version: u32,
+    pub gateway_configured: bool,
+    pub permalink_proxy: bool,
+    pub modes: Vec<SourceConnectionMode>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceConnectionMode {
+    pub mode: String,
+    pub available: bool,
+    pub unavailable_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceConnectionDelta {
+    pub cursor: i64,
+    pub connection_version: i64,
+    pub state: String,
+    pub error_code: Option<String>,
+    pub request_id: Option<String>,
+    pub connection: Option<SourceConnection>,
+    pub changed_at: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct SourceTemplatePreview {
     pub name: String,
     pub skill_name: String,
@@ -285,6 +352,22 @@ mod tests {
         assert!(event.reaction_target_kind.is_none());
         assert!(event.reaction_target_id.is_none());
     }
+
+    #[test]
+    fn oauth_browser_allowlist_rejects_lookalike_and_credential_urls() {
+        assert!(oauth_authorize_url_allowed(
+            "https://slack.com/oauth/v2/authorize?state=opaque"
+        ));
+        assert!(!oauth_authorize_url_allowed(
+            "https://slack.com.evil.example/oauth/v2/authorize?state=opaque"
+        ));
+        assert!(!oauth_authorize_url_allowed(
+            "https://slack.com@evil.example/oauth/v2/authorize?state=opaque"
+        ));
+        assert!(!oauth_authorize_url_allowed(
+            "http://127.0.0.1:9999/oauth/v2/authorize?state=opaque"
+        ));
+    }
 }
 
 fn binding_from_proto(value: orchestrator_proto::SourceBinding) -> SourceBinding {
@@ -358,6 +441,346 @@ fn simulation_from_proto(
         template_ref: value.template_ref,
         binding_revision: value.binding_revision,
     }
+}
+
+fn connection_from_proto(value: orchestrator_proto::SourceConnection) -> SourceConnection {
+    SourceConnection {
+        id: value.id,
+        project_id: value.project_id,
+        provider: value.provider,
+        display_label: value.display_label,
+        provisioning_mode: value.provisioning_mode,
+        installation_id: value.installation_id,
+        installation_id_digest: value.installation_id_digest,
+        enterprise_id_digest: value.enterprise_id_digest,
+        owner_daemon_id: value.owner_daemon_id,
+        generation: value.generation,
+        version: value.version,
+        state: value.state,
+        capabilities: value.capabilities,
+        scopes: value.scopes,
+        trigger_name: value.trigger_name,
+        last_delivery_at: value.last_delivery_at,
+        last_acked_cursor: value.last_acked_cursor,
+        delivery_lag: value.delivery_lag,
+        last_error_code: value.last_error_code,
+        created_at: value.created_at,
+        updated_at: value.updated_at,
+        reauthorized_at: value.reauthorized_at,
+        disconnected_at: value.disconnected_at,
+    }
+}
+
+fn intent_from_proto(
+    value: orchestrator_proto::SourceConnectionIntentResponse,
+) -> SourceConnectionIntent {
+    SourceConnectionIntent {
+        id: value.id,
+        project_id: value.project_id,
+        provider: value.provider,
+        provisioning_mode: value.provisioning_mode,
+        status: value.status,
+        connection_id: value.connection_id,
+        error_code: value.error_code,
+        expires_at: value.expires_at,
+        authorize_url: value.authorize_url,
+        connection: value.connection.map(connection_from_proto),
+    }
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_connection_catalog_get(
+    state: State<'_, Arc<AppState>>,
+) -> Result<SourceConnectionCatalog, String> {
+    let mut client = state.client().await?;
+    client
+        .source_connection_catalog_get(orchestrator_proto::SourceConnectionCatalogRequest {})
+        .await
+        .map(|response| {
+            let value = response.into_inner();
+            SourceConnectionCatalog {
+                protocol_version: value.protocol_version,
+                gateway_configured: value.gateway_configured,
+                permalink_proxy: value.permalink_proxy,
+                modes: value
+                    .modes
+                    .into_iter()
+                    .map(|mode| SourceConnectionMode {
+                        mode: mode.mode,
+                        available: mode.available,
+                        unavailable_reason: mode.unavailable_reason,
+                    })
+                    .collect(),
+            }
+        })
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_connection_list(
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+    include_disconnected: Option<bool>,
+) -> Result<Vec<SourceConnection>, String> {
+    let mut client = state.client().await?;
+    client
+        .source_connection_list(orchestrator_proto::SourceConnectionListRequest {
+            project_id,
+            provider: Some("slack".into()),
+            include_disconnected: include_disconnected.unwrap_or(false),
+            limit: 200,
+        })
+        .await
+        .map(|response| {
+            response
+                .into_inner()
+                .connections
+                .into_iter()
+                .map(connection_from_proto)
+                .collect()
+        })
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_connection_get(
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+    id: String,
+) -> Result<SourceConnection, String> {
+    let mut client = state.client().await?;
+    client
+        .source_connection_get(orchestrator_proto::SourceConnectionGetRequest { project_id, id })
+        .await
+        .map(|response| connection_from_proto(response.into_inner()))
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_connection_connect(
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+    display_label: String,
+    reason: String,
+    idempotency_key: String,
+) -> Result<SourceConnectionIntent, String> {
+    let mut client = state.client().await?;
+    client
+        .source_connection_connect(orchestrator_proto::SourceConnectionConnectRequest {
+            project_id,
+            provider: "slack".into(),
+            provisioning_mode: "managed_shared".into(),
+            display_label,
+            idempotency_key,
+            reason,
+        })
+        .await
+        .map(|response| intent_from_proto(response.into_inner()))
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_connection_intent_get(
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+    intent_id: String,
+) -> Result<SourceConnectionIntent, String> {
+    let mut client = state.client().await?;
+    client
+        .source_connection_intent_get(orchestrator_proto::SourceConnectionIntentGetRequest {
+            project_id,
+            intent_id,
+        })
+        .await
+        .map(|response| intent_from_proto(response.into_inner()))
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_connection_cancel(
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+    intent_id: String,
+    reason: String,
+    idempotency_key: String,
+) -> Result<SourceConnectionIntent, String> {
+    let mut client = state.client().await?;
+    client
+        .source_connection_cancel(orchestrator_proto::SourceConnectionIntentMutationRequest {
+            project_id,
+            intent_id,
+            idempotency_key,
+            reason,
+        })
+        .await
+        .map(|response| intent_from_proto(response.into_inner()))
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_connection_reauthorize(
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+    id: String,
+    expected_version: i64,
+    reason: String,
+    idempotency_key: String,
+) -> Result<SourceConnectionIntent, String> {
+    let mut client = state.client().await?;
+    client
+        .source_connection_reauthorize(orchestrator_proto::SourceConnectionMutationRequest {
+            project_id,
+            id,
+            expected_version,
+            idempotency_key,
+            reason,
+        })
+        .await
+        .map(|response| intent_from_proto(response.into_inner()))
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_connection_disconnect(
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+    id: String,
+    expected_version: i64,
+    reason: String,
+    idempotency_key: String,
+) -> Result<SourceConnection, String> {
+    let mut client = state.client().await?;
+    client
+        .source_connection_disconnect(orchestrator_proto::SourceConnectionMutationRequest {
+            project_id,
+            id,
+            expected_version,
+            idempotency_key,
+            reason,
+        })
+        .await
+        .map(|response| connection_from_proto(response.into_inner()))
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_connection_transfer(
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+    id: String,
+    expected_version: i64,
+    target_daemon_id: String,
+    reason: String,
+    idempotency_key: String,
+) -> Result<SourceConnection, String> {
+    let mut client = state.client().await?;
+    client
+        .source_connection_transfer(orchestrator_proto::SourceConnectionTransferRequest {
+            project_id,
+            id,
+            expected_version,
+            target_daemon_id,
+            idempotency_key,
+            reason,
+        })
+        .await
+        .map(|response| connection_from_proto(response.into_inner()))
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn open_source_connection_oauth(authorize_url: String) -> Result<(), String> {
+    if !oauth_authorize_url_allowed(&authorize_url) {
+        return Err("OAuth URL host is not allowlisted".into());
+    }
+    #[cfg(target_os = "macos")]
+    let status = std::process::Command::new("open")
+        .arg(&authorize_url)
+        .status();
+    #[cfg(target_os = "linux")]
+    let status = std::process::Command::new("xdg-open")
+        .arg(&authorize_url)
+        .status();
+    #[cfg(target_os = "windows")]
+    let status = std::process::Command::new("cmd")
+        .args(["/C", "start", "", &authorize_url])
+        .status();
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    let status: std::io::Result<std::process::ExitStatus> = Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "system browser is not supported",
+    ));
+    match status {
+        Ok(status) if status.success() => Ok(()),
+        _ => Err("Failed to open the system browser".into()),
+    }
+}
+
+fn oauth_authorize_url_allowed(value: &str) -> bool {
+    let Ok(value) = url::Url::parse(value) else {
+        return false;
+    };
+    value.scheme() == "https"
+        && value.host_str() == Some("slack.com")
+        && matches!(value.port(), None | Some(443))
+        && value.path() == "/oauth/v2/authorize"
+        && value.query().is_some()
+        && value.username().is_empty()
+        && value.password().is_none()
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn start_source_connection_watch(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+    after_cursor: Option<i64>,
+) -> Result<(), String> {
+    let mut client = state.client().await?;
+    let response = client
+        .source_connection_watch(orchestrator_proto::SourceConnectionWatchRequest {
+            project_id,
+            after_cursor: after_cursor.unwrap_or_default(),
+            interval_millis: 1000,
+        })
+        .await
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))?;
+    let mut stream = response.into_inner();
+    let cancel = state.register_stream("source-connection").await;
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::select! {
+                message = stream.message() => match message {
+                    Ok(Some(value)) => {
+                        let payload = SourceConnectionDelta {
+                            cursor: value.cursor,
+                            connection_version: value.connection_version,
+                            state: value.state,
+                            error_code: value.error_code,
+                            request_id: value.request_id,
+                            connection: value.connection.map(connection_from_proto),
+                            changed_at: value.changed_at,
+                        };
+                        let _ = app.emit("source-connection-delta", &payload);
+                    }
+                    Ok(None) => break,
+                    Err(error) => {
+                        let message = crate::errors::humanize_grpc_error(&error);
+                        let _ = app.emit("source-connection-watch-error", &message);
+                        break;
+                    }
+                },
+                _ = cancel.cancelled() => break,
+            }
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn stop_source_connection_watch(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    state.cancel_stream("source-connection").await;
+    Ok(())
 }
 
 #[tauri::command(rename_all = "snake_case")]

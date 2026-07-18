@@ -79,6 +79,11 @@ pub fn router(state: GatewayState) -> Router {
         .route("/v1/deliveries/claim", post(claim_deliveries))
         .route("/v1/deliveries/ack", post(acknowledge_deliveries))
         .route("/v1/provider/permalink", post(resolve_permalink))
+        .route(
+            "/v1/installations/disconnect",
+            post(disconnect_installation),
+        )
+        .route("/v1/installations/transfer", post(transfer_installation))
         .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_BYTES))
         .with_state(state)
 }
@@ -119,8 +124,10 @@ struct CreateIntentResponse {
 
 async fn create_intent(
     State(state): State<GatewayState>,
+    headers: HeaderMap,
     Json(request): Json<CreateIntentRequest>,
 ) -> Result<Json<CreateIntentResponse>, ApiError> {
+    authenticate_enrollment(&headers, &state.config.enrollment_key)?;
     if !state.allow_intent() {
         return Err(ApiError::new(
             StatusCode::TOO_MANY_REQUESTS,
@@ -170,6 +177,24 @@ async fn create_intent(
         poll_secret: created.poll_secret,
         expires_at: created.expires_at,
     }))
+}
+
+fn authenticate_enrollment(headers: &HeaderMap, expected: &str) -> Result<(), ApiError> {
+    use hmac::{Hmac, KeyInit, Mac};
+    use sha2::Sha256;
+
+    let provided = bearer(headers)
+        .map_err(|_| ApiError::new(StatusCode::UNAUTHORIZED, "enrollment_unauthorized"))?;
+    let mut verifier = <Hmac<Sha256> as KeyInit>::new_from_slice(expected.as_bytes())
+        .map_err(|_| ApiError::internal())?;
+    verifier.update(b"orchestrator-slack-gateway-enrollment-v1");
+    let expected_mac = verifier.finalize().into_bytes();
+    let mut candidate = <Hmac<Sha256> as KeyInit>::new_from_slice(provided.as_bytes())
+        .map_err(|_| ApiError::new(StatusCode::UNAUTHORIZED, "enrollment_unauthorized"))?;
+    candidate.update(b"orchestrator-slack-gateway-enrollment-v1");
+    candidate
+        .verify_slice(&expected_mac)
+        .map_err(|_| ApiError::new(StatusCode::UNAUTHORIZED, "enrollment_unauthorized"))
 }
 
 #[derive(Debug, Serialize)]
@@ -547,6 +572,67 @@ async fn resolve_permalink(
     }))
 }
 
+#[derive(Debug, Deserialize)]
+struct InstallationMutationRequest {
+    installation_id: String,
+    daemon_id: String,
+    expected_version: i64,
+}
+
+async fn disconnect_installation(
+    State(state): State<GatewayState>,
+    headers: HeaderMap,
+    Json(request): Json<InstallationMutationRequest>,
+) -> Result<Json<crate::domain::InstallationProjection>, ApiError> {
+    let pairing = bearer(&headers)?;
+    state
+        .store
+        .disconnect_installation(
+            &request.installation_id,
+            &request.daemon_id,
+            pairing,
+            request.expected_version,
+        )
+        .map(Json)
+        .map_err(map_store_error)
+}
+
+#[derive(Debug, Deserialize)]
+struct TransferRequest {
+    installation_id: String,
+    daemon_id: String,
+    expected_version: i64,
+    target_daemon_id: String,
+}
+
+#[derive(Debug, Serialize)]
+struct TransferResponse {
+    installation: crate::domain::InstallationProjection,
+    pairing_secret: String,
+}
+
+async fn transfer_installation(
+    State(state): State<GatewayState>,
+    headers: HeaderMap,
+    Json(request): Json<TransferRequest>,
+) -> Result<Json<TransferResponse>, ApiError> {
+    let pairing = bearer(&headers)?;
+    let (installation, pairing_secret) = state
+        .store
+        .transfer_installation(
+            &request.installation_id,
+            &request.daemon_id,
+            pairing,
+            request.expected_version,
+            &request.target_daemon_id,
+        )
+        .map_err(map_store_error)?;
+    Ok(Json(TransferResponse {
+        installation,
+        pairing_secret,
+    }))
+}
+
 impl GatewayState {
     fn store_identity_digest(&self, purpose: &str, value: &str) -> String {
         self.store.identity_digest(purpose, value)
@@ -714,6 +800,7 @@ mod tests {
             public_url: "http://127.0.0.1:19440".into(),
             database: temp.path().join("gateway.db"),
             master_key: base64::engine::general_purpose::STANDARD.encode([4_u8; 32]),
+            enrollment_key: "0123456789abcdef0123456789abcdef".into(),
             slack_api_base: "http://127.0.0.1:19441".into(),
             intent_ttl_secs: 600,
             max_lease_secs: 60,
@@ -763,6 +850,7 @@ mod tests {
                     .method("POST")
                     .uri("/v1/oauth/intents")
                     .header("content-type", "application/json")
+                    .header("authorization", "Bearer 0123456789abcdef0123456789abcdef")
                     .body(axum::body::Body::from(
                         r#"{"daemon_id":"daemon-a","project_id":"default","actor_id":"admin-a"}"#,
                     ))
@@ -779,6 +867,25 @@ mod tests {
         assert!(text.contains("intent_id"));
         assert!(!text.contains("client_secret"));
         assert!(!text.contains("signing"));
+    }
+
+    #[tokio::test]
+    async fn intent_creation_requires_enrollment_authentication() {
+        let (_temp, state) = test_state();
+        let response = router(state)
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/v1/oauth/intents")
+                    .header("content-type", "application/json")
+                    .body(axum::body::Body::from(
+                        r#"{"daemon_id":"attacker","project_id":"victim","actor_id":"unknown"}"#,
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[test]

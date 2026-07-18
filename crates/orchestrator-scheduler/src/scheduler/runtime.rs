@@ -783,6 +783,9 @@ mod tests {
             trigger_engine_handle: std::sync::Mutex::new(None),
             fs_watcher_reload_tx: std::sync::Mutex::new(None),
             task_enqueuer: agent_orchestrator::scheduler_port::noop_task_enqueuer(),
+            source_connection_provider: std::sync::RwLock::new(Arc::new(
+                agent_orchestrator::source_connection::DisabledSourceConnectionProvider,
+            )),
         })
     }
 

@@ -3240,6 +3240,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tonic",
+ "url",
 ]
 
 [[package]]
@@ -3300,6 +3301,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tonic",
+ "url",
 ]
 
 [[package]]
@@ -3464,6 +3466,7 @@ dependencies = [
  "tower",
  "tracing",
  "tracing-subscriber",
+ "url",
  "uuid",
  "x509-parser",
 ]

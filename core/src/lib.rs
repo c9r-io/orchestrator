@@ -137,6 +137,8 @@ pub mod session_store;
 pub mod source;
 /// Durable idempotency and provenance for source-triggered task automation.
 pub mod source_automation;
+/// Durable provider connection lifecycle and safe projections.
+pub mod source_connection;
 /// Deterministic source reaction binding validation and matching.
 pub mod source_task_binding;
 /// Governed source-to-task template validation and rendering.
