@@ -149,3 +149,12 @@ pub struct DeliveryProjection {
     /// Lease expiration timestamp.
     pub lease_expires_at: String,
 }
+
+/// Durable ownership handoff revealed only to its enrolled target daemon.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct OwnershipTransferClaim {
+    /// Safe installation projection after the owner CAS.
+    pub installation: InstallationProjection,
+    /// Replacement installation-scoped credential for the target daemon.
+    pub pairing_secret: String,
+}

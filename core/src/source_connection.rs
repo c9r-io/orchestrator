@@ -186,6 +186,10 @@ pub struct ActivateSourceConnection {
     pub owner_daemon_id: String,
     /// Gateway credential generation.
     pub generation: i64,
+    /// Gateway lifecycle version.
+    pub version: i64,
+    /// Gateway cursor already acknowledged before this daemon adopted the installation.
+    pub last_acked_cursor: i64,
     /// Negotiated capabilities.
     pub capabilities: Vec<String>,
     /// Granted scopes.
@@ -213,8 +217,6 @@ pub struct TransferSourceConnectionOwner {
     pub target_daemon_id: String,
     /// Gateway credential generation.
     pub generation: i64,
-    /// Replacement encrypted pairing credential.
-    pub pairing_secret_ciphertext: String,
     /// Canonical governed request ID.
     pub request_id: String,
 }
@@ -551,7 +553,6 @@ impl AsyncSourceConnectionRepository {
     ) -> Result<SourceConnection> {
         for (label, value) in [
             ("target daemon", input.target_daemon_id.as_str()),
-            ("pairing envelope", input.pairing_secret_ciphertext.as_str()),
             ("request ID", input.request_id.as_str()),
         ] {
             if value.trim().is_empty() {
@@ -568,8 +569,8 @@ impl AsyncSourceConnectionRepository {
                 let now = now_ts();
                 let changed = transaction.execute(
                     "UPDATE source_connections SET owner_daemon_id=?4,generation=?5,
-                     pairing_secret_ciphertext=?6,state='suspended',version=version+1,
-                     last_error_code='owner_transfer_pending_acceptance',updated_at=?7
+                     pairing_secret_ciphertext=NULL,state='suspended',version=version+1,
+                     last_error_code='owner_transfer_pending_acceptance',updated_at=?6
                      WHERE id=?1 AND project_id=?2 AND version=?3 AND state='active'",
                     params![
                         input.id,
@@ -577,7 +578,6 @@ impl AsyncSourceConnectionRepository {
                         input.expected_version,
                         input.target_daemon_id,
                         input.generation,
-                        input.pairing_secret_ciphertext,
                         now,
                     ],
                 )?;
@@ -822,7 +822,7 @@ fn activate(conn: &Connection, input: ActivateSourceConnection) -> Result<Source
     let now = now_ts();
     let existing = transaction
         .query_row(
-            "SELECT id,project_id,owner_daemon_id,generation,state FROM source_connections
+            "SELECT id,project_id,owner_daemon_id,generation,version,state FROM source_connections
              WHERE provider=?1 AND installation_id=?2 AND state!='disconnected'",
             params![input.provider, input.installation_id],
             |row| {
@@ -831,52 +831,52 @@ fn activate(conn: &Connection, input: ActivateSourceConnection) -> Result<Source
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?,
                     row.get::<_, i64>(3)?,
-                    row.get::<_, String>(4)?,
+                    row.get::<_, i64>(4)?,
+                    row.get::<_, String>(5)?,
                 ))
             },
         )
         .optional()?;
-    let version = if let Some((id, project, owner, generation, state)) = existing {
+    let version = if let Some((id, project, owner, generation, version, state)) = existing {
         if project != input.project_id || owner != input.owner_daemon_id || id != input.id {
             bail!("SourceConnection installation already has another owner");
         }
-        if input.generation < generation {
-            bail!("SourceConnection credential generation is stale");
+        if input.generation < generation || input.version < version {
+            bail!("SourceConnection credential generation or version is stale");
         }
         let changed = transaction.execute(
-            "UPDATE source_connections SET display_label=?2,generation=?3,version=version+1,
-             state='active',capabilities_json=?4,scopes_json=?5,trigger_name=?6,
-             gateway_origin=?7,pairing_secret_ciphertext=?8,last_error_code=NULL,
-             updated_at=?9,reauthorized_at=CASE WHEN ?3>generation THEN ?9 ELSE reauthorized_at END,
-             disconnected_at=NULL WHERE id=?1 AND generation<=?3",
+            "UPDATE source_connections SET display_label=?2,generation=?3,version=?4,
+             state='active',capabilities_json=?5,scopes_json=?6,trigger_name=?7,
+             gateway_origin=?8,pairing_secret_ciphertext=?9,last_error_code=NULL,
+             last_acked_cursor=MAX(last_acked_cursor,?10),
+             updated_at=?11,reauthorized_at=CASE WHEN ?3>generation THEN ?11 ELSE reauthorized_at END,
+             disconnected_at=NULL WHERE id=?1 AND generation<=?3 AND version<=?4",
             params![
                 input.id,
                 input.display_label,
                 input.generation,
+                input.version,
                 serde_json::to_string(&input.capabilities)?,
                 serde_json::to_string(&input.scopes)?,
                 input.trigger_name,
                 input.gateway_origin,
                 input.pairing_secret_ciphertext,
+                input.last_acked_cursor,
                 now,
             ],
         )?;
         if changed != 1 || state == "disconnected" {
             bail!("SourceConnection reauthorization conflict");
         }
-        transaction.query_row(
-            "SELECT version FROM source_connections WHERE id=?1",
-            [&input.id],
-            |row| row.get::<_, i64>(0),
-        )?
+        input.version
     } else {
         transaction.execute(
             "INSERT INTO source_connections
              (id,project_id,provider,display_label,provisioning_mode,installation_id,
               installation_id_digest,enterprise_id_digest,owner_daemon_id,generation,version,
               state,capabilities_json,scopes_json,trigger_name,gateway_origin,
-              pairing_secret_ciphertext,created_at,updated_at)
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,1,'active',?11,?12,?13,?14,?15,?16,?16)",
+              pairing_secret_ciphertext,last_acked_cursor,created_at,updated_at)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,'active',?12,?13,?14,?15,?16,?17,?18,?18)",
             params![
                 input.id,
                 input.project_id,
@@ -888,15 +888,17 @@ fn activate(conn: &Connection, input: ActivateSourceConnection) -> Result<Source
                 input.enterprise_id_digest,
                 input.owner_daemon_id,
                 input.generation,
+                input.version,
                 serde_json::to_string(&input.capabilities)?,
                 serde_json::to_string(&input.scopes)?,
                 input.trigger_name,
                 input.gateway_origin,
                 input.pairing_secret_ciphertext,
+                input.last_acked_cursor,
                 now,
             ],
         )?;
-        1
+        input.version
     };
     append_change(
         &transaction,
@@ -940,8 +942,8 @@ fn validate_activation(input: &ActivateSourceConnection) -> Result<()> {
     {
         bail!("managed SourceConnection requires encrypted Gateway pairing material");
     }
-    if input.generation < 1 {
-        bail!("SourceConnection generation must be positive");
+    if input.generation < 1 || input.version < 1 || input.last_acked_cursor < 0 {
+        bail!("SourceConnection generation and version must be positive");
     }
     Ok(())
 }
@@ -1156,6 +1158,8 @@ mod tests {
             enterprise_id_digest: None,
             owner_daemon_id: "daemon-1".into(),
             generation: 1,
+            version: 1,
+            last_acked_cursor: 0,
             capabilities: vec!["permalink_proxy".into()],
             scopes: vec!["reactions:read".into()],
             trigger_name: Some("slack-conn-install-1".into()),
@@ -1203,6 +1207,7 @@ mod tests {
             .expect("activate");
         let mut reauthorize = activation("project-a");
         reauthorize.generation = 2;
+        reauthorize.version = 2;
         reauthorize.pairing_secret_ciphertext = Some("encrypted-generation-2".into());
         reauthorize.request_id = "req-reauthorize".into();
         let connection = repository.activate(reauthorize).await.expect("reauthorize");
@@ -1295,7 +1300,6 @@ mod tests {
                     expected_version: 99,
                     target_daemon_id: "daemon-2".into(),
                     generation: 1,
-                    pairing_secret_ciphertext: "encrypted-pairing-generation-2".into(),
                     request_id: "req-stale-transfer".into(),
                 })
                 .await
@@ -1308,7 +1312,6 @@ mod tests {
                 expected_version: active.version,
                 target_daemon_id: "daemon-2".into(),
                 generation: 1,
-                pairing_secret_ciphertext: "encrypted-pairing-generation-2".into(),
                 request_id: "req-transfer".into(),
             })
             .await

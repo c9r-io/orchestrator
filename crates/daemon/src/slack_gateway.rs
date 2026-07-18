@@ -293,6 +293,44 @@ impl SlackGatewayClient {
         .await
     }
 
+    pub(crate) async fn claim_ownership_transfers(
+        &self,
+        daemon_id: &str,
+    ) -> Result<Vec<GatewayOwnershipTransfer>> {
+        let response: GatewayOwnershipTransferResponse = self
+            .post_json(
+                "v1/installations/transfers/claim",
+                Some(&self.enrollment_key),
+                &serde_json::json!({"daemon_id": daemon_id}),
+            )
+            .await?;
+        Ok(response.transfers)
+    }
+
+    pub(crate) async fn acknowledge_ownership_transfer(
+        &self,
+        installation_id: &str,
+        daemon_id: &str,
+        pairing_secret: &str,
+    ) -> Result<()> {
+        let request = self
+            .client
+            .post(self.endpoint("v1/installations/transfers/ack")?)
+            .bearer_auth(pairing_secret)
+            .json(&serde_json::json!({
+                "installation_id": installation_id,
+                "daemon_id": daemon_id
+            }));
+        let response = request
+            .send()
+            .await
+            .context("Slack Gateway request failed")?;
+        if response.status() == StatusCode::NO_CONTENT {
+            return Ok(());
+        }
+        Err(provider_error(response).await)
+    }
+
     async fn get_json<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,
@@ -461,7 +499,17 @@ pub(crate) struct GatewayPermalinkResponse {
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct GatewayTransferResponse {
     pub(crate) installation: GatewayInstallation,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct GatewayOwnershipTransfer {
+    pub(crate) installation: GatewayInstallation,
     pub(crate) pairing_secret: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GatewayOwnershipTransferResponse {
+    transfers: Vec<GatewayOwnershipTransfer>,
 }
 
 #[cfg(test)]

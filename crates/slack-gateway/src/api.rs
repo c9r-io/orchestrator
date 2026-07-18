@@ -84,6 +84,14 @@ pub fn router(state: GatewayState) -> Router {
             post(disconnect_installation),
         )
         .route("/v1/installations/transfer", post(transfer_installation))
+        .route(
+            "/v1/installations/transfers/claim",
+            post(claim_ownership_transfers),
+        )
+        .route(
+            "/v1/installations/transfers/ack",
+            post(acknowledge_ownership_transfer),
+        )
         .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_BYTES))
         .with_state(state)
 }
@@ -608,7 +616,6 @@ struct TransferRequest {
 #[derive(Debug, Serialize)]
 struct TransferResponse {
     installation: crate::domain::InstallationProjection,
-    pairing_secret: String,
 }
 
 async fn transfer_installation(
@@ -617,7 +624,7 @@ async fn transfer_installation(
     Json(request): Json<TransferRequest>,
 ) -> Result<Json<TransferResponse>, ApiError> {
     let pairing = bearer(&headers)?;
-    let (installation, pairing_secret) = state
+    let installation = state
         .store
         .transfer_installation(
             &request.installation_id,
@@ -627,10 +634,53 @@ async fn transfer_installation(
             &request.target_daemon_id,
         )
         .map_err(map_store_error)?;
-    Ok(Json(TransferResponse {
-        installation,
-        pairing_secret,
-    }))
+    Ok(Json(TransferResponse { installation }))
+}
+
+#[derive(Debug, Deserialize)]
+struct TransferClaimRequest {
+    daemon_id: String,
+}
+
+#[derive(Debug, Serialize)]
+struct TransferClaimResponse {
+    transfers: Vec<crate::domain::OwnershipTransferClaim>,
+}
+
+async fn claim_ownership_transfers(
+    State(state): State<GatewayState>,
+    headers: HeaderMap,
+    Json(request): Json<TransferClaimRequest>,
+) -> Result<Json<TransferClaimResponse>, ApiError> {
+    authenticate_enrollment(&headers, &state.config.enrollment_key)?;
+    state
+        .store
+        .pending_ownership_transfers(&request.daemon_id)
+        .map(|transfers| Json(TransferClaimResponse { transfers }))
+        .map_err(map_store_error)
+}
+
+#[derive(Debug, Deserialize)]
+struct TransferAckRequest {
+    installation_id: String,
+    daemon_id: String,
+}
+
+async fn acknowledge_ownership_transfer(
+    State(state): State<GatewayState>,
+    headers: HeaderMap,
+    Json(request): Json<TransferAckRequest>,
+) -> Result<StatusCode, ApiError> {
+    let pairing = bearer(&headers)?;
+    let changed = state
+        .store
+        .acknowledge_ownership_transfer(&request.installation_id, &request.daemon_id, pairing)
+        .map_err(map_store_error)?;
+    if changed {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(ApiError::not_found("ownership_transfer_not_found"))
+    }
 }
 
 impl GatewayState {
@@ -881,6 +931,23 @@ mod tests {
                     .body(axum::body::Body::from(
                         r#"{"daemon_id":"attacker","project_id":"victim","actor_id":"unknown"}"#,
                     ))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn ownership_transfer_claim_requires_enrollment_authentication() {
+        let (_temp, state) = test_state();
+        let response = router(state)
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/v1/installations/transfers/claim")
+                    .header("content-type", "application/json")
+                    .body(axum::body::Body::from(r#"{"daemon_id":"daemon-b"}"#))
                     .expect("request"),
             )
             .await

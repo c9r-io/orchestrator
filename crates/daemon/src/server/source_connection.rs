@@ -565,8 +565,14 @@ async fn reconcile_intent(
     let pairing_secret_ciphertext = encryption
         .encrypt_source_connection_credential(project_id, &connection_id, &pairing_secret)
         .map_err(internal)?;
-    let trigger_name =
-        ensure_default_trigger(server, project_id, &connection_id, &installation.id).await?;
+    let trigger_name = ensure_default_trigger(
+        &server.state,
+        &server.config_mutation_lock,
+        project_id,
+        &connection_id,
+        &installation.id,
+    )
+    .await?;
     let connection = repository
         .activate(ActivateSourceConnection {
             id: connection_id.clone(),
@@ -579,6 +585,8 @@ async fn reconcile_intent(
             enterprise_id_digest: installation.enterprise_digest,
             owner_daemon_id: daemon_id,
             generation: installation.generation,
+            version: installation.version,
+            last_acked_cursor: installation.last_acked_cursor,
             capabilities: vec!["delivery_v1".into(), "permalink_proxy".into()],
             scopes: installation.scopes,
             trigger_name: Some(trigger_name),
@@ -712,8 +720,7 @@ async fn transfer_connection(
         .await
         .map_err(internal)?
         .ok_or_else(|| Status::failed_precondition("active connection credential missing"))?;
-    let encryption = encryption(server)?;
-    let pairing = encryption
+    let pairing = encryption(server)?
         .decrypt_source_connection_credential(
             &req.project_id,
             &req.id,
@@ -744,9 +751,6 @@ async fn transfer_connection(
             "Slack Gateway transfer projection mismatch; operator reconciliation required",
         ));
     }
-    let replacement_ciphertext = encryption
-        .encrypt_source_connection_credential(&req.project_id, &req.id, &transferred.pairing_secret)
-        .map_err(internal)?;
     repository
         .transfer_owner(TransferSourceConnectionOwner {
             project_id: req.project_id.clone(),
@@ -754,7 +758,6 @@ async fn transfer_connection(
             expected_version: req.expected_version,
             target_daemon_id: req.target_daemon_id.clone(),
             generation: transferred.installation.generation,
-            pairing_secret_ciphertext: replacement_ciphertext,
             request_id: request_id.to_string(),
         })
         .await
@@ -771,14 +774,15 @@ async fn transfer_connection(
         })
 }
 
-async fn ensure_default_trigger(
-    server: &OrchestratorServer,
+pub(crate) async fn ensure_default_trigger(
+    state: &std::sync::Arc<agent_orchestrator::state::InnerState>,
+    config_mutation_lock: &std::sync::Arc<tokio::sync::Mutex<()>>,
     project_id: &str,
     connection_id: &str,
     installation_id: &str,
 ) -> Result<String, Status> {
-    let _guard = server.config_mutation_lock.lock().await;
-    let active = agent_orchestrator::config_load::read_active_config(&server.state)
+    let _guard = config_mutation_lock.lock().await;
+    let active = agent_orchestrator::config_load::read_active_config(state)
         .map_err(|error| Status::failed_precondition(error.to_string()))?;
     let project = active
         .config
@@ -825,7 +829,7 @@ async fn ensure_default_trigger(
     }))
     .map_err(internal)?;
     let applied = agent_orchestrator::service::resource::apply_manifests(
-        &server.state,
+        state,
         &manifest,
         false,
         Some(project_id),

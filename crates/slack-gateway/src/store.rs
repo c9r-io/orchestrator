@@ -13,9 +13,10 @@ use uuid::Uuid;
 use crate::crypto::{GatewayCrypto, random_secret};
 use crate::domain::{
     ConnectionState, DeliveryProjection, InstallationProjection, NormalizedSlackEvent,
+    OwnershipTransferClaim,
 };
 
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 
 /// Decrypted official-app credentials held only for the duration of a provider call.
 #[derive(Clone)]
@@ -776,6 +777,10 @@ impl GatewayStore {
              acked_at=?2,updated_at=?2 WHERE installation_id=?1 AND state!='acked'",
             params![installation_id, now_ts()],
         )?;
+        transaction.execute(
+            "DELETE FROM ownership_transfers WHERE installation_id=?1",
+            [installation_id],
+        )?;
         insert_audit(
             &transaction,
             installation_id,
@@ -796,7 +801,7 @@ impl GatewayStore {
         pairing_secret: &str,
         expected_version: i64,
         target_daemon_id: &str,
-    ) -> Result<(InstallationProjection, String)> {
+    ) -> Result<InstallationProjection> {
         validate_identity(target_daemon_id, "target daemon ID")?;
         self.authenticate_pairing(installation_id, daemon_id, pairing_secret)?;
         if target_daemon_id == daemon_id {
@@ -806,6 +811,10 @@ impl GatewayStore {
         let replacement_digest = self
             .crypto
             .digest("installation-pairing", &replacement_pairing);
+        let replacement_ciphertext = self.crypto.encrypt(
+            &format!("ownership-transfer:{installation_id}:{target_daemon_id}"),
+            &replacement_pairing,
+        )?;
         let mut connection = self.connection()?;
         let transaction = connection.transaction()?;
         transaction.execute(
@@ -828,6 +837,23 @@ impl GatewayStore {
         if changed != 1 {
             bail!("installation_version_conflict");
         }
+        transaction.execute(
+            "INSERT INTO ownership_transfers
+             (installation_id,source_daemon_id,target_daemon_id,pairing_secret_ciphertext,created_at)
+             VALUES(?1,?2,?3,?4,?5)
+             ON CONFLICT(installation_id) DO UPDATE SET
+               source_daemon_id=excluded.source_daemon_id,
+               target_daemon_id=excluded.target_daemon_id,
+               pairing_secret_ciphertext=excluded.pairing_secret_ciphertext,
+               created_at=excluded.created_at",
+            params![
+                installation_id,
+                daemon_id,
+                target_daemon_id,
+                replacement_ciphertext,
+                now_ts(),
+            ],
+        )?;
         insert_audit(
             &transaction,
             installation_id,
@@ -837,10 +863,67 @@ impl GatewayStore {
         )?;
         transaction.commit()?;
         drop(connection);
-        Ok((
-            self.installation_projection(installation_id)?,
-            replacement_pairing,
-        ))
+        self.installation_projection(installation_id)
+    }
+
+    /// Returns durable handoffs only to the named enrolled target daemon.
+    pub fn pending_ownership_transfers(
+        &self,
+        target_daemon_id: &str,
+    ) -> Result<Vec<OwnershipTransferClaim>> {
+        validate_identity(target_daemon_id, "target daemon ID")?;
+        let connection = self.connection()?;
+        let mut statement = connection.prepare(
+            "SELECT installation_id,pairing_secret_ciphertext FROM ownership_transfers
+             WHERE target_daemon_id=?1 ORDER BY created_at,installation_id LIMIT 100",
+        )?;
+        let rows = statement
+            .query_map([target_daemon_id], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        drop(statement);
+        drop(connection);
+        rows.into_iter()
+            .map(|(installation_id, encrypted)| {
+                let pairing_secret = self.crypto.decrypt(
+                    &format!("ownership-transfer:{installation_id}:{target_daemon_id}"),
+                    &encrypted,
+                )?;
+                Ok(OwnershipTransferClaim {
+                    installation: self.installation_projection(&installation_id)?,
+                    pairing_secret,
+                })
+            })
+            .collect()
+    }
+
+    /// Acknowledges target persistence using the transferred installation credential.
+    pub fn acknowledge_ownership_transfer(
+        &self,
+        installation_id: &str,
+        target_daemon_id: &str,
+        pairing_secret: &str,
+    ) -> Result<bool> {
+        self.authenticate_pairing(installation_id, target_daemon_id, pairing_secret)?;
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+        let changed = transaction.execute(
+            "DELETE FROM ownership_transfers
+             WHERE installation_id=?1 AND target_daemon_id=?2",
+            params![installation_id, target_daemon_id],
+        )?;
+        if changed == 1 {
+            insert_audit(
+                &transaction,
+                installation_id,
+                "installation_transfer_claimed",
+                None,
+                None,
+            )?;
+        }
+        transaction.commit()?;
+        Ok(changed == 1)
     }
 
     fn installation_projection(&self, installation_id: &str) -> Result<InstallationProjection> {
@@ -977,6 +1060,26 @@ fn apply_migrations(connection: &Connection) -> Result<()> {
             CREATE INDEX idx_gateway_audit_installation ON gateway_audit(installation_id,created_at);
             INSERT INTO gateway_schema_migrations(version,name,applied_at)
                 VALUES (1,'m0001_managed_slack_gateway',strftime('%Y-%m-%dT%H:%M:%SZ','now'));
+            COMMIT;
+            "#,
+        )?;
+    }
+    if current < 2 {
+        connection.execute_batch(
+            r#"
+            BEGIN IMMEDIATE;
+            CREATE TABLE ownership_transfers(
+                installation_id TEXT PRIMARY KEY,
+                source_daemon_id TEXT NOT NULL,
+                target_daemon_id TEXT NOT NULL,
+                pairing_secret_ciphertext TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(installation_id) REFERENCES installations(id)
+            );
+            CREATE INDEX idx_ownership_transfers_target
+                ON ownership_transfers(target_daemon_id,created_at,installation_id);
+            INSERT INTO gateway_schema_migrations(version,name,applied_at)
+                VALUES (2,'m0002_ownership_transfer_handoff',strftime('%Y-%m-%dT%H:%M:%SZ','now'));
             COMMIT;
             "#,
         )?;
@@ -1249,7 +1352,7 @@ mod tests {
             .expect("status")
             .pairing_secret
             .expect("pairing");
-        let (transferred, replacement) = store
+        let transferred = store
             .transfer_installation(
                 &installation.id,
                 "daemon-a",
@@ -1262,12 +1365,39 @@ mod tests {
         assert_eq!(transferred.version, installation.version + 1);
         assert!(
             store
+                .pending_ownership_transfers("daemon-c")
+                .expect("wrong target claims")
+                .is_empty()
+        );
+        let claims = store
+            .pending_ownership_transfers("daemon-b")
+            .expect("target claims");
+        assert_eq!(claims.len(), 1);
+        let replacement = &claims[0].pairing_secret;
+        assert!(
+            store
                 .installation_credential(&installation.id, "daemon-a", &first_pairing)
                 .is_err()
         );
         assert!(
             store
-                .installation_credential(&installation.id, "daemon-b", &replacement)
+                .acknowledge_ownership_transfer(&installation.id, "daemon-b", "wrong")
+                .is_err()
+        );
+        assert!(
+            store
+                .acknowledge_ownership_transfer(&installation.id, "daemon-b", replacement)
+                .expect("ack transfer")
+        );
+        assert!(
+            store
+                .pending_ownership_transfers("daemon-b")
+                .expect("claims after ack")
+                .is_empty()
+        );
+        assert!(
+            store
+                .installation_credential(&installation.id, "daemon-b", replacement)
                 .is_ok()
         );
         assert!(
@@ -1280,6 +1410,42 @@ mod tests {
                     "daemon-c",
                 )
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn migration_from_v1_preserves_installations_and_adds_handoff_table() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let path = temp.path().join("gateway.db");
+        let key = base64::engine::general_purpose::STANDARD.encode([7_u8; 32]);
+        let store = GatewayStore::open(&path, GatewayCrypto::from_base64(&key).expect("crypto"))
+            .expect("open current schema");
+        let (_, installation) = create_completed(&store);
+        drop(store);
+
+        let connection = Connection::open(&path).expect("open v1 fixture");
+        connection
+            .execute_batch(
+                "DROP TABLE ownership_transfers;
+                 DELETE FROM gateway_schema_migrations WHERE version=2;",
+            )
+            .expect("downgrade fixture metadata");
+        drop(connection);
+
+        let migrated = GatewayStore::open(&path, GatewayCrypto::from_base64(&key).expect("crypto"))
+            .expect("migrate v1");
+        assert_eq!(
+            migrated
+                .installation_projection(&installation.id)
+                .expect("preserved installation")
+                .owner_daemon_id,
+            "daemon-a"
+        );
+        assert!(
+            migrated
+                .pending_ownership_transfers("daemon-b")
+                .expect("handoff table")
+                .is_empty()
         );
     }
 

@@ -25,6 +25,8 @@ use tonic::{Request, Response, Status};
 use crate::control_plane::{AuthzError, ControlPlaneSecurity, Role, required_role_for_rpc};
 use crate::uds_security::{UdsAuthPolicy, UdsPeerInfo};
 
+pub(crate) use source_connection::ensure_default_trigger;
+
 /// gRPC service implementation — thin translation layer from gRPC requests
 /// to core service calls.
 pub struct OrchestratorServer {
@@ -45,6 +47,7 @@ impl OrchestratorServer {
         control_plane: Option<Arc<ControlPlaneSecurity>>,
         uds_auth_policy: Option<UdsAuthPolicy>,
         slack_gateway: Option<Arc<crate::slack_gateway::SlackGatewayClient>>,
+        config_mutation_lock: Arc<Mutex<()>>,
     ) -> Self {
         Self {
             state,
@@ -52,7 +55,7 @@ impl OrchestratorServer {
             control_plane,
             uds_auth_policy,
             session_read_limits: session::SessionReadLimits::default(),
-            config_mutation_lock: Arc::new(Mutex::new(())),
+            config_mutation_lock,
             slack_gateway,
         }
     }

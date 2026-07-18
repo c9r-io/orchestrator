@@ -5,7 +5,8 @@ use agent_orchestrator::source::{
     IngestSourceEvent, NormalizedSourceEvent, SourceEventKind, SourceReactionRef,
 };
 use agent_orchestrator::source_connection::{
-    AsyncSourceConnectionRepository, SourceConnection, SourceConnectionState,
+    ActivateSourceConnection, AsyncSourceConnectionRepository, SourceConnection,
+    SourceConnectionMode, SourceConnectionState,
 };
 use agent_orchestrator::state::InnerState;
 use anyhow::{Context, Result, bail};
@@ -19,6 +20,7 @@ use crate::slack_gateway::{GatewayDelivery, GatewayEvent, SlackGatewayClient};
 pub(crate) async fn run(
     state: Arc<InnerState>,
     gateway: Arc<SlackGatewayClient>,
+    config_mutation_lock: Arc<tokio::sync::Mutex<()>>,
     mut shutdown: tokio::sync::watch::Receiver<bool>,
 ) {
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(2));
@@ -26,7 +28,7 @@ pub(crate) async fn run(
     loop {
         tokio::select! {
             _ = interval.tick() => {
-                if let Err(error) = reconcile_all(&state, &gateway).await {
+                if let Err(error) = reconcile_all(&state, &gateway, &config_mutation_lock).await {
                     tracing::warn!(error_code = %stable_error(&error), "managed Slack delivery reconciliation failed");
                 }
             }
@@ -35,7 +37,12 @@ pub(crate) async fn run(
     }
 }
 
-async fn reconcile_all(state: &Arc<InnerState>, gateway: &SlackGatewayClient) -> Result<()> {
+async fn reconcile_all(
+    state: &Arc<InnerState>,
+    gateway: &SlackGatewayClient,
+    config_mutation_lock: &Arc<tokio::sync::Mutex<()>>,
+) -> Result<()> {
+    adopt_ownership_transfers(state, gateway, config_mutation_lock).await?;
     let active = agent_orchestrator::config_load::read_active_config(state)?;
     let repository = AsyncSourceConnectionRepository::new(state.async_database.clone());
     for project_id in active.config.projects.keys() {
@@ -56,6 +63,97 @@ async fn reconcile_all(state: &Arc<InnerState>, gateway: &SlackGatewayClient) ->
                 );
             }
         }
+    }
+    Ok(())
+}
+
+async fn adopt_ownership_transfers(
+    state: &Arc<InnerState>,
+    gateway: &SlackGatewayClient,
+    config_mutation_lock: &Arc<tokio::sync::Mutex<()>>,
+) -> Result<()> {
+    let repository = AsyncSourceConnectionRepository::new(state.async_database.clone());
+    let daemon_id = repository.daemon_id().await?;
+    let transfers = gateway.claim_ownership_transfers(&daemon_id).await?;
+    if transfers.is_empty() {
+        return Ok(());
+    }
+    let keyring =
+        agent_orchestrator::secret_key_lifecycle::load_keyring(&state.data_dir, &state.db_path)?;
+    let encryption =
+        agent_orchestrator::secret_store_crypto::SecretEncryption::from_keyring(&keyring)?;
+    for transfer in transfers {
+        let installation = transfer.installation;
+        if installation.owner_daemon_id != daemon_id
+            || installation.state != "active"
+            || installation.version < 1
+            || installation.generation < 1
+            || installation.last_acked_cursor < 0
+        {
+            tracing::warn!(
+                installation_id = %installation.id,
+                error_code = "ownership_transfer_projection_invalid",
+                "managed Slack ownership transfer rejected"
+            );
+            continue;
+        }
+        let connection_id = format!("conn-{}", installation.id);
+        let trigger_name = match crate::server::ensure_default_trigger(
+            state,
+            config_mutation_lock,
+            &installation.owner_project_id,
+            &connection_id,
+            &installation.id,
+        )
+        .await
+        {
+            Ok(value) => value,
+            Err(error) => {
+                tracing::warn!(
+                    installation_id = %installation.id,
+                    project_id = %installation.owner_project_id,
+                    error_code = "ownership_transfer_trigger_failed",
+                    error = %error,
+                    "managed Slack ownership transfer adoption deferred"
+                );
+                continue;
+            }
+        };
+        let pairing_secret_ciphertext = encryption.encrypt_source_connection_credential(
+            &installation.owner_project_id,
+            &connection_id,
+            &transfer.pairing_secret,
+        )?;
+        repository
+            .activate(ActivateSourceConnection {
+                id: connection_id,
+                project_id: installation.owner_project_id.clone(),
+                provider: "slack".to_string(),
+                display_label: "Transferred Slack workspace".to_string(),
+                provisioning_mode: SourceConnectionMode::ManagedShared,
+                installation_id: installation.id.clone(),
+                installation_id_digest: installation.team_digest,
+                enterprise_id_digest: installation.enterprise_digest,
+                owner_daemon_id: daemon_id.clone(),
+                generation: installation.generation,
+                version: installation.version,
+                last_acked_cursor: installation.last_acked_cursor,
+                capabilities: vec!["delivery_v1".into(), "permalink_proxy".into()],
+                scopes: installation.scopes,
+                trigger_name: Some(trigger_name),
+                gateway_origin: Some(gateway.origin().to_string()),
+                pairing_secret_ciphertext: Some(pairing_secret_ciphertext),
+                request_id: format!("req-transfer-adopt-{}", installation.id),
+            })
+            .await?;
+        gateway
+            .acknowledge_ownership_transfer(&installation.id, &daemon_id, &transfer.pairing_secret)
+            .await?;
+        tracing::info!(
+            installation_id = %installation.id,
+            project_id = %installation.owner_project_id,
+            "managed Slack ownership transfer adopted"
+        );
     }
     Ok(())
 }
@@ -248,6 +346,8 @@ fn stable_error(error: &anyhow::Error) -> &'static str {
         "managed_reaction_channel_missing",
         "managed_reaction_timestamp_missing",
         "managed_reaction_event_timestamp_invalid",
+        "ownership_transfer_projection_invalid",
+        "ownership_transfer_trigger_failed",
     ] {
         if value.contains(code) {
             return code;

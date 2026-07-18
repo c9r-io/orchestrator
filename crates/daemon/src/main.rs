@@ -390,6 +390,7 @@ fn main() -> Result<()> {
         // Restart coordination: worker sends binary path when restart is requested
         let (restart_tx, restart_rx) =
             tokio::sync::watch::channel::<Option<std::path::PathBuf>>(None);
+        let config_mutation_lock = Arc::new(tokio::sync::Mutex::new(()));
 
         // Spawn worker supervisor (owns restart_tx, manages worker lifecycle)
         let supervisor_handle = {
@@ -408,8 +409,15 @@ fn main() -> Result<()> {
         if let Some(gateway) = slack_gateway.clone() {
             let managed_state = inner.clone();
             let managed_shutdown = shutdown_rx.clone();
+            let managed_config_lock = config_mutation_lock.clone();
             tokio::spawn(async move {
-                managed_source::run(managed_state, gateway, managed_shutdown).await;
+                managed_source::run(
+                    managed_state,
+                    gateway,
+                    managed_config_lock,
+                    managed_shutdown,
+                )
+                .await;
             });
             info!("managed Slack delivery worker started");
         }
@@ -858,6 +866,7 @@ fn main() -> Result<()> {
             None,
             uds_policy,
             slack_gateway.clone(),
+            config_mutation_lock.clone(),
         );
 
         // Shutdown future: listen for OS signals, restart request, or RPC shutdown
@@ -900,6 +909,7 @@ fn main() -> Result<()> {
                         Some(secure.security),
                         None,
                         slack_gateway.clone(),
+                        config_mutation_lock.clone(),
                     ))
                     .max_encoding_message_size(64 * 1024 * 1024),
                 )
