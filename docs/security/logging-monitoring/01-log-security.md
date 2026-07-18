@@ -62,6 +62,7 @@ Verify critical actions are written to audit logs and there is no API to delete/
 - See `docs/qa/orchestrator/58-control-plane-security.md` Scenario 6 for verification steps.
 - FR-099 source logs record provider, source event ID, task ID, routing state, and hashed installation/external IDs, never message bodies or signing secrets. `source_command_actions` must retain authenticated actor, locally resolved role, target, action, status/result, and error code; see `docs/qa/orchestrator/146-source-events-and-slack-binding.md`.
 - FR-103 recovery evidence joins handoff generation, plan creation, rejected execution, and successful execution through non-empty request IDs. Audit and notification evidence must retain ordering and result metadata without prompt, transcript, stdout/stderr, source message, token, API key, or arbitrary error bodies; see `docs/qa/orchestrator/150-process-console-recovery-notifications-e2e.md`.
+- FR-113 release diagnostics report only gate owner/duration/status, stable route states, and retained log paths. Aggregate and vertical logs must reject fixture signing secrets, outbound tokens, private Slack hosts/URLs, rendered goals, and raw source payloads even when a failure log is retained; see `docs/qa/orchestrator/161-slack-reaction-skill-automation-release.md` Scenario 5.
 
 ---
 

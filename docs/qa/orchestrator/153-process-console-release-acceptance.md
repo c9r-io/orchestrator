@@ -65,7 +65,7 @@ Verify the supported historical upgrade retains identities, associations, and re
 
 ### Expected
 
-- Latest schema is 32 and exactly one final migration is applied from the populated schema-31 state.
+- The current successor schema is 34 and exactly three migrations are applied from the populated schema-31 state; the original Console v1 boundary remains migrations 27-32 and FR-113 owns migrations 33-34.
 - All seeded entity IDs and the shared request-ID join remain present.
 - The exited legacy Session is normalized to `closed` with state version 1.
 - Rebuild produces one rollup for each supported bucket.
@@ -75,6 +75,9 @@ Verify the supported historical upgrade retains identities, associations, and re
 ```sql
 SELECT version, name FROM schema_migrations WHERE version BETWEEN 27 AND 32;
 -- Expected: six applied migrations, including 31=m0031_control_action_audit
+
+SELECT version, name FROM schema_migrations WHERE version IN (33, 34);
+-- Expected: successor additive source automation migrations are also applied
 
 SELECT COUNT(*) FROM process_metric_rollups WHERE project_id='console-project';
 -- Expected: six supported bucket rollups after rebuild

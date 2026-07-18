@@ -2,6 +2,8 @@
 
 This runbook is the operator contract for upgrading, verifying, stopping, and rolling back the local-first Agent Process Console v1. The daemon remains authoritative for state and migrations; the CLI and Tauri GUI are clients and must never edit SQLite directly.
 
+This document retains the original Console-specific migrations 27-32 boundary. Deployments enabling Slack Reaction Skill Automation must additionally qualify migrations 33-34 and follow `docs/guide/slack-reaction-skill-automation.md`.
+
 ## Supported Upgrade Boundary
 
 - The release gate proves a populated schema 26 database upgrades through migrations 27-32 without losing task, Session, Attention, handoff, source binding, or action-audit identity.

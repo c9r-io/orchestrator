@@ -22,6 +22,7 @@
 | [06 - 自引导](06-self-bootstrap.md) | 自修改工作流与生存机制 | 高级 |
 | [07 - CLI 参考](07-cli-reference.md) | 命令速查表 | 参考 |
 | [08 - Agent Process Console](08-agent-process-console.md) | Attention、Timeline、Handoff、安全恢复、Session 接管与日常操作 | 入门到高级 |
+| [Slack Reaction Skill 自动化](../slack-reaction-skill-automation.md) | Slack app、SecretStore、双 badge 任务、诊断、升级与回滚 | 入门到运维 |
 
 ## 补充资源
 
