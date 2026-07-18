@@ -44,12 +44,12 @@ export default function ExpertStore() {
     }
   };
 
-  const handlePut = async () => {
+  const handlePut = async (mode: "edit" | "new") => {
     setError(null); setMsg(null);
     try {
       const m = await invoke<string>("store_put", {
-        store, key: editMode ? selectedKey : newKey,
-        valueJson: editMode ? selectedValue : newValue,
+        store, key: mode === "edit" ? selectedKey : newKey,
+        valueJson: mode === "edit" ? selectedValue : newValue,
       });
       setMsg(m);
       setNewKey(""); setNewValue("");
@@ -114,7 +114,7 @@ export default function ExpertStore() {
                   border: "1px solid var(--glass-border-subtle)", borderRadius: 8, padding: 8,
                   fontFamily: "monospace", fontSize: 12, color: "var(--text-primary)" }} />
               <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
-                <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={handlePut}>{i18n.common.save}</button>
+                <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => handlePut("edit")}>{i18n.common.save}</button>
                 <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setEditMode(false)}>{i18n.common.cancel}</button>
               </div>
             </div>
@@ -130,7 +130,7 @@ export default function ExpertStore() {
           <input placeholder="value (JSON)" value={newValue} onChange={(e) => setNewValue(e.target.value)}
             style={{ flex: 1, padding: "4px 8px", borderRadius: 8, border: "1px solid var(--glass-border-subtle)",
               background: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: 12 }} />
-          <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={handlePut}
+          <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => handlePut("new")}
             disabled={!newKey}>{i18n.common.add}</button>
         </div>
       )}

@@ -49,6 +49,11 @@ describe("Sources", () => {
         const state = (args as { routing_state: string | null }).routing_state;
         return events.filter((event) => !state || event.routing_state === state);
       }
+      if (command === "source_event_get") return events.find((event) => event.id === (args as { id: string }).id);
+      if (command === "source_binding_list") return [
+        { id: "binding-1", task_id: "task-1", provider: "slack", installation_id: "workspace-demo",
+          conversation_id: "channel-1", thread_id: "thread-1", binding_type: "thread", created_at: "now" },
+      ];
       if (command === "source_replay") return true;
       if (command === "source_automation_route_get") {
         return { id: "route-3", source_event_id: "source-3", reaction: "agent_fix",
@@ -93,5 +98,37 @@ describe("Sources", () => {
     expect(link).toHaveAttribute("href", "https://acme.slack.com/archives/channel-1/p1712345678000100");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noreferrer");
+  });
+
+  it("opens a selected event deep link and returns to the bounded event collection", async () => {
+    const onNavigate = vi.fn();
+    const onOpenTask = vi.fn();
+    render(<RoleContext.Provider value={{ role: "admin", canAccess: (required) => hasAccess("admin", required) }}>
+      <Sources route={{ page: "sources", section: "events", resourceId: "source-3" }}
+        onNavigate={onNavigate} onOpenTask={onOpenTask} />
+    </RoleContext.Provider>);
+
+    expect(await screen.findAllByRole("listitem")).toHaveLength(1);
+    expect(invoke).toHaveBeenCalledWith("source_event_get", { id: "source-3" });
+    fireEvent.click(screen.getByRole("button", { name: "Open route" }));
+    expect(onNavigate).toHaveBeenCalledWith({ page: "sources", section: "automations", automationView: "routes", resourceId: "route-3" });
+    fireEvent.click(screen.getByRole("button", { name: "All events" }));
+    expect(onNavigate).toHaveBeenCalledWith({ page: "sources", section: "events" });
+  });
+
+  it("loads process bindings from a deep link and opens the correlated process", async () => {
+    const onOpenTask = vi.fn();
+    render(<RoleContext.Provider value={{ role: "read_only", canAccess: (required) => hasAccess("read_only", required) }}>
+      <Sources route={{ page: "sources", section: "bindings", resourceId: "task-1" }}
+        onNavigate={vi.fn()} onOpenTask={onOpenTask} />
+    </RoleContext.Provider>);
+
+    expect(await screen.findByText("slack · thread")).toBeVisible();
+    expect(screen.getByText("workspace-demo / channel-1 / thread-1")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Open process" }));
+    expect(onOpenTask).toHaveBeenCalledWith("task-1");
+    fireEvent.change(screen.getByRole("textbox", { name: "Process ID" }), { target: { value: " task-2 " } });
+    fireEvent.click(screen.getByRole("button", { name: "Find bindings" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("source_binding_list", { task_id: "task-2" }));
   });
 });
