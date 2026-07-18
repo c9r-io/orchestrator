@@ -273,6 +273,11 @@ pub fn registered_migrations() -> Vec<Migration> {
             name: "m0035_source_connections",
             up: crate::persistence::migration_steps::m0035_source_connections,
         },
+        Migration {
+            version: 36,
+            name: "m0036_dedicated_slack_app_provisioning",
+            up: crate::persistence::migration_steps::m0036_dedicated_slack_app_provisioning,
+        },
     ]
 }
 
@@ -461,7 +466,7 @@ mod tests {
 
         let summary = run_pending(&conn, &migrations).expect("upgrade populated database");
         assert_eq!(summary.applied.first().map(|item| item.version), Some(29));
-        assert_eq!(current_version(&conn).unwrap(), 35);
+        assert_eq!(current_version(&conn).unwrap(), 36);
         let rows: Vec<(String, String, i64)> = conn
             .prepare(
                 "SELECT id,state,state_version FROM agent_sessions

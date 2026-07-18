@@ -125,6 +125,16 @@ pub struct SourceConnection {
     pub display_label: String,
     /// Provisioning path.
     pub provisioning_mode: SourceConnectionMode,
+    /// Slack App authority: Orchestrator shared app, workspace-owned app, or external app.
+    pub app_ownership: String,
+    /// Non-reversible Slack App identity digest.
+    pub app_id_digest: Option<String>,
+    /// Reviewed manifest profile version for managed dedicated apps.
+    pub manifest_version: Option<String>,
+    /// Safe dedicated provisioning checkpoint.
+    pub provision_state: Option<String>,
+    /// Stable dedicated provisioning failure code.
+    pub provision_error_code: Option<String>,
     /// Opaque gateway installation identity, not a provider team ID.
     pub installation_id: String,
     /// Non-reversible provider tenant digest.
@@ -176,6 +186,16 @@ pub struct ActivateSourceConnection {
     pub display_label: String,
     /// Provisioning mode.
     pub provisioning_mode: SourceConnectionMode,
+    /// Slack App authority projection.
+    pub app_ownership: String,
+    /// Non-reversible Slack App identity digest.
+    pub app_id_digest: Option<String>,
+    /// Reviewed manifest profile version.
+    pub manifest_version: Option<String>,
+    /// Safe dedicated provisioning checkpoint.
+    pub provision_state: Option<String>,
+    /// Stable dedicated provisioning failure code.
+    pub provision_error_code: Option<String>,
     /// Opaque installation ID.
     pub installation_id: String,
     /// Verified tenant digest.
@@ -276,6 +296,77 @@ pub struct SourceConnectionIntentCredential {
     pub display_label: String,
     /// Owner daemon identity fence.
     pub owner_daemon_id: String,
+}
+
+/// Secret-free checkpoint for one managed dedicated Slack App provisioning flow.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DedicatedProvisioning {
+    /// Opaque local provisioning ID.
+    pub id: String,
+    /// Owning project.
+    pub project_id: String,
+    /// Bounded connection label.
+    pub display_label: String,
+    /// Exclusive daemon owner.
+    pub owner_daemon_id: String,
+    /// Durable provisioning state.
+    pub status: String,
+    /// Reviewed manifest profile version.
+    pub manifest_version: String,
+    /// Manifest content digest.
+    pub manifest_digest: String,
+    /// Non-reversible App ID digest after creation.
+    pub app_id_digest: Option<String>,
+    /// Resulting OAuth intent after credential handoff.
+    pub oauth_intent_id: Option<String>,
+    /// Stable failure code.
+    pub error_code: Option<String>,
+    /// Ephemeral session expiry.
+    pub expires_at: String,
+    /// Creation timestamp.
+    pub created_at: String,
+    /// Last update timestamp.
+    pub updated_at: String,
+}
+
+/// Internal input for creating a dedicated provisioning checkpoint.
+#[derive(Debug, Clone)]
+pub struct StoreDedicatedProvisioning {
+    /// Opaque local provisioning ID.
+    pub id: String,
+    /// Owning project.
+    pub project_id: String,
+    /// Bounded display label.
+    pub display_label: String,
+    /// Exclusive daemon owner.
+    pub owner_daemon_id: String,
+    /// Reviewed manifest profile version.
+    pub manifest_version: String,
+    /// Manifest content digest.
+    pub manifest_digest: String,
+    /// Ephemeral session expiry.
+    pub expires_at: String,
+}
+
+/// Internal CAS transition for a dedicated provisioning checkpoint.
+#[derive(Debug, Clone)]
+pub struct UpdateDedicatedProvisioning {
+    /// Owning project.
+    pub project_id: String,
+    /// Opaque local provisioning ID.
+    pub id: String,
+    /// Exact prior status used as a CAS fence.
+    pub expected_status: String,
+    /// Next durable status.
+    pub status: String,
+    /// Optional encrypted exact Slack App ID for orphan recovery.
+    pub app_id_ciphertext: Option<String>,
+    /// Optional non-reversible App identity.
+    pub app_id_digest: Option<String>,
+    /// Optional resulting managed OAuth intent.
+    pub oauth_intent_id: Option<String>,
+    /// Optional privacy-safe failure code.
+    pub error_code: Option<String>,
 }
 
 /// Input for persisting a newly authenticated Gateway OAuth intent.
@@ -654,6 +745,160 @@ impl AsyncSourceConnectionRepository {
             .await
             .map_err(flatten_err)
     }
+
+    /// Creates one secret-free dedicated App provisioning checkpoint.
+    pub async fn store_dedicated_provisioning(
+        &self,
+        input: StoreDedicatedProvisioning,
+    ) -> Result<DedicatedProvisioning> {
+        self.db
+            .writer()
+            .call(move |conn| store_dedicated_provisioning(conn, input).map_err(other))
+            .await
+            .map_err(flatten_err)
+    }
+
+    /// Reads one dedicated provisioning checkpoint inside its project boundary.
+    pub async fn dedicated_provisioning(
+        &self,
+        project_id: &str,
+        id: &str,
+    ) -> Result<Option<DedicatedProvisioning>> {
+        let project_id = project_id.to_string();
+        let id = id.to_string();
+        self.db
+            .reader()
+            .call(move |conn| read_dedicated_provisioning(conn, &project_id, &id).map_err(other))
+            .await
+            .map_err(flatten_err)
+    }
+
+    /// Advances a dedicated checkpoint with an exact prior-state fence.
+    pub async fn update_dedicated_provisioning(
+        &self,
+        input: UpdateDedicatedProvisioning,
+    ) -> Result<DedicatedProvisioning> {
+        self.db
+            .writer()
+            .call(move |conn| update_dedicated_provisioning(conn, input).map_err(other))
+            .await
+            .map_err(flatten_err)
+    }
+}
+
+fn valid_provision_status(value: &str) -> bool {
+    matches!(
+        value,
+        "awaiting_approval"
+            | "creating"
+            | "handoff_pending"
+            | "oauth_pending"
+            | "attention"
+            | "abandoned"
+            | "completed"
+    )
+}
+
+fn store_dedicated_provisioning(
+    conn: &Connection,
+    input: StoreDedicatedProvisioning,
+) -> Result<DedicatedProvisioning> {
+    for (label, value, max) in [
+        ("provisioning ID", input.id.as_str(), 128),
+        ("project", input.project_id.as_str(), 128),
+        ("display label", input.display_label.as_str(), 128),
+        ("owner daemon", input.owner_daemon_id.as_str(), 128),
+        ("manifest version", input.manifest_version.as_str(), 64),
+        ("manifest digest", input.manifest_digest.as_str(), 128),
+        ("expiry", input.expires_at.as_str(), 64),
+    ] {
+        if value.trim().is_empty() || value.len() > max {
+            bail!("dedicated Slack {label} must contain 1-{max} characters");
+        }
+    }
+    let now = now_ts();
+    conn.execute(
+        "INSERT INTO source_connection_provisioning
+         (id,project_id,display_label,owner_daemon_id,status,manifest_version,
+          manifest_digest,expires_at,created_at,updated_at)
+         VALUES(?1,?2,?3,?4,'awaiting_approval',?5,?6,?7,?8,?8)",
+        params![
+            input.id,
+            input.project_id,
+            input.display_label,
+            input.owner_daemon_id,
+            input.manifest_version,
+            input.manifest_digest,
+            input.expires_at,
+            now,
+        ],
+    )?;
+    read_dedicated_provisioning(conn, &input.project_id, &input.id)?
+        .context("stored dedicated provisioning checkpoint missing")
+}
+
+fn update_dedicated_provisioning(
+    conn: &Connection,
+    input: UpdateDedicatedProvisioning,
+) -> Result<DedicatedProvisioning> {
+    if !valid_provision_status(&input.expected_status) || !valid_provision_status(&input.status) {
+        bail!("invalid dedicated Slack provisioning state");
+    }
+    let changed = conn.execute(
+        "UPDATE source_connection_provisioning SET status=?4,
+         app_id_ciphertext=COALESCE(?5,app_id_ciphertext),
+         app_id_digest=COALESCE(?6,app_id_digest),
+         oauth_intent_id=COALESCE(?7,oauth_intent_id),error_code=?8,updated_at=?9
+         WHERE id=?1 AND project_id=?2 AND status=?3",
+        params![
+            input.id,
+            input.project_id,
+            input.expected_status,
+            input.status,
+            input.app_id_ciphertext,
+            input.app_id_digest,
+            input.oauth_intent_id,
+            input.error_code,
+            now_ts(),
+        ],
+    )?;
+    if changed != 1 {
+        bail!("dedicated Slack provisioning state conflict");
+    }
+    read_dedicated_provisioning(conn, &input.project_id, &input.id)?
+        .context("updated dedicated provisioning checkpoint missing")
+}
+
+fn read_dedicated_provisioning(
+    conn: &Connection,
+    project_id: &str,
+    id: &str,
+) -> Result<Option<DedicatedProvisioning>> {
+    conn.query_row(
+        "SELECT id,project_id,display_label,owner_daemon_id,status,manifest_version,
+         manifest_digest,app_id_digest,oauth_intent_id,error_code,expires_at,created_at,updated_at
+         FROM source_connection_provisioning WHERE id=?1 AND project_id=?2",
+        params![id, project_id],
+        |row| {
+            Ok(DedicatedProvisioning {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                display_label: row.get(2)?,
+                owner_daemon_id: row.get(3)?,
+                status: row.get(4)?,
+                manifest_version: row.get(5)?,
+                manifest_digest: row.get(6)?,
+                app_id_digest: row.get(7)?,
+                oauth_intent_id: row.get(8)?,
+                error_code: row.get(9)?,
+                expires_at: row.get(10)?,
+                created_at: row.get(11)?,
+                updated_at: row.get(12)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(Into::into)
 }
 
 fn store_intent(
@@ -678,8 +923,11 @@ fn store_intent(
             bail!("SourceConnection {label} cannot be empty");
         }
     }
-    if input.provisioning_mode != SourceConnectionMode::ManagedShared {
-        bail!("only managed_shared supports OAuth intents in this capability version");
+    if !matches!(
+        input.provisioning_mode,
+        SourceConnectionMode::ManagedShared | SourceConnectionMode::ManagedDedicated
+    ) {
+        bail!("manual SourceConnection does not use managed OAuth intents");
     }
     let now = now_ts();
     conn.execute(
@@ -845,15 +1093,23 @@ fn activate(conn: &Connection, input: ActivateSourceConnection) -> Result<Source
             bail!("SourceConnection credential generation or version is stale");
         }
         let changed = transaction.execute(
-            "UPDATE source_connections SET display_label=?2,generation=?3,version=?4,
-             state='active',capabilities_json=?5,scopes_json=?6,trigger_name=?7,
-             gateway_origin=?8,pairing_secret_ciphertext=?9,last_error_code=NULL,
-             last_acked_cursor=MAX(last_acked_cursor,?10),
-             updated_at=?11,reauthorized_at=CASE WHEN ?3>generation THEN ?11 ELSE reauthorized_at END,
-             disconnected_at=NULL WHERE id=?1 AND generation<=?3 AND version<=?4",
+            "UPDATE source_connections SET display_label=?2,provisioning_mode=?3,
+             app_ownership=?4,app_id_digest=?5,manifest_version=?6,provision_state=?7,
+             provision_error_code=?8,generation=?9,version=?10,state='active',
+             capabilities_json=?11,scopes_json=?12,trigger_name=?13,gateway_origin=?14,
+             pairing_secret_ciphertext=?15,last_error_code=NULL,
+             last_acked_cursor=MAX(last_acked_cursor,?16),updated_at=?17,
+             reauthorized_at=CASE WHEN ?9>generation THEN ?17 ELSE reauthorized_at END,
+             disconnected_at=NULL WHERE id=?1 AND generation<=?9 AND version<=?10",
             params![
                 input.id,
                 input.display_label,
+                input.provisioning_mode.as_str(),
+                input.app_ownership,
+                input.app_id_digest,
+                input.manifest_version,
+                input.provision_state,
+                input.provision_error_code,
                 input.generation,
                 input.version,
                 serde_json::to_string(&input.capabilities)?,
@@ -875,8 +1131,10 @@ fn activate(conn: &Connection, input: ActivateSourceConnection) -> Result<Source
              (id,project_id,provider,display_label,provisioning_mode,installation_id,
               installation_id_digest,enterprise_id_digest,owner_daemon_id,generation,version,
               state,capabilities_json,scopes_json,trigger_name,gateway_origin,
-              pairing_secret_ciphertext,last_acked_cursor,created_at,updated_at)
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,'active',?12,?13,?14,?15,?16,?17,?18,?18)",
+              pairing_secret_ciphertext,last_acked_cursor,created_at,updated_at,app_ownership,
+              app_id_digest,manifest_version,provision_state,provision_error_code)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,'active',?12,?13,?14,?15,
+                    ?16,?17,?18,?18,?19,?20,?21,?22,?23)",
             params![
                 input.id,
                 input.project_id,
@@ -896,6 +1154,11 @@ fn activate(conn: &Connection, input: ActivateSourceConnection) -> Result<Source
                 input.pairing_secret_ciphertext,
                 input.last_acked_cursor,
                 now,
+                input.app_ownership,
+                input.app_id_digest,
+                input.manifest_version,
+                input.provision_state,
+                input.provision_error_code,
             ],
         )?;
         input.version
@@ -934,8 +1197,18 @@ fn validate_activation(input: &ActivateSourceConnection) -> Result<()> {
             bail!("SourceConnection {label} must contain 1-{max} characters");
         }
     }
-    if input.provisioning_mode == SourceConnectionMode::ManagedDedicated {
-        bail!("managed_dedicated is not supported by this daemon capability set");
+    if !matches!(
+        input.app_ownership.as_str(),
+        "orchestrator" | "workspace" | "external"
+    ) {
+        bail!("invalid SourceConnection App ownership");
+    }
+    if input.provisioning_mode == SourceConnectionMode::ManagedDedicated
+        && (input.app_ownership != "workspace"
+            || input.app_id_digest.is_none()
+            || input.manifest_version.is_none())
+    {
+        bail!("managed_dedicated requires workspace App identity and manifest version");
     }
     if input.provisioning_mode != SourceConnectionMode::Manual
         && (input.gateway_origin.is_none() || input.pairing_secret_ciphertext.is_none())
@@ -1005,7 +1278,8 @@ fn read_connection(
         "SELECT id,project_id,provider,display_label,provisioning_mode,installation_id,
          installation_id_digest,enterprise_id_digest,owner_daemon_id,generation,version,state,
          capabilities_json,scopes_json,trigger_name,last_delivery_at,last_acked_cursor,
-         delivery_lag,last_error_code,created_at,updated_at,reauthorized_at,disconnected_at
+         delivery_lag,last_error_code,created_at,updated_at,reauthorized_at,disconnected_at,
+         app_ownership,app_id_digest,manifest_version,provision_state,provision_error_code
          FROM source_connections WHERE id=?1 AND project_id=?2",
         params![id, project_id],
         |row| {
@@ -1035,6 +1309,11 @@ fn row_to_fields(row: &rusqlite::Row<'_>) -> rusqlite::Result<SourceConnection> 
         provider: row.get(2)?,
         display_label: row.get(3)?,
         provisioning_mode: SourceConnectionMode::Manual,
+        app_ownership: row.get(23)?,
+        app_id_digest: row.get(24)?,
+        manifest_version: row.get(25)?,
+        provision_state: row.get(26)?,
+        provision_error_code: row.get(27)?,
         installation_id: row.get(5)?,
         installation_id_digest: row.get(6)?,
         enterprise_id_digest: row.get(7)?,
@@ -1153,6 +1432,11 @@ mod tests {
             provider: "slack".into(),
             display_label: "Slack workspace".into(),
             provisioning_mode: SourceConnectionMode::ManagedShared,
+            app_ownership: "orchestrator".into(),
+            app_id_digest: None,
+            manifest_version: None,
+            provision_state: None,
+            provision_error_code: None,
             installation_id: "install-1".into(),
             installation_id_digest: "digest-team".into(),
             enterprise_id_digest: None,

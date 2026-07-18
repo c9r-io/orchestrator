@@ -71,11 +71,24 @@ pub fn router(state: GatewayState) -> Router {
         .route("/v1/capabilities", get(capabilities))
         .route("/v1/oauth/intents", post(create_intent))
         .route(
+            "/v1/dedicated/import-slots",
+            post(create_dedicated_import_slot),
+        )
+        .route("/v1/dedicated/import", post(import_dedicated_app))
+        .route(
             "/v1/oauth/intents/{intent_id}",
             get(intent_status).delete(cancel_intent),
         )
         .route("/slack/oauth/callback", get(oauth_callback))
         .route("/slack/events", post(slack_events))
+        .route(
+            "/slack/connections/{connection_id}/oauth/callback",
+            get(dedicated_oauth_callback),
+        )
+        .route(
+            "/slack/connections/{connection_id}/events",
+            post(dedicated_slack_events),
+        )
         .route("/v1/deliveries/claim", post(claim_deliveries))
         .route("/v1/deliveries/ack", post(acknowledge_deliveries))
         .route("/v1/provider/permalink", post(resolve_permalink))
@@ -162,6 +175,8 @@ async fn create_intent(
         .create_intent(NewIntent {
             daemon_id: &request.daemon_id,
             project_id: &request.project_id,
+            provisioning_mode: "managed_shared",
+            app_connection_id: None,
             actor_id: &request.actor_id,
             redirect_uri: &redirect_uri,
             requested_scopes: &requested_scopes,
@@ -185,6 +200,160 @@ async fn create_intent(
         poll_secret: created.poll_secret,
         expires_at: created.expires_at,
     }))
+}
+
+#[derive(Deserialize)]
+struct DedicatedImportSlotRequest {
+    connection_id: String,
+    daemon_id: String,
+    project_id: String,
+    manifest_version: String,
+    manifest_digest: String,
+}
+
+#[derive(Serialize)]
+struct DedicatedImportSlotResponse {
+    connection_id: String,
+    import_secret: String,
+    expires_at: String,
+    oauth_callback_url: String,
+    events_url: String,
+}
+
+async fn create_dedicated_import_slot(
+    State(state): State<GatewayState>,
+    headers: HeaderMap,
+    Json(request): Json<DedicatedImportSlotRequest>,
+) -> Result<Json<DedicatedImportSlotResponse>, ApiError> {
+    authenticate_enrollment(&headers, &state.config.enrollment_key)?;
+    let slot = state
+        .store
+        .create_dedicated_import_slot(
+            &request.connection_id,
+            &request.daemon_id,
+            &request.project_id,
+            &request.manifest_version,
+            &request.manifest_digest,
+            Duration::from_secs(state.config.intent_ttl_secs),
+        )
+        .map_err(map_store_error)?;
+    let oauth_callback_url = state
+        .config
+        .dedicated_oauth_callback_url(&slot.connection_id)
+        .map_err(|_| ApiError::internal())?;
+    let events_url = state
+        .config
+        .dedicated_events_url(&slot.connection_id)
+        .map_err(|_| ApiError::internal())?;
+    Ok(Json(DedicatedImportSlotResponse {
+        connection_id: slot.connection_id,
+        import_secret: slot.import_secret,
+        expires_at: slot.expires_at,
+        oauth_callback_url,
+        events_url,
+    }))
+}
+
+#[derive(Deserialize)]
+struct DedicatedCredentialsInput {
+    app_id: String,
+    client_id: String,
+    client_secret: String,
+    signing_secret: String,
+}
+
+#[derive(Deserialize)]
+struct DedicatedImportRequest {
+    connection_id: String,
+    daemon_id: String,
+    project_id: String,
+    actor_id: String,
+    credentials: DedicatedCredentialsInput,
+}
+
+#[derive(Serialize)]
+struct DedicatedImportResponse {
+    connection_id: String,
+    app_id_digest: String,
+    credential_generation: i64,
+    receipt_signature: String,
+    intent_id: String,
+    authorize_url: String,
+    poll_secret: String,
+    expires_at: String,
+}
+
+async fn import_dedicated_app(
+    State(state): State<GatewayState>,
+    headers: HeaderMap,
+    Json(request): Json<DedicatedImportRequest>,
+) -> Result<Json<DedicatedImportResponse>, ApiError> {
+    let import_secret = bearer(&headers)?;
+    let credentials = OfficialAppCredentials {
+        app_id: request.credentials.app_id,
+        client_id: request.credentials.client_id,
+        client_secret: request.credentials.client_secret,
+        signing_secret: request.credentials.signing_secret,
+    };
+    let receipt = state
+        .store
+        .import_dedicated_app_credentials(
+            &request.connection_id,
+            &request.daemon_id,
+            &request.project_id,
+            import_secret,
+            &credentials,
+        )
+        .map_err(map_store_error)?;
+    let redirect_uri = state
+        .config
+        .dedicated_oauth_callback_url(&request.connection_id)
+        .map_err(|_| ApiError::internal())?;
+    let scopes = REQUIRED_SCOPES
+        .iter()
+        .map(|scope| (*scope).to_string())
+        .collect::<Vec<_>>();
+    let created = state
+        .store
+        .create_intent(NewIntent {
+            daemon_id: &request.daemon_id,
+            project_id: &request.project_id,
+            provisioning_mode: "managed_dedicated",
+            app_connection_id: Some(&request.connection_id),
+            actor_id: &request.actor_id,
+            redirect_uri: &redirect_uri,
+            requested_scopes: &scopes,
+            ttl: Duration::from_secs(state.config.intent_ttl_secs),
+        })
+        .map_err(map_store_error)?;
+    let authorize_url = oauth_authorize_url(
+        &state.config.slack_api_base,
+        &credentials,
+        &created.oauth_state,
+        &redirect_uri,
+        &scopes,
+    )?;
+    let receipt_signature = sign_receipt(&state.config.enrollment_key, &receipt.receipt_payload)?;
+    Ok(Json(DedicatedImportResponse {
+        connection_id: receipt.connection_id,
+        app_id_digest: receipt.app_id_digest,
+        credential_generation: receipt.credential_generation,
+        receipt_signature,
+        intent_id: created.id,
+        authorize_url,
+        poll_secret: created.poll_secret,
+        expires_at: created.expires_at,
+    }))
+}
+
+fn sign_receipt(key: &str, payload: &str) -> Result<String, ApiError> {
+    use hmac::{Hmac, KeyInit, Mac};
+    use sha2::Sha256;
+    let mut mac = <Hmac<Sha256> as KeyInit>::new_from_slice(key.as_bytes())
+        .map_err(|_| ApiError::internal())?;
+    mac.update(b"orchestrator-dedicated-app-receipt-v1:");
+    mac.update(payload.as_bytes());
+    Ok(hex::encode(mac.finalize().into_bytes()))
 }
 
 fn authenticate_enrollment(headers: &HeaderMap, expected: &str) -> Result<(), ApiError> {
@@ -267,6 +436,22 @@ async fn oauth_callback(
     State(state): State<GatewayState>,
     Query(query): Query<OAuthCallbackQuery>,
 ) -> Result<Html<&'static str>, ApiError> {
+    oauth_callback_inner(state, query, None).await
+}
+
+async fn dedicated_oauth_callback(
+    State(state): State<GatewayState>,
+    Path(connection_id): Path<String>,
+    Query(query): Query<OAuthCallbackQuery>,
+) -> Result<Html<&'static str>, ApiError> {
+    oauth_callback_inner(state, query, Some(connection_id)).await
+}
+
+async fn oauth_callback_inner(
+    state: GatewayState,
+    query: OAuthCallbackQuery,
+    expected_connection_id: Option<String>,
+) -> Result<Html<&'static str>, ApiError> {
     let oauth_state = query
         .state
         .as_deref()
@@ -292,10 +477,20 @@ async fn oauth_callback(
         .store
         .pending_intent_by_state(oauth_state)
         .map_err(map_store_error)?;
-    let credentials = state
-        .store
-        .official_app_credentials()
-        .map_err(|_| ApiError::new(StatusCode::SERVICE_UNAVAILABLE, "official_app_not_ready"))?;
+    if pending.app_connection_id != expected_connection_id {
+        return Err(ApiError::not_found("oauth_app_identity_mismatch"));
+    }
+    let credentials = if let Some(connection_id) = pending.app_connection_id.as_deref() {
+        state
+            .store
+            .dedicated_app_credentials(connection_id)
+            .map_err(map_store_error)?
+    } else {
+        state
+            .store
+            .official_app_credentials()
+            .map_err(|_| ApiError::new(StatusCode::SERVICE_UNAVAILABLE, "official_app_not_ready"))?
+    };
     let exchange = match state
         .slack
         .exchange_oauth(code, &pending.redirect_uri, &credentials)
@@ -342,12 +537,44 @@ async fn slack_events(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Response, ApiError> {
-    let timestamp = required_header(&headers, "x-slack-request-timestamp")?;
-    let signature = required_header(&headers, "x-slack-signature")?;
     let credentials = state
         .store
         .official_app_credentials()
         .map_err(|_| ApiError::new(StatusCode::SERVICE_UNAVAILABLE, "official_app_not_ready"))?;
+    slack_events_inner(state, headers, body, credentials, "managed_shared", None).await
+}
+
+async fn dedicated_slack_events(
+    State(state): State<GatewayState>,
+    Path(connection_id): Path<String>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<Response, ApiError> {
+    let credentials = state
+        .store
+        .dedicated_app_credentials(&connection_id)
+        .map_err(map_store_error)?;
+    slack_events_inner(
+        state,
+        headers,
+        body,
+        credentials,
+        "managed_dedicated",
+        Some(connection_id),
+    )
+    .await
+}
+
+async fn slack_events_inner(
+    state: GatewayState,
+    headers: HeaderMap,
+    body: Bytes,
+    credentials: OfficialAppCredentials,
+    provisioning_mode: &str,
+    app_connection_id: Option<String>,
+) -> Result<Response, ApiError> {
+    let timestamp = required_header(&headers, "x-slack-request-timestamp")?;
+    let signature = required_header(&headers, "x-slack-signature")?;
     verify_request(
         &credentials.signing_secret,
         timestamp,
@@ -368,6 +595,7 @@ async fn slack_events(
             Ok(Json(serde_json::json!({"challenge": challenge})).into_response())
         }
         SlackEvent::ReactionAdded {
+            app_id,
             event_id,
             team_id,
             enterprise_id,
@@ -377,9 +605,16 @@ async fn slack_events(
             message_ts,
             event_ts,
         } => {
+            if app_id != credentials.app_id {
+                return Err(ApiError::not_found("unknown_installation"));
+            }
             let installation = state
                 .store
-                .installation_for_team(&team_id)
+                .installation_for_app_team(
+                    &team_id,
+                    provisioning_mode,
+                    app_connection_id.as_deref(),
+                )
                 .map_err(map_store_error)?;
             let enterprise_digest = enterprise_id
                 .as_deref()
@@ -405,20 +640,29 @@ async fn slack_events(
             Ok(StatusCode::NO_CONTENT.into_response())
         }
         SlackEvent::AppUninstalled {
+            app_id,
             event_id,
             team_id,
             enterprise_id,
             event_ts,
         }
         | SlackEvent::TokensRevoked {
+            app_id,
             event_id,
             team_id,
             enterprise_id,
             event_ts,
         } => {
+            if app_id != credentials.app_id {
+                return Err(ApiError::not_found("unknown_installation"));
+            }
             let installation = state
                 .store
-                .installation_for_team(&team_id)
+                .installation_for_app_team(
+                    &team_id,
+                    provisioning_mode,
+                    app_connection_id.as_deref(),
+                )
                 .map_err(map_store_error)?;
             let enterprise_digest = enterprise_id
                 .as_deref()
@@ -727,16 +971,22 @@ fn bearer(headers: &HeaderMap) -> Result<&str, ApiError> {
 fn map_store_error(error: anyhow::Error) -> ApiError {
     let code = error.to_string();
     match code.as_str() {
-        "intent_not_found" | "installation_not_found" | "unknown_installation" => {
-            ApiError::not_found(code)
-        }
+        "intent_not_found"
+        | "installation_not_found"
+        | "unknown_installation"
+        | "dedicated_import_not_found"
+        | "dedicated_app_not_found" => ApiError::not_found(code),
         "oauth_state_invalid_or_expired" => ApiError::bad_request(code),
         "installation_owner_conflict" | "oauth_state_already_consumed" => {
             ApiError::new(StatusCode::CONFLICT, code)
         }
-        "installation_not_active" | "credential_generation_stale" => {
-            ApiError::new(StatusCode::CONFLICT, code)
-        }
+        "installation_not_active"
+        | "credential_generation_stale"
+        | "dedicated_import_not_pending"
+        | "dedicated_import_state_conflict"
+        | "dedicated_import_already_completed"
+        | "dedicated_app_not_ready"
+        | "oauth_app_identity_mismatch" => ApiError::new(StatusCode::CONFLICT, code),
         _ => ApiError::internal(),
     }
 }
@@ -872,7 +1122,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn capabilities_reserve_no_dedicated_fallback() {
+    async fn capabilities_advertise_explicit_dedicated_support() {
         let (_temp, state) = test_state();
         let response = router(state)
             .oneshot(
@@ -888,7 +1138,10 @@ mod tests {
             .await
             .expect("body");
         let payload: GatewayCapabilities = serde_json::from_slice(&bytes).expect("json");
-        assert_eq!(payload.supported_modes, ["managed_shared"]);
+        assert_eq!(
+            payload.supported_modes,
+            ["managed_shared", "managed_dedicated"]
+        );
     }
 
     #[tokio::test]

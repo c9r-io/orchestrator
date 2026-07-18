@@ -68,6 +68,10 @@ service OrchestratorService {
   rpc SourceConnectionReauthorize(SourceConnectionMutationRequest) returns (SourceConnectionIntentResponse);
   rpc SourceConnectionDisconnect(SourceConnectionMutationRequest) returns (SourceConnection);
   rpc SourceConnectionTransfer(SourceConnectionTransferRequest) returns (SourceConnection);
+  rpc SourceConnectionDedicatedPreview(SourceConnectionDedicatedPreviewRequest) returns (SourceConnectionDedicatedProvisioningResponse);
+  rpc SourceConnectionDedicatedApprove(SourceConnectionDedicatedMutationRequest) returns (SourceConnectionDedicatedProvisioningResponse);
+  rpc SourceConnectionDedicatedGet(SourceConnectionDedicatedGetRequest) returns (SourceConnectionDedicatedProvisioningResponse);
+  rpc SourceConnectionDedicatedAbandon(SourceConnectionDedicatedMutationRequest) returns (SourceConnectionDedicatedProvisioningResponse);
 
   // Deterministic handoff and two-stage safe logical resume
   rpc HandoffGenerate(HandoffGenerateRequest) returns (HandoffSnapshotResponse);
@@ -872,6 +876,11 @@ message SourceConnection {
   string updated_at = 21;
   optional string reauthorized_at = 22;
   optional string disconnected_at = 23;
+  string app_ownership = 24;
+  optional string app_id_digest = 25;
+  optional string manifest_version = 26;
+  optional string provision_state = 27;
+  optional string provision_error_code = 28;
 }
 
 message SourceConnectionListRequest {
@@ -962,6 +971,48 @@ message SourceConnectionTransferRequest {
   string target_daemon_id = 4;
   string idempotency_key = 5;
   string reason = 6;
+}
+
+message SourceConnectionManifestDiffEntry {
+  string field = 1;
+  string change = 2;
+  repeated string before = 3;
+  repeated string after = 4;
+  bool permission_expansion = 5;
+}
+
+message SourceConnectionDedicatedPreviewRequest {
+  string project_id = 1;
+  string display_label = 2;
+  string config_token = 3;
+  string idempotency_key = 4;
+  string reason = 5;
+}
+
+message SourceConnectionDedicatedMutationRequest {
+  string project_id = 1;
+  string provisioning_id = 2;
+  string idempotency_key = 3;
+  string reason = 4;
+}
+
+message SourceConnectionDedicatedGetRequest {
+  string project_id = 1;
+  string provisioning_id = 2;
+}
+
+message SourceConnectionDedicatedProvisioningResponse {
+  string id = 1;
+  string project_id = 2;
+  string status = 3;
+  string manifest_version = 4;
+  string manifest_digest = 5;
+  repeated SourceConnectionManifestDiffEntry diff = 6;
+  optional string app_id_digest = 7;
+  optional string oauth_intent_id = 8;
+  optional string authorize_url = 9;
+  optional string error_code = 10;
+  string expires_at = 11;
 }
 
 message HandoffGenerateRequest {

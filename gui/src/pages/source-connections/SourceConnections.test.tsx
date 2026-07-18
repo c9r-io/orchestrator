@@ -13,6 +13,8 @@ const active: SourceConnection = {
   id: "conn-installation-1", project_id: "default", provider: "slack",
   display_label: "Product Slack", provisioning_mode: "managed_shared",
   installation_id: "installation-1", installation_id_digest: "team-digest",
+  app_ownership: "orchestrator", app_id_digest: null, manifest_version: null,
+  provision_state: null, provision_error_code: null,
   enterprise_id_digest: null, owner_daemon_id: "daemon-1", generation: 2,
   version: 3, state: "active", capabilities: ["delivery_v1"], scopes: ["reactions:read"],
   trigger_name: "slack-installation-1", last_delivery_at: null, last_acked_cursor: 0,
@@ -36,7 +38,7 @@ describe("SourceConnections", () => {
         protocol_version: 1, gateway_configured: true, permalink_proxy: true,
         modes: [
           { mode: "managed_shared", available: true, unavailable_reason: null },
-          { mode: "managed_dedicated", available: false, unavailable_reason: "fr_115_not_implemented" },
+          { mode: "managed_dedicated", available: true, unavailable_reason: null },
           { mode: "manual", available: true, unavailable_reason: null },
         ],
       };
@@ -82,6 +84,74 @@ describe("SourceConnections", () => {
     expect(invoke).toHaveBeenCalledWith("open_source_connection_oauth", { authorize_url: pending.authorize_url });
     expect(JSON.parse(localStorage.getItem("orchestrator.sourceConnectionIntent.v1") ?? "null")).toEqual({ id: "intent-1", project: "default" });
     expect(await screen.findByText("Waiting for Slack consent")).toBeVisible();
+  });
+
+  it("clears the Configuration Token before review and persists only a safe checkpoint", async () => {
+    const preview = {
+      id: "dedicated-1", project_id: "default", status: "awaiting_approval",
+      manifest_version: "v1", manifest_digest: "a".repeat(64), app_id_digest: null,
+      oauth_intent_id: null, authorize_url: null, error_code: null,
+      expires_at: "2026-07-18T01:00:00Z",
+      diff: [{ field: "bot_scopes", change: "changed", before: [], after: ["reactions:read"], permission_expansion: true }],
+    };
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "source_connection_catalog_get") return { protocol_version: 1, gateway_configured: true, permalink_proxy: true, modes: [{ mode: "managed_dedicated", available: true, unavailable_reason: null }] };
+      if (command === "source_connection_list") return [];
+      if (command === "source_connection_dedicated_preview") {
+        expect(args).toEqual(expect.objectContaining({ config_token: "xoxe.xoxp-sensitive-token", display_label: "Private Engineering" }));
+        return preview;
+      }
+      if (["start_source_connection_watch", "stop_source_connection_watch"].includes(command)) return null;
+      throw new Error(`unexpected ${command}`);
+    });
+    renderAs("admin");
+    fireEvent.change(await screen.findByLabelText("Dedicated connection label"), { target: { value: "Private Engineering" } });
+    const token = screen.getByLabelText("One-time Configuration Token") as HTMLInputElement;
+    expect(token.type).toBe("password");
+    expect(token.autocomplete).toBe("off");
+    fireEvent.change(token, { target: { value: "xoxe.xoxp-sensitive-token" } });
+    fireEvent.click(screen.getByRole("button", { name: "Validate manifest" }));
+    await screen.findByRole("heading", { name: "Dedicated app provisioning review" });
+    expect(token.value).toBe("");
+    expect(screen.getByText(/permission expansion/)).toBeVisible();
+    const retained = localStorage.getItem("orchestrator.dedicatedSlackProvisioning.v1") ?? "";
+    expect(JSON.parse(retained)).toEqual({ id: "dedicated-1", project: "default" });
+    expect(retained).not.toContain("sensitive-token");
+    expect(document.body.textContent).not.toContain("xoxe.xoxp-sensitive-token");
+  });
+
+  it("requires a second reviewed approval before creating a dedicated App", async () => {
+    const preview = {
+      id: "dedicated-2", project_id: "default", status: "awaiting_approval",
+      manifest_version: "v1", manifest_digest: "b".repeat(64), app_id_digest: null,
+      oauth_intent_id: null, authorize_url: null, error_code: null,
+      expires_at: "2026-07-18T01:00:00Z",
+      diff: [{ field: "events", change: "changed", before: [], after: ["reaction_added"], permission_expansion: true }],
+    };
+    const approved = {
+      ...preview, status: "oauth_pending", diff: [], oauth_intent_id: "intent-dedicated-2",
+      authorize_url: "https://slack.com/oauth/v2/authorize?state=dedicated",
+    };
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "source_connection_catalog_get") return { protocol_version: 1, gateway_configured: true, permalink_proxy: true, modes: [{ mode: "managed_dedicated", available: true, unavailable_reason: null }] };
+      if (command === "source_connection_list") return [];
+      if (command === "source_connection_dedicated_preview") return preview;
+      if (command === "source_connection_dedicated_approve") return approved;
+      if (command === "source_connection_intent_get") return { id: "intent-dedicated-2", project_id: "default", provider: "slack", provisioning_mode: "managed_dedicated", status: "pending", connection_id: null, error_code: null, expires_at: approved.expires_at, authorize_url: approved.authorize_url, connection: null };
+      if (command === "open_source_connection_oauth") return true;
+      if (["start_source_connection_watch", "stop_source_connection_watch"].includes(command)) return null;
+      throw new Error(`unexpected ${command}`);
+    });
+    renderAs("admin");
+    fireEvent.change(await screen.findByLabelText("One-time Configuration Token"), { target: { value: "one-time" } });
+    fireEvent.click(screen.getByRole("button", { name: "Validate manifest" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Approve and create app" }));
+    const dialog = await screen.findByRole("dialog", { name: "Create dedicated Slack App" });
+    expect(within(dialog).getByRole("button", { name: "Create app" })).toBeDisabled();
+    fireEvent.change(within(dialog).getByLabelText("Audit reason"), { target: { value: "isolate regulated workspace" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create app" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("source_connection_dedicated_approve", expect.objectContaining({ provisioning_id: "dedicated-2", reason: "isolate regulated workspace" })));
+    expect(invoke).toHaveBeenCalledWith("open_source_connection_oauth", { authorize_url: approved.authorize_url });
   });
 
   it("requires a reviewed reason and sends the displayed version fence when disconnecting", async () => {

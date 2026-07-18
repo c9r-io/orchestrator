@@ -74,7 +74,10 @@ impl Default for GatewayCapabilities {
     fn default() -> Self {
         Self {
             protocol_version: 1,
-            supported_modes: vec![ProvisioningMode::ManagedShared.as_str().into()],
+            supported_modes: vec![
+                ProvisioningMode::ManagedShared.as_str().into(),
+                ProvisioningMode::ManagedDedicated.as_str().into(),
+            ],
             max_delivery_batch: 100,
             permalink_proxy: true,
         }
@@ -94,6 +97,14 @@ pub struct InstallationProjection {
     pub owner_daemon_id: String,
     /// Owning project identity.
     pub owner_project_id: String,
+    /// App provisioning mode currently authoritative for this workspace.
+    pub provisioning_mode: String,
+    /// Dedicated App connection identity, absent for the official shared App.
+    pub app_connection_id: Option<String>,
+    /// Non-reversible Slack App identity digest.
+    pub app_id_digest: Option<String>,
+    /// Reviewed App Manifest profile version.
+    pub manifest_version: Option<String>,
     /// Current credential generation.
     pub generation: i64,
     /// Optimistic concurrency version.

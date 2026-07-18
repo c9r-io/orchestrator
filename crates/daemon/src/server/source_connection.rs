@@ -1,22 +1,51 @@
 //! Managed SourceConnection gRPC surface and OAuth intent reconciliation.
 
 use agent_orchestrator::source_connection::{
-    ActivateSourceConnection, AsyncSourceConnectionRepository, SourceConnection as CoreConnection,
+    ActivateSourceConnection, AsyncSourceConnectionRepository,
+    DedicatedProvisioning as CoreDedicatedProvisioning, SourceConnection as CoreConnection,
     SourceConnectionIntent as CoreIntent, SourceConnectionMode, SourceConnectionState,
-    StoreSourceConnectionIntent, TransferSourceConnectionOwner,
+    StoreDedicatedProvisioning, StoreSourceConnectionIntent, TransferSourceConnectionOwner,
+    UpdateDedicatedProvisioning,
 };
 use futures::Stream;
 use orchestrator_proto::*;
+use orchestrator_slack_gateway::slack::{render_manifest_endpoints, reviewed_manifest_contract};
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::pin::Pin;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
+use zeroize::Zeroizing;
 
 use super::OrchestratorServer;
 use super::action_audit::{self, ActionDescriptor};
 
 pub(crate) type SourceConnectionWatchStream =
     Pin<Box<dyn Stream<Item = Result<SourceConnectionDelta, Status>> + Send>>;
+
+const DEDICATED_MANIFEST_VERSION: &str = "orchestrator-slack-dedicated-v1";
+
+pub(crate) type DedicatedSessionStore = Arc<Mutex<HashMap<String, DedicatedSession>>>;
+
+pub(crate) struct DedicatedSession {
+    project_id: String,
+    display_label: String,
+    owner_daemon_id: String,
+    manifest: serde_json::Value,
+    manifest_digest: String,
+    config_token: Zeroizing<String>,
+    import_secret: Option<Zeroizing<String>>,
+    created_credentials: Option<DedicatedCreatedCredentials>,
+}
+
+struct DedicatedCreatedCredentials {
+    app_id: Zeroizing<String>,
+    client_id: Zeroizing<String>,
+    client_secret: Zeroizing<String>,
+    signing_secret: Zeroizing<String>,
+}
 
 pub(crate) async fn list(
     server: &OrchestratorServer,
@@ -128,7 +157,7 @@ pub(crate) async fn catalog(
             protocol_version: 1,
             modes: vec![
                 mode_capability("managed_shared", false, Some("gateway_not_configured")),
-                mode_capability("managed_dedicated", false, Some("fr_115_not_implemented")),
+                mode_capability("managed_dedicated", false, Some("gateway_not_configured")),
                 mode_capability("manual", true, None),
             ],
             gateway_configured: false,
@@ -152,12 +181,519 @@ pub(crate) async fn catalog(
                     .any(|value| value == "managed_shared"),
                 None,
             ),
-            mode_capability("managed_dedicated", false, Some("fr_115_not_implemented")),
+            mode_capability(
+                "managed_dedicated",
+                capabilities
+                    .supported_modes
+                    .iter()
+                    .any(|value| value == "managed_dedicated"),
+                None,
+            ),
             mode_capability("manual", true, None),
         ],
         gateway_configured: true,
         permalink_proxy: capabilities.permalink_proxy,
     }))
+}
+
+pub(crate) async fn dedicated_preview(
+    server: &OrchestratorServer,
+    mut request: Request<SourceConnectionDedicatedPreviewRequest>,
+) -> Result<Response<SourceConnectionDedicatedProvisioningResponse>, Status> {
+    let config_token = Zeroizing::new(std::mem::take(&mut request.get_mut().config_token));
+    let req = request.get_ref().clone();
+    validate_project(&req.project_id)?;
+    validate_label(&req.display_label)?;
+    validate_mutation(&req.reason, &req.idempotency_key)?;
+    if config_token.trim().is_empty() || config_token.len() > 8192 {
+        return Err(Status::invalid_argument(
+            "Configuration Token must contain 1-8192 characters",
+        ));
+    }
+    let gateway = server
+        .slack_gateway
+        .as_ref()
+        .ok_or_else(|| Status::failed_precondition("Slack Gateway is not configured"))?;
+    let capabilities = gateway.capabilities().await.map_err(unavailable)?;
+    if !capabilities
+        .supported_modes
+        .iter()
+        .any(|mode| mode == "managed_dedicated")
+    {
+        return Err(Status::failed_precondition(
+            "Slack Gateway does not support managed_dedicated",
+        ));
+    }
+    let provisioning_id = format!("dedicated-{}", Uuid::new_v4());
+    let (oauth_callback_url, events_url) = dedicated_urls(gateway.origin(), &provisioning_id)?;
+    let mut manifest: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../deploy/slack/dedicated-app-manifest.json"
+    ))
+    .map_err(internal)?;
+    render_manifest_endpoints(&mut manifest, &oauth_callback_url, &events_url).map_err(internal)?;
+    let contract = reviewed_manifest_contract(&manifest).map_err(internal)?;
+    server
+        .slack_manifest_client
+        .validate_manifest(&config_token, &manifest)
+        .await
+        .map_err(|error| unavailable(anyhow::Error::new(error)))?;
+    let manifest_bytes = serde_json::to_vec(&manifest).map_err(internal)?;
+    let manifest_digest = hex::encode(Sha256::digest(&manifest_bytes));
+    let daemon_id = repository(server).daemon_id().await.map_err(internal)?;
+    let expires_at = (chrono::Utc::now() + chrono::Duration::minutes(10))
+        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let context = audit_context(&req.reason, &req.idempotency_key);
+    let attempt = action_audit::begin(
+        server,
+        &mut request,
+        "SourceConnectionDedicatedPreview",
+        Some(&context),
+        ActionDescriptor {
+            project_id: &req.project_id,
+            target_type: "source_connection_provisioning",
+            target_id: &provisioning_id,
+            action: "source.connection.dedicated.preview",
+            expected_version: None,
+            fencing_token: None,
+            canonical_request: serde_json::json!({
+                "project_id": req.project_id,
+                "display_label": req.display_label,
+                "manifest_version": DEDICATED_MANIFEST_VERSION,
+                "manifest_digest": manifest_digest,
+            }),
+            fallback_reason_code: "dedicated_slack_app",
+            fallback_operator_reason: Some(&req.reason),
+            fallback_idempotency_key: Some(&req.idempotency_key),
+            renewable_exemption: false,
+        },
+    )
+    .await?;
+    if !attempt.should_execute {
+        return Err(attempt.status(Status::already_exists(
+            "matching dedicated preview was already processed",
+        )));
+    }
+    let checkpoint = repository(server)
+        .store_dedicated_provisioning(StoreDedicatedProvisioning {
+            id: provisioning_id.clone(),
+            project_id: req.project_id.clone(),
+            display_label: req.display_label.clone(),
+            owner_daemon_id: daemon_id.clone(),
+            manifest_version: DEDICATED_MANIFEST_VERSION.to_string(),
+            manifest_digest: manifest_digest.clone(),
+            expires_at,
+        })
+        .await
+        .map_err(internal)?;
+    server.dedicated_sessions.lock().await.insert(
+        provisioning_id.clone(),
+        DedicatedSession {
+            project_id: req.project_id,
+            display_label: req.display_label,
+            owner_daemon_id: daemon_id,
+            manifest,
+            manifest_digest,
+            config_token,
+            import_secret: None,
+            created_credentials: None,
+        },
+    );
+    attempt
+        .succeeded(
+            server,
+            Some("source_connection_provisioning"),
+            Some(&provisioning_id),
+        )
+        .await?;
+    Ok(attempt.response(dedicated_response(
+        checkpoint,
+        Some(manifest_diff(&contract)),
+        None,
+    )))
+}
+
+pub(crate) async fn dedicated_get(
+    server: &OrchestratorServer,
+    request: Request<SourceConnectionDedicatedGetRequest>,
+) -> Result<Response<SourceConnectionDedicatedProvisioningResponse>, Status> {
+    super::authorize(server, &request, "SourceConnectionDedicatedGet").map_err(Status::from)?;
+    let req = request.into_inner();
+    validate_project(&req.project_id)?;
+    validate_id(&req.provisioning_id, "provisioning id")?;
+    let mut checkpoint = repository(server)
+        .dedicated_provisioning(&req.project_id, &req.provisioning_id)
+        .await
+        .map_err(internal)?
+        .ok_or_else(|| Status::not_found("dedicated provisioning not found"))?;
+    if matches!(checkpoint.status.as_str(), "creating" | "handoff_pending")
+        && !server
+            .dedicated_sessions
+            .lock()
+            .await
+            .contains_key(&checkpoint.id)
+    {
+        checkpoint = repository(server)
+            .update_dedicated_provisioning(UpdateDedicatedProvisioning {
+                project_id: checkpoint.project_id.clone(),
+                id: checkpoint.id.clone(),
+                expected_status: checkpoint.status.clone(),
+                status: "attention".into(),
+                app_id_ciphertext: None,
+                app_id_digest: None,
+                oauth_intent_id: None,
+                error_code: Some("provisioning_session_lost".into()),
+            })
+            .await
+            .map_err(internal)?;
+    }
+    Ok(Response::new(dedicated_response(checkpoint, None, None)))
+}
+
+pub(crate) async fn dedicated_abandon(
+    server: &OrchestratorServer,
+    mut request: Request<SourceConnectionDedicatedMutationRequest>,
+) -> Result<Response<SourceConnectionDedicatedProvisioningResponse>, Status> {
+    let req = request.get_ref().clone();
+    validate_project(&req.project_id)?;
+    validate_id(&req.provisioning_id, "provisioning id")?;
+    validate_mutation(&req.reason, &req.idempotency_key)?;
+    let current = repository(server)
+        .dedicated_provisioning(&req.project_id, &req.provisioning_id)
+        .await
+        .map_err(internal)?
+        .ok_or_else(|| Status::not_found("dedicated provisioning not found"))?;
+    if matches!(current.status.as_str(), "completed" | "abandoned") {
+        return Err(Status::failed_precondition(
+            "dedicated provisioning is already terminal",
+        ));
+    }
+    let context = audit_context(&req.reason, &req.idempotency_key);
+    let attempt = action_audit::begin(
+        server,
+        &mut request,
+        "SourceConnectionDedicatedAbandon",
+        Some(&context),
+        ActionDescriptor {
+            project_id: &req.project_id,
+            target_type: "source_connection_provisioning",
+            target_id: &req.provisioning_id,
+            action: "source.connection.dedicated.abandon",
+            expected_version: Some(current.status.clone()),
+            fencing_token: None,
+            canonical_request: serde_json::json!({"provisioning_id": req.provisioning_id}),
+            fallback_reason_code: "dedicated_slack_app",
+            fallback_operator_reason: Some(&req.reason),
+            fallback_idempotency_key: Some(&req.idempotency_key),
+            renewable_exemption: false,
+        },
+    )
+    .await?;
+    if !attempt.should_execute {
+        return Err(attempt.status(Status::already_exists("abandon already processed")));
+    }
+    server
+        .dedicated_sessions
+        .lock()
+        .await
+        .remove(&req.provisioning_id);
+    let checkpoint = repository(server)
+        .update_dedicated_provisioning(UpdateDedicatedProvisioning {
+            project_id: req.project_id,
+            id: req.provisioning_id.clone(),
+            expected_status: current.status,
+            status: "abandoned".into(),
+            app_id_ciphertext: None,
+            app_id_digest: None,
+            oauth_intent_id: None,
+            error_code: Some("provisioning_abandoned".into()),
+        })
+        .await
+        .map_err(internal)?;
+    attempt
+        .succeeded(
+            server,
+            Some("source_connection_provisioning"),
+            Some(&req.provisioning_id),
+        )
+        .await?;
+    Ok(attempt.response(dedicated_response(checkpoint, None, None)))
+}
+
+pub(crate) async fn dedicated_approve(
+    server: &OrchestratorServer,
+    mut request: Request<SourceConnectionDedicatedMutationRequest>,
+) -> Result<Response<SourceConnectionDedicatedProvisioningResponse>, Status> {
+    let req = request.get_ref().clone();
+    validate_project(&req.project_id)?;
+    validate_id(&req.provisioning_id, "provisioning id")?;
+    validate_mutation(&req.reason, &req.idempotency_key)?;
+    let current = repository(server)
+        .dedicated_provisioning(&req.project_id, &req.provisioning_id)
+        .await
+        .map_err(internal)?
+        .ok_or_else(|| Status::not_found("dedicated provisioning not found"))?;
+    if !matches!(
+        current.status.as_str(),
+        "awaiting_approval" | "handoff_pending"
+    ) {
+        return Err(Status::failed_precondition(
+            "dedicated provisioning cannot be approved from its current state",
+        ));
+    }
+    let context = audit_context(&req.reason, &req.idempotency_key);
+    let attempt = action_audit::begin(
+        server,
+        &mut request,
+        "SourceConnectionDedicatedApprove",
+        Some(&context),
+        ActionDescriptor {
+            project_id: &req.project_id,
+            target_type: "source_connection_provisioning",
+            target_id: &req.provisioning_id,
+            action: "source.connection.dedicated.approve",
+            expected_version: Some(current.status.clone()),
+            fencing_token: None,
+            canonical_request: serde_json::json!({
+                "provisioning_id": req.provisioning_id,
+                "manifest_version": current.manifest_version,
+                "manifest_digest": current.manifest_digest,
+            }),
+            fallback_reason_code: "dedicated_slack_app",
+            fallback_operator_reason: Some(&req.reason),
+            fallback_idempotency_key: Some(&req.idempotency_key),
+            renewable_exemption: false,
+        },
+    )
+    .await?;
+    if !attempt.should_execute {
+        return Err(attempt.status(Status::already_exists("approval already processed")));
+    }
+    match perform_dedicated_approve(server, &req, current, &attempt.request_id).await {
+        Ok(response) => {
+            attempt
+                .succeeded(
+                    server,
+                    Some("source_connection_provisioning"),
+                    Some(&req.provisioning_id),
+                )
+                .await?;
+            Ok(attempt.response(response))
+        }
+        Err(status) => Err(attempt.failed(server, status).await),
+    }
+}
+
+async fn perform_dedicated_approve(
+    server: &OrchestratorServer,
+    req: &SourceConnectionDedicatedMutationRequest,
+    current: CoreDedicatedProvisioning,
+    request_id: &str,
+) -> Result<SourceConnectionDedicatedProvisioningResponse, Status> {
+    let mut session = server
+        .dedicated_sessions
+        .lock()
+        .await
+        .remove(&req.provisioning_id)
+        .ok_or_else(|| Status::failed_precondition("provisioning_session_lost"))?;
+    if session.project_id != req.project_id
+        || session.owner_daemon_id != current.owner_daemon_id
+        || session.manifest_digest != current.manifest_digest
+    {
+        return Err(Status::permission_denied(
+            "dedicated provisioning session boundary mismatch",
+        ));
+    }
+    let gateway = server
+        .slack_gateway
+        .as_ref()
+        .ok_or_else(|| Status::failed_precondition("Slack Gateway is not configured"))?;
+    let mut checkpoint = current;
+    if checkpoint.status == "awaiting_approval" {
+        checkpoint = repository(server)
+            .update_dedicated_provisioning(UpdateDedicatedProvisioning {
+                project_id: req.project_id.clone(),
+                id: req.provisioning_id.clone(),
+                expected_status: "awaiting_approval".into(),
+                status: "creating".into(),
+                app_id_ciphertext: None,
+                app_id_digest: None,
+                oauth_intent_id: None,
+                error_code: None,
+            })
+            .await
+            .map_err(internal)?;
+        let slot = match gateway
+            .create_dedicated_import_slot(
+                &req.provisioning_id,
+                &session.owner_daemon_id,
+                &req.project_id,
+                DEDICATED_MANIFEST_VERSION,
+                &session.manifest_digest,
+            )
+            .await
+        {
+            Ok(slot) => slot,
+            Err(error) => {
+                mark_dedicated_attention(server, &checkpoint, "gateway_import_slot_failed").await?;
+                return Err(unavailable(error));
+            }
+        };
+        let contract = reviewed_manifest_contract(&session.manifest).map_err(internal)?;
+        if contract.redirect_url != slot.oauth_callback_url
+            || contract.events_url != slot.events_url
+            || slot.connection_id != req.provisioning_id
+            || slot.expires_at.trim().is_empty()
+        {
+            mark_dedicated_attention(server, &checkpoint, "gateway_endpoint_mismatch").await?;
+            return Err(Status::data_loss("Gateway dedicated endpoint mismatch"));
+        }
+        session.import_secret = Some(Zeroizing::new(slot.import_secret));
+        let created = match server
+            .slack_manifest_client
+            .provision_manifest(&session.config_token, &session.manifest)
+            .await
+        {
+            Ok(created) => created,
+            Err(error) => {
+                mark_dedicated_attention(server, &checkpoint, "slack_manifest_create_uncertain")
+                    .await?;
+                return Err(unavailable(anyhow::Error::new(error)));
+            }
+        };
+        let app_id_digest = hex::encode(Sha256::digest(created.app_id.as_bytes()));
+        let app_id_ciphertext = encryption(server)?
+            .encrypt_source_connection_credential(
+                &req.project_id,
+                &req.provisioning_id,
+                &created.app_id,
+            )
+            .map_err(internal)?;
+        session.created_credentials = Some(DedicatedCreatedCredentials {
+            app_id: Zeroizing::new(created.credentials.app_id),
+            client_id: Zeroizing::new(created.credentials.client_id),
+            client_secret: Zeroizing::new(created.credentials.client_secret),
+            signing_secret: Zeroizing::new(created.credentials.signing_secret),
+        });
+        checkpoint = repository(server)
+            .update_dedicated_provisioning(UpdateDedicatedProvisioning {
+                project_id: req.project_id.clone(),
+                id: req.provisioning_id.clone(),
+                expected_status: "creating".into(),
+                status: "handoff_pending".into(),
+                app_id_ciphertext: Some(app_id_ciphertext),
+                app_id_digest: Some(app_id_digest),
+                oauth_intent_id: None,
+                error_code: None,
+            })
+            .await
+            .map_err(internal)?;
+    }
+    let credentials = session
+        .created_credentials
+        .as_ref()
+        .ok_or_else(|| Status::failed_precondition("dedicated_app_credentials_unavailable"))?;
+    let import_secret = session
+        .import_secret
+        .as_deref()
+        .ok_or_else(|| Status::failed_precondition("dedicated_import_capability_unavailable"))?;
+    let imported = match gateway
+        .import_dedicated_app(
+            &req.provisioning_id,
+            &session.owner_daemon_id,
+            &req.project_id,
+            request_id,
+            &session.manifest_digest,
+            import_secret,
+            &crate::slack_gateway::GatewayDedicatedCredentials {
+                app_id: &credentials.app_id,
+                client_id: &credentials.client_id,
+                client_secret: &credentials.client_secret,
+                signing_secret: &credentials.signing_secret,
+            },
+        )
+        .await
+    {
+        Ok(imported) => imported,
+        Err(error) => {
+            server
+                .dedicated_sessions
+                .lock()
+                .await
+                .insert(req.provisioning_id.clone(), session);
+            return Err(unavailable(error));
+        }
+    };
+    let local_intent_id = format!("intent-{}", Uuid::new_v4());
+    let encryption = encryption(server)?;
+    let authorize_url_ciphertext = encryption
+        .encrypt_source_connection_credential(
+            &req.project_id,
+            &local_intent_id,
+            &imported.authorize_url,
+        )
+        .map_err(internal)?;
+    let poll_secret_ciphertext = encryption
+        .encrypt_source_connection_credential(
+            &req.project_id,
+            &local_intent_id,
+            &imported.poll_secret,
+        )
+        .map_err(internal)?;
+    repository(server)
+        .store_intent(StoreSourceConnectionIntent {
+            id: local_intent_id.clone(),
+            project_id: req.project_id.clone(),
+            provider: "slack".into(),
+            display_label: session.display_label,
+            provisioning_mode: SourceConnectionMode::ManagedDedicated,
+            owner_daemon_id: session.owner_daemon_id,
+            actor_digest: hex::encode(Sha256::digest(request_id.as_bytes())),
+            gateway_intent_id: imported.intent_id,
+            authorize_url_ciphertext,
+            poll_secret_ciphertext,
+            expires_at: imported.expires_at.clone(),
+        })
+        .await
+        .map_err(internal)?;
+    checkpoint = repository(server)
+        .update_dedicated_provisioning(UpdateDedicatedProvisioning {
+            project_id: req.project_id.clone(),
+            id: req.provisioning_id.clone(),
+            expected_status: checkpoint.status,
+            status: "oauth_pending".into(),
+            app_id_ciphertext: None,
+            app_id_digest: Some(imported.app_id_digest),
+            oauth_intent_id: Some(local_intent_id.clone()),
+            error_code: None,
+        })
+        .await
+        .map_err(internal)?;
+    Ok(dedicated_response(
+        checkpoint,
+        None,
+        Some((local_intent_id, imported.authorize_url)),
+    ))
+}
+
+async fn mark_dedicated_attention(
+    server: &OrchestratorServer,
+    checkpoint: &CoreDedicatedProvisioning,
+    error_code: &str,
+) -> Result<(), Status> {
+    repository(server)
+        .update_dedicated_provisioning(UpdateDedicatedProvisioning {
+            project_id: checkpoint.project_id.clone(),
+            id: checkpoint.id.clone(),
+            expected_status: checkpoint.status.clone(),
+            status: "attention".into(),
+            app_id_ciphertext: None,
+            app_id_digest: None,
+            oauth_intent_id: None,
+            error_code: Some(error_code.into()),
+        })
+        .await
+        .map(|_| ())
+        .map_err(internal)
 }
 
 pub(crate) async fn connect(
@@ -579,7 +1115,17 @@ async fn reconcile_intent(
             project_id: project_id.to_string(),
             provider: "slack".to_string(),
             display_label: stored.display_label,
-            provisioning_mode: SourceConnectionMode::ManagedShared,
+            provisioning_mode: stored.intent.provisioning_mode,
+            app_ownership: if installation.provisioning_mode == "managed_dedicated" {
+                "workspace".into()
+            } else {
+                "orchestrator".into()
+            },
+            app_id_digest: installation.app_id_digest.clone(),
+            manifest_version: installation.manifest_version.clone(),
+            provision_state: (installation.provisioning_mode == "managed_dedicated")
+                .then(|| "completed".into()),
+            provision_error_code: None,
             installation_id: installation.id,
             installation_id_digest: installation.team_digest,
             enterprise_id_digest: installation.enterprise_digest,
@@ -596,6 +1142,29 @@ async fn reconcile_intent(
         })
         .await
         .map_err(internal)?;
+    if let Some(provisioning_id) = installation.app_connection_id.as_deref() {
+        if let Some(checkpoint) = repository
+            .dedicated_provisioning(project_id, provisioning_id)
+            .await
+            .map_err(internal)?
+        {
+            if checkpoint.status == "oauth_pending" {
+                repository
+                    .update_dedicated_provisioning(UpdateDedicatedProvisioning {
+                        project_id: project_id.to_string(),
+                        id: provisioning_id.to_string(),
+                        expected_status: "oauth_pending".into(),
+                        status: "completed".into(),
+                        app_id_ciphertext: None,
+                        app_id_digest: installation.app_id_digest.clone(),
+                        oauth_intent_id: Some(intent_id.to_string()),
+                        error_code: None,
+                    })
+                    .await
+                    .map_err(internal)?;
+            }
+        }
+    }
     let intent = repository
         .complete_intent(
             project_id,
@@ -865,6 +1434,11 @@ fn connection_to_proto(value: CoreConnection) -> SourceConnection {
         provider: value.provider,
         display_label: value.display_label,
         provisioning_mode: value.provisioning_mode.as_str().to_string(),
+        app_ownership: value.app_ownership,
+        app_id_digest: value.app_id_digest,
+        manifest_version: value.manifest_version,
+        provision_state: value.provision_state,
+        provision_error_code: value.provision_error_code,
         installation_id: value.installation_id,
         installation_id_digest: value.installation_id_digest,
         enterprise_id_digest: value.enterprise_id_digest,
@@ -883,6 +1457,94 @@ fn connection_to_proto(value: CoreConnection) -> SourceConnection {
         updated_at: value.updated_at,
         reauthorized_at: value.reauthorized_at,
         disconnected_at: value.disconnected_at,
+    }
+}
+
+fn dedicated_urls(gateway_origin: &str, provisioning_id: &str) -> Result<(String, String), Status> {
+    let origin = url::Url::parse(gateway_origin).map_err(internal)?;
+    let callback = origin
+        .join(&format!(
+            "slack/connections/{provisioning_id}/oauth/callback"
+        ))
+        .map_err(internal)?;
+    let events = origin
+        .join(&format!("slack/connections/{provisioning_id}/events"))
+        .map_err(internal)?;
+    Ok((callback.to_string(), events.to_string()))
+}
+
+fn manifest_diff(
+    contract: &orchestrator_slack_gateway::slack::ReviewedManifestContract,
+) -> Vec<SourceConnectionManifestDiffEntry> {
+    vec![
+        SourceConnectionManifestDiffEntry {
+            field: "oauth.scopes.bot".into(),
+            change: "add".into(),
+            before: vec![],
+            after: contract.bot_scopes.clone(),
+            permission_expansion: true,
+        },
+        SourceConnectionManifestDiffEntry {
+            field: "events.bot_events".into(),
+            change: "add".into(),
+            before: vec![],
+            after: contract.bot_events.clone(),
+            permission_expansion: true,
+        },
+        SourceConnectionManifestDiffEntry {
+            field: "oauth.redirect_url".into(),
+            change: "set".into(),
+            before: vec![],
+            after: vec![safe_url_origin(&contract.redirect_url)],
+            permission_expansion: true,
+        },
+        SourceConnectionManifestDiffEntry {
+            field: "events.request_url".into(),
+            change: "set".into(),
+            before: vec![],
+            after: vec![safe_url_origin(&contract.events_url)],
+            permission_expansion: true,
+        },
+        SourceConnectionManifestDiffEntry {
+            field: "settings.token_rotation_enabled".into(),
+            change: "set".into(),
+            before: vec![],
+            after: vec!["false".into()],
+            permission_expansion: false,
+        },
+    ]
+}
+
+fn safe_url_origin(value: &str) -> String {
+    url::Url::parse(value)
+        .ok()
+        .and_then(|url| {
+            let host = url.host_str()?.to_string();
+            Some(format!("{}://{host}", url.scheme()))
+        })
+        .unwrap_or_else(|| "invalid-origin".into())
+}
+
+fn dedicated_response(
+    value: CoreDedicatedProvisioning,
+    diff: Option<Vec<SourceConnectionManifestDiffEntry>>,
+    oauth: Option<(String, String)>,
+) -> SourceConnectionDedicatedProvisioningResponse {
+    let (oauth_intent_id, authorize_url) = oauth
+        .map(|(intent, url)| (Some(intent), Some(url)))
+        .unwrap_or_else(|| (value.oauth_intent_id.clone(), None));
+    SourceConnectionDedicatedProvisioningResponse {
+        id: value.id,
+        project_id: value.project_id,
+        status: value.status,
+        manifest_version: value.manifest_version,
+        manifest_digest: value.manifest_digest,
+        diff: diff.unwrap_or_default(),
+        app_id_digest: value.app_id_digest,
+        oauth_intent_id,
+        authorize_url,
+        error_code: value.error_code,
+        expires_at: value.expires_at,
     }
 }
 

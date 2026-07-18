@@ -572,6 +572,76 @@ pub enum SourceConnectionCommands {
         #[arg(long)]
         no_open: bool,
     },
+    /// Validate and provision a workspace-owned private Slack App.
+    #[command(name = "provision-dedicated")]
+    ProvisionDedicated {
+        /// Project isolation scope.
+        #[arg(short, long)]
+        project: String,
+        /// Safe local display label.
+        #[arg(long, default_value = "Slack workspace")]
+        label: String,
+        /// Read the short-lived Slack Configuration Token from stdin.
+        #[arg(long)]
+        config_token_stdin: bool,
+        /// Approve the displayed reviewed manifest diff in this invocation.
+        #[arg(long)]
+        approve: bool,
+        /// Admin reason recorded in canonical audit.
+        #[arg(long)]
+        reason: String,
+        /// Stable retry identity.
+        #[arg(long)]
+        idempotency_key: String,
+        /// Print the OAuth URL without opening the system browser.
+        #[arg(long)]
+        no_open: bool,
+    },
+    /// Inspect a dedicated App provisioning checkpoint.
+    #[command(name = "dedicated-status")]
+    DedicatedStatus {
+        /// Provisioning checkpoint ID.
+        provisioning_id: String,
+        /// Project isolation scope.
+        #[arg(short, long)]
+        project: String,
+        /// Output encoding.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
+    /// Resume credential handoff or approve a reviewed dedicated App preview.
+    #[command(name = "dedicated-resume")]
+    DedicatedResume {
+        /// Provisioning checkpoint ID.
+        provisioning_id: String,
+        /// Project isolation scope.
+        #[arg(short, long)]
+        project: String,
+        /// Admin reason recorded in canonical audit.
+        #[arg(long)]
+        reason: String,
+        /// Stable retry identity.
+        #[arg(long)]
+        idempotency_key: String,
+        /// Print the OAuth URL without opening the system browser.
+        #[arg(long)]
+        no_open: bool,
+    },
+    /// Abandon a non-terminal dedicated App provisioning checkpoint.
+    #[command(name = "dedicated-abandon")]
+    DedicatedAbandon {
+        /// Provisioning checkpoint ID.
+        provisioning_id: String,
+        /// Project isolation scope.
+        #[arg(short, long)]
+        project: String,
+        /// Admin reason recorded in canonical audit.
+        #[arg(long)]
+        reason: String,
+        /// Stable retry identity.
+        #[arg(long)]
+        idempotency_key: String,
+    },
     /// Poll or resume one OAuth intent.
     Status {
         /// OAuth intent ID.

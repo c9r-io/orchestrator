@@ -130,7 +130,21 @@ async fn adopt_ownership_transfers(
                 project_id: installation.owner_project_id.clone(),
                 provider: "slack".to_string(),
                 display_label: "Transferred Slack workspace".to_string(),
-                provisioning_mode: SourceConnectionMode::ManagedShared,
+                provisioning_mode: if installation.provisioning_mode == "managed_dedicated" {
+                    SourceConnectionMode::ManagedDedicated
+                } else {
+                    SourceConnectionMode::ManagedShared
+                },
+                app_ownership: if installation.provisioning_mode == "managed_dedicated" {
+                    "workspace".into()
+                } else {
+                    "orchestrator".into()
+                },
+                app_id_digest: installation.app_id_digest,
+                manifest_version: installation.manifest_version,
+                provision_state: (installation.provisioning_mode == "managed_dedicated")
+                    .then(|| "completed".into()),
+                provision_error_code: None,
                 installation_id: installation.id.clone(),
                 installation_id_digest: installation.team_digest,
                 enterprise_id_digest: installation.enterprise_digest,

@@ -97,6 +97,22 @@ impl GatewayConfig {
         join_public(&self.public_url, "/slack/events")
     }
 
+    /// Dedicated OAuth callback URL scoped to one opaque App connection.
+    pub fn dedicated_oauth_callback_url(&self, connection_id: &str) -> Result<String> {
+        join_public(
+            &self.public_url,
+            &format!("/slack/connections/{connection_id}/oauth/callback"),
+        )
+    }
+
+    /// Dedicated Events API URL scoped to one opaque App connection.
+    pub fn dedicated_events_url(&self, connection_id: &str) -> Result<String> {
+        join_public(
+            &self.public_url,
+            &format!("/slack/connections/{connection_id}/events"),
+        )
+    }
+
     /// Provider request timeout.
     pub fn provider_timeout(&self) -> Duration {
         Duration::from_secs(self.provider_timeout_secs)

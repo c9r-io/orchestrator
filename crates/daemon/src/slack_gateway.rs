@@ -162,6 +162,71 @@ impl SlackGatewayClient {
         .await
     }
 
+    pub(crate) async fn create_dedicated_import_slot(
+        &self,
+        connection_id: &str,
+        daemon_id: &str,
+        project_id: &str,
+        manifest_version: &str,
+        manifest_digest: &str,
+    ) -> Result<GatewayDedicatedImportSlot> {
+        self.post_json(
+            "v1/dedicated/import-slots",
+            Some(&self.enrollment_key),
+            &serde_json::json!({
+                "connection_id": connection_id,
+                "daemon_id": daemon_id,
+                "project_id": project_id,
+                "manifest_version": manifest_version,
+                "manifest_digest": manifest_digest
+            }),
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn import_dedicated_app(
+        &self,
+        connection_id: &str,
+        daemon_id: &str,
+        project_id: &str,
+        actor_id: &str,
+        manifest_digest: &str,
+        import_secret: &str,
+        credentials: &GatewayDedicatedCredentials<'_>,
+    ) -> Result<GatewayDedicatedImport> {
+        let response: GatewayDedicatedImport = self
+            .post_json(
+                "v1/dedicated/import",
+                Some(import_secret),
+                &serde_json::json!({
+                    "connection_id": connection_id,
+                    "daemon_id": daemon_id,
+                    "project_id": project_id,
+                    "actor_id": actor_id,
+                    "credentials": {
+                        "app_id": credentials.app_id,
+                        "client_id": credentials.client_id,
+                        "client_secret": credentials.client_secret,
+                        "signing_secret": credentials.signing_secret
+                    }
+                }),
+            )
+            .await?;
+        if response.connection_id != connection_id || response.credential_generation < 1 {
+            bail!("dedicated_import_receipt_identity_mismatch");
+        }
+        let payload = format!(
+            "{}:{}:{}:{}",
+            response.connection_id,
+            response.app_id_digest,
+            response.credential_generation,
+            manifest_digest
+        );
+        verify_dedicated_receipt(&self.enrollment_key, &payload, &response.receipt_signature)?;
+        Ok(response)
+    }
+
     pub(crate) async fn intent_status(
         &self,
         intent_id: &str,
@@ -412,6 +477,18 @@ fn valid_error_code(value: &str) -> bool {
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
 }
 
+fn verify_dedicated_receipt(key: &str, payload: &str, signature: &str) -> Result<()> {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+    let provided = hex::decode(signature).context("dedicated_import_receipt_invalid")?;
+    let mut mac = <Hmac<Sha256> as hmac::digest::KeyInit>::new_from_slice(key.as_bytes())
+        .map_err(|_| anyhow::anyhow!("dedicated_import_receipt_invalid"))?;
+    mac.update(b"orchestrator-dedicated-app-receipt-v1:");
+    mac.update(payload.as_bytes());
+    mac.verify_slice(&provided)
+        .map_err(|_| anyhow::anyhow!("dedicated_import_receipt_invalid"))
+}
+
 #[derive(Debug, Deserialize)]
 struct GatewayError {
     error: String,
@@ -427,6 +504,34 @@ pub(crate) struct GatewayCapabilities {
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct GatewayIntentCreated {
+    pub(crate) intent_id: String,
+    pub(crate) authorize_url: String,
+    pub(crate) poll_secret: String,
+    pub(crate) expires_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct GatewayDedicatedImportSlot {
+    pub(crate) connection_id: String,
+    pub(crate) import_secret: String,
+    pub(crate) expires_at: String,
+    pub(crate) oauth_callback_url: String,
+    pub(crate) events_url: String,
+}
+
+pub(crate) struct GatewayDedicatedCredentials<'a> {
+    pub(crate) app_id: &'a str,
+    pub(crate) client_id: &'a str,
+    pub(crate) client_secret: &'a str,
+    pub(crate) signing_secret: &'a str,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct GatewayDedicatedImport {
+    pub(crate) connection_id: String,
+    pub(crate) app_id_digest: String,
+    pub(crate) credential_generation: i64,
+    pub(crate) receipt_signature: String,
     pub(crate) intent_id: String,
     pub(crate) authorize_url: String,
     pub(crate) poll_secret: String,
@@ -450,6 +555,10 @@ pub(crate) struct GatewayInstallation {
     pub(crate) enterprise_digest: Option<String>,
     pub(crate) owner_daemon_id: String,
     pub(crate) owner_project_id: String,
+    pub(crate) provisioning_mode: String,
+    pub(crate) app_connection_id: Option<String>,
+    pub(crate) app_id_digest: Option<String>,
+    pub(crate) manifest_version: Option<String>,
     pub(crate) generation: i64,
     pub(crate) version: i64,
     pub(crate) state: String,

@@ -1,17 +1,20 @@
-use anyhow::Result;
+use anyhow::{Context, Result, bail};
 use orchestrator_proto::{
     ActionAuditContext, OrchestratorServiceClient, SourceAutomationGetRequest,
     SourceAutomationListRequest, SourceAutomationMutationRequest, SourceAutomationRouteGetRequest,
     SourceAutomationSimulateRequest, SourceAutomationStatusRequest, SourceAutomationWatchRequest,
     SourceBindRequest, SourceBinding, SourceBindingListRequest, SourceConnectionCatalogRequest,
-    SourceConnectionConnectRequest, SourceConnectionGetRequest, SourceConnectionIntentGetRequest,
-    SourceConnectionIntentMutationRequest, SourceConnectionListRequest,
-    SourceConnectionMutationRequest, SourceConnectionTransferRequest, SourceConnectionWatchRequest,
-    SourceEvent, SourceEventGetRequest, SourceEventIngestRequest, SourceEventListRequest,
-    SourceReplayRequest, SourceTaskBindingMutationRequest, SourceTaskBindingSimulateRequest,
-    SourceTaskTemplatePreviewRequest,
+    SourceConnectionConnectRequest, SourceConnectionDedicatedGetRequest,
+    SourceConnectionDedicatedMutationRequest, SourceConnectionDedicatedPreviewRequest,
+    SourceConnectionDedicatedProvisioningResponse, SourceConnectionGetRequest,
+    SourceConnectionIntentGetRequest, SourceConnectionIntentMutationRequest,
+    SourceConnectionListRequest, SourceConnectionMutationRequest, SourceConnectionTransferRequest,
+    SourceConnectionWatchRequest, SourceEvent, SourceEventGetRequest, SourceEventIngestRequest,
+    SourceEventListRequest, SourceReplayRequest, SourceTaskBindingMutationRequest,
+    SourceTaskBindingSimulateRequest, SourceTaskTemplatePreviewRequest,
 };
 use sha2::{Digest, Sha256};
+use std::io::Read;
 use tonic::transport::Channel;
 
 use crate::{
@@ -658,6 +661,109 @@ async fn dispatch_connection(
             maybe_open_oauth(intent.authorize_url.as_deref(), no_open);
             print_value(intent_value(&intent), OutputFormat::Yaml)?;
         }
+        SourceConnectionCommands::ProvisionDedicated {
+            project,
+            label,
+            config_token_stdin,
+            approve,
+            reason,
+            idempotency_key,
+            no_open,
+        } => {
+            if !config_token_stdin {
+                bail!(
+                    "--config-token-stdin is required; Configuration Tokens are never accepted in argv or environment"
+                );
+            }
+            let mut config_token = String::new();
+            std::io::stdin()
+                .take(8193)
+                .read_to_string(&mut config_token)
+                .context("failed to read Configuration Token from stdin")?;
+            let config_token = config_token.trim().to_string();
+            if config_token.is_empty() || config_token.len() > 8192 {
+                bail!("Configuration Token stdin must contain 1-8192 characters");
+            }
+            let preview = client
+                .source_connection_dedicated_preview(SourceConnectionDedicatedPreviewRequest {
+                    project_id: project.clone(),
+                    display_label: label,
+                    config_token,
+                    idempotency_key: idempotency_key.clone(),
+                    reason: reason.clone(),
+                })
+                .await?
+                .into_inner();
+            if !approve {
+                print_value(dedicated_value(&preview), OutputFormat::Yaml)?;
+                eprintln!(
+                    "Review the manifest diff, then run `orchestrator source connection dedicated-resume {} --project {} ...` to approve before expiry.",
+                    preview.id, project
+                );
+            } else {
+                let approved = client
+                    .source_connection_dedicated_approve(SourceConnectionDedicatedMutationRequest {
+                        project_id: project,
+                        provisioning_id: preview.id,
+                        idempotency_key: format!("{idempotency_key}-approve"),
+                        reason,
+                    })
+                    .await?
+                    .into_inner();
+                maybe_open_oauth(approved.authorize_url.as_deref(), no_open);
+                print_value(dedicated_value(&approved), OutputFormat::Yaml)?;
+            }
+        }
+        SourceConnectionCommands::DedicatedStatus {
+            provisioning_id,
+            project,
+            output,
+        } => {
+            let value = client
+                .source_connection_dedicated_get(SourceConnectionDedicatedGetRequest {
+                    project_id: project,
+                    provisioning_id,
+                })
+                .await?
+                .into_inner();
+            print_value(dedicated_value(&value), output)?;
+        }
+        SourceConnectionCommands::DedicatedResume {
+            provisioning_id,
+            project,
+            reason,
+            idempotency_key,
+            no_open,
+        } => {
+            let value = client
+                .source_connection_dedicated_approve(SourceConnectionDedicatedMutationRequest {
+                    project_id: project,
+                    provisioning_id,
+                    idempotency_key,
+                    reason,
+                })
+                .await?
+                .into_inner();
+            maybe_open_oauth(value.authorize_url.as_deref(), no_open);
+            print_value(dedicated_value(&value), OutputFormat::Yaml)?;
+        }
+        SourceConnectionCommands::DedicatedAbandon {
+            provisioning_id,
+            project,
+            reason,
+            idempotency_key,
+        } => {
+            let value = client
+                .source_connection_dedicated_abandon(SourceConnectionDedicatedMutationRequest {
+                    project_id: project,
+                    provisioning_id,
+                    idempotency_key,
+                    reason,
+                })
+                .await?
+                .into_inner();
+            print_value(dedicated_value(&value), OutputFormat::Yaml)?;
+        }
         SourceConnectionCommands::Status {
             intent_id,
             project,
@@ -797,6 +903,11 @@ fn connection_value(value: &orchestrator_proto::SourceConnection) -> serde_json:
         "provider": value.provider,
         "display_label": value.display_label,
         "provisioning_mode": value.provisioning_mode,
+        "app_ownership": value.app_ownership,
+        "app_id_digest": value.app_id_digest,
+        "manifest_version": value.manifest_version,
+        "provision_state": value.provision_state,
+        "provision_error_code": value.provision_error_code,
         "installation_id": value.installation_id,
         "installation_id_digest": value.installation_id_digest,
         "enterprise_id_digest": value.enterprise_id_digest,
@@ -815,6 +926,28 @@ fn connection_value(value: &orchestrator_proto::SourceConnection) -> serde_json:
         "updated_at": value.updated_at,
         "reauthorized_at": value.reauthorized_at,
         "disconnected_at": value.disconnected_at,
+    })
+}
+
+fn dedicated_value(value: &SourceConnectionDedicatedProvisioningResponse) -> serde_json::Value {
+    serde_json::json!({
+        "id": value.id,
+        "project_id": value.project_id,
+        "status": value.status,
+        "manifest_version": value.manifest_version,
+        "manifest_digest": value.manifest_digest,
+        "diff": value.diff.iter().map(|entry| serde_json::json!({
+            "field": entry.field,
+            "change": entry.change,
+            "before": entry.before,
+            "after": entry.after,
+            "permission_expansion": entry.permission_expansion,
+        })).collect::<Vec<_>>(),
+        "app_id_digest": value.app_id_digest,
+        "oauth_intent_id": value.oauth_intent_id,
+        "authorize_url": value.authorize_url,
+        "error_code": value.error_code,
+        "expires_at": value.expires_at,
     })
 }
 

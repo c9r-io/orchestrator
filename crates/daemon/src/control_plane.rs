@@ -745,6 +745,7 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         | "SourceAutomationCatalogGet"
         | "SourceConnectionList" | "SourceConnectionGet" | "SourceConnectionWatch"
         | "SourceConnectionCatalogGet"
+        | "SourceConnectionDedicatedGet"
         | "HandoffGet" | "ResumeBoundaryList"
         | "Describe" | "StoreGet" | "StoreList" | "WorkerStatus" | "Check" | "ManifestExport"
         | "DbStatus" | "DbMigrationsList" | "SecretKeyStatus" | "SecretKeyList"
@@ -777,7 +778,9 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         | "QaDoctor" | "SourceReplay" | "ProcessMetricsRebuild" | "ProcessMetricsPrune"
         | "SourceConnectionConnect" | "SourceConnectionIntentGet" | "SourceConnectionCancel"
         | "SourceConnectionReauthorize" | "SourceConnectionDisconnect"
-        | "SourceConnectionTransfer" => Role::Admin,
+        | "SourceConnectionTransfer" | "SourceConnectionDedicatedPreview"
+        | "SourceConnectionDedicatedApprove"
+        | "SourceConnectionDedicatedAbandon" => Role::Admin,
 
         other => {
             tracing::warn!(rpc = other, "unmapped RPC defaulting to Admin role");

@@ -1671,3 +1671,66 @@ pub(crate) fn m0035_source_connections(conn: &Connection) -> Result<()> {
     .context("m0035_source_connections")?;
     Ok(())
 }
+
+/// Adds secret-free dedicated Slack App provisioning checkpoints and projections.
+pub(crate) fn m0036_dedicated_slack_app_provisioning(conn: &Connection) -> Result<()> {
+    ensure_column_exists(
+        conn,
+        "source_connections",
+        "app_ownership",
+        "ALTER TABLE source_connections ADD COLUMN app_ownership TEXT NOT NULL DEFAULT 'orchestrator' CHECK(app_ownership IN ('orchestrator','workspace','external'))",
+    )?;
+    ensure_column_exists(
+        conn,
+        "source_connections",
+        "app_id_digest",
+        "ALTER TABLE source_connections ADD COLUMN app_id_digest TEXT",
+    )?;
+    ensure_column_exists(
+        conn,
+        "source_connections",
+        "manifest_version",
+        "ALTER TABLE source_connections ADD COLUMN manifest_version TEXT",
+    )?;
+    ensure_column_exists(
+        conn,
+        "source_connections",
+        "provision_state",
+        "ALTER TABLE source_connections ADD COLUMN provision_state TEXT",
+    )?;
+    ensure_column_exists(
+        conn,
+        "source_connections",
+        "provision_error_code",
+        "ALTER TABLE source_connections ADD COLUMN provision_error_code TEXT",
+    )?;
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS source_connection_provisioning (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            display_label TEXT NOT NULL,
+            owner_daemon_id TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN
+                ('awaiting_approval','creating','handoff_pending','oauth_pending',
+                 'attention','abandoned','completed')),
+            manifest_version TEXT NOT NULL,
+            manifest_digest TEXT NOT NULL,
+            app_id_ciphertext TEXT,
+            app_id_digest TEXT,
+            oauth_intent_id TEXT,
+            error_code TEXT,
+            expires_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(oauth_intent_id) REFERENCES source_connection_intents(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_source_connection_provisioning_project
+            ON source_connection_provisioning(project_id,status,updated_at DESC,id DESC);
+        CREATE INDEX IF NOT EXISTS idx_source_connection_provisioning_expiry
+            ON source_connection_provisioning(status,expires_at);
+        "#,
+    )
+    .context("m0036_dedicated_slack_app_provisioning")?;
+    Ok(())
+}

@@ -16,7 +16,7 @@ use crate::domain::{
     OwnershipTransferClaim,
 };
 
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 /// Decrypted official-app credentials held only for the duration of a provider call.
 #[derive(Clone)]
@@ -29,6 +29,23 @@ pub struct OfficialAppCredentials {
     pub client_secret: String,
     /// Slack Events API signing secret.
     pub signing_secret: String,
+}
+
+/// One-time credential import slot for a daemon-created dedicated Slack App.
+#[derive(Debug, Clone)]
+pub struct DedicatedImportSlot {
+    pub connection_id: String,
+    pub import_secret: String,
+    pub expires_at: String,
+}
+
+/// Durable receipt returned only after dedicated App credentials are encrypted.
+#[derive(Debug, Clone)]
+pub struct DedicatedImportReceipt {
+    pub connection_id: String,
+    pub app_id_digest: String,
+    pub credential_generation: i64,
+    pub receipt_payload: String,
 }
 
 impl std::fmt::Debug for OfficialAppCredentials {
@@ -49,6 +66,10 @@ pub struct NewIntent<'a> {
     pub daemon_id: &'a str,
     /// Project selected by the authenticated daemon admin.
     pub project_id: &'a str,
+    /// Managed provisioning mode selecting the OAuth client credentials.
+    pub provisioning_mode: &'a str,
+    /// Dedicated App connection identity, absent for shared OAuth.
+    pub app_connection_id: Option<&'a str>,
     /// Stable actor identity; persisted only as a digest.
     pub actor_id: &'a str,
     /// Exact reviewed OAuth redirect URI.
@@ -216,6 +237,215 @@ impl GatewayStore {
         })
     }
 
+    /// Creates one expiring, connection-scoped import capability.
+    pub fn create_dedicated_import_slot(
+        &self,
+        connection_id: &str,
+        daemon_id: &str,
+        project_id: &str,
+        manifest_version: &str,
+        manifest_digest: &str,
+        ttl: Duration,
+    ) -> Result<DedicatedImportSlot> {
+        validate_identity(connection_id, "connection ID")?;
+        validate_identity(daemon_id, "daemon ID")?;
+        validate_identity(project_id, "project ID")?;
+        validate_identity(manifest_version, "manifest version")?;
+        validate_identity(manifest_digest, "manifest digest")?;
+        let import_secret = random_secret();
+        let expires = Utc::now() + chrono::Duration::from_std(ttl)?;
+        let now = now_ts();
+        self.connection()?.execute(
+            "INSERT INTO dedicated_import_slots
+             (connection_id,owner_daemon_id,owner_project_id,import_digest,manifest_version,
+              manifest_digest,state,expires_at,created_at,updated_at)
+             VALUES(?1,?2,?3,?4,?5,?6,'pending',?7,?8,?8)",
+            params![
+                connection_id,
+                daemon_id,
+                project_id,
+                self.crypto.digest("dedicated-import", &import_secret),
+                manifest_version,
+                manifest_digest,
+                format_ts(expires),
+                now,
+            ],
+        )?;
+        Ok(DedicatedImportSlot {
+            connection_id: connection_id.to_string(),
+            import_secret,
+            expires_at: format_ts(expires),
+        })
+    }
+
+    /// Encrypts one dedicated App credential set exactly once and returns a durable receipt.
+    pub fn import_dedicated_app_credentials(
+        &self,
+        connection_id: &str,
+        daemon_id: &str,
+        project_id: &str,
+        import_secret: &str,
+        credentials: &OfficialAppCredentials,
+    ) -> Result<DedicatedImportReceipt> {
+        let now = now_ts();
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+
+        let slot = transaction
+            .query_row(
+                "SELECT import_digest,manifest_version,manifest_digest,state,expires_at
+                 FROM dedicated_import_slots
+                 WHERE connection_id=?1 AND owner_daemon_id=?2 AND owner_project_id=?3",
+                params![connection_id, daemon_id, project_id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, String>(4)?,
+                    ))
+                },
+            )
+            .optional()?
+            .context("dedicated_import_not_found")?;
+        if !self
+            .crypto
+            .verify_digest("dedicated-import", import_secret, &slot.0)
+        {
+            bail!("dedicated_import_not_found");
+        }
+        if credentials.app_id.is_empty() || credentials.app_id.len() > 64 {
+            bail!("dedicated_app_identity_invalid");
+        }
+        let app_id_digest = self.crypto.digest("slack-app", &credentials.app_id);
+        if slot.3 == "imported" {
+            let imported = transaction
+                .query_row(
+                    "SELECT app_id_digest,credential_generation FROM dedicated_apps
+                     WHERE connection_id=?1 AND state='ready'",
+                    [connection_id],
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+                )
+                .optional()?
+                .context("dedicated_import_already_completed")?;
+            if imported.0 != app_id_digest {
+                bail!("dedicated_import_already_completed");
+            }
+            return Ok(DedicatedImportReceipt {
+                connection_id: connection_id.to_string(),
+                app_id_digest,
+                credential_generation: imported.1,
+                receipt_payload: format!(
+                    "{connection_id}:{}:{}:{}",
+                    imported.0, imported.1, slot.2
+                ),
+            });
+        }
+        if slot.3 != "pending" || slot.4 <= now {
+            bail!("dedicated_import_not_pending");
+        }
+        let client_id = self.crypto.encrypt(
+            &format!("dedicated-app:{connection_id}:generation:1:client-id"),
+            &credentials.client_id,
+        )?;
+        let client_secret = self.crypto.encrypt(
+            &format!("dedicated-app:{connection_id}:generation:1:client-secret"),
+            &credentials.client_secret,
+        )?;
+        let signing_secret = self.crypto.encrypt(
+            &format!("dedicated-app:{connection_id}:generation:1:signing-secret"),
+            &credentials.signing_secret,
+        )?;
+        transaction.execute(
+            "INSERT INTO dedicated_apps
+             (connection_id,owner_daemon_id,owner_project_id,app_id,app_id_digest,
+              client_id_ciphertext,client_secret_ciphertext,signing_secret_ciphertext,
+              manifest_version,manifest_digest,credential_generation,state,created_at,updated_at)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,1,'ready',?11,?11)",
+            params![
+                connection_id,
+                daemon_id,
+                project_id,
+                credentials.app_id,
+                app_id_digest,
+                client_id,
+                client_secret,
+                signing_secret,
+                slot.1,
+                slot.2,
+                now,
+            ],
+        )?;
+        let changed = transaction.execute(
+            "UPDATE dedicated_import_slots SET state='imported',updated_at=?2
+             WHERE connection_id=?1 AND state='pending'",
+            params![connection_id, now],
+        )?;
+        if changed != 1 {
+            bail!("dedicated_import_state_conflict");
+        }
+        transaction.commit()?;
+        let receipt_payload = format!("{connection_id}:{app_id_digest}:1:{}", slot.2);
+        Ok(DedicatedImportReceipt {
+            connection_id: connection_id.to_string(),
+            app_id_digest,
+            credential_generation: 1,
+            receipt_payload,
+        })
+    }
+
+    /// Decrypts one dedicated App only for OAuth or signature verification.
+    pub fn dedicated_app_credentials(&self, connection_id: &str) -> Result<OfficialAppCredentials> {
+        let row = self
+            .connection()?
+            .query_row(
+                "SELECT app_id,client_id_ciphertext,client_secret_ciphertext,
+                        signing_secret_ciphertext,credential_generation,state
+                 FROM dedicated_apps WHERE connection_id=?1",
+                [connection_id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, i64>(4)?,
+                        row.get::<_, String>(5)?,
+                    ))
+                },
+            )
+            .optional()?
+            .context("dedicated_app_not_found")?;
+        if row.5 != "ready" {
+            bail!("dedicated_app_not_ready");
+        }
+        Ok(OfficialAppCredentials {
+            app_id: row.0,
+            client_id: self.crypto.decrypt(
+                &format!(
+                    "dedicated-app:{connection_id}:generation:{}:client-id",
+                    row.4
+                ),
+                &row.1,
+            )?,
+            client_secret: self.crypto.decrypt(
+                &format!(
+                    "dedicated-app:{connection_id}:generation:{}:client-secret",
+                    row.4
+                ),
+                &row.2,
+            )?,
+            signing_secret: self.crypto.decrypt(
+                &format!(
+                    "dedicated-app:{connection_id}:generation:{}:signing-secret",
+                    row.4
+                ),
+                &row.3,
+            )?,
+        })
+    }
+
     /// Creates a short-lived OAuth intent and returns its two plaintext one-time secrets.
     pub fn create_intent(&self, input: NewIntent<'_>) -> Result<CreatedIntent> {
         validate_identity(input.daemon_id, "daemon ID")?;
@@ -226,6 +456,15 @@ impl GatewayStore {
         if input.requested_scopes.is_empty() || input.requested_scopes.len() > 32 {
             bail!("requested scopes must contain 1-32 entries");
         }
+        if !matches!(
+            input.provisioning_mode,
+            "managed_shared" | "managed_dedicated"
+        ) {
+            bail!("unsupported managed OAuth provisioning mode");
+        }
+        if (input.provisioning_mode == "managed_dedicated") != input.app_connection_id.is_some() {
+            bail!("dedicated OAuth intent requires exact App connection identity");
+        }
         let id = Uuid::new_v4().to_string();
         let oauth_state = random_secret();
         let poll_secret = random_secret();
@@ -235,8 +474,9 @@ impl GatewayStore {
         self.connection()?.execute(
             "INSERT INTO oauth_intents
              (id,state_digest,poll_digest,daemon_id,project_id,actor_digest,redirect_uri,
-              requested_scopes_json,status,expires_at,created_at,updated_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'pending',?9,?10,?10)",
+              requested_scopes_json,status,expires_at,created_at,updated_at,
+              provisioning_mode,app_connection_id)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'pending',?9,?10,?10,?11,?12)",
             params![
                 id,
                 self.crypto.digest("oauth-state", &oauth_state),
@@ -248,6 +488,8 @@ impl GatewayStore {
                 scopes,
                 format_ts(expires),
                 format_ts(now),
+                input.provisioning_mode,
+                input.app_connection_id,
             ],
         )?;
         Ok(CreatedIntent {
@@ -340,7 +582,8 @@ impl GatewayStore {
         let now = now_ts();
         self.connection()?
             .query_row(
-                "SELECT id,daemon_id,project_id,redirect_uri,requested_scopes_json,expires_at
+                "SELECT id,daemon_id,project_id,redirect_uri,requested_scopes_json,expires_at,
+                        provisioning_mode,app_connection_id
                  FROM oauth_intents WHERE state_digest=?1 AND status='pending' AND expires_at>?2",
                 params![digest, now],
                 |row| {
@@ -359,6 +602,8 @@ impl GatewayStore {
                         redirect_uri: row.get(3)?,
                         requested_scopes: scopes,
                         expires_at: row.get(5)?,
+                        provisioning_mode: row.get(6)?,
+                        app_connection_id: row.get(7)?,
                     })
                 },
             )
@@ -382,6 +627,26 @@ impl GatewayStore {
         let now = now_ts();
         let mut connection = self.connection()?;
         let transaction = connection.transaction()?;
+
+        let (app_id_digest, manifest_version) = match intent.app_connection_id.as_deref() {
+            Some(connection_id) if intent.provisioning_mode == "managed_dedicated" => transaction
+                .query_row(
+                    "SELECT app_id_digest,manifest_version FROM dedicated_apps
+                     WHERE connection_id=?1 AND owner_daemon_id=?2 AND owner_project_id=?3
+                       AND state='ready'",
+                    params![connection_id, intent.daemon_id, intent.project_id],
+                    |row| {
+                        Ok((
+                            Some(row.get::<_, String>(0)?),
+                            Some(row.get::<_, String>(1)?),
+                        ))
+                    },
+                )
+                .optional()?
+                .context("dedicated_app_not_ready")?,
+            None if intent.provisioning_mode == "managed_shared" => (None, None),
+            _ => bail!("oauth_app_identity_mismatch"),
+        };
 
         let existing = transaction
             .query_row(
@@ -432,14 +697,19 @@ impl GatewayStore {
             "INSERT INTO installations
              (id,team_digest,enterprise_digest,team_id_ciphertext,enterprise_id_ciphertext,
               owner_daemon_id,owner_project_id,generation,version,state,scopes_json,
-              bot_token_ciphertext,pairing_digest,last_acked_cursor,created_at,updated_at,reauthorized_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,1,'active',?9,?10,?11,0,?12,?12,?12)
+              bot_token_ciphertext,pairing_digest,last_acked_cursor,created_at,updated_at,
+              reauthorized_at,provisioning_mode,app_connection_id,app_id_digest,manifest_version)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,1,'active',?9,?10,?11,0,?12,?12,?12,
+                     ?13,?14,?15,?16)
              ON CONFLICT(id) DO UPDATE SET enterprise_digest=excluded.enterprise_digest,
               team_id_ciphertext=excluded.team_id_ciphertext,
               enterprise_id_ciphertext=excluded.enterprise_id_ciphertext,
               generation=excluded.generation,version=installations.version+1,state='active',
               scopes_json=excluded.scopes_json,bot_token_ciphertext=excluded.bot_token_ciphertext,
               pairing_digest=excluded.pairing_digest,last_error_code=NULL,
+              provisioning_mode=excluded.provisioning_mode,
+              app_connection_id=excluded.app_connection_id,
+              app_id_digest=excluded.app_id_digest,manifest_version=excluded.manifest_version,
               updated_at=excluded.updated_at,reauthorized_at=excluded.reauthorized_at",
             params![
                 installation_id,
@@ -454,6 +724,10 @@ impl GatewayStore {
                 bot_token_ciphertext,
                 pairing_digest,
                 now,
+                intent.provisioning_mode,
+                intent.app_connection_id,
+                app_id_digest,
+                manifest_version,
             ],
         )?;
 
@@ -490,7 +764,8 @@ impl GatewayStore {
         let connection = self.connection()?;
         let mut statement = connection.prepare(
             "SELECT id,team_digest,enterprise_digest,owner_daemon_id,owner_project_id,
-             generation,version,state,scopes_json,last_acked_cursor,last_error_code,created_at,updated_at
+             generation,version,state,scopes_json,last_acked_cursor,last_error_code,created_at,
+             updated_at,provisioning_mode,app_connection_id,app_id_digest,manifest_version
              FROM installations WHERE owner_daemon_id=?1 AND (?2 IS NULL OR owner_project_id=?2)
              ORDER BY created_at DESC,id DESC",
         )?;
@@ -706,6 +981,29 @@ impl GatewayStore {
             .query_row(
                 "SELECT id FROM installations WHERE team_digest=?1 AND state='active'",
                 [digest],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?
+            .context("unknown_installation")?;
+        drop(connection);
+        self.installation_projection(&id)
+    }
+
+    /// Resolves a verified team only when the signed App endpoint is authoritative.
+    pub fn installation_for_app_team(
+        &self,
+        team_id: &str,
+        provisioning_mode: &str,
+        app_connection_id: Option<&str>,
+    ) -> Result<InstallationProjection> {
+        let digest = self.crypto.digest("slack-team", team_id);
+        let connection = self.connection()?;
+        let id = connection
+            .query_row(
+                "SELECT id FROM installations WHERE team_digest=?1 AND state='active'
+                   AND provisioning_mode=?2
+                   AND ((?3 IS NULL AND app_connection_id IS NULL) OR app_connection_id=?3)",
+                params![digest, provisioning_mode, app_connection_id],
                 |row| row.get::<_, String>(0),
             )
             .optional()?
@@ -930,7 +1228,8 @@ impl GatewayStore {
         self.connection()?
             .query_row(
                 "SELECT id,team_digest,enterprise_digest,owner_daemon_id,owner_project_id,
-                 generation,version,state,scopes_json,last_acked_cursor,last_error_code,created_at,updated_at
+                 generation,version,state,scopes_json,last_acked_cursor,last_error_code,created_at,
+                 updated_at,provisioning_mode,app_connection_id,app_id_digest,manifest_version
                  FROM installations WHERE id=?1",
                 [installation_id],
                 projection_from_row,
@@ -955,6 +1254,10 @@ pub struct PendingIntent {
     pub daemon_id: String,
     /// Owning project.
     pub project_id: String,
+    /// Managed App path used for OAuth and event routing.
+    pub provisioning_mode: String,
+    /// Dedicated App connection identity when applicable.
+    pub app_connection_id: Option<String>,
     /// Exact OAuth redirect URI.
     pub redirect_uri: String,
     /// Exact requested scopes.
@@ -964,6 +1267,10 @@ pub struct PendingIntent {
 }
 
 fn apply_migrations(connection: &Connection) -> Result<()> {
+    apply_migrations_through(connection, SCHEMA_VERSION)
+}
+
+fn apply_migrations_through(connection: &Connection, target: i64) -> Result<()> {
     connection.execute_batch(
         "CREATE TABLE IF NOT EXISTS gateway_schema_migrations(
             version INTEGER PRIMARY KEY,
@@ -976,10 +1283,10 @@ fn apply_migrations(connection: &Connection) -> Result<()> {
         [],
         |row| row.get(0),
     )?;
-    if current > SCHEMA_VERSION {
+    if current > target {
         bail!("gateway database schema is newer than this binary");
     }
-    if current < 1 {
+    if current < 1 && target >= 1 {
         connection.execute_batch(
             r#"
             BEGIN IMMEDIATE;
@@ -1064,7 +1371,7 @@ fn apply_migrations(connection: &Connection) -> Result<()> {
             "#,
         )?;
     }
-    if current < 2 {
+    if current < 2 && target >= 2 {
         connection.execute_batch(
             r#"
             BEGIN IMMEDIATE;
@@ -1080,6 +1387,63 @@ fn apply_migrations(connection: &Connection) -> Result<()> {
                 ON ownership_transfers(target_daemon_id,created_at,installation_id);
             INSERT INTO gateway_schema_migrations(version,name,applied_at)
                 VALUES (2,'m0002_ownership_transfer_handoff',strftime('%Y-%m-%dT%H:%M:%SZ','now'));
+            COMMIT;
+            "#,
+        )?;
+    }
+    if current < 3 && target >= 3 {
+        connection.execute_batch(
+            r#"
+            BEGIN IMMEDIATE;
+            ALTER TABLE oauth_intents ADD COLUMN provisioning_mode TEXT NOT NULL
+                DEFAULT 'managed_shared'
+                CHECK(provisioning_mode IN ('managed_shared','managed_dedicated'));
+            ALTER TABLE oauth_intents ADD COLUMN app_connection_id TEXT;
+
+            ALTER TABLE installations ADD COLUMN provisioning_mode TEXT NOT NULL
+                DEFAULT 'managed_shared'
+                CHECK(provisioning_mode IN ('managed_shared','managed_dedicated'));
+            ALTER TABLE installations ADD COLUMN app_connection_id TEXT;
+            ALTER TABLE installations ADD COLUMN app_id_digest TEXT;
+            ALTER TABLE installations ADD COLUMN manifest_version TEXT;
+
+            CREATE TABLE dedicated_import_slots(
+                connection_id TEXT PRIMARY KEY,
+                owner_daemon_id TEXT NOT NULL,
+                owner_project_id TEXT NOT NULL,
+                import_digest TEXT NOT NULL,
+                manifest_version TEXT NOT NULL,
+                manifest_digest TEXT NOT NULL,
+                state TEXT NOT NULL CHECK(state IN ('pending','imported','abandoned')),
+                expires_at TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX idx_dedicated_import_slots_expiry
+                ON dedicated_import_slots(state,expires_at);
+
+            CREATE TABLE dedicated_apps(
+                connection_id TEXT PRIMARY KEY,
+                owner_daemon_id TEXT NOT NULL,
+                owner_project_id TEXT NOT NULL,
+                app_id TEXT NOT NULL UNIQUE,
+                app_id_digest TEXT NOT NULL UNIQUE,
+                client_id_ciphertext TEXT NOT NULL,
+                client_secret_ciphertext TEXT NOT NULL,
+                signing_secret_ciphertext TEXT NOT NULL,
+                manifest_version TEXT NOT NULL,
+                manifest_digest TEXT NOT NULL,
+                credential_generation INTEGER NOT NULL CHECK(credential_generation>0),
+                state TEXT NOT NULL CHECK(state IN ('ready','attention','deleted')),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(connection_id) REFERENCES dedicated_import_slots(connection_id)
+            );
+            CREATE INDEX idx_dedicated_apps_owner
+                ON dedicated_apps(owner_daemon_id,owner_project_id,state);
+
+            INSERT INTO gateway_schema_migrations(version,name,applied_at)
+                VALUES (3,'m0003_dedicated_slack_apps',strftime('%Y-%m-%dT%H:%M:%SZ','now'));
             COMMIT;
             "#,
         )?;
@@ -1102,6 +1466,10 @@ fn projection_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Installation
         enterprise_digest: row.get(2)?,
         owner_daemon_id: row.get(3)?,
         owner_project_id: row.get(4)?,
+        provisioning_mode: row.get(13)?,
+        app_connection_id: row.get(14)?,
+        app_id_digest: row.get(15)?,
+        manifest_version: row.get(16)?,
         generation: row.get(5)?,
         version: row.get(6)?,
         state: row.get(7)?,
@@ -1206,6 +1574,8 @@ mod tests {
             .create_intent(NewIntent {
                 daemon_id: "daemon-a",
                 project_id: "project-a",
+                provisioning_mode: "managed_shared",
+                app_connection_id: None,
                 actor_id: "admin-a",
                 redirect_uri: "https://gateway.example/slack/oauth/callback",
                 requested_scopes: &["reactions:read".into()],
@@ -1226,6 +1596,67 @@ mod tests {
                 },
             )
             .expect("complete");
+        (created, projection)
+    }
+
+    fn create_dedicated_completed(
+        store: &GatewayStore,
+        connection_id: &str,
+        app_id: &str,
+        team_id: &str,
+    ) -> (CreatedIntent, InstallationProjection) {
+        let slot = store
+            .create_dedicated_import_slot(
+                connection_id,
+                "daemon-a",
+                "project-a",
+                "v1",
+                &format!("manifest-{connection_id}"),
+                Duration::from_secs(600),
+            )
+            .expect("dedicated slot");
+        store
+            .import_dedicated_app_credentials(
+                connection_id,
+                "daemon-a",
+                "project-a",
+                &slot.import_secret,
+                &OfficialAppCredentials {
+                    app_id: app_id.into(),
+                    client_id: format!("client-{connection_id}"),
+                    client_secret: format!("client-secret-{connection_id}"),
+                    signing_secret: format!("signing-secret-{connection_id}"),
+                },
+            )
+            .expect("dedicated import");
+        let created = store
+            .create_intent(NewIntent {
+                daemon_id: "daemon-a",
+                project_id: "project-a",
+                provisioning_mode: "managed_dedicated",
+                app_connection_id: Some(connection_id),
+                actor_id: "admin-a",
+                redirect_uri: &format!(
+                    "https://gateway.example/slack/connections/{connection_id}/oauth/callback"
+                ),
+                requested_scopes: &["reactions:read".into()],
+                ttl: Duration::from_secs(600),
+            })
+            .expect("dedicated intent");
+        let pending = store
+            .pending_intent_by_state(&created.oauth_state)
+            .expect("dedicated pending");
+        let projection = store
+            .complete_intent(
+                &pending,
+                OAuthInstallation {
+                    team_id,
+                    enterprise_id: None,
+                    scopes: &["reactions:read".into()],
+                    bot_token: &format!("xoxb-{connection_id}"),
+                },
+            )
+            .expect("dedicated OAuth completion");
         (created, projection)
     }
 
@@ -1270,6 +1701,139 @@ mod tests {
     }
 
     #[test]
+    fn dedicated_import_is_connection_scoped_retry_safe_and_encrypted() {
+        let (temp, store) = setup();
+        let slot_a = store
+            .create_dedicated_import_slot(
+                "connection-a",
+                "daemon-a",
+                "project-a",
+                "v1",
+                "manifest-a",
+                Duration::from_secs(600),
+            )
+            .expect("slot a");
+        let slot_b = store
+            .create_dedicated_import_slot(
+                "connection-b",
+                "daemon-a",
+                "project-a",
+                "v1",
+                "manifest-b",
+                Duration::from_secs(600),
+            )
+            .expect("slot b");
+        let credentials = OfficialAppCredentials {
+            app_id: "A-DEDICATED-A".into(),
+            client_id: "dedicated-client-a".into(),
+            client_secret: "dedicated-client-secret-a".into(),
+            signing_secret: "dedicated-signing-secret-a".into(),
+        };
+        assert!(
+            store
+                .import_dedicated_app_credentials(
+                    "connection-b",
+                    "daemon-a",
+                    "project-a",
+                    &slot_a.import_secret,
+                    &credentials,
+                )
+                .expect_err("cross-connection capability")
+                .to_string()
+                .contains("dedicated_import_not_found")
+        );
+        let first = store
+            .import_dedicated_app_credentials(
+                "connection-a",
+                "daemon-a",
+                "project-a",
+                &slot_a.import_secret,
+                &credentials,
+            )
+            .expect("first import");
+        let retried = store
+            .import_dedicated_app_credentials(
+                "connection-a",
+                "daemon-a",
+                "project-a",
+                &slot_a.import_secret,
+                &credentials,
+            )
+            .expect("lost receipt retry");
+        assert_eq!(first.receipt_payload, retried.receipt_payload);
+        assert_eq!(first.app_id_digest, retried.app_id_digest);
+        let changed_app = OfficialAppCredentials {
+            app_id: "A-CHANGED".into(),
+            ..credentials.clone()
+        };
+        assert!(
+            store
+                .import_dedicated_app_credentials(
+                    "connection-a",
+                    "daemon-a",
+                    "project-a",
+                    &slot_a.import_secret,
+                    &changed_app,
+                )
+                .expect_err("changed retry")
+                .to_string()
+                .contains("dedicated_import_already_completed")
+        );
+        assert!(
+            store.dedicated_app_credentials("connection-b").is_err(),
+            "a failed cross-connection import must not create an App"
+        );
+        assert!(!slot_b.import_secret.is_empty());
+        let database = String::from_utf8_lossy(
+            &std::fs::read(temp.path().join("gateway.db")).expect("read database"),
+        )
+        .into_owned();
+        for secret in [
+            &slot_a.import_secret,
+            &slot_b.import_secret,
+            "dedicated-client-a",
+            "dedicated-client-secret-a",
+            "dedicated-signing-secret-a",
+        ] {
+            assert!(
+                !database.contains(secret),
+                "database leaked dedicated secret"
+            );
+        }
+    }
+
+    #[test]
+    fn dedicated_installation_lookup_fails_closed_across_app_endpoints() {
+        let (_temp, store) = setup();
+        let (_, first) =
+            create_dedicated_completed(&store, "connection-a", "A-DEDICATED-A", "TEAM-A");
+        let (_, second) =
+            create_dedicated_completed(&store, "connection-b", "A-DEDICATED-B", "TEAM-B");
+
+        assert_eq!(
+            store
+                .installation_for_app_team("TEAM-A", "managed_dedicated", Some("connection-a"))
+                .expect("exact App/team")
+                .id,
+            first.id
+        );
+        assert!(
+            store
+                .installation_for_app_team("TEAM-A", "managed_dedicated", Some("connection-b"))
+                .is_err(),
+            "a verified team must not cross an App endpoint"
+        );
+        assert!(
+            store
+                .installation_for_app_team("TEAM-B", "managed_shared", None)
+                .is_err(),
+            "dedicated installation must not be selected by the shared endpoint"
+        );
+        assert_ne!(first.app_id_digest, second.app_id_digest);
+        assert_ne!(first.app_connection_id, second.app_connection_id);
+    }
+
+    #[test]
     fn repeated_oauth_reauthorizes_one_logical_installation_and_fences_old_pairing() {
         let (_temp, store) = setup();
         let (first_intent, first) = create_completed(&store);
@@ -1283,6 +1847,8 @@ mod tests {
             .create_intent(NewIntent {
                 daemon_id: "daemon-a",
                 project_id: "project-a",
+                provisioning_mode: "managed_shared",
+                app_connection_id: None,
                 actor_id: "admin-a",
                 redirect_uri: "https://gateway.example/slack/oauth/callback",
                 requested_scopes: &["reactions:read".into()],
@@ -1320,6 +1886,8 @@ mod tests {
             .create_intent(NewIntent {
                 daemon_id: "daemon-b",
                 project_id: "project-b",
+                provisioning_mode: "managed_shared",
+                app_connection_id: None,
                 actor_id: "admin-b",
                 redirect_uri: "https://gateway.example/slack/oauth/callback",
                 requested_scopes: &["reactions:read".into()],
@@ -1414,38 +1982,80 @@ mod tests {
     }
 
     #[test]
-    fn migration_from_v1_preserves_installations_and_adds_handoff_table() {
+    fn current_schema_preserves_installations_and_adds_dedicated_tables() {
         let temp = tempfile::tempdir().expect("tempdir");
         let path = temp.path().join("gateway.db");
         let key = base64::engine::general_purpose::STANDARD.encode([7_u8; 32]);
         let store = GatewayStore::open(&path, GatewayCrypto::from_base64(&key).expect("crypto"))
             .expect("open current schema");
         let (_, installation) = create_completed(&store);
-        drop(store);
-
-        let connection = Connection::open(&path).expect("open v1 fixture");
-        connection
-            .execute_batch(
-                "DROP TABLE ownership_transfers;
-                 DELETE FROM gateway_schema_migrations WHERE version=2;",
-            )
-            .expect("downgrade fixture metadata");
-        drop(connection);
-
-        let migrated = GatewayStore::open(&path, GatewayCrypto::from_base64(&key).expect("crypto"))
-            .expect("migrate v1");
         assert_eq!(
-            migrated
+            store
                 .installation_projection(&installation.id)
                 .expect("preserved installation")
                 .owner_daemon_id,
             "daemon-a"
         );
         assert!(
-            migrated
+            store
                 .pending_ownership_transfers("daemon-b")
                 .expect("handoff table")
                 .is_empty()
+        );
+        let connection = Connection::open(&path).expect("open schema");
+        for table in ["dedicated_import_slots", "dedicated_apps"] {
+            let count: i64 = connection
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+                    [table],
+                    |row| row.get(0),
+                )
+                .expect("query dedicated table");
+            assert_eq!(count, 1, "missing {table}");
+        }
+    }
+
+    #[test]
+    fn populated_v2_schema_upgrades_to_dedicated_schema_without_data_loss() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let path = temp.path().join("gateway-v2.db");
+        let connection = Connection::open(&path).expect("open v2 database");
+        apply_migrations_through(&connection, 2).expect("apply v2 schema");
+        connection
+            .execute(
+                "INSERT INTO installations
+                 (id,team_digest,enterprise_digest,team_id_ciphertext,enterprise_id_ciphertext,
+                  owner_daemon_id,owner_project_id,generation,version,state,scopes_json,
+                  bot_token_ciphertext,pairing_digest,last_acked_cursor,last_error_code,
+                  created_at,updated_at,reauthorized_at)
+                 VALUES('installation-v2','team-digest-v2',NULL,'encrypted-team',NULL,
+                        'daemon-v2','project-v2',1,1,'active','[\"reactions:read\"]',
+                        'encrypted-bot','pairing-digest',0,NULL,
+                        '2026-07-18T00:00:00Z','2026-07-18T00:00:00Z',NULL)",
+                [],
+            )
+            .expect("insert populated v2 installation");
+        drop(connection);
+
+        let key = base64::engine::general_purpose::STANDARD.encode([8_u8; 32]);
+        let store = GatewayStore::open(&path, GatewayCrypto::from_base64(&key).expect("crypto"))
+            .expect("upgrade to current schema");
+        let projection = store
+            .installation_projection("installation-v2")
+            .expect("preserved projection");
+        assert_eq!(projection.owner_daemon_id, "daemon-v2");
+        assert_eq!(projection.provisioning_mode, "managed_shared");
+        assert!(projection.app_connection_id.is_none());
+        let connection = Connection::open(&path).expect("inspect upgraded schema");
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT MAX(version) FROM gateway_schema_migrations",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .expect("schema version"),
+            SCHEMA_VERSION
         );
     }
 

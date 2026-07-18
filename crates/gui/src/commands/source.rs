@@ -110,6 +110,11 @@ pub struct SourceConnection {
     pub provider: String,
     pub display_label: String,
     pub provisioning_mode: String,
+    pub app_ownership: String,
+    pub app_id_digest: Option<String>,
+    pub manifest_version: Option<String>,
+    pub provision_state: Option<String>,
+    pub provision_error_code: Option<String>,
     pub installation_id: String,
     pub installation_id_digest: String,
     pub enterprise_id_digest: Option<String>,
@@ -168,6 +173,30 @@ pub struct SourceConnectionDelta {
     pub request_id: Option<String>,
     pub connection: Option<SourceConnection>,
     pub changed_at: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DedicatedProvisioning {
+    pub id: String,
+    pub project_id: String,
+    pub status: String,
+    pub manifest_version: String,
+    pub manifest_digest: String,
+    pub diff: Vec<DedicatedManifestDiff>,
+    pub app_id_digest: Option<String>,
+    pub oauth_intent_id: Option<String>,
+    pub authorize_url: Option<String>,
+    pub error_code: Option<String>,
+    pub expires_at: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DedicatedManifestDiff {
+    pub field: String,
+    pub change: String,
+    pub before: Vec<String>,
+    pub after: Vec<String>,
+    pub permission_expansion: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -450,6 +479,11 @@ fn connection_from_proto(value: orchestrator_proto::SourceConnection) -> SourceC
         provider: value.provider,
         display_label: value.display_label,
         provisioning_mode: value.provisioning_mode,
+        app_ownership: value.app_ownership,
+        app_id_digest: value.app_id_digest,
+        manifest_version: value.manifest_version,
+        provision_state: value.provision_state,
+        provision_error_code: value.provision_error_code,
         installation_id: value.installation_id,
         installation_id_digest: value.installation_id_digest,
         enterprise_id_digest: value.enterprise_id_digest,
@@ -468,6 +502,34 @@ fn connection_from_proto(value: orchestrator_proto::SourceConnection) -> SourceC
         updated_at: value.updated_at,
         reauthorized_at: value.reauthorized_at,
         disconnected_at: value.disconnected_at,
+    }
+}
+
+fn dedicated_from_proto(
+    value: orchestrator_proto::SourceConnectionDedicatedProvisioningResponse,
+) -> DedicatedProvisioning {
+    DedicatedProvisioning {
+        id: value.id,
+        project_id: value.project_id,
+        status: value.status,
+        manifest_version: value.manifest_version,
+        manifest_digest: value.manifest_digest,
+        diff: value
+            .diff
+            .into_iter()
+            .map(|entry| DedicatedManifestDiff {
+                field: entry.field,
+                change: entry.change,
+                before: entry.before,
+                after: entry.after,
+                permission_expansion: entry.permission_expansion,
+            })
+            .collect(),
+        app_id_digest: value.app_id_digest,
+        oauth_intent_id: value.oauth_intent_id,
+        authorize_url: value.authorize_url,
+        error_code: value.error_code,
+        expires_at: value.expires_at,
     }
 }
 
@@ -576,6 +638,111 @@ pub async fn source_connection_connect(
         })
         .await
         .map(|response| intent_from_proto(response.into_inner()))
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_connection_dedicated_preview(
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+    display_label: String,
+    config_token: String,
+    reason: String,
+    idempotency_key: String,
+) -> Result<DedicatedProvisioning, String> {
+    let mut client = state.client().await?;
+    client
+        .source_connection_dedicated_preview(
+            orchestrator_proto::SourceConnectionDedicatedPreviewRequest {
+                project_id,
+                display_label,
+                config_token,
+                idempotency_key,
+                reason,
+            },
+        )
+        .await
+        .map(|response| dedicated_from_proto(response.into_inner()))
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_connection_dedicated_approve(
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+    provisioning_id: String,
+    reason: String,
+    idempotency_key: String,
+) -> Result<DedicatedProvisioning, String> {
+    dedicated_mutation(
+        state,
+        project_id,
+        provisioning_id,
+        reason,
+        idempotency_key,
+        true,
+    )
+    .await
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_connection_dedicated_abandon(
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+    provisioning_id: String,
+    reason: String,
+    idempotency_key: String,
+) -> Result<DedicatedProvisioning, String> {
+    dedicated_mutation(
+        state,
+        project_id,
+        provisioning_id,
+        reason,
+        idempotency_key,
+        false,
+    )
+    .await
+}
+
+async fn dedicated_mutation(
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+    provisioning_id: String,
+    reason: String,
+    idempotency_key: String,
+    approve: bool,
+) -> Result<DedicatedProvisioning, String> {
+    let mut client = state.client().await?;
+    let request = orchestrator_proto::SourceConnectionDedicatedMutationRequest {
+        project_id,
+        provisioning_id,
+        idempotency_key,
+        reason,
+    };
+    let response = if approve {
+        client.source_connection_dedicated_approve(request).await
+    } else {
+        client.source_connection_dedicated_abandon(request).await
+    };
+    response
+        .map(|response| dedicated_from_proto(response.into_inner()))
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_connection_dedicated_get(
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+    provisioning_id: String,
+) -> Result<DedicatedProvisioning, String> {
+    let mut client = state.client().await?;
+    client
+        .source_connection_dedicated_get(orchestrator_proto::SourceConnectionDedicatedGetRequest {
+            project_id,
+            provisioning_id,
+        })
+        .await
+        .map(|response| dedicated_from_proto(response.into_inner()))
         .map_err(|error| crate::errors::humanize_grpc_error(&error))
 }
 

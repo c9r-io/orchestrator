@@ -320,11 +320,25 @@ export interface SourceAutomationSimulation {
 export interface SourceConnection {
   id: string; project_id: string; provider: string; display_label: string;
   provisioning_mode: string; installation_id: string; installation_id_digest: string;
+  app_ownership: string; app_id_digest: string | null; manifest_version: string | null;
+  provision_state: string | null; provision_error_code: string | null;
   enterprise_id_digest: string | null; owner_daemon_id: string; generation: number;
   version: number; state: string; capabilities: string[]; scopes: string[];
   trigger_name: string | null; last_delivery_at: string | null; last_acked_cursor: number;
   delivery_lag: number; last_error_code: string | null; created_at: string;
   updated_at: string; reauthorized_at: string | null; disconnected_at: string | null;
+}
+
+export interface DedicatedManifestDiff {
+  field: string; change: string; before: string[]; after: string[];
+  permission_expansion: boolean;
+}
+
+export interface DedicatedProvisioning {
+  id: string; project_id: string; status: string; manifest_version: string;
+  manifest_digest: string; diff: DedicatedManifestDiff[]; app_id_digest: string | null;
+  oauth_intent_id: string | null; authorize_url: string | null; error_code: string | null;
+  expires_at: string;
 }
 
 export interface SourceConnectionIntent {

@@ -82,6 +82,7 @@ pub enum SlackEvent {
     UrlVerification { challenge: String },
     /// Message reaction event.
     ReactionAdded {
+        app_id: String,
         event_id: String,
         team_id: String,
         enterprise_id: Option<String>,
@@ -93,6 +94,7 @@ pub enum SlackEvent {
     },
     /// App uninstall event.
     AppUninstalled {
+        app_id: String,
         event_id: String,
         team_id: String,
         enterprise_id: Option<String>,
@@ -100,6 +102,7 @@ pub enum SlackEvent {
     },
     /// Token revocation event.
     TokensRevoked {
+        app_id: String,
         event_id: String,
         team_id: String,
         enterprise_id: Option<String>,
@@ -391,6 +394,10 @@ pub fn parse_event(raw_body: &[u8]) -> std::result::Result<SlackEvent, SlackErro
         .team_id
         .filter(|value| valid_slack_id(value, 'T'))
         .ok_or_else(|| SlackError::new("slack_team_invalid"))?;
+    let app_id = envelope
+        .api_app_id
+        .filter(|value| valid_slack_id(value, 'A'))
+        .ok_or_else(|| SlackError::new("slack_app_invalid"))?;
     let enterprise_id = envelope
         .enterprise_id
         .filter(|value| valid_slack_id(value, 'E'));
@@ -404,6 +411,7 @@ pub fn parse_event(raw_body: &[u8]) -> std::result::Result<SlackEvent, SlackErro
                 .filter(|item| item.kind == "message")
                 .ok_or_else(|| SlackError::new("slack_reaction_target_unsupported"))?;
             Ok(SlackEvent::ReactionAdded {
+                app_id,
                 event_id,
                 team_id,
                 enterprise_id,
@@ -434,6 +442,7 @@ pub fn parse_event(raw_body: &[u8]) -> std::result::Result<SlackEvent, SlackErro
             })
         }
         "app_uninstalled" => Ok(SlackEvent::AppUninstalled {
+            app_id,
             event_id,
             team_id,
             enterprise_id,
@@ -446,6 +455,7 @@ pub fn parse_event(raw_body: &[u8]) -> std::result::Result<SlackEvent, SlackErro
                 .is_some_and(|tokens| !tokens.bot.is_empty()) =>
         {
             Ok(SlackEvent::TokensRevoked {
+                app_id,
                 event_id,
                 team_id,
                 enterprise_id,
@@ -630,6 +640,7 @@ struct EventEnvelope {
     challenge: Option<String>,
     team_id: Option<String>,
     enterprise_id: Option<String>,
+    api_app_id: Option<String>,
     event_id: Option<String>,
     event_time: Option<i64>,
     event: Option<EventBody>,
@@ -808,13 +819,13 @@ mod tests {
     #[test]
     fn parser_accepts_only_allowlisted_message_reactions() {
         let event = parse_event(
-            br#"{"type":"event_callback","team_id":"T123","event_id":"Ev123","event_time":1700000000,"event":{"type":"reaction_added","user":"U123","reaction":"agent-review","item":{"type":"message","channel":"C123","ts":"1700000000.000100"},"event_ts":"1700000001.000100"}}"#,
+            br#"{"type":"event_callback","team_id":"T123","api_app_id":"A123","event_id":"Ev123","event_time":1700000000,"event":{"type":"reaction_added","user":"U123","reaction":"agent-review","item":{"type":"message","channel":"C123","ts":"1700000000.000100"},"event_ts":"1700000001.000100"}}"#,
         )
         .expect("reaction");
         assert!(
             matches!(event, SlackEvent::ReactionAdded { reaction, .. } if reaction == "agent-review")
         );
-        let unsupported = br#"{"type":"event_callback","team_id":"T123","event_id":"Ev123","event_time":1700000000,"event":{"type":"message","event_ts":"1700000001.000100"}}"#;
+        let unsupported = br#"{"type":"event_callback","team_id":"T123","api_app_id":"A123","event_id":"Ev123","event_time":1700000000,"event":{"type":"message","event_ts":"1700000001.000100"}}"#;
         assert_eq!(
             parse_event(unsupported).expect_err("unsupported").code(),
             "slack_event_unsupported"
@@ -823,12 +834,12 @@ mod tests {
 
     #[test]
     fn parser_accepts_only_bot_token_revocation() {
-        let revoked = br#"{"type":"event_callback","team_id":"T123","event_id":"Ev123","event_time":1700000000,"event":{"type":"tokens_revoked","tokens":{"oauth":["xoxp-redacted"],"bot":["xoxb-redacted"]}}}"#;
+        let revoked = br#"{"type":"event_callback","team_id":"T123","api_app_id":"A123","event_id":"Ev123","event_time":1700000000,"event":{"type":"tokens_revoked","tokens":{"oauth":["xoxp-redacted"],"bot":["xoxb-redacted"]}}}"#;
         assert!(matches!(
             parse_event(revoked).expect("bot revocation"),
             SlackEvent::TokensRevoked { .. }
         ));
-        let user_only = br#"{"type":"event_callback","team_id":"T123","event_id":"Ev123","event_time":1700000000,"event":{"type":"tokens_revoked","tokens":{"oauth":["xoxp-redacted"],"bot":[]}}}"#;
+        let user_only = br#"{"type":"event_callback","team_id":"T123","api_app_id":"A123","event_id":"Ev123","event_time":1700000000,"event":{"type":"tokens_revoked","tokens":{"oauth":["xoxp-redacted"],"bot":[]}}}"#;
         assert_eq!(
             parse_event(user_only).expect_err("user token only").code(),
             "slack_event_unsupported"

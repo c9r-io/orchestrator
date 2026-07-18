@@ -37,6 +37,8 @@ pub struct OrchestratorServer {
     pub(crate) session_read_limits: session::SessionReadLimits,
     pub(crate) config_mutation_lock: Arc<Mutex<()>>,
     pub(crate) slack_gateway: Option<Arc<crate::slack_gateway::SlackGatewayClient>>,
+    pub(crate) slack_manifest_client: Arc<orchestrator_slack_gateway::slack::SlackClient>,
+    pub(crate) dedicated_sessions: source_connection::DedicatedSessionStore,
 }
 
 impl OrchestratorServer {
@@ -47,6 +49,7 @@ impl OrchestratorServer {
         control_plane: Option<Arc<ControlPlaneSecurity>>,
         uds_auth_policy: Option<UdsAuthPolicy>,
         slack_gateway: Option<Arc<crate::slack_gateway::SlackGatewayClient>>,
+        slack_manifest_client: Arc<orchestrator_slack_gateway::slack::SlackClient>,
         config_mutation_lock: Arc<Mutex<()>>,
     ) -> Self {
         Self {
@@ -57,6 +60,8 @@ impl OrchestratorServer {
             session_read_limits: session::SessionReadLimits::default(),
             config_mutation_lock,
             slack_gateway,
+            slack_manifest_client,
+            dedicated_sessions: source_connection::DedicatedSessionStore::default(),
         }
     }
 
@@ -578,6 +583,34 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<SourceConnectionTransferRequest>,
     ) -> Result<Response<SourceConnection>, Status> {
         source_connection::transfer(self, request).await
+    }
+
+    async fn source_connection_dedicated_preview(
+        &self,
+        request: Request<SourceConnectionDedicatedPreviewRequest>,
+    ) -> Result<Response<SourceConnectionDedicatedProvisioningResponse>, Status> {
+        source_connection::dedicated_preview(self, request).await
+    }
+
+    async fn source_connection_dedicated_approve(
+        &self,
+        request: Request<SourceConnectionDedicatedMutationRequest>,
+    ) -> Result<Response<SourceConnectionDedicatedProvisioningResponse>, Status> {
+        source_connection::dedicated_approve(self, request).await
+    }
+
+    async fn source_connection_dedicated_get(
+        &self,
+        request: Request<SourceConnectionDedicatedGetRequest>,
+    ) -> Result<Response<SourceConnectionDedicatedProvisioningResponse>, Status> {
+        source_connection::dedicated_get(self, request).await
+    }
+
+    async fn source_connection_dedicated_abandon(
+        &self,
+        request: Request<SourceConnectionDedicatedMutationRequest>,
+    ) -> Result<Response<SourceConnectionDedicatedProvisioningResponse>, Status> {
+        source_connection::dedicated_abandon(self, request).await
     }
 
     async fn agent_session_list(

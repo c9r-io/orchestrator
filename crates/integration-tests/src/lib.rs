@@ -373,6 +373,42 @@ impl OrchestratorService for TestOrchestratorServer {
         ))
     }
 
+    async fn source_connection_dedicated_preview(
+        &self,
+        _: Request<SourceConnectionDedicatedPreviewRequest>,
+    ) -> Result<Response<SourceConnectionDedicatedProvisioningResponse>, Status> {
+        Err(Status::unimplemented(
+            "dedicated Slack provisioning uses production daemon",
+        ))
+    }
+
+    async fn source_connection_dedicated_approve(
+        &self,
+        _: Request<SourceConnectionDedicatedMutationRequest>,
+    ) -> Result<Response<SourceConnectionDedicatedProvisioningResponse>, Status> {
+        Err(Status::unimplemented(
+            "dedicated Slack provisioning uses production daemon",
+        ))
+    }
+
+    async fn source_connection_dedicated_get(
+        &self,
+        _: Request<SourceConnectionDedicatedGetRequest>,
+    ) -> Result<Response<SourceConnectionDedicatedProvisioningResponse>, Status> {
+        Err(Status::unimplemented(
+            "dedicated Slack provisioning uses production daemon",
+        ))
+    }
+
+    async fn source_connection_dedicated_abandon(
+        &self,
+        _: Request<SourceConnectionDedicatedMutationRequest>,
+    ) -> Result<Response<SourceConnectionDedicatedProvisioningResponse>, Status> {
+        Err(Status::unimplemented(
+            "dedicated Slack provisioning uses production daemon",
+        ))
+    }
+
     async fn source_automation_list(
         &self,
         _: Request<SourceAutomationListRequest>,

@@ -130,6 +130,15 @@ struct Args {
     )]
     slack_gateway_enrollment_key: Option<String>,
 
+    /// Slack Web API origin used only by local dedicated App provisioning.
+    /// Production accepts slack.com; loopback overrides exist for isolated QA.
+    #[arg(
+        long,
+        env = "ORCHESTRATOR_SLACK_API_BASE",
+        default_value = "https://slack.com"
+    )]
+    slack_api_base: String,
+
     /// Minutes before a running item is considered stalled (0 = disabled).
     #[arg(long = "stall-timeout-mins", default_value_t = 30)]
     stall_timeout_mins: u64,
@@ -275,6 +284,23 @@ fn main() -> Result<()> {
                 "managed Slack requires both --slack-gateway-url and --slack-gateway-enrollment-key"
             ),
         };
+        let slack_api_url = url::Url::parse(&args.slack_api_base)
+            .context("invalid Slack API base URL")?;
+        let slack_api_official = slack_api_url.scheme() == "https"
+            && slack_api_url.host_str() == Some("slack.com");
+        let slack_api_loopback = matches!(
+            slack_api_url.host_str(),
+            Some("localhost" | "127.0.0.1" | "::1")
+        );
+        if !slack_api_official && !slack_api_loopback {
+            bail!("Slack API base override is restricted to loopback tests");
+        }
+        let slack_manifest_client = Arc::new(
+            orchestrator_slack_gateway::slack::SlackClient::new(
+                &args.slack_api_base,
+                std::time::Duration::from_secs(15),
+            )?,
+        );
         if let Some(gateway) = slack_gateway.as_ref() {
             let provider: Arc<dyn agent_orchestrator::source_connection::SourceConnectionProvider> =
                 Arc::new(slack_gateway::SlackGatewayProvider::new(
@@ -866,6 +892,7 @@ fn main() -> Result<()> {
             None,
             uds_policy,
             slack_gateway.clone(),
+            slack_manifest_client.clone(),
             config_mutation_lock.clone(),
         );
 
@@ -909,6 +936,7 @@ fn main() -> Result<()> {
                         Some(secure.security),
                         None,
                         slack_gateway.clone(),
+                        slack_manifest_client.clone(),
                         config_mutation_lock.clone(),
                     ))
                     .max_encoding_message_size(64 * 1024 * 1024),
