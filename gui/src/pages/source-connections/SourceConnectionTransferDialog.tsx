@@ -33,7 +33,7 @@ export default function SourceConnectionTransferDialog({ connection, busy, onCon
       if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     };
     document.addEventListener("keydown", handler);
-    requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>("input")?.focus());
+    dialogRef.current?.querySelector<HTMLElement>("input")?.focus();
     return () => { document.removeEventListener("keydown", handler); previousFocus.current?.focus(); };
   }, [connection]);
 
