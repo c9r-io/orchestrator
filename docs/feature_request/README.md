@@ -1,6 +1,6 @@
 # Feature Requests
 
-本目录收录 `orchestrator` 的正式功能需求文档。Agent Process Console v1 已完成闭环；产品结构与发布边界分别由[信息架构](../design_doc/orchestrator/110-process-console-information-architecture.md)和[发布验收设计](../design_doc/orchestrator/116-process-console-release-acceptance.md)持续承载。当前 Slack reaction 驱动的 Skill 任务自动化规划见 [Slack Reaction Skill Automation Roadmap](slack-reaction-skill-automation-roadmap.md)。
+本目录收录 `orchestrator` 的正式功能需求文档。Agent Process Console v1 已完成闭环；产品结构与发布边界分别由[信息架构](../design_doc/orchestrator/110-process-console-information-architecture.md)和[发布验收设计](../design_doc/orchestrator/116-process-console-release-acceptance.md)持续承载。Slack reaction 驱动的 Skill 任务自动化已按 [Slack Reaction Skill Automation Roadmap](slack-reaction-skill-automation-roadmap.md)发布；[Managed Slack Connection 与官方 App OAuth](FR-114-managed-slack-connection-shared-oauth.md)及[每 workspace 独立 App provisioning](FR-115-dedicated-slack-app-auto-provisioning.md)是其 post-release follow-up。
 
 ## 当前条目
 
@@ -79,6 +79,8 @@
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
+| FR-114 | Managed Slack Connection 与官方 App OAuth 快速路径 | P0 | Proposed |
+| FR-115 | 每 Workspace 独立 Slack App 自动 Provisioning | P0 | Proposed |
 
 ## 说明
 

@@ -251,7 +251,7 @@ Audit/provenance must answer:
 - Posting progress messages or reactions back to Slack; outbound feedback is a later optional feature.
 - Supporting GitHub labels, Linear states or other provider-specific badges in this roadmap, although the core template/binding model should remain provider-neutral.
 - Replacing StepTemplate, Workflow or Agent capability selection.
-- Hosted multi-tenant Slack OAuth installation management.
+- Hosted multi-tenant Slack connection management；这是不重开本路线图的 post-release follow-up：共享官方 App OAuth 与统一连接/Gateway 基础见 [FR-114](FR-114-managed-slack-connection-shared-oauth.md)，每 workspace 独立 App 自动 provisioning 见 [FR-115](FR-115-dedicated-slack-app-auto-provisioning.md)。
 
 ## 12. Main Risks
 
