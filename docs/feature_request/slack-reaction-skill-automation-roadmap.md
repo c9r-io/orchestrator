@@ -1,7 +1,7 @@
 # Slack Reaction Skill Automation Roadmap
 
-**Status**: Proposed
-**Governed FRs**: FR-107 through FR-113
+**Status**: Released
+**Governed FRs**: FR-107 through FR-113 (all closed)
 **Created**: 2026-07-17
 **Target outcome**: 在一条 Slack 消息上添加已绑定的 reaction emoji，即可用对应 Skill 与该消息的稳定链接创建一个可审计、可管理的 Orchestrator 任务
 
@@ -168,13 +168,15 @@ FR-109 and FR-110 are closed, so Phase B provides deterministic binding, permali
 | FR-111 (Closed): [design](../design_doc/orchestrator/122-source-automation-reliability-operations.md), [QA](../qa/orchestrator/159-source-automation-reliability-operations.md) | Retry/rate-limit/restart behavior, route simulation, CLI observability and Attention policy | FR-110 | Operator can explain and safely retry every non-terminal route state |
 | FR-112 (Closed): [design](../design_doc/orchestrator/123-process-console-source-automation-ui.md), [QA](../qa/orchestrator/160-process-console-source-automation-ui.md) | Template/binding management UI and recent-route inspection | FR-109 through FR-111, Process Console v1 | Operator can create, preview, bind, suspend and diagnose automation without editing files |
 
-FR-111 and FR-112 are closed, so Phase C delivers both durable operations and the daily management UI. Release closure now proceeds through FR-113.
+FR-111 and FR-112 are closed, so Phase C delivers both durable operations and the daily management UI.
 
 ### Phase D: Release closure
 
 | FR | Deliverable | Depends on | Exit gate |
 |---|---|---|---|
-| [FR-113](FR-113-slack-reaction-skill-automation-release.md) | Aggregate E2E, UI accessibility/regression, upgrade/rollback and user guide | FR-107 through FR-112 | Clean-tree release gate proves signed Slack event → permalink → task → Console provenance |
+| FR-113 (Closed): [design](../design_doc/orchestrator/124-slack-reaction-skill-automation-release.md), [QA](../qa/orchestrator/161-slack-reaction-skill-automation-release.md), [guide](../guide/slack-reaction-skill-automation.md) | Aggregate E2E, UI accessibility/regression, upgrade/rollback and user guide | FR-107 through FR-112 | Clean-tree release gate proves signed Slack event → permalink → task → Console provenance |
+
+FR-113 is closed after the 16-gate clean-tree aggregate passed on 2026-07-18. Phase D and the complete roadmap are release-complete.
 
 ## 8. Delivery Increments
 
@@ -263,7 +265,7 @@ Audit/provenance must answer:
 | Binding conflicts choose the wrong Skill | Apply-time conflict detection and route-time exactly-one-match rule |
 | GUI and daemon render different goals | One daemon renderer used by apply preview, CLI, GUI and live route |
 
-## 13. Planned Closure Artifacts
+## 13. Closure Artifacts
 
 | FR | Design doc | QA doc | Executable evidence |
 |---|---|---|---|
@@ -275,7 +277,7 @@ Audit/provenance must answer:
 | FR-112 | `docs/design_doc/orchestrator/123-process-console-source-automation-ui.md` | `docs/qa/orchestrator/160-process-console-source-automation-ui.md` | `scripts/qa/test-source-automation-ui.sh` |
 | FR-113 | `docs/design_doc/orchestrator/124-slack-reaction-skill-automation-release.md` | `docs/qa/orchestrator/161-slack-reaction-skill-automation-release.md` | `scripts/qa/test-slack-skill-automation-release.sh` |
 
-FR-113 also owns `docs/guide/slack-reaction-skill-automation.md` and the aggregate release/rollback instructions.
+FR-113 also owns `docs/guide/slack-reaction-skill-automation.md` and the aggregate release/rollback instructions. All listed artifacts are implemented and verified.
 
 ## 14. External Protocol References
 
@@ -283,12 +285,13 @@ FR-113 also owns `docs/guide/slack-reaction-skill-automation.md` and the aggrega
 - [Slack `chat.getPermalink` method](https://docs.slack.dev/reference/methods/chat.getPermalink/)
 - [Slack Events API acknowledgement and retry behavior](https://docs.slack.dev/apis/events-api/)
 
-## 15. Roadmap Acceptance
+## 15. Roadmap Closure
 
-This roadmap is ready for implementation governance when:
+This roadmap closed on 2026-07-18 with the following decisions and evidence:
 
 - the definition of Badge, Skill and Source Task Template is approved;
 - SourceTaskTemplate versus StepTemplate responsibilities are accepted;
 - exact-match, authorization, idempotency and no-message-body defaults are accepted;
-- FR-107 through FR-113 boundaries and dependency order are accepted;
-- MVP closure is explicitly FR-110, while production release closure remains FR-113.
+- FR-107 through FR-113 boundaries and dependency order were accepted and governed to closure;
+- MVP closed with FR-110 and production release closed with FR-113;
+- `scripts/qa/test-slack-skill-automation-release.sh` passed all 16 clean-tree gates, including the 12-gate signed vertical scenario, 19 Playwright tests, migrations 33-34, and compatible-binary rollback.

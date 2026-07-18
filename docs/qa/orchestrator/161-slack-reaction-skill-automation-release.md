@@ -173,8 +173,8 @@ The feature is reachable from visible primary navigation through "Sources" → "
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|---|---|---|---|---|
-| 1 | Clean current-HEAD aggregate and slice ownership | Pending | | | Full clean-tree gate required |
-| 2 | Signed two-badge flow, identity convergence, and recovery | PASS | 2026-07-18 | Codex | Isolated vertical QA passed |
+| 1 | Clean current-HEAD aggregate and slice ownership | PASS | 2026-07-18 | Codex | 16-gate clean-tree aggregate passed in 381 seconds |
+| 2 | Signed two-badge flow, identity convergence, and recovery | PASS | 2026-07-18 | Codex | Isolated vertical QA passed all 12 gates |
 | 3 | Populated upgrade and compatible rollback | PASS | 2026-07-18 | Codex | Migration regressions and real previous daemon passed |
-| 4 | Console entry, Tauri, RBAC, privacy, and accessibility | Pending | | | Full browser aggregate required |
-| 5 | Guide, changelog, and diagnostic privacy | Pending | | | Release documentation gate required |
+| 4 | Console entry, Tauri, RBAC, privacy, and accessibility | PASS | 2026-07-18 | Codex | Real Tauri boundary and all 19 Playwright tests passed |
+| 5 | Guide, changelog, and diagnostic privacy | PASS | 2026-07-18 | Codex | Guide contract, doc lint, and retained-log privacy scan passed |

@@ -79,7 +79,6 @@
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
-| FR-113 | Slack Reaction Skill Automation Release Acceptance | P1 | Proposed |
 
 ## 说明
 
@@ -89,6 +88,7 @@
 - `In Progress`: 已有部分阶段落地，剩余阶段仍在治理中
 - `Implemented`: 需求已完成并进入维护阶段
 - 已闭环并删除的 FR，应由对应 `docs/design_doc/**` 与 `docs/qa/**` 继续承载设计和验证信息
+- FR-113 已闭环删除；其 clean-tree aggregate、双 badge 垂直链路、并发/重启恢复、真实 Tauri 边界、前向升级/兼容回滚、用户指南与隐私诊断证据现由 `docs/design_doc/orchestrator/124-slack-reaction-skill-automation-release.md`、`docs/qa/orchestrator/161-slack-reaction-skill-automation-release.md`、`docs/guide/slack-reaction-skill-automation.md`、`fixtures/manifests/bundles/slack-skill-automation-release-fixture.yaml` 与 `scripts/qa/test-slack-skill-automation-release.sh` 承载
 - FR-111 已闭环删除；其 bounded retry/lease recovery、Attention 恢复、安全查询/模拟/重放、暂停投影、隐私安全指标与保留策略现由 `docs/design_doc/orchestrator/122-source-automation-reliability-operations.md`、`docs/qa/orchestrator/159-source-automation-reliability-operations.md` 与 `scripts/qa/test-source-automation-operations.sh` 承载
 - FR-110 已闭环删除；其 Slack outbound credential、permalink 验证、durable automation route、canonical task/audit、幂等重启收敛与角色感知深链现由 `docs/design_doc/orchestrator/121-slack-permalink-canonical-task-routing.md`、`docs/qa/orchestrator/158-slack-permalink-canonical-task-routing.md`、`fixtures/manifests/bundles/source-task-routing-fixture.yaml` 与 `scripts/qa/test-slack-reaction-task-routing.sh` 承载
 - FR-109 已闭环删除；其 native SourceTaskBinding、确定性匹配、冲突回滚、热更新、引用治理与可复现证据现由 `docs/design_doc/orchestrator/120-source-task-binding-badge-matching.md`、`docs/qa/orchestrator/157-source-task-binding-badge-matching.md`、`fixtures/manifests/bundles/source-task-binding-fixture.yaml` 与 `scripts/qa/test-source-task-binding.sh` 承载
