@@ -110,6 +110,7 @@ async function installTauriMock(page: Page, role: "read_only" | "operator" | "ad
       if (command === "source_connection_list") return sourceConnections;
       if (command === "source_connection_connect") return { id: "intent-1", project_id: "default", provider: "slack", provisioning_mode: "managed_shared", status: "pending", connection_id: null, error_code: null, expires_at: "2026-07-18T01:00:00Z", authorize_url: "https://slack.com/oauth/v2/authorize?state=opaque", connection: null };
       if (command === "source_connection_intent_get") return { id: "intent-1", project_id: "default", provider: "slack", provisioning_mode: "managed_shared", status: "pending", connection_id: null, error_code: null, expires_at: "2026-07-18T01:00:00Z", authorize_url: "https://slack.com/oauth/v2/authorize?state=opaque", connection: null };
+      if (command === "source_connection_transfer") return { ...sourceConnections[0], owner_daemon_id: String(args.target_daemon_id), state: "suspended", version: 2, last_error_code: "owner_transfer_pending_acceptance" };
       if (["open_source_connection_oauth", "start_source_connection_watch", "stop_source_connection_watch", "source_connection_cancel"].includes(command)) return true;
       if (command === "source_automation_catalog_get") return automationCatalog;
       if (command === "manifest_validate") return { valid: true, errors: [], message: "valid", diagnostics: [] };
@@ -241,6 +242,12 @@ test("Slack connections presents explicit provisioning choices and starts resuma
     expect.objectContaining({ command: "source_connection_connect", args: expect.objectContaining({ project_id: "default", display_label: "Engineering Slack" }) }),
     expect.objectContaining({ command: "open_source_connection_oauth", args: { authorize_url: "https://slack.com/oauth/v2/authorize?state=opaque" } }),
   ]));
+  await page.getByRole("button", { name: "Transfer" }).click();
+  const dialog = page.getByRole("dialog", { name: "Transfer Product Slack" });
+  await dialog.getByLabel("Target daemon ID").fill("daemon-2");
+  await dialog.getByLabel("Audit reason").fill("move to replacement daemon");
+  await dialog.getByRole("button", { name: "Transfer ownership" }).click();
+  await expect.poll(async () => (await page.evaluate(() => (window as any).__PROCESS_TEST__.calls)).some((call: any) => call.command === "source_connection_transfer" && call.args.target_daemon_id === "daemon-2" && call.args.expected_version === 1)).toBe(true);
 });
 
 test("Slack connections keeps credentials and mutations hidden from read-only users", async ({ page }) => {
@@ -250,6 +257,7 @@ test("Slack connections keeps credentials and mutations hidden from read-only us
   await expect(page.getByText(/generation 1/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Connect workspace" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Reauthorize" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Transfer" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Disconnect" })).toHaveCount(0);
   expect((await new AxeBuilder({ page }).analyze()).violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))).toEqual([]);
 });

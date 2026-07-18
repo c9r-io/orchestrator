@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -84,8 +84,7 @@ describe("SourceConnections", () => {
     expect(await screen.findByText("Waiting for Slack consent")).toBeVisible();
   });
 
-  it("requires confirmation and sends the displayed version fence when disconnecting", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("requires a reviewed reason and sends the displayed version fence when disconnecting", async () => {
     vi.mocked(invoke).mockImplementation(async (command, args) => {
       if (command === "source_connection_catalog_get") return { protocol_version: 1, gateway_configured: true, permalink_proxy: true, modes: [{ mode: "managed_shared", available: true, unavailable_reason: null }] };
       if (command === "source_connection_list") return [active];
@@ -95,6 +94,26 @@ describe("SourceConnections", () => {
     });
     renderAs("admin");
     fireEvent.click(await screen.findByRole("button", { name: "Disconnect" }));
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("source_connection_disconnect", expect.objectContaining({ id: active.id, expected_version: 3 })));
+    const dialog = await screen.findByRole("dialog", { name: "Disconnect Product Slack" });
+    fireEvent.change(screen.getByLabelText("Audit reason"), { target: { value: "retire obsolete connection" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Disconnect" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("source_connection_disconnect", expect.objectContaining({ id: active.id, expected_version: 3, reason: "retire obsolete connection" })));
+  });
+
+  it("transfers to a different daemon with the displayed version and reviewed reason", async () => {
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "source_connection_catalog_get") return { protocol_version: 1, gateway_configured: true, permalink_proxy: true, modes: [{ mode: "managed_shared", available: true, unavailable_reason: null }] };
+      if (command === "source_connection_list") return [active];
+      if (command === "source_connection_transfer") return { ...active, state: "suspended", version: 4, owner_daemon_id: "daemon-2" };
+      if (["start_source_connection_watch", "stop_source_connection_watch"].includes(command)) return null;
+      throw new Error(`unexpected ${command} ${JSON.stringify(args)}`);
+    });
+    renderAs("admin");
+    fireEvent.click(await screen.findByRole("button", { name: "Transfer" }));
+    const dialog = await screen.findByRole("dialog", { name: "Transfer Product Slack" });
+    fireEvent.change(within(dialog).getByLabelText("Target daemon ID"), { target: { value: "daemon-2" } });
+    fireEvent.change(within(dialog).getByLabelText("Audit reason"), { target: { value: "move to replacement daemon" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Transfer ownership" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("source_connection_transfer", expect.objectContaining({ id: active.id, expected_version: 3, target_daemon_id: "daemon-2", reason: "move to replacement daemon" })));
   });
 });

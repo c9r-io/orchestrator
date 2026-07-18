@@ -533,6 +533,49 @@ mod tests {
     }
 
     #[test]
+    fn populated_v34_upgrade_adds_source_connections_without_changing_tasks() {
+        let (_temp, _db_path, conn) = file_conn("populated-v34-source-connections.db");
+        let migrations = all_migrations();
+        run_pending(&conn, &migrations[..34]).expect("seed v34 schema");
+        conn.execute(
+            "INSERT INTO tasks
+             (id,name,status,goal,target_files_json,mode,workspace_id,workflow_id,project_id,
+              workspace_root,qa_targets_json,ticket_dir,created_at,updated_at)
+             VALUES('pre-connection-task','preserved task','completed','bounded goal','[]','once',
+                    'workspace-a','workflow-a','project-a','/tmp/project-a','[]','docs/ticket',
+                    '2026-07-18T00:00:00Z','2026-07-18T00:00:01Z')",
+            [],
+        )
+        .expect("seed populated v34 task");
+
+        assert_eq!(run_pending(&conn, &migrations).expect("upgrade to v35"), 1);
+        assert_eq!(current_version(&conn).expect("latest version"), 35);
+        let task: (String, String) = conn
+            .query_row(
+                "SELECT project_id,status FROM tasks WHERE id='pre-connection-task'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("query preserved task");
+        assert_eq!(task, ("project-a".to_string(), "completed".to_string()));
+        for table in [
+            "source_daemon_identity",
+            "source_connections",
+            "source_connection_intents",
+            "source_connection_changes",
+        ] {
+            let count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+                    [table],
+                    |row| row.get(0),
+                )
+                .expect("query source connection table");
+            assert_eq!(count, 1, "missing migration-35 table {table}");
+        }
+    }
+
+    #[test]
     fn partial_then_full_applies_remaining() {
         let conn = mem_conn();
         let all = all_migrations();

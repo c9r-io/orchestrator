@@ -4,6 +4,8 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useRole } from "../../hooks/useRole";
 import type { ConsoleRoute } from "../../lib/routes";
 import type { SourceConnection, SourceConnectionCatalog, SourceConnectionIntent } from "../../lib/types";
+import ReviewedActionDialog from "../../components/ReviewedActionDialog";
+import SourceConnectionTransferDialog from "./SourceConnectionTransferDialog";
 
 const INTENT_KEY = "orchestrator.sourceConnectionIntent.v1";
 
@@ -18,6 +20,8 @@ export default function SourceConnections({ selectedId, onNavigate }: Props) {
   const [label, setLabel] = useState("Slack workspace");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [reviewedAction, setReviewedAction] = useState<{ kind: "reauthorize" | "disconnect"; connection: SourceConnection } | null>(null);
+  const [transferConnection, setTransferConnection] = useState<SourceConnection | null>(null);
   const pollRef = useRef<number | null>(null);
 
   const stopPolling = useCallback(() => {
@@ -101,12 +105,12 @@ export default function SourceConnections({ selectedId, onNavigate }: Props) {
     } catch (cause) { setError(String(cause)); } finally { setBusy(false); }
   };
 
-  const reauthorize = async (connection: SourceConnection) => {
+  const reauthorize = async (connection: SourceConnection, reason: string) => {
     setBusy(true); setError(null);
     try {
       const next = await invoke<SourceConnectionIntent>("source_connection_reauthorize", {
         project_id: projectId, id: connection.id, expected_version: connection.version,
-        reason: "Reauthorize managed Slack connection", idempotency_key: `gui-reauth-${crypto.randomUUID()}`,
+        reason, idempotency_key: `gui-reauth-${crypto.randomUUID()}`,
       });
       setIntent(next); localStorage.setItem(INTENT_KEY, JSON.stringify({ id: next.id, project: projectId }));
       if (next.authorize_url) await invoke("open_source_connection_oauth", { authorize_url: next.authorize_url });
@@ -115,15 +119,26 @@ export default function SourceConnections({ selectedId, onNavigate }: Props) {
     } catch (cause) { setError(String(cause)); } finally { setBusy(false); }
   };
 
-  const disconnect = async (connection: SourceConnection) => {
-    if (!window.confirm(`Disconnect ${connection.display_label}? Existing task evidence is retained.`)) return;
+  const disconnect = async (connection: SourceConnection, reason: string) => {
     setBusy(true); setError(null);
     try {
       await invoke("source_connection_disconnect", {
         project_id: projectId, id: connection.id, expected_version: connection.version,
-        reason: "Disconnect managed Slack connection", idempotency_key: `gui-disconnect-${crypto.randomUUID()}`,
+        reason, idempotency_key: `gui-disconnect-${crypto.randomUUID()}`,
       });
       await load();
+    } catch (cause) { setError(String(cause)); } finally { setBusy(false); }
+  };
+
+  const transfer = async (connection: SourceConnection, targetDaemonId: string, reason: string) => {
+    setBusy(true); setError(null);
+    try {
+      await invoke("source_connection_transfer", {
+        project_id: projectId, id: connection.id, expected_version: connection.version,
+        target_daemon_id: targetDaemonId, reason,
+        idempotency_key: `gui-transfer-${crypto.randomUUID()}`,
+      });
+      setTransferConnection(null); await load();
     } catch (cause) { setError(String(cause)); } finally { setBusy(false); }
   };
 
@@ -140,9 +155,11 @@ export default function SourceConnections({ selectedId, onNavigate }: Props) {
     {intent?.status === "pending" && <div className="connection-intent" role="status"><div><strong>Waiting for Slack consent</strong><p>This page can be refreshed safely. Intent expires at {intent.expires_at}.</p></div><div className="decision-actions">{intent.authorize_url && <button className="btn btn-secondary" onClick={() => void invoke("open_source_connection_oauth", { authorize_url: intent.authorize_url })}>Open Slack again</button>}<button className="btn btn-ghost" disabled={busy} onClick={() => void cancel()}>Cancel</button></div></div>}
     {intent && intent.status !== "pending" && intent.status !== "completed" && <p role="alert" className="attention-error">OAuth {intent.status}: {intent.error_code ?? "No credential was stored"}</p>}
     <div className="connection-list" role="list" aria-live="polite">
-      {connections.map((connection) => <article key={connection.id} role="listitem" className={`liquid-glass connection-card ${selected?.id === connection.id ? "selected" : ""}`}><button className="connection-card-main" onClick={() => onNavigate({ page: "sources", section: "connections", resourceId: connection.id })}><span><strong>{connection.display_label}</strong><span className={`badge ${connection.state === "active" ? "badge-success" : ""}`}>{connection.state}</span></span><small>{connection.provisioning_mode} · generation {connection.generation} · {connection.trigger_name ?? "Trigger pending"}</small><small>Last delivery: {connection.last_delivery_at ?? "No events yet"} · cursor {connection.last_acked_cursor}</small></button>{canAccess("admin") && <div className="decision-actions"><button className="btn btn-ghost" disabled={busy} onClick={() => void reauthorize(connection)}>Reauthorize</button><button className="btn btn-danger" disabled={busy} onClick={() => void disconnect(connection)}>Disconnect</button></div>}{connection.last_error_code && <p className="field-error">{connection.last_error_code}</p>}</article>)}
+      {connections.map((connection) => <article key={connection.id} role="listitem" className={`liquid-glass connection-card ${selected?.id === connection.id ? "selected" : ""}`}><button className="connection-card-main" onClick={() => onNavigate({ page: "sources", section: "connections", resourceId: connection.id })}><span><strong>{connection.display_label}</strong><span className={`badge ${connection.state === "active" ? "badge-success" : ""}`}>{connection.state}</span></span><small>{connection.provisioning_mode} · generation {connection.generation} · {connection.trigger_name ?? "Trigger pending"}</small><small>Last delivery: {connection.last_delivery_at ?? "No events yet"} · cursor {connection.last_acked_cursor}</small></button>{canAccess("admin") && <div className="decision-actions"><button className="btn btn-ghost" disabled={busy} onClick={() => setReviewedAction({ kind: "reauthorize", connection })}>Reauthorize</button><button className="btn btn-ghost" disabled={busy || connection.state !== "active"} onClick={() => setTransferConnection(connection)}>Transfer</button><button className="btn btn-danger" disabled={busy} onClick={() => setReviewedAction({ kind: "disconnect", connection })}>Disconnect</button></div>}{connection.last_error_code && <p className="field-error">{connection.last_error_code}</p>}</article>)}
       {connections.length === 0 && <div className="operations-state">No Slack connections in this project.</div>}
     </div>
     {intent?.connection && <div className="connection-next-steps"><h3>Connection active</h3><p>Reaction routing stays disabled until you explicitly configure a template and binding.</p><a className="btn btn-primary" href="#/sources/automations/templates">Configure badge automation</a></div>}
+    <ReviewedActionDialog open={reviewedAction !== null} title={reviewedAction?.kind === "disconnect" ? `Disconnect ${reviewedAction.connection.display_label}` : `Reauthorize ${reviewedAction?.connection.display_label ?? "connection"}`} description={reviewedAction?.kind === "disconnect" ? "Gateway and local credentials will be destroyed. Existing task and source evidence is retained." : "Slack OAuth will rotate this connection credential and invalidate the old generation."} confirmLabel={reviewedAction?.kind === "disconnect" ? "Disconnect" : "Continue to Slack"} destructive={reviewedAction?.kind === "disconnect"} onCancel={() => setReviewedAction(null)} onConfirm={(reason) => { const action = reviewedAction; setReviewedAction(null); if (!action) return; if (action.kind === "disconnect") void disconnect(action.connection, reason); else void reauthorize(action.connection, reason); }} />
+    <SourceConnectionTransferDialog connection={transferConnection} busy={busy} onCancel={() => setTransferConnection(null)} onConfirm={(target, reason) => { if (transferConnection) void transfer(transferConnection, target, reason); }} />
   </section>;
 }
