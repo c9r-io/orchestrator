@@ -4,7 +4,7 @@ export type ConsoleRoute =
   | { page: "attention"; attentionId?: string }
   | { page: "processes"; taskId?: string }
   | { page: "sessions"; sessionId?: string }
-  | { page: "sources"; taskId?: string }
+  | { page: "sources"; taskId?: string; section?: "events" | "bindings" | "automations"; automationView?: "templates" | "bindings" | "routes"; resourceId?: string }
   | { page: "system"; section?: string }
   | { page: "new-process"; draftId?: string };
 
@@ -12,11 +12,18 @@ const decode = (value: string | undefined) => value ? decodeURIComponent(value) 
 
 export function parseConsoleRoute(hash: string): ConsoleRoute {
   const path = hash.replace(/^#/, "").replace(/^\//, "");
-  const [page = "attention", id] = path.split("/");
+  const [page = "attention", id, child, resourceId] = path.split("/");
   switch (page) {
     case "processes": return { page, taskId: decode(id) };
     case "sessions": return { page, sessionId: decode(id) };
-    case "sources": return { page, taskId: decode(id) };
+    case "sources": {
+      if (id === "events") return { page, section: "events", resourceId: decode(child) };
+      if (id === "bindings") return { page, section: "bindings", resourceId: decode(child) };
+      if (id === "automations" && ["templates", "bindings", "routes"].includes(child)) {
+        return { page, section: "automations", automationView: child as "templates" | "bindings" | "routes", resourceId: decode(resourceId) };
+      }
+      return { page, taskId: decode(id) };
+    }
     case "system": return { page, section: decode(id) };
     case "new-process": return { page, draftId: decode(id) };
     case "attention": return { page, attentionId: decode(id) };
@@ -25,6 +32,12 @@ export function parseConsoleRoute(hash: string): ConsoleRoute {
 }
 
 export function formatConsoleRoute(route: ConsoleRoute): string {
+  if (route.page === "sources" && route.section) {
+    const base = route.section === "automations"
+      ? `#/sources/automations/${route.automationView ?? "templates"}`
+      : `#/sources/${route.section}`;
+    return `${base}${route.resourceId ? `/${encodeURIComponent(route.resourceId)}` : ""}`;
+  }
   const id = route.page === "attention" ? route.attentionId
     : route.page === "processes" ? route.taskId
     : route.page === "sessions" ? route.sessionId

@@ -60,19 +60,30 @@ pub async fn resource_describe(
 }
 
 /// Apply a resource from YAML (operator+).
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn resource_apply(
     state: State<'_, Arc<AppState>>,
     content: String,
+    project_id: Option<String>,
+    expected_revision: Option<String>,
+    require_absent: Option<bool>,
+    reason: Option<String>,
+    idempotency_key: Option<String>,
 ) -> Result<String, String> {
     let mut client = state.client().await?;
     let resp = client
         .apply(orchestrator_proto::ApplyRequest {
             content,
             dry_run: false,
-            project: None,
+            project: project_id,
             prune: false,
-            audit: None,
+            audit: Some(orchestrator_proto::ActionAuditContext {
+                reason_code: "operator_resource_apply".into(),
+                operator_reason: reason,
+                idempotency_key,
+            }),
+            expected_revision,
+            require_absent: require_absent.unwrap_or(false),
         })
         .await
         .map_err(|e| crate::errors::humanize_grpc_error(&e))?;

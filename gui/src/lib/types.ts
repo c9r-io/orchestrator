@@ -172,6 +172,8 @@ export interface AttentionItem {
   task_item_id: string | null;
   step_id: string | null;
   session_id: string | null;
+  source_route_id?: string | null;
+  source_binding_name?: string | null;
   kind: string;
   severity: "intervention" | "attention";
   state: "open" | "claimed" | "snoozed" | "resolved";
@@ -226,7 +228,6 @@ export interface SourceEvent {
   thread_id: string | null;
   occurred_at: string;
   received_at: string;
-  normalized_json: string;
   routing_state: string;
   routing_attempts: number;
   routed_task_id: string | null;
@@ -240,13 +241,89 @@ export interface SourceEvent {
 
 export interface SourceAutomationRoute {
   id: string;
+  project_id: string;
   source_event_id: string;
+  provider: string;
   reaction: string;
   binding_name: string;
+  binding_revision: string;
   template_name: string;
+  template_hash: string;
   status: string;
+  error_code: string | null;
+  error_category: string | null;
   task_id: string | null;
   permalink: string | null;
+  request_id: string;
+  generation: number;
+  version: number;
+  attempt_count: number;
+  max_attempts: number;
+  next_attempt_at: string | null;
+  suspended_scope: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}
+
+export interface SourceAutomationAttempt {
+  attempt_no: number; generation: number; started_at: string; completed_at: string | null;
+  result_state: string | null; error_code: string | null; error_category: string | null;
+  retry_after_seconds: number | null;
+}
+
+export interface SourceAutomationDetail { route: SourceAutomationRoute; attempts: SourceAutomationAttempt[]; }
+export interface SourceAutomationPage { routes: SourceAutomationRoute[]; next_page_token: string | null; }
+export interface SourceAutomationStatus {
+  project_id: string; backlog_count: number; oldest_age_seconds: number; active_leases: number;
+  retrying_count: number; needs_attention_count: number; failure_categories: Array<[string, number]>;
+}
+
+export interface SourceAutomationTemplate {
+  name: string; revision: string; skill_name: string; skill_invocation: string; skill_args: string[];
+  workflow: string; workspace: string; start: boolean; initial_vars: Record<string, string>;
+  goal_template: string; allowed_variables: string[];
+}
+
+export interface SourceAutomationBinding {
+  name: string; revision: string; trigger_ref: string; installation_id: string; reaction: string;
+  channels: string[]; all_channels: boolean; template_ref: string; allowed_actor_roles: string[];
+  suspended: boolean;
+}
+
+export interface SourceAutomationInstallation {
+  trigger_name: string; installation_id: string; actor_ids: string[]; actor_roles: string[];
+  suspended: boolean; reaction_routing: string;
+}
+
+export interface SourceAutomationCatalog {
+  project_id: string; templates: SourceAutomationTemplate[]; bindings: SourceAutomationBinding[];
+  installations: SourceAutomationInstallation[]; workflows: string[]; workspaces: string[];
+}
+
+export interface SourceTemplatePreview {
+  name: string; skill_name: string; skill_invocation: string; skill_args: string[]; goal: string;
+  workflow: string; workspace: string; start: boolean; initial_vars: Record<string, string>;
+  revision: string; warnings: string[];
+}
+
+export interface SourceBindingSimulation {
+  status: string; reason: string; resolved_role: string | null; binding_id: string | null;
+  template_ref: string | null; binding_revision: string | null;
+}
+
+export interface SourceAutomationSimulation {
+  match_result: SourceBindingSimulation | null; rendered: SourceTemplatePreview | null;
+  mutation_performed: boolean; network_performed: boolean;
+}
+
+export interface ManifestDiagnostic {
+  source: string; rule: string; severity: string; passed: boolean; blocking: boolean;
+  message: string; scope: string | null; suggested_fix: string | null;
+}
+
+export interface ManifestValidateResult {
+  valid: boolean; errors: string[]; message: string; diagnostics: ManifestDiagnostic[];
 }
 
 export interface SourceBinding {

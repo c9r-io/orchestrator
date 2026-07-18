@@ -43,6 +43,7 @@ pub(crate) async fn dispatch(
                         event_id,
                         reaction,
                         target_id,
+                        draft_content: None,
                     })
                     .await?
                     .into_inner();
@@ -92,6 +93,7 @@ pub(crate) async fn dispatch(
                         target_kind,
                         channel_id: channel,
                         external_actor_id: actor,
+                        draft_content: None,
                     })
                     .await?
                     .into_inner();
@@ -122,6 +124,7 @@ pub(crate) async fn dispatch(
                             "operator_source_binding_suspend",
                             "binding-suspend",
                         )),
+                        expected_revision: None,
                     })
                     .await?
                     .into_inner();
@@ -144,6 +147,7 @@ pub(crate) async fn dispatch(
                             "operator_source_binding_resume",
                             "binding-resume",
                         )),
+                        expected_revision: None,
                     })
                     .await?
                     .into_inner();
@@ -292,6 +296,7 @@ pub(crate) async fn dispatch(
                         message_url,
                         event_id,
                         target_id,
+                        draft_binding_content: None,
                     })
                     .await?
                     .into_inner();

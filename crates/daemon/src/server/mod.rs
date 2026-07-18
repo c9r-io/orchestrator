@@ -18,7 +18,7 @@ use std::sync::Arc;
 use agent_orchestrator::error::{ErrorCategory, OrchestratorError};
 use agent_orchestrator::state::InnerState;
 use orchestrator_proto::*;
-use tokio::sync::Notify;
+use tokio::sync::{Mutex, Notify};
 use tonic::{Request, Response, Status};
 
 use crate::control_plane::{AuthzError, ControlPlaneSecurity, Role, required_role_for_rpc};
@@ -32,6 +32,7 @@ pub struct OrchestratorServer {
     pub(crate) control_plane: Option<Arc<ControlPlaneSecurity>>,
     pub(crate) uds_auth_policy: Option<UdsAuthPolicy>,
     pub(crate) session_read_limits: session::SessionReadLimits,
+    pub(crate) config_mutation_lock: Arc<Mutex<()>>,
 }
 
 impl OrchestratorServer {
@@ -48,6 +49,7 @@ impl OrchestratorServer {
             control_plane,
             uds_auth_policy,
             session_read_limits: session::SessionReadLimits::default(),
+            config_mutation_lock: Arc::new(Mutex::new(())),
         }
     }
 
@@ -435,6 +437,13 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<SourceAutomationStatusRequest>,
     ) -> Result<Response<SourceAutomationStatusResponse>, Status> {
         source::automation_status_get(self, request).await
+    }
+
+    async fn source_automation_catalog_get(
+        &self,
+        request: Request<SourceAutomationCatalogRequest>,
+    ) -> Result<Response<SourceAutomationCatalogResponse>, Status> {
+        source::automation_catalog_get(self, request).await
     }
 
     async fn source_event_ingest(

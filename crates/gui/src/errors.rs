@@ -9,6 +9,10 @@ pub fn humanize_grpc_error(status: &Status) -> String {
         Code::InvalidArgument => format!("输入内容不符合要求: {}", status.message()),
         Code::DeadlineExceeded => "操作超时，请稍后重试".into(),
         Code::AlreadyExists => "资源已存在".into(),
+        Code::Aborted => format!(
+            "资源已被其他操作更新，请重新加载后再试: {}",
+            status.message()
+        ),
         Code::Unauthenticated => "认证失败，请检查证书配置".into(),
         Code::ResourceExhausted => "资源耗尽，请稍后重试".into(),
         Code::Unimplemented => "此功能暂未实现".into(),

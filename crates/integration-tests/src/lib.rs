@@ -345,6 +345,15 @@ impl OrchestratorService for TestOrchestratorServer {
         ))
     }
 
+    async fn source_automation_catalog_get(
+        &self,
+        _: Request<SourceAutomationCatalogRequest>,
+    ) -> Result<Response<SourceAutomationCatalogResponse>, Status> {
+        Err(Status::unimplemented(
+            "source automation integration fixture uses the production daemon",
+        ))
+    }
+
     async fn source_event_ingest(
         &self,
         _: Request<SourceEventIngestRequest>,

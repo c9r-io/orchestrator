@@ -34,6 +34,8 @@ pub(crate) async fn dispatch(
                                 .unwrap_or_default()
                         )),
                     }),
+                    expected_revision: None,
+                    require_absent: false,
                 })
                 .await
                 .map_err(format_grpc_error)?

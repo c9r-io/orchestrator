@@ -49,6 +49,7 @@ service OrchestratorService {
   rpc SourceAutomationReplay(SourceAutomationMutationRequest) returns (SourceAutomationRoute);
   rpc SourceAutomationIgnore(SourceAutomationMutationRequest) returns (SourceAutomationRoute);
   rpc SourceAutomationStatusGet(SourceAutomationStatusRequest) returns (SourceAutomationStatusResponse);
+  rpc SourceAutomationCatalogGet(SourceAutomationCatalogRequest) returns (SourceAutomationCatalogResponse);
   rpc SourceEventIngest(SourceEventIngestRequest) returns (SourceEventIngestResponse);
   rpc SourceBindingList(SourceBindingListRequest) returns (SourceBindingListResponse);
   rpc SourceBind(SourceBindRequest) returns (SourceBinding);
@@ -637,6 +638,8 @@ message SourceAutomationSimulateRequest {
   string message_url = 9;
   optional string event_id = 10;
   string target_id = 11;
+  // Optional unsaved SourceTaskBinding manifest overlaid only for this simulation.
+  optional string draft_binding_content = 12;
 }
 
 message SourceAutomationSimulateResponse {
@@ -669,6 +672,53 @@ message SourceAutomationStatusResponse {
   uint64 retrying_count = 5;
   uint64 needs_attention_count = 6;
   repeated SourceAutomationFailureCount failure_categories = 7;
+}
+
+message SourceAutomationCatalogRequest { string project_id = 1; }
+
+message SourceAutomationTemplateResource {
+  string name = 1;
+  string revision = 2;
+  string skill_name = 3;
+  string skill_invocation = 4;
+  repeated string skill_args = 5;
+  string workflow = 6;
+  string workspace = 7;
+  bool start = 8;
+  map<string, string> initial_vars = 9;
+  string goal_template = 10;
+  repeated string allowed_variables = 11;
+}
+
+message SourceAutomationBindingResource {
+  string name = 1;
+  string revision = 2;
+  string trigger_ref = 3;
+  string installation_id = 4;
+  string reaction = 5;
+  repeated string channels = 6;
+  bool all_channels = 7;
+  string template_ref = 8;
+  repeated string allowed_actor_roles = 9;
+  bool suspended = 10;
+}
+
+message SourceAutomationInstallationResource {
+  string trigger_name = 1;
+  string installation_id = 2;
+  repeated string actor_ids = 3;
+  repeated string actor_roles = 4;
+  bool suspended = 5;
+  string reaction_routing = 6;
+}
+
+message SourceAutomationCatalogResponse {
+  string project_id = 1;
+  repeated SourceAutomationTemplateResource templates = 2;
+  repeated SourceAutomationBindingResource bindings = 3;
+  repeated SourceAutomationInstallationResource installations = 4;
+  repeated string workflows = 5;
+  repeated string workspaces = 6;
 }
 
 message SourceEventIngestRequest {
@@ -723,6 +773,8 @@ message SourceTaskTemplatePreviewRequest {
   optional string event_id = 6;
   optional string reaction = 7;
   optional string target_id = 8;
+  // Optional unsaved SourceTaskTemplate manifest overlaid only for this preview.
+  optional string draft_content = 9;
 }
 
 message SourceTaskTemplatePreviewResponse {
@@ -750,6 +802,8 @@ message SourceTaskBindingSimulateRequest {
   string target_kind = 6;
   string channel_id = 7;
   string external_actor_id = 8;
+  // Optional unsaved SourceTaskBinding manifest overlaid only for this simulation.
+  optional string draft_content = 9;
 }
 
 message SourceTaskBindingCandidate {
@@ -773,6 +827,8 @@ message SourceTaskBindingMutationRequest {
   string name = 1;
   string project_id = 2;
   optional ActionAuditContext audit = 3;
+  // Normalized content revision observed by the editor.
+  optional string expected_revision = 4;
 }
 
 message SourceTaskBindingMutationResponse {
@@ -960,6 +1016,10 @@ message ApplyRequest {
   optional string project = 3;
   bool prune = 4;
   optional ActionAuditContext audit = 5;
+  // SourceTaskTemplate/SourceTaskBinding optimistic concurrency guard.
+  optional string expected_revision = 6;
+  // When true, the single source automation resource must not already exist.
+  bool require_absent = 7;
 }
 
 message ApplyResultEntry {

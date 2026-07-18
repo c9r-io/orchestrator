@@ -10,6 +10,19 @@ pub struct ValidateResult {
     pub valid: bool,
     pub errors: Vec<String>,
     pub message: String,
+    pub diagnostics: Vec<ManifestDiagnostic>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ManifestDiagnostic {
+    pub source: String,
+    pub rule: String,
+    pub severity: String,
+    pub passed: bool,
+    pub blocking: bool,
+    pub message: String,
+    pub scope: Option<String>,
+    pub suggested_fix: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -38,6 +51,20 @@ pub async fn manifest_validate(
         valid: inner.valid,
         errors: inner.errors,
         message: inner.message,
+        diagnostics: inner
+            .diagnostics
+            .into_iter()
+            .map(|item| ManifestDiagnostic {
+                source: item.source,
+                rule: item.rule,
+                severity: item.severity,
+                passed: item.passed,
+                blocking: item.blocking,
+                message: item.message,
+                scope: item.scope,
+                suggested_fix: item.suggested_fix,
+            })
+            .collect(),
     })
 }
 

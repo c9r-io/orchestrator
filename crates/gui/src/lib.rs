@@ -63,7 +63,21 @@ pub fn run() {
             commands::attention::attention_execute_action,
             // external sources
             commands::source::source_event_list,
+            commands::source::source_event_get,
             commands::source::source_automation_route_get,
+            commands::source::source_automation_catalog_get,
+            commands::source::source_task_template_preview,
+            commands::source::source_task_binding_simulate,
+            commands::source::source_task_binding_suspend,
+            commands::source::source_task_binding_resume,
+            commands::source::source_automation_list,
+            commands::source::source_automation_get,
+            commands::source::source_automation_simulate,
+            commands::source::source_automation_replay,
+            commands::source::source_automation_ignore,
+            commands::source::source_automation_status_get,
+            commands::source::start_source_automation_watch,
+            commands::source::stop_source_automation_watch,
             commands::source::source_binding_list,
             commands::source::source_replay,
             // handoff and safe resume
@@ -351,5 +365,147 @@ mod live_bridge_tests {
             resolved,
             "source Attention should resolve after durable resume"
         );
+    }
+
+    #[test]
+    fn live_source_automation_crosses_real_tauri_handlers_and_grpc() {
+        if std::env::var("FR112_LIVE_E2E").as_deref() != Ok("1") {
+            return;
+        }
+        let project = std::env::var("FR112_PROJECT").expect("FR112_PROJECT");
+        let app_state = Arc::new(AppState::new());
+        let app = tauri::test::mock_builder()
+            .manage(app_state)
+            .invoke_handler(tauri::generate_handler![
+                commands::system::connect,
+                commands::source::source_automation_catalog_get,
+                commands::source::source_task_template_preview,
+                commands::source::source_automation_simulate,
+                commands::source::source_task_binding_suspend,
+                commands::source::source_task_binding_resume,
+                commands::resource::resource_apply,
+            ])
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app");
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("mock webview");
+
+        invoke(&webview, "connect", json!({})).expect("connect through Tauri");
+        let catalog = invoke(
+            &webview,
+            "source_automation_catalog_get",
+            json!({"project_id": project}),
+        )
+        .expect("catalog through Tauri");
+        assert!(
+            catalog["templates"]
+                .as_array()
+                .is_some_and(|items| items.len() >= 2)
+        );
+        assert!(
+            catalog["bindings"]
+                .as_array()
+                .is_some_and(|items| items.len() >= 2)
+        );
+        let public_catalog = catalog.to_string();
+        assert!(!public_catalog.contains("qa-source-routing-signing-secret"));
+        assert!(!public_catalog.contains("qa-source-routing-fake-token"));
+        assert!(!public_catalog.contains("normalized_json"));
+
+        let preview = invoke(
+            &webview,
+            "source_task_template_preview",
+            json!({
+                "name": "implement-from-slack",
+                "project_id": project,
+                "provider": "slack",
+                "installation_id": "T_QA_ROUTING",
+                "message_url": "https://qa-workspace.slack.com/archives/C_QA_ROUTING/p1234567890000100",
+                "event_id": null,
+                "reaction": "agent-implement",
+                "target_id": "C_QA_ROUTING:1234567890.000100",
+                "draft_content": null
+            }),
+        )
+        .expect("preview through Tauri");
+        assert_eq!(required_string(&preview, "skill_invocation"), "$docs");
+        assert!(required_string(&preview, "goal").contains("qa-workspace.slack.com"));
+
+        let simulation = invoke(
+            &webview,
+            "source_automation_simulate",
+            json!({
+                "project_id": project,
+                "provider": "slack",
+                "installation_id": "T_QA_ROUTING",
+                "event_kind": "reaction_added",
+                "reaction": "agent-implement",
+                "target_kind": "message",
+                "channel_id": "C_QA_ROUTING",
+                "external_actor_id": "U_OPERATOR",
+                "message_url": "https://qa-workspace.slack.com/archives/C_QA_ROUTING/p1234567890000100",
+                "event_id": null,
+                "target_id": "C_QA_ROUTING:1234567890.000100",
+                "draft_binding_content": null
+            }),
+        )
+        .expect("simulation through Tauri");
+        assert_eq!(simulation["match_result"]["status"], "matched");
+        assert_eq!(simulation["mutation_performed"], false);
+        assert_eq!(simulation["network_performed"], false);
+
+        let revision = catalog["bindings"]
+            .as_array()
+            .and_then(|items| items.iter().find(|item| item["name"] == "slack-implement"))
+            .map(|item| required_string(item, "revision").to_string())
+            .expect("binding revision");
+        invoke(
+            &webview,
+            "source_task_binding_suspend",
+            json!({"name":"slack-implement","project_id":project,"expected_revision":revision,"reason":"FR-112 live bridge suspend"}),
+        )
+        .expect("suspend through Tauri");
+        let suspended = invoke(
+            &webview,
+            "source_automation_catalog_get",
+            json!({"project_id": project}),
+        )
+        .expect("suspended catalog");
+        let suspended_binding = suspended["bindings"]
+            .as_array()
+            .and_then(|items| items.iter().find(|item| item["name"] == "slack-implement"))
+            .expect("suspended binding");
+        assert_eq!(suspended_binding["suspended"], true);
+        invoke(
+            &webview,
+            "source_task_binding_resume",
+            json!({"name":"slack-implement","project_id":project,"expected_revision":required_string(suspended_binding,"revision"),"reason":"FR-112 live bridge resume"}),
+        )
+        .expect("resume through Tauri");
+
+        let new_template = json!({
+            "apiVersion":"orchestrator.dev/v2","kind":"SourceTaskTemplate",
+            "metadata":{"name":"fr112-bridge-template"},
+            "spec":{"skill":{"name":"docs","invocation":"$docs","args":[]},
+              "action":{"workflow":"source-routing-fixture","workspace":"source-routing-fixture","start":false},
+              "goalTemplate":"{skill_invocation}: inspect {source_message_url}",
+              "allowedVariables":["skill_invocation","source_message_url"]}
+        })
+        .to_string();
+        invoke(
+            &webview,
+            "resource_apply",
+            json!({"content":new_template,"project_id":project,"expected_revision":null,"require_absent":true,"reason":"create bridge fixture","idempotency_key":"fr112-create"}),
+        )
+        .expect("create through optimistic resource apply");
+        let stale = invoke(
+            &webview,
+            "resource_apply",
+            json!({"content":new_template,"project_id":project,"expected_revision":null,"require_absent":true,"reason":"prove create CAS","idempotency_key":"fr112-stale"}),
+        )
+        .expect_err("second create must fail closed");
+        assert!(stale.to_string().contains("重新加载"), "{stale}");
+        println!("FR112_BRIDGE_OK=1");
     }
 }

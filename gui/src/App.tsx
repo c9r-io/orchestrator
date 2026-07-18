@@ -110,7 +110,7 @@ export default function App() {
       return <section className="liquid-glass"><h1>Feature unavailable</h1><p>This console page is disabled by its rollout flag.</p></section>;
     }
     switch (route.page) {
-      case "attention": return <AttentionInbox initialAttentionId={route.attentionId} nativeNotificationsEnabled={nativeNotificationsEnabled} onOpenTask={(taskId) => go({ page: "processes", taskId })} />;
+      case "attention": return <AttentionInbox initialAttentionId={route.attentionId} nativeNotificationsEnabled={nativeNotificationsEnabled} onOpenTask={(taskId) => go({ page: "processes", taskId })} onOpenSourceRoute={(resourceId) => go({ page: "sources", section: "automations", automationView: "routes", resourceId })} />;
       case "processes": return route.taskId
         ? <ProcessWorkspace taskId={route.taskId} onBack={() => go({ page: "processes" })} />
         : <ProcessList onSelect={(taskId) => go({ page: "processes", taskId })} />;
@@ -119,7 +119,7 @@ export default function App() {
         : <SessionList onSelect={(sessionId) => go({ page: "sessions", sessionId })} />;
       case "sources": return route.taskId
         ? <ProcessWorkspace taskId={route.taskId} onBack={() => go({ page: "sources" })} />
-        : <Sources onOpenTask={(taskId) => go({ page: "sources", taskId })} />;
+        : <Sources route={route} onNavigate={go} onOpenTask={(taskId) => go({ page: "processes", taskId })} />;
       case "system": return <System initialSection={route.section} />;
       case "new-process": return route.draftId
         ? <WishDetail taskId={route.draftId} onBack={() => go({ page: "new-process" })} onConfirmed={(taskId) => go({ page: "processes", taskId })} />

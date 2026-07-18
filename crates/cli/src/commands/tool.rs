@@ -135,6 +135,8 @@ async fn secret_rotate_cmd(
             prune: false,
             project: Some(project_id),
             audit: None,
+            expected_revision: None,
+            require_absent: false,
         })
         .await?
         .into_inner();

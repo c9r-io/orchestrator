@@ -12,14 +12,14 @@ const events: SourceEvent[] = [
   { id: "source-1", project_id: "project-1", provider: "slack", installation_id: "workspace-demo",
     external_event_id: "evt-1", event_type: "message", conversation_id: "channel-1", thread_id: "thread-1",
     reaction_name: null, reaction_target_kind: null, reaction_target_id: null,
-    occurred_at: "2026-07-14T00:00:00Z", received_at: "2026-07-14T00:00:01Z", normalized_json: "{}",
+    occurred_at: "2026-07-14T00:00:00Z", received_at: "2026-07-14T00:00:01Z",
     routing_state: "needs_attention", routing_attempts: 1, routed_task_id: "task-1", last_error_code: "trigger_ambiguous",
     automation_route_id: null, automation_status: null, automation_binding_name: null,
     automation_template_name: null, automation_template_hash: null },
   { id: "source-2", project_id: "project-1", provider: "github", installation_id: "repo-demo",
     external_event_id: "evt-2", event_type: "pull_request", conversation_id: "pr-42", thread_id: null,
     reaction_name: null, reaction_target_kind: null, reaction_target_id: null,
-    occurred_at: "2026-07-14T00:02:00Z", received_at: "2026-07-14T00:02:01Z", normalized_json: "{}",
+    occurred_at: "2026-07-14T00:02:00Z", received_at: "2026-07-14T00:02:01Z",
     routing_state: "routed", routing_attempts: 1, routed_task_id: "task-2", last_error_code: null,
     automation_route_id: null, automation_status: null, automation_binding_name: null,
     automation_template_name: null, automation_template_hash: null },
@@ -27,7 +27,7 @@ const events: SourceEvent[] = [
     external_event_id: "evt-3", event_type: "reaction_added", reaction_name: "agent_fix",
     reaction_target_kind: "message", reaction_target_id: "channel-1:1712345678.000100",
     conversation_id: "channel-1", thread_id: "1712345678.000100",
-    occurred_at: "2026-07-14T00:03:00Z", received_at: "2026-07-14T00:03:01Z", normalized_json: "{}",
+    occurred_at: "2026-07-14T00:03:00Z", received_at: "2026-07-14T00:03:01Z",
     routing_state: "routed", routing_attempts: 1, routed_task_id: "task-3", last_error_code: null,
     automation_route_id: "route-3", automation_status: "routed", automation_binding_name: "fix-binding",
     automation_template_name: "fix-template", automation_template_hash: "hash-3" },
@@ -37,7 +37,7 @@ function renderAs(role: Role, onOpenTask = vi.fn()) {
   return {
     onOpenTask,
     ...render(<RoleContext.Provider value={{ role, canAccess: (required) => hasAccess(role, required) }}>
-      <Sources onOpenTask={onOpenTask} />
+      <Sources route={{ page: "sources", section: "events" }} onNavigate={vi.fn()} onOpenTask={onOpenTask} />
     </RoleContext.Provider>),
   };
 }

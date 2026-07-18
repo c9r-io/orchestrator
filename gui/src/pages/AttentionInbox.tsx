@@ -7,7 +7,7 @@ import { recordUiMetric } from "../lib/telemetry";
 import i18n from "../lib/i18n";
 import type { AttentionAction, AttentionDelta, AttentionItem, AttentionListResult, Role } from "../lib/types";
 
-interface Props { initialAttentionId?: string; nativeNotificationsEnabled: boolean; onOpenTask: (taskId: string) => void; }
+interface Props { initialAttentionId?: string; nativeNotificationsEnabled: boolean; onOpenTask: (taskId: string) => void; onOpenSourceRoute?: (routeId: string) => void; }
 interface Filters { state: string; severity: string; assignee: string; }
 type PendingAction = { kind: "resolve"; item: AttentionItem } | { kind: "execute"; item: AttentionItem; action: AttentionAction };
 
@@ -50,7 +50,7 @@ function ageLabel(value: string): string {
   return `${Math.floor(minutes / 1440)}d`;
 }
 
-export default function AttentionInbox({ initialAttentionId, nativeNotificationsEnabled, onOpenTask }: Props) {
+export default function AttentionInbox({ initialAttentionId, nativeNotificationsEnabled, onOpenTask, onOpenSourceRoute }: Props) {
   const { canAccess } = useRole();
   const canMutate = canAccess("operator");
   const [items, setItems] = useState<AttentionItem[]>([]);
@@ -194,6 +194,7 @@ export default function AttentionInbox({ initialAttentionId, nativeNotifications
             {current.actions.filter((action) => !["acknowledge", "retry_failed_item", "resume_task"].includes(action.id)).map((action) => <button key={action.id} className="btn btn-primary" disabled={!actionAllowed(action)} title={!actionAllowed(action) ? `Requires ${action.required_role}` : undefined} onClick={() => setPending({ kind: "execute", item: current, action })}>{action.label}</button>)}
             <button className="btn btn-ghost" disabled={!canMutate} onClick={() => setPending({ kind: "resolve", item: current })}>Resolve</button>
             {current.task_id && <button className="btn btn-secondary" onClick={() => onOpenTask(current.task_id)}>Open process</button>}
+            {current.source_route_id && onOpenSourceRoute && <button className="btn btn-secondary" onClick={() => onOpenSourceRoute(current.source_route_id!)}>Open automation route</button>}
           </div>
         </>}
       </aside>

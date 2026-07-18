@@ -1,6 +1,6 @@
 use serde::Serialize;
 use std::sync::Arc;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 use crate::state::AppState;
 
@@ -19,7 +19,6 @@ pub struct SourceEvent {
     pub thread_id: Option<String>,
     pub occurred_at: String,
     pub received_at: String,
-    pub normalized_json: String,
     pub routing_state: String,
     pub routing_attempts: i64,
     pub routed_task_id: Option<String>,
@@ -34,13 +33,156 @@ pub struct SourceEvent {
 #[derive(Debug, Clone, Serialize)]
 pub struct SourceAutomationRoute {
     pub id: String,
+    pub project_id: String,
     pub source_event_id: String,
+    pub provider: String,
     pub reaction: String,
     pub binding_name: String,
+    pub binding_revision: String,
     pub template_name: String,
+    pub template_hash: String,
     pub status: String,
+    pub error_code: Option<String>,
+    pub error_category: Option<String>,
     pub task_id: Option<String>,
     pub permalink: Option<String>,
+    pub request_id: String,
+    pub generation: i64,
+    pub version: i64,
+    pub attempt_count: i64,
+    pub max_attempts: i64,
+    pub next_attempt_at: Option<String>,
+    pub suspended_scope: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub completed_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceAutomationAttempt {
+    pub attempt_no: i64,
+    pub generation: i64,
+    pub started_at: String,
+    pub completed_at: Option<String>,
+    pub result_state: Option<String>,
+    pub error_code: Option<String>,
+    pub error_category: Option<String>,
+    pub retry_after_seconds: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceAutomationDetail {
+    pub route: SourceAutomationRoute,
+    pub attempts: Vec<SourceAutomationAttempt>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceAutomationPage {
+    pub routes: Vec<SourceAutomationRoute>,
+    pub next_page_token: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceAutomationStatus {
+    pub project_id: String,
+    pub backlog_count: u64,
+    pub oldest_age_seconds: u64,
+    pub active_leases: u64,
+    pub retrying_count: u64,
+    pub needs_attention_count: u64,
+    pub failure_categories: Vec<(String, u64)>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceAutomationDelta {
+    pub cursor: i64,
+    pub route_version: i64,
+    pub state: String,
+    pub error_code: Option<String>,
+    pub route: Option<SourceAutomationRoute>,
+    pub changed_at: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceTemplatePreview {
+    pub name: String,
+    pub skill_name: String,
+    pub skill_invocation: String,
+    pub skill_args: Vec<String>,
+    pub goal: String,
+    pub workflow: String,
+    pub workspace: String,
+    pub start: bool,
+    pub initial_vars: std::collections::HashMap<String, String>,
+    pub revision: String,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceBindingSimulation {
+    pub status: String,
+    pub reason: String,
+    pub resolved_role: Option<String>,
+    pub binding_id: Option<String>,
+    pub template_ref: Option<String>,
+    pub binding_revision: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceAutomationSimulation {
+    pub match_result: Option<SourceBindingSimulation>,
+    pub rendered: Option<SourceTemplatePreview>,
+    pub mutation_performed: bool,
+    pub network_performed: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceAutomationCatalog {
+    pub project_id: String,
+    pub templates: Vec<SourceAutomationTemplate>,
+    pub bindings: Vec<SourceAutomationBinding>,
+    pub installations: Vec<SourceAutomationInstallation>,
+    pub workflows: Vec<String>,
+    pub workspaces: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceAutomationTemplate {
+    pub name: String,
+    pub revision: String,
+    pub skill_name: String,
+    pub skill_invocation: String,
+    pub skill_args: Vec<String>,
+    pub workflow: String,
+    pub workspace: String,
+    pub start: bool,
+    pub initial_vars: std::collections::HashMap<String, String>,
+    pub goal_template: String,
+    pub allowed_variables: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceAutomationBinding {
+    pub name: String,
+    pub revision: String,
+    pub trigger_ref: String,
+    pub installation_id: String,
+    pub reaction: String,
+    pub channels: Vec<String>,
+    pub all_channels: bool,
+    pub template_ref: String,
+    pub allowed_actor_roles: Vec<String>,
+    pub suspended: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceAutomationInstallation {
+    pub trigger_name: String,
+    pub installation_id: String,
+    pub actor_ids: Vec<String>,
+    pub actor_roles: Vec<String>,
+    pub suspended: bool,
+    pub reaction_routing: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -89,7 +231,6 @@ fn event_from_proto(value: orchestrator_proto::SourceEvent) -> SourceEvent {
         thread_id: value.thread_id,
         occurred_at: value.occurred_at,
         received_at: value.received_at,
-        normalized_json: value.normalized_json,
         routing_state: value.routing_state,
         routing_attempts: value.routing_attempts,
         routed_task_id: value.routed_task_id,
@@ -159,6 +300,66 @@ fn binding_from_proto(value: orchestrator_proto::SourceBinding) -> SourceBinding
     }
 }
 
+fn route_from_proto(value: orchestrator_proto::SourceAutomationRoute) -> SourceAutomationRoute {
+    SourceAutomationRoute {
+        id: value.id,
+        project_id: value.project_id,
+        source_event_id: value.source_event_id,
+        provider: value.provider,
+        reaction: value.reaction,
+        binding_name: value.binding_name,
+        binding_revision: value.binding_revision,
+        template_name: value.template_name,
+        template_hash: value.template_hash,
+        status: value.status,
+        error_code: value.error_code,
+        error_category: value.error_category,
+        task_id: value.task_id,
+        permalink: value.permalink,
+        request_id: value.request_id,
+        generation: value.generation,
+        version: value.version,
+        attempt_count: value.attempt_count,
+        max_attempts: value.max_attempts,
+        next_attempt_at: value.next_attempt_at,
+        suspended_scope: value.suspended_scope,
+        created_at: value.created_at,
+        updated_at: value.updated_at,
+        completed_at: value.completed_at,
+    }
+}
+
+fn preview_from_proto(
+    value: orchestrator_proto::SourceTaskTemplatePreviewResponse,
+) -> SourceTemplatePreview {
+    SourceTemplatePreview {
+        name: value.name,
+        skill_name: value.skill_name,
+        skill_invocation: value.skill_invocation,
+        skill_args: value.skill_args,
+        goal: value.goal,
+        workflow: value.workflow,
+        workspace: value.workspace,
+        start: value.start,
+        initial_vars: value.initial_vars,
+        revision: value.revision,
+        warnings: value.warnings,
+    }
+}
+
+fn simulation_from_proto(
+    value: orchestrator_proto::SourceTaskBindingSimulateResponse,
+) -> SourceBindingSimulation {
+    SourceBindingSimulation {
+        status: value.status,
+        reason: value.reason,
+        resolved_role: value.resolved_role,
+        binding_id: value.binding_id,
+        template_ref: value.template_ref,
+        binding_revision: value.binding_revision,
+    }
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub async fn source_event_list(
     state: State<'_, Arc<AppState>>,
@@ -183,6 +384,19 @@ pub async fn source_event_list(
                 .map(event_from_proto)
                 .collect()
         })
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_event_get(
+    state: State<'_, Arc<AppState>>,
+    id: String,
+) -> Result<SourceEvent, String> {
+    let mut client = state.client().await?;
+    client
+        .source_event_get(orchestrator_proto::SourceEventGetRequest { id })
+        .await
+        .map(|response| event_from_proto(response.into_inner()))
         .map_err(|error| crate::errors::humanize_grpc_error(&error))
 }
 
@@ -217,20 +431,456 @@ pub async fn source_automation_route_get(
             source_event_id,
         })
         .await
+        .map(|response| route_from_proto(response.into_inner()))
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_automation_catalog_get(
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+) -> Result<SourceAutomationCatalog, String> {
+    let mut client = state.client().await?;
+    client
+        .source_automation_catalog_get(orchestrator_proto::SourceAutomationCatalogRequest {
+            project_id,
+        })
+        .await
         .map(|response| {
             let value = response.into_inner();
-            SourceAutomationRoute {
-                id: value.id,
-                source_event_id: value.source_event_id,
-                reaction: value.reaction,
-                binding_name: value.binding_name,
-                template_name: value.template_name,
-                status: value.status,
-                task_id: value.task_id,
-                permalink: value.permalink,
+            SourceAutomationCatalog {
+                project_id: value.project_id,
+                templates: value
+                    .templates
+                    .into_iter()
+                    .map(|item| SourceAutomationTemplate {
+                        name: item.name,
+                        revision: item.revision,
+                        skill_name: item.skill_name,
+                        skill_invocation: item.skill_invocation,
+                        skill_args: item.skill_args,
+                        workflow: item.workflow,
+                        workspace: item.workspace,
+                        start: item.start,
+                        initial_vars: item.initial_vars,
+                        goal_template: item.goal_template,
+                        allowed_variables: item.allowed_variables,
+                    })
+                    .collect(),
+                bindings: value
+                    .bindings
+                    .into_iter()
+                    .map(|item| SourceAutomationBinding {
+                        name: item.name,
+                        revision: item.revision,
+                        trigger_ref: item.trigger_ref,
+                        installation_id: item.installation_id,
+                        reaction: item.reaction,
+                        channels: item.channels,
+                        all_channels: item.all_channels,
+                        template_ref: item.template_ref,
+                        allowed_actor_roles: item.allowed_actor_roles,
+                        suspended: item.suspended,
+                    })
+                    .collect(),
+                installations: value
+                    .installations
+                    .into_iter()
+                    .map(|item| SourceAutomationInstallation {
+                        trigger_name: item.trigger_name,
+                        installation_id: item.installation_id,
+                        actor_ids: item.actor_ids,
+                        actor_roles: item.actor_roles,
+                        suspended: item.suspended,
+                        reaction_routing: item.reaction_routing,
+                    })
+                    .collect(),
+                workflows: value.workflows,
+                workspaces: value.workspaces,
             }
         })
         .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+#[allow(clippy::too_many_arguments)]
+pub async fn source_task_template_preview(
+    state: State<'_, Arc<AppState>>,
+    name: String,
+    project_id: String,
+    provider: String,
+    installation_id: String,
+    message_url: String,
+    event_id: Option<String>,
+    reaction: Option<String>,
+    target_id: Option<String>,
+    draft_content: Option<String>,
+) -> Result<SourceTemplatePreview, String> {
+    let mut client = state.client().await?;
+    client
+        .source_task_template_preview(orchestrator_proto::SourceTaskTemplatePreviewRequest {
+            name,
+            project_id,
+            provider,
+            installation_id,
+            message_url,
+            event_id,
+            reaction,
+            target_id,
+            draft_content,
+        })
+        .await
+        .map(|response| preview_from_proto(response.into_inner()))
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+#[allow(clippy::too_many_arguments)]
+pub async fn source_task_binding_simulate(
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+    provider: String,
+    installation_id: String,
+    event_kind: String,
+    reaction: String,
+    target_kind: String,
+    channel_id: String,
+    external_actor_id: String,
+    draft_content: Option<String>,
+) -> Result<SourceBindingSimulation, String> {
+    let mut client = state.client().await?;
+    client
+        .source_task_binding_simulate(orchestrator_proto::SourceTaskBindingSimulateRequest {
+            project_id,
+            provider,
+            installation_id,
+            event_kind,
+            reaction,
+            target_kind,
+            channel_id,
+            external_actor_id,
+            draft_content,
+        })
+        .await
+        .map(|response| simulation_from_proto(response.into_inner()))
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+async fn mutate_binding(
+    state: &AppState,
+    name: String,
+    project_id: String,
+    expected_revision: Option<String>,
+    reason: String,
+    suspend: bool,
+) -> Result<String, String> {
+    let mut client = state.client().await?;
+    let request = orchestrator_proto::SourceTaskBindingMutationRequest {
+        name,
+        project_id,
+        audit: Some(orchestrator_proto::ActionAuditContext {
+            reason_code: if suspend {
+                "operator_source_binding_suspend".into()
+            } else {
+                "operator_source_binding_resume".into()
+            },
+            operator_reason: Some(reason),
+            idempotency_key: None,
+        }),
+        expected_revision,
+    };
+    let response = if suspend {
+        client.source_task_binding_suspend(request).await
+    } else {
+        client.source_task_binding_resume(request).await
+    }
+    .map_err(|error| crate::errors::humanize_grpc_error(&error))?;
+    Ok(response.into_inner().message)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_task_binding_suspend(
+    state: State<'_, Arc<AppState>>,
+    name: String,
+    project_id: String,
+    expected_revision: Option<String>,
+    reason: String,
+) -> Result<String, String> {
+    mutate_binding(&state, name, project_id, expected_revision, reason, true).await
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_task_binding_resume(
+    state: State<'_, Arc<AppState>>,
+    name: String,
+    project_id: String,
+    expected_revision: Option<String>,
+    reason: String,
+) -> Result<String, String> {
+    mutate_binding(&state, name, project_id, expected_revision, reason, false).await
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_automation_list(
+    state: State<'_, Arc<AppState>>,
+    project_id: Option<String>,
+    route_state: Option<String>,
+    provider: Option<String>,
+    binding_name: Option<String>,
+    task_id: Option<String>,
+    page_token: Option<String>,
+) -> Result<SourceAutomationPage, String> {
+    let mut client = state.client().await?;
+    client
+        .source_automation_list(orchestrator_proto::SourceAutomationListRequest {
+            project_id,
+            state: route_state,
+            provider,
+            binding_name,
+            task_id,
+            page_size: 100,
+            page_token,
+        })
+        .await
+        .map(|response| {
+            let value = response.into_inner();
+            SourceAutomationPage {
+                routes: value.routes.into_iter().map(route_from_proto).collect(),
+                next_page_token: value.next_page_token,
+            }
+        })
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_automation_get(
+    state: State<'_, Arc<AppState>>,
+    route_id: String,
+) -> Result<SourceAutomationDetail, String> {
+    let mut client = state.client().await?;
+    client
+        .source_automation_get(orchestrator_proto::SourceAutomationGetRequest {
+            route_id,
+            attempt_limit: 100,
+        })
+        .await
+        .map(|response| {
+            let value = response.into_inner();
+            SourceAutomationDetail {
+                route: route_from_proto(value.route.unwrap_or_default()),
+                attempts: value
+                    .attempts
+                    .into_iter()
+                    .map(|attempt| SourceAutomationAttempt {
+                        attempt_no: attempt.attempt_no,
+                        generation: attempt.generation,
+                        started_at: attempt.started_at,
+                        completed_at: attempt.completed_at,
+                        result_state: attempt.result_state,
+                        error_code: attempt.error_code,
+                        error_category: attempt.error_category,
+                        retry_after_seconds: attempt.retry_after_seconds,
+                    })
+                    .collect(),
+            }
+        })
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+#[allow(clippy::too_many_arguments)]
+pub async fn source_automation_simulate(
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+    provider: String,
+    installation_id: String,
+    event_kind: String,
+    reaction: String,
+    target_kind: String,
+    channel_id: String,
+    external_actor_id: String,
+    message_url: String,
+    event_id: Option<String>,
+    target_id: String,
+    draft_binding_content: Option<String>,
+) -> Result<SourceAutomationSimulation, String> {
+    let mut client = state.client().await?;
+    client
+        .source_automation_simulate(orchestrator_proto::SourceAutomationSimulateRequest {
+            project_id,
+            provider,
+            installation_id,
+            event_kind,
+            reaction,
+            target_kind,
+            channel_id,
+            external_actor_id,
+            message_url,
+            event_id,
+            target_id,
+            draft_binding_content,
+        })
+        .await
+        .map(|response| {
+            let value = response.into_inner();
+            SourceAutomationSimulation {
+                match_result: value.match_result.map(simulation_from_proto),
+                rendered: value.rendered.map(preview_from_proto),
+                mutation_performed: value.mutation_performed,
+                network_performed: value.network_performed,
+            }
+        })
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+async fn mutate_route(
+    state: &AppState,
+    route_id: String,
+    expected_version: i64,
+    reason: String,
+    idempotency_key: String,
+    adopt_current_config: bool,
+    replay: bool,
+) -> Result<SourceAutomationRoute, String> {
+    let mut client = state.client().await?;
+    let request = orchestrator_proto::SourceAutomationMutationRequest {
+        route_id,
+        expected_version,
+        reason,
+        idempotency_key,
+        adopt_current_config,
+    };
+    let response = if replay {
+        client.source_automation_replay(request).await
+    } else {
+        client.source_automation_ignore(request).await
+    }
+    .map_err(|error| crate::errors::humanize_grpc_error(&error))?;
+    Ok(route_from_proto(response.into_inner()))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_automation_replay(
+    state: State<'_, Arc<AppState>>,
+    route_id: String,
+    expected_version: i64,
+    reason: String,
+    idempotency_key: String,
+    adopt_current_config: bool,
+) -> Result<SourceAutomationRoute, String> {
+    mutate_route(
+        &state,
+        route_id,
+        expected_version,
+        reason,
+        idempotency_key,
+        adopt_current_config,
+        true,
+    )
+    .await
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_automation_ignore(
+    state: State<'_, Arc<AppState>>,
+    route_id: String,
+    expected_version: i64,
+    reason: String,
+    idempotency_key: String,
+) -> Result<SourceAutomationRoute, String> {
+    mutate_route(
+        &state,
+        route_id,
+        expected_version,
+        reason,
+        idempotency_key,
+        false,
+        false,
+    )
+    .await
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_automation_status_get(
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+) -> Result<SourceAutomationStatus, String> {
+    let mut client = state.client().await?;
+    client
+        .source_automation_status_get(orchestrator_proto::SourceAutomationStatusRequest {
+            project_id,
+        })
+        .await
+        .map(|response| {
+            let value = response.into_inner();
+            SourceAutomationStatus {
+                project_id: value.project_id,
+                backlog_count: value.backlog_count,
+                oldest_age_seconds: value.oldest_age_seconds,
+                active_leases: value.active_leases,
+                retrying_count: value.retrying_count,
+                needs_attention_count: value.needs_attention_count,
+                failure_categories: value
+                    .failure_categories
+                    .into_iter()
+                    .map(|item| (item.category, item.count))
+                    .collect(),
+            }
+        })
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn start_source_automation_watch(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    project_id: Option<String>,
+    after_cursor: Option<i64>,
+) -> Result<(), String> {
+    let mut client = state.client().await?;
+    let response = client
+        .source_automation_watch(orchestrator_proto::SourceAutomationWatchRequest {
+            project_id,
+            after_cursor: after_cursor.unwrap_or_default(),
+            interval_millis: 1000,
+        })
+        .await
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))?;
+    let mut stream = response.into_inner();
+    let cancel = state.register_stream("source-automation").await;
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::select! {
+                message = stream.message() => match message {
+                    Ok(Some(value)) => {
+                        let payload = SourceAutomationDelta {
+                            cursor: value.cursor,
+                            route_version: value.route_version,
+                            state: value.state,
+                            error_code: value.error_code,
+                            route: value.route.map(route_from_proto),
+                            changed_at: value.changed_at,
+                        };
+                        let _ = app.emit("source-automation-delta", &payload);
+                    }
+                    Ok(None) => break,
+                    Err(error) => {
+                        let message = crate::errors::humanize_grpc_error(&error);
+                        let _ = app.emit("source-automation-watch-error", &message);
+                        break;
+                    }
+                },
+                _ = cancel.cancelled() => break,
+            }
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn stop_source_automation_watch(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    state.cancel_stream("source-automation").await;
+    Ok(())
 }
 
 #[tauri::command(rename_all = "snake_case")]

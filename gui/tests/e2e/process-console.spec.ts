@@ -13,7 +13,7 @@ async function installTauriMock(page: Page, role: "read_only" | "operator" | "ad
       { id: "attention-2", title: "Choose recovery", taskId: "task-2", severity: "attention" },
     ];
     let attentionRows = items.map((item) => ({
-      id: item.id, project_id: "project-1", task_id: item.taskId, task_item_id: null, step_id: "test", session_id: "session-1",
+      id: item.id, project_id: "project-1", task_id: item.taskId, task_item_id: null, step_id: "test", session_id: "session-1", source_route_id: item.id === "attention-1" ? "route-1" : null, source_binding_name: item.id === "attention-1" ? "analyze-badge" : null,
       kind: "step_failed", severity: item.severity, state: "open", title: item.title, summary: "A human decision is required",
       requested_decision_json: JSON.stringify({ question: "Retry from the verified boundary?" }),
       actions: [{ id: "retry_failed_item", label: "Retry safely", required_role: "operator", confirmation: "required", input_schema_json: "{}" }],
@@ -29,6 +29,14 @@ async function installTauriMock(page: Page, role: "read_only" | "operator" | "ad
       { id: "source-1", project_id: "project-1", provider: "slack", installation_id: "workspace-demo", external_event_id: "evt-1", event_type: "message", conversation_id: "channel-1", thread_id: "thread-1", occurred_at: "2026-07-14T00:00:00Z", received_at: "2026-07-14T00:00:01Z", normalized_json: "{}", routing_state: "needs_attention", routing_attempts: 1, routed_task_id: "task-1", last_error_code: "trigger_ambiguous" },
       { id: "source-2", project_id: "project-1", provider: "github", installation_id: "repo-demo", external_event_id: "evt-2", event_type: "pull_request", conversation_id: "pr-42", thread_id: null, occurred_at: "2026-07-14T00:02:00Z", received_at: "2026-07-14T00:02:01Z", normalized_json: "{}", routing_state: "routed", routing_attempts: 1, routed_task_id: "task-complete", last_error_code: null },
     ];
+    const automationCatalog = {
+      project_id: "default",
+      templates: [{ name: "analyze", revision: "template-revision", skill_name: "analyze", skill_invocation: "$analyze", skill_args: ["--safe"], workflow: "analysis", workspace: "main", start: true, initial_vars: {}, goal_template: "{skill_invocation} {source_message_url}", allowed_variables: ["skill_invocation", "source_message_url"] }],
+      bindings: [{ name: "analyze-badge", revision: "binding-revision", trigger_ref: "slack-main", installation_id: "T123", reaction: "agent-analyze", channels: ["C123"], all_channels: false, template_ref: "analyze", allowed_actor_roles: ["operator"], suspended: false }],
+      installations: [{ trigger_name: "slack-main", installation_id: "T123", actor_ids: ["U123"], actor_roles: ["operator"], suspended: false, reaction_routing: "bindings" }],
+      workflows: ["analysis", "docs"], workspaces: ["main"],
+    };
+    const automationRoute = { id: "route-1", project_id: "default", source_event_id: "source-1", provider: "slack", reaction: "agent-analyze", binding_name: "analyze-badge", binding_revision: "binding-revision", template_name: "analyze", template_hash: "template-revision", status: "needs_attention", error_code: "task_create_failed", error_category: "internal", task_id: "task-1", permalink: null, request_id: "request-1", generation: 1, version: 4, attempt_count: 1, max_attempts: 3, next_attempt_at: null, suspended_scope: null, created_at: "2026-07-14T00:00:00Z", updated_at: "2026-07-14T00:01:00Z", completed_at: null };
     let session = { session_id: "session-1", task_id: "task-1", task_item_id: null, step_id: "test", agent_id: "coder", state: "detached", pid: 42, writer_client_id: null as string | null, writer_actor: null as string | null, writer_lease_expires_at: null as string | null, state_version: 1 };
     const invoke = async (command: string, args: Record<string, unknown> = {}) => {
       processCalls.push({ command, args });
@@ -94,7 +102,16 @@ async function installTauriMock(page: Page, role: "read_only" | "operator" | "ad
       if (command === "agent_session_close") { sessionCalls.push({ command, args }); session = { ...session, state: "draining", state_version: session.state_version + 1 }; return session; }
       if (command === "source_binding_list") return [];
       if (command === "source_event_list") return sourceEvents.filter((event) => !args.routing_state || event.routing_state === args.routing_state);
+      if (command === "source_event_get") return sourceEvents.find((event) => event.id === args.id);
       if (command === "source_replay") return true;
+      if (command === "source_automation_catalog_get") return automationCatalog;
+      if (command === "manifest_validate") return { valid: true, errors: [], message: "valid", diagnostics: [] };
+      if (command === "source_task_template_preview") return { name: String(args.name), skill_name: "docs", skill_invocation: "$docs", skill_args: [], goal: `$docs: inspect ${String(args.message_url)}`, workflow: "analysis", workspace: "main", start: false, initial_vars: {}, revision: "draft", warnings: ["sample_url_not_verified_against_installation"] };
+      if (command === "source_task_binding_simulate") return { status: "matched", reason: "binding_matched", resolved_role: "operator", binding_id: "analyze-badge", template_ref: "analyze", binding_revision: "draft" };
+      if (["resource_apply", "source_task_binding_suspend", "source_task_binding_resume", "source_automation_replay", "source_automation_ignore", "start_source_automation_watch", "stop_source_automation_watch"].includes(command)) return automationRoute;
+      if (command === "source_automation_list") return { routes: [automationRoute].filter((route) => !args.route_state || route.status === args.route_state).filter((route) => !args.binding_name || route.binding_name === args.binding_name).filter((route) => !args.task_id || route.task_id === args.task_id), next_page_token: null };
+      if (command === "source_automation_status_get") return { project_id: "default", backlog_count: 1, oldest_age_seconds: 30, active_leases: 0, retrying_count: 0, needs_attention_count: 1, failure_categories: [["internal", 1]] };
+      if (command === "source_automation_get") return { route: automationRoute, attempts: [{ attempt_no: 1, generation: 1, started_at: automationRoute.created_at, completed_at: automationRoute.updated_at, result_state: automationRoute.status, error_code: automationRoute.error_code, error_category: automationRoute.error_category, retry_after_seconds: null }] };
       if (command === "handoff_generate") return {
         id: "handoff-1", task_id: "task-1", source_event_cursor: 42, projection_version: 1,
         briefing: { goal: "Restore the failed payment test", current_state: { status: "failed" }, last_success: null, failure: { step: "test" }, test_evidence: [], changed_files: ["tests/payment.rs"], constraints: [], decisions: [], open_questions: [], recommendations: ["Retry from the verified test boundary"] },
@@ -308,7 +325,7 @@ test("Sources supports routing filters, process correlation, and admin-only repl
   await page.getByRole("button", { name: "重新路由" }).click();
   await expect.poll(() => page.evaluate(() => (window as any).__PROCESS_TEST__.calls.some((call: any) => call.command === "source_replay" && call.args.id === "source-1"))).toBe(true);
   await page.getByRole("button", { name: "打开进程" }).click();
-  await expect(page).toHaveURL(/#\/sources\/task-1/);
+  await expect(page).toHaveURL(/#\/processes\/task-1/);
   await expect(page.getByRole("heading", { name: "Fix payment failure" })).toBeVisible();
 });
 
@@ -317,6 +334,67 @@ test("read-only Sources exposes correlation without replay controls", async ({ p
   await page.goto("/#/sources");
   await expect(page.getByRole("button", { name: "打开进程" })).toHaveCount(2);
   await expect(page.getByRole("button", { name: "重新路由" })).toHaveCount(0);
+});
+
+test("operator creates and previews a daemon-rendered task template with an audited CAS apply", async ({ page }) => {
+  await installTauriMock(page, "operator");
+  await page.goto("/#/sources/automations/templates");
+  await expect(page.getByRole("heading", { name: "Slack reaction automations" })).toBeVisible();
+  await page.getByRole("button", { name: "New", exact: true }).click();
+  await page.getByLabel("Name", { exact: true }).fill("docs-badge-template");
+  await page.getByLabel("Skill name").fill("docs");
+  await page.getByLabel("Skill invocation").fill("$docs");
+  await page.getByLabel("Workflow").selectOption("analysis");
+  await page.getByLabel("Workspace").selectOption("main");
+  await page.getByRole("button", { name: "Render preview" }).click();
+  await expect(page.getByText(/\$docs: inspect https:\/\/example\.slack\.com/)).toBeVisible();
+  await expect(page.getByText(/no task created/)).toBeVisible();
+  await page.getByRole("button", { name: "Review and save" }).click();
+  const dialog = page.getByRole("dialog", { name: "Apply task template" });
+  await dialog.getByLabel("Audit reason").fill("Create reviewed documentation automation");
+  await dialog.getByRole("button", { name: "Apply template" }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__PROCESS_TEST__.calls.find((call: any) => call.command === "resource_apply")?.args)).toMatchObject({ require_absent: true, expected_revision: null, reason: "Create reviewed documentation automation" });
+});
+
+test("operator simulates trusted badge matching and suspends with a revision", async ({ page }) => {
+  await installTauriMock(page, "operator");
+  await page.goto("/#/sources/automations/bindings/analyze-badge");
+  await page.getByRole("button", { name: "Simulate badge" }).click();
+  await expect(page.getByText("binding_matched")).toBeVisible();
+  await expect(page.getByText(/no mutation or network call/)).toBeVisible();
+  await page.getByRole("button", { name: "Suspend binding" }).click();
+  const dialog = page.getByRole("dialog", { name: "Suspend badge binding" });
+  await dialog.getByLabel("Audit reason").fill("Pause while investigating source noise");
+  await dialog.getByRole("button", { name: "Suspend" }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__PROCESS_TEST__.calls.find((call: any) => call.command === "source_task_binding_suspend")?.args)).toMatchObject({ name: "analyze-badge", expected_revision: "binding-revision" });
+});
+
+test("route diagnosis deep-links provenance and replays only after reviewed consequences", async ({ page }) => {
+  await installTauriMock(page, "operator");
+  await page.goto("/#/sources/automations/routes/route-1");
+  await expect(page.getByRole("complementary", { name: "Route detail" }).locator("p.attention-error")).toContainText("task_create_failed");
+  await expect(page.getByRole("button", { name: "Open Attention" })).toBeVisible();
+  await page.getByRole("button", { name: "Replay" }).click();
+  const dialog = page.getByRole("dialog", { name: "Replay automation route" });
+  await expect(dialog.getByRole("button", { name: "Replay route" })).toBeDisabled();
+  await dialog.getByLabel("Audit reason").fill("Dependency recovered; replay pinned evidence");
+  await dialog.getByLabel(/Adopt the current/).check();
+  await dialog.getByRole("button", { name: "Replay route" }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__PROCESS_TEST__.calls.find((call: any) => call.command === "source_automation_replay")?.args)).toMatchObject({ route_id: "route-1", expected_version: 4, adopt_current_config: true });
+  await page.getByRole("button", { name: "Open Attention" }).click();
+  await expect(page).toHaveURL(/#\/attention\/attention-1/);
+});
+
+test("read-only automation UI is accessible, narrow, and leaks no source secrets into DOM or storage", async ({ page }) => {
+  await installTauriMock(page, "read_only");
+  await page.setViewportSize({ width: 640, height: 820 });
+  await page.goto("/#/sources/automations/bindings/analyze-badge");
+  await expect(page.getByText(/Read-only access/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Review and save" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Suspend binding" })).toHaveCount(0);
+  expect((await new AxeBuilder({ page }).analyze()).violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))).toEqual([]);
+  const snapshot = await page.evaluate(() => ({ text: document.body.textContent, html: document.body.innerHTML, local: JSON.stringify(localStorage), session: JSON.stringify(sessionStorage) }));
+  expect(JSON.stringify(snapshot)).not.toMatch(/signing.secret|bot.token|normalized_json|private message body/i);
 });
 
 test("global shortcuts, visible navigation, theme, and handoff remain integrated", async ({ page }) => {

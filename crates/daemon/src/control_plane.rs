@@ -742,6 +742,7 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         | "SourceTaskBindingSimulate"
         | "SourceAutomationList" | "SourceAutomationGet" | "SourceAutomationWatch"
         | "SourceAutomationSimulate" | "SourceAutomationStatusGet"
+        | "SourceAutomationCatalogGet"
         | "HandoffGet" | "ResumeBoundaryList"
         | "Describe" | "StoreGet" | "StoreList" | "WorkerStatus" | "Check" | "ManifestExport"
         | "DbStatus" | "DbMigrationsList" | "SecretKeyStatus" | "SecretKeyList"

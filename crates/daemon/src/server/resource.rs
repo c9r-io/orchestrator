@@ -8,6 +8,7 @@ pub(crate) async fn apply(
     mut request: Request<ApplyRequest>,
 ) -> Result<Response<ApplyResponse>, Status> {
     super::authorize(server, &request, "Apply").map_err(Status::from)?;
+    let _mutation_guard = server.config_mutation_lock.lock().await;
 
     // Elevate to Admin when the manifest contains CRDs with plugins or hooks.
     // This prevents Operator-role callers (including agent subprocesses via UDS)
@@ -16,8 +17,11 @@ pub(crate) async fn apply(
         super::authorize(server, &request, "ApplyPluginCrd").map_err(Status::from)?;
     }
 
-    let binding_mutation = !request.get_ref().dry_run
-        && manifests_contain_source_task_bindings(&request.get_ref().content);
+    let source_mutation = if request.get_ref().dry_run {
+        None
+    } else {
+        source_resource_apply_kind(&request.get_ref().content)
+    };
     let project_id = request
         .get_ref()
         .project
@@ -29,9 +33,20 @@ pub(crate) async fn apply(
     )
     .map_err(|error| Status::internal(error.to_string()))?;
     let context = request.get_ref().audit.clone();
+    let expected_revision = request.get_ref().expected_revision.clone();
+    let require_absent = request.get_ref().require_absent;
+    if expected_revision.is_some() || require_absent {
+        validate_source_resource_revision(
+            server,
+            &request.get_ref().content,
+            &project_id,
+            expected_revision.as_deref(),
+            require_absent,
+        )?;
+    }
     let dry_run = request.get_ref().dry_run;
     let prune = request.get_ref().prune;
-    let attempt = if binding_mutation {
+    let attempt = if let Some((target_type, action)) = source_mutation {
         Some(
             super::action_audit::begin(
                 server,
@@ -40,16 +55,18 @@ pub(crate) async fn apply(
                 context.as_ref(),
                 super::action_audit::ActionDescriptor {
                     project_id: &project_id,
-                    target_type: "source_task_binding",
+                    target_type,
                     target_id: &format!("manifest:{}", &content_hash[..16]),
-                    action: "source.binding.apply",
-                    expected_version: None,
+                    action,
+                    expected_version: expected_revision.clone(),
                     fencing_token: None,
                     canonical_request: serde_json::json!({
                         "content_hash": content_hash,
                         "project_id": project_id,
                         "dry_run": dry_run,
                         "prune": prune,
+                        "expected_revision": expected_revision,
+                        "require_absent": require_absent,
                     }),
                     fallback_reason_code: "legacy_client",
                     fallback_operator_reason: None,
@@ -64,7 +81,7 @@ pub(crate) async fn apply(
     };
     if let Some(replayed) = attempt.as_ref().filter(|attempt| !attempt.should_execute) {
         return Err(replayed.status(Status::already_exists(
-            "matching SourceTaskBinding apply already audited",
+            "matching source automation resource apply already audited",
         )));
     }
     let req = request.into_inner();
@@ -113,11 +130,99 @@ pub(crate) async fn apply(
     }
 }
 
+fn validate_source_resource_revision(
+    server: &OrchestratorServer,
+    content: &str,
+    project_id: &str,
+    expected_revision: Option<&str>,
+    require_absent: bool,
+) -> Result<(), Status> {
+    use agent_orchestrator::resource::{RegisteredResource, Resource};
+
+    let manifests = agent_orchestrator::resource::parse_manifests_from_yaml(content)
+        .map_err(|error| Status::invalid_argument(error.to_string()))?;
+    if manifests.len() != 1 {
+        return Err(Status::invalid_argument(
+            "optimistic source apply requires exactly one manifest",
+        ));
+    }
+    let manifest = manifests
+        .into_iter()
+        .next()
+        .ok_or_else(|| Status::invalid_argument("optimistic source apply requires one manifest"))?;
+    let agent_orchestrator::crd::ParsedManifest::Builtin(resource) = manifest else {
+        return Err(Status::invalid_argument(
+            "optimistic source apply supports SourceTaskTemplate or SourceTaskBinding",
+        ));
+    };
+    let registered = agent_orchestrator::resource::dispatch_resource(*resource)
+        .map_err(|error| Status::invalid_argument(error.to_string()))?;
+    let (kind, name) = match &registered {
+        RegisteredResource::SourceTaskTemplate(_) => ("SourceTaskTemplate", registered.name()),
+        RegisteredResource::SourceTaskBinding(_) => ("SourceTaskBinding", registered.name()),
+        _ => {
+            return Err(Status::invalid_argument(
+                "optimistic source apply supports SourceTaskTemplate or SourceTaskBinding",
+            ));
+        }
+    };
+    let active = agent_orchestrator::config_load::read_active_config(&server.state)
+        .map_err(|error| Status::failed_precondition(error.to_string()))?;
+    let project = active.config.projects.get(project_id);
+    let current = match kind {
+        "SourceTaskTemplate" => project
+            .and_then(|value| value.source_task_templates.get(name))
+            .map(agent_orchestrator::source_task_template::template_content_hash)
+            .transpose()
+            .map_err(|error| Status::internal(error.to_string()))?,
+        "SourceTaskBinding" => project
+            .and_then(|value| value.source_task_bindings.get(name))
+            .map(agent_orchestrator::source_task_binding::binding_content_hash)
+            .transpose()
+            .map_err(|error| Status::internal(error.to_string()))?,
+        _ => None,
+    };
+    if require_absent && current.is_some() {
+        return Err(Status::aborted(format!(
+            "{kind}/{name} was created after the editor loaded; refresh before saving"
+        )));
+    }
+    if let Some(expected) = expected_revision {
+        match current {
+            Some(actual) if actual == expected => {}
+            Some(_) => {
+                return Err(Status::aborted(format!(
+                    "{kind}/{name} changed after the editor loaded; refresh before saving"
+                )));
+            }
+            None => {
+                return Err(Status::aborted(format!(
+                    "{kind}/{name} no longer exists; refresh before saving"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn manifests_contain_source_task_bindings(content: &str) -> bool {
     content.lines().any(|line| {
         let trimmed = line.trim();
         trimmed == "kind: SourceTaskBinding" || trimmed == "kind: 'SourceTaskBinding'"
     })
+}
+
+fn source_resource_apply_kind(content: &str) -> Option<(&'static str, &'static str)> {
+    if manifests_contain_source_task_bindings(content) {
+        Some(("source_task_binding", "source.binding.apply"))
+    } else if content.lines().any(|line| {
+        let trimmed = line.trim();
+        trimmed == "kind: SourceTaskTemplate" || trimmed == "kind: 'SourceTaskTemplate'"
+    }) {
+        Some(("source_task_template", "source.template.apply"))
+    } else {
+        None
+    }
 }
 
 /// Check whether raw YAML content contains CRD manifests with non-empty

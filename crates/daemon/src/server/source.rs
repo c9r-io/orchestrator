@@ -16,6 +16,58 @@ use tonic::{Request, Response, Status};
 use super::OrchestratorServer;
 use super::action_audit::{self, ActionDescriptor};
 
+fn config_with_source_draft(
+    server: &OrchestratorServer,
+    project_id: &str,
+    content: &str,
+    expected_kind: agent_orchestrator::cli_types::ResourceKind,
+) -> Result<agent_orchestrator::config::OrchestratorConfig, Status> {
+    use agent_orchestrator::resource::Resource;
+
+    if content.is_empty() || content.len() > 64 * 1024 {
+        return Err(Status::invalid_argument(
+            "draft_content must contain 1-65536 bytes",
+        ));
+    }
+    let report = agent_orchestrator::service::system::validate_manifests(
+        &server.state,
+        content,
+        Some(project_id),
+    )
+    .map_err(super::map_core_error)?;
+    if !report.valid {
+        return Err(Status::invalid_argument(report.errors.join("; ")));
+    }
+    let manifests = agent_orchestrator::resource::parse_manifests_from_yaml(content)
+        .map_err(|error| Status::invalid_argument(error.to_string()))?;
+    if manifests.len() != 1 {
+        return Err(Status::invalid_argument(
+            "draft_content must contain exactly one manifest",
+        ));
+    }
+    let manifest = manifests.into_iter().next().ok_or_else(|| {
+        Status::invalid_argument("draft_content must contain exactly one manifest")
+    })?;
+    let agent_orchestrator::crd::ParsedManifest::Builtin(resource) = manifest else {
+        return Err(Status::invalid_argument(
+            "draft_content must contain a builtin source automation resource",
+        ));
+    };
+    let registered = agent_orchestrator::resource::dispatch_resource(*resource)
+        .map_err(|error| Status::invalid_argument(error.to_string()))?;
+    if registered.kind() != expected_kind {
+        return Err(Status::invalid_argument(format!(
+            "draft_content must contain {expected_kind:?}"
+        )));
+    }
+    let active = agent_orchestrator::config_load::read_active_config(&server.state)
+        .map_err(|error| Status::failed_precondition(error.to_string()))?;
+    let mut config = active.config.clone();
+    agent_orchestrator::resource::apply_to_project(&registered, &mut config, project_id)
+        .map_err(|error| Status::invalid_argument(error.to_string()))?;
+    Ok(config)
+}
+
 fn event_to_proto(
     value: agent_orchestrator::source::SourceEventRecord,
     route: Option<&CoreSourceAutomationRoute>,
@@ -370,8 +422,17 @@ pub(crate) async fn automation_simulate(
     }
     let active = agent_orchestrator::config_load::read_active_config(&server.state)
         .map_err(|error| Status::failed_precondition(error.to_string()))?;
+    let config = match req.draft_binding_content.as_deref() {
+        Some(content) => config_with_source_draft(
+            server,
+            &req.project_id,
+            content,
+            agent_orchestrator::cli_types::ResourceKind::SourceTaskBinding,
+        )?,
+        None => active.config.clone(),
+    };
     let simulation = agent_orchestrator::source_automation::simulate_source_automation(
-        &active.config,
+        &config,
         &agent_orchestrator::source_automation::SourceAutomationSimulationInput {
             project_id: req.project_id.clone(),
             match_input: agent_orchestrator::source_task_binding::SourceTaskBindingMatchInput {
@@ -391,7 +452,7 @@ pub(crate) async fn automation_simulate(
     .map_err(|error| Status::failed_precondition(error.to_string()))?;
     let match_result = simulation.match_result;
     let public_rendered = simulation.rendered.map(|rendered| {
-        let policy = active.config.runtime_policy_for_project(&req.project_id);
+        let policy = config.runtime_policy_for_project(&req.project_id);
         agent_orchestrator::source_task_template::redact_rendered_source_task_template(
             &rendered,
             &policy.runner.redaction_patterns,
@@ -715,6 +776,112 @@ pub(crate) async fn automation_status_get(
     }))
 }
 
+pub(crate) async fn automation_catalog_get(
+    server: &OrchestratorServer,
+    request: Request<SourceAutomationCatalogRequest>,
+) -> Result<Response<SourceAutomationCatalogResponse>, Status> {
+    super::authorize(server, &request, "SourceAutomationCatalogGet").map_err(Status::from)?;
+    let requested = request.into_inner().project_id;
+    let project_id = if requested.trim().is_empty() {
+        agent_orchestrator::config::DEFAULT_PROJECT_ID.to_string()
+    } else {
+        requested
+    };
+    let active = agent_orchestrator::config_load::read_active_config(&server.state)
+        .map_err(|error| Status::failed_precondition(error.to_string()))?;
+    let project = active
+        .config
+        .projects
+        .get(&project_id)
+        .ok_or_else(|| Status::not_found(format!("project not found: {project_id}")))?;
+
+    let mut templates = project
+        .source_task_templates
+        .iter()
+        .map(|(name, template)| {
+            Ok(SourceAutomationTemplateResource {
+                name: name.clone(),
+                revision: agent_orchestrator::source_task_template::template_content_hash(template)
+                    .map_err(|error| Status::internal(error.to_string()))?,
+                skill_name: template.skill.name.clone(),
+                skill_invocation: template.skill.invocation.clone(),
+                skill_args: template.skill.args.clone(),
+                workflow: template.action.workflow.clone(),
+                workspace: template.action.workspace.clone(),
+                start: template.action.start,
+                initial_vars: template.action.initial_vars.clone().into_iter().collect(),
+                goal_template: template.goal_template.clone(),
+                allowed_variables: template.allowed_variables.clone(),
+            })
+        })
+        .collect::<Result<Vec<_>, Status>>()?;
+    templates.sort_by(|left, right| left.name.cmp(&right.name));
+
+    let mut bindings = project
+        .source_task_bindings
+        .iter()
+        .map(|(name, binding)| {
+            let installation_id = project
+                .triggers
+                .get(&binding.trigger_ref)
+                .and_then(|trigger| trigger.event.as_ref())
+                .and_then(|event| event.webhook.as_ref())
+                .and_then(|webhook| webhook.installation_id.clone())
+                .unwrap_or_default();
+            Ok(SourceAutomationBindingResource {
+                name: name.clone(),
+                revision: agent_orchestrator::source_task_binding::binding_content_hash(binding)
+                    .map_err(|error| Status::internal(error.to_string()))?,
+                trigger_ref: binding.trigger_ref.clone(),
+                installation_id,
+                reaction: binding.match_rule.reaction.clone(),
+                channels: binding.match_rule.channels.clone(),
+                all_channels: binding.match_rule.all_channels,
+                template_ref: binding.template_ref.clone(),
+                allowed_actor_roles: binding.allowed_actor_roles.clone(),
+                suspended: binding.suspend,
+            })
+        })
+        .collect::<Result<Vec<_>, Status>>()?;
+    bindings.sort_by(|left, right| left.name.cmp(&right.name));
+
+    let mut installations = project
+        .triggers
+        .iter()
+        .filter_map(|(name, trigger)| {
+            let webhook = trigger.event.as_ref()?.webhook.as_ref()?;
+            if webhook.provider.as_deref() != Some("slack") {
+                return None;
+            }
+            let installation_id = webhook.installation_id.clone()?;
+            let mut actors = webhook.actor_roles.iter().collect::<Vec<_>>();
+            actors.sort_by(|left, right| left.0.cmp(right.0));
+            Some(SourceAutomationInstallationResource {
+                trigger_name: name.clone(),
+                installation_id,
+                actor_ids: actors.iter().map(|(id, _)| (*id).clone()).collect(),
+                actor_roles: actors.iter().map(|(_, role)| (*role).clone()).collect(),
+                suspended: trigger.suspend,
+                reaction_routing: webhook.reaction_routing.clone(),
+            })
+        })
+        .collect::<Vec<_>>();
+    installations.sort_by(|left, right| left.trigger_name.cmp(&right.trigger_name));
+    let mut workflows = project.workflows.keys().cloned().collect::<Vec<_>>();
+    workflows.sort();
+    let mut workspaces = project.workspaces.keys().cloned().collect::<Vec<_>>();
+    workspaces.sort();
+
+    Ok(Response::new(SourceAutomationCatalogResponse {
+        project_id,
+        templates,
+        bindings,
+        installations,
+        workflows,
+        workspaces,
+    }))
+}
+
 pub(crate) async fn task_template_preview(
     server: &OrchestratorServer,
     request: Request<SourceTaskTemplatePreviewRequest>,
@@ -728,9 +895,18 @@ pub(crate) async fn task_template_preview(
     };
     let active = agent_orchestrator::config_load::read_active_config(&server.state)
         .map_err(|error| Status::failed_precondition(error.to_string()))?;
+    let config = match req.draft_content.as_deref() {
+        Some(content) => config_with_source_draft(
+            server,
+            &project_id,
+            content,
+            agent_orchestrator::cli_types::ResourceKind::SourceTaskTemplate,
+        )?,
+        None => active.config.clone(),
+    };
     let rendered =
         agent_orchestrator::source_task_template::render_source_task_template_from_config(
-            &active.config,
+            &config,
             &project_id,
             &req.name,
             &agent_orchestrator::source_task_template::SourceTaskTemplateRenderInput {
@@ -751,7 +927,7 @@ pub(crate) async fn task_template_preview(
                 Status::invalid_argument(message)
             }
         })?;
-    let policy = active.config.runtime_policy_for_project(&project_id);
+    let policy = config.runtime_policy_for_project(&project_id);
     let public = agent_orchestrator::source_task_template::redact_rendered_source_task_template(
         &rendered,
         &policy.runner.redaction_patterns,
@@ -797,8 +973,17 @@ pub(crate) async fn task_binding_simulate(
     }
     let active = agent_orchestrator::config_load::read_active_config(&server.state)
         .map_err(|error| Status::failed_precondition(error.to_string()))?;
+    let config = match req.draft_content.as_deref() {
+        Some(content) => config_with_source_draft(
+            server,
+            &req.project_id,
+            content,
+            agent_orchestrator::cli_types::ResourceKind::SourceTaskBinding,
+        )?,
+        None => active.config.clone(),
+    };
     let result = agent_orchestrator::source_task_binding::match_source_task_binding(
-        &active.config,
+        &config,
         &req.project_id,
         &agent_orchestrator::source_task_binding::SourceTaskBindingMatchInput {
             provider: req.provider,
@@ -869,6 +1054,25 @@ async fn mutate_task_binding(
     if name.is_empty() || name.len() > 253 {
         return Err(Status::invalid_argument("name must contain 1-253 bytes"));
     }
+    let _mutation_guard = server.config_mutation_lock.lock().await;
+    let expected_revision = request.get_ref().expected_revision.clone();
+    if let Some(expected) = expected_revision.as_deref() {
+        let active = agent_orchestrator::config_load::read_active_config(&server.state)
+            .map_err(|error| Status::failed_precondition(error.to_string()))?;
+        let current = active
+            .config
+            .projects
+            .get(&project_id)
+            .and_then(|project| project.source_task_bindings.get(&name))
+            .ok_or_else(|| Status::aborted("binding no longer exists; refresh before saving"))?;
+        let actual = agent_orchestrator::source_task_binding::binding_content_hash(current)
+            .map_err(|error| Status::internal(error.to_string()))?;
+        if actual != expected {
+            return Err(Status::aborted(
+                "binding changed after the editor loaded; refresh before saving",
+            ));
+        }
+    }
     let context = request.get_ref().audit.clone();
     let attempt = action_audit::begin(
         server,
@@ -880,9 +1084,9 @@ async fn mutate_task_binding(
             target_type: "source_task_binding",
             target_id: &name,
             action,
-            expected_version: None,
+            expected_version: expected_revision.clone(),
             fencing_token: None,
-            canonical_request: serde_json::json!({"name":name,"project_id":project_id,"suspend":suspend}),
+            canonical_request: serde_json::json!({"name":name,"project_id":project_id,"suspend":suspend,"expected_revision":expected_revision}),
             fallback_reason_code: "legacy_client",
             fallback_operator_reason: None,
             fallback_idempotency_key: None,

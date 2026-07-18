@@ -778,6 +778,54 @@ button:focus-visible {
 .operations-table th, .operations-table td { padding: 9px; border-bottom: 1px solid var(--glass-border-subtle); text-align: left; }
 .operations-table th { color: var(--text-secondary); }
 
+/* Source automation console */
+.sources-header, .automation-header, .pane-heading, .source-event-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.source-primary-nav, .source-subnav { display: flex; gap: 4px; margin: 18px 0; padding: 4px; overflow-x: auto; border: 1px solid var(--glass-border-subtle); border-radius: 12px; background: var(--bg-secondary); }
+.source-primary-nav a, .source-subnav a { padding: 8px 13px; border-radius: 8px; color: var(--text-secondary); font-size: 13px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.source-primary-nav a.active, .source-subnav a.active { color: var(--accent); background: var(--accent-tint); }
+.source-subnav { width: fit-content; margin: 12px 0 18px; }
+.automation-header p, .pane-heading p, .source-event-card p, .process-bindings > p { color: var(--text-secondary); font-size: 13px; }
+.automation-project { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 7px; }
+.automation-project label { display: flex; flex-direction: column; gap: 4px; color: var(--text-secondary); font-size: 11px; font-weight: 700; }
+.automation-project input { min-height: 34px; padding: 6px 9px; color: var(--text-primary); border: 1px solid var(--glass-border-subtle); border-radius: 8px; background: var(--bg-secondary); }
+.automation-split { display: grid; grid-template-columns: minmax(210px, 0.32fr) minmax(0, 1fr); min-height: 520px; overflow: hidden; border: 1px solid var(--glass-border-subtle); border-radius: 16px; background: var(--bg-secondary); }
+.automation-list-pane { min-width: 0; padding: 12px; overflow-y: auto; border-right: 1px solid var(--glass-border-subtle); }
+.automation-list-pane h3, .automation-editor h3 { margin: 0; }
+.automation-row { display: flex; width: 100%; align-items: flex-start; flex-direction: column; gap: 4px; margin: 4px 0; padding: 10px; color: var(--text-primary); text-align: left; border: 1px solid transparent; border-radius: 10px; background: transparent; }
+button.automation-row { cursor: pointer; }
+.automation-row:hover, .automation-row.selected { border-color: var(--glass-border-subtle); background: var(--accent-tint); }
+.automation-row > span { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 6px; }
+.automation-row small { color: var(--text-tertiary); overflow-wrap: anywhere; }
+.automation-editor { margin: 12px; align-self: start; box-shadow: none; }
+.automation-editor:hover { transform: none; }
+.automation-form-grid, .route-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+.automation-form-grid label, .route-filters label, .field-stack, .source-filter { display: flex; min-width: 0; flex-direction: column; gap: 5px; color: var(--text-secondary); font-size: 12px; font-weight: 700; }
+.automation-form-grid input, .automation-form-grid select, .route-filters input, .route-filters select, .field-stack input, .field-stack textarea, .source-filter select { width: 100%; min-height: 38px; padding: 8px 10px; color: var(--text-primary); border: 1px solid var(--glass-border-subtle); border-radius: 9px; background: var(--bg-secondary); }
+.field-stack textarea { min-height: 100px; resize: vertical; }
+.checkbox-row { display: flex; align-items: center; gap: 8px; margin: 10px 0; color: var(--text-secondary); font-size: 12px; }
+.field-error { color: var(--danger); font-size: 11px; font-weight: 600; }
+.field-warning { color: var(--warning); font-size: 11px; }
+.preview-panel { margin: 18px 0; padding: 14px; border: 1px solid var(--glass-border-subtle); border-radius: 12px; }
+.preview-panel legend { padding: 0 6px; color: var(--text-secondary); font-size: 12px; font-weight: 700; }
+.preview-result { margin-top: 12px; padding: 12px; border-radius: 10px; background: var(--bg-tertiary); overflow-wrap: anywhere; }
+.preview-result p { margin: 6px 0; }
+.editor-actions, .dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.route-health { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.route-health span { display: flex; flex-direction: column; padding: 10px; border: 1px solid var(--glass-border-subtle); border-radius: 10px; color: var(--text-secondary); font-size: 11px; }
+.route-health strong { color: var(--text-primary); font-size: 20px; }
+.route-split { min-height: 440px; }
+.link-button { padding: 0; color: var(--accent); text-align: left; border: 0; background: transparent; cursor: pointer; overflow-wrap: anywhere; }
+.attempt-timeline { margin: 10px 0 0 18px; padding: 0; }
+.attempt-timeline li { display: flex; flex-direction: column; gap: 3px; margin-bottom: 10px; padding-left: 4px; color: var(--text-secondary); font-size: 12px; }
+.attempt-timeline strong { color: var(--text-primary); }
+.source-filter { width: min(260px, 100%); margin: 14px 0; }
+.source-event-list { display: grid; gap: 10px; }
+.source-event-card { box-shadow: none; }
+.source-event-heading { align-items: center; flex-wrap: wrap; }
+.source-event-heading time { margin-left: auto; color: var(--text-tertiary); font-size: 11px; }
+.process-bindings { max-width: 760px; }
+.dialog-content { max-width: 480px; width: min(92vw, 480px); }
+
 @media (max-width: 1000px) {
   .page {
     max-width: 100%;
@@ -796,6 +844,12 @@ button:focus-visible {
 }
 
 @media (max-width: 760px) {
+  .automation-header { flex-direction: column; }
+  .automation-split { grid-template-columns: 1fr; overflow: visible; }
+  .automation-list-pane { max-height: 250px; border-right: 0; border-bottom: 1px solid var(--glass-border-subtle); }
+  .automation-form-grid, .route-filters { grid-template-columns: 1fr; }
+  .route-health { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .automation-editor { margin: 8px; }
   .operations-header { flex-direction: column; }
   .operations-runtime-grid { grid-template-columns: 1fr; }
   .operations-table { display: block; overflow-x: auto; }

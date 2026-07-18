@@ -398,19 +398,63 @@ fn diagnostic_entry_from_error(
     rule: impl Into<String>,
     message: impl Into<String>,
 ) -> orchestrator_proto::DiagnosticEntry {
+    let message = message.into();
     orchestrator_proto::DiagnosticEntry {
         source: "manifest_validate".to_string(),
         rule: rule.into(),
         severity: "error".to_string(),
         passed: false,
         blocking: true,
-        message: message.into(),
+        scope: source_automation_field_scope(&message).map(str::to_string),
+        message,
         context: None,
-        scope: None,
         actual: None,
         expected: None,
         risk: None,
         suggested_fix: None,
+    }
+}
+
+fn source_automation_field_scope(message: &str) -> Option<&'static str> {
+    let lower = message.to_ascii_lowercase();
+    if lower.contains("metadata.name") {
+        Some("metadata.name")
+    } else if lower.contains("goaltemplate")
+        || lower.contains("goal_template")
+        || lower.contains("unknown variable")
+        || lower.contains("template token")
+    {
+        Some("spec.goalTemplate")
+    } else if lower.contains("allowedvariables") || lower.contains("allowed_variables") {
+        Some("spec.allowedVariables")
+    } else if lower.contains("skill.invocation") || lower.contains("skill invocation") {
+        Some("spec.skill.invocation")
+    } else if lower.contains("skill.name") || lower.contains("skill name") {
+        Some("spec.skill.name")
+    } else if lower.contains("workflow") {
+        Some("spec.action.workflow")
+    } else if lower.contains("workspace") {
+        Some("spec.action.workspace")
+    } else if lower.contains("templateref") || lower.contains("template_ref") {
+        Some("spec.templateRef")
+    } else if lower.contains("triggerref") || lower.contains("trigger_ref") {
+        Some("spec.triggerRef")
+    } else if lower.contains("allowedactorroles")
+        || lower.contains("allowed_actor_roles")
+        || lower.contains("actorroles")
+        || lower.contains("actor roles")
+    {
+        Some("spec.allowedActorRoles")
+    } else if lower.contains("channel") {
+        Some("spec.match.channels")
+    } else if lower.contains("reaction") || lower.contains("overlap") {
+        Some("spec.match.reaction")
+    } else if lower.contains("targetkind") || lower.contains("target_kind") {
+        Some("spec.match.targetKind")
+    } else if lower.contains("eventkind") || lower.contains("event_kind") {
+        Some("spec.match.eventKind")
+    } else {
+        None
     }
 }
 
@@ -649,6 +693,33 @@ mod tests {
         assert!(!invalid.valid);
         assert_eq!(invalid.message, "Validation failed");
         assert!(!invalid.errors.is_empty());
+    }
+
+    #[test]
+    fn source_automation_diagnostics_identify_responsible_fields() {
+        let cases = [
+            (
+                "unknown variable source_body in goalTemplate",
+                "spec.goalTemplate",
+            ),
+            (
+                "SourceTaskTemplate skill invocation is empty",
+                "spec.skill.invocation",
+            ),
+            (
+                "SourceTaskBinding templateRef does not exist",
+                "spec.templateRef",
+            ),
+            ("allowedActorRoles contains guest", "spec.allowedActorRoles"),
+            ("binding channel policy is empty", "spec.match.channels"),
+            ("reaction overlap detected", "spec.match.reaction"),
+        ];
+        for (message, expected) in cases {
+            let entry = diagnostic_entry_from_error("config_build_failed", message);
+            assert_eq!(entry.scope.as_deref(), Some(expected), "{message}");
+            assert!(entry.blocking);
+        }
+        assert_eq!(source_automation_field_scope("generic config error"), None);
     }
 
     #[tokio::test]
