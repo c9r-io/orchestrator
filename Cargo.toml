@@ -13,6 +13,7 @@ members = [
     "crates/gui",
     "crates/orchestrator-client",
     "crates/integration-tests",
+    "crates/slack-gateway",
 ]
 
 [workspace.package]

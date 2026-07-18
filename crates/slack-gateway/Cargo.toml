@@ -1,0 +1,43 @@
+[package]
+name = "orchestrator-slack-gateway"
+version = "0.3.1"
+description = "Managed Slack OAuth, durable delivery, and bounded provider proxy for Agent Orchestrator"
+repository = "https://github.com/c9r-io/orchestrator"
+keywords = ["orchestrator", "slack", "oauth", "gateway"]
+categories = ["web-programming", "development-tools"]
+license = "MIT"
+edition.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "orchestrator-slack-gateway"
+path = "src/main.rs"
+
+[dependencies]
+aes-gcm-siv = "0.11"
+anyhow = "1.0"
+axum = "0.8"
+base64 = "0.22"
+bytes = "1"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4.6", features = ["derive", "env"] }
+hex = "0.4"
+hmac = "0.13"
+http = "1"
+rand = "0.8"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.11"
+tokio = { version = "1.51", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
+tower-http = { version = "0.6", features = ["limit", "request-id", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+url = "2.5"
+uuid = { version = "1.11", features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "3.26"
+tower = { version = "0.5", features = ["util"] }
+

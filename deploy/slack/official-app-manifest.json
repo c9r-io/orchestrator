@@ -1,0 +1,40 @@
+{
+  "_metadata": {
+    "major_version": 2,
+    "minor_version": 1
+  },
+  "display_information": {
+    "name": "Orchestrator",
+    "description": "Turn reviewed Slack reactions into governed Orchestrator tasks.",
+    "background_color": "#005ecb"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Orchestrator",
+      "always_online": false
+    }
+  },
+  "oauth_config": {
+    "redirect_urls": [
+      "https://gateway.orchestrator.example/slack/oauth/callback"
+    ],
+    "scopes": {
+      "bot": [
+        "reactions:read"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "request_url": "https://gateway.orchestrator.example/slack/events",
+      "bot_events": [
+        "reaction_added",
+        "app_uninstalled",
+        "tokens_revoked"
+      ]
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}
