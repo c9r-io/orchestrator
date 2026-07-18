@@ -57,3 +57,4 @@ PORTAL_BASE_URL="http://localhost:3000"   # If there is a Web UI
 8. For FR-103 reviewed recovery and native Attention notifications, run `07-accessibility.md` + `10-dialogs-notifications.md` with `docs/qa/orchestrator/150-process-console-recovery-notifications-e2e.md`.
 9. Complex animations/glass effects: run at least `04-animations.md` (including performance and reduced motion).
 10. Before a Process Console v1 release, run `docs/qa/orchestrator/153-process-console-release-acceptance.md`; its aggregate gate includes the Console Vitest/Playwright suite, real Tauri/gRPC recovery flow, accessibility, responsive, reduced-motion, and reduced-transparency checks.
+11. For FR-112 Sources → Automations editors and route workbench, run `05-responsive-layout.md`, `06-navigation-ia.md`, `07-accessibility.md`, `08-forms-validation.md`, and `10-dialogs-notifications.md` with `docs/qa/orchestrator/160-process-console-source-automation-ui.md`.

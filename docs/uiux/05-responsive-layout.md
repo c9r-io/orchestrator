@@ -4,6 +4,8 @@
 **Scope**: Breakpoints, layout stability, touch targets, safe areas, small-screen usability  
 **Scenarios**: 5
 
+FR-112 overlay: at 640 px, Automation split panes collapse to one column, the resource/route list remains bounded and reachable, form grids become one column, health cards use two columns, and save/suspend/replay/error controls remain visible. Long route IDs, revisions, URLs, and diagnostics wrap inside their containers. See `docs/qa/orchestrator/160-process-console-source-automation-ui.md` Scenario 5.
+
 ---
 
 ## Scenario 1: Layout Is Usable Across Key Breakpoints
@@ -95,4 +97,3 @@ Verify tables/long IDs/code blocks do not break layout on narrow screens.
 ### Expected
 - If horizontal scrolling is used: the scroll container is explicit and does not cause page-wide horizontal scrolling.
 - If cards are used: key fields are preserved and action button layout remains stable.
-

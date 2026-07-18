@@ -19,6 +19,8 @@ Project-specific overlay: FR-097 resume execution must reject a missing prerequi
 
 FR-109/FR-110 source-routing overlay: exact reaction, target, channel, and Trigger-derived role must produce exactly one enabled `SourceTaskBinding`. Zero matches are explainable no-ops; multiple matches fail closed. Omitted channel/role restrictions, cross-project references, and overlapping rules are rejected before active config publication. Trigger `reactionRouting` defaults to `disabled`; once enabled, a durable automation key over project/installation/message/reaction/binding plus a deterministic task ID must converge delivery replay, concurrent reservation, and restart recovery on one canonical task. The selected binding/template revisions are frozen before provider work, while the outbound credential is resolved freshly from SecretStore. See `docs/qa/orchestrator/157-source-task-binding-badge-matching.md` and `docs/qa/orchestrator/158-slack-permalink-canonical-task-routing.md`.
 
+FR-112 overlay: unsaved GUI preview/simulation must overlay exactly one expected manifest onto an isolated active-config clone and call the production matcher/renderer without persistence or network access. Frontend fields cannot locally select a Skill or binding outside daemon validation. Replay defaults to the pinned generation and only adopts current configuration after explicit reviewed confirmation. See `docs/qa/orchestrator/160-process-console-source-automation-ui.md` Scenarios 1 and 3.
+
 ---
 
 ## Scenario 1: Step Skipping (Bypass Prerequisite Validation)

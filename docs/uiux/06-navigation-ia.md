@@ -39,6 +39,7 @@ Verify sidebar/top-nav active state is accurate so users do not get lost.
 - Avoid multiple items being active at the same time.
 - Attention counters match the actionable card set, and Attention/source deep links open the integrated Process Workspace with the target task.
 - Sources shows a unique active state; opening a routed source reveals matching provenance without losing the Sources navigation context.
+- FR-112 keeps Events, Process bindings, and Automations under the single Sources active state. Templates, Badge bindings, and Recent routes use stable hash deep links; route detail links to source event, Attention, and Process Workspace, and Attention links back to the route. See `docs/qa/orchestrator/160-process-console-source-automation-ui.md` Scenario 3.
 
 ---
 

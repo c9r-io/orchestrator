@@ -6,6 +6,8 @@
 
 FR-097 overlay: in the "Resume consequence preview" form, verify logical boundary and mode have visible labels, operator reason is required, elevated confirmation is required only for unsafe replay, and disabled execution communicates the unmet requirement through adjacent text rather than color alone. See `docs/qa/orchestrator/144-handoff-and-safe-resume.md`.
 
+FR-112 overlay: Template and Badge Binding editors use visible labels and daemon `DiagnosticEntry.scope` for field-local errors; global transport/permission/stale errors remain at the editor level. Preview/simulation is explicitly non-mutating. Apply compares `require_absent` or normalized revision, and a stale response reloads authoritative state before another review. See `docs/qa/orchestrator/160-process-console-source-automation-ui.md` Scenarios 1 and 2.
+
 ---
 
 ## Scenario 1: Field Labels, Help Text, And Required Markers Are Consistent

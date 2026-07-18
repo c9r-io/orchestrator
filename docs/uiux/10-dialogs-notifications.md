@@ -8,6 +8,8 @@ FR-097 overlay: use the "Resume consequence preview" dialog as the high-risk ref
 
 FR-103 overlay: when the dialog is opened by failed-process "Review safe resume", focus must return to that button rather than the panel's "Preview resume" control. Native Attention notifications are eligible only for daemon-declared new/reopened actionable versions, deduplicated by item/version, bounded to title/severity/process/deep link, and backed by an in-app `aria-live` status when permission or delivery is unavailable. See QA-150.
 
+FR-112 overlay: reviewed template/binding apply, suspend/resume, replay, and ignore dialogs require a non-empty audit reason before confirmation. Replay explains pinned versus current configuration and exposes adoption as an explicit checkbox. Dialogs focus the reason, trap Tab/Shift+Tab, close on Escape/Cancel, and restore the exact trigger. See `docs/qa/orchestrator/160-process-console-source-automation-ui.md` Scenarios 2, 3, and 5.
+
 ---
 
 ## Scenario 1: Dialog Open/Close Paths Are Consistent

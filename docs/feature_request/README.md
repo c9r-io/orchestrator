@@ -79,7 +79,6 @@
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
-| FR-112 | Process Console Source Automation UI | P1 | Proposed |
 | FR-113 | Slack Reaction Skill Automation Release Acceptance | P1 | Proposed |
 
 ## 说明

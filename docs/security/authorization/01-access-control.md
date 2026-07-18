@@ -12,6 +12,8 @@ FR-110 overlay: `SourceEventList/Get` may expose route status, binding/template 
 
 FR-111 overlay: `SourceAutomationList/Get/Watch/Simulate/StatusGet` require `read_only+` and expose safe operational projections only. `SourceAutomationReplay/Ignore`, binding suspend/resume, and Trigger suspend/resume require `operator+` plus canonical audit context; replay/ignore additionally require a reason, positive expected route version, and idempotency key. Current-config adoption must re-authorize the original external actor and same stable binding. Generic admin `SourceReplay` must reject automation-linked events. See `docs/qa/orchestrator/159-source-automation-reliability-operations.md` Scenarios 2-4.
 
+FR-112 overlay: Process Console automation editors may expose safe catalog/config metadata and daemon preview/simulation to `read_only+`, but save, suspend/resume, replay, and ignore controls must be absent below Operator. Direct Tauri/RPC invocation remains daemon-authorized. Protected Slack permalink retrieval stays Operator-only and is never part of catalog/list/get/watch. Reviewed mutations carry reason plus resource revision or route version. See `docs/qa/orchestrator/160-process-console-source-automation-ui.md` Scenarios 2 and 4.
+
 ---
 
 ## Background

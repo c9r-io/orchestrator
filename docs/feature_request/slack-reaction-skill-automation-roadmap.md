@@ -166,9 +166,9 @@ FR-109 and FR-110 are closed, so Phase B provides deterministic binding, permali
 | FR | Deliverable | Depends on | Exit gate |
 |---|---|---|---|
 | FR-111 (Closed): [design](../design_doc/orchestrator/122-source-automation-reliability-operations.md), [QA](../qa/orchestrator/159-source-automation-reliability-operations.md) | Retry/rate-limit/restart behavior, route simulation, CLI observability and Attention policy | FR-110 | Operator can explain and safely retry every non-terminal route state |
-| [FR-112](FR-112-process-console-source-automation-ui.md) | Template/binding management UI and recent-route inspection | FR-109 through FR-111, Process Console v1 | Operator can create, preview, bind, suspend and diagnose automation without editing files |
+| FR-112 (Closed): [design](../design_doc/orchestrator/123-process-console-source-automation-ui.md), [QA](../qa/orchestrator/160-process-console-source-automation-ui.md) | Template/binding management UI and recent-route inspection | FR-109 through FR-111, Process Console v1 | Operator can create, preview, bind, suspend and diagnose automation without editing files |
 
-FR-111 is closed, so the Operations beta is complete. Phase C now depends only on FR-112 for the management UI.
+FR-111 and FR-112 are closed, so Phase C delivers both durable operations and the daily management UI. Release closure now proceeds through FR-113.
 
 ### Phase D: Release closure
 

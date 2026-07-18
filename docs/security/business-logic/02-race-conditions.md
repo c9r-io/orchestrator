@@ -22,6 +22,8 @@ FR-109 overlay: binding apply/resume validates a cloned complete project candida
 
 FR-111 overlay: route claim, expired-attempt closure, retry-budget increment, lease fencing, attempt creation, and change append are one transaction. Race multiple workers and require one active route lease, at most one claimed route per installation, stale-token rejection, and a strictly newer token after expiry. Race replay/ignore with the same and different idempotency/version inputs; only one audited transition may win, while the canonical automation key, request fence, and deterministic task ID prevent duplicate task creation across a crash in `creating`. See `docs/qa/orchestrator/159-source-automation-reliability-operations.md` Scenarios 1 and 2.
 
+FR-112 overlay: race two GUI resource editors and require create-if-absent or normalized expected revision to allow one apply only. Binding suspend/resume compares the editor revision under the daemon configuration mutation lock. A stale operation returns `Aborted`, reloads authoritative state, and cannot reuse an old review. Route replay/ignore continues to use FR-111 expected version and idempotency. See `docs/qa/orchestrator/160-process-console-source-automation-ui.md` Scenarios 2 and 3.
+
 ---
 
 ## Scenario 1: Concurrent Use Of A One-Time Token (If Applicable)
