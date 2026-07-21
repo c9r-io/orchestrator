@@ -165,7 +165,7 @@ Prove mode changes retain one logical connection/runtime and all mutation author
 2. With a fresh token, export the exact App, preview a semantic manifest diff, apply with the reviewed version, and verify permission expansion produces `suspended / reauthorization_required` plus one Attention item before OAuth.
 3. Provision dedicated for a team currently using shared mode; complete OAuth with the exact installation/version/source-mode fence, inject stale and unreviewed callbacks, and verify the original owner remains active until a valid switch commits. Perform the reverse dedicated→shared path and verify the old endpoint/pairing is fenced.
 4. Disconnect without deleting the App. Then use a fresh token, typed exact App ID, independent reason/idempotency/version fence, and the dedicated delete action; verify Gateway credentials are retired while local evidence becomes `app_deleted`.
-5. Enable the two fixture badge bindings through preview/simulation, deliver both reactions, verify two distinct deterministic echo tasks, and repeat lifecycle/migration mutations across ReadOnly, Operator, and Admin.
+5. Enable the two fixture badge bindings through preview/simulation, deliver both reactions on the same message, verify two distinct deterministic echo tasks, and repeat lifecycle/migration mutations across ReadOnly, Operator, and Admin.
 
 ### Expected
 
@@ -173,7 +173,7 @@ Prove mode changes retain one logical connection/runtime and all mutation author
 - Upgrade is exact-App/CAS-scoped; secret input is cleared, permission expansion cannot deliver before reauthorization, and lifecycle Attention deduplicates by connection.
 - Connection/installation/Trigger and historical source/route/task evidence remain stable; generation/version advance and exactly one owner/pairing is active.
 - Disconnect retains the App and all evidence. Delete is unavailable while active and requires the separate typed, audited confirmation.
-- `provisioning_mode` does not enter task identity or template variables. Existing route/task dedupe prevents duplicate paid work.
+- `provisioning_mode` does not enter task identity or template variables. Different badge bindings on one message create different automation bindings/tasks, while the same message/reaction/binding identity remains deduplicated.
 - ReadOnly can inspect safe state. Dedicated preview/approve/abandon and connection credential mutations require Admin in GUI and direct RPC.
 
 ### Expected Data State
@@ -189,6 +189,13 @@ SELECT automation_key, COUNT(DISTINCT task_id)
 FROM source_automation_routes
 WHERE project_id='{project_id}' GROUP BY automation_key HAVING COUNT(DISTINCT task_id) != 1;
 -- Expected: no rows
+
+SELECT conversation_id, thread_id, binding_type,
+       COUNT(*) AS bindings, COUNT(DISTINCT task_id) AS tasks
+FROM source_bindings
+WHERE project_id='{project_id}' AND binding_type='automation'
+GROUP BY conversation_id, thread_id, binding_type;
+-- Expected for the same-message two-badge fixture: bindings=2 | tasks=2
 ```
 
 ---
@@ -220,14 +227,30 @@ SELECT MAX(version) FROM gateway_schema_migrations;
 -- Expected: 4
 ```
 
+### Controlled Live Certification Record
+
+Only allowlisted, non-provider-identifying evidence is retained:
+
+| Evidence | Result |
+|---|---|
+| Date / candidate | PASS — 2026-07-22 / `83c063129f2a63e095d8543bd5ac7f9dfe7345f7` |
+| Manifest | PASS — `orchestrator-slack-dedicated-v1`; SHA-256 `088a2ab58d6160f64630d5c5f1f927f02a65f44d6075d7a337ac1969a1936c1f` |
+| Final aggregate | PASS — all 12 FR-115 gates, including workspace/all-features, strict Clippy, GUI, FR-114 shared OAuth, FR-113 same-message vertical, documentation, and diagnostic privacy |
+| Provision / OAuth | PASS — real App create, receipt-gated import, exact-App OAuth, `active / managed_dedicated / workspace`, default disabled Trigger |
+| Same-message badges | PASS — two reactions, two routed automation bindings, two distinct completed echo tasks; duplicate-delivery regression remains one route/task |
+| Reauthorization / recovery | PASS — exact-App reauthorization advanced the installation generation; one Gateway delivery stayed pending while daemon was offline, then acked after restart and created one completed task |
+| Negative canaries | PASS — wrong endpoint plus invalid-signature App/team payload produced zero new deliveries; signed cross-App/App-team cases pass in the automated two-App suite |
+| Disconnect / delete | PASS — disconnect preserved App/evidence; separate fresh-token, exact-App typed delete produced `disconnected / app_deleted`; Configuration Token was revoked |
+| Privacy / cleanup | PASS — browser, OAuth, tunnel, database, log, and token artifacts were destroyed; retained evidence contains no workspace/channel/user/message/App ID, secret, raw payload, OAuth material, or private URL |
+
 ---
 
 ## Checklist
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|---|---|---|---|---|
-| 1 | Discover, validate, approve, create, and install | PASS (automated) | 2026-07-22 | Codex | GUI/Gateway fixed-manifest, receipt-before-OAuth, safe projection, and disabled Trigger contracts pass; live provider record remains in Scenario 5 |
+| 1 | Discover, validate, approve, create, and install | PASS | 2026-07-22 | Codex | Automated GUI/Gateway contract and controlled real Manifest/OAuth provisioning both pass |
 | 2 | Secret custody, receipt retry, and cross-App rejection | PASS (automated) | 2026-07-22 | Codex | Two App/team canaries, encrypted storage, exact endpoint lookup, cross-App rejection, and isolated revocation pass |
 | 3 | Crash, timeout, Attention, resume, and abandon | PASS (automated) | 2026-07-22 | Codex | Create-once state machine, lost receipt retry, session loss/expiry Attention, resume/abandon, and no-blind-retry checks pass |
-| 4 | App lifecycle, mode migration, badge runtime, and RBAC | PASS (automated) | 2026-07-22 | Codex | Exact-App upgrade/suspend/delete, reviewed bidirectional migration fences, 7 lifecycle Playwright scenarios, and FR-113 runtime regression pass |
-| 5 | Migration, UI accessibility, aggregate, and live certification | PARTIAL | 2026-07-22 | Codex | Daemon 37/Gateway 4 populated upgrades, workspace/all-features, strict Clippy, GUI unit/build/Playwright, FR-114 regression, doc/privacy gates pass; controlled dedicated Slack live record is blocked only on browser availability |
+| 4 | App lifecycle, mode migration, badge runtime, and RBAC | PASS | 2026-07-22 | Codex | Automated lifecycle/migration/RBAC plus live reauthorization, same-message two-badge routing, offline cursor recovery, disconnect, and exact-App delete pass |
+| 5 | Migration, UI accessibility, aggregate, and live certification | PASS | 2026-07-22 | Codex | Daemon 37/Gateway 4 upgrades, strict tests/Clippy, GUI unit/build/Playwright, FR-114/FR-113 regression, doc/privacy gates, and the controlled dedicated Slack cleanup record pass |

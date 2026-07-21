@@ -496,7 +496,7 @@ orchestrator daemon maintenance --disable
 - [ ] Trigger installation、actorRoles 和 channel allowlist 已复核。
 - [ ] 两个模板 preview 与两个 binding simulation 都正确。
 - [ ] `reactionRouting` 只在验证后从 `disabled` 改为 `bindings`。
-- [ ] 两个 badge 创建不同 Skill/workflow task。
+- [ ] 在同一条合成消息上添加两个不同 badge，各自创建不同 Skill/workflow task；同一个 badge 的重复 delivery 不创建第二个 task。
 - [ ] ReadOnly 看不到 mutation 或受保护 Slack link。
 - [ ] Attention、route attempt、task timeline 和 provenance 可追踪。
 - [ ] SQLite backup/integrity、migrations 33-34 和 stop-loss 已演练。

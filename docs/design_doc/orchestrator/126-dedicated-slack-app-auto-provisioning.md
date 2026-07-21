@@ -1,7 +1,7 @@
 # Orchestrator - Dedicated Slack App Auto Provisioning
 
 **Module**: Orchestrator / Slack Integration Gateway
-**Status**: Implementation complete; controlled Slack lifecycle certification pending
+**Status**: Released; controlled Slack lifecycle certification complete
 **Related Plan**: FR-115
 **Related QA**: `docs/qa/orchestrator/163-dedicated-slack-app-auto-provisioning.md`
 **Created**: 2026-07-19
@@ -101,6 +101,7 @@ Both migrations are additive and forward-only. Populated daemon v34 and Gateway 
 6. **Runtime convergence**: Gateway's unique team digest keeps one logical installation. Reauthorization or a reviewed shared↔dedicated replacement updates that installation, so connection ID, Trigger, route/task dedupe, and evidence remain stable.
 7. **Lifecycle review sessions**: upgrade secrets and exact App identity live only in a ten-minute, in-memory daemon session. Apply is CAS-fenced to the reviewed connection version; permission expansion atomically advances Gateway/local versions, suspends delivery, emits one Attention item, and starts exact-App OAuth.
 8. **Delete is not disconnect**: disconnect destroys installation access but retains App/evidence. Delete requires a fresh token and typed exact App ID, verifies the App through Slack, then retires the Gateway credential envelope and records `app_deleted` without erasing history.
+9. **Same-message badge fan-out**: primary/related source correlations remain exclusive, but each reserved automation route owns an idempotent automation binding identity. Different reviewed badges on one Slack message can therefore create different tasks, while retries for the same message/reaction/binding still converge on one route and task.
 
 ## Alternatives And Tradeoffs
 
@@ -141,6 +142,17 @@ Both migrations are additive and forward-only. Populated daemon v34 and Gateway 
 - E2E: navigation, three-mode tradeoffs, password clearing, diff approval, OAuth resume, Attention recovery, RBAC, focus, narrow layout, and accessibility scan.
 - Live: one controlled dedicated App plus two badge-to-Skill echo tasks, followed by token revocation and App cleanup under the combined FR-114/FR-115 runbook.
 
+## Controlled Live Certification
+
+The 2026-07-22 controlled sandbox run used candidate `83c063129f2a63e095d8543bd5ac7f9dfe7345f7` and manifest `orchestrator-slack-dedicated-v1` with SHA-256 `088a2ab58d6160f64630d5c5f1f927f02a65f44d6075d7a337ac1969a1936c1f`.
+
+- Real Manifest API provisioning, receipt-gated import, dedicated OAuth, exact-App reauthorization, and disabled-Trigger creation passed.
+- Two different badges on one synthetic message converged to two routed automation bindings and two distinct completed echo tasks. The live run exposed and repaired the prior exclusive automation-correlation key; the deterministic vertical suite now fixes both badges to the same message and still proves duplicate delivery convergence.
+- A real Reaction delivered while the daemon was stopped remained pending in the Gateway, was acknowledged after daemon restart, and produced one additional completed task from the restored cursor.
+- Wrong endpoint and invalid-signature App/team canaries produced no delivery. Strong signed cross-App/App-team isolation remains covered by the two-App automated contract suite.
+- Disconnect retained the workspace-owned App and evidence. A separate fresh-token, exact-App, typed-confirmation delete moved the retained state to `app_deleted`; the Configuration Token was then revoked.
+- All browser, OAuth, database, tunnel, and log artifacts were destroyed after the allowlisted state/count evidence was recorded. No workspace, channel, user, message, App ID, OAuth URL, token, credential, raw body, or private endpoint is retained.
+
 ## QA Docs
 
 - `docs/qa/orchestrator/163-dedicated-slack-app-auto-provisioning.md`
@@ -154,4 +166,4 @@ Both migrations are additive and forward-only. Populated daemon v34 and Gateway 
 - Partial create/import states are retry-safe where provable and otherwise produce deduplicated human Attention without blind App recreation.
 - Dedicated OAuth creates the normal disabled Trigger and the existing two-badge runtime has no mode-specific task semantics.
 - Shared/manual compatibility, strict Clippy, workspace tests, frontend unit/build/E2E, security/doc lint, and populated upgrades pass.
-- Formal FR closure waits for the controlled Slack sandbox record required by FR-114 and FR-115.
+- Controlled Slack sandbox provisioning, badge routing, reauthorization, offline cursor recovery, disconnect, reviewed App deletion, token revocation, and privacy cleanup are certified.

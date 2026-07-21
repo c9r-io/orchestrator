@@ -70,7 +70,7 @@ Migrations 33 and 34 remain additive and forward-only. Migration 33 adds the dur
 ## Key Design
 
 1. The aggregate script coordinates owning slice scripts instead of copying their assertions. `SKIP_DEPENDENCY_GATES=1` avoids nested reruns only when the aggregate has already invoked the dependency directly; standalone scripts retain their original behavior.
-2. The vertical fixture uses two deterministic echo workflows. `agent-implement` selects `$ticket-fix` and `slack-release-implement`; `agent-docs` selects `$qa-doc-gen` and `slack-release-docs`. Both start and complete without an AI provider.
+2. The vertical fixture applies both badges to the same message and uses two deterministic echo workflows. `agent-implement` selects `$ticket-fix` and `slack-release-implement`; `agent-docs` selects `$qa-doc-gen` and `slack-release-docs`. Distinct automation binding identities produce two tasks, while same message/reaction/binding retries remain idempotent. Both start and complete without an AI provider.
 3. The fake Slack API implements only the production boundary used by the daemon: bearer-token validation, deterministic `chat.getPermalink`, HTTP 429 with `Retry-After`, and `invalid_auth`. It records only a coordinate hash, outcome, and attempt number.
 4. Concurrent deliveries use distinct Slack event IDs for the same message/reaction/binding identity. The durable automation key must converge all deliveries on one route and deterministic task.
 5. The restart checkpoint is a persisted `retrying` route after a provider 429. The daemon stops before retry is due, restarts against the same database, and completes the existing route without a new delivery.

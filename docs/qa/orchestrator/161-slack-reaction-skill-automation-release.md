@@ -61,7 +61,7 @@ Prove the complete authenticated Slack-to-task path for two Skills and every req
 
 ### Steps
 
-1. Send signed `reaction_added` deliveries for `agent-implement` and `agent-docs`; verify HTTP 200 and durable `source_events` rows.
+1. Send signed `reaction_added` deliveries for `agent-implement` and `agent-docs` against the same message; verify HTTP 200 and durable `source_events` rows.
 2. Wait for distinct routes and completed tasks; verify binding/template hashes, Skill goal prefix, workflow, permalink, source binding, and canonical action audit.
 3. Send four concurrent event IDs for one message/badge/binding identity and verify one route/task.
 4. Send the fake-API 429 fixture, wait for `retrying`, stop and restart the daemon, and verify the same route completes.
@@ -71,6 +71,7 @@ Prove the complete authenticated Slack-to-task path for two Skills and every req
 
 - Provider acknowledgement follows durable persistence and asynchronous routing.
 - `agent-implement` selects `$ticket-fix`/`slack-release-implement`; `agent-docs` selects `$qa-doc-gen`/`slack-release-docs`.
+- The two different bindings on the same message retain two automation SourceBindings and create two distinct tasks.
 - Duplicate and concurrent delivery never create a second canonical task for one automation identity.
 - Restart consumes the persisted retry checkpoint without requiring another Slack event.
 - Reviewed replay advances generation, creates one task, and resolves the linked Attention item.
@@ -83,6 +84,13 @@ FROM source_automation_routes
 WHERE project_id = '{project_id}'
 GROUP BY message_ts, reaction;
 -- Expected: every message/reaction identity has one route and one task
+
+SELECT message_ts, COUNT(*) AS bindings, COUNT(DISTINCT task_id) AS tasks
+FROM source_automation_routes
+WHERE project_id = '{project_id}'
+  AND reaction IN ('agent-implement', 'agent-docs')
+GROUP BY message_ts;
+-- Expected for the primary two-badge fixture: one row | bindings=2 | tasks=2
 
 SELECT r.id, r.status, r.generation, a.state
 FROM source_automation_routes r

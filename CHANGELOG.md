@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Session read and control rollout is globally authoritative from the `_system` RuntimePolicy; ordinary project policies cannot override the fail-closed control gate
 - Process Console mutations support `action_audit_mode=compatibility|enforced`; rollout begins in compatibility mode and moves to enforced only after clients send canonical action context
 
+### Fixed
+- Slack source automation now permits different reviewed badge bindings on the same message to create distinct tasks, while preserving one route/task for retries of the same message/reaction/binding identity
+
 ### Compatibility And Migrations
 - Migrations 27-32 add Attention/change feeds, handoff/resume state, Session control fencing, source events/bindings, canonical action audit, and Process Console metric observations/rollups. They are additive, forward-only, restart-safe, and preserve existing task and Session identity.
 - Migrations 33-34 add durable source automation routes, frozen template/binding generations, optimistic route versions, bounded retry leases, attempt/change history, and Attention correlation. They are additive and forward-only; normal binary rollback keeps their tables and disables reaction writers before using a verified compatible binary.

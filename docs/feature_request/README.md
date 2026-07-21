@@ -1,6 +1,6 @@
 # Feature Requests
 
-本目录收录 `orchestrator` 的正式功能需求文档。Agent Process Console v1 已完成闭环；产品结构与发布边界分别由[信息架构](../design_doc/orchestrator/110-process-console-information-architecture.md)和[发布验收设计](../design_doc/orchestrator/116-process-console-release-acceptance.md)持续承载。Slack reaction 驱动的 Skill 任务自动化已按 [Slack Reaction Skill Automation Roadmap](slack-reaction-skill-automation-roadmap.md)发布；Managed Slack Connection 与官方 App OAuth 已闭环，后续由[每 workspace 独立 App provisioning](FR-115-dedicated-slack-app-auto-provisioning.md)继续扩展。
+本目录收录 `orchestrator` 的正式功能需求文档。Agent Process Console v1 已完成闭环；产品结构与发布边界分别由[信息架构](../design_doc/orchestrator/110-process-console-information-architecture.md)和[发布验收设计](../design_doc/orchestrator/116-process-console-release-acceptance.md)持续承载。Slack reaction 驱动的 Skill 任务自动化已按 [Slack Reaction Skill Automation Roadmap](slack-reaction-skill-automation-roadmap.md)发布；Managed Slack Connection、官方 App OAuth 与[每 workspace 独立 App provisioning](../design_doc/orchestrator/126-dedicated-slack-app-auto-provisioning.md)均已闭环。
 
 ## 当前条目
 
@@ -79,7 +79,6 @@
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
-| FR-115 | 每 Workspace 独立 Slack App 自动 Provisioning | P0 | In Progress（lifecycle/live certification pending） |
 
 ## 说明
 
@@ -89,6 +88,7 @@
 - `In Progress`: 已有部分阶段落地，剩余阶段仍在治理中
 - `Implemented`: 需求已完成并进入维护阶段
 - 已闭环并删除的 FR，应由对应 `docs/design_doc/**` 与 `docs/qa/**` 继续承载设计和验证信息
+- FR-115 已闭环删除；其 per-workspace private App provisioning、local-only Configuration Token、receipt-gated credential import、exact-App OAuth/events、reviewed lifecycle/migration、same-message two-badge routing、离线 cursor 恢复与受控 Slack sandbox 清理证据现由 `docs/design_doc/orchestrator/126-dedicated-slack-app-auto-provisioning.md`、`docs/qa/orchestrator/163-dedicated-slack-app-auto-provisioning.md`、`docs/guide/slack-dedicated-app-provisioning.md` 与 `scripts/qa/test-slack-dedicated-app-provisioning.sh` 承载
 - FR-114 已闭环删除；其 shared official App OAuth、SourceConnection/Gateway 边界、双 workspace/daemon live certification、恢复/转移/撤销/备份证据与可复跑 harness 现由 `docs/design_doc/orchestrator/125-managed-slack-connection-shared-oauth.md`、`docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md`、`docs/guide/slack-managed-sandbox-certification-runbook.md`、`scripts/qa/test-slack-managed-shared-oauth.sh` 与 `scripts/qa/certify-slack-managed-live.sh` 承载
 - FR-113 已闭环删除；其 clean-tree aggregate、双 badge 垂直链路、并发/重启恢复、真实 Tauri 边界、前向升级/兼容回滚、用户指南与隐私诊断证据现由 `docs/design_doc/orchestrator/124-slack-reaction-skill-automation-release.md`、`docs/qa/orchestrator/161-slack-reaction-skill-automation-release.md`、`docs/guide/slack-reaction-skill-automation.md`、`fixtures/manifests/bundles/slack-skill-automation-release-fixture.yaml` 与 `scripts/qa/test-slack-skill-automation-release.sh` 承载
 - FR-111 已闭环删除；其 bounded retry/lease recovery、Attention 恢复、安全查询/模拟/重放、暂停投影、隐私安全指标与保留策略现由 `docs/design_doc/orchestrator/122-source-automation-reliability-operations.md`、`docs/qa/orchestrator/159-source-automation-reliability-operations.md` 与 `scripts/qa/test-source-automation-operations.sh` 承载
