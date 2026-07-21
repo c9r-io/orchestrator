@@ -36,3 +36,10 @@ site/zh/guide/
 
 # Browser auth state (sensitive)
 *-auth.json
+
+# Operator-owned live certification environments (sensitive)
+.env
+.env.*
+*.env
+*.env.*
+!*.env.example

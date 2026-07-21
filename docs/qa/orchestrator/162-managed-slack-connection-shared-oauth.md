@@ -24,6 +24,17 @@ orchestrator apply --project default \
 
 It does not connect to Slack or claim live certification. Run with a clean worktree for release evidence. `FR114_ALLOW_DIRTY=1` is for local iteration only and must not appear in final release evidence.
 
+The opt-in live smoke entry point is:
+
+```bash
+cp config/qa/slack-live.env.example ~/.config/orchestrator/qa/fr114.env
+chmod 600 ~/.config/orchestrator/qa/fr114.env
+FR114_LIVE_ENV_FILE=~/.config/orchestrator/qa/fr114.env \
+  ./scripts/qa/certify-slack-managed-live.sh
+```
+
+The populated environment file stays outside the repository. Its test-driver token belongs to a separate sandbox-only Slack App with `chat:write` and `reactions:write`; the official Orchestrator App remains read-only with `reactions:read`.
+
 ## Scenario 1: Catalog, OAuth Intent, Connection, And Default Trigger
 
 ### Preconditions
@@ -171,14 +182,39 @@ Execute the full operator procedure in `docs/guide/slack-managed-sandbox-certifi
 - Automated gates are reproducible from a clean commit and attribute failures to the owning slice.
 - The manual Slack integration and FR-107 through FR-113 release aggregate remain green.
 - Live provider behavior matches the fake-provider contract and safe evidence policy.
-- FR-114 is not marked complete until live certification is attached.
+- FR-114 remains complete only while both the deterministic aggregate and the controlled live certification contract stay reproducible.
 
 ## Checklist
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|---|---|---|---|---|
-| 1 | Catalog, OAuth intent, connection, and default Trigger | PARTIAL | 2026-07-18 | Codex | Gateway/SourceConnection focused tests pass; live consent remains |
-| 2 | Multi-workspace isolation, signed delivery, and recovery | PARTIAL | 2026-07-18 | Codex | Gateway owner/delivery/dedupe tests pass; controlled vertical remains |
-| 3 | Disconnect, transfer, migration, and backup | PARTIAL | 2026-07-18 | Codex | Pairing rotation, target claim/ack, Gateway v1→v2, daemon v34→v35, previous-daemon rollback and forward recovery pass; backup/restore drill remains |
-| 4 | CLI/Tauri/GUI/RBAC/accessibility/privacy | PARTIAL | 2026-07-18 | Codex | 4 Connections component tests, 2 focused and 21 aggregate Playwright tests, build, RBAC/focus/privacy checks pass; live Connections Tauri vertical remains |
-| 5 | Repository aggregate and live Slack sandbox | PARTIAL | 2026-07-18 | Codex | Clean commit `8cc91385`: 12 FR-114 gates pass in 471s, including 16 FR-113 release gates in 418s; live Slack certification remains |
+| 1 | Catalog, OAuth intent, connection, and default Trigger | PASS | 2026-07-22 | Codex | Real GUI OAuth, reload recovery, cancel/deny/expiry/replay, default-disabled Trigger, and reauthorization passed |
+| 2 | Multi-workspace isolation, signed delivery, and recovery | PASS | 2026-07-22 | Codex | Distinct installation digests, cross-project negative reads/deliveries, duplicate convergence, and offline cursor recovery passed |
+| 3 | Disconnect, transfer, migration, and backup | PASS | 2026-07-22 | Codex | Exclusive transfer, stale CAS rejection, schema 3/36 integrity, populated restore, credential destruction, and evidence retention passed |
+| 4 | CLI/Tauri/GUI/RBAC/accessibility/privacy | PASS | 2026-07-22 | Codex | Production Tauri path, connection lifecycle, revocation Attention, bounded shutdown, UI aggregate, and zero-match safe-artifact scan passed |
+| 5 | Repository aggregate and live Slack sandbox | PASS | 2026-07-22 | Codex | Run `fr114-live-20260721T154316Z` passed L0-L11; post-fix aggregate passed 12/12 in 494s (nested FR-113 16/16 in 437s); both installations and all private artifacts were removed |
+
+## Controlled Sandbox Certification Record
+
+- Run: `fr114-live-20260721T154316Z`; 2026-07-21 UTC / 2026-07-22 JST.
+- Base commit: `d10317612f1d`, followed by the reviewed live-certification fixes in this closure change.
+- Official App manifest SHA-256: `c0d814d1ac764ced13f0c1e436175c3fdf59d36bda5275f2374e57e16a30093c`.
+- Anonymous installation digests: `da91fdb5a4f325588cd2be9d6555d03ed56e94dac5c88b6d099cca88cf75f0c0`, `8e05e3c5f8235af4bf6778402956b70370dee3728404fe515bc988db500b423e`.
+- Salted daemon digests: `2732b16e0f64339deabec1c6777b3f7962dcb15ae2d9854dcbd0e3067c9ae427`, `a61ebd22a806096d11abd927621ab1bdd14885ae491d051ec0609445e77481d8`.
+
+| Gate | Result | Safe evidence |
+|---|---|---|
+| L0 Automated aggregate | PASS | Live preflight 12/12 in 525s with nested FR-113 16/16 in 461s; post-fix aggregate 12/12 in 494s with nested FR-113 16/16 in 437s |
+| L1 Gateway/App/TLS | PASS | Stable HTTPS origin, healthy capability contract, and reviewed manifest digest |
+| L2 GUI OAuth | PASS | Production GUI navigation and reload recovery; active generation 1/version 1; default routing disabled |
+| L3 OAuth failures | PASS | Cancel, deny, expiry, and callback replay were terminal and created no ghost connection |
+| L4 Tenant isolation | PASS | Distinct installation digests; cross-project list/get and delivery canaries remained isolated |
+| L5 Two badges | PASS | Two distinct fixture Skill/workflow tasks completed; retry created no duplicate; second-tenant canary stayed local |
+| L6 Offline recovery | PASS | One durable delivery; cursor 5→6; lag returned to zero; task delta exactly one |
+| L7 Reauthorize | PASS | Same connection/Trigger; generation 1→2, version 1→2; stale CAS rejected |
+| L8 Transfer | PASS | Old owner suspended, target active at generation 2/version 3, cursor monotonic, one target-owner task |
+| L9 Revocation | PASS | Work stopped; one deduped Attention recorded two occurrences; reauthorization resolved it without cross-tenant impact |
+| L10 Restore/disconnect | PASS | Gateway schema 3 and daemon schema 36 restored with integrity/counts preserved; both credentials destroyed |
+| L11 Privacy/cleanup | PASS | Zero forbidden matches in safe artifacts; both installations, all live processes, browser state, databases, backups, and temporary credentials removed |
+
+Overall: **PASS**. The live run found and closed terminal OAuth expiry projection, top-level Slack message identity, revocation Attention/stale lifecycle retirement, and bounded daemon shutdown with a persistent GUI connection. No open FR-114 observation remains.

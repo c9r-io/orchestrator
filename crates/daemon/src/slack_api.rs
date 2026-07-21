@@ -4,6 +4,7 @@ use futures::StreamExt;
 use reqwest::header::{AUTHORIZATION, RETRY_AFTER};
 use serde::Deserialize;
 use std::fmt;
+#[cfg(any(debug_assertions, feature = "dev-insecure"))]
 use std::net::IpAddr;
 use std::time::Duration;
 

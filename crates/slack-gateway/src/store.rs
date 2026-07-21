@@ -502,38 +502,51 @@ impl GatewayStore {
 
     /// Reads an intent only when the installation-specific poll secret matches.
     pub fn intent_status(&self, id: &str, poll_secret: &str) -> Result<IntentStatus> {
-        let row = self
+        let poll_digest = self
             .connection()?
             .query_row(
-                "SELECT poll_digest,status,expires_at,error_code,installation_id,pairing_secret_ciphertext
-                 FROM oauth_intents WHERE id=?1",
+                "SELECT poll_digest FROM oauth_intents WHERE id=?1",
                 [id],
-                |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, String>(2)?,
-                        row.get::<_, Option<String>>(3)?,
-                        row.get::<_, Option<String>>(4)?,
-                        row.get::<_, Option<String>>(5)?,
-                    ))
-                },
+                |row| row.get::<_, String>(0),
             )
             .optional()?
             .context("intent_not_found")?;
         if !self
             .crypto
-            .verify_digest("intent-poll", poll_secret, &row.0)
+            .verify_digest("intent-poll", poll_secret, &poll_digest)
         {
             bail!("intent_not_found");
         }
+
+        let now = now_ts();
+        self.connection()?.execute(
+            "UPDATE oauth_intents
+             SET status='failed',error_code='oauth_intent_expired',updated_at=?2
+             WHERE id=?1 AND status='pending' AND expires_at<=?2",
+            params![id, now],
+        )?;
+
+        let row = self.connection()?.query_row(
+            "SELECT status,expires_at,error_code,installation_id,pairing_secret_ciphertext
+             FROM oauth_intents WHERE id=?1",
+            [id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                ))
+            },
+        )?;
         let installation = row
-            .4
+            .3
             .as_deref()
             .map(|installation_id| self.installation_projection(installation_id))
             .transpose()?;
         let pairing_secret = row
-            .5
+            .4
             .as_deref()
             .map(|encrypted| {
                 self.crypto
@@ -542,9 +555,9 @@ impl GatewayStore {
             .transpose()?;
         Ok(IntentStatus {
             id: id.to_string(),
-            status: row.1,
-            expires_at: row.2,
-            error_code: row.3,
+            status: row.0,
+            expires_at: row.1,
+            error_code: row.2,
             installation,
             pairing_secret,
         })
@@ -671,6 +684,25 @@ impl GatewayStore {
             }
             if existing.4 == ConnectionState::Disconnected.as_str() {
                 bail!("installation_disconnected");
+            }
+            if existing.4 == ConnectionState::Revoked.as_str() {
+                let retired_cursor = transaction.query_row(
+                    "SELECT MAX(cursor) FROM deliveries WHERE installation_id=?1 AND state!='acked'",
+                    [&existing.0],
+                    |row| row.get::<_, Option<i64>>(0),
+                )?;
+                if let Some(cursor) = retired_cursor {
+                    transaction.execute(
+                        "UPDATE deliveries SET state='acked',acked_at=?2,updated_at=?2
+                         WHERE installation_id=?1 AND state!='acked'",
+                        params![&existing.0, now],
+                    )?;
+                    transaction.execute(
+                        "UPDATE installations SET last_acked_cursor=MAX(last_acked_cursor,?2)
+                         WHERE id=?1",
+                        params![&existing.0, cursor],
+                    )?;
+                }
             }
             (existing.0, existing.3 + 1)
         } else {
@@ -1701,6 +1733,38 @@ mod tests {
     }
 
     #[test]
+    fn authenticated_poll_materializes_expired_intent_once() {
+        let (_temp, store) = setup();
+        let created = store
+            .create_intent(NewIntent {
+                daemon_id: "daemon-a",
+                project_id: "project-a",
+                provisioning_mode: "managed_shared",
+                app_connection_id: None,
+                actor_id: "admin-a",
+                redirect_uri: "https://gateway.example/slack/oauth/callback",
+                requested_scopes: &["reactions:read".into()],
+                ttl: Duration::ZERO,
+            })
+            .expect("intent");
+
+        assert!(store.intent_status(&created.id, "wrong").is_err());
+        let status = store
+            .intent_status(&created.id, &created.poll_secret)
+            .expect("expired status");
+        assert_eq!(status.status, "failed");
+        assert_eq!(status.error_code.as_deref(), Some("oauth_intent_expired"));
+        assert!(status.installation.is_none());
+        assert!(status.pairing_secret.is_none());
+
+        let repeated = store
+            .intent_status(&created.id, &created.poll_secret)
+            .expect("repeat status");
+        assert_eq!(repeated.status, "failed");
+        assert_eq!(repeated.error_code, status.error_code);
+    }
+
+    #[test]
     fn dedicated_import_is_connection_scoped_retry_safe_and_encrypted() {
         let (temp, store) = setup();
         let slot_a = store
@@ -1876,6 +1940,78 @@ mod tests {
                 .installation_credential(&first.id, "daemon-a", &first_secret)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn reauthorization_retires_the_revoked_generation_lifecycle_backlog() {
+        let (_temp, store) = setup();
+        let (_, first) = create_completed(&store);
+        store
+            .revoke_team("T123", "slack_credential_revoked")
+            .expect("revoke");
+        store
+            .enqueue_delivery(&NormalizedSlackEvent {
+                external_event_id: "Ev-uninstalled".into(),
+                event_type: "installation_revoked".into(),
+                installation_id: first.id.clone(),
+                external_actor_id: None,
+                reaction: None,
+                channel_id: None,
+                message_ts: None,
+                event_ts: "1700000001.000100".into(),
+                team_digest: first.team_digest.clone(),
+                enterprise_digest: None,
+            })
+            .expect("enqueue revocation");
+        let retired_cursor = store
+            .connection()
+            .expect("connection")
+            .query_row(
+                "SELECT MAX(cursor) FROM deliveries WHERE installation_id=?1",
+                [&first.id],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("revocation cursor");
+
+        let created = store
+            .create_intent(NewIntent {
+                daemon_id: "daemon-a",
+                project_id: "project-a",
+                provisioning_mode: "managed_shared",
+                app_connection_id: None,
+                actor_id: "admin-a",
+                redirect_uri: "https://gateway.example/slack/oauth/callback",
+                requested_scopes: &["reactions:read".into()],
+                ttl: Duration::from_secs(600),
+            })
+            .expect("reauthorization intent");
+        let pending = store
+            .pending_intent_by_state(&created.oauth_state)
+            .expect("pending");
+        let reauthorized = store
+            .complete_intent(
+                &pending,
+                OAuthInstallation {
+                    team_id: "T123",
+                    enterprise_id: None,
+                    scopes: &["reactions:read".into()],
+                    bot_token: "xoxb-recovered",
+                },
+            )
+            .expect("reauthorize");
+
+        assert_eq!(reauthorized.state, "active");
+        assert_eq!(reauthorized.last_acked_cursor, retired_cursor);
+        let remaining: i64 = store
+            .connection()
+            .expect("connection")
+            .query_row(
+                "SELECT COUNT(*) FROM deliveries WHERE installation_id=?1 AND state!='acked'",
+                [&first.id],
+                |row| row.get(0),
+            )
+            .expect("remaining deliveries");
+        assert_eq!(remaining, 0);
     }
 
     #[test]

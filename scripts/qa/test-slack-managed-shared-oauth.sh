@@ -75,7 +75,9 @@ run_gate frontend-build FR-114 bash -c 'cd gui && npm run build'
 run_gate fixture-contract FR-114 bash -c '
   rg -q "connectionRef: conn-managed-shared-fixture" fixtures/manifests/bundles/slack-managed-shared-oauth-fixture.yaml &&
   rg -q "reactionRouting: disabled" fixtures/manifests/bundles/slack-managed-shared-oauth-fixture.yaml &&
-  ! rg -q "kind: SecretStore|signing|bot-token|xox[baprs]-" fixtures/manifests/bundles/slack-managed-shared-oauth-fixture.yaml
+  ! rg -q "kind: SecretStore|signing|bot-token|xox[baprs]-" fixtures/manifests/bundles/slack-managed-shared-oauth-fixture.yaml &&
+  bash -n scripts/qa/test-slack-managed-live-smoke.sh scripts/qa/certify-slack-managed-live.sh &&
+  ! rg -q "xox[baprs]-[A-Za-z0-9-]+" config/qa/slack-live.env.example scripts/qa/test-slack-managed-live-smoke.sh scripts/qa/certify-slack-managed-live.sh
 '
 run_gate documentation-lint documentation ./scripts/qa-doc-lint.sh
 
@@ -107,4 +109,3 @@ TOTAL_ELAPSED=$(( $(date +%s) - STARTED_AT ))
 echo ""
 echo "Managed Slack shared OAuth QA: ${#COMPLETED[@]} gates passed in ${TOTAL_ELAPSED}s"
 printf '  %s\n' "${COMPLETED[@]}"
-

@@ -6,6 +6,12 @@ rust-version.workspace = true
 license = "MIT"
 publish = false
 
+[features]
+# Production Tauri builds must load the embedded frontend instead of devUrl.
+# The Tauri CLI enables this feature automatically; repository cargo-based
+# release and certification commands enable it explicitly.
+custom-protocol = ["tauri/custom-protocol"]
+
 [dependencies]
 orchestrator-client = { path = "../orchestrator-client", version = "0.3.1" }
 orchestrator-proto = { path = "../proto", version = "0.3.1" }

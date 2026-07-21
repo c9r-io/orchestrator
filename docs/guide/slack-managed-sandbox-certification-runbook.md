@@ -52,7 +52,7 @@ Sandbox workspace B ─┘                                      │
 - 两个 daemon 都只能访问本次 sandbox Gateway；Gateway/daemon SQLite 不能共享。
 - 只运行 [`slack-managed-shared-oauth-fixture.yaml`](../../fixtures/manifests/bundles/slack-managed-shared-oauth-fixture.yaml) 中的确定性 `echo` agent，不运行真实 AI agent，不消耗 API credits。
 - 测试 Slack 消息只写合成内容，例如 `FR114 sandbox echo request {run-id}`，不要包含代码、ticket、客户或人员信息。
-- 两个 workspace 都准备 `:agent-implement:` 与 `:agent-docs:`；manifest 中使用不带冒号的 `agent-implement`/`agent-docs`。
+- 两个 workspace 都准备两种 badge。为了零配置复跑，优先使用 Slack 内置 `:eyes:` 与 `:white_check_mark:`；若使用自定义 `:agent-implement:` / `:agent-docs:`，manifest 中必须使用不带冒号的名称。
 
 ## 3. 证据与 secret 处理规则
 
@@ -127,8 +127,8 @@ test -z "$(git status --porcelain)"
 cargo build --release \
   -p orchestrator-slack-gateway \
   -p orchestratord \
-  -p orchestrator-cli \
-  -p orchestrator-gui
+  -p orchestrator-cli
+cargo build --release -p orchestrator-gui --features custom-protocol
 ```
 
 记录安全元数据：
@@ -347,6 +347,28 @@ export OWNER_B="$(jq -r '.[0].owner_daemon_id' "$PRIVATE_RUN_ROOT/connection-b-p
 - 不要把跨租户负测错误的完整 payload 保存到安全报告，只记录结果和 stable error code。
 
 ## 10. L5：配置两个 Badge 并创建不同 Echo Task
+
+### 10.1 可复跑的 test-driver
+
+首次人工认证可以直接在 Slack UI 发消息和添加 reaction。后续回归建议使用一个**独立、仅限 sandbox 的 test-driver App** 调用 `chat.postMessage` 和 `reactions.add`：
+
+- 官方 Orchestrator App 继续只持有 `reactions:read`，不为测试扩大生产权限；
+- test-driver App 只安装在受控 sandbox，持有 `chat:write` 与 `reactions:write`；
+- 将 driver token 与 live identity 存在仓库外 mode `0600` 文件，绝不提交。
+
+```bash
+mkdir -p ~/.config/orchestrator/qa
+cp config/qa/slack-live.env.example ~/.config/orchestrator/qa/fr114.env
+chmod 600 ~/.config/orchestrator/qa/fr114.env
+${EDITOR:-vi} ~/.config/orchestrator/qa/fr114.env
+
+FR114_LIVE_ENV_FILE=~/.config/orchestrator/qa/fr114.env \
+  ./scripts/qa/certify-slack-managed-live.sh
+```
+
+`certify-slack-managed-live.sh` 先运行确定性的 FR-114/FR-113 aggregate，再执行真实 Slack smoke。smoke 会验证 active/caught-up connection、无副作用 binding simulation、两个 badge → 两个不同 Skill task、reaction remove/re-add 幂等，以及最终 backlog/lease/Attention 归零；无论成功失败都会删除合成 Slack 消息和私密临时响应。OAuth、transfer、revocation、backup/restore 等低频生命周期仍按 L2-L10 人工步骤执行。
+
+### 10.2 Binding 与真实 reaction
 
 自动 Trigger 包含真实 installation/connection 引用。把它导出到私密临时文件：
 

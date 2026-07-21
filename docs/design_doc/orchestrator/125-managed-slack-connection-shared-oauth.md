@@ -1,12 +1,12 @@
 # Orchestrator - Managed Slack Connection And Shared OAuth
 
-**Module**: Orchestrator / Slack Integration Gateway  
-**Status**: Implemented; live Slack certification pending  
-**Related Plan**: FR-114  
-**Related QA**: `docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md`  
-**Live Runbook**: `docs/guide/slack-managed-sandbox-certification-runbook.md` \
-**Created**: 2026-07-18  
-**Last Updated**: 2026-07-19
+**Module**: Orchestrator / Slack Integration Gateway
+**Status**: Approved and live-certified
+**Related Plan**: FR-114
+**Related QA**: `docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md`
+**Live Runbook**: `docs/guide/slack-managed-sandbox-certification-runbook.md`
+**Created**: 2026-07-18
+**Last Updated**: 2026-07-22
 
 ## Background
 
@@ -106,7 +106,7 @@ Daemon migration 35 adds `source_connections`, `source_connection_intents`, and 
 
 Gateway schema version 1 adds official app credentials, OAuth intents, installations, normalized deliveries, and audit. Version 2 adds durable owner-transfer handoffs. All migrations are additive and forward-only.
 
-OAuth intent transitions are `pending → completed | cancelled | failed`. State and poll secrets are random, short-lived, single-use, context-bound digests. Reauthorization rotates the bot token and pairing, increments installation generation/version, and invalidates the old generation.
+OAuth intent transitions are `pending → completed | cancelled | expired | failed`. State and poll secrets are random, short-lived, single-use, context-bound digests. An authenticated status poll materializes an overdue pending intent as `oauth_intent_expired`; it never remains pending indefinitely. Reauthorization rotates the bot token and pairing, increments installation generation/version, and invalidates the old generation. If the previous generation was revoked, its already-authorized lifecycle backlog is retired before the new generation becomes active so a stale uninstall event cannot revoke the replacement credential.
 
 Connection lifecycle is `connecting → active`, with controlled transitions to `attention`, `suspended`, `revoked`, or `disconnected`. Disconnect destroys local and Gateway access material while retaining safe execution evidence.
 
@@ -131,6 +131,10 @@ The initial contract requests `reactions:read`, subscribes to `reaction_added`, 
 Gateway verifies Slack timestamp and HMAC over raw bytes before parsing. It persists only allowlisted normalized fields: event identity, team/enterprise digest, actor, reaction, channel, message timestamp, and event timestamp. It does not retain raw payloads or message content.
 
 Slack receives success only after durable enqueue. The daemon claims bounded batches using the installation pairing, validates owner/generation/tenant/cursor, ingests with the existing external-event dedupe, and acknowledges monotonic cursors. The permalink proxy exposes only `chat.getPermalink`; response URLs must be HTTPS Slack hosts and contain the requested channel coordinate.
+
+For `reaction_added`, the normalized conversation identity uses the message timestamp as `thread_id` even for a top-level message. This keeps the provider-neutral target identity aligned with manual Slack ingestion and allows the existing route validator and duplicate convergence key to be reused.
+
+`app_uninstalled` and bot-token revocation create one project-scoped `source_connection_revoked` Attention item. Its dedupe key is the logical connection ID, repeated occurrences increment the same item, and successful reauthorization resolves it without exposing the workspace label.
 
 ## UI Design And Accessibility
 
@@ -175,8 +179,10 @@ Logs and audit include request/intent/installation IDs or stable digests, genera
 
 Deploy Gateway with its own database backup, master-key recovery, TLS termination, endpoint allowlist, and retention policy. Upgrade Gateway schema before enabling a daemon capability that depends on it. Stop-loss disables managed connection creation/delivery while preserving Gateway queue and daemon source/task evidence. Normal rollback is forward-only; restore backups only for migration failure or corruption.
 
+Production GUI certification must build `orchestrator-gui` with the `custom-protocol` feature and Vite relative asset paths. Daemon shutdown allows five seconds for gRPC connection drain, then exits cleanly even when a persistent GUI client remains connected.
+
 ## Testing And Acceptance
 
 Automated acceptance is defined in `docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md` and `scripts/qa/test-slack-managed-shared-oauth.sh`. It covers schema/state fencing, OAuth failure contracts, provider verification, durable delivery, transfer claim/ack, CLI/Tauri/UI/RBAC/privacy, migration compatibility, FR-113 regression, and repository quality gates.
 
-A controlled Slack sandbox certification remains a separate, non-CI gate because it requires real workspace consent and external credentials. Execute `docs/guide/slack-managed-sandbox-certification-runbook.md`; FR-114 must remain In Progress until its L0-L11 evidence is recorded without private workspace data. Dedicated-app certification is governed separately by `docs/guide/slack-dedicated-app-provisioning.md` and QA-163.
+A controlled Slack sandbox certification remains a separate, non-CI gate because it requires real workspace consent and external credentials. The 2026-07-21/22 run passed L0-L11 with two workspaces, two isolated daemons, real OAuth, real reactions, transfer, revocation, backup/restore, disconnect, uninstall, and privacy cleanup. Future smoke runs use `scripts/qa/certify-slack-managed-live.sh` with an operator-owned mode-0600 environment file and a separate sandbox test-driver App. Dedicated-app certification is governed separately by `docs/guide/slack-dedicated-app-provisioning.md` and QA-163.

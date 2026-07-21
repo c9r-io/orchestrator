@@ -1,5 +1,6 @@
 //! Outbound durable delivery reconciliation for managed SourceConnections.
 
+use agent_orchestrator::attention::{AttentionCandidate, AttentionSeverity};
 use agent_orchestrator::source::{
     AsyncSourceRepository, ConversationRef, ExternalActorRef, ExternalArtifactRef,
     IngestSourceEvent, NormalizedSourceEvent, SourceEventKind, SourceReactionRef,
@@ -239,8 +240,41 @@ async fn reconcile_connection(
                 &format!("req-gateway-revocation-{cursor}"),
             )
             .await?;
+        state
+            .attention_repo
+            .upsert_external_candidate(revocation_attention(&latest, cursor))
+            .await?;
     }
     Ok(())
+}
+
+fn revocation_attention(connection: &SourceConnection, cursor: i64) -> AttentionCandidate {
+    let dedupe_key = format!("source-connection-revoked:{}", connection.id);
+    let digest = hex::encode(Sha256::digest(dedupe_key.as_bytes()));
+    let occurred_at = agent_orchestrator::config_load::now_ts();
+    AttentionCandidate {
+        id: format!("attention-source-connection-{}", &digest[..24]),
+        project_id: connection.project_id.clone(),
+        task_id: String::new(),
+        task_item_id: None,
+        step_id: None,
+        session_id: None,
+        kind: "source_connection_revoked".into(),
+        severity: AttentionSeverity::Intervention,
+        title: "Slack connection needs reauthorization".into(),
+        summary: "Slack revoked this managed connection. Reauthorize it before resuming source automation.".into(),
+        requested_decision: Some(serde_json::json!({
+            "connection_id": connection.id,
+            "safe_error_code": "slack_credential_revoked"
+        })),
+        actions: vec![],
+        dedupe_key,
+        source_event_id: format!("gateway-revocation:{cursor}"),
+        source_route_id: None,
+        source_binding_name: None,
+        occurred_at,
+        sla_deadline: None,
+    }
 }
 
 fn validate_delivery(connection: &SourceConnection, delivery: &GatewayDelivery) -> Result<()> {
@@ -267,6 +301,23 @@ async fn ingest_reaction(
     connection: &SourceConnection,
     event: &GatewayEvent,
 ) -> Result<()> {
+    let normalized = normalize_reaction(&connection.installation_id, event)?;
+    let encoded = serde_json::to_vec(&normalized)?;
+    repository
+        .ingest(IngestSourceEvent {
+            project_id: connection.project_id.clone(),
+            event: normalized,
+            payload_hash: hex::encode(Sha256::digest(encoded)),
+            raw_payload_ref: None,
+        })
+        .await?;
+    Ok(())
+}
+
+fn normalize_reaction(
+    installation_id: &str,
+    event: &GatewayEvent,
+) -> Result<NormalizedSourceEvent> {
     let actor = event
         .external_actor_id
         .as_ref()
@@ -285,7 +336,7 @@ async fn ingest_reaction(
         .context("managed_reaction_timestamp_missing")?;
     let normalized = NormalizedSourceEvent {
         provider: "slack".to_string(),
-        installation_id: connection.installation_id.clone(),
+        installation_id: installation_id.to_string(),
         external_event_id: event.external_event_id.clone(),
         kind: SourceEventKind::ReactionAdded,
         reaction: Some(SourceReactionRef {
@@ -302,7 +353,7 @@ async fn ingest_reaction(
         },
         conversation: Some(ConversationRef {
             conversation_id: channel.clone(),
-            thread_id: None,
+            thread_id: Some(message_ts.clone()),
             top_level: true,
         }),
         text_summary: None,
@@ -310,16 +361,7 @@ async fn ingest_reaction(
         attachments: vec![],
         occurred_at: slack_timestamp_to_rfc3339(&event.event_ts)?,
     };
-    let encoded = serde_json::to_vec(&normalized)?;
-    repository
-        .ingest(IngestSourceEvent {
-            project_id: connection.project_id.clone(),
-            event: normalized,
-            payload_hash: hex::encode(Sha256::digest(encoded)),
-            raw_payload_ref: None,
-        })
-        .await?;
-    Ok(())
+    Ok(normalized)
 }
 
 fn slack_timestamp_to_rfc3339(value: &str) -> Result<String> {
@@ -373,6 +415,72 @@ fn stable_error(error: &anyhow::Error) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn managed_reaction_preserves_canonical_message_identity() {
+        let event = GatewayEvent {
+            external_event_id: "event-1".into(),
+            event_type: "reaction_added".into(),
+            installation_id: "installation-1".into(),
+            external_actor_id: Some("actor-1".into()),
+            reaction: Some("eyes".into()),
+            channel_id: Some("channel-1".into()),
+            message_ts: Some("1700000000.000100".into()),
+            event_ts: "1700000001.000100".into(),
+            team_digest: "team-digest".into(),
+            enterprise_digest: None,
+        };
+
+        let normalized = normalize_reaction("installation-1", &event).expect("normalize");
+        let conversation = normalized.conversation.expect("conversation");
+        assert_eq!(conversation.conversation_id, "channel-1");
+        assert_eq!(conversation.thread_id.as_deref(), Some("1700000000.000100"));
+        assert_eq!(
+            normalized.reaction.expect("reaction").target.external_id,
+            "channel-1:1700000000.000100"
+        );
+    }
+
+    #[test]
+    fn connection_revocation_attention_is_stable_and_private() {
+        let connection = SourceConnection {
+            id: "connection-1".into(),
+            project_id: "project-1".into(),
+            provider: "slack".into(),
+            display_label: "private workspace label".into(),
+            provisioning_mode: SourceConnectionMode::ManagedShared,
+            app_ownership: "orchestrator".into(),
+            app_id_digest: None,
+            manifest_version: None,
+            provision_state: None,
+            provision_error_code: None,
+            installation_id: "installation-1".into(),
+            installation_id_digest: "team-digest".into(),
+            enterprise_id_digest: None,
+            owner_daemon_id: "daemon-1".into(),
+            generation: 1,
+            version: 2,
+            state: SourceConnectionState::Revoked,
+            capabilities: vec![],
+            scopes: vec!["reactions:read".into()],
+            trigger_name: Some("trigger-1".into()),
+            last_delivery_at: None,
+            last_acked_cursor: 7,
+            delivery_lag: 0,
+            last_error_code: Some("slack_credential_revoked".into()),
+            created_at: "2026-01-01T00:00:00Z".into(),
+            updated_at: "2026-01-01T00:00:01Z".into(),
+            reauthorized_at: None,
+            disconnected_at: None,
+        };
+
+        let first = revocation_attention(&connection, 7);
+        let replay = revocation_attention(&connection, 8);
+        assert_eq!(first.id, replay.id);
+        assert_eq!(first.dedupe_key, replay.dedupe_key);
+        assert_eq!(first.kind, "source_connection_revoked");
+        assert!(!first.summary.contains(&connection.display_label));
+    }
 
     #[test]
     fn converts_slack_decimal_timestamp_without_losing_fraction() {

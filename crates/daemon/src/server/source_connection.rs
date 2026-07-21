@@ -1175,11 +1175,7 @@ async fn reconcile_intent(
         return Ok(response);
     }
     if status.status != "completed" {
-        let terminal = if status.status == "cancelled" {
-            "cancelled"
-        } else {
-            "failed"
-        };
+        let terminal = local_terminal_intent_status(&status.status, status.error_code.as_deref());
         let intent = repository
             .complete_intent(
                 project_id,
@@ -1251,6 +1247,17 @@ async fn reconcile_intent(
             pairing_secret_ciphertext: Some(pairing_secret_ciphertext),
             request_id: format!("req-oauth-{intent_id}"),
         })
+        .await
+        .map_err(internal)?;
+    server
+        .state
+        .attention_repo
+        .resolve_external_candidate(
+            project_id,
+            &format!("source-connection-revoked:{connection_id}"),
+            &format!("source-connection-reauthorized:{intent_id}"),
+            "source_connection_reauthorized",
+        )
         .await
         .map_err(internal)?;
     if let Some(provisioning_id) = installation.app_connection_id.as_deref() {
@@ -1743,4 +1750,33 @@ fn internal(error: impl std::fmt::Display) -> Status {
 
 fn unavailable(error: impl std::fmt::Display) -> Status {
     Status::unavailable(error.to_string())
+}
+
+fn local_terminal_intent_status<'a>(gateway_status: &'a str, error_code: Option<&str>) -> &'a str {
+    if gateway_status == "cancelled" {
+        "cancelled"
+    } else if gateway_status == "expired" || error_code == Some("oauth_intent_expired") {
+        "expired"
+    } else {
+        "failed"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::local_terminal_intent_status;
+
+    #[test]
+    fn gateway_expiry_is_projected_as_a_local_expired_intent() {
+        assert_eq!(
+            local_terminal_intent_status("failed", Some("oauth_intent_expired")),
+            "expired"
+        );
+        assert_eq!(local_terminal_intent_status("expired", None), "expired");
+        assert_eq!(local_terminal_intent_status("cancelled", None), "cancelled");
+        assert_eq!(
+            local_terminal_intent_status("failed", Some("provider_denied")),
+            "failed"
+        );
+    }
 }

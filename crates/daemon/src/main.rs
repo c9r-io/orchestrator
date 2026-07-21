@@ -179,6 +179,11 @@ enum ControlPlaneCommands {
     },
 }
 
+async fn force_server_shutdown(started: Arc<tokio::sync::Notify>) {
+    started.notified().await;
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
 
@@ -897,10 +902,12 @@ fn main() -> Result<()> {
         );
 
         // Shutdown future: listen for OS signals, restart request, or RPC shutdown
+        let server_shutdown_started = Arc::new(tokio::sync::Notify::new());
         let shutdown_fut = {
             let inner2 = inner.clone();
             let mut restart_rx2 = restart_rx.clone();
             let notify = shutdown_notify.clone();
+            let server_shutdown_started = server_shutdown_started.clone();
             async move {
                 tokio::select! {
                     result = lifecycle::shutdown_signal(inner2) => {
@@ -913,6 +920,7 @@ fn main() -> Result<()> {
                         tracing::info!("shutdown triggered via RPC");
                     }
                 }
+                server_shutdown_started.notify_one();
             }
         };
 
@@ -926,7 +934,7 @@ fn main() -> Result<()> {
                 args.control_plane_dir.as_deref(),
             )?;
             info!(%addr, "listening on TCP");
-            Server::builder()
+            let serving = Server::builder()
                 .layer(protection.clone().layer())
                 .tls_config(secure.tls)?
                 .add_service(
@@ -941,9 +949,13 @@ fn main() -> Result<()> {
                     ))
                     .max_encoding_message_size(64 * 1024 * 1024),
                 )
-                .serve_with_shutdown(addr, shutdown_fut)
-                .await
-                .context("gRPC server error")?;
+                .serve_with_shutdown(addr, shutdown_fut);
+            tokio::select! {
+                result = serving => result.context("gRPC server error")?,
+                _ = force_server_shutdown(server_shutdown_started.clone()) => {
+                    tracing::warn!("forcing gRPC server shutdown after connection drain timeout");
+                }
+            }
         } else {
             #[cfg(feature = "dev-insecure")]
             let insecure_addr = args.insecure_bind.as_deref();
@@ -954,15 +966,19 @@ fn main() -> Result<()> {
                 let addr = addr.parse().context("invalid insecure bind address")?;
                 info!(%addr, "listening on insecure TCP");
                 tracing::warn!("insecure TCP control-plane enabled; use only for local development");
-                Server::builder()
+                let serving = Server::builder()
                     .layer(protection.clone().layer())
                     .add_service(
                         OrchestratorServiceServer::new(service)
                             .max_encoding_message_size(64 * 1024 * 1024),
                     )
-                    .serve_with_shutdown(addr, shutdown_fut)
-                    .await
-                    .context("gRPC server error")?;
+                    .serve_with_shutdown(addr, shutdown_fut);
+                tokio::select! {
+                    result = serving => result.context("gRPC server error")?,
+                    _ = force_server_shutdown(server_shutdown_started.clone()) => {
+                        tracing::warn!("forcing gRPC server shutdown after connection drain timeout");
+                    }
+                }
             } else {
                 // UDS transport
                 use tokio::net::UnixListener;
@@ -1008,15 +1024,19 @@ fn main() -> Result<()> {
                 emit_daemon_event(&inner, "daemon_socket_ready", serde_json::json!({
                     "socket": socket_path.to_string_lossy(),
                 })).await;
-                Server::builder()
+                let serving = Server::builder()
                     .layer(protection.clone().layer())
                     .add_service(
                         OrchestratorServiceServer::new(service)
                             .max_encoding_message_size(64 * 1024 * 1024),
                     )
-                    .serve_with_incoming_shutdown(uds_stream, shutdown_fut)
-                    .await
-                    .context("gRPC server error")?;
+                    .serve_with_incoming_shutdown(uds_stream, shutdown_fut);
+                tokio::select! {
+                    result = serving => result.context("gRPC server error")?,
+                    _ = force_server_shutdown(server_shutdown_started.clone()) => {
+                        tracing::warn!("forcing gRPC server shutdown after connection drain timeout");
+                    }
+                }
             }
         }
 
