@@ -539,18 +539,21 @@ impl AsyncSourceRepository {
     ) -> Result<Vec<SourceBinding>> {
         let provider = provider.to_owned();
         let installation_id = installation_id.to_owned();
-        let key = correlation_key(conversation_id, thread_id);
+        let conversation_id = conversation_id.map(str::to_owned);
+        let thread_id = thread_id.map(str::to_owned);
         self.db
             .reader()
             .call(move |conn| {
                 let mut stmt = conn.prepare(
                     "SELECT id FROM source_bindings WHERE provider=?1 AND installation_id=?2
-                     AND correlation_key=?3 ORDER BY created_at ASC, id ASC",
+                     AND conversation_id IS ?3 AND thread_id IS ?4
+                     ORDER BY created_at ASC, id ASC",
                 )?;
                 let ids = stmt
-                    .query_map(params![provider, installation_id, key], |row| {
-                        row.get::<_, String>(0)
-                    })?
+                    .query_map(
+                        params![provider, installation_id, conversation_id, thread_id],
+                        |row| row.get::<_, String>(0),
+                    )?
                     .collect::<std::result::Result<Vec<_>, _>>()?;
                 ids.into_iter()
                     .map(|id| {
@@ -832,7 +835,16 @@ fn create_binding(conn: &Connection, input: CreateSourceBinding) -> Result<Sourc
     ) {
         bail!("unsupported binding_type");
     }
-    let key = correlation_key(input.conversation_id.as_deref(), input.thread_id.as_deref());
+    let base_key = correlation_key(input.conversation_id.as_deref(), input.thread_id.as_deref());
+    // A Slack message may deliberately select multiple badge bindings. Primary and
+    // related correlations stay exclusive, while each reserved automation route gets
+    // its own idempotent binding identity for that same message.
+    let key = if input.binding_type == "automation" {
+        let event_digest = digest_hex(input.created_by_event_id.as_bytes());
+        format!("{base_key}:automation:{}", &event_digest[..24])
+    } else {
+        base_key
+    };
     let digest = digest_hex(
         format!(
             "{}:{}:{}:{}",
@@ -1069,6 +1081,8 @@ mod tests {
               current_cycle,init_done,created_at,updated_at,spawn_depth,step_filter_json,
               initial_vars_json,artifacts_dir)
              VALUES ('task-1','fixture','created','fixture','[]','','default','default','default',
+              '.','[]','docs/ticket','{}','once',0,0,datetime('now'),datetime('now'),0,'','',''),
+             ('task-2','fixture-2','created','fixture','[]','','default','default','default',
               '.','[]','docs/ticket','{}','once',0,0,datetime('now'),datetime('now'),0,'','','')",
             [],
         )
@@ -1223,6 +1237,69 @@ mod tests {
             .await
             .expect("find");
         assert_eq!(found.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn automation_bindings_allow_distinct_badges_on_one_message() {
+        let (_temp, repo) = repository().await;
+        let first_event = repo
+            .ingest(reaction_fixture("reaction-eyes", "message"))
+            .await
+            .expect("first reaction")
+            .event;
+        let second_event = repo
+            .ingest(reaction_fixture("reaction-check", "message"))
+            .await
+            .expect("second reaction")
+            .event;
+        let first_input = CreateSourceBinding {
+            project_id: "default".into(),
+            task_id: "task-1".into(),
+            provider: "fixture".into(),
+            installation_id: "test-installation".into(),
+            conversation_id: Some("conversation-1".into()),
+            thread_id: Some("thread-1".into()),
+            binding_type: "automation".into(),
+            created_by_event_id: first_event.id,
+        };
+        let second_input = CreateSourceBinding {
+            task_id: "task-2".into(),
+            created_by_event_id: second_event.id,
+            ..first_input.clone()
+        };
+
+        let first = repo
+            .create_binding(first_input.clone())
+            .await
+            .expect("first automation binding");
+        let repeated = repo
+            .create_binding(first_input)
+            .await
+            .expect("idempotent automation binding");
+        let second = repo
+            .create_binding(second_input)
+            .await
+            .expect("second automation binding");
+
+        assert_eq!(first.id, repeated.id);
+        assert_ne!(first.id, second.id);
+        let found = repo
+            .find_bindings(
+                "fixture",
+                "test-installation",
+                Some("conversation-1"),
+                Some("thread-1"),
+            )
+            .await
+            .expect("find same-message automations");
+        assert_eq!(found.len(), 2);
+        assert_eq!(
+            found
+                .iter()
+                .map(|binding| binding.task_id.as_str())
+                .collect::<std::collections::BTreeSet<_>>(),
+            std::collections::BTreeSet::from(["task-1", "task-2"])
+        );
     }
 
     #[tokio::test]

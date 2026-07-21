@@ -271,7 +271,9 @@ wait_for_active_key || fail "daemon did not create an active encryption key"
 
 NOW="$(date +%s)"
 IMPLEMENT_TS="$NOW.000100"
-DOCS_TS="$NOW.000200"
+# Deliberately use the same message for both badges. Distinct reviewed bindings
+# must create distinct tasks without weakening message/reaction deduplication.
+DOCS_TS="$IMPLEMENT_TS"
 post_reaction Ev-release-implement agent-implement "$IMPLEMENT_TS" "$QA_ROOT/implement"
 post_reaction Ev-release-docs agent-docs "$DOCS_TS" "$QA_ROOT/docs"
 if [[ "$(<"$QA_ROOT/implement.code")" == "200" && "$(<"$QA_ROOT/docs.code")" == "200" ]] &&
@@ -296,7 +298,7 @@ if [[ "$IMPLEMENT_ROUTE" != "$DOCS_ROUTE" && "$IMPLEMENT_TASK" != "$DOCS_TASK" ]
   [[ "$(sqlite3 "$DB" "SELECT workflow_id FROM tasks WHERE id='$DOCS_TASK';")" == "slack-release-docs" ]] &&
   [[ "$(sqlite3 "$DB" "SELECT goal FROM tasks WHERE id='$IMPLEMENT_TASK';")" == "\$ticket-fix $IMPLEMENT_URL" ]] &&
   [[ "$(sqlite3 "$DB" "SELECT goal FROM tasks WHERE id='$DOCS_TASK';")" == "\$qa-doc-gen $DOCS_URL" ]]; then
-  pass "two badges select distinct Skill, template, workflow, route, and completed task results"
+  pass "two badges on one message select distinct Skill, template, workflow, route, and completed task results"
 else
   fail "two-badge Skill/workflow routing differs"
 fi
