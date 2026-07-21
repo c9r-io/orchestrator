@@ -409,6 +409,42 @@ impl OrchestratorService for TestOrchestratorServer {
         ))
     }
 
+    async fn source_connection_migrate_to_shared(
+        &self,
+        _: Request<SourceConnectionMutationRequest>,
+    ) -> Result<Response<SourceConnectionIntentResponse>, Status> {
+        Err(Status::unimplemented(
+            "dedicated Slack migration uses production daemon",
+        ))
+    }
+
+    async fn source_connection_dedicated_upgrade_preview(
+        &self,
+        _: Request<SourceConnectionDedicatedUpgradePreviewRequest>,
+    ) -> Result<Response<SourceConnectionDedicatedLifecycleResponse>, Status> {
+        Err(Status::unimplemented(
+            "dedicated Slack lifecycle uses production daemon",
+        ))
+    }
+
+    async fn source_connection_dedicated_upgrade_apply(
+        &self,
+        _: Request<SourceConnectionDedicatedUpgradeApplyRequest>,
+    ) -> Result<Response<SourceConnectionDedicatedLifecycleResponse>, Status> {
+        Err(Status::unimplemented(
+            "dedicated Slack lifecycle uses production daemon",
+        ))
+    }
+
+    async fn source_connection_dedicated_delete(
+        &self,
+        _: Request<SourceConnectionDedicatedDeleteRequest>,
+    ) -> Result<Response<SourceConnection>, Status> {
+        Err(Status::unimplemented(
+            "dedicated Slack lifecycle uses production daemon",
+        ))
+    }
+
     async fn source_automation_list(
         &self,
         _: Request<SourceAutomationListRequest>,
