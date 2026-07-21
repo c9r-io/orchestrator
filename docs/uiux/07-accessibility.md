@@ -87,6 +87,7 @@ Verify label/`aria-describedby`/error relationships are correct so screen reader
 ### Expected
 - Required/error states are accessible to assistive tech.
 - Errors are not conveyed by color alone.
+- Dedicated Slack secret fields use explicit labels, password semantics, and `autocomplete=off`; they clear before review content appears. Upgrade/migration/delete reviews use named focus-trapped dialogs, while the destructive delete panel keeps typed App identity, reason, and action labels distinct from Disconnect at 640 px and wider.
 
 ---
 

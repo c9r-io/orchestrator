@@ -2,7 +2,7 @@
 
 ## 优先级: P0
 
-## 状态: In Progress（初始 provisioning 与完整 aggregate 已落地；App upgrade/delete/migration lifecycle 和受控 Slack sandbox 待完成）
+## 状态: In Progress（实现与自动 aggregate 已完成；仅受控 Slack sandbox lifecycle certification 待完成）
 
 ## 依赖
 
@@ -158,21 +158,21 @@ Slack 标准 OAuth 只能安装已有 App；自动创建 App 必须使用 App Ma
 
 - [x] Connections wizard同时展示Instant shared、Dedicated private和Existing manual，默认shared且清楚说明trade-off。
 - [x] Admin提供短期Configuration Token后，系统自动validate/create独立App、导入Gateway并启动OAuth，无需复制App credentials。
-- [ ] Configuration Token/refresh token只存在local daemon memory，create完成/失败/cancel/crash后不出现在任何持久化、日志、GUI storage或artifact。
-- [ ] 两个workspace分别创建不同App ID/Signing Secret/client credentials/event URL，并严格路由到各自connection。
+- [x] Configuration Token/refresh token只存在local daemon memory，create完成/失败/cancel/crash后不出现在任何持久化、日志、GUI storage或artifact。
+- [x] 两个workspace分别创建不同App ID/Signing Secret/client credentials/event URL，并严格路由到各自connection。
 - [x] manifest preview准确显示scope/event/callback/token rotation diff；扩大权限必须二次Admin审批。
-- [ ] create callback retry、daemon/Gateway restart和API timeout不会创建第二个App；partial create可resume或abandon。
+- [x] create callback retry、daemon/Gateway restart和API timeout不会创建第二个App；partial create可resume或abandon。
 - [x] credential handoff必须durable receipt后才启动OAuth；跨connection receipt/secret/import全部拒绝。
 - [x] Dedicated OAuth完成后自动创建disabled Trigger，并可用现有preview/simulation安全enable。
-- [ ] 两个badge在dedicated mode选择不同Skill/template/workflow，runtime路径与shared mode一致且无mode分叉task语义。
+- [x] 两个badge在dedicated mode选择不同Skill/template/workflow，runtime路径与shared mode一致且无mode分叉task语义。
 - [x] event endpoint先定位connection再验证对应Signing Secret，并交叉检查verified app/team identity；cross-App signature confusion测试通过。
-- [ ] App update需要新Configuration Token、exact App ID匹配和diff审批；scope扩大强制reauthorize。
-- [ ] disconnect不删除App/evidence；delete App需要fresh token、typed confirmation与独立audit。
-- [ ] shared↔dedicated migration任意失败点均恢复到恰有一个active owner且无duplicate task。
-- [ ] 一个dedicated App compromise/revoke只暂停自身connection并产生dedupe Attention。
+- [x] App update需要新Configuration Token、exact App ID匹配和diff审批；scope扩大强制reauthorize。
+- [x] disconnect不删除App/evidence；delete App需要fresh token、typed confirmation与独立audit。
+- [x] shared↔dedicated migration任意失败点均恢复到恰有一个active owner且无duplicate task。
+- [x] 一个dedicated App compromise/revoke只暂停自身connection并产生dedupe Attention。
 - [x] ReadOnly/Operator/Admin UI与直接RPC权限一致；secret字段不进入safe projection。
 - [x] FR-114 shared OAuth aggregate、manual mode及FR-107 through FR-113 release gate全部无回归。
-- [ ] Gateway/daemon populated upgrade、compatible rollback与provision checkpoint recovery通过。
+- [x] Gateway/daemon populated upgrade、compatible rollback与provision checkpoint recovery通过。
 - [x] Workspace、Clippy、Gateway/provisioner、GUI unit/build/Playwright、security、doc lint与dedicated aggregate全绿。
 - [ ] 受控Slack sandbox创建一个真实dedicated App并完成badge task certification；完成后按runbook撤销token/清理App，证据无secret/private data。
 

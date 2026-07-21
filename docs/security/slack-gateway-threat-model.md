@@ -1,7 +1,7 @@
 # Slack Integration Gateway Threat Model
 
 **Scope**: FR-114 shared OAuth plus FR-115 dedicated Slack App provisioning and SourceConnection delivery
-**Assessment date**: 2026-07-19
+**Assessment date**: 2026-07-22
 **Target**: `crates/slack-gateway`, daemon Gateway client/reconciler, SourceConnection control plane, and Connections UI
 
 ## Executive Summary
@@ -77,6 +77,8 @@ Not assumed: compromise of Slack, the Gateway host/root account, the Gateway mas
 | T15 | Dedicated event endpoint selects another App's Signing Secret or trusts unverified `api_app_id` | Cross-tenant task creation | Unique connection endpoint selects one candidate secret, HMAC over raw bytes, then verified App/team/mode cross-check; shared and dedicated selectors are disjoint | Gateway host compromise can bypass lookup isolation |
 | T16 | Import capability/receipt is replayed across connection, daemon, project, or manifest | Credential overwrite or OAuth confusion | Random expiring import secret digest, connection/owner/project/manifest binding, one-time transaction, App digest/generation receipt HMAC, changed/cross-boundary retries fail closed | Deployment-wide enrollment key remains a privileged bootstrap root |
 | T17 | Shared↔dedicated replacement produces two active consumers | Duplicate paid work | Unique verified-team installation, one active App connection reference and pairing generation, old endpoint/mode lookup fails after switch, source/route/task idempotency remains mode-neutral | Live failure-injection certification is required before production migration |
+| T18 | A stale or cross-App lifecycle request updates the wrong manifest, or expanded scopes continue on old consent | Cross-tenant App mutation or undeclared provider access | Fresh local-only token, exact encrypted App ID, export-before-review, semantic diff, ten-minute in-memory lifecycle session, project/connection/version CAS, exact App digest at Gateway, suspension plus deduplicated Attention before reauthorization | A provider success followed by a permanent local/Gateway failure still requires operator reconciliation from safe audit IDs |
+| T19 | Disconnect is confused with App deletion, or a destructive request deletes a still-active/wrong App | Irrecoverable App loss or retained credential exposure | Delete is a separate Admin RPC/UI/CLI action; requires disconnected state, fresh token, typed exact App ID, reason/idempotency/version fence, provider verification, then encrypted Gateway credential retirement while local evidence remains | Slack-side manual deletion can bypass Orchestrator audit; restrict App collaborators and reconcile provider state |
 
 ## Security Invariants
 
@@ -84,6 +86,7 @@ Not assumed: compromise of Slack, the Gateway host/root account, the Gateway mas
 - One active installation has exactly one owner daemon/project and one valid pairing generation.
 - Official app secrets and installation tokens never enter daemon config, proto responses, task data, browser storage, or routine logs.
 - Configuration Tokens exist only in the local daemon's bounded live provisioning session; dedicated App credentials cross once into connection-context encrypted Gateway storage and never enter safe projections.
+- Manifest upgrade/delete Configuration Tokens and exact App IDs are consumed into zeroizing memory before validation; lifecycle session state is memory-only and bounded, while audit stores only stable IDs, digests, versions, outcomes, and reasons.
 - An opaque dedicated endpoint is routing context, not authentication; Slack HMAC and verified App/team identity remain mandatory.
 - The old owner never receives the replacement pairing during transfer.
 - Slack success acknowledgement occurs only after durable normalized enqueue.
@@ -94,7 +97,7 @@ Not assumed: compromise of Slack, the Gateway host/root account, the Gateway mas
 
 - Run QA-162 and `docs/qa/orchestrator/163-dedicated-slack-app-auto-provisioning.md` together with authentication, authorization, SSRF, sensitive-data, logging, workflow-abuse, and race-condition security suites.
 - Scan binaries' test logs, daemon/Gateway logs, Tauri payloads, DOM, and browser storage for fixture credentials, OAuth state/code, token prefixes, raw bodies, and private Slack URLs.
-- In a controlled Slack sandbox, certify consent, callback, signed event, reinstall, revoke, disconnect, and rotation without retaining private workspace data.
+- In a controlled Slack sandbox, certify consent, callback, signed event, reinstall, revoke, manifest upgrade/reauthorization, reviewed mode migration, disconnect, and separate App deletion without retaining private workspace data.
 - Use `docs/guide/slack-managed-sandbox-certification-runbook.md` for the required two-workspace topology, stop-loss rules, offline recovery, ownership transfer, backup/restore, privacy scan, and evidence allowlist.
 - Before production, validate TLS/proxy raw-body behavior, upstream rate limiting, backup restore, enrollment-key rotation, Gateway master-key recovery, and alert delivery.
 

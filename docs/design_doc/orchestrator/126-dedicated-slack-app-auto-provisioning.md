@@ -1,11 +1,11 @@
 # Orchestrator - Dedicated Slack App Auto Provisioning
 
 **Module**: Orchestrator / Slack Integration Gateway
-**Status**: Initial provisioning implemented; App lifecycle and controlled Slack certification pending
+**Status**: Implementation complete; controlled Slack lifecycle certification pending
 **Related Plan**: FR-115
 **Related QA**: `docs/qa/orchestrator/163-dedicated-slack-app-auto-provisioning.md`
 **Created**: 2026-07-19
-**Last Updated**: 2026-07-19
+**Last Updated**: 2026-07-22
 
 ## Background
 
@@ -34,8 +34,8 @@ Slack cannot create an App through installation OAuth. A user must first generat
 
 In scope:
 
-- daemon migration 36 and secret-free provisioning checkpoints;
-- Gateway schema 3, one-time import capabilities, per-App encryption contexts, signed durable receipts, dedicated OAuth, and exact event endpoints;
+- daemon migrations 36-37 and secret-free provisioning/lifecycle checkpoints;
+- Gateway schemas 3-4, one-time import capabilities, per-App encryption contexts, signed durable receipts, dedicated OAuth, exact event endpoints, and reviewed mode-migration fences;
 - fixed `deploy/slack/dedicated-app-manifest.json` authority;
 - gRPC, CLI, Tauri, and `Sources → Connections` provisioning/recovery surfaces;
 - shared↔dedicated convergence through the existing unique Slack team installation;
@@ -63,6 +63,9 @@ Out of scope:
 - `SourceConnectionDedicatedApprove`: performs create → durable Gateway import receipt → dedicated OAuth intent.
 - `SourceConnectionDedicatedGet`: returns safe state and turns expired/lost unsafe sessions into Attention.
 - `SourceConnectionDedicatedAbandon`: zeroizes the live session and terminally abandons the checkpoint.
+- `SourceConnectionMigrateToShared`: creates an official-App OAuth intent bound to the exact dedicated installation, version, and source mode.
+- `SourceConnectionDedicatedUpgradePreview/Apply`: exports the exact App, validates and diffs the fixed target manifest, applies only after a second review, and suspends for OAuth when permissions expand.
+- `SourceConnectionDedicatedDelete`: deletes only a disconnected exact App after a fresh Configuration Token, typed App ID, Admin reason, and CAS check.
 - Existing `SourceConnectionIntentGet`, `SourceConnectionReauthorize`, `SourceConnectionDisconnect`, and `SourceConnectionTransfer` operate on both managed modes. Dedicated reauthorization selects its exact App credentials.
 
 CLI accepts the Configuration Token only through `--config-token-stdin`. It is deliberately unsupported in argv, environment options, files, or safe output.
@@ -72,6 +75,9 @@ CLI accepts the Configuration Token only through `--config-token-stdin`. It is d
 - `POST /v1/dedicated/import-slots`: enrollment-authenticated, expiring connection-scoped import capability.
 - `POST /v1/dedicated/import`: one-time App credential import with a signed durable receipt and dedicated OAuth intent.
 - `POST /v1/dedicated/oauth/intents`: exact-App reauthorization.
+- `POST /v1/dedicated/apps/manifest`: exact-owner/App manifest metadata update with installation version advancement.
+- `POST /v1/installations/suspend`: pairing-authenticated suspension before permission-expanded OAuth.
+- `POST /v1/dedicated/apps/delete`: retires encrypted App credentials only after the installation is disconnected.
 - `GET /slack/connections/{connection_id}/oauth/callback`.
 - `POST /slack/connections/{connection_id}/events`.
 
@@ -79,9 +85,9 @@ Public payloads never expose client secret, Signing Secret, import secret, poll 
 
 ## Database Changes
 
-Daemon migration 36 adds safe App/provision fields to `source_connections` and `source_connection_provisioning`. The checkpoint stores manifest digest/version, safe state/error, App ID digest, OAuth intent reference, and an encrypted exact App ID used only for governed lifecycle recovery. It never stores the Configuration Token or returned App credentials.
+Daemon migration 36 adds safe App/provision fields to `source_connections` and `source_connection_provisioning`. Migration 37 adds the optional reviewed migration target to the provisioning checkpoint. The checkpoint stores manifest digest/version, safe state/error, App ID digest, OAuth intent reference, and an encrypted exact App ID used only for governed lifecycle recovery. It never stores the Configuration Token or returned App credentials.
 
-Gateway schema 3 adds mode/App metadata to intents/installations plus `dedicated_import_slots` and `dedicated_apps`. Client ID, Client Secret, and Signing Secret are encrypted under `dedicated-app:{connection_id}:generation:{n}:{field}` contexts. Import secret and App/team identities are stored as purpose-scoped digests where plaintext is unnecessary.
+Gateway schema 3 adds mode/App metadata to intents/installations plus `dedicated_import_slots` and `dedicated_apps`. Schema 4 adds `migration_installation_id`, `migration_expected_version`, and `migration_source_mode` to OAuth intents. Client ID, Client Secret, and Signing Secret are encrypted under `dedicated-app:{connection_id}:generation:{n}:{field}` contexts. Import secret and App/team identities are stored as purpose-scoped digests where plaintext is unnecessary.
 
 Both migrations are additive and forward-only. Populated daemon v34 and Gateway v2 upgrades preserve existing shared/manual connections; older binaries may continue delivery but cannot create new dedicated Apps.
 
@@ -93,6 +99,8 @@ Both migrations are additive and forward-only. Populated daemon v34 and Gateway 
 4. **Receipt-before-OAuth**: OAuth begins only after Gateway encryption commits and the daemon verifies a receipt HMAC over connection, App digest, generation, and manifest digest.
 5. **Authenticated endpoint selection**: the opaque path selects one candidate secret; Slack HMAC is still mandatory, and verified `api_app_id` plus team identity must match the endpoint's App/installation.
 6. **Runtime convergence**: Gateway's unique team digest keeps one logical installation. Reauthorization or a reviewed shared↔dedicated replacement updates that installation, so connection ID, Trigger, route/task dedupe, and evidence remain stable.
+7. **Lifecycle review sessions**: upgrade secrets and exact App identity live only in a ten-minute, in-memory daemon session. Apply is CAS-fenced to the reviewed connection version; permission expansion atomically advances Gateway/local versions, suspends delivery, emits one Attention item, and starts exact-App OAuth.
+8. **Delete is not disconnect**: disconnect destroys installation access but retains App/evidence. Delete requires a fresh token and typed exact App ID, verifies the App through Slack, then retires the Gateway credential envelope and records `app_deleted` without erasing history.
 
 ## Alternatives And Tradeoffs
 
@@ -122,7 +130,8 @@ Both migrations are additive and forward-only. Populated daemon v34 and Gateway 
 - Configure the existing Gateway origin/enrollment secret and daemon Slack API base. Production provider/Gateway origins require HTTPS; loopback HTTP is test-only.
 - Upgrade Gateway schema before enabling daemon dedicated capability. Back up Gateway and daemon databases with their independent keys.
 - Stop-loss: disable new provisioning while preserving existing delivery. A provisioning Attention item must be reviewed; do not rerun create blindly.
-- Disconnect revokes the installation and retains the workspace-owned App. App replacement/retirement requires a fresh Configuration Token and explicit Slack-side review.
+- Disconnect revokes the installation and retains the workspace-owned App. App replacement, manifest upgrade, and retirement require a fresh Configuration Token and explicit reviewed operations.
+- Schema rollback is fail-closed: an older Gateway refuses schema 4 and an older daemon refuses migration 37. During a binary rollback, keep the upgraded stores intact, disable new provisioning/lifecycle mutations, and restore the compatible binary; existing delivery continues only on a binary that understands the current schema.
 - Live certification is intentionally paired with FR-114 because both modes share the same real callback, OAuth, delivery, Trigger, and badge runtime boundary.
 
 ## Test Plan

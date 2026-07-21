@@ -144,6 +144,34 @@ Dedicated 连接的 **Reauthorize** 会使用该连接自己的 client identity 
 
 Shared → Dedicated 的安全路径是：创建新 App（routing disabled）→ OAuth/health → Gateway 对同一 verified team 原子更新唯一 installation → 原连接/Trigger 保持 → smoke → 恢复 routing。Dedicated → Shared 反向执行。任一时刻只允许一个 active pairing；历史 source/route/task/audit 不删除。
 
+在 GUI 创建 Dedicated App 时，可用 **Migration source (optional)** 明确选择要替换的 active shared connection。Dedicated → Shared 则在目标连接上点击 **Migrate to Official App**，审阅影响并填写原因。CLI 对应命令为：
+
+```bash
+orchestrator source connection migrate-to-shared {connection_id} \
+  --project default \
+  --expected-version {version} \
+  --reason "return this workspace to the official App" \
+  --idempotency-key "dedicated-to-shared-{connection_id}"
+```
+
+OAuth intent 会绑定 installation ID、当前 version 和原 provisioning mode。回调过期、重复、目标已变化或未经过迁移审阅时都会失败关闭，原 active owner 保持不变。
+
+### 升级固定 Manifest
+
+现有 Dedicated 连接可点击 **Review manifest upgrade**。每次升级都需要一个新的 Configuration Token；系统先 export 精确 App ID，再 validate 固定目标 manifest并显示 current → target 语义 diff。CLI 使用：
+
+```bash
+printf '%s' "$FRESH_SLACK_CONFIGURATION_TOKEN" | \
+  orchestrator source connection dedicated-upgrade {connection_id} \
+    --project default \
+    --expected-version {version} \
+    --config-token-stdin \
+    --reason "review dedicated App manifest v1" \
+    --idempotency-key "dedicated-upgrade-{connection_id}"
+```
+
+不加 `--approve` 只输出 diff。审阅后用新的 token 重跑并增加 `--approve`。如果 Slack 或语义 diff 表明权限扩大，connection 会进入 `suspended / reauthorization_required`，Attention Inbox 出现一个去重项；完成随后打开的 OAuth 前，旧 scope 不会继续 delivery。
+
 Slack 官方 Manifest API支持 App `export/update/delete`，但没有一个等价 API可以原地自动生成新的 Signing Secret/Client Secret。因此 Orchestrator 不会伪造 `rotate-app-credentials`：
 
 1. 用新 Configuration Token 走新的 Dedicated provisioning；
@@ -158,7 +186,22 @@ Slack 官方 Manifest API支持 App `export/update/delete`，但没有一个等�
 
 **Disconnect** 撤销 installation credential、停止 delivery/proxy，并保留 source、route、task、Attention 和 audit。默认不删除 workspace-owned App。
 
-删除 App 是另一个不可逆动作：需要 fresh Configuration Token、精确 App ID 确认、独立 Admin 审计，并且应先断开连接。若当前版本尚未提供受控 delete UI，请在 Slack App 管理页面按 runbook 删除；绝不能把 Disconnect 解释成已经删除 App。
+删除 App 是另一个不可逆动作：需要 fresh Configuration Token、精确 App ID 确认、独立 Admin 审计，并且应先断开连接；绝不能把 Disconnect 解释成已经删除 App。
+
+当前版本已提供独立的 **Delete workspace App** 控件；它只在 Dedicated connection 已 `disconnected` 时显示。CLI 等价操作：
+
+```bash
+printf '%s' "$FRESH_SLACK_CONFIGURATION_TOKEN" | \
+  orchestrator source connection dedicated-delete {connection_id} \
+    --project default \
+    --expected-version {version} \
+    --config-token-stdin \
+    --app-id-confirmation {exact_slack_app_id} \
+    --reason "retire reviewed sandbox App" \
+    --idempotency-key "dedicated-delete-{connection_id}"
+```
+
+删除成功后 Gateway 清空该 App 的 encrypted credential envelope，connection 保留为 `disconnected / app_deleted` 证据。Configuration Token 和输入的 App ID 不进入 safe projection、浏览器存储或审计正文。
 
 ## 受控 Slack Sandbox 实测 Addendum
 

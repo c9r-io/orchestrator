@@ -5,7 +5,7 @@ self_referential_safe: true
 # Orchestrator - Dedicated Slack App Auto Provisioning
 
 **Module**: Orchestrator / Slack Integration Gateway
-**Scope**: Dedicated manifest provisioning, credential handoff, OAuth/delivery isolation, recovery, UI, privacy, and compatibility
+**Scope**: Dedicated manifest provisioning, credential handoff, OAuth/delivery isolation, recovery, manifest lifecycle, mode migration, UI, privacy, and compatibility
 **Scenarios**: 5
 **Priority**: Critical
 
@@ -148,7 +148,7 @@ WHERE project_id='{project_id}'
 
 ---
 
-## Scenario 4: Reauthorization, Mode Migration, Badge Runtime, And RBAC
+## Scenario 4: App Lifecycle, Mode Migration, Badge Runtime, And RBAC
 
 ### Preconditions
 
@@ -162,15 +162,17 @@ Prove mode changes retain one logical connection/runtime and all mutation author
 ### Steps
 
 1. Reauthorize a dedicated connection and inspect the OAuth URL client identity and callback path.
-2. Provision dedicated for a team currently using shared mode; complete OAuth, inject failure before and after owner switch, and verify the unique team installation converges to one active mode.
-3. Perform the reverse dedicated→shared reviewed OAuth path. Verify old event path/pairing cannot deliver after the switch.
-4. Enable the two fixture badge bindings through preview/simulation, deliver both reactions, and verify two distinct deterministic echo tasks with unchanged template/binding semantics.
-5. Repeat list/status as ReadOnly and all preview/approve/abandon/reauthorize/direct-RPC mutations as ReadOnly, Operator, and Admin.
+2. With a fresh token, export the exact App, preview a semantic manifest diff, apply with the reviewed version, and verify permission expansion produces `suspended / reauthorization_required` plus one Attention item before OAuth.
+3. Provision dedicated for a team currently using shared mode; complete OAuth with the exact installation/version/source-mode fence, inject stale and unreviewed callbacks, and verify the original owner remains active until a valid switch commits. Perform the reverse dedicated→shared path and verify the old endpoint/pairing is fenced.
+4. Disconnect without deleting the App. Then use a fresh token, typed exact App ID, independent reason/idempotency/version fence, and the dedicated delete action; verify Gateway credentials are retired while local evidence becomes `app_deleted`.
+5. Enable the two fixture badge bindings through preview/simulation, deliver both reactions, verify two distinct deterministic echo tasks, and repeat lifecycle/migration mutations across ReadOnly, Operator, and Admin.
 
 ### Expected
 
 - Dedicated reauthorization uses that connection's App client credentials, never the official shared App.
+- Upgrade is exact-App/CAS-scoped; secret input is cleared, permission expansion cannot deliver before reauthorization, and lifecycle Attention deduplicates by connection.
 - Connection/installation/Trigger and historical source/route/task evidence remain stable; generation/version advance and exactly one owner/pairing is active.
+- Disconnect retains the App and all evidence. Delete is unavailable while active and requires the separate typed, audited confirmation.
 - `provisioning_mode` does not enter task identity or template variables. Existing route/task dedupe prevents duplicate paid work.
 - ReadOnly can inspect safe state. Dedicated preview/approve/abandon and connection credential mutations require Admin in GUI and direct RPC.
 
@@ -195,7 +197,7 @@ WHERE project_id='{project_id}' GROUP BY automation_key HAVING COUNT(DISTINCT ta
 
 ### Steps
 
-1. Upgrade populated daemon v34→36 and Gateway v2→3; verify existing shared/manual entities, deliveries, and ownership handoffs remain intact. Exercise partial migration recovery and newer-schema rejection.
+1. Upgrade populated daemon v34→37 and Gateway v2→4; verify existing shared/manual entities, deliveries, and ownership handoffs remain intact. Exercise transaction recovery and newer-schema rejection.
 2. Run Connections Vitest, production build, and Playwright for visible entry, token clearing, diff approval, recovery, popup/reload, keyboard focus/return, axe, reduced effects, and 640 px layout.
 3. Run strict workspace Clippy/tests, FR-114 aggregate, FR-113 badge release aggregate, documentation lint, and diagnostic privacy scan.
 4. Execute `docs/guide/slack-managed-sandbox-certification-runbook.md` followed by the dedicated addendum in `docs/guide/slack-dedicated-app-provisioning.md` using a non-production workspace and echo-only content.
@@ -212,10 +214,10 @@ WHERE project_id='{project_id}' GROUP BY automation_key HAVING COUNT(DISTINCT ta
 
 ```sql
 SELECT MAX(version) FROM schema_migrations;
--- Expected: 36
+-- Expected: 37
 
 SELECT MAX(version) FROM gateway_schema_migrations;
--- Expected: 3
+-- Expected: 4
 ```
 
 ---
@@ -224,8 +226,8 @@ SELECT MAX(version) FROM gateway_schema_migrations;
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|---|---|---|---|---|
-| 1 | Discover, validate, approve, create, and install | PARTIAL | 2026-07-19 | Codex | Automated UI/Gateway contracts pass; live create pending |
-| 2 | Secret custody, receipt retry, and cross-App rejection | PARTIAL | 2026-07-19 | Codex | Encryption/receipt/App-team isolation unit tests pass; two live Apps pending |
-| 3 | Crash, timeout, Attention, resume, and abandon | PARTIAL | 2026-07-19 | Codex | Safe checkpoints and Attention implemented; process-injection vertical pending |
-| 4 | Reauthorization, mode migration, badge runtime, and RBAC | PARTIAL | 2026-07-19 | Codex | Exact-App reauthorization, role-safe UI, and FR-113 runtime aggregate pass; full mode-migration failure injection pending |
-| 5 | Migration, UI accessibility, aggregate, and live certification | PARTIAL | 2026-07-19 | Codex | Workspace/all-features, strict Clippy, 91 Vitest coverage tests, 22 Playwright tests, FR-114/FR-113 aggregates, migrations, and doc/privacy gates pass; live certification pending |
+| 1 | Discover, validate, approve, create, and install | PASS (automated) | 2026-07-22 | Codex | GUI/Gateway fixed-manifest, receipt-before-OAuth, safe projection, and disabled Trigger contracts pass; live provider record remains in Scenario 5 |
+| 2 | Secret custody, receipt retry, and cross-App rejection | PASS (automated) | 2026-07-22 | Codex | Two App/team canaries, encrypted storage, exact endpoint lookup, cross-App rejection, and isolated revocation pass |
+| 3 | Crash, timeout, Attention, resume, and abandon | PASS (automated) | 2026-07-22 | Codex | Create-once state machine, lost receipt retry, session loss/expiry Attention, resume/abandon, and no-blind-retry checks pass |
+| 4 | App lifecycle, mode migration, badge runtime, and RBAC | PASS (automated) | 2026-07-22 | Codex | Exact-App upgrade/suspend/delete, reviewed bidirectional migration fences, 7 lifecycle Playwright scenarios, and FR-113 runtime regression pass |
+| 5 | Migration, UI accessibility, aggregate, and live certification | PARTIAL | 2026-07-22 | Codex | Daemon 37/Gateway 4 populated upgrades, workspace/all-features, strict Clippy, GUI unit/build/Playwright, FR-114 regression, doc/privacy gates pass; controlled dedicated Slack live record is blocked only on browser availability |
