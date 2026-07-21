@@ -166,7 +166,7 @@ mod tests {
         )
         .expect("populate audit row");
 
-        assert_eq!(run_pending(&conn, &migrations).expect("upgrade"), 6);
+        assert_eq!(run_pending(&conn, &migrations).expect("upgrade"), 7);
         let preserved: i64 = conn
             .query_row("SELECT COUNT(*) FROM control_plane_audit", [], |row| {
                 row.get(0)
@@ -313,9 +313,9 @@ mod tests {
 
         assert_eq!(
             run_pending(&conn, &migrations).expect("upgrade to latest"),
-            5
+            6
         );
-        assert_eq!(current_version(&conn).expect("latest version"), 36);
+        assert_eq!(current_version(&conn).expect("latest version"), 37);
         for (table, id) in [
             ("tasks", "console-task"),
             ("agent_sessions", "console-session"),
@@ -470,8 +470,8 @@ mod tests {
         )
         .expect("seed populated source automation route");
 
-        assert_eq!(run_pending(&conn, &migrations).expect("upgrade to v36"), 3);
-        assert_eq!(current_version(&conn).expect("latest version"), 36);
+        assert_eq!(run_pending(&conn, &migrations).expect("upgrade to v37"), 4);
+        assert_eq!(current_version(&conn).expect("latest version"), 37);
         let route: (String, i64, i64, i64, i64) = conn
             .query_row(
                 "SELECT status,generation,version,attempt_count,max_attempts

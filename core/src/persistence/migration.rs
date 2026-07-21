@@ -471,7 +471,7 @@ mod tests {
 
         let summary = run_pending(&conn, &migrations).expect("upgrade populated database");
         assert_eq!(summary.applied.first().map(|item| item.version), Some(29));
-        assert_eq!(current_version(&conn).unwrap(), 36);
+        assert_eq!(current_version(&conn).unwrap(), 37);
         let rows: Vec<(String, String, i64)> = conn
             .prepare(
                 "SELECT id,state,state_version FROM agent_sessions
