@@ -16,7 +16,7 @@ use crate::domain::{
     OwnershipTransferClaim,
 };
 
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 
 /// Decrypted official-app credentials held only for the duration of a provider call.
 #[derive(Clone)]
@@ -70,6 +70,12 @@ pub struct NewIntent<'a> {
     pub provisioning_mode: &'a str,
     /// Dedicated App connection identity, absent for shared OAuth.
     pub app_connection_id: Option<&'a str>,
+    /// Existing installation explicitly selected for a reviewed mode migration.
+    pub migration_installation_id: Option<&'a str>,
+    /// Existing installation version used as a migration CAS fence.
+    pub migration_expected_version: Option<i64>,
+    /// Existing mode that must still own the installation when OAuth completes.
+    pub migration_source_mode: Option<&'a str>,
     /// Stable actor identity; persisted only as a digest.
     pub actor_id: &'a str,
     /// Exact reviewed OAuth redirect URI.
@@ -446,6 +452,108 @@ impl GatewayStore {
         })
     }
 
+    /// Advances reviewed manifest metadata for one exact dedicated App.
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_dedicated_app_manifest(
+        &self,
+        connection_id: &str,
+        daemon_id: &str,
+        project_id: &str,
+        app_id_digest: &str,
+        manifest_version: &str,
+        manifest_digest: &str,
+    ) -> Result<InstallationProjection> {
+        for (label, value) in [
+            ("connection ID", connection_id),
+            ("daemon ID", daemon_id),
+            ("project ID", project_id),
+            ("App digest", app_id_digest),
+            ("manifest version", manifest_version),
+            ("manifest digest", manifest_digest),
+        ] {
+            validate_identity(value, label)?;
+        }
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+        let changed = transaction.execute(
+            "UPDATE dedicated_apps SET manifest_version=?5,manifest_digest=?6,updated_at=?7
+             WHERE connection_id=?1 AND owner_daemon_id=?2 AND owner_project_id=?3
+               AND app_id_digest=?4 AND state='ready'",
+            params![
+                connection_id,
+                daemon_id,
+                project_id,
+                app_id_digest,
+                manifest_version,
+                manifest_digest,
+                now_ts(),
+            ],
+        )?;
+        if changed != 1 {
+            bail!("dedicated_app_lifecycle_identity_mismatch");
+        }
+        let installation_id = transaction
+            .query_row(
+                "SELECT id FROM installations WHERE app_connection_id=?1
+                   AND owner_daemon_id=?2 AND owner_project_id=?3 AND state='active'",
+                params![connection_id, daemon_id, project_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?
+            .context("dedicated_app_installation_not_active")?;
+        transaction.execute(
+            "UPDATE installations SET manifest_version=?2,version=version+1,updated_at=?3
+             WHERE id=?1 AND state='active'",
+            params![installation_id, manifest_version, now_ts()],
+        )?;
+        transaction.commit()?;
+        drop(connection);
+        self.installation_projection(&installation_id)
+    }
+
+    /// Retires one exact dedicated App and destroys its Gateway credential ciphertext.
+    pub fn retire_dedicated_app(
+        &self,
+        connection_id: &str,
+        daemon_id: &str,
+        project_id: &str,
+        app_id_digest: &str,
+    ) -> Result<()> {
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+        let installation_state = transaction
+            .query_row(
+                "SELECT state FROM installations WHERE app_connection_id=?1
+                   AND owner_daemon_id=?2 AND owner_project_id=?3",
+                params![connection_id, daemon_id, project_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?
+            .context("dedicated_app_installation_not_found")?;
+        if installation_state != "disconnected" {
+            bail!("dedicated_app_delete_requires_disconnected_installation");
+        }
+        let changed = transaction.execute(
+            "UPDATE dedicated_apps SET state='deleted',app_id='deleted:' || app_id_digest,
+             client_id_ciphertext='',
+             client_secret_ciphertext='',signing_secret_ciphertext='',updated_at=?5
+             WHERE connection_id=?1 AND owner_daemon_id=?2 AND owner_project_id=?3
+               AND app_id_digest=?4 AND state='ready'",
+            params![
+                connection_id,
+                daemon_id,
+                project_id,
+                app_id_digest,
+                now_ts()
+            ],
+        )?;
+        if changed != 1 {
+            bail!("dedicated_app_lifecycle_identity_mismatch");
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
     /// Creates a short-lived OAuth intent and returns its two plaintext one-time secrets.
     pub fn create_intent(&self, input: NewIntent<'_>) -> Result<CreatedIntent> {
         validate_identity(input.daemon_id, "daemon ID")?;
@@ -465,6 +573,28 @@ impl GatewayStore {
         if (input.provisioning_mode == "managed_dedicated") != input.app_connection_id.is_some() {
             bail!("dedicated OAuth intent requires exact App connection identity");
         }
+        let migration_fields = [
+            input.migration_installation_id.is_some(),
+            input.migration_expected_version.is_some(),
+            input.migration_source_mode.is_some(),
+        ];
+        if migration_fields.iter().any(|value| *value)
+            && !migration_fields.iter().all(|value| *value)
+        {
+            bail!("OAuth migration fence is incomplete");
+        }
+        if let Some(source_mode) = input.migration_source_mode
+            && (!matches!(source_mode, "managed_shared" | "managed_dedicated")
+                || source_mode == input.provisioning_mode)
+        {
+            bail!("OAuth migration source mode is invalid");
+        }
+        if input
+            .migration_expected_version
+            .is_some_and(|value| value < 1)
+        {
+            bail!("OAuth migration version is invalid");
+        }
         let id = Uuid::new_v4().to_string();
         let oauth_state = random_secret();
         let poll_secret = random_secret();
@@ -475,8 +605,9 @@ impl GatewayStore {
             "INSERT INTO oauth_intents
              (id,state_digest,poll_digest,daemon_id,project_id,actor_digest,redirect_uri,
               requested_scopes_json,status,expires_at,created_at,updated_at,
-              provisioning_mode,app_connection_id)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'pending',?9,?10,?10,?11,?12)",
+              provisioning_mode,app_connection_id,migration_installation_id,
+              migration_expected_version,migration_source_mode)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'pending',?9,?10,?10,?11,?12,?13,?14,?15)",
             params![
                 id,
                 self.crypto.digest("oauth-state", &oauth_state),
@@ -490,6 +621,9 @@ impl GatewayStore {
                 format_ts(now),
                 input.provisioning_mode,
                 input.app_connection_id,
+                input.migration_installation_id,
+                input.migration_expected_version,
+                input.migration_source_mode,
             ],
         )?;
         Ok(CreatedIntent {
@@ -596,7 +730,8 @@ impl GatewayStore {
         self.connection()?
             .query_row(
                 "SELECT id,daemon_id,project_id,redirect_uri,requested_scopes_json,expires_at,
-                        provisioning_mode,app_connection_id
+                        provisioning_mode,app_connection_id,migration_installation_id,
+                        migration_expected_version,migration_source_mode
                  FROM oauth_intents WHERE state_digest=?1 AND status='pending' AND expires_at>?2",
                 params![digest, now],
                 |row| {
@@ -617,6 +752,9 @@ impl GatewayStore {
                         expires_at: row.get(5)?,
                         provisioning_mode: row.get(6)?,
                         app_connection_id: row.get(7)?,
+                        migration_installation_id: row.get(8)?,
+                        migration_expected_version: row.get(9)?,
+                        migration_source_mode: row.get(10)?,
                     })
                 },
             )
@@ -663,7 +801,8 @@ impl GatewayStore {
 
         let existing = transaction
             .query_row(
-                "SELECT id,owner_daemon_id,owner_project_id,generation,state
+                "SELECT id,owner_daemon_id,owner_project_id,generation,state,version,
+                        provisioning_mode
                  FROM installations WHERE team_digest=?1",
                 [&team_digest],
                 |row| {
@@ -673,6 +812,8 @@ impl GatewayStore {
                         row.get::<_, String>(2)?,
                         row.get::<_, i64>(3)?,
                         row.get::<_, String>(4)?,
+                        row.get::<_, i64>(5)?,
+                        row.get::<_, String>(6)?,
                     ))
                 },
             )
@@ -684,6 +825,16 @@ impl GatewayStore {
             }
             if existing.4 == ConnectionState::Disconnected.as_str() {
                 bail!("installation_disconnected");
+            }
+            if existing.6 != intent.provisioning_mode {
+                if intent.migration_installation_id.as_deref() != Some(existing.0.as_str())
+                    || intent.migration_expected_version != Some(existing.5)
+                    || intent.migration_source_mode.as_deref() != Some(existing.6.as_str())
+                {
+                    bail!("installation_mode_migration_not_reviewed");
+                }
+            } else if intent.migration_installation_id.is_some() {
+                bail!("installation_mode_migration_stale");
             }
             if existing.4 == ConnectionState::Revoked.as_str() {
                 let retired_cursor = transaction.query_row(
@@ -706,6 +857,9 @@ impl GatewayStore {
             }
             (existing.0, existing.3 + 1)
         } else {
+            if intent.migration_installation_id.is_some() {
+                bail!("installation_mode_migration_target_missing");
+            }
             (Uuid::new_v4().to_string(), 1)
         };
 
@@ -924,12 +1078,7 @@ impl GatewayStore {
             )
             .optional()?
             .context("installation_not_found")?;
-        if owner.0 != daemon_id
-            || !matches!(
-                owner.1.as_str(),
-                "active" | "attention" | "suspended" | "revoked"
-            )
-        {
+        if owner.0 != daemon_id || !matches!(owner.1.as_str(), "active" | "attention" | "revoked") {
             bail!("installation_not_found");
         }
 
@@ -1123,6 +1272,27 @@ impl GatewayStore {
         self.installation_projection(installation_id)
     }
 
+    /// Suspends delivery before a permission-expanding App reauthorization.
+    pub fn suspend_installation(
+        &self,
+        installation_id: &str,
+        daemon_id: &str,
+        pairing_secret: &str,
+        expected_version: i64,
+    ) -> Result<InstallationProjection> {
+        self.authenticate_pairing(installation_id, daemon_id, pairing_secret)?;
+        let changed = self.connection()?.execute(
+            "UPDATE installations SET state='suspended',version=version+1,
+             last_error_code='slack_manifest_reauthorization_required',updated_at=?4
+             WHERE id=?1 AND owner_daemon_id=?2 AND version=?3 AND state='active'",
+            params![installation_id, daemon_id, expected_version, now_ts()],
+        )?;
+        if changed != 1 {
+            bail!("installation_version_conflict");
+        }
+        self.installation_projection(installation_id)
+    }
+
     /// Atomically transfers one installation owner after draining active leases.
     pub fn transfer_installation(
         &self,
@@ -1290,6 +1460,12 @@ pub struct PendingIntent {
     pub provisioning_mode: String,
     /// Dedicated App connection identity when applicable.
     pub app_connection_id: Option<String>,
+    /// Explicit reviewed migration target, when changing App modes.
+    pub migration_installation_id: Option<String>,
+    /// Exact installation version observed when migration started.
+    pub migration_expected_version: Option<i64>,
+    /// Exact prior App mode observed when migration started.
+    pub migration_source_mode: Option<String>,
     /// Exact OAuth redirect URI.
     pub redirect_uri: String,
     /// Exact requested scopes.
@@ -1480,6 +1656,21 @@ fn apply_migrations_through(connection: &Connection, target: i64) -> Result<()> 
             "#,
         )?;
     }
+    if current < 4 && target >= 4 {
+        connection.execute_batch(
+            r#"
+            BEGIN IMMEDIATE;
+            ALTER TABLE oauth_intents ADD COLUMN migration_installation_id TEXT;
+            ALTER TABLE oauth_intents ADD COLUMN migration_expected_version INTEGER;
+            ALTER TABLE oauth_intents ADD COLUMN migration_source_mode TEXT;
+            CREATE INDEX idx_oauth_intents_migration
+                ON oauth_intents(migration_installation_id,status,expires_at);
+            INSERT INTO gateway_schema_migrations(version,name,applied_at)
+                VALUES (4,'m0004_reviewed_app_mode_migration',strftime('%Y-%m-%dT%H:%M:%SZ','now'));
+            COMMIT;
+            "#,
+        )?;
+    }
     Ok(())
 }
 
@@ -1608,6 +1799,9 @@ mod tests {
                 project_id: "project-a",
                 provisioning_mode: "managed_shared",
                 app_connection_id: None,
+                migration_installation_id: None,
+                migration_expected_version: None,
+                migration_source_mode: None,
                 actor_id: "admin-a",
                 redirect_uri: "https://gateway.example/slack/oauth/callback",
                 requested_scopes: &["reactions:read".into()],
@@ -1667,6 +1861,9 @@ mod tests {
                 project_id: "project-a",
                 provisioning_mode: "managed_dedicated",
                 app_connection_id: Some(connection_id),
+                migration_installation_id: None,
+                migration_expected_version: None,
+                migration_source_mode: None,
                 actor_id: "admin-a",
                 redirect_uri: &format!(
                     "https://gateway.example/slack/connections/{connection_id}/oauth/callback"
@@ -1690,6 +1887,33 @@ mod tests {
             )
             .expect("dedicated OAuth completion");
         (created, projection)
+    }
+
+    fn import_dedicated(store: &GatewayStore, connection_id: &str, app_id: &str) {
+        let slot = store
+            .create_dedicated_import_slot(
+                connection_id,
+                "daemon-a",
+                "project-a",
+                "v1",
+                &format!("manifest-{connection_id}"),
+                Duration::from_secs(600),
+            )
+            .expect("dedicated slot");
+        store
+            .import_dedicated_app_credentials(
+                connection_id,
+                "daemon-a",
+                "project-a",
+                &slot.import_secret,
+                &OfficialAppCredentials {
+                    app_id: app_id.into(),
+                    client_id: format!("client-{connection_id}"),
+                    client_secret: format!("client-secret-{connection_id}"),
+                    signing_secret: format!("signing-secret-{connection_id}"),
+                },
+            )
+            .expect("dedicated import");
     }
 
     #[test]
@@ -1741,6 +1965,9 @@ mod tests {
                 project_id: "project-a",
                 provisioning_mode: "managed_shared",
                 app_connection_id: None,
+                migration_installation_id: None,
+                migration_expected_version: None,
+                migration_source_mode: None,
                 actor_id: "admin-a",
                 redirect_uri: "https://gateway.example/slack/oauth/callback",
                 requested_scopes: &["reactions:read".into()],
@@ -1898,6 +2125,44 @@ mod tests {
     }
 
     #[test]
+    fn dedicated_revocation_isolated_to_one_workspace() {
+        let (_temp, store) = setup();
+        let (_, first) =
+            create_dedicated_completed(&store, "connection-a", "A-DEDICATED-A", "TEAM-A");
+        let (second_intent, second) =
+            create_dedicated_completed(&store, "connection-b", "A-DEDICATED-B", "TEAM-B");
+        let second_pairing = store
+            .intent_status(&second_intent.id, &second_intent.poll_secret)
+            .expect("second intent status")
+            .pairing_secret
+            .expect("second pairing");
+
+        store
+            .revoke_team("TEAM-A", "slack_credential_revoked")
+            .expect("revoke first workspace");
+        assert_eq!(
+            store
+                .installation_projection(&first.id)
+                .expect("first projection")
+                .state,
+            "revoked"
+        );
+        assert_eq!(
+            store
+                .installation_projection(&second.id)
+                .expect("second projection")
+                .state,
+            "active"
+        );
+        assert!(
+            store
+                .installation_credential(&second.id, "daemon-a", &second_pairing)
+                .is_ok(),
+            "revoking one dedicated App must not fence another workspace"
+        );
+    }
+
+    #[test]
     fn repeated_oauth_reauthorizes_one_logical_installation_and_fences_old_pairing() {
         let (_temp, store) = setup();
         let (first_intent, first) = create_completed(&store);
@@ -1913,6 +2178,9 @@ mod tests {
                 project_id: "project-a",
                 provisioning_mode: "managed_shared",
                 app_connection_id: None,
+                migration_installation_id: None,
+                migration_expected_version: None,
+                migration_source_mode: None,
                 actor_id: "admin-a",
                 redirect_uri: "https://gateway.example/slack/oauth/callback",
                 requested_scopes: &["reactions:read".into()],
@@ -1979,6 +2247,9 @@ mod tests {
                 project_id: "project-a",
                 provisioning_mode: "managed_shared",
                 app_connection_id: None,
+                migration_installation_id: None,
+                migration_expected_version: None,
+                migration_source_mode: None,
                 actor_id: "admin-a",
                 redirect_uri: "https://gateway.example/slack/oauth/callback",
                 requested_scopes: &["reactions:read".into()],
@@ -2024,6 +2295,9 @@ mod tests {
                 project_id: "project-b",
                 provisioning_mode: "managed_shared",
                 app_connection_id: None,
+                migration_installation_id: None,
+                migration_expected_version: None,
+                migration_source_mode: None,
                 actor_id: "admin-b",
                 redirect_uri: "https://gateway.example/slack/oauth/callback",
                 requested_scopes: &["reactions:read".into()],
@@ -2193,6 +2467,21 @@ mod tests {
                 .expect("schema version"),
             SCHEMA_VERSION
         );
+        let migration_columns: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('oauth_intents')
+                 WHERE name IN ('migration_installation_id','migration_expected_version','migration_source_mode')",
+                [],
+                |row| row.get(0),
+            )
+            .expect("reviewed migration columns");
+        assert_eq!(migration_columns, 3);
+        assert!(
+            apply_migrations_through(&connection, SCHEMA_VERSION - 1)
+                .expect_err("older binary must reject a newer schema")
+                .to_string()
+                .contains("newer than this binary")
+        );
     }
 
     #[test]
@@ -2246,5 +2535,223 @@ mod tests {
             .disconnect_installation(&installation.id, "daemon-a", &pairing, installation.version)
             .expect("disconnect after delivery");
         assert_eq!(disconnected.state, "disconnected");
+    }
+
+    #[test]
+    fn app_mode_migration_requires_exact_reviewed_installation_fence() {
+        let (_temp, store) = setup();
+        let (_, shared) = create_completed(&store);
+        import_dedicated(&store, "connection-migrate", "A-MIGRATE");
+
+        let unreviewed = store
+            .create_intent(NewIntent {
+                daemon_id: "daemon-a",
+                project_id: "project-a",
+                provisioning_mode: "managed_dedicated",
+                app_connection_id: Some("connection-migrate"),
+                migration_installation_id: None,
+                migration_expected_version: None,
+                migration_source_mode: None,
+                actor_id: "admin-a",
+                redirect_uri: "https://gateway.example/slack/connections/connection-migrate/oauth/callback",
+                requested_scopes: &["reactions:read".into()],
+                ttl: Duration::from_secs(600),
+            })
+            .expect("unreviewed intent");
+        let unreviewed_pending = store
+            .pending_intent_by_state(&unreviewed.oauth_state)
+            .expect("unreviewed pending");
+        assert!(
+            store
+                .complete_intent(
+                    &unreviewed_pending,
+                    OAuthInstallation {
+                        team_id: "T123",
+                        enterprise_id: None,
+                        scopes: &["reactions:read".into()],
+                        bot_token: "xoxb-unreviewed",
+                    },
+                )
+                .expect_err("unreviewed mode switch must fail")
+                .to_string()
+                .contains("installation_mode_migration_not_reviewed")
+        );
+        assert_eq!(
+            store
+                .installation_projection(&shared.id)
+                .expect("shared preserved")
+                .provisioning_mode,
+            "managed_shared"
+        );
+
+        let stale = store
+            .create_intent(NewIntent {
+                daemon_id: "daemon-a",
+                project_id: "project-a",
+                provisioning_mode: "managed_dedicated",
+                app_connection_id: Some("connection-migrate"),
+                migration_installation_id: Some(&shared.id),
+                migration_expected_version: Some(shared.version + 1),
+                migration_source_mode: Some("managed_shared"),
+                actor_id: "admin-a",
+                redirect_uri: "https://gateway.example/slack/connections/connection-migrate/oauth/callback",
+                requested_scopes: &["reactions:read".into()],
+                ttl: Duration::from_secs(600),
+            })
+            .expect("stale reviewed intent");
+        let stale_pending = store
+            .pending_intent_by_state(&stale.oauth_state)
+            .expect("stale pending");
+        assert!(
+            store
+                .complete_intent(
+                    &stale_pending,
+                    OAuthInstallation {
+                        team_id: "T123",
+                        enterprise_id: None,
+                        scopes: &["reactions:read".into()],
+                        bot_token: "xoxb-stale",
+                    },
+                )
+                .expect_err("stale reviewed switch must fail")
+                .to_string()
+                .contains("installation_mode_migration_not_reviewed")
+        );
+        assert_eq!(
+            store
+                .installation_projection(&shared.id)
+                .expect("shared owner preserved after stale callback")
+                .provisioning_mode,
+            "managed_shared"
+        );
+
+        let reviewed = store
+            .create_intent(NewIntent {
+                daemon_id: "daemon-a",
+                project_id: "project-a",
+                provisioning_mode: "managed_dedicated",
+                app_connection_id: Some("connection-migrate"),
+                migration_installation_id: Some(&shared.id),
+                migration_expected_version: Some(shared.version),
+                migration_source_mode: Some("managed_shared"),
+                actor_id: "admin-a",
+                redirect_uri: "https://gateway.example/slack/connections/connection-migrate/oauth/callback",
+                requested_scopes: &["reactions:read".into()],
+                ttl: Duration::from_secs(600),
+            })
+            .expect("reviewed intent");
+        let reviewed_pending = store
+            .pending_intent_by_state(&reviewed.oauth_state)
+            .expect("reviewed pending");
+        let dedicated = store
+            .complete_intent(
+                &reviewed_pending,
+                OAuthInstallation {
+                    team_id: "T123",
+                    enterprise_id: None,
+                    scopes: &["reactions:read".into()],
+                    bot_token: "xoxb-dedicated",
+                },
+            )
+            .expect("reviewed shared to dedicated");
+        assert_eq!(dedicated.id, shared.id);
+        assert_eq!(dedicated.provisioning_mode, "managed_dedicated");
+        assert_eq!(
+            dedicated.app_connection_id.as_deref(),
+            Some("connection-migrate")
+        );
+        assert_eq!(dedicated.generation, shared.generation + 1);
+        assert!(
+            store
+                .installation_for_app_team("T123", "managed_shared", None)
+                .is_err()
+        );
+
+        let rollback = store
+            .create_intent(NewIntent {
+                daemon_id: "daemon-a",
+                project_id: "project-a",
+                provisioning_mode: "managed_shared",
+                app_connection_id: None,
+                migration_installation_id: Some(&dedicated.id),
+                migration_expected_version: Some(dedicated.version),
+                migration_source_mode: Some("managed_dedicated"),
+                actor_id: "admin-a",
+                redirect_uri: "https://gateway.example/slack/oauth/callback",
+                requested_scopes: &["reactions:read".into()],
+                ttl: Duration::from_secs(600),
+            })
+            .expect("rollback intent");
+        let rollback_pending = store
+            .pending_intent_by_state(&rollback.oauth_state)
+            .expect("rollback pending");
+        let restored = store
+            .complete_intent(
+                &rollback_pending,
+                OAuthInstallation {
+                    team_id: "T123",
+                    enterprise_id: None,
+                    scopes: &["reactions:read".into()],
+                    bot_token: "xoxb-shared-restored",
+                },
+            )
+            .expect("reviewed dedicated to shared");
+        assert_eq!(restored.id, shared.id);
+        assert_eq!(restored.provisioning_mode, "managed_shared");
+        assert!(restored.app_connection_id.is_none());
+    }
+
+    #[test]
+    fn dedicated_upgrade_suspend_disconnect_and_delete_are_fenced() {
+        let (_temp, store) = setup();
+        let (intent, installation) =
+            create_dedicated_completed(&store, "connection-lifecycle", "A-LIFECYCLE", "T-LIFE");
+        let pairing = store
+            .intent_status(&intent.id, &intent.poll_secret)
+            .expect("intent status")
+            .pairing_secret
+            .expect("pairing");
+        let app_digest = installation.app_id_digest.clone().expect("App digest");
+        let upgraded = store
+            .update_dedicated_app_manifest(
+                "connection-lifecycle",
+                "daemon-a",
+                "project-a",
+                &app_digest,
+                "v2",
+                "manifest-v2",
+            )
+            .expect("update manifest metadata");
+        assert_eq!(upgraded.version, installation.version + 1);
+        assert_eq!(upgraded.manifest_version.as_deref(), Some("v2"));
+        assert!(
+            store
+                .retire_dedicated_app("connection-lifecycle", "daemon-a", "project-a", &app_digest,)
+                .expect_err("active App cannot be deleted")
+                .to_string()
+                .contains("delete_requires_disconnected")
+        );
+        let suspended = store
+            .suspend_installation(&upgraded.id, "daemon-a", &pairing, upgraded.version)
+            .expect("suspend");
+        assert_eq!(suspended.state, "suspended");
+        assert!(
+            store
+                .claim_deliveries(&suspended.id, "daemon-a", 0, 10, Duration::from_secs(30),)
+                .is_err(),
+            "suspended installation must not deliver"
+        );
+        let disconnected = store
+            .disconnect_installation(&suspended.id, "daemon-a", &pairing, suspended.version)
+            .expect("disconnect suspended installation");
+        assert_eq!(disconnected.state, "disconnected");
+        store
+            .retire_dedicated_app("connection-lifecycle", "daemon-a", "project-a", &app_digest)
+            .expect("retire disconnected App");
+        assert!(
+            store
+                .dedicated_app_credentials("connection-lifecycle")
+                .is_err()
+        );
     }
 }

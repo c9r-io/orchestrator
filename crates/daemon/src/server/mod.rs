@@ -39,6 +39,7 @@ pub struct OrchestratorServer {
     pub(crate) slack_gateway: Option<Arc<crate::slack_gateway::SlackGatewayClient>>,
     pub(crate) slack_manifest_client: Arc<orchestrator_slack_gateway::slack::SlackClient>,
     pub(crate) dedicated_sessions: source_connection::DedicatedSessionStore,
+    pub(crate) dedicated_lifecycle_sessions: source_connection::DedicatedLifecycleSessionStore,
 }
 
 impl OrchestratorServer {
@@ -62,6 +63,8 @@ impl OrchestratorServer {
             slack_gateway,
             slack_manifest_client,
             dedicated_sessions: source_connection::DedicatedSessionStore::default(),
+            dedicated_lifecycle_sessions:
+                source_connection::DedicatedLifecycleSessionStore::default(),
         }
     }
 
@@ -611,6 +614,34 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<SourceConnectionDedicatedMutationRequest>,
     ) -> Result<Response<SourceConnectionDedicatedProvisioningResponse>, Status> {
         source_connection::dedicated_abandon(self, request).await
+    }
+
+    async fn source_connection_migrate_to_shared(
+        &self,
+        request: Request<SourceConnectionMutationRequest>,
+    ) -> Result<Response<SourceConnectionIntentResponse>, Status> {
+        source_connection::migrate_to_shared(self, request).await
+    }
+
+    async fn source_connection_dedicated_upgrade_preview(
+        &self,
+        request: Request<SourceConnectionDedicatedUpgradePreviewRequest>,
+    ) -> Result<Response<SourceConnectionDedicatedLifecycleResponse>, Status> {
+        source_connection::dedicated_upgrade_preview(self, request).await
+    }
+
+    async fn source_connection_dedicated_upgrade_apply(
+        &self,
+        request: Request<SourceConnectionDedicatedUpgradeApplyRequest>,
+    ) -> Result<Response<SourceConnectionDedicatedLifecycleResponse>, Status> {
+        source_connection::dedicated_upgrade_apply(self, request).await
+    }
+
+    async fn source_connection_dedicated_delete(
+        &self,
+        request: Request<SourceConnectionDedicatedDeleteRequest>,
+    ) -> Result<Response<SourceConnection>, Status> {
+        source_connection::dedicated_delete(self, request).await
     }
 
     async fn agent_session_list(

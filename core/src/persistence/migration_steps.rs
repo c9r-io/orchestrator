@@ -1734,3 +1734,24 @@ pub(crate) fn m0036_dedicated_slack_app_provisioning(conn: &Connection) -> Resul
     .context("m0036_dedicated_slack_app_provisioning")?;
     Ok(())
 }
+
+/// Adds the reviewed migration target to dedicated provisioning checkpoints.
+///
+/// Lifecycle secrets remain process-only. The persisted target is a local opaque
+/// SourceConnection ID used to fence shared/dedicated ownership replacement.
+pub(crate) fn m0037_dedicated_slack_app_lifecycle(conn: &Connection) -> Result<()> {
+    ensure_column_exists(
+        conn,
+        "source_connection_provisioning",
+        "target_connection_id",
+        "ALTER TABLE source_connection_provisioning ADD COLUMN target_connection_id TEXT",
+    )?;
+    conn.execute_batch(
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_source_connection_provisioning_target
+            ON source_connection_provisioning(project_id,target_connection_id,status);
+        "#,
+    )
+    .context("m0037_dedicated_slack_app_lifecycle")?;
+    Ok(())
+}

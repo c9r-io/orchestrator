@@ -77,6 +77,11 @@ pub fn router(state: GatewayState) -> Router {
         .route("/v1/dedicated/import", post(import_dedicated_app))
         .route("/v1/dedicated/oauth/intents", post(create_dedicated_intent))
         .route(
+            "/v1/dedicated/apps/manifest",
+            post(update_dedicated_manifest),
+        )
+        .route("/v1/dedicated/apps/delete", post(retire_dedicated_app))
+        .route(
             "/v1/oauth/intents/{intent_id}",
             get(intent_status).delete(cancel_intent),
         )
@@ -97,6 +102,7 @@ pub fn router(state: GatewayState) -> Router {
             "/v1/installations/disconnect",
             post(disconnect_installation),
         )
+        .route("/v1/installations/suspend", post(suspend_installation))
         .route("/v1/installations/transfer", post(transfer_installation))
         .route(
             "/v1/installations/transfers/claim",
@@ -134,6 +140,9 @@ struct CreateIntentRequest {
     actor_id: String,
     #[serde(default)]
     requested_scopes: Vec<String>,
+    migration_installation_id: Option<String>,
+    migration_expected_version: Option<i64>,
+    migration_source_mode: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -178,6 +187,9 @@ async fn create_intent(
             project_id: &request.project_id,
             provisioning_mode: "managed_shared",
             app_connection_id: None,
+            migration_installation_id: request.migration_installation_id.as_deref(),
+            migration_expected_version: request.migration_expected_version,
+            migration_source_mode: request.migration_source_mode.as_deref(),
             actor_id: &request.actor_id,
             redirect_uri: &redirect_uri,
             requested_scopes: &requested_scopes,
@@ -209,6 +221,9 @@ struct CreateDedicatedIntentRequest {
     daemon_id: String,
     project_id: String,
     actor_id: String,
+    migration_installation_id: Option<String>,
+    migration_expected_version: Option<i64>,
+    migration_source_mode: Option<String>,
 }
 
 async fn create_dedicated_intent(
@@ -242,6 +257,9 @@ async fn create_dedicated_intent(
             project_id: &request.project_id,
             provisioning_mode: "managed_dedicated",
             app_connection_id: Some(&request.connection_id),
+            migration_installation_id: request.migration_installation_id.as_deref(),
+            migration_expected_version: request.migration_expected_version,
+            migration_source_mode: request.migration_source_mode.as_deref(),
             actor_id: &request.actor_id,
             redirect_uri: &redirect_uri,
             requested_scopes: &requested_scopes,
@@ -330,6 +348,9 @@ struct DedicatedImportRequest {
     project_id: String,
     actor_id: String,
     credentials: DedicatedCredentialsInput,
+    migration_installation_id: Option<String>,
+    migration_expected_version: Option<i64>,
+    migration_source_mode: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -381,6 +402,9 @@ async fn import_dedicated_app(
             project_id: &request.project_id,
             provisioning_mode: "managed_dedicated",
             app_connection_id: Some(&request.connection_id),
+            migration_installation_id: request.migration_installation_id.as_deref(),
+            migration_expected_version: request.migration_expected_version,
+            migration_source_mode: request.migration_source_mode.as_deref(),
             actor_id: &request.actor_id,
             redirect_uri: &redirect_uri,
             requested_scopes: &scopes,
@@ -405,6 +429,62 @@ async fn import_dedicated_app(
         poll_secret: created.poll_secret,
         expires_at: created.expires_at,
     }))
+}
+
+#[derive(Debug, Deserialize)]
+struct DedicatedManifestMetadataRequest {
+    connection_id: String,
+    daemon_id: String,
+    project_id: String,
+    app_id_digest: String,
+    manifest_version: String,
+    manifest_digest: String,
+}
+
+async fn update_dedicated_manifest(
+    State(state): State<GatewayState>,
+    headers: HeaderMap,
+    Json(request): Json<DedicatedManifestMetadataRequest>,
+) -> Result<Json<crate::domain::InstallationProjection>, ApiError> {
+    authenticate_enrollment(&headers, &state.config.enrollment_key)?;
+    state
+        .store
+        .update_dedicated_app_manifest(
+            &request.connection_id,
+            &request.daemon_id,
+            &request.project_id,
+            &request.app_id_digest,
+            &request.manifest_version,
+            &request.manifest_digest,
+        )
+        .map(Json)
+        .map_err(map_store_error)
+}
+
+#[derive(Debug, Deserialize)]
+struct DedicatedRetireRequest {
+    connection_id: String,
+    daemon_id: String,
+    project_id: String,
+    app_id_digest: String,
+}
+
+async fn retire_dedicated_app(
+    State(state): State<GatewayState>,
+    headers: HeaderMap,
+    Json(request): Json<DedicatedRetireRequest>,
+) -> Result<StatusCode, ApiError> {
+    authenticate_enrollment(&headers, &state.config.enrollment_key)?;
+    state
+        .store
+        .retire_dedicated_app(
+            &request.connection_id,
+            &request.daemon_id,
+            &request.project_id,
+            &request.app_id_digest,
+        )
+        .map_err(map_store_error)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 fn sign_receipt(key: &str, payload: &str) -> Result<String, ApiError> {
@@ -901,6 +981,24 @@ async fn disconnect_installation(
     state
         .store
         .disconnect_installation(
+            &request.installation_id,
+            &request.daemon_id,
+            pairing,
+            request.expected_version,
+        )
+        .map(Json)
+        .map_err(map_store_error)
+}
+
+async fn suspend_installation(
+    State(state): State<GatewayState>,
+    headers: HeaderMap,
+    Json(request): Json<InstallationMutationRequest>,
+) -> Result<Json<crate::domain::InstallationProjection>, ApiError> {
+    let pairing = bearer(&headers)?;
+    state
+        .store
+        .suspend_installation(
             &request.installation_id,
             &request.daemon_id,
             pairing,

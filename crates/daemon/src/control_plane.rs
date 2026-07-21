@@ -780,7 +780,11 @@ pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
         | "SourceConnectionReauthorize" | "SourceConnectionDisconnect"
         | "SourceConnectionTransfer" | "SourceConnectionDedicatedPreview"
         | "SourceConnectionDedicatedApprove"
-        | "SourceConnectionDedicatedAbandon" => Role::Admin,
+        | "SourceConnectionDedicatedAbandon"
+        | "SourceConnectionMigrateToShared"
+        | "SourceConnectionDedicatedUpgradePreview"
+        | "SourceConnectionDedicatedUpgradeApply"
+        | "SourceConnectionDedicatedDelete" => Role::Admin,
 
         other => {
             tracing::warn!(rpc = other, "unmapped RPC defaulting to Admin role");

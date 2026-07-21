@@ -596,6 +596,9 @@ pub enum SourceConnectionCommands {
         /// Print the OAuth URL without opening the system browser.
         #[arg(long)]
         no_open: bool,
+        /// Existing shared connection selected for a reviewed migration.
+        #[arg(long)]
+        target_connection: Option<String>,
     },
     /// Inspect a dedicated App provisioning checkpoint.
     #[command(name = "dedicated-status")]
@@ -635,6 +638,78 @@ pub enum SourceConnectionCommands {
         /// Project isolation scope.
         #[arg(short, long)]
         project: String,
+        /// Admin reason recorded in canonical audit.
+        #[arg(long)]
+        reason: String,
+        /// Stable retry identity.
+        #[arg(long)]
+        idempotency_key: String,
+    },
+    /// Review and apply the fixed manifest to an existing dedicated App.
+    #[command(name = "dedicated-upgrade")]
+    DedicatedUpgrade {
+        /// SourceConnection ID.
+        id: String,
+        /// Project isolation scope.
+        #[arg(short, long)]
+        project: String,
+        /// Observed optimistic version.
+        #[arg(long)]
+        expected_version: i64,
+        /// Read the short-lived Slack Configuration Token from stdin.
+        #[arg(long)]
+        config_token_stdin: bool,
+        /// Apply the displayed reviewed diff in this invocation.
+        #[arg(long)]
+        approve: bool,
+        /// Admin reason recorded in canonical audit.
+        #[arg(long)]
+        reason: String,
+        /// Stable retry identity.
+        #[arg(long)]
+        idempotency_key: String,
+        /// Print a required OAuth URL without opening the system browser.
+        #[arg(long)]
+        no_open: bool,
+    },
+    /// Start a reviewed dedicated-to-official App migration.
+    #[command(name = "migrate-to-shared")]
+    MigrateToShared {
+        /// SourceConnection ID.
+        id: String,
+        /// Project isolation scope.
+        #[arg(short, long)]
+        project: String,
+        /// Observed optimistic version.
+        #[arg(long)]
+        expected_version: i64,
+        /// Admin reason recorded in canonical audit.
+        #[arg(long)]
+        reason: String,
+        /// Stable retry identity.
+        #[arg(long)]
+        idempotency_key: String,
+        /// Print the OAuth URL without opening the system browser.
+        #[arg(long)]
+        no_open: bool,
+    },
+    /// Permanently delete a disconnected workspace-owned Slack App.
+    #[command(name = "dedicated-delete")]
+    DedicatedDelete {
+        /// SourceConnection ID.
+        id: String,
+        /// Project isolation scope.
+        #[arg(short, long)]
+        project: String,
+        /// Observed optimistic version.
+        #[arg(long)]
+        expected_version: i64,
+        /// Read the short-lived Slack Configuration Token from stdin.
+        #[arg(long)]
+        config_token_stdin: bool,
+        /// Exact Slack App ID typed for destructive confirmation.
+        #[arg(long)]
+        app_id_confirmation: String,
         /// Admin reason recorded in canonical audit.
         #[arg(long)]
         reason: String,

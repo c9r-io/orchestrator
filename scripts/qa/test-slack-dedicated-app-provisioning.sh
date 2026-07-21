@@ -68,7 +68,7 @@ run_gate strict-dedicated-clippy FR-115 \
 run_gate frontend-dedicated-unit FR-115 bash -c \
   'cd gui && npm test -- --run src/pages/source-connections/SourceConnections.test.tsx'
 run_gate frontend-dedicated-e2e FR-115 bash -c \
-  'cd gui && npm run test:e2e -- --grep "Slack connections"'
+  'cd gui && npm run test:e2e -- --grep "Slack connections|Slack dedicated"'
 run_gate frontend-build FR-115 bash -c 'cd gui && npm run build'
 run_gate fixture-contract FR-115 bash -c '
   rg -q "connectionRef: conn-managed-dedicated-fixture" fixtures/manifests/bundles/slack-managed-dedicated-app-fixture.yaml &&
@@ -99,6 +99,8 @@ fi
 
 for forbidden in \
   xoxe-fr115-configuration-token \
+  xoxe-upgrade-marker \
+  xoxe-delete-marker \
   fr115-client-secret \
   fr115-signing-secret \
   xoxb-fr115-installation-token \

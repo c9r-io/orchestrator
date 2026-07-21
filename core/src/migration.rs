@@ -548,8 +548,8 @@ mod tests {
         )
         .expect("seed populated v34 task");
 
-        assert_eq!(run_pending(&conn, &migrations).expect("upgrade to v36"), 2);
-        assert_eq!(current_version(&conn).expect("latest version"), 36);
+        assert_eq!(run_pending(&conn, &migrations).expect("upgrade to v37"), 3);
+        assert_eq!(current_version(&conn).expect("latest version"), 37);
         let task: (String, String) = conn
             .query_row(
                 "SELECT project_id,status FROM tasks WHERE id='pre-connection-task'",

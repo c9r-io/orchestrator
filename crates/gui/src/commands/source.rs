@@ -188,6 +188,22 @@ pub struct DedicatedProvisioning {
     pub authorize_url: Option<String>,
     pub error_code: Option<String>,
     pub expires_at: String,
+    pub target_connection_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DedicatedLifecycle {
+    pub lifecycle_id: String,
+    pub connection_id: String,
+    pub status: String,
+    pub manifest_version: String,
+    pub manifest_digest: String,
+    pub diff: Vec<DedicatedManifestDiff>,
+    pub permission_expansion: bool,
+    pub expires_at: String,
+    pub oauth_intent_id: Option<String>,
+    pub authorize_url: Option<String>,
+    pub connection: Option<SourceConnection>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -530,6 +546,35 @@ fn dedicated_from_proto(
         authorize_url: value.authorize_url,
         error_code: value.error_code,
         expires_at: value.expires_at,
+        target_connection_id: value.target_connection_id,
+    }
+}
+
+fn dedicated_lifecycle_from_proto(
+    value: orchestrator_proto::SourceConnectionDedicatedLifecycleResponse,
+) -> DedicatedLifecycle {
+    DedicatedLifecycle {
+        lifecycle_id: value.lifecycle_id,
+        connection_id: value.connection_id,
+        status: value.status,
+        manifest_version: value.manifest_version,
+        manifest_digest: value.manifest_digest,
+        diff: value
+            .diff
+            .into_iter()
+            .map(|entry| DedicatedManifestDiff {
+                field: entry.field,
+                change: entry.change,
+                before: entry.before,
+                after: entry.after,
+                permission_expansion: entry.permission_expansion,
+            })
+            .collect(),
+        permission_expansion: value.permission_expansion,
+        expires_at: value.expires_at,
+        oauth_intent_id: value.oauth_intent_id,
+        authorize_url: value.authorize_url,
+        connection: value.connection.map(connection_from_proto),
     }
 }
 
@@ -649,6 +694,7 @@ pub async fn source_connection_dedicated_preview(
     config_token: String,
     reason: String,
     idempotency_key: String,
+    target_connection_id: Option<String>,
 ) -> Result<DedicatedProvisioning, String> {
     let mut client = state.client().await?;
     client
@@ -659,10 +705,118 @@ pub async fn source_connection_dedicated_preview(
                 config_token,
                 idempotency_key,
                 reason,
+                target_connection_id,
             },
         )
         .await
         .map(|response| dedicated_from_proto(response.into_inner()))
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_connection_migrate_to_shared(
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+    id: String,
+    expected_version: i64,
+    reason: String,
+    idempotency_key: String,
+) -> Result<SourceConnectionIntent, String> {
+    let mut client = state.client().await?;
+    client
+        .source_connection_migrate_to_shared(orchestrator_proto::SourceConnectionMutationRequest {
+            project_id,
+            id,
+            expected_version,
+            idempotency_key,
+            reason,
+        })
+        .await
+        .map(|response| intent_from_proto(response.into_inner()))
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_connection_dedicated_upgrade_preview(
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+    id: String,
+    expected_version: i64,
+    config_token: String,
+    reason: String,
+    idempotency_key: String,
+) -> Result<DedicatedLifecycle, String> {
+    let mut client = state.client().await?;
+    client
+        .source_connection_dedicated_upgrade_preview(
+            orchestrator_proto::SourceConnectionDedicatedUpgradePreviewRequest {
+                project_id,
+                id,
+                expected_version,
+                config_token,
+                idempotency_key,
+                reason,
+            },
+        )
+        .await
+        .map(|response| dedicated_lifecycle_from_proto(response.into_inner()))
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_connection_dedicated_upgrade_apply(
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+    id: String,
+    expected_version: i64,
+    lifecycle_id: String,
+    reason: String,
+    idempotency_key: String,
+) -> Result<DedicatedLifecycle, String> {
+    let mut client = state.client().await?;
+    client
+        .source_connection_dedicated_upgrade_apply(
+            orchestrator_proto::SourceConnectionDedicatedUpgradeApplyRequest {
+                project_id,
+                id,
+                expected_version,
+                lifecycle_id,
+                idempotency_key,
+                reason,
+            },
+        )
+        .await
+        .map(|response| dedicated_lifecycle_from_proto(response.into_inner()))
+        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+}
+
+#[allow(clippy::too_many_arguments)]
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_connection_dedicated_delete(
+    state: State<'_, Arc<AppState>>,
+    project_id: String,
+    id: String,
+    expected_version: i64,
+    config_token: String,
+    typed_app_id: String,
+    reason: String,
+    idempotency_key: String,
+) -> Result<SourceConnection, String> {
+    let mut client = state.client().await?;
+    client
+        .source_connection_dedicated_delete(
+            orchestrator_proto::SourceConnectionDedicatedDeleteRequest {
+                project_id,
+                id,
+                expected_version,
+                config_token,
+                typed_app_id,
+                idempotency_key,
+                reason,
+            },
+        )
+        .await
+        .map(|response| connection_from_proto(response.into_inner()))
         .map_err(|error| crate::errors::humanize_grpc_error(&error))
 }
 

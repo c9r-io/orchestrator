@@ -22,6 +22,18 @@ const active: SourceConnection = {
   updated_at: "2026-07-18T00:00:00Z", reauthorized_at: null, disconnected_at: null,
 };
 
+const dedicatedActive: SourceConnection = {
+  ...active,
+  id: "conn-dedicated-1",
+  installation_id: "installation-dedicated-1",
+  display_label: "Private Product Slack",
+  provisioning_mode: "managed_dedicated",
+  app_ownership: "workspace",
+  app_id_digest: "dedicated-app-identity-digest",
+  manifest_version: "orchestrator-slack-dedicated-v1",
+  provision_state: "completed",
+};
+
 function renderAs(role: Role) {
   return render(
     <RoleContext.Provider value={{ role, canAccess: (required) => hasAccess(role, required) }}>
@@ -175,6 +187,80 @@ describe("SourceConnections", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Create app" }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("source_connection_dedicated_approve", expect.objectContaining({ provisioning_id: "dedicated-2", reason: "isolate regulated workspace" })));
     expect(invoke).toHaveBeenCalledWith("open_source_connection_oauth", { authorize_url: approved.authorize_url });
+  });
+
+  it("binds a reviewed shared connection when provisioning its dedicated replacement", async () => {
+    const preview = {
+      id: "dedicated-migration", project_id: "default", status: "awaiting_approval",
+      manifest_version: "v1", manifest_digest: "c".repeat(64), app_id_digest: null,
+      oauth_intent_id: null, authorize_url: null, error_code: null,
+      expires_at: "2026-07-18T01:00:00Z", target_connection_id: active.id,
+      diff: [{ field: "oauth.scopes.bot", change: "add", before: [], after: ["reactions:read"], permission_expansion: true }],
+    };
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "source_connection_catalog_get") return { protocol_version: 1, gateway_configured: true, permalink_proxy: true, modes: [{ mode: "managed_dedicated", available: true, unavailable_reason: null }] };
+      if (command === "source_connection_list") return [active];
+      if (command === "source_connection_dedicated_preview") return preview;
+      if (["start_source_connection_watch", "stop_source_connection_watch"].includes(command)) return null;
+      throw new Error(`unexpected ${command} ${JSON.stringify(args)}`);
+    });
+    renderAs("admin");
+    fireEvent.change(await screen.findByLabelText("Migration source (optional)"), { target: { value: active.id } });
+    fireEvent.change(screen.getByLabelText("One-time Configuration Token"), { target: { value: "one-time" } });
+    fireEvent.click(screen.getByRole("button", { name: "Validate manifest" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("source_connection_dedicated_preview", expect.objectContaining({ target_connection_id: active.id })));
+  });
+
+  it("clears a fresh token and requires reviewed approval for exact-App upgrade", async () => {
+    const preview = {
+      lifecycle_id: "lifecycle-1", connection_id: dedicatedActive.id, status: "awaiting_approval",
+      manifest_version: "v2", manifest_digest: "d".repeat(64), permission_expansion: true,
+      expires_at: "2026-07-18T01:00:00Z", oauth_intent_id: null, authorize_url: null,
+      connection: dedicatedActive,
+      diff: [{ field: "oauth.scopes.bot", change: "add", before: [], after: ["reactions:read"], permission_expansion: true }],
+    };
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "source_connection_catalog_get") return { protocol_version: 1, gateway_configured: true, permalink_proxy: true, modes: [{ mode: "managed_dedicated", available: true, unavailable_reason: null }] };
+      if (command === "source_connection_list") return [dedicatedActive];
+      if (command === "source_connection_dedicated_upgrade_preview") return preview;
+      if (command === "source_connection_dedicated_upgrade_apply") return { ...preview, status: "reauthorization_required", oauth_intent_id: "intent-upgrade", authorize_url: "https://slack.com/oauth/v2/authorize?state=upgrade" };
+      if (command === "source_connection_intent_get") return { id: "intent-upgrade", project_id: "default", provider: "slack", provisioning_mode: "managed_dedicated", status: "pending", connection_id: null, error_code: null, expires_at: preview.expires_at, authorize_url: null, connection: null };
+      if (command === "open_source_connection_oauth") return true;
+      if (["start_source_connection_watch", "stop_source_connection_watch"].includes(command)) return null;
+      throw new Error(`unexpected ${command} ${JSON.stringify(args)}`);
+    });
+    renderAs("admin");
+    fireEvent.click(await screen.findByRole("button", { name: "Review manifest upgrade" }));
+    const token = screen.getByLabelText("Fresh Configuration Token") as HTMLInputElement;
+    fireEvent.change(token, { target: { value: "fresh-upgrade-token" } });
+    fireEvent.click(screen.getByRole("button", { name: "Validate upgrade" }));
+    expect(await screen.findByRole("button", { name: "Approve manifest upgrade" })).toBeVisible();
+    expect(token.value).toBe("");
+    expect(document.body.textContent).not.toContain("fresh-upgrade-token");
+    fireEvent.click(screen.getByRole("button", { name: "Approve manifest upgrade" }));
+    const dialog = await screen.findByRole("dialog", { name: "Apply dedicated Slack App manifest" });
+    fireEvent.change(within(dialog).getByLabelText("Audit reason"), { target: { value: "upgrade reviewed manifest" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Apply manifest" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("source_connection_dedicated_upgrade_apply", expect.objectContaining({ lifecycle_id: "lifecycle-1", expected_version: dedicatedActive.version })));
+  });
+
+  it("keeps App deletion separate from disconnect with fresh token and typed identity", async () => {
+    const disconnected = { ...dedicatedActive, state: "disconnected" as const, version: 4, disconnected_at: "2026-07-18T02:00:00Z" };
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "source_connection_catalog_get") return { protocol_version: 1, gateway_configured: true, permalink_proxy: true, modes: [{ mode: "managed_dedicated", available: true, unavailable_reason: null }] };
+      if (command === "source_connection_list") return [disconnected];
+      if (command === "source_connection_dedicated_delete") return { ...disconnected, version: 5, provision_state: "app_deleted" };
+      if (["start_source_connection_watch", "stop_source_connection_watch"].includes(command)) return null;
+      throw new Error(`unexpected ${command} ${JSON.stringify(args)}`);
+    });
+    renderAs("admin");
+    fireEvent.click(await screen.findByRole("button", { name: "Delete workspace App" }));
+    fireEvent.change(screen.getByLabelText("Fresh Configuration Token"), { target: { value: "fresh-delete-token" } });
+    fireEvent.change(screen.getByLabelText("Exact Slack App ID"), { target: { value: "A123DELETE" } });
+    fireEvent.change(screen.getByLabelText("Audit reason"), { target: { value: "retire sandbox App" } });
+    fireEvent.click(screen.getByRole("button", { name: "Permanently delete App" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("source_connection_dedicated_delete", expect.objectContaining({ typed_app_id: "A123DELETE", expected_version: 4, reason: "retire sandbox App" })));
+    expect(document.body.textContent).not.toContain("fresh-delete-token");
   });
 
   it("requires a reviewed reason and sends the displayed version fence when disconnecting", async () => {

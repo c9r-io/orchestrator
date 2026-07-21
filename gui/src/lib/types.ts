@@ -338,7 +338,14 @@ export interface DedicatedProvisioning {
   id: string; project_id: string; status: string; manifest_version: string;
   manifest_digest: string; diff: DedicatedManifestDiff[]; app_id_digest: string | null;
   oauth_intent_id: string | null; authorize_url: string | null; error_code: string | null;
-  expires_at: string;
+  expires_at: string; target_connection_id?: string | null;
+}
+
+export interface DedicatedLifecycle {
+  lifecycle_id: string; connection_id: string; status: string;
+  manifest_version: string; manifest_digest: string; diff: DedicatedManifestDiff[];
+  permission_expansion: boolean; expires_at: string; oauth_intent_id: string | null;
+  authorize_url: string | null; connection: SourceConnection | null;
 }
 
 export interface SourceConnectionIntent {

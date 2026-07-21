@@ -278,6 +278,11 @@ pub fn registered_migrations() -> Vec<Migration> {
             name: "m0036_dedicated_slack_app_provisioning",
             up: crate::persistence::migration_steps::m0036_dedicated_slack_app_provisioning,
         },
+        Migration {
+            version: 37,
+            name: "m0037_dedicated_slack_app_lifecycle",
+            up: crate::persistence::migration_steps::m0037_dedicated_slack_app_lifecycle,
+        },
     ]
 }
 

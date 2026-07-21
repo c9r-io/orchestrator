@@ -72,6 +72,10 @@ service OrchestratorService {
   rpc SourceConnectionDedicatedApprove(SourceConnectionDedicatedMutationRequest) returns (SourceConnectionDedicatedProvisioningResponse);
   rpc SourceConnectionDedicatedGet(SourceConnectionDedicatedGetRequest) returns (SourceConnectionDedicatedProvisioningResponse);
   rpc SourceConnectionDedicatedAbandon(SourceConnectionDedicatedMutationRequest) returns (SourceConnectionDedicatedProvisioningResponse);
+  rpc SourceConnectionMigrateToShared(SourceConnectionMutationRequest) returns (SourceConnectionIntentResponse);
+  rpc SourceConnectionDedicatedUpgradePreview(SourceConnectionDedicatedUpgradePreviewRequest) returns (SourceConnectionDedicatedLifecycleResponse);
+  rpc SourceConnectionDedicatedUpgradeApply(SourceConnectionDedicatedUpgradeApplyRequest) returns (SourceConnectionDedicatedLifecycleResponse);
+  rpc SourceConnectionDedicatedDelete(SourceConnectionDedicatedDeleteRequest) returns (SourceConnection);
 
   // Deterministic handoff and two-stage safe logical resume
   rpc HandoffGenerate(HandoffGenerateRequest) returns (HandoffSnapshotResponse);
@@ -987,6 +991,7 @@ message SourceConnectionDedicatedPreviewRequest {
   string config_token = 3;
   string idempotency_key = 4;
   string reason = 5;
+  optional string target_connection_id = 6;
 }
 
 message SourceConnectionDedicatedMutationRequest {
@@ -1013,6 +1018,49 @@ message SourceConnectionDedicatedProvisioningResponse {
   optional string authorize_url = 9;
   optional string error_code = 10;
   string expires_at = 11;
+  optional string target_connection_id = 12;
+}
+
+message SourceConnectionDedicatedUpgradePreviewRequest {
+  string project_id = 1;
+  string id = 2;
+  int64 expected_version = 3;
+  string config_token = 4;
+  string idempotency_key = 5;
+  string reason = 6;
+}
+
+message SourceConnectionDedicatedUpgradeApplyRequest {
+  string project_id = 1;
+  string id = 2;
+  int64 expected_version = 3;
+  string lifecycle_id = 4;
+  string idempotency_key = 5;
+  string reason = 6;
+}
+
+message SourceConnectionDedicatedLifecycleResponse {
+  string lifecycle_id = 1;
+  string connection_id = 2;
+  string status = 3;
+  string manifest_version = 4;
+  string manifest_digest = 5;
+  repeated SourceConnectionManifestDiffEntry diff = 6;
+  bool permission_expansion = 7;
+  string expires_at = 8;
+  optional string oauth_intent_id = 9;
+  optional string authorize_url = 10;
+  optional SourceConnection connection = 11;
+}
+
+message SourceConnectionDedicatedDeleteRequest {
+  string project_id = 1;
+  string id = 2;
+  int64 expected_version = 3;
+  string config_token = 4;
+  string typed_app_id = 5;
+  string idempotency_key = 6;
+  string reason = 7;
 }
 
 message HandoffGenerateRequest {

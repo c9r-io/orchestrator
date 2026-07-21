@@ -27,6 +27,12 @@ pub(crate) struct SlackGatewayProvider {
     client: Arc<SlackGatewayClient>,
 }
 
+pub(crate) struct GatewayMigrationFence<'a> {
+    pub(crate) installation_id: &'a str,
+    pub(crate) expected_version: i64,
+    pub(crate) source_mode: &'a str,
+}
+
 impl SlackGatewayProvider {
     pub(crate) fn new(state: Arc<InnerState>, client: Arc<SlackGatewayClient>) -> Self {
         Self { state, client }
@@ -148,6 +154,7 @@ impl SlackGatewayClient {
         daemon_id: &str,
         project_id: &str,
         actor_id: &str,
+        migration: Option<&GatewayMigrationFence<'_>>,
     ) -> Result<GatewayIntentCreated> {
         self.post_json(
             "v1/oauth/intents",
@@ -156,7 +163,10 @@ impl SlackGatewayClient {
                 "daemon_id": daemon_id,
                 "project_id": project_id,
                 "actor_id": actor_id,
-                "requested_scopes": ["reactions:read"]
+                "requested_scopes": ["reactions:read"],
+                "migration_installation_id": migration.map(|value| value.installation_id),
+                "migration_expected_version": migration.map(|value| value.expected_version),
+                "migration_source_mode": migration.map(|value| value.source_mode)
             }),
         )
         .await
@@ -168,6 +178,7 @@ impl SlackGatewayClient {
         daemon_id: &str,
         project_id: &str,
         actor_id: &str,
+        migration: Option<&GatewayMigrationFence<'_>>,
     ) -> Result<GatewayIntentCreated> {
         self.post_json(
             "v1/dedicated/oauth/intents",
@@ -176,7 +187,10 @@ impl SlackGatewayClient {
                 "connection_id": connection_id,
                 "daemon_id": daemon_id,
                 "project_id": project_id,
-                "actor_id": actor_id
+                "actor_id": actor_id,
+                "migration_installation_id": migration.map(|value| value.installation_id),
+                "migration_expected_version": migration.map(|value| value.expected_version),
+                "migration_source_mode": migration.map(|value| value.source_mode)
             }),
         )
         .await
@@ -214,6 +228,7 @@ impl SlackGatewayClient {
         manifest_digest: &str,
         import_secret: &str,
         credentials: &GatewayDedicatedCredentials<'_>,
+        migration: Option<&GatewayMigrationFence<'_>>,
     ) -> Result<GatewayDedicatedImport> {
         let response: GatewayDedicatedImport = self
             .post_json(
@@ -229,7 +244,10 @@ impl SlackGatewayClient {
                         "client_id": credentials.client_id,
                         "client_secret": credentials.client_secret,
                         "signing_secret": credentials.signing_secret
-                    }
+                    },
+                    "migration_installation_id": migration.map(|value| value.installation_id),
+                    "migration_expected_version": migration.map(|value| value.expected_version),
+                    "migration_source_mode": migration.map(|value| value.source_mode)
                 }),
             )
             .await?;
@@ -357,6 +375,70 @@ impl SlackGatewayClient {
         .await
     }
 
+    pub(crate) async fn suspend(
+        &self,
+        installation_id: &str,
+        daemon_id: &str,
+        expected_version: i64,
+        pairing_secret: &str,
+    ) -> Result<GatewayInstallation> {
+        self.post_json(
+            "v1/installations/suspend",
+            Some(pairing_secret),
+            &serde_json::json!({
+                "installation_id": installation_id,
+                "daemon_id": daemon_id,
+                "expected_version": expected_version
+            }),
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn update_dedicated_manifest(
+        &self,
+        connection_id: &str,
+        daemon_id: &str,
+        project_id: &str,
+        app_id_digest: &str,
+        manifest_version: &str,
+        manifest_digest: &str,
+    ) -> Result<GatewayInstallation> {
+        self.post_json(
+            "v1/dedicated/apps/manifest",
+            Some(&self.enrollment_key),
+            &serde_json::json!({
+                "connection_id": connection_id,
+                "daemon_id": daemon_id,
+                "project_id": project_id,
+                "app_id_digest": app_id_digest,
+                "manifest_version": manifest_version,
+                "manifest_digest": manifest_digest
+            }),
+        )
+        .await
+    }
+
+    pub(crate) async fn retire_dedicated_app(
+        &self,
+        connection_id: &str,
+        daemon_id: &str,
+        project_id: &str,
+        app_id_digest: &str,
+    ) -> Result<()> {
+        self.post_empty(
+            "v1/dedicated/apps/delete",
+            Some(&self.enrollment_key),
+            &serde_json::json!({
+                "connection_id": connection_id,
+                "daemon_id": daemon_id,
+                "project_id": project_id,
+                "app_id_digest": app_id_digest
+            }),
+        )
+        .await
+    }
+
     pub(crate) async fn transfer(
         &self,
         installation_id: &str,
@@ -451,6 +533,26 @@ impl SlackGatewayClient {
                 .context("Slack Gateway request failed")?,
         )
         .await
+    }
+
+    async fn post_empty(
+        &self,
+        path: &str,
+        bearer: Option<&str>,
+        body: &serde_json::Value,
+    ) -> Result<()> {
+        let mut request = self.client.post(self.endpoint(path)?).json(body);
+        if let Some(secret) = bearer {
+            request = request.bearer_auth(secret);
+        }
+        let response = request
+            .send()
+            .await
+            .context("Slack Gateway request failed")?;
+        if response.status().is_success() {
+            return Ok(());
+        }
+        Err(provider_error(response).await)
     }
 
     fn endpoint(&self, path: &str) -> Result<Url> {

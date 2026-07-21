@@ -309,6 +309,8 @@ pub struct DedicatedProvisioning {
     pub display_label: String,
     /// Exclusive daemon owner.
     pub owner_daemon_id: String,
+    /// Existing logical connection selected for a reviewed mode migration.
+    pub target_connection_id: Option<String>,
     /// Durable provisioning state.
     pub status: String,
     /// Reviewed manifest profile version.
@@ -351,6 +353,8 @@ pub struct StoreDedicatedProvisioning {
     pub display_label: String,
     /// Exclusive daemon owner.
     pub owner_daemon_id: String,
+    /// Existing logical connection selected for a reviewed mode migration.
+    pub target_connection_id: Option<String>,
     /// Reviewed manifest profile version.
     pub manifest_version: String,
     /// Manifest content digest.
@@ -378,6 +382,27 @@ pub struct UpdateDedicatedProvisioning {
     pub oauth_intent_id: Option<String>,
     /// Optional privacy-safe failure code.
     pub error_code: Option<String>,
+}
+
+/// CAS update for safe dedicated App lifecycle metadata on a SourceConnection.
+#[derive(Debug, Clone)]
+pub struct UpdateDedicatedConnectionLifecycle {
+    /// Owning project.
+    pub project_id: String,
+    /// Stable logical SourceConnection ID.
+    pub id: String,
+    /// Exact prior connection version.
+    pub expected_version: i64,
+    /// Resulting connection state.
+    pub state: SourceConnectionState,
+    /// Reviewed manifest profile version.
+    pub manifest_version: String,
+    /// Safe lifecycle projection (`completed`, `reauthorization_required`, `app_deleted`).
+    pub provision_state: String,
+    /// Optional stable privacy-safe failure code.
+    pub error_code: Option<String>,
+    /// Canonical governed request ID.
+    pub request_id: String,
 }
 
 /// Input for persisting a newly authenticated Gateway OAuth intent.
@@ -829,6 +854,18 @@ impl AsyncSourceConnectionRepository {
             .await
             .map_err(flatten_err)
     }
+
+    /// Updates dedicated App lifecycle metadata with the SourceConnection version fence.
+    pub async fn update_dedicated_connection_lifecycle(
+        &self,
+        input: UpdateDedicatedConnectionLifecycle,
+    ) -> Result<SourceConnection> {
+        self.db
+            .writer()
+            .call(move |conn| update_dedicated_connection_lifecycle(conn, input).map_err(other))
+            .await
+            .map_err(flatten_err)
+    }
 }
 
 fn valid_provision_status(value: &str) -> bool {
@@ -864,14 +901,15 @@ fn store_dedicated_provisioning(
     let now = now_ts();
     conn.execute(
         "INSERT INTO source_connection_provisioning
-         (id,project_id,display_label,owner_daemon_id,status,manifest_version,
-          manifest_digest,expires_at,created_at,updated_at)
-         VALUES(?1,?2,?3,?4,'awaiting_approval',?5,?6,?7,?8,?8)",
+         (id,project_id,display_label,owner_daemon_id,target_connection_id,status,
+          manifest_version,manifest_digest,expires_at,created_at,updated_at)
+         VALUES(?1,?2,?3,?4,?5,'awaiting_approval',?6,?7,?8,?9,?9)",
         params![
             input.id,
             input.project_id,
             input.display_label,
             input.owner_daemon_id,
+            input.target_connection_id,
             input.manifest_version,
             input.manifest_digest,
             input.expires_at,
@@ -920,8 +958,9 @@ fn read_dedicated_provisioning(
     id: &str,
 ) -> Result<Option<DedicatedProvisioning>> {
     conn.query_row(
-        "SELECT id,project_id,display_label,owner_daemon_id,status,manifest_version,
-         manifest_digest,app_id_digest,oauth_intent_id,error_code,expires_at,created_at,updated_at
+        "SELECT id,project_id,display_label,owner_daemon_id,target_connection_id,status,
+         manifest_version,manifest_digest,app_id_digest,oauth_intent_id,error_code,
+         expires_at,created_at,updated_at
          FROM source_connection_provisioning WHERE id=?1 AND project_id=?2",
         params![id, project_id],
         |row| {
@@ -930,20 +969,72 @@ fn read_dedicated_provisioning(
                 project_id: row.get(1)?,
                 display_label: row.get(2)?,
                 owner_daemon_id: row.get(3)?,
-                status: row.get(4)?,
-                manifest_version: row.get(5)?,
-                manifest_digest: row.get(6)?,
-                app_id_digest: row.get(7)?,
-                oauth_intent_id: row.get(8)?,
-                error_code: row.get(9)?,
-                expires_at: row.get(10)?,
-                created_at: row.get(11)?,
-                updated_at: row.get(12)?,
+                target_connection_id: row.get(4)?,
+                status: row.get(5)?,
+                manifest_version: row.get(6)?,
+                manifest_digest: row.get(7)?,
+                app_id_digest: row.get(8)?,
+                oauth_intent_id: row.get(9)?,
+                error_code: row.get(10)?,
+                expires_at: row.get(11)?,
+                created_at: row.get(12)?,
+                updated_at: row.get(13)?,
             })
         },
     )
     .optional()
     .map_err(Into::into)
+}
+
+fn update_dedicated_connection_lifecycle(
+    conn: &Connection,
+    input: UpdateDedicatedConnectionLifecycle,
+) -> Result<SourceConnection> {
+    if input.expected_version < 1
+        || input.manifest_version.trim().is_empty()
+        || input.manifest_version.len() > 64
+        || !matches!(
+            input.provision_state.as_str(),
+            "completed" | "reauthorization_required" | "app_deleted"
+        )
+        || input.request_id.trim().is_empty()
+    {
+        bail!("invalid dedicated Slack App lifecycle update");
+    }
+    let transaction = conn.unchecked_transaction()?;
+    let now = now_ts();
+    let changed = transaction.execute(
+        "UPDATE source_connections SET state=?4,version=version+1,manifest_version=?5,
+         provision_state=?6,provision_error_code=?7,last_error_code=?7,updated_at=?8
+         WHERE id=?1 AND project_id=?2 AND version=?3
+           AND provisioning_mode='managed_dedicated'",
+        params![
+            input.id,
+            input.project_id,
+            input.expected_version,
+            input.state.as_str(),
+            input.manifest_version,
+            input.provision_state,
+            input.error_code,
+            now,
+        ],
+    )?;
+    if changed != 1 {
+        bail!("dedicated SourceConnection version or mode conflict");
+    }
+    append_change(
+        &transaction,
+        &input.id,
+        &input.project_id,
+        input.expected_version + 1,
+        input.state,
+        input.error_code.as_deref(),
+        Some(&input.request_id),
+        &now,
+    )?;
+    transaction.commit()?;
+    read_connection(conn, &input.project_id, &input.id)?
+        .context("updated dedicated SourceConnection missing")
 }
 
 fn store_intent(
@@ -1708,6 +1799,7 @@ mod tests {
                 project_id: "project-a".into(),
                 display_label: "Private Slack".into(),
                 owner_daemon_id: "daemon-1".into(),
+                target_connection_id: None,
                 manifest_version: "dedicated-v1".into(),
                 manifest_digest: "manifest-digest".into(),
                 expires_at: "2026-07-19T01:00:00Z".into(),
@@ -1790,6 +1882,42 @@ mod tests {
                 .await
                 .expect("cross-project read")
                 .is_none()
+        );
+
+        let suspended = repository
+            .update_dedicated_connection_lifecycle(UpdateDedicatedConnectionLifecycle {
+                project_id: "project-a".into(),
+                id: "conn-install-1".into(),
+                expected_version: 1,
+                state: SourceConnectionState::Suspended,
+                manifest_version: "dedicated-v2".into(),
+                provision_state: "reauthorization_required".into(),
+                error_code: Some("slack_manifest_reauthorization_required".into()),
+                request_id: "req-upgrade".into(),
+            })
+            .await
+            .expect("update lifecycle");
+        assert_eq!(suspended.version, 2);
+        assert_eq!(suspended.state, SourceConnectionState::Suspended);
+        assert_eq!(suspended.manifest_version.as_deref(), Some("dedicated-v2"));
+        assert_eq!(
+            suspended.provision_state.as_deref(),
+            Some("reauthorization_required")
+        );
+        assert!(
+            repository
+                .update_dedicated_connection_lifecycle(UpdateDedicatedConnectionLifecycle {
+                    project_id: "project-a".into(),
+                    id: "conn-install-1".into(),
+                    expected_version: 1,
+                    state: SourceConnectionState::Active,
+                    manifest_version: "dedicated-v2".into(),
+                    provision_state: "completed".into(),
+                    error_code: None,
+                    request_id: "req-stale-upgrade".into(),
+                })
+                .await
+                .is_err()
         );
     }
 }

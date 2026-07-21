@@ -4,9 +4,11 @@ use orchestrator_proto::{
     SourceAutomationListRequest, SourceAutomationMutationRequest, SourceAutomationRouteGetRequest,
     SourceAutomationSimulateRequest, SourceAutomationStatusRequest, SourceAutomationWatchRequest,
     SourceBindRequest, SourceBinding, SourceBindingListRequest, SourceConnectionCatalogRequest,
-    SourceConnectionConnectRequest, SourceConnectionDedicatedGetRequest,
+    SourceConnectionConnectRequest, SourceConnectionDedicatedDeleteRequest,
+    SourceConnectionDedicatedGetRequest, SourceConnectionDedicatedLifecycleResponse,
     SourceConnectionDedicatedMutationRequest, SourceConnectionDedicatedPreviewRequest,
-    SourceConnectionDedicatedProvisioningResponse, SourceConnectionGetRequest,
+    SourceConnectionDedicatedProvisioningResponse, SourceConnectionDedicatedUpgradeApplyRequest,
+    SourceConnectionDedicatedUpgradePreviewRequest, SourceConnectionGetRequest,
     SourceConnectionIntentGetRequest, SourceConnectionIntentMutationRequest,
     SourceConnectionListRequest, SourceConnectionMutationRequest, SourceConnectionTransferRequest,
     SourceConnectionWatchRequest, SourceEvent, SourceEventGetRequest, SourceEventIngestRequest,
@@ -16,6 +18,7 @@ use orchestrator_proto::{
 use sha2::{Digest, Sha256};
 use std::io::Read;
 use tonic::transport::Channel;
+use zeroize::Zeroizing;
 
 use crate::{
     OutputFormat, SourceAutomationCommands, SourceBindingCommands, SourceCommands,
@@ -669,28 +672,17 @@ async fn dispatch_connection(
             reason,
             idempotency_key,
             no_open,
+            target_connection,
         } => {
-            if !config_token_stdin {
-                bail!(
-                    "--config-token-stdin is required; Configuration Tokens are never accepted in argv or environment"
-                );
-            }
-            let mut config_token = String::new();
-            std::io::stdin()
-                .take(8193)
-                .read_to_string(&mut config_token)
-                .context("failed to read Configuration Token from stdin")?;
-            let config_token = config_token.trim().to_string();
-            if config_token.is_empty() || config_token.len() > 8192 {
-                bail!("Configuration Token stdin must contain 1-8192 characters");
-            }
+            let mut config_token = read_config_token_stdin(config_token_stdin)?;
             let preview = client
                 .source_connection_dedicated_preview(SourceConnectionDedicatedPreviewRequest {
                     project_id: project.clone(),
                     display_label: label,
-                    config_token,
+                    config_token: std::mem::take(&mut *config_token),
                     idempotency_key: idempotency_key.clone(),
                     reason: reason.clone(),
+                    target_connection_id: target_connection,
                 })
                 .await?
                 .into_inner();
@@ -763,6 +755,98 @@ async fn dispatch_connection(
                 .await?
                 .into_inner();
             print_value(dedicated_value(&value), OutputFormat::Yaml)?;
+        }
+        SourceConnectionCommands::DedicatedUpgrade {
+            id,
+            project,
+            expected_version,
+            config_token_stdin,
+            approve,
+            reason,
+            idempotency_key,
+            no_open,
+        } => {
+            let mut config_token = read_config_token_stdin(config_token_stdin)?;
+            let preview = client
+                .source_connection_dedicated_upgrade_preview(
+                    SourceConnectionDedicatedUpgradePreviewRequest {
+                        project_id: project.clone(),
+                        id: id.clone(),
+                        expected_version,
+                        config_token: std::mem::take(&mut *config_token),
+                        idempotency_key: idempotency_key.clone(),
+                        reason: reason.clone(),
+                    },
+                )
+                .await?
+                .into_inner();
+            if !approve {
+                print_value(dedicated_lifecycle_value(&preview), OutputFormat::Yaml)?;
+                eprintln!(
+                    "Review the manifest diff, then rerun with --approve and a fresh Configuration Token before expiry."
+                );
+            } else {
+                let applied = client
+                    .source_connection_dedicated_upgrade_apply(
+                        SourceConnectionDedicatedUpgradeApplyRequest {
+                            project_id: project,
+                            id,
+                            expected_version,
+                            lifecycle_id: preview.lifecycle_id,
+                            idempotency_key: format!("{idempotency_key}-apply"),
+                            reason,
+                        },
+                    )
+                    .await?
+                    .into_inner();
+                maybe_open_oauth(applied.authorize_url.as_deref(), no_open);
+                print_value(dedicated_lifecycle_value(&applied), OutputFormat::Yaml)?;
+            }
+        }
+        SourceConnectionCommands::MigrateToShared {
+            id,
+            project,
+            expected_version,
+            reason,
+            idempotency_key,
+            no_open,
+        } => {
+            let intent = client
+                .source_connection_migrate_to_shared(SourceConnectionMutationRequest {
+                    project_id: project,
+                    id,
+                    expected_version,
+                    idempotency_key,
+                    reason,
+                })
+                .await?
+                .into_inner();
+            maybe_open_oauth(intent.authorize_url.as_deref(), no_open);
+            print_value(intent_value(&intent), OutputFormat::Yaml)?;
+        }
+        SourceConnectionCommands::DedicatedDelete {
+            id,
+            project,
+            expected_version,
+            config_token_stdin,
+            app_id_confirmation,
+            reason,
+            idempotency_key,
+        } => {
+            let mut config_token = read_config_token_stdin(config_token_stdin)?;
+            let connection = client
+                .source_connection_dedicated_delete(SourceConnectionDedicatedDeleteRequest {
+                    project_id: project,
+                    id,
+                    expected_version,
+                    config_token: std::mem::take(&mut *config_token),
+                    typed_app_id: app_id_confirmation,
+                    idempotency_key,
+                    reason,
+                })
+                .await?
+                .into_inner();
+            print_value(connection_value(&connection), OutputFormat::Yaml)?;
         }
         SourceConnectionCommands::Status {
             intent_id,
@@ -948,7 +1032,51 @@ fn dedicated_value(value: &SourceConnectionDedicatedProvisioningResponse) -> ser
         "authorize_url": value.authorize_url,
         "error_code": value.error_code,
         "expires_at": value.expires_at,
+        "target_connection_id": value.target_connection_id,
     })
+}
+
+fn dedicated_lifecycle_value(
+    value: &SourceConnectionDedicatedLifecycleResponse,
+) -> serde_json::Value {
+    serde_json::json!({
+        "lifecycle_id": value.lifecycle_id,
+        "connection_id": value.connection_id,
+        "status": value.status,
+        "manifest_version": value.manifest_version,
+        "manifest_digest": value.manifest_digest,
+        "permission_expansion": value.permission_expansion,
+        "expires_at": value.expires_at,
+        "oauth_intent_id": value.oauth_intent_id,
+        "authorize_url": value.authorize_url,
+        "diff": value.diff.iter().map(|entry| serde_json::json!({
+            "field": entry.field,
+            "change": entry.change,
+            "before": entry.before,
+            "after": entry.after,
+            "permission_expansion": entry.permission_expansion,
+        })).collect::<Vec<_>>(),
+        "connection": value.connection.as_ref().map(connection_value),
+    })
+}
+
+fn read_config_token_stdin(enabled: bool) -> Result<Zeroizing<String>> {
+    if !enabled {
+        bail!(
+            "--config-token-stdin is required; Configuration Tokens are never accepted in argv or environment"
+        );
+    }
+    let mut value = Zeroizing::new(String::new());
+    std::io::stdin()
+        .take(8193)
+        .read_to_string(&mut value)
+        .context("failed to read Configuration Token from stdin")?;
+    let trimmed = value.trim().to_string();
+    value.clear();
+    if trimmed.is_empty() || trimmed.len() > 8192 {
+        bail!("Configuration Token stdin must contain 1-8192 characters");
+    }
+    Ok(Zeroizing::new(trimmed))
 }
 
 fn intent_value(value: &orchestrator_proto::SourceConnectionIntentResponse) -> serde_json::Value {
