@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "provider": "codex",
+  "transport": "cli",
+  "codex_cli_version": "0.144.5",
+  "recorded_at": "2026-07-22",
+  "session_placeholder": "<SESSION_ID>",
+  "first_events": [
+    {
+      "type": "thread.started",
+      "thread_id": "<SESSION_ID>"
+    },
+    {
+      "type": "turn.started"
+    },
+    {
+      "type": "item.completed",
+      "item": {
+        "id": "<FIRST_ITEM_ID>",
+        "type": "agent_message",
+        "text": "ORCH_RESUME_ANCHOR_ALPHA"
+      }
+    },
+    {
+      "type": "turn.completed",
+      "usage": {
+        "input_tokens": 12794,
+        "cached_input_tokens": 9984,
+        "output_tokens": 12,
+        "reasoning_output_tokens": 0
+      }
+    }
+  ],
+  "resume_events": [
+    {
+      "type": "thread.started",
+      "thread_id": "<SESSION_ID>"
+    },
+    {
+      "type": "turn.started"
+    },
+    {
+      "type": "item.completed",
+      "item": {
+        "id": "<RESUME_ITEM_ID>",
+        "type": "agent_message",
+        "text": "ORCH_RESUME_ANCHOR_BETA:ORCH_RESUME_ANCHOR_ALPHA"
+      }
+    },
+    {
+      "type": "turn.completed",
+      "usage": {
+        "input_tokens": 25634,
+        "cached_input_tokens": 22016,
+        "output_tokens": 34,
+        "reasoning_output_tokens": 0
+      }
+    }
+  ]
+}

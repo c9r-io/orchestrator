@@ -483,16 +483,44 @@ mod tests {
     }
 
     #[test]
-    fn codex_fixture_maps_thread_and_message() {
-        let (events, session) =
-            parse_codex_event(&json!({"type":"thread.started","thread_id":"thread-secret"}));
-        assert!(events.is_empty());
-        assert_eq!(session.as_deref(), Some("thread-secret"));
-        let (events, _) = parse_codex_event(
-            &json!({"type":"item.completed","item":{"type":"agent_message","text":"complete"}}),
-        );
-        assert!(
-            matches!(events.as_slice(), [DriverEvent::AssistantText(text)] if text == "complete")
-        );
+    fn codex_resume_recorded_fixture_maps_session_text_and_usage() {
+        let fixture: Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../fixtures/driver/codex-cli-0.144.5-resume.json"
+        )))
+        .unwrap();
+        assert_eq!(fixture["codex_cli_version"], "0.144.5");
+
+        let map_stream = |field: &str| {
+            let mut events = Vec::new();
+            let mut session = None;
+            for line in fixture[field].as_array().unwrap() {
+                let (mapped, found) = parse_codex_event(line);
+                events.extend(mapped);
+                session = found.or(session);
+            }
+            (events, session)
+        };
+
+        let (first_events, first_session) = map_stream("first_events");
+        let (resume_events, resume_session) = map_stream("resume_events");
+        assert_eq!(first_session.as_deref(), Some("<SESSION_ID>"));
+        assert_eq!(resume_session, first_session);
+        assert!(first_events.iter().any(
+            |event| matches!(event, DriverEvent::AssistantText(text) if text == "ORCH_RESUME_ANCHOR_ALPHA")
+        ));
+        assert!(resume_events.iter().any(
+            |event| matches!(event, DriverEvent::AssistantText(text) if text == "ORCH_RESUME_ANCHOR_BETA:ORCH_RESUME_ANCHOR_ALPHA")
+        ));
+        assert!(resume_events.iter().any(|event| matches!(
+            event,
+            DriverEvent::Usage {
+                cost_usd: None,
+                tokens: TokenCounts {
+                    input: Some(25_634),
+                    output: Some(34),
+                },
+            }
+        )));
     }
 }

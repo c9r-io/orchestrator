@@ -41,9 +41,9 @@ pub fn driver_capabilities(config: &AgentDriverConfig) -> DriverCapabilities {
         (DriverProvider::Codex, DriverTransport::Cli) => DriverCapabilities {
             multi_turn: false,
             tool_hosting: ToolHosting::None,
-            // FR-116-A: keep attachment fail-closed until the real CLI protocol
-            // and its recorded conformance fixture have been certified.
-            session_resume: false,
+            // Certified against codex-cli 0.144.5 and pinned by the recorded
+            // resume fixture under fixtures/driver/.
+            session_resume: true,
             permission_events: false,
             cancel: CancelSemantics::Guaranteed,
             sandboxable: true,
@@ -175,9 +175,9 @@ mod tests {
     }
 
     #[test]
-    fn codex_resume_is_fail_closed_until_protocol_certification() {
+    fn codex_resume_is_advertised_after_protocol_certification() {
         let capabilities = driver_capabilities(&driver(DriverProvider::Codex));
-        assert!(!capabilities.session_resume);
+        assert!(capabilities.session_resume);
     }
 
     #[test]

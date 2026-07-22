@@ -282,6 +282,7 @@ fn quote(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::driver::SessionRef;
     use orchestrator_config::config::{AgentDriverConfig, DriverOptions, DriverTransport};
     use std::collections::HashMap;
     #[cfg(unix)]
@@ -338,6 +339,22 @@ mod tests {
         let command = build_codex_command(&request(&codex, root.path()));
         assert!(command.contains("exec --json"));
         assert!(command.ends_with(r"-- 'fix it'\''s tests'"));
+    }
+
+    #[test]
+    fn codex_resume_command_matches_certified_cli_grammar() {
+        let root = tempdir().unwrap();
+        let codex = driver(DriverProvider::Codex);
+        let session =
+            SessionRef::from_provider("01900000-0000-7000-8000-000000000001".to_string()).unwrap();
+        let mut resume = request(&codex, root.path());
+        resume.session_ref = Some(&session);
+
+        assert_eq!(
+            build_codex_command(&resume),
+            "'codex' exec resume '01900000-0000-7000-8000-000000000001' --json -- \
+             'fix it'\\''s tests'"
+        );
     }
 
     #[test]
