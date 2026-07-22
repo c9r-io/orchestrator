@@ -763,6 +763,62 @@ mod tests {
         assert!(error.to_string().contains("ExecutionProfile 'writer'"));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn global_skill_inside_managed_task_homes_is_rejected_during_config_load() {
+        use crate::config::{ProjectConfig, WorkspaceConfig, WorkspaceKind};
+        use std::os::unix::fs::PermissionsExt;
+
+        let data_dir = tempfile::tempdir().expect("data dir");
+        let managed_homes = data_dir.path().join("task-homes");
+        let skill = managed_homes.join("skills");
+        std::fs::create_dir_all(&skill).expect("skill directory");
+        std::fs::set_permissions(&skill, std::fs::Permissions::from_mode(0o755))
+            .expect("trusted permission bits");
+        let policy = serde_yaml::to_string(&serde_json::json!({
+            "fileSharing": {
+                "globalSkills": [{ "path": skill }],
+                "shareableRoots": [managed_homes]
+            }
+        }))
+        .expect("serialize file sharing policy");
+        std::fs::write(data_dir.path().join("file-sharing.yaml"), policy)
+            .expect("write file sharing policy");
+        let config = OrchestratorConfig {
+            projects: [(
+                "project".to_string(),
+                ProjectConfig {
+                    workspaces: [(
+                        "ephemeral".to_string(),
+                        WorkspaceConfig {
+                            kind: WorkspaceKind::Task,
+                            root_path: String::new(),
+                            qa_targets: Vec::new(),
+                            ticket_dir: String::new(),
+                            self_referential: false,
+                            health_policy: Default::default(),
+                            artifacts_dir: None,
+                        },
+                    )]
+                    .into(),
+                    ..ProjectConfig::default()
+                },
+            )]
+            .into(),
+            ..OrchestratorConfig::default()
+        };
+
+        let error =
+            resolve_and_validate_workspaces_for_project(data_dir.path(), &config, "project")
+                .expect_err("managed task home overlap must fail");
+        assert!(
+            error
+                .to_string()
+                .contains("FILE_SHARING_GLOBAL_SKILL_UNTRUSTED")
+        );
+        assert!(error.to_string().contains("managed task home"));
+    }
+
     #[test]
     fn resolve_and_validate_projects_resolves_workspaces() {
         use crate::config::{ProjectConfig, WorkspaceConfig};

@@ -73,13 +73,18 @@ Global Skills are mounted read-only into *every* task sandbox, so the directory 
 
 ### Steps
 
-1. Confirm the configured `fileSharing.globalSkills` directory is owned by and writable only by the daemon user (not group/world-writable, not a task-writable path).
-2. Confirm no `globalSkills` entry points inside a task `work_dir` or any writable profile path.
+1. On Unix, run `cargo test -p orchestrator-config global_skill_owned_by_another_uid_is_rejected`.
+2. Run `cargo test -p orchestrator-config group_writable_global_skill_is_rejected` and `cargo test -p orchestrator-config world_writable_global_skill_is_rejected`.
+3. Run `cargo test -p agent-orchestrator global_skill_inside_task_work_dir_is_rejected_during_config_load`.
+4. Run `cargo test -p agent-orchestrator global_skill_overlapping_writable_profile_is_rejected_during_config_load`.
+5. Run `cargo test -p agent-orchestrator global_skill_inside_managed_task_homes_is_rejected_during_config_load` and `cargo test -p orchestrator-config trusted_isolated_global_skill_is_accepted`.
 
 ### Expected
 
-- The global Skill directory's provenance is trusted at the same level as the daemon binary.
-- A `globalSkills` path that is also task-writable is treated as a misconfiguration, not a convenience.
+- Owner mismatch and group/world write bits fail with `FILE_SHARING_GLOBAL_SKILL_UNTRUSTED`.
+- Ancestor-or-descendant overlap with task `work_dir`, managed task homes, or writable profiles fails with the same stable code.
+- A daemon-owned, non-group/world-writable, isolated directory remains valid.
+- Non-Unix platforms fail closed for configured global Skills because the required provenance cannot be verified.
 
 ## Operational Rule
 

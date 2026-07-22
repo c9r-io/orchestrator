@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Slack source automation now permits different reviewed badge bindings on the same message to create distinct tasks, while preserving one route/task for retries of the same message/reaction/binding identity
 - Task-scoped driver completion and `mark_done` events now participate in implicit-item convergence, and successful low-confidence Slack replies create Attention records without converting the step into a failure
 
+### Security
+- Global Skill directories now fail closed unless owned by the daemon effective user, free of group/world write bits, and disjoint from every task Workspace and writable ExecutionProfile path; unsupported platforms reject configured global Skills with `FILE_SHARING_GLOBAL_SKILL_UNTRUSTED`
+
 ### Compatibility And Migrations
 - Migrations 27-32 add Attention/change feeds, handoff/resume state, Session control fencing, source events/bindings, canonical action audit, and Process Console metric observations/rollups. They are additive, forward-only, restart-safe, and preserve existing task and Session identity.
 - Migrations 33-34 add durable source automation routes, frozen template/binding generations, optimistic route versions, bounded retry leases, attempt/change history, and Attention correlation. They are additive and forward-only; normal binary rollback keeps their tables and disables reaction writers before using a verified compatible binary.

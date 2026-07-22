@@ -30,7 +30,9 @@ fileSharing:
 
 `shareableRoots` is the maximum authority. A Workspace or ExecutionProfile may narrow it but cannot expand it. If this file is absent, host path sharing is denied. Restart `orchestratord` after changing it.
 
-Do not add your whole home directory. Prefer one root for Skills and one root for each operational data area.
+On Unix, each `globalSkills` directory must be owned by the daemon user and must not be group/world-writable. Keep it separate from every task `work_dir`, managed task home, and ExecutionProfile `writable_paths`; either direction of path overlap is rejected. Non-Unix platforms reject configured global Skills because the required UID/mode provenance cannot be verified.
+
+Do not add your whole home directory. Prefer one root for Skills and one separate root for each operational data area.
 
 ## 2. Define A Task Workspace
 
@@ -159,6 +161,7 @@ It runs an isolated daemon and loopback Slack service, then verifies signed reac
 |---|---|---|
 | `TASK_WORKSPACE_SANDBOX_REQUIRED` | A step has no scoped sandbox | Add `execution_profile` with `mode: sandbox` and scoped `fs_mode` |
 | `FILE_SHARING_PATH_OUTSIDE_CEILING` | A host path exceeds daemon authority | Add a narrow root to `file-sharing.yaml`, then restart the daemon |
+| `FILE_SHARING_GLOBAL_SKILL_UNTRUSTED` | A global Skill has the wrong owner, unsafe write bits, unsupported provenance, or overlaps a task write path | Change ownership to the daemon user, run `chmod go-w`, separate Skill/data roots, then restart the daemon |
 | `TASK_WORKSPACE_QA_FIELDS_FORBIDDEN` | QA/ticket fields were copied from a code Workspace | Remove `qa_targets` and `ticket_dir` |
 | `TASK_WORKSPACE_GIT_CHECKPOINT_FORBIDDEN` | Workflow uses a Git checkpoint | Set checkpoint strategy to `none` |
 | `TASK_WORKSPACE_TARGET_FILES_FORBIDDEN` | Task creation supplied target files | Put the work in `goal` or initial variables instead |
@@ -166,6 +169,7 @@ It runs an isolated daemon and loopback Slack service, then verifies signed reac
 ## Security Checklist
 
 - Keep `shareableRoots` minimal.
+- Keep global Skills daemon-owned, remove group/world writes, and never overlap them with task-writable paths.
 - Treat persistent `work_dir` as shared state; use omitted `work_dir` for isolation.
 - Use `network_mode: deny` unless the agent truly requires outbound access.
 - Pass credentials through SecretStore, never through shared files or task goals.

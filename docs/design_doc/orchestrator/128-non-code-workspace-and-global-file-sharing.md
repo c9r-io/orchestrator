@@ -2,10 +2,10 @@
 
 **Module**: orchestrator  
 **Status**: Approved  
-**Related Plan**: FR-117, task-oriented Workspace semantics and daemon-owned file-sharing ceiling  
-**Related QA**: `docs/qa/orchestrator/165-non-code-workspace-and-global-file-sharing.md`  
+**Related Plan**: FR-117 and FR-117-A, task-oriented Workspace semantics and daemon-owned file-sharing ceiling
+**Related QA**: `docs/qa/orchestrator/165-non-code-workspace-and-global-file-sharing.md`, `docs/qa/orchestrator/167-global-skill-directory-provenance.md`
 **Created**: 2026-07-22  
-**Last Updated**: 2026-07-22
+**Last Updated**: 2026-07-23
 
 ## Background
 
@@ -117,7 +117,7 @@ Static Workspace validation happens during resource apply. Cross-resource compat
 - Symlink or prefix escape: canonicalize before subset comparison and test sibling-prefix and symlink cases.
 - Host HOME leakage: strict read mode plus forced environment variables and a real sandbox pilot.
 - Temporary data leakage: `0700`, per-task identity, RAII cleanup on failed creation, terminal cleanup, and delete cleanup.
-- **Global Skill supply-chain surface**: every `globalSkills` directory is mounted read-only into *every* task sandbox, so its contents execute with the authority of each agent. Anyone who can write that directory can inject code into all tasks. Current enforcement: load resolves each path, requires it to be inside `shareableRoots`, and requires it to be a directory; it is mounted read-only and never made writable to a task. Operational requirement (not yet enforced in code): the directory must be writable only by the daemon user — treat its provenance with the same trust as the daemon binary. Follow-up hardening: verify owner/permission bits at load and reject a group/world-writable or task-writable `globalSkills` path. Do not point `globalSkills` at a directory writable by task workspaces or untrusted users.
+- **Global Skill supply-chain surface**: every `globalSkills` directory is mounted read-only into *every* task sandbox, so its contents execute with the authority of each agent. Configuration load now requires the directory owner to match the daemon effective UID, rejects group/world write bits, and rejects ancestor-or-descendant overlap with an explicit task `work_dir`, the managed `task-homes` root, or any project ExecutionProfile `writable_paths`. The same check runs at daemon bootstrap, resource apply, and phase setup; failures use `FILE_SHARING_GLOBAL_SKILL_UNTRUSTED` with an actionable fix. Non-Unix platforms reject configured global Skills because Unix provenance cannot be verified. Read-only sandbox mounting remains a second independent layer.
 - **Convergence trust shift**: a task item converges on the agent self-reporting via `mark_done` or a successful driver terminal event. When the agent is the untrusted principal, self-certified completion is a weaker gate than a QA exit code. This is an accepted trade-off for non-code work (there is no external verifier to run); it is bounded by `max_cycles`, degenerate-loop detection, and budget caps, and the operator remains the decision authority via the Attention review item rather than trusting the suggestion directly.
 - Hidden non-code semantics in the UI: explicit `workspace_kind`/`item_kind` presentation fields without changing the public gRPC schema.
 - Low-confidence suggestions disappearing: successful low-confidence steps now both resolve stale step attention and open a review item before task-level resolution.
@@ -132,19 +132,21 @@ Static Workspace validation happens during resource apply. Cross-resource compat
 ## Operations / Release
 
 - Restart the daemon after changing `file-sharing.yaml`.
+- Before restart, make every global Skill directory daemon-owned, remove group/world write bits, and keep it disjoint from all task write boundaries.
 - Roll out task workspaces only after every enabled step references a supported scoped sandbox profile.
 - Keep `shareableRoots` narrow; do not add the whole user home.
 - Rollback is code-only and additive. Existing manifests continue to deserialize through `root_path`; task manifests must be disabled before running an older binary that does not understand them.
 
 ## Test Plan
 
-- Unit: schema aliasing, task validation, ceiling/symlink checks, implicit item materialization, gate failures, private HOME, sandbox profile generation, Attention policy.
+- Unit: schema aliasing, task validation, ceiling/symlink checks, global Skill UID/mode/write-boundary provenance, implicit item materialization, gate failures, private HOME, sandbox profile generation, Attention policy.
 - Integration: isolated daemon, signed Slack delivery, fake permalink provider, source route, sandbox agent, global Skill and inventory evidence, convergence, Attention, cleanup.
 - UI: Vitest and Playwright verify task presentation and absence of the internal sentinel.
 
 ## QA Docs
 
 - `docs/qa/orchestrator/165-non-code-workspace-and-global-file-sharing.md`
+- `docs/qa/orchestrator/167-global-skill-directory-provenance.md`
 - `docs/security/authorization/02-file-sharing-ceiling.md`
 - `docs/security/file-security/02-workspace-home-isolation.md`
 

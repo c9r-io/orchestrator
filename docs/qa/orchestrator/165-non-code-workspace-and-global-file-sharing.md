@@ -60,12 +60,14 @@ Verify canonical subset authorization, read-only global Skills, and redirected H
 
 1. Run `cargo test -p orchestrator-config file_sharing`.
 2. Run `cargo test -p orchestrator-runner strict_`.
-3. Run the primary QA gate and inspect its HOME/Skill result.
+3. Run the provenance suite in `docs/qa/orchestrator/167-global-skill-directory-provenance.md`.
+4. Run the primary QA gate and inspect its HOME/Skill result.
 
 ### Expected
 
 - Missing policy denies host sharing.
 - Sibling-prefix, `..`, and symlink escapes fail.
+- UID mismatch, group/world writes, and task-writable overlap fail before activation.
 - The agent reads the global Skill but cannot mutate it.
 - HOME and XDG paths equal the workspace, never the daemon user's original HOME.
 
