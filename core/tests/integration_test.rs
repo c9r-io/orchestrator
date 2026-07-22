@@ -321,7 +321,7 @@ spec:
 }
 
 #[test]
-fn validation_rejects_empty_agent_command() {
+fn validation_rejects_agent_without_command_or_driver() {
     let yaml = r#"apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
@@ -337,7 +337,7 @@ spec:
         result
             .expect_err("operation should fail")
             .to_string()
-            .contains("command cannot be empty")
+            .contains("agent.spec.command or agent.spec.driver is required")
     );
 }
 
