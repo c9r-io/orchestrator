@@ -79,6 +79,7 @@
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
+| FR-117 | 非代码 Workspace 与全局文件共享 — 通用 Agent 场景解耦 | P1 | Proposed |
 
 ## 说明
 
@@ -89,6 +90,7 @@
 - `Implemented`: 需求已完成并进入维护阶段
 - 已闭环并删除的 FR，应由对应 `docs/design_doc/**` 与 `docs/qa/**` 继续承载设计和验证信息
 - FR-116 已闭环删除；其 driver 契约、三种 CLI provider、能力门禁、直接事件折叠、session 隐私、MCP 隔离与 shell pilot 证据现由 `docs/design_doc/orchestrator/127-agent-driver-abstraction.md`、`docs/qa/orchestrator/164-agent-driver-abstraction.md`、`docs/guide/agent-driver-model.md`、`fixtures/manifests/bundles/agent-driver-fixture.yaml` 与 `scripts/qa/test-agent-driver-abstraction.sh` 承载
+  - 遗留低优先级 follow-up：[FR-116-A Codex Driver 会话续接语义验证](FR-116-A-codex-session-resume-verification.md)（P3 / Deferred，非独立 FR 编号）
 - FR-115 已闭环删除；其 per-workspace private App provisioning、local-only Configuration Token、receipt-gated credential import、exact-App OAuth/events、reviewed lifecycle/migration、same-message two-badge routing、离线 cursor 恢复与受控 Slack sandbox 清理证据现由 `docs/design_doc/orchestrator/126-dedicated-slack-app-auto-provisioning.md`、`docs/qa/orchestrator/163-dedicated-slack-app-auto-provisioning.md`、`docs/guide/slack-dedicated-app-provisioning.md` 与 `scripts/qa/test-slack-dedicated-app-provisioning.sh` 承载
 - FR-114 已闭环删除；其 shared official App OAuth、SourceConnection/Gateway 边界、双 workspace/daemon live certification、恢复/转移/撤销/备份证据与可复跑 harness 现由 `docs/design_doc/orchestrator/125-managed-slack-connection-shared-oauth.md`、`docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md`、`docs/guide/slack-managed-sandbox-certification-runbook.md`、`scripts/qa/test-slack-managed-shared-oauth.sh` 与 `scripts/qa/certify-slack-managed-live.sh` 承载
 - FR-113 已闭环删除；其 clean-tree aggregate、双 badge 垂直链路、并发/重启恢复、真实 Tauri 边界、前向升级/兼容回滚、用户指南与隐私诊断证据现由 `docs/design_doc/orchestrator/124-slack-reaction-skill-automation-release.md`、`docs/qa/orchestrator/161-slack-reaction-skill-automation-release.md`、`docs/guide/slack-reaction-skill-automation.md`、`fixtures/manifests/bundles/slack-skill-automation-release-fixture.yaml` 与 `scripts/qa/test-slack-skill-automation-release.sh` 承载
