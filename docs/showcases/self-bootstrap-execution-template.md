@@ -8,8 +8,8 @@
 
 建议参考历史实例：
 
-1. [`docs/showcases/resource-rs-refactor-execution.md`](resource-rs-refactor-execution.md)（如该文件仍保留）
-2. [`docs/showcases/self-bootstrap-builtin-self-test-workaround-execution.md`](self-bootstrap-builtin-self-test-workaround-execution.md)
+1. `docs/showcases/resource-rs-refactor-execution.md`（历史执行日志，如仍保留）
+2. `docs/showcases/self-bootstrap-builtin-self-test-workaround-execution.md`（历史执行日志，如仍保留）
 
 ---
 
