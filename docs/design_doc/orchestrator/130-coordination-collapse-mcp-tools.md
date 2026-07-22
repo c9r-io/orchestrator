@@ -79,6 +79,8 @@ The pilot intentionally records every remaining item-level pipeline variable. Th
 
 No task-level pipeline variables remain in the pilot. A follow-up typed-channel design, if justified, should cover only these durable cross-step needs rather than recreate a general coordination store.
 
+**Decision: no typed-channel FR is opened at this time.** The measurement shows no central coordination state survives the collapse — state now lives in the agent session and typed tool contracts. The four residual variables are three homogeneous sandbox-safety signals plus one user-intent value, not a general store; a LangGraph-style typed state + reducer layer would be over-engineering. Typing those channels, if ever pursued, belongs to a small safety-scoped change, not a dedicated typed-state proposal. This item is closed, not deferred.
+
 ## Security And Failure Handling
 
 - The callback binds only to `127.0.0.1` on an ephemeral port and requires a cryptographically random per-run Bearer token.
