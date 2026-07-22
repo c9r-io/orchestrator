@@ -17,6 +17,8 @@ self_referential_safe: true
 
 The script builds an isolated daemon, applies `fixtures/manifests/bundles/agent-driver-fixture.yaml`, runs both shell pilots, and destroys its temporary HOME/data/workspace on success. `FR116_ALLOW_DIRTY=1` is for local iteration only; closure evidence uses a clean worktree.
 
+Codex session attachment has a separate exact-version protocol gate in `docs/qa/orchestrator/166-codex-session-resume-conformance.md`. The default FR-116 script remains network-free and does not invoke a live provider.
+
 ## Scenario 1: Resource Round Trip And Apply-Time Capability Rejection
 
 ### Preconditions
@@ -45,7 +47,7 @@ The script builds an isolated daemon, applies `fixtures/manifests/bundles/agent-
 
 1. Run `cargo test -p orchestrator-runner driver::`.
 2. Feed recorded Claude init/assistant/tool/result JSONL through the Claude adapter.
-3. Feed recorded Codex thread/message/usage/failure records through the Codex adapter.
+3. Replay `fixtures/driver/codex-cli-0.144.5-resume.json` through the Codex adapter and run the exact resume command assertion.
 4. Build commands with normalized model/budget/permission/tool/cwd/env/timeout options and typed vendor options.
 5. Inject unknown event fields and verify parsing remains forward-compatible.
 
@@ -53,7 +55,7 @@ The script builds an isolated daemon, applies `fixtures/manifests/bundles/agent-
 
 - `shell/cli`, `claude/cli`, and `codex/cli` expose the documented capability matrix.
 - Provider flags occur only in the provider module; control-plane code and pilot YAML do not spell them.
-- Text, tool I/O, usage, outcome, and session availability map deterministically.
+- Text, tool I/O, usage, outcome, and session availability map deterministically; Codex initial/resume streams resolve the same session reference.
 - Unknown records do not create fabricated events or abort a valid stream.
 
 ## Scenario 3: Direct Stream Folding, Event Persistence, Attention, And Privacy
@@ -127,7 +129,7 @@ GROUP BY event_type;
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|---|---|---|---|---|
 | 1 | Resource round trip and capability rejection | PASS | 2026-07-22 | Codex | Five incompatibility classes and structured diagnostic unit gates pass |
-| 2 | Provider command and protocol conformance | PASS | 2026-07-22 | Codex | Three drivers and recorded Claude/Codex mappings pass |
+| 2 | Provider command and protocol conformance | PASS | 2026-07-22 | Codex | Three drivers, recorded Codex 0.144.5 resume fixture, and exact command grammar pass |
 | 3 | Stream folding, events, Attention, privacy | PASS | 2026-07-22 | Codex | Direct fold, full projection, redaction, and opaque session tests pass |
 | 4 | Sandbox, cancellation, MCP, raw escape hatch | PASS | 2026-07-22 | Codex | Common spawn path, guaranteed cancel matrix, unique 0600 MCP, Admin/audit gates pass |
 | 5 | Shell pilot and repository regression | PASS | 2026-07-22 | Codex | Isolated legacy/explicit tasks converge to completed/0; full gates recorded at closure |

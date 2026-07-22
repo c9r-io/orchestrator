@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Session read and control rollout is globally authoritative from the `_system` RuntimePolicy; ordinary project policies cannot override the fail-closed control gate
 - Process Console mutations support `action_audit_mode=compatibility|enforced`; rollout begins in compatibility mode and moves to enforced only after clients send canonical action context
 - Explicit driver phases use `setup → start → consume → fold → record`; the deprecated global streaming executor is now a provider-owned compatibility bridge while legacy manifests migrate
+- Codex CLI cross-step session attachment is certified against `codex-cli 0.144.5` with same-thread context continuity, a sanitized recorded JSONL fixture, an offline replay gate, and an isolated live recertification script
 - Workspace manifests serialize the canonical `work_dir` field while continuing to accept legacy `root_path`; existing omitted `kind` manifests retain `code_repo` behavior
 
 ### Fixed

@@ -3,7 +3,7 @@
 **Module**: Orchestrator Config / Runner / Scheduler  
 **Status**: Released  
 **Related Plan**: FR-116  
-**Related QA**: `docs/qa/orchestrator/164-agent-driver-abstraction.md`  
+**Related QA**: `docs/qa/orchestrator/164-agent-driver-abstraction.md`, `docs/qa/orchestrator/166-codex-session-resume-conformance.md`
 **Created**: 2026-07-22  
 **Last Updated**: 2026-07-22
 
@@ -103,6 +103,12 @@ Provider flags and JSON schemas exist only in `crates/orchestrator-runner/src/dr
 
 Claude input is JSONL over stdin. Claude and Codex JSONL output are normalized before the scheduler observes them. Unknown provider records remain in the redacted raw artifact but do not become invented semantic events.
 
+### Codex Resume Certification
+
+`codex/cli` session attachment is certified against `codex-cli 0.144.5`. The provider adapter obtains the opaque reference from `thread.started.thread_id` and resumes with `codex exec resume <SESSION_ID> --json ... -- <PROMPT>`. A controlled two-turn run proved that the resumed process emits the same thread ID and can recall a unique first-turn anchor.
+
+The sanitized capture is `fixtures/driver/codex-cli-0.144.5-resume.json`. Default CI replays it offline; `scripts/qa/certify-codex-session-resume.sh` is the explicit auth/network/token-consuming recertification path. A different installed version fails that live gate until the fixture and mappings are reviewed. See [Codex Session Resume Conformance](129-codex-session-resume-conformance.md).
+
 ## Capability Validation
 
 Every enabled explicit driver eligible for a workflow capability must satisfy the step. Validation fails closed with a stable code:
@@ -150,7 +156,7 @@ The legacy Agent block is 9 effective YAML lines; the explicit shell block is 14
 
 ## Risks And Mitigations
 
-- Provider JSON schemas can drift: conformance fixtures pin the fields Orchestrator consumes; unknown records are tolerated.
+- Provider JSON schemas can drift: conformance fixtures pin the fields Orchestrator consumes; Codex resume is pinned to `0.144.5`, the live certification rejects an unreviewed version, and unknown records are tolerated.
 - Event payloads can leak secrets: session fields are removed before artifact persistence and all projections pass through configured redaction.
 - SDK calls can bypass sandbox/process isolation: SDK is non-sandboxable and unavailable; apply rejects workspace and non-idempotent use before runtime.
 - A driver process can stall: the consumer retains heartbeat, timeout, external pause, stall-kill, and process-group cancellation behavior.
@@ -166,7 +172,7 @@ The legacy Agent block is 9 effective YAML lines; the explicit shell block is 14
 
 ## Test Plan And Evidence
 
-- Unit/conformance: contract folding, Claude/Codex mappings, session redaction, command construction, unique MCP files, configuration shape, and diagnostics.
+- Unit/conformance: contract folding, Claude mappings, recorded Codex `0.144.5` initial/resume streams, exact resume command construction, session redaction, unique MCP files, configuration shape, and diagnostics.
 - Scheduler: direct event folding, complete event projection, Attention event mapping, redaction, timeout/cancel, and legacy regression.
 - Vertical: isolated daemon applies the fixture and runs legacy/explicit shell pilots to the same terminal result.
 - Security: session token absence across artifacts/events and unsafe raw-argument authorization/audit gates.
@@ -175,6 +181,13 @@ Automated entry point:
 
 ```bash
 ./scripts/qa/test-agent-driver-abstraction.sh
+```
+
+Codex-specific offline and controlled live entry points:
+
+```bash
+./scripts/qa/test-codex-session-resume.sh
+./scripts/qa/certify-codex-session-resume.sh
 ```
 
 ## Acceptance Criteria

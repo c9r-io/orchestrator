@@ -72,7 +72,7 @@ spec:
       reasoningEffort: high
 ```
 
-The current Codex CLI adapter is one-shot and does not host Orchestrator MCP tools or emit governed permission requests. Session attachment is supported for a later step during the same daemon lifetime.
+The current Codex CLI adapter is one-shot and does not host Orchestrator MCP tools or emit governed permission requests. Session attachment is supported for a later step during the same daemon lifetime. Its `codex exec resume` grammar and JSONL fields are certified against `codex-cli 0.144.5`; run `./scripts/qa/test-codex-session-resume.sh` offline and `./scripts/qa/certify-codex-session-resume.sh` before adopting a newer CLI version.
 
 ## Declare What The Workflow Needs
 
@@ -277,6 +277,8 @@ behavior:
 所有 CLI driver 都继续走 Orchestrator 的统一进程路径，包括 runner policy、Daemon PID 防护、Seatbelt/Linux namespace、rlimit、环境变量白名单、脱敏和进程组终止。SDK 目前只是未来接口描述：不能执行，也不能承载 workspace 修改。
 
 供应商 session token 是 runner 内部的不透明值：不会进入 gRPC、DTO、日志、Action Audit 或事件正文。同一 daemon 生命周期内可以跨 step 接力；daemon 重启后，应从 Orchestrator handoff/checkpoint 开一个新的供应商 session。
+
+Codex 的 `resume` 命令和 JSONL 字段已基于 `codex-cli 0.144.5` 实测：恢复后的进程会返回相同 thread，并继承上一轮上下文。日常离线验证运行 `./scripts/qa/test-codex-session-resume.sh`；升级 Codex CLI 前运行 `./scripts/qa/certify-codex-session-resume.sh` 并重新审查 fixture。
 
 Claude 的 MCP 配置写在每次 run 独立的 `{run_artifacts}/driver/mcp.json`，Unix 权限为 `0600`，并发任务不会共享路径。
 

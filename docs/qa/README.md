@@ -287,6 +287,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/163-dedicated-slack-app-auto-provisioning.md` | 5 | Fixed-manifest private App creation, local Configuration Token custody, cross-App isolation, reviewed lifecycle/migration, same-message two-badge routing, offline cursor recovery, UI, and completed live certification |
 | orchestrator | `docs/qa/orchestrator/164-agent-driver-abstraction.md` | 5 | Provider-neutral driver resources, apply-time capability gates, direct event folding, sandbox/cancel invariants, session privacy, MCP isolation, and shell compatibility |
 | orchestrator | `docs/qa/orchestrator/165-non-code-workspace-and-global-file-sharing.md` | 5 | Task Workspace compatibility gates, canonical file-sharing ceiling, isolated HOME/global Skills, implicit-item convergence, Console semantics, and Slack pilot |
+| orchestrator | `docs/qa/orchestrator/166-codex-session-resume-conformance.md` | 5 | Codex CLI 0.144.5 resume grammar, recorded JSONL replay, real same-thread context continuity, credential/session privacy, and repository regression |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |

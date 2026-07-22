@@ -56,7 +56,7 @@ API_TOKEN="{bearer_token}"                # If authentication is required
 ### Data Security
 | Doc | Description | Scenarios | Risk |
 |------|------|--------|----------|
-| `docs/security/data-security/01-sensitive-data.md` | Sensitive data exposure and masking, including provider/session/source/template overlays | 5 | Critical |
+| `docs/security/data-security/01-sensitive-data.md` | Sensitive data exposure and masking, including provider/session/source/template overlays and isolated Codex resume certification | 5 | Critical |
 
 ### Infrastructure Security
 | Doc | Description | Scenarios | Risk |
@@ -102,3 +102,4 @@ API_TOKEN="{bearer_token}"                # If authentication is required
 12. Before enabling FR-114 managed Slack connections, review `slack-gateway-threat-model.md` and run authentication, authorization, SSRF, sensitive-data, logging, workflow-abuse, and race-condition overlays with `docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md`. A controlled Slack sandbox certification is required outside CI.
 13. Before enabling FR-115 dedicated provisioning or lifecycle mutations, repeat the managed Slack suite with `docs/qa/orchestrator/163-dedicated-slack-app-auto-provisioning.md`, including Configuration Token retention scans, cross-App signature/receipt canaries, orphan/lifecycle Attention, reviewed migration/upgrade/delete, and the controlled dedicated sandbox addendum.
 14. For task Workspace or ExecutionProfile path changes, run `authorization/02-file-sharing-ceiling.md` and `file-security/02-workspace-home-isolation.md` with `docs/qa/orchestrator/165-non-code-workspace-and-global-file-sharing.md`; missing FileSharing configuration must remain deny-all for declared host paths.
+15. Before upgrading the Codex CLI used by an explicit Agent driver, run the offline and controlled live gates in `docs/qa/orchestrator/166-codex-session-resume-conformance.md`; retain placeholder-only fixtures and unconditional temporary-auth cleanup.
