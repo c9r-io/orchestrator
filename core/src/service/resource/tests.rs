@@ -528,6 +528,10 @@ fn driver_apply_errors_expose_stable_structured_diagnostics() {
     );
 
     let mut config = crate::config::OrchestratorConfig::default();
+    config.projects.insert(
+        crate::config::DEFAULT_PROJECT_ID.to_string(),
+        crate::config::ProjectConfig::default(),
+    );
     let project = config
         .projects
         .get_mut(crate::config::DEFAULT_PROJECT_ID)

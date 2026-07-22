@@ -177,3 +177,40 @@ pub(super) async fn validate_driver_events_stage(
         sandbox_network_target: None,
     })
 }
+
+#[cfg(test)]
+mod driver_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn driver_terminal_truth_does_not_depend_on_bounded_stdout_reread() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let stdout_path = directory.path().join("stdout.log");
+        let stderr_path = directory.path().join("stderr.log");
+        std::fs::write(&stdout_path, "x".repeat(300 * 1024)).expect("large stdout");
+        std::fs::write(&stderr_path, "").expect("stderr");
+        let events = vec![
+            DriverEvent::AssistantText("normalized answer".to_string()),
+            DriverEvent::Finished {
+                outcome: DriverOutcome::Success,
+                exit_code: 0,
+            },
+        ];
+
+        let validated = validate_driver_events_stage(
+            "implement",
+            Uuid::new_v4(),
+            "driver-agent",
+            0,
+            &events,
+            &stderr_path,
+            &[],
+        )
+        .await
+        .expect("fold normalized stream");
+
+        assert!(validated.success);
+        assert_eq!(validated.redacted_output.stdout, "normalized answer");
+        assert!(std::fs::metadata(stdout_path).expect("metadata").len() > 256 * 1024);
+    }
+}

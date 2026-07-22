@@ -128,6 +128,14 @@ fn spawn_command(
     );
     let mut env = request.extra_env.clone();
     env.extend(request.driver.options.env.clone());
+    if let Some(tokens) = request
+        .driver
+        .claude
+        .as_ref()
+        .and_then(|config| config.thinking_budget_tokens)
+    {
+        env.insert("MAX_THINKING_TOKENS".to_string(), tokens.to_string());
+    }
     spawn_command_via_shell(
         request.runner,
         command,
@@ -163,13 +171,18 @@ fn build_claude_command(request: &DriverStartRequest<'_>, mcp_config: Option<&Pa
     };
     args.extend(["--permission-mode".to_string(), permission.to_string()]);
     if let Some(config) = mcp_config {
+        let allowed_tools = if request.driver.options.allowed_tools.is_empty() {
+            vec!["mcp__orch".to_string()]
+        } else {
+            request.driver.options.allowed_tools.clone()
+        };
         args.extend([
             "--mcp-config".to_string(),
             quote(&config.to_string_lossy()),
             "--strict-mcp-config".to_string(),
             "--allowedTools".to_string(),
-            "mcp__orch".to_string(),
         ]);
+        args.extend(allowed_tools.into_iter().map(|tool| quote(&tool)));
     }
     if let Some(reference) = request.session_ref {
         args.extend(["--resume".to_string(), quote(reference.expose_secret())]);

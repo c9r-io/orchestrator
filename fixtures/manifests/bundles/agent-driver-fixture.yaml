@@ -1,0 +1,140 @@
+# FR-116 Agent Driver fixture.
+# Apply with: orchestrator apply -f fixtures/manifests/bundles/agent-driver-fixture.yaml --project driver-fixture
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: driver-workspace
+spec:
+  root_path: "."
+  qa_targets: [docs/qa]
+  ticket_dir: docs/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: legacy-shell-pilot
+spec:
+  capabilities: [driver_legacy_pilot]
+  command: >-
+    echo '{"confidence":1.0,"quality_score":1.0,"artifacts":[]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: explicit-shell-pilot
+spec:
+  capabilities: [driver_shell_pilot]
+  command: >-
+    echo '{"confidence":1.0,"quality_score":1.0,"artifacts":[]}'
+  driver:
+    provider: shell
+    transport: cli
+    shell:
+      requirePromptPlaceholder: false
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: claude-driver
+spec:
+  capabilities: [driver_claude]
+  driver:
+    provider: claude
+    transport: cli
+    options:
+      model: sonnet
+      maxTurns: 8
+      budgetCapUsd: 1.0
+      permissionMode: ask
+      allowedTools: [mcp__orch]
+    claude:
+      thinkingBudgetTokens: 2048
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: codex-driver
+spec:
+  capabilities: [driver_codex]
+  driver:
+    provider: codex
+    transport: cli
+    options:
+      model: gpt-5-codex
+      permissionMode: governed
+    codex:
+      reasoningEffort: high
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: legacy-shell-pilot
+spec:
+  steps:
+    - id: run
+      type: driver_legacy_pilot
+      required_capability: driver_legacy_pilot
+      enabled: true
+      repeatable: false
+      behavior:
+        side_effect_class: none
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: explicit-shell-pilot
+spec:
+  steps:
+    - id: run
+      type: driver_shell_pilot
+      required_capability: driver_shell_pilot
+      enabled: true
+      repeatable: false
+      behavior:
+        side_effect_class: none
+        driverRequirements:
+          workspaceAccess: none
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: claude-driver-pilot
+spec:
+  steps:
+    - id: analyze
+      type: driver_claude
+      required_capability: driver_claude
+      enabled: true
+      repeatable: false
+      behavior:
+        side_effect_class: none
+        driverRequirements:
+          multiTurn: true
+          toolHosting: stdio
+          sessionResume: true
+          permissionEvents: true
+          workspaceAccess: none
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: codex-driver-pilot
+spec:
+  steps:
+    - id: analyze
+      type: driver_codex
+      required_capability: driver_codex
+      enabled: true
+      repeatable: false
+      behavior:
+        side_effect_class: none
+        driverRequirements:
+          workspaceAccess: none
+  loop:
+    mode: once

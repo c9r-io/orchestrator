@@ -239,7 +239,12 @@ async fn run_phase_with_timeout(
         step_id,
         phase,
         step_scope,
-        step_timeout_secs,
+        step_timeout_secs.or_else(|| {
+            setup
+                .driver
+                .as_ref()
+                .and_then(|driver| driver.options.timeout_secs)
+        }),
         stall_timeout_secs,
         runtime,
         spawn_result.child_pid,
