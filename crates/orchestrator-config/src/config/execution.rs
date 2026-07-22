@@ -494,7 +494,10 @@ pub struct WorkflowFinalizeOutcome {
 /// Resolved workspace (with absolute paths)
 #[derive(Debug, Clone)]
 pub struct ResolvedWorkspace {
+    /// Semantic workspace kind controlling item and filesystem behavior.
+    pub kind: crate::config::WorkspaceKind,
     /// Absolute root path of the workspace.
+    /// Empty only for a task workspace whose HOME is allocated per task.
     pub root_path: std::path::PathBuf,
     /// QA targets derived from workspace configuration.
     pub qa_targets: Vec<String>,

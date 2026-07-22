@@ -126,13 +126,41 @@ pub enum WorkflowSafetyProfile {
 }
 
 /// Workspace configuration
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceKind {
+    /// A traditional source repository with QA-file and ticket semantics.
+    #[default]
+    CodeRepo,
+    /// A general-purpose task workspace with one implicit work item.
+    Task,
+}
+
+impl WorkspaceKind {
+    /// Returns the stable manifest value for this workspace kind.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::CodeRepo => "code_repo",
+            Self::Task => "task",
+        }
+    }
+}
+
+/// Workspace configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceConfig {
+    /// Workspace semantic kind. Existing resources default to `code_repo`.
+    #[serde(default)]
+    pub kind: WorkspaceKind,
     /// Path to the workspace root, relative to the application root unless absolute.
+    /// `root_path` remains a deserialize-only compatibility alias.
+    #[serde(default, rename = "work_dir", alias = "root_path")]
     pub root_path: String,
     /// QA target paths evaluated for this workspace.
+    #[serde(default)]
     pub qa_targets: Vec<String>,
     /// Directory used to store QA tickets for the workspace.
+    #[serde(default)]
     pub ticket_dir: String,
     /// When true, the workspace points to the orchestrator's own source tree
     #[serde(default)]

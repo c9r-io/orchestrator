@@ -24,7 +24,7 @@ spec:
 
 ## 1. Workspace（工作区）
 
-Workspace 定义任务执行的文件系统上下文。
+Workspace 定义任务的执行与文件系统上下文。`code_repo` 是向后兼容的默认类型；`task` 用于 Slack 运营、调研、文档工作和支持分流等非代码进程。
 
 ```yaml
 apiVersion: orchestrator.dev/v2
@@ -32,7 +32,8 @@ kind: Workspace
 metadata:
   name: my-project
 spec:
-  root_path: "."                    # 项目根目录
+  kind: code_repo                   # 默认值
+  work_dir: "."                    # 项目根目录
   qa_targets:                       # 扫描 QA 文件的目录（.md 文件成为任务项）
     - docs/qa
   ticket_dir: docs/ticket           # 失败工单的写入目录
@@ -41,10 +42,25 @@ spec:
 
 | 字段 | 必填 | 说明 |
 |------|------|------|
-| `root_path` | 是 | 项目根目录；相对路径从此处解析 |
-| `qa_targets` | 是 | 包含 QA 文档的目录（`.md` 文件成为任务项） |
-| `ticket_dir` | 是 | 失败工单目录 |
+| `kind` | 否 | `code_repo`（默认）或 `task` |
+| `work_dir` | 条件必填 | `code_repo` 必填；`task` 可选。`root_path` 仍可作为旧清单的输入别名 |
+| `qa_targets` | 条件必填 | `code_repo` 必填；`task` 禁止 |
+| `ticket_dir` | 条件必填 | `code_repo` 必填；`task` 禁止 |
 | `self_referential` | 否 | 为 `true` 时启用生存机制（默认：`false`） |
+
+非代码 Workspace 可以指定持久共享目录：
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: warehouse-ops
+spec:
+  kind: task
+  work_dir: ~/warehouse-data
+```
+
+省略 `work_dir` 时，daemon 会为每个 task 创建权限为 `0700` 的独立 HOME/cwd，并在 task 终态时清理。Task Workspace 始终只有一个隐式 `__TASK__` item，不扫描 QA 文件。Task Workspace 及其 ExecutionProfile 使用的任何宿主路径都必须位于运维者配置的 `fileSharing.shareableRoots` 天花板之下。详见[非代码 Workspace 与全局 Skills](non-code-workspace.md)。
 
 ## 2. Agent（代理）
 
@@ -491,7 +507,7 @@ kind: Workspace
 metadata:
   name: default
 spec:
-  root_path: "."
+  work_dir: "."
   qa_targets: [docs/qa]
   ticket_dir: docs/ticket
 ---

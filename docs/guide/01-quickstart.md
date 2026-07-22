@@ -52,7 +52,7 @@ kind: Workspace
 metadata:
   name: default
 spec:
-  root_path: "."
+  work_dir: "."
   qa_targets:
     - docs/qa
   ticket_dir: docs/ticket

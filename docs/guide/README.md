@@ -16,6 +16,7 @@ This guide helps you understand and use Agent Orchestrator as a **Harness Engine
 | [00 - Vision](00-vision.md) | Understand the Harness Engineering control plane direction | Beginner |
 | [01 - Quick Start](01-quickstart.md) | Run your first workflow in 5 minutes | Beginner |
 | [02 - Resource Model](02-resource-model.md) | Workspace, Agent, Workflow, StepTemplate | Beginner |
+| [Non-code Workspaces and Global Skills](non-code-workspace.md) | Task workspaces, isolated HOME, file-sharing ceiling, Slack pilot | Beginner to Operations |
 | [03 - Workflow Configuration](03-workflow-configuration.md) | Steps, scopes, loops, finalize rules | Intermediate |
 | [04 - CEL Prehooks](04-cel-prehooks.md) | Dynamic step gating with CEL expressions | Intermediate |
 | [05 - Advanced Features](05-advanced-features.md) | CRDs, Persistent Store, Task Spawning, Invariants | Advanced |

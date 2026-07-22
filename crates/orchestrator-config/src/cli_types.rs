@@ -370,15 +370,21 @@ pub struct HealthPolicySpec {
 /// Defines a workspace configuration with root path and QA targets.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WorkspaceSpec {
-    /// Root path of the workspace
-    pub root_path: String,
+    /// Workspace semantic kind. Defaults to `code_repo` for compatibility.
+    #[serde(default)]
+    pub kind: crate::config::WorkspaceKind,
+
+    /// Optional working directory. Legacy `root_path` is accepted as an alias.
+    #[serde(default, alias = "root_path", skip_serializing_if = "Option::is_none")]
+    pub work_dir: Option<String>,
 
     /// QA target paths or patterns
     #[serde(default)]
     pub qa_targets: Vec<String>,
 
     /// Directory for ticket files
-    pub ticket_dir: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ticket_dir: Option<String>,
 
     /// When true, the workspace points to the orchestrator's own source tree
     #[serde(default)]

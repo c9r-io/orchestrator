@@ -41,6 +41,7 @@ fn create_minimal_test_config(temp_root: &Path) -> OrchestratorConfig {
                         ws.insert(
                             "default".to_string(),
                             WorkspaceConfig {
+                                kind: Default::default(),
                                 root_path: temp_root
                                     .join("workspace/default")
                                     .to_string_lossy()
@@ -203,6 +204,7 @@ impl TestState {
             .insert(
                 workspace_id.clone(),
                 WorkspaceConfig {
+                    kind: Default::default(),
                     root_path,
                     qa_targets: vec!["docs/qa".to_string(), "docs/security".to_string()],
                     ticket_dir: "docs/ticket".to_string(),
@@ -211,6 +213,43 @@ impl TestState {
                     artifacts_dir: None,
                 },
             );
+        self
+    }
+
+    /// Add a general-purpose task workspace with no persistent work directory.
+    pub fn with_task_workspace(mut self, name: impl Into<String>) -> Self {
+        self.config
+            .projects
+            .get_mut(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project")
+            .workspaces
+            .insert(
+                name.into(),
+                WorkspaceConfig {
+                    kind: crate::config::WorkspaceKind::Task,
+                    root_path: String::new(),
+                    qa_targets: Vec::new(),
+                    ticket_dir: String::new(),
+                    self_referential: false,
+                    health_policy: Default::default(),
+                    artifacts_dir: None,
+                },
+            );
+        self
+    }
+
+    /// Add an execution profile to the default test project.
+    pub fn with_execution_profile(
+        mut self,
+        name: impl Into<String>,
+        profile: crate::config::ExecutionProfileConfig,
+    ) -> Self {
+        self.config
+            .projects
+            .get_mut(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project")
+            .execution_profiles
+            .insert(name.into(), profile);
         self
     }
 
@@ -343,6 +382,7 @@ impl TestState {
                 mode: orchestrator_config::plugin_policy::PluginPolicyMode::Audit,
                 ..Default::default()
             },
+            file_sharing_policy: orchestrator_config::file_sharing::FileSharingPolicy::default(),
             daemon_runtime: crate::runtime::DaemonRuntimeState::new(),
             worker_notify: Arc::new(tokio::sync::Notify::new()),
             trigger_event_tx: tokio::sync::broadcast::channel(64).0,

@@ -32,6 +32,7 @@ API_TOKEN="{bearer_token}"                # If authentication is required
 | Doc | Description | Scenarios | Risk |
 |------|------|--------|----------|
 | `docs/security/authorization/01-access-control.md` | Access control, IDOR, privilege boundaries, session/source RBAC overlays | 5 | Critical |
+| `docs/security/authorization/02-file-sharing-ceiling.md` | Canonical host-path ceiling, default deny, traversal and symlink escape resistance | 5 | Critical |
 
 ### Input Validation
 | Doc | Description | Scenarios | Risk |
@@ -83,6 +84,7 @@ API_TOKEN="{bearer_token}"                # If authentication is required
 | Doc | Description | Scenarios | Risk |
 |------|------|--------|----------|
 | `docs/security/file-security/01-file-upload.md` | Upload/download security | 4 | High |
+| `docs/security/file-security/02-workspace-home-isolation.md` | Forced task HOME/XDG isolation, read-only global Skills, and terminal cleanup | 5 | Critical |
 
 ## Execution Guidance (Strict)
 
@@ -99,3 +101,4 @@ API_TOKEN="{bearer_token}"                # If authentication is required
 11. Before releasing Slack Reaction Skill Automation, run every FR-107 through FR-112 source overlay plus `docs/qa/orchestrator/161-slack-reaction-skill-automation-release.md`; require signed two-badge routing, concurrent/restart convergence, diagnostic redaction, and forward-only compatible rollback.
 12. Before enabling FR-114 managed Slack connections, review `slack-gateway-threat-model.md` and run authentication, authorization, SSRF, sensitive-data, logging, workflow-abuse, and race-condition overlays with `docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md`. A controlled Slack sandbox certification is required outside CI.
 13. Before enabling FR-115 dedicated provisioning or lifecycle mutations, repeat the managed Slack suite with `docs/qa/orchestrator/163-dedicated-slack-app-auto-provisioning.md`, including Configuration Token retention scans, cross-App signature/receipt canaries, orphan/lifecycle Attention, reviewed migration/upgrade/delete, and the controlled dedicated sandbox addendum.
+14. For task Workspace or ExecutionProfile path changes, run `authorization/02-file-sharing-ceiling.md` and `file-security/02-workspace-home-isolation.md` with `docs/qa/orchestrator/165-non-code-workspace-and-global-file-sharing.md`; missing FileSharing configuration must remain deny-all for declared host paths.

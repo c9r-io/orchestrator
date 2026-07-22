@@ -417,6 +417,26 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn strict_macos_profile_does_not_grant_ambient_home_reads() {
+        use orchestrator_config::config::ExecutionFsMode;
+        use sandbox_macos::build_macos_sandbox_profile;
+        let mut profile = ResolvedExecutionProfile::host();
+        profile.mode = ExecutionProfileMode::Sandbox;
+        profile.fs_mode = ExecutionFsMode::WorkspaceRwScoped;
+        profile.workspace_root = Some(std::path::PathBuf::from("/shared/task-home"));
+        profile.readable_paths = vec![std::path::PathBuf::from("/shared/global-skills")];
+        profile.strict_read_paths = true;
+        profile.host_home = Some(std::path::PathBuf::from("/Users/operator"));
+        let sandbox = build_macos_sandbox_profile(&profile);
+        assert!(!sandbox.lines().any(|line| line == "(allow file-read*)"));
+        assert!(sandbox.contains("(subpath \"/shared/task-home\")"));
+        assert!(sandbox.contains("(subpath \"/shared/global-skills\")"));
+        assert!(sandbox.contains("(deny file-write*"));
+        assert!(!sandbox.contains("/Users/operator"));
+    }
+
     // --- Linux filesystem isolation script generation tests ---
 
     #[cfg(target_os = "linux")]
@@ -433,6 +453,8 @@ mod tests {
                 fs_mode,
                 writable_paths: Vec::new(),
                 readable_paths: Vec::new(),
+                strict_read_paths: false,
+                host_home: None,
                 network_mode: ExecutionNetworkMode::Deny,
                 network_allowlist: Vec::new(),
                 max_memory_mb: None,
@@ -529,6 +551,22 @@ mod tests {
             assert!(script.contains(
                 "if [ -e /shared/cache ]; then mount --bind /shared/cache /shared/cache && mount -o remount,ro,bind /shared/cache /shared/cache; fi"
             ));
+        }
+
+        #[test]
+        fn strict_profile_masks_host_home_and_restores_only_allowed_subpaths() {
+            let mut profile = base_profile(ExecutionFsMode::WorkspaceRwScoped);
+            profile.workspace_root = Some(PathBuf::from("/home/operator/task-home"));
+            profile.readable_paths = vec![PathBuf::from("/home/operator/global-skills")];
+            profile.strict_read_paths = true;
+            profile.host_home = Some(PathBuf::from("/home/operator"));
+            let script =
+                build_fs_isolation_inner_script(&profile, "'/bin/bash'", "'-lc'", "'echo hi'")
+                    .expect("should produce script");
+            assert!(script.contains("mount -t tmpfs -o mode=0700 tmpfs '/home/operator'"));
+            assert!(script.contains("mount --bind '/home/operator/task-home'"));
+            assert!(script.contains("mount --bind '/home/operator/global-skills'"));
+            assert!(!script.contains("mount --bind '/home/operator' '/home/operator'"));
         }
     }
 }

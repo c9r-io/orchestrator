@@ -29,9 +29,10 @@ pub fn workspace_manifest(name: &str, root_path: &str) -> OrchestratorResource {
             annotations: None,
         },
         spec: ResourceSpec::Workspace(WorkspaceSpec {
-            root_path: root_path.to_string(),
+            kind: Default::default(),
+            work_dir: Some(root_path.to_string()),
             qa_targets: vec!["docs/qa".to_string()],
-            ticket_dir: "docs/ticket".to_string(),
+            ticket_dir: Some("docs/ticket".to_string()),
             self_referential: false,
             health_policy: None,
             artifacts_dir: None,

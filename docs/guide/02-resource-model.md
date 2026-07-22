@@ -24,7 +24,7 @@ Multiple resources can be defined in a single YAML file, separated by `---`.
 
 ## 1. Workspace
 
-A Workspace defines the file system context for task execution.
+A Workspace defines the execution and file-system context for a task. `code_repo` is the backward-compatible default; `task` is for non-code processes such as Slack operations, research, document work, and support triage.
 
 ```yaml
 apiVersion: orchestrator.dev/v2
@@ -32,7 +32,8 @@ kind: Workspace
 metadata:
   name: my-project
 spec:
-  root_path: "."                    # project root directory
+  kind: code_repo                   # default
+  work_dir: "."                    # project root directory
   qa_targets:                       # directories to scan for QA files (task items)
     - docs/qa
   ticket_dir: docs/ticket           # where failure tickets are written
@@ -41,10 +42,25 @@ spec:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `root_path` | Yes | Project root; relative paths are resolved from here |
-| `qa_targets` | Yes | Directories containing QA documents (`.md` files become task items) |
-| `ticket_dir` | Yes | Directory for failure tickets |
+| `kind` | No | `code_repo` (default) or `task` |
+| `work_dir` | Conditional | Required for `code_repo`; optional for `task`. `root_path` is accepted as a legacy input alias |
+| `qa_targets` | Conditional | Required for `code_repo`; forbidden for `task` |
+| `ticket_dir` | Conditional | Required for `code_repo`; forbidden for `task` |
 | `self_referential` | No | Enables survival mechanisms when `true` (default: `false`) |
+
+A non-code workspace may use a persistent shared directory:
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: warehouse-ops
+spec:
+  kind: task
+  work_dir: ~/warehouse-data
+```
+
+If `work_dir` is omitted, the daemon creates a private `0700` HOME/cwd for each task and removes it when the task reaches a terminal state. Task workspaces always have one implicit `__TASK__` item and do not scan QA files. Any host path used by a task workspace or its ExecutionProfile must be below the operator's `fileSharing.shareableRoots` ceiling. See [Non-code Workspaces and Global Skills](non-code-workspace.md).
 
 ## 2. Agent
 
@@ -491,7 +507,7 @@ kind: Workspace
 metadata:
   name: default
 spec:
-  root_path: "."
+  work_dir: "."
   qa_targets: [docs/qa]
   ticket_dir: docs/ticket
 ---

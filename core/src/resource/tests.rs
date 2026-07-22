@@ -396,9 +396,10 @@ mod cases {
                 annotations: None,
             },
             spec: WorkspaceSpec {
-                root_path: "workspace/yaml-roundtrip".to_string(),
+                kind: Default::default(),
+                work_dir: Some("workspace/yaml-roundtrip".to_string()),
                 qa_targets: vec!["docs/qa".to_string()],
-                ticket_dir: "docs/ticket".to_string(),
+                ticket_dir: Some("docs/ticket".to_string()),
                 self_referential: false,
                 health_policy: None,
                 artifacts_dir: None,
@@ -411,7 +412,7 @@ mod cases {
         assert!(yaml.contains("apiVersion: orchestrator.dev/v2"));
         assert!(yaml.contains("kind: Workspace"));
         assert!(yaml.contains("name: yaml-roundtrip"));
-        assert!(yaml.contains("root_path: workspace/yaml-roundtrip"));
+        assert!(yaml.contains("work_dir: workspace/yaml-roundtrip"));
     }
 
     // ── apply_to_store ──────────────────────────────────────────────
@@ -421,6 +422,7 @@ mod cases {
         use crate::crd::projection::CrdProjectable;
         let mut config = OrchestratorConfig::default();
         let ws = crate::config::WorkspaceConfig {
+            kind: Default::default(),
             root_path: "/new".to_string(),
             qa_targets: vec![],
             ticket_dir: "t".to_string(),
@@ -451,6 +453,7 @@ mod cases {
         use crate::crd::projection::CrdProjectable;
         let mut config = OrchestratorConfig::default();
         let ws = crate::config::WorkspaceConfig {
+            kind: Default::default(),
             root_path: "/same".to_string(),
             qa_targets: vec![],
             ticket_dir: "t".to_string(),
@@ -470,6 +473,7 @@ mod cases {
         use crate::crd::projection::CrdProjectable;
         let mut config = OrchestratorConfig::default();
         let ws1 = crate::config::WorkspaceConfig {
+            kind: Default::default(),
             root_path: "/v1".to_string(),
             qa_targets: vec![],
             ticket_dir: "t".to_string(),
@@ -478,6 +482,7 @@ mod cases {
             artifacts_dir: None,
         };
         let ws2 = crate::config::WorkspaceConfig {
+            kind: Default::default(),
             root_path: "/v2".to_string(),
             qa_targets: vec![],
             ticket_dir: "t".to_string(),
@@ -509,6 +514,7 @@ mod cases {
         config.ensure_project(None).workspaces.insert(
             "snapshot-ws".to_string(),
             crate::config::WorkspaceConfig {
+                kind: Default::default(),
                 root_path: "/snapshot".to_string(),
                 qa_targets: vec![],
                 ticket_dir: "t".to_string(),
@@ -530,6 +536,7 @@ mod cases {
 
         // Apply the identical resource — should return Unchanged because reconciliation detects it.
         let ws = crate::config::WorkspaceConfig {
+            kind: Default::default(),
             root_path: "/snapshot".to_string(),
             qa_targets: vec![],
             ticket_dir: "t".to_string(),
@@ -557,6 +564,7 @@ mod cases {
         use crate::crd::projection::CrdProjectable;
         let mut config = OrchestratorConfig::default();
         let ws = crate::config::WorkspaceConfig {
+            kind: Default::default(),
             root_path: "/g".to_string(),
             qa_targets: vec![],
             ticket_dir: "t".to_string(),
@@ -573,6 +581,7 @@ mod cases {
             .generation;
 
         let ws2 = crate::config::WorkspaceConfig {
+            kind: Default::default(),
             root_path: "/g2".to_string(),
             qa_targets: vec![],
             ticket_dir: "t".to_string(),
@@ -596,6 +605,7 @@ mod cases {
         use crate::crd::projection::CrdProjectable;
         let mut config = OrchestratorConfig::default();
         let ws = crate::config::WorkspaceConfig {
+            kind: Default::default(),
             root_path: "/d".to_string(),
             qa_targets: vec![],
             ticket_dir: "t".to_string(),
@@ -637,6 +647,7 @@ mod cases {
         config.ensure_project(None).workspaces.insert(
             "snapshot-del".to_string(),
             crate::config::WorkspaceConfig {
+                kind: Default::default(),
                 root_path: "/ld".to_string(),
                 qa_targets: vec![],
                 ticket_dir: "t".to_string(),
@@ -670,6 +681,7 @@ mod cases {
         use crate::crd::projection::CrdProjectable;
         let mut config = OrchestratorConfig::default();
         let ws = crate::config::WorkspaceConfig {
+            kind: Default::default(),
             root_path: "/m".to_string(),
             qa_targets: vec![],
             ticket_dir: "t".to_string(),
@@ -1113,9 +1125,10 @@ mod execution_profile_tests {
                 annotations: None,
             },
             spec: ResourceSpec::Workspace(WorkspaceSpec {
-                root_path: "/tmp".to_string(),
+                kind: Default::default(),
+                work_dir: Some("/tmp".to_string()),
                 qa_targets: vec![],
-                ticket_dir: "t".to_string(),
+                ticket_dir: Some("t".to_string()),
                 self_referential: false,
                 health_policy: None,
                 artifacts_dir: None,
@@ -1137,9 +1150,10 @@ mod execution_profile_tests {
                 annotations: None,
             },
             spec: ResourceSpec::Workspace(WorkspaceSpec {
-                root_path: "/tmp".to_string(),
+                kind: Default::default(),
+                work_dir: Some("/tmp".to_string()),
                 qa_targets: vec![],
-                ticket_dir: "t".to_string(),
+                ticket_dir: Some("t".to_string()),
                 self_referential: false,
                 health_policy: None,
                 artifacts_dir: None,

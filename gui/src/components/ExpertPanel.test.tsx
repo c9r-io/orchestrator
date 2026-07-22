@@ -116,6 +116,16 @@ describe("ExpertPanel", () => {
     expect(screen.getByRole("button", { name: "已复制" })).toBeVisible();
   });
 
+  it("renders the implicit non-code item as a generic task", () => {
+    render(
+      <RoleContext.Provider value={{ role: "read_only", canAccess: (required) => hasAccess("read_only", required) }}>
+        <ExpertPanel taskDetail={{ ...detail, workspace_kind: "task", total_items: 1, items: [{ id: "task-item", qa_file_path: "__TASK__", item_kind: "task", status: "running", order_no: 1 }] }} />
+      </RoleContext.Provider>,
+    );
+    expect(screen.getByText("Task")).toBeVisible();
+    expect(screen.queryByText("__TASK__")).not.toBeInTheDocument();
+  });
+
   it("operates resources, agents, and stores through role-gated controls", async () => {
     renderAs("admin");
 

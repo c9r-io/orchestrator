@@ -192,6 +192,8 @@ mod cases {
             fs_mode: ExecutionFsMode::WorkspaceRwScoped,
             writable_paths: Vec::new(),
             readable_paths: Vec::new(),
+            strict_read_paths: false,
+            host_home: None,
             network_mode: ExecutionNetworkMode::Deny,
             network_allowlist: Vec::new(),
             max_memory_mb: None,

@@ -36,9 +36,12 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
             resources.push(RegisteredResource::Workspace(WorkspaceResource {
                 metadata: project_metadata(config, "Workspace", project_id, name),
                 spec: crate::cli_types::WorkspaceSpec {
-                    root_path: workspace.root_path.clone(),
+                    kind: workspace.kind,
+                    work_dir: (!workspace.root_path.is_empty())
+                        .then(|| workspace.root_path.clone()),
                     qa_targets: workspace.qa_targets.clone(),
-                    ticket_dir: workspace.ticket_dir.clone(),
+                    ticket_dir: (!workspace.ticket_dir.is_empty())
+                        .then(|| workspace.ticket_dir.clone()),
                     self_referential: workspace.self_referential,
                     health_policy: None,
                     artifacts_dir: workspace.artifacts_dir.clone(),
@@ -583,9 +586,10 @@ mod tests {
                 annotations: Some([("team".to_string(), "infra".to_string())].into()),
             },
             spec: ResourceSpec::Workspace(WorkspaceSpec {
-                root_path: "/labeled".to_string(),
+                kind: Default::default(),
+                work_dir: Some("/labeled".to_string()),
                 qa_targets: vec![],
-                ticket_dir: "tickets".to_string(),
+                ticket_dir: Some("tickets".to_string()),
                 self_referential: false,
                 health_policy: None,
                 artifacts_dir: None,

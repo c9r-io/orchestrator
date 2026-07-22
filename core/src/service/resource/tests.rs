@@ -266,7 +266,7 @@ fn get_resource_supports_named_queries_describe_and_selector_helpers() {
         Some(crate::config::DEFAULT_PROJECT_ID),
     )
     .expect("get named workspace");
-    assert!(named.contains(&format!("root_path: {}", ws_root_str)));
+    assert!(named.contains(&format!("work_dir: {}", ws_root_str)));
 
     let listed = get_resource(
         &state,
@@ -428,6 +428,7 @@ fn helper_functions_cover_delete_and_projection_paths() {
         workspaces: HashMap::from([(
             "ws".to_string(),
             crate::config::WorkspaceConfig {
+                kind: Default::default(),
                 root_path: "workspace/default".to_string(),
                 qa_targets: vec!["docs/qa".to_string()],
                 ticket_dir: "docs/ticket".to_string(),

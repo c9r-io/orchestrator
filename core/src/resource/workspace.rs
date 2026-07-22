@@ -1,5 +1,5 @@
 use crate::cli_types::{OrchestratorResource, ResourceKind, ResourceSpec, WorkspaceSpec};
-use crate::config::{OrchestratorConfig, WorkspaceConfig};
+use crate::config::{OrchestratorConfig, WorkspaceConfig, WorkspaceKind};
 use anyhow::{Result, anyhow};
 
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
@@ -24,11 +24,46 @@ impl Resource for WorkspaceResource {
 
     fn validate(&self) -> Result<()> {
         super::validate_resource_name(self.name())?;
-        if self.spec.root_path.trim().is_empty() {
-            return Err(anyhow!("workspace.spec.root_path cannot be empty"));
-        }
-        if self.spec.ticket_dir.trim().is_empty() {
-            return Err(anyhow!("workspace.spec.ticket_dir cannot be empty"));
+        match self.spec.kind {
+            WorkspaceKind::CodeRepo => {
+                if self
+                    .spec
+                    .work_dir
+                    .as_deref()
+                    .is_none_or(|path| path.trim().is_empty())
+                {
+                    return Err(anyhow!(
+                        "[CODE_REPO_WORK_DIR_REQUIRED] workspace.spec.work_dir is required for code_repo"
+                    ));
+                }
+                if self.spec.qa_targets.is_empty() {
+                    return Err(anyhow!(
+                        "[CODE_REPO_QA_TARGETS_REQUIRED] workspace.spec.qa_targets cannot be empty for code_repo"
+                    ));
+                }
+                if self
+                    .spec
+                    .ticket_dir
+                    .as_deref()
+                    .is_none_or(|path| path.trim().is_empty())
+                {
+                    return Err(anyhow!(
+                        "[CODE_REPO_TICKET_DIR_REQUIRED] workspace.spec.ticket_dir is required for code_repo"
+                    ));
+                }
+            }
+            WorkspaceKind::Task => {
+                if self.spec.self_referential {
+                    return Err(anyhow!(
+                        "[TASK_WORKSPACE_SELF_REFERENTIAL_FORBIDDEN] task workspace cannot be self_referential"
+                    ));
+                }
+                if !self.spec.qa_targets.is_empty() || self.spec.ticket_dir.is_some() {
+                    return Err(anyhow!(
+                        "[TASK_WORKSPACE_QA_FIELDS_FORBIDDEN] task workspace cannot define qa_targets or ticket_dir"
+                    ));
+                }
+            }
         }
         Ok(())
     }
@@ -103,26 +138,31 @@ pub(super) fn build_workspace(resource: OrchestratorResource) -> Result<Register
 
 /// Converts a workspace manifest spec into runtime config.
 ///
-/// Relative `root_path` values are resolved against the current working
+/// Relative `work_dir` values are resolved against the current working
 /// directory so that the stored config always contains an absolute path.
 pub(crate) fn workspace_spec_to_config(spec: &WorkspaceSpec) -> WorkspaceConfig {
     use crate::config::HealthPolicyConfig;
-    let root_path = {
-        let p = std::path::Path::new(&spec.root_path);
-        if p.is_absolute() {
-            spec.root_path.clone()
-        } else {
-            std::env::current_dir()
-                .unwrap_or_else(|_| std::path::PathBuf::from("."))
-                .join(p)
-                .to_string_lossy()
-                .to_string()
-        }
-    };
+    let root_path = spec
+        .work_dir
+        .as_deref()
+        .map(|raw| {
+            let p = std::path::Path::new(raw);
+            if p.is_absolute() {
+                raw.to_string()
+            } else {
+                std::env::current_dir()
+                    .unwrap_or_else(|_| std::path::PathBuf::from("."))
+                    .join(p)
+                    .to_string_lossy()
+                    .to_string()
+            }
+        })
+        .unwrap_or_default();
     WorkspaceConfig {
+        kind: spec.kind,
         root_path,
         qa_targets: spec.qa_targets.clone(),
-        ticket_dir: spec.ticket_dir.clone(),
+        ticket_dir: spec.ticket_dir.clone().unwrap_or_default(),
         self_referential: spec.self_referential,
         health_policy: spec
             .health_policy
@@ -147,9 +187,10 @@ pub(crate) fn workspace_spec_to_config(spec: &WorkspaceSpec) -> WorkspaceConfig 
 pub(crate) fn workspace_config_to_spec(config: &WorkspaceConfig) -> WorkspaceSpec {
     use crate::cli_types::HealthPolicySpec;
     WorkspaceSpec {
-        root_path: config.root_path.clone(),
+        kind: config.kind,
+        work_dir: (!config.root_path.is_empty()).then(|| config.root_path.clone()),
         qa_targets: config.qa_targets.clone(),
-        ticket_dir: config.ticket_dir.clone(),
+        ticket_dir: (!config.ticket_dir.is_empty()).then(|| config.ticket_dir.clone()),
         self_referential: config.self_referential,
         health_policy: if config.health_policy.is_default() {
             None
@@ -195,16 +236,15 @@ mod tests {
 
         let loaded = WorkspaceResource::get_from(&config, "ws-roundtrip")
             .expect("workspace should be present in config");
-        // root_path is absolutized at apply-time against CWD
+        // work_dir is absolutized at apply-time against CWD
+        let work_dir = loaded.spec.work_dir.as_deref().expect("code repo work_dir");
         assert!(
-            std::path::Path::new(&loaded.spec.root_path).is_absolute(),
-            "root_path should be absolute after apply: {}",
-            loaded.spec.root_path
+            std::path::Path::new(work_dir).is_absolute(),
+            "work_dir should be absolute after apply: {work_dir}",
         );
         assert!(
-            loaded.spec.root_path.ends_with("workspace/ws-roundtrip"),
-            "root_path should end with original relative path: {}",
-            loaded.spec.root_path
+            work_dir.ends_with("workspace/ws-roundtrip"),
+            "work_dir should end with original relative path: {work_dir}",
         );
         assert_eq!(loaded.kind(), ResourceKind::Workspace);
     }
@@ -214,16 +254,17 @@ mod tests {
         let ws = WorkspaceResource {
             metadata: super::super::metadata_with_name("ws-no-root"),
             spec: WorkspaceSpec {
-                root_path: "  ".to_string(),
-                qa_targets: vec![],
-                ticket_dir: "tickets".to_string(),
+                kind: Default::default(),
+                work_dir: Some("  ".to_string()),
+                qa_targets: vec!["qa".to_string()],
+                ticket_dir: Some("tickets".to_string()),
                 self_referential: false,
                 health_policy: None,
                 artifacts_dir: None,
             },
         };
         let err = ws.validate().expect_err("operation should fail");
-        assert!(err.to_string().contains("root_path"));
+        assert!(err.to_string().contains("work_dir"));
     }
 
     #[test]
@@ -231,9 +272,10 @@ mod tests {
         let ws = WorkspaceResource {
             metadata: super::super::metadata_with_name("ws-no-ticket"),
             spec: WorkspaceSpec {
-                root_path: "/some/path".to_string(),
-                qa_targets: vec![],
-                ticket_dir: "  ".to_string(),
+                kind: Default::default(),
+                work_dir: Some("/some/path".to_string()),
+                qa_targets: vec!["qa".to_string()],
+                ticket_dir: Some("  ".to_string()),
                 self_referential: false,
                 health_policy: None,
                 artifacts_dir: None,
@@ -244,12 +286,94 @@ mod tests {
     }
 
     #[test]
+    fn task_workspace_accepts_omitted_code_repo_fields() {
+        let yaml = r#"
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: warehouse-ops
+spec:
+  kind: task
+"#;
+        let manifest: OrchestratorResource = serde_yaml::from_str(yaml).expect("task manifest");
+        let resource = dispatch_resource(manifest).expect("dispatch task workspace");
+        resource.validate().expect("task workspace should validate");
+    }
+
+    #[test]
+    fn legacy_root_path_deserializes_and_serializes_as_work_dir() {
+        let yaml = r#"
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: legacy
+spec:
+  root_path: /tmp/legacy
+  qa_targets: [docs/qa]
+  ticket_dir: docs/ticket
+"#;
+        let manifest: OrchestratorResource = serde_yaml::from_str(yaml).expect("legacy manifest");
+        let ResourceSpec::Workspace(spec) = manifest.spec else {
+            panic!("workspace spec expected");
+        };
+        assert_eq!(spec.work_dir.as_deref(), Some("/tmp/legacy"));
+        let workspace = WorkspaceResource {
+            metadata: super::super::metadata_with_name("legacy"),
+            spec,
+        };
+        let canonical = workspace.to_yaml().expect("serialize canonical manifest");
+        assert!(canonical.contains("work_dir: /tmp/legacy"));
+        assert!(!canonical.contains("root_path:"));
+    }
+
+    #[test]
+    fn task_workspace_rejects_qa_and_self_referential_fields() {
+        let base = WorkspaceSpec {
+            kind: WorkspaceKind::Task,
+            work_dir: None,
+            qa_targets: vec!["docs/qa".to_string()],
+            ticket_dir: None,
+            self_referential: false,
+            health_policy: None,
+            artifacts_dir: None,
+        };
+        let qa_error = WorkspaceResource {
+            metadata: super::super::metadata_with_name("task-with-qa"),
+            spec: base.clone(),
+        }
+        .validate()
+        .expect_err("QA fields must be rejected");
+        assert!(
+            qa_error
+                .to_string()
+                .contains("TASK_WORKSPACE_QA_FIELDS_FORBIDDEN")
+        );
+
+        let self_ref_error = WorkspaceResource {
+            metadata: super::super::metadata_with_name("task-self-ref"),
+            spec: WorkspaceSpec {
+                qa_targets: Vec::new(),
+                self_referential: true,
+                ..base
+            },
+        }
+        .validate()
+        .expect_err("self reference must be rejected");
+        assert!(
+            self_ref_error
+                .to_string()
+                .contains("TASK_WORKSPACE_SELF_REFERENTIAL_FORBIDDEN")
+        );
+    }
+
+    #[test]
     fn workspace_get_from_without_stored_metadata() {
         let mut config = make_config();
         // Insert workspace directly without resource_meta
         config.ensure_project(None).workspaces.insert(
             "bare-ws".to_string(),
             WorkspaceConfig {
+                kind: Default::default(),
                 root_path: "/bare".to_string(),
                 qa_targets: vec![],
                 ticket_dir: "t".to_string(),
@@ -283,9 +407,10 @@ mod tests {
                 annotations: None,
             },
             spec: ResourceSpec::Workspace(WorkspaceSpec {
-                root_path: "/meta".to_string(),
+                kind: Default::default(),
+                work_dir: Some("/meta".to_string()),
                 qa_targets: vec![],
-                ticket_dir: "t".to_string(),
+                ticket_dir: Some("t".to_string()),
                 self_referential: false,
                 health_policy: None,
                 artifacts_dir: None,
@@ -319,9 +444,10 @@ mod tests {
                 annotations: Some([("desc".to_string(), "test workspace".to_string())].into()),
             },
             spec: WorkspaceSpec {
-                root_path: "/path/to/workspace".to_string(),
+                kind: Default::default(),
+                work_dir: Some("/path/to/workspace".to_string()),
                 qa_targets: vec!["docs/qa".to_string(), "tests".to_string()],
-                ticket_dir: "tickets".to_string(),
+                ticket_dir: Some("tickets".to_string()),
                 self_referential: false,
                 health_policy: None,
                 artifacts_dir: None,
@@ -337,9 +463,10 @@ mod tests {
     #[test]
     fn workspace_spec_config_roundtrip() {
         let spec = WorkspaceSpec {
-            root_path: "/my/project".to_string(),
+            kind: Default::default(),
+            work_dir: Some("/my/project".to_string()),
             qa_targets: vec!["src".to_string(), "tests".to_string()],
-            ticket_dir: "docs/tickets".to_string(),
+            ticket_dir: Some("docs/tickets".to_string()),
             self_referential: true,
             health_policy: None,
             artifacts_dir: None,
@@ -351,7 +478,7 @@ mod tests {
         assert!(config.self_referential);
 
         let back = workspace_config_to_spec(&config);
-        assert_eq!(back.root_path, "/my/project");
+        assert_eq!(back.work_dir.as_deref(), Some("/my/project"));
         assert_eq!(back.qa_targets, vec!["src", "tests"]);
         assert!(back.self_referential);
     }
@@ -369,9 +496,10 @@ mod tests {
                 annotations: Some([("note".to_string(), "test".to_string())].into()),
             },
             spec: ResourceSpec::Workspace(WorkspaceSpec {
-                root_path: "/store-meta".to_string(),
+                kind: Default::default(),
+                work_dir: Some("/store-meta".to_string()),
                 qa_targets: vec![],
-                ticket_dir: "t".to_string(),
+                ticket_dir: Some("t".to_string()),
                 self_referential: false,
                 health_policy: None,
                 artifacts_dir: None,

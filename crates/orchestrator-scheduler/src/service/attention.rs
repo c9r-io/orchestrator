@@ -142,14 +142,24 @@ fn policy_operations(event: &AttentionSourceEvent) -> Vec<AttentionProjectionOp>
     }
 
     if is_successful_step(event) {
+        let mut operations = Vec::new();
         if let Some(step_id) = step_id(event) {
-            return vec![AttentionProjectionOp::ResolveStep {
+            operations.push(AttentionProjectionOp::ResolveStep {
                 task_id: event.task_id.clone(),
                 task_item_id: event.task_item_id.clone(),
                 step_id,
                 source_event_id: event.id.to_string(),
-            }];
+            });
         }
+        if is_low_confidence(event) {
+            operations.push(AttentionProjectionOp::Upsert(Box::new(candidate(
+                event,
+                "low_confidence",
+                AttentionSeverity::Attention,
+                "Agent confidence needs review",
+            ))));
+        }
+        return operations;
     }
 
     let policy = match event.event_type.as_str() {
@@ -404,6 +414,22 @@ mod tests {
             policy_operations(&event("task_completed", json!({})))[0],
             AttentionProjectionOp::ResolveTask { .. }
         ));
+    }
+
+    #[test]
+    fn successful_low_confidence_step_resolves_stale_step_and_opens_review() {
+        let operations = policy_operations(&event(
+            "step_finished",
+            json!({"success": true, "step_id": "prepare_reply", "confidence": 0.4}),
+        ));
+        assert!(matches!(
+            operations.first(),
+            Some(AttentionProjectionOp::ResolveStep { .. })
+        ));
+        let Some(AttentionProjectionOp::Upsert(candidate)) = operations.get(1) else {
+            panic!("expected low-confidence review item");
+        };
+        assert_eq!(candidate.kind, "low_confidence");
     }
 
     #[test]

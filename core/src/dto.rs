@@ -321,6 +321,9 @@ pub struct TicketPreviewData {
 /// Placeholder QA path used for tickets that are not tied to a concrete file.
 pub const UNASSIGNED_QA_FILE_PATH: &str = "__UNASSIGNED__";
 
+/// Stable synthetic item identity for a non-code task workspace.
+pub const IMPLICIT_TASK_ITEM_PATH: &str = "__TASK__";
+
 /// Result of running a command phase in the orchestrator pipeline.
 #[derive(Debug)]
 pub struct RunResult {

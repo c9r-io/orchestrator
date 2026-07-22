@@ -366,6 +366,7 @@ mod tests {
         workspaces.insert(
             "default".into(),
             WorkspaceConfig {
+                kind: Default::default(),
                 root_path: "ws".into(),
                 qa_targets: vec!["docs/qa".into()],
                 ticket_dir: "tickets".into(),

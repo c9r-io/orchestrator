@@ -12,9 +12,33 @@ pub(crate) fn build_macos_sandbox_profile(execution_profile: &ResolvedExecutionP
         "(deny default)".to_string(),
         "(import \"system.sb\")".to_string(),
         "(allow process*)".to_string(),
-        "(allow file-read*)".to_string(),
         "(allow sysctl-read)".to_string(),
     ];
+    if execution_profile.strict_read_paths {
+        lines.push("(allow file-read*".to_string());
+        for system_path in [
+            "/System",
+            "/usr",
+            "/bin",
+            "/sbin",
+            "/Library/Apple",
+            "/private/etc",
+            "/private/var/db",
+            "/dev",
+            "/opt/homebrew",
+        ] {
+            lines.push(format!("    (subpath \"{system_path}\")"));
+        }
+        if let Some(workspace) = execution_profile.workspace_root.as_deref() {
+            lines.push(format!("    (subpath \"{}\")", escape_sb_string(workspace)));
+        }
+        for path in &execution_profile.readable_paths {
+            lines.push(format!("    (subpath \"{}\")", escape_sb_string(path)));
+        }
+        lines.push(")".to_string());
+    } else {
+        lines.push("(allow file-read*)".to_string());
+    }
     if execution_profile.network_mode != ExecutionNetworkMode::Deny {
         lines.push("(allow network*)".to_string());
     }
@@ -32,13 +56,13 @@ pub(crate) fn build_macos_sandbox_profile(execution_profile: &ResolvedExecutionP
             }
         }
     }
-    // FR-093: `readable_paths` is currently a no-op on macOS because the
-    // profile above unconditionally emits `(allow file-read*)`. The
-    // ORCHESTRATOR_READABLE_PATHS env var is still propagated to agent
-    // wrapper scripts so that agent-CLI-specific sandboxes can apply it.
-    // If the macOS profile ever becomes read-restrictive, emit explicit
-    // `(allow file-read* (subpath ...))` rules for readable_paths here.
-    let _ = &execution_profile.readable_paths;
+    if execution_profile.strict_read_paths && !execution_profile.readable_paths.is_empty() {
+        lines.push("(deny file-write*".to_string());
+        for path in &execution_profile.readable_paths {
+            lines.push(format!("    (subpath \"{}\")", escape_sb_string(path)));
+        }
+        lines.push(")".to_string());
+    }
     lines.join("\n")
 }
 

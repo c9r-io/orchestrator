@@ -162,6 +162,7 @@ pub(crate) mod tests {
         project.workspaces.insert(
             "default".to_string(),
             crate::config::WorkspaceConfig {
+                kind: Default::default(),
                 root_path: ".".to_string(),
                 qa_targets: vec!["fixtures/qa-probe-targets".to_string()],
                 ticket_dir: "fixtures/ticket".to_string(),

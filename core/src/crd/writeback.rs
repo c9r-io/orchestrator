@@ -708,6 +708,7 @@ mod tests {
         config.ensure_project(None).workspaces.insert(
             "ws1".to_string(),
             WorkspaceConfig {
+                kind: Default::default(),
                 root_path: "/ws".to_string(),
                 qa_targets: vec![],
                 ticket_dir: "t".to_string(),
@@ -732,6 +733,7 @@ mod tests {
         config.ensure_project(None).workspaces.insert(
             "ws2".to_string(),
             WorkspaceConfig {
+                kind: Default::default(),
                 root_path: "/ws2".to_string(),
                 qa_targets: vec![],
                 ticket_dir: "t".to_string(),
@@ -1008,6 +1010,7 @@ mod tests {
         config.ensure_project(None).workspaces.insert(
             "my-ws".to_string(),
             WorkspaceConfig {
+                kind: Default::default(),
                 root_path: "/ws".to_string(),
                 qa_targets: vec![],
                 ticket_dir: "t".to_string(),
@@ -1234,6 +1237,7 @@ mod tests {
     fn reconcile_single_workspace_writes_to_config() {
         let mut config = make_default_config_with_project();
         let ws = WorkspaceConfig {
+            kind: Default::default(),
             root_path: "/rec".to_string(),
             qa_targets: vec![],
             ticket_dir: "t".to_string(),
@@ -1404,6 +1408,7 @@ mod tests {
         config.ensure_project(None).workspaces.insert(
             "sync-ws".to_string(),
             WorkspaceConfig {
+                kind: Default::default(),
                 root_path: "/sync".to_string(),
                 qa_targets: vec![],
                 ticket_dir: "t".to_string(),

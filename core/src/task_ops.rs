@@ -2,7 +2,10 @@ use crate::config::LoopMode;
 use crate::config_load::build_execution_plan_for_project;
 use crate::config_load::{now_ts, read_active_config};
 use crate::db::open_conn;
-use crate::dto::{CreateRunStepPayload, CreateTaskPayload, TaskSummary, UNASSIGNED_QA_FILE_PATH};
+use crate::dto::{
+    CreateRunStepPayload, CreateTaskPayload, IMPLICIT_TASK_ITEM_PATH, TaskSummary,
+    UNASSIGNED_QA_FILE_PATH,
+};
 use crate::task_repository::{
     DbEventRecord, SqliteTaskRepository, TaskQueryRepository, insert_event_row,
 };
@@ -89,6 +92,18 @@ fn resolve_task_targets(
     plan: &crate::config::TaskExecutionPlan,
     explicit_targets: Option<Vec<String>>,
 ) -> Result<ResolvedTaskTargets> {
+    if workspace.kind == crate::config::WorkspaceKind::Task {
+        if explicit_targets.is_some() {
+            anyhow::bail!(
+                "[TASK_WORKSPACE_TARGET_FILES_FORBIDDEN] task workspace uses one implicit item and cannot accept target files"
+            );
+        }
+        return Ok(ResolvedTaskTargets {
+            persisted_target_files: Vec::new(),
+            task_item_paths: vec![IMPLICIT_TASK_ITEM_PATH.to_string()],
+            qa_directory_scan_diagnostic: None,
+        });
+    }
     let requires_item_targets = execution_plan_requires_item_targets(plan);
     match select_target_seed_strategy(explicit_targets.as_ref(), plan) {
         TargetSeedStrategy::Explicit => {
@@ -160,6 +175,135 @@ fn resolve_task_targets(
             qa_directory_scan_diagnostic: None,
         }),
     }
+}
+
+fn validate_task_workspace_compatibility(
+    state: &crate::state::InnerState,
+    workspace: &crate::config::ResolvedWorkspace,
+    workflow: &crate::config::WorkflowConfig,
+    execution_plan: &crate::config::TaskExecutionPlan,
+    project: &crate::config::ResolvedProject,
+) -> Result<()> {
+    use crate::config::{
+        CheckpointStrategy, ExecutionFsMode, ExecutionProfileMode, PostAction, WorkspaceKind,
+    };
+    if workspace.kind != WorkspaceKind::Task {
+        return Ok(());
+    }
+    if !matches!(
+        workflow.safety.checkpoint_strategy,
+        CheckpointStrategy::None
+    ) {
+        anyhow::bail!(
+            "[TASK_WORKSPACE_GIT_CHECKPOINT_FORBIDDEN] task workspace cannot use git_tag or git_stash checkpoints"
+        );
+    }
+    if execution_plan.item_isolation.is_some()
+        || execution_plan.steps.iter().any(|step| {
+            step.behavior
+                .post_actions
+                .iter()
+                .any(|action| matches!(action, PostAction::GenerateItems(_)))
+        })
+    {
+        anyhow::bail!(
+            "[TASK_WORKSPACE_DYNAMIC_ITEMS_FORBIDDEN] task workspace must retain one implicit item"
+        );
+    }
+    for step in execution_plan.steps.iter().filter(|step| step.enabled) {
+        let profile_name = step.execution_profile.as_deref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "[TASK_WORKSPACE_SANDBOX_REQUIRED] step '{}' must select a sandbox ExecutionProfile",
+                step.id
+            )
+        })?;
+        let profile = project
+            .execution_profiles
+            .get(profile_name)
+            .ok_or_else(|| anyhow::anyhow!("execution profile '{}' not found", profile_name))?;
+        if profile.mode != ExecutionProfileMode::Sandbox
+            || profile.fs_mode == ExecutionFsMode::Inherit
+        {
+            anyhow::bail!(
+                "[TASK_WORKSPACE_SANDBOX_REQUIRED] step '{}' profile '{}' must use mode=sandbox and a scoped fs_mode",
+                step.id,
+                profile_name
+            );
+        }
+        for (field, configured) in [
+            ("readable_paths", &profile.readable_paths),
+            ("writable_paths", &profile.writable_paths),
+        ] {
+            for raw in configured {
+                if raw.contains('$') {
+                    anyhow::bail!(
+                        "[FILE_SHARING_DYNAMIC_PATH_FORBIDDEN] task workspace {} cannot contain environment expansion: '{}'",
+                        field,
+                        raw
+                    );
+                }
+                let expanded = orchestrator_config::file_sharing::expand_home(raw)?;
+                let path = if expanded.is_absolute() {
+                    expanded
+                } else if workspace.root_path.as_os_str().is_empty() {
+                    // Per-task HOME is daemon-managed and therefore inside the
+                    // internal runtime boundary rather than the host ceiling.
+                    continue;
+                } else {
+                    workspace.root_path.join(expanded)
+                };
+                state
+                    .file_sharing_policy
+                    .ensure_shareable(&path, &format!("executionProfile.{field}"))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+struct ManagedTaskWorkspaceGuard {
+    paths: Vec<std::path::PathBuf>,
+}
+
+impl ManagedTaskWorkspaceGuard {
+    fn disarm(&mut self) {
+        self.paths.clear();
+    }
+}
+
+impl Drop for ManagedTaskWorkspaceGuard {
+    fn drop(&mut self) {
+        for path in &self.paths {
+            let _ = std::fs::remove_dir_all(path);
+        }
+    }
+}
+
+fn materialize_task_workspace(
+    state: &crate::state::InnerState,
+    task_id: &str,
+    workspace: &mut crate::config::ResolvedWorkspace,
+) -> Result<ManagedTaskWorkspaceGuard> {
+    if workspace.kind != crate::config::WorkspaceKind::Task
+        || !workspace.root_path.as_os_str().is_empty()
+    {
+        return Ok(ManagedTaskWorkspaceGuard { paths: Vec::new() });
+    }
+    let root = state.data_dir.join("task-homes").join(task_id);
+    std::fs::create_dir_all(&root)
+        .with_context(|| format!("failed to create task HOME {}", root.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700))?;
+    }
+    let artifacts = state.data_dir.join("task-artifacts").join(task_id);
+    std::fs::create_dir_all(&artifacts)?;
+    workspace.root_path = root;
+    workspace.artifacts_dir = artifacts.clone();
+    Ok(ManagedTaskWorkspaceGuard {
+        paths: vec![workspace.root_path.clone(), artifacts],
+    })
 }
 
 /// FR-094: persists `qa_directory_scan_triggered` (and, when oversize,
@@ -281,7 +425,7 @@ pub fn create_task_impl_with_id_outcome(
     } else {
         resolve_default_resource_id(&project.workspaces, "workspace")?
     };
-    let workspace = project
+    let mut workspace = project
         .workspaces
         .get(&workspace_id)
         .cloned()
@@ -310,6 +454,7 @@ pub fn create_task_impl_with_id_outcome(
 
     let execution_plan =
         build_execution_plan_for_project(&active.config, &workflow, &workflow_id, &project_id)?;
+    validate_task_workspace_compatibility(state, &workspace, &workflow, &execution_plan, project)?;
     let execution_plan_json =
         serde_json::to_string(&execution_plan).context("serialize execution plan")?;
     let loop_mode = match execution_plan.loop_policy.mode {
@@ -351,11 +496,11 @@ pub fn create_task_impl_with_id_outcome(
         String::new()
     };
 
-    let resolved_targets = resolve_task_targets(&workspace, &execution_plan, payload.target_files)?;
-
     let task_id = requested_task_id
         .map(str::to_owned)
         .unwrap_or_else(|| Uuid::new_v4().to_string());
+    let mut managed_workspace = materialize_task_workspace(state, &task_id, &mut workspace)?;
+    let resolved_targets = resolve_task_targets(&workspace, &execution_plan, payload.target_files)?;
     let created_at = now_ts();
     let task_name = payload
         .name
@@ -403,6 +548,7 @@ pub fn create_task_impl_with_id_outcome(
         emit_qa_directory_scan_events(&tx, &task_id, diagnostic)?;
     }
     tx.commit()?;
+    managed_workspace.disarm();
 
     let repo = SqliteTaskRepository::new(state.db_path.clone());
     let mut summary = repo.load_task_summary(&task_id)?;
@@ -442,7 +588,7 @@ pub fn create_run_step_task(
     } else {
         resolve_default_resource_id(&project.workspaces, "workspace")?
     };
-    let workspace = project
+    let mut workspace = project
         .workspaces
         .get(&workspace_id)
         .cloned()
@@ -531,9 +677,24 @@ pub fn create_run_step_task(
         String::new()
     };
 
-    let resolved_targets = resolve_task_targets(&workspace, &execution_plan, payload.target_files)?;
-
     let task_id = Uuid::new_v4().to_string();
+    if workspace.kind == crate::config::WorkspaceKind::Task {
+        let profile = execution_plan
+            .steps
+            .first()
+            .and_then(|step| step.execution_profile.as_deref())
+            .and_then(|name| project.execution_profiles.get(name));
+        if profile.is_none_or(|profile| {
+            profile.mode != crate::config::ExecutionProfileMode::Sandbox
+                || profile.fs_mode == crate::config::ExecutionFsMode::Inherit
+        }) {
+            anyhow::bail!(
+                "[TASK_WORKSPACE_SANDBOX_REQUIRED] direct task execution requires a scoped sandbox ExecutionProfile"
+            );
+        }
+    }
+    let mut managed_workspace = materialize_task_workspace(state, &task_id, &mut workspace)?;
+    let resolved_targets = resolve_task_targets(&workspace, &execution_plan, payload.target_files)?;
     let created_at = now_ts();
     let task_name = format!("run:{}", payload.template);
     let goal = format!("Direct step execution: {}", payload.template);
@@ -573,6 +734,7 @@ pub fn create_run_step_task(
         emit_qa_directory_scan_events(&tx, &task_id, diagnostic)?;
     }
     tx.commit()?;
+    managed_workspace.disarm();
 
     let repo = SqliteTaskRepository::new(state.db_path.clone());
     let mut summary = repo.load_task_summary(&task_id)?;
@@ -1539,6 +1701,145 @@ mod tests {
         assert_eq!(
             oversize_count, 0,
             "single-file scan must not emit the oversize warning"
+        );
+    }
+
+    fn task_sandbox_profile() -> crate::config::ExecutionProfileConfig {
+        crate::config::ExecutionProfileConfig {
+            mode: crate::config::ExecutionProfileMode::Sandbox,
+            fs_mode: crate::config::ExecutionFsMode::WorkspaceRwScoped,
+            network_mode: crate::config::ExecutionNetworkMode::Deny,
+            ..Default::default()
+        }
+    }
+
+    fn task_workspace_workflow() -> WorkflowConfig {
+        let mut step = make_step("warehouse", None, Some("qa"));
+        step.scope = Some(crate::config::StepScope::Task);
+        step.execution_profile = Some("task-sandbox".to_string());
+        make_workflow(vec![step])
+    }
+
+    #[test]
+    fn task_workspace_materializes_one_implicit_item_and_private_home() {
+        let mut ts = TestState::new()
+            .with_task_workspace("warehouse")
+            .with_execution_profile("task-sandbox", task_sandbox_profile())
+            .with_workflow("warehouse-flow", task_workspace_workflow());
+        let state = ts.build();
+        let result = create_task_impl(
+            &state,
+            CreateTaskPayload {
+                name: Some("warehouse reply".to_string()),
+                goal: Some("prepare a Slack response".to_string()),
+                project_id: None,
+                workspace_id: Some("warehouse".to_string()),
+                workflow_id: Some("warehouse-flow".to_string()),
+                target_files: None,
+                parent_task_id: None,
+                spawn_reason: None,
+                step_filter: None,
+                initial_vars: None,
+            },
+        )
+        .expect("create non-code task");
+        assert_eq!(result.total_items, 1);
+        let (_, paths) = load_task_storage(&state, &result.id);
+        assert_eq!(paths, vec![IMPLICIT_TASK_ITEM_PATH.to_string()]);
+
+        let home = state.data_dir.join("task-homes").join(&result.id);
+        assert!(home.is_dir());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(&home)
+                    .expect("metadata")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o700
+            );
+        }
+        let conn = open_conn(&state.db_path).expect("open db");
+        let stored_root: String = conn
+            .query_row(
+                "SELECT workspace_root FROM tasks WHERE id = ?1",
+                params![result.id],
+                |row| row.get(0),
+            )
+            .expect("stored workspace root");
+        assert_eq!(std::path::Path::new(&stored_root), home);
+    }
+
+    #[test]
+    fn task_workspace_rejects_targets_git_checkpoints_and_ceiling_escape() {
+        let mut target_state = TestState::new()
+            .with_task_workspace("warehouse")
+            .with_execution_profile("task-sandbox", task_sandbox_profile())
+            .with_workflow("warehouse-flow", task_workspace_workflow());
+        let state = target_state.build();
+        let payload = CreateTaskPayload {
+            name: None,
+            goal: None,
+            project_id: None,
+            workspace_id: Some("warehouse".to_string()),
+            workflow_id: Some("warehouse-flow".to_string()),
+            target_files: Some(vec!["inventory.csv".to_string()]),
+            parent_task_id: None,
+            spawn_reason: None,
+            step_filter: None,
+            initial_vars: None,
+        };
+        let target_error = create_task_impl(&state, payload).expect_err("targets forbidden");
+        assert!(
+            target_error
+                .to_string()
+                .contains("TASK_WORKSPACE_TARGET_FILES_FORBIDDEN")
+        );
+
+        let mut git_workflow = task_workspace_workflow();
+        git_workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
+        let mut git_state = TestState::new()
+            .with_task_workspace("warehouse")
+            .with_execution_profile("task-sandbox", task_sandbox_profile())
+            .with_workflow("git-flow", git_workflow);
+        let state = git_state.build();
+        let git_error = create_task_impl(
+            &state,
+            CreateTaskPayload {
+                workspace_id: Some("warehouse".to_string()),
+                workflow_id: Some("git-flow".to_string()),
+                ..Default::default()
+            },
+        )
+        .expect_err("git checkpoint forbidden");
+        assert!(
+            git_error
+                .to_string()
+                .contains("TASK_WORKSPACE_GIT_CHECKPOINT_FORBIDDEN")
+        );
+
+        let mut escaped_profile = task_sandbox_profile();
+        escaped_profile.readable_paths = vec!["/tmp".to_string()];
+        let mut ceiling_state = TestState::new()
+            .with_task_workspace("warehouse")
+            .with_execution_profile("task-sandbox", escaped_profile)
+            .with_workflow("warehouse-flow", task_workspace_workflow());
+        let state = ceiling_state.build();
+        let ceiling_error = create_task_impl(
+            &state,
+            CreateTaskPayload {
+                workspace_id: Some("warehouse".to_string()),
+                workflow_id: Some("warehouse-flow".to_string()),
+                ..Default::default()
+            },
+        )
+        .expect_err("deny-all ceiling must reject host path");
+        assert!(
+            ceiling_error
+                .to_string()
+                .contains("FILE_SHARING_PATH_OUTSIDE_CEILING")
         );
     }
 }

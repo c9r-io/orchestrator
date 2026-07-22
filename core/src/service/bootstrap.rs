@@ -156,6 +156,10 @@ fn build_managed_state(
             tracing::warn!("failed to load plugin policy, using default (allowlist): {e}");
             orchestrator_config::plugin_policy::PluginPolicy::default()
         });
+    let file_sharing_policy =
+        orchestrator_config::file_sharing::load_file_sharing_policy(&data_dir)
+            .context("failed to load file-sharing policy")?;
+    let _ = file_sharing_policy.resolved_global_skills()?;
 
     Ok(ManagedState {
         inner: Arc::new(InnerState {
@@ -182,6 +186,7 @@ fn build_managed_state(
             handoff_repo,
             store_manager,
             plugin_policy,
+            file_sharing_policy,
             daemon_runtime: crate::runtime::DaemonRuntimeState::new(),
             worker_notify: Arc::new(Notify::new()),
             trigger_event_tx: tokio::sync::broadcast::channel(64).0,

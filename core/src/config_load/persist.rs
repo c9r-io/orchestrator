@@ -316,6 +316,7 @@ mod tests {
                     workspaces: HashMap::from([(
                         "shared-ws".to_string(),
                         crate::config::WorkspaceConfig {
+                            kind: Default::default(),
                             root_path: ".".to_string(),
                             qa_targets: vec!["docs/qa".to_string()],
                             ticket_dir: "docs/ticket".to_string(),

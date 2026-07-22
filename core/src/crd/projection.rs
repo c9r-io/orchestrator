@@ -457,6 +457,7 @@ mod tests {
     #[test]
     fn workspace_config_round_trip() {
         let config = WorkspaceConfig {
+            kind: Default::default(),
             root_path: "/test".to_string(),
             qa_targets: vec!["src".to_string()],
             ticket_dir: "tickets".to_string(),

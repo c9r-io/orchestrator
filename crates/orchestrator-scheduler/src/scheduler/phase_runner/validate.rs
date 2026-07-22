@@ -132,6 +132,15 @@ pub(super) async fn validate_driver_events_stage(
             }
             DriverEvent::Finished { outcome, exit_code } => {
                 terminal = Some((*outcome, *exit_code));
+                artifacts.push(
+                    Artifact::new(ArtifactKind::Data {
+                        schema: "driver_terminal".to_string(),
+                    })
+                    .with_content(json!({
+                        "outcome": format!("{outcome:?}").to_lowercase(),
+                        "exit_code": exit_code,
+                    })),
+                );
             }
             DriverEvent::Started { .. } | DriverEvent::PermissionRequested { .. } => {}
         }

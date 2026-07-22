@@ -232,14 +232,33 @@ pub(super) async fn apply_step_results(
     // Process store_outputs declarations
     process_store_outputs(state, task_ctx, task_id, step, acc).await;
 
-    // 6. Collect artifacts
-    if step.behavior.collect_artifacts {
-        let step_artifacts = result
-            .output
-            .as_ref()
-            .map(|o| o.artifacts.clone())
-            .unwrap_or_default();
-        if !step_artifacts.is_empty() {
+    // 6. Collect artifacts. Convergence signals are control-plane input and
+    // must survive even when user-facing artifact collection is disabled.
+    let step_artifacts = result
+        .output
+        .as_ref()
+        .map(|o| {
+            o.artifacts
+                .iter()
+                .filter(|artifact| {
+                    step.behavior.collect_artifacts
+                        || matches!(
+                            &artifact.kind,
+                            agent_orchestrator::collab::ArtifactKind::ToolCall { tool }
+                                if tool == "mark_done" || tool.ends_with("__mark_done")
+                        )
+                        || matches!(
+                            &artifact.kind,
+                            agent_orchestrator::collab::ArtifactKind::Data { schema }
+                                if schema == "driver_terminal"
+                        )
+                })
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if !step_artifacts.is_empty() {
+        if step.behavior.collect_artifacts {
             insert_event(
                 state,
                 task_id,
@@ -248,8 +267,8 @@ pub(super) async fn apply_step_results(
                 json!({"step": phase, "count": step_artifacts.len()}),
             )
             .await?;
-            acc.phase_artifacts.extend(step_artifacts);
         }
+        acc.phase_artifacts.extend(step_artifacts);
     }
 
     // Also check for ticket artifacts that may seed active_tickets

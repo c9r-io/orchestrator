@@ -65,7 +65,9 @@ export default function TaskDetail({ taskId, onBack }: Props) {
           goal: previous?.goal ?? snapshot.task.goal ?? "", total_items: snapshot.task.total_items,
           finished_items: snapshot.task.finished_items, failed_items: snapshot.task.failed_items,
           created_at: snapshot.task.created_at, updated_at: snapshot.task.updated_at,
-          project_id: snapshot.task.project_id, workflow_id: snapshot.task.workflow_id, items: snapshot.items,
+          project_id: snapshot.task.project_id, workflow_id: snapshot.task.workflow_id,
+          workspace_kind: previous?.workspace_kind ?? (snapshot.items.some((item) => item.item_kind === "task") ? "task" : "code_repo"),
+          items: snapshot.items,
         }));
       });
       try { await invoke("start_task_watch", { task_id: taskId, interval_secs: 2 }); } catch { /* Terminal tasks need no watch. */ }
@@ -125,7 +127,7 @@ export default function TaskDetail({ taskId, onBack }: Props) {
     {displayData && <>
       <section className="process-overview liquid-glass" aria-label="Process overview">
         <div className="process-state"><StatusIcon status={displayData.status} /><span><strong>{displayData.status}</strong><small>{displayData.goal || "No goal summary"}</small></span></div>
-        <dl className="process-facts"><div><dt>Workflow</dt><dd>{displayData.workflow_id}</dd></div><div><dt>Project</dt><dd>{displayData.project_id}</dd></div><div><dt>Open attention</dt><dd>{openAttention}</dd></div><div><dt>Active sessions</dt><dd>{activeSessions}</dd></div></dl>
+        <dl className="process-facts"><div><dt>Workflow</dt><dd>{displayData.workflow_id}</dd></div><div><dt>Workspace type</dt><dd>{displayData.workspace_kind === "task" ? "Task" : "Code repository"}</dd></div><div><dt>Project</dt><dd>{displayData.project_id}</dd></div><div><dt>Open attention</dt><dd>{openAttention}</dd></div><div><dt>Active sessions</dt><dd>{activeSessions}</dd></div></dl>
         {displayData.total_items > 0 && <ProgressBar finished={displayData.finished_items} total={displayData.total_items} />}
       </section>
 

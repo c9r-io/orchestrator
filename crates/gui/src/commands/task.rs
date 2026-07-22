@@ -33,6 +33,7 @@ pub struct TaskDetail {
     pub updated_at: String,
     pub project_id: String,
     pub workflow_id: String,
+    pub workspace_kind: String,
     pub items: Vec<TaskItemSummary>,
 }
 
@@ -40,8 +41,17 @@ pub struct TaskDetail {
 pub struct TaskItemSummary {
     pub id: String,
     pub qa_file_path: String,
+    pub item_kind: String,
     pub status: String,
     pub order_no: i64,
+}
+
+pub(super) fn item_kind(path: &str) -> &'static str {
+    if path == "__TASK__" {
+        "task"
+    } else {
+        "qa_file"
+    }
 }
 
 /// List all tasks with optional status filter.
@@ -444,17 +454,23 @@ pub async fn task_info(
 
     let inner = resp.into_inner();
     let task = inner.task.ok_or("task not found")?;
-    let items = inner
+    let items: Vec<TaskItemSummary> = inner
         .items
         .into_iter()
         .map(|i| TaskItemSummary {
             id: i.id,
+            item_kind: item_kind(&i.qa_file_path).to_string(),
             qa_file_path: i.qa_file_path,
             status: i.status,
             order_no: i.order_no,
         })
         .collect();
 
+    let workspace_kind = if items.iter().any(|item| item.item_kind == "task") {
+        "task"
+    } else {
+        "code_repo"
+    };
     Ok(TaskDetail {
         id: task.id,
         name: task.name,
@@ -467,6 +483,7 @@ pub async fn task_info(
         updated_at: task.updated_at,
         project_id: task.project_id,
         workflow_id: task.workflow_id,
+        workspace_kind: workspace_kind.to_string(),
         items,
     })
 }

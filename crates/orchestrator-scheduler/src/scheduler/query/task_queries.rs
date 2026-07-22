@@ -66,6 +66,14 @@ pub async fn delete_task_impl(state: &InnerState, task_id: &str) -> Result<()> {
     for path in log_paths {
         let _ = std::fs::remove_file(path);
     }
+    for root in [
+        state.data_dir.join("task-homes").join(&resolved_id),
+        state.data_dir.join("task-artifacts").join(&resolved_id),
+    ] {
+        if root.starts_with(&state.data_dir) {
+            let _ = std::fs::remove_dir_all(root);
+        }
+    }
 
     Ok(())
 }
@@ -298,6 +306,10 @@ mod tests {
 
         assert!(stdout_path.exists());
         assert!(stderr_path.exists());
+        let managed_home = state.data_dir.join("task-homes").join(&task_id);
+        let managed_artifacts = state.data_dir.join("task-artifacts").join(&task_id);
+        std::fs::create_dir_all(&managed_home).expect("managed home");
+        std::fs::create_dir_all(&managed_artifacts).expect("managed artifacts");
 
         delete_task_impl(&state, &task_id)
             .await
@@ -306,6 +318,14 @@ mod tests {
         // Log files should be cleaned up
         assert!(!stdout_path.exists(), "stdout log should be deleted");
         assert!(!stderr_path.exists(), "stderr log should be deleted");
+        assert!(
+            !managed_home.exists(),
+            "managed task HOME should be deleted"
+        );
+        assert!(
+            !managed_artifacts.exists(),
+            "managed task artifacts should be deleted"
+        );
 
         // Task should no longer be listable
         let tasks = list_tasks_impl(&state).await.expect("list after delete");

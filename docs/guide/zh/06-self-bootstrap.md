@@ -26,7 +26,7 @@ kind: Workspace
 metadata:
   name: self
 spec:
-  root_path: "."
+  work_dir: "."
   qa_targets:
     - docs/qa
   ticket_dir: docs/ticket

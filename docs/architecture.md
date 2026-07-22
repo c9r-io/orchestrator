@@ -54,6 +54,9 @@ The project structure is organized as follows:
 │   ├── agent_orchestrator.db  # SQLite database
 │   ├── orchestrator.sock # Daemon Unix socket (C/S mode)
 │   ├── daemon.pid        # Daemon PID file (C/S mode)
+│   ├── file-sharing.yaml # Operator-owned host path ceiling and global Skill roots
+│   ├── task-homes/       # Private 0700 HOME/cwd for task workspaces without work_dir
+│   ├── task-artifacts/   # Per-task artifacts paired with managed task homes
 │   └── logs/             # Execution logs
 ├── docs/                 # Documentation & QA/Design artifacts
 ├── scripts/              # Helper scripts (e.g., `watchdog.sh`)
@@ -164,7 +167,7 @@ The `core/` service implements the control-plane logic for a Harness Engineering
 The orchestrator manages resources organized hierarchically:
 
 1.  **Project**: Top-level namespace for isolation.
-2.  **Workspace**: Defines the file system context (root path, QA targets, ticket directory).
+2.  **Workspace**: Defines an execution context. `code_repo` (the default) retains the repository, QA-target, and ticket-directory contract; `task` supports non-code processes with an optional `work_dir` and no repository assumptions. `root_path` remains a deserialize-only compatibility alias for `work_dir`.
 3.  **Agent**: Defines capabilities (e.g., `qa`, `fix`, `retest`) plus either a legacy shell command template or a typed provider/transport driver. Workflows declare provider-neutral driver requirements and apply rejects incompatible candidate Agents before runtime.
 4.  **Workflow**: Defines the process flow, including:
     *   **Steps**: Ordered sequence of actions (e.g., `init_once`, `qa`, `ticket_scan`, `fix`, `retest`).
@@ -181,7 +184,7 @@ The orchestrator manages resources organized hierarchically:
 
 #### Execution Model
 
-A **Task** is the unit of execution, binding a Workspace and Workflow to a set of target files.
+A **Task** is the unit of execution, binding a Workspace and Workflow to work. A `code_repo` workspace discovers target files from `qa_targets`; a `task` workspace creates one implicit `__TASK__` item and converges from provider-neutral driver completion or `mark_done` signals.
 
 1.  **Initialization**: The `init_once` step runs to prepare the environment.
 2.  **Orchestration Cycle**: The task runs in cycles until completion or manual stop.
@@ -197,6 +200,12 @@ A **Task** is the unit of execution, binding a Workspace and Workflow to a set o
 3.  **State Management**:
     *   State is persisted in a local SQLite database (`tasks`, `task_items`, `command_runs`, `events`).
     *   Events are emitted for real-time observability.
+
+#### Non-code Filesystem Boundary
+
+`{data_dir}/file-sharing.yaml` is an operator-owned authorization ceiling for task workspaces. `fileSharing.shareableRoots` lists the only host roots that task `work_dir` and ExecutionProfile readable/writable paths may use; missing configuration denies all declared host sharing. Paths are canonicalized before containment checks so lexical traversal, sibling-prefix tricks, and symlink escapes fail closed. `fileSharing.globalSkills` selects read-only Skill directories and must itself remain inside the ceiling.
+
+Every task workspace receives an isolated HOME/cwd. An explicit `work_dir` becomes both; when omitted, the daemon allocates a task-specific directory under `task-homes/` with mode `0700` and removes it with its paired artifacts at terminal completion or task deletion. Runner environment construction forces `HOME`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `XDG_DATA_HOME`, and `TMPDIR` beneath that workspace. The macOS Seatbelt and Linux namespace backends expose only the workspace plus approved read/write paths, with global Skills kept read-only.
 
 #### Scheduler Layer
 

@@ -17,15 +17,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Managed Slack Connections** (FR-114) — one-consent installation of an official shared Orchestrator Slack App, independent internet-facing OAuth/Events Gateway, project-scoped SourceConnection lifecycle, outbound durable delivery, bounded permalink proxy, target-side two-phase ownership transfer, and Sources → Connections management with a [deployment and user guide](docs/guide/slack-managed-connections.md)
 - **Dedicated Slack App Provisioning** (FR-115) — an advanced per-workspace private App path with a fixed reviewed manifest, local-only short-lived Configuration Token custody, one-time receipt-gated credential import, per-connection encrypted App identity, exact-App OAuth/events, provisioning Attention recovery, reviewed shared↔dedicated migration, semantic manifest upgrade with suspension/reauthorization, separate typed App deletion, CLI stdin, and a [dedicated setup guide](docs/guide/slack-dedicated-app-provisioning.md)
 - **Agent Driver Abstraction** (FR-116) — per-Agent `shell/cli`, `claude/cli`, and `codex/cli` adapters; typed provider-neutral options and workflow requirements; structured apply diagnostics; direct event-stream folding; complete tool/usage/permission event projection; opaque in-memory session attachment; and run-scoped private MCP configuration. See the [driver guide](docs/guide/agent-driver-model.md).
+- **Non-code Workspaces and Global File Sharing** (FR-117) — `task` workspaces with an optional persistent `work_dir`, one implicit process item, provider-neutral convergence, private per-task HOME/cwd allocation, operator-owned `fileSharing` ceilings, read-only global Skills, Process Console task semantics, and a reproducible Slack inventory pilot. See the [user guide](docs/guide/non-code-workspace.md).
 
 ### Changed
 - Wish Pool and Progress Observer are now presented as New Process and Processes; resource administration remains reachable through System and raw diagnostics through Process Expert
 - Session read and control rollout is globally authoritative from the `_system` RuntimePolicy; ordinary project policies cannot override the fail-closed control gate
 - Process Console mutations support `action_audit_mode=compatibility|enforced`; rollout begins in compatibility mode and moves to enforced only after clients send canonical action context
 - Explicit driver phases use `setup → start → consume → fold → record`; the deprecated global streaming executor is now a provider-owned compatibility bridge while legacy manifests migrate
+- Workspace manifests serialize the canonical `work_dir` field while continuing to accept legacy `root_path`; existing omitted `kind` manifests retain `code_repo` behavior
 
 ### Fixed
 - Slack source automation now permits different reviewed badge bindings on the same message to create distinct tasks, while preserving one route/task for retries of the same message/reaction/binding identity
+- Task-scoped driver completion and `mark_done` events now participate in implicit-item convergence, and successful low-confidence Slack replies create Attention records without converting the step into a failure
 
 ### Compatibility And Migrations
 - Migrations 27-32 add Attention/change feeds, handoff/resume state, Session control fencing, source events/bindings, canonical action audit, and Process Console metric observations/rollups. They are additive, forward-only, restart-safe, and preserve existing task and Session identity.
@@ -34,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Daemon migration 36 adds safe dedicated App projections and provisioning checkpoints. Slack Gateway schema 3 adds per-App encryption contexts, one-time import capabilities, signed receipt metadata, dedicated OAuth identity, and exact event endpoint mapping; populated shared/manual state remains compatible.
 - Daemon migration 37 adds reviewed dedicated-provisioning migration targets. Slack Gateway schema 4 adds installation/version/source-mode OAuth fences so stale or unreviewed App-mode callbacks fail closed; older binaries reject newer stores rather than guessing rollback compatibility.
 - Existing task, trace, log, watch, CLI, and additive gRPC clients remain compatible. No persisted `Task` rename or destructive schema conversion is included.
+- No database migration is required for task workspaces. Existing Workspace manifests remain compatible through the default `code_repo` kind and `root_path` input alias; exported manifests use `work_dir`.
 - Normal rollback disables source/session/resume writers and optional projectors before deploying the previous binaries; it retains migrations 27-32 and all Console tables. Database restore is reserved for migration failure or corruption.
 
 ### Slack Permissions, Secrets, And Privacy

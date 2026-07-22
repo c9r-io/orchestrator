@@ -92,7 +92,8 @@ async function installTauriMock(
         return updated;
       }
       if (command === "task_list") return tasks;
-      if (command === "task_info") return { id: "task-1", name: "Fix payment failure", status: "failed", goal: "Restore the failed payment test", total_items: 1, finished_items: 0, failed_items: 1, created_at: "2026-07-14T00:00:00Z", updated_at: "2026-07-14T00:01:00Z", project_id: "project-1", workflow_id: "qa-loop", items: [{ id: "item-1", qa_file_path: "tests/payment.rs", status: "failed", order_no: 1 }] };
+      if (command === "task_info" && args.task_id === "task-non-code") return { id: "task-non-code", name: "Warehouse reply", status: "running", goal: "Prepare an inventory-backed Slack reply", total_items: 1, finished_items: 0, failed_items: 0, created_at: "2026-07-14T00:00:00Z", updated_at: "2026-07-14T00:01:00Z", project_id: "project-1", workflow_id: "warehouse-assistant", workspace_kind: "task", items: [{ id: "item-task", qa_file_path: "__TASK__", item_kind: "task", status: "running", order_no: 1 }] };
+      if (command === "task_info") return { id: "task-1", name: "Fix payment failure", status: "failed", goal: "Restore the failed payment test", total_items: 1, finished_items: 0, failed_items: 1, created_at: "2026-07-14T00:00:00Z", updated_at: "2026-07-14T00:01:00Z", project_id: "project-1", workflow_id: "qa-loop", workspace_kind: "code_repo", items: [{ id: "item-1", qa_file_path: "tests/payment.rs", item_kind: "qa_file", status: "failed", order_no: 1 }] };
       if (command === "task_timeline") return { entries: [{ id: "entry-1", task_id: "task-1", occurred_at: "2026-07-14T00:00:00Z", category: "failure", title: "Test failed", summary: "The payment fixture assertion failed", status: "failed", actor: null, step_id: "test", task_item_id: "item-1", command_run_id: "run-1", session_id: "session-1", checkpoint_id: "checkpoint-1", source_event_id: null, evidence: [{ kind: "test", label: "cargo test payment", uri: null, content_type: "text/plain", digest: null, redacted: false }], raw_event_ids: [1], projection_version: 1 }], next_cursor: null, has_more: false, snapshot_max_event_id: 1, projection_version: 1 };
       if (command === "agent_session_list") return [session];
       if (command === "agent_session_attach") {
@@ -433,6 +434,16 @@ test("Processes prioritizes active and failed work while preserving keyboard rea
   await processCards.nth(1).focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/#\/processes\/task-1/);
+});
+
+test("non-code process uses task semantics in the console", async ({ page }) => {
+  await installTauriMock(page);
+  await page.goto("/#/processes/task-non-code");
+  await expect(page.getByRole("heading", { name: "Warehouse reply" })).toBeVisible();
+  await expect(page.getByText("Workspace type").locator("..")).toContainText("Task");
+  await expect(page.getByText("__TASK__")).toHaveCount(0);
+  await page.getByRole("button", { name: "Expert off" }).click();
+  await expect(page.getByLabel("Expert process details").getByText("Task", { exact: true })).toBeVisible();
 });
 
 test("Attention mutations use guarded commands and resolved work leaves the open queue", async ({ page }) => {

@@ -206,6 +206,41 @@ pub(crate) fn build_fs_isolation_inner_script(
                 format!("mount -o remount,ro,bind {ws} {ws}"),
             ];
 
+            if execution_profile.strict_read_paths
+                && let Some(host_home) = execution_profile.host_home.as_deref()
+            {
+                let mut permitted = Vec::new();
+                if workspace.starts_with(host_home) {
+                    permitted.push(workspace.to_path_buf());
+                }
+                permitted.extend(
+                    execution_profile
+                        .readable_paths
+                        .iter()
+                        .chain(execution_profile.writable_paths.iter())
+                        .filter(|path| path.starts_with(host_home))
+                        .cloned(),
+                );
+                permitted.sort();
+                permitted.dedup();
+                let stage_root = "/tmp/orchestrator-strict-home-$$";
+                inner.push(format!("mkdir -p {stage_root}"));
+                for (index, path) in permitted.iter().enumerate() {
+                    let source = shell_quote(&path.to_string_lossy());
+                    inner.push(format!(
+                        "mkdir -p {stage_root}/{index} && mount --bind {source} {stage_root}/{index}"
+                    ));
+                }
+                let home = shell_quote(&host_home.to_string_lossy());
+                inner.push(format!("mount -t tmpfs -o mode=0700 tmpfs {home}"));
+                for (index, path) in permitted.iter().enumerate() {
+                    let destination = shell_quote(&path.to_string_lossy());
+                    inner.push(format!(
+                        "mkdir -p {destination} && mount --bind {stage_root}/{index} {destination}"
+                    ));
+                }
+            }
+
             if execution_profile.fs_mode == ExecutionFsMode::WorkspaceRwScoped {
                 // Re-bind each writable path read-write on top of the read-only workspace.
                 for path in &execution_profile.writable_paths {

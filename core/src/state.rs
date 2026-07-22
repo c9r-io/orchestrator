@@ -96,6 +96,8 @@ pub struct InnerState {
     pub store_manager: crate::store::StoreManager,
     /// Plugin security policy (loaded from `{data_dir}/plugin-policy.yaml`).
     pub plugin_policy: orchestrator_config::plugin_policy::PluginPolicy,
+    /// Operator-owned host file-sharing ceiling.
+    pub file_sharing_policy: orchestrator_config::file_sharing::FileSharingPolicy,
     /// Runtime daemon lifecycle state.
     pub daemon_runtime: DaemonRuntimeState,
     /// In-process wakeup channel for idle workers.

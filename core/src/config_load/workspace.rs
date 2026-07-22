@@ -1,4 +1,4 @@
-use crate::config::{OrchestratorConfig, ResolvedProject, ResolvedWorkspace};
+use crate::config::{OrchestratorConfig, ResolvedProject, ResolvedWorkspace, WorkspaceKind};
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -42,6 +42,10 @@ pub fn resolve_and_validate_workspaces_for_project(
     project_id: &str,
 ) -> Result<HashMap<String, ResolvedWorkspace>> {
     let mut resolved = HashMap::new();
+    let file_sharing = orchestrator_config::file_sharing::load_file_sharing_policy(data_dir)?;
+    // Validate global Skill directories even before a task references them so
+    // a malformed daemon ceiling can never degrade into runtime best effort.
+    let _ = file_sharing.resolved_global_skills()?;
     let project = config
         .projects
         .get(project_id)
@@ -52,22 +56,55 @@ pub fn resolve_and_validate_workspaces_for_project(
                 "[INVALID_WORKSPACE] workspace id cannot be empty\n  category: validation\n  suggested_fix: provide a non-empty workspace name"
             );
         }
-        if entry.qa_targets.is_empty() {
-            anyhow::bail!(
-                "[INVALID_WORKSPACE] workspace '{}' qa_targets cannot be empty\n  category: validation\n  suggested_fix: add at least one qa_targets path (e.g. docs/qa)",
-                id
-            );
+        match entry.kind {
+            WorkspaceKind::CodeRepo => {
+                if entry.root_path.trim().is_empty() {
+                    anyhow::bail!(
+                        "[CODE_REPO_WORK_DIR_REQUIRED] workspace '{}' requires work_dir",
+                        id
+                    );
+                }
+                if entry.qa_targets.is_empty() {
+                    anyhow::bail!(
+                        "[INVALID_WORKSPACE] workspace '{}' qa_targets cannot be empty\n  category: validation\n  suggested_fix: add at least one qa_targets path (e.g. docs/qa)",
+                        id
+                    );
+                }
+                if entry.ticket_dir.trim().is_empty() {
+                    anyhow::bail!(
+                        "[CODE_REPO_TICKET_DIR_REQUIRED] workspace '{}' requires ticket_dir",
+                        id
+                    );
+                }
+            }
+            WorkspaceKind::Task => {
+                if entry.self_referential {
+                    anyhow::bail!(
+                        "[TASK_WORKSPACE_SELF_REFERENTIAL_FORBIDDEN] workspace '{}' cannot be self_referential",
+                        id
+                    );
+                }
+                if !entry.qa_targets.is_empty() || !entry.ticket_dir.is_empty() {
+                    anyhow::bail!(
+                        "[TASK_WORKSPACE_QA_FIELDS_FORBIDDEN] workspace '{}' cannot define qa_targets or ticket_dir",
+                        id
+                    );
+                }
+            }
         }
 
-        let root_path = data_dir
-            .join(&entry.root_path)
-            .canonicalize()
-            .with_context(|| {
-                format!(
-                    "workspace '{}' root_path not found: {}",
-                    id, entry.root_path
-                )
+        let root_path = if entry.root_path.trim().is_empty() {
+            PathBuf::new()
+        } else {
+            let requested = data_dir.join(&entry.root_path);
+            let root = requested.canonicalize().with_context(|| {
+                format!("workspace '{}' work_dir not found: {}", id, entry.root_path)
             })?;
+            if entry.kind == WorkspaceKind::Task {
+                file_sharing.ensure_shareable(&root, &format!("workspace '{}'.work_dir", id))?;
+            }
+            root
+        };
 
         for (idx, target) in entry.qa_targets.iter().enumerate() {
             let field = format!("workspace '{}' qa_targets[{}]", id, idx);
@@ -80,19 +117,23 @@ pub fn resolve_and_validate_workspaces_for_project(
                 );
             }
         }
-        let ticket_field = format!("workspace '{}' ticket_dir", id);
-        let resolved_ticket = resolve_workspace_path(&root_path, &entry.ticket_dir, &ticket_field)?;
-        if resolved_ticket.exists() && !resolved_ticket.is_dir() {
-            anyhow::bail!(
-                "{} must be a directory: {}",
-                ticket_field,
-                resolved_ticket.display()
-            );
+        if entry.kind == WorkspaceKind::CodeRepo {
+            let ticket_field = format!("workspace '{}' ticket_dir", id);
+            let resolved_ticket =
+                resolve_workspace_path(&root_path, &entry.ticket_dir, &ticket_field)?;
+            if resolved_ticket.exists() && !resolved_ticket.is_dir() {
+                anyhow::bail!(
+                    "{} must be a directory: {}",
+                    ticket_field,
+                    resolved_ticket.display()
+                );
+            }
         }
 
-        let artifacts_dir = match &entry.artifacts_dir {
-            Some(rel) => root_path.join(rel),
-            None => root_path.join(".orchestrator/artifacts"),
+        let artifacts_dir = match (&entry.artifacts_dir, root_path.as_os_str().is_empty()) {
+            (Some(rel), false) => root_path.join(rel),
+            (None, false) => root_path.join(".orchestrator/artifacts"),
+            (_, true) => data_dir.join("task-artifacts").join(id),
         };
         if !artifacts_dir.exists() {
             std::fs::create_dir_all(&artifacts_dir).with_context(|| {
@@ -107,6 +148,7 @@ pub fn resolve_and_validate_workspaces_for_project(
         resolved.insert(
             id.clone(),
             ResolvedWorkspace {
+                kind: entry.kind,
                 root_path,
                 qa_targets: entry.qa_targets.clone(),
                 ticket_dir: entry.ticket_dir.clone(),
@@ -132,16 +174,27 @@ pub fn resolve_and_validate_projects(
     for (project_id, project_config) in &config.projects {
         let mut workspaces = HashMap::new();
         for (workspace_id, workspace_config) in &project_config.workspaces {
-            let root_path = data_dir.join(&workspace_config.root_path);
+            let root_path = if workspace_config.kind == WorkspaceKind::Task
+                && workspace_config.root_path.trim().is_empty()
+            {
+                PathBuf::new()
+            } else {
+                data_dir.join(&workspace_config.root_path)
+            };
             workspaces.insert(
                 workspace_id.clone(),
                 ResolvedWorkspace {
+                    kind: workspace_config.kind,
                     root_path: root_path.clone(),
                     qa_targets: workspace_config.qa_targets.clone(),
                     ticket_dir: workspace_config.ticket_dir.clone(),
-                    artifacts_dir: match &workspace_config.artifacts_dir {
-                        Some(rel) => root_path.join(rel),
-                        None => root_path.join(".orchestrator/artifacts"),
+                    artifacts_dir: match (
+                        &workspace_config.artifacts_dir,
+                        root_path.as_os_str().is_empty(),
+                    ) {
+                        (_, true) => data_dir.join("task-artifacts").join(workspace_id),
+                        (Some(rel), false) => root_path.join(rel),
+                        (None, false) => root_path.join(".orchestrator/artifacts"),
                     },
                 },
             );
@@ -243,6 +296,7 @@ mod tests {
                     workspaces: [(
                         "ws1".to_string(),
                         WorkspaceConfig {
+                            kind: Default::default(),
                             root_path: "/tmp".to_string(),
                             qa_targets: vec!["docs".to_string()],
                             ticket_dir: "tickets".to_string(),
@@ -284,6 +338,7 @@ mod tests {
                     workspaces: [(
                         "ws1".to_string(),
                         WorkspaceConfig {
+                            kind: Default::default(),
                             root_path: "/tmp".to_string(),
                             qa_targets: vec!["docs".to_string()],
                             ticket_dir: "tickets".to_string(),
@@ -325,6 +380,7 @@ mod tests {
                     workspaces: [(
                         "".to_string(),
                         WorkspaceConfig {
+                            kind: Default::default(),
                             root_path: "/tmp".to_string(),
                             qa_targets: vec!["docs".to_string()],
                             ticket_dir: "tickets".to_string(),
@@ -373,6 +429,7 @@ mod tests {
                     workspaces: [(
                         "ws1".to_string(),
                         WorkspaceConfig {
+                            kind: Default::default(),
                             root_path: "/tmp".to_string(),
                             qa_targets: vec![],
                             ticket_dir: "tickets".to_string(),
@@ -428,6 +485,7 @@ mod tests {
                     workspaces: [(
                         "ws1".to_string(),
                         WorkspaceConfig {
+                            kind: Default::default(),
                             root_path: ws_root.to_string_lossy().to_string(),
                             qa_targets: vec!["docs".to_string()],
                             ticket_dir: "tickets".to_string(),
@@ -472,6 +530,42 @@ mod tests {
     }
 
     #[test]
+    fn task_workspace_without_work_dir_stays_unmaterialized_in_snapshot() {
+        use crate::config::{ProjectConfig, WorkspaceConfig, WorkspaceKind};
+        let data_dir = tempfile::tempdir().expect("data dir");
+        let config = OrchestratorConfig {
+            projects: [(
+                "project".to_string(),
+                ProjectConfig {
+                    workspaces: [(
+                        "task-workspace".to_string(),
+                        WorkspaceConfig {
+                            kind: WorkspaceKind::Task,
+                            root_path: String::new(),
+                            qa_targets: Vec::new(),
+                            ticket_dir: String::new(),
+                            self_referential: false,
+                            health_policy: Default::default(),
+                            artifacts_dir: None,
+                        },
+                    )]
+                    .into(),
+                    ..ProjectConfig::default()
+                },
+            )]
+            .into(),
+            ..OrchestratorConfig::default()
+        };
+        let projects = resolve_and_validate_projects(data_dir.path(), &config).expect("snapshot");
+        let workspace = &projects["project"].workspaces["task-workspace"];
+        assert!(workspace.root_path.as_os_str().is_empty());
+        assert_eq!(
+            workspace.artifacts_dir,
+            data_dir.path().join("task-artifacts/task-workspace")
+        );
+    }
+
+    #[test]
     fn resolve_and_validate_projects_resolves_workspaces() {
         use crate::config::{ProjectConfig, WorkspaceConfig};
         let mut projects = HashMap::new();
@@ -479,6 +573,7 @@ mod tests {
         ws.insert(
             "proj-ws".to_string(),
             WorkspaceConfig {
+                kind: Default::default(),
                 root_path: "/app/some/absolute/path".to_string(),
                 qa_targets: vec!["docs".to_string()],
                 ticket_dir: "tickets".to_string(),

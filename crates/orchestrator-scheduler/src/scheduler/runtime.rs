@@ -240,7 +240,7 @@ pub async fn load_task_runtime_context(
     let task_goal = runtime_row.goal;
     let project_id = runtime_row.project_id;
 
-    let (workflow, effective_project_id, self_referential, mut execution_plan) = {
+    let (workflow, effective_project_id, workspace_kind, self_referential, mut execution_plan) = {
         let active = read_active_config(state)?;
         let effective_project_id = active
             .config
@@ -265,6 +265,13 @@ pub async fn load_task_runtime_context(
             .and_then(|p| p.workspaces.get(&workspace_id))
             .map(|ws| ws.self_referential)
             .unwrap_or(false);
+        let workspace_kind = active
+            .config
+            .projects
+            .get(&effective_project_id)
+            .and_then(|p| p.workspaces.get(&workspace_id))
+            .map(|workspace| workspace.kind)
+            .unwrap_or_default();
         let execution_plan = serde_json::from_str::<TaskExecutionPlan>(&execution_plan_json)
             .ok()
             .filter(|plan| !plan.steps.is_empty())
@@ -287,6 +294,7 @@ pub async fn load_task_runtime_context(
         (
             workflow,
             effective_project_id,
+            workspace_kind,
             self_referential,
             execution_plan,
         )
@@ -307,6 +315,17 @@ pub async fn load_task_runtime_context(
     }
 
     let workspace_root = PathBuf::from(workspace_root_raw);
+    if workspace_kind == agent_orchestrator::config::WorkspaceKind::Task
+        && !workspace_root.exists()
+        && workspace_root.starts_with(state.data_dir.join("task-homes").join(task_id))
+    {
+        std::fs::create_dir_all(&workspace_root)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&workspace_root, std::fs::Permissions::from_mode(0o700))?;
+        }
+    }
     if !workspace_root.exists() {
         anyhow::bail!(
             "workspace root does not exist for task {}: {}",
@@ -317,7 +336,9 @@ pub async fn load_task_runtime_context(
     let workspace_root = workspace_root
         .canonicalize()
         .with_context(|| format!("failed to canonicalize workspace root for task {}", task_id))?;
-    resolve_workspace_path(&workspace_root, &ticket_dir, "task.ticket_dir")?;
+    if workspace_kind == agent_orchestrator::config::WorkspaceKind::CodeRepo {
+        resolve_workspace_path(&workspace_root, &ticket_dir, "task.ticket_dir")?;
+    }
 
     let dynamic_steps = workflow.dynamic_steps.clone();
     let adaptive = workflow.adaptive.clone();
@@ -777,6 +798,7 @@ mod tests {
                 mode: orchestrator_config::plugin_policy::PluginPolicyMode::Audit,
                 ..Default::default()
             },
+            file_sharing_policy: orchestrator_config::file_sharing::FileSharingPolicy::default(),
             daemon_runtime: agent_orchestrator::runtime::DaemonRuntimeState::new(),
             worker_notify: Arc::new(tokio::sync::Notify::new()),
             trigger_event_tx: tokio::sync::broadcast::channel(64).0,

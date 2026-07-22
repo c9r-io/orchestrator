@@ -22,6 +22,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                 workspaces: [(
                     "default".to_string(),
                     WorkspaceConfig {
+                        kind: Default::default(),
                         root_path: "workspace/default".to_string(),
                         qa_targets: vec!["docs/qa".to_string()],
                         ticket_dir: "docs/ticket".to_string(),
@@ -316,7 +317,7 @@ spec:
         result
             .expect_err("operation should fail")
             .to_string()
-            .contains("root_path")
+            .contains("work_dir")
     );
 }
 
@@ -369,6 +370,7 @@ fn delete_removes_workspace_from_config() {
     config.ensure_project(None).workspaces.insert(
         "to-delete".to_string(),
         agent_orchestrator::config::WorkspaceConfig {
+            kind: Default::default(),
             root_path: "workspace/to-delete".to_string(),
             qa_targets: vec!["docs/qa".to_string()],
             ticket_dir: "docs/ticket".to_string(),
@@ -678,6 +680,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                 workspaces: [(
                     "default".to_string(),
                     WorkspaceConfig {
+                        kind: Default::default(),
                         root_path: "workspace/default".to_string(),
                         qa_targets: vec!["docs/qa".to_string()],
                         ticket_dir: "docs/ticket".to_string(),

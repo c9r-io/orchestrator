@@ -73,7 +73,30 @@ pub async fn run_task_loop(
             let _ = record_task_execution_metric(&state, task_id, "failed", 0, unresolved).await;
         }
     }
+    cleanup_managed_task_home(&state, task_id).await;
     result
+}
+
+async fn cleanup_managed_task_home(state: &InnerState, task_id: &str) {
+    let Ok(summary) = state.task_repo.load_task_summary(task_id).await else {
+        return;
+    };
+    if !matches!(
+        summary.status.as_str(),
+        "completed" | "failed" | "cancelled"
+    ) {
+        return;
+    }
+    let expected = state.data_dir.join("task-homes").join(task_id);
+    let root = state
+        .task_repo
+        .load_task_runtime_row(task_id)
+        .await
+        .ok()
+        .map(|row| std::path::PathBuf::from(row.workspace_root_raw));
+    if root.as_ref() == Some(&expected) {
+        let _ = tokio::fs::remove_dir_all(expected).await;
+    }
 }
 
 /// Signal returned by `execute_cycle_segments` to indicate whether the caller

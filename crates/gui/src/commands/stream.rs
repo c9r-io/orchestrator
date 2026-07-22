@@ -332,6 +332,7 @@ pub async fn start_task_watch(
                                 let items: Vec<_> = snapshot.items.into_iter().map(|i| {
                                     super::task::TaskItemSummary {
                                         id: i.id,
+                                        item_kind: super::task::item_kind(&i.qa_file_path).to_string(),
                                         qa_file_path: i.qa_file_path,
                                         status: i.status,
                                         order_no: i.order_no,

@@ -156,7 +156,9 @@ export default function ExpertWorkflow({ taskDetail }: Props) {
           {nodes.map((n) => {
             const x = nodeX(n);
             const y = nodeY(n);
-            const label = n.item.qa_file_path
+            const label = n.item.item_kind === "task"
+              ? "Task"
+              : n.item.qa_file_path
               ? n.item.qa_file_path.split("/").pop() ?? `Step ${n.item.order_no}`
               : `Step ${n.item.order_no}`;
             return (

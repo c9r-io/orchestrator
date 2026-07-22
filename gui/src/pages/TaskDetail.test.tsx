@@ -20,17 +20,18 @@ vi.mock("../components/SessionPanel", () => ({ default: () => <div>session panel
 vi.mock("../components/SourcePanel", () => ({ default: () => <div>source panel</div> }));
 vi.mock("../components/ExpertPanel", () => ({ default: () => <div>expert details</div> }));
 
-function detail(status: string): TaskDetailType {
+function detail(status: string, workspaceKind: "code_repo" | "task" = "code_repo"): TaskDetailType {
   return {
     id: "task-1", name: "Fix payment failure", status, goal: "Restore tests", total_items: 2,
     finished_items: status === "completed" ? 2 : 1, failed_items: status === "failed" ? 1 : 0,
     created_at: "2026-07-17T00:00:00Z", updated_at: "2026-07-17T00:01:00Z",
-    project_id: "project-1", workflow_id: "qa-loop", items: [],
+    project_id: "project-1", workflow_id: "qa-loop", workspace_kind: workspaceKind,
+    items: workspaceKind === "task" ? [{ id: "item-1", qa_file_path: "__TASK__", item_kind: "task", status: "running", order_no: 1 }] : [],
   };
 }
 
-function renderAs(role: Role, status: string, onBack = vi.fn()) {
-  vi.mocked(useGrpc).mockReturnValue({ data: detail(status), error: null, loading: false, call: vi.fn() });
+function renderAs(role: Role, status: string, onBack = vi.fn(), workspaceKind: "code_repo" | "task" = "code_repo") {
+  vi.mocked(useGrpc).mockReturnValue({ data: detail(status, workspaceKind), error: null, loading: false, call: vi.fn() });
   vi.mocked(useStream).mockReturnValue({
     data: [{ line: "cargo test failed", timestamp: "2026-07-17T00:00:00Z" }, { line: "other output", timestamp: "2026-07-17T00:00:01Z" }],
     active: false, error: null, start: vi.fn(), stop: vi.fn(),
@@ -75,6 +76,12 @@ describe("TaskDetail", () => {
     fireEvent.click(screen.getByRole("button", { name: "Pause" }));
     expect(await screen.findByRole("status")).toHaveTextContent("task_pause succeeded");
     expect(invoke).toHaveBeenCalledWith("task_pause", { task_id: "task-1" });
+  });
+
+  it("identifies a non-code task workspace without exposing a QA file label", () => {
+    renderAs("operator", "running", vi.fn(), "task");
+    expect(screen.getByText("Workspace type").nextElementSibling).toHaveTextContent("Task");
+    expect(screen.queryByText("__TASK__")).not.toBeInTheDocument();
   });
 
   it("requires admin presentation access for destructive deletion", async () => {

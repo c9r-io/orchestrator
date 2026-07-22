@@ -41,7 +41,14 @@ pub(super) async fn setup_phase_execution(
     let stdout_path = logs_dir.join(format!("{}_{}.stdout", phase, run_id));
     let stderr_path = logs_dir.join(format!("{}_{}.stderr", phase, run_id));
 
-    let (runner, execution_profile, mut resolved_extra_env, sensitive_values, driver) = {
+    let (
+        runner,
+        execution_profile,
+        mut resolved_extra_env,
+        sensitive_values,
+        driver,
+        task_workspace,
+    ) = {
         let active = agent_orchestrator::config_load::read_active_config(state)?;
         let mut runner = active.config.runtime_policy_for_project(project_id).runner;
         if state.unsafe_mode {
@@ -50,6 +57,10 @@ pub(super) async fn setup_phase_execution(
         let effective_project_id = active.config.effective_project_id(Some(project_id));
         let project_cfg = active.config.projects.get(effective_project_id);
         let agent_cfg = project_cfg.and_then(|p| p.agents.get(agent_id));
+        let task_workspace = project_cfg
+            .and_then(|project| project.workspaces.get(workspace_id))
+            .map(|workspace| workspace.kind == agent_orchestrator::config::WorkspaceKind::Task)
+            .unwrap_or(false);
         let empty_env_stores = HashMap::new();
         let empty_secret_stores = HashMap::new();
         let env_stores = project_cfg
@@ -81,20 +92,36 @@ pub(super) async fn setup_phase_execution(
                 project_cfg
                     .and_then(|p| p.execution_profiles.get(name))
                     .map(|profile| {
-                        let mut always_writable =
-                            vec![state.logs_dir.join(task_id), std::env::temp_dir()];
+                        let mut always_writable = vec![state.logs_dir.join(task_id)];
+                        if task_workspace {
+                            always_writable.push(workspace_root.to_path_buf());
+                        } else {
+                            always_writable.push(std::env::temp_dir());
+                        }
                         // Claude Code agents need write access to ~/.claude/ for
                         // session-env bootstrapping; without this the sandbox blocks
                         // every bash command after self_restart.
-                        if let Ok(home) = std::env::var("HOME") {
+                        if !task_workspace && let Ok(home) = std::env::var("HOME") {
                             always_writable.push(std::path::PathBuf::from(home).join(".claude"));
                         }
-                        ResolvedExecutionProfile::from_config(
+                        let mut resolved = ResolvedExecutionProfile::from_config(
                             name,
                             profile,
                             workspace_root,
                             &always_writable,
-                        )
+                        );
+                        if task_workspace
+                            && let Ok(global_skills) =
+                                state.file_sharing_policy.resolved_global_skills()
+                        {
+                            resolved.readable_paths.extend(global_skills);
+                        }
+                        if task_workspace {
+                            resolved.strict_read_paths = true;
+                            resolved.host_home =
+                                std::env::var_os("HOME").map(std::path::PathBuf::from);
+                        }
+                        resolved
                     })
             })
             .unwrap_or_else(ResolvedExecutionProfile::host);
@@ -105,8 +132,65 @@ pub(super) async fn setup_phase_execution(
             extra_env,
             sensitive,
             agent_cfg.and_then(|agent| agent.driver.clone()),
+            task_workspace,
         )
     };
+    if task_workspace {
+        let internal_artifacts = state.data_dir.join("task-artifacts").join(task_id);
+        for path in execution_profile
+            .readable_paths
+            .iter()
+            .chain(execution_profile.writable_paths.iter())
+        {
+            if path.starts_with(workspace_root)
+                || path.starts_with(state.logs_dir.join(task_id))
+                || path.starts_with(&internal_artifacts)
+            {
+                continue;
+            }
+            state
+                .file_sharing_policy
+                .ensure_shareable(path, "executionProfile.path")?;
+        }
+    }
+    if task_workspace {
+        let config_home = workspace_root.join(".config");
+        let cache_home = workspace_root.join(".cache");
+        let data_home = workspace_root.join(".local/share");
+        let state_home = workspace_root.join(".local/state");
+        let runtime_home = workspace_root.join(".runtime");
+        let temp_home = workspace_root.join(".tmp");
+        for path in [
+            &config_home,
+            &cache_home,
+            &data_home,
+            &state_home,
+            &runtime_home,
+            &temp_home,
+        ] {
+            std::fs::create_dir_all(path)?;
+        }
+        for (key, value) in [
+            ("HOME", workspace_root.to_path_buf()),
+            ("XDG_CONFIG_HOME", config_home),
+            ("XDG_CACHE_HOME", cache_home),
+            ("XDG_DATA_HOME", data_home),
+            ("XDG_STATE_HOME", state_home),
+            ("XDG_RUNTIME_DIR", runtime_home),
+            ("TMPDIR", temp_home),
+        ] {
+            resolved_extra_env.insert(key.to_string(), value.to_string_lossy().into_owned());
+        }
+        let global_skills = state.file_sharing_policy.resolved_global_skills()?;
+        resolved_extra_env.insert(
+            "ORCHESTRATOR_GLOBAL_SKILLS".to_string(),
+            global_skills
+                .iter()
+                .map(|path| path.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join(":"),
+        );
+    }
     // Inject daemon PID for self-referential workspaces so the runner can
     // guard against kill commands targeting the daemon process itself.
     if self_referential {

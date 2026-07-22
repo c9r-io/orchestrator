@@ -31,6 +31,10 @@ pub struct ResolvedExecutionProfile {
     pub max_open_files: Option<u64>,
     /// Workspace root directory (needed by Linux mount-namespace filesystem isolation).
     pub workspace_root: Option<PathBuf>,
+    /// Whether user-home reads must be limited to the resolved path set.
+    pub strict_read_paths: bool,
+    /// Ambient daemon HOME masked by strict Linux filesystem isolation.
+    pub host_home: Option<PathBuf>,
 }
 
 impl ResolvedExecutionProfile {
@@ -49,6 +53,8 @@ impl ResolvedExecutionProfile {
             max_processes: None,
             max_open_files: None,
             workspace_root: None,
+            strict_read_paths: false,
+            host_home: None,
         }
     }
 
@@ -93,6 +99,8 @@ impl ResolvedExecutionProfile {
             max_processes: config.max_processes,
             max_open_files: config.max_open_files,
             workspace_root: Some(workspace_root.to_path_buf()),
+            strict_read_paths: false,
+            host_home: None,
         }
     }
 }

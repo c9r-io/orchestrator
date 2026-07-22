@@ -531,7 +531,7 @@ mod tests {
             .expect_err("unhealable config should still fail");
 
         assert!(
-            err.to_string().contains("root_path not found"),
+            err.to_string().contains("work_dir not found"),
             "expected original error to be preserved, got: {err}"
         );
         let conn = crate::db::open_conn(&db_path).expect("open sqlite connection");
@@ -684,6 +684,7 @@ mod tests {
         previous_workspaces.insert(
             "ws-to-remove".to_string(),
             WorkspaceConfig {
+                kind: Default::default(),
                 root_path: "/tmp".to_string(),
                 qa_targets: vec!["docs".to_string()],
                 ticket_dir: "tickets".to_string(),

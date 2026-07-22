@@ -1,0 +1,171 @@
+# FR-117 controlled Slack-to-non-code-task pilot.
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: warehouse-ops
+spec:
+  kind: task
+  work_dir: .
+---
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: ephemeral-ops
+spec:
+  kind: task
+---
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: task-sandbox
+spec:
+  mode: sandbox
+  fs_mode: workspace_rw_scoped
+  network_mode: deny
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: warehouse-assistant
+spec:
+  capabilities: [warehouse_reply]
+  promptDelivery: env
+  command: >-
+    mkdir -p evidence;
+    skill_text="$(cat "$ORCHESTRATOR_GLOBAL_SKILLS/warehouse/SKILL.md")";
+    inventory="$(cat inventory.txt 2>/dev/null || printf unavailable)";
+    if touch "$ORCHESTRATOR_GLOBAL_SKILLS/warehouse/mutation-denied" 2>/dev/null; then skill_read_only=false; else skill_read_only=true; fi;
+    printf 'prompt=%s\nskill=%s\ninventory=%s\nsuggestion=Confirm 3 units in stock, reserve after approval.\nhome=%s\nxdg_config=%s\nskill_read_only=%s\n' "$ORCH_PROMPT" "$skill_text" "$inventory" "$HOME" "$XDG_CONFIG_HOME" "$skill_read_only" > evidence/reply-suggestion.txt;
+    echo '{"confidence":0.4,"quality_score":1.0,"artifacts":[]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: warehouse-finisher
+spec:
+  capabilities: [warehouse_finish]
+  command: >-
+    echo '{"confidence":1.0,"quality_score":1.0,"artifacts":[]}'
+  driver:
+    provider: shell
+    transport: cli
+    shell:
+      requirePromptPlaceholder: false
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: warehouse-reply
+spec:
+  steps:
+    - id: prepare_reply
+      type: warehouse_reply
+      required_capability: warehouse_reply
+      template: warehouse-reply-prompt
+      execution_profile: task-sandbox
+      scope: task
+      enabled: true
+      repeatable: false
+      behavior:
+        side_effect_class: none
+    - id: finish_reply
+      type: warehouse_finish
+      required_capability: warehouse_finish
+      execution_profile: task-sandbox
+      scope: task
+      enabled: true
+      repeatable: false
+      behavior:
+        side_effect_class: none
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: warehouse-reply-prompt
+spec:
+  description: Render the source-derived non-code task goal for the agent.
+  prompt: "{goal}"
+---
+apiVersion: orchestrator.dev/v2
+kind: RuntimePolicy
+metadata:
+  name: default
+spec:
+  runner:
+    shell: /bin/bash
+    shell_arg: -lc
+    policy: allowlist
+    executor: shell
+    allowed_shells: [/bin/bash, /bin/sh, sh]
+    allowed_shell_args: [-lc, -c]
+  resume:
+    auto: false
+  source_ingest_enabled: true
+  attention_inbox_enabled: true
+---
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskTemplate
+metadata:
+  name: warehouse-from-slack
+spec:
+  skill:
+    name: warehouse
+    invocation: "$warehouse"
+    args: ["--reply-draft"]
+  action:
+    workflow: warehouse-reply
+    workspace: warehouse-ops
+    start: true
+  goalTemplate: "{skill_invocation}: inspect {source_message_url}, check inventory, and prepare a reply for approval"
+  allowedVariables: [skill_invocation, source_message_url]
+---
+apiVersion: orchestrator.dev/v2
+kind: SecretStore
+metadata:
+  name: slack-secret
+spec:
+  data:
+    signing: qa-non-code-signing-secret
+    bot-token: qa-non-code-fake-token
+---
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: slack-warehouse
+spec:
+  event:
+    source: webhook
+    webhook:
+      provider: slack
+      installationId: T_WAREHOUSE
+      timestampToleranceSecs: 300
+      actorRoles:
+        U_OPERATOR: operator
+      reactionRouting: bindings
+      secret:
+        fromRef: slack-secret
+      outboundCredential:
+        fromRef: slack-secret
+        key: bot-token
+  action:
+    workflow: warehouse-reply
+    workspace: warehouse-ops
+    start: true
+  concurrencyPolicy: Allow
+---
+apiVersion: orchestrator.dev/v2
+kind: SourceTaskBinding
+metadata:
+  name: warehouse-badge
+spec:
+  triggerRef: slack-warehouse
+  match:
+    eventKind: reaction_added
+    reaction: warehouse-check
+    targetKind: message
+    channels: [C_WAREHOUSE]
+  templateRef: warehouse-from-slack
+  allowedActorRoles: [operator]
+  suspend: false

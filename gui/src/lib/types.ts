@@ -32,12 +32,14 @@ export interface TaskDetail {
   updated_at: string;
   project_id: string;
   workflow_id: string;
+  workspace_kind?: "code_repo" | "task";
   items: TaskItemSummary[];
 }
 
 export interface TaskItemSummary {
   id: string;
   qa_file_path: string;
+  item_kind?: "qa_file" | "task";
   status: string;
   order_no: number;
 }
