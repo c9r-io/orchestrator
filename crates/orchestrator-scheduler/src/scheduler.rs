@@ -1,5 +1,7 @@
 /// Preflight config and workflow checks.
 pub mod check;
+/// Run-scoped daemon coordination tools exposed through the MCP transport shim.
+pub mod coordination_tools;
 /// Runtime invariant enforcement helpers.
 pub mod invariant;
 mod item_executor;

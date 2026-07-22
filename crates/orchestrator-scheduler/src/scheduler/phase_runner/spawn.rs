@@ -14,6 +14,7 @@ use uuid::Uuid;
 use super::RunningTask;
 use super::types::{PhaseSetup, SpawnResult};
 use super::util::{shell_escape, step_scope_label};
+use crate::scheduler::coordination_tools::{CoordinationHostRequest, start_tool_host};
 
 /// Stage 2: TTY allocation, session creation, process spawning, stdin write.
 /// Returns early for TTY sessions or hands back spawn metadata.
@@ -98,6 +99,30 @@ pub(super) async fn spawn_phase_process(
         let driver = create_driver(&driver_config)?;
         let provider_session = recalled_provider_session(task_id).await;
         let prompt = prompt_payload.as_deref().unwrap_or_default();
+        let tool_host = if driver.capabilities().tool_hosting
+            == agent_orchestrator::config::ToolHosting::Stdio
+        {
+            let host = start_tool_host(CoordinationHostRequest {
+                state: state.clone(),
+                task_id,
+                item_id,
+                run_id: &setup.run_id,
+                workspace_root,
+                runner: &setup.runner,
+                execution_profile: &setup.execution_profile,
+                extra_env: &setup.resolved_extra_env,
+                redaction_patterns: &setup.redaction_patterns,
+                artifacts_dir: &setup.artifacts_dir,
+                allowed_tools: &driver_config.options.allowed_tools,
+            })
+            .await?;
+            setup
+                .redaction_patterns
+                .push(host.callback().expose_token().to_string());
+            Some(host)
+        } else {
+            None
+        };
         let session = driver
             .start(DriverStartRequest {
                 driver: &driver_config,
@@ -112,6 +137,7 @@ pub(super) async fn spawn_phase_process(
                 execution_profile: &setup.execution_profile,
                 artifacts_dir: &setup.artifacts_dir,
                 session_ref: provider_session.as_ref(),
+                mcp_callback: tool_host.as_ref().map(|host| host.callback()),
             })
             .await?;
         let child_pid = session.pid();
@@ -143,6 +169,7 @@ pub(super) async fn spawn_phase_process(
             child_pid,
             output_capture: None,
             driver_session: Some(session),
+            coordination_tool_host: tool_host,
             tty_early_return: None,
         });
     }
@@ -216,6 +243,7 @@ pub(super) async fn spawn_phase_process(
             child_pid: None,
             output_capture: None,
             driver_session: None,
+            coordination_tool_host: None,
             tty_early_return: Some(agent_orchestrator::dto::RunResult {
                 success: true,
                 exit_code: 0,
@@ -280,6 +308,7 @@ pub(super) async fn spawn_phase_process(
         child_pid,
         output_capture,
         driver_session: None,
+        coordination_tool_host: None,
         tty_early_return: None,
     })
 }

@@ -49,7 +49,10 @@ impl AgentDriver for ClaudeCliDriver {
 
     async fn start(&self, request: DriverStartRequest<'_>) -> Result<Box<dyn DriverSession>> {
         let mcp_config = if self.capabilities().tool_hosting == ToolHosting::Stdio {
-            Some(write_per_run_mcp_config(request.artifacts_dir)?)
+            Some(write_per_run_mcp_config(
+                request.artifacts_dir,
+                request.mcp_callback,
+            )?)
         } else {
             None
         };
@@ -219,7 +222,10 @@ fn push_common_args(args: &mut Vec<String>, request: &DriverStartRequest<'_>) {
     }
 }
 
-fn write_per_run_mcp_config(artifacts_dir: &Path) -> Result<PathBuf> {
+fn write_per_run_mcp_config(
+    artifacts_dir: &Path,
+    callback: Option<&super::McpCallbackConfig>,
+) -> Result<PathBuf> {
     let directory = artifacts_dir.join("driver");
     std::fs::create_dir_all(&directory).with_context(|| {
         format!(
@@ -229,7 +235,14 @@ fn write_per_run_mcp_config(artifacts_dir: &Path) -> Result<PathBuf> {
     })?;
     let path = directory.join("mcp.json");
     let binary = resolve_mcp_tools_bin()?;
-    let value = json!({"mcpServers":{"orch":{"command":binary,"args":[]}}});
+    let mut server = json!({"command":binary,"args":[]});
+    if let Some(callback) = callback {
+        server["env"] = json!({
+            "ORCH_MCP_CALLBACK_URL": callback.url(),
+            "ORCH_MCP_CALLBACK_TOKEN": callback.expose_token(),
+        });
+    }
+    let value = json!({"mcpServers":{"orch":server}});
     std::fs::write(&path, value.to_string())
         .with_context(|| format!("writing per-run MCP config {}", path.display()))?;
     #[cfg(unix)]
@@ -248,7 +261,7 @@ pub(crate) fn prepare_legacy_claude_streaming_command(
     session_ref: Option<&str>,
 ) -> Result<String> {
     let directory = std::env::temp_dir().join(format!("orch-streaming-{}", uuid::Uuid::new_v4()));
-    let config_path = write_per_run_mcp_config(&directory)?;
+    let config_path = write_per_run_mcp_config(&directory, None)?;
     let mut command = base_command.to_string();
     if let Some(reference) = session_ref {
         let reference = super::SessionRef::from_provider(reference.to_string())?;
@@ -319,6 +332,7 @@ mod tests {
             execution_profile: Box::leak(Box::new(crate::runner::ResolvedExecutionProfile::host())),
             artifacts_dir: cwd,
             session_ref: None,
+            mcp_callback: None,
         }
     }
 
@@ -361,8 +375,8 @@ mod tests {
     fn per_run_mcp_configs_do_not_share_paths() {
         let first = tempdir().unwrap();
         let second = tempdir().unwrap();
-        let first_path = write_per_run_mcp_config(first.path()).unwrap();
-        let second_path = write_per_run_mcp_config(second.path()).unwrap();
+        let first_path = write_per_run_mcp_config(first.path(), None).unwrap();
+        let second_path = write_per_run_mcp_config(second.path(), None).unwrap();
         assert_ne!(first_path, second_path);
         #[cfg(unix)]
         assert_eq!(
@@ -377,5 +391,26 @@ mod tests {
         assert!(command.contains("--output-format stream-json"));
         assert!(command.contains("--strict-mcp-config"));
         assert!(command.contains("orch-streaming-"));
+    }
+
+    #[test]
+    fn private_mcp_config_carries_run_scoped_callback() {
+        let directory = tempdir().unwrap();
+        let callback = super::super::McpCallbackConfig::new(
+            "http://127.0.0.1:19118/mcp".to_string(),
+            "secret-118".to_string(),
+        )
+        .unwrap();
+        let path = write_per_run_mcp_config(directory.path(), Some(&callback)).unwrap();
+        let value: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        assert_eq!(
+            value["mcpServers"]["orch"]["env"]["ORCH_MCP_CALLBACK_URL"],
+            callback.url()
+        );
+        assert_eq!(
+            value["mcpServers"]["orch"]["env"]["ORCH_MCP_CALLBACK_TOKEN"],
+            callback.expose_token()
+        );
     }
 }

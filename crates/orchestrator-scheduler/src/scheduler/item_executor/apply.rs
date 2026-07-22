@@ -47,6 +47,7 @@ pub(super) async fn apply_step_results(
     );
     acc.step_ran.insert(step.id.clone(), true);
     acc.apply_run_diagnostics(result);
+    apply_coordination_tool_effects(result, acc);
 
     // Inject streaming-run signals (tools_called, tool_error_count, run_cost_usd, …)
     // as typed pipeline vars so prehook / convergence / finalize CEL can drive
@@ -350,6 +351,114 @@ pub(super) async fn apply_step_results(
     }
 
     Ok(false)
+}
+
+/// Folds authenticated coordination-tool receipts into the same accumulator
+/// used by legacy post-actions. The daemon already performed or validated the
+/// operation; this step keeps scheduler-local state aligned before finalization.
+fn apply_coordination_tool_effects(
+    result: &agent_orchestrator::dto::RunResult,
+    acc: &mut StepExecutionAccumulator,
+) {
+    use agent_orchestrator::collab::ArtifactKind;
+    use std::collections::HashMap;
+
+    let Some(output) = result.output.as_ref() else {
+        return;
+    };
+    let mut calls = HashMap::new();
+    for artifact in &output.artifacts {
+        if let ArtifactKind::ToolCall { tool } = &artifact.kind
+            && let Some(call_id) = artifact
+                .content
+                .as_ref()
+                .and_then(|content| content.get("call_id"))
+                .and_then(serde_json::Value::as_str)
+        {
+            calls.insert(call_id.to_string(), bare_tool_name(tool));
+        }
+    }
+    for artifact in &output.artifacts {
+        let ArtifactKind::Data { schema } = &artifact.kind else {
+            continue;
+        };
+        if schema != "driver_tool_result" {
+            continue;
+        }
+        let Some(content) = artifact.content.as_ref() else {
+            continue;
+        };
+        if content
+            .get("is_error")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+        {
+            continue;
+        }
+        let Some(call_id) = content.get("call_id").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        let Some(tool) = calls.get(call_id) else {
+            continue;
+        };
+        let Some(receipt) = content.get("payload").and_then(parse_tool_result_payload) else {
+            continue;
+        };
+        match tool.as_str() {
+            "mark_item" | "mark_done"
+                if receipt
+                    .get("accepted")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false) =>
+            {
+                if let Some(status) = receipt.get("status").and_then(serde_json::Value::as_str) {
+                    acc.item_status = status.to_string();
+                }
+            }
+            "create_ticket" => {
+                if let Some(path) = receipt.get("path").and_then(serde_json::Value::as_str) {
+                    if !acc.created_ticket_files.iter().any(|value| value == path) {
+                        acc.created_ticket_files.push(path.to_string());
+                    }
+                    if !acc.active_tickets.iter().any(|value| value == path) {
+                        acc.active_tickets.push(path.to_string());
+                    }
+                    acc.new_ticket_count = acc.active_tickets.len() as i64;
+                }
+            }
+            "scan_tickets" => {
+                if let Some(tickets) = receipt.get("tickets").and_then(serde_json::Value::as_array)
+                {
+                    acc.active_tickets = tickets
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .map(ToOwned::to_owned)
+                        .collect();
+                    acc.new_ticket_count = acc.active_tickets.len() as i64;
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn bare_tool_name(tool: &str) -> String {
+    tool.strip_prefix("mcp__orch__").unwrap_or(tool).to_string()
+}
+
+fn parse_tool_result_payload(payload: &serde_json::Value) -> Option<serde_json::Value> {
+    match payload {
+        serde_json::Value::String(value) => serde_json::from_str(value).ok(),
+        serde_json::Value::Array(blocks) => {
+            let text = blocks
+                .iter()
+                .filter_map(|block| block.get("text").and_then(serde_json::Value::as_str))
+                .collect::<String>();
+            serde_json::from_str(&text).ok()
+        }
+        serde_json::Value::Object(_) => Some(payload.clone()),
+        _ => None,
+    }
 }
 
 /// Execute a single store put operation. Non-critical: logs on failure.

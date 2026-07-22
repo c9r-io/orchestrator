@@ -75,6 +75,8 @@ pub(super) struct SpawnResult {
     pub child_pid: Option<u32>,
     pub output_capture: Option<agent_orchestrator::output_capture::OutputCaptureHandles>,
     pub driver_session: Option<Box<dyn DriverSession>>,
+    /// Keeps the authenticated daemon tool host alive until the driver exits.
+    pub coordination_tool_host: Option<super::super::coordination_tools::CoordinationToolHost>,
     /// If `true`, the TTY early-return path was taken and the caller should return immediately.
     pub tty_early_return: Option<agent_orchestrator::dto::RunResult>,
 }

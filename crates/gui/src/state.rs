@@ -242,12 +242,12 @@ impl AppState {
 
                     if state.connect(None).await.is_ok() {
                         // Verify with a ping.
-                        if let Ok(mut c) = state.client().await {
-                            if c.ping(orchestrator_proto::PingRequest {}).await.is_ok() {
-                                reconnected = true;
-                                // connect() already set Connected state.
-                                break;
-                            }
+                        if let Ok(mut c) = state.client().await
+                            && c.ping(orchestrator_proto::PingRequest {}).await.is_ok()
+                        {
+                            reconnected = true;
+                            // connect() already set Connected state.
+                            break;
                         }
                     }
                 }

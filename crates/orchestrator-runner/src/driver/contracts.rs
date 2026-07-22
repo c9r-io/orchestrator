@@ -175,6 +175,47 @@ pub struct DriverRunResult {
     pub events: Vec<DriverEvent>,
 }
 
+/// Private run-scoped callback used by the stdio MCP transport shim.
+///
+/// The callback is created by the embedded scheduler, binds only to loopback,
+/// and is destroyed with the command run. Its bearer token deliberately has no
+/// serialization or display implementation.
+#[derive(Clone, PartialEq, Eq)]
+pub struct McpCallbackConfig {
+    url: String,
+    token: String,
+}
+
+impl McpCallbackConfig {
+    /// Creates a callback descriptor for one command run.
+    pub fn new(url: String, token: String) -> Result<Self> {
+        if !url.starts_with("http://127.0.0.1:") || token.trim().is_empty() {
+            bail!("MCP callback must use loopback HTTP with a non-empty token");
+        }
+        Ok(Self { url, token })
+    }
+
+    /// Returns the loopback callback URL for provider configuration.
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
+    /// Exposes the bearer token only while assembling private provider state.
+    pub fn expose_token(&self) -> &str {
+        &self.token
+    }
+}
+
+impl fmt::Debug for McpCallbackConfig {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("McpCallbackConfig")
+            .field("url", &self.url)
+            .field("token", &"[REDACTED]")
+            .finish()
+    }
+}
+
 /// Inputs required to start one driver process.
 pub struct DriverStartRequest<'a> {
     /// Agent-scoped driver configuration.
@@ -201,6 +242,8 @@ pub struct DriverStartRequest<'a> {
     pub artifacts_dir: &'a Path,
     /// Optional provider session material loaded inside the daemon boundary.
     pub session_ref: Option<&'a SessionRef>,
+    /// Private daemon callback used by orchestrator-owned MCP tools.
+    pub mcp_callback: Option<&'a McpCallbackConfig>,
 }
 
 /// Provider-specific process adapter selected by an Agent manifest.
@@ -272,5 +315,20 @@ mod tests {
             SessionRef::from_provider("provider-secret-123".to_string()).expect("reference");
         assert_eq!(format!("{reference:?}"), "SessionRef([REDACTED])");
         assert!(!format!("{reference:?}").contains(reference.expose_secret()));
+    }
+
+    #[test]
+    fn mcp_callback_requires_loopback_and_redacts_token() {
+        let callback = McpCallbackConfig::new(
+            "http://127.0.0.1:19001/mcp".to_string(),
+            "run-secret".to_string(),
+        )
+        .expect("callback");
+        assert_eq!(callback.url(), "http://127.0.0.1:19001/mcp");
+        assert!(!format!("{callback:?}").contains("run-secret"));
+        assert!(
+            McpCallbackConfig::new("http://0.0.0.0:19001/mcp".to_string(), "secret".to_string())
+                .is_err()
+        );
     }
 }

@@ -784,7 +784,13 @@ async fn flush_pending_generate_items(
 ) {
     let gen_action = match task_acc.pending_generate_items.take() {
         Some(a) => a,
-        None => return,
+        None => {
+            // An authenticated `generate_items` coordination tool writes
+            // directly through the daemon repository. Reconcile that durable
+            // result at the same segment boundary used by legacy post-actions.
+            refresh_dynamic_items(state, task_id, items, task_item_paths).await;
+            return;
+        }
     };
 
     match super::super::item_generate::extract_dynamic_items(
@@ -812,50 +818,7 @@ async fn flush_pending_generate_items(
                     {
                         warn!(error = %e, "failed to emit items_generated event");
                     }
-                    // Refresh items list — when dynamic items exist,
-                    // subsequent item-scoped steps target only dynamic items.
-                    // Static items excluded by dynamic replacement are marked
-                    // "replaced" in the DB so they don't count as unresolved.
-                    match list_task_items_for_cycle(state, task_id).await {
-                        Ok(all_items) => {
-                            // Filter out terminal items (preserved from prior run).
-                            const TERMINAL_STATUSES: &[&str] = &[
-                                "qa_passed",
-                                "skipped",
-                                "fixed",
-                                "verified",
-                                "eliminated",
-                                "replaced",
-                            ];
-                            let all_items: Vec<_> = all_items
-                                .into_iter()
-                                .filter(|i| !TERMINAL_STATUSES.contains(&i.status.as_str()))
-                                .collect();
-
-                            let has_dynamic = all_items.iter().any(|i| i.source == "dynamic");
-                            if has_dynamic {
-                                // Mark static items as "replaced" so they don't
-                                // appear unresolved at task completion.
-                                for item in all_items.iter().filter(|i| i.source != "dynamic") {
-                                    let _ = state
-                                        .db_writer
-                                        .update_task_item_status(&item.id, "replaced")
-                                        .await;
-                                }
-                                *items = all_items
-                                    .into_iter()
-                                    .filter(|i| i.source == "dynamic")
-                                    .collect();
-                            } else {
-                                *items = all_items;
-                            }
-                            *task_item_paths =
-                                items.iter().map(|i| i.qa_file_path.clone()).collect();
-                        }
-                        Err(e) => {
-                            warn!(error = %e, "failed to refresh items after generate_items");
-                        }
-                    }
+                    refresh_dynamic_items(state, task_id, items, task_item_paths).await;
                 }
                 Err(e) => {
                     warn!(error = %e, "failed to create dynamic items");
@@ -892,4 +855,45 @@ async fn flush_pending_generate_items(
             .await;
         }
     }
+}
+
+async fn refresh_dynamic_items(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    items: &mut Vec<agent_orchestrator::dto::TaskItemRow>,
+    task_item_paths: &mut Vec<String>,
+) {
+    let all_items = match list_task_items_for_cycle(state, task_id).await {
+        Ok(items) => items,
+        Err(error) => {
+            warn!(error = %error, "failed to refresh items after generate_items");
+            return;
+        }
+    };
+    if !all_items.iter().any(|item| item.source == "dynamic") {
+        return;
+    }
+    const TERMINAL_STATUSES: &[&str] = &[
+        "qa_passed",
+        "skipped",
+        "fixed",
+        "verified",
+        "eliminated",
+        "replaced",
+    ];
+    let active: Vec<_> = all_items
+        .into_iter()
+        .filter(|item| !TERMINAL_STATUSES.contains(&item.status.as_str()))
+        .collect();
+    for item in active.iter().filter(|item| item.source != "dynamic") {
+        let _ = state
+            .db_writer
+            .update_task_item_status(&item.id, "replaced")
+            .await;
+    }
+    *items = active
+        .into_iter()
+        .filter(|item| item.source == "dynamic")
+        .collect();
+    *task_item_paths = items.iter().map(|item| item.qa_file_path.clone()).collect();
 }

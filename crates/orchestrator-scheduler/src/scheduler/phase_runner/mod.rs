@@ -254,6 +254,10 @@ async fn run_phase_with_timeout(
         &setup.stderr_path,
     )
     .await?;
+    // The callback must outlive the provider process, but no longer than the
+    // command run. Dropping it here closes the loopback listener before result
+    // validation and persistence.
+    drop(spawn_result.coordination_tool_host);
 
     // Stage 4: validate
     let validated = if wait_result.driver_events.is_empty() {
