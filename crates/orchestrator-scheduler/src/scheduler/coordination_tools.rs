@@ -586,6 +586,9 @@ fn tool_schemas(allowed: &HashSet<String>) -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_orchestrator::dto::CreateTaskPayload;
+    use agent_orchestrator::task_ops::create_task_impl;
+    use agent_orchestrator::test_utils::TestState;
 
     #[test]
     fn allowed_tool_normalization_is_fail_closed() {
@@ -615,5 +618,193 @@ mod tests {
         let schemas = tool_schemas(&HashSet::from(["mark_item".to_string()]));
         assert_eq!(schemas.len(), 1);
         assert_eq!(schemas[0]["name"], "mark_item");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn authenticated_host_executes_real_coordination_tools() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let workspace = agent_orchestrator::config_load::read_active_config(&state)
+            .expect("active config")
+            .workspaces
+            .get("default")
+            .expect("workspace")
+            .root_path
+            .clone();
+        std::fs::create_dir_all(workspace.join("docs/qa")).expect("qa directory");
+        std::fs::create_dir_all(workspace.join("docs/ticket")).expect("ticket directory");
+        std::fs::create_dir_all(workspace.join("src")).expect("source directory");
+        std::fs::write(workspace.join("docs/qa/pilot.md"), "# Pilot\n").expect("qa file");
+        std::fs::write(
+            workspace.join("Cargo.toml"),
+            "[package]\nname='coordination-fixture'\nversion='0.1.0'\nedition='2024'\n",
+        )
+        .expect("manifest");
+        std::fs::write(
+            workspace.join("src/lib.rs"),
+            "#[test]\nfn pilot() { assert!(true); }\n",
+        )
+        .expect("passing test");
+        let task = create_task_impl(
+            &state,
+            CreateTaskPayload {
+                name: Some("coordination-host".to_string()),
+                workspace_id: Some("default".to_string()),
+                workflow_id: Some("basic".to_string()),
+                target_files: Some(vec!["docs/qa/pilot.md".to_string()]),
+                ..CreateTaskPayload::default()
+            },
+        )
+        .expect("task");
+        let item = state
+            .task_repo
+            .list_task_items_for_cycle(&task.id)
+            .await
+            .expect("items")
+            .into_iter()
+            .next()
+            .expect("item");
+        let artifacts = fixture.temp_root().join("tool-artifacts");
+        let host = start_tool_host(CoordinationHostRequest {
+            state: state.clone(),
+            task_id: &task.id,
+            item_id: &item.id,
+            run_id: "run-118",
+            workspace_root: &workspace,
+            runner: &RunnerConfig::default(),
+            execution_profile: &ResolvedExecutionProfile::host(),
+            extra_env: &HashMap::new(),
+            redaction_patterns: &[],
+            artifacts_dir: &artifacts,
+            allowed_tools: &["mcp__orch".to_string()],
+        })
+        .await
+        .expect("tool host");
+        let client = reqwest::Client::new();
+
+        let unauthorized = client
+            .post(host.callback().url())
+            .json(&json!({"jsonrpc":"2.0","id":0,"method":"tools/list"}))
+            .send()
+            .await
+            .expect("unauthorized response");
+        assert_eq!(unauthorized.status(), reqwest::StatusCode::UNAUTHORIZED);
+
+        async fn call(
+            client: &reqwest::Client,
+            callback: &McpCallbackConfig,
+            id: u64,
+            name: &str,
+            arguments: Value,
+        ) -> Value {
+            client
+                .post(callback.url())
+                .bearer_auth(callback.expose_token())
+                .json(&json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "method": "tools/call",
+                    "params": {"name": name, "arguments": arguments},
+                }))
+                .send()
+                .await
+                .expect("tool response")
+                .json()
+                .await
+                .expect("tool JSON")
+        }
+
+        let passing = call(
+            &client,
+            host.callback(),
+            1,
+            "run_tests",
+            json!({"target":"workspace"}),
+        )
+        .await;
+        assert_eq!(
+            passing.pointer("/result/structuredContent/success"),
+            Some(&Value::Bool(true))
+        );
+
+        let marked = call(
+            &client,
+            host.callback(),
+            2,
+            "mark_item",
+            json!({"status":"qa_passed","summary":"fixture passed"}),
+        )
+        .await;
+        assert_eq!(
+            marked.pointer("/result/structuredContent/accepted"),
+            Some(&Value::Bool(true))
+        );
+
+        std::fs::write(
+            workspace.join("src/lib.rs"),
+            "#[test]\nfn pilot() { assert!(false); }\n",
+        )
+        .expect("failing test");
+        let failing = call(
+            &client,
+            host.callback(),
+            3,
+            "run_tests",
+            json!({"target":"workspace"}),
+        )
+        .await;
+        assert_eq!(
+            failing.pointer("/result/structuredContent/success"),
+            Some(&Value::Bool(false))
+        );
+        let ticket = call(&client, host.callback(), 4, "create_ticket", json!({})).await;
+        assert_eq!(
+            ticket.pointer("/result/structuredContent/created"),
+            Some(&Value::Bool(true))
+        );
+        let scan = call(&client, host.callback(), 5, "scan_tickets", json!({})).await;
+        assert_eq!(
+            scan.pointer("/result/structuredContent/count"),
+            Some(&json!(1))
+        );
+        let generated = call(
+            &client,
+            host.callback(),
+            6,
+            "generate_items",
+            json!({"items":[{"id":"docs/qa/generated.md","label":"Generated"}],"replace":true}),
+        )
+        .await;
+        assert_eq!(
+            generated.pointer("/result/structuredContent/created"),
+            Some(&json!(1))
+        );
+        let dynamic_count = state
+            .task_repo
+            .list_task_items_for_cycle(&task.id)
+            .await
+            .expect("updated items")
+            .into_iter()
+            .filter(|row| row.source == "dynamic")
+            .count();
+        assert_eq!(dynamic_count, 1);
+        let event_count: i64 = state
+            .async_database
+            .reader()
+            .call({
+                let task_id = task.id.clone();
+                move |connection| {
+                    connection
+                        .query_row(
+                            "SELECT COUNT(*) FROM events WHERE task_id=?1 AND event_type IN ('coordination_tool_started','coordination_tool_completed')",
+                            rusqlite::params![task_id],
+                            |row| row.get(0),
+                        )
+                        .map_err(Into::into)
+                }
+            })
+            .await
+            .expect("event count");
+        assert_eq!(event_count, 12);
     }
 }

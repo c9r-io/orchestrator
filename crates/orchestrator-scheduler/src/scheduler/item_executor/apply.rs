@@ -52,7 +52,9 @@ pub(super) async fn apply_step_results(
     // Inject streaming-run signals (tools_called, tool_error_count, run_cost_usd, …)
     // as typed pipeline vars so prehook / convergence / finalize CEL can drive
     // coordination from what the agent did. Empty for non-streaming runs.
-    if let Some(output) = result.output.as_ref() {
+    if let Some(output) = result.output.as_ref()
+        && !uses_coordination_tool_model(&output.artifacts)
+    {
         for (key, value) in agent_orchestrator::stream_json::stream_signal_vars(&output.artifacts) {
             acc.pipeline_vars.vars.insert(key, value);
         }
@@ -446,6 +448,19 @@ fn bare_tool_name(tool: &str) -> String {
     tool.strip_prefix("mcp__orch__").unwrap_or(tool).to_string()
 }
 
+fn uses_coordination_tool_model(artifacts: &[agent_orchestrator::collab::Artifact]) -> bool {
+    use agent_orchestrator::collab::ArtifactKind;
+    artifacts.iter().any(|artifact| {
+        let ArtifactKind::ToolCall { tool } = &artifact.kind else {
+            return false;
+        };
+        matches!(
+            bare_tool_name(tool).as_str(),
+            "run_tests" | "mark_item" | "create_ticket" | "scan_tickets" | "generate_items"
+        )
+    })
+}
+
 fn parse_tool_result_payload(payload: &serde_json::Value) -> Option<serde_json::Value> {
     match payload {
         serde_json::Value::String(value) => serde_json::from_str(value).ok(),
@@ -517,5 +532,79 @@ async fn process_store_outputs(
                 "store_output: pipeline var not found"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod coordination_effect_tests {
+    use super::*;
+    use agent_orchestrator::collab::{AgentOutput, Artifact, ArtifactKind};
+    use agent_orchestrator::config::PipelineVariables;
+    use uuid::Uuid;
+
+    #[test]
+    fn mark_item_and_ticket_receipts_fold_into_accumulator() {
+        let artifacts = vec![
+            Artifact::new(ArtifactKind::ToolCall {
+                tool: "mcp__orch__mark_item".to_string(),
+            })
+            .with_content(json!({"call_id":"mark-1","args":{"status":"qa_passed"}})),
+            Artifact::new(ArtifactKind::Data {
+                schema: "driver_tool_result".to_string(),
+            })
+            .with_content(json!({
+                "call_id":"mark-1",
+                "payload":[{"type":"text","text":"{\"accepted\":true,\"status\":\"qa_passed\"}"}],
+                "is_error":false
+            })),
+            Artifact::new(ArtifactKind::ToolCall {
+                tool: "mcp__orch__create_ticket".to_string(),
+            })
+            .with_content(json!({"call_id":"ticket-1","args":{}})),
+            Artifact::new(ArtifactKind::Data {
+                schema: "driver_tool_result".to_string(),
+            })
+            .with_content(json!({
+                "call_id":"ticket-1",
+                "payload":"{\"created\":true,\"path\":\"docs/ticket/T-1.md\"}",
+                "is_error":false
+            })),
+        ];
+        let result = agent_orchestrator::dto::RunResult {
+            success: true,
+            exit_code: 0,
+            stdout_path: String::new(),
+            stderr_path: String::new(),
+            timed_out: false,
+            duration_ms: Some(1),
+            output: Some(
+                AgentOutput::new(
+                    Uuid::new_v4(),
+                    "agent".to_string(),
+                    "qa".to_string(),
+                    0,
+                    String::new(),
+                    String::new(),
+                )
+                .with_artifacts(artifacts),
+            ),
+            validation_status: "passed".to_string(),
+            agent_id: "agent".to_string(),
+            run_id: "run".to_string(),
+            execution_profile: "host".to_string(),
+            execution_mode: "host".to_string(),
+            sandbox_denied: false,
+            sandbox_denial_reason: None,
+            sandbox_violation_kind: None,
+            sandbox_resource_kind: None,
+            sandbox_network_target: None,
+        };
+        let mut accumulator = StepExecutionAccumulator::new(PipelineVariables::default());
+
+        apply_coordination_tool_effects(&result, &mut accumulator);
+
+        assert_eq!(accumulator.item_status, "qa_passed");
+        assert_eq!(accumulator.created_ticket_files, vec!["docs/ticket/T-1.md"]);
+        assert_eq!(accumulator.active_tickets, vec!["docs/ticket/T-1.md"]);
     }
 }

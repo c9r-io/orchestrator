@@ -1,0 +1,113 @@
+# FR-118 coordination-collapse parity pilot.
+# The legacy workflow pays the declarative coordination cost. The tool workflow
+# retains only governance and delegates in-fence coordination to typed tools.
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: coordination-pilot
+spec:
+  root_path: "."
+  qa_targets: [docs/qa]
+  ticket_dir: docs/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: legacy-coordination-agent
+spec:
+  capabilities: [legacy_coordination]
+  command: >-
+    printf '%s\n' '{"confidence":1.0,"quality_score":1.0,"passed":true,"artifacts":[]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: tool-coordination-agent
+spec:
+  capabilities: [tool_coordination]
+  driver:
+    provider: claude
+    transport: cli
+    binary: fake-claude-coordination
+    options:
+      maxTurns: 4
+      budgetCapUsd: 0.01
+      permissionMode: governed
+      allowedTools:
+        - mcp__orch__run_tests
+        - mcp__orch__scan_tickets
+        - mcp__orch__mark_item
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: tool-coordination-pilot
+spec:
+  prompt: >-
+    Run the workspace tests, inspect tickets, and mark the current item based on
+    typed tool results. Do not communicate state through shell output variables.
+---
+# BEGIN LEGACY COORDINATION
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: coordination-legacy
+spec:
+  steps:
+    - id: legacy_test
+      type: legacy_coordination
+      scope: item
+      required_capability: legacy_coordination
+      enabled: true
+      repeatable: false
+      behavior:
+        captures:
+          - var: legacy_test_passed
+            source: stdout
+            json_path: "$.passed"
+        post_actions:
+          - type: scan_tickets
+        on_success:
+          action: set_status
+          status: qa_passed
+    - id: legacy_finalize
+      type: legacy_coordination
+      scope: item
+      required_capability: legacy_coordination
+      enabled: true
+      repeatable: false
+      prehook:
+        engine: cel
+        when: "legacy_test_passed == true && active_ticket_count == 0"
+        reason: "Carry captured test state and ticket scan into finalization"
+      behavior:
+        on_success:
+          action: set_status
+          status: qa_passed
+  loop:
+    mode: once
+# END LEGACY COORDINATION
+---
+# BEGIN TOOL COORDINATION
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: coordination-tools
+spec:
+  steps:
+    - id: coordinate
+      type: tool_coordination
+      scope: item
+      required_capability: tool_coordination
+      template: tool-coordination-pilot
+      enabled: true
+      repeatable: false
+      behavior:
+        side_effect_class: workspace_only
+        driverRequirements:
+          multiTurn: true
+          toolHosting: stdio
+          workspaceAccess: write
+  loop:
+    mode: once
+# END TOOL COORDINATION

@@ -43,4 +43,5 @@ test-harness = ["agent-orchestrator/test-harness"]
 
 [dev-dependencies]
 agent-orchestrator = { path = "../../core", version = "0.3.1", features = ["test-harness"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tempfile = "3.26.0"
