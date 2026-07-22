@@ -689,12 +689,13 @@ mod tests {
 
     #[test]
     fn from_cr_spec_rejects_malformed_agent_spec() {
-        let bad_spec = serde_json::json!({ "not_a_valid_field": 42 });
-        // AgentSpec requires "command" field — absence should cause deserialization error
+        let bad_spec = serde_json::json!({ "capabilities": "not-an-array" });
+        // A command-less Agent may now be backed by an explicit driver. Keep this
+        // projection test focused on a genuinely malformed field type.
         let result = AgentConfig::from_cr_spec(&bad_spec);
         assert!(
             result.is_err(),
-            "should reject spec missing required 'command' field"
+            "should reject a malformed capabilities field"
         );
     }
 

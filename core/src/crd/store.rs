@@ -291,7 +291,7 @@ mod tests {
         store.put(make_cr(
             "Agent",
             "bad",
-            serde_json::json!({"not_command": 42}),
+            serde_json::json!({"capabilities": "not-an-array"}),
         ));
         let map: HashMap<String, AgentConfig> = store.project_map();
         assert_eq!(map.len(), 1);
