@@ -11,6 +11,16 @@
 
 The original Workspace contract assumed a code repository: a root directory, QA-document scan targets, ticket output, and file-backed task items. Slack operations, document analysis, inventory assistance, and other general agent processes need a governed execution context without pretending that a QA file or Git repository exists.
 
+### Threat Model
+
+Removing the repository boundary changes who the adversary is. In a `code_repo` workspace the Git tree and workspace root implicitly bound the agent; in a `task` workspace there is no project boundary, so **the sandbox plus the daemon-owned file-sharing ceiling are the only remaining constraints**. The design therefore treats the agent process itself as the primary untrusted principal:
+
+- **Untrusted agent process** — the LLM may be prompt-injected. In the warehouse pilot the triggering Slack message is attacker-influenced content; a compromised turn may attempt to read `~/.ssh`, exfiltrate the daemon user's ambient HOME, or write outside the workspace. SI-1 (ceiling subset) and SI-2 (HOME isolation) exist specifically to contain this principal.
+- **Untrusted manifest author** — a project manifest must not be able to expand host authority beyond what the operator approved. The two-level subset model makes the operator (via `file-sharing.yaml`), not the manifest, the authority owner.
+- **Untrusted external actor** — the Slack sender/reactor. Bounded by existing FR-113/114 routing (permalink-only, role-gated, message text cannot select Skill/workflow); this FR inherits, does not re-open, that boundary.
+
+Out of model: a compromised daemon or operator, and kernel/sandbox-backend escapes (delegated to the OS sandbox).
+
 ## Goals
 
 - Preserve existing `code_repo` behavior while adding `kind: task`.
@@ -107,6 +117,8 @@ Static Workspace validation happens during resource apply. Cross-resource compat
 - Symlink or prefix escape: canonicalize before subset comparison and test sibling-prefix and symlink cases.
 - Host HOME leakage: strict read mode plus forced environment variables and a real sandbox pilot.
 - Temporary data leakage: `0700`, per-task identity, RAII cleanup on failed creation, terminal cleanup, and delete cleanup.
+- **Global Skill supply-chain surface**: every `globalSkills` directory is mounted read-only into *every* task sandbox, so its contents execute with the authority of each agent. Anyone who can write that directory can inject code into all tasks. Current enforcement: load resolves each path, requires it to be inside `shareableRoots`, and requires it to be a directory; it is mounted read-only and never made writable to a task. Operational requirement (not yet enforced in code): the directory must be writable only by the daemon user — treat its provenance with the same trust as the daemon binary. Follow-up hardening: verify owner/permission bits at load and reject a group/world-writable or task-writable `globalSkills` path. Do not point `globalSkills` at a directory writable by task workspaces or untrusted users.
+- **Convergence trust shift**: a task item converges on the agent self-reporting via `mark_done` or a successful driver terminal event. When the agent is the untrusted principal, self-certified completion is a weaker gate than a QA exit code. This is an accepted trade-off for non-code work (there is no external verifier to run); it is bounded by `max_cycles`, degenerate-loop detection, and budget caps, and the operator remains the decision authority via the Attention review item rather than trusting the suggestion directly.
 - Hidden non-code semantics in the UI: explicit `workspace_kind`/`item_kind` presentation fields without changing the public gRPC schema.
 - Low-confidence suggestions disappearing: successful low-confidence steps now both resolve stale step attention and open a review item before task-level resolution.
 

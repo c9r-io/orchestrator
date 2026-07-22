@@ -9,6 +9,8 @@
 
 A task agent must not inherit or read the daemon user's ambient HOME. HOME, XDG locations, and temporary files are redirected beneath the resolved task workspace. Daemon-managed homes are private and ephemeral.
 
+**Adversary**: the untrusted agent process (potentially prompt-injected). Its likely objective after injection is to reach the daemon user's real home — `~/.ssh`, credential files, provider tokens under `~/.config` — by dereferencing `$HOME`, `~`, or inherited `XDG_*`. This invariant removes those references at the source (forced env) and, on Linux, masks the ambient home with tmpfs so even a hardcoded absolute path resolves to nothing. It is the second of the two remaining constraints once the repository boundary is gone (the first is the file-sharing ceiling, `../authorization/02-file-sharing-ceiling.md`).
+
 ---
 
 ## Scenario 1: Environment Redirection
