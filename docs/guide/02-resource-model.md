@@ -48,7 +48,7 @@ spec:
 
 ## 2. Agent
 
-An Agent is an execution unit with declared capabilities and a shell command template.
+An Agent is an execution unit with declared capabilities and either a legacy shell command template or an explicit provider driver.
 
 ```yaml
 apiVersion: orchestrator.dev/v2
@@ -82,12 +82,29 @@ spec:
 | Field | Required | Description |
 |-------|----------|-------------|
 | `capabilities` | Yes | What this agent can do (matched against step `required_capability`) |
-| `command` | Yes | Shell command template. Supports `{prompt}` placeholder (filled from StepTemplate) |
+| `command` | Conditional | Legacy shell command template. Required when `driver` is absent and for `provider: shell`; omitted for Claude/Codex drivers |
+| `driver` | No | Typed provider/transport adapter (`shell`, `claude`, or `codex`; CLI transport is executable) |
 | `metadata.cost` | No | Used by agent selection strategy for cost-aware routing |
 | `metadata.description` | No | Human-readable description of the agent |
 | `selection` | No | Agent selection strategy override (see below) |
 | `env` | No | Environment variables: direct values, `fromRef` (import all from store), or `refValue` (single key from store) |
 | `promptDelivery` | No | How the rendered prompt reaches the agent: `stdin`, `file`, `env`, or `arg` (default: `arg`) |
+
+### Agent Drivers
+
+Explicit drivers keep provider flags out of manifests and emit normalized tool, permission, usage, and terminal events. Workflow steps declare their needs under `behavior.driverRequirements`; incompatible candidate Agents fail during apply. See the bilingual [Agent Driver Model](agent-driver-model.md) for complete fields, security boundaries, migration, and examples.
+
+```yaml
+spec:
+  capabilities: [implement]
+  driver:
+    provider: claude
+    transport: cli
+    options:
+      model: sonnet
+      permissionMode: ask
+      allowedTools: [mcp__orch]
+```
 
 ### Agent Selection
 
@@ -218,7 +235,7 @@ spec:
   observability: { ... }
 ```
 
-**`runner.executor`** selects the execution backend (global):
+**`runner.executor`** selects the legacy global execution backend. New provider-aware Agents should use `spec.driver`:
 
 - `shell` (default) — runs each step's command as a one-shot shell process; output is captured as text/JSON.
 - `streaming` — drives the agent CLI in `stream-json` mode with orchestrator-owned MCP tools, exposing structured signals (`tools_called`, `run_cost_usd`, …) to coordination CEL. See `docs/design_doc/orchestrator/streaming-runner-pivot-overview.md` and the [showcase](../showcases/streaming-mark-done-convergence.md).

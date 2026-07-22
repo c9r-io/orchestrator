@@ -7,7 +7,7 @@
 **Created**: 2026-06-27
 **Last Updated**: 2026-06-28
 
-> **Implementation status (first cut, 2026-06-28):** landed and end-to-end validated. Added `RunnerExecutorKind::Streaming` and a `StreamingAgentRunner` behind the existing `RunnerExecutor` seam (`crates/orchestrator-runner/src/runner/streaming.rs`), plus an orchestrator-owned Rust stdio MCP server (`crates/orchestrator-runner/src/bin/orch_mcp_tools.rs`). An ignored e2e test (`crates/orchestrator-runner/tests/streaming_runner_e2e.rs`) drives the real `claude` CLI in `stream-json` mode: the agent calls `mcp__orch__run_tests`, the orchestrator computes the result, and it flows back into the agent's answer — proving the structured tool-calling loop on a single step. Validation was left untouched (non-strict phases already tolerate stream-json). Per-agent runner routing, event-stream ingestion into the `events` table, and richer tool surface remain follow-ups.
+> **Implementation status (superseded seam, 2026-07-22):** the 2026-06-28 first cut proved structured tool calling behind `RunnerExecutorKind::Streaming`. FR-116 subsequently introduced per-Agent `shell/cli`, `claude/cli`, and `codex/cli` drivers, direct `DriverEvent` consumption, complete event-table projection, opaque session attachment, apply-time capability validation, and run-scoped MCP configuration. The global streaming executor remains a provider-owned compatibility bridge while manifests migrate. See [Agent Driver Abstraction](127-agent-driver-abstraction.md).
 
 ## Background
 
@@ -54,9 +54,9 @@ This pivot is predicated on an explicit positioning choice: **the orchestrator i
 
 ## Key Design
 
-1. **New runner behind the existing seam** — `StreamingAgentRunner` implements `RunnerExecutor` (`crates/orchestrator-runner/src/runner/spawn.rs:43`). Selection by agent/capability is unchanged (`core/src/selection.rs`); only the execution backend differs. Agents opt in via spec (e.g. a `runner: streaming` field).
+1. **Historical runner seam, revised by FR-116** — `StreamingAgentRunner` originally implemented `RunnerExecutor`, while selection by capability stayed unchanged. That seam remains sufficient for a one-shot compatibility runner, but it is not the durable provider abstraction.
 
-   **Seam-fit finding (from deep-read):** the trait is `fn spawn(&self, params: SpawnParams<'_>) -> Result<tokio::process::Child>`, and the phase pipeline (`phase_runner/`) treats the spawned child as opaque: it `.wait()`s for exit, then reads stdout/stderr from files and parses them. This fits the streaming model **as long as MCP tools are hosted out-of-band** (see point 3). Under that arrangement a single step is still "spawn → run → exit" — the agent makes N tool calls against the orchestrator's MCP side-channel *during* the run, and exits when the step's prompt is satisfied. The spawned `tokio::process::Child` is the real `claude` process; the pipeline's existing `wait` stage works unchanged. This means **no refactor of the phase pipeline's control flow is required** — the integration is genuinely additive at the existing seam.
+   **Revised seam-fit finding:** once the provider exposes live session input, permission requests, tool I/O, usage, and terminal outcome through one normalized stream, a child-process-only seam is too narrow. Re-reading a bounded stdout file also risks dropping the terminal result. FR-116 therefore refactored explicit-driver phases from `setup → spawn → wait → validate → record` to `setup → start → consume → fold → record`. Legacy commands retain the old path, while all CLI drivers still delegate process creation to the common sandbox spawn function.
 
    Two consequences for the pipeline:
    - **Validation must become stream-json-aware** (`core/src/output_validation.rs`): instead of expecting one JSON blob on stdout, parse the event stream and take the terminal `result` event (plus `tool_use`/`tool_result` for the events table). This is an additive variant keyed on the runner/agent kind.

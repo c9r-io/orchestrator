@@ -16,11 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Slack automation release acceptance with two badges selecting distinct Skill/workflow tasks, concurrent identity convergence, rate-limit restart recovery, real Tauri provenance, populated migration, compatible previous-binary rollback, and the [setup/operations guide](docs/guide/slack-reaction-skill-automation.md)
 - **Managed Slack Connections** (FR-114) — one-consent installation of an official shared Orchestrator Slack App, independent internet-facing OAuth/Events Gateway, project-scoped SourceConnection lifecycle, outbound durable delivery, bounded permalink proxy, target-side two-phase ownership transfer, and Sources → Connections management with a [deployment and user guide](docs/guide/slack-managed-connections.md)
 - **Dedicated Slack App Provisioning** (FR-115) — an advanced per-workspace private App path with a fixed reviewed manifest, local-only short-lived Configuration Token custody, one-time receipt-gated credential import, per-connection encrypted App identity, exact-App OAuth/events, provisioning Attention recovery, reviewed shared↔dedicated migration, semantic manifest upgrade with suspension/reauthorization, separate typed App deletion, CLI stdin, and a [dedicated setup guide](docs/guide/slack-dedicated-app-provisioning.md)
+- **Agent Driver Abstraction** (FR-116) — per-Agent `shell/cli`, `claude/cli`, and `codex/cli` adapters; typed provider-neutral options and workflow requirements; structured apply diagnostics; direct event-stream folding; complete tool/usage/permission event projection; opaque in-memory session attachment; and run-scoped private MCP configuration. See the [driver guide](docs/guide/agent-driver-model.md).
 
 ### Changed
 - Wish Pool and Progress Observer are now presented as New Process and Processes; resource administration remains reachable through System and raw diagnostics through Process Expert
 - Session read and control rollout is globally authoritative from the `_system` RuntimePolicy; ordinary project policies cannot override the fail-closed control gate
 - Process Console mutations support `action_audit_mode=compatibility|enforced`; rollout begins in compatibility mode and moves to enforced only after clients send canonical action context
+- Explicit driver phases use `setup → start → consume → fold → record`; the deprecated global streaming executor is now a provider-owned compatibility bridge while legacy manifests migrate
 
 ### Fixed
 - Slack source automation now permits different reviewed badge bindings on the same message to create distinct tasks, while preserving one route/task for retries of the same message/reaction/binding identity

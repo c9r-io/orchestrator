@@ -10,7 +10,7 @@ This document describes the architecture of Agent Orchestrator as a **local-firs
 - **CLI-First:** All interactions are driven by a command-line interface.
 - **Local Execution:** Runs directly on the host machine, managing local processes.
 - **Stateful Orchestration:** Persists task state, logs, and events to a local SQLite database.
-- **Agent Abstraction:** Treats AI agents (or scripts) as interchangeable, capable execution units defined by shell templates.
+- **Agent Driver Abstraction:** Treats AI agents (or scripts) as interchangeable execution units selected by capability and backed by a typed shell, Claude CLI, or Codex CLI provider adapter.
 - **Harness Layer:** Encodes workflow logic, triggers, secrets, policies, and observability around agent execution instead of relying on one-off prompts.
 
 ## 2. Directory Layout
@@ -133,7 +133,7 @@ core/
     *   **Scheduler** (`crates/orchestrator-scheduler/`): Task loop execution, enqueue/claim, phase runner, loop guards, traces, checkpoints.
     *   **Task Management**: Creates, starts, pauses, and resumes tasks.
     *   **Cycle Loop**: Manages the iterative execution of workflows.
-    *   **Process Management**: Spawns and monitors agent processes. Two runner executors sit behind the `RunnerExecutor` seam: the default `shell` (one-shot command, text contract) and `streaming`, which drives the agent CLI in `stream-json` mode with orchestrator-owned MCP tools so coordination consumes structured signals instead of scraped stdout. See [Streaming Runner Pivot — Overview](design_doc/orchestrator/streaming-runner-pivot-overview.md).
+    *   **Process Management**: Spawns and monitors agent processes. Legacy command Agents use the default shell executor. Explicit Agents select a provider-neutral `shell/cli`, `claude/cli`, or `codex/cli` driver; drivers normalize live events while every CLI process still traverses the shared runner policy, sandbox, environment, rlimit, and process-group path. The scheduler consumes explicit drivers as `setup → start → consume → fold → record`. See [Agent Driver Abstraction](design_doc/orchestrator/127-agent-driver-abstraction.md).
     *   **Event System**: Emits structured events (`step_started`, `task_failed`) to the database.
     *   **Source Event Boundary**: Provider adapters authenticate and normalize external deliveries, then persist them before acknowledgement. The daemon router correlates provider conversations through `source_bindings` and invokes canonical Trigger or allowlisted Attention services; adapters never mutate task state directly.
     *   **Managed Slack Boundary**: An optional independent `orchestrator-slack-gateway` owns official and per-workspace App credentials, OAuth callbacks, raw-body request verification, encrypted installation tokens, durable normalized queues, and the bounded permalink proxy. Local daemons use outbound HTTPS only and retain an encrypted installation-scoped pairing. For dedicated Apps, the daemon alone uses a short-lived Configuration Token with a fixed manifest, while Gateway import is one-time, connection-scoped, encrypted, and receipt-bound. SourceConnection ownership, Trigger association, badge policy, and task mutation remain daemon authority. See [Managed Slack Connection And Shared OAuth](design_doc/orchestrator/125-managed-slack-connection-shared-oauth.md) and [Dedicated Slack App Auto Provisioning](design_doc/orchestrator/126-dedicated-slack-app-auto-provisioning.md).
@@ -165,7 +165,7 @@ The orchestrator manages resources organized hierarchically:
 
 1.  **Project**: Top-level namespace for isolation.
 2.  **Workspace**: Defines the file system context (root path, QA targets, ticket directory).
-3.  **Agent**: Defines capabilities (e.g., `qa`, `fix`, `retest`) and execution templates (shell commands with placeholders like `{rel_path}`).
+3.  **Agent**: Defines capabilities (e.g., `qa`, `fix`, `retest`) plus either a legacy shell command template or a typed provider/transport driver. Workflows declare provider-neutral driver requirements and apply rejects incompatible candidate Agents before runtime.
 4.  **Workflow**: Defines the process flow, including:
     *   **Steps**: Ordered sequence of actions (e.g., `init_once`, `qa`, `ticket_scan`, `fix`, `retest`).
     *   **Loop Policy**: Controls iteration (Once or Infinite) and termination conditions.

@@ -48,7 +48,7 @@ spec:
 
 ## 2. Agent（代理）
 
-Agent 是具有声明能力和 shell 命令模板的执行单元。
+Agent 是具有声明能力的执行单元，可以使用旧式 shell 命令模板，也可以显式选择供应商 driver。
 
 ```yaml
 apiVersion: orchestrator.dev/v2
@@ -82,12 +82,29 @@ spec:
 | 字段 | 必填 | 说明 |
 |------|------|------|
 | `capabilities` | 是 | 此代理能做什么（与步骤的 `required_capability` 匹配） |
-| `command` | 是 | shell 命令模板。支持 `{prompt}` 占位符（由 StepTemplate 填充） |
+| `command` | 条件必填 | 未配置 `driver` 时必填；`provider: shell` 也需要；Claude/Codex driver 应省略 |
+| `driver` | 否 | 类型化的 provider/transport adapter（`shell`、`claude`、`codex`；当前可执行 transport 为 CLI） |
 | `metadata.cost` | 否 | 用于代理选择策略的成本感知路由 |
 | `metadata.description` | 否 | 代理的人类可读描述 |
 | `selection` | 否 | 代理选择策略覆盖（见下文） |
 | `env` | 否 | 环境变量：直接值、`fromRef`（从存储导入全部）、或 `refValue`（从存储导入单个键） |
 | `promptDelivery` | 否 | 提示词传递方式：`stdin`、`file`、`env` 或 `arg`（默认：`arg`） |
+
+### Agent Driver
+
+显式 driver 可以避免在 manifest 中写供应商命令行参数，并把工具调用、权限请求、用量和终局结果转成统一事件。Workflow 在 `behavior.driverRequirements` 声明需要的语义；不兼容的候选 Agent 会在 apply 阶段被拒绝。完整字段、安全边界、迁移和示例见双语 [Agent Driver 使用指南](../agent-driver-model.md)。
+
+```yaml
+spec:
+  capabilities: [implement]
+  driver:
+    provider: claude
+    transport: cli
+    options:
+      model: sonnet
+      permissionMode: ask
+      allowedTools: [mcp__orch]
+```
 
 ### 代理选择
 
@@ -218,7 +235,7 @@ spec:
   observability: { ... }
 ```
 
-**`runner.executor`** 选择执行后端（全局）：
+**`runner.executor`** 只选择旧式全局执行后端。新的供应商感知 Agent 应使用 `spec.driver`：
 
 - `shell`（默认）—— 将每个步骤的命令作为一次性 shell 进程运行，输出按文本/JSON 捕获。
 - `streaming` —— 以 `stream-json` 模式驱动 agent CLI，并提供 orchestrator 自持的 MCP 工具，把结构化信号（`tools_called`、`run_cost_usd` 等）暴露给编排 CEL。见 `docs/design_doc/orchestrator/streaming-runner-pivot-overview.md` 与[演示](../showcases/streaming-mark-done-convergence.md)。
