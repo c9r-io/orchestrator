@@ -253,6 +253,8 @@ pub fn apply_manifests(
         Vec::new()
     };
 
+    validate_driver_raw_args(&merged_config, cli_project, state.unsafe_mode, &mut errors);
+
     if errors.is_empty() && !deleted_resources.is_empty() {
         let conn = crate::db::open_conn(db_path)
             .map_err(|err| classify_resource_error("resource.apply", err))?;
@@ -290,12 +292,68 @@ pub fn apply_manifests(
         None
     };
 
+    let diagnostics = errors.iter().map(|error| apply_diagnostic(error)).collect();
     Ok(orchestrator_proto::ApplyResponse {
         results,
         config_version,
         errors,
         warnings,
+        diagnostics,
     })
+}
+
+fn validate_driver_raw_args(
+    config: &crate::config::OrchestratorConfig,
+    project_id: &str,
+    unsafe_mode: bool,
+    errors: &mut Vec<String>,
+) {
+    let Some(project) = config.projects.get(project_id) else {
+        return;
+    };
+    for (agent_id, agent) in &project.agents {
+        let Some(driver) = agent.driver.as_ref() else {
+            continue;
+        };
+        if !driver.raw_args.is_empty() && !unsafe_mode {
+            errors.push(format!(
+                "[driver_raw_args_unsafe_mode_required] Agent / {agent_id} spec.driver.rawArgs requires daemon unsafe mode"
+            ));
+        }
+    }
+}
+
+fn apply_diagnostic(error: &str) -> orchestrator_proto::ApplyDiagnostic {
+    let code = error
+        .strip_prefix('[')
+        .and_then(|value| value.split_once(']'))
+        .map(|(code, _)| code)
+        .unwrap_or("manifest_invalid")
+        .to_string();
+    let field_path = if code.starts_with("driver_") {
+        Some(
+            if code.contains("multi_turn")
+                || code.contains("tool_hosting")
+                || code.contains("session_resume")
+                || code.contains("permission_events")
+                || code.contains("workspace_sandbox")
+                || code.contains("guaranteed_cancel")
+            {
+                "spec.steps[].behavior.driverRequirements".to_string()
+            } else {
+                "spec.driver".to_string()
+            },
+        )
+    } else {
+        None
+    };
+    orchestrator_proto::ApplyDiagnostic {
+        code,
+        message: error.to_string(),
+        resource_kind: None,
+        resource_name: None,
+        field_path,
+    }
 }
 
 // ── Helpers used by apply_manifests and tests ────────────────────────

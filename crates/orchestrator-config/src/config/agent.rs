@@ -121,6 +121,9 @@ pub struct AgentConfig {
     /// Command to execute (must contain {prompt} placeholder)
     #[serde(default)]
     pub command: String,
+    /// Explicit provider-neutral execution driver. When absent, legacy command behavior applies.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub driver: Option<super::AgentDriverConfig>,
     /// Conditional command rules evaluated in order via CEL.
     /// First matching rule's command is used; falls back to `command` if none match.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -152,6 +155,7 @@ impl AgentConfig {
             enabled: true,
             capabilities: Vec::new(),
             command: String::new(),
+            driver: None,
             command_rules: Vec::new(),
             selection: AgentSelectionConfig::default(),
             env: None,

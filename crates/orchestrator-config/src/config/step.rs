@@ -64,6 +64,9 @@ pub struct StepBehavior {
     /// Whether runner artifacts should be persisted for the step.
     #[serde(default)]
     pub collect_artifacts: bool,
+    /// Capabilities required from any explicit Agent driver selected for this step.
+    #[serde(default, rename = "driverRequirements")]
+    pub driver_requirements: super::DriverRequirements,
 }
 
 /// What to do when a step fails.

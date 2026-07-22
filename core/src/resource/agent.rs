@@ -30,8 +30,13 @@ impl Resource for AgentResource {
 
     fn validate(&self) -> Result<()> {
         super::validate_resource_name(self.name())?;
-        if self.spec.command.trim().is_empty() {
-            return Err(anyhow!("agent.spec.command cannot be empty"));
+        if self.spec.command.trim().is_empty() && self.spec.driver.is_none() {
+            return Err(anyhow!(
+                "agent.spec.command or agent.spec.driver is required"
+            ));
+        }
+        if let Some(driver) = self.spec.driver.as_ref() {
+            crate::driver::validate_driver_config(driver, &self.spec.command)?;
         }
         Ok(())
     }
@@ -118,6 +123,7 @@ pub(crate) fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
         enabled: spec.enabled.unwrap_or(true),
         capabilities,
         command: spec.command.clone(),
+        driver: spec.driver.clone(),
         command_rules: spec.command_rules.clone(),
         selection: spec
             .selection
@@ -151,6 +157,7 @@ pub(crate) fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
 pub(crate) fn agent_config_to_spec(config: &AgentConfig) -> AgentSpec {
     AgentSpec {
         command: config.command.clone(),
+        driver: config.driver.clone(),
         command_rules: config.command_rules.clone(),
         enabled: if config.enabled { None } else { Some(false) },
         capabilities: if config.capabilities.is_empty() {
@@ -223,6 +230,7 @@ mod tests {
             spec: AgentSpec {
                 enabled: None,
                 command: "  ".to_string(),
+                driver: None,
                 capabilities: None,
                 metadata: None,
                 selection: None,
@@ -233,7 +241,7 @@ mod tests {
             },
         };
         let err = agent.validate().expect_err("operation should fail");
-        assert!(err.to_string().contains("command cannot be empty"));
+        assert!(err.to_string().contains("command or agent.spec.driver"));
     }
 
     #[test]
@@ -243,6 +251,7 @@ mod tests {
             spec: AgentSpec {
                 enabled: None,
                 command: "glmcode -p \"{prompt}\"".to_string(),
+                driver: None,
                 capabilities: Some(vec!["plan".to_string()]),
                 metadata: None,
                 selection: None,
@@ -265,6 +274,7 @@ mod tests {
                 metadata: AgentMetadata::default(),
                 capabilities: vec!["qa".to_string()],
                 command: "glmcode -p \"{prompt}\"".to_string(),
+                driver: None,
                 selection: AgentSelectionConfig::default(),
                 env: None,
                 prompt_delivery: PromptDelivery::default(),
@@ -318,6 +328,7 @@ mod tests {
             spec: AgentSpec {
                 enabled: None,
                 command: "glmcode -p \"{prompt}\" --verbose".to_string(),
+                driver: None,
                 capabilities: Some(vec!["plan".to_string(), "implement".to_string()]),
                 metadata: None,
                 selection: None,
@@ -338,6 +349,7 @@ mod tests {
         let spec = AgentSpec {
             enabled: None,
             command: "glmcode -p \"{prompt}\" --verbose".to_string(),
+            driver: None,
             capabilities: Some(vec!["plan".to_string(), "implement".to_string()]),
             metadata: Some(AgentMetadataSpec {
                 cost: Some(2),
@@ -373,6 +385,7 @@ mod tests {
             metadata: AgentMetadata::default(),
             capabilities: vec![],
             command: "echo".to_string(),
+            driver: None,
             selection: AgentSelectionConfig::default(),
             env: None,
             prompt_delivery: PromptDelivery::default(),
@@ -395,6 +408,7 @@ mod tests {
             },
             capabilities: vec![],
             command: "echo".to_string(),
+            driver: None,
             selection: AgentSelectionConfig::default(),
             env: None,
             prompt_delivery: PromptDelivery::default(),
@@ -420,6 +434,7 @@ mod tests {
             spec: ResourceSpec::Agent(Box::new(AgentSpec {
                 enabled: None,
                 command: "glmcode -p \"{prompt}\"".to_string(),
+                driver: None,
                 capabilities: Some(vec!["qa".to_string()]),
                 metadata: None,
                 selection: None,

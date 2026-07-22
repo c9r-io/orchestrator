@@ -68,6 +68,7 @@ fn create_minimal_test_config(temp_root: &Path) -> OrchestratorConfig {
                                 },
                                 capabilities: vec!["qa".to_string()],
                                 command: "echo 'qa: {rel_path}'".to_string(),
+                                driver: None,
                                 command_rules: Vec::new(),
                                 selection: AgentSelectionConfig::default(),
                                 env: None,

@@ -78,7 +78,7 @@ impl StreamingRedactor {
     }
 }
 
-async fn pipe_and_redact<R: AsyncRead + Unpin>(
+pub(crate) async fn pipe_and_redact<R: AsyncRead + Unpin>(
     mut reader: R,
     file: File,
     redaction_patterns: Vec<String>,

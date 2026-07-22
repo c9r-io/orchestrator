@@ -86,6 +86,8 @@ pub mod metrics;
 pub mod migration;
 /// Logging and metrics bootstrap helpers for runtime observability.
 pub mod observability;
+/// Provider-neutral agent driver contracts and registry.
+pub use orchestrator_runner::driver;
 /// Output capture utilities for spawned commands.
 pub use orchestrator_runner::output_capture;
 /// Structured output validation and diagnostics.

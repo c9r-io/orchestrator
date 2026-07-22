@@ -1,4 +1,7 @@
-use agent_orchestrator::config::{PipelineVariables, PromptDelivery, RunnerConfig, StepScope};
+use agent_orchestrator::config::{
+    AgentDriverConfig, PipelineVariables, PromptDelivery, RunnerConfig, StepScope,
+};
+use agent_orchestrator::driver::{DriverEvent, DriverSession, SessionRef};
 use agent_orchestrator::runner::{ResolvedExecutionProfile, SandboxResourceKind};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -62,6 +65,8 @@ pub(super) struct PhaseSetup {
     pub command: String,
     pub command_template: Option<String>,
     pub execution_profile: ResolvedExecutionProfile,
+    pub driver: Option<AgentDriverConfig>,
+    pub artifacts_dir: PathBuf,
 }
 
 /// Intermediate data produced by `spawn_phase_process`.
@@ -69,6 +74,7 @@ pub(super) struct SpawnResult {
     pub session_id: Option<String>,
     pub child_pid: Option<u32>,
     pub output_capture: Option<agent_orchestrator::output_capture::OutputCaptureHandles>,
+    pub driver_session: Option<Box<dyn DriverSession>>,
     /// If `true`, the TTY early-return path was taken and the caller should return immediately.
     pub tty_early_return: Option<agent_orchestrator::dto::RunResult>,
 }
@@ -79,6 +85,8 @@ pub(super) struct WaitResult {
     pub exit_signal: Option<i32>,
     pub timed_out: bool,
     pub duration: std::time::Duration,
+    pub driver_events: Vec<DriverEvent>,
+    pub provider_session: Option<SessionRef>,
 }
 
 /// Intermediate data produced by `validate_phase_output_stage`.

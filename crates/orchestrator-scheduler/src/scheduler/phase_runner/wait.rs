@@ -1,9 +1,11 @@
 use agent_orchestrator::config::StepScope;
+use agent_orchestrator::driver::{DriverEvent, DriverOutcome, DriverSession};
 use agent_orchestrator::events::insert_event;
 use agent_orchestrator::output_capture::OutputCaptureHandles;
 use agent_orchestrator::runner::kill_child_process_group;
 use agent_orchestrator::state::InnerState;
 use anyhow::Result;
+use futures_util::StreamExt as _;
 use serde_json::json;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
@@ -30,9 +32,27 @@ pub(super) async fn wait_for_process(
     runtime: &RunningTask,
     child_pid: Option<u32>,
     output_capture: Option<OutputCaptureHandles>,
+    driver_session: Option<Box<dyn DriverSession>>,
     stdout_path: &Path,
     stderr_path: &Path,
 ) -> Result<WaitResult> {
+    if let Some(session) = driver_session {
+        return wait_for_driver(
+            state,
+            task_id,
+            item_id,
+            step_id,
+            phase,
+            step_scope,
+            step_timeout_secs,
+            stall_timeout_secs,
+            session,
+            child_pid,
+            stdout_path,
+            stderr_path,
+        )
+        .await;
+    }
     let step_timeout_secs = resolved_step_timeout_secs(step_timeout_secs);
     let stall_kill_heartbeats = stall_timeout_secs
         .map(|secs| {
@@ -208,5 +228,134 @@ pub(super) async fn wait_for_process(
         exit_signal,
         timed_out,
         duration,
+        driver_events: Vec::new(),
+        provider_session: None,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn wait_for_driver(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    item_id: &str,
+    step_id: &str,
+    phase: &str,
+    step_scope: StepScope,
+    step_timeout_secs: Option<u64>,
+    stall_timeout_secs: Option<u64>,
+    mut session: Box<dyn DriverSession>,
+    child_pid: Option<u32>,
+    stdout_path: &Path,
+    stderr_path: &Path,
+) -> Result<WaitResult> {
+    let step_timeout_secs = resolved_step_timeout_secs(step_timeout_secs);
+    let stall_kill_heartbeats = stall_timeout_secs
+        .map(|seconds| (seconds / HEARTBEAT_INTERVAL_SECS).max(1) as u32)
+        .unwrap_or(super::types::STALL_AUTO_KILL_CONSECUTIVE_HEARTBEATS);
+    let start = Instant::now();
+    let deadline = start + std::time::Duration::from_secs(step_timeout_secs);
+    let heartbeat_interval = std::time::Duration::from_secs(HEARTBEAT_INTERVAL_SECS);
+    let mut progress = HeartbeatProgress::default();
+    let mut events = Vec::new();
+    let mut stream = session.take_events()?;
+    let mut timed_out = false;
+    let exit_code = loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            session.cancel().await?;
+            timed_out = true;
+            insert_event(
+                state,
+                task_id,
+                Some(item_id),
+                "step_timeout",
+                json!({
+                    "step": phase,
+                    "step_id": step_id,
+                    "step_scope": step_scope_label(step_scope),
+                    "timeout_secs": step_timeout_secs,
+                    "pid": child_pid,
+                    "driver": true,
+                }),
+            )
+            .await?;
+            break -4;
+        }
+
+        match tokio::time::timeout(heartbeat_interval.min(remaining), stream.next()).await {
+            Ok(Some(Ok(event))) => {
+                let terminal = match &event {
+                    DriverEvent::Finished { outcome, exit_code } => Some(match outcome {
+                        DriverOutcome::Success => *exit_code,
+                        DriverOutcome::Failed | DriverOutcome::Cancelled => *exit_code,
+                    }),
+                    _ => None,
+                };
+                events.push(event);
+                if let Some(exit_code) = terminal {
+                    break exit_code;
+                }
+            }
+            Ok(Some(Err(error))) => return Err(error),
+            Ok(None) => break -3,
+            Err(_) => {
+                let elapsed = start.elapsed();
+                let stdout_bytes = tokio::fs::metadata(stdout_path)
+                    .await
+                    .map(|metadata| metadata.len())
+                    .unwrap_or(0);
+                let stderr_bytes = tokio::fs::metadata(stderr_path)
+                    .await
+                    .map(|metadata| metadata.len())
+                    .unwrap_or(0);
+                let heartbeat = sample_heartbeat_progress(
+                    &mut progress,
+                    stdout_bytes,
+                    stderr_bytes,
+                    elapsed.as_secs(),
+                    true,
+                );
+                insert_event(
+                    state,
+                    task_id,
+                    Some(item_id),
+                    "step_heartbeat",
+                    json!({
+                        "step": phase,
+                        "step_id": step_id,
+                        "step_scope": step_scope_label(step_scope),
+                        "elapsed_secs": elapsed.as_secs(),
+                        "stdout_bytes": heartbeat.stdout_bytes,
+                        "stderr_bytes": heartbeat.stderr_bytes,
+                        "stdout_delta_bytes": heartbeat.stdout_delta_bytes,
+                        "stderr_delta_bytes": heartbeat.stderr_delta_bytes,
+                        "stagnant_heartbeats": heartbeat.stagnant_heartbeats,
+                        "output_state": heartbeat.output_state,
+                        "pid": child_pid,
+                        "driver": true,
+                    }),
+                )
+                .await?;
+                if heartbeat.output_state == "low_output"
+                    && heartbeat.stagnant_heartbeats >= stall_kill_heartbeats
+                {
+                    session.cancel().await?;
+                    break -7;
+                }
+                if super::super::task_state::is_task_paused_in_db(state, task_id).await? {
+                    session.cancel().await?;
+                    break -5;
+                }
+            }
+        }
+    };
+    let provider_session = session.session_ref();
+    Ok(WaitResult {
+        exit_code,
+        exit_signal: None,
+        timed_out,
+        duration: start.elapsed(),
+        driver_events: events,
+        provider_session,
     })
 }

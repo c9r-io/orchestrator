@@ -1,7 +1,8 @@
 use super::common::AgentLookup;
 use crate::cli_types::WorkflowStepSpec;
 use crate::config::{
-    CaptureSource, StepSemanticKind, WorkflowStepConfig, resolve_step_semantic_kind,
+    CancelSemantics, CaptureSource, DriverTransport, SideEffectClass, StepSemanticKind,
+    ToolHosting, WorkflowStepConfig, WorkspaceAccess, resolve_step_semantic_kind,
 };
 use anyhow::Result;
 use std::collections::HashSet;
@@ -52,6 +53,9 @@ pub(super) fn validate_workflow_steps<A: AgentLookup>(
                 workflow_id
             );
         }
+        if !is_self_contained {
+            validate_driver_candidates(step, workflow_id, key, agents)?;
+        }
         for capture in &step.behavior.captures {
             if capture.json_path.is_some()
                 && !matches!(
@@ -76,6 +80,116 @@ pub(super) fn validate_workflow_steps<A: AgentLookup>(
         anyhow::bail!("workflow '{}' has no enabled steps", workflow_id);
     }
     Ok(enabled_count)
+}
+
+fn validate_driver_candidates<A: AgentLookup>(
+    step: &WorkflowStepConfig,
+    workflow_id: &str,
+    capability: &str,
+    agents: &A,
+) -> Result<()> {
+    let requirements = &step.behavior.driver_requirements;
+    for (agent_id, agent) in agents.agents_with_capability(capability) {
+        let Some(driver) = agent.driver.as_ref() else {
+            // Legacy command Agents retain pre-FR-116 behavior.
+            continue;
+        };
+        crate::driver::validate_driver_config(driver, &agent.command).map_err(|error| {
+            anyhow::anyhow!(
+                "[driver_config_invalid] workflow '{}' step '{}' agent '{}': {}",
+                workflow_id,
+                step.id,
+                agent_id,
+                error
+            )
+        })?;
+        let capabilities = crate::driver::driver_capabilities(driver);
+        let driver_id = crate::driver::driver_id(driver);
+        if requirements.multi_turn && !capabilities.multi_turn {
+            driver_error(
+                "driver_multi_turn_required",
+                workflow_id,
+                step,
+                agent_id,
+                driver_id,
+            )?;
+        }
+        if requirements.tool_hosting != ToolHosting::None
+            && requirements.tool_hosting != capabilities.tool_hosting
+        {
+            driver_error(
+                "driver_tool_hosting_required",
+                workflow_id,
+                step,
+                agent_id,
+                driver_id,
+            )?;
+        }
+        if requirements.session_resume && !capabilities.session_resume {
+            driver_error(
+                "driver_session_resume_required",
+                workflow_id,
+                step,
+                agent_id,
+                driver_id,
+            )?;
+        }
+        if requirements.permission_events && !capabilities.permission_events {
+            driver_error(
+                "driver_permission_events_required",
+                workflow_id,
+                step,
+                agent_id,
+                driver_id,
+            )?;
+        }
+        if requirements.workspace_access != WorkspaceAccess::None && !capabilities.sandboxable {
+            driver_error(
+                "driver_workspace_sandbox_required",
+                workflow_id,
+                step,
+                agent_id,
+                driver_id,
+            )?;
+        }
+        if step.behavior.side_effect_class == SideEffectClass::NonIdempotentExternal
+            && capabilities.cancel != CancelSemantics::Guaranteed
+        {
+            driver_error(
+                "driver_guaranteed_cancel_required",
+                workflow_id,
+                step,
+                agent_id,
+                driver_id,
+            )?;
+        }
+        if driver.transport == DriverTransport::Sdk {
+            driver_error(
+                "driver_transport_unavailable",
+                workflow_id,
+                step,
+                agent_id,
+                driver_id,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn driver_error(
+    code: &str,
+    workflow_id: &str,
+    step: &WorkflowStepConfig,
+    agent_id: &str,
+    driver_id: &str,
+) -> Result<()> {
+    anyhow::bail!(
+        "[{code}] workflow '{}' step '{}' is incompatible with agent '{}' driver '{}'",
+        workflow_id,
+        step.id,
+        agent_id,
+        driver_id
+    )
 }
 
 /// "Did you mean" suggestions for commonly misplaced step-level fields.
@@ -278,6 +392,122 @@ pub fn collect_step_warnings(steps: &[WorkflowStepSpec], workflow_id: &str) -> V
     }
 
     warnings
+}
+
+#[cfg(test)]
+mod driver_tests {
+    use super::*;
+    use crate::config::{
+        AgentConfig, AgentDriverConfig, DriverOptions, DriverProvider, DriverRequirements,
+    };
+    use crate::config_load::tests::make_step;
+    use std::collections::HashMap;
+
+    fn agent(provider: DriverProvider, transport: DriverTransport) -> AgentConfig {
+        AgentConfig {
+            capabilities: vec!["implement".to_string()],
+            driver: Some(AgentDriverConfig {
+                provider,
+                transport,
+                binary: None,
+                options: DriverOptions::default(),
+                claude: None,
+                codex: None,
+                shell: None,
+                raw_args: Vec::new(),
+                unsafe_raw_args: false,
+            }),
+            command: if provider == DriverProvider::Shell {
+                "echo {prompt}".to_string()
+            } else {
+                String::new()
+            },
+            ..AgentConfig::default()
+        }
+    }
+
+    fn validate(
+        provider: DriverProvider,
+        transport: DriverTransport,
+        requirements: DriverRequirements,
+        side_effect_class: SideEffectClass,
+    ) -> String {
+        let agents = HashMap::from([("agent".to_string(), agent(provider, transport))]);
+        let mut step = make_step("implement", true);
+        step.required_capability = Some("implement".to_string());
+        step.behavior.driver_requirements = requirements;
+        step.behavior.side_effect_class = side_effect_class;
+        validate_driver_candidates(&step, "workflow", "implement", &agents)
+            .expect_err("incompatible driver")
+            .to_string()
+    }
+
+    #[test]
+    fn apply_validation_rejects_multi_turn_shell_driver() {
+        let error = validate(
+            DriverProvider::Shell,
+            DriverTransport::Cli,
+            DriverRequirements {
+                multi_turn: true,
+                ..DriverRequirements::default()
+            },
+            SideEffectClass::WorkspaceOnly,
+        );
+        assert!(error.contains("driver_multi_turn_required"));
+    }
+
+    #[test]
+    fn apply_validation_rejects_missing_tool_hosting() {
+        let error = validate(
+            DriverProvider::Codex,
+            DriverTransport::Cli,
+            DriverRequirements {
+                tool_hosting: ToolHosting::Stdio,
+                ..DriverRequirements::default()
+            },
+            SideEffectClass::WorkspaceOnly,
+        );
+        assert!(error.contains("driver_tool_hosting_required"));
+    }
+
+    #[test]
+    fn apply_validation_rejects_non_guaranteed_cancel_for_external_step() {
+        let error = validate(
+            DriverProvider::Codex,
+            DriverTransport::Sdk,
+            DriverRequirements {
+                workspace_access: WorkspaceAccess::None,
+                ..DriverRequirements::default()
+            },
+            SideEffectClass::NonIdempotentExternal,
+        );
+        assert!(error.contains("driver_guaranteed_cancel_required"));
+    }
+
+    #[test]
+    fn apply_validation_rejects_sdk_workspace_access_before_runtime() {
+        let error = validate(
+            DriverProvider::Codex,
+            DriverTransport::Sdk,
+            DriverRequirements::default(),
+            SideEffectClass::WorkspaceOnly,
+        );
+        assert!(error.contains("driver_workspace_sandbox_required"));
+    }
+
+    #[test]
+    fn apply_validation_rejects_driver_without_permission_events() {
+        let error = validate(
+            DriverProvider::Codex,
+            DriverTransport::Cli,
+            DriverRequirements {
+                permission_events: true,
+                ..DriverRequirements::default()
+            },
+            SideEffectClass::WorkspaceOnly,
+        );
+        assert!(error.contains("driver_permission_events_required"));
+    }
 }
 
 #[cfg(test)]

@@ -8,7 +8,6 @@ mod sandbox;
 mod sandbox_linux;
 #[cfg(target_os = "macos")]
 mod sandbox_macos;
-mod session_adapter;
 mod spawn;
 mod streaming;
 
@@ -21,7 +20,7 @@ pub use sandbox::{
     SandboxBackendError, SandboxResourceKind, build_command_for_profile, sandbox_backend_label,
     sandbox_backend_preflight_issues, validate_execution_profile_support,
 };
-pub use session_adapter::{ClaudeStreamingSessionAdapter, RunnerSessionAdapter};
+pub(crate) use spawn::spawn_command_via_shell;
 pub use spawn::{
     CapturedChild, RunnerExecutor, RunnerStdioMode, ShellRunnerExecutor, SpawnParams,
     kill_child_process_group, spawn_with_runner, spawn_with_runner_and_capture,

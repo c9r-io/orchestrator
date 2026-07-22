@@ -1,4 +1,5 @@
 use orchestrator_proto::*;
+use serde::Deserialize as _;
 use tonic::{Request, Response, Status};
 
 use super::{OrchestratorServer, map_core_error};
@@ -13,12 +14,16 @@ pub(crate) async fn apply(
     // Elevate to Admin when the manifest contains CRDs with plugins or hooks.
     // This prevents Operator-role callers (including agent subprocesses via UDS)
     // from injecting arbitrary shell commands into the plugin execution pipeline.
-    if manifests_contain_executable_commands(&request.get_ref().content) {
+    let contains_driver_raw_args = manifests_contain_driver_raw_args(&request.get_ref().content);
+    if manifests_contain_executable_commands(&request.get_ref().content) || contains_driver_raw_args
+    {
         super::authorize(server, &request, "ApplyPluginCrd").map_err(Status::from)?;
     }
 
-    let source_mutation = if request.get_ref().dry_run {
+    let audited_mutation = if request.get_ref().dry_run {
         None
+    } else if contains_driver_raw_args {
+        Some(("agent_driver", "agent.driver.raw_args.apply"))
     } else {
         source_resource_apply_kind(&request.get_ref().content)
     };
@@ -46,7 +51,7 @@ pub(crate) async fn apply(
     }
     let dry_run = request.get_ref().dry_run;
     let prune = request.get_ref().prune;
-    let attempt = if let Some((target_type, action)) = source_mutation {
+    let attempt = if let Some((target_type, action)) = audited_mutation {
         Some(
             super::action_audit::begin(
                 server,
@@ -81,7 +86,7 @@ pub(crate) async fn apply(
     };
     if let Some(replayed) = attempt.as_ref().filter(|attempt| !attempt.should_execute) {
         return Err(replayed.status(Status::already_exists(
-            "matching source automation resource apply already audited",
+            "matching audited resource apply already exists",
         )));
     }
     let req = request.into_inner();
@@ -128,6 +133,24 @@ pub(crate) async fn apply(
     } else {
         Ok(Response::new(result))
     }
+}
+
+fn manifests_contain_driver_raw_args(content: &str) -> bool {
+    if !content.contains("rawArgs") {
+        return false;
+    }
+    serde_yaml::Deserializer::from_str(content).any(|document| {
+        let Ok(value) = serde_yaml::Value::deserialize(document) else {
+            return false;
+        };
+        value.get("kind").and_then(serde_yaml::Value::as_str) == Some("Agent")
+            && value
+                .get("spec")
+                .and_then(|spec| spec.get("driver"))
+                .and_then(|driver| driver.get("rawArgs"))
+                .and_then(serde_yaml::Value::as_sequence)
+                .is_some_and(|args| !args.is_empty())
+    })
 }
 
 fn validate_source_resource_revision(
@@ -436,4 +459,31 @@ pub(crate) async fn manifest_export(
         content,
         format: req.output_format,
     }))
+}
+
+#[cfg(test)]
+mod driver_tests {
+    use super::manifests_contain_driver_raw_args;
+
+    #[test]
+    fn raw_driver_args_are_detected_only_on_agent_documents() {
+        let agent = r#"
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: codex
+spec:
+  driver:
+    provider: codex
+    rawArgs: [--experimental]
+    unsafeRawArgs: true
+"#;
+        assert!(manifests_contain_driver_raw_args(agent));
+
+        let workflow = agent.replace("kind: Agent", "kind: Workflow");
+        assert!(!manifests_contain_driver_raw_args(&workflow));
+        assert!(!manifests_contain_driver_raw_args(
+            "kind: Agent\nspec:\n  driver:\n    provider: codex\n"
+        ));
+    }
 }

@@ -1,4 +1,5 @@
 use agent_orchestrator::config::StepScope;
+use agent_orchestrator::driver::{DriverStartRequest, SessionRef, create_driver, driver_id};
 use agent_orchestrator::events::insert_event;
 use agent_orchestrator::runner::spawn_with_runner_and_capture_session;
 use agent_orchestrator::session_store;
@@ -7,6 +8,7 @@ use anyhow::{Context, Result};
 use serde_json::json;
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use uuid::Uuid;
 
 use super::RunningTask;
@@ -89,6 +91,61 @@ pub(super) async fn spawn_phase_process(
     };
     // For stdin delivery in TTY mode, we already warned and fell back to arg
     let effective_pipe_stdin = req_pipe_stdin && !tty;
+    if let Some(driver_config) = setup.driver.clone() {
+        if tty {
+            anyhow::bail!("explicit Agent drivers do not support TTY sessions");
+        }
+        let driver = create_driver(&driver_config)?;
+        let provider_session = recalled_provider_session(task_id).await;
+        let prompt = prompt_payload.as_deref().unwrap_or_default();
+        let session = driver
+            .start(DriverStartRequest {
+                driver: &driver_config,
+                runner: &setup.runner,
+                legacy_command: &command_to_run,
+                prompt,
+                cwd: workspace_root,
+                stdout: std::mem::replace(&mut setup.stdout_file, tempfile_placeholder()?),
+                stderr: std::mem::replace(&mut setup.stderr_file, tempfile_placeholder()?),
+                redaction_patterns: &setup.redaction_patterns,
+                extra_env: &setup.resolved_extra_env,
+                execution_profile: &setup.execution_profile,
+                artifacts_dir: &setup.artifacts_dir,
+                session_ref: provider_session.as_ref(),
+            })
+            .await?;
+        let child_pid = session.pid();
+        if let Some(pid) = child_pid {
+            let _ = state
+                .db_writer
+                .update_command_run_pid(&setup.run_id, pid as i64)
+                .await;
+        }
+        insert_event(
+            state,
+            task_id,
+            Some(item_id),
+            "step_spawned",
+            json!({
+                "step": phase,
+                "step_id": step_id,
+                "step_scope": step_scope_label(step_scope),
+                "agent_id": agent_id,
+                "run_id": setup.run_id,
+                "pid": child_pid,
+                "driver": driver_id(&driver_config),
+                "execution_profile": setup.execution_profile.name,
+            }),
+        )
+        .await?;
+        return Ok(SpawnResult {
+            session_id: None,
+            child_pid,
+            output_capture: None,
+            driver_session: Some(session),
+            tty_early_return: None,
+        });
+    }
     let provider_session_token = resolve_provider_session_token(state, task_id).await?;
     let captured = spawn_with_runner_and_capture_session(
         &setup.runner,
@@ -159,6 +216,7 @@ pub(super) async fn spawn_phase_process(
             session_id,
             child_pid: None,
             output_capture: None,
+            driver_session: None,
             tty_early_return: Some(agent_orchestrator::dto::RunResult {
                 success: true,
                 exit_code: 0,
@@ -222,8 +280,27 @@ pub(super) async fn spawn_phase_process(
         session_id,
         child_pid,
         output_capture,
+        driver_session: None,
         tty_early_return: None,
     })
+}
+
+fn provider_sessions() -> &'static tokio::sync::Mutex<std::collections::HashMap<String, SessionRef>>
+{
+    static SESSIONS: OnceLock<tokio::sync::Mutex<std::collections::HashMap<String, SessionRef>>> =
+        OnceLock::new();
+    SESSIONS.get_or_init(|| tokio::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
+async fn recalled_provider_session(task_id: &str) -> Option<SessionRef> {
+    provider_sessions().lock().await.get(task_id).cloned()
+}
+
+pub(super) async fn remember_provider_session(task_id: &str, reference: SessionRef) {
+    provider_sessions()
+        .lock()
+        .await
+        .insert(task_id.to_string(), reference);
 }
 
 async fn resolve_provider_session_token(

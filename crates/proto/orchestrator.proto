@@ -1259,6 +1259,15 @@ message ApplyResponse {
   optional int64 config_version = 2;
   repeated string errors = 3;
   repeated string warnings = 4;
+  repeated ApplyDiagnostic diagnostics = 5;
+}
+
+message ApplyDiagnostic {
+  string code = 1;
+  string message = 2;
+  optional string resource_kind = 3;
+  optional string resource_name = 4;
+  optional string field_path = 5;
 }
 
 message GetRequest {

@@ -2,6 +2,7 @@
 
 mod agent;
 mod defaults;
+mod driver;
 mod dynamic_items;
 mod env_store;
 mod execution;
@@ -28,6 +29,7 @@ mod workflow_store;
 
 pub use agent::*;
 pub use defaults::*;
+pub use driver::*;
 pub use dynamic_items::*;
 pub use env_store::*;
 pub use execution::*;

@@ -17,5 +17,7 @@ pub mod runner;
 /// Sandbox network allowlist parsing and validation.
 pub mod sandbox_network;
 
+/// Provider-neutral agent driver contracts and built-in driver registry.
+pub mod driver;
 #[cfg(test)]
 pub(crate) mod test_env;

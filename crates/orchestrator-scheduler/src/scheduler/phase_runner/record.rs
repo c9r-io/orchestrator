@@ -1,4 +1,5 @@
 use agent_orchestrator::config_load::now_ts;
+use agent_orchestrator::driver::{DriverEvent, DriverOutcome};
 use agent_orchestrator::health::{
     increment_consecutive_errors, mark_agent_diseased, reset_consecutive_errors,
     update_capability_health,
@@ -20,6 +21,7 @@ pub(super) async fn record_phase_results(
     setup: &PhaseSetup,
     validated: &ValidatedOutput,
     session_id: &Option<String>,
+    driver_events: &[DriverEvent],
     task_id: &str,
     item_id: &str,
     step_id: &str,
@@ -129,6 +131,17 @@ pub(super) async fn record_phase_results(
             agent_id,
             &setup.run_id,
         ));
+        events.extend(project_driver_events(
+            driver_events,
+            task_id,
+            item_id,
+            phase,
+            step_id,
+            step_scope,
+            agent_id,
+            &setup.run_id,
+            &setup.redaction_patterns,
+        ));
 
         writer
             .update_command_run_with_owned_events(insert_payload, events)
@@ -201,6 +214,105 @@ pub(super) async fn record_phase_results(
     }
 
     Ok(())
+}
+
+/// Projects every normalized driver event into the canonical task event stream.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn project_driver_events(
+    driver_events: &[DriverEvent],
+    task_id: &str,
+    item_id: &str,
+    step: &str,
+    step_id: &str,
+    step_scope: agent_orchestrator::config::StepScope,
+    agent_id: &str,
+    run_id: &str,
+    redaction_patterns: &[String],
+) -> Vec<agent_orchestrator::db_write::DbEventRecord> {
+    use agent_orchestrator::db_write::DbEventRecord;
+    let step_scope = match step_scope {
+        agent_orchestrator::config::StepScope::Task => "task",
+        agent_orchestrator::config::StepScope::Item => "item",
+    };
+    driver_events
+        .iter()
+        .map(|event| {
+            let (event_type, detail) = match event {
+                DriverEvent::Started { session } => (
+                    "driver_started",
+                    json!({"session_available": session.is_some()}),
+                ),
+                DriverEvent::AssistantText(text) => (
+                    "driver_assistant_text",
+                    json!({"text": bounded_text(text, 16 * 1024)}),
+                ),
+                DriverEvent::ToolUse {
+                    call_id,
+                    name,
+                    args,
+                } => (
+                    "driver_tool_use",
+                    json!({"call_id": call_id, "name": name, "args": args}),
+                ),
+                DriverEvent::ToolResult {
+                    call_id,
+                    payload,
+                    is_error,
+                } => (
+                    "driver_tool_result",
+                    json!({"call_id": call_id, "payload": payload, "is_error": is_error}),
+                ),
+                DriverEvent::PermissionRequested { request_id, scope } => (
+                    "approval_requested",
+                    json!({
+                        "request_id": request_id,
+                        "permission_kind": scope.kind,
+                        "scope": scope.detail,
+                    }),
+                ),
+                DriverEvent::Usage { cost_usd, tokens } => (
+                    "driver_usage",
+                    json!({
+                        "cost_usd": cost_usd,
+                        "input_tokens": tokens.input,
+                        "output_tokens": tokens.output,
+                    }),
+                ),
+                DriverEvent::Finished { outcome, exit_code } => (
+                    "driver_finished",
+                    json!({
+                        "outcome": match outcome {
+                            DriverOutcome::Success => "success",
+                            DriverOutcome::Failed => "failed",
+                            DriverOutcome::Cancelled => "cancelled",
+                        },
+                        "exit_code": exit_code,
+                    }),
+                ),
+            };
+            let payload = json!({
+                "step": step,
+                "step_id": step_id,
+                "step_scope": step_scope,
+                "agent_id": agent_id,
+                "run_id": run_id,
+                "detail": detail,
+            });
+            DbEventRecord {
+                task_id: task_id.to_string(),
+                task_item_id: Some(item_id.to_string()),
+                event_type: event_type.to_string(),
+                payload_json: agent_orchestrator::runner::redact_text(
+                    &payload.to_string(),
+                    redaction_patterns,
+                ),
+            }
+        })
+        .collect()
+}
+
+fn bounded_text(value: &str, max_chars: usize) -> String {
+    value.chars().take(max_chars).collect()
 }
 
 /// Projects stream-json structured artifacts (from the streaming agent runner)
@@ -286,9 +398,10 @@ pub(crate) fn project_stream_events(
 
 #[cfg(test)]
 mod tests {
-    use super::project_stream_events;
+    use super::{project_driver_events, project_stream_events};
     use agent_orchestrator::config::StepScope;
     use agent_orchestrator::db::open_conn;
+    use agent_orchestrator::driver::{DriverEvent, DriverOutcome, PermissionScope, SessionRef};
     use agent_orchestrator::output_validation::validate_phase_output;
     use agent_orchestrator::test_utils::TestState;
     use rusqlite::params;
@@ -377,5 +490,56 @@ mod tests {
             serde_json::from_str(&summary.1).expect("parse summary payload");
         assert_eq!(summary_payload["summary"]["num_turns"], 3);
         assert_eq!(summary_payload["summary"]["num_tool_calls"], 1);
+    }
+
+    #[test]
+    fn driver_projection_is_complete_redacted_and_session_opaque() {
+        let secret = "provider-session-secret";
+        let events = vec![
+            DriverEvent::Started {
+                session: Some(SessionRef::from_provider(secret.to_string()).expect("session")),
+            },
+            DriverEvent::ToolUse {
+                call_id: "tool-1".to_string(),
+                name: "run_tests".to_string(),
+                args: serde_json::json!({"token":"sensitive-value"}),
+            },
+            DriverEvent::PermissionRequested {
+                request_id: "permission-1".to_string(),
+                scope: PermissionScope {
+                    kind: "workspace_write".to_string(),
+                    detail: serde_json::json!({"path":"src/lib.rs"}),
+                },
+            },
+            DriverEvent::Finished {
+                outcome: DriverOutcome::Success,
+                exit_code: 0,
+            },
+        ];
+        let projected = project_driver_events(
+            &events,
+            "task-1",
+            "item-1",
+            "implement",
+            "implement",
+            StepScope::Item,
+            "driver-agent",
+            "run-1",
+            &["sensitive-value".to_string()],
+        );
+        assert_eq!(projected.len(), events.len());
+        assert!(
+            projected
+                .iter()
+                .any(|event| event.event_type == "approval_requested")
+        );
+        let joined = projected
+            .iter()
+            .map(|event| event.payload_json.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(!joined.contains(secret));
+        assert!(!joined.contains("sensitive-value"));
+        assert!(joined.contains("[REDACTED]"));
     }
 }

@@ -352,6 +352,7 @@ mod tests {
                 metadata: AgentMetadata::default(),
                 capabilities: vec!["plan".into(), "implement".into()],
                 command: "echo test".to_string(),
+                driver: None,
                 selection: AgentSelectionConfig::default(),
                 env: None,
                 prompt_delivery: PromptDelivery::default(),

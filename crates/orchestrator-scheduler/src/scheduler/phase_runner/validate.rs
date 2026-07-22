@@ -1,3 +1,4 @@
+use agent_orchestrator::driver::{DriverEvent, DriverOutcome};
 use agent_orchestrator::output_validation::validate_phase_output;
 use agent_orchestrator::runner::redact_text;
 use anyhow::{Context, Result};
@@ -62,6 +63,111 @@ pub(super) async fn validate_phase_output_stage(
         validation_status: validation.status,
         validation_event_payload_json,
         redacted_output,
+        sandbox_denied: false,
+        sandbox_event_type: None,
+        sandbox_reason_code: None,
+        sandbox_denial_reason: None,
+        sandbox_denial_stderr_excerpt: None,
+        sandbox_resource_kind: None,
+        sandbox_network_target: None,
+    })
+}
+
+/// Folds the normalized driver stream directly, avoiding a second parse of a
+/// size-limited stdout artifact as the terminal source of truth.
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn validate_driver_events_stage(
+    phase: &str,
+    run_uuid: Uuid,
+    agent_id: &str,
+    process_exit_code: i32,
+    events: &[DriverEvent],
+    stderr_path: &Path,
+    redaction_patterns: &[String],
+) -> Result<ValidatedOutput> {
+    use agent_orchestrator::collab::{AgentOutput, Artifact, ArtifactKind, ExecutionMetrics};
+
+    const MAX_STDERR_BYTES: u64 = 256 * 1024;
+    let stderr = read_output_with_limit(stderr_path, MAX_STDERR_BYTES)
+        .await
+        .with_context(|| format!("failed to read stderr log: {}", stderr_path.display()))?
+        .text;
+    let mut text = Vec::new();
+    let mut artifacts = Vec::new();
+    let mut tokens = 0_u64;
+    let mut terminal = None;
+    for event in events {
+        match event {
+            DriverEvent::AssistantText(value) => {
+                text.push(redact_text(value, redaction_patterns));
+            }
+            DriverEvent::ToolUse {
+                call_id,
+                name,
+                args,
+            } => artifacts.push(
+                Artifact::new(ArtifactKind::ToolCall { tool: name.clone() }).with_content(json!({
+                    "call_id": call_id,
+                    "args": args,
+                })),
+            ),
+            DriverEvent::ToolResult {
+                call_id,
+                payload,
+                is_error,
+            } => artifacts.push(
+                Artifact::new(ArtifactKind::Data {
+                    schema: "driver_tool_result".to_string(),
+                })
+                .with_content(json!({
+                    "call_id": call_id,
+                    "payload": payload,
+                    "is_error": is_error,
+                })),
+            ),
+            DriverEvent::Usage { tokens: counts, .. } => {
+                tokens = tokens
+                    .saturating_add(counts.input.unwrap_or(0))
+                    .saturating_add(counts.output.unwrap_or(0));
+            }
+            DriverEvent::Finished { outcome, exit_code } => {
+                terminal = Some((*outcome, *exit_code));
+            }
+            DriverEvent::Started { .. } | DriverEvent::PermissionRequested { .. } => {}
+        }
+    }
+    let (outcome, driver_exit_code) =
+        terminal.unwrap_or((DriverOutcome::Failed, process_exit_code));
+    let final_exit_code = match outcome {
+        DriverOutcome::Success => driver_exit_code as i64,
+        DriverOutcome::Failed | DriverOutcome::Cancelled => {
+            if driver_exit_code == 0 {
+                1
+            } else {
+                driver_exit_code as i64
+            }
+        }
+    };
+    let output = AgentOutput::new(
+        run_uuid,
+        agent_id.to_string(),
+        phase.to_string(),
+        final_exit_code,
+        text.join("\n"),
+        redact_text(&stderr, redaction_patterns),
+    )
+    .with_artifacts(artifacts)
+    .with_metrics(ExecutionMetrics {
+        tokens_consumed: (tokens > 0).then_some(tokens),
+        ..ExecutionMetrics::default()
+    });
+
+    Ok(ValidatedOutput {
+        final_exit_code,
+        success: final_exit_code == 0,
+        validation_status: "passed",
+        validation_event_payload_json: None,
+        redacted_output: output,
         sandbox_denied: false,
         sandbox_event_type: None,
         sandbox_reason_code: None,

@@ -3339,12 +3339,16 @@ name = "orchestrator-runner"
 version = "0.3.1"
 dependencies = [
  "anyhow",
+ "async-trait",
+ "futures-core",
+ "futures-util",
  "libc",
  "nix",
  "orchestrator-config",
  "serde_json",
  "tempfile",
  "tokio",
+ "tokio-stream",
  "tracing",
  "uuid",
 ]
@@ -3359,6 +3363,7 @@ dependencies = [
  "async-trait",
  "cel-interpreter",
  "chrono",
+ "futures-util",
  "glob",
  "libc",
  "nix",

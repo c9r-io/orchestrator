@@ -72,6 +72,11 @@ fn apply_prompt_delivery(
     prompt_delivery: PromptDelivery,
     agent_id: &str,
 ) -> (String, Option<String>) {
+    // Explicit drivers own provider invocation, so an empty command is valid and
+    // the rendered prompt must remain a typed input instead of shell text.
+    if command_template.trim().is_empty() {
+        return (String::new(), rendered_prompt.map(ToOwned::to_owned));
+    }
     match prompt_delivery {
         PromptDelivery::Arg => {
             let cmd = if let Some(prompt) = rendered_prompt {
@@ -239,23 +244,41 @@ async fn run_phase_with_timeout(
         runtime,
         spawn_result.child_pid,
         spawn_result.output_capture,
+        spawn_result.driver_session,
         &setup.stdout_path,
         &setup.stderr_path,
     )
     .await?;
 
     // Stage 4: validate
-    let validated = validate_phase_output_stage(
-        phase,
-        setup.run_uuid,
-        &setup.run_id,
-        agent_id,
-        wait_result.exit_code,
-        &setup.stdout_path,
-        &setup.stderr_path,
-        &setup.redaction_patterns,
-    )
-    .await?;
+    let validated = if wait_result.driver_events.is_empty() {
+        validate_phase_output_stage(
+            phase,
+            setup.run_uuid,
+            &setup.run_id,
+            agent_id,
+            wait_result.exit_code,
+            &setup.stdout_path,
+            &setup.stderr_path,
+            &setup.redaction_patterns,
+        )
+        .await?
+    } else {
+        validate::validate_driver_events_stage(
+            phase,
+            setup.run_uuid,
+            agent_id,
+            wait_result.exit_code,
+            &wait_result.driver_events,
+            &setup.stderr_path,
+            &setup.redaction_patterns,
+        )
+        .await?
+    };
+
+    if let Some(reference) = wait_result.provider_session.clone() {
+        spawn::remember_provider_session(task_id, reference).await;
+    }
 
     let sandbox_violation =
         detect_sandbox_violation(&setup.execution_profile, &wait_result, &setup.stderr_path).await;
@@ -276,6 +299,7 @@ async fn run_phase_with_timeout(
         &setup,
         &validated,
         &spawn_result.session_id,
+        &wait_result.driver_events,
         task_id,
         item_id,
         step_id,

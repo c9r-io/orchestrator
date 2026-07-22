@@ -208,6 +208,8 @@ mod cases {
             exit_signal,
             timed_out: false,
             duration: std::time::Duration::from_secs(1),
+            driver_events: Vec::new(),
+            provider_session: None,
         }
     }
 

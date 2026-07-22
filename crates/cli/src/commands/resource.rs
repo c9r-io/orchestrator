@@ -65,6 +65,18 @@ pub(crate) async fn dispatch(
             for err in &resp.errors {
                 eprintln!("Error: {}", err);
             }
+            for diagnostic in &resp.diagnostics {
+                eprintln!(
+                    "Diagnostic [{}]{}: {}",
+                    diagnostic.code,
+                    diagnostic
+                        .field_path
+                        .as_ref()
+                        .map(|path| format!(" at {path}"))
+                        .unwrap_or_default(),
+                    diagnostic.message
+                );
+            }
             if !resp.errors.is_empty() {
                 std::process::exit(1);
             }

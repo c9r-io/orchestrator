@@ -37,6 +37,7 @@ pub fn build_active_config(data_dir: &Path, config: OrchestratorConfig) -> Resul
     let projects = resolve_and_validate_projects(data_dir, &config)?;
     validate_agent_env_store_refs(&config)?;
     validate_agent_command_rules(&config)?;
+    validate_agent_drivers(&config)?;
     validate_source_task_templates(&config)?;
     validate_source_task_bindings(&config)?;
     Ok(ActiveConfig {
@@ -60,6 +61,7 @@ pub fn build_active_config_for_project(
     let projects = resolve_and_validate_projects(data_dir, &config)?;
     validate_agent_env_store_refs_for_project(&config, target_project)?;
     validate_agent_command_rules_for_project(&config, target_project)?;
+    validate_agent_drivers_for_project(&config, target_project)?;
     validate_source_task_templates_for_project(&config, target_project)?;
     validate_source_task_bindings_for_project(&config, target_project)?;
     Ok(ActiveConfig {
@@ -67,6 +69,45 @@ pub fn build_active_config_for_project(
         projects,
         config,
     })
+}
+
+fn validate_agent_drivers(config: &OrchestratorConfig) -> Result<()> {
+    for (project_id, project) in &config.projects {
+        validate_agent_drivers_in_project(project_id, project)?;
+    }
+    Ok(())
+}
+
+fn validate_agent_drivers_for_project(config: &OrchestratorConfig, project_id: &str) -> Result<()> {
+    let Some(project) = config.projects.get(project_id) else {
+        return Ok(());
+    };
+    validate_agent_drivers_in_project(project_id, project)
+}
+
+fn validate_agent_drivers_in_project(
+    project_id: &str,
+    project: &crate::config::ProjectConfig,
+) -> Result<()> {
+    for (agent_id, agent) in &project.agents {
+        if let Some(driver) = agent.driver.as_ref() {
+            crate::driver::validate_driver_config(driver, &agent.command).map_err(|error| {
+                anyhow::anyhow!(
+                    "[driver_config_invalid] project '{}' agent '{}': {}",
+                    project_id,
+                    agent_id,
+                    error
+                )
+            })?;
+        } else if agent.command.trim().is_empty() {
+            anyhow::bail!(
+                "[driver_config_invalid] project '{}' agent '{}' requires command or driver",
+                project_id,
+                agent_id
+            );
+        }
+    }
+    Ok(())
 }
 
 /// Attempts to build active config and persists a healed snapshot when self-heal succeeds.

@@ -41,7 +41,7 @@ pub(super) async fn setup_phase_execution(
     let stdout_path = logs_dir.join(format!("{}_{}.stdout", phase, run_id));
     let stderr_path = logs_dir.join(format!("{}_{}.stderr", phase, run_id));
 
-    let (runner, execution_profile, mut resolved_extra_env, sensitive_values) = {
+    let (runner, execution_profile, mut resolved_extra_env, sensitive_values, driver) = {
         let active = agent_orchestrator::config_load::read_active_config(state)?;
         let mut runner = active.config.runtime_policy_for_project(project_id).runner;
         if state.unsafe_mode {
@@ -99,7 +99,13 @@ pub(super) async fn setup_phase_execution(
             })
             .unwrap_or_else(ResolvedExecutionProfile::host);
         validate_execution_profile_support(&execution_profile)?;
-        (runner, execution_profile, extra_env, sensitive)
+        (
+            runner,
+            execution_profile,
+            extra_env,
+            sensitive,
+            agent_cfg.and_then(|agent| agent.driver.clone()),
+        )
     };
     // Inject daemon PID for self-referential workspaces so the runner can
     // guard against kill commands targeting the daemon process itself.
@@ -256,7 +262,7 @@ pub(super) async fn setup_phase_execution(
 
     Ok(PhaseSetup {
         run_uuid,
-        run_id,
+        run_id: run_id.clone(),
         now,
         runner,
         execution_profile,
@@ -268,5 +274,7 @@ pub(super) async fn setup_phase_execution(
         stderr_file,
         command,
         command_template,
+        driver,
+        artifacts_dir: logs_dir.join(format!("{}_{}.artifacts", phase, run_id)),
     })
 }

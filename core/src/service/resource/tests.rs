@@ -449,6 +449,7 @@ fn helper_functions_cover_delete_and_projection_paths() {
                 capabilities: vec!["implement".to_string()],
                 command: "echo '{\"confidence\":1.0,\"quality_score\":1.0,\"artifacts\":[]}'"
                     .to_string(),
+                driver: None,
                 selection: crate::config::AgentSelectionConfig::default(),
                 env: None,
                 prompt_delivery: crate::config::PromptDelivery::default(),
@@ -513,4 +514,44 @@ fn helper_functions_cover_delete_and_projection_paths() {
     assert_eq!(apply_action_label(ApplyResult::Created), "created");
     assert_eq!(apply_action_label(ApplyResult::Configured), "updated");
     assert_eq!(apply_action_label(ApplyResult::Unchanged), "unchanged");
+}
+
+#[test]
+fn driver_apply_errors_expose_stable_structured_diagnostics() {
+    let diagnostic = apply_diagnostic(
+        "[driver_multi_turn_required] Workflow / pilot step implement requires multi-turn",
+    );
+    assert_eq!(diagnostic.code, "driver_multi_turn_required");
+    assert_eq!(
+        diagnostic.field_path.as_deref(),
+        Some("spec.steps[].behavior.driverRequirements")
+    );
+
+    let mut config = crate::config::OrchestratorConfig::default();
+    let project = config
+        .projects
+        .get_mut(crate::config::DEFAULT_PROJECT_ID)
+        .expect("default project");
+    let mut agent = crate::config::AgentConfig::new();
+    agent.driver = Some(crate::config::AgentDriverConfig {
+        provider: crate::config::DriverProvider::Codex,
+        transport: crate::config::DriverTransport::Cli,
+        binary: None,
+        options: Default::default(),
+        claude: None,
+        codex: None,
+        shell: None,
+        raw_args: vec!["--dangerously-bypass-approvals-and-sandbox".to_string()],
+        unsafe_raw_args: true,
+    });
+    project.agents.insert("unsafe-codex".to_string(), agent);
+    let mut errors = Vec::new();
+    validate_driver_raw_args(
+        &config,
+        crate::config::DEFAULT_PROJECT_ID,
+        false,
+        &mut errors,
+    );
+    assert_eq!(errors.len(), 1);
+    assert!(errors[0].contains("driver_raw_args_unsafe_mode_required"));
 }

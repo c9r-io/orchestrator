@@ -856,7 +856,12 @@ pub struct AgentEnvRefValue {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AgentSpec {
     /// Command to execute (must contain {prompt} placeholder)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub command: String,
+
+    /// Explicit provider-neutral execution driver. Legacy Agents may omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub driver: Option<crate::config::AgentDriverConfig>,
 
     /// Conditional command rules evaluated in order via CEL.
     /// First matching rule's command is used; falls back to `command` if none match.
