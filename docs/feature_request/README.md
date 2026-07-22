@@ -79,6 +79,7 @@
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
+| FR-118 | 协调塌缩 — 用 orchestrator-owned MCP 工具替换过渡态 CEL 层 | P1 | Proposed |
 
 ## 说明
 
