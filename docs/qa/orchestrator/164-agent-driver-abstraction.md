@@ -96,14 +96,14 @@ GROUP BY event_type;
 1. Run a CLI driver under a workspace-scoped ExecutionProfile and verify it traverses the common shell/sandbox path.
 2. Trigger timeout, stall-kill, and external pause; inspect process-group termination and terminal classification.
 3. Start two Claude driver runs concurrently and compare their MCP config paths/content/modes.
-4. Apply `rawArgs` without acknowledgement, without daemon unsafe mode, and as non-Admin.
-5. Apply reviewed `rawArgs` with all gates satisfied and query Action Audit.
+4. Verify the run-scoped config carries distinct loopback callback URLs/tokens, rejects an unauthenticated callback, and never persists or logs either token.
+5. Apply `rawArgs` without acknowledgement, without daemon unsafe mode, and as non-Admin; then apply reviewed `rawArgs` with all gates satisfied and query Action Audit.
 
 ### Expected
 
 - Workspace execution retains policy, daemon-PID guard, sandbox, rlimits, env allowlist, and guaranteed process-group kill.
 - SDK workspace/non-idempotent attempts never reach runtime.
-- MCP files have distinct `{run_artifacts}/driver/mcp.json` paths and mode `0600`; no shared temporary file exists.
+- MCP files have distinct `{run_artifacts}/driver/mcp.json` paths and mode `0600`; no shared temporary file exists. Coordination business logic remains in the daemon behind authenticated loopback callbacks, while the stdio binary is transport-only.
 - Raw arguments fail closed until `unsafeRawArgs`, unsafe daemon mode, Admin, and audit context all exist.
 - Successful escape-hatch mutation records `agent.driver.raw_args.apply` without provider credential/session material.
 

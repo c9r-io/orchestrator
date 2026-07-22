@@ -1,13 +1,13 @@
 # Orchestrator - Streaming Agent Runner Architecture Pivot
 
 **Module**: orchestrator
-**Status**: Proposed (Decision Record)
+**Status**: Released (Decision Record)
 **Related Plan**: Replace the one-shot shell-text agent contract with a long-lived, bidirectional, structured streaming contract (stream-json) where the agent calls orchestrator-owned typed tools (MCP), collapsing coordination logic out of the YAML/CEL declarative layer
-**Related QA**: TBD (to be generated when implementation begins)
+**Related QA**: [QA-164](../../qa/orchestrator/164-agent-driver-abstraction.md), [QA-168](../../qa/orchestrator/168-coordination-collapse-mcp-tools.md)
 **Created**: 2026-06-27
-**Last Updated**: 2026-06-28
+**Last Updated**: 2026-07-23
 
-> **Implementation status (superseded seam, 2026-07-22):** the 2026-06-28 first cut proved structured tool calling behind `RunnerExecutorKind::Streaming`. FR-116 subsequently introduced per-Agent `shell/cli`, `claude/cli`, and `codex/cli` drivers, direct `DriverEvent` consumption, complete event-table projection, opaque session attachment, apply-time capability validation, and run-scoped MCP configuration. The global streaming executor remains a provider-owned compatibility bridge while manifests migrate. See [Agent Driver Abstraction](127-agent-driver-abstraction.md).
+> **Implementation status (pivot complete, 2026-07-23):** the 2026-06-28 first cut proved structured tool calling behind `RunnerExecutorKind::Streaming`. FR-116 then introduced per-Agent provider drivers and direct normalized event consumption ([DD-127](127-agent-driver-abstraction.md)). FR-118 replaced canned MCP responses with authenticated daemon-owned tools, migrated a parity pilot away from CEL/captures/post-actions, and measured the remaining cross-step channels ([DD-130](130-coordination-collapse-mcp-tools.md)). The global streaming executor and CEL path remain compatibility bridges while manifests migrate; they are no longer blockers to the pivot.
 
 ## Background
 
@@ -125,14 +125,14 @@ Wrinkles observed (carried into Risks): MCP tools may be **deferred** — the ag
 - Pilot first: rewrite one workflow (candidate: the QA fix-loop or `self-bootstrap`) and compare YAML size and behavior against the shell version side by side.
 - Rollback: remove the streaming opt-in from the agent spec to revert to `ShellRunnerExecutor`.
 
-## Migration Plan (first cut)
+## Migration Plan (completed)
 
-1. Implement the stream-json protocol client and `StreamingAgentRunner` (Option A).
-2. Stand up an orchestrator-hosted MCP tool surface with 3–4 tools (`run_tests`, `create_ticket`, `mark_item`, `read_file`/`apply_patch` if not delegated to the CLI's built-ins).
-3. Wire `allowedTools`/permission mode as the governance layer.
-4. Rewrite one pilot workflow; delete the CEL/captures/pipeline-var machinery it no longer needs.
-5. Ingest the event stream into `events`; construct `RunResult` from it.
-6. Measure: lines of YAML before/after, behavior parity, latency/cost.
+1. **Complete** — implement the stream-json compatibility runner, followed by the durable per-Agent driver seam.
+2. **Complete** — host `run_tests`, `mark_item`, `create_ticket`, `scan_tickets`, and `generate_items` in the daemon behind a per-run authenticated callback.
+3. **Complete** — enforce `allowedTools`, permission mode, private MCP configuration, and driver requirements.
+4. **Complete** — migrate a paired pilot off CEL/captures/JSONPath/post-actions and prove terminal parity.
+5. **Complete** — ingest provider tool I/O and daemon execution receipts into `events`.
+6. **Complete** — record 38→21 effective YAML lines, 15→0 coordination lines, equal `completed/qa_passed` behavior, and four residual non-spilled cross-step fields in DD-130.
 
 ## Test Plan
 
@@ -143,7 +143,8 @@ Wrinkles observed (carried into Risks): MCP tools may be **deferred** — the ag
 
 ## QA Docs
 
-- TBD — to be generated alongside implementation (`docs/qa/orchestrator/<n>-streaming-agent-runner.md`).
+- [QA-164 — Agent Driver Abstraction](../../qa/orchestrator/164-agent-driver-abstraction.md)
+- [QA-168 — Coordination MCP Tools](../../qa/orchestrator/168-coordination-collapse-mcp-tools.md)
 
 ## Acceptance Criteria
 

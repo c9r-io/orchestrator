@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Dedicated Slack App Provisioning** (FR-115) — an advanced per-workspace private App path with a fixed reviewed manifest, local-only short-lived Configuration Token custody, one-time receipt-gated credential import, per-connection encrypted App identity, exact-App OAuth/events, provisioning Attention recovery, reviewed shared↔dedicated migration, semantic manifest upgrade with suspension/reauthorization, separate typed App deletion, CLI stdin, and a [dedicated setup guide](docs/guide/slack-dedicated-app-provisioning.md)
 - **Agent Driver Abstraction** (FR-116) — per-Agent `shell/cli`, `claude/cli`, and `codex/cli` adapters; typed provider-neutral options and workflow requirements; structured apply diagnostics; direct event-stream folding; complete tool/usage/permission event projection; opaque in-memory session attachment; and run-scoped private MCP configuration. See the [driver guide](docs/guide/agent-driver-model.md).
 - **Non-code Workspaces and Global File Sharing** (FR-117) — `task` workspaces with an optional persistent `work_dir`, one implicit process item, provider-neutral convergence, private per-task HOME/cwd allocation, operator-owned `fileSharing` ceilings, read-only global Skills, Process Console task semantics, and a reproducible Slack inventory pilot. See the [user guide](docs/guide/non-code-workspace.md).
+- **Orchestrator-Owned Coordination Tools** (FR-118) — authenticated per-run loopback tool hosting for `run_tests`, `mark_item`, `create_ticket`, `scan_tickets`, and `generate_items`; a transport-only stdio MCP shim; complete daemon/tool event evidence; and a parity pilot that removes all measured CEL/capture/post-action coordination lines. See the [coordination tools guide](docs/guide/coordination-tools.md).
 
 ### Changed
 - The workspace minimum supported Rust version is now 1.88, allowing the patched `plist`/`quick-xml` dependency chain required by current Tauri releases
@@ -27,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Explicit driver phases use `setup → start → consume → fold → record`; the deprecated global streaming executor is now a provider-owned compatibility bridge while legacy manifests migrate
 - Codex CLI cross-step session attachment is certified against `codex-cli 0.144.5` with same-thread context continuity, a sanitized recorded JSONL fixture, an offline replay gate, and an isolated live recertification script
 - Workspace manifests serialize the canonical `work_dir` field while continuing to accept legacy `root_path`; existing omitted `kind` manifests retain `code_repo` behavior
+- Tool-capable Claude driver runs now receive a private mode-`0600` MCP configuration that forwards stdio JSON-RPC to an authenticated, ephemeral daemon callback; legacy shell/CEL workflows remain compatible
 
 ### Fixed
 - Slack source automation now permits different reviewed badge bindings on the same message to create distinct tasks, while preserving one route/task for retries of the same message/reaction/binding identity

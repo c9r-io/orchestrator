@@ -17,6 +17,7 @@
 | [01 - 快速开始](01-quickstart.md) | 5 分钟跑通你的第一个工作流 | 入门 |
 | [02 - 资源模型](02-resource-model.md) | Workspace、Agent、Workflow、StepTemplate | 入门 |
 | [非代码 Workspace 与全局 Skills](non-code-workspace.md) | Task Workspace、独立 HOME、文件共享天花板、Slack pilot | 入门到运维 |
+| [协调工具](coordination-tools.md) | daemon-owned typed 测试、Item、ticket 与动态 Item 协调 | 中级到高级 |
 | [03 - 工作流配置](03-workflow-configuration.md) | Step、作用域、循环、终结规则 | 中级 |
 | [04 - CEL 预钩子](04-cel-prehooks.md) | 基于 CEL 表达式的动态步骤门控 | 中级 |
 | [05 - 高级特性](05-advanced-features.md) | CRD、持久化存储、任务派生、不变量约束 | 高级 |

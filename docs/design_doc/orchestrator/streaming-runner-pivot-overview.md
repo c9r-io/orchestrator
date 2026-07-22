@@ -1,8 +1,8 @@
 # Streaming Runner Pivot — Overview
 
 **Module**: orchestrator
-**Status**: Narrative overview (ties together design docs 101–103 + showcase)
-**Last Updated**: 2026-06-28
+**Status**: Released narrative overview (ties together design docs 101–103, 127, 130 + pilots)
+**Last Updated**: 2026-07-23
 
 A one-page tour of the streaming-runner pivot: why it happened, the four moves
 that delivered it, and the end-to-end demo that proves it.
@@ -36,6 +36,8 @@ to where it belongs.
 | [102](102-stream-json-event-ingestion.md) | Parse the stream into structured records | `tool_use`/`tool_result`/`result` projected into the `events` table and onto `AgentOutput`; tool I/O + run economics become first-class data |
 | [103](103-cel-stream-run-signals.md) | Surface signals to coordination CEL | `tools_called` / `tool_error_count` / `run_cost_usd` … injected as typed pipeline vars; **one unified `bind_pipeline_vars`** exposes them to prehook, convergence, and finalize |
 | [showcase](../../showcases/streaming-mark-done-convergence.md) | End-to-end demo | a real workflow **converges at cycle 1** on `'mark_done' in tools_called` — the agent signals via a typed tool, the loop guard consumes it |
+| [127](127-agent-driver-abstraction.md) | Replace the global runner switch with a provider-neutral per-Agent seam | shell, Claude, and Codex drivers share sandbox/cancel policy and emit normalized events directly |
+| [130](130-coordination-collapse-mcp-tools.md) | Move coordination execution into authenticated daemon-owned tools | five real tools, complete event receipts, behavioral parity, and 15→0 pilot coordination lines |
 
 ## The proof (captured live, claude-haiku)
 
@@ -62,9 +64,8 @@ path still passes its full suite.
 
 ## Where it stands / next
 
-- `mark_done` and `run_tests` are demo tools in `orch-mcp-tools` (a Rust stdio MCP
-  server). Real tools that share daemon state (in-process / HTTP MCP) are the next
-  step (doc 101 risks).
-- Runner selection is a global `executor: streaming` switch today; per-agent
-  routing is a follow-up.
-- Spike: [`scripts/spikes/streaming-agent-runner/`](../../../scripts/spikes/streaming-agent-runner/).
+- The pivot is complete. `orch-mcp-tools` is now transport-only; real coordination tools share daemon state behind a run-scoped authenticated loopback callback.
+- Per-Agent `shell/cli`, `claude/cli`, and `codex/cli` drivers supersede the global executor switch for new manifests.
+- CEL and legacy shell execution remain supported compatibility paths. Migration is incremental and requires per-workflow parity evidence.
+- The pilot found only four residual non-spilled cross-step fields (`goal` and three sandbox-safety fields). Any future typed-channel work should be limited to measured residual needs.
+- Historical spike: [`scripts/spikes/streaming-agent-runner/`](../../../scripts/spikes/streaming-agent-runner/).
