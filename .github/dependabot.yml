@@ -15,3 +15,27 @@ updates:
     open-pull-requests-limit: 10
     commit-message:
       prefix: "ci"
+
+  - package-ecosystem: npm
+    directory: /gui
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: npm
+    directory: /site
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: npm
+    directory: /.claude/skills/project-bootstrap/assets/template/portal
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
