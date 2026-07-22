@@ -159,7 +159,9 @@ fn build_managed_state(
     let file_sharing_policy =
         orchestrator_config::file_sharing::load_file_sharing_policy(&data_dir)
             .context("failed to load file-sharing policy")?;
-    let _ = file_sharing_policy.resolved_global_skills()?;
+    let task_writable_paths =
+        crate::config_load::resolve_task_writable_paths(&data_dir, &active.config)?;
+    let _ = file_sharing_policy.resolved_global_skills(&task_writable_paths)?;
 
     Ok(ManagedState {
         inner: Arc::new(InnerState {

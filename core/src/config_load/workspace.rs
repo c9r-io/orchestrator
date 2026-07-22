@@ -1,5 +1,6 @@
 use crate::config::{OrchestratorConfig, ResolvedProject, ResolvedWorkspace, WorkspaceKind};
 use anyhow::{Context, Result};
+use orchestrator_config::file_sharing::TaskWritablePath;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -45,7 +46,8 @@ pub fn resolve_and_validate_workspaces_for_project(
     let file_sharing = orchestrator_config::file_sharing::load_file_sharing_policy(data_dir)?;
     // Validate global Skill directories even before a task references them so
     // a malformed daemon ceiling can never degrade into runtime best effort.
-    let _ = file_sharing.resolved_global_skills()?;
+    let task_writable_paths = resolve_task_writable_paths(data_dir, config)?;
+    let _ = file_sharing.resolved_global_skills(&task_writable_paths)?;
     let project = config
         .projects
         .get(project_id)
@@ -162,6 +164,75 @@ pub fn resolve_and_validate_workspaces_for_project(
         validate_execution_profiles_for_project(config, workflow, workflow_id, project_id)?;
     }
 
+    Ok(resolved)
+}
+
+/// Resolve every host path that a task workspace could make writable.
+///
+/// Global Skills are daemon-wide, so this intentionally considers task
+/// workspaces and ExecutionProfiles across every project, including resources
+/// not yet paired by a Workflow. A later resource apply must not be able to
+/// turn an already trusted global Skill into a task-writable supply-chain path.
+pub fn resolve_task_writable_paths(
+    data_dir: &Path,
+    config: &OrchestratorConfig,
+) -> Result<Vec<TaskWritablePath>> {
+    let mut resolved = Vec::new();
+    for (project_id, project) in &config.projects {
+        let task_workspaces = project
+            .workspaces
+            .iter()
+            .filter(|(_, workspace)| workspace.kind == WorkspaceKind::Task)
+            .map(|(workspace_id, workspace)| {
+                let (path, source) = if workspace.root_path.trim().is_empty() {
+                    (
+                        data_dir.join("task-homes"),
+                        format!(
+                            "project '{project_id}' workspace '{workspace_id}' managed task home"
+                        ),
+                    )
+                } else {
+                    (
+                        data_dir.join(&workspace.root_path),
+                        format!("project '{project_id}' workspace '{workspace_id}'.work_dir"),
+                    )
+                };
+                (path, source)
+            })
+            .collect::<Vec<_>>();
+
+        for (path, source) in &task_workspaces {
+            resolved.push(TaskWritablePath::new(path, source));
+        }
+
+        for (profile_id, profile) in &project.execution_profiles {
+            for raw in &profile.writable_paths {
+                // Task preflight rejects environment-expanded paths before an
+                // agent can run, so they cannot form an executable write grant.
+                if raw.contains('$') {
+                    continue;
+                }
+                let expanded = orchestrator_config::file_sharing::expand_home(raw)?;
+                if expanded.is_absolute() {
+                    resolved.push(TaskWritablePath::new(
+                        expanded,
+                        format!(
+                            "project '{project_id}' ExecutionProfile '{profile_id}'.writable_paths"
+                        ),
+                    ));
+                    continue;
+                }
+                for (workspace_path, _) in &task_workspaces {
+                    resolved.push(TaskWritablePath::new(
+                        workspace_path.join(&expanded),
+                        format!(
+                            "project '{project_id}' ExecutionProfile '{profile_id}'.writable_paths"
+                        ),
+                    ));
+                }
+            }
+        }
+    }
     Ok(resolved)
 }
 
@@ -563,6 +634,133 @@ mod tests {
             workspace.artifacts_dir,
             data_dir.path().join("task-artifacts/task-workspace")
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn global_skill_inside_task_work_dir_is_rejected_during_config_load() {
+        use crate::config::{ProjectConfig, WorkspaceConfig, WorkspaceKind};
+        use std::os::unix::fs::PermissionsExt;
+
+        let data_dir = tempfile::tempdir().expect("data dir");
+        let shared = data_dir.path().join("shared");
+        let workspace = shared.join("workspace");
+        let skill = workspace.join("skills");
+        std::fs::create_dir_all(&skill).expect("skill directory");
+        std::fs::set_permissions(&skill, std::fs::Permissions::from_mode(0o755))
+            .expect("trusted permission bits");
+        let policy = serde_yaml::to_string(&serde_json::json!({
+            "fileSharing": {
+                "globalSkills": [{ "path": skill }],
+                "shareableRoots": [shared]
+            }
+        }))
+        .expect("serialize file sharing policy");
+        std::fs::write(data_dir.path().join("file-sharing.yaml"), policy)
+            .expect("write file sharing policy");
+        let config = OrchestratorConfig {
+            projects: [(
+                "project".to_string(),
+                ProjectConfig {
+                    workspaces: [(
+                        "task".to_string(),
+                        WorkspaceConfig {
+                            kind: WorkspaceKind::Task,
+                            root_path: workspace.to_string_lossy().into_owned(),
+                            qa_targets: Vec::new(),
+                            ticket_dir: String::new(),
+                            self_referential: false,
+                            health_policy: Default::default(),
+                            artifacts_dir: None,
+                        },
+                    )]
+                    .into(),
+                    ..ProjectConfig::default()
+                },
+            )]
+            .into(),
+            ..OrchestratorConfig::default()
+        };
+
+        let error =
+            resolve_and_validate_workspaces_for_project(data_dir.path(), &config, "project")
+                .expect_err("task work_dir overlap must fail");
+        assert!(
+            error
+                .to_string()
+                .contains("FILE_SHARING_GLOBAL_SKILL_UNTRUSTED")
+        );
+        assert!(error.to_string().contains("workspace 'task'.work_dir"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn global_skill_overlapping_writable_profile_is_rejected_during_config_load() {
+        use crate::config::{
+            ExecutionProfileConfig, ProjectConfig, WorkspaceConfig, WorkspaceKind,
+        };
+        use std::os::unix::fs::PermissionsExt;
+
+        let data_dir = tempfile::tempdir().expect("data dir");
+        let shared = data_dir.path().join("shared");
+        let workspace = shared.join("workspace");
+        let skill = shared.join("skills");
+        std::fs::create_dir_all(&workspace).expect("workspace");
+        std::fs::create_dir(&skill).expect("skill directory");
+        std::fs::set_permissions(&skill, std::fs::Permissions::from_mode(0o755))
+            .expect("trusted permission bits");
+        let policy = serde_yaml::to_string(&serde_json::json!({
+            "fileSharing": {
+                "globalSkills": [{ "path": skill }],
+                "shareableRoots": [shared]
+            }
+        }))
+        .expect("serialize file sharing policy");
+        std::fs::write(data_dir.path().join("file-sharing.yaml"), policy)
+            .expect("write file sharing policy");
+        let config = OrchestratorConfig {
+            projects: [(
+                "project".to_string(),
+                ProjectConfig {
+                    workspaces: [(
+                        "task".to_string(),
+                        WorkspaceConfig {
+                            kind: WorkspaceKind::Task,
+                            root_path: workspace.to_string_lossy().into_owned(),
+                            qa_targets: Vec::new(),
+                            ticket_dir: String::new(),
+                            self_referential: false,
+                            health_policy: Default::default(),
+                            artifacts_dir: None,
+                        },
+                    )]
+                    .into(),
+                    execution_profiles: [(
+                        "writer".to_string(),
+                        ExecutionProfileConfig {
+                            writable_paths: vec![
+                                skill.join("generated").to_string_lossy().into_owned(),
+                            ],
+                            ..ExecutionProfileConfig::default()
+                        },
+                    )]
+                    .into(),
+                    ..ProjectConfig::default()
+                },
+            )]
+            .into(),
+            ..OrchestratorConfig::default()
+        };
+
+        let error =
+            resolve_and_validate_workspaces_for_project(data_dir.path(), &config, "project")
+                .expect_err("writable profile overlap must fail");
+        assert!(
+            error
+                .to_string()
+                .contains("FILE_SHARING_GLOBAL_SKILL_UNTRUSTED")
+        );
+        assert!(error.to_string().contains("ExecutionProfile 'writer'"));
     }
 
     #[test]

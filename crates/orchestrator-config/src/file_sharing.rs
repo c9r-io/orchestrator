@@ -6,6 +6,8 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Component, Path, PathBuf};
 
+const GLOBAL_SKILL_UNTRUSTED: &str = "FILE_SHARING_GLOBAL_SKILL_UNTRUSTED";
+
 /// One read-only global Skill directory.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -22,6 +24,25 @@ pub struct FileSharingPolicy {
     pub global_skills: Vec<GlobalSkillPath>,
     /// Operator-owned ceiling for all user-declared host paths.
     pub shareable_roots: Vec<String>,
+}
+
+/// One host path that a task execution can modify.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskWritablePath {
+    /// Canonical or canonicalizable host path.
+    pub path: PathBuf,
+    /// Operator-facing configuration source for diagnostics.
+    pub source: String,
+}
+
+impl TaskWritablePath {
+    /// Creates a task-writable path with its configuration source.
+    pub fn new(path: impl Into<PathBuf>, source: impl Into<String>) -> Self {
+        Self {
+            path: path.into(),
+            source: source.into(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -107,8 +128,11 @@ impl FileSharingPolicy {
             .collect()
     }
 
-    /// Resolve global Skill paths and verify each is inside the ceiling.
-    pub fn resolved_global_skills(&self) -> anyhow::Result<Vec<PathBuf>> {
+    /// Resolve global Skill paths and verify their provenance and isolation.
+    pub fn resolved_global_skills(
+        &self,
+        task_writable_paths: &[TaskWritablePath],
+    ) -> anyhow::Result<Vec<PathBuf>> {
         self.global_skills
             .iter()
             .map(|entry| {
@@ -116,6 +140,21 @@ impl FileSharingPolicy {
                 self.ensure_shareable(&path, "fileSharing.globalSkills")?;
                 if !path.is_dir() {
                     anyhow::bail!("global Skill path must be a directory: {}", path.display());
+                }
+                validate_global_skill_metadata(&path)?;
+                for writable in task_writable_paths {
+                    let writable_path = canonicalize_policy_path(&writable.path)?;
+                    if path.starts_with(&writable_path) || writable_path.starts_with(&path) {
+                        return Err(untrusted_global_skill(
+                            &path,
+                            format!(
+                                "it overlaps task-writable path '{}' from {}",
+                                writable_path.display(),
+                                writable.source
+                            ),
+                            "move the global Skill outside every task work_dir and writable ExecutionProfile path, or remove that write authorization",
+                        ));
+                    }
                 }
                 Ok(path)
             })
@@ -136,9 +175,77 @@ impl FileSharingPolicy {
     }
 }
 
+fn untrusted_global_skill(
+    path: &Path,
+    reason: impl std::fmt::Display,
+    suggested_fix: &str,
+) -> anyhow::Error {
+    anyhow::anyhow!(
+        "[{GLOBAL_SKILL_UNTRUSTED}] global Skill directory '{}' is untrusted: {reason}\n  category: authorization\n  suggested_fix: {suggested_fix}",
+        path.display()
+    )
+}
+
+#[cfg(unix)]
+fn validate_global_skill_metadata(path: &Path) -> anyhow::Result<()> {
+    // SAFETY: geteuid has no preconditions and does not dereference pointers.
+    let daemon_uid = unsafe { libc::geteuid() };
+    validate_global_skill_metadata_for_uid(path, daemon_uid)
+}
+
+#[cfg(unix)]
+fn validate_global_skill_metadata_for_uid(path: &Path, daemon_uid: u32) -> anyhow::Result<()> {
+    use std::os::unix::fs::MetadataExt;
+
+    let metadata = std::fs::metadata(path).map_err(|error| {
+        untrusted_global_skill(
+            path,
+            format!("its metadata cannot be read: {error}"),
+            "restore the directory and make it readable by the daemon user",
+        )
+    })?;
+    if metadata.uid() != daemon_uid {
+        return Err(untrusted_global_skill(
+            path,
+            format!(
+                "owner uid {} does not match daemon uid {daemon_uid}",
+                metadata.uid()
+            ),
+            "change the directory owner to the daemon user and restart orchestratord",
+        ));
+    }
+    let mode = metadata.mode() & 0o7777;
+    if mode & 0o022 != 0 {
+        return Err(untrusted_global_skill(
+            path,
+            format!("mode {mode:#06o} permits group or world writes"),
+            "remove group/world write permission (for example, chmod go-w) and restart orchestratord",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn validate_global_skill_metadata(path: &Path) -> anyhow::Result<()> {
+    Err(untrusted_global_skill(
+        path,
+        "this platform cannot verify Unix owner and permission bits",
+        "disable fileSharing.globalSkills or run orchestratord on a supported Unix platform",
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn policy_for(root: &Path, global_skill: &Path) -> FileSharingPolicy {
+        FileSharingPolicy {
+            global_skills: vec![GlobalSkillPath {
+                path: global_skill.to_string_lossy().into_owned(),
+            }],
+            shareable_roots: vec![root.to_string_lossy().into_owned()],
+        }
+    }
 
     #[test]
     fn missing_policy_is_deny_all() {
@@ -189,5 +296,113 @@ mod tests {
             shareable_roots: vec![root.to_string_lossy().into_owned()],
         };
         assert!(policy.ensure_shareable(&root.join("link"), "test").is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn global_skill_owned_by_another_uid_is_rejected() {
+        use std::os::unix::fs::MetadataExt;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let skill = dir.path().join("skills");
+        std::fs::create_dir(&skill).expect("skill directory");
+        let actual_uid = std::fs::metadata(&skill).expect("metadata").uid();
+        let error = validate_global_skill_metadata_for_uid(&skill, actual_uid.wrapping_add(1))
+            .expect_err("different owner must fail");
+        assert!(error.to_string().contains(GLOBAL_SKILL_UNTRUSTED));
+        assert!(error.to_string().contains("owner uid"));
+        assert!(error.to_string().contains("suggested_fix"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn group_writable_global_skill_is_rejected() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let skill = dir.path().join("skills");
+        std::fs::create_dir(&skill).expect("skill directory");
+        std::fs::set_permissions(&skill, std::fs::Permissions::from_mode(0o770))
+            .expect("set permissions");
+        let error = policy_for(dir.path(), &skill)
+            .resolved_global_skills(&[])
+            .expect_err("group-writable directory must fail");
+        assert!(error.to_string().contains(GLOBAL_SKILL_UNTRUSTED));
+        assert!(error.to_string().contains("group or world writes"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn world_writable_global_skill_is_rejected() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let skill = dir.path().join("skills");
+        std::fs::create_dir(&skill).expect("skill directory");
+        std::fs::set_permissions(&skill, std::fs::Permissions::from_mode(0o707))
+            .expect("set permissions");
+        let error = policy_for(dir.path(), &skill)
+            .resolved_global_skills(&[])
+            .expect_err("world-writable directory must fail");
+        assert!(error.to_string().contains(GLOBAL_SKILL_UNTRUSTED));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn global_skill_overlapping_task_writable_path_is_rejected() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let skill = dir.path().join("skills");
+        let writable_child = skill.join("generated");
+        std::fs::create_dir_all(&writable_child).expect("writable child");
+        std::fs::set_permissions(&skill, std::fs::Permissions::from_mode(0o700))
+            .expect("set permissions");
+        let error = policy_for(dir.path(), &skill)
+            .resolved_global_skills(&[TaskWritablePath::new(
+                &writable_child,
+                "executionProfile.writable_paths",
+            )])
+            .expect_err("writable descendant must fail");
+        assert!(error.to_string().contains(GLOBAL_SKILL_UNTRUSTED));
+        assert!(
+            error
+                .to_string()
+                .contains("executionProfile.writable_paths")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn trusted_isolated_global_skill_is_accepted() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let skill = dir.path().join("skills");
+        let workspace = dir.path().join("workspace");
+        std::fs::create_dir(&skill).expect("skill directory");
+        std::fs::create_dir(&workspace).expect("workspace directory");
+        std::fs::set_permissions(&skill, std::fs::Permissions::from_mode(0o755))
+            .expect("set permissions");
+        let resolved = policy_for(dir.path(), &skill)
+            .resolved_global_skills(&[TaskWritablePath::new(&workspace, "workspace.work_dir")])
+            .expect("trusted directory");
+        assert_eq!(
+            resolved,
+            vec![skill.canonicalize().expect("canonical skill path")]
+        );
+    }
+
+    #[cfg(not(unix))]
+    #[test]
+    fn non_unix_global_skill_is_rejected_when_provenance_cannot_be_verified() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let skill = dir.path().join("skills");
+        std::fs::create_dir(&skill).expect("skill directory");
+        let error = policy_for(dir.path(), &skill)
+            .resolved_global_skills(&[])
+            .expect_err("unsupported provenance check must fail closed");
+        assert!(error.to_string().contains(GLOBAL_SKILL_UNTRUSTED));
+        assert!(error.to_string().contains("supported Unix platform"));
     }
 }

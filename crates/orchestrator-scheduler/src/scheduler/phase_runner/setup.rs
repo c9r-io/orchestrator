@@ -43,7 +43,7 @@ pub(super) async fn setup_phase_execution(
 
     let (
         runner,
-        execution_profile,
+        mut execution_profile,
         mut resolved_extra_env,
         sensitive_values,
         driver,
@@ -110,12 +110,6 @@ pub(super) async fn setup_phase_execution(
                             workspace_root,
                             &always_writable,
                         );
-                        if task_workspace
-                            && let Ok(global_skills) =
-                                state.file_sharing_policy.resolved_global_skills()
-                        {
-                            resolved.readable_paths.extend(global_skills);
-                        }
                         if task_workspace {
                             resolved.strict_read_paths = true;
                             resolved.host_home =
@@ -135,6 +129,27 @@ pub(super) async fn setup_phase_execution(
             task_workspace,
         )
     };
+    let global_skills = if task_workspace {
+        let task_writable_paths = execution_profile
+            .writable_paths
+            .iter()
+            .map(|path| {
+                orchestrator_config::file_sharing::TaskWritablePath::new(
+                    path,
+                    "runtime ExecutionProfile writable path",
+                )
+            })
+            .collect::<Vec<_>>();
+        state
+            .file_sharing_policy
+            .resolved_global_skills(&task_writable_paths)?
+    } else {
+        Vec::new()
+    };
+    execution_profile
+        .readable_paths
+        .extend(global_skills.iter().cloned());
+
     if task_workspace {
         let internal_artifacts = state.data_dir.join("task-artifacts").join(task_id);
         for path in execution_profile
@@ -181,7 +196,6 @@ pub(super) async fn setup_phase_execution(
         ] {
             resolved_extra_env.insert(key.to_string(), value.to_string_lossy().into_owned());
         }
-        let global_skills = state.file_sharing_policy.resolved_global_skills()?;
         resolved_extra_env.insert(
             "ORCHESTRATOR_GLOBAL_SKILLS".to_string(),
             global_skills

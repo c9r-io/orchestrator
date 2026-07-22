@@ -44,10 +44,10 @@ export ORCHESTRATORD_DATA_DIR="$QA_ROOT/runtime"
 export ORCHESTRATOR_CONTROL_PLANE_CONFIG="$QA_HOME/.orchestrator/control-plane/config.yaml"
 export ORCHESTRATOR_SLACK_API_BASE_URL="http://$FAKE_SLACK_BIND/api/"
 unset ORCHESTRATOR_SOCKET
-mkdir -p "$ORCHESTRATORD_DATA_DIR" "$QA_ROOT/global-skills/warehouse" "$QA_ROOT/evidence"
-WORK_ROOT="$(cd "$QA_ROOT" && pwd -P)"
+mkdir -p "$ORCHESTRATORD_DATA_DIR" "$QA_ROOT/global-skills/warehouse" "$QA_ROOT/workspace/evidence"
+WORK_ROOT="$(cd "$QA_ROOT/workspace" && pwd -P)"
 printf 'Use inventory evidence and require human approval before promising stock.\n' > "$QA_ROOT/global-skills/warehouse/SKILL.md"
-printf 'sku=widget-a available=3\n' > "$QA_ROOT/inventory.txt"
+printf 'sku=widget-a available=3\n' > "$QA_ROOT/workspace/inventory.txt"
 cat > "$ORCHESTRATORD_DATA_DIR/file-sharing.yaml" <<EOF
 fileSharing:
   globalSkills:
@@ -88,9 +88,9 @@ PY
 SLACK_PID=$!
 
 (
-  cd "$QA_ROOT"
-  "$ORCHD" --foreground --bind "$GRPC_BIND" --webhook-bind "$WEBHOOK_BIND" --workers 1 --uds-max-role admin > daemon.log 2>&1 &
-  echo $! > daemon.pid
+  cd "$QA_ROOT/workspace"
+  "$ORCHD" --foreground --bind "$GRPC_BIND" --webhook-bind "$WEBHOOK_BIND" --workers 1 --uds-max-role admin > "$QA_ROOT/daemon.log" 2>&1 &
+  echo $! > "$QA_ROOT/daemon.pid"
 )
 DAEMON_PID="$(<"$QA_ROOT/daemon.pid")"
 for _ in {1..80}; do
@@ -134,7 +134,7 @@ else
 fi
 
 PERMALINK="https://qa-workspace.slack.com/archives/C_WAREHOUSE/p${MESSAGE_TS//./}"
-EVIDENCE="$QA_ROOT/evidence/reply-suggestion.txt"
+EVIDENCE="$QA_ROOT/workspace/evidence/reply-suggestion.txt"
 if [[ -f "$EVIDENCE" ]] && rg -q --fixed-strings "$PERMALINK" "$EVIDENCE" && \
    rg -q 'available=3' "$EVIDENCE" && rg -q 'reserve after approval' "$EVIDENCE"; then
   pass "agent receives the Slack message URL, reads inventory, and writes an approval-ready suggestion"
@@ -170,7 +170,7 @@ else
   fail "Attention handoff was not projected"
 fi
 
-EPHEMERAL_ID="$(cd "$QA_ROOT" && "$ORCH" task create --project "$PROJECT" --workspace ephemeral-ops --workflow warehouse-reply --name ephemeral --goal cleanup --no-start | rg -o '[0-9a-f-]{36}' | head -1)"
+EPHEMERAL_ID="$(cd "$QA_ROOT/workspace" && "$ORCH" task create --project "$PROJECT" --workspace ephemeral-ops --workflow warehouse-reply --name ephemeral --goal cleanup --no-start | rg -o '[0-9a-f-]{36}' | head -1)"
 EPHEMERAL_HOME="$(sqlite3 "$DB" "SELECT workspace_root FROM tasks WHERE id='$EPHEMERAL_ID';")"
 MODE="$(stat -f '%Lp' "$EPHEMERAL_HOME" 2>/dev/null || stat -c '%a' "$EPHEMERAL_HOME")"
 "$ORCH" task start "$EPHEMERAL_ID" >/dev/null
