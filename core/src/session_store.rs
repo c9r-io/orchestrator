@@ -250,7 +250,7 @@ pub fn capture_process_fingerprint(pid: u32) -> Option<String> {
         // Field 22 in proc_pid_stat; the post-comm slice begins at field 3.
         let start_ticks = fields.get(19)?;
         let boot_id = std::fs::read_to_string("/proc/sys/kernel/random/boot_id").ok()?;
-        return Some(format!("{pid}:{}:{}", boot_id.trim(), start_ticks));
+        Some(format!("{pid}:{}:{}", boot_id.trim(), start_ticks))
     }
     #[cfg(not(target_os = "linux"))]
     {
