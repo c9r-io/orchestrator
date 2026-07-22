@@ -1,6 +1,6 @@
 # Feature Requests
 
-本目录收录 `orchestrator` 的正式功能需求文档。Agent Process Console v1 已完成闭环；产品结构与发布边界分别由[信息架构](../design_doc/orchestrator/110-process-console-information-architecture.md)和[发布验收设计](../design_doc/orchestrator/116-process-console-release-acceptance.md)持续承载。Slack reaction 驱动的 Skill 任务自动化已按 [Slack Reaction Skill Automation Roadmap](slack-reaction-skill-automation-roadmap.md)发布；Managed Slack Connection、官方 App OAuth 与[每 workspace 独立 App provisioning](../design_doc/orchestrator/126-dedicated-slack-app-auto-provisioning.md)均已闭环。
+本目录收录 `orchestrator` 的正式功能需求文档。Agent Process Console v1 已完成闭环；产品结构与发布边界分别由[信息架构](../design_doc/orchestrator/110-process-console-information-architecture.md)和[发布验收设计](../design_doc/orchestrator/116-process-console-release-acceptance.md)持续承载。Slack reaction 驱动的 Skill 任务自动化已按 [Slack Reaction Skill Automation Roadmap](slack-reaction-skill-automation-roadmap.md)发布；Managed Slack Connection、官方 App OAuth 与[每 workspace 独立 App provisioning](../design_doc/orchestrator/126-dedicated-slack-app-auto-provisioning.md)均已闭环。Agent 执行后端契约的供应商中立化由 [FR-116 Agent Driver 抽象](FR-116-agent-driver-abstraction.md)承载，是 `docs/design_doc/orchestrator/101-streaming-agent-runner-architecture-pivot.md` 的第二阶段。
 
 ## 当前条目
 
@@ -79,6 +79,7 @@
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
+| FR-116 | Agent Driver 抽象 — 供应商中立的执行后端契约 | P1 | Proposed |
 
 ## 说明
 
