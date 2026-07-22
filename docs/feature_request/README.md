@@ -79,7 +79,6 @@
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
-| FR-117 | 非代码 Workspace 与全局文件共享 — 通用 Agent 场景解耦 | P1 | Proposed |
 
 ## 说明
 
@@ -89,6 +88,7 @@
 - `In Progress`: 已有部分阶段落地，剩余阶段仍在治理中
 - `Implemented`: 需求已完成并进入维护阶段
 - 已闭环并删除的 FR，应由对应 `docs/design_doc/**` 与 `docs/qa/**` 继续承载设计和验证信息
+- FR-117 已闭环删除；其 task Workspace、隐式 process item、FileSharing 天花板、HOME/XDG 隔离、全局 Skill 只读访问、Console 语义与 Slack inventory pilot 证据现由 `docs/design_doc/orchestrator/128-non-code-workspace-and-global-file-sharing.md`、`docs/qa/orchestrator/165-non-code-workspace-and-global-file-sharing.md`、`docs/security/authorization/02-file-sharing-ceiling.md`、`docs/security/file-security/02-workspace-home-isolation.md`、`docs/guide/non-code-workspace.md` 与 `scripts/qa/test-non-code-workspace.sh` 承载
 - FR-116 已闭环删除；其 driver 契约、三种 CLI provider、能力门禁、直接事件折叠、session 隐私、MCP 隔离与 shell pilot 证据现由 `docs/design_doc/orchestrator/127-agent-driver-abstraction.md`、`docs/qa/orchestrator/164-agent-driver-abstraction.md`、`docs/guide/agent-driver-model.md`、`fixtures/manifests/bundles/agent-driver-fixture.yaml` 与 `scripts/qa/test-agent-driver-abstraction.sh` 承载
   - 遗留低优先级 follow-up：[FR-116-A Codex Driver 会话续接语义验证](FR-116-A-codex-session-resume-verification.md)（P3 / Deferred，非独立 FR 编号）
 - FR-115 已闭环删除；其 per-workspace private App provisioning、local-only Configuration Token、receipt-gated credential import、exact-App OAuth/events、reviewed lifecycle/migration、same-message two-badge routing、离线 cursor 恢复与受控 Slack sandbox 清理证据现由 `docs/design_doc/orchestrator/126-dedicated-slack-app-auto-provisioning.md`、`docs/qa/orchestrator/163-dedicated-slack-app-auto-provisioning.md`、`docs/guide/slack-dedicated-app-provisioning.md` 与 `scripts/qa/test-slack-dedicated-app-provisioning.sh` 承载
