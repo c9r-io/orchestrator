@@ -49,9 +49,9 @@ fn run_probe(probe: SandboxProbeCommands) -> Result<()> {
     match probe {
         SandboxProbeCommands::WriteFile { path, contents } => {
             let mut file = File::create(&path)
-                .with_context(|| format!("failed to create probe file '{}'", path))?;
+                .with_context(|| format!("failed to create probe file '{path}'"))?;
             file.write_all(contents.as_bytes())
-                .with_context(|| format!("failed to write probe file '{}'", path))?;
+                .with_context(|| format!("failed to write probe file '{path}'"))?;
             Ok(())
         }
         SandboxProbeCommands::OpenFiles { count } => open_files_probe(count),
@@ -190,7 +190,7 @@ fn tcp_serve_probe(bind: &str, port: u16, ready_file: Option<&str>) -> Result<()
         .with_context(|| format!("bind tcp server {bind}:{port}"))?;
     if let Some(path) = ready_file {
         std::fs::write(path, format!("{bind}:{port}"))
-            .with_context(|| format!("write ready file '{}'", path))?;
+            .with_context(|| format!("write ready file '{path}'"))?;
     }
     let (mut stream, _) = listener.accept().context("accept tcp client")?;
     stream

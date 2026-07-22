@@ -110,12 +110,13 @@ impl TaskExecutionStep {
             // step around an Item-default capability without their explicit
             // `scope: task` being silently overridden after a config↔spec
             // round trip.  See FR-094.
-            if scope == StepScope::Task && CONVENTIONS.lookup(&self.id).is_some() {
-                if let Some(ref cap) = self.required_capability {
-                    let cap_scope = CONVENTIONS.default_scope(cap);
-                    if cap_scope == StepScope::Item {
-                        return cap_scope;
-                    }
+            if scope == StepScope::Task
+                && CONVENTIONS.lookup(&self.id).is_some()
+                && let Some(ref cap) = self.required_capability
+            {
+                let cap_scope = CONVENTIONS.default_scope(cap);
+                if cap_scope == StepScope::Item {
+                    return cap_scope;
                 }
             }
             scope
@@ -140,12 +141,12 @@ impl TaskExecutionStep {
         if !self.chain_steps.is_empty() {
             return std::borrow::Cow::Owned(ExecutionMode::Chain);
         }
-        if let Some(ref bname) = self.builtin {
-            if is_known_builtin_step_name(bname) {
-                return std::borrow::Cow::Owned(ExecutionMode::Builtin {
-                    name: bname.clone(),
-                });
-            }
+        if let Some(ref bname) = self.builtin
+            && is_known_builtin_step_name(bname)
+        {
+            return std::borrow::Cow::Owned(ExecutionMode::Builtin {
+                name: bname.clone(),
+            });
         }
         if self.command.is_some() {
             return std::borrow::Cow::Owned(ExecutionMode::Builtin {
@@ -178,12 +179,12 @@ impl TaskExecutionStep {
             return;
         }
 
-        if let Some(ref name) = self.builtin.clone() {
-            if is_known_builtin_step_name(name) {
-                self.behavior.execution = ExecutionMode::Builtin { name: name.clone() };
-                self.required_capability = None;
-                return;
-            }
+        if let Some(ref name) = self.builtin.clone()
+            && is_known_builtin_step_name(name)
+        {
+            self.behavior.execution = ExecutionMode::Builtin { name: name.clone() };
+            self.required_capability = None;
+            return;
         }
 
         if self.command.is_some() {
@@ -912,20 +913,14 @@ mod tests {
         for name in &["init_once", "loop_guard", "ticket_scan", "self_test"] {
             let mut step = make_agent_step(name, Some(name), None);
             // Starts as Agent (default)
-            assert_eq!(
-                step.behavior.execution,
-                ExecutionMode::Agent,
-                "name={}",
-                name
-            );
+            assert_eq!(step.behavior.execution, ExecutionMode::Agent, "name={name}");
             step.renormalize_execution_mode();
             assert_eq!(
                 step.behavior.execution,
                 ExecutionMode::Builtin {
                     name: name.to_string()
                 },
-                "name={}",
-                name
+                "name={name}"
             );
         }
     }

@@ -1343,7 +1343,7 @@ impl OrchestratorService for TestOrchestratorServer {
         .map_err(map_core_error)?;
         let scope = req
             .project
-            .map(|p| format!(" (project: {})", p))
+            .map(|p| format!(" (project: {p})"))
             .unwrap_or_default();
         let verb = if req.dry_run {
             "would be deleted (dry run)"

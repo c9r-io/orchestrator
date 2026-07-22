@@ -22,24 +22,19 @@ pub(super) fn validate_adaptive_workflow<A: AgentLookup>(
         .filter(|value| !value.is_empty())
         .ok_or_else(|| {
             anyhow::anyhow!(
-                "workflow '{}' adaptive planner is enabled but adaptive.planner_agent is missing",
-                workflow_id
+                "workflow '{workflow_id}' adaptive planner is enabled but adaptive.planner_agent is missing"
             )
         })?;
 
     let agent = agents.get_agent(planner_agent).ok_or_else(|| {
         anyhow::anyhow!(
-            "workflow '{}' adaptive planner references unknown agent '{}'",
-            workflow_id,
-            planner_agent
+            "workflow '{workflow_id}' adaptive planner references unknown agent '{planner_agent}'"
         )
     })?;
 
     if !agent.supports_capability("adaptive_plan") {
         anyhow::bail!(
-            "workflow '{}' adaptive planner agent '{}' must support capability 'adaptive_plan'",
-            workflow_id,
-            planner_agent
+            "workflow '{workflow_id}' adaptive planner agent '{planner_agent}' must support capability 'adaptive_plan'"
         );
     }
 

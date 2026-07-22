@@ -105,8 +105,7 @@ fn prepare_task_for_start_batch_rejects_already_running() {
         .expect_err("should reject already-running task");
     assert!(
         err.to_string().contains("already running"),
-        "error should mention 'already running', got: {}",
-        err
+        "error should mention 'already running', got: {err}"
     );
 }
 
@@ -121,8 +120,7 @@ fn prepare_task_for_start_batch_errors_for_missing_task() {
         .expect_err("should error for missing task");
     assert!(
         err.to_string().contains("task not found"),
-        "error should mention 'task not found', got: {}",
-        err
+        "error should mention 'task not found', got: {err}"
     );
 }
 
@@ -766,8 +764,7 @@ fn recover_orphaned_running_items_skips_paused_task_in_return() {
     // Return value should be EMPTY — paused task is not returned for worker notification
     assert!(
         recovered.is_empty(),
-        "paused task should not appear in recovered list, got: {:?}",
-        recovered
+        "paused task should not appear in recovered list, got: {recovered:?}"
     );
 
     // But the item should still be reset to pending (ready for later resume)

@@ -75,21 +75,21 @@ fn get_single_resource(
         _ => {
             // CRD-defined custom resource fallback (skip kinds with dedicated ProjectConfig
             // projections — those are handled by the match arms above)
-            if let Some(crd) = crate::crd::resolve::find_crd_by_kind_or_alias(config, kind) {
-                if !crate::crd::resolve::is_builtin_kind(&crd.kind) {
-                    let storage_key = format!("{}/{}", crd.kind, name);
-                    if let Some(cr) = config.custom_resources.get(&storage_key) {
-                        return format_output(cr, output_format);
-                    }
-                    return Err(classify_resource_error(
-                        "resource.get",
-                        anyhow::anyhow!("{} not found: {}", crd.kind, name),
-                    ));
+            if let Some(crd) = crate::crd::resolve::find_crd_by_kind_or_alias(config, kind)
+                && !crate::crd::resolve::is_builtin_kind(&crd.kind)
+            {
+                let storage_key = format!("{}/{}", crd.kind, name);
+                if let Some(cr) = config.custom_resources.get(&storage_key) {
+                    return format_output(cr, output_format);
                 }
+                return Err(classify_resource_error(
+                    "resource.get",
+                    anyhow::anyhow!("{} not found: {}", crd.kind, name),
+                ));
             }
             return Err(classify_resource_error(
                 "resource.get",
-                anyhow::anyhow!("unknown resource type: {}", kind),
+                anyhow::anyhow!("unknown resource type: {kind}"),
             ));
         }
     };
@@ -105,7 +105,7 @@ fn get_single_resource(
             let ws = project.workspaces.get(name).ok_or_else(|| {
                 classify_resource_error(
                     "resource.get",
-                    anyhow::anyhow!("workspace not found: {}", name),
+                    anyhow::anyhow!("workspace not found: {name}"),
                 )
             })?;
             format_output(ws, output_format)
@@ -114,17 +114,14 @@ fn get_single_resource(
             let wf = project.workflows.get(name).ok_or_else(|| {
                 classify_resource_error(
                     "resource.get",
-                    anyhow::anyhow!("workflow not found: {}", name),
+                    anyhow::anyhow!("workflow not found: {name}"),
                 )
             })?;
             format_output(wf, output_format)
         }
         "agent" => {
             let agent = project.agents.get(name).ok_or_else(|| {
-                classify_resource_error(
-                    "resource.get",
-                    anyhow::anyhow!("agent not found: {}", name),
-                )
+                classify_resource_error("resource.get", anyhow::anyhow!("agent not found: {name}"))
             })?;
             format_output(agent, output_format)
         }
@@ -132,7 +129,7 @@ fn get_single_resource(
             let trigger = project.triggers.get(name).ok_or_else(|| {
                 classify_resource_error(
                     "resource.get",
-                    anyhow::anyhow!("trigger not found: {}", name),
+                    anyhow::anyhow!("trigger not found: {name}"),
                 )
             })?;
             format_output(trigger, output_format)
@@ -141,7 +138,7 @@ fn get_single_resource(
             let template = project.source_task_templates.get(name).ok_or_else(|| {
                 classify_resource_error(
                     "resource.get",
-                    anyhow::anyhow!("source task template not found: {}", name),
+                    anyhow::anyhow!("source task template not found: {name}"),
                 )
             })?;
             format_output(template, output_format)
@@ -150,7 +147,7 @@ fn get_single_resource(
             let binding = project.source_task_bindings.get(name).ok_or_else(|| {
                 classify_resource_error(
                     "resource.get",
-                    anyhow::anyhow!("source task binding not found: {}", name),
+                    anyhow::anyhow!("source task binding not found: {name}"),
                 )
             })?;
             format_output(binding, output_format)
@@ -193,39 +190,38 @@ fn get_list_resource(
             // CRD-defined custom resource list fallback (skip kinds with dedicated ProjectConfig
             // projections — those are handled by the match arms above)
             if let Some(crd) = crate::crd::resolve::find_crd_by_kind_or_alias(config, resource_type)
+                && !crate::crd::resolve::is_builtin_kind(&crd.kind)
             {
-                if !crate::crd::resolve::is_builtin_kind(&crd.kind) {
-                    let prefix = format!("{}/", crd.kind);
-                    let cr_names: Vec<String> = config
-                        .custom_resources
-                        .keys()
-                        .filter(|key| key.starts_with(&prefix))
-                        .map(|key| key[prefix.len()..].to_string())
-                        .collect();
+                let prefix = format!("{}/", crd.kind);
+                let cr_names: Vec<String> = config
+                    .custom_resources
+                    .keys()
+                    .filter(|key| key.starts_with(&prefix))
+                    .map(|key| key[prefix.len()..].to_string())
+                    .collect();
 
-                    let filtered: Vec<&String> = if let Some(sel) = selector {
-                        let conditions = parse_label_selector(sel)?;
-                        cr_names
-                            .iter()
-                            .filter(|name| {
-                                let storage_key = format!("{}{}", prefix, name);
-                                let labels = config
-                                    .custom_resources
-                                    .get(&storage_key)
-                                    .and_then(|cr| cr.metadata.labels.as_ref());
-                                match_labels(labels, &conditions)
-                            })
-                            .collect()
-                    } else {
-                        cr_names.iter().collect()
-                    };
+                let filtered: Vec<&String> = if let Some(sel) = selector {
+                    let conditions = parse_label_selector(sel)?;
+                    cr_names
+                        .iter()
+                        .filter(|name| {
+                            let storage_key = format!("{prefix}{name}");
+                            let labels = config
+                                .custom_resources
+                                .get(&storage_key)
+                                .and_then(|cr| cr.metadata.labels.as_ref());
+                            match_labels(labels, &conditions)
+                        })
+                        .collect()
+                } else {
+                    cr_names.iter().collect()
+                };
 
-                    return format_output(&filtered, output_format);
-                }
+                return format_output(&filtered, output_format);
             }
             return Err(classify_resource_error(
                 "resource.get",
-                anyhow::anyhow!("unknown list resource type: {}", resource_type),
+                anyhow::anyhow!("unknown list resource type: {resource_type}"),
             ));
         }
     };
@@ -260,7 +256,7 @@ pub(super) fn parse_label_selector(selector: &str) -> Result<Vec<(String, String
         if kv.len() != 2 {
             return Err(classify_resource_error(
                 "resource.get",
-                anyhow::anyhow!("invalid label selector: '{}' (expected key=value)", part),
+                anyhow::anyhow!("invalid label selector: '{part}' (expected key=value)"),
             ));
         }
         conditions.push((kv[0].to_string(), kv[1].to_string()));

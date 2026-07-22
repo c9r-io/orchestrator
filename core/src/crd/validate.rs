@@ -47,8 +47,7 @@ pub fn validate_crd_definition(
     for short in &spec.short_names {
         if is_builtin_alias(short) {
             return Err(anyhow!(
-                "CRD short_name '{}' conflicts with builtin resource alias",
-                short
+                "CRD short_name '{short}' conflicts with builtin resource alias"
             ));
         }
     }
@@ -209,15 +208,15 @@ fn validate_crd_plugins(
         }
 
         // ── Timeout cap ────────────────────────────────────────────────
-        if let Some(timeout) = plugin.timeout {
-            if timeout > policy.max_timeout_secs {
-                return Err(anyhow!(
-                    "plugin '{}' timeout {}s exceeds policy maximum {}s",
-                    plugin.name,
-                    timeout,
-                    policy.max_timeout_secs
-                ));
-            }
+        if let Some(timeout) = plugin.timeout
+            && timeout > policy.max_timeout_secs
+        {
+            return Err(anyhow!(
+                "plugin '{}' timeout {}s exceeds policy maximum {}s",
+                plugin.name,
+                timeout,
+                policy.max_timeout_secs
+            ));
         }
 
         // ── Execution profile validation ──────────────────────────────
@@ -267,8 +266,8 @@ fn validate_cel_syntax(expression: &str) -> Result<()> {
         return Err(anyhow!("CEL rule expression cannot be empty"));
     }
     let compiled = std::panic::catch_unwind(|| Program::compile(expr))
-        .map_err(|_| anyhow!("CEL rule '{}' caused parser panic", expr))?;
-    compiled.map_err(|err| anyhow!("CEL rule '{}' is invalid: {}", expr, err))?;
+        .map_err(|_| anyhow!("CEL rule '{expr}' caused parser panic"))?;
+    compiled.map_err(|err| anyhow!("CEL rule '{expr}' is invalid: {err}"))?;
     Ok(())
 }
 
@@ -288,7 +287,7 @@ fn validate_cel_rules(spec: &serde_json::Value, rules: &[CelValidationRule]) -> 
         let mut context = CelContext::default();
         context
             .add_variable("self", cel_value.clone())
-            .map_err(|err| anyhow!("failed to bind 'self' in CEL context: {}", err))?;
+            .map_err(|err| anyhow!("failed to bind 'self' in CEL context: {err}"))?;
 
         let result = program.execute(&context);
         match result {
@@ -360,7 +359,7 @@ mod tests {
         CrdManifest {
             api_version: "orchestrator.dev/v2".to_string(),
             metadata: crate::cli_types::ResourceMetadata {
-                name: format!("{}.{}", plural, group),
+                name: format!("{plural}.{group}"),
                 project: None,
                 labels: None,
                 annotations: None,

@@ -57,7 +57,7 @@ pub fn delete_task_and_collect_log_paths(conn: &Connection, task_id: &str) -> Re
         )
         .optional()?;
     if exists.is_none() {
-        anyhow::bail!("task not found: {}", task_id);
+        anyhow::bail!("task not found: {task_id}");
     }
 
     let mut log_paths = HashSet::new();

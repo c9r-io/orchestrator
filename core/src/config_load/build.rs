@@ -93,17 +93,12 @@ fn validate_agent_drivers_in_project(
         if let Some(driver) = agent.driver.as_ref() {
             crate::driver::validate_driver_config(driver, &agent.command).map_err(|error| {
                 anyhow::anyhow!(
-                    "[driver_config_invalid] project '{}' agent '{}': {}",
-                    project_id,
-                    agent_id,
-                    error
+                    "[driver_config_invalid] project '{project_id}' agent '{agent_id}': {error}"
                 )
             })?;
         } else if agent.command.trim().is_empty() {
             anyhow::bail!(
-                "[driver_config_invalid] project '{}' agent '{}' requires command or driver",
-                project_id,
-                agent_id
+                "[driver_config_invalid] project '{project_id}' agent '{agent_id}' requires command or driver"
             );
         }
     }
@@ -356,8 +351,7 @@ fn format_blocking_delete_error(
     blockers: &[crate::db::TaskReference],
 ) -> String {
     let mut message = format!(
-        "[FAILED_PRECONDITION] apply/delete would remove {}/{} in project {}, but {} non-terminal task(s) still reference it",
-        kind, name, project_id, task_count
+        "[FAILED_PRECONDITION] apply/delete would remove {kind}/{name} in project {project_id}, but {task_count} non-terminal task(s) still reference it"
     );
     if !blockers.is_empty() {
         message.push_str("\nblocking tasks:");
@@ -369,8 +363,7 @@ fn format_blocking_delete_error(
         }
     }
     message.push_str(&format!(
-        "\nsuggested fixes:\n- orchestrator task list --project {}\n- orchestrator task delete <task_id> --force\n- rerun without --prune if deletion is not intended",
-        project_id
+        "\nsuggested fixes:\n- orchestrator task list --project {project_id}\n- orchestrator task delete <task_id> --force\n- rerun without --prune if deletion is not intended"
     ));
     message
 }

@@ -126,13 +126,12 @@ pub async fn process_item_filtered(
             .vars
             .insert("item_label".to_string(), label.clone());
     }
-    if let Some(ref vars_json) = item.dynamic_vars_json {
-        if let Ok(vars) =
+    if let Some(ref vars_json) = item.dynamic_vars_json
+        && let Ok(vars) =
             serde_json::from_str::<std::collections::HashMap<String, String>>(vars_json)
-        {
-            for (k, v) in vars {
-                acc.pipeline_vars.vars.insert(k, v);
-            }
+    {
+        for (k, v) in vars {
+            acc.pipeline_vars.vars.insert(k, v);
         }
     }
 
@@ -628,24 +627,22 @@ async fn execute_agent_step(
             // doesn't leak into subsequent steps' global pipeline state.
             restore_step_vars_overlay(&mut acc.pipeline_vars, step_vars_originals);
 
-            if let Some(ref output) = result.output {
-                if !output.stdout.is_empty() {
-                    let output_key = format!("{}_output", step.id);
-                    // Extract result text from stream-json output when available;
-                    // fall back to raw stdout for non-stream-json agents.
-                    let effective_output =
-                        agent_orchestrator::json_extract::extract_stream_json_result(
-                            &output.stdout,
-                        )
+            if let Some(ref output) = result.output
+                && !output.stdout.is_empty()
+            {
+                let output_key = format!("{}_output", step.id);
+                // Extract result text from stream-json output when available;
+                // fall back to raw stdout for non-stream-json agents.
+                let effective_output =
+                    agent_orchestrator::json_extract::extract_stream_json_result(&output.stdout)
                         .unwrap_or_else(|| output.stdout.clone());
-                    spill_large_var(
-                        &task_ctx.artifacts_dir,
-                        task_id,
-                        &output_key,
-                        effective_output,
-                        &mut acc.pipeline_vars,
-                    );
-                }
+                spill_large_var(
+                    &task_ctx.artifacts_dir,
+                    task_id,
+                    &output_key,
+                    effective_output,
+                    &mut acc.pipeline_vars,
+                );
             }
 
             Ok(AgentStepOutcome::Result(result))

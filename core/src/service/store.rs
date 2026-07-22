@@ -92,7 +92,7 @@ pub async fn store_prune(state: &InnerState, store: &str, project: &str) -> Resu
 
     let store_config = {
         let config = crate::config_load::read_loaded_config(state)?;
-        let key = format!("WorkflowStore/{}", store);
+        let key = format!("WorkflowStore/{store}");
         config
             .config
             .custom_resources

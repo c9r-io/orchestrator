@@ -1510,10 +1510,10 @@ fn filter_entries(
                     return false;
                 }
             }
-            if let Some(cat) = category_filter {
-                if !e.category.matches(cat) {
-                    return false;
-                }
+            if let Some(cat) = category_filter
+                && !e.category.matches(cat)
+            {
+                return false;
             }
             true
         })

@@ -79,14 +79,13 @@ pub fn prepare_task_for_start_batch(conn: &Connection, task_id: &str) -> Result<
         .optional()?;
 
     if status.is_none() {
-        anyhow::bail!("task not found: {}", task_id);
+        anyhow::bail!("task not found: {task_id}");
     }
 
     if matches!(status.as_deref(), Some("running")) {
         anyhow::bail!(
-            "task {} is already running — cannot start a second instance. \
-             Use 'task pause' first, or wait for it to finish.",
-            task_id
+            "task {task_id} is already running — cannot start a second instance. \
+             Use 'task pause' first, or wait for it to finish."
         );
     }
 

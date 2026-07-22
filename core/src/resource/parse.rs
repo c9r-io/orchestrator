@@ -103,12 +103,11 @@ pub fn delete_resource_by_kind(
                 // Resolve the actual kind name from the CRD
                 let crd_kind = find_crd_by_kind_or_alias(config, kind)
                     .map(|crd| crd.kind.clone())
-                    .ok_or_else(|| anyhow!("CRD not found for '{}'", kind))?;
+                    .ok_or_else(|| anyhow!("CRD not found for '{kind}'"))?;
                 return crate::crd::delete_custom_resource(config, &crd_kind, name);
             }
             Err(anyhow!(
-                "unknown resource type: {} (supported: workspace, agent, workflow, project, runtimepolicy, steptemplate, sourcetasktemplate, sourcetaskbinding, executionprofile, envstore, secretstore, or CRD-defined types)",
-                kind
+                "unknown resource type: {kind} (supported: workspace, agent, workflow, project, runtimepolicy, steptemplate, sourcetasktemplate, sourcetaskbinding, executionprofile, envstore, secretstore, or CRD-defined types)"
             ))
         }
     }

@@ -261,12 +261,11 @@ impl Resource for RegisteredResource {
         {
             return Some(Self::ExecutionProfile(execution_profile));
         }
-        if name == "runtime" {
-            if let Some(runtime_policy) =
+        if name == "runtime"
+            && let Some(runtime_policy) =
                 RuntimePolicyResource::get_from_project(config, name, project_id)
-            {
-                return Some(Self::RuntimePolicy(runtime_policy));
-            }
+        {
+            return Some(Self::RuntimePolicy(runtime_policy));
         }
         if let Some(env_store) = EnvStoreResource::get_from_project(config, name, project_id) {
             return Some(Self::EnvStore(env_store));

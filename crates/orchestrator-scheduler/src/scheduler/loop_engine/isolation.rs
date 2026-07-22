@@ -29,10 +29,10 @@ pub(crate) fn step_workspace_root(
     pipeline_vars: &PipelineVariables,
     step_scope: agent_orchestrator::config::StepScope,
 ) -> PathBuf {
-    if step_scope == agent_orchestrator::config::StepScope::Item {
-        if let Some(path) = pipeline_vars.vars.get(ITEM_WORKTREE_PATH_VAR) {
-            return PathBuf::from(path);
-        }
+    if step_scope == agent_orchestrator::config::StepScope::Item
+        && let Some(path) = pipeline_vars.vars.get(ITEM_WORKTREE_PATH_VAR)
+    {
+        return PathBuf::from(path);
     }
     task_ctx.workspace_root.clone()
 }
@@ -60,7 +60,7 @@ pub(crate) async fn ensure_item_isolation(
     let path = worktree_path(state, task_id, item);
     tokio::fs::create_dir_all(task_worktree_root(state, task_id))
         .await
-        .with_context(|| format!("create worktree root for task {}", task_id))?;
+        .with_context(|| format!("create worktree root for task {task_id}"))?;
 
     let _ = run_git(
         &task_ctx.workspace_root,
@@ -140,7 +140,7 @@ pub(crate) async fn apply_winner_if_needed(
         ["merge", "--ff-only", branch.as_str()],
     )
     .await
-    .with_context(|| format!("merge winner branch {}", branch))?;
+    .with_context(|| format!("merge winner branch {branch}"))?;
 
     // R2: Collect diff stats for observability
     let (files_changed, insertions, deletions) = match run_git_output(

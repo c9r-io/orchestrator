@@ -72,13 +72,13 @@ impl ResourceStore {
 
     /// Get a namespaced resource by kind, project, and name.
     pub fn get_namespaced(&self, kind: &str, project: &str, name: &str) -> Option<&CustomResource> {
-        let key = format!("{}/{}/{}", kind, project, name);
+        let key = format!("{kind}/{project}/{name}");
         self.resources.get(&key)
     }
 
     /// List all resources of a given kind.
     pub fn list_by_kind(&self, kind: &str) -> Vec<&CustomResource> {
-        let prefix = format!("{}/", kind);
+        let prefix = format!("{kind}/");
         self.resources
             .iter()
             .filter(|(k, _)| k.starts_with(&prefix))
@@ -88,7 +88,7 @@ impl ResourceStore {
 
     /// List resources of a given kind within a specific project.
     pub fn list_by_kind_for_project(&self, kind: &str, project: &str) -> Vec<&CustomResource> {
-        let prefix = format!("{}/{}/", kind, project);
+        let prefix = format!("{kind}/{project}/");
         self.resources
             .iter()
             .filter(|(k, _)| k.starts_with(&prefix))
@@ -140,8 +140,8 @@ impl ResourceStore {
     /// Remove a resource by kind and name from any project namespace.
     /// Scans all entries of the form `kind/*/name`.
     pub fn remove_first_by_kind_name(&mut self, kind: &str, name: &str) -> Option<CustomResource> {
-        let suffix = format!("/{}", name);
-        let prefix = format!("{}/", kind);
+        let suffix = format!("/{name}");
+        let prefix = format!("{kind}/");
         let key = self
             .resources
             .keys()
@@ -164,7 +164,7 @@ impl ResourceStore {
         project: &str,
         name: &str,
     ) -> Option<CustomResource> {
-        let key = format!("{}/{}/{}", kind, project, name);
+        let key = format!("{kind}/{project}/{name}");
         let removed = self.resources.remove(&key);
         if removed.is_some() {
             self.generation += 1;
@@ -174,7 +174,7 @@ impl ResourceStore {
 
     /// Removes all resources belonging to a project.
     pub fn remove_all_for_project(&mut self, project: &str) {
-        let pattern = format!("/{}/", project);
+        let pattern = format!("/{project}/");
         let before = self.resources.len();
         self.resources.retain(|key, _| !key.contains(&pattern));
         if self.resources.len() < before {

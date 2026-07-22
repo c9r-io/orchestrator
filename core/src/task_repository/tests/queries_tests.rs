@@ -65,8 +65,7 @@ fn resolve_task_id_errors_for_multiple_matches() {
         .expect_err("should error for multiple matches");
     assert!(
         err.to_string().contains("multiple tasks match prefix"),
-        "error should mention multiple matches, got: {}",
-        err
+        "error should mention multiple matches, got: {err}"
     );
 }
 

@@ -18,7 +18,7 @@ pub fn execute_hook(
     spec: &serde_json::Value,
 ) -> Result<()> {
     let spec_json = serde_json::to_string(spec)
-        .map_err(|e| anyhow!("failed to serialize spec for hook: {}", e))?;
+        .map_err(|e| anyhow!("failed to serialize spec for hook: {e}"))?;
 
     let output = Command::new("sh")
         .arg("-c")
@@ -28,15 +28,7 @@ pub fn execute_hook(
         .env("RESOURCE_ACTION", action)
         .env("RESOURCE_SPEC", &spec_json)
         .output()
-        .map_err(|e| {
-            anyhow!(
-                "failed to execute {} hook for {}/{}: {}",
-                action,
-                kind,
-                name,
-                e
-            )
-        })?;
+        .map_err(|e| anyhow!("failed to execute {action} hook for {kind}/{name}: {e}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);

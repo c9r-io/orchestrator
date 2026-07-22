@@ -41,7 +41,7 @@ pub async fn spawn_task_runner(state: Arc<InnerState>, task_id: String) -> Resul
         .clone()
         .acquire_owned()
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to acquire semaphore: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to acquire semaphore: {e}"))?;
     let span_task_id = task_id.clone();
 
     tokio::spawn(
@@ -253,8 +253,7 @@ pub async fn load_task_runtime_context(
             .and_then(|p| p.workflows.get(&workflow_id))
             .with_context(|| {
                 format!(
-                    "workflow not found: {} in project '{}' for task {}",
-                    workflow_id, effective_project_id, task_id
+                    "workflow not found: {workflow_id} in project '{effective_project_id}' for task {task_id}"
                 )
             })?
             .clone();
@@ -309,8 +308,7 @@ pub async fn load_task_runtime_context(
     }
     if execution_plan.steps.is_empty() {
         anyhow::bail!(
-            "[EMPTY_PLAN] task '{}' has empty execution plan\n  category: runtime\n  suggested_fix: ensure the workflow has at least one enabled step",
-            task_id
+            "[EMPTY_PLAN] task '{task_id}' has empty execution plan\n  category: runtime\n  suggested_fix: ensure the workflow has at least one enabled step"
         );
     }
 
@@ -335,7 +333,7 @@ pub async fn load_task_runtime_context(
     }
     let workspace_root = workspace_root
         .canonicalize()
-        .with_context(|| format!("failed to canonicalize workspace root for task {}", task_id))?;
+        .with_context(|| format!("failed to canonicalize workspace root for task {task_id}"))?;
     if workspace_kind == agent_orchestrator::config::WorkspaceKind::CodeRepo {
         resolve_workspace_path(&workspace_root, &ticket_dir, "task.ticket_dir")?;
     }
@@ -415,15 +413,13 @@ pub async fn load_task_runtime_context(
                 _ => agent_orchestrator::config::PipelineVariables::default(),
             };
             // FR-090: Inject initial_vars into pipeline variables (first cycle only)
-            if let Some(ref iv_json) = runtime_row.initial_vars_json {
-                if !iv_json.is_empty() {
-                    if let Ok(iv) =
-                        serde_json::from_str::<std::collections::HashMap<String, String>>(iv_json)
-                    {
-                        for (k, v) in iv {
-                            pv.vars.entry(k).or_insert(v);
-                        }
-                    }
+            if let Some(ref iv_json) = runtime_row.initial_vars_json
+                && !iv_json.is_empty()
+                && let Ok(iv) =
+                    serde_json::from_str::<std::collections::HashMap<String, String>>(iv_json)
+            {
+                for (k, v) in iv {
+                    pv.vars.entry(k).or_insert(v);
                 }
             }
             if !task_goal.is_empty() {

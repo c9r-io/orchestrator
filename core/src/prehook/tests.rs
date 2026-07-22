@@ -689,8 +689,7 @@ fn test_validate_workflow_finalize_rule_invalid_cel() {
     let err_msg = result.expect_err("operation should fail").to_string();
     assert!(
         err_msg.contains("invalid CEL") || err_msg.contains("parser panic"),
-        "expected CEL error, got: {}",
-        err_msg
+        "expected CEL error, got: {err_msg}"
     );
 }
 
@@ -2589,8 +2588,7 @@ fn validate_command_rules_second_rule_invalid_cel() {
     let err = result.unwrap_err().to_string();
     assert!(
         err.contains("command_rules[1]"),
-        "error should reference second rule index, got: {}",
-        err
+        "error should reference second rule index, got: {err}"
     );
 }
 
@@ -2612,8 +2610,7 @@ fn validate_command_rules_second_rule_missing_prompt() {
     let err = result.unwrap_err().to_string();
     assert!(
         err.contains("command_rules[1]"),
-        "error should reference second rule index, got: {}",
-        err
+        "error should reference second rule index, got: {err}"
     );
     assert!(err.contains("{prompt} placeholder"));
 }

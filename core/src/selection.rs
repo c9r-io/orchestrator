@@ -45,7 +45,7 @@ pub fn select_agent_advanced(
         .collect();
 
     if candidates.is_empty() {
-        anyhow::bail!("No healthy agent found with capability: {}", capability);
+        anyhow::bail!("No healthy agent found with capability: {capability}");
     }
 
     let mut scored: Vec<_> = candidates
@@ -133,7 +133,7 @@ pub fn select_agent_by_preference(
     let (agent_id, config) = agents
         .iter()
         .nth(idx)
-        .ok_or_else(|| anyhow!("failed to select agent at random index {}", idx))?;
+        .ok_or_else(|| anyhow!("failed to select agent at random index {idx}"))?;
     let command = if config.command.is_empty() {
         "echo default".to_string()
     } else {
@@ -189,7 +189,7 @@ mod tests {
         cfg.metadata.name = id.to_string();
         cfg.metadata.cost = Some(cost);
         cfg.capabilities = vec![capability.to_string()];
-        cfg.command = format!("echo {}", id);
+        cfg.command = format!("echo {id}");
         (id.to_string(), cfg)
     }
 

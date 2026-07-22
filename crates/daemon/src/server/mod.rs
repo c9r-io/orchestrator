@@ -110,21 +110,21 @@ pub(crate) fn authorize<T>(
                 .is_some_and(|p| p.audit_all_reads);
 
             // Phase 4: optional UDS authorization policy
-            if let Some(policy) = &server.uds_auth_policy {
-                if !policy.max_role.allows(required) {
-                    uds_audit(
-                        &server.state.db_path,
-                        rpc,
-                        peer,
-                        "denied",
-                        Some("uds_policy_denied"),
-                        Some(effective_role),
-                        request_id,
-                    );
-                    return Err(AuthzError::PermissionDenied(
-                        "UDS policy restricts this operation",
-                    ));
-                }
+            if let Some(policy) = &server.uds_auth_policy
+                && !policy.max_role.allows(required)
+            {
+                uds_audit(
+                    &server.state.db_path,
+                    rpc,
+                    peer,
+                    "denied",
+                    Some("uds_policy_denied"),
+                    Some(effective_role),
+                    request_id,
+                );
+                return Err(AuthzError::PermissionDenied(
+                    "UDS policy restricts this operation",
+                ));
             }
 
             // Phase 3: audit mutating operations on UDS (and read-only if configured)

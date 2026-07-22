@@ -28,7 +28,7 @@ fn detect_fatal_agent_error(stdout: &str, stderr: &str) -> Option<&'static str> 
         .collect::<Vec<_>>()
         .join("\n")
         .to_ascii_lowercase();
-    let combined = format!("{}\n{}", stdout_plain, stderr_lower);
+    let combined = format!("{stdout_plain}\n{stderr_lower}");
     let patterns = [
         ("rate-limited", "provider rate limit exceeded"),
         ("rate limited", "provider rate limit exceeded"),
@@ -67,7 +67,7 @@ fn is_strict_phase(phase: &str) -> bool {
     const STRICT: &[&str] = &["qa", "fix", "retest", "guard", "adaptive_plan"];
     STRICT
         .iter()
-        .any(|s| phase == *s || phase.ends_with(&format!("_{}", s)))
+        .any(|s| phase == *s || phase.ends_with(&format!("_{s}")))
 }
 
 /// Returns true for phases that produce build/test structured output
@@ -302,7 +302,7 @@ trait DiagnosticParser: Default {
 }
 
 fn parse_diagnostic_output<P: DiagnosticParser>(stderr: &str, stdout: &str) -> Vec<P::Item> {
-    let combined = format!("{}\n{}", stderr, stdout);
+    let combined = format!("{stderr}\n{stdout}");
     let mut parser = P::default();
     for line in combined.lines() {
         parser.process_line(line);
@@ -363,13 +363,13 @@ impl DiagnosticParser for BuildErrorParser {
                 message: line.to_string(),
                 level: BuildErrorLevel::Warning,
             });
-        } else if line.trim_start().starts_with("--> ") {
-            if let Some(last_error) = self.errors.last_mut() {
-                let (file, line_num, col) = parse_location_line(line);
-                last_error.file = file;
-                last_error.line = line_num;
-                last_error.column = col;
-            }
+        } else if line.trim_start().starts_with("--> ")
+            && let Some(last_error) = self.errors.last_mut()
+        {
+            let (file, line_num, col) = parse_location_line(line);
+            last_error.file = file;
+            last_error.line = line_num;
+            last_error.column = col;
         }
     }
 
@@ -593,8 +593,7 @@ warning: unused variable
                 .expect("validation should return outcome");
             assert_eq!(
                 outcome.status, "passed",
-                "phase {} should accept stream-json",
-                phase
+                "phase {phase} should accept stream-json"
             );
         }
     }
@@ -615,8 +614,7 @@ warning: unused variable
                     .expect("validation should return outcome");
             assert_eq!(
                 outcome.status, "passed",
-                "phase {} should accept plain text",
-                phase
+                "phase {phase} should accept plain text"
             );
         }
     }

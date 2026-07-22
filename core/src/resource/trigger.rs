@@ -47,13 +47,13 @@ impl Resource for TriggerResource {
         }
 
         // Validate cron expression if present.
-        if let Some(ref cron) = self.spec.cron {
-            if cron.schedule.trim().is_empty() {
-                return Err(anyhow!(
-                    "trigger '{}': cron.schedule cannot be empty",
-                    self.name()
-                ));
-            }
+        if let Some(ref cron) = self.spec.cron
+            && cron.schedule.trim().is_empty()
+        {
+            return Err(anyhow!(
+                "trigger '{}': cron.schedule cannot be empty",
+                self.name()
+            ));
         }
 
         // Validate event source if present.

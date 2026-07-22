@@ -53,10 +53,10 @@ pub fn validate_workflow_config_for_project(
     let project = config
         .projects
         .get(pid)
-        .ok_or_else(|| anyhow::anyhow!("project '{}' not found", pid))?;
+        .ok_or_else(|| anyhow::anyhow!("project '{pid}' not found"))?;
     let project_agents = &project.agents;
     if workflow.steps.is_empty() {
-        anyhow::bail!("workflow '{}' must define at least one step", workflow_id);
+        anyhow::bail!("workflow '{workflow_id}' must define at least one step");
     }
     validate_probe_workflow_shape(workflow, workflow_id)?;
     validate_execution_profiles_for_project(config, workflow, workflow_id, pid)?;
@@ -98,7 +98,7 @@ pub(crate) fn validate_workflow_config_with_agents(
     workflow_id: &str,
 ) -> Result<()> {
     if workflow.steps.is_empty() {
-        anyhow::bail!("workflow '{}' must define at least one step", workflow_id);
+        anyhow::bail!("workflow '{workflow_id}' must define at least one step");
     }
     validate_probe_workflow_shape(workflow, workflow_id)?;
 

@@ -21,7 +21,7 @@ fn resolve_pipeline_var_content(
 ) -> Result<String> {
     let inline = pipeline_vars
         .get(key)
-        .with_context(|| format!("pipeline variable '{}' not found for generate_items", key))?;
+        .with_context(|| format!("pipeline variable '{key}' not found for generate_items"))?;
 
     // If not truncated, check if it's raw stream-json JSONL and extract the result
     if !inline.contains("[truncated \u{2014}") && !inline.contains("[truncated —") {
@@ -36,16 +36,13 @@ fn resolve_pipeline_var_content(
     }
 
     // Fall back to spill file
-    let path_key = format!("{}_path", key);
+    let path_key = format!("{key}_path");
     let path = pipeline_vars.get(&path_key).with_context(|| {
-        format!(
-            "pipeline variable '{}' is truncated but no spill path '{}' found",
-            key, path_key
-        )
+        format!("pipeline variable '{key}' is truncated but no spill path '{path_key}' found")
     })?;
 
     let content = std::fs::read_to_string(path)
-        .with_context(|| format!("failed to read spill file at '{}'", path))?;
+        .with_context(|| format!("failed to read spill file at '{path}'"))?;
 
     // Check if content looks like stream-json JSONL (multiple JSON lines from claude)
     // and extract the `result` field from the last `type: result` line
@@ -186,7 +183,7 @@ pub async fn create_dynamic_task_items_async(
                 .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
         })
         .await
-        .map_err(|e| anyhow::anyhow!("async db error: {}", e))
+        .map_err(|e| anyhow::anyhow!("async db error: {e}"))
 }
 
 #[cfg(test)]

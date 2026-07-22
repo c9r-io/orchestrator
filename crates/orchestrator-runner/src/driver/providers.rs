@@ -199,13 +199,13 @@ fn build_codex_command(request: &DriverStartRequest<'_>) -> String {
     }
     args.push("--json".to_string());
     push_common_args(&mut args, request);
-    if let Some(codex) = &request.driver.codex {
-        if let Some(effort) = &codex.reasoning_effort {
-            args.extend([
-                "--config".to_string(),
-                quote(&format!("model_reasoning_effort={effort}")),
-            ]);
-        }
+    if let Some(codex) = &request.driver.codex
+        && let Some(effort) = &codex.reasoning_effort
+    {
+        args.extend([
+            "--config".to_string(),
+            quote(&format!("model_reasoning_effort={effort}")),
+        ]);
     }
     args.extend(request.driver.raw_args.iter().map(|arg| quote(arg)));
     args.push("--".to_string());
@@ -263,10 +263,10 @@ pub(crate) fn prepare_legacy_claude_streaming_command(
 }
 
 fn resolve_mcp_tools_bin() -> Result<PathBuf> {
-    if let Ok(value) = std::env::var("ORCH_MCP_TOOLS_BIN") {
-        if !value.is_empty() {
-            return Ok(PathBuf::from(value));
-        }
+    if let Ok(value) = std::env::var("ORCH_MCP_TOOLS_BIN")
+        && !value.is_empty()
+    {
+        return Ok(PathBuf::from(value));
     }
     let executable = std::env::current_exe()?;
     let directory = executable

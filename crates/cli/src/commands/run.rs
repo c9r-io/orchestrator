@@ -103,6 +103,6 @@ pub(crate) async fn dispatch(
         .map(|t| t.status.as_str())
         .unwrap_or("unknown");
     let exit_code = if task_status == "completed" { 0 } else { 1 };
-    eprintln!("\nTask {} finished with status: {}", task_id, task_status);
+    eprintln!("\nTask {task_id} finished with status: {task_status}");
     std::process::exit(exit_code);
 }

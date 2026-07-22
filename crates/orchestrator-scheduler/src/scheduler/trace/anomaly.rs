@@ -136,8 +136,7 @@ pub(super) fn detect_missing_step_end(events: &[&EventDto], anomalies: &mut Vec<
                     anomalies.push(Anomaly::new(
                         AnomalyRule::MissingStepEnd,
                         format!(
-                            "Step '{}' started at {} has no corresponding step_finished/step_skipped",
-                            step, started_at,
+                            "Step '{step}' started at {started_at} has no corresponding step_finished/step_skipped",
                         ),
                         Some(started_at),
                     ));
@@ -151,8 +150,7 @@ pub(super) fn detect_missing_step_end(events: &[&EventDto], anomalies: &mut Vec<
         anomalies.push(Anomaly::new(
             AnomalyRule::MissingStepEnd,
             format!(
-                "Step '{}' started at {} has no corresponding step_finished/step_skipped",
-                step, started_at,
+                "Step '{step}' started at {started_at} has no corresponding step_finished/step_skipped",
             ),
             Some(started_at),
         ));
@@ -166,17 +164,14 @@ pub(super) fn detect_empty_cycles(events: &[&EventDto], anomalies: &mut Vec<Anom
     for event in events {
         match event.event_type.as_str() {
             "cycle_started" => {
-                if let Some((prev_cycle, ref prev_at)) = cycle_start {
-                    if !has_steps {
-                        anomalies.push(Anomaly::new(
-                            AnomalyRule::EmptyCycle,
-                            format!(
-                                "Cycle {} (started {}) completed with no steps",
-                                prev_cycle, prev_at,
-                            ),
-                            Some(prev_at.clone()),
-                        ));
-                    }
+                if let Some((prev_cycle, ref prev_at)) = cycle_start
+                    && !has_steps
+                {
+                    anomalies.push(Anomaly::new(
+                        AnomalyRule::EmptyCycle,
+                        format!("Cycle {prev_cycle} (started {prev_at}) completed with no steps",),
+                        Some(prev_at.clone()),
+                    ));
                 }
                 let cycle = event
                     .payload
@@ -194,17 +189,14 @@ pub(super) fn detect_empty_cycles(events: &[&EventDto], anomalies: &mut Vec<Anom
                 has_steps = true;
             }
             "task_completed" | "task_failed" => {
-                if let Some((prev_cycle, ref prev_at)) = cycle_start {
-                    if !has_steps {
-                        anomalies.push(Anomaly::new(
-                            AnomalyRule::EmptyCycle,
-                            format!(
-                                "Cycle {} (started {}) completed with no steps",
-                                prev_cycle, prev_at,
-                            ),
-                            Some(prev_at.clone()),
-                        ));
-                    }
+                if let Some((prev_cycle, ref prev_at)) = cycle_start
+                    && !has_steps
+                {
+                    anomalies.push(Anomaly::new(
+                        AnomalyRule::EmptyCycle,
+                        format!("Cycle {prev_cycle} (started {prev_at}) completed with no steps",),
+                        Some(prev_at.clone()),
+                    ));
                 }
             }
             _ => {}
@@ -227,17 +219,15 @@ pub(super) fn detect_orphan_commands(
         if matches!(
             event.event_type.as_str(),
             "step_started" | "chain_step_started" | "dynamic_step_started"
+        ) && let (Some(item_id), Some(step)) = (
+            &event.task_item_id,
+            event
+                .payload
+                .get("step")
+                .or_else(|| event.payload.get("step_id"))
+                .and_then(|v| v.as_str()),
         ) {
-            if let (Some(item_id), Some(step)) = (
-                &event.task_item_id,
-                event
-                    .payload
-                    .get("step")
-                    .or_else(|| event.payload.get("step_id"))
-                    .and_then(|v| v.as_str()),
-            ) {
-                known_steps.insert((item_id.clone(), step.to_string()));
-            }
+            known_steps.insert((item_id.clone(), step.to_string()));
         }
     }
 
@@ -264,17 +254,18 @@ pub(super) fn detect_orphan_commands(
 
 pub(super) fn detect_nonzero_exit(command_runs: &[CommandRunDto], anomalies: &mut Vec<Anomaly>) {
     for run in command_runs {
-        if let Some(code) = run.exit_code {
-            if code != 0 && code != -1 {
-                anomalies.push(Anomaly::new(
-                    AnomalyRule::NonzeroExit,
-                    format!(
-                        "Command '{}' (phase={}) exited with code {}",
-                        &run.id, run.phase, code,
-                    ),
-                    Some(run.started_at.clone()),
-                ));
-            }
+        if let Some(code) = run.exit_code
+            && code != 0
+            && code != -1
+        {
+            anomalies.push(Anomaly::new(
+                AnomalyRule::NonzeroExit,
+                format!(
+                    "Command '{}' (phase={}) exited with code {}",
+                    run.id, run.phase, code,
+                ),
+                Some(run.started_at.clone()),
+            ));
         }
     }
 }
@@ -331,19 +322,19 @@ pub fn find_template_vars(s: &str) -> Vec<String> {
 pub(super) fn detect_long_running_steps(cycles: &[CycleTrace], anomalies: &mut Vec<Anomaly>) {
     for cycle in cycles {
         for step in &cycle.steps {
-            if let Some(secs) = step.duration_secs {
-                if secs > 600.0 {
-                    anomalies.push(Anomaly::new(
-                        AnomalyRule::LongRunning,
-                        format!(
-                            "Step '{}' took {:.0}s (>{} min)",
-                            step.step_id,
-                            secs,
-                            (secs / 60.0).ceil() as u32,
-                        ),
-                        step.started_at.clone(),
-                    ));
-                }
+            if let Some(secs) = step.duration_secs
+                && secs > 600.0
+            {
+                anomalies.push(Anomaly::new(
+                    AnomalyRule::LongRunning,
+                    format!(
+                        "Step '{}' took {:.0}s (>{} min)",
+                        step.step_id,
+                        secs,
+                        (secs / 60.0).ceil() as u32,
+                    ),
+                    step.started_at.clone(),
+                ));
             }
         }
     }
@@ -422,10 +413,7 @@ pub(super) fn detect_sandbox_denied(events: &[&EventDto], anomalies: &mut Vec<An
     for (step, (count, first_at)) in &step_denials {
         anomalies.push(Anomaly::new(
             AnomalyRule::SandboxDenied,
-            format!(
-                "Step '{}' had {} sandbox denial(s); first at {}",
-                step, count, first_at,
-            ),
+            format!("Step '{step}' had {count} sandbox denial(s); first at {first_at}",),
             Some(first_at.clone()),
         ));
     }
@@ -457,8 +445,7 @@ pub(super) fn detect_low_output_steps(events: &[&EventDto], anomalies: &mut Vec<
         anomalies.push(Anomaly::new(
             AnomalyRule::LowOutput,
             format!(
-                "Step '{}' entered low-output state after {}s with {} quiet heartbeats",
-                step, elapsed_secs, stagnant_heartbeats
+                "Step '{step}' entered low-output state after {elapsed_secs}s with {stagnant_heartbeats} quiet heartbeats"
             ),
             Some(event.created_at.clone()),
         ));
@@ -473,10 +460,10 @@ pub(super) fn detect_low_output_steps(events: &[&EventDto], anomalies: &mut Vec<
 pub(super) fn detect_incarnation_boundary(events: &[&EventDto], anomalies: &mut Vec<Anomaly>) {
     let mut incarnations: Vec<(u64, String)> = Vec::new();
     for event in events {
-        if event.event_type == "daemon_incarnation_started" {
-            if let Some(inc) = event.payload.get("incarnation").and_then(|v| v.as_u64()) {
-                incarnations.push((inc, event.created_at.clone()));
-            }
+        if event.event_type == "daemon_incarnation_started"
+            && let Some(inc) = event.payload.get("incarnation").and_then(|v| v.as_u64())
+        {
+            incarnations.push((inc, event.created_at.clone()));
         }
     }
     if incarnations.len() > 1 {

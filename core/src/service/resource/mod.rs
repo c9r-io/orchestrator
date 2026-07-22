@@ -44,7 +44,7 @@ pub fn apply_manifests(
 ) -> Result<orchestrator_proto::ApplyResponse> {
     let db_path = &state.db_path;
     let manifests = parse_manifests_from_yaml(content).map_err(|e| {
-        classify_resource_error("resource.apply", anyhow::anyhow!("parse error: {}", e))
+        classify_resource_error("resource.apply", anyhow::anyhow!("parse error: {e}"))
     })?;
 
     let current_config = load_config(db_path)
@@ -88,17 +88,17 @@ pub fn apply_manifests(
                 if let crate::resource::RegisteredResource::Workflow(ref wf) = registered {
                     warnings.extend(wf.collect_warnings());
                 }
-                if let Some(meta_project) = registered.metadata_project() {
-                    if meta_project != cli_project {
-                        errors.push(format!(
-                            "{} / {} project mismatch: --project={} but metadata.project={}",
-                            kind_as_str(registered.kind()),
-                            registered.name(),
-                            cli_project,
-                            meta_project
-                        ));
-                        continue;
-                    }
+                if let Some(meta_project) = registered.metadata_project()
+                    && meta_project != cli_project
+                {
+                    errors.push(format!(
+                        "{} / {} project mismatch: --project={} but metadata.project={}",
+                        kind_as_str(registered.kind()),
+                        registered.name(),
+                        cli_project,
+                        meta_project
+                    ));
+                    continue;
                 }
                 let result = apply_to_project(&registered, &mut merged_config, cli_project)
                     .map_err(|err| classify_resource_error("resource.apply", err))?;
@@ -178,7 +178,7 @@ pub fn apply_manifests(
                         }
                         let action = apply_action_label(result);
                         results.push(orchestrator_proto::ApplyResultEntry {
-                            kind: format!("crd({})", crd_kind),
+                            kind: format!("crd({crd_kind})"),
                             name: crd_name,
                             action: action.to_string(),
                             project_scope: None,

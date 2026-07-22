@@ -79,20 +79,17 @@ pub fn parse_network_allowlist_entry(raw: &str) -> Result<NetworkAllowlistEntry>
     }
     if value.contains("://") {
         return Err(anyhow!(
-            "network_allowlist entry '{}' must not include a URL scheme",
-            raw
+            "network_allowlist entry '{raw}' must not include a URL scheme"
         ));
     }
     if value.contains('/') || value.contains('?') || value.contains('#') {
         return Err(anyhow!(
-            "network_allowlist entry '{}' must not include path, query, or fragment data",
-            raw
+            "network_allowlist entry '{raw}' must not include path, query, or fragment data"
         ));
     }
     if value.contains('*') {
         return Err(anyhow!(
-            "network_allowlist entry '{}' must not use wildcards",
-            raw
+            "network_allowlist entry '{raw}' must not use wildcards"
         ));
     }
 
@@ -111,7 +108,7 @@ pub fn parse_network_allowlist_entry(raw: &str) -> Result<NetworkAllowlistEntry>
     if value.matches(':').count() == 1 {
         let (host_part, port_part) = value
             .rsplit_once(':')
-            .ok_or_else(|| anyhow!("invalid network_allowlist entry '{}'", raw))?;
+            .ok_or_else(|| anyhow!("invalid network_allowlist entry '{raw}'"))?;
         let port = parse_port(raw, port_part)?;
         if let Ok(ip) = host_part.parse::<IpAddr>() {
             return Ok(NetworkAllowlistEntry {
@@ -130,8 +127,7 @@ pub fn parse_network_allowlist_entry(raw: &str) -> Result<NetworkAllowlistEntry>
 
     if value.contains(':') {
         return Err(anyhow!(
-            "network_allowlist entry '{}' must wrap IPv6 addresses in brackets when a port is present",
-            raw
+            "network_allowlist entry '{raw}' must wrap IPv6 addresses in brackets when a port is present"
         ));
     }
 
@@ -153,17 +149,11 @@ pub fn validate_network_allowlist(entries: &[String]) -> Result<Vec<NetworkAllow
 
 fn parse_bracketed_ip_entry(raw: &str, value: &str) -> Result<NetworkAllowlistEntry> {
     let end = value.find(']').ok_or_else(|| {
-        anyhow!(
-            "network_allowlist entry '{}' has an unterminated bracketed IPv6 address",
-            raw
-        )
+        anyhow!("network_allowlist entry '{raw}' has an unterminated bracketed IPv6 address")
     })?;
     let ip_part = &value[1..end];
     let ip = ip_part.parse::<IpAddr>().map_err(|_| {
-        anyhow!(
-            "network_allowlist entry '{}' does not contain a valid bracketed IPv6 address",
-            raw
-        )
+        anyhow!("network_allowlist entry '{raw}' does not contain a valid bracketed IPv6 address")
     })?;
     let remainder = &value[end + 1..];
     let port = if remainder.is_empty() {
@@ -171,8 +161,7 @@ fn parse_bracketed_ip_entry(raw: &str, value: &str) -> Result<NetworkAllowlistEn
     } else {
         let Some(port_part) = remainder.strip_prefix(':') else {
             return Err(anyhow!(
-                "network_allowlist entry '{}' has invalid trailing data after IPv6 address",
-                raw
+                "network_allowlist entry '{raw}' has invalid trailing data after IPv6 address"
             ));
         };
         Some(parse_port(raw, port_part)?)
@@ -186,30 +175,22 @@ fn parse_bracketed_ip_entry(raw: &str, value: &str) -> Result<NetworkAllowlistEn
 
 fn parse_port(raw: &str, value: &str) -> Result<u16> {
     value.parse::<u16>().map_err(|_| {
-        anyhow!(
-            "network_allowlist entry '{}' must use a valid TCP port between 1 and 65535",
-            raw
-        )
+        anyhow!("network_allowlist entry '{raw}' must use a valid TCP port between 1 and 65535")
     })
 }
 
 fn validate_hostname(raw: &str, value: &str) -> Result<()> {
     if value.is_empty() {
-        return Err(anyhow!(
-            "network_allowlist entry '{}' has an empty host",
-            raw
-        ));
+        return Err(anyhow!("network_allowlist entry '{raw}' has an empty host"));
     }
     if value.len() > 253 {
         return Err(anyhow!(
-            "network_allowlist entry '{}' exceeds the maximum hostname length",
-            raw
+            "network_allowlist entry '{raw}' exceeds the maximum hostname length"
         ));
     }
     if value.starts_with('.') || value.ends_with('.') || value.contains("..") {
         return Err(anyhow!(
-            "network_allowlist entry '{}' is not a valid hostname",
-            raw
+            "network_allowlist entry '{raw}' is not a valid hostname"
         ));
     }
     for label in value.split('.') {
@@ -222,8 +203,7 @@ fn validate_hostname(raw: &str, value: &str) -> Result<()> {
                 .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
         {
             return Err(anyhow!(
-                "network_allowlist entry '{}' is not a valid hostname",
-                raw
+                "network_allowlist entry '{raw}' is not a valid hostname"
             ));
         }
     }

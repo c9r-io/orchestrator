@@ -139,7 +139,7 @@ pub fn delete_custom_resource(
     kind: &str,
     name: &str,
 ) -> Result<bool> {
-    let storage_key = format!("{}/{}", kind, name);
+    let storage_key = format!("{kind}/{name}");
 
     // Look up the CR to get its spec for the hook
     let cr = match config.custom_resources.get(&storage_key) {
@@ -163,12 +163,11 @@ pub fn delete_crd(config: &mut OrchestratorConfig, kind: &str) -> Result<bool> {
     let has_instances = config
         .custom_resources
         .keys()
-        .any(|key| key.starts_with(&format!("{}/", kind)));
+        .any(|key| key.starts_with(&format!("{kind}/")));
 
     if has_instances {
         return Err(anyhow!(
-            "cannot delete CRD '{}': custom resource instances still exist (delete them first)",
-            kind
+            "cannot delete CRD '{kind}': custom resource instances still exist (delete them first)"
         ));
     }
 

@@ -112,10 +112,10 @@ fn sanitized_config_snapshot(config: &OrchestratorConfig) -> OrchestratorConfig 
         if resource.kind != "SecretStore" {
             continue;
         }
-        if let Some(spec) = resource.spec.as_object_mut() {
-            if let Some(data) = spec.get_mut("data").and_then(|value| value.as_object_mut()) {
-                redact_secret_data_map(data);
-            }
+        if let Some(spec) = resource.spec.as_object_mut()
+            && let Some(data) = spec.get_mut("data").and_then(|value| value.as_object_mut())
+        {
+            redact_secret_data_map(data);
         }
     }
     sanitized

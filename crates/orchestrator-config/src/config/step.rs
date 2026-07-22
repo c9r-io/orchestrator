@@ -380,7 +380,7 @@ json_path: $.total_score
             "evaluate",
             "item_select",
         ] {
-            assert!(validate_step_type(id).is_ok(), "expected valid for {}", id);
+            assert!(validate_step_type(id).is_ok(), "expected valid for {id}");
         }
     }
 
@@ -420,8 +420,7 @@ json_path: $.total_score
             assert_eq!(
                 default_scope_for_step_id(id),
                 StepScope::Task,
-                "expected Task for {}",
-                id
+                "expected Task for {id}"
             );
         }
     }
@@ -440,8 +439,7 @@ json_path: $.total_score
             assert_eq!(
                 default_scope_for_step_id(id),
                 StepScope::Item,
-                "expected Item for {}",
-                id
+                "expected Item for {id}"
             );
         }
     }

@@ -27,7 +27,7 @@ pub fn find_crd_for_kind<'a>(
         .custom_resource_definitions
         .values()
         .find(|crd| crd.kind == kind)
-        .ok_or_else(|| anyhow!("no CustomResourceDefinition found for kind '{}'", kind))
+        .ok_or_else(|| anyhow!("no CustomResourceDefinition found for kind '{kind}'"))
 }
 
 /// Resolve an apiVersion string (e.g. "extensions.orchestrator.dev/v1") to

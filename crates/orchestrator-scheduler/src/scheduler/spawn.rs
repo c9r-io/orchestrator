@@ -160,14 +160,10 @@ pub fn execute_spawn_tasks(
 
 /// Validate spawn depth against safety limits.
 pub fn validate_spawn_depth(current_depth: i64, max_depth: Option<usize>) -> Result<()> {
-    if let Some(max) = max_depth {
-        if current_depth as usize >= max {
-            anyhow::bail!(
-                "spawn depth limit reached: current={}, max={}",
-                current_depth,
-                max
-            );
-        }
+    if let Some(max) = max_depth
+        && current_depth as usize >= max
+    {
+        anyhow::bail!("spawn depth limit reached: current={current_depth}, max={max}");
     }
     Ok(())
 }
@@ -176,7 +172,7 @@ pub fn validate_spawn_depth(current_depth: i64, max_depth: Option<usize>) -> Res
 fn resolve_template(template: &str, vars: &HashMap<String, String>) -> String {
     let mut result = template.to_string();
     for (key, value) in vars {
-        result = result.replace(&format!("{{{}}}", key), value);
+        result = result.replace(&format!("{{{key}}}"), value);
     }
     result
 }

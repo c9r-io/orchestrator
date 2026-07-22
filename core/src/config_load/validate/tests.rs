@@ -281,8 +281,7 @@ fn validate_workflow_config_rejects_duplicate_step_ids() {
     let err = result.expect_err("operation should fail").to_string();
     assert!(
         err.contains("duplicate step id 'duplicate_step'"),
-        "unexpected error: {}",
-        err
+        "unexpected error: {err}"
     );
 }
 
@@ -995,8 +994,7 @@ fn ensure_within_root_rejects_path_outside_root() {
     let err = result.expect_err("operation should fail").to_string();
     assert!(
         err.contains("resolves outside workspace root"),
-        "unexpected error: {}",
-        err
+        "unexpected error: {err}"
     );
 
     std::fs::remove_dir_all(&root).ok();
@@ -1054,8 +1052,7 @@ fn ensure_within_root_rejects_symlink_escaping_root() {
     let err = result.expect_err("operation should fail").to_string();
     assert!(
         err.contains("resolves outside workspace root"),
-        "unexpected error: {}",
-        err
+        "unexpected error: {err}"
     );
 
     std::fs::remove_dir_all(&root).ok();
@@ -1090,8 +1087,7 @@ fn validate_probe_workflow_shape_rejects_chain_steps_via_semantic_kind() {
     let err = result.expect_err("operation should fail").to_string();
     assert!(
         err.contains("self_ref.probe_command_steps_only"),
-        "unexpected error: {}",
-        err
+        "unexpected error: {err}"
     );
 }
 
@@ -1112,8 +1108,7 @@ fn validate_probe_workflow_shape_rejects_fixed_loop_mode() {
     let err = result.expect_err("operation should fail").to_string();
     assert!(
         err.contains("self_ref.probe_requires_loop_mode_once"),
-        "unexpected error: {}",
-        err
+        "unexpected error: {err}"
     );
 }
 
@@ -1134,8 +1129,7 @@ fn validate_probe_workflow_shape_rejects_infinite_loop_mode() {
     let err = result.expect_err("operation should fail").to_string();
     assert!(
         err.contains("self_ref.probe_requires_loop_mode_once"),
-        "unexpected error: {}",
-        err
+        "unexpected error: {err}"
     );
 }
 
@@ -1157,8 +1151,7 @@ fn validate_probe_workflow_shape_rejects_forbidden_phase_qa_testing() {
     let err = result.expect_err("operation should fail").to_string();
     assert!(
         err.contains("self_ref.probe_forbidden_phase"),
-        "unexpected error: {}",
-        err
+        "unexpected error: {err}"
     );
     assert!(
         err.contains("qa_testing"),
@@ -1464,8 +1457,7 @@ fn exec_profile_rejects_non_agent_step_with_profile() {
         .expect_err("command step should reject profile");
     assert!(
         err.to_string().contains("only supported on agent steps"),
-        "unexpected: {}",
-        err
+        "unexpected: {err}"
     );
 }
 
@@ -1482,8 +1474,7 @@ fn exec_profile_rejects_unknown_profile_name() {
         .expect_err("unknown profile should fail");
     assert!(
         err.to_string().contains("unknown execution profile"),
-        "unexpected: {}",
-        err
+        "unexpected: {err}"
     );
 }
 
@@ -1514,8 +1505,7 @@ fn exec_profile_rejects_host_mode_with_sandbox_fields() {
         .expect_err("host with sandbox fields should fail");
     assert!(
         err.to_string().contains("sandbox-only fields"),
-        "unexpected: {}",
-        err
+        "unexpected: {err}"
     );
 }
 
@@ -1547,8 +1537,7 @@ fn exec_profile_rejects_host_mode_with_readable_paths() {
         .expect_err("host with readable_paths should fail");
     assert!(
         err.to_string().contains("sandbox-only fields"),
-        "unexpected: {}",
-        err
+        "unexpected: {err}"
     );
 }
 
@@ -1607,8 +1596,7 @@ fn exec_profile_rejects_missing_project() {
         .expect_err("missing project should fail");
     assert!(
         err.to_string().contains("project 'nonexistent' not found"),
-        "unexpected: {}",
-        err
+        "unexpected: {err}"
     );
 }
 
@@ -1651,8 +1639,7 @@ fn adaptive_missing_planner_agent_errors() {
         .expect_err("missing planner_agent should fail");
     assert!(
         err.to_string().contains("planner_agent is missing"),
-        "unexpected: {}",
-        err
+        "unexpected: {err}"
     );
 }
 
@@ -1670,8 +1657,7 @@ fn adaptive_empty_planner_agent_errors() {
         .expect_err("whitespace-only planner_agent should fail");
     assert!(
         err.to_string().contains("planner_agent is missing"),
-        "unexpected: {}",
-        err
+        "unexpected: {err}"
     );
 }
 
@@ -1689,8 +1675,7 @@ fn adaptive_unknown_agent_errors() {
         .expect_err("unknown agent should fail");
     assert!(
         err.to_string().contains("unknown agent 'ghost'"),
-        "unexpected: {}",
-        err
+        "unexpected: {err}"
     );
 }
 
@@ -1718,8 +1703,7 @@ fn adaptive_agent_missing_capability_errors() {
     assert!(
         err.to_string()
             .contains("must support capability 'adaptive_plan'"),
-        "unexpected: {}",
-        err
+        "unexpected: {err}"
     );
 }
 
@@ -2034,8 +2018,7 @@ fn with_agents_rejects_invalid_convergence_expr_cel() {
         .expect_err("invalid CEL in convergence_expr should fail");
     assert!(
         err.to_string().contains("invalid CEL"),
-        "error should mention invalid CEL: {}",
-        err
+        "error should mention invalid CEL: {err}"
     );
 }
 
@@ -2071,8 +2054,7 @@ fn with_agents_rejects_empty_convergence_expr_when() {
         .expect_err("empty when should fail");
     assert!(
         err.to_string().contains("empty"),
-        "error should mention empty: {}",
-        err
+        "error should mention empty: {err}"
     );
 }
 

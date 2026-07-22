@@ -74,7 +74,7 @@ fn run_git(args: &[&str], cwd: &Path) {
         .current_dir(cwd)
         .status()
         .expect("run git");
-    assert!(status.success(), "git {:?} should succeed", args);
+    assert!(status.success(), "git {args:?} should succeed");
 }
 
 #[tokio::test]
@@ -618,8 +618,7 @@ async fn test_restore_rejects_corrupt_stable() {
     let err_msg = result.expect_err("should be error").to_string();
     assert!(
         err_msg.contains("pre-restore integrity check failed"),
-        "error should mention integrity check: {}",
-        err_msg
+        "error should mention integrity check: {err_msg}"
     );
 
     std::fs::remove_dir_all(&temp_dir).ok();
@@ -989,8 +988,7 @@ async fn test_execute_self_restart_step_success_returns_exit_restart() {
 
     assert!(
         matches!(result, SelfRestartOutcome::RestartReady { .. }),
-        "expected RestartReady, got {:?}",
-        result
+        "expected RestartReady, got {result:?}"
     );
 
     // Task status should be restart_pending
@@ -1248,8 +1246,7 @@ async fn test_execute_self_restart_step_binary_read_fails_uses_unknown() {
     // On success, RestartReady is returned
     assert!(
         matches!(result, SelfRestartOutcome::RestartReady { .. }),
-        "expected RestartReady, got {:?}",
-        result
+        "expected RestartReady, got {result:?}"
     );
 
     // Check that self_restart_ready event was recorded with a new_binary_sha256 field
@@ -1399,8 +1396,7 @@ async fn test_restore_binary_creates_parent_dirs() {
             let msg = e.to_string();
             assert!(
                 msg.contains("failed to restore binary snapshot"),
-                "error message should be descriptive: {}",
-                msg
+                "error message should be descriptive: {msg}"
             );
         }
     }
@@ -1440,8 +1436,7 @@ async fn test_execute_self_restart_step_records_old_binary_sha256() {
 
     assert!(
         matches!(result, SelfRestartOutcome::RestartReady { .. }),
-        "expected RestartReady, got {:?}",
-        result
+        "expected RestartReady, got {result:?}"
     );
 
     // Verify the self_restart_ready event has old_binary_sha256, new_binary_sha256, and binary_changed

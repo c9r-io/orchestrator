@@ -12,27 +12,24 @@ fn validate_env_store_refs_for_agents(
     for (agent_name, agent_cfg) in agents {
         if let Some(ref entries) = agent_cfg.env {
             for entry in entries {
-                if let Some(ref store_name) = entry.from_ref {
-                    if !env_stores.contains_key(store_name.as_str())
-                        && !secret_stores.contains_key(store_name.as_str())
-                    {
-                        anyhow::bail!(
-                            "agent '{}'(project '{}') env fromRef '{}' references unknown store",
-                            agent_name,
-                            project_id,
-                            store_name
-                        );
-                    }
+                if let Some(ref store_name) = entry.from_ref
+                    && !env_stores.contains_key(store_name.as_str())
+                    && !secret_stores.contains_key(store_name.as_str())
+                {
+                    anyhow::bail!(
+                        "agent '{agent_name}'(project '{project_id}') env fromRef '{store_name}' references unknown store"
+                    );
                 }
-                if let Some(ref rv) = entry.ref_value {
-                    if !env_stores.contains_key(&rv.name) && !secret_stores.contains_key(&rv.name) {
-                        anyhow::bail!(
-                            "agent '{}'(project '{}') env refValue.name '{}' references unknown store",
-                            agent_name,
-                            project_id,
-                            rv.name
-                        );
-                    }
+                if let Some(ref rv) = entry.ref_value
+                    && !env_stores.contains_key(&rv.name)
+                    && !secret_stores.contains_key(&rv.name)
+                {
+                    anyhow::bail!(
+                        "agent '{}'(project '{}') env refValue.name '{}' references unknown store",
+                        agent_name,
+                        project_id,
+                        rv.name
+                    );
                 }
             }
         }

@@ -710,91 +710,89 @@ async fn execute_automation_route(
             .permalink
             .clone()
             .context("resolved automation route has no permalink")?
-    } else {
-        if managed_connection {
-            let provider = state
-                .source_connection_provider
-                .read()
-                .map_err(|_| anyhow::anyhow!("managed provider lock poisoned"))?
-                .clone();
-            match provider
-                .permalink(
-                    &route.project_id,
-                    &snapshot.credential_key,
-                    &route.channel_id,
-                    &route.message_ts,
-                )
-                .await
-            {
-                Ok(permalink) => {
-                    route_repository
-                        .record_permalink(&route.id, lease_token, &permalink)
-                        .await?;
-                    permalink
-                }
-                Err(_) => {
-                    return handle_automation_failure(
-                        state,
-                        source_repository,
-                        route_repository,
-                        Some(event),
-                        &route,
-                        "managed_permalink_failed",
-                        "provider_contract",
-                        true,
-                        None,
-                    )
-                    .await;
-                }
+    } else if managed_connection {
+        let provider = state
+            .source_connection_provider
+            .read()
+            .map_err(|_| anyhow::anyhow!("managed provider lock poisoned"))?
+            .clone();
+        match provider
+            .permalink(
+                &route.project_id,
+                &snapshot.credential_key,
+                &route.channel_id,
+                &route.message_ts,
+            )
+            .await
+        {
+            Ok(permalink) => {
+                route_repository
+                    .record_permalink(&route.id, lease_token, &permalink)
+                    .await?;
+                permalink
             }
-        } else {
-            let client = match SlackApiClient::new() {
-                Ok(client) => client,
-                Err(error) => {
-                    return handle_automation_failure(
-                        state,
-                        source_repository,
-                        route_repository,
-                        Some(event),
-                        &route,
-                        error.code(),
-                        "provider_configuration",
-                        false,
-                        None,
-                    )
-                    .await;
-                }
-            };
-            match client
-                .get_permalink(
-                    token
-                        .as_deref()
-                        .context("manual Slack credential missing")?,
-                    &route.channel_id,
-                    &route.message_ts,
+            Err(_) => {
+                return handle_automation_failure(
+                    state,
+                    source_repository,
+                    route_repository,
+                    Some(event),
+                    &route,
+                    "managed_permalink_failed",
+                    "provider_contract",
+                    true,
+                    None,
                 )
-                .await
-            {
-                Ok(permalink) => {
-                    route_repository
-                        .record_permalink(&route.id, lease_token, &permalink.url)
-                        .await?;
-                    permalink.url
-                }
-                Err(error) => {
-                    return handle_automation_failure(
-                        state,
-                        source_repository,
-                        route_repository,
-                        Some(event),
-                        &route,
-                        error.code(),
-                        slack_error_category(error.code()),
-                        error.is_transient(),
-                        error.retry_after().map(|value| value.as_secs()),
-                    )
-                    .await;
-                }
+                .await;
+            }
+        }
+    } else {
+        let client = match SlackApiClient::new() {
+            Ok(client) => client,
+            Err(error) => {
+                return handle_automation_failure(
+                    state,
+                    source_repository,
+                    route_repository,
+                    Some(event),
+                    &route,
+                    error.code(),
+                    "provider_configuration",
+                    false,
+                    None,
+                )
+                .await;
+            }
+        };
+        match client
+            .get_permalink(
+                token
+                    .as_deref()
+                    .context("manual Slack credential missing")?,
+                &route.channel_id,
+                &route.message_ts,
+            )
+            .await
+        {
+            Ok(permalink) => {
+                route_repository
+                    .record_permalink(&route.id, lease_token, &permalink.url)
+                    .await?;
+                permalink.url
+            }
+            Err(error) => {
+                return handle_automation_failure(
+                    state,
+                    source_repository,
+                    route_repository,
+                    Some(event),
+                    &route,
+                    error.code(),
+                    slack_error_category(error.code()),
+                    error.is_transient(),
+                    error.retry_after().map(|value| value.as_secs()),
+                )
+                .await;
             }
         }
     };

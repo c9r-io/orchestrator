@@ -23,10 +23,10 @@ fn expand_tilde(input: &str) -> String {
     if input == "~" {
         return std::env::var("HOME").unwrap_or_else(|_| input.to_string());
     }
-    if let Some(rest) = input.strip_prefix("~/") {
-        if let Ok(home) = std::env::var("HOME") {
-            return format!("{}/{}", home.trim_end_matches('/'), rest);
-        }
+    if let Some(rest) = input.strip_prefix("~/")
+        && let Ok(home) = std::env::var("HOME")
+    {
+        return format!("{}/{}", home.trim_end_matches('/'), rest);
     }
     input.to_string()
 }

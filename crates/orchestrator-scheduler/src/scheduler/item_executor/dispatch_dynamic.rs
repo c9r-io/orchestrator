@@ -149,7 +149,7 @@ impl AdaptivePlanExecutor for AgentBackedAdaptiveExecutor<'_> {
                 &active.config,
                 planner_agent,
             )
-            .ok_or_else(|| anyhow!("adaptive planner agent not found: {}", planner_agent))?;
+            .ok_or_else(|| anyhow!("adaptive planner agent not found: {planner_agent}"))?;
             (agent.command.clone(), agent.prompt_delivery)
         };
         let result = run_phase_with_selected_agent(
@@ -313,7 +313,7 @@ async fn execute_adaptive_plan(
         }
         let node = plan
             .get_node(&node_id)
-            .ok_or_else(|| anyhow!("adaptive plan node disappeared: {}", node_id))?;
+            .ok_or_else(|| anyhow!("adaptive plan node disappeared: {node_id}"))?;
         let dyn_step = agent_orchestrator::dynamic_orchestration::DynamicStepConfig {
             id: node.id.clone(),
             description: None,

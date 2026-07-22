@@ -192,7 +192,7 @@ pub(crate) mod tests {
         let ts = super::now_ts();
         assert!(!ts.is_empty());
         let parsed = chrono::DateTime::parse_from_rfc3339(&ts);
-        assert!(parsed.is_ok(), "now_ts should return valid RFC3339: {}", ts);
+        assert!(parsed.is_ok(), "now_ts should return valid RFC3339: {ts}");
     }
 
     #[test]

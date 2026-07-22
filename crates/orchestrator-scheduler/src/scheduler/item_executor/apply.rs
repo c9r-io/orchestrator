@@ -285,7 +285,7 @@ pub(super) async fn apply_step_results(
             .count();
         if ticket_artifact_count > 0 {
             acc.active_tickets = (0..ticket_artifact_count)
-                .map(|idx| format!("artifact://ticket/{}", idx))
+                .map(|idx| format!("artifact://ticket/{idx}"))
                 .collect();
             acc.new_ticket_count = acc.active_tickets.len() as i64;
         }

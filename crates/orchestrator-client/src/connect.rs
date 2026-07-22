@@ -107,8 +107,7 @@ async fn connect_uds() -> Result<Channel> {
             Err(e) => {
                 if attempt < max_attempts {
                     eprintln!(
-                        "daemon connection attempt {}/{} failed, retrying in 1s…",
-                        attempt, max_attempts,
+                        "daemon connection attempt {attempt}/{max_attempts} failed, retrying in 1s…",
                     );
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 }

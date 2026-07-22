@@ -48,9 +48,7 @@ pub(super) fn validate_workflow_steps<A: AgentLookup>(
         );
         if !is_self_contained && !agents.has_capability(key) {
             anyhow::bail!(
-                "no agent supports capability for step '{}' used by workflow '{}'",
-                key,
-                workflow_id
+                "no agent supports capability for step '{key}' used by workflow '{workflow_id}'"
             );
         }
         if !is_self_contained {
@@ -77,7 +75,7 @@ pub(super) fn validate_workflow_steps<A: AgentLookup>(
         }
     }
     if enabled_count == 0 {
-        anyhow::bail!("workflow '{}' has no enabled steps", workflow_id);
+        anyhow::bail!("workflow '{workflow_id}' has no enabled steps");
     }
     Ok(enabled_count)
 }
@@ -649,7 +647,7 @@ mod tests {
             ..default_step_spec()
         };
         let warnings = collect_step_warnings(&[capture_step, prehook_step], "test-wf");
-        assert!(warnings.is_empty(), "unexpected warnings: {:?}", warnings);
+        assert!(warnings.is_empty(), "unexpected warnings: {warnings:?}");
     }
 
     #[test]
@@ -679,15 +677,13 @@ mod tests {
             warnings
                 .iter()
                 .any(|w| w.contains("capture") && w.contains("behavior.captures")),
-            "expected 'did you mean' warning, got: {:?}",
-            warnings
+            "expected 'did you mean' warning, got: {warnings:?}"
         );
         assert!(
             warnings.iter().any(
                 |w| w.contains("regression_target_ids") && w.contains("no prior step captures")
             ),
-            "expected uncaptured var warning, got: {:?}",
-            warnings
+            "expected uncaptured var warning, got: {warnings:?}"
         );
     }
 
@@ -721,8 +717,7 @@ mod tests {
         let warnings = collect_step_warnings(&[capture_step, prehook_step], "test-workflow");
         assert!(
             warnings.is_empty(),
-            "expected no warnings for steps.step_a.var access, got: {:?}",
-            warnings
+            "expected no warnings for steps.step_a.var access, got: {warnings:?}"
         );
     }
 

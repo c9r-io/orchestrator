@@ -266,7 +266,7 @@ fn get_resource_supports_named_queries_describe_and_selector_helpers() {
         Some(crate::config::DEFAULT_PROJECT_ID),
     )
     .expect("get named workspace");
-    assert!(named.contains(&format!("work_dir: {}", ws_root_str)));
+    assert!(named.contains(&format!("work_dir: {ws_root_str}")));
 
     let listed = get_resource(
         &state,

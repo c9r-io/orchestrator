@@ -18,13 +18,13 @@ pub(crate) fn spill_large_var(
     if let Err(e) = std::fs::create_dir_all(&dir) {
         warn!(task_id, key, error = %e, "pipeline var: failed to create spill directory");
     }
-    let path = dir.join(format!("{}.txt", key));
+    let path = dir.join(format!("{key}.txt"));
     if let Err(e) = std::fs::write(&path, &value) {
         warn!(task_id, key, path = %path.display(), error = %e, "pipeline var: failed to write spill file");
     }
     pipeline
         .vars
-        .insert(format!("{}_path", key), path.to_string_lossy().to_string());
+        .insert(format!("{key}_path"), path.to_string_lossy().to_string());
 
     if value.len() <= PIPELINE_VAR_INLINE_LIMIT {
         pipeline.vars.insert(key.to_string(), value);
@@ -61,7 +61,7 @@ pub(crate) fn spill_to_file(
     if let Err(e) = std::fs::create_dir_all(&dir) {
         warn!(task_id, key, error = %e, "pipeline var: failed to create spill directory");
     }
-    let path = dir.join(format!("{}.txt", key));
+    let path = dir.join(format!("{key}.txt"));
     if let Err(e) = std::fs::write(&path, value.as_bytes()) {
         warn!(task_id, key, path = %path.display(), error = %e, "pipeline var: failed to write spill file");
     }

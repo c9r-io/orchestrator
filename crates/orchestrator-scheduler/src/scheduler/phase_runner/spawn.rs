@@ -163,34 +163,33 @@ pub(super) async fn spawn_phase_process(
     let mut output_capture = Some(captured.output_capture);
 
     // Write prompt to child stdin for stdin delivery mode
-    if effective_pipe_stdin {
-        if let Some(payload) = &prompt_payload {
-            if let Some(mut stdin_handle) = child.stdin.take() {
-                use tokio::io::AsyncWriteExt;
-                stdin_handle.write_all(payload.as_bytes()).await?;
-                drop(stdin_handle); // send EOF
-            }
-        }
+    if effective_pipe_stdin
+        && let Some(payload) = &prompt_payload
+        && let Some(mut stdin_handle) = child.stdin.take()
+    {
+        use tokio::io::AsyncWriteExt;
+        stdin_handle.write_all(payload.as_bytes()).await?;
+        drop(stdin_handle); // send EOF
     }
 
-    if let Some(sid) = session_id.as_deref() {
-        if let Some(pid) = child.id() {
-            let fingerprint = session_store::capture_process_fingerprint(pid);
-            let sid_owned = sid.to_owned();
-            let _ = state
-                .async_database
-                .writer()
-                .call(move |conn| {
-                    session_store::update_session_process(
-                        conn,
-                        &sid_owned,
-                        pid as i64,
-                        fingerprint.as_deref(),
-                    )
-                    .map_err(|err| tokio_rusqlite::Error::Other(err.into()))
-                })
-                .await;
-        }
+    if let Some(sid) = session_id.as_deref()
+        && let Some(pid) = child.id()
+    {
+        let fingerprint = session_store::capture_process_fingerprint(pid);
+        let sid_owned = sid.to_owned();
+        let _ = state
+            .async_database
+            .writer()
+            .call(move |conn| {
+                session_store::update_session_process(
+                    conn,
+                    &sid_owned,
+                    pid as i64,
+                    fingerprint.as_deref(),
+                )
+                .map_err(|err| tokio_rusqlite::Error::Other(err.into()))
+            })
+            .await;
     }
 
     if tty && session_id.is_some() {

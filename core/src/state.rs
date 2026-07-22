@@ -389,7 +389,7 @@ mod tests {
                     execution_profiles: HashMap::new(),
                 })
                 .workflows
-                .insert(format!("{}-updated", original), workflow_clone);
+                .insert(format!("{original}-updated"), workflow_clone);
             (next, ())
         });
 
@@ -397,7 +397,7 @@ mod tests {
             .expect("re-read active config")
             .projects
             .get(crate::config::DEFAULT_PROJECT_ID)
-            .map(|p| p.workflows.contains_key(&format!("{}-updated", original)))
+            .map(|p| p.workflows.contains_key(&format!("{original}-updated")))
             .unwrap_or(false);
         assert!(updated_exists);
     }

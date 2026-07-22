@@ -17,10 +17,10 @@ pub(super) fn check_capability_coverage(
         .collect();
 
     for (wf_id, wf) in workflows {
-        if let Some(filter) = workflow_filter {
-            if wf_id != filter {
-                continue;
-            }
+        if let Some(filter) = workflow_filter
+            && wf_id != filter
+        {
+            continue;
         }
         check_steps_capability(&wf.steps, wf_id, &all_caps, out);
     }

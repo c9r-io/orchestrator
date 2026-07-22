@@ -38,8 +38,8 @@ pub(super) async fn setup_phase_execution(
     let run_uuid = Uuid::new_v4();
     let run_id = run_uuid.to_string();
     let logs_dir = state.logs_dir.join(task_id);
-    let stdout_path = logs_dir.join(format!("{}_{}.stdout", phase, run_id));
-    let stderr_path = logs_dir.join(format!("{}_{}.stderr", phase, run_id));
+    let stdout_path = logs_dir.join(format!("{phase}_{run_id}.stdout"));
+    let stderr_path = logs_dir.join(format!("{phase}_{run_id}.stderr"));
 
     let (
         runner,
@@ -267,7 +267,7 @@ pub(super) async fn setup_phase_execution(
     let command = match prompt_delivery {
         PromptDelivery::File => {
             if let Some(payload) = &prompt_payload {
-                let prompt_file_path = logs_dir.join(format!("prompt_{}.txt", run_id));
+                let prompt_file_path = logs_dir.join(format!("prompt_{run_id}.txt"));
                 std::fs::write(&prompt_file_path, payload).with_context(|| {
                     format!(
                         "failed to write prompt file: {}",
@@ -373,6 +373,6 @@ pub(super) async fn setup_phase_execution(
         command,
         command_template,
         driver,
-        artifacts_dir: logs_dir.join(format!("{}_{}.artifacts", phase, run_id)),
+        artifacts_dir: logs_dir.join(format!("{phase}_{run_id}.artifacts")),
     })
 }

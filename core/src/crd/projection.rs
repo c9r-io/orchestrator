@@ -720,7 +720,7 @@ mod tests {
         ];
         let mut set = std::collections::HashSet::new();
         for kind in &kinds {
-            assert!(set.insert(*kind), "duplicate kind: {}", kind);
+            assert!(set.insert(*kind), "duplicate kind: {kind}");
         }
         assert_eq!(set.len(), 14);
     }

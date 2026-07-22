@@ -45,7 +45,7 @@ pub(crate) async fn dispatch(
                 let scope = entry
                     .project_scope
                     .as_ref()
-                    .map(|p| format!(" (project: {})", p))
+                    .map(|p| format!(" (project: {p})"))
                     .unwrap_or_default();
                 if dry_run {
                     println!(
@@ -57,13 +57,13 @@ pub(crate) async fn dispatch(
                 }
             }
             if let Some(version) = resp.config_version {
-                println!("configuration version: {}", version);
+                println!("configuration version: {version}");
             }
             for warning in &resp.warnings {
-                eprintln!("Warning: {}", warning);
+                eprintln!("Warning: {warning}");
             }
             for err in &resp.errors {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             }
             for diagnostic in &resp.diagnostics {
                 eprintln!(

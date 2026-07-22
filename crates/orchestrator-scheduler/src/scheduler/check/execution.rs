@@ -24,10 +24,10 @@ pub(super) fn check_execution_profile_backend_support(
         .unwrap_or_else(|| data_dir.to_path_buf());
 
     for (workflow_id, workflow) in workflows {
-        if let Some(filter) = workflow_filter {
-            if workflow_id != filter {
-                continue;
-            }
+        if let Some(filter) = workflow_filter
+            && workflow_id != filter
+        {
+            continue;
         }
         for step in &workflow.steps {
             let Some(profile_name) = step.execution_profile.as_deref() else {

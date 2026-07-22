@@ -140,7 +140,7 @@ pub(crate) async fn dispatch(
                 match chunk {
                     Ok(c) => println!("{}", c.content),
                     Err(e) => {
-                        eprintln!("stream error: {}", e);
+                        eprintln!("stream error: {e}");
                         break;
                     }
                 }
@@ -156,7 +156,7 @@ pub(crate) async fn dispatch(
                     match line {
                         Ok(l) => println!("{}", l.line),
                         Err(e) => {
-                            eprintln!("follow error: {}", e);
+                            eprintln!("follow error: {e}");
                             break;
                         }
                     }
@@ -193,7 +193,7 @@ pub(crate) async fn dispatch(
                     .into_inner();
                 println!("{}", resp.message);
                 for err in &resp.errors {
-                    eprintln!("  error: {}", err);
+                    eprintln!("  error: {err}");
                 }
             }
             Ok(())
@@ -248,13 +248,13 @@ pub(crate) async fn dispatch(
                 let next = if let Some(dl) = deadline {
                     let remaining = dl.saturating_duration_since(tokio::time::Instant::now());
                     if remaining.is_zero() {
-                        eprintln!("watch: timeout after {}s", timeout);
+                        eprintln!("watch: timeout after {timeout}s");
                         break;
                     }
                     match tokio::time::timeout(remaining, stream.next()).await {
                         Ok(item) => item,
                         Err(_) => {
-                            eprintln!("watch: timeout after {}s", timeout);
+                            eprintln!("watch: timeout after {timeout}s");
                             break;
                         }
                     }
@@ -283,7 +283,7 @@ pub(crate) async fn dispatch(
                         }
                     }
                     Some(Err(e)) => {
-                        eprintln!("watch error: {}", e);
+                        eprintln!("watch error: {e}");
                         break;
                     }
                     None => break,
@@ -330,7 +330,7 @@ pub(crate) async fn dispatch(
                     let at = anomaly
                         .at
                         .as_deref()
-                        .map(|t| format!(" at {}", t))
+                        .map(|t| format!(" at {t}"))
                         .unwrap_or_default();
                     println!(
                         "[{}] {}: {}{}",

@@ -71,7 +71,7 @@ pub fn evaluate_webhook_filter(expression: &str, payload: &serde_json::Value) ->
     let compiled = std::panic::catch_unwind(|| Program::compile(expression))
         .map_err(|_| anyhow::anyhow!("webhook filter compilation panicked"))?;
     let program =
-        compiled.map_err(|err| anyhow::anyhow!("webhook filter compilation failed: {}", err))?;
+        compiled.map_err(|err| anyhow::anyhow!("webhook filter compilation failed: {err}"))?;
 
     let mut cel_context = cel_interpreter::Context::default();
     // Inject the full payload as a JSON string variable for complex access.
@@ -108,10 +108,10 @@ pub fn evaluate_webhook_filter(expression: &str, payload: &serde_json::Value) ->
 
     let value = program
         .execute(&cel_context)
-        .map_err(|err| anyhow::anyhow!("webhook filter execution failed: {}", err))?;
+        .map_err(|err| anyhow::anyhow!("webhook filter execution failed: {err}"))?;
     match value {
         CelValue::Bool(v) => Ok(v),
-        other => anyhow::bail!("webhook filter must return bool, got {:?}", other),
+        other => anyhow::bail!("webhook filter must return bool, got {other:?}"),
     }
 }
 
@@ -123,14 +123,14 @@ pub fn evaluate_convergence_expression(
     let compiled = std::panic::catch_unwind(|| Program::compile(expression))
         .map_err(|_| anyhow::anyhow!("convergence_expr compilation panicked"))?;
     let program =
-        compiled.map_err(|err| anyhow::anyhow!("convergence_expr compilation failed: {}", err))?;
+        compiled.map_err(|err| anyhow::anyhow!("convergence_expr compilation failed: {err}"))?;
     let cel_context = build_convergence_cel_context(context)?;
     let value = program
         .execute(&cel_context)
-        .map_err(|err| anyhow::anyhow!("convergence_expr execution failed: {}", err))?;
+        .map_err(|err| anyhow::anyhow!("convergence_expr execution failed: {err}"))?;
     match value {
         CelValue::Bool(v) => Ok(v),
-        other => anyhow::bail!("convergence_expr must return bool, got {:?}", other),
+        other => anyhow::bail!("convergence_expr must return bool, got {other:?}"),
     }
 }
 

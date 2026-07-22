@@ -43,10 +43,10 @@ pub fn build_timeline_page(
     redaction_patterns: &[String],
 ) -> Result<TimelinePage> {
     let cursor = query.cursor.as_deref().map(decode_cursor).transpose()?;
-    if let Some(cursor) = &cursor {
-        if cursor.snapshot_max_event_id != source.snapshot_max_event_id {
-            bail!("timeline cursor watermark does not match source snapshot");
-        }
+    if let Some(cursor) = &cursor
+        && cursor.snapshot_max_event_id != source.snapshot_max_event_id
+    {
+        bail!("timeline cursor watermark does not match source snapshot");
     }
     let categories = parse_categories(&query.categories)?;
     let projected = project_timeline(source, redaction_patterns, &categories);

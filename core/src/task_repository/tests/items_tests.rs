@@ -159,8 +159,7 @@ fn delete_task_and_collect_log_paths_errors_for_missing_task() {
         .expect_err("should error for missing task");
     assert!(
         err.to_string().contains("task not found"),
-        "error should mention 'task not found', got: {}",
-        err
+        "error should mention 'task not found', got: {err}"
     );
 }
 

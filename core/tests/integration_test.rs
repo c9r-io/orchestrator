@@ -970,8 +970,7 @@ fn multi_agent_capability_config_validates() {
     let result = validate_workflow_config(&config, workflow, "bootstrap");
     assert!(
         result.is_ok(),
-        "multi-agent config should validate: {:?}",
-        result
+        "multi-agent config should validate: {result:?}"
     );
 }
 

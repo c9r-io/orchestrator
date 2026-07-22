@@ -229,12 +229,7 @@ mod tests {
         for rule in ALL_RULES {
             let name = rule.canonical_name();
             let parsed = AnomalyRule::from_canonical(name);
-            assert_eq!(
-                parsed.as_ref(),
-                Some(rule),
-                "roundtrip failed for {:?}",
-                rule
-            );
+            assert_eq!(parsed.as_ref(), Some(rule), "roundtrip failed for {rule:?}");
         }
     }
 
@@ -336,7 +331,7 @@ mod tests {
     #[test]
     fn display_tag_non_empty() {
         for rule in ALL_RULES {
-            assert!(!rule.display_tag().is_empty(), "empty tag for {:?}", rule);
+            assert!(!rule.display_tag().is_empty(), "empty tag for {rule:?}");
         }
     }
 

@@ -13,10 +13,10 @@ pub(super) fn check_builtin_names(
     out: &mut Vec<CheckResult>,
 ) {
     for (wf_id, wf) in workflows {
-        if let Some(filter) = workflow_filter {
-            if wf_id != filter {
-                continue;
-            }
+        if let Some(filter) = workflow_filter
+            && wf_id != filter
+        {
+            continue;
         }
         check_steps_builtin(&wf.steps, wf_id, out);
     }
@@ -117,10 +117,10 @@ pub(super) fn check_pipe_to_refs(
     out: &mut Vec<CheckResult>,
 ) {
     for (wf_id, wf) in workflows {
-        if let Some(filter) = workflow_filter {
-            if wf_id != filter {
-                continue;
-            }
+        if let Some(filter) = workflow_filter
+            && wf_id != filter
+        {
+            continue;
         }
         let step_ids: HashSet<&str> = collect_step_ids(&wf.steps);
         check_steps_pipe_to(&wf.steps, wf_id, &step_ids, out);
@@ -187,10 +187,10 @@ pub(super) fn check_template_vars(
 
     // Collect pipeline-derived vars per workflow
     for (wf_id, wf) in workflows {
-        if let Some(filter) = workflow_filter {
-            if wf_id != filter {
-                continue;
-            }
+        if let Some(filter) = workflow_filter
+            && wf_id != filter
+        {
+            continue;
         }
         let mut pipeline_vars: HashSet<String> = HashSet::new();
         for step in &wf.steps {
@@ -234,10 +234,10 @@ pub(super) fn check_empty_workflows(
     out: &mut Vec<CheckResult>,
 ) {
     for (wf_id, wf) in workflows {
-        if let Some(filter) = workflow_filter {
-            if wf_id != filter {
-                continue;
-            }
+        if let Some(filter) = workflow_filter
+            && wf_id != filter
+        {
+            continue;
         }
         let enabled_count = wf.steps.iter().filter(|s| s.enabled).count();
         let is_empty = enabled_count == 0;

@@ -390,7 +390,7 @@ mod tests {
             "op",
             anyhow::anyhow!("boom"),
         );
-        let display = format!("{}", err);
+        let display = format!("{err}");
         assert_eq!(display, "op: boom");
     }
 
@@ -402,7 +402,7 @@ mod tests {
             anyhow::anyhow!("missing"),
         )
         .with_subject("proj-1");
-        let display = format!("{}", err);
+        let display = format!("{err}");
         assert_eq!(display, "resource.get [proj-1]: missing");
     }
 

@@ -1019,7 +1019,7 @@ mod tests {
     fn test_parse_ticket_preview_content_status_after_line_80() {
         let mut content = String::new();
         for i in 0..85 {
-            content.push_str(&format!("line {}\n", i));
+            content.push_str(&format!("line {i}\n"));
         }
         content.push_str("**Status**: LATE\n");
         let result = parse_ticket_preview_content(&content);
@@ -1100,10 +1100,10 @@ mod tests {
 
         let stdout_path = dir.join("stdout.log");
         // Write 50 lines, only last 20 should appear
-        let stdout_content: String = (1..=50).map(|i| format!("line {}\n", i)).collect();
+        let stdout_content: String = (1..=50).map(|i| format!("line {i}\n")).collect();
         std::fs::write(&stdout_path, &stdout_content).expect("write stdout");
         let stderr_path = dir.join("stderr.log");
-        let stderr_content: String = (1..=30).map(|i| format!("err {}\n", i)).collect();
+        let stderr_content: String = (1..=30).map(|i| format!("err {i}\n")).collect();
         std::fs::write(&stderr_path, &stderr_content).expect("write stderr");
 
         let result = create_ticket_for_qa_failure(

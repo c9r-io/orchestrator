@@ -354,11 +354,11 @@ fn print_agent_list(agents: &[orchestrator_proto::AgentStatus], format: OutputFo
                 println!("  in_flight_items: {}", a.in_flight_items);
                 println!("  capabilities: {:?}", a.capabilities);
                 if let Some(ref dt) = a.drain_requested_at {
-                    println!("  drain_requested_at: {}", dt);
+                    println!("  drain_requested_at: {dt}");
                 }
                 println!("  is_healthy: {}", a.is_healthy);
                 if let Some(ref dt) = a.diseased_until {
-                    println!("  diseased_until: {}", dt);
+                    println!("  diseased_until: {dt}");
                 }
                 if a.consecutive_errors > 0 {
                     println!("  consecutive_errors: {}", a.consecutive_errors);

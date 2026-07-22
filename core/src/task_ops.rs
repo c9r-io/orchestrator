@@ -220,7 +220,7 @@ fn validate_task_workspace_compatibility(
         let profile = project
             .execution_profiles
             .get(profile_name)
-            .ok_or_else(|| anyhow::anyhow!("execution profile '{}' not found", profile_name))?;
+            .ok_or_else(|| anyhow::anyhow!("execution profile '{profile_name}' not found"))?;
         if profile.mode != ExecutionProfileMode::Sandbox
             || profile.fs_mode == ExecutionFsMode::Inherit
         {
@@ -237,9 +237,7 @@ fn validate_task_workspace_compatibility(
             for raw in configured {
                 if raw.contains('$') {
                     anyhow::bail!(
-                        "[FILE_SHARING_DYNAMIC_PATH_FORBIDDEN] task workspace {} cannot contain environment expansion: '{}'",
-                        field,
-                        raw
+                        "[FILE_SHARING_DYNAMIC_PATH_FORBIDDEN] task workspace {field} cannot contain environment expansion: '{raw}'"
                     );
                 }
                 let expanded = orchestrator_config::file_sharing::expand_home(raw)?;
@@ -418,7 +416,7 @@ pub fn create_task_impl_with_id_outcome(
     let project = active
         .projects
         .get(&project_id)
-        .with_context(|| format!("project not found: {}", project_id))?;
+        .with_context(|| format!("project not found: {project_id}"))?;
 
     let workspace_id = if let Some(workspace_id) = payload.workspace_id.clone() {
         workspace_id
@@ -430,10 +428,7 @@ pub fn create_task_impl_with_id_outcome(
         .get(&workspace_id)
         .cloned()
         .with_context(|| {
-            format!(
-                "workspace not found: {} in project '{}'",
-                workspace_id, project_id
-            )
+            format!("workspace not found: {workspace_id} in project '{project_id}'")
         })?;
 
     let workflow_id = if let Some(workflow_id) = payload.workflow_id.clone() {
@@ -445,12 +440,7 @@ pub fn create_task_impl_with_id_outcome(
         .workflows
         .get(&workflow_id)
         .cloned()
-        .with_context(|| {
-            format!(
-                "workflow not found: {} in project '{}'",
-                workflow_id, project_id
-            )
-        })?;
+        .with_context(|| format!("workflow not found: {workflow_id} in project '{project_id}'"))?;
 
     let execution_plan =
         build_execution_plan_for_project(&active.config, &workflow, &workflow_id, &project_id)?;
@@ -581,7 +571,7 @@ pub fn create_run_step_task(
     let project = active
         .projects
         .get(&project_id)
-        .with_context(|| format!("project not found: {}", project_id))?;
+        .with_context(|| format!("project not found: {project_id}"))?;
 
     let workspace_id = if let Some(ws) = payload.workspace_id {
         ws
@@ -592,7 +582,7 @@ pub fn create_run_step_task(
         .workspaces
         .get(&workspace_id)
         .cloned()
-        .with_context(|| format!("workspace not found: {}", workspace_id))?;
+        .with_context(|| format!("workspace not found: {workspace_id}"))?;
 
     // Validate template exists
     if !project.step_templates.contains_key(&payload.template) {
@@ -750,7 +740,7 @@ fn resolve_default_resource_id<T>(
     resource_kind: &str,
 ) -> Result<String> {
     if entries.is_empty() {
-        anyhow::bail!("project has no {}s configured", resource_kind);
+        anyhow::bail!("project has no {resource_kind}s configured");
     }
     if entries.len() == 1 {
         return Ok(entries.keys().next().cloned().unwrap_or_default());
@@ -759,9 +749,7 @@ fn resolve_default_resource_id<T>(
         return Ok("default".to_string());
     }
     anyhow::bail!(
-        "multiple {}s exist in project; specify --{} explicitly",
-        resource_kind,
-        resource_kind
+        "multiple {resource_kind}s exist in project; specify --{resource_kind} explicitly"
     )
 }
 
@@ -807,7 +795,7 @@ fn resolve_task_item_id(conn: &rusqlite::Connection, id_or_prefix: &str) -> Resu
     if let Some(id) = exact {
         return Ok(id);
     }
-    let pattern = format!("{}%", id_or_prefix);
+    let pattern = format!("{id_or_prefix}%");
     let mut stmt = conn.prepare("SELECT id FROM task_items WHERE id LIKE ?1")?;
     let matches: Vec<String> = stmt
         .query_map(params![pattern], |row| row.get(0))?
@@ -817,12 +805,8 @@ fn resolve_task_item_id(conn: &rusqlite::Connection, id_or_prefix: &str) -> Resu
             .into_iter()
             .next()
             .ok_or_else(|| anyhow::anyhow!("unexpected empty matches"))?),
-        0 => anyhow::bail!("task item not found: {}", id_or_prefix),
-        _ => anyhow::bail!(
-            "multiple task items match prefix '{}': {:?}",
-            id_or_prefix,
-            matches
-        ),
+        0 => anyhow::bail!("task item not found: {id_or_prefix}"),
+        _ => anyhow::bail!("multiple task items match prefix '{id_or_prefix}': {matches:?}"),
     }
 }
 
@@ -1046,8 +1030,7 @@ mod tests {
         let err = result.expect_err("operation should fail").to_string();
         assert!(
             err.contains("workspace not found"),
-            "unexpected error: {}",
-            err
+            "unexpected error: {err}"
         );
     }
 
@@ -1073,8 +1056,7 @@ mod tests {
         let err = result.expect_err("operation should fail").to_string();
         assert!(
             err.contains("workflow not found"),
-            "unexpected error: {}",
-            err
+            "unexpected error: {err}"
         );
     }
 
@@ -1101,8 +1083,7 @@ mod tests {
         let err = result.expect_err("operation should fail").to_string();
         assert!(
             err.contains("No QA/Security markdown files found for item-scoped workflow"),
-            "unexpected error: {}",
-            err
+            "unexpected error: {err}"
         );
     }
 
@@ -1124,8 +1105,8 @@ mod tests {
         let file2 = qa_path.join("file2.md");
         std::fs::write(&file1, "# File 1\n").expect("write file1");
         std::fs::write(&file2, "# File 2\n").expect("write file2");
-        let rel1 = format!("{}/file1.md", qa_dir);
-        let rel2 = format!("{}/file2.md", qa_dir);
+        let rel1 = format!("{qa_dir}/file1.md");
+        let rel2 = format!("{qa_dir}/file2.md");
         drop(active);
 
         let payload = CreateTaskPayload {

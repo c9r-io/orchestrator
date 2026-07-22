@@ -132,13 +132,12 @@ impl EffectiveExecutionGraph {
         if self.nodes.is_empty() {
             return Err(anyhow!("effective execution graph has no nodes"));
         }
-        if let Some(entry) = self.entry.as_deref() {
-            if !self.nodes.contains_key(entry) {
-                return Err(anyhow!(
-                    "effective execution graph entry '{}' is missing",
-                    entry
-                ));
-            }
+        if let Some(entry) = self.entry.as_deref()
+            && !self.nodes.contains_key(entry)
+        {
+            return Err(anyhow!(
+                "effective execution graph entry '{entry}' is missing"
+            ));
         }
         let mut in_degree: HashMap<&str, usize> = self
             .nodes

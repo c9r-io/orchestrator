@@ -57,18 +57,14 @@ fn set_source_task_binding_suspend(
         .projects
         .get_mut(project_id)
         .ok_or_else(|| {
-            classify_resource_error(op, anyhow::anyhow!("project not found: {}", project_id))
+            classify_resource_error(op, anyhow::anyhow!("project not found: {project_id}"))
         })?
         .source_task_bindings
         .get_mut(name)
         .ok_or_else(|| {
             classify_resource_error(
                 op,
-                anyhow::anyhow!(
-                    "SourceTaskBinding '{}' not found in project '{}'",
-                    name,
-                    project_id
-                ),
+                anyhow::anyhow!("SourceTaskBinding '{name}' not found in project '{project_id}'"),
             )
         })?;
     binding.suspend = suspend;

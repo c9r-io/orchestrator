@@ -265,7 +265,7 @@ mod tests {
                 .iter()
                 .find(|s| s.id == *id)
                 .expect("repeatable step should exist");
-            assert!(s.repeatable, "step {} should be repeatable", id);
+            assert!(s.repeatable, "step {id} should be repeatable");
         }
     }
 

@@ -32,12 +32,7 @@ fn load_trigger_cfg(
         .projects
         .get(project)
         .and_then(|p| p.triggers.get(trigger_name))
-        .unwrap_or_else(|| {
-            panic!(
-                "trigger '{}' not found in project '{}'",
-                trigger_name, project
-            )
-        })
+        .unwrap_or_else(|| panic!("trigger '{trigger_name}' not found in project '{project}'"))
         .clone()
 }
 

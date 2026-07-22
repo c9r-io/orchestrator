@@ -113,7 +113,7 @@ pub fn render_source_task_template(
     ]);
     let goal = render_goal(&template.goal_template, &values)?;
     if goal.len() > MAX_GOAL_BYTES {
-        bail!("rendered goal exceeds {} bytes", MAX_GOAL_BYTES);
+        bail!("rendered goal exceeds {MAX_GOAL_BYTES} bytes");
     }
     let content_hash = template_content_hash(template)?;
     let warnings = if input.installation_verified {
@@ -148,11 +148,11 @@ pub fn render_source_task_template_from_config(
     let project = config
         .projects
         .get(project_id)
-        .ok_or_else(|| anyhow!("project not found: {}", project_id))?;
+        .ok_or_else(|| anyhow!("project not found: {project_id}"))?;
     let template = project
         .source_task_templates
         .get(template_name)
-        .ok_or_else(|| anyhow!("source task template not found: {}", template_name))?;
+        .ok_or_else(|| anyhow!("source task template not found: {template_name}"))?;
     render_source_task_template(template, input)
 }
 
@@ -188,10 +188,10 @@ fn validate_source_input(input: &SourceTaskTemplateRenderInput) -> Result<()> {
         bail!("source installation id cannot be empty");
     }
     if input.message_url.len() > MAX_SOURCE_URL_BYTES {
-        bail!("source message URL exceeds {} bytes", MAX_SOURCE_URL_BYTES);
+        bail!("source message URL exceeds {MAX_SOURCE_URL_BYTES} bytes");
     }
     let parsed = url::Url::parse(&input.message_url)
-        .map_err(|error| anyhow!("invalid source message URL: {}", error))?;
+        .map_err(|error| anyhow!("invalid source message URL: {error}"))?;
     if parsed.scheme() != "https" {
         bail!("source message URL must use https");
     }
@@ -203,7 +203,7 @@ fn validate_source_input(input: &SourceTaskTemplateRenderInput) -> Result<()> {
             .host_str()
             .ok_or_else(|| anyhow!("Slack message URL must include a host"))?;
         if host != "slack.com" && !host.ends_with(".slack.com") {
-            bail!("Slack message URL host is not allowed: {}", host);
+            bail!("Slack message URL host is not allowed: {host}");
         }
         if !parsed.path().starts_with("/archives/") {
             bail!("Slack message URL must use an /archives/ permalink");
@@ -236,7 +236,7 @@ fn render_goal(template: &str, values: &HashMap<&str, &str>) -> Result<String> {
                 let end = index + 1 + relative_end;
                 let variable = &template[index + 1..end];
                 let value = values.get(variable).ok_or_else(|| {
-                    anyhow!("goalTemplate variable '{}' has no typed value", variable)
+                    anyhow!("goalTemplate variable '{variable}' has no typed value")
                 })?;
                 output.push_str(value);
                 index = end + 1;
@@ -264,33 +264,22 @@ pub fn validate_template_config(template: &SourceTaskTemplateConfig) -> Result<(
         bail!("source_task_template.spec.skill.invocation cannot be empty");
     }
     if template.skill.invocation.len() > MAX_INVOCATION_BYTES {
-        bail!(
-            "source_task_template.spec.skill.invocation exceeds {} bytes",
-            MAX_INVOCATION_BYTES
-        );
+        bail!("source_task_template.spec.skill.invocation exceeds {MAX_INVOCATION_BYTES} bytes");
     }
     if template.skill.invocation.contains(['\n', '\r', '\0']) {
         bail!("source_task_template.spec.skill.invocation cannot contain control line breaks");
     }
     if template.skill.args.len() > MAX_SKILL_ARGS {
-        bail!(
-            "source_task_template.spec.skill.args exceeds {} entries",
-            MAX_SKILL_ARGS
-        );
+        bail!("source_task_template.spec.skill.args exceeds {MAX_SKILL_ARGS} entries");
     }
     for (index, arg) in template.skill.args.iter().enumerate() {
         if arg.len() > MAX_SKILL_ARG_BYTES {
             bail!(
-                "source_task_template.spec.skill.args[{}] exceeds {} bytes",
-                index,
-                MAX_SKILL_ARG_BYTES
+                "source_task_template.spec.skill.args[{index}] exceeds {MAX_SKILL_ARG_BYTES} bytes"
             );
         }
         if arg.contains('\0') {
-            bail!(
-                "source_task_template.spec.skill.args[{}] contains NUL",
-                index
-            );
+            bail!("source_task_template.spec.skill.args[{index}] contains NUL");
         }
     }
     if template.action.workflow.trim().is_empty() {
@@ -300,10 +289,7 @@ pub fn validate_template_config(template: &SourceTaskTemplateConfig) -> Result<(
         bail!("source_task_template.spec.action.workspace cannot be empty");
     }
     if template.action.initial_vars.len() > MAX_INITIAL_VARS {
-        bail!(
-            "source_task_template.spec.action.initialVars exceeds {} entries",
-            MAX_INITIAL_VARS
-        );
+        bail!("source_task_template.spec.action.initialVars exceeds {MAX_INITIAL_VARS} entries");
     }
     for (key, value) in &template.action.initial_vars {
         if key.trim().is_empty() {
@@ -311,9 +297,7 @@ pub fn validate_template_config(template: &SourceTaskTemplateConfig) -> Result<(
         }
         if value.len() > MAX_INITIAL_VAR_BYTES {
             bail!(
-                "source_task_template.spec.action.initialVars['{}'] exceeds {} bytes",
-                key,
-                MAX_INITIAL_VAR_BYTES
+                "source_task_template.spec.action.initialVars['{key}'] exceeds {MAX_INITIAL_VAR_BYTES} bytes"
             );
         }
     }
@@ -321,10 +305,7 @@ pub fn validate_template_config(template: &SourceTaskTemplateConfig) -> Result<(
         bail!("source_task_template.spec.goalTemplate cannot be empty");
     }
     if template.goal_template.len() > MAX_GOAL_BYTES {
-        bail!(
-            "source_task_template.spec.goalTemplate exceeds {} bytes",
-            MAX_GOAL_BYTES
-        );
+        bail!("source_task_template.spec.goalTemplate exceeds {MAX_GOAL_BYTES} bytes");
     }
 
     let supported: HashSet<&str> = SUPPORTED_VARIABLES.into_iter().collect();
@@ -332,23 +313,16 @@ pub fn validate_template_config(template: &SourceTaskTemplateConfig) -> Result<(
     for variable in &template.allowed_variables {
         if !supported.contains(variable.as_str()) {
             bail!(
-                "source_task_template.spec.allowedVariables contains unsupported variable '{}'",
-                variable
+                "source_task_template.spec.allowedVariables contains unsupported variable '{variable}'"
             );
         }
         if !allowed.insert(variable.as_str()) {
-            bail!(
-                "source_task_template.spec.allowedVariables contains duplicate '{}'",
-                variable
-            );
+            bail!("source_task_template.spec.allowedVariables contains duplicate '{variable}'");
         }
     }
     for variable in template_variables(&template.goal_template)? {
         if !allowed.contains(variable.as_str()) {
-            bail!(
-                "goalTemplate variable '{}' is not declared in allowedVariables",
-                variable
-            );
+            bail!("goalTemplate variable '{variable}' is not declared in allowedVariables");
         }
     }
     Ok(())
@@ -374,10 +348,7 @@ fn template_variables(template: &str) -> Result<Vec<String>> {
                         byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_'
                     })
                 {
-                    bail!(
-                        "goalTemplate contains invalid variable token '{{{}}}'",
-                        variable
-                    );
+                    bail!("goalTemplate contains invalid variable token '{{{variable}}}'");
                 }
                 variables.push(variable.to_string());
                 index = end + 1;

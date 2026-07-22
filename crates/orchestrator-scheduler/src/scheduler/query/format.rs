@@ -3,10 +3,10 @@
 /// Colorize a task status string for terminal display.
 pub fn colorize_status(status: &str) -> String {
     match status {
-        "completed" => format!("\x1b[32m{}\x1b[0m", status),
-        "failed" => format!("\x1b[31m{}\x1b[0m", status),
-        "running" => format!("\x1b[33m{}\x1b[0m", status),
-        "paused" => format!("\x1b[90m{}\x1b[0m", status),
+        "completed" => format!("\x1b[32m{status}\x1b[0m"),
+        "failed" => format!("\x1b[31m{status}\x1b[0m"),
+        "running" => format!("\x1b[33m{status}\x1b[0m"),
+        "paused" => format!("\x1b[90m{status}\x1b[0m"),
         _ => status.to_string(),
     }
 }
@@ -14,20 +14,20 @@ pub fn colorize_status(status: &str) -> String {
 /// Format a duration in milliseconds to a human-readable string.
 pub fn format_duration(ms: u64) -> String {
     if ms < 1000 {
-        format!("{}ms", ms)
+        format!("{ms}ms")
     } else if ms < 60_000 {
         format!("{:.1}s", ms as f64 / 1000.0)
     } else {
         let mins = ms / 60_000;
         let secs = (ms % 60_000) / 1000;
-        format!("{}m {}s", mins, secs)
+        format!("{mins}m {secs}s")
     }
 }
 
 /// Format a byte count to a human-readable string.
 pub fn format_bytes(bytes: u64) -> String {
     if bytes < 1024 {
-        format!("{}B", bytes)
+        format!("{bytes}B")
     } else if bytes < 1024 * 1024 {
         format!("{:.1}KB", bytes as f64 / 1024.0)
     } else {

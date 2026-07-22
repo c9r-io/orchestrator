@@ -151,17 +151,16 @@ fn reload_watches(
             for rel_path in &fs_config.paths {
                 let abs_path = root_path.join(rel_path);
                 // Safety: must be within root_path.
-                if let Ok(canonical_root) = root_path.canonicalize() {
-                    if let Ok(canonical_path) = abs_path.canonicalize() {
-                        if !canonical_path.starts_with(&canonical_root) {
-                            warn!(
-                                path = %abs_path.display(),
-                                root = %canonical_root.display(),
-                                "filesystem trigger path outside root_path, skipping"
-                            );
-                            continue;
-                        }
-                    }
+                if let Ok(canonical_root) = root_path.canonicalize()
+                    && let Ok(canonical_path) = abs_path.canonicalize()
+                    && !canonical_path.starts_with(&canonical_root)
+                {
+                    warn!(
+                        path = %abs_path.display(),
+                        root = %canonical_root.display(),
+                        "filesystem trigger path outside root_path, skipping"
+                    );
+                    continue;
                 }
                 // Skip .git and ORCHESTRATORD_DATA_DIR.
                 let path_str = abs_path.to_string_lossy();
@@ -169,11 +168,11 @@ fn reload_watches(
                     warn!(path = %abs_path.display(), "skipping .git path");
                     continue;
                 }
-                if let Ok(data_dir) = std::env::var("ORCHESTRATORD_DATA_DIR") {
-                    if path_str.starts_with(&data_dir) {
-                        warn!(path = %abs_path.display(), "skipping daemon data directory");
-                        continue;
-                    }
+                if let Ok(data_dir) = std::env::var("ORCHESTRATORD_DATA_DIR")
+                    && path_str.starts_with(&data_dir)
+                {
+                    warn!(path = %abs_path.display(), "skipping daemon data directory");
+                    continue;
                 }
                 // Canonicalize to resolve symlinks (e.g. /var → /private/var on macOS).
                 let canonical = abs_path.canonicalize().unwrap_or(abs_path);

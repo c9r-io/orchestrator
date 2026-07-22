@@ -25,7 +25,7 @@ pub(crate) async fn dispatch(
             if resp.found {
                 println!("{}", resp.value_json.unwrap_or_default());
             } else {
-                eprintln!("key '{}' not found", key);
+                eprintln!("key '{key}' not found");
                 std::process::exit(1);
             }
             Ok(())

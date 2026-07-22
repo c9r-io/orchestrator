@@ -207,8 +207,7 @@ impl FromStr for LoopMode {
             "fixed" => Ok(Self::Fixed),
             "infinite" => Ok(Self::Infinite),
             _ => Err(format!(
-                "unknown loop mode: {} (expected once|fixed|infinite)",
-                value
+                "unknown loop mode: {value} (expected once|fixed|infinite)"
             )),
         }
     }

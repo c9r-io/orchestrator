@@ -64,11 +64,11 @@ async fn task_create_start_complete() {
                 .expect("task_info failed")
                 .into_inner();
 
-            if let Some(task) = &info.task {
-                if matches!(task.status.as_str(), "completed" | "failed") {
-                    final_status = task.status.clone();
-                    break;
-                }
+            if let Some(task) = &info.task
+                && matches!(task.status.as_str(), "completed" | "failed")
+            {
+                final_status = task.status.clone();
+                break;
             }
         }
 

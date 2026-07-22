@@ -189,7 +189,7 @@ fn workflow_step_spec_to_config(step: &WorkflowStepSpec) -> Result<WorkflowStepC
                 .as_ref()
                 .map(|ui| serde_json::from_value::<StepPrehookUiConfig>(ui.clone()))
                 .transpose()
-                .map_err(|e| anyhow!("invalid prehook ui: {}", e))?,
+                .map_err(|e| anyhow!("invalid prehook ui: {e}"))?,
             extended: prehook.extended,
         }),
         None => None,
@@ -371,7 +371,7 @@ pub(super) fn parse_cost_preference(value: Option<&str>) -> Result<Option<CostPr
         Some("performance") => Some(CostPreference::Performance),
         Some("quality") => Some(CostPreference::Quality),
         Some("balance") => Some(CostPreference::Balance),
-        Some(other) => return Err(anyhow!("unknown cost_preference '{}'", other)),
+        Some(other) => return Err(anyhow!("unknown cost_preference '{other}'")),
         None => None,
     })
 }

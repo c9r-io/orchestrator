@@ -68,8 +68,7 @@ pub async fn uncordon_agent(state: &InnerState, agent_id: &str) -> Result<(), St
         }
         AgentLifecycleState::Active => Ok(()),
         AgentLifecycleState::Draining => Err(format!(
-            "cannot uncordon agent '{}': currently draining — wait for drain to complete or use uncordon after drained",
-            agent_id
+            "cannot uncordon agent '{agent_id}': currently draining — wait for drain to complete or use uncordon after drained"
         )),
     }
 }

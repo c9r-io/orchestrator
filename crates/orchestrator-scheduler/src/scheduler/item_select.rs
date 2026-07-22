@@ -70,18 +70,15 @@ fn select_min_max(
 
     let mut scored: Vec<(usize, f64)> = Vec::new();
     for (idx, item) in items.iter().enumerate() {
-        if let Some(val_str) = item.pipeline_vars.get(metric_var) {
-            if let Ok(val) = val_str.parse::<f64>() {
-                scored.push((idx, val));
-            }
+        if let Some(val_str) = item.pipeline_vars.get(metric_var)
+            && let Ok(val) = val_str.parse::<f64>()
+        {
+            scored.push((idx, val));
         }
     }
 
     if scored.is_empty() {
-        anyhow::bail!(
-            "item_select: no items have parseable metric_var '{}'",
-            metric_var
-        );
+        anyhow::bail!("item_select: no items have parseable metric_var '{metric_var}'");
     }
 
     scored.sort_by(|a, b| {
@@ -127,11 +124,7 @@ fn select_threshold(items: &[ItemEvalState], config: &ItemSelectConfig) -> Resul
         .collect();
 
     if passing.is_empty() {
-        anyhow::bail!(
-            "item_select: no items pass threshold {} for '{}'",
-            threshold,
-            metric_var
-        );
+        anyhow::bail!("item_select: no items pass threshold {threshold} for '{metric_var}'");
     }
 
     Ok(break_tie(&passing, config.tie_break))

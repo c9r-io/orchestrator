@@ -62,20 +62,18 @@ pub(crate) fn apply_self_heal_to_step(
     step: &mut WorkflowStepConfig,
     changes: &mut Vec<ConfigSelfHealChange>,
 ) -> Result<()> {
-    if let Some(builtin) = step.builtin.as_deref() {
-        if is_known_builtin_step_name(builtin) {
-            if let Some(required_capability) = step.required_capability.take() {
-                changes.push(ConfigSelfHealChange {
+    if let Some(builtin) = step.builtin.as_deref()
+        && is_known_builtin_step_name(builtin)
+        && let Some(required_capability) = step.required_capability.take()
+    {
+        changes.push(ConfigSelfHealChange {
                     workflow_id: workflow_id.to_string(),
                     step_id: step.id.clone(),
                     rule: ConfigSelfHealRule::DropRequiredCapabilityFromBuiltinStep,
                     detail: format!(
-                        "removed deprecated required_capability '{}' from builtin '{}'",
-                        required_capability, builtin
+                        "removed deprecated required_capability '{required_capability}' from builtin '{builtin}'"
                     ),
                 });
-            }
-        }
     }
 
     let previous_execution = step.behavior.execution.clone();

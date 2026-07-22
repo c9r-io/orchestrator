@@ -39,16 +39,15 @@ pub async fn dispatch(cmd: ToolCommands, control_plane_config: Option<&str>) -> 
 fn verify_hmac_cmd(algo: &str, secret: &str, body: &str, signature: &str) -> Result<()> {
     if algo != "sha256" {
         return Err(anyhow!(
-            "unsupported algorithm '{}' (only sha256 is supported)",
-            algo
+            "unsupported algorithm '{algo}' (only sha256 is supported)"
         ));
     }
 
     let hex_sig = signature.strip_prefix("sha256=").unwrap_or(signature);
-    let expected = hex::decode(hex_sig).map_err(|e| anyhow!("invalid signature hex: {}", e))?;
+    let expected = hex::decode(hex_sig).map_err(|e| anyhow!("invalid signature hex: {e}"))?;
 
     let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-        .map_err(|e| anyhow!("invalid secret: {}", e))?;
+        .map_err(|e| anyhow!("invalid secret: {e}"))?;
     mac.update(body.as_bytes());
 
     if mac.verify_slice(&expected).is_ok() {
@@ -63,23 +62,23 @@ fn verify_hmac_cmd(algo: &str, secret: &str, body: &str, signature: &str) -> Res
 fn payload_extract_cmd(path: &str) -> Result<()> {
     let mut input = String::new();
     std::io::Read::read_to_string(&mut std::io::stdin(), &mut input)
-        .map_err(|e| anyhow!("failed to read stdin: {}", e))?;
+        .map_err(|e| anyhow!("failed to read stdin: {e}"))?;
 
     let value: serde_json::Value =
-        serde_json::from_str(input.trim()).map_err(|e| anyhow!("invalid JSON input: {}", e))?;
+        serde_json::from_str(input.trim()).map_err(|e| anyhow!("invalid JSON input: {e}"))?;
 
     let result = extract_path(&value, path);
     match result {
         Some(v) => {
             if let Some(s) = v.as_str() {
-                println!("{}", s);
+                println!("{s}");
             } else {
                 println!("{}", serde_json::to_string(&v).unwrap_or_default());
             }
             Ok(())
         }
         None => {
-            eprintln!("path '{}' not found", path);
+            eprintln!("path '{path}' not found");
             std::process::exit(1);
         }
     }
@@ -104,7 +103,7 @@ async fn secret_rotate_cmd(
 
     // Read current SecretStore via describe, update the key, and re-apply.
     let project_id = project.unwrap_or("default").to_string();
-    let resource_path = format!("secretstore/{}", store);
+    let resource_path = format!("secretstore/{store}");
     let resp = client
         .describe(orchestrator_proto::DescribeRequest {
             resource: resource_path,
@@ -116,13 +115,13 @@ async fn secret_rotate_cmd(
 
     // Parse the existing manifest, update the target key
     let mut manifest: serde_yaml::Value =
-        serde_yaml::from_str(&resp.content).map_err(|e| anyhow!("failed to parse store: {}", e))?;
+        serde_yaml::from_str(&resp.content).map_err(|e| anyhow!("failed to parse store: {e}"))?;
 
     // Navigate to spec.data and set the key
     let data = manifest
         .get_mut("spec")
         .and_then(|s| s.get_mut("data"))
-        .ok_or_else(|| anyhow!("SecretStore '{}' has no spec.data", store))?;
+        .ok_or_else(|| anyhow!("SecretStore '{store}' has no spec.data"))?;
 
     data[serde_yaml::Value::String(key.to_string())] = serde_yaml::Value::String(value.to_string());
 

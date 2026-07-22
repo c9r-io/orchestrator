@@ -135,10 +135,10 @@ fn build_managed_state(
     let session_store = Arc::new(crate::session_store::AsyncSessionStore::new(
         async_database.clone(),
     ));
-    if let Ok(conn) = crate::db::open_conn(&db_path) {
-        if let Err(error) = crate::session_store::reconcile_sessions(&conn) {
-            tracing::warn!(%error, "failed to reconcile interactive sessions during bootstrap");
-        }
+    if let Ok(conn) = crate::db::open_conn(&db_path)
+        && let Err(error) = crate::session_store::reconcile_sessions(&conn)
+    {
+        tracing::warn!(%error, "failed to reconcile interactive sessions during bootstrap");
     }
     let task_repo = Arc::new(crate::task_repository::AsyncSqliteTaskRepository::new(
         async_database.clone(),
@@ -277,35 +277,34 @@ fn import_legacy_key_if_needed(data_dir: &Path, db_path: &Path) -> Result<()> {
         return Ok(());
     }
     let count: i64 = conn.query_row("SELECT COUNT(*) FROM secret_keys", [], |row| row.get(0))?;
-    if count == 0 {
-        if let Some(record) =
+    if count == 0
+        && let Some(record) =
             crate::secret_key_lifecycle::import_legacy_key_record(&conn, data_dir)?
-        {
-            let now = crate::config_load::now_ts();
-            // Write audit events for the imported key
-            let _ = crate::secret_key_audit::insert_key_audit_event(
-                &conn,
-                &crate::secret_key_audit::KeyAuditEvent {
-                    event_kind: crate::secret_key_audit::KeyAuditEventKind::KeyCreated,
-                    key_id: record.key_id.clone(),
-                    key_fingerprint: record.fingerprint.clone(),
-                    actor: "system:migration".to_string(),
-                    detail_json: "{\"source\":\"legacy_import\"}".to_string(),
-                    created_at: now.clone(),
-                },
-            );
-            let _ = crate::secret_key_audit::insert_key_audit_event(
-                &conn,
-                &crate::secret_key_audit::KeyAuditEvent {
-                    event_kind: crate::secret_key_audit::KeyAuditEventKind::KeyActivated,
-                    key_id: record.key_id,
-                    key_fingerprint: record.fingerprint,
-                    actor: "system:migration".to_string(),
-                    detail_json: "{\"source\":\"legacy_import\"}".to_string(),
-                    created_at: now,
-                },
-            );
-        }
+    {
+        let now = crate::config_load::now_ts();
+        // Write audit events for the imported key
+        let _ = crate::secret_key_audit::insert_key_audit_event(
+            &conn,
+            &crate::secret_key_audit::KeyAuditEvent {
+                event_kind: crate::secret_key_audit::KeyAuditEventKind::KeyCreated,
+                key_id: record.key_id.clone(),
+                key_fingerprint: record.fingerprint.clone(),
+                actor: "system:migration".to_string(),
+                detail_json: "{\"source\":\"legacy_import\"}".to_string(),
+                created_at: now.clone(),
+            },
+        );
+        let _ = crate::secret_key_audit::insert_key_audit_event(
+            &conn,
+            &crate::secret_key_audit::KeyAuditEvent {
+                event_kind: crate::secret_key_audit::KeyAuditEventKind::KeyActivated,
+                key_id: record.key_id,
+                key_fingerprint: record.fingerprint,
+                actor: "system:migration".to_string(),
+                detail_json: "{\"source\":\"legacy_import\"}".to_string(),
+                created_at: now,
+            },
+        );
     }
     Ok(())
 }
@@ -338,23 +337,23 @@ fn run_key_lifecycle_diagnostics(data_dir: &Path, db_path: &Path) {
         .iter()
         .filter(|r| r.state == crate::secret_key_lifecycle::KeyState::Revoked)
         .collect();
-    if !revoked_records.is_empty() {
-        if let Ok(conn) = crate::db::open_conn(db_path) {
-            for rec in &revoked_records {
-                let still_ref: bool = conn
+    if !revoked_records.is_empty()
+        && let Ok(conn) = crate::db::open_conn(db_path)
+    {
+        for rec in &revoked_records {
+            let still_ref: bool = conn
                     .query_row(
                         "SELECT EXISTS(SELECT 1 FROM resources WHERE kind='SecretStore' AND instr(spec_json, ?1) > 0)",
                         rusqlite::params![format!("\"key_id\":\"{}\"", rec.key_id)],
                         |row| row.get(0),
                     )
                     .unwrap_or(false);
-                if still_ref {
-                    tracing::warn!(
-                        key_id = %rec.key_id,
-                        "crash recovery: revoked key still referenced by SecretStore data; \
-                         loaded as decrypt-only. Run `secret key rotate --resume` to complete migration"
-                    );
-                }
+            if still_ref {
+                tracing::warn!(
+                    key_id = %rec.key_id,
+                    "crash recovery: revoked key still referenced by SecretStore data; \
+                     loaded as decrypt-only. Run `secret key rotate --resume` to complete migration"
+                );
             }
         }
     }

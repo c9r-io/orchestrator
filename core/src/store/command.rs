@@ -124,7 +124,7 @@ impl CommandAdapter {
             .envs(envs)
             .output()
             .await
-            .map_err(|e| anyhow!("failed to execute provider command: {}", e))?;
+            .map_err(|e| anyhow!("failed to execute provider command: {e}"))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -143,7 +143,7 @@ impl CommandAdapter {
                     Ok(StoreOpResult::Value(None))
                 } else {
                     let value: serde_json::Value = serde_json::from_str(&stdout)
-                        .map_err(|e| anyhow!("failed to parse provider get output: {}", e))?;
+                        .map_err(|e| anyhow!("failed to parse provider get output: {e}"))?;
                     Ok(StoreOpResult::Value(Some(value)))
                 }
             }
@@ -152,7 +152,7 @@ impl CommandAdapter {
                     Ok(StoreOpResult::Entries(vec![]))
                 } else {
                     let entries: Vec<StoreEntry> = serde_json::from_str(&stdout)
-                        .map_err(|e| anyhow!("failed to parse provider list output: {}", e))?;
+                        .map_err(|e| anyhow!("failed to parse provider list output: {e}"))?;
                     Ok(StoreOpResult::Entries(entries))
                 }
             }
@@ -178,12 +178,9 @@ mod tests {
         let base = temp.path().to_str().expect("path");
 
         let commands = StoreBackendCommands {
-            get: format!(
-                "cat {}/\"$STORE_NAME\"-\"$KEY\".json 2>/dev/null || true",
-                base
-            ),
-            put: format!("echo \"$VALUE\" > {}/\"$STORE_NAME\"-\"$KEY\".json", base),
-            delete: format!("rm -f {}/\"$STORE_NAME\"-\"$KEY\".json", base),
+            get: format!("cat {base}/\"$STORE_NAME\"-\"$KEY\".json 2>/dev/null || true"),
+            put: format!("echo \"$VALUE\" > {base}/\"$STORE_NAME\"-\"$KEY\".json"),
+            delete: format!("rm -f {base}/\"$STORE_NAME\"-\"$KEY\".json"),
             list: "echo '[]'".to_string(),
             prune: None,
         };
@@ -220,7 +217,7 @@ mod tests {
             .expect("get");
         match result {
             StoreOpResult::Value(Some(v)) => assert_eq!(v["hello"], "world"),
-            other => panic!("expected Value(Some), got {:?}", other),
+            other => panic!("expected Value(Some), got {other:?}"),
         }
     }
 
@@ -280,12 +277,9 @@ mod tests {
         let base = temp.path().to_str().expect("path");
 
         let commands = StoreBackendCommands {
-            get: format!(
-                "cat {}/\"$STORE_NAME\"-\"$KEY\".json 2>/dev/null || true",
-                base
-            ),
-            put: format!("echo \"$VALUE\" > {}/\"$STORE_NAME\"-\"$KEY\".json", base),
-            delete: format!("rm -f {}/\"$STORE_NAME\"-\"$KEY\".json", base),
+            get: format!("cat {base}/\"$STORE_NAME\"-\"$KEY\".json 2>/dev/null || true"),
+            put: format!("echo \"$VALUE\" > {base}/\"$STORE_NAME\"-\"$KEY\".json"),
+            delete: format!("rm -f {base}/\"$STORE_NAME\"-\"$KEY\".json"),
             list: "echo '[]'".to_string(),
             prune: None,
         };
@@ -361,7 +355,7 @@ mod tests {
             .expect("list");
         match result {
             StoreOpResult::Entries(entries) => assert!(entries.is_empty()),
-            other => panic!("expected Entries([]), got {:?}", other),
+            other => panic!("expected Entries([]), got {other:?}"),
         }
     }
 
@@ -372,7 +366,7 @@ mod tests {
             get: "true".to_string(),
             put: "true".to_string(),
             delete: "true".to_string(),
-            list: format!("echo '{}'", json),
+            list: format!("echo '{json}'"),
             prune: None,
         };
 
@@ -398,7 +392,7 @@ mod tests {
                 assert_eq!(entries[1].key, "k2");
                 assert_eq!(entries[1].value, serde_json::json!("hello"));
             }
-            other => panic!("expected Entries, got {:?}", other),
+            other => panic!("expected Entries, got {other:?}"),
         }
     }
 
@@ -511,7 +505,7 @@ mod tests {
             .expect("list with limit/offset");
         match result {
             StoreOpResult::Entries(entries) => assert!(entries.is_empty()),
-            other => panic!("expected Entries([]), got {:?}", other),
+            other => panic!("expected Entries([]), got {other:?}"),
         }
     }
 }

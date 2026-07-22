@@ -97,14 +97,16 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
         .steps
         .iter()
         .any(|step| step.id == "retest" && step.enabled);
-    if !had_ticket_scan_step && !qa_enabled && fix_enabled && !retest_enabled {
-        if let Some(scan_step) = workflow
+    if !had_ticket_scan_step
+        && !qa_enabled
+        && fix_enabled
+        && !retest_enabled
+        && let Some(scan_step) = workflow
             .steps
             .iter_mut()
             .find(|step| step.id == "ticket_scan")
-        {
-            scan_step.enabled = true;
-        }
+    {
+        scan_step.enabled = true;
     }
     workflow.qa = None;
     workflow.fix = None;

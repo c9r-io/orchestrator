@@ -217,7 +217,7 @@ impl SharedState {
     pub fn render_template(&self, template: &str) -> String {
         let mut result = template.to_string();
         for (key, value) in &self.data {
-            let placeholder = format!("{{{}}}", key);
+            let placeholder = format!("{{{key}}}");
             if let Some(s) = value.as_str() {
                 result = result.replace(&placeholder, s);
             } else if let Ok(s) = serde_json::to_string(value) {
@@ -260,19 +260,19 @@ pub fn parse_artifacts_from_output(output: &str) -> Vec<Artifact> {
             artifacts.push(artifact);
         }
 
-        if artifacts.is_empty() {
-            if let Some(arr) = parsed.get("artifacts").and_then(|v| v.as_array()) {
-                for value in arr {
-                    if let Some(kind) = extract_artifact_kind(value) {
-                        let mut artifact = Artifact::new(kind);
-                        if let Some(path) = value.get("path").and_then(|v| v.as_str()) {
-                            artifact = artifact.with_path(path.to_string());
-                        }
-                        if let Some(content) = value.get("content") {
-                            artifact = artifact.with_content(content.clone());
-                        }
-                        artifacts.push(artifact);
+        if artifacts.is_empty()
+            && let Some(arr) = parsed.get("artifacts").and_then(|v| v.as_array())
+        {
+            for value in arr {
+                if let Some(kind) = extract_artifact_kind(value) {
+                    let mut artifact = Artifact::new(kind);
+                    if let Some(path) = value.get("path").and_then(|v| v.as_str()) {
+                        artifact = artifact.with_path(path.to_string());
                     }
+                    if let Some(content) = value.get("content") {
+                        artifact = artifact.with_content(content.clone());
+                    }
+                    artifacts.push(artifact);
                 }
             }
         }
@@ -636,11 +636,11 @@ mod tests {
             ("severity=unknown", Severity::Info),
         ];
         for (marker, expected) in levels {
-            let input = format!("[TICKET: {}, category=bug]", marker);
+            let input = format!("[TICKET: {marker}, category=bug]");
             let artifacts = parse_artifacts_from_output(&input);
             assert_eq!(artifacts.len(), 1);
             if let ArtifactKind::Ticket { severity, .. } = &artifacts[0].kind {
-                assert_eq!(*severity, expected, "failed for marker: {}", marker);
+                assert_eq!(*severity, expected, "failed for marker: {marker}");
             }
         }
     }
@@ -653,7 +653,7 @@ mod tests {
             ("category=other", "general"),
         ];
         for (marker, expected) in categories {
-            let input = format!("[TICKET: severity=high, {}]", marker);
+            let input = format!("[TICKET: severity=high, {marker}]");
             let artifacts = parse_artifacts_from_output(&input);
             if let ArtifactKind::Ticket { category, .. } = &artifacts[0].kind {
                 assert_eq!(category, expected);

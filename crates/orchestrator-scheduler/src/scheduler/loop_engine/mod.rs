@@ -232,37 +232,37 @@ async fn run_task_loop_core(
         );
 
         // FR-035 L2: Rapid cycle detection — pause task if last 3 cycles were too fast
-        if task_ctx.current_cycle >= 4 {
-            if let Ok(true) = detect_rapid_cycles(&state, task_id, &task_ctx).await {
-                insert_event(
-                    &state,
-                    task_id,
-                    None,
-                    "degenerate_cycle_detected",
-                    json!({
-                        "cycle": task_ctx.current_cycle,
-                        "min_cycle_interval_secs": task_ctx.safety.min_cycle_interval_secs,
-                    }),
-                )
-                .await?;
-                state.emit_event(
-                    task_id,
-                    None,
-                    "degenerate_cycle_detected",
-                    json!({"cycle": task_ctx.current_cycle}),
-                );
-                set_task_status(&state, task_id, "paused", false).await?;
-                let unresolved = count_unresolved_items(&state, task_id).await?;
-                record_task_execution_metric(
-                    &state,
-                    task_id,
-                    "paused",
-                    task_ctx.current_cycle,
-                    unresolved,
-                )
-                .await?;
-                return Ok(());
-            }
+        if task_ctx.current_cycle >= 4
+            && let Ok(true) = detect_rapid_cycles(&state, task_id, &task_ctx).await
+        {
+            insert_event(
+                &state,
+                task_id,
+                None,
+                "degenerate_cycle_detected",
+                json!({
+                    "cycle": task_ctx.current_cycle,
+                    "min_cycle_interval_secs": task_ctx.safety.min_cycle_interval_secs,
+                }),
+            )
+            .await?;
+            state.emit_event(
+                task_id,
+                None,
+                "degenerate_cycle_detected",
+                json!({"cycle": task_ctx.current_cycle}),
+            );
+            set_task_status(&state, task_id, "paused", false).await?;
+            let unresolved = count_unresolved_items(&state, task_id).await?;
+            record_task_execution_metric(
+                &state,
+                task_id,
+                "paused",
+                task_ctx.current_cycle,
+                unresolved,
+            )
+            .await?;
+            return Ok(());
         }
 
         let outcome = match task_ctx.execution.mode {
@@ -316,30 +316,29 @@ async fn run_task_loop_core(
         InvariantCheckPoint::BeforeComplete,
     )
     .await?
+        && action == "halt"
     {
-        if action == "halt" {
-            set_task_status(&state, task_id, "failed", false).await?;
-            insert_event(
-                &state,
-                task_id,
-                None,
-                "task_failed",
-                json!({"reason": "invariant_halt_before_complete"}),
-            )
-            .await?;
-            let unresolved = count_unresolved_items(&state, task_id).await?;
-            record_task_execution_metric(
-                &state,
-                task_id,
-                "failed",
-                task_ctx.current_cycle,
-                unresolved,
-            )
-            .await?;
-            return Ok(());
-        }
-        // rollback at before_complete is treated as warn-only
+        set_task_status(&state, task_id, "failed", false).await?;
+        insert_event(
+            &state,
+            task_id,
+            None,
+            "task_failed",
+            json!({"reason": "invariant_halt_before_complete"}),
+        )
+        .await?;
+        let unresolved = count_unresolved_items(&state, task_id).await?;
+        record_task_execution_metric(
+            &state,
+            task_id,
+            "failed",
+            task_ctx.current_cycle,
+            unresolved,
+        )
+        .await?;
+        return Ok(());
     }
+    // rollback at before_complete is treated as warn-only
 
     // FR-038/FR-052: Wait for in-flight command runs before deciding task fate.
     wait_for_inflight_runs(&state, task_id, &task_ctx.safety).await?;
@@ -424,54 +423,54 @@ async fn run_init_once_if_needed(
         return Ok(());
     }
 
-    if let Some(step) = task_ctx.execution_plan.step_by_id("init_once") {
-        if let Some(anchor_item_id) = first_task_item_id(state, task_id).await? {
-            insert_event(
-                state,
+    if let Some(step) = task_ctx.execution_plan.step_by_id("init_once")
+        && let Some(anchor_item_id) = first_task_item_id(state, task_id).await?
+    {
+        insert_event(
+            state,
+            task_id,
+            Some(&anchor_item_id),
+            "step_started",
+            json!({"step":"init_once", "step_scope": "task"}),
+        )
+        .await?;
+        let init_result = run_phase_with_rotation(
+            state,
+            RotatingPhaseRunRequest {
                 task_id,
-                Some(&anchor_item_id),
-                "step_started",
-                json!({"step":"init_once", "step_scope": "task"}),
-            )
-            .await?;
-            let init_result = run_phase_with_rotation(
-                state,
-                RotatingPhaseRunRequest {
-                    task_id,
-                    item_id: &anchor_item_id,
-                    step_id: &step.id,
-                    phase: "init_once",
-                    tty: step.tty,
-                    capability: step.required_capability.as_deref(),
-                    rel_path: ".",
-                    ticket_paths: &[],
-                    workspace_root: &task_ctx.workspace_root,
-                    workspace_id: &task_ctx.workspace_id,
-                    cycle: task_ctx.current_cycle,
-                    runtime,
-                    pipeline_vars: None,
-                    step_timeout_secs: task_ctx.safety.step_timeout_secs,
-                    stall_timeout_secs: task_ctx.safety.stall_timeout_secs,
-                    step_scope: StepScope::Task,
-                    step_template_prompt: None,
-                    project_id: &task_ctx.project_id,
-                    execution_profile: step.execution_profile.as_deref(),
-                    self_referential: task_ctx.self_referential,
-                },
-            )
-            .await?;
-            if !init_result.is_success() {
-                anyhow::bail!("init_once failed: exit={}", init_result.exit_code);
-            }
-            insert_event(
-                state,
-                task_id,
-                Some(&anchor_item_id),
-                "step_finished",
-                json!({"step":"init_once","step_scope":"task","exit_code":init_result.exit_code}),
-            )
-            .await?;
+                item_id: &anchor_item_id,
+                step_id: &step.id,
+                phase: "init_once",
+                tty: step.tty,
+                capability: step.required_capability.as_deref(),
+                rel_path: ".",
+                ticket_paths: &[],
+                workspace_root: &task_ctx.workspace_root,
+                workspace_id: &task_ctx.workspace_id,
+                cycle: task_ctx.current_cycle,
+                runtime,
+                pipeline_vars: None,
+                step_timeout_secs: task_ctx.safety.step_timeout_secs,
+                stall_timeout_secs: task_ctx.safety.stall_timeout_secs,
+                step_scope: StepScope::Task,
+                step_template_prompt: None,
+                project_id: &task_ctx.project_id,
+                execution_profile: step.execution_profile.as_deref(),
+                self_referential: task_ctx.self_referential,
+            },
+        )
+        .await?;
+        if !init_result.is_success() {
+            anyhow::bail!("init_once failed: exit={}", init_result.exit_code);
         }
+        insert_event(
+            state,
+            task_id,
+            Some(&anchor_item_id),
+            "step_finished",
+            json!({"step":"init_once","step_scope":"task","exit_code":init_result.exit_code}),
+        )
+        .await?;
     }
     task_ctx.init_done = true;
     update_task_cycle_state(state, task_id, task_ctx.current_cycle, true).await?;

@@ -31,11 +31,11 @@ pub async fn watch_task(
     let mut last_warning: Option<String> = None;
 
     loop {
-        if let Some(dl) = deadline {
-            if Instant::now() >= dl {
-                eprintln!("watch: timeout after {}s", timeout_secs.unwrap_or(0));
-                return Ok(());
-            }
+        if let Some(dl) = deadline
+            && Instant::now() >= dl
+        {
+            eprintln!("watch: timeout after {}s", timeout_secs.unwrap_or(0));
+            return Ok(());
         }
         let task = match load_task_summary(state, task_id).await {
             Ok(task) => task,
@@ -118,7 +118,7 @@ fn render_watch_frame(task: &TaskSummary, events: &[StepEvent], task_id: &str) -
         "Task: {}  Status: {}  Workflow: {}",
         &task_id[..8.min(task_id.len())],
         colorize_status(&task.status),
-        &task.workflow_id,
+        task.workflow_id,
     );
 
     let cycle_count = events
@@ -182,7 +182,7 @@ fn render_watch_frame(task: &TaskSummary, events: &[StepEvent], task_id: &str) -
                     existing.duration_ms = ev.duration_ms;
                     existing.agent_id = ev.agent_id.clone().unwrap_or(existing.agent_id.clone());
                     if let Some(conf) = ev.confidence {
-                        existing.details = format!("conf={:.2}", conf);
+                        existing.details = format!("conf={conf:.2}");
                     }
                 }
             }
@@ -263,12 +263,12 @@ fn render_watch_frame(task: &TaskSummary, events: &[StepEvent], task_id: &str) -
                         ));
                     }
 
-                    if existing.scope == Some(ObservedStepScope::Task) {
-                        if let Some(anchor_item_id) = &existing.binding_item_id {
-                            existing
-                                .details
-                                .push_str(&format!(" anchor={anchor_item_id}"));
-                        }
+                    if existing.scope == Some(ObservedStepScope::Task)
+                        && let Some(anchor_item_id) = &existing.binding_item_id
+                    {
+                        existing
+                            .details
+                            .push_str(&format!(" anchor={anchor_item_id}"));
                     }
                 }
             }

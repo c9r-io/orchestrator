@@ -13,10 +13,10 @@ pub(super) fn check_self_referential_policy(
             continue;
         }
         for (workflow_id, workflow) in workflows {
-            if let Some(filter) = workflow_filter {
-                if workflow_id != filter {
-                    continue;
-                }
+            if let Some(filter) = workflow_filter
+                && workflow_id != filter
+            {
+                continue;
             }
             match evaluate_self_referential_policy(workflow, workflow_id, workspace_id, true) {
                 Ok(report) => out.extend(report.diagnostics.into_iter().map(CheckResult::from)),

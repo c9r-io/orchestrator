@@ -1883,35 +1883,33 @@ async fn reconcile_intent(
         )
         .await
         .map_err(internal)?;
-    if let Some(provisioning_id) = installation.app_connection_id.as_deref() {
-        if let Some(checkpoint) = repository
+    if let Some(provisioning_id) = installation.app_connection_id.as_deref()
+        && let Some(checkpoint) = repository
             .dedicated_provisioning(project_id, provisioning_id)
             .await
             .map_err(internal)?
-        {
-            if checkpoint.status == "oauth_pending" {
-                let completed = repository
-                    .update_dedicated_provisioning(UpdateDedicatedProvisioning {
-                        project_id: project_id.to_string(),
-                        id: provisioning_id.to_string(),
-                        expected_status: "oauth_pending".into(),
-                        status: "completed".into(),
-                        app_id_ciphertext: None,
-                        app_id_digest: installation.app_id_digest.clone(),
-                        oauth_intent_id: Some(intent_id.to_string()),
-                        error_code: None,
-                    })
-                    .await
-                    .map_err(internal)?;
-                resolve_dedicated_attention(
-                    server,
-                    project_id,
-                    &completed.id,
-                    "dedicated_connection_activated",
-                )
-                .await?;
-            }
-        }
+        && checkpoint.status == "oauth_pending"
+    {
+        let completed = repository
+            .update_dedicated_provisioning(UpdateDedicatedProvisioning {
+                project_id: project_id.to_string(),
+                id: provisioning_id.to_string(),
+                expected_status: "oauth_pending".into(),
+                status: "completed".into(),
+                app_id_ciphertext: None,
+                app_id_digest: installation.app_id_digest.clone(),
+                oauth_intent_id: Some(intent_id.to_string()),
+                error_code: None,
+            })
+            .await
+            .map_err(internal)?;
+        resolve_dedicated_attention(
+            server,
+            project_id,
+            &completed.id,
+            "dedicated_connection_activated",
+        )
+        .await?;
     }
     let intent = repository
         .complete_intent(

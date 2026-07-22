@@ -40,8 +40,7 @@ pub fn debug_info(state: &InnerState, component: Option<&str>) -> Result<String>
         }
         "dag" => debug_dag_info(state),
         _ => Ok(format!(
-            "Unknown debug component: {}\nAvailable: state, config, dag\n",
-            comp
+            "Unknown debug component: {comp}\nAvailable: state, config, dag\n"
         )),
     }
 }

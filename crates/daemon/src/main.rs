@@ -701,17 +701,16 @@ fn main() -> Result<()> {
                 loop {
                     tokio::select! {
                         _ = interval.tick() => {
-                            if log_days > 0 {
-                                if let Err(e) = agent_orchestrator::log_cleanup::cleanup_old_logs(
+                            if log_days > 0
+                                && let Err(e) = agent_orchestrator::log_cleanup::cleanup_old_logs(
                                     &lifecycle_state.async_database,
                                     &lifecycle_state.logs_dir,
                                     log_days,
                                 ).await {
                                     tracing::warn!(error = %e, "log cleanup sweep failed");
                                 }
-                            }
-                            if task_days > 0 {
-                                if let Err(e) = agent_orchestrator::task_cleanup::cleanup_old_tasks(
+                            if task_days > 0
+                                && let Err(e) = agent_orchestrator::task_cleanup::cleanup_old_tasks(
                                     &lifecycle_state.async_database,
                                     &lifecycle_state.logs_dir,
                                     task_days,
@@ -719,7 +718,6 @@ fn main() -> Result<()> {
                                 ).await {
                                     tracing::warn!(error = %e, "task cleanup sweep failed");
                                 }
-                            }
                         }
                         _ = lifecycle_shutdown.changed() => {
                             break;

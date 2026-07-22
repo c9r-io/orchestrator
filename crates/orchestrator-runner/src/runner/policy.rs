@@ -82,8 +82,7 @@ pub fn guard_daemon_pid_kill(command: &str, daemon_pid: u32) -> Result<(), Daemo
     if contains_daemon_stop_subcommand(command) {
         return Err(DaemonPidGuardBlocked {
             reason: format!(
-                "command uses 'orchestrator daemon stop' which sends SIGTERM to daemon (PID {})",
-                daemon_pid
+                "command uses 'orchestrator daemon stop' which sends SIGTERM to daemon (PID {daemon_pid})"
             ),
             matched_pattern: "orchestrator daemon stop".to_string(),
         });
@@ -93,8 +92,7 @@ pub fn guard_daemon_pid_kill(command: &str, daemon_pid: u32) -> Result<(), Daemo
     if command.contains("daemon.pid") && command.contains("kill") {
         return Err(DaemonPidGuardBlocked {
             reason: format!(
-                "command references daemon.pid in a kill context (daemon PID {})",
-                daemon_pid
+                "command references daemon.pid in a kill context (daemon PID {daemon_pid})"
             ),
             matched_pattern: "kill + daemon.pid".to_string(),
         });
@@ -107,8 +105,7 @@ pub fn guard_daemon_pid_kill(command: &str, daemon_pid: u32) -> Result<(), Daemo
     {
         return Err(DaemonPidGuardBlocked {
             reason: format!(
-                "command uses ORCHESTRATOR_DAEMON_PID env var in a kill context (daemon PID {})",
-                daemon_pid
+                "command uses ORCHESTRATOR_DAEMON_PID env var in a kill context (daemon PID {daemon_pid})"
             ),
             matched_pattern: "kill + $ORCHESTRATOR_DAEMON_PID".to_string(),
         });
@@ -119,10 +116,9 @@ pub fn guard_daemon_pid_kill(command: &str, daemon_pid: u32) -> Result<(), Daemo
         if contains_process_kill(command, cmd_prefix, "orchestratord") {
             return Err(DaemonPidGuardBlocked {
                 reason: format!(
-                    "command uses {} to target orchestratord (daemon PID {})",
-                    cmd_prefix, daemon_pid
+                    "command uses {cmd_prefix} to target orchestratord (daemon PID {daemon_pid})"
                 ),
-                matched_pattern: format!("{} orchestratord", cmd_prefix),
+                matched_pattern: format!("{cmd_prefix} orchestratord"),
             });
         }
     }
@@ -133,11 +129,8 @@ pub fn guard_daemon_pid_kill(command: &str, daemon_pid: u32) -> Result<(), Daemo
     // standalone token (word boundary).
     if contains_kill_pid(command, &pid_str) {
         return Err(DaemonPidGuardBlocked {
-            reason: format!(
-                "command contains kill targeting literal daemon PID {}",
-                daemon_pid
-            ),
-            matched_pattern: format!("kill {}", pid_str),
+            reason: format!("command contains kill targeting literal daemon PID {daemon_pid}"),
+            matched_pattern: format!("kill {pid_str}"),
         });
     }
 

@@ -311,20 +311,21 @@ impl TriggerEngine {
 
         for (project_id, project) in &config.projects {
             // When a project scope is specified, only match triggers in that project.
-            if let Some(ref scoped_project) = payload.project {
-                if project_id != scoped_project {
-                    continue;
-                }
+            if let Some(ref scoped_project) = payload.project
+                && project_id != scoped_project
+            {
+                continue;
             }
             for (name, trigger) in &project.triggers {
                 if trigger.suspend {
                     continue;
                 }
                 // Skip the trigger that was already directly fired (dedup).
-                if let Some((ref excl_name, ref excl_proj)) = payload.exclude_trigger {
-                    if name == excl_name && project_id == excl_proj {
-                        continue;
-                    }
+                if let Some((ref excl_name, ref excl_proj)) = payload.exclude_trigger
+                    && name == excl_name
+                    && project_id == excl_proj
+                {
+                    continue;
                 }
                 // Skip triggers not yet stabilized (first seen in most recent reload).
                 if !self
@@ -552,19 +553,18 @@ pub async fn fire_trigger_canonical_with_context(
     // ── Suspend check ────────────────────────────────────────────────
     if trigger.suspend {
         emit_trigger_skipped(state, trigger_name, "trigger_skipped", "suspended");
-        anyhow::bail!("trigger '{}' is suspended", trigger_name);
+        anyhow::bail!("trigger '{trigger_name}' is suspended");
     }
 
     // ── Throttle check ───────────────────────────────────────────────
-    if let Some(ref throttle) = trigger.throttle {
-        if throttle.min_interval > 0 {
-            if let Some(last) = load_last_fired(state, trigger_name, project).await {
-                let elapsed = (Utc::now() - last).num_seconds();
-                if elapsed >= 0 && (elapsed as u64) < throttle.min_interval {
-                    emit_trigger_skipped(state, trigger_name, "trigger_skipped", "throttled");
-                    anyhow::bail!("trigger '{}' throttled", trigger_name);
-                }
-            }
+    if let Some(ref throttle) = trigger.throttle
+        && throttle.min_interval > 0
+        && let Some(last) = load_last_fired(state, trigger_name, project).await
+    {
+        let elapsed = (Utc::now() - last).num_seconds();
+        if elapsed >= 0 && (elapsed as u64) < throttle.min_interval {
+            emit_trigger_skipped(state, trigger_name, "trigger_skipped", "throttled");
+            anyhow::bail!("trigger '{trigger_name}' throttled");
         }
     }
 
@@ -579,8 +579,7 @@ pub async fn fire_trigger_canonical_with_context(
                     "concurrent_task_active",
                 );
                 anyhow::bail!(
-                    "trigger '{}' skipped: concurrent task active (Forbid policy)",
-                    trigger_name
+                    "trigger '{trigger_name}' skipped: concurrent task active (Forbid policy)"
                 );
             }
         }
@@ -661,12 +660,11 @@ pub async fn fire_trigger_canonical_with_context(
     }
 
     // ── History limit cleanup (best-effort) ──────────────────────────
-    if trigger.history_limit.is_some() {
-        if let Err(e) =
+    if trigger.history_limit.is_some()
+        && let Err(e) =
             cleanup_history(state, trigger_name, project, trigger.history_limit.as_ref()).await
-        {
-            debug!(trigger = trigger_name, error = %e, "history cleanup failed");
-        }
+    {
+        debug!(trigger = trigger_name, error = %e, "history cleanup failed");
     }
 
     Ok(task_id)
@@ -760,15 +758,15 @@ async fn cancel_active_tasks(state: &InnerState, trigger_name: &str, project: &s
         })
         .await;
 
-    if let Ok(Some(task_id)) = result {
-        if let Err(e) = cancel_task_for_trigger(state, &task_id).await {
-            warn!(
-                trigger = trigger_name,
-                task_id = task_id.as_str(),
-                error = %e,
-                "failed to cancel active task for Replace policy"
-            );
-        }
+    if let Ok(Some(task_id)) = result
+        && let Err(e) = cancel_task_for_trigger(state, &task_id).await
+    {
+        warn!(
+            trigger = trigger_name,
+            task_id = task_id.as_str(),
+            error = %e,
+            "failed to cancel active task for Replace policy"
+        );
     }
 }
 
@@ -999,12 +997,12 @@ fn build_trigger_goal(trigger_name: &str, event_payload: Option<&serde_json::Val
     match event_payload {
         Some(payload) => {
             // For filesystem events, use a friendlier format.
-            if let Some(filename) = payload.get("filename").and_then(|v| v.as_str()) {
-                if let Some(event_type) = payload.get("event_type").and_then(|v| v.as_str()) {
-                    return format!(
-                        "Triggered by filesystem '{trigger_name}': {event_type} {filename}"
-                    );
-                }
+            if let Some(filename) = payload.get("filename").and_then(|v| v.as_str())
+                && let Some(event_type) = payload.get("event_type").and_then(|v| v.as_str())
+            {
+                return format!(
+                    "Triggered by filesystem '{trigger_name}': {event_type} {filename}"
+                );
             }
             let summary = serde_json::to_string(payload).unwrap_or_default();
             let truncated = if summary.len() > 500 {
@@ -1031,16 +1029,16 @@ pub fn broadcast_task_event(state: &InnerState, payload: TriggerEventPayload) {
 /// Also notifies the filesystem watcher (if running) to re-evaluate watched paths.
 /// Safe to call from sync code. No-op if no engine/watcher is running.
 pub fn notify_trigger_reload(state: &InnerState) {
-    if let Ok(guard) = state.trigger_engine_handle.lock() {
-        if let Some(ref handle) = *guard {
-            let _ = handle.reload_sync();
-        }
+    if let Ok(guard) = state.trigger_engine_handle.lock()
+        && let Some(ref handle) = *guard
+    {
+        let _ = handle.reload_sync();
     }
     // Also notify filesystem watcher to reload its watch list.
-    if let Ok(guard) = state.fs_watcher_reload_tx.lock() {
-        if let Some(ref tx) = *guard {
-            let _ = tx.try_send(());
-        }
+    if let Ok(guard) = state.fs_watcher_reload_tx.lock()
+        && let Some(ref tx) = *guard
+    {
+        let _ = tx.try_send(());
     }
 }
 

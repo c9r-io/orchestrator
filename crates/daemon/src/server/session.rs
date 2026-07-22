@@ -894,12 +894,12 @@ pub(crate) async fn close(
     }
     let actor = trusted_actor(&request);
     let req = request.into_inner();
-    if let Some(v) = req.expected_state_version {
-        if v != row.state_version {
-            return Err(attempt
-                .failed(server, Status::aborted("session state version changed"))
-                .await);
-        }
+    if let Some(v) = req.expected_state_version
+        && v != row.state_version
+    {
+        return Err(attempt
+            .failed(server, Status::aborted("session state version changed"))
+            .await);
     }
     if !process_identity_matches(&row) {
         return Err(attempt

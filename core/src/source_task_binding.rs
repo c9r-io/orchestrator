@@ -89,10 +89,7 @@ pub fn validate_binding_config(binding: &SourceTaskBindingConfig) -> Result<()> 
         );
     }
     if binding.match_rule.channels.len() > MAX_CHANNELS {
-        bail!(
-            "source_task_binding.spec.match.channels exceeds {} entries",
-            MAX_CHANNELS
-        );
+        bail!("source_task_binding.spec.match.channels exceeds {MAX_CHANNELS} entries");
     }
     let mut channels = HashSet::new();
     for channel in &binding.match_rule.channels {
@@ -107,10 +104,7 @@ pub fn validate_binding_config(binding: &SourceTaskBindingConfig) -> Result<()> 
             );
         }
         if !channels.insert(channel.as_str()) {
-            bail!(
-                "source_task_binding.spec.match.channels contains duplicate '{}'",
-                channel
-            );
+            bail!("source_task_binding.spec.match.channels contains duplicate '{channel}'");
         }
     }
     if binding.allowed_actor_roles.is_empty() {
@@ -124,10 +118,7 @@ pub fn validate_binding_config(binding: &SourceTaskBindingConfig) -> Result<()> 
             );
         }
         if !roles.insert(role.as_str()) {
-            bail!(
-                "source_task_binding.spec.allowedActorRoles contains duplicate '{}'",
-                role
-            );
+            bail!("source_task_binding.spec.allowedActorRoles contains duplicate '{role}'");
         }
     }
     Ok(())

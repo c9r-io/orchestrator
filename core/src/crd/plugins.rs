@@ -126,7 +126,7 @@ pub async fn execute_transformer(
     );
     let timeout = Duration::from_secs(plugin.effective_timeout());
     let input = serde_json::to_string(payload)
-        .map_err(|e| anyhow!("failed to serialize payload for transformer: {}", e))?;
+        .map_err(|e| anyhow!("failed to serialize payload for transformer: {e}"))?;
 
     let mut cmd = build_plugin_command(ctx, plugin, &resolved_profile)?;
 
@@ -373,14 +373,14 @@ async fn run_plugin_with_timeout(
     // Command via build_command_for_profile, but process-group and kill_on_drop
     // are plugin-specific additions).
 
-    let mut child = cmd.spawn().map_err(|e| anyhow!("spawn failed: {}", e))?;
+    let mut child = cmd.spawn().map_err(|e| anyhow!("spawn failed: {e}"))?;
 
     // Write stdin data and close the handle before waiting.
-    if let Some(data) = stdin_data {
-        if let Some(mut stdin) = child.stdin.take() {
-            let _ = stdin.write_all(data).await;
-            drop(stdin);
-        }
+    if let Some(data) = stdin_data
+        && let Some(mut stdin) = child.stdin.take()
+    {
+        let _ = stdin.write_all(data).await;
+        drop(stdin);
     }
 
     // Take stdout/stderr pipes before waiting so we retain `&mut child` for kill.
@@ -404,7 +404,7 @@ async fn run_plugin_with_timeout(
                 stderr,
             })
         }
-        Ok(Err(e)) => Err(anyhow!("wait failed: {}", e)),
+        Ok(Err(e)) => Err(anyhow!("wait failed: {e}")),
         Err(_elapsed) => {
             // Timeout — kill the entire process group, not just the direct child.
             crate::runner::kill_child_process_group(&mut child).await;
@@ -679,16 +679,16 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         // Read the grandchild PID and verify it's no longer running.
-        if let Ok(pid_str) = std::fs::read_to_string(&pid_file) {
-            if let Ok(pid) = pid_str.trim().parse::<i32>() {
-                #[cfg(unix)]
-                {
-                    // SAFETY: kill(pid, 0) checks if process exists without
-                    // sending a signal. The pid is a valid i32 parsed from the
-                    // grandchild's PID file written earlier in this test.
-                    let alive = unsafe { libc::kill(pid, 0) };
-                    assert_ne!(alive, 0, "grandchild process {} should be dead", pid);
-                }
+        if let Ok(pid_str) = std::fs::read_to_string(&pid_file)
+            && let Ok(pid) = pid_str.trim().parse::<i32>()
+        {
+            #[cfg(unix)]
+            {
+                // SAFETY: kill(pid, 0) checks if process exists without
+                // sending a signal. The pid is a valid i32 parsed from the
+                // grandchild's PID file written earlier in this test.
+                let alive = unsafe { libc::kill(pid, 0) };
+                assert_ne!(alive, 0, "grandchild process {pid} should be dead");
             }
         }
         let _ = std::fs::remove_file(&pid_file);

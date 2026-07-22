@@ -13,7 +13,7 @@ pub(crate) fn validate_execution_profiles_for_project(
     let project = config
         .projects
         .get(project_id)
-        .ok_or_else(|| anyhow::anyhow!("project '{}' not found", project_id))?;
+        .ok_or_else(|| anyhow::anyhow!("project '{project_id}' not found"))?;
     for step in &workflow.steps {
         let Some(profile_name) = step.execution_profile.as_deref() else {
             continue;

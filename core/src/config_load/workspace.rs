@@ -19,10 +19,10 @@ pub fn resolve_workspace_path(
     let joined = workspace_root.join(rel_path);
     if joined.exists() {
         ensure_within_root(workspace_root, &joined, field)?;
-    } else if let Some(parent) = joined.parent() {
-        if parent.exists() {
-            ensure_within_root(workspace_root, parent, field)?;
-        }
+    } else if let Some(parent) = joined.parent()
+        && parent.exists()
+    {
+        ensure_within_root(workspace_root, parent, field)?;
     }
     Ok(joined)
 }
@@ -51,7 +51,7 @@ pub fn resolve_and_validate_workspaces_for_project(
     let project = config
         .projects
         .get(project_id)
-        .ok_or_else(|| anyhow::anyhow!("project '{}' does not exist", project_id))?;
+        .ok_or_else(|| anyhow::anyhow!("project '{project_id}' does not exist"))?;
     for (id, entry) in &project.workspaces {
         if id.trim().is_empty() {
             anyhow::bail!(
@@ -62,34 +62,29 @@ pub fn resolve_and_validate_workspaces_for_project(
             WorkspaceKind::CodeRepo => {
                 if entry.root_path.trim().is_empty() {
                     anyhow::bail!(
-                        "[CODE_REPO_WORK_DIR_REQUIRED] workspace '{}' requires work_dir",
-                        id
+                        "[CODE_REPO_WORK_DIR_REQUIRED] workspace '{id}' requires work_dir"
                     );
                 }
                 if entry.qa_targets.is_empty() {
                     anyhow::bail!(
-                        "[INVALID_WORKSPACE] workspace '{}' qa_targets cannot be empty\n  category: validation\n  suggested_fix: add at least one qa_targets path (e.g. docs/qa)",
-                        id
+                        "[INVALID_WORKSPACE] workspace '{id}' qa_targets cannot be empty\n  category: validation\n  suggested_fix: add at least one qa_targets path (e.g. docs/qa)"
                     );
                 }
                 if entry.ticket_dir.trim().is_empty() {
                     anyhow::bail!(
-                        "[CODE_REPO_TICKET_DIR_REQUIRED] workspace '{}' requires ticket_dir",
-                        id
+                        "[CODE_REPO_TICKET_DIR_REQUIRED] workspace '{id}' requires ticket_dir"
                     );
                 }
             }
             WorkspaceKind::Task => {
                 if entry.self_referential {
                     anyhow::bail!(
-                        "[TASK_WORKSPACE_SELF_REFERENTIAL_FORBIDDEN] workspace '{}' cannot be self_referential",
-                        id
+                        "[TASK_WORKSPACE_SELF_REFERENTIAL_FORBIDDEN] workspace '{id}' cannot be self_referential"
                     );
                 }
                 if !entry.qa_targets.is_empty() || !entry.ticket_dir.is_empty() {
                     anyhow::bail!(
-                        "[TASK_WORKSPACE_QA_FIELDS_FORBIDDEN] workspace '{}' cannot define qa_targets or ticket_dir",
-                        id
+                        "[TASK_WORKSPACE_QA_FIELDS_FORBIDDEN] workspace '{id}' cannot define qa_targets or ticket_dir"
                     );
                 }
             }
@@ -103,13 +98,13 @@ pub fn resolve_and_validate_workspaces_for_project(
                 format!("workspace '{}' work_dir not found: {}", id, entry.root_path)
             })?;
             if entry.kind == WorkspaceKind::Task {
-                file_sharing.ensure_shareable(&root, &format!("workspace '{}'.work_dir", id))?;
+                file_sharing.ensure_shareable(&root, &format!("workspace '{id}'.work_dir"))?;
             }
             root
         };
 
         for (idx, target) in entry.qa_targets.iter().enumerate() {
-            let field = format!("workspace '{}' qa_targets[{}]", id, idx);
+            let field = format!("workspace '{id}' qa_targets[{idx}]");
             let resolved_target = resolve_workspace_path(&root_path, target, &field)?;
             if resolved_target.exists() && !resolved_target.is_dir() {
                 anyhow::bail!(
@@ -120,7 +115,7 @@ pub fn resolve_and_validate_workspaces_for_project(
             }
         }
         if entry.kind == WorkspaceKind::CodeRepo {
-            let ticket_field = format!("workspace '{}' ticket_dir", id);
+            let ticket_field = format!("workspace '{id}' ticket_dir");
             let resolved_ticket =
                 resolve_workspace_path(&root_path, &entry.ticket_dir, &ticket_field)?;
             if resolved_ticket.exists() && !resolved_ticket.is_dir() {

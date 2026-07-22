@@ -127,10 +127,10 @@ fn collect_assistant(value: &Value, run: &mut StreamRun, pending: &mut HashMap<S
                 }
             }
             Some("text") => {
-                if let Some(text) = block.get("text").and_then(Value::as_str) {
-                    if !text.trim().is_empty() {
-                        run.assistant_texts.push(text.to_string());
-                    }
+                if let Some(text) = block.get("text").and_then(Value::as_str)
+                    && !text.trim().is_empty()
+                {
+                    run.assistant_texts.push(text.to_string());
                 }
             }
             _ => {}
@@ -160,11 +160,11 @@ fn collect_tool_results(value: &Value, run: &mut StreamRun, pending: &HashMap<St
             .and_then(Value::as_bool)
             .unwrap_or(false);
         let result = extract_result_content(block.get("content"));
-        if let Some(&index) = pending.get(id) {
-            if let Some(call) = run.tool_calls.get_mut(index) {
-                call.result = result;
-                call.is_error = is_error;
-            }
+        if let Some(&index) = pending.get(id)
+            && let Some(call) = run.tool_calls.get_mut(index)
+        {
+            call.result = result;
+            call.is_error = is_error;
         }
     }
 }

@@ -28,74 +28,74 @@ pub async fn execute_guard_step(
     task_ctx: &TaskRuntimeContext,
     runtime: &RunningTask,
 ) -> Result<GuardResult> {
-    if let ExecutionMode::Builtin { name } = step.effective_execution_mode().as_ref() {
-        if name == "loop_guard" {
-            let unresolved = count_unresolved_items(state, task_id).await?;
-            // Respect stop_when_no_unresolved config: only stop on zero unresolved
-            // when the guard is configured to do so. In Fixed mode with max_cycles,
-            // the loop_engine's evaluate_loop_guard_rules handles cycle counting
-            // separately, so the builtin guard should not short-circuit it.
-            let should_stop = task_ctx
-                .execution_plan
-                .loop_policy
-                .guard
-                .stop_when_no_unresolved
-                && unresolved == 0;
-            if should_stop {
-                return Ok(GuardResult {
-                    should_stop: true,
-                    reason: "no_unresolved".to_string(),
-                });
-            }
-            // FR-043: Evaluate convergence expressions when present.
-            if let Some(exprs) = &task_ctx.execution_plan.loop_policy.convergence_expr {
-                let conv_ctx = ConvergenceContext {
-                    cycle: task_ctx.current_cycle,
-                    active_ticket_count: unresolved,
-                    self_test_passed: task_ctx
-                        .pipeline_vars
-                        .vars
-                        .get("self_test_passed")
-                        .map(|v| v == "true")
-                        .unwrap_or(false),
-                    max_cycles: task_ctx
-                        .execution_plan
-                        .loop_policy
-                        .guard
-                        .max_cycles
-                        .unwrap_or(0),
-                    vars: task_ctx.pipeline_vars.vars.clone(),
-                };
-                for entry in exprs {
-                    match evaluate_convergence_expression(entry.when.trim(), &conv_ctx) {
-                        Ok(true) => {
-                            let reason = entry
-                                .reason
-                                .clone()
-                                .unwrap_or_else(|| "convergence_expr".to_string());
-                            return Ok(GuardResult {
-                                should_stop: true,
-                                reason,
-                            });
-                        }
-                        Ok(false) => {}
-                        Err(e) => {
-                            tracing::warn!(
-                                task_id,
-                                cycle = task_ctx.current_cycle,
-                                expr = entry.when.as_str(),
-                                "convergence_expr evaluation error: {}",
-                                e
-                            );
-                        }
+    if let ExecutionMode::Builtin { name } = step.effective_execution_mode().as_ref()
+        && name == "loop_guard"
+    {
+        let unresolved = count_unresolved_items(state, task_id).await?;
+        // Respect stop_when_no_unresolved config: only stop on zero unresolved
+        // when the guard is configured to do so. In Fixed mode with max_cycles,
+        // the loop_engine's evaluate_loop_guard_rules handles cycle counting
+        // separately, so the builtin guard should not short-circuit it.
+        let should_stop = task_ctx
+            .execution_plan
+            .loop_policy
+            .guard
+            .stop_when_no_unresolved
+            && unresolved == 0;
+        if should_stop {
+            return Ok(GuardResult {
+                should_stop: true,
+                reason: "no_unresolved".to_string(),
+            });
+        }
+        // FR-043: Evaluate convergence expressions when present.
+        if let Some(exprs) = &task_ctx.execution_plan.loop_policy.convergence_expr {
+            let conv_ctx = ConvergenceContext {
+                cycle: task_ctx.current_cycle,
+                active_ticket_count: unresolved,
+                self_test_passed: task_ctx
+                    .pipeline_vars
+                    .vars
+                    .get("self_test_passed")
+                    .map(|v| v == "true")
+                    .unwrap_or(false),
+                max_cycles: task_ctx
+                    .execution_plan
+                    .loop_policy
+                    .guard
+                    .max_cycles
+                    .unwrap_or(0),
+                vars: task_ctx.pipeline_vars.vars.clone(),
+            };
+            for entry in exprs {
+                match evaluate_convergence_expression(entry.when.trim(), &conv_ctx) {
+                    Ok(true) => {
+                        let reason = entry
+                            .reason
+                            .clone()
+                            .unwrap_or_else(|| "convergence_expr".to_string());
+                        return Ok(GuardResult {
+                            should_stop: true,
+                            reason,
+                        });
+                    }
+                    Ok(false) => {}
+                    Err(e) => {
+                        tracing::warn!(
+                            task_id,
+                            cycle = task_ctx.current_cycle,
+                            expr = entry.when.as_str(),
+                            "convergence_expr evaluation error: {}",
+                            e
+                        );
                     }
                 }
             }
-            return Ok(GuardResult {
-                should_stop: false,
-                reason: "has_unresolved".to_string(),
-            });
         }
+        return Ok(GuardResult {
+            should_stop: false,
+            reason: "has_unresolved".to_string(),
+        });
     }
 
     let (agent_id, template, _prompt_delivery, _command_rules) = {

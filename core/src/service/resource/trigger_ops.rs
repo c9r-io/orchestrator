@@ -37,17 +37,13 @@ pub async fn fire_trigger(
     let proj_cfg = active.config.projects.get(project_id).ok_or_else(|| {
         classify_resource_error(
             "trigger.fire",
-            anyhow::anyhow!("project not found: {}", project_id),
+            anyhow::anyhow!("project not found: {project_id}"),
         )
     })?;
     let trigger_cfg = proj_cfg.triggers.get(trigger_name).ok_or_else(|| {
         classify_resource_error(
             "trigger.fire",
-            anyhow::anyhow!(
-                "trigger '{}' not found in project '{}'",
-                trigger_name,
-                project_id
-            ),
+            anyhow::anyhow!("trigger '{trigger_name}' not found in project '{project_id}'"),
         )
     })?;
 
@@ -83,16 +79,12 @@ fn set_trigger_suspend(
     };
 
     let proj_cfg = config.projects.get_mut(project_id).ok_or_else(|| {
-        classify_resource_error(op, anyhow::anyhow!("project not found: {}", project_id))
+        classify_resource_error(op, anyhow::anyhow!("project not found: {project_id}"))
     })?;
     let trigger_cfg = proj_cfg.triggers.get_mut(trigger_name).ok_or_else(|| {
         classify_resource_error(
             op,
-            anyhow::anyhow!(
-                "trigger '{}' not found in project '{}'",
-                trigger_name,
-                project_id
-            ),
+            anyhow::anyhow!("trigger '{trigger_name}' not found in project '{project_id}'"),
         )
     })?;
 

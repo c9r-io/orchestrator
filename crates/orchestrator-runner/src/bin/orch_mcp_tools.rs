@@ -55,11 +55,11 @@ fn main() {
             _ => id.map(|id| error_response(id, -32601, "method not found")),
         };
 
-        if let Some(response) = response {
-            if let Err(e) = write_message(&mut stdout, &response) {
-                log(&format!("stdout write error: {e}"));
-                break;
-            }
+        if let Some(response) = response
+            && let Err(e) = write_message(&mut stdout, &response)
+        {
+            log(&format!("stdout write error: {e}"));
+            break;
         }
     }
 }

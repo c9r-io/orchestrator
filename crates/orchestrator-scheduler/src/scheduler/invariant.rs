@@ -41,15 +41,15 @@ fn run_single_invariant(
     workspace_root: &Path,
 ) -> Result<InvariantResult> {
     // Check protected files first
-    if !invariant.protected_files.is_empty() {
-        if let Some(violation_msg) = check_protected_files(invariant, workspace_root) {
-            return Ok(InvariantResult {
-                name: invariant.name.clone(),
-                passed: false,
-                message: violation_msg,
-                on_violation: invariant.on_violation,
-            });
-        }
+    if !invariant.protected_files.is_empty()
+        && let Some(violation_msg) = check_protected_files(invariant, workspace_root)
+    {
+        return Ok(InvariantResult {
+            name: invariant.name.clone(),
+            passed: false,
+            message: violation_msg,
+            on_violation: invariant.on_violation,
+        });
     }
 
     // Run command if specified
@@ -87,7 +87,7 @@ fn run_single_invariant(
                         return Ok(InvariantResult {
                             name: invariant.name.clone(),
                             passed: false,
-                            message: format!("assertion failed: {}", expr),
+                            message: format!("assertion failed: {expr}"),
                             on_violation: invariant.on_violation,
                         });
                     }
@@ -98,7 +98,7 @@ fn run_single_invariant(
                 return Ok(InvariantResult {
                     name: invariant.name.clone(),
                     passed: false,
-                    message: format!("command execution failed: {}", e),
+                    message: format!("command execution failed: {e}"),
                     on_violation: invariant.on_violation,
                 });
             }
@@ -134,8 +134,7 @@ fn check_protected_files(invariant: &InvariantConfig, workspace_root: &Path) -> 
         for changed in &changed_files {
             if file_matches_pattern(changed, pattern) {
                 return Some(format!(
-                    "protected file '{}' was modified (pattern: '{}')",
-                    changed, pattern
+                    "protected file '{changed}' was modified (pattern: '{pattern}')"
                 ));
             }
         }
@@ -162,15 +161,15 @@ fn file_matches_pattern(file: &str, pattern: &str) -> bool {
 fn evaluate_invariant_assertion(expr: &str, exit_code: i32, _stdout: &str) -> bool {
     let expr = expr.trim();
 
-    if let Some(rest) = expr.strip_prefix("exit_code == ") {
-        if let Ok(expected) = rest.trim().parse::<i32>() {
-            return exit_code == expected;
-        }
+    if let Some(rest) = expr.strip_prefix("exit_code == ")
+        && let Ok(expected) = rest.trim().parse::<i32>()
+    {
+        return exit_code == expected;
     }
-    if let Some(rest) = expr.strip_prefix("exit_code != ") {
-        if let Ok(expected) = rest.trim().parse::<i32>() {
-            return exit_code != expected;
-        }
+    if let Some(rest) = expr.strip_prefix("exit_code != ")
+        && let Ok(expected) = rest.trim().parse::<i32>()
+    {
+        return exit_code != expected;
     }
 
     // Default: treat non-zero exit as failure

@@ -160,33 +160,31 @@ pub fn extract_json_array(json_str: &str, path: &str) -> Result<Vec<Value>> {
         let target = resolve_path(&root, path)?;
         return match target {
             Value::Array(arr) => Ok(arr.clone()),
-            _ => anyhow::bail!("path '{}' does not point to an array", path),
+            _ => anyhow::bail!("path '{path}' does not point to an array"),
         };
     }
 
     // 2. Try extracting from a fenced code block (```json ... ``` or ``` ... ```)
-    if let Some(json_block) = extract_fenced_json(json_str) {
-        if let Ok(root) = serde_json::from_str::<Value>(&json_block) {
-            if let Ok(target) = resolve_path(&root, path) {
-                return match target {
-                    Value::Array(arr) => Ok(arr.clone()),
-                    _ => anyhow::bail!("path '{}' does not point to an array", path),
-                };
-            }
-        }
+    if let Some(json_block) = extract_fenced_json(json_str)
+        && let Ok(root) = serde_json::from_str::<Value>(&json_block)
+        && let Ok(target) = resolve_path(&root, path)
+    {
+        return match target {
+            Value::Array(arr) => Ok(arr.clone()),
+            _ => anyhow::bail!("path '{path}' does not point to an array"),
+        };
     }
 
     // 2.5 Try repairing unquoted JSON
     let repaired = repair_unquoted_json(json_str);
-    if repaired != json_str {
-        if let Ok(root) = serde_json::from_str::<Value>(&repaired) {
-            if let Ok(target) = resolve_path(&root, path) {
-                return match target {
-                    Value::Array(arr) => Ok(arr.clone()),
-                    _ => anyhow::bail!("path '{}' does not point to an array", path),
-                };
-            }
-        }
+    if repaired != json_str
+        && let Ok(root) = serde_json::from_str::<Value>(&repaired)
+        && let Ok(target) = resolve_path(&root, path)
+    {
+        return match target {
+            Value::Array(arr) => Ok(arr.clone()),
+            _ => anyhow::bail!("path '{path}' does not point to an array"),
+        };
     }
 
     // 3. Scan for JSON objects/arrays starting at each `{` or `[`
@@ -194,7 +192,7 @@ pub fn extract_json_array(json_str: &str, path: &str) -> Result<Vec<Value>> {
         return Ok(arr);
     }
 
-    anyhow::bail!("no valid JSON containing path '{}' found in text", path)
+    anyhow::bail!("no valid JSON containing path '{path}' found in text")
 }
 
 /// Extract JSON content from a markdown fenced code block.
@@ -222,19 +220,19 @@ fn scan_for_json_with_path(text: &str, path: &str) -> Option<Vec<Value>> {
         }
         let slice = &text[i..];
         let mut de = serde_json::Deserializer::from_str(slice);
-        if let Ok(root) = <Value as Deserialize>::deserialize(&mut de) {
-            if let Ok(Value::Array(arr)) = resolve_path(&root, path) {
-                return Some(arr.clone());
-            }
+        if let Ok(root) = <Value as Deserialize>::deserialize(&mut de)
+            && let Ok(Value::Array(arr)) = resolve_path(&root, path)
+        {
+            return Some(arr.clone());
         }
         // Fallback: try repairing unquoted JSON in this slice
         let repaired = repair_unquoted_json(slice);
         if repaired != slice {
             let mut de = serde_json::Deserializer::from_str(&repaired);
-            if let Ok(root) = <Value as Deserialize>::deserialize(&mut de) {
-                if let Ok(Value::Array(arr)) = resolve_path(&root, path) {
-                    return Some(arr.clone());
-                }
+            if let Ok(root) = <Value as Deserialize>::deserialize(&mut de)
+                && let Ok(Value::Array(arr)) = resolve_path(&root, path)
+            {
+                return Some(arr.clone());
             }
         }
     }
@@ -262,10 +260,10 @@ pub fn extract_stream_json_result(content: &str) -> Option<String> {
             continue;
         }
         if trimmed.contains("\"type\":\"result\"") || trimmed.contains("\"type\": \"result\"") {
-            if let Ok(parsed) = serde_json::from_str::<Value>(trimmed) {
-                if let Some(result) = parsed.get("result").and_then(|v| v.as_str()) {
-                    return Some(result.to_string());
-                }
+            if let Ok(parsed) = serde_json::from_str::<Value>(trimmed)
+                && let Some(result) = parsed.get("result").and_then(|v| v.as_str())
+            {
+                return Some(result.to_string());
             }
             if let Some(extracted) = extract_result_field_raw(trimmed) {
                 return Some(extracted);
@@ -287,7 +285,7 @@ fn resolve_path<'a>(root: &'a Value, path: &str) -> Result<&'a Value> {
         }
         current = current
             .get(segment)
-            .with_context(|| format!("field '{}' not found", segment))?;
+            .with_context(|| format!("field '{segment}' not found"))?;
     }
     Ok(current)
 }
@@ -312,10 +310,10 @@ fn extract_result_field_raw(line: &str) -> Option<String> {
                     b'/' => result.push('/'),
                     b'u' if i + 5 < bytes.len() => {
                         let hex = &line[i + 2..i + 6];
-                        if let Ok(cp) = u32::from_str_radix(hex, 16) {
-                            if let Some(ch) = char::from_u32(cp) {
-                                result.push(ch);
-                            }
+                        if let Ok(cp) = u32::from_str_radix(hex, 16)
+                            && let Some(ch) = char::from_u32(cp)
+                        {
+                            result.push(ch);
                         }
                         i += 6;
                         continue;

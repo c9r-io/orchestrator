@@ -412,7 +412,7 @@ impl AdaptivePlanExecutor for GraphAdaptiveExecutor<'_> {
                 &active.config,
                 planner_agent,
             )
-            .ok_or_else(|| anyhow!("adaptive planner agent not found: {}", planner_agent))?;
+            .ok_or_else(|| anyhow!("adaptive planner agent not found: {planner_agent}"))?;
             (agent.command.clone(), agent.prompt_delivery)
         };
         let result = run_phase_with_selected_agent(
@@ -498,7 +498,7 @@ async fn execute_graph_nodes(
         }
         let node = graph
             .get_node(node_id)
-            .ok_or_else(|| anyhow!("graph node '{}' disappeared", node_id))?;
+            .ok_or_else(|| anyhow!("graph node '{node_id}' disappeared"))?;
         emit_graph_event(
             state,
             task_id,

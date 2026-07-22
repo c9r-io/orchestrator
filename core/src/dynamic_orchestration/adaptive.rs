@@ -182,7 +182,7 @@ impl AdaptivePlanner {
             Err(err) => {
                 return self.handle_failure(
                     AdaptiveFailureClass::InvalidJson,
-                    anyhow!("adaptive planner returned invalid JSON: {}", err),
+                    anyhow!("adaptive planner returned invalid JSON: {err}"),
                     context,
                     Some(response),
                 );
@@ -404,10 +404,10 @@ pub fn validate_generated_plan(plan: &DynamicExecutionPlan) -> Result<()> {
         anyhow::bail!("adaptive plan must define at least one node");
     }
 
-    if let Some(entry) = plan.entry.as_deref() {
-        if !plan.nodes.contains_key(entry) {
-            anyhow::bail!("adaptive plan entry node '{}' does not exist", entry);
-        }
+    if let Some(entry) = plan.entry.as_deref()
+        && !plan.nodes.contains_key(entry)
+    {
+        anyhow::bail!("adaptive plan entry node '{entry}' does not exist");
     }
 
     for (node_id, node) in &plan.nodes {
@@ -503,7 +503,7 @@ mod tests {
 
         for i in 0..5 {
             planner.add_history(ExecutionHistoryRecord {
-                task_id: format!("task_{}", i),
+                task_id: format!("task_{i}"),
                 item_id: "item".to_string(),
                 cycle: i,
                 steps: vec![],

@@ -50,17 +50,17 @@ pub(super) fn build_scope_segments(
             continue;
         }
         // FR-090: Skip steps excluded by task-level step_filter
-        if let Some(ref filter) = task_ctx.step_filter {
-            if !filter.contains(&step.id) {
-                continue;
-            }
+        if let Some(ref filter) = task_ctx.step_filter
+            && !filter.contains(&step.id)
+        {
+            continue;
         }
         let scope = step.resolved_scope();
-        if let Some(last) = segments.last_mut() {
-            if last.scope == scope {
-                last.step_ids.insert(step.id.clone());
-                continue;
-            }
+        if let Some(last) = segments.last_mut()
+            && last.scope == scope
+        {
+            last.step_ids.insert(step.id.clone());
+            continue;
         }
         let mut ids = HashSet::new();
         ids.insert(step.id.clone());
@@ -126,36 +126,33 @@ pub(super) async fn execute_task_segment(
     // before we reach the generate_items logic below.  Flush deferred post-actions
     // (pipeline vars + generate_items) to the database NOW so they survive the
     // exec() restart and are available in the next cycle.
-    if let Err(ref e) = process_result {
-        if e.downcast_ref::<super::super::safety::RestartRequestedError>()
+    if let Err(ref e) = process_result
+        && e.downcast_ref::<super::super::safety::RestartRequestedError>()
             .is_some()
-        {
-            // Persist pipeline vars so the new process can read qa_doc_gen_output
-            task_ctx.pipeline_vars = task_acc.pipeline_vars.clone();
-            if let Ok(json_str) = serde_json::to_string(&task_ctx.pipeline_vars) {
-                let _ = state
-                    .db_writer
-                    .update_task_pipeline_vars(task_id, &json_str)
-                    .await;
-            }
-            // Flush pending generate_items — creates dynamic items in the DB
-            flush_pending_generate_items(state, task_id, &mut task_acc, items, task_item_paths)
+    {
+        // Persist pipeline vars so the new process can read qa_doc_gen_output
+        task_ctx.pipeline_vars = task_acc.pipeline_vars.clone();
+        if let Ok(json_str) = serde_json::to_string(&task_ctx.pipeline_vars) {
+            let _ = state
+                .db_writer
+                .update_task_pipeline_vars(task_id, &json_str)
                 .await;
         }
+        // Flush pending generate_items — creates dynamic items in the DB
+        flush_pending_generate_items(state, task_id, &mut task_acc, items, task_item_paths).await;
     }
     process_result?;
 
     // Propagate task-scoped pipeline vars to subsequent segments
     task_ctx.pipeline_vars = task_acc.pipeline_vars.clone();
     // Persist pipeline vars to DB for recovery across process restarts
-    if let Ok(json_str) = serde_json::to_string(&task_ctx.pipeline_vars) {
-        if let Err(e) = state
+    if let Ok(json_str) = serde_json::to_string(&task_ctx.pipeline_vars)
+        && let Err(e) = state
             .db_writer
             .update_task_pipeline_vars(task_id, &json_str)
             .await
-        {
-            tracing::warn!("failed to persist pipeline_vars after task segment: {e}");
-        }
+    {
+        tracing::warn!("failed to persist pipeline_vars after task segment: {e}");
     }
     for item in items.iter() {
         let acc = item_state
@@ -170,23 +167,22 @@ pub(super) async fn execute_task_segment(
             segment.step_ids.contains(&s.id)
                 && s.required_capability.as_deref() == Some("implement")
         });
-    if has_implement {
-        if let Some(action) = super::cycle_safety::check_invariants(
+    if has_implement
+        && let Some(action) = super::cycle_safety::check_invariants(
             state,
             task_id,
             task_ctx,
             agent_orchestrator::config::InvariantCheckPoint::AfterImplement,
         )
         .await?
-        {
-            match action {
-                "halt" => {
-                    set_task_status(state, task_id, "failed", false).await?;
-                    anyhow::bail!("invariant halt at after_implement checkpoint");
-                }
-                _ => {
-                    return Ok(TaskSegmentOutcome::InvariantRollback);
-                }
+    {
+        match action {
+            "halt" => {
+                set_task_status(state, task_id, "failed", false).await?;
+                anyhow::bail!("invariant halt at after_implement checkpoint");
+            }
+            _ => {
+                return Ok(TaskSegmentOutcome::InvariantRollback);
             }
         }
     }
@@ -245,18 +241,18 @@ pub(super) async fn execute_item_segment(
                 continue;
             }
             // FR-035 L1: Skip items in retry backoff
-            if let Some(&retry_after) = task_ctx.item_retry_after.get(&item.id) {
-                if std::time::Instant::now() < retry_after {
-                    insert_event(
-                        state,
-                        task_id,
-                        Some(&item.id),
-                        "step_skipped",
-                        json!({"reason": "retry_backoff"}),
-                    )
-                    .await?;
-                    continue;
-                }
+            if let Some(&retry_after) = task_ctx.item_retry_after.get(&item.id)
+                && std::time::Instant::now() < retry_after
+            {
+                insert_event(
+                    state,
+                    task_id,
+                    Some(&item.id),
+                    "step_skipped",
+                    json!({"reason": "retry_backoff"}),
+                )
+                .await?;
+                continue;
             }
             let acc = item_state
                 .entry(item.id.clone())
@@ -358,7 +354,7 @@ pub(super) async fn execute_item_segment(
                 .clone()
                 .acquire_owned()
                 .await
-                .map_err(|e| anyhow::anyhow!("semaphore closed: {}", e))?;
+                .map_err(|e| anyhow::anyhow!("semaphore closed: {e}"))?;
             let state = state.clone();
             let item_id = item.id.clone();
             let item = item.clone();
@@ -390,12 +386,12 @@ pub(super) async fn execute_item_segment(
                 // immediately so `Progress: X/N` updates in real-time.
                 // The batch `finalize_items` call later will re-evaluate
                 // the same item (idempotent).
-                if run_dynamic_steps && result.is_ok() {
-                    if let Err(e) =
+                if run_dynamic_steps
+                    && result.is_ok()
+                    && let Err(e) =
                         finalize_item_execution(&state, &task_id, &item, &ctx, &mut acc).await
-                    {
-                        return (item_id, acc, Err(e));
-                    }
+                {
+                    return (item_id, acc, Err(e));
                 }
                 (item_id, acc, result)
             });
@@ -419,7 +415,7 @@ pub(super) async fn execute_item_segment(
                     errors.push(e);
                 }
                 Err(e) => {
-                    errors.push(anyhow::anyhow!("item task panicked: {}", e));
+                    errors.push(anyhow::anyhow!("item task panicked: {e}"));
                 }
             }
         }
@@ -429,7 +425,7 @@ pub(super) async fn execute_item_segment(
                 .map(|e| e.to_string())
                 .collect::<Vec<_>>()
                 .join("; ");
-            anyhow::bail!("parallel item execution failed: {}", msg);
+            anyhow::bail!("parallel item execution failed: {msg}");
         }
 
         // FR-053: Completeness check — ensure every item was dispatched into the
@@ -440,8 +436,7 @@ pub(super) async fn execute_item_segment(
         let expected = items.len();
         if dispatched_count < expected {
             let msg = format!(
-                "parallel item segment incomplete: dispatched {}/{} items",
-                dispatched_count, expected
+                "parallel item segment incomplete: dispatched {dispatched_count}/{expected} items"
             );
             warn!(
                 dispatched_count,
@@ -458,7 +453,7 @@ pub(super) async fn execute_item_segment(
                 }),
             )
             .await?;
-            anyhow::bail!("{}", msg);
+            anyhow::bail!("{msg}");
         }
     }
 
@@ -686,10 +681,10 @@ fn has_item_select_step(
     plan: &agent_orchestrator::config::TaskExecutionPlan,
 ) -> bool {
     for step_id in &segment.step_ids {
-        if let Some(step) = plan.step_by_id(step_id) {
-            if step.builtin.as_deref() == Some("item_select") {
-                return true;
-            }
+        if let Some(step) = plan.step_by_id(step_id)
+            && step.builtin.as_deref() == Some("item_select")
+        {
+            return true;
         }
     }
     false

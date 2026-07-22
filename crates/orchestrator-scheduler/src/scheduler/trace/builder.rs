@@ -314,18 +314,15 @@ fn build_cycles(
                         // Try to get actual exit_code from command_runs
                         if let Some(item_id) =
                             step.item_id.as_ref().or(step.anchor_item_id.as_ref())
-                        {
-                            if let Some(runs) =
+                            && let Some(runs) =
                                 runs_by_item_phase.get(&(item_id.clone(), step_id.to_string()))
-                            {
-                                if let Some(run) = runs.last() {
-                                    if run.exit_code.is_some() {
-                                        step.exit_code = run.exit_code;
-                                    }
-                                    if step.agent_id.is_none() && !run.agent_id.is_empty() {
-                                        step.agent_id = Some(run.agent_id.clone());
-                                    }
-                                }
+                            && let Some(run) = runs.last()
+                        {
+                            if run.exit_code.is_some() {
+                                step.exit_code = run.exit_code;
+                            }
+                            if step.agent_id.is_none() && !run.agent_id.is_empty() {
+                                step.agent_id = Some(run.agent_id.clone());
                             }
                         }
                     }

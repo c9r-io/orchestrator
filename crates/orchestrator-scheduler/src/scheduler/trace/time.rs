@@ -41,10 +41,10 @@ pub(super) fn parse_trace_timestamp(ts: &str) -> Option<chrono::DateTime<chrono:
         "%Y-%m-%dT%H:%M:%S",
         "%Y-%m-%dT%H:%M:%S%.f",
     ] {
-        if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(ts, fmt) {
-            if let Some(parsed) = zero_offset.from_local_datetime(&naive).single() {
-                return Some(parsed);
-            }
+        if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(ts, fmt)
+            && let Some(parsed) = zero_offset.from_local_datetime(&naive).single()
+        {
+            return Some(parsed);
         }
     }
 

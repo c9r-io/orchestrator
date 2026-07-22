@@ -48,13 +48,13 @@ pub fn is_capability_healthy(
     match health_map.get(agent_id) {
         None => true,
         Some(state) => {
-            if let Some(until) = state.diseased_until {
-                if Utc::now() < until {
-                    if let Some(cap_health) = state.capability_health.get(capability) {
-                        return cap_health.success_rate() >= success_threshold as f32;
-                    }
-                    return false;
+            if let Some(until) = state.diseased_until
+                && Utc::now() < until
+            {
+                if let Some(cap_health) = state.capability_health.get(capability) {
+                    return cap_health.success_rate() >= success_threshold as f32;
                 }
+                return false;
             }
             true
         }

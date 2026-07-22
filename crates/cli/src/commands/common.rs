@@ -4,7 +4,7 @@ use crate::OutputFormat;
 
 pub(crate) fn resolve_resource(resource: &str, name: Option<&str>) -> String {
     match name {
-        Some(n) => format!("{}/{}", resource, n),
+        Some(n) => format!("{resource}/{n}"),
         None => resource.to_string(),
     }
 }
@@ -22,15 +22,13 @@ pub(crate) fn format_grpc_error(e: tonic::Status) -> anyhow::Error {
         tonic::Code::FailedPrecondition => {
             if msg.starts_with("use --force") {
                 anyhow::anyhow!(
-                    "{}{}\nhint: check --force to confirm the requested deletion",
-                    msg,
-                    request_id
+                    "{msg}{request_id}\nhint: check --force to confirm the requested deletion"
                 )
             } else {
-                anyhow::anyhow!("{}{}", msg, request_id)
+                anyhow::anyhow!("{msg}{request_id}")
             }
         }
-        _ => anyhow::anyhow!("{}{}", msg, request_id),
+        _ => anyhow::anyhow!("{msg}{request_id}"),
     }
 }
 
@@ -42,7 +40,7 @@ pub(crate) fn read_input_or_file(file: &str) -> Result<String> {
         Ok(buf)
     } else {
         std::fs::read_to_string(file)
-            .map_err(|e| anyhow::anyhow!("failed to read manifest file '{}': {}", file, e))
+            .map_err(|e| anyhow::anyhow!("failed to read manifest file '{file}': {e}"))
     }
 }
 

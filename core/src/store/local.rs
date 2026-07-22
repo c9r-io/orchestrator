@@ -170,7 +170,7 @@ mod tests {
             StoreOpResult::Value(Some(v)) => {
                 assert_eq!(v["test_count"], 42);
             }
-            other => panic!("expected Value(Some(...)), got {:?}", other),
+            other => panic!("expected Value(Some(...)), got {other:?}"),
         }
 
         // Delete
@@ -212,7 +212,7 @@ mod tests {
             StoreOpResult::Entries(entries) => {
                 assert_eq!(entries.len(), 2);
             }
-            other => panic!("expected Entries, got {:?}", other),
+            other => panic!("expected Entries, got {other:?}"),
         }
     }
 
@@ -235,7 +235,7 @@ mod tests {
         let result = backend.get("s", "", "k").await.expect("get");
         match result {
             StoreOpResult::Value(Some(v)) => assert_eq!(v["v"], 2),
-            other => panic!("expected Value(Some(...)), got {:?}", other),
+            other => panic!("expected Value(Some(...)), got {other:?}"),
         }
     }
 }

@@ -17,43 +17,42 @@ fn validate_at_path(instance: &Value, schema: &Value, path: &str) -> Result<()> 
     };
 
     // type check
-    if let Some(type_val) = schema_obj.get("type") {
-        if let Some(expected_type) = type_val.as_str() {
-            validate_type(instance, expected_type, path)?;
-        }
+    if let Some(type_val) = schema_obj.get("type")
+        && let Some(expected_type) = type_val.as_str()
+    {
+        validate_type(instance, expected_type, path)?;
     }
 
     // enum check
-    if let Some(enum_val) = schema_obj.get("enum") {
-        if let Some(variants) = enum_val.as_array() {
-            if !variants.contains(instance) {
-                return Err(anyhow!("{}: value must be one of {:?}", path, variants));
-            }
-        }
+    if let Some(enum_val) = schema_obj.get("enum")
+        && let Some(variants) = enum_val.as_array()
+        && !variants.contains(instance)
+    {
+        return Err(anyhow!("{path}: value must be one of {variants:?}"));
     }
 
     // string constraints
     if instance.is_string() {
         let s = instance.as_str().unwrap_or_default();
-        if let Some(min) = schema_obj.get("minLength").and_then(|v| v.as_u64()) {
-            if (s.len() as u64) < min {
-                return Err(anyhow!(
-                    "{}: string length {} is less than minLength {}",
-                    path,
-                    s.len(),
-                    min
-                ));
-            }
+        if let Some(min) = schema_obj.get("minLength").and_then(|v| v.as_u64())
+            && (s.len() as u64) < min
+        {
+            return Err(anyhow!(
+                "{}: string length {} is less than minLength {}",
+                path,
+                s.len(),
+                min
+            ));
         }
-        if let Some(max) = schema_obj.get("maxLength").and_then(|v| v.as_u64()) {
-            if (s.len() as u64) > max {
-                return Err(anyhow!(
-                    "{}: string length {} exceeds maxLength {}",
-                    path,
-                    s.len(),
-                    max
-                ));
-            }
+        if let Some(max) = schema_obj.get("maxLength").and_then(|v| v.as_u64())
+            && (s.len() as u64) > max
+        {
+            return Err(anyhow!(
+                "{}: string length {} exceeds maxLength {}",
+                path,
+                s.len(),
+                max
+            ));
         }
         if let Some(pattern) = schema_obj.get("pattern").and_then(|v| v.as_str()) {
             validate_pattern(s, pattern, path)?;
@@ -62,20 +61,15 @@ fn validate_at_path(instance: &Value, schema: &Value, path: &str) -> Result<()> 
 
     // number constraints
     if let Some(n) = instance.as_f64() {
-        if let Some(min) = schema_obj.get("minimum").and_then(|v| v.as_f64()) {
-            if n < min {
-                return Err(anyhow!(
-                    "{}: value {} is less than minimum {}",
-                    path,
-                    n,
-                    min
-                ));
-            }
+        if let Some(min) = schema_obj.get("minimum").and_then(|v| v.as_f64())
+            && n < min
+        {
+            return Err(anyhow!("{path}: value {n} is less than minimum {min}"));
         }
-        if let Some(max) = schema_obj.get("maximum").and_then(|v| v.as_f64()) {
-            if n > max {
-                return Err(anyhow!("{}: value {} exceeds maximum {}", path, n, max));
-            }
+        if let Some(max) = schema_obj.get("maximum").and_then(|v| v.as_f64())
+            && n > max
+        {
+            return Err(anyhow!("{path}: value {n} exceeds maximum {max}"));
         }
     }
 
@@ -84,10 +78,10 @@ fn validate_at_path(instance: &Value, schema: &Value, path: &str) -> Result<()> 
         // required
         if let Some(required) = schema_obj.get("required").and_then(|v| v.as_array()) {
             for req in required {
-                if let Some(field_name) = req.as_str() {
-                    if !obj.contains_key(field_name) {
-                        return Err(anyhow!("{}: missing required field '{}'", path, field_name));
-                    }
+                if let Some(field_name) = req.as_str()
+                    && !obj.contains_key(field_name)
+                {
+                    return Err(anyhow!("{path}: missing required field '{field_name}'"));
                 }
             }
         }
@@ -96,21 +90,20 @@ fn validate_at_path(instance: &Value, schema: &Value, path: &str) -> Result<()> 
         if let Some(properties) = schema_obj.get("properties").and_then(|v| v.as_object()) {
             for (prop_name, prop_schema) in properties {
                 if let Some(prop_value) = obj.get(prop_name) {
-                    let prop_path = format!("{}.{}", path, prop_name);
+                    let prop_path = format!("{path}.{prop_name}");
                     validate_at_path(prop_value, prop_schema, &prop_path)?;
                 }
             }
         }
 
         // additionalProperties
-        if let Some(additional) = schema_obj.get("additionalProperties") {
-            if additional.as_bool() == Some(false) {
-                if let Some(properties) = schema_obj.get("properties").and_then(|v| v.as_object()) {
-                    for key in obj.keys() {
-                        if !properties.contains_key(key) {
-                            return Err(anyhow!("{}: unexpected property '{}'", path, key));
-                        }
-                    }
+        if let Some(additional) = schema_obj.get("additionalProperties")
+            && additional.as_bool() == Some(false)
+            && let Some(properties) = schema_obj.get("properties").and_then(|v| v.as_object())
+        {
+            for key in obj.keys() {
+                if !properties.contains_key(key) {
+                    return Err(anyhow!("{path}: unexpected property '{key}'"));
                 }
             }
         }
@@ -118,29 +111,29 @@ fn validate_at_path(instance: &Value, schema: &Value, path: &str) -> Result<()> 
 
     // array constraints
     if let Some(arr) = instance.as_array() {
-        if let Some(min) = schema_obj.get("minItems").and_then(|v| v.as_u64()) {
-            if (arr.len() as u64) < min {
-                return Err(anyhow!(
-                    "{}: array length {} is less than minItems {}",
-                    path,
-                    arr.len(),
-                    min
-                ));
-            }
+        if let Some(min) = schema_obj.get("minItems").and_then(|v| v.as_u64())
+            && (arr.len() as u64) < min
+        {
+            return Err(anyhow!(
+                "{}: array length {} is less than minItems {}",
+                path,
+                arr.len(),
+                min
+            ));
         }
-        if let Some(max) = schema_obj.get("maxItems").and_then(|v| v.as_u64()) {
-            if (arr.len() as u64) > max {
-                return Err(anyhow!(
-                    "{}: array length {} exceeds maxItems {}",
-                    path,
-                    arr.len(),
-                    max
-                ));
-            }
+        if let Some(max) = schema_obj.get("maxItems").and_then(|v| v.as_u64())
+            && (arr.len() as u64) > max
+        {
+            return Err(anyhow!(
+                "{}: array length {} exceeds maxItems {}",
+                path,
+                arr.len(),
+                max
+            ));
         }
         if let Some(items_schema) = schema_obj.get("items") {
             for (i, item) in arr.iter().enumerate() {
-                let item_path = format!("{}[{}]", path, i);
+                let item_path = format!("{path}[{i}]");
                 validate_at_path(item, items_schema, &item_path)?;
             }
         }
@@ -198,10 +191,7 @@ fn validate_pattern(value: &str, pattern: &str, path: &str) -> Result<()> {
         // Plain substring match
         if !value.contains(pattern) {
             return Err(anyhow!(
-                "{}: string '{}' does not match pattern '{}'",
-                path,
-                value,
-                pattern
+                "{path}: string '{value}' does not match pattern '{pattern}'"
             ));
         }
         return Ok(());
@@ -238,10 +228,7 @@ fn validate_pattern(value: &str, pattern: &str, path: &str) -> Result<()> {
         };
         if !matched {
             return Err(anyhow!(
-                "{}: string '{}' does not match pattern '{}'",
-                path,
-                value,
-                pattern
+                "{path}: string '{value}' does not match pattern '{pattern}'"
             ));
         }
         return Ok(());
@@ -259,10 +246,7 @@ pub fn validate_schema_definition(schema: &Value) -> Result<()> {
 
     match obj.get("type").and_then(|v| v.as_str()) {
         Some("object") => Ok(()),
-        Some(other) => Err(anyhow!(
-            "schema root type must be 'object', got '{}'",
-            other
-        )),
+        Some(other) => Err(anyhow!("schema root type must be 'object', got '{other}'")),
         None => Err(anyhow!("schema must have a 'type' field set to 'object'")),
     }
 }

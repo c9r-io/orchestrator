@@ -26,7 +26,7 @@ pub fn delete_resource_with_references(
     if parts.len() != 2 {
         return Err(classify_resource_error(
             "resource.delete",
-            anyhow::anyhow!("invalid resource format: {} (use kind/name)", resource),
+            anyhow::anyhow!("invalid resource format: {resource} (use kind/name)"),
         ));
     }
     let (kind, name) = (parts[0], parts[1]);
@@ -34,7 +34,7 @@ pub fn delete_resource_with_references(
     if !force {
         return Err(classify_resource_error(
             "resource.delete",
-            anyhow::anyhow!("use --force to confirm deletion of {}/{}", kind, name),
+            anyhow::anyhow!("use --force to confirm deletion of {kind}/{name}"),
         ));
     }
 
@@ -86,7 +86,7 @@ pub fn delete_resource_with_references(
             } else {
                 return Err(classify_resource_error(
                     "resource.delete",
-                    anyhow::anyhow!("project '{}' not found", name),
+                    anyhow::anyhow!("project '{name}' not found"),
                 ));
             }
         }
@@ -97,22 +97,22 @@ pub fn delete_resource_with_references(
             } else {
                 return Err(classify_resource_error(
                     "resource.delete",
-                    anyhow::anyhow!("CRD '{}' not found", name),
+                    anyhow::anyhow!("CRD '{name}' not found"),
                 ));
             }
         }
         // Custom resource dry-run check (skip kinds with dedicated ProjectConfig projections)
-        if let Some(crd) = crate::crd::resolve::find_crd_by_kind_or_alias(&config, kind) {
-            if !crate::crd::resolve::is_builtin_kind(&crd.kind) {
-                let storage_key = format!("{}/{}", crd.kind, name);
-                if config.custom_resources.contains_key(&storage_key) {
-                    return Ok(());
-                } else {
-                    return Err(classify_resource_error(
-                        "resource.delete",
-                        anyhow::anyhow!("{}/{} not found", crd.kind, name),
-                    ));
-                }
+        if let Some(crd) = crate::crd::resolve::find_crd_by_kind_or_alias(&config, kind)
+            && !crate::crd::resolve::is_builtin_kind(&crd.kind)
+        {
+            let storage_key = format!("{}/{}", crd.kind, name);
+            if config.custom_resources.contains_key(&storage_key) {
+                return Ok(());
+            } else {
+                return Err(classify_resource_error(
+                    "resource.delete",
+                    anyhow::anyhow!("{}/{} not found", crd.kind, name),
+                ));
             }
         }
         let proj_cfg = match config.projects.get(project_id) {
@@ -120,7 +120,7 @@ pub fn delete_resource_with_references(
             None => {
                 return Err(classify_resource_error(
                     "resource.delete",
-                    anyhow::anyhow!("{}/{} not found in project '{}'", kind, name, project_id),
+                    anyhow::anyhow!("{kind}/{name} not found in project '{project_id}'"),
                 ));
             }
         };
@@ -145,7 +145,7 @@ pub fn delete_resource_with_references(
         if !exists {
             return Err(classify_resource_error(
                 "resource.delete",
-                anyhow::anyhow!("{}/{} not found in project '{}'", kind, name, project_id),
+                anyhow::anyhow!("{kind}/{name} not found in project '{project_id}'"),
             ));
         }
         return Ok(());
@@ -162,7 +162,7 @@ pub fn delete_resource_with_references(
         if !deleted {
             return Err(classify_resource_error(
                 "resource.delete",
-                anyhow::anyhow!("CRD '{}' not found", name),
+                anyhow::anyhow!("CRD '{name}' not found"),
             ));
         }
         persist_config_for_delete(state, config, "daemon-delete", &[])?;
@@ -170,20 +170,20 @@ pub fn delete_resource_with_references(
         return Ok(());
     }
 
-    if let Some(crd) = crate::crd::resolve::find_crd_by_kind_or_alias(&config, kind) {
-        if !crate::crd::resolve::is_builtin_kind(&crd.kind) {
-            let crd_kind = crd.kind.clone();
-            let deleted = crate::crd::delete_custom_resource(&mut config, &crd_kind, name)?;
-            if !deleted {
-                return Err(classify_resource_error(
-                    "resource.delete",
-                    anyhow::anyhow!("{}/{} not found", crd_kind, name),
-                ));
-            }
-            persist_config_for_delete(state, config, "daemon-delete", &[])?;
-            crate::trigger_engine::notify_trigger_reload(state);
-            return Ok(());
+    if let Some(crd) = crate::crd::resolve::find_crd_by_kind_or_alias(&config, kind)
+        && !crate::crd::resolve::is_builtin_kind(&crd.kind)
+    {
+        let crd_kind = crd.kind.clone();
+        let deleted = crate::crd::delete_custom_resource(&mut config, &crd_kind, name)?;
+        if !deleted {
+            return Err(classify_resource_error(
+                "resource.delete",
+                anyhow::anyhow!("{crd_kind}/{name} not found"),
+            ));
         }
+        persist_config_for_delete(state, config, "daemon-delete", &[])?;
+        crate::trigger_engine::notify_trigger_reload(state);
+        return Ok(());
     }
 
     if kind == "project" {
@@ -198,17 +198,17 @@ pub fn delete_resource_with_references(
                     .data_dir
                     .join(&ws_config.root_path)
                     .join(&ws_config.ticket_dir);
-                if ticket_path.is_dir() {
-                    if let Ok(entries) = std::fs::read_dir(&ticket_path) {
-                        for entry in entries.flatten() {
-                            let fname = entry.file_name();
-                            let fname_str = fname.to_string_lossy();
-                            if fname_str.starts_with("auto_")
-                                && fname_str.ends_with(".md")
-                                && std::fs::remove_file(entry.path()).is_ok()
-                            {
-                                _tickets_cleaned += 1;
-                            }
+                if ticket_path.is_dir()
+                    && let Ok(entries) = std::fs::read_dir(&ticket_path)
+                {
+                    for entry in entries.flatten() {
+                        let fname = entry.file_name();
+                        let fname_str = fname.to_string_lossy();
+                        if fname_str.starts_with("auto_")
+                            && fname_str.ends_with(".md")
+                            && std::fs::remove_file(entry.path()).is_ok()
+                        {
+                            _tickets_cleaned += 1;
                         }
                     }
                 }
@@ -240,7 +240,7 @@ pub fn delete_resource_with_references(
     let proj_cfg = config.projects.get_mut(project_id).ok_or_else(|| {
         classify_resource_error(
             "resource.delete",
-            anyhow::anyhow!("project not found: {}", project_id),
+            anyhow::anyhow!("project not found: {project_id}"),
         )
     })?;
     let canonical_kind = canonical_project_kind(kind)?;
@@ -248,7 +248,7 @@ pub fn delete_resource_with_references(
     if !deleted {
         return Err(classify_resource_error(
             "resource.delete",
-            anyhow::anyhow!("{}/{} not found in project '{}'", kind, name, project_id),
+            anyhow::anyhow!("{kind}/{name} not found in project '{project_id}'"),
         ));
     }
     let mut deleted_resources = vec![ResourceRemoval {
@@ -385,7 +385,7 @@ pub(super) fn delete_resource_from_project(
         "trigger" | "tg" => Ok(proj.triggers.remove(name).is_some()),
         _ => Err(classify_resource_error(
             "resource.delete",
-            anyhow::anyhow!("unknown resource type for project delete: {}", kind),
+            anyhow::anyhow!("unknown resource type for project delete: {kind}"),
         )),
     }
 }
@@ -408,7 +408,7 @@ pub(super) fn canonical_project_kind(kind: &str) -> Result<&'static str> {
         "trigger" | "tg" => Ok("Trigger"),
         _ => Err(classify_resource_error(
             "resource.delete",
-            anyhow::anyhow!("unknown resource type for project delete: {}", kind),
+            anyhow::anyhow!("unknown resource type for project delete: {kind}"),
         )),
     }
 }

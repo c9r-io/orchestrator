@@ -15,7 +15,7 @@ pub fn validate_source_task_bindings_for_project(
     project_id: &str,
 ) -> Result<()> {
     let Some(project) = config.projects.get(project_id) else {
-        bail!("project '{}' not found", project_id);
+        bail!("project '{project_id}' not found");
     };
     for (name, binding) in &project.source_task_bindings {
         validate_one(project_id, name, binding, project)?;
@@ -30,11 +30,7 @@ pub fn validate_source_task_bindings_for_project(
         for (right_name, right) in enabled.iter().skip(index + 1) {
             if crate::source_task_binding::bindings_overlap(left, right) {
                 bail!(
-                    "SourceTaskBinding '{}/{}' overlaps enabled binding '{}/{}'; explicit precedence is not supported",
-                    project_id,
-                    left_name,
-                    project_id,
-                    right_name
+                    "SourceTaskBinding '{project_id}/{left_name}' overlaps enabled binding '{project_id}/{right_name}'; explicit precedence is not supported"
                 );
             }
         }
@@ -49,12 +45,7 @@ fn validate_one(
     project: &ProjectConfig,
 ) -> Result<()> {
     crate::source_task_binding::validate_binding_config(binding).map_err(|error| {
-        anyhow::anyhow!(
-            "SourceTaskBinding '{}/{}' is invalid: {}",
-            project_id,
-            name,
-            error
-        )
+        anyhow::anyhow!("SourceTaskBinding '{project_id}/{name}' is invalid: {error}")
     })?;
     let trigger = project.triggers.get(&binding.trigger_ref).ok_or_else(|| {
         anyhow::anyhow!(

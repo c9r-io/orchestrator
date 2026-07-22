@@ -28,32 +28,17 @@ pub fn validate_agent_command_rules(
     for (i, rule) in rules.iter().enumerate() {
         let expression = rule.when.trim();
         if expression.is_empty() {
-            anyhow::bail!(
-                "agent '{}' command_rules[{}].when cannot be empty",
-                agent_id,
-                i
-            );
+            anyhow::bail!("agent '{agent_id}' command_rules[{i}].when cannot be empty");
         }
         let compiled = std::panic::catch_unwind(|| Program::compile(expression)).map_err(|_| {
-            anyhow::anyhow!(
-                "agent '{}' command_rules[{}].when caused CEL parser panic",
-                agent_id,
-                i
-            )
+            anyhow::anyhow!("agent '{agent_id}' command_rules[{i}].when caused CEL parser panic")
         })?;
         compiled.map_err(|err| {
-            anyhow::anyhow!(
-                "agent '{}' command_rules[{}].when is invalid CEL: {}",
-                agent_id,
-                i,
-                err
-            )
+            anyhow::anyhow!("agent '{agent_id}' command_rules[{i}].when is invalid CEL: {err}")
         })?;
         if !rule.command.contains("{prompt}") {
             anyhow::bail!(
-                "agent '{}' command_rules[{}].command must contain {{prompt}} placeholder",
-                agent_id,
-                i
+                "agent '{agent_id}' command_rules[{i}].command must contain {{prompt}} placeholder"
             );
         }
     }
@@ -68,28 +53,19 @@ pub fn validate_step_prehook(
 ) -> Result<()> {
     let expression = prehook.when.trim();
     if expression.is_empty() {
-        anyhow::bail!(
-            "workflow '{}' step '{}' prehook.when cannot be empty",
-            workflow_id,
-            step_type
-        );
+        anyhow::bail!("workflow '{workflow_id}' step '{step_type}' prehook.when cannot be empty");
     }
     match prehook.engine {
         StepHookEngine::Cel => {
             let compiled =
                 std::panic::catch_unwind(|| Program::compile(expression)).map_err(|_| {
                     anyhow::anyhow!(
-                        "workflow '{}' step '{}' prehook.when caused CEL parser panic",
-                        workflow_id,
-                        step_type
+                        "workflow '{workflow_id}' step '{step_type}' prehook.when caused CEL parser panic"
                     )
                 })?;
             compiled.map_err(|err| {
                 anyhow::anyhow!(
-                    "workflow '{}' step '{}' prehook.when is invalid CEL: {}",
-                    workflow_id,
-                    step_type,
-                    err
+                    "workflow '{workflow_id}' step '{step_type}' prehook.when is invalid CEL: {err}"
                 )
             })?;
         }
@@ -103,7 +79,7 @@ pub fn validate_workflow_finalize_rule(
     workflow_id: &str,
 ) -> Result<()> {
     if rule.id.trim().is_empty() {
-        anyhow::bail!("workflow '{}' has finalize rule with empty id", workflow_id);
+        anyhow::bail!("workflow '{workflow_id}' has finalize rule with empty id");
     }
     if rule.status.trim().is_empty() {
         anyhow::bail!(

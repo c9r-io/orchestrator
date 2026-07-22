@@ -71,16 +71,13 @@ pub async fn stream_task_logs_impl(
 
         let header = if show_timestamps {
             let ts = started_at.as_deref().unwrap_or("unknown");
-            format!("[{}][{}][{}]", ts, run_id, phase)
+            format!("[{ts}][{run_id}][{phase}]")
         } else {
-            format!("[{}][{}]", run_id, phase)
+            format!("[{run_id}][{phase}]")
         };
 
         let log_body = if stdout_tail.is_empty() && stderr_tail.is_empty() {
-            format!(
-                "{} (stdout={}, stderr={})",
-                LOG_UNAVAILABLE_MARKER, stdout_path, stderr_path
-            )
+            format!("{LOG_UNAVAILABLE_MARKER} (stdout={stdout_path}, stderr={stderr_path})")
         } else {
             redact_text(&stdout_tail, &redaction_patterns)
         };
@@ -163,11 +160,11 @@ where
                     output_fn("[waiting for first log stream]\n".to_string(), true)?;
                     waiting_notice_printed = true;
                 }
-                if let Ok(Some(status)) = state.task_repo.load_task_status(task_id).await {
-                    if status == "completed" || status == "failed" {
-                        output_fn(format!("\n--- task {} ---\n", status), true)?;
-                        return Ok(());
-                    }
+                if let Ok(Some(status)) = state.task_repo.load_task_status(task_id).await
+                    && (status == "completed" || status == "failed")
+                {
+                    output_fn(format!("\n--- task {status} ---\n"), true)?;
+                    return Ok(());
                 }
                 tokio::time::sleep(Duration::from_millis(FOLLOW_POLL_MS)).await;
                 continue;
@@ -186,7 +183,7 @@ where
         if phase != current_phase {
             if !current_phase.is_empty() {
                 output_fn(
-                    format!("\n--- step changed: {} -> {} ---\n", current_phase, phase),
+                    format!("\n--- step changed: {current_phase} -> {phase} ---\n"),
                     true,
                 )?;
             }
@@ -228,12 +225,12 @@ where
             );
         }
 
-        if let Ok(Some(status)) = state.task_repo.load_task_status(task_id).await {
-            if status == "completed" || status == "failed" {
-                tokio::time::sleep(Duration::from_millis(200)).await;
-                output_fn(format!("\n--- task {} ---\n", status), true)?;
-                return Ok(());
-            }
+        if let Ok(Some(status)) = state.task_repo.load_task_status(task_id).await
+            && (status == "completed" || status == "failed")
+        {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            output_fn(format!("\n--- task {status} ---\n"), true)?;
+            return Ok(());
         }
 
         tokio::time::sleep(Duration::from_millis(FOLLOW_POLL_MS)).await;
@@ -368,7 +365,7 @@ mod tests {
         let path = dir.join("log.txt");
         // Use trailing newline so each "line" is terminated
         let content = (1..=20)
-            .map(|i| format!("line {}", i))
+            .map(|i| format!("line {i}"))
             .collect::<Vec<_>>()
             .join("\n")
             + "\n";
@@ -407,7 +404,7 @@ mod tests {
         let path = dir.join("big.txt");
         let mut f = std::fs::File::create(&path).expect("create large log");
         for i in 0..500 {
-            writeln!(f, "line {:04}", i).expect("append line");
+            writeln!(f, "line {i:04}").expect("append line");
         }
         drop(f);
 
@@ -648,18 +645,18 @@ mod tests {
 
         // Insert 3 command runs with distinct log files
         for i in 0..3 {
-            let stdout_path = dir.join(format!("tail_out_{}.log", i));
-            let stderr_path = dir.join(format!("tail_err_{}.log", i));
-            std::fs::write(&stdout_path, format!("run {} output\n", i)).expect("write tail stdout");
+            let stdout_path = dir.join(format!("tail_out_{i}.log"));
+            let stderr_path = dir.join(format!("tail_err_{i}.log"));
+            std::fs::write(&stdout_path, format!("run {i} output\n")).expect("write tail stdout");
             std::fs::write(&stderr_path, "").expect("write tail stderr");
 
             state
                 .task_repo
                 .insert_command_run(NewCommandRun {
-                    id: format!("run-tail-{}", i),
+                    id: format!("run-tail-{i}"),
                     task_item_id: item_id.clone(),
                     phase: "qa".to_string(),
-                    command: format!("echo {}", i),
+                    command: format!("echo {i}"),
                     command_template: None,
                     cwd: "/tmp".to_string(),
                     workspace_id: "default".to_string(),
@@ -667,7 +664,7 @@ mod tests {
                     exit_code: 0,
                     stdout_path: stdout_path.to_string_lossy().to_string(),
                     stderr_path: stderr_path.to_string_lossy().to_string(),
-                    started_at: format!("2026-01-01T00:00:0{}Z", i),
+                    started_at: format!("2026-01-01T00:00:0{i}Z"),
                     ended_at: now_ts(),
                     interrupted: 0,
                     output_json: "{}".to_string(),

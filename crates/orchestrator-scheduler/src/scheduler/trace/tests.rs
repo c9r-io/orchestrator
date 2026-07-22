@@ -83,10 +83,10 @@ fn make_item_event(
 
 fn make_run(phase: &str, item_id: &str, exit_code: Option<i64>, agent_id: &str) -> CommandRunDto {
     CommandRunDto {
-        id: format!("run-{}-{}", phase, item_id),
+        id: format!("run-{phase}-{item_id}"),
         task_item_id: item_id.to_string(),
         phase: phase.to_string(),
-        command: format!("echo {}", phase),
+        command: format!("echo {phase}"),
         command_template: None,
         cwd: "/tmp".to_string(),
         workspace_id: "ws".to_string(),
@@ -420,8 +420,7 @@ fn detect_unexpanded_template_var_ignores_user_content() {
         .collect();
     assert!(
         tmpl_anomalies.is_empty(),
-        "should not flag {{var}} from user content; found: {:?}",
-        tmpl_anomalies
+        "should not flag {{var}} from user content; found: {tmpl_anomalies:?}"
     );
 }
 
@@ -785,8 +784,7 @@ fn wall_time_calculated() {
         .expect("wall time should be computed");
     assert!(
         (wall - 272.0).abs() < 1.0,
-        "wall time should be ~272s, got {}",
-        wall
+        "wall time should be ~272s, got {wall}"
     );
 }
 
@@ -902,8 +900,7 @@ fn completed_task_wall_time_uses_task_meta_when_events_are_sparse() {
         .expect("completed task should have wall time");
     assert!(
         (wall - 154.842).abs() < 0.01,
-        "unexpected wall time: {}",
-        wall
+        "unexpected wall time: {wall}"
     );
 }
 
@@ -1493,8 +1490,7 @@ fn wall_time_uses_started_at_from_meta() {
     let wall = trace.summary.wall_time_secs.expect("should have wall time");
     assert!(
         (wall - 30.0).abs() < 0.01,
-        "wall time should use meta.started_at, got {}",
-        wall
+        "wall time should use meta.started_at, got {wall}"
     );
 }
 

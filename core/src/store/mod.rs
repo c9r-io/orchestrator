@@ -141,12 +141,12 @@ impl StoreManager {
         let store_config = self.resolve_store_config(custom_resources, &store_name);
 
         // Validate schema on put
-        if let StoreOp::Put { ref value, .. } = op {
-            if let Some(ref schema) = store_config.schema {
-                let parsed: serde_json::Value = serde_json::from_str(value)
-                    .map_err(|e| anyhow!("invalid JSON value for store put: {}", e))?;
-                validate_schema(&parsed, schema)?;
-            }
+        if let StoreOp::Put { ref value, .. } = op
+            && let Some(ref schema) = store_config.schema
+        {
+            let parsed: serde_json::Value = serde_json::from_str(value)
+                .map_err(|e| anyhow!("invalid JSON value for store put: {e}"))?;
+            validate_schema(&parsed, schema)?;
         }
 
         let provider_name = &store_config.provider;
@@ -158,7 +158,7 @@ impl StoreManager {
         custom_resources: &HashMap<String, CustomResource>,
         store_name: &str,
     ) -> WorkflowStoreConfig {
-        let key = format!("WorkflowStore/{}", store_name);
+        let key = format!("WorkflowStore/{store_name}");
         custom_resources
             .get(&key)
             .and_then(|cr| WorkflowStoreConfig::from_cr_spec(&cr.spec).ok())
@@ -177,13 +177,13 @@ impl StoreManager {
             match provider_name {
                 "local" => self.local_backend.execute(op).await,
                 "file" => self.file_backend.execute(op).await,
-                _ => Err(anyhow!("unknown builtin provider: {}", provider_name)),
+                _ => Err(anyhow!("unknown builtin provider: {provider_name}")),
             }
         } else {
             let commands = provider
                 .commands
                 .as_ref()
-                .ok_or_else(|| anyhow!("provider '{}' has no commands defined", provider_name))?;
+                .ok_or_else(|| anyhow!("provider '{provider_name}' has no commands defined"))?;
             self.command_adapter.execute(commands, op).await
         }
     }
@@ -205,11 +205,11 @@ impl StoreManager {
         }
 
         // Look up user-defined provider from custom_resources
-        let key = format!("StoreBackendProvider/{}", provider_name);
+        let key = format!("StoreBackendProvider/{provider_name}");
         custom_resources
             .get(&key)
             .and_then(|cr| StoreBackendProviderConfig::from_cr_spec(&cr.spec).ok())
-            .ok_or_else(|| anyhow!("store backend provider '{}' not found", provider_name))
+            .ok_or_else(|| anyhow!("store backend provider '{provider_name}' not found"))
     }
 }
 
@@ -224,7 +224,7 @@ mod tests {
             project_id: "proj1".to_string(),
             key: "k1".to_string(),
         };
-        let debug = format!("{:?}", op);
+        let debug = format!("{op:?}");
         assert!(debug.contains("Get"));
         assert!(debug.contains("metrics"));
     }
@@ -275,7 +275,7 @@ mod tests {
             },
         ];
         for op in &variants {
-            let debug = format!("{:?}", op);
+            let debug = format!("{op:?}");
             assert!(!debug.is_empty());
         }
     }

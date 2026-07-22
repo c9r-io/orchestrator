@@ -134,35 +134,35 @@ impl AgentContext {
             }
 
             for (key, value) in &pipeline.vars {
-                result = result.replace(&format!("{{{}}}", key), &escape_for_bash_dquote(value));
+                result = result.replace(&format!("{{{key}}}"), &escape_for_bash_dquote(value));
             }
         }
 
         for (i, output) in self.upstream_outputs.iter().enumerate() {
-            let prefix = format!("upstream[{}]", i);
+            let prefix = format!("upstream[{i}]");
 
             result = result.replace(
-                &format!("{}.exit_code", prefix),
+                &format!("{prefix}.exit_code"),
                 &output.exit_code.to_string(),
             );
             result = result.replace(
-                &format!("{}.confidence", prefix),
+                &format!("{prefix}.confidence"),
                 &output.confidence.to_string(),
             );
             result = result.replace(
-                &format!("{}.quality_score", prefix),
+                &format!("{prefix}.quality_score"),
                 &output.quality_score.to_string(),
             );
             result = result.replace(
-                &format!("{}.duration_ms", prefix),
+                &format!("{prefix}.duration_ms"),
                 &output.metrics.duration_ms.to_string(),
             );
 
             for (j, artifact) in output.artifacts.iter().enumerate() {
                 if let Some(content) = &artifact.content {
-                    let key = format!("{}.artifacts[{}].content", prefix, j);
+                    let key = format!("{prefix}.artifacts[{j}].content");
                     result = result.replace(
-                        &format!("{{{}}}", key),
+                        &format!("{{{key}}}"),
                         &serde_json::to_string(content).unwrap_or_default(),
                     );
                 }

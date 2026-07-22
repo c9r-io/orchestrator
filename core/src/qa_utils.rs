@@ -160,15 +160,15 @@ impl TemplateEngine for AdvancedTemplateContext {
         // Upstream outputs - collect all replacements first
         let mut replacements: Vec<(String, String)> = Vec::new();
         for (i, output) in self.upstream_outputs.iter().enumerate() {
-            let prefix = format!("upstream[{}]", i);
+            let prefix = format!("upstream[{i}]");
             if let Some(v) = output.get("exit_code").and_then(|v| v.as_i64()) {
-                replacements.push((format!("{}.exit_code", prefix), v.to_string()));
+                replacements.push((format!("{prefix}.exit_code"), v.to_string()));
             }
             if let Some(v) = output.get("confidence").and_then(|v| v.as_f64()) {
-                replacements.push((format!("{}.confidence", prefix), v.to_string()));
+                replacements.push((format!("{prefix}.confidence"), v.to_string()));
             }
             if let Some(v) = output.get("quality_score").and_then(|v| v.as_f64()) {
-                replacements.push((format!("{}.quality_score", prefix), v.to_string()));
+                replacements.push((format!("{prefix}.quality_score"), v.to_string()));
             }
         }
 
@@ -176,12 +176,12 @@ impl TemplateEngine for AdvancedTemplateContext {
         replacements.sort_by_key(|r| std::cmp::Reverse(r.0.len()));
 
         for (key, value) in replacements {
-            result = result.replace(&format!("{{{}}}", key), &value);
+            result = result.replace(&format!("{{{key}}}"), &value);
         }
 
         // Shared state
         for (key, value) in &self.shared_state {
-            let placeholder = format!("{{{}}}", key);
+            let placeholder = format!("{{{key}}}");
             if let Some(s) = value.as_str() {
                 result = result.replace(&placeholder, s);
             } else if let Ok(s) = serde_json::to_string(value) {
@@ -197,19 +197,19 @@ impl TemplateEngine for AdvancedTemplateContext {
 pub fn validate_workspace_rel_path(raw: &str, field: &str) -> Result<()> {
     let path = raw.trim();
     if path.is_empty() {
-        anyhow::bail!("{} cannot be empty", field);
+        anyhow::bail!("{field} cannot be empty");
     }
 
     let parsed = Path::new(path);
     if parsed.is_absolute() {
-        anyhow::bail!("{} must be a relative path: {}", field, raw);
+        anyhow::bail!("{field} must be a relative path: {raw}");
     }
 
     if parsed
         .components()
         .any(|c| matches!(c, Component::ParentDir))
     {
-        anyhow::bail!("{} cannot include '..': {}", field, raw);
+        anyhow::bail!("{field} cannot include '..': {raw}");
     }
 
     Ok(())
@@ -250,18 +250,18 @@ pub fn render_template_with_context(
 
     // Upstream outputs (JSON serialized)
     for (i, output) in upstream_outputs.iter().enumerate() {
-        let prefix = format!("upstream[{}]", i);
+        let prefix = format!("upstream[{i}]");
         if let Some(v) = output.get("exit_code").and_then(|v| v.as_i64()) {
-            result = result.replace(&format!("{}.exit_code", prefix), &v.to_string());
+            result = result.replace(&format!("{prefix}.exit_code"), &v.to_string());
         }
         if let Some(v) = output.get("confidence").and_then(|v| v.as_f64()) {
-            result = result.replace(&format!("{}.confidence", prefix), &v.to_string());
+            result = result.replace(&format!("{prefix}.confidence"), &v.to_string());
         }
     }
 
     // Shared state
     for (key, value) in shared_state {
-        let placeholder = format!("{{{}}}", key);
+        let placeholder = format!("{{{key}}}");
         if let Some(s) = value.as_str() {
             result = result.replace(&placeholder, s);
         } else if let Ok(s) = serde_json::to_string(value) {

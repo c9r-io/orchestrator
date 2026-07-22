@@ -40,10 +40,7 @@ pub fn resolve_agent_env(
             (None, None, Some(store_name), None) => {
                 let data =
                     lookup_store_data(store_name, env_stores, secret_stores).ok_or_else(|| {
-                        anyhow!(
-                            "agent env fromRef '{}' references unknown store",
-                            store_name
-                        )
+                        anyhow!("agent env fromRef '{store_name}' references unknown store")
                     })?;
                 for (k, v) in data {
                     resolved.insert(k.clone(), v.clone());
@@ -96,17 +93,16 @@ pub fn collect_sensitive_values(
 ) -> Vec<String> {
     let mut sensitive = Vec::new();
     for entry in env_entries {
-        if let Some(ref store_name) = entry.from_ref {
-            if let Some(store) = secret_stores.get(store_name.as_str()) {
-                sensitive.extend(store.data.values().cloned());
-            }
+        if let Some(ref store_name) = entry.from_ref
+            && let Some(store) = secret_stores.get(store_name.as_str())
+        {
+            sensitive.extend(store.data.values().cloned());
         }
-        if let Some(ref rv) = entry.ref_value {
-            if let Some(store) = secret_stores.get(&rv.name) {
-                if let Some(v) = store.data.get(&rv.key) {
-                    sensitive.push(v.clone());
-                }
-            }
+        if let Some(ref rv) = entry.ref_value
+            && let Some(store) = secret_stores.get(&rv.name)
+            && let Some(v) = store.data.get(&rv.key)
+        {
+            sensitive.push(v.clone());
         }
     }
     sensitive

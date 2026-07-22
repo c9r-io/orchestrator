@@ -192,14 +192,13 @@ pub(super) async fn execute_builtin_step_dispatch(
                     }
 
                     // Persist pipeline vars to DB before restart so the new process recovers them.
-                    if let Ok(json) = serde_json::to_string(&acc.pipeline_vars) {
-                        if let Err(e) = state
+                    if let Ok(json) = serde_json::to_string(&acc.pipeline_vars)
+                        && let Err(e) = state
                             .db_writer
                             .update_task_pipeline_vars(task_id, &json)
                             .await
-                        {
-                            tracing::warn!("failed to persist pipeline_vars before restart: {e}");
-                        }
+                    {
+                        tracing::warn!("failed to persist pipeline_vars before restart: {e}");
                     }
 
                     acc.step_ran.insert(step.id.clone(), true);
@@ -415,7 +414,7 @@ pub(crate) async fn execute_builtin_step(
         pipeline.build_errors = output.build_errors.clone();
         pipeline.test_failures = output.test_failures.clone();
 
-        let output_key = format!("{}_output", phase);
+        let output_key = format!("{phase}_output");
         if !output.stdout.is_empty() {
             spill_large_var(
                 &task_ctx.artifacts_dir,

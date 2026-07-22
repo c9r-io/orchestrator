@@ -45,11 +45,11 @@ async fn run_task_to_completion(harness: &TestHarness, workflow_id: &str) -> Tas
             .expect("task_info failed")
             .into_inner();
 
-        if let Some(task) = &resp.task {
-            if matches!(task.status.as_str(), "completed" | "failed" | "cancelled") {
-                info = Some(resp);
-                break;
-            }
+        if let Some(task) = &resp.task
+            && matches!(task.status.as_str(), "completed" | "failed" | "cancelled")
+        {
+            info = Some(resp);
+            break;
         }
     }
 
@@ -159,7 +159,7 @@ async fn convergence_expr_stops_loop() {
             "should have loop_guard_decision event with convergence reason, events: {:?}",
             info.events
                 .iter()
-                .map(|e| format!("{}:{}", e.event_type, &e.payload_json))
+                .map(|e| format!("{}:{}", e.event_type, e.payload_json))
                 .collect::<Vec<_>>()
         );
     })

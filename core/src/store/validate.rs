@@ -16,10 +16,7 @@ fn validate_node(value: &serde_json::Value, schema: &serde_json::Value, path: &s
         let actual_type = json_type_name(value);
         if !type_matches(value, expected_type) {
             return Err(anyhow!(
-                "schema validation failed at {}: expected type '{}', got '{}'",
-                path,
-                expected_type,
-                actual_type
+                "schema validation failed at {path}: expected type '{expected_type}', got '{actual_type}'"
             ));
         }
     }
@@ -29,14 +26,12 @@ fn validate_node(value: &serde_json::Value, schema: &serde_json::Value, path: &s
         // Check required fields
         if let Some(required) = schema.get("required").and_then(|v| v.as_array()) {
             for req in required {
-                if let Some(field_name) = req.as_str() {
-                    if !obj.contains_key(field_name) {
-                        return Err(anyhow!(
-                            "schema validation failed at {}: missing required field '{}'",
-                            path,
-                            field_name
-                        ));
-                    }
+                if let Some(field_name) = req.as_str()
+                    && !obj.contains_key(field_name)
+                {
+                    return Err(anyhow!(
+                        "schema validation failed at {path}: missing required field '{field_name}'"
+                    ));
                 }
             }
         }
@@ -45,7 +40,7 @@ fn validate_node(value: &serde_json::Value, schema: &serde_json::Value, path: &s
         if let Some(properties) = schema.get("properties").and_then(|v| v.as_object()) {
             for (prop_name, prop_schema) in properties {
                 if let Some(prop_value) = obj.get(prop_name) {
-                    let prop_path = format!("{}.{}", path, prop_name);
+                    let prop_path = format!("{path}.{prop_name}");
                     validate_node(prop_value, prop_schema, &prop_path)?;
                 }
             }
@@ -54,25 +49,19 @@ fn validate_node(value: &serde_json::Value, schema: &serde_json::Value, path: &s
 
     // Number range validation
     if let Some(num) = value.as_f64() {
-        if let Some(min) = schema.get("minimum").and_then(|v| v.as_f64()) {
-            if num < min {
-                return Err(anyhow!(
-                    "schema validation failed at {}: value {} is below minimum {}",
-                    path,
-                    num,
-                    min
-                ));
-            }
+        if let Some(min) = schema.get("minimum").and_then(|v| v.as_f64())
+            && num < min
+        {
+            return Err(anyhow!(
+                "schema validation failed at {path}: value {num} is below minimum {min}"
+            ));
         }
-        if let Some(max) = schema.get("maximum").and_then(|v| v.as_f64()) {
-            if num > max {
-                return Err(anyhow!(
-                    "schema validation failed at {}: value {} exceeds maximum {}",
-                    path,
-                    num,
-                    max
-                ));
-            }
+        if let Some(max) = schema.get("maximum").and_then(|v| v.as_f64())
+            && num > max
+        {
+            return Err(anyhow!(
+                "schema validation failed at {path}: value {num} exceeds maximum {max}"
+            ));
         }
     }
 

@@ -271,9 +271,8 @@ pub fn reset_db_by_path(db_path: &Path, include_history: bool, include_config: b
         .unwrap_or(0);
     if active_count > 0 {
         anyhow::bail!(
-            "db reset blocked: {} active task(s) with status running/restart_pending. \
-             Use `project reset <project> --force` for project-scoped cleanup instead.",
-            active_count
+            "db reset blocked: {active_count} active task(s) with status running/restart_pending. \
+             Use `project reset <project> --force` for project-scoped cleanup instead."
         );
     }
 
@@ -677,11 +676,7 @@ mod tests {
         let result = reset_db(&state, false, false);
         assert!(result.is_err());
         let err = result.expect_err("should be blocked").to_string();
-        assert!(
-            err.contains("db reset blocked"),
-            "unexpected error: {}",
-            err
-        );
+        assert!(err.contains("db reset blocked"), "unexpected error: {err}");
     }
 
     #[test]
@@ -748,7 +743,7 @@ mod tests {
         let b = a;
         assert_eq!(a, b);
         // Debug should work
-        let _debug = format!("{:?}", a);
+        let _debug = format!("{a:?}");
     }
 
     // ── list_non_terminal_tasks_by_workspace ──
@@ -1014,7 +1009,7 @@ mod tests {
             )
             .expect("count config versions after");
         // Should keep at most 1 (the latest)
-        assert!(versions_after <= 1, "Expected <= 1, got {}", versions_after);
+        assert!(versions_after <= 1, "Expected <= 1, got {versions_after}");
         // Tasks should be cleared
         let tasks: i64 = conn
             .query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get(0))

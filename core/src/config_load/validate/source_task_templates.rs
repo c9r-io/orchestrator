@@ -15,7 +15,7 @@ pub fn validate_source_task_templates_for_project(
     project_id: &str,
 ) -> Result<()> {
     let Some(project) = config.projects.get(project_id) else {
-        bail!("project '{}' not found", project_id);
+        bail!("project '{project_id}' not found");
     };
     for (name, template) in &project.source_task_templates {
         validate_one(project_id, name, template, project)?;
@@ -30,12 +30,7 @@ fn validate_one(
     project: &crate::config::ProjectConfig,
 ) -> Result<()> {
     crate::source_task_template::validate_template_config(template).map_err(|error| {
-        anyhow::anyhow!(
-            "SourceTaskTemplate '{}/{}' is invalid: {}",
-            project_id,
-            name,
-            error
-        )
+        anyhow::anyhow!("SourceTaskTemplate '{project_id}/{name}' is invalid: {error}")
     })?;
     if !project.workflows.contains_key(&template.action.workflow) {
         bail!(

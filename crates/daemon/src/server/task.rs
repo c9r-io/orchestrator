@@ -30,10 +30,10 @@ pub(crate) async fn task_create(
 ) -> Result<Response<TaskCreateResponse>, Status> {
     super::authorize(server, &request, "TaskCreate").map_err(Status::from)?;
     let req = request.into_inner();
-    if !req.no_start {
-        if let Some(status) = server.reject_new_work_during_shutdown("TaskCreate") {
-            return Err(status);
-        }
+    if !req.no_start
+        && let Some(status) = server.reject_new_work_during_shutdown("TaskCreate")
+    {
+        return Err(status);
     }
     let payload = agent_orchestrator::dto::CreateTaskPayload {
         name: req.name,
@@ -88,10 +88,10 @@ pub(crate) async fn run_step(
 ) -> Result<Response<RunStepResponse>, Status> {
     super::authorize(server, &request, "RunStep").map_err(Status::from)?;
     let req = request.into_inner();
-    if !req.no_start {
-        if let Some(status) = server.reject_new_work_during_shutdown("RunStep") {
-            return Err(status);
-        }
+    if !req.no_start
+        && let Some(status) = server.reject_new_work_during_shutdown("RunStep")
+    {
+        return Err(status);
     }
     let payload = agent_orchestrator::dto::CreateRunStepPayload {
         project_id: req.project_id,
@@ -551,10 +551,10 @@ pub(crate) async fn task_watch(
             None
         };
         loop {
-            if let Some(dl) = deadline {
-                if tokio::time::Instant::now() >= dl {
-                    break;
-                }
+            if let Some(dl) = deadline
+                && tokio::time::Instant::now() >= dl
+            {
+                break;
             }
 
             let summary =

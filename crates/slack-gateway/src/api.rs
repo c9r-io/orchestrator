@@ -1206,12 +1206,12 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let mut response =
             (self.status, Json(serde_json::json!({"error": self.code}))).into_response();
-        if let Some(retry_after) = self.retry_after {
-            if let Ok(value) = retry_after.to_string().parse() {
-                response
-                    .headers_mut()
-                    .insert(axum::http::header::RETRY_AFTER, value);
-            }
+        if let Some(retry_after) = self.retry_after
+            && let Ok(value) = retry_after.to_string().parse()
+        {
+            response
+                .headers_mut()
+                .insert(axum::http::header::RETRY_AFTER, value);
         }
         response
     }

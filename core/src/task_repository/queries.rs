@@ -19,7 +19,7 @@ pub fn resolve_task_id(conn: &Connection, task_id_or_prefix: &str) -> Result<Str
         return Ok(id);
     }
 
-    let pattern = format!("{}%", task_id_or_prefix);
+    let pattern = format!("{task_id_or_prefix}%");
     let mut stmt = conn.prepare("SELECT id FROM tasks WHERE id LIKE ?1")?;
     let matches: Vec<String> = stmt
         .query_map(params![pattern], |row| row.get(0))?
@@ -29,12 +29,8 @@ pub fn resolve_task_id(conn: &Connection, task_id_or_prefix: &str) -> Result<Str
             .into_iter()
             .next()
             .ok_or_else(|| anyhow::anyhow!("single task match disappeared unexpectedly")),
-        0 => anyhow::bail!("task not found: {}", task_id_or_prefix),
-        _ => anyhow::bail!(
-            "multiple tasks match prefix '{}': {:?}",
-            task_id_or_prefix,
-            matches
-        ),
+        0 => anyhow::bail!("task not found: {task_id_or_prefix}"),
+        _ => anyhow::bail!("multiple tasks match prefix '{task_id_or_prefix}': {matches:?}"),
     }
 }
 

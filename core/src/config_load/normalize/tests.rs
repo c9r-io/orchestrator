@@ -735,8 +735,7 @@ fn normalize_preserves_required_capability_on_custom_step_ids() {
     let json = serde_json::to_string_pretty(run_qa).expect("serialize run_qa");
     assert!(
         json.contains("required_capability"),
-        "required_capability must appear in JSON: {}",
-        json
+        "required_capability must appear in JSON: {json}"
     );
 }
 
@@ -759,8 +758,8 @@ fn normalize_config_populates_builtin_crds() {
         "EnvStore",
         "SecretStore",
     ] {
-        assert!(crds.contains_key(*kind), "missing builtin CRD: {}", kind);
-        assert!(crds[*kind].builtin, "{} should be marked builtin", kind);
+        assert!(crds.contains_key(*kind), "missing builtin CRD: {kind}");
+        assert!(crds[*kind].builtin, "{kind} should be marked builtin");
     }
 }
 

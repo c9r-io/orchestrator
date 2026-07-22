@@ -104,18 +104,18 @@ pub fn render_trace_terminal(trace: &TaskTrace, verbose: bool) {
             let agent = step
                 .agent_id
                 .as_ref()
-                .map(|a| format!("  agent={}", a))
+                .map(|a| format!("  agent={a}"))
                 .unwrap_or_default();
 
             let exit = match step.exit_code {
-                Some(c) if c != 0 => format!("  exit={}", c),
+                Some(c) if c != 0 => format!("  exit={c}"),
                 _ => String::new(),
             };
 
             let skip_info = step
                 .skip_reason
                 .as_ref()
-                .map(|r| format!(" ({})", r))
+                .map(|r| format!(" ({r})"))
                 .unwrap_or_default();
 
             println!(
@@ -145,10 +145,10 @@ pub fn render_trace_terminal(trace: &TaskTrace, verbose: bool) {
 
 pub(super) fn colorize_status(status: &str) -> String {
     match status {
-        "completed" => format!("\x1b[32m{}\x1b[0m", status),
-        "failed" => format!("\x1b[31m{}\x1b[0m", status),
-        "running" => format!("\x1b[33m{}\x1b[0m", status),
-        "paused" => format!("\x1b[90m{}\x1b[0m", status),
+        "completed" => format!("\x1b[32m{status}\x1b[0m"),
+        "failed" => format!("\x1b[31m{status}\x1b[0m"),
+        "running" => format!("\x1b[33m{status}\x1b[0m"),
+        "paused" => format!("\x1b[90m{status}\x1b[0m"),
         _ => status.to_string(),
     }
 }
@@ -165,7 +165,7 @@ pub(super) fn format_duration(secs: f64) -> String {
     } else if total >= 60 {
         format!("{}m {:02}s", total / 60, total % 60)
     } else {
-        format!("{}s", total)
+        format!("{total}s")
     }
 }
 

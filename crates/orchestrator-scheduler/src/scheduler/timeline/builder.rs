@@ -455,10 +455,10 @@ fn humanize_event_type(event_type: &str) -> String {
         .filter(|word| !word.is_empty())
         .map(str::to_string)
         .collect::<Vec<_>>();
-    if let Some(first) = words.first_mut() {
-        if let Some(initial) = first.get_mut(0..1) {
-            initial.make_ascii_uppercase();
-        }
+    if let Some(first) = words.first_mut()
+        && let Some(initial) = first.get_mut(0..1)
+    {
+        initial.make_ascii_uppercase();
     }
     words.join(" ")
 }

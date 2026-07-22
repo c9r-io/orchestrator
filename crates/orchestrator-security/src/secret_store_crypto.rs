@@ -139,11 +139,7 @@ impl SecretEncryption {
             || envelope.aad.project != project
             || envelope.aad.name != name
         {
-            bail!(
-                "secret store envelope AAD mismatch for SecretStore/{}/{}",
-                project,
-                name
-            );
+            bail!("secret store envelope AAD mismatch for SecretStore/{project}/{name}");
         }
 
         // Multi-key dispatch: look up the key matching envelope.key_id
@@ -406,10 +402,7 @@ pub fn load_existing_secret_key(data_dir: &Path) -> Result<Option<SecretKeyHandl
         .decode(encoded.trim())
         .context("failed to decode secret key file")?;
     if decoded.len() != KEY_SIZE_BYTES {
-        bail!(
-            "invalid secret key length: expected {} bytes",
-            KEY_SIZE_BYTES
-        );
+        bail!("invalid secret key length: expected {KEY_SIZE_BYTES} bytes");
     }
     let mut key_bytes = [0_u8; KEY_SIZE_BYTES];
     key_bytes.copy_from_slice(&decoded);
@@ -618,9 +611,7 @@ pub fn decrypt_resource_spec_json(
     }
     let encryption = encryption.ok_or_else(|| {
         anyhow!(
-            "encrypted SecretStore/{}/{} cannot be loaded because the secret key is unavailable",
-            project,
-            name
+            "encrypted SecretStore/{project}/{name} cannot be loaded because the secret key is unavailable"
         )
     })?;
     encryption.decrypt_secret_store_spec(project, name, spec_json)

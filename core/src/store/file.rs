@@ -65,7 +65,7 @@ impl FileStoreBackend {
 
     fn entry_path(&self, store_name: &str, project_id: &str, key: &str) -> PathBuf {
         self.store_dir(store_name, project_id)
-            .join(format!("{}.json", key))
+            .join(format!("{key}.json"))
     }
 
     fn get(&self, store_name: &str, project_id: &str, key: &str) -> Result<StoreOpResult> {
@@ -234,7 +234,7 @@ mod tests {
             .expect("get");
         match result {
             StoreOpResult::Value(Some(v)) => assert_eq!(v["count"], 10),
-            other => panic!("expected Value(Some), got {:?}", other),
+            other => panic!("expected Value(Some), got {other:?}"),
         }
 
         // Delete
@@ -297,7 +297,7 @@ mod tests {
             .expect("list");
         match result {
             StoreOpResult::Entries(entries) => assert_eq!(entries.len(), 2),
-            other => panic!("expected Entries, got {:?}", other),
+            other => panic!("expected Entries, got {other:?}"),
         }
     }
 
@@ -311,8 +311,8 @@ mod tests {
                 .execute(StoreOp::Put {
                     store_name: "s".to_string(),
                     project_id: "p".to_string(),
-                    key: format!("k{}", i),
-                    value: format!(r#"{{"v": {}}}"#, i),
+                    key: format!("k{i}"),
+                    value: format!(r#"{{"v": {i}}}"#),
                     task_id: "".to_string(),
                 })
                 .await
@@ -330,7 +330,7 @@ mod tests {
             .expect("list with offset");
         match result {
             StoreOpResult::Entries(entries) => assert_eq!(entries.len(), 2),
-            other => panic!("expected Entries, got {:?}", other),
+            other => panic!("expected Entries, got {other:?}"),
         }
     }
 
@@ -350,7 +350,7 @@ mod tests {
             .expect("list nonexistent");
         match result {
             StoreOpResult::Entries(entries) => assert!(entries.is_empty()),
-            other => panic!("expected empty Entries, got {:?}", other),
+            other => panic!("expected empty Entries, got {other:?}"),
         }
     }
 
@@ -364,8 +364,8 @@ mod tests {
                 .execute(StoreOp::Put {
                     store_name: "s".to_string(),
                     project_id: "p".to_string(),
-                    key: format!("k{}", i),
-                    value: format!(r#"{{"v": {}}}"#, i),
+                    key: format!("k{i}"),
+                    value: format!(r#"{{"v": {i}}}"#),
                     task_id: "".to_string(),
                 })
                 .await
@@ -394,7 +394,7 @@ mod tests {
             .expect("list after prune");
         match result {
             StoreOpResult::Entries(entries) => assert_eq!(entries.len(), 2),
-            other => panic!("expected 2 entries after prune, got {:?}", other),
+            other => panic!("expected 2 entries after prune, got {other:?}"),
         }
     }
 
@@ -425,8 +425,8 @@ mod tests {
                 .execute(StoreOp::Put {
                     store_name: "s".to_string(),
                     project_id: "p".to_string(),
-                    key: format!("k{}", i),
-                    value: format!(r#"{{"v": {}}}"#, i),
+                    key: format!("k{i}"),
+                    value: format!(r#"{{"v": {i}}}"#),
                     task_id: "".to_string(),
                 })
                 .await
@@ -456,7 +456,7 @@ mod tests {
             .expect("list after no-op prune");
         match result {
             StoreOpResult::Entries(entries) => assert_eq!(entries.len(), 3),
-            other => panic!("expected 3 entries, got {:?}", other),
+            other => panic!("expected 3 entries, got {other:?}"),
         }
     }
 
@@ -527,7 +527,7 @@ mod tests {
             .expect("get with project_id");
         match result {
             StoreOpResult::Value(Some(v)) => assert_eq!(v["x"], 42),
-            other => panic!("expected Value(Some), got {:?}", other),
+            other => panic!("expected Value(Some), got {other:?}"),
         }
     }
 
@@ -588,7 +588,7 @@ mod tests {
             .expect("list empty pid");
         match result {
             StoreOpResult::Entries(entries) => assert_eq!(entries.len(), 1),
-            other => panic!("expected 1 entry, got {:?}", other),
+            other => panic!("expected 1 entry, got {other:?}"),
         }
     }
 }

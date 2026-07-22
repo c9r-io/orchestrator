@@ -483,10 +483,7 @@ pub fn reconcile_sessions(conn: &Connection) -> Result<Vec<(String, String)>> {
 /// Loads a session row by session identifier.
 pub fn load_session(conn: &Connection, session_id: &str) -> Result<Option<SessionRow>> {
     conn.query_row(
-        &format!(
-            "SELECT {} FROM agent_sessions WHERE id = ?1",
-            SESSION_COLUMNS
-        ),
+        &format!("SELECT {SESSION_COLUMNS} FROM agent_sessions WHERE id = ?1"),
         params![session_id],
         row_to_session,
     )
@@ -502,12 +499,11 @@ pub fn load_active_session_for_task_step(
 ) -> Result<Option<SessionRow>> {
     conn.query_row(
         &format!(
-            "SELECT {}
+            "SELECT {SESSION_COLUMNS}
              FROM agent_sessions
              WHERE task_id = ?1 AND step_id = ?2 AND state IN ('active','detached')
              ORDER BY created_at DESC
-             LIMIT 1",
-            SESSION_COLUMNS
+             LIMIT 1"
         ),
         params![task_id, step_id],
         row_to_session,
@@ -519,11 +515,10 @@ pub fn load_active_session_for_task_step(
 /// Lists all sessions for a task ordered from newest to oldest.
 pub fn list_task_sessions(conn: &Connection, task_id: &str) -> Result<Vec<SessionRow>> {
     let mut stmt = conn.prepare(&format!(
-        "SELECT {}
+        "SELECT {SESSION_COLUMNS}
              FROM agent_sessions
              WHERE task_id = ?1
-             ORDER BY created_at DESC",
-        SESSION_COLUMNS
+             ORDER BY created_at DESC"
     ))?;
     let rows = stmt
         .query_map(params![task_id], row_to_session)?
@@ -541,10 +536,11 @@ pub fn acquire_writer(conn: &Connection, session_id: &str, client_id: &str) -> R
         )
         .optional()?
         .flatten();
-    if let Some(owner) = existing {
-        if !owner.is_empty() && owner != client_id {
-            return Ok(false);
-        }
+    if let Some(owner) = existing
+        && !owner.is_empty()
+        && owner != client_id
+    {
+        return Ok(false);
     }
     conn.execute(
         "UPDATE agent_sessions SET writer_client_id = ?2, updated_at = ?3 WHERE id = ?1",
