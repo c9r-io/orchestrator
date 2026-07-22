@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Task-scoped driver completion and `mark_done` events now participate in implicit-item convergence, and successful low-confidence Slack replies create Attention records without converting the step into a failure
 
 ### Security
-- Remediated all open Dependabot advisories across Cargo, the GUI, the documentation site, and the project-bootstrap portal template; npm dependency surfaces are now included in weekly Dependabot updates
+- Remediated all open Dependabot advisories across Cargo, the GUI, the documentation site, and the project-bootstrap portal template
 - Global Skill directories now fail closed unless owned by the daemon effective user, free of group/world write bits, and disjoint from every task Workspace and writable ExecutionProfile path; unsupported platforms reject configured global Skills with `FILE_SHARING_GLOBAL_SKILL_UNTRUSTED`
 
 ### Compatibility And Migrations
