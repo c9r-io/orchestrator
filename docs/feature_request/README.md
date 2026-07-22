@@ -140,7 +140,7 @@
 - FR-029 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/41-item-scoped-git-worktree-isolation.md` 与 `docs/qa/orchestrator/80-item-scoped-git-worktree-isolation.md` 承载
 - FR-030 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/42-self-evolution-db-schema-alignment.md` 与 `docs/qa/orchestrator/81-self-evolution-db-schema-alignment.md` 承载
 - FR-034 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/44-self-referential-daemon-pid-guard.md` 与 `docs/qa/orchestrator/87-self-referential-daemon-pid-guard.md` 承载
-- FR-035 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/12-degenerate-cycle-loop-guard.md` 与 `docs/qa/orchestrator/23-degenerate-cycle-loop-guard.md` 承载
+- FR-035 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/12-degenerate-cycle-loop-guard.md` 与 `docs/qa/orchestrator/88-degenerate-cycle-loop-guard.md` 承载
 - FR-036 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/45-plan-output-context-overflow-mitigation.md` 与 `docs/qa/orchestrator/89-plan-output-context-overflow-mitigation.md` 承载
 - FR-031 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/46-unquoted-json-extraction.md` 与 `docs/qa/orchestrator/90-unquoted-json-extraction.md` 承载
 - FR-032 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/47-daemon-crash-resilience.md` 与 `docs/qa/orchestrator/91-daemon-crash-resilience.md` 承载
@@ -178,8 +178,8 @@
 - FR-066 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/76-gui-realtime-wish-isolation.md` 与 `docs/qa/orchestrator/118-gui-realtime-wish-isolation.md` 承载
 - FR-060 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/77-reduce-unsafe-qa-operations.md` 承载（13 次迭代将 unsafe 文档从 114 降至 33，+360 安全场景，23.1% unsafe 率达成 < 30% 目标）
 - FR-067 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/77-gui-cli-rpc-parity.md` 与 `docs/qa/orchestrator/119-gui-cli-rpc-parity.md` 承载
-- FR-068 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/78-gui-connection-resilience-notification.md` 与 `docs/qa/orchestrator/120-gui-connection-resilience-notification.md` 承载
-- FR-069 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/79-gui-polish-theme-i18n-responsive.md` 与 `docs/qa/orchestrator/121-gui-polish-theme-i18n-responsive.md` 承载
+- FR-068 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/78-gui-connection-resilience-notification.md`、`docs/qa/orchestrator/120-gui-connection-resilience.md` 与 `docs/qa/orchestrator/120b-gui-notification-error-humanization.md` 承载
+- FR-069 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/79-gui-polish-theme-i18n-responsive.md`、`docs/qa/orchestrator/121-gui-polish-visual.md` 与 `docs/qa/orchestrator/121b-gui-i18n-ux.md` 承载
 - FR-070 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/80-evo-apply-winner-observability.md` 与 `docs/qa/orchestrator/122-evo-apply-winner-observability.md` 承载
 - FR-071 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/81-open-source-compliance.md` 与 `docs/qa/orchestrator/123-open-source-compliance.md` 承载（LICENSE、CHANGELOG、CONTRIBUTING、GitHub 模板已就绪；v0.1.0 release 待 tag 推送）
 - FR-072 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/82-homebrew-tap-distribution.md` 与 `docs/qa/orchestrator/124-homebrew-tap-distribution.md` 承载（Docker 分发因架构不兼容已排除——orchestratord 以子进程方式 spawn agent，需宿主机工具与凭证；已实现 Homebrew tap 与 cargo install 两条分发渠道）
