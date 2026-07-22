@@ -157,6 +157,16 @@ Verify that the certified capability remains consistent with the broader driver 
 
 ---
 
+## Execution Evidence
+
+- `./scripts/qa/certify-codex-session-resume.sh`: 4 passed, 0 failed against real `codex-cli 0.144.5`.
+- `./scripts/qa/test-codex-session-resume.sh`: 3 passed, 0 failed.
+- `./scripts/qa/test-agent-driver-abstraction.sh`: 6 passed, 0 failed from a clean worktree.
+- `cargo test --workspace --quiet`: all workspace unit, integration, and doctest suites passed; only the documented opt-in tests remained ignored.
+- `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all --check`, and `./scripts/qa-doc-lint.sh`: passed.
+
+---
+
 ## Checklist
 
 | # | Scenario | Status | Test Date | Tester | Notes |
@@ -165,4 +175,4 @@ Verify that the certified capability remains consistent with the broader driver 
 | 2 | Recorded protocol replay | PASS | 2026-07-22 | Codex | Sanitized `0.144.5` initial/resume streams replay offline |
 | 3 | Controlled live context resume | PASS | 2026-07-22 | Codex | Same thread and prior-turn anchor verified with real CLI |
 | 4 | Authentication and session privacy | PASS | 2026-07-22 | Codex | UUID rejection, redaction, private temp home, and cleanup verified |
-| 5 | Capability and repository regression | PASS | 2026-07-22 | Codex | Targeted gates pass; full workspace gates recorded at closure |
+| 5 | Capability and repository regression | PASS | 2026-07-22 | Codex | Full workspace, strict Clippy, formatting, FR-116 QA, and doc lint gates pass |
