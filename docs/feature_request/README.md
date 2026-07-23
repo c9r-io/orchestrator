@@ -1,6 +1,6 @@
 # Feature Requests
 
-本目录收录 `orchestrator` 的正式功能需求文档。Agent Process Console v1 已完成闭环；产品结构与发布边界分别由[信息架构](../design_doc/orchestrator/110-process-console-information-architecture.md)和[发布验收设计](../design_doc/orchestrator/116-process-console-release-acceptance.md)持续承载。Slack reaction 驱动的 Skill 任务自动化已按 [Slack Reaction Skill Automation Roadmap](slack-reaction-skill-automation-roadmap.md)发布；Managed Slack Connection、官方 App OAuth 与[每 workspace 独立 App provisioning](../design_doc/orchestrator/126-dedicated-slack-app-auto-provisioning.md)均已闭环。Agent 执行后端契约的供应商中立化已由 [Agent Driver 设计](../design_doc/orchestrator/127-agent-driver-abstraction.md)闭环，并修订了 DD-101 的 runner seam 结论。
+本目录收录 `orchestrator` 的正式功能需求文档。Agent Process Console v1 已完成闭环；产品结构与发布边界分别由[信息架构](../design_doc/orchestrator/110-process-console-information-architecture.md)和[发布验收设计](../design_doc/orchestrator/116-process-console-release-acceptance.md)持续承载。Slack reaction 驱动的 Skill 任务自动化已发布（FR-107 至 FR-113 全部闭环删除），其设计、验证与用户指南现由 `docs/design_doc/orchestrator/118-`～`124-`、`docs/qa/orchestrator/155-`～`161-` 与 [用户指南](../guide/slack-reaction-skill-automation.md)承载；Managed Slack Connection、官方 App OAuth 与[每 workspace 独立 App provisioning](../design_doc/orchestrator/126-dedicated-slack-app-auto-provisioning.md)均已闭环。Agent 执行后端契约的供应商中立化已由 [Agent Driver 设计](../design_doc/orchestrator/127-agent-driver-abstraction.md)闭环，并修订了 DD-101 的 runner seam 结论。
 
 ## 当前条目
 
