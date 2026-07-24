@@ -79,6 +79,11 @@
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
+| FR-119 | Expert Resources 可达列表与受治理编辑闭环 | P1 | Proposed |
+| FR-120 | Handoff 恢复审查对话框焦点生命周期 | P2 | Proposed |
+| FR-121 | Attention Mutation 错误反馈与权威状态对账 | P1 | Proposed |
+| FR-122 | CLI、Daemon 与 Tauri 边界层覆盖率治理 | P1 | Proposed |
+| FR-123 | 受控 Slack Sandbox 持续认证与证据保鲜 | P1 | Proposed |
 
 ## 说明
 
