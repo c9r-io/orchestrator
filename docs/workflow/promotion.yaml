@@ -17,7 +17,8 @@ metadata:
   name: promotion
 spec:
   root_path: "."
-  qa_targets: []
+  qa_targets:
+    - docs/promotion/drafts
   ticket_dir: docs/ticket
   self_referential: false
 ---
@@ -177,13 +178,12 @@ spec:
     provider: claude
     transport: cli
     options:
+      model: claude-sonnet-4-6
       maxTurns: 12
       budgetCapUsd: 2.00
       permissionMode: governed
       allowedTools:
         - mcp__orch__generate_items
-  env:
-    - fromRef: claude-sonnet-promo
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
@@ -197,31 +197,12 @@ spec:
     provider: claude
     transport: cli
     options:
+      model: claude-sonnet-4-6
       maxTurns: 16
       budgetCapUsd: 3.00
       permissionMode: governed
       allowedTools:
         - mcp__orch__mark_item
-  env:
-    - fromRef: claude-sonnet-promo
----
-# ── Workflow Store ──────────────────────────────────────────────────────
-# Tracks promotion state across runs to avoid duplicate content.
----
-apiVersion: orchestrator.dev/v2
-kind: WorkflowStore
-metadata:
-  name: promotion
-spec:
-  backend: local
-  schema:
-    type: object
-    properties:
-      value:
-        type: string
-  retention:
-    max_entries: 100
-    ttl_seconds: 7776000
 ---
 # ── Workflow ────────────────────────────────────────────────────────────
 #
@@ -254,6 +235,7 @@ spec:
     # ── Task segment: gather_updates → analyze_highlights ──
 
     - id: gather_updates
+      type: gather_updates
       scope: task
       enabled: true
       repeatable: false
@@ -314,6 +296,7 @@ spec:
           workspaceAccess: write
 
     - id: publish
+      type: publish
       scope: item
       enabled: true
       repeatable: false
@@ -355,6 +338,7 @@ spec:
     # ── Task segment: track_results → loop_guard ──
 
     - id: track_results
+      type: track_results
       scope: task
       enabled: true
       repeatable: false
@@ -407,4 +391,6 @@ spec:
     workspace: promotion
   concurrencyPolicy: Forbid
   suspend: true
-  historyLimit: 5
+  historyLimit:
+    successful: 5
+    failed: 5

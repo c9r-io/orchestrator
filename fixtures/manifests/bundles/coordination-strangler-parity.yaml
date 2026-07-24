@@ -1,0 +1,482 @@
+# FR-124 offline parity matrix. Each legacy/tool pair models one production
+# workflow's coordination seam while retaining the same terminal contract.
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: strangler-parity
+spec:
+  root_path: "."
+  qa_targets: [docs/qa]
+  ticket_dir: docs/ticket
+  self_referential: false
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: legacy-status
+spec:
+  capabilities: [legacy_status]
+  command: >-
+    printf '%s\n' '{"passed":true,"session":"legacy-private","total_score":91}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: legacy-dynamic
+spec:
+  capabilities: [legacy_dynamic]
+  command: >-
+    printf '%s\n' '{"regression_targets":[{"id":"docs/qa/pilot.md","name":"docs/qa/pilot.md"}],"platforms":[{"id":"devto","name":"Dev.to","content_type":"blog_post","api_publishable":"false","priority":"5"}],"candidates":[{"id":"approach-a","name":"Approach A","description":"minimal","strategy":"small change"},{"id":"approach-b","name":"Approach B","description":"thorough","strategy":"full validation"}]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: typed-coordinator
+spec:
+  capabilities: [typed_session, typed_qa, typed_dynamic, typed_metric]
+  driver:
+    provider: claude
+    transport: cli
+    binary: fake-claude-strangler
+    options:
+      maxTurns: 8
+      budgetCapUsd: 0.01
+      permissionMode: governed
+      allowedTools:
+        - mcp__orch__run_tests
+        - mcp__orch__scan_tickets
+        - mcp__orch__generate_items
+        - mcp__orch__record_metric
+        - mcp__orch__mark_item
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: session-init
+spec:
+  prompt: "SESSION_INIT retain private provider context"
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: session-resume
+spec:
+  prompt: "SESSION_RESUME CALL_MARK_VERIFIED"
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: typed-qa
+spec:
+  prompt: "CALL_RUN_TESTS CALL_SCAN_TICKETS CALL_MARK_QA_PASSED"
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: typed-verify
+spec:
+  prompt: "CALL_RUN_TESTS CALL_MARK_VERIFIED"
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: generate-qa
+spec:
+  prompt: "CALL_GENERATE_QA_ITEMS"
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: generate-promotion
+spec:
+  prompt: "CALL_GENERATE_PROMOTION_ITEMS"
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: generate-evolution
+spec:
+  prompt: "CALL_GENERATE_EVOLUTION_ITEMS"
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: mark-verified
+spec:
+  prompt: "CALL_MARK_VERIFIED"
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: record-metric
+spec:
+  prompt: "CALL_RECORD_METRIC"
+---
+# command_rules: captured provider session versus daemon-private opt-in resume.
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: parity-command-legacy
+spec:
+  steps:
+    - id: create_session
+      type: legacy_status
+      enabled: true
+      scope: task
+      required_capability: legacy_status
+      behavior:
+        captures:
+          - {var: provider_session, source: stdout, json_path: "$.session"}
+    - id: continue_session
+      type: legacy_status
+      enabled: true
+      scope: item
+      required_capability: legacy_status
+      step_vars: {session: provider_session}
+      behavior:
+        on_success: {action: set_status, status: verified}
+  loop: {mode: once}
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: parity-command-tools
+spec:
+  steps:
+    - id: create_session
+      type: typed_session
+      enabled: true
+      scope: task
+      required_capability: typed_session
+      template: session-init
+      behavior:
+        driverRequirements: {workspaceAccess: read}
+    - id: continue_session
+      type: typed_session
+      enabled: true
+      scope: item
+      required_capability: typed_session
+      template: session-resume
+      behavior:
+        driverRequirements:
+          {multiTurn: true, toolHosting: stdio, sessionResume: true, workspaceAccess: read}
+  loop: {mode: once}
+---
+# qa_loop: captured test/ticket status versus typed QA tools.
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: parity-qa-legacy
+spec:
+  steps:
+    - id: qa
+      type: legacy_status
+      enabled: true
+      scope: item
+      required_capability: legacy_status
+      behavior:
+        captures:
+          - {var: passed, source: stdout, json_path: "$.passed"}
+        post_actions: [{type: scan_tickets}]
+        on_success: {action: set_status, status: qa_passed}
+  loop: {mode: once}
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: parity-qa-tools
+spec:
+  steps:
+    - id: qa
+      type: typed_qa
+      enabled: true
+      scope: item
+      required_capability: typed_qa
+      template: typed-qa
+      behavior:
+        driverRequirements:
+          {multiTurn: true, toolHosting: stdio, workspaceAccess: write}
+  loop: {mode: once}
+---
+# plan_execute: captured plan handoff versus private session + typed verify.
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: parity-plan-legacy
+spec:
+  steps:
+    - id: plan
+      type: legacy_status
+      enabled: true
+      scope: task
+      required_capability: legacy_status
+      behavior:
+        captures:
+          - {var: plan_ready, source: stdout, json_path: "$.passed"}
+    - id: verify
+      type: legacy_status
+      enabled: true
+      scope: item
+      required_capability: legacy_status
+      prehook: {engine: cel, when: "plan_ready == true"}
+      behavior:
+        on_success: {action: set_status, status: verified}
+  loop: {mode: once}
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: parity-plan-tools
+spec:
+  steps:
+    - id: plan
+      type: typed_session
+      enabled: true
+      scope: task
+      required_capability: typed_session
+      template: session-init
+      behavior:
+        driverRequirements: {workspaceAccess: read}
+    - id: verify
+      type: typed_qa
+      enabled: true
+      scope: item
+      required_capability: typed_qa
+      template: typed-verify
+      behavior:
+        driverRequirements:
+          {multiTurn: true, toolHosting: stdio, sessionResume: true, workspaceAccess: write}
+  loop: {mode: once}
+---
+# full-qa: safety CEL remains while test/ticket coordination moves to tools.
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: parity-fullqa-legacy
+spec:
+  steps:
+    - id: qa
+      type: legacy_status
+      enabled: true
+      scope: item
+      required_capability: legacy_status
+      prehook: {engine: cel, when: "qa_file_path.startsWith(\"docs/qa/\")"}
+      behavior:
+        post_actions: [{type: scan_tickets}]
+        on_success: {action: set_status, status: qa_passed}
+  loop: {mode: once}
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: parity-fullqa-tools
+spec:
+  steps:
+    - id: qa
+      type: typed_qa
+      enabled: true
+      scope: item
+      required_capability: typed_qa
+      template: typed-qa
+      prehook: {engine: cel, when: "qa_file_path.startsWith(\"docs/qa/\")"}
+      behavior:
+        driverRequirements:
+          {multiTurn: true, toolHosting: stdio, workspaceAccess: write}
+  loop: {mode: once}
+---
+# self-bootstrap: dynamic QA narrowing and a real self_test gate over two cycles.
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: parity-bootstrap-legacy
+spec:
+  steps:
+    - id: select_qa
+      type: legacy_dynamic
+      enabled: true
+      scope: task
+      required_capability: legacy_dynamic
+      repeatable: false
+      behavior:
+        post_actions:
+          - type: generate_items
+            from_var: select_qa_output
+            json_path: "$.regression_targets"
+            mapping: {item_id: "$.id", label: "$.name"}
+            replace: true
+    - id: qa
+      type: legacy_status
+      enabled: true
+      scope: item
+      required_capability: legacy_status
+      repeatable: true
+      prehook: {engine: cel, when: "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\")"}
+      behavior:
+        on_success: {action: set_status, status: qa_passed}
+    - {id: self_test, type: self_test, scope: task, builtin: self_test, enabled: true, repeatable: true}
+    - {id: loop_guard, type: loop_guard, builtin: loop_guard, enabled: true, repeatable: true, is_guard: true}
+  loop: {mode: fixed, max_cycles: 2, stop_when_no_unresolved: false}
+  safety:
+    {auto_rollback: true, checkpoint_strategy: git_tag, binary_snapshot: true}
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: parity-bootstrap-tools
+spec:
+  steps:
+    - id: select_qa
+      type: typed_dynamic
+      enabled: true
+      scope: task
+      required_capability: typed_dynamic
+      template: generate-qa
+      repeatable: false
+      behavior:
+        driverRequirements:
+          {multiTurn: true, toolHosting: stdio, workspaceAccess: read}
+    - id: qa
+      type: typed_qa
+      enabled: true
+      scope: item
+      required_capability: typed_qa
+      template: typed-qa
+      repeatable: true
+      prehook: {engine: cel, when: "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\")"}
+      behavior:
+        driverRequirements:
+          {multiTurn: true, toolHosting: stdio, workspaceAccess: write}
+    - {id: self_test, type: self_test, scope: task, builtin: self_test, enabled: true, repeatable: true}
+    - {id: loop_guard, type: loop_guard, builtin: loop_guard, enabled: true, repeatable: true, is_guard: true}
+  loop: {mode: fixed, max_cycles: 2, stop_when_no_unresolved: false}
+  safety:
+    {auto_rollback: true, checkpoint_strategy: git_tag, binary_snapshot: true}
+---
+# promotion: output extraction versus typed dynamic items and deterministic draft status.
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: parity-promotion-legacy
+spec:
+  steps:
+    - id: analyze
+      type: legacy_dynamic
+      enabled: true
+      scope: task
+      required_capability: legacy_dynamic
+      behavior:
+        post_actions:
+          - type: generate_items
+            from_var: analyze_output
+            json_path: "$.platforms"
+            mapping:
+              item_id: "$.id"
+              label: "$.name"
+              vars: {api_publishable: "$.api_publishable"}
+            replace: true
+    - id: draft
+      type: legacy_status
+      enabled: true
+      scope: item
+      required_capability: legacy_status
+      behavior:
+        captures:
+          - {var: draft_score, source: stdout, json_path: "$.total_score"}
+        on_success: {action: set_status, status: verified}
+  loop: {mode: once}
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: parity-promotion-tools
+spec:
+  steps:
+    - id: analyze
+      type: typed_dynamic
+      enabled: true
+      scope: task
+      required_capability: typed_dynamic
+      template: generate-promotion
+      behavior:
+        driverRequirements:
+          {multiTurn: true, toolHosting: stdio, workspaceAccess: read}
+    - id: draft
+      type: typed_qa
+      enabled: true
+      scope: item
+      required_capability: typed_qa
+      template: mark-verified
+      behavior:
+        driverRequirements:
+          {multiTurn: true, toolHosting: stdio, workspaceAccess: write}
+  loop: {mode: once}
+---
+# self-evolution: capture/json_path score versus a bounded typed metric.
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: parity-evolution-legacy
+spec:
+  steps:
+    - id: plan
+      type: legacy_dynamic
+      enabled: true
+      scope: task
+      required_capability: legacy_dynamic
+      behavior:
+        post_actions:
+          - type: generate_items
+            from_var: plan_output
+            json_path: "$.candidates"
+            mapping:
+              item_id: "$.id"
+              label: "$.name"
+              vars: {approach: "$.description", strategy: "$.strategy"}
+            replace: true
+    - id: benchmark
+      type: legacy_status
+      enabled: true
+      scope: item
+      required_capability: legacy_status
+      behavior:
+        captures:
+          - {var: score, source: stdout, json_path: "$.total_score"}
+    - id: select_best
+      type: item_select
+      enabled: true
+      scope: task
+      builtin: item_select
+      item_select_config: {strategy: max, metric_var: score}
+  loop: {mode: once}
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: parity-evolution-tools
+spec:
+  steps:
+    - id: plan
+      type: typed_dynamic
+      enabled: true
+      scope: task
+      required_capability: typed_dynamic
+      template: generate-evolution
+      behavior:
+        driverRequirements:
+          {multiTurn: true, toolHosting: stdio, workspaceAccess: read}
+    - id: benchmark
+      type: typed_metric
+      enabled: true
+      scope: item
+      required_capability: typed_metric
+      template: record-metric
+      behavior:
+        driverRequirements:
+          {multiTurn: true, toolHosting: stdio, workspaceAccess: read}
+    - id: select_best
+      type: item_select
+      enabled: true
+      scope: task
+      builtin: item_select
+      item_select_config: {strategy: max, metric_var: score}
+  loop: {mode: once}

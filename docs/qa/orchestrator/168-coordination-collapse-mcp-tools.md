@@ -32,13 +32,14 @@ Prove that tool results come from daemon-owned logic rather than canned shim res
 
 1. Run `cargo test -p orchestrator-scheduler authenticated_host_executes_real_coordination_tools`.
 2. Exercise `run_tests` with passing and failing Cargo fixtures.
-3. Exercise `mark_item`, evidence-gated `create_ticket`, `scan_tickets`, and bounded `generate_items`.
+3. Exercise `mark_item`, evidence-gated `create_ticket`, `scan_tickets`, bounded `generate_items`, and bounded `record_metric`.
 4. Attempt a request without the run token.
 
 ### Expected
 
 - Passing/failing results reflect the real fixture commands.
 - Status, ticket, scan, and generated-item receipts reflect store state.
+- Metric receipts reject invalid names/non-finite values and drive deterministic item selection.
 - `create_ticket` requires prior failing evidence.
 - The unauthenticated request returns HTTP 401 before tool dispatch.
 
@@ -156,8 +157,11 @@ Ensure the additive tool path does not regress legacy shell/CEL or driver behavi
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|---|---|---|---|---|
-| 1 | Authenticated host and real tools | PASS | 2026-07-23 | Codex | Real pass/fail command execution and five tool contracts verified |
+| 1 | Authenticated host and real tools | PASS | 2026-07-25 | Codex | Real pass/fail command execution and six primary tool contracts verified |
 | 2 | Shim, allowlist, and isolation | PASS | 2026-07-23 | Codex | Actual shim, 401, 0600 config, and token non-disclosure verified |
 | 3 | Pilot parity and line collapse | PASS | 2026-07-23 | Codex | completed/qa_passed parity; 100% coordination-line reduction |
 | 4 | Events and residual channels | PASS | 2026-07-23 | Codex | 12 tool events and exactly four classified residual keys |
 | 5 | Repository regression | PASS | 2026-07-23 | Codex | Closure gates recorded during FR governance |
+
+Production-wide migration supersedes the pilot-only completion claim; see
+[QA-174](174-coordination-strangler-completion.md).

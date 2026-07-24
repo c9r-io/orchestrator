@@ -11,7 +11,7 @@
 
 The provider-neutral driver seam from DD-127 made structured tool calls observable, but the original `orch-mcp-tools` binary still returned canned results. Workflow authors therefore still had to coordinate through CEL prehooks, stdout captures, JSONPath, pipeline variables, and post-actions.
 
-FR-118 completes the pivot proposed by DD-101. Coordination intent is expressed through five typed tools whose results are computed inside the daemon. The existing shell/CEL path remains supported for compatibility; new tool-driven workflows can remove transitional coordination wiring while retaining declarative governance.
+FR-118 established the pivot proposed by DD-101. Coordination intent is expressed through typed tools whose results are computed inside the daemon. The existing shell/CEL path remains supported for compatibility; new tool-driven workflows can remove transitional coordination wiring while retaining declarative governance. DD-136 completes the production strangler migration and adds the freeze/retirement gate.
 
 ## Architecture
 
@@ -43,6 +43,7 @@ This split keeps Claude's stdio MCP compatibility while ensuring authoritative t
 | `create_ticket` | Creates a deduplicated QA ticket only from the latest failing `run_tests` evidence in the same run. |
 | `scan_tickets` | Uses the existing ticket scanner and returns the current active-ticket set. |
 | `generate_items` | Validates 1–100 non-duplicate workspace-relative paths and creates dynamic items through the existing scheduler service. |
+| `record_metric` | Validates an authenticated item, bounded metric name, and finite governed numeric value, then folds it into item state for deterministic selection. |
 
 `mark_done` remains a compatibility alias for existing streaming demonstrations. New workflows should use `mark_item`.
 
@@ -96,6 +97,10 @@ This change is additive. Legacy shell commands, CEL prehooks, captures, post-act
 
 Rollback removes the tool-capable Agent selection or returns the workflow to its legacy step. No schema downgrade is required. Do not remove CEL compatibility until all production workflows have independent parity evidence.
 
+That evidence and the staged retirement criteria are now maintained by
+[DD-136](136-coordination-strangler-completion.md). CEL remains supported for
+deterministic governance even after coordination consumers reach zero.
+
 ## Verification
 
 `scripts/qa/test-coordination-collapse.sh` provides a network-free gate. It tests real callback authentication and tool execution, the actual stdio shim, legacy/tool pilot parity, event completeness, token privacy, private config mode, authored-line reduction, and residual channel classification. Repository closure also requires formatting, workspace tests, strict Clippy, the FR-116 driver regression, and QA-document lint.
@@ -108,3 +113,5 @@ Rollback removes the tool-capable Agent selection or returns the workflow to its
 - `crates/orchestrator-scheduler/src/scheduler/item_executor/apply.rs` — tool-effect folding.
 - `fixtures/manifests/bundles/coordination-collapse-pilot.yaml` — parity fixture.
 - `scripts/qa/test-coordination-collapse.sh` — reproducible closure gate.
+- `config/governance/coordination-collapse-ledger.json` — exact production inventory and monotonic ratchet.
+- `scripts/qa/test-coordination-strangler.sh` — per-production-workflow parity and self-bootstrap gate.

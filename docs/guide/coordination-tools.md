@@ -42,6 +42,10 @@ behavior:
 
 Apply-time validation rejects an Agent that cannot satisfy these requirements. `allowedTools` is a hard daemon allowlist, not merely prompt guidance.
 
+Tool hosting is also a runtime opt-in. A Claude driver step that omits
+`toolHosting: stdio` does not start the callback, even if the Agent declares
+coordination tools.
+
 ## Available Tools
 
 | Tool | Use it for | Important constraints |
@@ -50,7 +54,8 @@ Apply-time validation rejects an Agent that cannot satisfy these requirements. `
 | `mark_item` | Record the current item's governed status | The item and requested status are validated. |
 | `create_ticket` | Create a QA ticket for a demonstrated failure | Requires the latest `run_tests` call in the same run to have failed; deduplicates through existing ticket logic. |
 | `scan_tickets` | Read the current active-ticket set | Uses the Workspace ticket directory and existing scanner. |
-| `generate_items` | Add work discovered during the run | Accepts 1–100 unique workspace-relative paths; rejects unsafe or duplicate input. |
+| `generate_items` | Add work discovered during the run | Accepts 1–100 unique workspace-relative IDs with optional labels/string variables; rejects unsafe or duplicate input. |
+| `record_metric` | Supply a numeric score for deterministic item selection | Name must match `[a-z][a-z0-9_]{0,63}`; value must be finite and within the governed range. |
 
 `mark_done` is retained as a compatibility alias for older streaming demonstrations. Prefer `mark_item` for new workflows.
 
@@ -74,10 +79,22 @@ Inspect them with normal task events/logs tooling or query the `events` table du
 5. Run the legacy and tool variants side by side. Compare task/item terminal state and event evidence before removing the legacy wiring.
 6. Record any remaining cross-step variables. Do not automatically replace them with a general state store.
 
+For private provider continuity, add `sessionResume: true` only to a step that
+must continue the task's current provider context. Omit it for independent
+review. The reference stays daemon-private; do not capture or template a
+provider session ID. The current reference is task-scoped, so parallel
+item-scoped steps should remain fresh.
+
 The complete paired example is `fixtures/manifests/bundles/coordination-collapse-pilot.yaml`. Validate it with:
 
 ```bash
 ./scripts/qa/test-coordination-collapse.sh
+```
+
+The production migration matrix and freeze ratchet are covered by:
+
+```bash
+./scripts/qa/test-coordination-strangler.sh
 ```
 
 ## Troubleshooting
@@ -87,6 +104,7 @@ The complete paired example is `fixtures/manifests/bundles/coordination-collapse
 - **`create_ticket` rejects the call**: call `run_tests` first in the same run and create a ticket only when its result fails.
 - **Callback authentication fails**: do not copy or reuse MCP files. Check that the run artifact exists with mode `0600`, then inspect redacted driver/coordination events.
 - **Legacy CEL still controls the result**: remove transitional coordination only after parity. CEL remains supported and may still be appropriate for deterministic governance gates.
+- **A resumed step starts fresh**: verify that the step, not only its Agent, declares `sessionResume: true`.
 - **Tests need arbitrary commands**: `run_tests` intentionally has a small target allowlist. Add a reviewed typed tool rather than turning it into a shell escape hatch.
 
-For implementation and security boundaries, see [DD-130](../design_doc/orchestrator/130-coordination-collapse-mcp-tools.md). For reproducible acceptance, see [QA-168](../qa/orchestrator/168-coordination-collapse-mcp-tools.md).
+For implementation and security boundaries, see [DD-130](../design_doc/orchestrator/130-coordination-collapse-mcp-tools.md). For production migration and retirement governance, see [DD-136](../design_doc/orchestrator/136-coordination-strangler-completion.md). Reproducible acceptance lives in [QA-168](../qa/orchestrator/168-coordination-collapse-mcp-tools.md) and [QA-174](../qa/orchestrator/174-coordination-strangler-completion.md).

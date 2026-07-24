@@ -19,12 +19,14 @@ COMPLETE_STATUSES = %w[migrated classified].freeze
 options = {
   ledger: "config/governance/coordination-collapse-ledger.json",
   output: nil,
-  require_complete: false
+  require_complete: false,
+  test_fixtures: false
 }
 OptionParser.new do |parser|
   parser.on("--ledger PATH") { |value| options[:ledger] = value }
   parser.on("--output PATH") { |value| options[:output] = value }
   parser.on("--require-complete") { options[:require_complete] = true }
+  parser.on("--test-fixtures") { options[:test_fixtures] = true }
 end.parse!
 
 repo_root = Pathname.new(File.expand_path("../..", __dir__))
@@ -129,6 +131,27 @@ def source_counts(files)
     end
   end
   counts
+end
+
+if options[:test_fixtures]
+  fixture_path = repo_root.join(
+    "scripts/qa/fixtures/coordination-governance-cases.json"
+  )
+  fixture = JSON.parse(File.read(fixture_path))
+  fixture_errors = []
+  Array(fixture["cases"]).each do |test_case|
+    touches = workflow_touches(test_case.fetch("workflow"))
+    unexpected = touches - Array(test_case["approvedTouches"])
+    accepted = unexpected.empty?
+    next if accepted == test_case.fetch("expectedAccepted")
+
+    fixture_errors << "#{test_case.fetch("name")}: expected accepted=" \
+      "#{test_case.fetch("expectedAccepted")}, got #{accepted}"
+  end
+  unless fixture_errors.empty?
+    fixture_errors.each { |error| warn "  - #{error}" }
+    exit 1
+  end
 end
 
 documents = []

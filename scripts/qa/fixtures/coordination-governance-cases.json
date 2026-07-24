@@ -1,0 +1,77 @@
+{
+  "cases": [
+    {
+      "name": "new-captured-coordination-is-rejected",
+      "expectedAccepted": false,
+      "approvedTouches": [],
+      "workflow": {
+        "kind": "Workflow",
+        "metadata": {"name": "rejected-capture"},
+        "spec": {
+          "steps": [
+            {
+              "id": "coordinate",
+              "behavior": {
+                "captures": [
+                  {"var": "next_action", "source": "stdout", "json_path": "$.next"}
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "reviewed-cel-governance-is-accepted",
+      "expectedAccepted": true,
+      "approvedTouches": [
+        {
+          "step": "publish",
+          "kind": "prehook",
+          "engine": "cel",
+          "expression": "api_publishable == \"true\""
+        }
+      ],
+      "workflow": {
+        "kind": "Workflow",
+        "metadata": {"name": "allowed-governance"},
+        "spec": {
+          "steps": [
+            {
+              "id": "publish",
+              "prehook": {
+                "engine": "cel",
+                "when": "api_publishable == \"true\""
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "reviewed-safety-signal-is-accepted",
+      "expectedAccepted": true,
+      "approvedTouches": [
+        {
+          "step": "safety-review",
+          "kind": "step_vars",
+          "names": ["denial"]
+        }
+      ],
+      "workflow": {
+        "kind": "Workflow",
+        "metadata": {"name": "allowed-safety"},
+        "spec": {
+          "steps": [
+            {
+              "id": "safety-review",
+              "step_vars": {
+                "denial": "last_sandbox_denial_reason"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

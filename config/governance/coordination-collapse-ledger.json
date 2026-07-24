@@ -62,8 +62,8 @@
       "file": "docs/workflow/command-rules.yaml",
       "name": "command_rules",
       "classification": "tool-migratable",
-      "status": "pending",
-      "evidence": null,
+      "status": "migrated",
+      "evidence": "docs/qa/orchestrator/174-coordination-strangler-completion.md",
       "approvedTouches": [],
       "residualChannels": [
         "goal"
@@ -84,8 +84,8 @@
       "file": "docs/workflow/full-qa.yaml",
       "name": "full-qa",
       "classification": "hybrid",
-      "status": "pending",
-      "evidence": null,
+      "status": "migrated",
+      "evidence": "docs/qa/orchestrator/174-coordination-strangler-completion.md",
       "approvedTouches": [
         {
           "step": "qa_testing",
@@ -132,8 +132,8 @@
       "file": "docs/workflow/plan-execute.yaml",
       "name": "plan_execute",
       "classification": "tool-migratable",
-      "status": "pending",
-      "evidence": null,
+      "status": "migrated",
+      "evidence": "docs/qa/orchestrator/174-coordination-strangler-completion.md",
       "approvedTouches": [],
       "residualChannels": [
         "goal"
@@ -143,8 +143,8 @@
       "file": "docs/workflow/promotion.yaml",
       "name": "promotion",
       "classification": "hybrid",
-      "status": "pending",
-      "evidence": null,
+      "status": "migrated",
+      "evidence": "docs/qa/orchestrator/174-coordination-strangler-completion.md",
       "approvedTouches": [
         {
           "step": "publish",
@@ -166,8 +166,8 @@
       "file": "docs/workflow/qa-loop.yaml",
       "name": "qa_loop",
       "classification": "tool-migratable",
-      "status": "pending",
-      "evidence": null,
+      "status": "migrated",
+      "evidence": "docs/qa/orchestrator/174-coordination-strangler-completion.md",
       "approvedTouches": [],
       "residualChannels": [
         "goal",
@@ -191,8 +191,8 @@
       "file": "docs/workflow/self-bootstrap.yaml",
       "name": "self-bootstrap",
       "classification": "hybrid",
-      "status": "pending",
-      "evidence": null,
+      "status": "migrated",
+      "evidence": "docs/qa/orchestrator/174-coordination-strangler-completion.md",
       "approvedTouches": [
         {
           "step": "self_test",
@@ -245,8 +245,8 @@
       "file": "docs/workflow/self-evolution.yaml",
       "name": "self-evolution",
       "classification": "hybrid",
-      "status": "pending",
-      "evidence": null,
+      "status": "migrated",
+      "evidence": "docs/qa/orchestrator/174-coordination-strangler-completion.md",
       "approvedTouches": [
         {
           "step": "select_best",
