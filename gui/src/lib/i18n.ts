@@ -223,7 +223,23 @@ const zh = {
 
   expertResources: {
     backToList: "\u2190 返回列表",
-    describeHint: "使用 resource_describe 查看详情：在上方搜索 \"kind/name\" 格式",
+    kindFilter: "资源类型",
+    catalog: "资源目录",
+    loading: "正在加载资源…",
+    empty: "此类型暂无资源",
+    loadMore: "加载更多",
+    open: "打开",
+    manifest: "资源 Manifest",
+    applying: "正在应用…",
+    copyDraft: "复制草稿",
+    draftCopied: "草稿已复制",
+    manifestCopied: "Manifest 已复制",
+    reloadAuthority: "重新加载权威版本",
+    authorityReloaded: "权威版本已刷新；你的草稿仍保留，请审查差异后再次应用。",
+    confirmTitle: "确认应用资源变更",
+    confirmDescription: "Daemon 将重新校验权限、资源版本与完整配置，并写入 Action Audit。",
+    confirmApply: "应用已审查变更",
+    auditRequest: "审计请求",
   },
 
   expertAgents: {

@@ -8,7 +8,10 @@ mod tests;
 
 // Re-export public API (preserves agent_orchestrator::service::resource::* paths)
 pub use delete::{delete_resource, delete_resource_with_references};
-pub use query::{describe_resource, get_resource};
+pub use query::{
+    ResourceSummary, ResourceSummaryPage, current_resource_revision, describe_resource,
+    get_resource, list_resource_summaries, resource_content_revision,
+};
 pub use source_task_binding_ops::{
     SourceTaskBindingMutation, resume_source_task_binding, suspend_source_task_binding,
 };

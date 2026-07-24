@@ -1,8 +1,39 @@
 use crate::config_load::read_active_config;
 use crate::error::{Result, classify_resource_error};
+use crate::resource::{
+    AgentResource, EnvStoreResource, ExecutionProfileResource, ProjectResource, RegisteredResource,
+    Resource, RuntimePolicyResource, SecretStoreResource, SourceTaskBindingResource,
+    SourceTaskTemplateResource, StepTemplateResource, TriggerResource, WorkflowResource,
+    WorkspaceResource,
+};
 use crate::state::InnerState;
+use serde::{Deserialize, Serialize};
 
 use super::format_output;
+
+/// Stable daemon-owned metadata used by resource catalog consumers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResourceSummary {
+    /// Canonical manifest kind, for example `Workspace`.
+    pub kind: String,
+    /// Resource name within the project.
+    pub name: String,
+    /// Authoritative project scope.
+    pub project_id: String,
+    /// SHA-256 over the normalized current resource representation.
+    pub revision: String,
+    /// Projection that supplied the current resource.
+    pub source: String,
+}
+
+/// One bounded, deterministically ordered resource catalog page.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResourceSummaryPage {
+    /// Resource summaries in ascending name order.
+    pub resources: Vec<ResourceSummary>,
+    /// Last returned name when another page exists.
+    pub next_cursor: Option<String>,
+}
 
 /// Get a resource by selector string. Returns serialized content.
 pub fn get_resource(
@@ -65,6 +96,8 @@ fn get_single_resource(
         "ws" | "workspace" => "Workspace",
         "wf" | "workflow" => "Workflow",
         "agent" => "Agent",
+        "steptemplate" | "step-template" | "step_template" => "StepTemplate",
+        "executionprofile" | "execution-profile" | "execution_profile" => "ExecutionProfile",
         "trigger" | "tg" => "Trigger",
         "sourcetasktemplate" | "source-task-template" | "source_task_template" | "stt" => {
             "SourceTaskTemplate"
@@ -125,6 +158,24 @@ fn get_single_resource(
             })?;
             format_output(agent, output_format)
         }
+        "steptemplate" | "step-template" | "step_template" => {
+            let template = project.step_templates.get(name).ok_or_else(|| {
+                classify_resource_error(
+                    "resource.get",
+                    anyhow::anyhow!("step template not found: {name}"),
+                )
+            })?;
+            format_output(template, output_format)
+        }
+        "executionprofile" | "execution-profile" | "execution_profile" => {
+            let profile = project.execution_profiles.get(name).ok_or_else(|| {
+                classify_resource_error(
+                    "resource.get",
+                    anyhow::anyhow!("execution profile not found: {name}"),
+                )
+            })?;
+            format_output(profile, output_format)
+        }
         "trigger" | "tg" => {
             let trigger = project.triggers.get(name).ok_or_else(|| {
                 classify_resource_error(
@@ -169,6 +220,13 @@ fn get_list_resource(
         "ws" | "workspace" | "workspaces" => (project.workspaces.keys().collect(), "Workspace"),
         "agent" | "agents" => (project.agents.keys().collect(), "Agent"),
         "wf" | "workflow" | "workflows" => (project.workflows.keys().collect(), "Workflow"),
+        "steptemplate" | "step-template" | "step_template" | "steptemplates" => {
+            (project.step_templates.keys().collect(), "StepTemplate")
+        }
+        "executionprofile" | "execution-profile" | "execution_profile" | "executionprofiles" => (
+            project.execution_profiles.keys().collect(),
+            "ExecutionProfile",
+        ),
         "trigger" | "triggers" | "tg" => (project.triggers.keys().collect(), "Trigger"),
         "sourcetasktemplate"
         | "source-task-template"
@@ -284,5 +342,292 @@ pub fn describe_resource(
     output_format: &str,
     project: Option<&str>,
 ) -> Result<String> {
+    if let Some((kind, name)) = resource.split_once('/') {
+        let active = read_active_config(state)
+            .map_err(|err| classify_resource_error("resource.describe", err))?;
+        if let Some(content) =
+            describe_builtin_resource(&active.config, kind, name, output_format, project)?
+        {
+            return Ok(content);
+        }
+    }
     get_resource(state, resource, None, output_format, project)
+}
+
+fn describe_builtin_resource(
+    config: &crate::config::OrchestratorConfig,
+    kind: &str,
+    name: &str,
+    output_format: &str,
+    project: Option<&str>,
+) -> Result<Option<String>> {
+    let resource = match kind {
+        "ws" | "workspace" => WorkspaceResource::get_from_project(config, name, project)
+            .map(RegisteredResource::Workspace),
+        "agent" => AgentResource::get_from_project(config, name, project)
+            .map(Box::new)
+            .map(RegisteredResource::Agent),
+        "wf" | "workflow" => WorkflowResource::get_from_project(config, name, project)
+            .map(RegisteredResource::Workflow),
+        "steptemplate" | "step-template" | "step_template" => {
+            StepTemplateResource::get_from_project(config, name, project)
+                .map(RegisteredResource::StepTemplate)
+        }
+        "executionprofile" | "execution-profile" | "execution_profile" => {
+            ExecutionProfileResource::get_from_project(config, name, project)
+                .map(RegisteredResource::ExecutionProfile)
+        }
+        _ => return Ok(None),
+    };
+    resource
+        .map(|resource| {
+            let yaml = resource
+                .to_yaml()
+                .map_err(|err| classify_resource_error("resource.describe", err))?;
+            match output_format {
+                "yaml" => Ok(yaml),
+                "json" | "table" => {
+                    let value: serde_yaml::Value = serde_yaml::from_str(&yaml)
+                        .map_err(|err| classify_resource_error("resource.describe", err))?;
+                    serde_json::to_string_pretty(&value)
+                        .map_err(|err| classify_resource_error("resource.describe", err))
+                }
+                _ => Ok(yaml),
+            }
+        })
+        .transpose()
+}
+
+/// Return a bounded catalog page without asking callers to parse serialized output.
+pub fn list_resource_summaries(
+    state: &InnerState,
+    resource_type: &str,
+    project: Option<&str>,
+    cursor: Option<&str>,
+    limit: usize,
+) -> Result<ResourceSummaryPage> {
+    let active =
+        read_active_config(state).map_err(|err| classify_resource_error("resource.list", err))?;
+    let config = &active.config;
+    let project_id = project.unwrap_or(crate::config::DEFAULT_PROJECT_ID);
+    let empty_project = crate::config::ProjectConfig::default();
+    let project = config.projects.get(project_id).unwrap_or(&empty_project);
+    let (kind, query_kind, mut names): (&str, &str, Vec<String>) = match resource_type {
+        "ws" | "workspace" | "workspaces" => (
+            "Workspace",
+            "workspace",
+            project.workspaces.keys().cloned().collect(),
+        ),
+        "wf" | "workflow" | "workflows" => (
+            "Workflow",
+            "workflow",
+            project.workflows.keys().cloned().collect(),
+        ),
+        "agent" | "agents" => ("Agent", "agent", project.agents.keys().cloned().collect()),
+        "steptemplate" | "step-template" | "step_template" | "steptemplates" => (
+            "StepTemplate",
+            "steptemplate",
+            project.step_templates.keys().cloned().collect(),
+        ),
+        "executionprofile" | "execution-profile" | "execution_profile" | "executionprofiles" => (
+            "ExecutionProfile",
+            "executionprofile",
+            project.execution_profiles.keys().cloned().collect(),
+        ),
+        other => {
+            return Err(classify_resource_error(
+                "resource.list",
+                anyhow::anyhow!("unsupported expert resource catalog type: {other}"),
+            ));
+        }
+    };
+    names.sort();
+    if let Some(cursor) = cursor {
+        names.retain(|name| name.as_str() > cursor);
+    }
+
+    let page_limit = limit.clamp(1, 500);
+    let has_more = names.len() > page_limit;
+    names.truncate(page_limit);
+    let mut resources = Vec::with_capacity(names.len());
+    for name in names {
+        let content =
+            describe_builtin_resource(config, query_kind, &name, "yaml", Some(project_id))?
+                .ok_or_else(|| {
+                    classify_resource_error(
+                        "resource.list",
+                        anyhow::anyhow!("{kind} not found: {name}"),
+                    )
+                })?;
+        let revision = resource_content_revision(&content)?;
+        let source = if config
+            .resource_store
+            .get_namespaced(kind, project_id, &name)
+            .is_some()
+        {
+            "resource_store"
+        } else {
+            "active_config"
+        };
+        resources.push(ResourceSummary {
+            kind: kind.to_string(),
+            name,
+            project_id: project_id.to_string(),
+            revision,
+            source: source.to_string(),
+        });
+    }
+    let next_cursor = has_more
+        .then(|| resources.last().map(|resource| resource.name.clone()))
+        .flatten();
+    Ok(ResourceSummaryPage {
+        resources,
+        next_cursor,
+    })
+}
+
+/// Compute the current stable revision for a builtin resource, if it exists.
+pub fn current_resource_revision(
+    state: &InnerState,
+    kind: crate::cli_types::ResourceKind,
+    name: &str,
+    project: Option<&str>,
+) -> Result<Option<String>> {
+    let active = read_active_config(state)
+        .map_err(|err| classify_resource_error("resource.revision", err))?;
+    let config = &active.config;
+    let project_id = project.unwrap_or(crate::config::DEFAULT_PROJECT_ID);
+    let empty_project = crate::config::ProjectConfig::default();
+    let project_config = config.projects.get(project_id).unwrap_or(&empty_project);
+    if kind == crate::cli_types::ResourceKind::SourceTaskTemplate {
+        return project_config
+            .source_task_templates
+            .get(name)
+            .map(crate::source_task_template::template_content_hash)
+            .transpose()
+            .map_err(|err| classify_resource_error("resource.revision", err));
+    }
+    if kind == crate::cli_types::ResourceKind::SourceTaskBinding {
+        return project_config
+            .source_task_bindings
+            .get(name)
+            .map(crate::source_task_binding::binding_content_hash)
+            .transpose()
+            .map_err(|err| classify_resource_error("resource.revision", err));
+    }
+    let query_kind = match kind {
+        crate::cli_types::ResourceKind::Workspace => Some("workspace"),
+        crate::cli_types::ResourceKind::Agent => Some("agent"),
+        crate::cli_types::ResourceKind::Workflow => Some("workflow"),
+        crate::cli_types::ResourceKind::StepTemplate => Some("steptemplate"),
+        crate::cli_types::ResourceKind::ExecutionProfile => Some("executionprofile"),
+        crate::cli_types::ResourceKind::Trigger => Some("trigger"),
+        crate::cli_types::ResourceKind::SourceTaskTemplate
+        | crate::cli_types::ResourceKind::SourceTaskBinding => None,
+        _ => None,
+    };
+    if let Some(query_kind) = query_kind {
+        let exists = match kind {
+            crate::cli_types::ResourceKind::Workspace => {
+                project_config.workspaces.contains_key(name)
+            }
+            crate::cli_types::ResourceKind::Agent => project_config.agents.contains_key(name),
+            crate::cli_types::ResourceKind::Workflow => project_config.workflows.contains_key(name),
+            crate::cli_types::ResourceKind::StepTemplate => {
+                project_config.step_templates.contains_key(name)
+            }
+            crate::cli_types::ResourceKind::SourceTaskTemplate => {
+                project_config.source_task_templates.contains_key(name)
+            }
+            crate::cli_types::ResourceKind::SourceTaskBinding => {
+                project_config.source_task_bindings.contains_key(name)
+            }
+            crate::cli_types::ResourceKind::ExecutionProfile => {
+                project_config.execution_profiles.contains_key(name)
+            }
+            crate::cli_types::ResourceKind::Trigger => project_config.triggers.contains_key(name),
+            _ => false,
+        };
+        if !exists {
+            return Ok(None);
+        }
+        let content =
+            describe_builtin_resource(config, query_kind, name, "yaml", Some(project_id))?
+                .ok_or_else(|| {
+                    classify_resource_error(
+                        "resource.revision",
+                        anyhow::anyhow!("{query_kind} not found: {name}"),
+                    )
+                })?;
+        return resource_content_revision(&content).map(Some);
+    }
+    let resource = match kind {
+        crate::cli_types::ResourceKind::Workspace => {
+            WorkspaceResource::get_from_project(config, name, project)
+                .map(RegisteredResource::Workspace)
+        }
+        crate::cli_types::ResourceKind::Agent => {
+            AgentResource::get_from_project(config, name, project)
+                .map(Box::new)
+                .map(RegisteredResource::Agent)
+        }
+        crate::cli_types::ResourceKind::Workflow => {
+            WorkflowResource::get_from_project(config, name, project)
+                .map(RegisteredResource::Workflow)
+        }
+        crate::cli_types::ResourceKind::Project => {
+            ProjectResource::get_from_project(config, name, project)
+                .map(RegisteredResource::Project)
+        }
+        crate::cli_types::ResourceKind::RuntimePolicy => {
+            RuntimePolicyResource::get_from_project(config, name, project)
+                .map(RegisteredResource::RuntimePolicy)
+        }
+        crate::cli_types::ResourceKind::StepTemplate => {
+            StepTemplateResource::get_from_project(config, name, project)
+                .map(RegisteredResource::StepTemplate)
+        }
+        crate::cli_types::ResourceKind::SourceTaskTemplate => {
+            SourceTaskTemplateResource::get_from_project(config, name, project)
+                .map(RegisteredResource::SourceTaskTemplate)
+        }
+        crate::cli_types::ResourceKind::SourceTaskBinding => {
+            SourceTaskBindingResource::get_from_project(config, name, project)
+                .map(RegisteredResource::SourceTaskBinding)
+        }
+        crate::cli_types::ResourceKind::ExecutionProfile => {
+            ExecutionProfileResource::get_from_project(config, name, project)
+                .map(RegisteredResource::ExecutionProfile)
+        }
+        crate::cli_types::ResourceKind::EnvStore => {
+            EnvStoreResource::get_from_project(config, name, project)
+                .map(RegisteredResource::EnvStore)
+        }
+        crate::cli_types::ResourceKind::SecretStore => {
+            SecretStoreResource::get_from_project(config, name, project)
+                .map(RegisteredResource::SecretStore)
+        }
+        crate::cli_types::ResourceKind::Trigger => {
+            TriggerResource::get_from_project(config, name, project)
+                .map(RegisteredResource::Trigger)
+        }
+    };
+    resource
+        .map(|resource| {
+            resource
+                .to_yaml()
+                .map_err(|err| classify_resource_error("resource.revision", err))
+                .and_then(|content| resource_content_revision(&content))
+        })
+        .transpose()
+}
+
+/// Hash a serialized resource after normalizing map key ordering.
+pub fn resource_content_revision(content: &str) -> Result<String> {
+    let value: serde_yaml::Value = serde_yaml::from_str(content)
+        .map_err(|err| classify_resource_error("resource.revision", err))?;
+    let value = serde_json::to_value(value)
+        .map_err(|err| classify_resource_error("resource.revision", err))?;
+    crate::action_audit::canonical_request_hash(&value)
+        .map_err(|err| classify_resource_error("resource.revision", err))
 }

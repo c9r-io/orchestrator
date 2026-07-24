@@ -221,6 +221,24 @@ async fn apply_get_describe_roundtrip() {
             describe_resp.content.contains("echo"),
             "describe response should contain agent details"
         );
+
+        let catalog = client
+            .resource_catalog_list(ResourceCatalogListRequest {
+                resource_type: "agents".into(),
+                project: None,
+                cursor: None,
+                limit: 100,
+            })
+            .await
+            .expect("resource catalog failed")
+            .into_inner();
+        let echo = catalog
+            .resources
+            .iter()
+            .find(|resource| resource.name == "echo")
+            .expect("catalog should contain the echo agent");
+        assert_eq!(echo.kind, "Agent");
+        assert_eq!(echo.revision.len(), 64);
     })
     .await
     .expect("test timed out");

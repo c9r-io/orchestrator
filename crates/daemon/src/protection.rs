@@ -932,6 +932,7 @@ fn rpc_from_path(path: &str) -> Option<&'static str> {
         }
         "/orchestrator.OrchestratorService/Apply" => Some("Apply"),
         "/orchestrator.OrchestratorService/Get" => Some("Get"),
+        "/orchestrator.OrchestratorService/ResourceCatalogList" => Some("ResourceCatalogList"),
         "/orchestrator.OrchestratorService/Describe" => Some("Describe"),
         "/orchestrator.OrchestratorService/Delete" => Some("Delete"),
         "/orchestrator.OrchestratorService/StoreGet" => Some("StoreGet"),

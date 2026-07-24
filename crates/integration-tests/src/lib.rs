@@ -1310,6 +1310,39 @@ impl OrchestratorService for TestOrchestratorServer {
         }))
     }
 
+    async fn resource_catalog_list(
+        &self,
+        request: Request<ResourceCatalogListRequest>,
+    ) -> Result<Response<ResourceCatalogListResponse>, Status> {
+        let req = request.into_inner();
+        let page = agent_orchestrator::service::resource::list_resource_summaries(
+            &self.state,
+            &req.resource_type,
+            req.project.as_deref(),
+            req.cursor.as_deref(),
+            if req.limit == 0 {
+                100
+            } else {
+                req.limit as usize
+            },
+        )
+        .map_err(map_core_error)?;
+        Ok(Response::new(ResourceCatalogListResponse {
+            resources: page
+                .resources
+                .into_iter()
+                .map(|resource| ResourceSummary {
+                    kind: resource.kind,
+                    name: resource.name,
+                    project_id: resource.project_id,
+                    revision: resource.revision,
+                    source: Some(resource.source),
+                })
+                .collect(),
+            next_cursor: page.next_cursor,
+        }))
+    }
+
     async fn describe(
         &self,
         request: Request<DescribeRequest>,
@@ -1325,6 +1358,7 @@ impl OrchestratorService for TestOrchestratorServer {
         Ok(Response::new(DescribeResponse {
             content,
             format: req.output_format,
+            resource: None,
         }))
     }
 

@@ -254,9 +254,30 @@ body {
 .section-nav { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
 .section-nav .btn { justify-content: flex-start; text-align: left; }
 .system-panel { min-width: 0; }
+.expert-resources { min-height: 280px; }
+.resource-kind-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 16px; }
+.resource-kind-tabs .btn { padding: 6px 11px; font-size: 12px; }
+.resource-feedback { margin: 0 0 12px; padding: 9px 11px; border-radius: 10px; background: var(--accent-tint); color: var(--text-secondary); font-size: 13px; }
+.resource-error { background: var(--danger-tint); color: var(--danger); }
+.resource-success { color: var(--success); }
+.resource-catalog { overflow: hidden; margin: 0 0 12px; padding: 0; list-style: none; border: 1px solid var(--glass-border-subtle); border-radius: 14px; background: var(--bg-secondary); }
+.resource-catalog li + li { border-top: 1px solid var(--glass-border-subtle); }
+.resource-row { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px; border: 0; background: transparent; color: var(--text-primary); text-align: left; cursor: pointer; }
+.resource-row:hover { background: var(--accent-tint); }
+.resource-row > span { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.resource-row small { color: var(--text-tertiary); }
+.resource-row code { color: var(--text-secondary); font-size: 11px; }
+.resource-detail { display: flex; flex-direction: column; gap: 12px; }
+.resource-detail > .btn { align-self: flex-start; }
+.resource-manifest { max-height: 420px; overflow: auto; margin: 0; padding: 14px; border: 1px solid var(--glass-border-subtle); border-radius: 12px; background: var(--bg-secondary); color: var(--text-primary); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.55; }
+.resource-editor { display: flex; flex-direction: column; gap: 8px; }
+.resource-editor label { color: var(--text-secondary); font-size: 13px; font-weight: 600; }
+.resource-editor textarea { width: 100%; min-height: 320px; padding: 12px; resize: vertical; border: 1px solid var(--glass-border-subtle); border-radius: 12px; background: var(--bg-secondary); color: var(--text-primary); font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.resource-editor textarea:focus { border-color: var(--accent); }
 
 @supports not (backdrop-filter: blur(24px)) {
   .console-sidebar { background: var(--bg-secondary); }
+  .resource-catalog, .resource-manifest, .resource-editor textarea { background: var(--bg-secondary); }
 }
 
 .page-title {

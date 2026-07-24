@@ -30,6 +30,26 @@ fn labeled_bundle_manifest(project: &str, workspace_root: &str) -> String {
     )
 }
 
+fn expert_resource_extensions_manifest() -> &'static str {
+    "apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: reviewed-step
+spec:
+  description: Reviewed expert resource fixture
+  prompt: Review the selected resource.
+---
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: reviewed-profile
+spec:
+  mode: sandbox
+  fs_mode: workspace_readonly
+  network_mode: deny
+"
+}
+
 #[test]
 fn apply_without_prune_keeps_existing_resources_not_in_manifest() {
     let mut fixture = TestState::new();
@@ -268,6 +288,19 @@ fn get_resource_supports_named_queries_describe_and_selector_helpers() {
     .expect("get named workspace");
     assert!(named.contains(&format!("work_dir: {ws_root_str}")));
 
+    let editable = describe_resource(
+        &state,
+        "workspace/labeled-ws",
+        "yaml",
+        Some(crate::config::DEFAULT_PROJECT_ID),
+    )
+    .expect("describe editable workspace");
+    let parsed = crate::resource::parse_manifests_from_yaml(&editable)
+        .expect("described builtin must remain an apply-compatible manifest");
+    assert_eq!(parsed.len(), 1);
+    assert!(editable.contains("apiVersion: orchestrator.dev/v2"));
+    assert!(!editable.contains("generation:"));
+
     let listed = get_resource(
         &state,
         "workspaces",
@@ -327,6 +360,128 @@ fn get_resource_supports_named_queries_describe_and_selector_helpers() {
         invalid_selector
             .to_string()
             .contains("invalid label selector")
+    );
+}
+
+#[test]
+fn expert_resource_catalog_is_structured_bounded_and_revision_stable() {
+    let mut fixture = TestState::new();
+    let state = fixture.build();
+    let ws_root = state.data_dir.join("workspace/default");
+    let ws_root_str = ws_root.to_string_lossy();
+
+    apply_manifests(
+        &state,
+        &labeled_bundle_manifest(crate::config::DEFAULT_PROJECT_ID, &ws_root_str),
+        false,
+        Some(crate::config::DEFAULT_PROJECT_ID),
+        false,
+    )
+    .expect("seed base expert resources");
+    apply_manifests(
+        &state,
+        expert_resource_extensions_manifest(),
+        false,
+        Some(crate::config::DEFAULT_PROJECT_ID),
+        false,
+    )
+    .expect("seed step template and execution profile");
+
+    let first_page = list_resource_summaries(
+        &state,
+        "workspaces",
+        Some(crate::config::DEFAULT_PROJECT_ID),
+        None,
+        1,
+    )
+    .expect("first catalog page");
+    assert_eq!(first_page.resources.len(), 1);
+    let cursor = first_page.next_cursor.expect("bounded page cursor");
+    let second_page = list_resource_summaries(
+        &state,
+        "workspaces",
+        Some(crate::config::DEFAULT_PROJECT_ID),
+        Some(&cursor),
+        100,
+    )
+    .expect("second catalog page");
+    assert!(!second_page.resources.is_empty());
+    assert!(
+        second_page
+            .resources
+            .iter()
+            .all(|resource| resource.name > cursor)
+    );
+
+    for (query, kind, expected_name) in [
+        ("workspaces", "Workspace", "labeled-ws"),
+        ("workflows", "Workflow", "labeled-workflow"),
+        ("agents", "Agent", "labeled-agent"),
+        ("steptemplates", "StepTemplate", "reviewed-step"),
+        ("executionprofiles", "ExecutionProfile", "reviewed-profile"),
+    ] {
+        let page = list_resource_summaries(
+            &state,
+            query,
+            Some(crate::config::DEFAULT_PROJECT_ID),
+            None,
+            100,
+        )
+        .expect("catalog kind");
+        let summary = page
+            .resources
+            .iter()
+            .find(|resource| resource.name == expected_name)
+            .expect("expected resource summary");
+        assert_eq!(summary.kind, kind);
+        assert_eq!(summary.project_id, crate::config::DEFAULT_PROJECT_ID);
+        assert_eq!(summary.revision.len(), 64);
+    }
+
+    let step = get_resource(
+        &state,
+        "steptemplate/reviewed-step",
+        None,
+        "yaml",
+        Some(crate::config::DEFAULT_PROJECT_ID),
+    )
+    .expect("named step template");
+    assert!(step.contains("Review the selected resource"));
+    let profile = get_resource(
+        &state,
+        "executionprofile/reviewed-profile",
+        None,
+        "yaml",
+        Some(crate::config::DEFAULT_PROJECT_ID),
+    )
+    .expect("named execution profile");
+    assert!(profile.contains("workspace_readonly"));
+
+    let described_revision = resource_content_revision(
+        &describe_resource(
+            &state,
+            "workspace/labeled-ws",
+            "yaml",
+            Some(crate::config::DEFAULT_PROJECT_ID),
+        )
+        .expect("describe labeled workspace"),
+    )
+    .expect("describe revision");
+    let current_revision = current_resource_revision(
+        &state,
+        crate::cli_types::ResourceKind::Workspace,
+        "labeled-ws",
+        Some(crate::config::DEFAULT_PROJECT_ID),
+    )
+    .expect("current revision")
+    .expect("existing workspace");
+    assert_eq!(described_revision, current_revision);
+
+    let ordered = "kind: Workspace\nmetadata:\n  name: stable\n";
+    let reordered = "metadata:\n  name: stable\nkind: Workspace\n";
+    assert_eq!(
+        resource_content_revision(ordered).expect("ordered hash"),
+        resource_content_revision(reordered).expect("reordered hash")
     );
 }
 

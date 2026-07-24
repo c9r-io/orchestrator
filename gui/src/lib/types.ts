@@ -69,6 +69,28 @@ export interface ResourceResult {
   format: string;
 }
 
+export interface ResourceSummary {
+  kind: string;
+  name: string;
+  project_id: string;
+  revision: string;
+  source: string | null;
+}
+
+export interface ResourceCatalogResult {
+  resources: ResourceSummary[];
+  next_cursor: string | null;
+}
+
+export interface ResourceDescribeResult extends ResourceResult {
+  resource: ResourceSummary | null;
+}
+
+export interface ResourceApplyResult {
+  message: string;
+  request_id: string | null;
+}
+
 export interface AgentInfo {
   name: string;
   enabled: boolean;

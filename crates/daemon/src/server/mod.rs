@@ -745,6 +745,13 @@ impl OrchestratorService for OrchestratorServer {
         resource::get(self, request).await
     }
 
+    async fn resource_catalog_list(
+        &self,
+        request: Request<ResourceCatalogListRequest>,
+    ) -> Result<Response<ResourceCatalogListResponse>, Status> {
+        resource::catalog_list(self, request).await
+    }
+
     async fn describe(
         &self,
         request: Request<DescribeRequest>,

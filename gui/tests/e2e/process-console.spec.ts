@@ -46,6 +46,14 @@ async function installTauriMock(
     const dedicatedConnection = { ...sharedConnection, id: "conn-dedicated-1", display_label: "Private Product Slack", provisioning_mode: "managed_dedicated", app_ownership: "workspace", app_id_digest: "dedicated-app-digest", manifest_version: "orchestrator-slack-dedicated-v1", provision_state: "completed", installation_id: "installation-dedicated-1", version: sourceConnectionMode === "dedicated_disconnected" ? 4 : 3, state: sourceConnectionMode === "dedicated_disconnected" ? "disconnected" : "active", disconnected_at: sourceConnectionMode === "dedicated_disconnected" ? "2026-07-18T02:00:00Z" : null };
     const sourceConnections = sourceConnectionMode === "shared" ? [sharedConnection] : [dedicatedConnection];
     let session = { session_id: "session-1", task_id: "task-1", task_item_id: null, step_id: "test", agent_id: "coder", state: "detached", pid: 42, writer_client_id: null as string | null, writer_actor: null as string | null, writer_lease_expires_at: null as string | null, state_version: 1 };
+    const expertResources: Record<string, Array<{ kind: string; name: string; project_id: string; revision: string; source: string }>> = {
+      workspaces: [{ kind: "Workspace", name: "default", project_id: "default", revision: "a".repeat(64), source: "resource_store" }],
+      workflows: [{ kind: "Workflow", name: "delivery-loop", project_id: "default", revision: "b".repeat(64), source: "resource_store" }],
+      agents: [{ kind: "Agent", name: "coder", project_id: "default", revision: "c".repeat(64), source: "resource_store" }],
+      steptemplates: [{ kind: "StepTemplate", name: "implement", project_id: "default", revision: "d".repeat(64), source: "resource_store" }],
+      executionprofiles: [{ kind: "ExecutionProfile", name: "sandbox", project_id: "default", revision: "e".repeat(64), source: "resource_store" }],
+    };
+    let expertManifest = "apiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: default\nspec:\n  workDir: workspace/default\n";
     const invoke = async (command: string, args: Record<string, unknown> = {}) => {
       processCalls.push({ command, args });
       if (command === "plugin:event|listen") { listeners.set(String(args.event), Number(args.handler)); return nextId++; }
@@ -58,6 +66,12 @@ async function installTauriMock(
       }
       if (command === "probe_role") return roleName;
       if (command === "agent_list") return [];
+      if (command === "resource_list") return { resources: expertResources[String(args.resourceType)] ?? [], next_cursor: null };
+      if (command === "resource_describe") {
+        const path = String(args.resource);
+        const summary = Object.values(expertResources).flat().find((resource) => `${resource.kind.toLowerCase()}/${resource.name}` === path);
+        return { content: path === "workspace/default" ? expertManifest : `kind: ${summary?.kind}\nmetadata:\n  name: ${summary?.name}\n`, format: "yaml", resource: summary ?? null };
+      }
       if (command === "process_metric_record") return true;
       if (command === "process_metrics_get") {
         const metric = (name: string, value: number, sampleCount = 1, extra: Record<string, unknown> = {}) => ({
@@ -131,7 +145,15 @@ async function installTauriMock(
       if (command === "manifest_validate") return { valid: true, errors: [], message: "valid", diagnostics: [] };
       if (command === "source_task_template_preview") return { name: String(args.name), skill_name: "docs", skill_invocation: "$docs", skill_args: [], goal: `$docs: inspect ${String(args.message_url)}`, workflow: "analysis", workspace: "main", start: false, initial_vars: {}, revision: "draft", warnings: ["sample_url_not_verified_against_installation"] };
       if (command === "source_task_binding_simulate") return { status: "matched", reason: "binding_matched", resolved_role: "operator", binding_id: "analyze-badge", template_ref: "analyze", binding_revision: "draft" };
-      if (["resource_apply", "source_task_binding_suspend", "source_task_binding_resume", "source_automation_replay", "source_automation_ignore", "start_source_automation_watch", "stop_source_automation_watch"].includes(command)) return automationRoute;
+      if (command === "resource_apply") {
+        if (String(args.content).includes("kind: Workspace")) {
+          expertManifest = String(args.content);
+          expertResources.workspaces[0] = { ...expertResources.workspaces[0], revision: "f".repeat(64) };
+          return { message: "updated workspace default", request_id: "req-expert-resource-119" };
+        }
+        return automationRoute;
+      }
+      if (["source_task_binding_suspend", "source_task_binding_resume", "source_automation_replay", "source_automation_ignore", "start_source_automation_watch", "stop_source_automation_watch"].includes(command)) return automationRoute;
       if (command === "source_automation_list") return { routes: [automationRoute].filter((route) => !args.route_state || route.status === args.route_state).filter((route) => !args.binding_name || route.binding_name === args.binding_name).filter((route) => !args.task_id || route.task_id === args.task_id), next_page_token: null };
       if (command === "source_automation_status_get") return { project_id: "default", backlog_count: 1, oldest_age_seconds: 30, active_leases: 0, retrying_count: 0, needs_attention_count: 1, failure_categories: [["internal", 1]] };
       if (command === "source_automation_get") return { route: automationRoute, attempts: [{ attempt_no: 1, generation: 1, started_at: automationRoute.created_at, completed_at: automationRoute.updated_at, result_state: automationRoute.status, error_code: automationRoute.error_code, error_category: automationRoute.error_category, retry_after_seconds: null }] };
@@ -239,6 +261,64 @@ test("reduced-motion preference suppresses UI transitions", async ({ page }) => 
   await page.goto("/");
   const duration = await page.getByRole("button", { name: "Refresh snapshot" }).evaluate((element) => getComputedStyle(element).transitionDuration);
   expect(Number.parseFloat(duration)).toBeLessThanOrEqual(0.00001);
+});
+
+test("read-only users reach all resource catalogs and open details with the keyboard", async ({ page }) => {
+  await installTauriMock(page, "read_only");
+  await page.goto("/");
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: /System/ }).click();
+  await page.getByRole("button", { name: "Workflows & Resources" }).click();
+
+  const workspace = page.getByRole("button", { name: "打开 Workspace default" });
+  await expect(workspace).toBeVisible();
+  await workspace.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: "Workspace/default" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "复制" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "编辑" })).toHaveCount(0);
+  await page.getByRole("button", { name: "← 返回列表" }).click();
+  await expect(page.getByRole("button", { name: "打开 Workspace default" })).toBeFocused();
+
+  for (const [tab, row] of [
+    ["Workflows", "打开 Workflow delivery-loop"],
+    ["Agents", "打开 Agent coder"],
+    ["Step Templates", "打开 StepTemplate implement"],
+    ["Execution Profiles", "打开 ExecutionProfile sandbox"],
+  ]) {
+    await page.getByRole("tab", { name: tab, exact: true }).click();
+    await expect(page.getByRole("button", { name: row })).toBeVisible();
+  }
+  expect((await new AxeBuilder({ page }).analyze()).violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))).toEqual([]);
+});
+
+test("operator resource editing is reviewed, revision-fenced, audited, and focus-safe", async ({ page }) => {
+  await installTauriMock(page, "operator");
+  await page.goto("/#/system/resources");
+  await page.getByRole("button", { name: "打开 Workspace default" }).click();
+  await page.getByRole("button", { name: "编辑" }).click();
+  const editor = page.getByLabel("资源 Manifest");
+  await editor.fill("apiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: default\nspec:\n  workDir: workspace/reviewed\n");
+  const apply = page.getByRole("button", { name: "应用" });
+  await apply.click();
+  const dialog = page.getByRole("dialog", { name: "确认应用资源变更" });
+  await expect(dialog.getByLabel("Audit reason")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(apply).toBeFocused();
+
+  await apply.click();
+  await dialog.getByLabel("Audit reason").fill("reviewed resource workspace change");
+  await dialog.getByRole("button", { name: "应用已审查变更" }).click();
+  await expect(page.getByRole("status")).toContainText("req-expert-resource-119");
+  await expect(page.getByText(/workspace\/reviewed/)).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as any).__PROCESS_TEST__.calls.find((call: any) =>
+    call.command === "resource_apply" && String(call.args.content).includes("workspace/reviewed"),
+  )?.args)).toMatchObject({
+    project_id: "default",
+    expected_revision: "a".repeat(64),
+    require_absent: false,
+    reason: "reviewed resource workspace change",
+  });
+  expect((await new AxeBuilder({ page }).analyze()).violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))).toEqual([]);
 });
 
 test("Slack connections presents explicit provisioning choices and starts resumable OAuth", async ({ page }) => {

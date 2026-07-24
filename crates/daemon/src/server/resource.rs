@@ -4,6 +4,13 @@ use tonic::{Request, Response, Status};
 
 use super::{OrchestratorServer, map_core_error};
 
+#[derive(Debug, Clone)]
+struct ApplyResourceDescriptor {
+    kind: agent_orchestrator::cli_types::ResourceKind,
+    kind_name: String,
+    name: String,
+}
+
 pub(crate) async fn apply(
     server: &OrchestratorServer,
     mut request: Request<ApplyRequest>,
@@ -20,13 +27,7 @@ pub(crate) async fn apply(
         super::authorize(server, &request, "ApplyPluginCrd").map_err(Status::from)?;
     }
 
-    let audited_mutation = if request.get_ref().dry_run {
-        None
-    } else if contains_driver_raw_args {
-        Some(("agent_driver", "agent.driver.raw_args.apply"))
-    } else {
-        source_resource_apply_kind(&request.get_ref().content)
-    };
+    let resource_descriptor = single_builtin_apply_descriptor(&request.get_ref().content).ok();
     let project_id = request
         .get_ref()
         .project
@@ -40,18 +41,51 @@ pub(crate) async fn apply(
     let context = request.get_ref().audit.clone();
     let expected_revision = request.get_ref().expected_revision.clone();
     let require_absent = request.get_ref().require_absent;
-    if expected_revision.is_some() || require_absent {
-        validate_source_resource_revision(
-            server,
-            &request.get_ref().content,
-            &project_id,
-            expected_revision.as_deref(),
-            require_absent,
-        )?;
-    }
     let dry_run = request.get_ref().dry_run;
     let prune = request.get_ref().prune;
-    let attempt = if let Some((target_type, action)) = audited_mutation {
+    let audited_mutation = !dry_run
+        && (context.is_some()
+            || contains_driver_raw_args
+            || resource_descriptor.as_ref().is_some_and(|descriptor| {
+                matches!(
+                    descriptor.kind,
+                    agent_orchestrator::cli_types::ResourceKind::SourceTaskTemplate
+                        | agent_orchestrator::cli_types::ResourceKind::SourceTaskBinding
+                )
+            }));
+    let target_type = resource_descriptor
+        .as_ref()
+        .map(|descriptor| match descriptor.kind {
+            agent_orchestrator::cli_types::ResourceKind::SourceTaskTemplate => {
+                "source_task_template"
+            }
+            agent_orchestrator::cli_types::ResourceKind::SourceTaskBinding => "source_task_binding",
+            agent_orchestrator::cli_types::ResourceKind::Agent if contains_driver_raw_args => {
+                "agent_driver"
+            }
+            _ => "resource",
+        })
+        .unwrap_or("resource_manifest");
+    let action = resource_descriptor
+        .as_ref()
+        .map(|descriptor| match descriptor.kind {
+            agent_orchestrator::cli_types::ResourceKind::SourceTaskTemplate => {
+                "source.template.apply"
+            }
+            agent_orchestrator::cli_types::ResourceKind::SourceTaskBinding => {
+                "source.binding.apply"
+            }
+            agent_orchestrator::cli_types::ResourceKind::Agent if contains_driver_raw_args => {
+                "agent.driver.raw_args.apply"
+            }
+            _ => "resource.apply",
+        })
+        .unwrap_or("resource.apply");
+    let target_id = resource_descriptor
+        .as_ref()
+        .map(|descriptor| format!("{}/{}", descriptor.kind_name, descriptor.name))
+        .unwrap_or_else(|| format!("manifest:{}", &content_hash[..16]));
+    let attempt = if audited_mutation {
         Some(
             super::action_audit::begin(
                 server,
@@ -61,7 +95,7 @@ pub(crate) async fn apply(
                 super::action_audit::ActionDescriptor {
                     project_id: &project_id,
                     target_type,
-                    target_id: &format!("manifest:{}", &content_hash[..16]),
+                    target_id: &target_id,
                     action,
                     expected_version: expected_revision.clone(),
                     fencing_token: None,
@@ -88,6 +122,21 @@ pub(crate) async fn apply(
         return Err(replayed.status(Status::already_exists(
             "matching audited resource apply already exists",
         )));
+    }
+    if expected_revision.is_some() || require_absent {
+        let revision_result = validate_resource_revision(
+            server,
+            resource_descriptor.as_ref(),
+            &project_id,
+            expected_revision.as_deref(),
+            require_absent,
+        );
+        if let Err(status) = revision_result {
+            return Err(match attempt {
+                Some(attempt) => attempt.failed(server, status).await,
+                None => status,
+            });
+        }
     }
     let req = request.into_inner();
     let result = agent_orchestrator::service::resource::apply_manifests(
@@ -153,61 +202,27 @@ fn manifests_contain_driver_raw_args(content: &str) -> bool {
     })
 }
 
-fn validate_source_resource_revision(
+fn validate_resource_revision(
     server: &OrchestratorServer,
-    content: &str,
+    descriptor: Option<&ApplyResourceDescriptor>,
     project_id: &str,
     expected_revision: Option<&str>,
     require_absent: bool,
 ) -> Result<(), Status> {
-    use agent_orchestrator::resource::{RegisteredResource, Resource};
-
-    let manifests = agent_orchestrator::resource::parse_manifests_from_yaml(content)
-        .map_err(|error| Status::invalid_argument(error.to_string()))?;
-    if manifests.len() != 1 {
-        return Err(Status::invalid_argument(
-            "optimistic source apply requires exactly one manifest",
-        ));
-    }
-    let manifest = manifests
-        .into_iter()
-        .next()
-        .ok_or_else(|| Status::invalid_argument("optimistic source apply requires one manifest"))?;
-    let agent_orchestrator::crd::ParsedManifest::Builtin(resource) = manifest else {
-        return Err(Status::invalid_argument(
-            "optimistic source apply supports SourceTaskTemplate or SourceTaskBinding",
-        ));
-    };
-    let registered = agent_orchestrator::resource::dispatch_resource(*resource)
-        .map_err(|error| Status::invalid_argument(error.to_string()))?;
-    let (kind, name) = match &registered {
-        RegisteredResource::SourceTaskTemplate(_) => ("SourceTaskTemplate", registered.name()),
-        RegisteredResource::SourceTaskBinding(_) => ("SourceTaskBinding", registered.name()),
-        _ => {
-            return Err(Status::invalid_argument(
-                "optimistic source apply supports SourceTaskTemplate or SourceTaskBinding",
-            ));
-        }
-    };
-    let active = agent_orchestrator::config_load::read_active_config(&server.state)
-        .map_err(|error| Status::failed_precondition(error.to_string()))?;
-    let project = active.config.projects.get(project_id);
-    let current = match kind {
-        "SourceTaskTemplate" => project
-            .and_then(|value| value.source_task_templates.get(name))
-            .map(agent_orchestrator::source_task_template::template_content_hash)
-            .transpose()
-            .map_err(|error| Status::internal(error.to_string()))?,
-        "SourceTaskBinding" => project
-            .and_then(|value| value.source_task_bindings.get(name))
-            .map(agent_orchestrator::source_task_binding::binding_content_hash)
-            .transpose()
-            .map_err(|error| Status::internal(error.to_string()))?,
-        _ => None,
-    };
+    let descriptor = descriptor.ok_or_else(|| {
+        Status::invalid_argument("optimistic resource apply requires exactly one builtin manifest")
+    })?;
+    let current = agent_orchestrator::service::resource::current_resource_revision(
+        &server.state,
+        descriptor.kind,
+        &descriptor.name,
+        Some(project_id),
+    )
+    .map_err(map_core_error)?;
     if require_absent && current.is_some() {
         return Err(Status::aborted(format!(
-            "{kind}/{name} was created after the editor loaded; refresh before saving"
+            "{}/{} was created after the editor loaded; refresh before saving",
+            descriptor.kind_name, descriptor.name
         )));
     }
     if let Some(expected) = expected_revision {
@@ -215,12 +230,14 @@ fn validate_source_resource_revision(
             Some(actual) if actual == expected => {}
             Some(_) => {
                 return Err(Status::aborted(format!(
-                    "{kind}/{name} changed after the editor loaded; refresh before saving"
+                    "{}/{} changed after the editor loaded; refresh before saving",
+                    descriptor.kind_name, descriptor.name
                 )));
             }
             None => {
                 return Err(Status::aborted(format!(
-                    "{kind}/{name} no longer exists; refresh before saving"
+                    "{}/{} no longer exists; refresh before saving",
+                    descriptor.kind_name, descriptor.name
                 )));
             }
         }
@@ -228,24 +245,32 @@ fn validate_source_resource_revision(
     Ok(())
 }
 
-fn manifests_contain_source_task_bindings(content: &str) -> bool {
-    content.lines().any(|line| {
-        let trimmed = line.trim();
-        trimmed == "kind: SourceTaskBinding" || trimmed == "kind: 'SourceTaskBinding'"
-    })
-}
+fn single_builtin_apply_descriptor(content: &str) -> Result<ApplyResourceDescriptor, Status> {
+    use agent_orchestrator::resource::Resource;
 
-fn source_resource_apply_kind(content: &str) -> Option<(&'static str, &'static str)> {
-    if manifests_contain_source_task_bindings(content) {
-        Some(("source_task_binding", "source.binding.apply"))
-    } else if content.lines().any(|line| {
-        let trimmed = line.trim();
-        trimmed == "kind: SourceTaskTemplate" || trimmed == "kind: 'SourceTaskTemplate'"
-    }) {
-        Some(("source_task_template", "source.template.apply"))
-    } else {
-        None
+    let manifests = agent_orchestrator::resource::parse_manifests_from_yaml(content)
+        .map_err(|error| Status::invalid_argument(error.to_string()))?;
+    if manifests.len() != 1 {
+        return Err(Status::invalid_argument(
+            "reviewed resource apply requires exactly one manifest",
+        ));
     }
+    let manifest = manifests
+        .into_iter()
+        .next()
+        .ok_or_else(|| Status::invalid_argument("resource apply requires one manifest"))?;
+    let agent_orchestrator::crd::ParsedManifest::Builtin(resource) = manifest else {
+        return Err(Status::invalid_argument(
+            "reviewed resource apply requires one builtin manifest",
+        ));
+    };
+    let registered = agent_orchestrator::resource::dispatch_resource(*resource)
+        .map_err(|error| Status::invalid_argument(error.to_string()))?;
+    Ok(ApplyResourceDescriptor {
+        kind: registered.kind(),
+        kind_name: format!("{:?}", registered.kind()),
+        name: registered.name().to_string(),
+    })
 }
 
 /// Check whether raw YAML content contains CRD manifests with non-empty
@@ -296,6 +321,40 @@ pub(crate) async fn get(
     }))
 }
 
+pub(crate) async fn catalog_list(
+    server: &OrchestratorServer,
+    request: Request<ResourceCatalogListRequest>,
+) -> Result<Response<ResourceCatalogListResponse>, Status> {
+    super::authorize(server, &request, "ResourceCatalogList").map_err(Status::from)?;
+    let req = request.into_inner();
+    let page = agent_orchestrator::service::resource::list_resource_summaries(
+        &server.state,
+        &req.resource_type,
+        req.project.as_deref(),
+        req.cursor.as_deref(),
+        if req.limit == 0 {
+            100
+        } else {
+            req.limit as usize
+        },
+    )
+    .map_err(map_core_error)?;
+    Ok(Response::new(ResourceCatalogListResponse {
+        resources: page
+            .resources
+            .into_iter()
+            .map(|resource| ResourceSummary {
+                kind: resource.kind,
+                name: resource.name,
+                project_id: resource.project_id,
+                revision: resource.revision,
+                source: Some(resource.source),
+            })
+            .collect(),
+        next_cursor: page.next_cursor,
+    }))
+}
+
 pub(crate) async fn describe(
     server: &OrchestratorServer,
     request: Request<DescribeRequest>,
@@ -309,10 +368,51 @@ pub(crate) async fn describe(
         req.project.as_deref(),
     )
     .map_err(map_core_error)?;
+    let summary = describe_summary(
+        &req.resource,
+        req.project
+            .as_deref()
+            .unwrap_or(agent_orchestrator::config::DEFAULT_PROJECT_ID),
+        &content,
+    )
+    .map_err(map_core_error)?;
 
     Ok(Response::new(DescribeResponse {
         content,
         format: req.output_format,
+        resource: summary,
+    }))
+}
+
+fn describe_summary(
+    resource: &str,
+    project_id: &str,
+    content: &str,
+) -> agent_orchestrator::error::Result<Option<ResourceSummary>> {
+    let Some((kind, name)) = resource.split_once('/') else {
+        return Ok(None);
+    };
+    let canonical_kind = match kind {
+        "ws" | "workspace" => "Workspace",
+        "wf" | "workflow" => "Workflow",
+        "agent" => "Agent",
+        "steptemplate" | "step-template" | "step_template" => "StepTemplate",
+        "executionprofile" | "execution-profile" | "execution_profile" => "ExecutionProfile",
+        "trigger" | "tg" => "Trigger",
+        "sourcetasktemplate" | "source-task-template" | "source_task_template" | "stt" => {
+            "SourceTaskTemplate"
+        }
+        "sourcetaskbinding" | "source-task-binding" | "source_task_binding" | "stb" => {
+            "SourceTaskBinding"
+        }
+        _ => return Ok(None),
+    };
+    Ok(Some(ResourceSummary {
+        kind: canonical_kind.to_string(),
+        name: name.to_string(),
+        project_id: project_id.to_string(),
+        revision: agent_orchestrator::service::resource::resource_content_revision(content)?,
+        source: Some("describe_snapshot".to_string()),
     }))
 }
 

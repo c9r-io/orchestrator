@@ -50,6 +50,17 @@ describe("ExpertPanel", () => {
     vi.mocked(invoke).mockReset();
     vi.mocked(invoke).mockImplementation(async (command, args) => {
       switch (command) {
+        case "resource_list":
+          return {
+            resources: [{
+              kind: "Workspace",
+              name: "default",
+              project_id: "default",
+              revision: "a".repeat(64),
+              source: "resource_store",
+            }],
+            next_cursor: null,
+          };
         case "resource_get":
           return { content: `kind: ${(args as { resource?: string })?.resource}`, format: "yaml" };
         case "agent_list":
@@ -130,8 +141,7 @@ describe("ExpertPanel", () => {
     renderAs("admin");
 
     fireEvent.click(screen.getByRole("button", { name: "资源" }));
-    fireEvent.click(screen.getByRole("button", { name: "workspaces" }));
-    expect(await screen.findByText("kind: workspaces")).toBeVisible();
+    expect(await screen.findByRole("button", { name: "打开 Workspace default" })).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Agent" }));
     expect(await screen.findByText("coder")).toBeVisible();

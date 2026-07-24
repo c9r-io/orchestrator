@@ -87,6 +87,7 @@ service OrchestratorService {
   // Resource management
   rpc Apply(ApplyRequest)             returns (ApplyResponse);
   rpc Get(GetRequest)                 returns (GetResponse);
+  rpc ResourceCatalogList(ResourceCatalogListRequest) returns (ResourceCatalogListResponse);
   rpc Describe(DescribeRequest)       returns (DescribeResponse);
   rpc Delete(DeleteRequest)           returns (DeleteResponse);
 
@@ -1282,6 +1283,26 @@ message GetResponse {
   string format = 2;
 }
 
+message ResourceCatalogListRequest {
+  string resource_type = 1;
+  optional string project = 2;
+  optional string cursor = 3;
+  uint32 limit = 4;
+}
+
+message ResourceSummary {
+  string kind = 1;
+  string name = 2;
+  string project_id = 3;
+  string revision = 4;
+  optional string source = 5;
+}
+
+message ResourceCatalogListResponse {
+  repeated ResourceSummary resources = 1;
+  optional string next_cursor = 2;
+}
+
 message DescribeRequest {
   string resource = 1;      // e.g., "workspace/default"
   string output_format = 2;
@@ -1291,6 +1312,7 @@ message DescribeRequest {
 message DescribeResponse {
   string content = 1;
   string format = 2;
+  optional ResourceSummary resource = 3;
 }
 
 message DeleteRequest {

@@ -117,6 +117,7 @@ pub fn run() {
             commands::stream::stop_attention_follow,
             // resource
             commands::resource::resource_get,
+            commands::resource::resource_list,
             commands::resource::resource_describe,
             commands::resource::resource_apply,
             commands::resource::resource_delete,
@@ -176,7 +177,13 @@ mod live_bridge_tests {
                 cmd: command.into(),
                 callback: tauri::ipc::CallbackFn(0),
                 error: tauri::ipc::CallbackFn(1),
-                url: "http://tauri.localhost".parse().expect("url"),
+                url: if cfg!(any(windows, target_os = "android")) {
+                    "http://tauri.localhost"
+                } else {
+                    "tauri://localhost"
+                }
+                .parse()
+                .expect("url"),
                 body: InvokeBody::Json(body),
                 headers: Default::default(),
                 invoke_key: tauri::test::INVOKE_KEY.to_string(),
@@ -190,6 +197,115 @@ mod live_bridge_tests {
             .get(key)
             .and_then(Value::as_str)
             .unwrap_or_else(|| panic!("missing string field {key}: {value}"))
+    }
+
+    #[test]
+    fn live_expert_resources_cross_real_tauri_catalog_describe_apply_and_conflict() {
+        if std::env::var("FR119_LIVE_E2E").as_deref() != Ok("1") {
+            return;
+        }
+        let project = std::env::var("FR119_PROJECT").expect("FR119_PROJECT");
+        let app_state = Arc::new(AppState::new());
+        tauri::async_runtime::block_on(app_state.connect(None))
+            .expect("connect AppState to isolated daemon");
+        let app = tauri::test::mock_builder()
+            .manage(app_state)
+            .invoke_handler(tauri::generate_handler![
+                commands::resource::resource_list,
+                commands::resource::resource_describe,
+                commands::resource::resource_apply,
+            ])
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app");
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("mock webview");
+
+        let catalog = invoke(
+            &webview,
+            "resource_list",
+            json!({
+                "resourceType": "workspaces",
+                "projectId": project,
+                "cursor": null,
+                "limit": 100
+            }),
+        )
+        .expect("catalog through Tauri");
+        let workspace = catalog["resources"]
+            .as_array()
+            .and_then(|resources| {
+                resources
+                    .iter()
+                    .find(|resource| resource["name"] == "fr119-workspace")
+            })
+            .expect("FR-119 workspace summary");
+        assert_eq!(workspace["kind"], "Workspace");
+        let revision = required_string(workspace, "revision").to_string();
+        assert_eq!(revision.len(), 64);
+
+        let described = invoke(
+            &webview,
+            "resource_describe",
+            json!({
+                "resource": "workspace/fr119-workspace",
+                "outputFormat": "yaml",
+                "projectId": project
+            }),
+        )
+        .expect("describe through Tauri");
+        assert_eq!(
+            required_string(&described["resource"], "revision"),
+            revision
+        );
+        let current = required_string(&described, "content");
+        let updated = current
+            .replace("docs/ticket-v1", "docs/ticket-v2")
+            .replace("ticket-v1", "ticket-v2");
+        assert_ne!(
+            updated, current,
+            "fixture must expose the mutable ticket path"
+        );
+        let updated = format!("{updated}\n# qa-resource-sensitive-marker\n");
+        let applied = invoke(
+            &webview,
+            "resource_apply",
+            json!({
+                "content": updated,
+                "project_id": project,
+                "expected_revision": revision,
+                "require_absent": false,
+                "reason": "FR-119 reviewed live resource update",
+                "idempotency_key": "fr119-live-apply"
+            }),
+        )
+        .expect("reviewed apply through Tauri");
+        assert!(
+            required_string(&applied, "message").contains("workspace fr119-workspace"),
+            "{applied}"
+        );
+        let request_id = required_string(&applied, "request_id");
+        assert!(!request_id.is_empty());
+        println!("FR119_APPLY_REQUEST_ID={request_id}");
+
+        let stale = invoke(
+            &webview,
+            "resource_apply",
+            json!({
+                "content": updated,
+                "project_id": project,
+                "expected_revision": revision,
+                "require_absent": false,
+                "reason": "FR-119 prove stale revision rejection",
+                "idempotency_key": "fr119-live-stale"
+            }),
+        )
+        .expect_err("stale reviewed apply must fail");
+        let stale_message = stale.to_string();
+        assert!(stale_message.contains("重新加载"), "{stale_message}");
+        assert!(stale_message.contains("请求 ID"), "{stale_message}");
+        assert!(!stale_message.contains("qa-resource-sensitive-marker"));
+        println!("FR119_STALE_REJECTED=1");
     }
 
     #[test]
