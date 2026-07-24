@@ -1,0 +1,369 @@
+{
+  "schemaVersion": 1,
+  "decision": {
+    "typedState": "closed-not-deferred",
+    "reference": "docs/design_doc/orchestrator/130-coordination-collapse-mcp-tools.md"
+  },
+  "productionRoots": [
+    "docs/workflow",
+    "config"
+  ],
+  "preservedChannels": [
+    {
+      "name": "goal",
+      "classification": "user-intent"
+    },
+    {
+      "name": "last_sandbox_denied",
+      "classification": "safety-signal"
+    },
+    {
+      "name": "sandbox_denied_count",
+      "classification": "safety-signal"
+    },
+    {
+      "name": "last_sandbox_denial_reason",
+      "classification": "safety-signal"
+    }
+  ],
+  "sourceBaseline": {
+    "scope": "non-test Rust source under core/src and crates/*/src plus member Cargo.toml manifests",
+    "capturesOrJsonPath": 143,
+    "pipelineVariables": 47,
+    "celInterpreter": 9
+  },
+  "retirement": {
+    "freeze": {
+      "requires": [
+        "machine-readable production consumer inventory",
+        "new coordination consumers rejected by the ratchet"
+      ]
+    },
+    "deprecate": {
+      "requires": [
+        "zero production coordination consumers for the channel",
+        "independent legacy/tool parity evidence for every migrated workflow"
+      ]
+    },
+    "remove": {
+      "requires": [
+        "deprecation requirements remain true for the compatibility window",
+        "legacy fixture regression and rollback evidence are retained",
+        "workspace tests, strict Clippy, and boundary coverage governance pass"
+      ]
+    },
+    "shellRunnerExecutor": {
+      "state": "frozen",
+      "removeAfter": "all non-governance production workflows have independent tool-path parity evidence"
+    }
+  },
+  "workflows": [
+    {
+      "file": "docs/workflow/command-rules.yaml",
+      "name": "command_rules",
+      "classification": "tool-migratable",
+      "status": "pending",
+      "evidence": null,
+      "approvedTouches": [
+        {
+          "step": "create_session",
+          "kind": "capture",
+          "name": "loop_session_id",
+          "json_path": "$.session_id"
+        },
+        {
+          "step": "qa_testing",
+          "kind": "step_vars",
+          "names": [
+            "loop_session_id"
+          ]
+        }
+      ],
+      "residualChannels": [
+        "goal"
+      ]
+    },
+    {
+      "file": "docs/workflow/fr-watch.yaml",
+      "name": "fr_governance",
+      "classification": "governance-only",
+      "status": "classified",
+      "evidence": null,
+      "approvedTouches": [],
+      "residualChannels": [
+        "goal"
+      ]
+    },
+    {
+      "file": "docs/workflow/full-qa.yaml",
+      "name": "full-qa",
+      "classification": "hybrid",
+      "status": "pending",
+      "evidence": null,
+      "approvedTouches": [
+        {
+          "step": "qa_testing",
+          "kind": "prehook",
+          "engine": "cel",
+          "expression": "qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && (self_referential_safe || size(self_referential_safe_scenarios) > 0)"
+        },
+        {
+          "step": "ticket_fix",
+          "kind": "prehook",
+          "engine": "cel",
+          "expression": "qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && active_ticket_count > 0"
+        },
+        {
+          "step": "self_test",
+          "kind": "builtin",
+          "name": "self_test"
+        },
+        {
+          "step": "loop_guard",
+          "kind": "builtin",
+          "name": "loop_guard"
+        }
+      ],
+      "residualChannels": [
+        "goal",
+        "last_sandbox_denied",
+        "sandbox_denied_count",
+        "last_sandbox_denial_reason"
+      ]
+    },
+    {
+      "file": "docs/workflow/hello-world.yaml",
+      "name": "hello",
+      "classification": "governance-only",
+      "status": "classified",
+      "evidence": null,
+      "approvedTouches": [],
+      "residualChannels": [
+        "goal"
+      ]
+    },
+    {
+      "file": "docs/workflow/plan-execute.yaml",
+      "name": "plan_execute",
+      "classification": "tool-migratable",
+      "status": "pending",
+      "evidence": null,
+      "approvedTouches": [],
+      "residualChannels": [
+        "goal"
+      ]
+    },
+    {
+      "file": "docs/workflow/promotion.yaml",
+      "name": "promotion",
+      "classification": "hybrid",
+      "status": "pending",
+      "evidence": null,
+      "approvedTouches": [
+        {
+          "step": "analyze_highlights",
+          "kind": "capture",
+          "name": "promotion_summary",
+          "json_path": "$.summary"
+        },
+        {
+          "step": "analyze_highlights",
+          "kind": "post_action",
+          "name": "generate_items",
+          "from_var": "analyze_highlights_output",
+          "json_path": "$.platforms"
+        },
+        {
+          "step": "generate_content",
+          "kind": "capture",
+          "name": "draft_filename",
+          "json_path": "$.filename"
+        },
+        {
+          "step": "generate_content",
+          "kind": "capture",
+          "name": "draft_title",
+          "json_path": "$.title"
+        },
+        {
+          "step": "publish",
+          "kind": "prehook",
+          "engine": "cel",
+          "expression": "api_publishable == \"true\""
+        },
+        {
+          "step": "loop_guard",
+          "kind": "builtin",
+          "name": "loop_guard"
+        }
+      ],
+      "residualChannels": [
+        "goal"
+      ]
+    },
+    {
+      "file": "docs/workflow/qa-loop.yaml",
+      "name": "qa_loop",
+      "classification": "tool-migratable",
+      "status": "pending",
+      "evidence": null,
+      "approvedTouches": [
+        {
+          "step": "ticket_scan",
+          "kind": "builtin",
+          "name": "ticket_scan"
+        }
+      ],
+      "residualChannels": [
+        "goal",
+        "last_sandbox_denied",
+        "sandbox_denied_count",
+        "last_sandbox_denial_reason"
+      ]
+    },
+    {
+      "file": "docs/workflow/scheduled-scan.yaml",
+      "name": "scheduled_scan",
+      "classification": "governance-only",
+      "status": "classified",
+      "evidence": null,
+      "approvedTouches": [],
+      "residualChannels": [
+        "goal"
+      ]
+    },
+    {
+      "file": "docs/workflow/self-bootstrap.yaml",
+      "name": "self-bootstrap",
+      "classification": "hybrid",
+      "status": "pending",
+      "evidence": null,
+      "approvedTouches": [
+        {
+          "step": "qa_doc_gen",
+          "kind": "capture",
+          "name": "regression_target_ids",
+          "json_path": "$.regression_targets[*]"
+        },
+        {
+          "step": "qa_doc_gen",
+          "kind": "post_action",
+          "name": "generate_items",
+          "from_var": "regression_target_ids",
+          "json_path": "$"
+        },
+        {
+          "step": "self_test",
+          "kind": "builtin",
+          "name": "self_test"
+        },
+        {
+          "step": "self_restart",
+          "kind": "builtin",
+          "name": "self_restart"
+        },
+        {
+          "step": "qa_testing",
+          "kind": "prehook",
+          "engine": "cel",
+          "expression": "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && (self_referential_safe || size(self_referential_safe_scenarios) > 0) && (size(regression_target_ids) == 0 || qa_file_path in regression_target_ids)"
+        },
+        {
+          "step": "ticket_fix",
+          "kind": "prehook",
+          "engine": "cel",
+          "expression": "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && active_ticket_count > 0"
+        },
+        {
+          "step": "align_tests",
+          "kind": "prehook",
+          "engine": "cel",
+          "expression": "is_last_cycle"
+        },
+        {
+          "step": "doc_governance",
+          "kind": "prehook",
+          "engine": "cel",
+          "expression": "is_last_cycle"
+        },
+        {
+          "step": "loop_guard",
+          "kind": "builtin",
+          "name": "loop_guard"
+        }
+      ],
+      "residualChannels": [
+        "goal",
+        "last_sandbox_denied",
+        "sandbox_denied_count",
+        "last_sandbox_denial_reason"
+      ]
+    },
+    {
+      "file": "docs/workflow/self-evolution.yaml",
+      "name": "self-evolution",
+      "classification": "hybrid",
+      "status": "pending",
+      "evidence": null,
+      "approvedTouches": [
+        {
+          "step": "evo_plan",
+          "kind": "post_action",
+          "name": "generate_items",
+          "from_var": "evo_plan_output",
+          "json_path": "$.candidates"
+        },
+        {
+          "step": "evo_benchmark",
+          "kind": "capture",
+          "name": "score",
+          "json_path": "$.total_score"
+        },
+        {
+          "step": "select_best",
+          "kind": "builtin",
+          "name": "item_select"
+        },
+        {
+          "step": "self_test",
+          "kind": "builtin",
+          "name": "self_test"
+        },
+        {
+          "step": "loop_guard",
+          "kind": "builtin",
+          "name": "loop_guard"
+        }
+      ],
+      "residualChannels": [
+        "goal",
+        "last_sandbox_denied",
+        "sandbox_denied_count",
+        "last_sandbox_denial_reason"
+      ]
+    },
+    {
+      "file": "docs/workflow/streaming-mark-done-convergence.yaml",
+      "name": "mark_done_convergence",
+      "classification": "governance-only",
+      "status": "classified",
+      "evidence": "docs/qa/orchestrator/168-coordination-collapse-mcp-tools.md",
+      "approvedTouches": [
+        {
+          "step": "loop_guard",
+          "kind": "builtin",
+          "name": "loop_guard"
+        },
+        {
+          "step": "$loop[0]",
+          "kind": "convergence",
+          "engine": "cel",
+          "expression": "'mark_done' in tools_called"
+        }
+      ],
+      "residualChannels": [
+        "goal"
+      ]
+    }
+  ]
+}
