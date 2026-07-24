@@ -82,6 +82,7 @@
 | FR-121 | Attention Mutation 错误反馈与权威状态对账 | P1 | Proposed |
 | FR-122 | CLI、Daemon 与 Tauri 边界层覆盖率治理 | P1 | Proposed |
 | FR-123 | 受控 Slack Sandbox 持续认证与证据保鲜 | P1 | Proposed |
+| FR-124 | 协调坍缩 Strangler 迁移收尾与遗留路径退役治理 | P1 | Proposed |
 
 ## 说明
 
