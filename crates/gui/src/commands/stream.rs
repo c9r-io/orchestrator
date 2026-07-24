@@ -52,7 +52,7 @@ pub async fn start_attention_follow(
     task_id: Option<String>,
     active_only: Option<bool>,
     native_notifications_enabled: Option<bool>,
-) -> Result<(), String> {
+) -> Result<(), crate::errors::SafeGrpcError> {
     let mut client = state.client().await?;
     let response = client
         .attention_follow(orchestrator_proto::AttentionFollowRequest {
@@ -67,7 +67,7 @@ pub async fn start_attention_follow(
             active_only: active_only.unwrap_or(false),
         })
         .await
-        .map_err(|error| crate::errors::humanize_grpc_error(&error))?;
+        .map_err(|error| crate::errors::safe_grpc_error(&error))?;
     let mut stream = response.into_inner();
     let cancel = state.register_stream("attention").await;
     let app_state = state.inner().clone();
@@ -127,8 +127,8 @@ pub async fn start_attention_follow(
                         }
                         Ok(None) => break,
                         Err(error) => {
-                            let message = crate::errors::humanize_grpc_error(&error);
-                            let _ = app.emit("stream-error-attention", &message);
+                            let safe_error = crate::errors::safe_grpc_error(&error);
+                            let _ = app.emit("stream-error-attention", &safe_error);
                             break;
                         }
                     }

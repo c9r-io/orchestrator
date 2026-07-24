@@ -29,4 +29,39 @@ describe("recordUiMetric", () => {
     }));
     await Promise.resolve();
   });
+
+  it("records only bounded Attention outcome dimensions in the item project", () => {
+    vi.mocked(invoke).mockResolvedValue(null);
+    recordUiMetric("attention_mutation", {
+      project_id: "project-1",
+      action: "execute",
+      result: "failure",
+      error_category: "conflict",
+    });
+    expect(invoke).toHaveBeenCalledWith("process_metric_record", {
+      project_id: "project-1",
+      metric_name: "attention_mutation_total",
+      dimensions: {
+        action: "execute",
+        result: "failure",
+        error_category: "conflict",
+      },
+      value: 1,
+      source_key: "00000000-0000-4000-8000-000000000003",
+    });
+
+    recordUiMetric("attention_reconciliation", {
+      project_id: "project-1",
+      action: "execute",
+      result: "confirmed",
+      error_category: "must-not-be-recorded",
+    });
+    expect(invoke).toHaveBeenLastCalledWith(
+      "process_metric_record",
+      expect.objectContaining({
+        metric_name: "attention_reconciliation_total",
+        dimensions: { action: "execute", result: "confirmed" },
+      }),
+    );
+  });
 });

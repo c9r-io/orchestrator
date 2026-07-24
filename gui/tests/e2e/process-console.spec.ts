@@ -5,8 +5,9 @@ async function installTauriMock(
   page: Page,
   role: "read_only" | "operator" | "admin" = "operator",
   connectionMode: "shared" | "dedicated" | "dedicated_disconnected" = "shared",
+  attentionClaimConflict = false,
 ) {
-  await page.addInitScript(({ roleName, sourceConnectionMode }) => {
+  await page.addInitScript(({ roleName, sourceConnectionMode, shouldConflictAttentionClaim }) => {
     const callbacks = new Map<number, (payload: unknown) => void>();
     const listeners = new Map<string, number>();
     const sessionCalls: Array<{ command: string; args: Record<string, unknown> }> = [];
@@ -14,6 +15,7 @@ async function installTauriMock(
     let nextId = 1;
     let taskStatus = "failed";
     let updateStatusOnResume = false;
+    let conflictAttentionClaim = shouldConflictAttentionClaim;
     const items = [
       { id: "attention-1", title: "Approval required", taskId: "task-1", severity: "intervention" },
       { id: "attention-2", title: "Choose recovery", taskId: "task-2", severity: "attention" },
@@ -102,6 +104,17 @@ async function installTauriMock(
       }
       if (command === "attention_list") return { items: attentionRows, latest_change_id: 2 };
       if (["attention_claim", "attention_snooze", "attention_resolve"].includes(command)) {
+        if (command === "attention_claim" && conflictAttentionClaim) {
+          conflictAttentionClaim = false;
+          attentionRows = attentionRows.map((item) => item.id === args.id
+            ? { ...item, state: "claimed", assignee: "operator-b", version: 2 }
+            : item);
+          throw {
+            category: "conflict",
+            message: "provider token=must-not-render",
+            request_id: "req-playwright-conflict-121",
+          };
+        }
         const nextState = command === "attention_claim" ? "claimed" : command === "attention_snooze" ? "snoozed" : "resolved";
         const updated = { ...attentionRows.find((item) => item.id === args.id)!, state: nextState, version: 2 };
         attentionRows = attentionRows.map((item) => item.id === args.id ? updated : item);
@@ -192,7 +205,11 @@ async function installTauriMock(
         updateStatusOnResume: () => { updateStatusOnResume = true; },
       },
     });
-  }, { roleName: role, sourceConnectionMode: connectionMode });
+  }, {
+    roleName: role,
+    sourceConnectionMode: connectionMode,
+    shouldConflictAttentionClaim: attentionClaimConflict,
+  });
 }
 
 test("Attention is the default and opens the semantic failed-process workspace", async ({ page }) => {
@@ -610,6 +627,35 @@ test("Attention mutations use guarded commands and resolved work leaves the open
     .map((call: any) => ({ command: call.command, args: call.args })));
   expect(mutationCalls.map((call: any) => call.command)).toEqual(expect.arrayContaining(["attention_claim", "attention_resolve"]));
   expect(mutationCalls.find((call: any) => call.command === "attention_claim").args.idempotency_key).toBeTruthy();
+});
+
+test("Attention conflict preserves the error while reconciling authoritative state and focus", async ({ page }) => {
+  await installTauriMock(page, "operator", "shared", true);
+  await page.goto("/");
+  const claim = page.getByRole("button", { name: "Claim" });
+  await claim.focus();
+  await claim.click();
+
+  const alert = page.getByRole("alert");
+  await expect(alert).toContainText("Claim failed for Approval required");
+  await expect(alert).toContainText("latest daemon state has been restored");
+  await expect(alert).toContainText("req-playwright-conflict-121");
+  await expect(alert).not.toContainText("must-not-render");
+  await expect(page.getByText("operator-b")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Claim", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("listbox", { name: "Attention queue" })).toBeFocused();
+  expect((await new AxeBuilder({ page }).include(".attention-error-panel").analyze()).violations
+    .filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))).toEqual([]);
+
+  const calls = await page.evaluate(() => (window as any).__PROCESS_TEST__.calls);
+  expect(calls.filter((call: any) => call.command === "attention_claim")).toHaveLength(1);
+  expect(calls.filter((call: any) => call.command === "attention_list").length).toBeGreaterThanOrEqual(2);
+  expect(calls.some((call: any) => call.command === "process_metric_record"
+    && call.args.metric_name === "attention_mutation_total"
+    && call.args.dimensions.error_category === "conflict")).toBe(true);
+  expect(calls.some((call: any) => call.command === "process_metric_record"
+    && call.args.metric_name === "attention_reconciliation_total"
+    && call.args.dimensions.result === "confirmed")).toBe(true);
 });
 
 test("Sources supports routing filters, process correlation, and admin-only replay", async ({ page }) => {

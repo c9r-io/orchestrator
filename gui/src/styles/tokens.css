@@ -766,6 +766,32 @@ button:focus-visible {
 .attention-severity-attention { background: var(--warning); }
 .attention-readonly { margin-bottom: 12px; padding: 9px 12px; border-radius: 10px; background: var(--accent-tint); color: var(--accent); font-size: 12px; }
 .attention-error { margin-bottom: 12px; color: var(--danger); }
+.attention-error-panel, .attention-stream-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--danger) 42%, transparent);
+  border-radius: 12px;
+  background: var(--danger-tint);
+  color: var(--text-primary);
+}
+.attention-error-panel strong { color: var(--danger); }
+.attention-error-panel p { margin-top: 4px; font-size: 12px; line-height: 1.45; }
+.attention-error-panel small { display: block; margin-top: 5px; color: var(--text-secondary); }
+.attention-error-panel.is-unconfirmed { border-width: 2px; }
+.attention-reconciliation-state { font-weight: 650; }
+.attention-error-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 7px; }
+.attention-error-panel .btn, .attention-stream-error .btn { padding: 7px 10px; font-size: 12px; }
+.attention-stream-error {
+  padding-block: 8px;
+  border-color: var(--glass-border-subtle);
+  background: var(--accent-tint);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
 .attention-notification-fallback { margin-bottom: 12px; padding: 8px 11px; border: 1px solid var(--glass-border-subtle); border-radius: 10px; background: var(--accent-tint); color: var(--text-secondary); font-size: 12px; }
 .attention-empty { text-align: center; color: var(--text-secondary); }
 .attention-keyboard { margin-top: 14px; text-align: center; }
@@ -902,6 +928,7 @@ button.automation-row { cursor: pointer; }
   .operations-runtime-grid { grid-template-columns: 1fr; }
   .operations-table { display: block; overflow-x: auto; }
   .attention-header { align-items: flex-start; flex-direction: column; }
+  .attention-error-panel, .attention-stream-error { align-items: stretch; flex-direction: column; }
   .attention-workbench { grid-template-columns: 1fr; overflow: visible; }
   .attention-filter-pane { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; border-right: 0; border-bottom: 1px solid var(--glass-border-subtle); }
   .attention-filter-pane h2, .attention-filter-pane .btn { grid-column: 1 / -1; }

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import AttentionInbox from "./AttentionInbox";
 import { RoleContext, hasAccess } from "../hooks/useRole";
+import { recordUiMetric } from "../lib/telemetry";
 import type { AttentionItem, Role } from "../lib/types";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
@@ -25,6 +26,12 @@ function attention(overrides: Partial<AttentionItem> = {}): AttentionItem {
     ...overrides,
   };
 }
+
+const safeError = (category: string, request_id: string | null = null) => ({
+  category,
+  message: "provider token=must-not-render",
+  request_id,
+});
 
 function renderAs(
   role: Role,
@@ -123,10 +130,10 @@ describe("AttentionInbox component", () => {
     act(() => listeners.get("attention-delta")?.({ payload: { kind: "upsert", change_id: 11, item: incoming,
       notification: { title: "New blocker", dedupe_key: "attention-2:1", attention_item_id: "attention-2", item_version: 1, severity: "attention", process_id: "task-2", deep_link: "#/attention/attention-2" } } }));
     expect(screen.getByText("New blocker")).toBeVisible();
-    act(() => listeners.get("stream-error-attention")?.({ payload: "follow disconnected" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("follow disconnected");
+    act(() => listeners.get("stream-error-attention")?.({ payload: safeError("unavailable") }));
+    expect(screen.getAllByRole("status").some((node) => node.textContent?.includes("Live updates are disconnected"))).toBe(true);
     act(() => listeners.get("attention-notification-fallback")?.({ payload: "Open Attention now" }));
-    expect(screen.getByRole("status")).toHaveTextContent("Open Attention now");
+    expect(screen.getAllByRole("status").some((node) => node.textContent?.includes("Open Attention now"))).toBe(true);
   });
 
   it("keeps read-only inspection useful without mutation actions", async () => {
@@ -190,22 +197,147 @@ describe("AttentionInbox component", () => {
     expect(onOpenSourceRoute).toHaveBeenCalledWith("route-2");
   });
 
-  it("reloads authoritative state and remains usable after a failed mutation", async () => {
+  it("keeps a conflict visible while restoring the authoritative item and focus", async () => {
     let listCalls = 0;
     vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "attention_list") {
         listCalls += 1;
         return { items: [current], latest_change_id: 10 + listCalls };
       }
-      if (command === "attention_claim") throw new Error("version conflict");
+      if (command === "attention_claim") {
+        current = { ...current, state: "claimed", assignee: "operator-b", version: 2 };
+        throw safeError("conflict", "req-conflict-121");
+      }
+      return null;
+    });
+    renderAs("operator");
+    await screen.findByText("Retry now?");
+
+    const claim = screen.getByRole("button", { name: "Claim" });
+    claim.focus();
+    fireEvent.click(claim);
+
+    await waitFor(() => expect(listCalls).toBeGreaterThanOrEqual(2));
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("Claim failed for Approval required");
+    expect(alert).toHaveTextContent("latest daemon state has been restored");
+    expect(alert).toHaveTextContent("req-conflict-121");
+    expect(alert).not.toHaveTextContent("must-not-render");
+    expect(screen.getByText("operator-b")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Claim" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("listbox")).toHaveFocus());
+    expect(recordUiMetric).toHaveBeenCalledWith("attention_mutation", expect.objectContaining({
+      action: "claim", result: "failure", error_category: "conflict",
+    }));
+    expect(recordUiMetric).toHaveBeenCalledWith("attention_reconciliation", expect.objectContaining({
+      action: "claim", result: "confirmed",
+    }));
+  });
+
+  it("preserves both mutation and unconfirmed-state errors when reconciliation also fails", async () => {
+    let listCalls = 0;
+    let allowReconciliation = false;
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "attention_list") {
+        listCalls += 1;
+        if (listCalls > 1 && !allowReconciliation) throw safeError("unavailable");
+        return { items: [current], latest_change_id: 10 + listCalls };
+      }
+      if (command === "attention_claim") throw safeError("conflict");
+      return null;
+    });
+    renderAs("operator");
+    await screen.findByText("Retry now?");
+    fireEvent.click(screen.getByRole("button", { name: "Claim" }));
+
+    await screen.findByText(/Latest state is not confirmed/);
+    expect(screen.getAllByRole("alert").some((node) => node.textContent?.includes("Claim failed"))).toBe(true);
+    expect(screen.getByText("Latest Attention state could not be loaded.")).toBeVisible();
+    expect(screen.queryByText(/succeeded for Approval/)).not.toBeInTheDocument();
+
+    allowReconciliation = true;
+    fireEvent.click(screen.getByRole("button", { name: "Retry latest state check" }));
+    await waitFor(() => expect(screen.queryByText(/Claim failed/)).not.toBeInTheDocument());
+    expect(screen.queryByText("Latest Attention state could not be loaded.")).not.toBeInTheDocument();
+    expect(screen.getByText(/Latest state confirmed/)).toBeInTheDocument();
+  });
+
+  it("clears a prior error on same-operation success and never reuses its idempotency key", async () => {
+    const keys: string[] = [];
+    let attempts = 0;
+    vi.spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-4000-8000-000000000021")
+      .mockReturnValueOnce("00000000-0000-4000-8000-000000000022");
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "attention_list") return { items: [current], latest_change_id: 10 };
+      if (command === "attention_claim") {
+        attempts += 1;
+        keys.push(String((args as Record<string, unknown>).idempotency_key));
+        if (attempts === 1) throw safeError("conflict");
+        current = { ...current, state: "claimed", assignee: "operator-a", version: 2 };
+        return current;
+      }
       return null;
     });
     renderAs("operator");
     await screen.findByText("Retry now?");
 
     fireEvent.click(screen.getByRole("button", { name: "Claim" }));
+    await screen.findByText(/Claim failed/);
+    fireEvent.click(screen.getByRole("button", { name: "Claim" }));
 
-    await waitFor(() => expect(listCalls).toBeGreaterThanOrEqual(2));
+    await waitFor(() => expect(screen.queryByText(/Claim failed/)).not.toBeInTheDocument());
+    expect(keys).toEqual([
+      "00000000-0000-4000-8000-000000000021",
+      "00000000-0000-4000-8000-000000000022",
+    ]);
+    expect(screen.getByText(/claim succeeded for Approval required/)).toBeInTheDocument();
+  });
+
+  it("dismisses a persistent mutation error without changing the restored item", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "attention_list") return { items: [current], latest_change_id: 10 };
+      if (command === "attention_claim") throw safeError("conflict");
+      return null;
+    });
+    renderAs("operator");
+    await screen.findByText("Retry now?");
+    fireEvent.click(screen.getByRole("button", { name: "Claim" }));
+    await screen.findByText(/Claim failed/);
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss claim error" }));
+    expect(screen.queryByText(/Claim failed/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Claim" })).toBeEnabled();
+  });
+
+  it.each([
+    ["claim", "attention_claim"],
+    ["snooze", "attention_snooze"],
+    ["resolve", "attention_resolve"],
+    ["execute", "attention_execute_action"],
+  ] as const)("uses the shared failure/reconciliation contract for %s", async (operation, failedCommand) => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "attention_list") return { items: [current], latest_change_id: 10 };
+      if (command === failedCommand) throw safeError("conflict");
+      return null;
+    });
+    renderAs("operator");
+    await screen.findByText("Retry now?");
+
+    if (operation === "claim") fireEvent.click(screen.getByRole("button", { name: "Claim" }));
+    if (operation === "snooze") fireEvent.click(screen.getByRole("button", { name: "Snooze 1h" }));
+    if (operation === "resolve") {
+      fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Resolve item" }));
+    }
+    if (operation === "execute") {
+      fireEvent.click(screen.getByRole("button", { name: "Escalate" }));
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Execute reviewed action" }));
+    }
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("latest daemon state has been restored");
+    expect(recordUiMetric).toHaveBeenCalledWith("attention_mutation", expect.objectContaining({
+      action: operation, result: "failure",
+    }));
   });
 });

@@ -14,6 +14,7 @@ fn audit_context(
     })
 }
 
+use crate::errors::SafeGrpcError;
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize)]
@@ -109,7 +110,7 @@ pub async fn attention_list(
     assignee: Option<String>,
     task_id: Option<String>,
     active_only: Option<bool>,
-) -> Result<AttentionListResult, String> {
+) -> Result<AttentionListResult, SafeGrpcError> {
     let mut client = state.client().await?;
     let response = client
         .attention_list(orchestrator_proto::AttentionListRequest {
@@ -123,7 +124,7 @@ pub async fn attention_list(
             active_only: active_only.unwrap_or(false),
         })
         .await
-        .map_err(|error| crate::errors::humanize_grpc_error(&error))?
+        .map_err(|error| crate::errors::safe_grpc_error(&error))?
         .into_inner();
     Ok(AttentionListResult {
         items: response.items.into_iter().map(item_from_proto).collect(),
@@ -135,13 +136,13 @@ pub async fn attention_list(
 pub async fn attention_get(
     state: State<'_, Arc<AppState>>,
     id: String,
-) -> Result<AttentionItem, String> {
+) -> Result<AttentionItem, SafeGrpcError> {
     let mut client = state.client().await?;
     client
         .attention_get(orchestrator_proto::AttentionGetRequest { id })
         .await
         .map(|response| item_from_proto(response.into_inner()))
-        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+        .map_err(|error| crate::errors::safe_grpc_error(&error))
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -150,7 +151,7 @@ pub async fn attention_claim(
     id: String,
     expected_version: i64,
     idempotency_key: String,
-) -> Result<AttentionItem, String> {
+) -> Result<AttentionItem, SafeGrpcError> {
     let mut client = state.client().await?;
     client
         .attention_claim(orchestrator_proto::AttentionClaimRequest {
@@ -161,7 +162,7 @@ pub async fn attention_claim(
         })
         .await
         .map(|response| item_from_proto(response.into_inner()))
-        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+        .map_err(|error| crate::errors::safe_grpc_error(&error))
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -171,7 +172,7 @@ pub async fn attention_snooze(
     expected_version: i64,
     idempotency_key: String,
     until: String,
-) -> Result<AttentionItem, String> {
+) -> Result<AttentionItem, SafeGrpcError> {
     let mut client = state.client().await?;
     client
         .attention_snooze(orchestrator_proto::AttentionSnoozeRequest {
@@ -183,7 +184,7 @@ pub async fn attention_snooze(
         })
         .await
         .map(|response| item_from_proto(response.into_inner()))
-        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+        .map_err(|error| crate::errors::safe_grpc_error(&error))
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -193,7 +194,7 @@ pub async fn attention_resolve(
     expected_version: i64,
     idempotency_key: String,
     reason: String,
-) -> Result<AttentionItem, String> {
+) -> Result<AttentionItem, SafeGrpcError> {
     let mut client = state.client().await?;
     client
         .attention_resolve(orchestrator_proto::AttentionResolveRequest {
@@ -205,7 +206,7 @@ pub async fn attention_resolve(
         })
         .await
         .map(|response| item_from_proto(response.into_inner()))
-        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+        .map_err(|error| crate::errors::safe_grpc_error(&error))
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -216,7 +217,7 @@ pub async fn attention_execute_action(
     idempotency_key: String,
     action_id: String,
     input_json: Option<String>,
-) -> Result<AttentionItem, String> {
+) -> Result<AttentionItem, SafeGrpcError> {
     let mut client = state.client().await?;
     client
         .attention_execute_action(orchestrator_proto::AttentionExecuteActionRequest {
@@ -229,5 +230,5 @@ pub async fn attention_execute_action(
         })
         .await
         .map(|response| item_from_proto(response.into_inner()))
-        .map_err(|error| crate::errors::humanize_grpc_error(&error))
+        .map_err(|error| crate::errors::safe_grpc_error(&error))
 }

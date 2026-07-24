@@ -370,6 +370,8 @@ fn allowed_dimensions(metric: &str) -> Option<&'static [&'static str]> {
         "source_event_deduplicated_total" => Some(&["provider"]),
         "ui_page_load_seconds" => Some(&["page"]),
         "dashboard_error_total" => Some(&["result"]),
+        "attention_mutation_total" => Some(&["action", "result", "error_category"]),
+        "attention_reconciliation_total" => Some(&["action", "result"]),
         _ => None,
     }
 }
@@ -1458,6 +1460,48 @@ mod tests {
             })
             .await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn attention_observations_accept_only_privacy_safe_dimensions() {
+        let temp = tempdir().expect("tempdir");
+        let path = temp.path().join("metrics.db");
+        init_schema(&path).expect("schema");
+        let db = Arc::new(AsyncDatabase::open(path).await.expect("db"));
+        let repo = AsyncProcessMetricsRepository::new(db);
+        let accepted = repo
+            .record(MetricObservation {
+                project_id: "p1".into(),
+                metric_name: "attention_mutation_total".into(),
+                dimensions: labels(&[
+                    ("action", "claim"),
+                    ("result", "failure"),
+                    ("error_category", "conflict"),
+                ]),
+                value: 1.0,
+                occurred_at: "2026-07-14T00:00:00Z".into(),
+                source_kind: "ui".into(),
+                source_key: "ui-attention-1".into(),
+            })
+            .await;
+        assert!(accepted.unwrap());
+
+        let rejected = repo
+            .record(MetricObservation {
+                project_id: "p1".into(),
+                metric_name: "attention_reconciliation_total".into(),
+                dimensions: labels(&[
+                    ("action", "claim"),
+                    ("result", "unconfirmed"),
+                    ("requested_decision", "secret body"),
+                ]),
+                value: 1.0,
+                occurred_at: "2026-07-14T00:00:01Z".into(),
+                source_kind: "ui".into(),
+                source_key: "ui-attention-2".into(),
+            })
+            .await;
+        assert!(rejected.is_err());
     }
 
     #[tokio::test]

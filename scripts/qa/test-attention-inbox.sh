@@ -140,6 +140,38 @@ else
   fail "concurrent claim version gate was not exclusive"
 fi
 
+LOSER_OUTPUT="$QA_ROOT/claim-a"
+[[ "$STATUS_A" -eq 0 ]] && LOSER_OUTPUT="$QA_ROOT/claim-b"
+if rg -qi "aborted|version conflict|other operation updated|资源已被其他操作更新" "$LOSER_OUTPUT"; then
+  pass "losing client receives the stable version-conflict category"
+else
+  fail "losing client did not receive a stable version-conflict category"
+  sed -n '1,12p' "$LOSER_OUTPUT" >&2
+fi
+
+"$ORCH" attention get "$ITEM_ID" -o json > "$QA_ROOT/authoritative-claim.json"
+AUTHORITATIVE_VERSION="$(jq -r '.version' "$QA_ROOT/authoritative-claim.json")"
+AUTHORITATIVE_STATE="$(jq -r '.state' "$QA_ROOT/authoritative-claim.json")"
+AUTHORITATIVE_ASSIGNEE="$(jq -r '.assignee // empty' "$QA_ROOT/authoritative-claim.json")"
+if [[ "$AUTHORITATIVE_VERSION" -gt "$VERSION" ]] && \
+   [[ "$AUTHORITATIVE_STATE" == "claimed" ]] && \
+   [[ -n "$AUTHORITATIVE_ASSIGNEE" ]]; then
+  pass "authoritative reread exposes the winning assignee and newer version"
+else
+  fail "authoritative claim state did not reconcile after client competition"
+fi
+
+CLAIM_AUDIT_COUNTS="$(sqlite3 "$DB" "
+SELECT COUNT(*) || ':' || COUNT(DISTINCT idempotency_key)
+FROM control_action_audit
+WHERE action='attention.claim' AND target_id='$ITEM_ID';
+")"
+if [[ "$CLAIM_AUDIT_COUNTS" == "2:2" ]]; then
+  pass "competing clients retain two distinct retry identities in canonical audit"
+else
+  fail "client competition reused or lost a canonical retry identity ($CLAIM_AUDIT_COUNTS)"
+fi
+
 sqlite3 "$DB" "
 INSERT INTO events(task_id,task_item_id,event_type,payload_json,created_at)
 SELECT task_id,task_item_id,'step_finished','{\"step_id\":\"qa\",\"success\":true}',datetime('now')
