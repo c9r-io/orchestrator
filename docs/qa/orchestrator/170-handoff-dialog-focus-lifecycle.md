@@ -172,4 +172,4 @@ Verify the opened modal remains accessible across supported visual preferences a
 | 2 | Attention entry visibility and one-shot review intent | PASS | 2026-07-25 | Codex | Exact intent is consumed, no direct mutation occurs, and fallback avoids body |
 | 3 | Invalidated sources and async boundaries | PASS | 2026-07-25 | Codex | Removed controls, refresh removal, task fencing, and unmount are covered |
 | 4 | Busy and failure recovery | PASS | 2026-07-25 | Codex | Busy close protection and both failure phases remain operable |
-| 5 | Accessibility, visual modes, and regression | PASS | 2026-07-25 | Codex | 112 Vitest, 31 Playwright, build, audit, workspace tests, strict Clippy, and formatting pass |
+| 5 | Accessibility, visual modes, and regression | PASS | 2026-07-25 | Codex | FR-120 closure snapshot: 112 Vitest and 31 Playwright; current repository counts are governed by QA-172 |

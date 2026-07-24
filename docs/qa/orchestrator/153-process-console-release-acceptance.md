@@ -127,7 +127,9 @@ Verify the complete operator loop and release budgets across real client boundar
 ### Expected
 
 - Request IDs correlate handoff review, rejected stale execution, successful resume, and Attention resolution without exposing payload content.
-- 61 frontend unit/component tests and 15 Playwright tests pass.
+- The complete current frontend unit/component and Playwright suites pass; the
+  executable scenario count does not regress below the approved FR-122 baseline
+  in `coverage/boundary-baseline.json`.
 - Metrics and timeline remain within the DD-114 latency and response-size budgets.
 
 ## Scenario 5: Release Notes And Rollback Contract Are Complete

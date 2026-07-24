@@ -79,7 +79,6 @@
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
-| FR-122 | CLI、Daemon 与 Tauri 边界层覆盖率治理 | P1 | Proposed |
 | FR-123 | 受控 Slack Sandbox 持续认证与证据保鲜 | P1 | Proposed |
 | FR-124 | 协调坍缩 Strangler 迁移收尾与遗留路径退役治理 | P1 | Proposed |
 
@@ -91,6 +90,7 @@
 - `In Progress`: 已有部分阶段落地，剩余阶段仍在治理中
 - `Implemented`: 需求已完成并进入维护阶段
 - 已闭环并删除的 FR，应由对应 `docs/design_doc/**` 与 `docs/qa/**` 继续承载设计和验证信息
+- FR-122 已闭环删除；其统一覆盖率命令、批准基线非回退门禁、Rust branch `unsupported` 语义、五类 daemon 边界矩阵、CLI/Tauri 真实 gRPC 适配器模板及 FR-095～FR-118 证据索引现由 `docs/design_doc/orchestrator/134-boundary-layer-coverage-governance.md`、`docs/qa/orchestrator/172-boundary-layer-coverage-governance.md`、`coverage/boundary-baseline.json`、`coverage/README.md` 与 `scripts/coverage-governance.sh` 承载
 - FR-121 已闭环删除；其独立查询/流/mutation 错误生命周期、统一失败对账、持久可访问 alert、安全错误边界、焦点恢复、隐私安全指标与双客户端竞争证据现由 `docs/design_doc/orchestrator/133-attention-mutation-error-reconciliation.md`、`docs/qa/orchestrator/171-attention-mutation-error-reconciliation.md` 与 `scripts/qa/test-attention-inbox.sh` 承载
 - FR-118 已闭环删除；其 authenticated daemon tool host、transport-only stdio shim、五个真实协调工具、完整事件证据、pilot parity、协调行数塌缩与残余跨步通道度量现由 `docs/design_doc/orchestrator/130-coordination-collapse-mcp-tools.md`、`docs/qa/orchestrator/168-coordination-collapse-mcp-tools.md`、`docs/guide/coordination-tools.md`、`fixtures/manifests/bundles/coordination-collapse-pilot.yaml` 与 `scripts/qa/test-coordination-collapse.sh` 承载
 - FR-117 已闭环删除；其 task Workspace、隐式 process item、FileSharing 天花板、HOME/XDG 隔离、全局 Skill 只读访问、Console 语义与 Slack inventory pilot 证据现由 `docs/design_doc/orchestrator/128-non-code-workspace-and-global-file-sharing.md`、`docs/qa/orchestrator/165-non-code-workspace-and-global-file-sharing.md`、`docs/security/authorization/02-file-sharing-ceiling.md`、`docs/security/file-security/02-workspace-home-isolation.md`、`docs/guide/non-code-workspace.md` 与 `scripts/qa/test-non-code-workspace.sh` 承载

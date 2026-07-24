@@ -293,6 +293,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/169-expert-resources-governed-editing.md` | 5 | FR-119 typed catalogs, canonical Describe, accessible role-aware editing, optimistic conflicts, Action Audit, privacy, and real Tauri/daemon evidence |
 | orchestrator | `docs/qa/orchestrator/170-handoff-dialog-focus-lifecycle.md` | 5 | FR-120 manual and Attention review entry, modal focus containment and restoration, async invalidation, busy/failure recovery, visual accessibility, and Chromium regression |
 | orchestrator | `docs/qa/orchestrator/171-attention-mutation-error-reconciliation.md` | 5 | FR-121 shared mutation failure lifecycle, authoritative reconciliation, safe error copy, focus recovery, telemetry privacy, and two-client version competition |
+| orchestrator | `docs/qa/orchestrator/172-boundary-layer-coverage-governance.md` | 5 | FR-122 machine-readable component/module coverage, approved baseline enforcement, explicit branch support, daemon risk matrices, CLI/Tauri tonic adapters, and evidence traceability |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
@@ -310,3 +311,40 @@ This checks:
 | self-bootstrap | `docs/qa/self-bootstrap/scenario2-binary-rollback.md` | 1 | Binary snapshot restoration on auto-rollback |
 | self-bootstrap | `docs/qa/self-bootstrap/scenario3-binary-skip-disabled.md` | 1 | Binary snapshot skip when disabled |
 | self-bootstrap | `docs/qa/self-bootstrap/scenario4-self-test-pass.md` | 1 | Self-test step passes all three phases |
+
+## FR-095 Through FR-118 Executable Evidence Index
+
+This index records the strongest executable evidence layer for each closed FR.
+`Closed` means its acceptance evidence is complete; it does not mean every
+related production file has high line coverage. `Live` is never part of normal
+PR CI.
+
+| FR | Design / QA authority | Unit | Integration | Shell QA | Playwright | Controlled live |
+|---|---|---:|---:|---|---:|---|
+| FR-095 | DD-105 / QA-142 | Yes | Yes | `test-process-timeline.sh` | No direct journey | No |
+| FR-096 | DD-106 / QA-143 | Yes | Yes | `test-attention-inbox.sh` | Yes | No |
+| FR-097 | DD-107 / QA-144 | Yes | Yes | `test-handoff-safe-resume.sh` | Yes | No |
+| FR-098 | DD-108 / QA-145, superseded by QA-149 | Yes | Yes | `test-agent-session-control-plane.sh` | Yes | No |
+| FR-099 | DD-109 / QA-146 | Yes | Yes | `test-source-events-slack.sh` | Yes | No |
+| FR-100 | DD-110 / QA-147 | Vitest | Tauri mock | `test-process-console-ui.sh` | Yes | No |
+| FR-101 | DD-111 / QA-148 | Yes | Yes | `test-control-plane-action-audit.sh` | No direct journey | No |
+| FR-102 | DD-112 / QA-149 | Yes | Yes | `test-agent-session-control-plane.sh` | Yes | No |
+| FR-103 | DD-113 / QA-150 | Yes | Real Tauri/daemon | `test-process-console-vertical-flow.sh` | Yes | Deterministic local daemon only |
+| FR-104 | DD-114 / QA-151 | Yes | Yes | `test-process-console-metrics.sh` | Yes | No |
+| FR-105 | DD-115 / QA-152 | Yes | Yes | `test-agent-session-control-plane.sh` | Session regression | No |
+| FR-106 | DD-116 / QA-153 | Yes | Aggregate | `test-process-console-release.sh` | Yes | No |
+| FR-107 | DD-118 / QA-155 | Yes | Signed local webhook | `test-slack-reaction-source.sh` | Yes | No |
+| FR-108 | DD-119 / QA-156 | Yes | Isolated daemon | `test-source-task-template.sh` | No direct journey | No |
+| FR-109 | DD-120 / QA-157 | Yes | Isolated daemon | `test-source-task-binding.sh` | No direct journey | No |
+| FR-110 | DD-121 / QA-158 | Yes | Signed local route | `test-slack-reaction-task-routing.sh` | Deep-link regression | No |
+| FR-111 | DD-122 / QA-159 | Yes | Restart/retry fixture | `test-source-automation-operations.sh` | Operations regression | No |
+| FR-112 | DD-123 / QA-160 | Vitest | Real Tauri/daemon | `test-source-automation-ui.sh` | Yes | No |
+| FR-113 | DD-124 / QA-161 | Yes | Release vertical | `test-slack-skill-automation-release.sh` | Yes | No public provider |
+| FR-114 | DD-125 / QA-162 | Yes | Gateway/daemon | `test-slack-managed-shared-oauth.sh` | Yes | `certify-slack-managed-live.sh` |
+| FR-115 | DD-126 / QA-163 | Yes | Two-App lifecycle | `test-slack-dedicated-app-provisioning.sh` | Yes | Dedicated sandbox addendum |
+| FR-116 | DD-127 / QA-164; DD-129 / QA-166 extension | Yes | Driver fixture | `test-agent-driver-abstraction.sh` | No | `certify-codex-session-resume.sh` |
+| FR-117 | DD-128 / QA-165, QA-167 extension | Yes | Local Slack pilot | `test-non-code-workspace.sh` | Yes | No public provider |
+| FR-118 | DD-130 / QA-168 | Yes | Authenticated tool host | `test-coordination-collapse.sh` | No | No |
+
+Evidence rows are maintained when an owning FR closes. A later hardening FR may
+supersede an earlier QA document without erasing the historical design link.

@@ -163,4 +163,4 @@ Verify manifest content does not leak and the additive interfaces do not regress
 | 2 | Entry visibility, read-only navigation, and accessibility | PASS | 2026-07-25 | Codex | Vitest and Playwright cover tab reachability, keyboard, copy, focus return, and Axe |
 | 3 | Reviewed Apply and authoritative reload | PASS | 2026-07-25 | Codex | Real Tauri/gRPC Apply and request-ID evidence pass |
 | 4 | Validation and conflict recovery | PASS | 2026-07-25 | Codex | Draft retention and real stale revision rejection pass |
-| 5 | Audit privacy and repository regression | PASS | 2026-07-25 | Codex | Workspace tests, strict Clippy, 105 Vitest, 29 Playwright, production build, isolated QA, and doc lint pass |
+| 5 | Audit privacy and repository regression | PASS | 2026-07-25 | Codex | Workspace tests, strict Clippy, 120 Vitest, 32 Playwright, production build, isolated QA, and doc lint pass |

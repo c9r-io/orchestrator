@@ -96,4 +96,4 @@ DD-101（流式 Agent Runner 架构转向）与 DD-130（编排器自有协调 M
 - `docs/guide/coordination-tools.md`
 - `fixtures/manifests/bundles/coordination-collapse-pilot.yaml`
 - `scripts/qa/test-coordination-collapse.sh`
-- `docs/feature_request/FR-122-boundary-layer-coverage-governance.md`（遗留协调代码退役将改变覆盖基线，需与其非回退门禁协同）
+- `docs/design_doc/orchestrator/134-boundary-layer-coverage-governance.md` 与 `coverage/boundary-baseline.json`（遗留协调代码退役将改变覆盖基线，需与其非回退门禁协同）
