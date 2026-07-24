@@ -25,6 +25,8 @@ FR-099 may also materialize `source_routing_ambiguous` items before any task is 
 
 FR-103 adds an authoritative follow overlay: snapshot and stream filters share trusted actor semantics; new/reopened intervention or configured approval versions may carry one bounded notification descriptor; ordinary updates are quiet. Direct retry/resume actions are not rendered as substitutes for the Process Workspace reviewed recovery flow. See QA-150 for live Tauri/gRPC and notification acceptance.
 
+FR-121 adds the mutation-error reconciliation overlay. Query, follow-stream, and mutation failures no longer share one clearing lifecycle; conflicts retain a persistent alert while the GUI reloads daemon truth. Dual failure, explicit retry, focus recovery, safe error copy, and reconciliation metrics are verified by QA-171.
+
 ## Database Schema Reference
 
 | Table | Purpose |

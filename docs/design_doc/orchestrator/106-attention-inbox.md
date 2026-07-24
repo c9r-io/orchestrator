@@ -4,8 +4,9 @@
 **Status**: Approved  
 **Related Plan**: FR-096 persistent cross-task attention queue, governed actions, and default operator UI  
 **Related QA**: `docs/qa/orchestrator/143-attention-inbox.md`  
+**Error Reconciliation Overlay**: `docs/design_doc/orchestrator/133-attention-mutation-error-reconciliation.md`
 **Created**: 2026-07-12  
-**Last Updated**: 2026-07-12
+**Last Updated**: 2026-07-25
 
 ## Background
 
@@ -68,6 +69,7 @@ Task status and the process timeline describe work, but neither answers the oper
 5. Human mutations update by exact version and persist the authenticated actor in the same transaction.
 6. External actions use a two-phase database reservation. Exactly one caller receives `should_execute=true`; completion records success or failure. A replay of the same action key returns current state without repeating the external side effect.
 7. Follow clients consume `attention_changes` and reconcile by item ID. Existing rows remain readable when materialization is disabled.
+8. GUI query, stream, and mutation failures have independent lifecycles. Failed mutations enter the DD-133 shared state machine, perform one authoritative snapshot reconciliation, and retain a safe actionable alert until an explicit clearing rule applies.
 
 ## Alternatives And Tradeoffs
 

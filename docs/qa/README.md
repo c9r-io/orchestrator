@@ -292,6 +292,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/168-coordination-collapse-mcp-tools.md` | 5 | FR-118 authenticated daemon tool host, real tools, stdio forwarding, parity/events, 100% coordination-line collapse, and residual channels |
 | orchestrator | `docs/qa/orchestrator/169-expert-resources-governed-editing.md` | 5 | FR-119 typed catalogs, canonical Describe, accessible role-aware editing, optimistic conflicts, Action Audit, privacy, and real Tauri/daemon evidence |
 | orchestrator | `docs/qa/orchestrator/170-handoff-dialog-focus-lifecycle.md` | 5 | FR-120 manual and Attention review entry, modal focus containment and restoration, async invalidation, busy/failure recovery, visual accessibility, and Chromium regression |
+| orchestrator | `docs/qa/orchestrator/171-attention-mutation-error-reconciliation.md` | 5 | FR-121 shared mutation failure lifecycle, authoritative reconciliation, safe error copy, focus recovery, telemetry privacy, and two-client version competition |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
