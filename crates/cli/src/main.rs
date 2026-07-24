@@ -11,6 +11,8 @@
 mod cli;
 mod client;
 mod commands;
+#[cfg(test)]
+mod grpc_adapter_tests;
 mod output;
 
 use anyhow::{Context, Result};

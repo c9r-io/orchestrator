@@ -88,6 +88,77 @@ jobs:
         env:
           PROTOC: /usr/bin/protoc
 
+  coverage-policy-fixtures:
+    name: Coverage policy fixtures (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Verify baseline, unsupported branch, and path fixtures
+        run: ./scripts/coverage-governance.sh --fixture-test
+
+  boundary-coverage:
+    name: Boundary coverage non-regression
+    runs-on: macos-latest
+    needs:
+      - coverage-policy-fixtures
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: boundary-coverage
+
+      - name: Install pinned cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov@0.8.5
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: gui/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: gui
+        run: npm ci
+
+      - name: Install Playwright browser
+        working-directory: gui
+        run: npx playwright install chromium
+
+      - name: Generate and enforce boundary coverage
+        run: ./scripts/coverage-governance.sh
+
+      - name: Upload auditable coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: boundary-coverage-${{ runner.os }}-${{ runner.arch }}
+          path: target/coverage-governance/
+          if-no-files-found: error
+
   miri:
     name: Miri unsafe validation
     runs-on: ubuntu-latest

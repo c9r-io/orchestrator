@@ -33,6 +33,7 @@ tauri-build = "2"
 
 [dev-dependencies]
 tauri = { version = "2", features = ["test"] }
+orchestrator-integration-tests = { path = "../integration-tests" }
 
 [lib]
 name = "orchestrator_gui_lib"

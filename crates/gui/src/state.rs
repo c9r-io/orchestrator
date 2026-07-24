@@ -145,6 +145,14 @@ impl AppState {
             .max_decoding_message_size(client::max_decode_size()))
     }
 
+    /// Install an already-connected channel for deterministic in-process adapter tests.
+    #[cfg(test)]
+    pub(crate) async fn install_test_channel(&self, channel: Channel) {
+        *self.channel.write().await = Some(channel);
+        *self.transport.write().await = Some(TransportKind::Tls);
+        self.set_connection_state(ConnectionState::Connected).await;
+    }
+
     /// Get the transport kind of the current connection.
     pub async fn transport_kind(&self) -> Option<TransportKind> {
         *self.transport.read().await

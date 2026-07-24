@@ -40,3 +40,5 @@ libc = { workspace = true }
 nix = { version = "0.31", default-features = false, features = ["signal"] }
 
 [dev-dependencies]
+orchestrator-integration-tests = { path = "../integration-tests" }
+tempfile = "3.10"

@@ -1,6 +1,8 @@
 mod action_audit;
 mod agent;
 mod attention;
+#[cfg(test)]
+mod boundary_contract_tests;
 mod handoff;
 mod mapping;
 pub(crate) mod process_metrics;

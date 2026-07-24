@@ -2158,6 +2158,7 @@ impl OrchestratorService for TestOrchestratorServer {
 pub struct TestHarness {
     _test_state: TestState,
     state: Arc<InnerState>,
+    channel: Channel,
     client: OrchestratorServiceClient<Channel>,
     _server_handle: JoinHandle<()>,
 }
@@ -2226,11 +2227,12 @@ impl TestHarness {
             .connect()
             .await
             .expect("failed to connect to test gRPC server");
-        let client = OrchestratorServiceClient::new(channel);
+        let client = OrchestratorServiceClient::new(channel.clone());
 
         Self {
             _test_state: test_state,
             state,
+            channel,
             client,
             _server_handle: server_handle,
         }
@@ -2239,6 +2241,11 @@ impl TestHarness {
     /// Get a clone of the gRPC client.
     pub fn client(&self) -> OrchestratorServiceClient<Channel> {
         self.client.clone()
+    }
+
+    /// Get the connected raw channel for testing another real adapter.
+    pub fn channel(&self) -> Channel {
+        self.channel.clone()
     }
 
     /// Direct access to the shared state (for driving task execution).

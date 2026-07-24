@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "approvedAt": "2026-07-25",
+  "platform": "macos-aarch64",
+  "tooling": {
+    "cargoLlvmCov": "0.8.5",
+    "rustBranchCoverage": "unsupported-on-stable"
+  },
+  "policy": {
+    "percentageTolerance": 0.05,
+    "strategy": "approved-baseline-non-regression"
+  },
+  "rust": {
+    "components": {
+      "core/domain": {
+        "lines": { "count": 79417, "covered": 66894, "percent": 84.23 },
+        "functions": { "count": 7070, "covered": 5700, "percent": 80.62 },
+        "branches": {
+          "status": "unsupported",
+          "count": null,
+          "covered": null,
+          "percent": null
+        }
+      },
+      "daemon adapter": {
+        "lines": { "count": 16844, "covered": 4838, "percent": 28.72 },
+        "functions": { "count": 1518, "covered": 407, "percent": 26.81 },
+        "branches": {
+          "status": "unsupported",
+          "count": null,
+          "covered": null,
+          "percent": null
+        }
+      },
+      "CLI": {
+        "lines": { "count": 6038, "covered": 2143, "percent": 35.49 },
+        "functions": { "count": 305, "covered": 94, "percent": 30.82 },
+        "branches": {
+          "status": "unsupported",
+          "count": null,
+          "covered": null,
+          "percent": null
+        }
+      },
+      "Tauri Rust": {
+        "lines": { "count": 4227, "covered": 398, "percent": 9.42 },
+        "functions": { "count": 634, "covered": 49, "percent": 7.73 },
+        "branches": {
+          "status": "unsupported",
+          "count": null,
+          "covered": null,
+          "percent": null
+        }
+      }
+    },
+    "keyModules": {
+      "daemon/attention": {
+        "lines": { "count": 631, "covered": 354, "percent": 56.1 },
+        "functions": { "count": 46, "covered": 24, "percent": 52.17 },
+        "branches": {
+          "status": "unsupported",
+          "count": null,
+          "covered": null,
+          "percent": null
+        }
+      },
+      "daemon/handoff": {
+        "lines": { "count": 599, "covered": 225, "percent": 37.56 },
+        "functions": { "count": 46, "covered": 15, "percent": 32.61 },
+        "branches": {
+          "status": "unsupported",
+          "count": null,
+          "covered": null,
+          "percent": null
+        }
+      },
+      "daemon/session": {
+        "lines": { "count": 1104, "covered": 168, "percent": 15.22 },
+        "functions": { "count": 93, "covered": 22, "percent": 23.66 },
+        "branches": {
+          "status": "unsupported",
+          "count": null,
+          "covered": null,
+          "percent": null
+        }
+      },
+      "daemon/source_connection": {
+        "lines": { "count": 2482, "covered": 303, "percent": 12.21 },
+        "functions": { "count": 158, "covered": 29, "percent": 18.35 },
+        "branches": {
+          "status": "unsupported",
+          "count": null,
+          "covered": null,
+          "percent": null
+        }
+      },
+      "daemon/action_audit": {
+        "lines": { "count": 386, "covered": 324, "percent": 83.94 },
+        "functions": { "count": 49, "covered": 39, "percent": 79.59 },
+        "branches": {
+          "status": "unsupported",
+          "count": null,
+          "covered": null,
+          "percent": null
+        }
+      },
+      "cli/commands": {
+        "lines": { "count": 5113, "covered": 1727, "percent": 33.78 },
+        "functions": { "count": 223, "covered": 62, "percent": 27.8 },
+        "branches": {
+          "status": "unsupported",
+          "count": null,
+          "covered": null,
+          "percent": null
+        }
+      },
+      "tauri/commands": {
+        "lines": { "count": 3375, "covered": 184, "percent": 5.45 },
+        "functions": { "count": 547, "covered": 19, "percent": 3.47 },
+        "branches": {
+          "status": "unsupported",
+          "count": null,
+          "covered": null,
+          "percent": null
+        }
+      }
+    }
+  },
+  "frontend": {
+    "lines": { "count": 1883, "covered": 1680, "percent": 89.21 },
+    "functions": { "count": 780, "covered": 596, "percent": 76.41 },
+    "branches": {
+      "status": "supported",
+      "count": 1961,
+      "covered": 1493,
+      "percent": 76.13
+    }
+  },
+  "playwright": {
+    "minimumScenarios": 32
+  }
+}

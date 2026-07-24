@@ -162,6 +162,7 @@ pub fn run() {
 #[cfg(test)]
 mod live_bridge_tests {
     use super::*;
+    use orchestrator_integration_tests::TestHarness;
     use serde_json::{Value, json};
     use tauri::ipc::InvokeBody;
     use tauri::webview::InvokeRequest;
@@ -197,6 +198,61 @@ mod live_bridge_tests {
             .get(key)
             .and_then(Value::as_str)
             .unwrap_or_else(|| panic!("missing string field {key}: {value}"))
+    }
+
+    #[test]
+    fn task_create_crosses_real_tauri_handler_and_in_process_grpc_adapter() {
+        tauri::async_runtime::block_on(async {
+            let harness = TestHarness::start().await;
+            harness.seed_qa_file();
+            let channel = harness.channel();
+            let app_state = Arc::new(AppState::new());
+            app_state.install_test_channel(channel).await;
+            let app = tauri::test::mock_builder()
+                .manage(app_state)
+                .invoke_handler(tauri::generate_handler![
+                    commands::task::task_create,
+                    commands::task::task_info,
+                ])
+                .build(tauri::test::mock_context(tauri::test::noop_assets()))
+                .expect("mock Tauri app");
+            let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+                .build()
+                .expect("mock webview");
+
+            let created = invoke(
+                &webview,
+                "task_create",
+                json!({
+                    "name": "Tauri adapter fixture",
+                    "goal": "Preserve desktop mutation parameters",
+                    "project_id": "default",
+                    "workspace_id": "default",
+                    "workflow_id": "basic",
+                    "target_files": [],
+                    "no_start": true
+                }),
+            )
+            .expect("create through real Tauri handler");
+            let task_id = required_string(&created, "task_id").to_string();
+            assert_eq!(required_string(&created, "status"), "created");
+
+            let detail = invoke(&webview, "task_info", json!({"task_id":task_id}))
+                .expect("read through real Tauri handler");
+            assert_eq!(required_string(&detail, "name"), "Tauri adapter fixture");
+            assert_eq!(
+                required_string(&detail, "goal"),
+                "Preserve desktop mutation parameters"
+            );
+
+            let missing = invoke(
+                &webview,
+                "task_info",
+                json!({"task_id":"missing-tauri-task"}),
+            )
+            .expect_err("missing task is surfaced");
+            assert!(missing.to_string().contains("未找到"), "{missing}");
+        });
     }
 
     #[test]
