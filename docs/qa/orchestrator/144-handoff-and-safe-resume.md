@@ -9,6 +9,8 @@ self_referential_safe: true
 **Scenarios**: 5  
 **Priority**: High
 
+> The original resume safety scenarios remain authoritative for backend behavior. Dialog focus lifecycle closure is maintained by [DD-132](../../design_doc/orchestrator/132-handoff-dialog-focus-lifecycle.md) and [QA-170](170-handoff-dialog-focus-lifecycle.md).
+
 ---
 
 ## Background

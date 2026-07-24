@@ -5,7 +5,9 @@
 **Related Plan**: FR-097 immutable task handoffs, logical resume boundaries, two-stage consequence preview/execution, and provider-neutral session reuse  
 **Related QA**: `docs/qa/orchestrator/144-handoff-and-safe-resume.md`  
 **Created**: 2026-07-12  
-**Last Updated**: 2026-07-12
+**Last Updated**: 2026-07-25
+
+> Focus entry, trapping, restoration, and async invalidation for the review dialog are governed by [DD-132](132-handoff-dialog-focus-lifecycle.md) and [QA-170](../../qa/orchestrator/170-handoff-dialog-focus-lifecycle.md).
 
 ## Background
 

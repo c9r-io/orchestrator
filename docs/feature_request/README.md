@@ -79,7 +79,6 @@
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
-| FR-120 | Handoff 恢复审查对话框焦点生命周期 | P2 | Proposed |
 | FR-121 | Attention Mutation 错误反馈与权威状态对账 | P1 | Proposed |
 | FR-122 | CLI、Daemon 与 Tauri 边界层覆盖率治理 | P1 | Proposed |
 | FR-123 | 受控 Slack Sandbox 持续认证与证据保鲜 | P1 | Proposed |
@@ -209,3 +208,4 @@
 - FR-093 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/sandbox-readable-paths.md` 与 `docs/qa/orchestrator/101-sandbox-readable-paths.md` 承载（ExecutionProfile `readable_paths` 字段、`~`/`$VAR` 路径展开、Linux bind-mount RO 挂载、`ORCHESTRATOR_READABLE_PATHS` 环境变量供 agent wrapper 消费）
 - FR-094 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/step-scope-roundtrip-leak.md` 与 `docs/qa/orchestrator/141-step-scope-roundtrip-leak.md` 承载（自定义 step id 的显式 scope 跨 spec↔config 往返漂移修复：`resolved_scope` capability fallback 限定为 conventions 已知 id、`workflow_step_config_to_spec` 不再省略默认值优化、`task_ops::resolve_task_targets` 在 `QaDirectoryScan` 触发时发出 `qa_directory_scan_triggered` info 事件，超过 50 个 item 升级为 `qa_directory_scan_oversize` warning；6 个回归单测覆盖三层修复 + 一个端到端 round-trip dry-run，复制了 v3 retest 中 D1/E1 的 180-item 爆炸场景）
 - FR-119 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/131-expert-resources-governed-editing.md` 与 `docs/qa/orchestrator/169-expert-resources-governed-editing.md` 承载（五类 daemon 权威资源目录、可应用 canonical Describe、受审核 revision fence Apply、Action Audit 隐私与可访问 Expert UI 均已闭环）
+- FR-120 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/132-handoff-dialog-focus-lifecycle.md` 与 `docs/qa/orchestrator/170-handoff-dialog-focus-lifecycle.md` 承载（手动与 Attention 自动审查入口、焦点围栏与确定性恢复、异步失效防护、失败可操作性和 Chromium 可访问性均已闭环）
