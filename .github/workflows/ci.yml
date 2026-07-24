@@ -109,6 +109,25 @@ jobs:
       - name: Verify baseline, unsupported branch, and path fixtures
         run: ./scripts/coverage-governance.sh --fixture-test
 
+  slack-certification-recorded:
+    name: Slack certification recorded contracts (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Verify checkpoint, redaction, cleanup, and recorded provider contracts
+        run: ./scripts/qa/test-slack-live-certification.sh
+
+      - name: Display latest reviewed live status without loading secrets
+        run: ./scripts/qa/certify-slack-managed-live.sh status
+
   boundary-coverage:
     name: Boundary coverage non-regression
     runs-on: macos-latest

@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "provider": "slack",
+  "recorded_at": "2026-07-22",
+  "description": "Sanitized provider-boundary shapes for network-free controller regression. This fixture is not live certification.",
+  "cases": [
+    {
+      "kind": "oauth_callback",
+      "sanitized": true,
+      "payload": {
+        "team_id": "<TEAM_ID>",
+        "oauth_code": "<OAUTH_CODE>",
+        "state": "<OAUTH_STATE>",
+        "result": "installation_active"
+      }
+    },
+    {
+      "kind": "events_api_delivery",
+      "sanitized": true,
+      "payload": {
+        "event_id": "<EVENT_ID>",
+        "event_type": "reaction_added",
+        "reaction": "eyes",
+        "item_type": "message",
+        "cursor": 7
+      }
+    },
+    {
+      "kind": "manifest_diff",
+      "sanitized": true,
+      "payload": {
+        "manifest_version": "orchestrator-slack-dedicated-v1",
+        "scope_added": [],
+        "event_added": [],
+        "requires_reauthorization": false
+      }
+    },
+    {
+      "kind": "gateway_import_receipt",
+      "sanitized": true,
+      "payload": {
+        "connection_digest": "<CONNECTION_DIGEST>",
+        "app_digest": "<APP_DIGEST>",
+        "generation": 1,
+        "manifest_digest": "<MANIFEST_DIGEST>",
+        "verified": true
+      }
+    }
+  ]
+}

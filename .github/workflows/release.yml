@@ -23,9 +23,31 @@ env:
   RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 jobs:
+  slack-certification-status:
+    name: Display controlled Slack certification status
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Report shared and dedicated evidence freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## Controlled Slack certification"
+            echo
+            echo '```text'
+            ./scripts/qa/certify-slack-managed-live.sh status
+            echo '```'
+            echo
+            echo "Expired evidence means recertification is required; it does not assert a product regression."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
   build:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
+    needs: slack-certification-status
     strategy:
       fail-fast: false
       matrix:

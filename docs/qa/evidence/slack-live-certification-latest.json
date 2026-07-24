@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "certifications": [
+    {
+      "mode": "shared",
+      "result": "pass",
+      "run_id": "fr114-live-20260721T154316Z",
+      "certified_at": "2026-07-22T00:00:00Z",
+      "expires_at": "2026-08-21T00:00:00Z",
+      "build": {
+        "commit": "d10317612f1d",
+        "manifest_version": "orchestrator-slack-official-v1",
+        "manifest_sha256": "c0d814d1ac764ced13f0c1e436175c3fdf59d36bda5275f2374e57e16a30093c"
+      },
+      "stages": [
+        {
+          "name": "shared_oauth",
+          "result": "pass"
+        },
+        {
+          "name": "shared_multi_workspace",
+          "result": "pass"
+        },
+        {
+          "name": "shared_badges",
+          "result": "pass"
+        },
+        {
+          "name": "shared_cursor_recovery",
+          "result": "pass"
+        },
+        {
+          "name": "shared_revocation_disconnect",
+          "result": "pass"
+        }
+      ],
+      "cleanup": {
+        "result": "pass",
+        "destructive_confirmation": true
+      },
+      "secret_scan": {
+        "result": "pass",
+        "forbidden_matches": 0
+      },
+      "source": "reviewed_historical_live_record"
+    },
+    {
+      "mode": "dedicated",
+      "result": "pass",
+      "run_id": "fr115-live-20260722",
+      "certified_at": "2026-07-22T00:00:00Z",
+      "expires_at": "2026-08-21T00:00:00Z",
+      "build": {
+        "commit": "83c063129f2a63e095d8543bd5ac7f9dfe7345f7",
+        "manifest_version": "orchestrator-slack-dedicated-v1",
+        "manifest_sha256": "088a2ab58d6160f64630d5c5f1f927f02a65f44d6075d7a337ac1969a1936c1f"
+      },
+      "stages": [
+        {
+          "name": "dedicated_provision_oauth",
+          "result": "pass"
+        },
+        {
+          "name": "dedicated_manifest_receipt",
+          "result": "pass"
+        },
+        {
+          "name": "dedicated_badges",
+          "result": "pass"
+        },
+        {
+          "name": "dedicated_cursor_recovery",
+          "result": "pass"
+        },
+        {
+          "name": "dedicated_reauthorize",
+          "result": "pass"
+        },
+        {
+          "name": "dedicated_disconnect_delete",
+          "result": "pass"
+        }
+      ],
+      "cleanup": {
+        "result": "pass",
+        "destructive_confirmation": true
+      },
+      "secret_scan": {
+        "result": "pass",
+        "forbidden_matches": 0
+      },
+      "source": "reviewed_historical_live_record"
+    }
+  ]
+}

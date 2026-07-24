@@ -67,6 +67,18 @@ Pre-configured webhook trigger packages for external platforms: **[orchestrator-
 
 Slack, GitHub, LINE — each with per-trigger signature verification, CEL payload filtering, and setup guides. Add new integrations via the `/integration-authoring` skill.
 
+Controlled Slack provider evidence is maintained separately from network-free CI:
+
+| Mode | Last reviewed result | Certified | Expires |
+|---|---|---|---|
+| Shared official App | PASS | 2026-07-22 | 2026-08-21 |
+| Dedicated workspace App | PASS | 2026-07-22 | 2026-08-21 |
+
+Run `./scripts/qa/certify-slack-managed-live.sh status` for the derived
+`fresh`/`stale` interpretation. Expiry means recertification is due, not that a
+product regression has been detected. The allowlisted source record is
+[`docs/qa/evidence/slack-live-certification-latest.json`](docs/qa/evidence/slack-live-certification-latest.json).
+
 ## Key Features
 
 - **Declarative control plane** — YAML manifests with loop control, guard steps, DAG execution, and reusable resource definitions

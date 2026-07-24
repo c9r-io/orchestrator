@@ -74,21 +74,26 @@ cleanup() {
 }
 trap cleanup EXIT
 
-post_and_react() {
-  local reaction="$1"
-  local label="$2"
+post_message() {
+  local label="$1"
   local post_payload="$PRIVATE_ROOT/post-$label.json"
   local post_response="$PRIVATE_ROOT/post-$label-response.json"
-  local reaction_payload="$PRIVATE_ROOT/reaction-$label.json"
-  local reaction_response="$PRIVATE_ROOT/reaction-$label-response.json"
 
   jq -n --arg channel "$SLACK_LIVE_CHANNEL_ID" --arg text "$RUN_ID $label synthetic message" \
     '{channel:$channel,text:$text}' >"$post_payload"
   slack_api chat.postMessage "$post_payload" "$post_response"
   POSTED_TS="$(jq -er '.ts' "$post_response")"
   MESSAGE_TIMESTAMPS+=("$POSTED_TS")
+}
 
-  jq -n --arg channel "$SLACK_LIVE_CHANNEL_ID" --arg timestamp "$POSTED_TS" --arg name "$reaction" \
+add_reaction() {
+  local reaction="$1"
+  local label="$2"
+  local timestamp="$3"
+  local reaction_payload="$PRIVATE_ROOT/reaction-$label.json"
+  local reaction_response="$PRIVATE_ROOT/reaction-$label-response.json"
+
+  jq -n --arg channel "$SLACK_LIVE_CHANNEL_ID" --arg timestamp "$timestamp" --arg name "$reaction" \
     '{channel:$channel,timestamp:$timestamp,name:$name}' >"$reaction_payload"
   slack_api reactions.add "$reaction_payload" "$reaction_response"
 }
@@ -114,9 +119,10 @@ jq -e '.match.status == "matched" and .mutation_performed == false and .network_
 orch task list --project "$SLACK_LIVE_PROJECT" -o json >"$baseline"
 baseline_count="$(jq 'length' "$baseline")"
 
-post_and_react "$IMPLEMENT_REACTION" implement
+post_message two-badge
 implement_ts="$POSTED_TS"
-post_and_react "$DOCS_REACTION" docs
+add_reaction "$IMPLEMENT_REACTION" implement "$POSTED_TS"
+add_reaction "$DOCS_REACTION" docs "$POSTED_TS"
 
 deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
 while (( $(date +%s) < deadline )); do
@@ -152,4 +158,4 @@ orch source automation status --project "$SLACK_LIVE_PROJECT" -o json >"$PRIVATE
 jq -e '.backlog_count == 0 and .active_leases == 0 and .needs_attention_count == 0' \
   "$PRIVATE_ROOT/automation-status.json" >/dev/null || fail "automation did not quiesce cleanly"
 
-printf 'FR-114 live smoke: PASS (two routed tasks, duplicate converged, backlog empty)\n'
+printf 'Slack live smoke: PASS (same-message two badges, duplicate converged, backlog empty)\n'

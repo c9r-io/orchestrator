@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "default_ttl_days": 30,
+  "maximum_ttl_days": 365,
+  "modes": [
+    "shared",
+    "dedicated",
+    "both"
+  ],
+  "live_is_opt_in": true,
+  "expired_semantics": "recertification_required",
+  "expired_does_not_mean": "product_regression",
+  "safe_evidence_allowlist": [
+    "run_id",
+    "mode",
+    "status",
+    "timestamps",
+    "build_commit",
+    "manifest_digest",
+    "anonymous_identity_digest",
+    "scenario_result",
+    "stable_evidence_code",
+    "cleanup_result"
+  ]
+}
