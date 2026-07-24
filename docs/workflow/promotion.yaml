@@ -80,24 +80,17 @@ spec:
     - linkedin: Plainspoken update for engineers and technical leaders; avoid business slogans
     - hacker_news: Factual/understated Show HN or project update draft; no hype or competitor framing
 
-    Output a JSON object with these keys:
-    - summary (string): a 2-3 sentence overview of the most meaningful changes
-    - highlights (array of objects, each with):
-      - title (string): headline for the highlight
-      - description (string): 2-3 sentence explanation of the change, why it mattered, and what makes it worth sharing
-      - technical_depth (string): "deep" or "accessible"
-      - tags (array of strings): relevant technology tags (e.g. "rust", "ai", "automation")
-    - platforms (array of objects, each with):
-      - id (string): platform identifier (devto, hashnode, twitter, linkedin, hacker_news)
-      - name (string): human-readable platform name (Dev.to, Hashnode, Twitter, LinkedIn, Hacker News)
-      - content_type (string): "blog_post", "tweet_thread", "short_post", or "link_submission"
-      - api_publishable (boolean): true only when this workflow has a safe draft-publishing path for the platform
-      - priority (number 1-5): how well this content fits the platform audience
+    Select the meaningful highlights, then call mcp__orch__generate_items once
+    with replace=true. Create one item for each worthwhile target platform:
+    - id: devto, hashnode, twitter, linkedin, or hacker_news
+    - label: human-readable platform name
+    - vars: content_type, api_publishable ("true" or "false"),
+      platform_priority (string), and promotion_summary (a complete concise
+      summary of the selected changes and angles for the writer)
 
-    If there are no meaningful changes since the last promotion, output:
-    {"summary": "No significant changes to share", "highlights": [], "platforms": []}
-
-    IMPORTANT: Output ONLY valid JSON. No markdown, no explanation outside the JSON.
+    If there are no meaningful changes, keep one low-priority manual-review
+    item instead of emitting an empty coordination payload. Do not communicate
+    generated items through stdout.
 ---
 apiVersion: orchestrator.dev/v2
 kind: StepTemplate
@@ -160,14 +153,13 @@ spec:
       submission comment. Tone: factual, understated, no marketing language, no forced
       competitor comparisons. Focus on what it does and why it mattered technically.
 
-    IMPORTANT: Output the content as a JSON object with these keys:
+    Save the content as JSON with these keys:
     - platform (string): the platform id
     - title (string): content title or first tweet
     - body (string): full content body (markdown for blogs, thread as numbered list for twitter)
     - metadata (object): platform-specific metadata (tags, frontmatter fields, etc.)
-    - filename (string): suggested filename for the draft (e.g. "2026-03-23-devto-orchestrator-update.md")
-
-    Output ONLY valid JSON. No markdown wrapping, no explanation outside the JSON.
+    Write it to docs/promotion/drafts/draft-{task_item_id}.json. Create the
+    directory if needed. Then call mcp__orch__mark_item with status verified.
 ---
 # ── Agents ──────────────────────────────────────────────────────────────
 # Content agents use claude-sonnet — this is reflective technical writing,
@@ -181,7 +173,15 @@ metadata:
 spec:
   capabilities:
     - analyze
-  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  driver:
+    provider: claude
+    transport: cli
+    options:
+      maxTurns: 12
+      budgetCapUsd: 2.00
+      permissionMode: governed
+      allowedTools:
+        - mcp__orch__generate_items
   env:
     - fromRef: claude-sonnet-promo
 ---
@@ -193,7 +193,15 @@ metadata:
 spec:
   capabilities:
     - content_gen
-  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  driver:
+    provider: claude
+    transport: cli
+    options:
+      maxTurns: 16
+      budgetCapUsd: 3.00
+      permissionMode: governed
+      allowedTools:
+        - mcp__orch__mark_item
   env:
     - fromRef: claude-sonnet-promo
 ---
@@ -220,11 +228,11 @@ spec:
 # Promotion Pipeline:
 #
 #   ┌── Task ──────────────────────────────────────────────────────────────┐
-#   gather_updates (command) → analyze_highlights (agent) ─ generate_items ►
+#   gather_updates (command) → analyze_highlights (agent + generate_items tool) ►
 #
 #   ┌── Item ──────────────────────────────────────────────────────────────┐
-#   generate_content (agent ×N) → save_drafts (command ×N) →
-#   publish (command ×N, prehook: api_publishable)
+#   generate_content (agent ×N, writes deterministic draft) →
+#   publish (command ×N, governance prehook: api_publishable)
 #
 #   ┌── Task ──────────────────────────────────────────────────────────────┐
 #   track_results (command) → loop_guard (builtin)
@@ -283,22 +291,10 @@ spec:
       repeatable: false
       tty: false
       behavior:
-        captures:
-          - var: promotion_summary
-            source: stdout
-            json_path: "$.summary"
-        post_actions:
-          - type: generate_items
-            from_var: analyze_highlights_output
-            json_path: "$.platforms"
-            mapping:
-              item_id: "$.id"
-              label: "$.name"
-              vars:
-                content_type: "$.content_type"
-                api_publishable: "$.api_publishable"
-                platform_priority: "$.priority"
-            replace: true
+        driverRequirements:
+          multiTurn: true
+          toolHosting: stdio
+          workspaceAccess: read
 
     # ── Item segment: generate_content → save_drafts → publish ──
 
@@ -311,30 +307,11 @@ spec:
       repeatable: false
       tty: false
       behavior:
-        captures:
-          - var: draft_filename
-            source: stdout
-            json_path: "$.filename"
-          - var: draft_title
-            source: stdout
-            json_path: "$.title"
-
-    - id: save_drafts
-      scope: item
-      enabled: true
-      repeatable: false
-      tty: false
-      command: >-
-        cd {workspace_root} &&
-        mkdir -p docs/promotion/drafts &&
-        FILENAME="{draft_filename}" &&
-        if [ -z "$FILENAME" ] || [ "$FILENAME" = "{draft_filename}" ]; then
-          FILENAME="draft-{task_item_id}.json";
-        fi &&
-        cat > "docs/promotion/drafts/${FILENAME}" << 'DRAFT_EOF'
-        {generate_content_output}
-        DRAFT_EOF
-        echo "Draft saved: docs/promotion/drafts/${FILENAME}"
+        side_effect_class: workspace_only
+        driverRequirements:
+          multiTurn: true
+          toolHosting: stdio
+          workspaceAccess: write
 
     - id: publish
       scope: item
@@ -351,7 +328,7 @@ spec:
         case "${PLATFORM}" in
           "Dev.to")
             if [ -n "${DEVTO_API_KEY}" ]; then
-              BODY=$(cat docs/promotion/drafts/{draft_filename} | python3 -c "
+              BODY=$(cat docs/promotion/drafts/draft-{task_item_id}.json | python3 -c "
         import sys, json
         data = json.load(sys.stdin)
         article = {'article': {'title': data['title'], 'body_markdown': data['body'], 'published': False, 'tags': data.get('metadata', {}).get('tags', [])}}

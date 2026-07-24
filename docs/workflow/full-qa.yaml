@@ -29,7 +29,18 @@ metadata:
 spec:
   capabilities:
     - qa_testing
-  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  driver:
+    provider: claude
+    transport: cli
+    options:
+      maxTurns: 12
+      budgetCapUsd: 2.00
+      permissionMode: governed
+      allowedTools:
+        - mcp__orch__run_tests
+        - mcp__orch__create_ticket
+        - mcp__orch__scan_tickets
+        - mcp__orch__mark_item
   env:
     - fromRef: claude-opus
     - fromRef: minimax
@@ -43,7 +54,17 @@ spec:
   capabilities:
     - ticket_fix
     - align_tests
-  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  driver:
+    provider: claude
+    transport: cli
+    options:
+      maxTurns: 12
+      budgetCapUsd: 2.00
+      permissionMode: governed
+      allowedTools:
+        - mcp__orch__run_tests
+        - mcp__orch__scan_tickets
+        - mcp__orch__mark_item
   env:
     - fromRef: claude-opus
     - fromRef: minimax
@@ -57,7 +78,15 @@ spec:
   capabilities:
     - doc_governance
     - loop_guard
-  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  driver:
+    provider: claude
+    transport: cli
+    options:
+      maxTurns: 8
+      budgetCapUsd: 1.00
+      permissionMode: governed
+      allowedTools:
+        - mcp__orch__mark_item
   env:
     - fromRef: minimax
 ---
@@ -84,6 +113,12 @@ spec:
         engine: cel
         when: "qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && (self_referential_safe || size(self_referential_safe_scenarios) > 0)"
         reason: "Run all QA markdown documents; skip self-referential-unsafe docs unless they have safe scenarios"
+      behavior:
+        side_effect_class: workspace_only
+        driverRequirements:
+          multiTurn: true
+          toolHosting: stdio
+          workspaceAccess: write
 
     - id: ticket_fix
       type: ticket_fix
@@ -97,8 +132,14 @@ spec:
       max_parallel: 2
       prehook:
         engine: cel
-        when: "qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && active_ticket_count > 0"
-        reason: "Only fix tickets for QA docs that have active tickets"
+        when: "qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\")"
+        reason: "Only consider ticket fixes for QA markdown documents; the agent scans typed ticket state"
+      behavior:
+        side_effect_class: workspace_only
+        driverRequirements:
+          multiTurn: true
+          toolHosting: stdio
+          workspaceAccess: write
 
     # ── Task segment: align_tests + doc_governance ──
     - id: align_tests

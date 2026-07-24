@@ -177,6 +177,8 @@ impl AdaptivePlanExecutor for AgentBackedAdaptiveExecutor<'_> {
                 project_id: &self.task_ctx.project_id,
                 execution_profile: None,
                 self_referential: self.task_ctx.self_referential,
+                resume_provider_session: false,
+                enable_coordination_tools: false,
                 command_rule_index: None,
             },
         )
@@ -412,6 +414,8 @@ pub(crate) async fn execute_dynamic_step_config(
                 project_id: &task_ctx.project_id,
                 execution_profile: None,
                 self_referential: task_ctx.self_referential,
+                resume_provider_session: false,
+                enable_coordination_tools: false,
                 command_rule_index: None,
             },
         )
@@ -446,6 +450,8 @@ pub(crate) async fn execute_dynamic_step_config(
                 project_id: &task_ctx.project_id,
                 execution_profile: None,
                 self_referential: task_ctx.self_referential,
+                resume_provider_session: false,
+                enable_coordination_tools: false,
             },
         )
         .await?

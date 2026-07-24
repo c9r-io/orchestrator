@@ -346,6 +346,8 @@ pub(crate) async fn execute_builtin_step(
                 project_id: &task_ctx.project_id,
                 execution_profile: None,
                 self_referential: task_ctx.self_referential,
+                resume_provider_session: false,
+                enable_coordination_tools: false,
                 command_rule_index: None,
             },
         )
@@ -384,6 +386,9 @@ pub(crate) async fn execute_builtin_step(
                 project_id: &task_ctx.project_id,
                 execution_profile: step.execution_profile.as_deref(),
                 self_referential: task_ctx.self_referential,
+                resume_provider_session: step.behavior.driver_requirements.session_resume,
+                enable_coordination_tools: step.behavior.driver_requirements.tool_hosting
+                    != agent_orchestrator::config::ToolHosting::None,
             },
         )
         .await?

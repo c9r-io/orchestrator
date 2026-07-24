@@ -157,6 +157,7 @@ fn normalize_allowed_tools(configured: &[String]) -> HashSet<String> {
         "create_ticket",
         "scan_tickets",
         "generate_items",
+        "record_metric",
     ];
     if configured.is_empty() || configured.iter().any(|tool| tool == "mcp__orch") {
         return ALL.iter().map(|tool| (*tool).to_string()).collect();
@@ -275,6 +276,7 @@ async fn execute_tool(state: &ToolHostState, name: &str, arguments: Value) -> Re
         "create_ticket" => create_ticket(state).await,
         "scan_tickets" => scan_tickets(state).await,
         "generate_items" => generate_items(state, arguments).await,
+        "record_metric" => record_metric(state, arguments).await,
         _ => bail!("unknown coordination tool"),
     }
 }
@@ -500,6 +502,43 @@ async fn generate_items(state: &ToolHostState, arguments: Value) -> Result<Value
     Ok(json!({"created": created, "replace": input.replace}))
 }
 
+async fn record_metric(state: &ToolHostState, arguments: Value) -> Result<Value> {
+    let name = arguments
+        .get("name")
+        .and_then(Value::as_str)
+        .context("name is required")?;
+    let value = arguments
+        .get("value")
+        .and_then(Value::as_f64)
+        .context("value must be a number")?;
+    validate_metric(name, value)?;
+    ensure_current_item(state).await?;
+    Ok(json!({
+        "accepted": true,
+        "task_id": state.task_id,
+        "item_id": state.item_id,
+        "name": name,
+        "value": value,
+    }))
+}
+
+fn validate_metric(name: &str, value: f64) -> Result<()> {
+    let valid_name = !name.is_empty()
+        && name.len() <= 64
+        && name.bytes().enumerate().all(|(index, byte)| match byte {
+            b'a'..=b'z' => true,
+            b'0'..=b'9' | b'_' => index > 0,
+            _ => false,
+        });
+    if !valid_name {
+        bail!("metric name must match [a-z][a-z0-9_]{{0,63}}");
+    }
+    if !value.is_finite() || !(-1_000_000_000.0..=1_000_000_000.0).contains(&value) {
+        bail!("metric value must be finite and within the governed range");
+    }
+    Ok(())
+}
+
 fn validate_item_id(value: &str) -> Result<()> {
     let path = Path::new(value);
     if value.trim().is_empty()
@@ -575,6 +614,11 @@ fn tool_schemas(allowed: &HashSet<String>) -> Vec<Value> {
             "description": "Create bounded dynamic task items for the authenticated task.",
             "inputSchema": {"type": "object", "properties": {"items": {"type": "array", "maxItems": MAX_GENERATED_ITEMS, "items": {"type": "object", "properties": {"id": {"type": "string"}, "label": {"type": "string"}, "vars": {"type": "object", "additionalProperties": {"type": "string"}}}, "required": ["id"]}}, "replace": {"type": "boolean"}}, "required": ["items"]}
         }),
+        json!({
+            "name": "record_metric",
+            "description": "Record one bounded numeric metric for deterministic item selection.",
+            "inputSchema": {"type": "object", "properties": {"name": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"}, "value": {"type": "number", "minimum": -1000000000, "maximum": 1000000000}}, "required": ["name", "value"]}
+        }),
     ];
     schemas
         .into_iter()
@@ -603,7 +647,7 @@ mod tests {
         assert_eq!(allowed, HashSet::from(["run_tests".to_string()]));
 
         let all = normalize_allowed_tools(&[]);
-        assert_eq!(all.len(), 6);
+        assert_eq!(all.len(), 7);
         assert!(all.contains("mark_done"));
 
         let namespace = normalize_allowed_tools(&["mcp__orch".to_string()]);
@@ -627,6 +671,18 @@ mod tests {
         assert!(validate_item_id("docs/../outside").is_err());
         assert!(validate_item_id("/absolute").is_err());
         assert!(validate_item_id(&"x".repeat(513)).is_err());
+    }
+
+    #[test]
+    fn recorded_metrics_are_bounded_and_named() {
+        assert!(validate_metric("score", 0.95).is_ok());
+        assert!(validate_metric("quality_score_2", -1_000_000_000.0).is_ok());
+        assert!(validate_metric("", 1.0).is_err());
+        assert!(validate_metric("Score", 1.0).is_err());
+        assert!(validate_metric("2score", 1.0).is_err());
+        assert!(validate_metric("score-with-dash", 1.0).is_err());
+        assert!(validate_metric("score", f64::INFINITY).is_err());
+        assert!(validate_metric("score", 1_000_000_001.0).is_err());
     }
 
     #[test]
@@ -821,7 +877,7 @@ mod tests {
                 .pointer("/result/tools")
                 .and_then(Value::as_array)
                 .map(Vec::len),
-            Some(6)
+            Some(7)
         );
 
         let unknown = client
@@ -967,6 +1023,31 @@ mod tests {
             Some(&json!("verified"))
         );
 
+        let invalid_metric = call(
+            &client,
+            host.callback(),
+            26,
+            "record_metric",
+            json!({"name":"Score","value":0.9}),
+        )
+        .await;
+        assert_eq!(
+            invalid_metric.pointer("/result/isError"),
+            Some(&Value::Bool(true))
+        );
+        let metric = call(
+            &client,
+            host.callback(),
+            27,
+            "record_metric",
+            json!({"name":"score","value":0.9}),
+        )
+        .await;
+        assert_eq!(
+            metric.pointer("/result/structuredContent/accepted"),
+            Some(&Value::Bool(true))
+        );
+
         std::fs::write(
             workspace.join("src/lib.rs"),
             "#[test]\nfn pilot() { assert!(false); }\n",
@@ -1032,6 +1113,6 @@ mod tests {
             })
             .await
             .expect("event count");
-        assert_eq!(event_count, 30);
+        assert_eq!(event_count, 34);
     }
 }

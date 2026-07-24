@@ -64,21 +64,7 @@
       "classification": "tool-migratable",
       "status": "pending",
       "evidence": null,
-      "approvedTouches": [
-        {
-          "step": "create_session",
-          "kind": "capture",
-          "name": "loop_session_id",
-          "json_path": "$.session_id"
-        },
-        {
-          "step": "qa_testing",
-          "kind": "step_vars",
-          "names": [
-            "loop_session_id"
-          ]
-        }
-      ],
+      "approvedTouches": [],
       "residualChannels": [
         "goal"
       ]
@@ -111,7 +97,7 @@
           "step": "ticket_fix",
           "kind": "prehook",
           "engine": "cel",
-          "expression": "qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && active_ticket_count > 0"
+          "expression": "qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\")"
         },
         {
           "step": "self_test",
@@ -161,31 +147,6 @@
       "evidence": null,
       "approvedTouches": [
         {
-          "step": "analyze_highlights",
-          "kind": "capture",
-          "name": "promotion_summary",
-          "json_path": "$.summary"
-        },
-        {
-          "step": "analyze_highlights",
-          "kind": "post_action",
-          "name": "generate_items",
-          "from_var": "analyze_highlights_output",
-          "json_path": "$.platforms"
-        },
-        {
-          "step": "generate_content",
-          "kind": "capture",
-          "name": "draft_filename",
-          "json_path": "$.filename"
-        },
-        {
-          "step": "generate_content",
-          "kind": "capture",
-          "name": "draft_title",
-          "json_path": "$.title"
-        },
-        {
           "step": "publish",
           "kind": "prehook",
           "engine": "cel",
@@ -207,13 +168,7 @@
       "classification": "tool-migratable",
       "status": "pending",
       "evidence": null,
-      "approvedTouches": [
-        {
-          "step": "ticket_scan",
-          "kind": "builtin",
-          "name": "ticket_scan"
-        }
-      ],
+      "approvedTouches": [],
       "residualChannels": [
         "goal",
         "last_sandbox_denied",
@@ -240,19 +195,6 @@
       "evidence": null,
       "approvedTouches": [
         {
-          "step": "qa_doc_gen",
-          "kind": "capture",
-          "name": "regression_target_ids",
-          "json_path": "$.regression_targets[*]"
-        },
-        {
-          "step": "qa_doc_gen",
-          "kind": "post_action",
-          "name": "generate_items",
-          "from_var": "regression_target_ids",
-          "json_path": "$"
-        },
-        {
           "step": "self_test",
           "kind": "builtin",
           "name": "self_test"
@@ -266,13 +208,13 @@
           "step": "qa_testing",
           "kind": "prehook",
           "engine": "cel",
-          "expression": "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && (self_referential_safe || size(self_referential_safe_scenarios) > 0) && (size(regression_target_ids) == 0 || qa_file_path in regression_target_ids)"
+          "expression": "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && (self_referential_safe || size(self_referential_safe_scenarios) > 0)"
         },
         {
           "step": "ticket_fix",
           "kind": "prehook",
           "engine": "cel",
-          "expression": "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && active_ticket_count > 0"
+          "expression": "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\")"
         },
         {
           "step": "align_tests",
@@ -306,19 +248,6 @@
       "status": "pending",
       "evidence": null,
       "approvedTouches": [
-        {
-          "step": "evo_plan",
-          "kind": "post_action",
-          "name": "generate_items",
-          "from_var": "evo_plan_output",
-          "json_path": "$.candidates"
-        },
-        {
-          "step": "evo_benchmark",
-          "kind": "capture",
-          "name": "score",
-          "json_path": "$.total_score"
-        },
         {
           "step": "select_best",
           "kind": "builtin",

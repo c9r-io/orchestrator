@@ -75,22 +75,20 @@ spec:
 
     Project: {source_tree}
 
-    IMPORTANT: First read the full plan file at {plan_output_path} to understand
-    the complete implementation plan, including its QA Strategy section.
+    Continue from the implementation plan retained in the private provider
+    session, including its QA Strategy section.
 
     Follow the QA Strategy defined in the plan:
     - If the plan says QA docs are NOT needed (e.g. refactoring tasks where
       behavioral equivalence is validated by unit tests), DO NOT generate new docs.
       Instead, identify 3-10 existing QA documents under docs/qa/ that are most
-      relevant for regression testing this change (covering affected code paths,
-      APIs, and integration points). Output ONLY a JSON object:
-      {"regression_targets": [{"id": "path/to/doc.md", "name": "path/to/doc.md"}]}
-      Use the relative path (e.g. "docs/qa/orchestrator/02-cli-task-lifecycle.md")
-      as both the id and name. Output NO other text — just the JSON.
+      relevant for regression testing this change.
     - If the plan calls for scenario-based QA docs, generate them under
-      docs/qa/ following existing conventions. After generation, output a JSON
-      object listing the new docs:
-      {"regression_targets": [{"id": "docs/qa/.../new-doc.md", "name": "docs/qa/.../new-doc.md"}]}
+      docs/qa/ following existing conventions and select those new documents.
+
+    Call mcp__orch__generate_items once with replace=true. Each selected QA
+    document is one item whose id and label are its relative path. Do not emit
+    a JSON handoff or communicate the selection through stdout.
 
     Do NOT generate QA documents that duplicate what unit tests already cover.
     Focus on integration-level and end-to-end behaviors that unit tests cannot
@@ -108,8 +106,8 @@ spec:
     Use /rust-conventions for all Rust code.
     Use /test-authoring — add unit tests for new logic.
 
-    IMPORTANT: Read the plan at {plan_output_path} and implement it exactly.
-    Follow the plan exactly — implement only what is listed in the plan's
+    Continue from the plan retained in the private provider session.
+    Follow it exactly — implement only what is listed in the plan's
     'Files to Change' and 'Scope Boundary' sections. Do NOT add abstractions,
     traits, or types that are not specified in the plan.
 
@@ -214,7 +212,16 @@ spec:
   capabilities:
     - plan
     - qa_doc_gen
-  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  driver:
+    provider: claude
+    transport: cli
+    options:
+      maxTurns: 16
+      budgetCapUsd: 4.00
+      permissionMode: governed
+      allowedTools:
+        - mcp__orch__generate_items
+        - mcp__orch__mark_item
   env:
     - fromRef: claude-opus
     - fromRef: minimax
@@ -230,7 +237,17 @@ spec:
     - implement
     - ticket_fix
     - align_tests
-  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  driver:
+    provider: claude
+    transport: cli
+    options:
+      maxTurns: 24
+      budgetCapUsd: 8.00
+      permissionMode: governed
+      allowedTools:
+        - mcp__orch__run_tests
+        - mcp__orch__scan_tickets
+        - mcp__orch__mark_item
   env:
     - fromRef: claude-opus
     # - fromRef: claude-sonnet
@@ -245,7 +262,18 @@ metadata:
 spec:
   capabilities:
     - qa_testing
-  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  driver:
+    provider: claude
+    transport: cli
+    options:
+      maxTurns: 16
+      budgetCapUsd: 4.00
+      permissionMode: governed
+      allowedTools:
+        - mcp__orch__run_tests
+        - mcp__orch__create_ticket
+        - mcp__orch__scan_tickets
+        - mcp__orch__mark_item
   env:
     # - fromRef: claude-sonnet
     - fromRef: minimax
@@ -261,7 +289,15 @@ spec:
     - doc_governance
     - review
     - loop_guard
-  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  driver:
+    provider: claude
+    transport: cli
+    options:
+      maxTurns: 12
+      budgetCapUsd: 2.00
+      permissionMode: governed
+      allowedTools:
+        - mcp__orch__mark_item
   env:
     # - fromRef: claude-haiku
     - fromRef: minimax
@@ -281,11 +317,8 @@ spec:
   #   plan + qa_doc_gen + implement + self_test + self_restart          qa_testing + ticket_fix  align_tests + doc_governance
   #
   # Item narrowing:
-  #   qa_doc_gen has a generate_items post_action. Post-actions are DEFERRED —
-  #   they buffer during the step but execute AFTER the entire Task segment ends.
-  #   When qa_doc_gen outputs {"regression_targets": [...]}, those targets replace
-  #   the 99 static QA items, so the next Item segment (qa_testing + ticket_fix)
-  #   only processes the selected subset. If extraction fails, static items remain.
+  #   qa_doc_gen calls the authenticated generate_items tool. The resulting typed
+  #   items replace the static QA set before the downstream Item segment begins.
 
   # Default parallelism for item-scoped segments (qa_testing + ticket_fix)
   # Reduced from 4 to 2: each claude agent consumes significant CPU/memory
@@ -301,6 +334,9 @@ spec:
       enabled: true
       repeatable: false
       tty: false
+      behavior:
+        driverRequirements:
+          workspaceAccess: write
 
     - id: qa_doc_gen
       type: qa_doc_gen
@@ -311,21 +347,12 @@ spec:
       repeatable: false
       tty: false
       behavior:
-        captures:
-          - var: regression_target_ids
-            source: stdout
-            json_path: "$.regression_targets[*]"
-        post_actions:
-          # Narrows the QA item set for the downstream Item segment (qa_testing).
-          # Deferred: buffers here, executes after the Task segment ends.
-          # On extraction failure: silent fallback to all static items.
-          - type: generate_items
-            from_var: regression_target_ids
-            json_path: "$"
-            mapping:
-              item_id: "$.id"
-              label: "$.name"
-            replace: true
+        side_effect_class: workspace_only
+        driverRequirements:
+          multiTurn: true
+          toolHosting: stdio
+          sessionResume: true
+          workspaceAccess: write
 
     - id: implement
       type: implement
@@ -336,6 +363,11 @@ spec:
       enabled: true
       repeatable: true
       tty: false
+      behavior:
+        side_effect_class: workspace_only
+        driverRequirements:
+          sessionResume: true
+          workspaceAccess: write
 
     # Self-Test — cargo check + cargo test --lib + manifest validate (builtin)
     # On failure: captures build errors into pipeline var `self_test_errors`
@@ -373,8 +405,14 @@ spec:
       tty: false
       prehook:
         engine: cel
-        when: "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && (self_referential_safe || size(self_referential_safe_scenarios) > 0) && (size(regression_target_ids) == 0 || qa_file_path in regression_target_ids)"
-        reason: "QA testing deferred to final cycle; restricted to QA markdown documents; skips self-referential-unsafe docs unless they have safe scenarios; filtered by regression targets when available"
+        when: "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && (self_referential_safe || size(self_referential_safe_scenarios) > 0)"
+        reason: "QA testing deferred to final cycle; typed generated items already narrow the target set; unsafe self-referential scenarios remain excluded"
+      behavior:
+        side_effect_class: workspace_only
+        driverRequirements:
+          multiTurn: true
+          toolHosting: stdio
+          workspaceAccess: write
 
     - id: ticket_fix
       type: ticket_fix
@@ -388,8 +426,14 @@ spec:
       max_parallel: 2  # ticket_fix is heavier — lower concurrency
       prehook:
         engine: cel
-        when: "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && active_ticket_count > 0"
-        reason: "Only fix tickets on last cycle for QA markdown documents when there are active tickets"
+        when: "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\")"
+        reason: "Only consider ticket fixes on the last cycle for QA markdown documents; the agent scans typed ticket state"
+      behavior:
+        side_effect_class: workspace_only
+        driverRequirements:
+          multiTurn: true
+          toolHosting: stdio
+          workspaceAccess: write
 
     # ── Task segment: align_tests + doc_governance ──
     # Deferred to Cycle 2 for full validation pass

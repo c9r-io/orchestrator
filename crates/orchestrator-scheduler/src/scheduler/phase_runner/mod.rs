@@ -128,6 +128,8 @@ async fn run_phase_with_timeout(
         project_id,
         execution_profile,
         self_referential,
+        resume_provider_session,
+        enable_coordination_tools,
         command_rule_index,
     } = request;
 
@@ -195,6 +197,8 @@ async fn run_phase_with_timeout(
         step_scope,
         &prompt_payload,
         req_pipe_stdin,
+        resume_provider_session,
+        enable_coordination_tools,
     )
     .await
     {
@@ -568,6 +572,8 @@ pub async fn run_phase_with_rotation(
         project_id,
         execution_profile,
         self_referential,
+        resume_provider_session,
+        enable_coordination_tools,
     } = request;
     let effective_capability = capability.or(match phase {
         "qa" | "fix" | "retest" => Some(phase),
@@ -646,6 +652,8 @@ pub async fn run_phase_with_rotation(
             project_id,
             execution_profile,
             self_referential,
+            resume_provider_session,
+            enable_coordination_tools,
             command_rule_index,
         },
     )
@@ -679,6 +687,8 @@ pub async fn run_phase_with_selected_agent(
         project_id,
         execution_profile,
         self_referential,
+        resume_provider_session,
+        enable_coordination_tools,
         command_rule_index,
     } = request;
 
@@ -755,6 +765,8 @@ pub async fn run_phase_with_selected_agent(
             project_id,
             execution_profile,
             self_referential,
+            resume_provider_session,
+            enable_coordination_tools,
             command_rule_index,
         },
     )

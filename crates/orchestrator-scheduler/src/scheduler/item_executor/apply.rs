@@ -439,6 +439,21 @@ fn apply_coordination_tool_effects(
                     acc.new_ticket_count = acc.active_tickets.len() as i64;
                 }
             }
+            "record_metric"
+                if receipt
+                    .get("accepted")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false) =>
+            {
+                if let (Some(name), Some(value)) = (
+                    receipt.get("name").and_then(serde_json::Value::as_str),
+                    receipt.get("value").and_then(serde_json::Value::as_f64),
+                ) {
+                    acc.pipeline_vars
+                        .vars
+                        .insert(name.to_string(), value.to_string());
+                }
+            }
             _ => {}
         }
     }
@@ -462,6 +477,7 @@ fn uses_coordination_tool_model(artifacts: &[agent_orchestrator::collab::Artifac
                 | "create_ticket"
                 | "scan_tickets"
                 | "generate_items"
+                | "record_metric"
         )
     })
 }
@@ -579,6 +595,10 @@ mod coordination_effect_tests {
         }
     }
 
+    fn accumulator() -> StepExecutionAccumulator {
+        StepExecutionAccumulator::new(PipelineVariables::default())
+    }
+
     #[test]
     fn mark_item_and_ticket_receipts_fold_into_accumulator() {
         let artifacts = vec![
@@ -608,7 +628,7 @@ mod coordination_effect_tests {
             })),
         ];
         let result = result_with_artifacts(artifacts);
-        let mut accumulator = StepExecutionAccumulator::new(PipelineVariables::default());
+        let mut accumulator = accumulator();
 
         apply_coordination_tool_effects(&result, &mut accumulator);
 
@@ -635,11 +655,39 @@ mod coordination_effect_tests {
         ];
         assert!(uses_coordination_tool_model(&artifacts));
         let result = result_with_artifacts(artifacts);
-        let mut accumulator = StepExecutionAccumulator::new(PipelineVariables::default());
+        let mut accumulator = accumulator();
 
         apply_coordination_tool_effects(&result, &mut accumulator);
 
         assert_eq!(accumulator.item_status, "verified");
+    }
+
+    #[test]
+    fn record_metric_receipt_updates_the_item_accumulator() {
+        let artifacts = vec![
+            Artifact::new(ArtifactKind::ToolCall {
+                tool: "mcp__orch__record_metric".to_string(),
+            })
+            .with_content(json!({"call_id":"metric-1","args":{"name":"score","value":0.91}})),
+            Artifact::new(ArtifactKind::Data {
+                schema: "driver_tool_result".to_string(),
+            })
+            .with_content(json!({
+                "call_id":"metric-1",
+                "payload":{"accepted":true,"name":"score","value":0.91},
+                "is_error":false
+            })),
+        ];
+        assert!(uses_coordination_tool_model(&artifacts));
+        let result = result_with_artifacts(artifacts);
+        let mut accumulator = accumulator();
+
+        apply_coordination_tool_effects(&result, &mut accumulator);
+
+        assert_eq!(
+            accumulator.pipeline_vars.vars.get("score"),
+            Some(&"0.91".to_string())
+        );
     }
 
     #[test]

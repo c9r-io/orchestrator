@@ -1,19 +1,18 @@
-# Command Rules — session reuse and isolation template.
+# Driver Session Continuity — typed session reuse and isolation template.
 #
 # Usage:
 #   orchestrator apply -f docs/workflow/command-rules.yaml --project cmd-rules
 #   orchestrator task create --name "session-demo" --goal "Demonstrate session reuse" --workflow command_rules --project cmd-rules
 #
-# Demonstrates the canonical use case for command_rules + step_vars:
-# Agent session reuse across workflow steps, with selective isolation.
+# This supersedes the legacy command_rules + captured session-ID pattern.
+# Provider session references stay opaque inside the daemon and a step opts in
+# through behavior.driverRequirements.sessionResume.
 #
 # Scenario:
-#   1. create_session: generates a session ID (captured to pipeline vars)
-#   2. plan:           reuses session via command_rules (session context preserved)
-#   3. implement:      reuses session (builds on plan context)
-#   4. qa_testing:     step_vars clears session → forces fresh session (no bias)
-#
-# All agents are echo-based — no API keys required.
+#   1. create_session: starts provider context without exporting its identifier
+#   2. plan:           explicitly resumes the private provider context
+#   3. implement:      resumes again and builds on the plan
+#   4. qa_testing:     omits sessionResume and therefore starts fresh
 apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
@@ -24,24 +23,23 @@ spec:
     - docs/qa
   ticket_dir: docs/ticket
 ---
-# ── Step Templates ────────────────────────────────────────────────────
----
 apiVersion: orchestrator.dev/v2
 kind: StepTemplate
 metadata:
   name: create_session
 spec:
-  description: "Create a new agent session and capture its ID"
+  description: "Create private provider context for the task"
   prompt: >-
-    Initialize a new analysis session for: {goal}.
-    Output a JSON object with a session_id field.
+    Initialize analysis context for: {goal}.
+    Keep the context inside this provider session and do not print or expose
+    any provider session identifier.
 ---
 apiVersion: orchestrator.dev/v2
 kind: StepTemplate
 metadata:
   name: plan
 spec:
-  description: "Create implementation plan (reuses session context)"
+  description: "Create implementation plan using private session context"
   prompt: >-
     You are working on a project at {source_tree}.
     Create an implementation plan for: {goal}.
@@ -51,66 +49,44 @@ kind: StepTemplate
 metadata:
   name: implement
 spec:
-  description: "Implement changes (reuses session context from plan)"
+  description: "Implement changes using the resumed provider context"
   prompt: >-
     Implement the changes for: {goal}.
-    Follow the plan from the previous step.
+    Follow the plan retained in this private provider session.
 ---
 apiVersion: orchestrator.dev/v2
 kind: StepTemplate
 metadata:
   name: qa_review
 spec:
-  description: "Independent QA review (fresh session, no prior bias)"
+  description: "Independent QA review in a fresh provider session"
   prompt: >-
     Independently review the project at {source_tree} for: {goal}.
     Perform QA verification without relying on prior session context.
----
-# ── Agent with command_rules ──────────────────────────────────────────
-#
-# Session reuse pattern:
-#   Default command:  creates a new session (--session-id new)
-#   Rule[0]:          if loop_session_id is set, resumes existing session (--resume)
-#
-# With echo agents, the commands differ in output to demonstrate switching.
-# In production, replace echo with: claude -p "{prompt}" --session-id new ...
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: session-agent
-  description: "Agent with session reuse via command_rules"
+  description: "Agent with daemon-private provider session continuity"
 spec:
   capabilities:
     - create_session
     - plan
     - implement
     - qa_review
-  command: >-
-    echo '{"session_id":"ses-abc-123","confidence":0.90,"quality_score":0.88,
-    "artifacts":[{"kind":"analysis","findings":[
-    {"title":"new-session","description":"Started NEW session.","severity":"info"}
-    ]}]}'
-  command_rules:
-    # When loop_session_id exists → resume session instead of creating new one
-    - when: "loop_session_id != \"\""
-      command: >-
-        echo '{"confidence":0.94,"quality_score":0.92,
-        "artifacts":[{"kind":"analysis","findings":[
-        {"title":"resumed-session","description":"RESUMED existing session for continuity.","severity":"info"}
-        ]}]}'
+  driver:
+    provider: claude
+    transport: cli
+    options:
+      maxTurns: 6
+      budgetCapUsd: 0.50
+      permissionMode: governed
+      allowedTools:
+        - mcp__orch__mark_item
 ---
-# ── Workflow ──────────────────────────────────────────────────────────
-#
-# Step-by-step command selection:
-#
-#   create_session → loop_session_id absent   → default cmd (new session)
-#                    captures session_id to loop_session_id
-#   plan           → loop_session_id = "ses-abc-123" → rule[0] (resume)
-#   implement      → loop_session_id = "ses-abc-123" → rule[0] (resume)
-#   qa_testing     → step_vars clears loop_session_id → default cmd (new session)
-#                    after step: loop_session_id restored to "ses-abc-123"
----
+# No provider session ID enters captures, pipeline variables, manifests, logs,
+# public DTOs, or events.
 apiVersion: orchestrator.dev/v2
 kind: Workflow
 metadata:
@@ -118,8 +94,6 @@ metadata:
 spec:
   max_parallel: 1
   steps:
-    # Step 1: Create session — no loop_session_id yet → default command
-    # Captures session_id from stdout JSON into loop_session_id pipeline var
     - id: create_session
       type: plan
       scope: task
@@ -128,11 +102,8 @@ spec:
       enabled: true
       repeatable: false
       behavior:
-        captures:
-          - var: loop_session_id
-            source: stdout
-            json_path: "$.session_id"
-    # Step 2: Plan — loop_session_id = "ses-abc-123" → rule[0] matches (resume)
+        driverRequirements:
+          workspaceAccess: write
     - id: plan
       type: plan
       scope: task
@@ -140,7 +111,10 @@ spec:
       template: plan
       enabled: true
       repeatable: false
-    # Step 3: Implement — loop_session_id still set → rule[0] matches (resume)
+      behavior:
+        driverRequirements:
+          sessionResume: true
+          workspaceAccess: write
     - id: implement
       type: implement
       scope: task
@@ -148,8 +122,10 @@ spec:
       template: implement
       enabled: true
       repeatable: false
-    # Step 4: QA review — step_vars clears loop_session_id → fresh session
-    # This ensures QA has no bias from prior session context.
+      behavior:
+        driverRequirements:
+          sessionResume: true
+          workspaceAccess: write
     - id: qa_testing
       type: qa_review
       scope: task
@@ -157,7 +133,8 @@ spec:
       template: qa_review
       enabled: true
       repeatable: false
-      step_vars:
-        loop_session_id: ""
+      behavior:
+        driverRequirements:
+          workspaceAccess: write
   loop:
     mode: once

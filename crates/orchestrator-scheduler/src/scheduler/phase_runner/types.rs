@@ -133,6 +133,10 @@ pub struct PhaseRunRequest<'a> {
     pub execution_profile: Option<&'a str>,
     /// Whether the workspace is self-referential (daemon PID protection enabled).
     pub self_referential: bool,
+    /// Whether this step may attach to provider context remembered by an earlier step.
+    pub resume_provider_session: bool,
+    /// Whether this step enables the authenticated coordination-tool host.
+    pub enable_coordination_tools: bool,
     /// Index of the matched agent command_rule (None = default command).
     #[allow(dead_code)]
     pub command_rule_index: Option<i32>,
@@ -162,6 +166,10 @@ pub struct RotatingPhaseRunRequest<'a> {
     pub execution_profile: Option<&'a str>,
     /// Whether the workspace is self-referential (daemon PID protection enabled).
     pub self_referential: bool,
+    /// Whether this step may attach to provider context remembered by an earlier step.
+    pub resume_provider_session: bool,
+    /// Whether this step enables the authenticated coordination-tool host.
+    pub enable_coordination_tools: bool,
 }
 
 pub struct SelectedPhaseRunRequest<'a> {
@@ -189,6 +197,10 @@ pub struct SelectedPhaseRunRequest<'a> {
     pub execution_profile: Option<&'a str>,
     /// Whether the workspace is self-referential (daemon PID protection enabled).
     pub self_referential: bool,
+    /// Whether this step may attach to provider context remembered by an earlier step.
+    pub resume_provider_session: bool,
+    /// Whether this step enables the authenticated coordination-tool host.
+    pub enable_coordination_tools: bool,
     /// Index of the matched agent command_rule (None = default command).
     pub command_rule_index: Option<i32>,
 }

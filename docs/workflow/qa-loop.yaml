@@ -1,12 +1,12 @@
-# QA Loop — test-fix-retest cycle template.
+# QA Loop — tool-driven test, ticket, fix, and verification template.
 #
 # Usage:
 #   orchestrator apply -f docs/workflow/qa-loop.yaml --project qa-loop
 #   orchestrator task create --name "qa-run" --goal "Run QA cycle" --workflow qa_loop --project qa-loop
 #
-# Demonstrates: multi-step workflow, capability-based agent selection,
-# ticket_scan builtin, and loop-once execution.
-# All agents are echo-based — no API keys required.
+# One provider session owns local coordination. The manifest retains capability,
+# sandbox, tool allowlist, and loop governance; typed daemon tools replace the
+# legacy ticket_scan builtin and cross-step status plumbing.
 apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
@@ -17,36 +17,40 @@ spec:
     - docs/qa
   ticket_dir: docs/ticket
 ---
-# QA agent — runs test scenarios and reports findings
 apiVersion: orchestrator.dev/v2
-kind: Agent
+kind: StepTemplate
 metadata:
-  name: qa-agent
-  description: "QA agent — executes test scenarios"
+  name: qa_coordinate
 spec:
-  capabilities:
-    - qa
-  command: >-
-    echo '{"confidence":0.92,"quality_score":0.88,
-    "artifacts":[{"kind":"analysis","findings":[
-    {"title":"qa-pass","description":"All scenarios passed.","severity":"info"}
-    ]}]}'
+  description: "Run QA and converge the current item through typed tools"
+  prompt: >-
+    Validate the current target for {goal}. Call mcp__orch__run_tests first.
+    If tests fail, call mcp__orch__create_ticket, inspect and fix the failure,
+    then call mcp__orch__run_tests again. Call mcp__orch__scan_tickets before
+    finishing. Mark the item qa_passed only when tests pass and no active ticket
+    remains; otherwise mark it unresolved. Do not communicate coordination
+    state through stdout fields or files.
 ---
-# Fix agent — resolves issues found by QA
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
-  name: fix-agent
-  description: "Fix agent — resolves QA failures and tickets"
+  name: qa-coordinator
+  description: "Tool-driven QA coordinator"
 spec:
   capabilities:
-    - fix
-    - retest
-  command: >-
-    echo '{"confidence":0.90,"quality_score":0.85,
-    "artifacts":[{"kind":"analysis","findings":[
-    {"title":"fix-applied","description":"Issue resolved.","severity":"info"}
-    ]}]}'
+    - qa_coordination
+  driver:
+    provider: claude
+    transport: cli
+    options:
+      maxTurns: 10
+      budgetCapUsd: 1.00
+      permissionMode: governed
+      allowedTools:
+        - mcp__orch__run_tests
+        - mcp__orch__create_ticket
+        - mcp__orch__scan_tickets
+        - mcp__orch__mark_item
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow
@@ -54,28 +58,18 @@ metadata:
   name: qa_loop
 spec:
   steps:
-    # Step 1: Run QA scenarios against qa_targets
-    - id: qa
+    - id: qa_coordinate
       type: qa
-      required_capability: qa
+      scope: item
+      required_capability: qa_coordination
+      template: qa_coordinate
       enabled: true
       repeatable: false
-    # Step 2: Scan for tickets created by QA failures
-    - id: ticket_scan
-      type: ticket_scan
-      enabled: true
-      repeatable: false
-    # Step 3: Fix any issues found
-    - id: fix
-      type: fix
-      required_capability: fix
-      enabled: true
-      repeatable: false
-    # Step 4: Re-test to confirm fixes
-    - id: retest
-      type: retest
-      required_capability: retest
-      enabled: true
-      repeatable: false
+      behavior:
+        side_effect_class: workspace_only
+        driverRequirements:
+          multiTurn: true
+          toolHosting: stdio
+          workspaceAccess: write
   loop:
     mode: once

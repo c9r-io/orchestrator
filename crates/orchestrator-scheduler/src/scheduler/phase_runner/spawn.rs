@@ -33,6 +33,8 @@ pub(super) async fn spawn_phase_process(
     step_scope: StepScope,
     prompt_payload: &Option<String>,
     req_pipe_stdin: bool,
+    resume_provider_session: bool,
+    enable_coordination_tools: bool,
 ) -> Result<SpawnResult> {
     let mut session_id: Option<String> = None;
     let command_to_run = if tty {
@@ -97,11 +99,13 @@ pub(super) async fn spawn_phase_process(
             anyhow::bail!("explicit Agent drivers do not support TTY sessions");
         }
         let driver = create_driver(&driver_config)?;
-        let provider_session = recalled_provider_session(task_id).await;
+        let provider_session =
+            recalled_provider_session_for_step(task_id, resume_provider_session).await;
         let prompt = prompt_payload.as_deref().unwrap_or_default();
-        let tool_host = if driver.capabilities().tool_hosting
-            == agent_orchestrator::config::ToolHosting::Stdio
-        {
+        let tool_host = if should_start_coordination_tool_host(
+            enable_coordination_tools,
+            driver.capabilities().tool_hosting,
+        ) {
             let host = start_tool_host(CoordinationHostRequest {
                 state: state.clone(),
                 task_id,
@@ -324,6 +328,24 @@ async fn recalled_provider_session(task_id: &str) -> Option<SessionRef> {
     provider_sessions().lock().await.get(task_id).cloned()
 }
 
+async fn recalled_provider_session_for_step(
+    task_id: &str,
+    resume_provider_session: bool,
+) -> Option<SessionRef> {
+    if resume_provider_session {
+        recalled_provider_session(task_id).await
+    } else {
+        None
+    }
+}
+
+fn should_start_coordination_tool_host(
+    enabled: bool,
+    hosting: agent_orchestrator::config::ToolHosting,
+) -> bool {
+    enabled && hosting == agent_orchestrator::config::ToolHosting::Stdio
+}
+
 pub(super) async fn remember_provider_session(task_id: &str, reference: SessionRef) {
     provider_sessions()
         .lock()
@@ -385,4 +407,48 @@ async fn resolve_provider_session_token(
 fn tempfile_placeholder() -> Result<std::fs::File> {
     // Open /dev/null as a cheap placeholder; the value is never used.
     std::fs::File::open("/dev/null").context("failed to open /dev/null placeholder")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn provider_session_attachment_is_step_opt_in() {
+        let task_id = format!("session-opt-in-{}", Uuid::new_v4());
+        remember_provider_session(
+            &task_id,
+            SessionRef::from_provider("private-provider-session".to_string())
+                .expect("valid reference"),
+        )
+        .await;
+
+        assert!(
+            recalled_provider_session_for_step(&task_id, false)
+                .await
+                .is_none()
+        );
+        let recalled = recalled_provider_session_for_step(&task_id, true)
+            .await
+            .expect("opted-in step should resume");
+        assert_eq!(recalled.expose_secret(), "private-provider-session");
+    }
+
+    #[test]
+    fn coordination_tool_host_is_step_opt_in_and_driver_capability_gated() {
+        use agent_orchestrator::config::ToolHosting;
+
+        assert!(!should_start_coordination_tool_host(
+            false,
+            ToolHosting::Stdio
+        ));
+        assert!(!should_start_coordination_tool_host(
+            true,
+            ToolHosting::None
+        ));
+        assert!(should_start_coordination_tool_host(
+            true,
+            ToolHosting::Stdio
+        ));
+    }
 }
