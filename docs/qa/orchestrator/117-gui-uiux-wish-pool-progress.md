@@ -117,15 +117,17 @@ self_referential_safe: false
 
 ### 场景 7: 专家模式 — 资源 Tab
 
+> **FR-119 behavior overlay (2026-07-25):** The Resources tab now uses daemon-owned typed summaries rather than displaying collection YAML. Use `docs/qa/orchestrator/169-expert-resources-governed-editing.md` for the current five-type catalog, keyboard navigation, reviewed optimistic Apply, conflict recovery, Action Audit, and privacy contract.
+
 **目标**: 资源浏览与编辑功能正确。
 
 **步骤**:
 1. 切换到「资源」Tab
-2. 选择 kind 过滤按钮（workspaces/workflows/agents 等）
-3. 确认显示资源 YAML 内容（ResourceGet）
-4. operator 角色：点击「编辑」→ 修改 YAML → 点击「应用」（ResourceApply）
+2. 选择 kind 过滤按钮（Workspace/Workflow/Agent/StepTemplate/ExecutionProfile）
+3. 从结构化资源行进入由 ResourceDescribe 返回的单资源 YAML
+4. operator 角色：点击「编辑」→ 修改 YAML → 审核身份、项目与 reason → 点击「应用」（ResourceApply）
 
-**期望**: 资源正确加载，编辑功能受 RBAC 控制。
+**期望**: 资源正确加载，编辑功能受 RBAC 与 revision fence 控制；失败保留草稿，成功重新读取 daemon 权威内容。
 
 ---
 

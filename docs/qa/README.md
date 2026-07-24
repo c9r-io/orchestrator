@@ -290,6 +290,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/166-codex-session-resume-conformance.md` | 5 | Codex CLI 0.144.5 resume grammar, recorded JSONL replay, real same-thread context continuity, credential/session privacy, and repository regression |
 | orchestrator | `docs/qa/orchestrator/167-global-skill-directory-provenance.md` | 4 | FR-117-A daemon UID, permission-bit, task-writable overlap, trusted-path, platform, and non-code vertical regression |
 | orchestrator | `docs/qa/orchestrator/168-coordination-collapse-mcp-tools.md` | 5 | FR-118 authenticated daemon tool host, real tools, stdio forwarding, parity/events, 100% coordination-line collapse, and residual channels |
+| orchestrator | `docs/qa/orchestrator/169-expert-resources-governed-editing.md` | 5 | FR-119 typed catalogs, canonical Describe, accessible role-aware editing, optimistic conflicts, Action Audit, privacy, and real Tauri/daemon evidence |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
