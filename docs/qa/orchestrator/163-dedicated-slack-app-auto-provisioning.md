@@ -24,6 +24,18 @@ orchestrator apply --project default \
 
 It does not call Slack or claim live certification. Final evidence requires a clean worktree; `FR115_ALLOW_DIRTY=1` is local iteration only.
 
+The unified opt-in live entry is:
+
+```bash
+./scripts/qa/certify-slack-managed-live.sh run \
+  --mode dedicated \
+  --env-file ~/.config/orchestrator/qa/slack-live.env
+```
+
+Use `--mode both` for a shared-then-dedicated run with one private inventory.
+Exit `20` is a resumable provider checkpoint. Dedicated delete and final
+external cleanup require an independent run-ID confirmation. See QA-173.
+
 ---
 
 ## Scenario 1: Discover, Validate, Approve, Create, And Install

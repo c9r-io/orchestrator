@@ -207,6 +207,15 @@ printf '%s' "$FRESH_SLACK_CONFIGURATION_TOKEN" | \
 
 先完成 `slack-managed-sandbox-certification-runbook.md` 的公共 Gateway、stop-loss、备份、隐私和证据前置步骤，再追加：
 
+```bash
+./scripts/qa/certify-slack-managed-live.sh run \
+  --mode dedicated \
+  --run-id "slack-dedicated-$(date -u +%Y%m%dT%H%M%SZ)" \
+  --env-file ~/.config/orchestrator/qa/slack-live.env
+```
+
+也可以用 `--mode both` 在同一 private run inventory 中先做 shared、再做 dedicated。每个 OAuth、manifest receipt、cursor recovery、reauthorize 和 disconnect/delete 阶段都会以退出码 `20` 暂停；完成 provider 操作后用 run ID 记录 checkpoint 并 resume。`dedicated_disconnect_delete` 的 PASS 和最终 external cleanup 都要求再次提供同一 run ID 作为破坏性确认。
+
 1. 使用一个全新的非生产 workspace 和一个全新的 Configuration Token；
 2. 记录提交 SHA、`deploy/slack/dedicated-app-manifest.json` SHA-256 和测试日期；
 3. 在 GUI 完成 validate → diff → approve → OAuth；刷新一次 `oauth_pending` 页面；
@@ -218,4 +227,4 @@ printf '%s' "$FRESH_SLACK_CONFIGURATION_TOKEN" | \
 9. 扫描所有保留证据，确认没有 `xox*`、Configuration Token、client/signing secret、OAuth code/state、raw body 或 private URL；
 10. 只保留 pass/fail、匿名 digest、安全状态转换和 request ID。
 
-FR-114 与 FR-115 共用真实 Slack OAuth/Events/Trigger/badge 边界。建议先完成 FR-114 shared live certification，再执行本 addendum；两者完成前，FR-115 不应标记 Closed。
+shared 与 dedicated 共用真实 Slack OAuth/Events/Trigger/badge 边界。组合模式保持先 shared、后 dedicated 的顺序；recorded fixture 只用于日常回归，不能替代本 addendum 的 live provider 证据。

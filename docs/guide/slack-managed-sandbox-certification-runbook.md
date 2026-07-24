@@ -1,12 +1,12 @@
-# FR-114 受控 Slack Sandbox 实测 Runbook
+# 受控 Slack Sandbox 持续认证 Runbook
 
-本 runbook 用于完成 FR-114 的非 CI live certification。它验证真实 Slack consent、同一官方 App 的多 workspace 隔离、badge → Skill task、离线补投、重授权、owner transfer、撤销、断开和备份恢复，同时避免把 workspace 私有信息或 credential 写入仓库、ticket、终端录屏和最终治理证据。
+本 runbook 用于 shared official App 与 dedicated workspace App 的非 CI live certification。它验证真实 Slack consent、多 workspace 隔离、badge → Skill task、离线补投、重授权、撤销、断开和清理，同时避免把 workspace 私有信息或 credential 写入仓库、ticket、终端录屏和最终治理证据。FR-123 的统一入口把本 runbook 的人工 provider 步骤转化为可暂停、可恢复的 checkpoint；不会绕过 Slack consent、验证码或管理员确认。
 
 这不是生产上线指南。必须只使用专用 sandbox Slack workspace、合成消息和仓库内的 `echo` fixture。任何阶段出现跨 workspace 错投、credential 泄露、重复 task 或无法止损，都应立即停止，不要通过删除数据库行掩盖失败。
 
 ## 1. 完成定义
 
-只有以下门禁全部通过，FR-114 的 live certification 才能标记为 PASS：
+shared 模式只有以下门禁全部通过才能标记为 PASS；dedicated 模式还必须完成 `slack-dedicated-app-provisioning.md` 的 addendum：
 
 | Gate | 必须证明 |
 |---|---|
@@ -358,15 +358,41 @@ export OWNER_B="$(jq -r '.[0].owner_daemon_id' "$PRIVATE_RUN_ROOT/connection-b-p
 
 ```bash
 mkdir -p ~/.config/orchestrator/qa
-cp config/qa/slack-live.env.example ~/.config/orchestrator/qa/fr114.env
-chmod 600 ~/.config/orchestrator/qa/fr114.env
-${EDITOR:-vi} ~/.config/orchestrator/qa/fr114.env
+cp config/qa/slack-live.env.example ~/.config/orchestrator/qa/slack-live.env
+chmod 600 ~/.config/orchestrator/qa/slack-live.env
+${EDITOR:-vi} ~/.config/orchestrator/qa/slack-live.env
 
-FR114_LIVE_ENV_FILE=~/.config/orchestrator/qa/fr114.env \
-  ./scripts/qa/certify-slack-managed-live.sh
+./scripts/qa/certify-slack-managed-live.sh run \
+  --mode shared \
+  --run-id "slack-shared-$(date -u +%Y%m%dT%H%M%SZ)" \
+  --env-file ~/.config/orchestrator/qa/slack-live.env
 ```
 
-`certify-slack-managed-live.sh` 先运行确定性的 FR-114/FR-113 aggregate，再执行真实 Slack smoke。smoke 会验证 active/caught-up connection、无副作用 binding simulation、两个 badge → 两个不同 Skill task、reaction remove/re-add 幂等，以及最终 backlog/lease/Attention 归零；无论成功失败都会删除合成 Slack 消息和私密临时响应。OAuth、transfer、revocation、backup/restore 等低频生命周期仍按 L2-L10 人工步骤执行。
+退出码 `20` 表示安全暂停在 OAuth/provider checkpoint。完成提示的人工步骤后，先记录当前 checkpoint，再 resume；已经 PASS 的阶段不会重跑：
+
+```bash
+./scripts/qa/certify-slack-managed-live.sh checkpoint \
+  --run-id {run_id} \
+  --stage {current_stage} \
+  --result pass \
+  --evidence-code {safe_code}
+
+./scripts/qa/certify-slack-managed-live.sh resume \
+  --run-id {run_id} \
+  --env-file ~/.config/orchestrator/qa/slack-live.env
+```
+
+统一 certifier 先运行确定性的 FR-114/FR-115 aggregate，再执行真实 Slack smoke。smoke 会验证 active/caught-up connection、无副作用 binding simulation、**同一条消息**上的两个 badge → 两个不同 Skill task、reaction remove/re-add 幂等，以及最终 backlog/lease/Attention 归零；无论成功失败都会删除合成 Slack 消息和私密临时响应。OAuth、transfer、revocation、backup/restore 等低频生命周期仍按 L2-L10 执行，但由稳定 checkpoint 串联。
+
+shared、dedicated 或组合入口分别是：
+
+```bash
+./scripts/qa/certify-slack-managed-live.sh run --mode shared
+./scripts/qa/certify-slack-managed-live.sh run --mode dedicated
+./scripts/qa/certify-slack-managed-live.sh run --mode both
+```
+
+实际 env 不会被 `source`；未知字段、shell substitution、多行值和非 `0600/0400` 权限都会 fail closed。Configuration Token 不属于该 env，仍只通过交互 stdin 使用。
 
 ### 10.2 Binding 与真实 reaction
 

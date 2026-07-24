@@ -1,8 +1,11 @@
 # Slack Integration Gateway Threat Model
 
-**Scope**: FR-114 shared OAuth plus FR-115 dedicated Slack App provisioning and SourceConnection delivery
-**Assessment date**: 2026-07-22
-**Target**: `crates/slack-gateway`, daemon Gateway client/reconciler, SourceConnection control plane, and Connections UI
+**Scope**: FR-114 shared OAuth, FR-115 dedicated Slack App provisioning,
+FR-123 continuous sandbox certification, and SourceConnection delivery
+**Assessment date**: 2026-07-25
+**Target**: `crates/slack-gateway`, daemon Gateway client/reconciler,
+SourceConnection control plane, Connections UI, and the opt-in live
+certification harness
 
 ## Executive Summary
 
@@ -32,6 +35,8 @@ Trust boundaries:
 4. Gateway database/master key to the running Gateway process.
 5. Local GUI/CLI to daemon gRPC authorization and canonical action audit.
 6. Normalized source event to daemon binding/template/task mutation.
+7. Operator-owned live environment/private checkpoint state to allowlisted
+   certification evidence and CI/release status.
 
 TLS may terminate at a trusted reverse proxy. The proxy must preserve the exact raw body and prevent external header spoofing. Gateway and daemon databases, keys, identities, and backups are independent.
 
@@ -44,6 +49,8 @@ TLS may terminate at a trusted reverse proxy. The proxy must preserve the exact 
 - Verified team/enterprise identity, delivery cursor, and normalized reaction metadata.
 - Daemon project ownership, SourceConnection state, Trigger, source provenance, and audit.
 - Availability of Slack event acknowledgement, durable backlog, and provider proxy.
+- Live certification env values, private cleanup identifiers, checkpoint state,
+  and reviewed safe evidence.
 
 ## Attacker Capabilities
 
@@ -79,6 +86,7 @@ Not assumed: compromise of Slack, the Gateway host/root account, the Gateway mas
 | T17 | Shared↔dedicated replacement produces two active consumers | Duplicate paid work | Unique verified-team installation, one active App connection reference and pairing generation, old endpoint/mode lookup fails after switch, source/route/task idempotency remains mode-neutral | Live failure-injection certification is required before production migration |
 | T18 | A stale or cross-App lifecycle request updates the wrong manifest, or expanded scopes continue on old consent | Cross-tenant App mutation or undeclared provider access | Fresh local-only token, exact encrypted App ID, export-before-review, semantic diff, ten-minute in-memory lifecycle session, project/connection/version CAS, exact App digest at Gateway, suspension plus deduplicated Attention before reauthorization | A provider success followed by a permanent local/Gateway failure still requires operator reconciliation from safe audit IDs |
 | T19 | Disconnect is confused with App deletion, or a destructive request deletes a still-active/wrong App | Irrecoverable App loss or retained credential exposure | Delete is a separate Admin RPC/UI/CLI action; requires disconnected state, fresh token, typed exact App ID, reason/idempotency/version fence, provider verification, then encrypted Gateway credential retirement while local evidence remains | Slack-side manual deletion can bypass Orchestrator audit; restrict App collaborators and reconcile provider state |
+| T20 | The live certifier evaluates a malicious env file, exports all secrets to a child, leaks provider material into artifacts, or silently abandons external objects | Host command execution, credential theft, or orphaned App/workspace/domain resources | Mode-0600/0400 inert allowlisted parser, no shell sourcing, no Configuration Token env, per-stage `env -i`, private XDG state, allowlisted safe projection, known-value plus generic token scan, deterministic cleanup inventory, and run-ID confirmation for destructive cleanup | A privileged local operator can still mis-attest a manual checkpoint; require independent evidence review and sandbox-only resources |
 
 ## Security Invariants
 
@@ -88,6 +96,10 @@ Not assumed: compromise of Slack, the Gateway host/root account, the Gateway mas
 - Configuration Tokens exist only in the local daemon's bounded live provisioning session; dedicated App credentials cross once into connection-context encrypted Gateway storage and never enter safe projections.
 - Manifest upgrade/delete Configuration Tokens and exact App IDs are consumed into zeroizing memory before validation; lifecycle session state is memory-only and bounded, while audit stores only stable IDs, digests, versions, outcomes, and reasons.
 - An opaque dedicated endpoint is routing context, not authentication; Slack HMAC and verified App/team identity remain mandatory.
+- Live certification credentials and raw external identifiers remain in
+  operator-owned private state. CI consumes only sanitized recorded contracts
+  and reviewed safe evidence; stale evidence requests recertification without
+  asserting a runtime regression.
 - The old owner never receives the replacement pairing during transfer.
 - Slack success acknowledgement occurs only after durable normalized enqueue.
 - Source task mutation occurs only in the daemon after existing binding/template policy and dedupe checks.

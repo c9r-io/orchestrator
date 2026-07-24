@@ -111,6 +111,8 @@ pass "cleanup is rerunnable and destructive objects require a distinct confirmat
 mkdir -p "$(slack_cert_run_dir state-run)/logs"
 SECRET_VALUE="known-certification-secret"
 slack_cert_register_known_secret state-run "$SECRET_VALUE"
+[[ ! -e "$(slack_cert_run_dir state-run)/.known-secrets" ]] \
+  || fail "known secret was persisted as a scan artifact"
 printf 'safe log\n' >"$(slack_cert_run_dir state-run)/logs/safe.log"
 slack_cert_scan_paths state-run "$(slack_cert_run_dir state-run)/logs" \
   || fail "safe log failed leakage scan"
@@ -118,14 +120,14 @@ printf 'leak=%s\n' "$SECRET_VALUE" >"$(slack_cert_run_dir state-run)/logs/leak.l
 expect_failure slack_cert_scan_paths state-run "$(slack_cert_run_dir state-run)/logs" \
   || fail "known secret leakage was not detected"
 rm "$(slack_cert_run_dir state-run)/logs/leak.log"
-printf 'Authorization: Bearer xoxb-example-leak\n' \
+printf 'Authorization: Bearer bearer-example-leak-value\n' \
   >"$(slack_cert_run_dir state-run)/logs/pattern.log"
 expect_failure slack_cert_scan_paths state-run "$(slack_cert_run_dir state-run)/logs" \
   || fail "generic Slack token leakage was not detected"
 rm "$(slack_cert_run_dir state-run)/logs/pattern.log"
 slack_cert_scan_paths state-run "$(slack_cert_run_dir state-run)/logs" \
   || fail "clean scan did not recover after leaked file removal"
-pass "known values and generic Slack credential patterns are scanned without retention"
+pass "known values and generic Slack credential patterns are scanned in memory without retention"
 
 slack_cert_validate_recorded_fixture \
   "$REPO_ROOT/fixtures/slack/certification/recorded-contracts.json" \
@@ -154,6 +156,24 @@ if jq -e '.. | strings | select(test("known-certification-secret|raw-private"))'
 fi
 pass "safe evidence schema excludes private state and registered secrets"
 
+while IFS= read -r pending_stage; do
+  [[ -n "$pending_stage" ]] || continue
+  slack_cert_state_stage_result state-run "$pending_stage" pass unit_verified
+done < <(jq -r '.stages[] | select(.result != "pass") | .name' "$STATE_FILE")
+PROMOTED="$QA_ROOT/promoted-latest.json"
+SLACK_CERT_STATE_HOME="$SLACK_CERT_STATE_HOME" \
+  "$SCRIPT_DIR/certify-slack-managed-live.sh" promote \
+    --run-id state-run \
+    --evidence "$PROMOTED" >/dev/null
+jq -e '
+  [.certifications[].mode] == ["shared","dedicated"]
+  and all(.certifications[]; .result == "pass"
+    and .source == "reviewed_live_run"
+    and .secret_scan.result == "pass"
+    and .cleanup.result == "pass")
+' "$PROMOTED" >/dev/null || fail "reviewed combined evidence did not promote safely"
+pass "only passed, scanned, cleaned evidence promotes into per-mode latest status"
+
 LATEST="$QA_ROOT/latest.json"
 jq -n \
   --arg certified "$FRESH_CREATED" \
@@ -177,6 +197,46 @@ if "$SCRIPT_DIR/certify-slack-managed-live.sh" status --require-fresh \
   fail "require-fresh accepted an expired mode"
 fi
 pass "status and release checks expose stale evidence without calling it regression"
+
+FAKE_BIN="$QA_ROOT/fake-bin"
+mkdir -p "$FAKE_BIN"
+cat >"$FAKE_BIN/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '{"protocol_version":1,"supported_modes":["shared","dedicated"]}\n'
+EOF
+chmod 700 "$FAKE_BIN/curl"
+START_ENV="$QA_ROOT/start-from-zero.env"
+cat >"$START_ENV" <<'EOF'
+ORCHESTRATOR_BIN=/usr/bin/true
+SLACK_LIVE_GATEWAY_URL=https://gateway.example.test
+SLACK_LIVE_SHARED_A_DAEMON_DATA=/tmp/shared-a
+SLACK_LIVE_SHARED_A_PROJECT=shared-a
+SLACK_LIVE_SHARED_A_WORKSPACE_ID=workspace-a
+SLACK_LIVE_SHARED_B_DAEMON_DATA=/tmp/shared-b
+SLACK_LIVE_SHARED_B_PROJECT=shared-b
+SLACK_LIVE_SHARED_B_WORKSPACE_ID=workspace-b
+EOF
+chmod 600 "$START_ENV"
+ZERO_RUN="from-zero-run"
+set +e
+PATH="$FAKE_BIN:$PATH" \
+SLACK_CERT_STATE_HOME="$QA_ROOT/from-zero-state" \
+SLACK_CERT_SKIP_AGGREGATES=1 \
+  "$SCRIPT_DIR/certify-slack-managed-live.sh" run \
+    --mode shared \
+    --run-id "$ZERO_RUN" \
+    --env-file "$START_ENV" >/dev/null 2>&1
+zero_exit=$?
+set -e
+[[ "$zero_exit" == "20" ]] || fail "from-zero run did not pause at OAuth"
+jq -e '
+  any(.stages[]; .name == "preflight" and .result == "pass")
+  and any(.stages[]; .name == "recorded_fixtures" and .result == "pass")
+  and any(.stages[]; .name == "shared_oauth" and .result == "waiting")
+  and ([.inventory[] | select(.object_type == "slack_workspace")] | length == 2)
+' "$QA_ROOT/from-zero-state/$ZERO_RUN/safe-result.json" >/dev/null \
+  || fail "from-zero run required post-OAuth IDs or missed workspace inventory"
+pass "from-zero preflight reaches OAuth before requiring connection and App IDs"
 
 MISSING_RUN="missing-env-run"
 set +e

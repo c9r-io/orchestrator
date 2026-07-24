@@ -27,13 +27,19 @@ It does not connect to Slack or claim live certification. Run with a clean workt
 The opt-in live smoke entry point is:
 
 ```bash
-cp config/qa/slack-live.env.example ~/.config/orchestrator/qa/fr114.env
-chmod 600 ~/.config/orchestrator/qa/fr114.env
-FR114_LIVE_ENV_FILE=~/.config/orchestrator/qa/fr114.env \
-  ./scripts/qa/certify-slack-managed-live.sh
+cp config/qa/slack-live.env.example ~/.config/orchestrator/qa/slack-live.env
+chmod 600 ~/.config/orchestrator/qa/slack-live.env
+./scripts/qa/certify-slack-managed-live.sh run \
+  --mode shared \
+  --env-file ~/.config/orchestrator/qa/slack-live.env
 ```
 
-The populated environment file stays outside the repository. Its test-driver token belongs to a separate sandbox-only Slack App with `chat:write` and `reactions:write`; the official Orchestrator App remains read-only with `reactions:read`.
+The populated environment file stays outside the repository and is parsed as
+inert allowlisted data. Its test-driver token belongs to a separate
+sandbox-only Slack App with `chat:write` and `reactions:write`; the official
+Orchestrator App remains read-only with `reactions:read`. Exit `20` is a
+resumable OAuth/provider checkpoint. Continuous evidence and cleanup behavior
+are governed by QA-173.
 
 ## Scenario 1: Catalog, OAuth Intent, Connection, And Default Trigger
 

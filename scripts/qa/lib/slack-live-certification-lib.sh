@@ -3,6 +3,8 @@
 # Shared helpers for the opt-in Slack live certification controller.
 # This file is intentionally side-effect free when sourced.
 
+declare -a SLACK_CERT_KNOWN_SECRETS=()
+
 slack_cert_fail() {
   printf 'Slack live certification: %s\n' "$*" >&2
   return 1
@@ -69,18 +71,21 @@ slack_cert_allowed_env_key() {
     SLACK_LIVE_DRIVER_BOT_TOKEN | \
     SLACK_LIVE_SHARED_A_DAEMON_DATA | \
     SLACK_LIVE_SHARED_A_PROJECT | \
+    SLACK_LIVE_SHARED_A_WORKSPACE_ID | \
     SLACK_LIVE_SHARED_A_CONNECTION_ID | \
     SLACK_LIVE_SHARED_A_CHANNEL_ID | \
     SLACK_LIVE_SHARED_A_ACTOR_ID | \
     SLACK_LIVE_SHARED_A_DRIVER_BOT_TOKEN | \
     SLACK_LIVE_SHARED_B_DAEMON_DATA | \
     SLACK_LIVE_SHARED_B_PROJECT | \
+    SLACK_LIVE_SHARED_B_WORKSPACE_ID | \
     SLACK_LIVE_SHARED_B_CONNECTION_ID | \
     SLACK_LIVE_SHARED_B_CHANNEL_ID | \
     SLACK_LIVE_SHARED_B_ACTOR_ID | \
     SLACK_LIVE_SHARED_B_DRIVER_BOT_TOKEN | \
     SLACK_LIVE_DEDICATED_DAEMON_DATA | \
     SLACK_LIVE_DEDICATED_PROJECT | \
+    SLACK_LIVE_DEDICATED_WORKSPACE_ID | \
     SLACK_LIVE_DEDICATED_CONNECTION_ID | \
     SLACK_LIVE_DEDICATED_CHANNEL_ID | \
     SLACK_LIVE_DEDICATED_ACTOR_ID | \
@@ -351,9 +356,8 @@ slack_cert_cleanup_mark() {
 slack_cert_scan_paths() {
   local run_id="$1"
   shift
-  local state known_file matches_file scanned=0 path
+  local state matches_file scanned=0 path secret
   state="$(slack_cert_state_file "$run_id")"
-  known_file="$(slack_cert_run_dir "$run_id")/.known-secrets"
   matches_file="$(slack_cert_run_dir "$run_id")/.secret-matches"
   : >"$matches_file"
   chmod 600 "$matches_file"
@@ -363,12 +367,10 @@ slack_cert_scan_paths() {
     rg -n -I \
       'xox[baprs]-[A-Za-z0-9-]+|xoxe\.[A-Za-z0-9._-]+|Authorization:[[:space:]]*Bearer|client_secret[=:][[:space:]]*"?[A-Za-z0-9_-]{12,}|signing_secret[=:][[:space:]]*"?[A-Za-z0-9_-]{12,}|oauth/v2/authorize.*(code|state)=' \
       "$path" >>"$matches_file" 2>/dev/null || true
-    if [[ -s "$known_file" ]]; then
-      while IFS= read -r secret; do
-        [[ -n "$secret" ]] || continue
-        rg -n -I -F "$secret" "$path" >>"$matches_file" 2>/dev/null || true
-      done <"$known_file"
-    fi
+    for secret in "${SLACK_CERT_KNOWN_SECRETS[@]:-}"; do
+      [[ -n "$secret" ]] || continue
+      rg -n -I -F "$secret" "$path" >>"$matches_file" 2>/dev/null || true
+    done
   done
   local now result
   now="$(slack_cert_now)"
@@ -389,14 +391,14 @@ slack_cert_scan_paths() {
 }
 
 slack_cert_register_known_secret() {
-  local run_id="$1"
+  local _run_id="$1"
   local value="$2"
   [[ -n "$value" ]] || return 0
-  local known_file
-  known_file="$(slack_cert_run_dir "$run_id")/.known-secrets"
-  umask 077
-  printf '%s\n' "$value" >>"$known_file"
-  chmod 600 "$known_file"
+  local existing
+  for existing in "${SLACK_CERT_KNOWN_SECRETS[@]:-}"; do
+    [[ "$existing" == "$value" ]] && return 0
+  done
+  SLACK_CERT_KNOWN_SECRETS+=("$value")
 }
 
 slack_cert_emit_safe() {

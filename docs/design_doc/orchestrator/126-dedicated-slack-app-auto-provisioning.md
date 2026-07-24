@@ -134,6 +134,10 @@ Both migrations are additive and forward-only. Populated daemon v34 and Gateway 
 - Disconnect revokes the installation and retains the workspace-owned App. App replacement, manifest upgrade, and retirement require a fresh Configuration Token and explicit reviewed operations.
 - Schema rollback is fail-closed: an older Gateway refuses schema 4 and an older daemon refuses migration 37. During a binary rollback, keep the upgraded stores intact, disable new provisioning/lifecycle mutations, and restore the compatible binary; existing delivery continues only on a binary that understands the current schema.
 - Live certification is intentionally paired with FR-114 because both modes share the same real callback, OAuth, delivery, Trigger, and badge runtime boundary.
+- FR-123 supplies the shared/dedicated/combined checkpoint controller, safe
+  evidence TTL, and cleanup inventory without changing this product boundary.
+  Use `scripts/qa/certify-slack-managed-live.sh run --mode dedicated|both`;
+  QA-173 governs continued certification.
 
 ## Test Plan
 

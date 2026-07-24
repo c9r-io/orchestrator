@@ -294,6 +294,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/170-handoff-dialog-focus-lifecycle.md` | 5 | FR-120 manual and Attention review entry, modal focus containment and restoration, async invalidation, busy/failure recovery, visual accessibility, and Chromium regression |
 | orchestrator | `docs/qa/orchestrator/171-attention-mutation-error-reconciliation.md` | 5 | FR-121 shared mutation failure lifecycle, authoritative reconciliation, safe error copy, focus recovery, telemetry privacy, and two-client version competition |
 | orchestrator | `docs/qa/orchestrator/172-boundary-layer-coverage-governance.md` | 5 | FR-122 machine-readable component/module coverage, approved baseline enforcement, explicit branch support, daemon risk matrices, CLI/Tauri tonic adapters, and evidence traceability |
+| orchestrator | `docs/qa/orchestrator/173-slack-sandbox-continuous-certification.md` | 5 | FR-123 unified shared/dedicated live modes, checkpoint resume, minimal secret custody, recorded provider CI, expiring safe evidence, and reviewed cleanup |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |

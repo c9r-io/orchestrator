@@ -78,7 +78,7 @@ API_TOKEN="{bearer_token}"                # If authentication is required
 ### Threat Models
 | Doc | Description | Risk |
 |------|------|----------|
-| `docs/security/slack-gateway-threat-model.md` | FR-114/FR-115 internet-facing shared/dedicated Slack OAuth, App provisioning, credential, tenant, delivery, proxy, and transfer boundary | Critical |
+| `docs/security/slack-gateway-threat-model.md` | FR-114/FR-115 provider boundary plus FR-123 live-certification secret, evidence, checkpoint, and cleanup governance | Critical |
 
 ### File Security (If Applicable)
 | Doc | Description | Scenarios | Risk |
@@ -103,3 +103,9 @@ API_TOKEN="{bearer_token}"                # If authentication is required
 13. Before enabling FR-115 dedicated provisioning or lifecycle mutations, repeat the managed Slack suite with `docs/qa/orchestrator/163-dedicated-slack-app-auto-provisioning.md`, including Configuration Token retention scans, cross-App signature/receipt canaries, orphan/lifecycle Attention, reviewed migration/upgrade/delete, and the controlled dedicated sandbox addendum.
 14. For task Workspace, ExecutionProfile, or global Skill path changes, run `authorization/02-file-sharing-ceiling.md` and `file-security/02-workspace-home-isolation.md` with `docs/qa/orchestrator/165-non-code-workspace-and-global-file-sharing.md` and `docs/qa/orchestrator/167-global-skill-directory-provenance.md`; missing FileSharing configuration must remain deny-all for declared host paths.
 15. Before upgrading the Codex CLI used by an explicit Agent driver, run the offline and controlled live gates in `docs/qa/orchestrator/166-codex-session-resume-conformance.md`; retain placeholder-only fixtures and unconditional temporary-auth cleanup.
+16. For controlled Slack recertification, run
+    `docs/qa/orchestrator/173-slack-sandbox-continuous-certification.md`.
+    Require inert mode-0600 env parsing, per-stage minimal environment,
+    private/safe evidence separation, zero-match leakage scans, and explicit
+    destructive cleanup confirmation. Recorded fixtures never replace live
+    provider evidence.

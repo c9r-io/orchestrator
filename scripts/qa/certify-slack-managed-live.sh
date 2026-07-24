@@ -76,13 +76,10 @@ preflight_mode_values() {
     for key in \
       SLACK_LIVE_SHARED_A_DAEMON_DATA \
       SLACK_LIVE_SHARED_A_PROJECT \
-      SLACK_LIVE_SHARED_A_CONNECTION_ID \
-      SLACK_LIVE_SHARED_A_CHANNEL_ID \
-      SLACK_LIVE_SHARED_A_ACTOR_ID \
-      SLACK_LIVE_SHARED_A_DRIVER_BOT_TOKEN \
+      SLACK_LIVE_SHARED_A_WORKSPACE_ID \
       SLACK_LIVE_SHARED_B_DAEMON_DATA \
       SLACK_LIVE_SHARED_B_PROJECT \
-      SLACK_LIVE_SHARED_B_CONNECTION_ID; do
+      SLACK_LIVE_SHARED_B_WORKSPACE_ID; do
       require_value "$key" || return 1
     done
   fi
@@ -91,10 +88,7 @@ preflight_mode_values() {
     for key in \
       SLACK_LIVE_DEDICATED_DAEMON_DATA \
       SLACK_LIVE_DEDICATED_PROJECT \
-      SLACK_LIVE_DEDICATED_CONNECTION_ID \
-      SLACK_LIVE_DEDICATED_CHANNEL_ID \
-      SLACK_LIVE_DEDICATED_ACTOR_ID \
-      SLACK_LIVE_DEDICATED_DRIVER_BOT_TOKEN; do
+      SLACK_LIVE_DEDICATED_WORKSPACE_ID; do
       require_value "$key" || return 1
     done
   fi
@@ -138,6 +132,10 @@ populate_inventory() {
   local run_id="$1"
   local mode="$2"
   if [[ "$mode" == "shared" || "$mode" == "both" ]]; then
+    slack_cert_inventory_add "$run_id" slack_workspace \
+      "${SLACK_LIVE_SHARED_A_WORKSPACE_ID:-}" review_workspace_retention true
+    slack_cert_inventory_add "$run_id" slack_workspace \
+      "${SLACK_LIVE_SHARED_B_WORKSPACE_ID:-}" review_workspace_retention true
     slack_cert_inventory_add "$run_id" source_connection \
       "${SLACK_LIVE_SHARED_A_CONNECTION_ID:-}" disconnect false
     slack_cert_inventory_add "$run_id" source_connection \
@@ -146,6 +144,8 @@ populate_inventory() {
       "${SLACK_LIVE_SHARED_A_CHANNEL_ID:-}" remove_synthetic_messages false
   fi
   if [[ "$mode" == "dedicated" || "$mode" == "both" ]]; then
+    slack_cert_inventory_add "$run_id" slack_workspace \
+      "${SLACK_LIVE_DEDICATED_WORKSPACE_ID:-}" review_workspace_retention true
     slack_cert_inventory_add "$run_id" source_connection \
       "${SLACK_LIVE_DEDICATED_CONNECTION_ID:-}" disconnect false
     slack_cert_inventory_add "$run_id" slack_channel \
@@ -201,6 +201,11 @@ run_live_smoke() {
   local channel_var="${prefix}_CHANNEL_ID"
   local actor_var="${prefix}_ACTOR_ID"
   local token_var="${prefix}_DRIVER_BOT_TOKEN"
+  local required
+  for required in \
+    "$daemon_var" "$project_var" "$connection_var" "$channel_var" "$actor_var" "$token_var"; do
+    require_value "$required" || return 1
+  done
   driver_token="${!token_var}"
   slack_cert_register_known_secret "$run_id" "$driver_token"
   log_file="$(slack_cert_run_dir "$run_id")/logs/${mode}-badge-smoke.log"
@@ -221,6 +226,21 @@ run_live_smoke() {
     SLACK_LIVE_DOCS_SKILL_MARKER="$SLACK_LIVE_DOCS_SKILL_MARKER" \
     SLACK_LIVE_TIMEOUT_SECONDS="$SLACK_LIVE_TIMEOUT_SECONDS" \
     "$SCRIPT_DIR/test-slack-managed-live-smoke.sh" >"$log_file" 2>&1
+}
+
+final_inventory_complete() {
+  local mode="$1"
+  if [[ "$mode" == "shared" || "$mode" == "both" ]]; then
+    require_value SLACK_LIVE_SHARED_A_WORKSPACE_ID || return 1
+    require_value SLACK_LIVE_SHARED_B_WORKSPACE_ID || return 1
+    require_value SLACK_LIVE_SHARED_A_CONNECTION_ID || return 1
+    require_value SLACK_LIVE_SHARED_B_CONNECTION_ID || return 1
+  fi
+  if [[ "$mode" == "dedicated" || "$mode" == "both" ]]; then
+    require_value SLACK_LIVE_DEDICATED_WORKSPACE_ID || return 1
+    require_value SLACK_LIVE_DEDICATED_CONNECTION_ID || return 1
+    require_value SLACK_LIVE_DEDICATED_APP_ID || return 1
+  fi
 }
 
 manual_stage() {
@@ -272,6 +292,12 @@ process_run() {
     slack_cert_state_stage_result "$run_id" preflight blocked missing_live_environment
     return "$WAITING_EXIT"
   fi
+  slack_cert_register_known_secret "$run_id" \
+    "${SLACK_LIVE_SHARED_A_DRIVER_BOT_TOKEN:-}"
+  slack_cert_register_known_secret "$run_id" \
+    "${SLACK_LIVE_SHARED_B_DRIVER_BOT_TOKEN:-}"
+  slack_cert_register_known_secret "$run_id" \
+    "${SLACK_LIVE_DEDICATED_DRIVER_BOT_TOKEN:-}"
   populate_inventory "$run_id" "$mode"
 
   while stage="$(slack_cert_next_stage "$run_id")" && [[ -n "$stage" ]]; do
@@ -310,10 +336,16 @@ process_run() {
         fi
         ;;
       privacy_scan)
+        if ! final_inventory_complete "$mode"; then
+          slack_cert_state_stage_result "$run_id" "$stage" blocked incomplete_cleanup_inventory
+          return "$WAITING_EXIT"
+        fi
         git -C "$REPO_ROOT" diff --no-ext-diff >"$(slack_cert_run_dir "$run_id")/logs/git-diff.txt"
         if slack_cert_scan_paths "$run_id" \
           "$(slack_cert_run_dir "$run_id")/logs" \
-          "$(slack_cert_safe_file "$run_id")"; then
+          "$(slack_cert_safe_file "$run_id")" \
+          "$REPO_ROOT/gui/test-results" \
+          "$REPO_ROOT/gui/playwright-report"; then
           slack_cert_state_stage_result "$run_id" "$stage" pass zero_forbidden_matches
         else
           slack_cert_state_stage_result "$run_id" "$stage" fail secret_scan_failed
