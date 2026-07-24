@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   HandoffSnapshot,
@@ -12,7 +12,30 @@ interface Props {
   canGenerate: boolean;
   canExecute: boolean;
   reviewRequest: number;
+  reviewReturnTargetRef?: RefObject<HTMLElement | null>;
   onExecuted: () => void;
+}
+
+const focusableSelector = [
+  "button:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "input:not([disabled])",
+  "a[href]",
+  "[tabindex]:not([tabindex='-1'])",
+].join(", ");
+
+function isVisibleTarget(element: HTMLElement | null): element is HTMLElement {
+  if (!element?.isConnected || element === document.body || element === document.documentElement) return false;
+  if (element.hidden || element.closest("[hidden], [aria-hidden='true']")) return false;
+  if (element.getAttribute("aria-disabled") === "true") return false;
+  if ("disabled" in element && Boolean((element as HTMLButtonElement).disabled)) return false;
+  const style = window.getComputedStyle(element);
+  return style.display !== "none" && style.visibility !== "hidden";
+}
+
+function isFocusableTarget(element: HTMLElement | null): element is HTMLElement {
+  return isVisibleTarget(element) && element.matches(focusableSelector);
 }
 
 const modes = [
@@ -22,7 +45,14 @@ const modes = [
   ["resume_provider_session", "Resume provider session"],
 ] as const;
 
-export default function HandoffPanel({ taskId, canGenerate, canExecute, reviewRequest, onExecuted }: Props) {
+export default function HandoffPanel({
+  taskId,
+  canGenerate,
+  canExecute,
+  reviewRequest,
+  reviewReturnTargetRef,
+  onExecuted,
+}: Props) {
   const [snapshot, setSnapshot] = useState<HandoffSnapshot | null>(null);
   const [boundaries, setBoundaries] = useState<ResumeBoundary[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -34,21 +64,55 @@ export default function HandoffPanel({ taskId, canGenerate, canExecute, reviewRe
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ResumeExecution | null>(null);
+  const panelRef = useRef<HTMLElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const resumeButtonRef = useRef<HTMLButtonElement>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const boundaryRef = useRef<HTMLSelectElement>(null);
+  const reasonRef = useRef<HTMLTextAreaElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+  const wasDialogOpenRef = useRef(false);
+  const hadPlanRef = useRef(false);
+  const mountedRef = useRef(true);
+  const openRequestRef = useRef(0);
+  const handledReviewRequestRef = useRef(0);
+  const activeTaskIdRef = useRef(taskId);
+  const busyRef = useRef(false);
+  busyRef.current = busy;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      openRequestRef.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activeTaskIdRef.current === taskId) return;
+    activeTaskIdRef.current = taskId;
+    openRequestRef.current += 1;
+    handledReviewRequestRef.current = 0;
+    setDialogOpen(false);
+    setBoundaries([]);
+    setPlan(null);
+    setResult(null);
+    setError(null);
+  }, [taskId]);
+
+  const closeDialog = useCallback(() => {
+    if (!busyRef.current) setDialogOpen(false);
+  }, []);
 
   useEffect(() => {
     if (!dialogOpen) return;
     const dialog = dialogRef.current;
-    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>(
-      "button:not([disabled]), select:not([disabled]), textarea:not([disabled]), input:not([disabled])"
-    ) ?? []);
+    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>(focusableSelector) ?? [])
+      .filter(isFocusableTarget);
     focusable()[0]?.focus();
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        setDialogOpen(false);
+        closeDialog();
         return;
       }
       if (event.key !== "Tab") return;
@@ -56,20 +120,54 @@ export default function HandoffPanel({ taskId, canGenerate, canExecute, reviewRe
       if (controls.length === 0) return;
       const first = controls[0];
       const last = controls[controls.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
+      const active = document.activeElement;
+      if (!dialog?.contains(active)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && active === first) {
         event.preventDefault();
         last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
+      } else if (!event.shiftKey && active === last) {
         event.preventDefault();
         first.focus();
       }
     };
-    dialog?.addEventListener("keydown", handleKeyDown);
-    return () => {
-      dialog?.removeEventListener("keydown", handleKeyDown);
-      (previousFocusRef.current ?? resumeButtonRef.current)?.focus();
-    };
-  }, [dialogOpen]);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [closeDialog, dialogOpen]);
+
+  useEffect(() => {
+    const wasOpen = wasDialogOpenRef.current;
+    wasDialogOpenRef.current = dialogOpen;
+    if (!wasOpen || dialogOpen) return;
+    const frame = requestAnimationFrame(() => {
+      const candidates = [
+        returnFocusRef.current,
+        reviewReturnTargetRef?.current ?? null,
+        resumeButtonRef.current,
+      ];
+      returnFocusRef.current = null;
+      for (const candidate of candidates) {
+        if (!isFocusableTarget(candidate)) continue;
+        candidate.focus();
+        return;
+      }
+      if (isVisibleTarget(panelRef.current)) panelRef.current.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [dialogOpen, reviewReturnTargetRef]);
+
+  useEffect(() => {
+    if (!dialogOpen) {
+      hadPlanRef.current = false;
+      return;
+    }
+    const hadPlan = hadPlanRef.current;
+    hadPlanRef.current = Boolean(plan);
+    if (Boolean(plan) === hadPlan) return;
+    if (plan) reasonRef.current?.focus();
+    else boundaryRef.current?.focus();
+  }, [dialogOpen, plan]);
 
   const generate = async () => {
     setBusy(true);
@@ -83,27 +181,34 @@ export default function HandoffPanel({ taskId, canGenerate, canExecute, reviewRe
     }
   };
 
-  const openResume = useCallback(async () => {
-    previousFocusRef.current = document.activeElement as HTMLElement | null;
+  const openResume = useCallback(async (source?: HTMLElement | null) => {
+    const request = ++openRequestRef.current;
+    const focusCandidate = source ?? null;
+    returnFocusRef.current = isFocusableTarget(focusCandidate)
+      ? focusCandidate
+      : resumeButtonRef.current;
     setBusy(true);
     setError(null);
     try {
       const values = await invoke<ResumeBoundary[]>("resume_boundary_list", { task_id: taskId });
+      if (!mountedRef.current || request !== openRequestRef.current) return;
       setBoundaries(values);
       setBoundaryId(values[0]?.id ?? "");
       setPlan(null);
       setResult(null);
       setDialogOpen(true);
     } catch (value) {
-      setError(String(value));
+      if (mountedRef.current && request === openRequestRef.current) setError(String(value));
     } finally {
-      setBusy(false);
+      if (mountedRef.current && request === openRequestRef.current) setBusy(false);
     }
   }, [taskId]);
 
   useEffect(() => {
-    if (reviewRequest > 0 && canExecute) void openResume();
-  }, [canExecute, openResume, reviewRequest]);
+    if (reviewRequest <= handledReviewRequestRef.current || !canExecute) return;
+    handledReviewRequestRef.current = reviewRequest;
+    void openResume(reviewReturnTargetRef?.current ?? resumeButtonRef.current);
+  }, [canExecute, openResume, reviewRequest, reviewReturnTargetRef]);
 
   const preview = async () => {
     setBusy(true);
@@ -148,7 +253,13 @@ export default function HandoffPanel({ taskId, canGenerate, canExecute, reviewRe
   );
 
   return (
-    <section className="liquid-glass handoff-panel" aria-labelledby="handoff-heading">
+    <section
+      ref={panelRef}
+      className="liquid-glass handoff-panel"
+      aria-labelledby="handoff-heading"
+      aria-busy={busy || undefined}
+      tabIndex={-1}
+    >
       <div className="handoff-heading-row">
         <div>
           <h3 id="handoff-heading">Handoff & safe resume</h3>
@@ -159,14 +270,19 @@ export default function HandoffPanel({ taskId, canGenerate, canExecute, reviewRe
             Generate handoff
           </button>}
           {canExecute && (
-            <button ref={resumeButtonRef} className="btn btn-primary" onClick={openResume} disabled={busy}>
+            <button
+              ref={resumeButtonRef}
+              className="btn btn-primary"
+              onClick={(event) => void openResume(event.currentTarget)}
+              disabled={busy}
+            >
               Preview resume
             </button>
           )}
         </div>
       </div>
 
-      {error && <p className="handoff-error" role="alert">{error}</p>}
+      {error && !dialogOpen && <p className="handoff-error" role="alert">{error}</p>}
       {!canGenerate && <p className="readonly-reason">Read-only access: existing handoff context is inspectable, but generating or executing a new handoff is unavailable.</p>}
       {snapshot && (
         <div className="handoff-briefing">
@@ -187,14 +303,15 @@ export default function HandoffPanel({ taskId, canGenerate, canExecute, reviewRe
           <div ref={dialogRef} className="resume-dialog liquid-glass" role="dialog" aria-modal="true" aria-labelledby="resume-title">
             <div className="handoff-heading-row">
               <h3 id="resume-title">Resume consequence preview</h3>
-              <button className="btn btn-ghost" onClick={() => setDialogOpen(false)} aria-label="Close resume dialog">Close</button>
+              <button className="btn btn-ghost" onClick={closeDialog} disabled={busy} aria-label="Close resume dialog">Close</button>
             </div>
+            {error && <p className="handoff-error" role="alert">{error}</p>}
 
             {!plan ? (
               <>
                 <label>
                   Logical boundary
-                  <select value={boundaryId} onChange={(event) => { setBoundaryId(event.target.value); setPlan(null); }}>
+                  <select ref={boundaryRef} value={boundaryId} onChange={(event) => { setBoundaryId(event.target.value); setPlan(null); }}>
                     {boundaries.map((boundary) => (
                       <option key={boundary.id} value={boundary.id}>
                         {boundary.step_id ?? "current state"} · {boundary.side_effect_class}
@@ -225,7 +342,7 @@ export default function HandoffPanel({ taskId, canGenerate, canExecute, reviewRe
                 </div>
                 <label>
                   Operator reason
-                  <textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={3} required />
+                  <textarea ref={reasonRef} value={reason} onChange={(event) => setReason(event.target.value)} rows={3} required />
                 </label>
                 {plan.elevated_confirmation_required && (
                   <label className="resume-confirmation">

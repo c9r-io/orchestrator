@@ -15,7 +15,10 @@ vi.mock("../hooks/useGrpc", () => ({ useGrpc: vi.fn() }));
 vi.mock("../hooks/useStream", () => ({ useStream: vi.fn() }));
 vi.mock("../components/ProcessTimeline", () => ({ default: () => <div>semantic timeline</div> }));
 vi.mock("../components/EvidencePanel", () => ({ default: () => <div>evidence panel</div> }));
-vi.mock("../components/HandoffPanel", () => ({ default: ({ reviewRequest }: { reviewRequest: number }) => <div>handoff review {reviewRequest}</div> }));
+vi.mock("../components/HandoffPanel", () => ({
+  default: ({ reviewRequest, reviewReturnTargetRef }: { reviewRequest: number; reviewReturnTargetRef?: { current: HTMLElement | null } }) =>
+    <div>handoff review {reviewRequest} return {reviewReturnTargetRef?.current?.textContent ?? "fallback"}</div>,
+}));
 vi.mock("../components/SessionPanel", () => ({ default: () => <div>session panel</div> }));
 vi.mock("../components/SourcePanel", () => ({ default: () => <div>source panel</div> }));
 vi.mock("../components/ExpertPanel", () => ({ default: () => <div>expert details</div> }));
@@ -57,9 +60,9 @@ describe("TaskDetail", () => {
   it("routes a failed process through reviewed resume and exposes bounded expert diagnostics", async () => {
     renderAs("operator", "failed");
     expect(screen.getByRole("heading", { name: "Fix payment failure" })).toBeVisible();
-    expect(screen.getByText("handoff review 0")).toBeVisible();
+    expect(screen.getByText("handoff review 0 return fallback")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Review safe resume" }));
-    expect(screen.getByText("handoff review 1")).toBeVisible();
+    expect(screen.getByText("handoff review 1 return Review safe resume")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Expert off" }));
     fireEvent.click(screen.getByRole("button", { name: "Load trace JSON" }));
     expect(await screen.findByText(/"trace":true/)).toBeVisible();
@@ -69,6 +72,23 @@ describe("TaskDetail", () => {
     fireEvent.click(screen.getByRole("button", { name: "Repair orphaned running items" }));
     fireEvent.click(within(screen.getByRole("dialog", { name: "Repair orphaned running items" })).getByRole("button", { name: "Repair orphaned items" }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("task_recover", { task_id: "task-1" }));
+  });
+
+  it("consumes an automatic review once and uses the panel fallback instead of a synthetic trigger", async () => {
+    vi.mocked(useGrpc).mockReturnValue({ data: detail("failed"), error: null, loading: false, call: vi.fn() });
+    vi.mocked(useStream).mockReturnValue({ data: [], active: false, error: null, start: vi.fn(), stop: vi.fn() });
+    const consumed = vi.fn();
+    const view = render(<RoleContext.Provider value={{ role: "operator", canAccess: (required) => hasAccess("operator", required) }}>
+      <TaskDetail taskId="task-1" onBack={vi.fn()} autoReviewResume onAutoReviewConsumed={consumed} />
+    </RoleContext.Provider>);
+
+    expect(await screen.findByText("handoff review 1 return fallback")).toBeVisible();
+    expect(consumed).toHaveBeenCalledOnce();
+    view.rerender(<RoleContext.Provider value={{ role: "operator", canAccess: (required) => hasAccess("operator", required) }}>
+      <TaskDetail taskId="task-1" onBack={vi.fn()} autoReviewResume onAutoReviewConsumed={consumed} />
+    </RoleContext.Provider>);
+    expect(screen.getByText("handoff review 1 return fallback")).toBeVisible();
+    expect(consumed).toHaveBeenCalledOnce();
   });
 
   it("pauses running work for operators and reports the daemon result", async () => {

@@ -15,6 +15,10 @@ describe("console routes", () => {
   it("round-trips stable resource identifiers", () => {
     const route = { page: "processes", taskId: "task/with space" } as const;
     expect(parseConsoleRoute(formatConsoleRoute(route))).toEqual(route);
+    const reviewRoute = { page: "processes", taskId: "task/with space", reviewResume: true } as const;
+    expect(formatConsoleRoute(reviewRoute)).toBe("#/processes/task%2Fwith%20space?review=safe-resume");
+    expect(parseConsoleRoute(formatConsoleRoute(reviewRoute))).toEqual(reviewRoute);
+    expect(parseConsoleRoute("#/processes/task-1?review=unknown")).toEqual({ page: "processes", taskId: "task-1" });
     expect(formatConsoleRoute({ page: "sessions", sessionId: "session-1" })).toBe("#/sessions/session-1");
   });
 

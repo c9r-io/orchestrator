@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,7 +13,9 @@ const boundary = {
 };
 
 describe("HandoffPanel", () => {
-  beforeEach(() => vi.mocked(invoke).mockReset());
+  beforeEach(() => {
+    vi.mocked(invoke).mockReset();
+  });
   afterEach(cleanup);
 
   it("renders a concise briefing generated from the governed snapshot", async () => {
@@ -95,6 +97,118 @@ describe("HandoffPanel", () => {
     fireEvent.keyDown(dialog, { key: "Escape" });
 
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Preview resume" })).toHaveFocus());
+  });
+
+  it("traps focus and returns manual Escape and close exits to the initiating control", async () => {
+    vi.mocked(invoke).mockResolvedValue([boundary]);
+    render(<HandoffPanel taskId="task-1" canGenerate canExecute reviewRequest={0} onExecuted={vi.fn()} />);
+    const resume = screen.getByRole("button", { name: "Preview resume" });
+    resume.focus();
+    fireEvent.click(resume);
+
+    const dialog = await screen.findByRole("dialog", { name: "Resume consequence preview" });
+    const close = screen.getByRole("button", { name: "Close resume dialog" });
+    const createPreview = screen.getByRole("button", { name: "Create preview" });
+    expect(close).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(createPreview).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(close).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    await waitFor(() => expect(resume).toHaveFocus());
+
+    fireEvent.click(resume);
+    await screen.findByRole("dialog", { name: "Resume consequence preview" });
+    fireEvent.click(screen.getByRole("button", { name: "Close resume dialog" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(resume).toHaveFocus());
+  });
+
+  it("falls back to the persistent handoff panel when the initiating control is removed", async () => {
+    vi.mocked(invoke).mockResolvedValue([boundary]);
+    const view = render(<HandoffPanel taskId="task-1" canGenerate canExecute reviewRequest={0} onExecuted={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Preview resume" }));
+    await screen.findByRole("dialog", { name: "Resume consequence preview" });
+
+    view.rerender(<HandoffPanel taskId="task-1" canGenerate canExecute={false} reviewRequest={0} onExecuted={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Close resume dialog" }));
+
+    const panel = screen.getByRole("region", { name: "Handoff & safe resume" });
+    await waitFor(() => expect(panel).toHaveFocus());
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  it("ignores late boundary responses after unmount", async () => {
+    let resolveBoundaries!: (value: typeof boundary[]) => void;
+    vi.mocked(invoke).mockImplementation(() => new Promise((resolve) => {
+      resolveBoundaries = resolve as (value: typeof boundary[]) => void;
+    }));
+    const view = render(<HandoffPanel taskId="task-1" canGenerate canExecute reviewRequest={0} onExecuted={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Preview resume" }));
+    view.unmount();
+
+    await act(async () => {
+      resolveBoundaries([boundary]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("does not allow Escape or Close to hide an in-flight reviewed operation", async () => {
+    let resolvePlan!: (value: ResumePlanFixture) => void;
+    let resolveExecution!: (value: ResumeExecutionFixture) => void;
+    type ResumePlanFixture = {
+      id: string; task_id: string; boundary: typeof boundary; mode: string;
+      expected_state_version: string; consequence: Record<string, unknown>;
+      elevated_confirmation_required: boolean; expires_at: string; status: string;
+    };
+    type ResumeExecutionFixture = {
+      execution_id: string; plan_id: string; accepted: boolean; status: string; child_task_id: string | null;
+    };
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "resume_boundary_list") return [boundary];
+      if (command === "resume_plan") return new Promise((resolve) => {
+        resolvePlan = resolve as (value: ResumePlanFixture) => void;
+      });
+      if (command === "resume_execute") return new Promise((resolve) => {
+        resolveExecution = resolve as (value: ResumeExecutionFixture) => void;
+      });
+      return null;
+    });
+    render(<HandoffPanel taskId="task-1" canGenerate canExecute reviewRequest={0} onExecuted={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Preview resume" }));
+    const dialog = await screen.findByRole("dialog", { name: "Resume consequence preview" });
+    fireEvent.click(screen.getByRole("button", { name: "Create preview" }));
+
+    expect(screen.getByRole("button", { name: "Close resume dialog" })).toBeDisabled();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(dialog).toBeVisible();
+
+    await act(async () => resolvePlan({
+      id: "plan-1", task_id: "task-1", boundary, mode: "restart_from_boundary",
+      expected_state_version: "state-1", consequence: { repeated_steps: ["publish"] },
+      elevated_confirmation_required: false, expires_at: "2026-07-14T01:00:00Z",
+      status: "review_required",
+    }));
+    await waitFor(() => expect(screen.getByLabelText("Operator reason")).toHaveFocus());
+    expect(screen.getByRole("button", { name: "Close resume dialog" })).toBeEnabled();
+
+    fireEvent.change(screen.getByLabelText("Operator reason"), { target: { value: "Reviewed replay" } });
+    fireEvent.click(screen.getByRole("button", { name: "Execute reviewed plan" }));
+    expect(screen.getByRole("button", { name: "Close resume dialog" })).toBeDisabled();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(dialog).toBeVisible();
+
+    await act(async () => resolveExecution({
+      execution_id: "execution-1", plan_id: "plan-1", accepted: true,
+      status: "succeeded", child_task_id: null,
+    }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Resume succeeded");
+    expect(screen.getByRole("button", { name: "Close resume dialog" })).toBeEnabled();
   });
 
   it("keeps the reviewed dialog recoverable when preview or execution fails", async () => {
@@ -129,9 +243,12 @@ describe("HandoffPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Preview resume" }));
     await screen.findByRole("dialog", { name: "Resume consequence preview" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Create preview" }));
+    const createPreview = screen.getByRole("button", { name: "Create preview" });
+    createPreview.focus();
+    fireEvent.click(createPreview);
     expect(await screen.findByRole("alert")).toHaveTextContent("stale boundary");
     expect(screen.getByRole("button", { name: "Create preview" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Create preview" })).toHaveFocus();
 
     fireEvent.click(screen.getByRole("button", { name: "Create preview" }));
     const execute = await screen.findByRole("button", { name: "Execute reviewed plan" });
@@ -139,10 +256,13 @@ describe("HandoffPanel", () => {
       target: { value: "Reviewed retry" },
     });
     fireEvent.click(screen.getByRole("checkbox"));
+    execute.focus();
     fireEvent.click(execute);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("version conflict");
     expect(execute).toBeEnabled();
+    expect(execute).toHaveFocus();
+    expect(screen.getByRole("dialog")).toContainElement(document.activeElement as HTMLElement);
     expect(onExecuted).not.toHaveBeenCalled();
   });
 

@@ -12,6 +12,8 @@ async function installTauriMock(
     const sessionCalls: Array<{ command: string; args: Record<string, unknown> }> = [];
     const processCalls: Array<{ command: string; args: Record<string, unknown> }> = [];
     let nextId = 1;
+    let taskStatus = "failed";
+    let updateStatusOnResume = false;
     const items = [
       { id: "attention-1", title: "Approval required", taskId: "task-1", severity: "intervention" },
       { id: "attention-2", title: "Choose recovery", taskId: "task-2", severity: "attention" },
@@ -107,7 +109,7 @@ async function installTauriMock(
       }
       if (command === "task_list") return tasks;
       if (command === "task_info" && args.task_id === "task-non-code") return { id: "task-non-code", name: "Warehouse reply", status: "running", goal: "Prepare an inventory-backed Slack reply", total_items: 1, finished_items: 0, failed_items: 0, created_at: "2026-07-14T00:00:00Z", updated_at: "2026-07-14T00:01:00Z", project_id: "project-1", workflow_id: "warehouse-assistant", workspace_kind: "task", items: [{ id: "item-task", qa_file_path: "__TASK__", item_kind: "task", status: "running", order_no: 1 }] };
-      if (command === "task_info") return { id: "task-1", name: "Fix payment failure", status: "failed", goal: "Restore the failed payment test", total_items: 1, finished_items: 0, failed_items: 1, created_at: "2026-07-14T00:00:00Z", updated_at: "2026-07-14T00:01:00Z", project_id: "project-1", workflow_id: "qa-loop", workspace_kind: "code_repo", items: [{ id: "item-1", qa_file_path: "tests/payment.rs", item_kind: "qa_file", status: "failed", order_no: 1 }] };
+      if (command === "task_info") return { id: "task-1", name: "Fix payment failure", status: taskStatus, goal: "Restore the failed payment test", total_items: 1, finished_items: 0, failed_items: taskStatus === "failed" ? 1 : 0, created_at: "2026-07-14T00:00:00Z", updated_at: "2026-07-14T00:01:00Z", project_id: "project-1", workflow_id: "qa-loop", workspace_kind: "code_repo", items: [{ id: "item-1", qa_file_path: "tests/payment.rs", item_kind: "qa_file", status: taskStatus === "failed" ? "failed" : "pending", order_no: 1 }] };
       if (command === "task_timeline") return { entries: [{ id: "entry-1", task_id: "task-1", occurred_at: "2026-07-14T00:00:00Z", category: "failure", title: "Test failed", summary: "The payment fixture assertion failed", status: "failed", actor: null, step_id: "test", task_item_id: "item-1", command_run_id: "run-1", session_id: "session-1", checkpoint_id: "checkpoint-1", source_event_id: null, evidence: [{ kind: "test", label: "cargo test payment", uri: null, content_type: "text/plain", digest: null, redacted: false }], raw_event_ids: [1], projection_version: 1 }], next_cursor: null, has_more: false, snapshot_max_event_id: 1, projection_version: 1 };
       if (command === "agent_session_list") return [session];
       if (command === "agent_session_attach") {
@@ -164,7 +166,10 @@ async function installTauriMock(
       };
       if (command === "resume_boundary_list") return [{ id: "boundary-1", task_id: "task-1", cycle: 1, step_id: "test", task_item_id: "item-1", provider_session_available: false, side_effect_class: "workspace_only", replay_safe: true, reason: "Failed step can be replayed", state_version: "state-1" }];
       if (command === "resume_plan") return { id: "plan-1", task_id: "task-1", boundary: null, mode: String(args.mode), expected_state_version: "state-1", consequence: { repeated_steps: ["test"], workspace_rollback: false }, elevated_confirmation_required: false, expires_at: "2026-07-14T01:00:00Z", status: "review_required" };
-      if (command === "resume_execute") return { execution_id: "execution-1", plan_id: "plan-1", accepted: true, status: "succeeded", child_task_id: "task-child" };
+      if (command === "resume_execute") {
+        if (updateStatusOnResume) taskStatus = "running";
+        return { execution_id: "execution-1", plan_id: "plan-1", accepted: true, status: "succeeded", child_task_id: "task-child" };
+      }
       return null;
     };
     Object.assign(window, {
@@ -182,7 +187,10 @@ async function installTauriMock(
           if (handler) callbacks.get(handler)?.({ event, id: 1, payload });
         },
       },
-      __PROCESS_TEST__: { calls: processCalls },
+      __PROCESS_TEST__: {
+        calls: processCalls,
+        updateStatusOnResume: () => { updateStatusOnResume = true; },
+      },
     });
   }, { roleName: role, sourceConnectionMode: connectionMode });
 }
@@ -213,9 +221,17 @@ test("keyboard selection is stable and read-only mutations are disabled", async 
 test("failed process uses reviewed resume and never routes the primary action to orphan repair", async ({ page }) => {
   await installTauriMock(page);
   await page.goto("/#/processes/task-1");
+  const panelResume = page.getByRole("button", { name: "Preview resume" });
+  await panelResume.click();
+  let dialog = page.getByRole("dialog", { name: "Resume consequence preview" });
+  await expect(dialog.getByRole("button", { name: "Close resume dialog" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(panelResume).toBeFocused();
+
   const review = page.getByRole("button", { name: "Review safe resume" });
   await review.click();
-  const dialog = page.getByRole("dialog", { name: "Resume consequence preview" });
+  dialog = page.getByRole("dialog", { name: "Resume consequence preview" });
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Create preview" }).click();
   await dialog.getByLabel("Operator reason").fill("Reviewed the failed test evidence");
@@ -226,6 +242,60 @@ test("failed process uses reviewed resume and never routes the primary action to
   expect(commands).not.toContain("task_recover");
   await dialog.getByRole("button", { name: "Close resume dialog" }).click();
   await expect(review).toBeFocused();
+});
+
+test("Attention one-click safe resume auto-opens and restores a stable process control", async ({ page }) => {
+  await installTauriMock(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Review safe resume" }).click();
+
+  await expect(page).toHaveURL(/#\/processes\/task-1$/);
+  const dialog = page.getByRole("dialog", { name: "Resume consequence preview" });
+  const close = dialog.getByRole("button", { name: "Close resume dialog" });
+  const createPreview = dialog.getByRole("button", { name: "Create preview" });
+  await expect(close).toBeFocused();
+  expect((await new AxeBuilder({ page }).include(".resume-dialog").analyze()).violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))).toEqual([]);
+
+  await page.keyboard.press("Shift+Tab");
+  await expect(createPreview).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(close).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+
+  const resume = page.getByRole("button", { name: "Preview resume" });
+  await expect(resume).toBeFocused();
+  await page.getByRole("button", { name: "切换到深色模式" }).click();
+  await page.getByRole("button", { name: /Reduce transparency/ }).click();
+  await page.keyboard.press("Tab");
+  await resume.focus();
+  const focusStyle = await resume.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { width: style.outlineWidth, style: style.outlineStyle, color: style.outlineColor };
+  });
+  expect(Number.parseFloat(focusStyle.width)).toBeGreaterThanOrEqual(2);
+  expect(focusStyle.style).not.toBe("none");
+  expect(focusStyle.color).not.toBe("transparent");
+});
+
+test("successful resume refresh falls back safely when initiating controls disappear", async ({ page }) => {
+  await installTauriMock(page);
+  await page.goto("/#/processes/task-1");
+  await page.evaluate(() => (window as any).__PROCESS_TEST__.updateStatusOnResume());
+  await page.getByRole("button", { name: "Review safe resume" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Resume consequence preview" });
+  await dialog.getByRole("button", { name: "Create preview" }).click();
+  await dialog.getByLabel("Operator reason").fill("Resume after verified failure");
+  await dialog.getByRole("button", { name: "Execute reviewed plan" }).click();
+  await expect(dialog.getByRole("status")).toContainText("succeeded");
+  await expect(page.getByRole("button", { name: "Review safe resume" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Preview resume" })).toHaveCount(0);
+
+  await dialog.getByRole("button", { name: "Close resume dialog" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Handoff & safe resume" })).toBeFocused();
+  expect(await page.evaluate(() => document.activeElement === document.body)).toBe(false);
 });
 
 test("confirmation dialogs trap focus, close with Escape, and restore focus", async ({ page }) => {

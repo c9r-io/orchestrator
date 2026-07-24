@@ -110,9 +110,9 @@ export default function App() {
       return <section className="liquid-glass"><h1>Feature unavailable</h1><p>This console page is disabled by its rollout flag.</p></section>;
     }
     switch (route.page) {
-      case "attention": return <AttentionInbox initialAttentionId={route.attentionId} nativeNotificationsEnabled={nativeNotificationsEnabled} onOpenTask={(taskId) => go({ page: "processes", taskId })} onOpenSourceRoute={(resourceId) => go({ page: "sources", section: "automations", automationView: "routes", resourceId })} />;
+      case "attention": return <AttentionInbox initialAttentionId={route.attentionId} nativeNotificationsEnabled={nativeNotificationsEnabled} onOpenTask={(taskId, reviewResume) => go({ page: "processes", taskId, reviewResume })} onOpenSourceRoute={(resourceId) => go({ page: "sources", section: "automations", automationView: "routes", resourceId })} />;
       case "processes": return route.taskId
-        ? <ProcessWorkspace taskId={route.taskId} onBack={() => go({ page: "processes" })} />
+        ? <ProcessWorkspace taskId={route.taskId} onBack={() => go({ page: "processes" })} autoReviewResume={route.reviewResume} onAutoReviewConsumed={() => go({ page: "processes", taskId: route.taskId })} />
         : <ProcessList onSelect={(taskId) => go({ page: "processes", taskId })} />;
       case "sessions": return route.sessionId
         ? <SessionInspector sessionId={route.sessionId} onBack={() => go({ page: "sessions" })} onOpenProcess={(taskId) => go({ page: "processes", taskId })} />

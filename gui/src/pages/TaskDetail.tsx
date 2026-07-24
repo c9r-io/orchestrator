@@ -16,10 +16,15 @@ import SourcePanel from "../components/SourcePanel";
 import i18n from "../lib/i18n";
 import type { AgentSession, AttentionListResult, LogLine, TaskDetail as TaskDetailType, TimelineEntry, WatchSnapshot } from "../lib/types";
 
-interface Props { taskId: string; onBack: () => void; }
+interface Props {
+  taskId: string;
+  onBack: () => void;
+  autoReviewResume?: boolean;
+  onAutoReviewConsumed?: () => void;
+}
 const LOG_LIMIT = 500;
 
-export default function TaskDetail({ taskId, onBack }: Props) {
+export default function TaskDetail({ taskId, onBack, autoReviewResume = false, onAutoReviewConsumed }: Props) {
   const { data, error, call } = useGrpc<TaskDetailType>("task_info");
   const { canAccess } = useRole();
   const [liveData, setLiveData] = useState<TaskDetailType | null>(null);
@@ -27,7 +32,7 @@ export default function TaskDetail({ taskId, onBack }: Props) {
   const [selectedEntry, setSelectedEntry] = useState<TimelineEntry | null>(null);
   const [showDelete, setShowDelete] = useState(false);
   const [showOrphanRepair, setShowOrphanRepair] = useState(false);
-  const [resumeReviewRequest, setResumeReviewRequest] = useState(0);
+  const [resumeReview, setResumeReview] = useState({ request: 0, returnToHeader: false });
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [actionErr, setActionErr] = useState<string | null>(null);
   const [traceJson, setTraceJson] = useState<string | null>(null);
@@ -37,6 +42,8 @@ export default function TaskDetail({ taskId, onBack }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const logContainerRef = useRef<HTMLDivElement>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const resumeReviewButtonRef = useRef<HTMLButtonElement>(null);
+  const consumedAutoReviewTaskRef = useRef<string | null>(null);
 
   const streamParams = useMemo(() => ({ task_id: taskId }), [taskId]);
   const { data: allLogs, active, start, stop } = useStream<LogLine>("start_task_follow", "stop_task_follow", `task-follow-${taskId}`, streamParams);
@@ -44,6 +51,16 @@ export default function TaskDetail({ taskId, onBack }: Props) {
   const reload = useCallback(() => { call({ task_id: taskId }); }, [call, taskId]);
 
   useEffect(() => { reload(); }, [reload]);
+  useEffect(() => {
+    if (!autoReviewResume) {
+      consumedAutoReviewTaskRef.current = null;
+      return;
+    }
+    if (consumedAutoReviewTaskRef.current === taskId) return;
+    consumedAutoReviewTaskRef.current = taskId;
+    setResumeReview((current) => ({ request: current.request + 1, returnToHeader: false }));
+    onAutoReviewConsumed?.();
+  }, [autoReviewResume, onAutoReviewConsumed, taskId]);
   useEffect(() => {
     Promise.all([
       invoke<AttentionListResult>("attention_list", { project_id: null, item_state: null, kind: null, severity: null, assignee: null, task_id: taskId }),
@@ -116,7 +133,7 @@ export default function TaskDetail({ taskId, onBack }: Props) {
       <div><button className="btn btn-ghost" onClick={onBack} aria-label={i18n.taskDetail.backLabel}>← Processes</button><h1 id="process-title" className="page-title">{displayData?.name || displayData?.id || "Process"}</h1></div>
       <div className="process-actions">
         {canAccess("operator") && isRunning && <button className="btn btn-secondary" onClick={() => void doAction("task_pause", { task_id: taskId })}>Pause</button>}
-        {canAccess("operator") && isFailed && <button className="btn btn-primary" onClick={() => setResumeReviewRequest((value) => value + 1)}>Review safe resume</button>}
+        {canAccess("operator") && isFailed && <button ref={resumeReviewButtonRef} className="btn btn-primary" onClick={() => setResumeReview((current) => ({ request: current.request + 1, returnToHeader: true }))}>Review safe resume</button>}
         <button className={`btn ${expert ? "btn-primary" : "btn-ghost"}`} onClick={() => setExpert((value) => !value)} aria-pressed={expert}>Expert {expert ? "on" : "off"}</button>
         {canAccess("admin") && <button className="btn btn-destructive" onClick={() => setShowDelete(true)}>Delete</button>}
       </div>
@@ -135,7 +152,14 @@ export default function TaskDetail({ taskId, onBack }: Props) {
         <section className="process-timeline-column"><ProcessTimeline taskId={taskId} selectedEntryId={selectedEntry?.id} onSelectEntry={setSelectedEntry} /></section>
         <aside className="process-context-rail" aria-label="Process context and controls">
           <EvidencePanel entry={selectedEntry} />
-          <HandoffPanel taskId={taskId} canGenerate={canAccess("operator")} canExecute={canAccess("operator") && (isPaused || isFailed)} reviewRequest={resumeReviewRequest} onExecuted={reload} />
+          <HandoffPanel
+            taskId={taskId}
+            canGenerate={canAccess("operator")}
+            canExecute={canAccess("operator") && (isPaused || isFailed)}
+            reviewRequest={resumeReview.request}
+            reviewReturnTargetRef={resumeReview.returnToHeader ? resumeReviewButtonRef : undefined}
+            onExecuted={reload}
+          />
           <SessionPanel taskId={taskId} canControl={canAccess("operator")} />
           <SourcePanel taskId={taskId} />
         </aside>

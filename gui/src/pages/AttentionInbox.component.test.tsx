@@ -94,6 +94,27 @@ describe("AttentionInbox component", () => {
     expect(await screen.findByText("当前没有需要处理的事项")).toBeVisible();
   });
 
+  it("routes retry and resume actions into reviewed safe resume without executing them", async () => {
+    current = attention({
+      actions: [{
+        id: "retry_failed_item",
+        label: "Retry safely",
+        required_role: "operator",
+        confirmation: "required",
+        input_schema_json: "{}",
+      }],
+    });
+    const { onOpenTask } = renderAs("operator");
+    await screen.findByText("Retry now?");
+    vi.mocked(invoke).mockClear();
+
+    expect(screen.queryByRole("button", { name: "Retry safely" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Review safe resume" }));
+
+    expect(onOpenTask).toHaveBeenCalledWith("task-1", true);
+    expect(invoke).not.toHaveBeenCalledWith("attention_execute_action", expect.anything());
+  });
+
   it("reconciles live deltas and presents stream and notification fallbacks", async () => {
     renderAs("operator", vi.fn(), false);
     await screen.findByText("Retry now?");
@@ -115,6 +136,7 @@ describe("AttentionInbox component", () => {
     expect(screen.getByRole("button", { name: "Claim" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Escalate" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Resolve" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Review safe resume" })).not.toBeInTheDocument();
   });
 
   it("supports keyboard triage and opens a correlated automation route", async () => {

@@ -22,9 +22,9 @@ vi.mock("./lib/routes", () => ({ useConsoleRoute: vi.fn() }));
 vi.mock("./lib/telemetry", () => ({ recordUiMetric: vi.fn() }));
 vi.mock("./components/ConnectionBanner", () => ({ default: ({ state }: { state: { kind: string } }) => <div>banner {state.kind}</div> }));
 vi.mock("./pages/ConnectionStatus", () => ({ default: ({ state }: { state: { kind: string } }) => <div>connection {state.kind}</div> }));
-vi.mock("./pages/AttentionInbox", () => ({ default: ({ nativeNotificationsEnabled, onOpenTask }: { nativeNotificationsEnabled: boolean; onOpenTask: (id: string) => void }) => <button onClick={() => onOpenTask("task-attention")}>attention page {String(nativeNotificationsEnabled)}</button> }));
+vi.mock("./pages/AttentionInbox", () => ({ default: ({ nativeNotificationsEnabled, onOpenTask }: { nativeNotificationsEnabled: boolean; onOpenTask: (id: string, reviewResume?: boolean) => void }) => <><button onClick={() => onOpenTask("task-attention")}>attention page {String(nativeNotificationsEnabled)}</button><button onClick={() => onOpenTask("task-review", true)}>attention review</button></> }));
 vi.mock("./pages/ProcessList", () => ({ default: ({ onSelect }: { onSelect: (id: string) => void }) => <button onClick={() => onSelect("task-list")}>process list</button> }));
-vi.mock("./pages/ProcessWorkspace", () => ({ default: ({ taskId, onBack }: { taskId: string; onBack: () => void }) => <button onClick={onBack}>process workspace {taskId}</button> }));
+vi.mock("./pages/ProcessWorkspace", () => ({ default: ({ taskId, onBack, autoReviewResume, onAutoReviewConsumed }: { taskId: string; onBack: () => void; autoReviewResume?: boolean; onAutoReviewConsumed?: () => void }) => <><button onClick={onBack}>process workspace {taskId}</button><button onClick={onAutoReviewConsumed}>consume review {String(autoReviewResume)}</button></> }));
 vi.mock("./pages/SessionList", () => ({ default: ({ onSelect }: { onSelect: (id: string) => void }) => <button onClick={() => onSelect("session-list")}>session list</button> }));
 vi.mock("./pages/SessionInspector", () => ({ default: ({ sessionId, onOpenProcess }: { sessionId: string; onOpenProcess: (id: string) => void }) => <button onClick={() => onOpenProcess("task-session")}>session inspector {sessionId}</button> }));
 vi.mock("./pages/Sources", () => ({ default: ({ onOpenTask }: { onOpenTask: (id: string) => void }) => <button onClick={() => onOpenTask("task-source")}>sources page</button> }));
@@ -87,8 +87,11 @@ describe("App shell", () => {
     fireEvent.keyDown(document, { key: "3", ctrlKey: true });
     fireEvent.keyDown(document, { key: "n", metaKey: true });
     fireEvent.click(screen.getByRole("button", { name: /attention page true/ }));
+    fireEvent.click(screen.getByRole("button", { name: "attention review" }));
     expect(navigate.mock.calls).toEqual(expect.arrayContaining([
-      [{ page: "sessions" }], [{ page: "new-process" }], [{ page: "processes", taskId: "task-attention" }],
+      [{ page: "sessions" }], [{ page: "new-process" }],
+      [{ page: "processes", taskId: "task-attention", reviewResume: undefined }],
+      [{ page: "processes", taskId: "task-review", reviewResume: true }],
     ]));
     expect(recordUiMetric).toHaveBeenCalledWith("page_load", expect.objectContaining({ page: "attention" }));
   });
@@ -107,6 +110,14 @@ describe("App shell", () => {
     view.rerender(<App />);
     fireEvent.click(screen.getByRole("button", { name: /wish detail draft-1/ }));
     expect(navigate).toHaveBeenCalledWith({ page: "processes", taskId: "task-confirmed" });
+  });
+
+  it("consumes the one-shot reviewed-resume route without losing the process identity", () => {
+    route = { page: "processes", taskId: "task-review", reviewResume: true };
+    render(<App />);
+    expect(screen.getByRole("button", { name: "consume review true" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "consume review true" }));
+    expect(navigate).toHaveBeenCalledWith({ page: "processes", taskId: "task-review" });
   });
 
   it("fails closed for disabled pages and accepts only safe notification deep links", async () => {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 export type ConsoleRoute =
   | { page: "attention"; attentionId?: string }
-  | { page: "processes"; taskId?: string }
+  | { page: "processes"; taskId?: string; reviewResume?: boolean }
   | { page: "sessions"; sessionId?: string }
   | { page: "sources"; taskId?: string; section?: "connections" | "events" | "bindings" | "automations"; automationView?: "templates" | "bindings" | "routes"; resourceId?: string }
   | { page: "system"; section?: string }
@@ -11,10 +11,17 @@ export type ConsoleRoute =
 const decode = (value: string | undefined) => value ? decodeURIComponent(value) : undefined;
 
 export function parseConsoleRoute(hash: string): ConsoleRoute {
-  const path = hash.replace(/^#/, "").replace(/^\//, "");
+  const normalized = hash.replace(/^#/, "").replace(/^\//, "");
+  const [path, search = ""] = normalized.split("?", 2);
+  const params = new URLSearchParams(search);
   const [page = "attention", id, child, resourceId] = path.split("/");
   switch (page) {
-    case "processes": return { page, taskId: decode(id) };
+    case "processes": {
+      const taskId = decode(id);
+      return params.get("review") === "safe-resume"
+        ? { page, taskId, reviewResume: true }
+        : { page, taskId };
+    }
     case "sessions": return { page, sessionId: decode(id) };
     case "sources": {
       if (id === "connections") return { page, section: "connections", resourceId: decode(child) };
@@ -45,7 +52,8 @@ export function formatConsoleRoute(route: ConsoleRoute): string {
     : route.page === "sources" ? route.taskId
     : route.page === "system" ? route.section
     : route.draftId;
-  return `#/${route.page}${id ? `/${encodeURIComponent(id)}` : ""}`;
+  const path = `#/${route.page}${id ? `/${encodeURIComponent(id)}` : ""}`;
+  return route.page === "processes" && route.reviewResume ? `${path}?review=safe-resume` : path;
 }
 
 export function useConsoleRoute() {

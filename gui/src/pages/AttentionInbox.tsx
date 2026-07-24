@@ -7,7 +7,12 @@ import { recordUiMetric } from "../lib/telemetry";
 import i18n from "../lib/i18n";
 import type { AttentionAction, AttentionDelta, AttentionItem, AttentionListResult, Role } from "../lib/types";
 
-interface Props { initialAttentionId?: string; nativeNotificationsEnabled: boolean; onOpenTask: (taskId: string) => void; onOpenSourceRoute?: (routeId: string) => void; }
+interface Props {
+  initialAttentionId?: string;
+  nativeNotificationsEnabled: boolean;
+  onOpenTask: (taskId: string, reviewResume?: boolean) => void;
+  onOpenSourceRoute?: (routeId: string) => void;
+}
 interface Filters { state: string; severity: string; assignee: string; }
 type PendingAction = { kind: "resolve"; item: AttentionItem } | { kind: "execute"; item: AttentionItem; action: AttentionAction };
 
@@ -159,6 +164,7 @@ export default function AttentionInbox({ initialAttentionId, nativeNotifications
 
   const counts = useMemo(() => ({ intervention: items.filter((item) => item.severity === "intervention").length, attention: items.filter((item) => item.severity === "attention").length }), [items]);
   const actionAllowed = (action: AttentionAction) => ["read_only", "operator", "admin"].includes(action.required_role) && canAccess(action.required_role as Role);
+  const safeResumeAction = current?.actions.find((action) => ["retry_failed_item", "resume_task"].includes(action.id));
 
   return <main aria-labelledby="attention-title">
     <header className="attention-header"><div><h1 id="attention-title" className="page-title">Attention</h1><p>{i18n.attention.subtitle}</p></div><div className="attention-counts"><span className="badge badge-danger">◆ {counts.intervention} intervention</span><span className="badge badge-warning">● {counts.attention} attention</span></div></header>
@@ -192,6 +198,7 @@ export default function AttentionInbox({ initialAttentionId, nativeNotifications
             {current.state === "open" && <button className="btn btn-secondary" disabled={!canMutate} title={!canMutate ? "Requires operator role" : undefined} onClick={() => void mutate("claim", current)}>Claim</button>}
             <button className="btn btn-ghost" disabled={!canMutate} onClick={() => void mutate("snooze", current)}>Snooze 1h</button>
             {current.actions.filter((action) => !["acknowledge", "retry_failed_item", "resume_task"].includes(action.id)).map((action) => <button key={action.id} className="btn btn-primary" disabled={!actionAllowed(action)} title={!actionAllowed(action) ? `Requires ${action.required_role}` : undefined} onClick={() => setPending({ kind: "execute", item: current, action })}>{action.label}</button>)}
+            {current.task_id && safeResumeAction && canMutate && <button className="btn btn-primary" disabled={!actionAllowed(safeResumeAction)} title={!actionAllowed(safeResumeAction) ? `Requires ${safeResumeAction.required_role}` : undefined} onClick={() => onOpenTask(current.task_id!, true)}>Review safe resume</button>}
             <button className="btn btn-ghost" disabled={!canMutate} onClick={() => setPending({ kind: "resolve", item: current })}>Resolve</button>
             {current.task_id && <button className="btn btn-secondary" onClick={() => onOpenTask(current.task_id)}>Open process</button>}
             {current.source_route_id && onOpenSourceRoute && <button className="btn btn-secondary" onClick={() => onOpenSourceRoute(current.source_route_id!)}>Open automation route</button>}
