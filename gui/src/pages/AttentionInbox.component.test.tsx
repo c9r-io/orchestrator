@@ -26,11 +26,20 @@ function attention(overrides: Partial<AttentionItem> = {}): AttentionItem {
   };
 }
 
-function renderAs(role: Role, onOpenTask = vi.fn(), nativeNotificationsEnabled = true) {
+function renderAs(
+  role: Role,
+  onOpenTask = vi.fn(),
+  nativeNotificationsEnabled = true,
+  onOpenSourceRoute?: (routeId: string) => void,
+) {
   return {
     onOpenTask,
     ...render(<RoleContext.Provider value={{ role, canAccess: (required) => hasAccess(role, required) }}>
-      <AttentionInbox nativeNotificationsEnabled={nativeNotificationsEnabled} onOpenTask={onOpenTask} />
+      <AttentionInbox
+        nativeNotificationsEnabled={nativeNotificationsEnabled}
+        onOpenTask={onOpenTask}
+        onOpenSourceRoute={onOpenSourceRoute}
+      />
     </RoleContext.Provider>),
   };
 }
@@ -106,5 +115,75 @@ describe("AttentionInbox component", () => {
     expect(screen.getByRole("button", { name: "Claim" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Escalate" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Resolve" })).toBeDisabled();
+  });
+
+  it("supports keyboard triage and opens a correlated automation route", async () => {
+    current = {
+      ...current,
+      last_occurred_at: "2026-07-17T02:00:00Z",
+    };
+    const second = attention({
+      id: "attention-2",
+      task_id: "task-2",
+      title: "Second blocker",
+      source_route_id: "route-2",
+      last_occurred_at: "2026-07-17T01:00:00Z",
+    });
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "attention_list") {
+        return { items: [current, second], latest_change_id: 10 };
+      }
+      if (command === "attention_claim") {
+        current = { ...current, state: "claimed", version: 2 };
+        return current;
+      }
+      if (command === "attention_snooze") {
+        current = { ...current, state: "snoozed", version: 3 };
+        return current;
+      }
+      return null;
+    });
+    const onOpenTask = vi.fn();
+    const onOpenSourceRoute = vi.fn();
+    renderAs("operator", onOpenTask, true, onOpenSourceRoute);
+    await screen.findByText("Second blocker");
+
+    expect(screen.getByRole("heading", { name: "Approval required" })).toBeVisible();
+    fireEvent.keyDown(document, { key: "c" });
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith(
+      "attention_claim",
+      expect.objectContaining({ id: "attention-1" }),
+    ));
+    fireEvent.keyDown(document, { key: "s" });
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith(
+      "attention_snooze",
+      expect.objectContaining({ id: "attention-1" }),
+    ));
+    fireEvent.keyDown(document, { key: "Enter" });
+    expect(onOpenTask).toHaveBeenCalledWith("task-1");
+
+    fireEvent.keyDown(document, { key: "j" });
+    expect(screen.getByRole("heading", { name: "Second blocker" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Open automation route" }));
+    expect(onOpenSourceRoute).toHaveBeenCalledWith("route-2");
+  });
+
+  it("reloads authoritative state and remains usable after a failed mutation", async () => {
+    let listCalls = 0;
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "attention_list") {
+        listCalls += 1;
+        return { items: [current], latest_change_id: 10 + listCalls };
+      }
+      if (command === "attention_claim") throw new Error("version conflict");
+      return null;
+    });
+    renderAs("operator");
+    await screen.findByText("Retry now?");
+
+    fireEvent.click(screen.getByRole("button", { name: "Claim" }));
+
+    await waitFor(() => expect(listCalls).toBeGreaterThanOrEqual(2));
+    expect(screen.getByRole("button", { name: "Claim" })).toBeEnabled();
   });
 });

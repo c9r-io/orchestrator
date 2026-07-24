@@ -189,7 +189,13 @@ pub struct McpCallbackConfig {
 impl McpCallbackConfig {
     /// Creates a callback descriptor for one command run.
     pub fn new(url: String, token: String) -> Result<Self> {
-        if !url.starts_with("http://127.0.0.1:") || token.trim().is_empty() {
+        let parsed = reqwest::Url::parse(&url);
+        let is_loopback_http = parsed.as_ref().is_ok_and(|parsed| {
+            parsed.scheme() == "http"
+                && parsed.host_str() == Some("127.0.0.1")
+                && parsed.port().is_some()
+        });
+        if !is_loopback_http || token.trim().is_empty() {
             bail!("MCP callback must use loopback HTTP with a non-empty token");
         }
         Ok(Self { url, token })
@@ -328,6 +334,24 @@ mod tests {
         assert!(!format!("{callback:?}").contains("run-secret"));
         assert!(
             McpCallbackConfig::new("http://0.0.0.0:19001/mcp".to_string(), "secret".to_string())
+                .is_err()
+        );
+        assert!(
+            McpCallbackConfig::new(
+                "http://127.0.0.1:19001@evil.example/mcp".to_string(),
+                "secret".to_string()
+            )
+            .is_err()
+        );
+        assert!(
+            McpCallbackConfig::new(
+                "https://127.0.0.1:19001/mcp".to_string(),
+                "secret".to_string()
+            )
+            .is_err()
+        );
+        assert!(
+            McpCallbackConfig::new("http://127.0.0.1:19001/mcp".to_string(), " ".to_string())
                 .is_err()
         );
     }

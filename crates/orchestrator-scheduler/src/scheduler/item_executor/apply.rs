@@ -456,7 +456,12 @@ fn uses_coordination_tool_model(artifacts: &[agent_orchestrator::collab::Artifac
         };
         matches!(
             bare_tool_name(tool).as_str(),
-            "run_tests" | "mark_item" | "create_ticket" | "scan_tickets" | "generate_items"
+            "run_tests"
+                | "mark_item"
+                | "mark_done"
+                | "create_ticket"
+                | "scan_tickets"
+                | "generate_items"
         )
     })
 }
@@ -542,6 +547,38 @@ mod coordination_effect_tests {
     use agent_orchestrator::config::PipelineVariables;
     use uuid::Uuid;
 
+    fn result_with_artifacts(artifacts: Vec<Artifact>) -> agent_orchestrator::dto::RunResult {
+        agent_orchestrator::dto::RunResult {
+            success: true,
+            exit_code: 0,
+            stdout_path: String::new(),
+            stderr_path: String::new(),
+            timed_out: false,
+            duration_ms: Some(1),
+            output: Some(
+                AgentOutput::new(
+                    Uuid::new_v4(),
+                    "agent".to_string(),
+                    "qa".to_string(),
+                    0,
+                    String::new(),
+                    String::new(),
+                )
+                .with_artifacts(artifacts),
+            ),
+            validation_status: "passed".to_string(),
+            agent_id: "agent".to_string(),
+            run_id: "run".to_string(),
+            execution_profile: "host".to_string(),
+            execution_mode: "host".to_string(),
+            sandbox_denied: false,
+            sandbox_denial_reason: None,
+            sandbox_violation_kind: None,
+            sandbox_resource_kind: None,
+            sandbox_network_target: None,
+        }
+    }
+
     #[test]
     fn mark_item_and_ticket_receipts_fold_into_accumulator() {
         let artifacts = vec![
@@ -570,35 +607,7 @@ mod coordination_effect_tests {
                 "is_error":false
             })),
         ];
-        let result = agent_orchestrator::dto::RunResult {
-            success: true,
-            exit_code: 0,
-            stdout_path: String::new(),
-            stderr_path: String::new(),
-            timed_out: false,
-            duration_ms: Some(1),
-            output: Some(
-                AgentOutput::new(
-                    Uuid::new_v4(),
-                    "agent".to_string(),
-                    "qa".to_string(),
-                    0,
-                    String::new(),
-                    String::new(),
-                )
-                .with_artifacts(artifacts),
-            ),
-            validation_status: "passed".to_string(),
-            agent_id: "agent".to_string(),
-            run_id: "run".to_string(),
-            execution_profile: "host".to_string(),
-            execution_mode: "host".to_string(),
-            sandbox_denied: false,
-            sandbox_denial_reason: None,
-            sandbox_violation_kind: None,
-            sandbox_resource_kind: None,
-            sandbox_network_target: None,
-        };
+        let result = result_with_artifacts(artifacts);
         let mut accumulator = StepExecutionAccumulator::new(PipelineVariables::default());
 
         apply_coordination_tool_effects(&result, &mut accumulator);
@@ -606,5 +615,71 @@ mod coordination_effect_tests {
         assert_eq!(accumulator.item_status, "qa_passed");
         assert_eq!(accumulator.created_ticket_files, vec!["docs/ticket/T-1.md"]);
         assert_eq!(accumulator.active_tickets, vec!["docs/ticket/T-1.md"]);
+    }
+
+    #[test]
+    fn compatibility_alias_is_detected_and_object_receipt_is_applied() {
+        let artifacts = vec![
+            Artifact::new(ArtifactKind::ToolCall {
+                tool: "mark_done".to_string(),
+            })
+            .with_content(json!({"call_id":"done-1","args":{}})),
+            Artifact::new(ArtifactKind::Data {
+                schema: "driver_tool_result".to_string(),
+            })
+            .with_content(json!({
+                "call_id":"done-1",
+                "payload":{"accepted":true,"status":"verified"},
+                "is_error":false
+            })),
+        ];
+        assert!(uses_coordination_tool_model(&artifacts));
+        let result = result_with_artifacts(artifacts);
+        let mut accumulator = StepExecutionAccumulator::new(PipelineVariables::default());
+
+        apply_coordination_tool_effects(&result, &mut accumulator);
+
+        assert_eq!(accumulator.item_status, "verified");
+    }
+
+    #[test]
+    fn errored_unpaired_and_malformed_receipts_are_ignored() {
+        let artifacts = vec![
+            Artifact::new(ArtifactKind::ToolCall {
+                tool: "mcp__orch__mark_item".to_string(),
+            })
+            .with_content(json!({"call_id":"mark-1"})),
+            Artifact::new(ArtifactKind::Data {
+                schema: "driver_tool_result".to_string(),
+            })
+            .with_content(json!({
+                "call_id":"mark-1",
+                "payload":{"accepted":true,"status":"qa_failed"},
+                "is_error":true
+            })),
+            Artifact::new(ArtifactKind::Data {
+                schema: "driver_tool_result".to_string(),
+            })
+            .with_content(json!({
+                "call_id":"unpaired",
+                "payload":{"accepted":true,"status":"qa_failed"},
+                "is_error":false
+            })),
+            Artifact::new(ArtifactKind::Data {
+                schema: "driver_tool_result".to_string(),
+            })
+            .with_content(json!({
+                "call_id":"mark-1",
+                "payload":[{"type":"image","data":"ignored"}],
+                "is_error":false
+            })),
+        ];
+        let result = result_with_artifacts(artifacts);
+        let mut accumulator = StepExecutionAccumulator::new(PipelineVariables::default());
+        accumulator.item_status = "unresolved".to_string();
+
+        apply_coordination_tool_effects(&result, &mut accumulator);
+
+        assert_eq!(accumulator.item_status, "unresolved");
     }
 }

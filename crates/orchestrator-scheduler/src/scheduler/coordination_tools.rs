@@ -284,13 +284,7 @@ async fn run_tests(state: &ToolHostState, arguments: Value) -> Result<Value> {
         .get("target")
         .and_then(Value::as_str)
         .context("target is required")?;
-    let command = match target {
-        "workspace" => "cargo test --workspace",
-        "core" => "cargo test -p agent-orchestrator",
-        "runner" => "cargo test -p orchestrator-runner",
-        "scheduler" => "cargo test -p orchestrator-scheduler",
-        _ => bail!("unsupported test target '{target}'"),
-    };
+    let command = test_command_for_target(target)?;
     let directory = state.artifacts_dir.join("coordination-tests");
     std::fs::create_dir_all(&directory)?;
     let stem = Uuid::new_v4().simple().to_string();
@@ -339,6 +333,16 @@ async fn run_tests(state: &ToolHostState, arguments: Value) -> Result<Value> {
         "stdout_tail": tail(&stdout_text, 40),
         "stderr_tail": tail(&stderr_text, 20),
     }))
+}
+
+fn test_command_for_target(target: &str) -> Result<&'static str> {
+    match target {
+        "workspace" => Ok("cargo test --workspace"),
+        "core" => Ok("cargo test -p agent-orchestrator"),
+        "runner" => Ok("cargo test -p orchestrator-runner"),
+        "scheduler" => Ok("cargo test -p orchestrator-scheduler"),
+        _ => bail!("unsupported test target '{target}'"),
+    }
 }
 
 async fn mark_item(state: &ToolHostState, arguments: Value) -> Result<Value> {
@@ -597,20 +601,55 @@ mod tests {
             "mcp__other__escape".to_string(),
         ]);
         assert_eq!(allowed, HashSet::from(["run_tests".to_string()]));
+
+        let all = normalize_allowed_tools(&[]);
+        assert_eq!(all.len(), 6);
+        assert!(all.contains("mark_done"));
+
+        let namespace = normalize_allowed_tools(&["mcp__orch".to_string()]);
+        assert_eq!(namespace, all);
     }
 
     #[test]
     fn test_count_parser_sums_cargo_suites() {
         let output = "test result: ok. 3 passed; 0 failed;\n\
-                      test result: FAILED. 2 passed; 1 failed;";
+                      test result: FAILED. 2 passed; 1 failed;\n\
+                      test result: malformed. many passed; no failed;";
         assert_eq!(parse_test_counts(output), (5, 1));
     }
 
     #[test]
     fn generated_item_ids_cannot_escape_workspace() {
         assert!(validate_item_id("docs/qa/test.md").is_ok());
+        assert!(validate_item_id("").is_err());
+        assert!(validate_item_id("   ").is_err());
         assert!(validate_item_id("../outside").is_err());
+        assert!(validate_item_id("docs/../outside").is_err());
         assert!(validate_item_id("/absolute").is_err());
+        assert!(validate_item_id(&"x".repeat(513)).is_err());
+    }
+
+    #[test]
+    fn test_targets_and_output_tails_are_bounded() {
+        assert_eq!(
+            test_command_for_target("workspace").unwrap(),
+            "cargo test --workspace"
+        );
+        assert_eq!(
+            test_command_for_target("core").unwrap(),
+            "cargo test -p agent-orchestrator"
+        );
+        assert_eq!(
+            test_command_for_target("runner").unwrap(),
+            "cargo test -p orchestrator-runner"
+        );
+        assert_eq!(
+            test_command_for_target("scheduler").unwrap(),
+            "cargo test -p orchestrator-scheduler"
+        );
+        assert!(test_command_for_target("cargo test --all").is_err());
+        assert_eq!(tail("one\ntwo\nthree", 2), "two\nthree");
+        assert_eq!(tail("one\ntwo", 0), "");
     }
 
     #[test]
@@ -690,6 +729,24 @@ mod tests {
             .expect("unauthorized response");
         assert_eq!(unauthorized.status(), reqwest::StatusCode::UNAUTHORIZED);
 
+        let oversized = client
+            .post(host.callback().url())
+            .bearer_auth(host.callback().expose_token())
+            .body(vec![b'x'; MAX_REQUEST_BYTES + 1])
+            .send()
+            .await
+            .expect("oversized response");
+        assert_eq!(oversized.status(), reqwest::StatusCode::PAYLOAD_TOO_LARGE);
+
+        let malformed = client
+            .post(host.callback().url())
+            .bearer_auth(host.callback().expose_token())
+            .body("{")
+            .send()
+            .await
+            .expect("malformed response");
+        assert_eq!(malformed.status(), reqwest::StatusCode::BAD_REQUEST);
+
         async fn call(
             client: &reqwest::Client,
             callback: &McpCallbackConfig,
@@ -714,10 +771,160 @@ mod tests {
                 .expect("tool JSON")
         }
 
+        let initialize = client
+            .post(host.callback().url())
+            .bearer_auth(host.callback().expose_token())
+            .json(&json!({
+                "jsonrpc":"2.0",
+                "id":"init",
+                "method":"initialize",
+                "params":{"protocolVersion":"2025-03-26"}
+            }))
+            .send()
+            .await
+            .expect("initialize response")
+            .json::<Value>()
+            .await
+            .expect("initialize JSON");
+        assert_eq!(
+            initialize.pointer("/result/protocolVersion"),
+            Some(&json!("2025-03-26"))
+        );
+
+        let initialized = client
+            .post(host.callback().url())
+            .bearer_auth(host.callback().expose_token())
+            .json(&json!({
+                "jsonrpc":"2.0",
+                "method":"notifications/initialized"
+            }))
+            .send()
+            .await
+            .expect("initialized response")
+            .json::<Value>()
+            .await
+            .expect("initialized JSON");
+        assert_eq!(initialized.pointer("/result"), Some(&Value::Null));
+
+        let listed = client
+            .post(host.callback().url())
+            .bearer_auth(host.callback().expose_token())
+            .json(&json!({"jsonrpc":"2.0","id":7,"method":"tools/list"}))
+            .send()
+            .await
+            .expect("list response")
+            .json::<Value>()
+            .await
+            .expect("list JSON");
+        assert_eq!(
+            listed
+                .pointer("/result/tools")
+                .and_then(Value::as_array)
+                .map(Vec::len),
+            Some(6)
+        );
+
+        let unknown = client
+            .post(host.callback().url())
+            .bearer_auth(host.callback().expose_token())
+            .json(&json!({"jsonrpc":"2.0","id":8,"method":"unknown"}))
+            .send()
+            .await
+            .expect("unknown method response")
+            .json::<Value>()
+            .await
+            .expect("unknown method JSON");
+        assert_eq!(unknown.pointer("/error/code"), Some(&json!(-32601)));
+
+        let missing_name = client
+            .post(host.callback().url())
+            .bearer_auth(host.callback().expose_token())
+            .json(&json!({"jsonrpc":"2.0","id":9,"method":"tools/call","params":{}}))
+            .send()
+            .await
+            .expect("missing name response")
+            .json::<Value>()
+            .await
+            .expect("missing name JSON");
+        assert_eq!(missing_name.pointer("/error/code"), Some(&json!(-32602)));
+
+        let restricted_host = start_tool_host(CoordinationHostRequest {
+            state: state.clone(),
+            task_id: &task.id,
+            item_id: &item.id,
+            run_id: "run-118-restricted",
+            workspace_root: &workspace,
+            runner: &RunnerConfig::default(),
+            execution_profile: &ResolvedExecutionProfile::host(),
+            extra_env: &HashMap::new(),
+            redaction_patterns: &[],
+            artifacts_dir: &artifacts,
+            allowed_tools: &["mcp__orch__mark_item".to_string()],
+        })
+        .await
+        .expect("restricted tool host");
+        let disallowed = call(
+            &client,
+            restricted_host.callback(),
+            10,
+            "run_tests",
+            json!({"target":"workspace"}),
+        )
+        .await;
+        assert_eq!(disallowed.pointer("/error/code"), Some(&json!(-32604)));
+
+        let ticket_without_test =
+            call(&client, host.callback(), 11, "create_ticket", json!({})).await;
+        assert_eq!(
+            ticket_without_test.pointer("/result/isError"),
+            Some(&Value::Bool(true))
+        );
+
+        let invalid_target = call(
+            &client,
+            host.callback(),
+            12,
+            "run_tests",
+            json!({"target":"arbitrary-command"}),
+        )
+        .await;
+        assert_eq!(
+            invalid_target.pointer("/result/isError"),
+            Some(&Value::Bool(true))
+        );
+
+        let invalid_status = call(
+            &client,
+            host.callback(),
+            13,
+            "mark_item",
+            json!({"status":"completed"}),
+        )
+        .await;
+        assert_eq!(
+            invalid_status.pointer("/result/isError"),
+            Some(&Value::Bool(true))
+        );
+
+        for (id, arguments) in [
+            (14, json!({"items":[]})),
+            (15, json!({"items":[{"id":"duplicate"},{"id":"duplicate"}]})),
+            (16, json!({"items":[{"id":"../outside"}]})),
+            (
+                17,
+                json!({"items":(0..=MAX_GENERATED_ITEMS)
+                    .map(|index| json!({"id":format!("item-{index}")}))
+                    .collect::<Vec<_>>()}),
+            ),
+        ] {
+            let invalid = call(&client, host.callback(), id, "generate_items", arguments).await;
+            assert_eq!(invalid.pointer("/result/isError"), Some(&Value::Bool(true)));
+        }
+
         let passing = call(
             &client,
             host.callback(),
-            1,
+            18,
             "run_tests",
             json!({"target":"workspace"}),
         )
@@ -727,10 +934,17 @@ mod tests {
             Some(&Value::Bool(true))
         );
 
+        let ticket_after_passing =
+            call(&client, host.callback(), 19, "create_ticket", json!({})).await;
+        assert_eq!(
+            ticket_after_passing.pointer("/result/isError"),
+            Some(&Value::Bool(true))
+        );
+
         let marked = call(
             &client,
             host.callback(),
-            2,
+            20,
             "mark_item",
             json!({"status":"qa_passed","summary":"fixture passed"}),
         )
@@ -738,6 +952,19 @@ mod tests {
         assert_eq!(
             marked.pointer("/result/structuredContent/accepted"),
             Some(&Value::Bool(true))
+        );
+
+        let marked_done = call(
+            &client,
+            host.callback(),
+            21,
+            "mark_done",
+            json!({"summary":"compatibility"}),
+        )
+        .await;
+        assert_eq!(
+            marked_done.pointer("/result/structuredContent/status"),
+            Some(&json!("verified"))
         );
 
         std::fs::write(
@@ -748,7 +975,7 @@ mod tests {
         let failing = call(
             &client,
             host.callback(),
-            3,
+            22,
             "run_tests",
             json!({"target":"workspace"}),
         )
@@ -757,12 +984,12 @@ mod tests {
             failing.pointer("/result/structuredContent/success"),
             Some(&Value::Bool(false))
         );
-        let ticket = call(&client, host.callback(), 4, "create_ticket", json!({})).await;
+        let ticket = call(&client, host.callback(), 23, "create_ticket", json!({})).await;
         assert_eq!(
             ticket.pointer("/result/structuredContent/created"),
             Some(&Value::Bool(true))
         );
-        let scan = call(&client, host.callback(), 5, "scan_tickets", json!({})).await;
+        let scan = call(&client, host.callback(), 24, "scan_tickets", json!({})).await;
         assert_eq!(
             scan.pointer("/result/structuredContent/count"),
             Some(&json!(1))
@@ -770,7 +997,7 @@ mod tests {
         let generated = call(
             &client,
             host.callback(),
-            6,
+            25,
             "generate_items",
             json!({"items":[{"id":"docs/qa/generated.md","label":"Generated"}],"replace":true}),
         )
@@ -805,6 +1032,6 @@ mod tests {
             })
             .await
             .expect("event count");
-        assert_eq!(event_count, 12);
+        assert_eq!(event_count, 30);
     }
 }

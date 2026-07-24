@@ -523,3 +523,126 @@ async fn create_resume_child(
         .map_err(anyhow::Error::from)?;
     Ok(child.id)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_orchestrator::config::SideEffectClass;
+    use agent_orchestrator::handoff::HandoffBriefing;
+
+    fn boundary(side_effect_class: SideEffectClass) -> CoreResumeBoundary {
+        CoreResumeBoundary {
+            id: "boundary-1".into(),
+            task_id: "task-1".into(),
+            cycle: 2,
+            step_id: Some("publish".into()),
+            task_item_id: Some("item-1".into()),
+            command_run_id: Some("run-1".into()),
+            provider_session_available: true,
+            checkpoint_id: Some("checkpoint-1".into()),
+            side_effect_class,
+            replay_safe: side_effect_class.replay_safe(),
+            reason: "review the boundary".into(),
+            state_version: "state-1".into(),
+        }
+    }
+
+    #[test]
+    fn status_mapping_preserves_public_error_categories() {
+        for (message, expected) in [
+            ("resume plan not found", tonic::Code::NotFound),
+            ("resume denied", tonic::Code::PermissionDenied),
+            ("resume disabled", tonic::Code::PermissionDenied),
+            ("stale plan", tonic::Code::FailedPrecondition),
+            ("plan expired", tonic::Code::FailedPrecondition),
+            ("plan not executable", tonic::Code::FailedPrecondition),
+            ("unsupported resume mode", tonic::Code::InvalidArgument),
+        ] {
+            assert_eq!(status(anyhow::anyhow!(message)).code(), expected);
+        }
+    }
+
+    #[test]
+    fn boundary_projection_uses_stable_side_effect_labels() {
+        for (side_effect, label, replay_safe) in [
+            (SideEffectClass::None, "none", true),
+            (SideEffectClass::WorkspaceOnly, "workspace_only", true),
+            (
+                SideEffectClass::IdempotentExternal,
+                "idempotent_external",
+                true,
+            ),
+            (
+                SideEffectClass::NonIdempotentExternal,
+                "non_idempotent_external",
+                false,
+            ),
+        ] {
+            let projected = boundary_to_proto(boundary(side_effect));
+            assert_eq!(projected.side_effect_class, label);
+            assert_eq!(projected.replay_safe, replay_safe);
+            assert!(projected.provider_session_available);
+            assert_eq!(projected.command_run_id.as_deref(), Some("run-1"));
+        }
+    }
+
+    #[test]
+    fn snapshot_and_plan_projection_keep_structured_evidence() {
+        let snapshot = HandoffSnapshot {
+            id: "snapshot-1".into(),
+            project_id: "project-1".into(),
+            task_id: "task-1".into(),
+            source_event_cursor: 42,
+            projection_version: 1,
+            briefing: HandoffBriefing {
+                goal: "Ship safely".into(),
+                current_state: json!({"status":"failed"}),
+                last_success: None,
+                failure: Some(json!({"step":"test"})),
+                test_evidence: vec![json!({"passed":4,"failed":1})],
+                changed_files: vec!["src/main.rs".into()],
+                constraints: Vec::new(),
+                decisions: Vec::new(),
+                open_questions: Vec::new(),
+                recommendations: vec!["Review failure".into()],
+            },
+            content_hash: "hash-1".into(),
+            state_version: "state-1".into(),
+            generated_by: "operator-1".into(),
+            created_at: "2026-07-25T00:00:00Z".into(),
+        };
+        let projected_snapshot = snapshot_to_proto(snapshot);
+        let briefing: serde_json::Value =
+            serde_json::from_str(&projected_snapshot.briefing_json).expect("briefing JSON");
+        assert_eq!(briefing["goal"], "Ship safely");
+        assert_eq!(briefing["test_evidence"][0]["failed"], 1);
+        assert_eq!(projected_snapshot.source_event_cursor, 42);
+
+        let plan = CoreResumePlan {
+            id: "plan-1".into(),
+            task_id: "task-1".into(),
+            boundary: boundary(SideEffectClass::NonIdempotentExternal),
+            mode: ResumeMode::RestartFromBoundary,
+            expected_state_version: "state-1".into(),
+            consequence: json!({"repeated_steps":["publish"]}),
+            elevated_confirmation_required: true,
+            expires_at: "2026-07-25T01:00:00Z".into(),
+            status: "review_required".into(),
+        };
+        let projected_plan = plan_to_proto(plan);
+        assert_eq!(projected_plan.mode, "restart_from_boundary");
+        assert!(projected_plan.elevated_confirmation_required);
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&projected_plan.consequence_json)
+                .expect("consequence JSON")["repeated_steps"][0],
+            "publish"
+        );
+        assert_eq!(
+            projected_plan
+                .boundary
+                .expect("boundary projection")
+                .side_effect_class,
+            "non_idempotent_external"
+        );
+    }
+}

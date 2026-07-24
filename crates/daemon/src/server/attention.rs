@@ -543,7 +543,9 @@ pub(crate) async fn attention_follow(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_orchestrator::attention::{AttentionChange, AttentionItem as CoreAttentionItem};
+    use agent_orchestrator::attention::{
+        AttentionActionDescriptor, AttentionChange, AttentionItem as CoreAttentionItem,
+    };
 
     fn item() -> CoreAttentionItem {
         CoreAttentionItem {
@@ -599,5 +601,103 @@ mod tests {
             ..open
         };
         assert!(notification_descriptor(&update, &item()).is_none());
+    }
+
+    #[test]
+    fn descriptor_requires_an_actionable_open_or_reopen_transition() {
+        let change = AttentionChange {
+            id: 1,
+            attention_item_id: "attention-1".into(),
+            change_kind: "open".into(),
+            item_version: 1,
+        };
+
+        let mut resolved = item();
+        resolved.state = "resolved".into();
+        assert!(notification_descriptor(&change, &resolved).is_none());
+
+        let mut informational = item();
+        informational.severity = "attention".into();
+        assert!(notification_descriptor(&change, &informational).is_none());
+
+        informational.kind = "approval_required".into();
+        assert!(notification_descriptor(&change, &informational).is_some());
+
+        let remove = AttentionChange {
+            change_kind: "remove".into(),
+            ..change
+        };
+        assert!(notification_descriptor(&remove, &item()).is_none());
+    }
+
+    #[test]
+    fn proto_projection_preserves_typed_fields_and_serializes_json() {
+        let mut source = item();
+        source.requested_decision = Some(serde_json::json!({"question":"Retry?"}));
+        source.resolution = Some(serde_json::json!({"reason":"fixed"}));
+        source.source_route_id = Some("route-1".into());
+        source.source_binding_name = Some("binding-1".into());
+        source.actions.push(AttentionActionDescriptor {
+            id: "retry".into(),
+            label: "Retry".into(),
+            required_role: "operator".into(),
+            confirmation: "required".into(),
+            input_schema: serde_json::json!({"type":"object"}),
+        });
+
+        let projected = item_to_proto(source);
+
+        assert_eq!(
+            projected.requested_decision_json.as_deref(),
+            Some(r#"{"question":"Retry?"}"#)
+        );
+        assert_eq!(
+            projected.resolution_json.as_deref(),
+            Some(r#"{"reason":"fixed"}"#)
+        );
+        assert_eq!(projected.source_route_id.as_deref(), Some("route-1"));
+        assert_eq!(projected.source_binding_name.as_deref(), Some("binding-1"));
+        assert_eq!(projected.actions.len(), 1);
+        assert_eq!(projected.actions[0].id, "retry");
+        assert_eq!(
+            projected.actions[0].input_schema_json,
+            r#"{"type":"object"}"#
+        );
+    }
+
+    #[test]
+    fn mutation_validation_and_error_mapping_are_stable() {
+        assert!(validate_idempotency("retry-1").is_ok());
+        assert_eq!(
+            validate_idempotency("").expect_err("empty key").code(),
+            tonic::Code::InvalidArgument
+        );
+        assert_eq!(
+            validate_idempotency(&"x".repeat(129))
+                .expect_err("oversized key")
+                .code(),
+            tonic::Code::InvalidArgument
+        );
+
+        assert_eq!(
+            mutation_error(anyhow::anyhow!("attention item not found")).code(),
+            tonic::Code::NotFound
+        );
+        assert_eq!(
+            mutation_error(anyhow::anyhow!("version conflict")).code(),
+            tonic::Code::Aborted
+        );
+        assert_eq!(
+            mutation_error(anyhow::anyhow!("mutation cannot be applied")).code(),
+            tonic::Code::Aborted
+        );
+        assert_eq!(
+            mutation_error(anyhow::anyhow!("idempotency replay")).code(),
+            tonic::Code::AlreadyExists
+        );
+        assert_eq!(
+            mutation_error(anyhow::anyhow!("invalid transition")).code(),
+            tonic::Code::InvalidArgument
+        );
     }
 }
