@@ -11,6 +11,38 @@
     "fixture-pinned": "Every claude/codex agent in the named fixture bundle also declares binary: fake-*.",
     "path-shadow": "The script copies a fake provider into an isolated bin directory and prepends it to PATH before starting a daemon."
   },
+  "supportFileRoles": {
+    "fixture": "Input data or a fake executable consumed by a gate. Never invoked as a gate itself, so it has no enforcement of its own.",
+    "library": "Shared shell or ruby sourced by one or more gates. Runs only inside its callers, so it inherits their enforcement."
+  },
+  "supportFiles": [
+    {
+      "path": "scripts/qa/fixtures/coordination-governance-cases.json",
+      "role": "fixture",
+      "reason": "case table read by test-coordination-governance.sh; data, not an executable"
+    },
+    {
+      "path": "scripts/qa/fixtures/fake-claude-agent-driver-migration.sh",
+      "role": "fixture",
+      "reason": "fake claude CLI copied onto PATH by test-agent-driver-execution-migration.sh"
+    },
+    {
+      "path": "scripts/qa/fixtures/fake-claude-coordination.sh",
+      "role": "fixture",
+      "reason": "fake claude CLI pinned by the coordination fixture bundles as binary: fake-claude-coordination"
+    },
+    {
+      "path": "scripts/qa/fixtures/fake-claude-strangler.sh",
+      "role": "fixture",
+      "reason": "fake claude CLI pinned by coordination-strangler-parity.yaml as binary: fake-claude-strangler"
+    },
+    {
+      "path": "scripts/qa/lib/slack-live-certification-lib.sh",
+      "role": "library",
+      "reason": "sourced by test-slack-live-certification.sh and certify-slack-managed-live.sh; both are classified above"
+    }
+  ],
+  "staleClaimExemptions": [],
   "scripts": [
     {
       "path": "scripts/qa/certify-codex-session-resume.sh",
