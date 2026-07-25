@@ -1,0 +1,309 @@
+{
+  "version": 1,
+  "description": "Explicit enforcement surface for every scripts/qa gate. Verified by scripts/qa/test-qa-gate-surface.sh, which runs in the ci.yml governance job. A script on disk that is absent here fails the gate, and so does an entry whose script no longer exists.",
+  "enforcementKinds": {
+    "ci-required": "Executed by a GitHub Actions workflow on every push/PR. Requires workflow, job, and providerIsolation. Must never be able to reach a real provider binary.",
+    "manual-runbook": "Executed by a human following the owner QA document. Requires reason and owner.",
+    "scheduled": "Executed by a scheduled workflow, not on push/PR. Requires reason and owner in addition to workflow and job."
+  },
+  "providerIsolationModes": {
+    "no-provider": "The script never applies a manifest bundle that declares an unpinned claude/codex agent driver.",
+    "fixture-pinned": "Every claude/codex agent in the named fixture bundle also declares binary: fake-*.",
+    "path-shadow": "The script copies a fake provider into an isolated bin directory and prepends it to PATH before starting a daemon."
+  },
+  "scripts": [
+    {
+      "path": "scripts/qa/certify-codex-session-resume.sh",
+      "enforcement": "manual-runbook",
+      "reason": "consumes real provider credentials/quota (invokes the real codex CLI pinned at 0.144.5)",
+      "owner": "docs/qa/orchestrator/166-codex-session-resume-conformance.md"
+    },
+    {
+      "path": "scripts/qa/certify-slack-managed-live.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "slack-certification-recorded",
+      "providerIsolation": { "mode": "no-provider" },
+      "note": "Only the read-only `status` subcommand runs in CI; it reads recorded evidence and loads no secrets. The live certification subcommands consume real Slack credentials and are human-invoked per docs/qa/orchestrator/173-slack-sandbox-continuous-certification.md."
+    },
+    {
+      "path": "scripts/qa/coordination-governance.rb",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "invokedBy": "scripts/qa/test-coordination-governance.sh",
+      "providerIsolation": { "mode": "no-provider" }
+    },
+    {
+      "path": "scripts/qa/test-agent-driver-abstraction.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance with bound ports and applies the agent-driver fixture bundle, whose codex agent is not pinned to a fake binary",
+      "owner": "docs/qa/orchestrator/164-agent-driver-abstraction.md"
+    },
+    {
+      "path": "scripts/qa/test-agent-driver-documentation-alignment.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "invokedBy": "scripts/qa-doc-lint.sh",
+      "providerIsolation": { "mode": "no-provider" }
+    },
+    {
+      "path": "scripts/qa/test-agent-driver-execution-migration.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": { "mode": "no-provider" },
+      "note": "Run with FR126_FAST=1 in CI. The repository-wide gates that the default mode re-runs (fmt, clippy, workspace tests, coordination strangler, coverage fixtures, qa-doc-lint) all execute as sibling jobs in the same workflow, so the certifying aggregate is the workflow, not this single invocation."
+    },
+    {
+      "path": "scripts/qa/test-agent-driver-production-parity.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": { "mode": "path-shadow" },
+      "note": "fixtures/manifests/bundles/agent-driver-production-parity.yaml declares provider: claude without a binary override, so isolation rests entirely on the PATH shadow. Removing that shadow must fail the surface gate."
+    },
+    {
+      "path": "scripts/qa/test-agent-session-control-plane.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance with bound ports and mutates session state",
+      "owner": "docs/qa/orchestrator/149-agent-session-control-plane-hardening.md"
+    },
+    {
+      "path": "scripts/qa/test-attention-inbox.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance with bound ports and mutates attention state",
+      "owner": "docs/qa/orchestrator/143-attention-inbox.md"
+    },
+    {
+      "path": "scripts/qa/test-codex-session-resume.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": { "mode": "no-provider" },
+      "note": "Asserts against the recorded fixtures/driver/codex-cli-0.144.5-resume.json transcript; it never invokes the real codex CLI. The live counterpart is certify-codex-session-resume.sh."
+    },
+    {
+      "path": "scripts/qa/test-control-plane-action-audit.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance with bound ports and writes audit records",
+      "owner": "docs/qa/orchestrator/153-process-console-release-acceptance.md"
+    },
+    {
+      "path": "scripts/qa/test-coordination-collapse.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance with bound ports and drives MCP coordination tools",
+      "owner": "docs/qa/orchestrator/168-coordination-collapse-mcp-tools.md"
+    },
+    {
+      "path": "scripts/qa/test-coordination-governance.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": { "mode": "no-provider" }
+    },
+    {
+      "path": "scripts/qa/test-coordination-strangler.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "coordination-strangler",
+      "providerIsolation": {
+        "mode": "fixture-pinned",
+        "evidence": "fixtures/manifests/bundles/coordination-strangler-parity.yaml"
+      }
+    },
+    {
+      "path": "scripts/qa/test-expert-resources-governed-editing.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance with bound ports and edits governed workspace resources",
+      "owner": "docs/qa/orchestrator/169-expert-resources-governed-editing.md"
+    },
+    {
+      "path": "scripts/qa/test-filesystem-trigger.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": { "mode": "no-provider" },
+      "note": "Scenarios 1-2 re-run cargo test --workspace and strict clippy, duplicating the sibling test and clippy jobs; the remaining scenarios are static structure assertions over crates/daemon/src/fs_watcher.rs. The duplication is accepted because the governance job already builds the workspace and shares the Rust cache."
+    },
+    {
+      "path": "scripts/qa/test-fr001-sandbox-matrix.sh",
+      "enforcement": "manual-runbook",
+      "reason": "requires macOS sandbox-exec and writes to the shared data/agent_orchestrator.db working database",
+      "owner": "docs/qa/orchestrator/57-sandbox-resource-limits-extended.md"
+    },
+    {
+      "path": "scripts/qa/test-fr013-control-plane-protection.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance with bound gRPC ports and exercises privileged control-plane calls",
+      "owner": "docs/qa/orchestrator/65-grpc-control-plane-protection.md"
+    },
+    {
+      "path": "scripts/qa/test-handoff-safe-resume.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance with bound ports and mutates handoff and session state",
+      "owner": "docs/qa/orchestrator/144-handoff-and-safe-resume.md"
+    },
+    {
+      "path": "scripts/qa/test-health-policy-check.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance with bound ports and drives health policy transitions over time",
+      "owner": "docs/qa/orchestrator/110b-agent-health-policy-advanced.md"
+    },
+    {
+      "path": "scripts/qa/test-legacy-coordination-decommission.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": { "mode": "no-provider" }
+    },
+    {
+      "path": "scripts/qa/test-non-code-workspace.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance with bound ports and provisions non-code workspaces on disk",
+      "owner": "docs/qa/orchestrator/165-non-code-workspace-and-global-file-sharing.md"
+    },
+    {
+      "path": "scripts/qa/test-per-trigger-webhook-auth.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance and binds webhook port 19091 to exercise per-trigger secret rotation",
+      "owner": "docs/qa/orchestrator/129-per-trigger-webhook-auth-cel-filter.md"
+    },
+    {
+      "path": "scripts/qa/test-process-console-metrics.sh",
+      "enforcement": "manual-runbook",
+      "reason": "requires the Node/Playwright browser stack to drive the process console UI",
+      "owner": "docs/qa/orchestrator/151-process-console-operational-metrics.md"
+    },
+    {
+      "path": "scripts/qa/test-process-console-release.sh",
+      "enforcement": "manual-runbook",
+      "reason": "clean-tree release acceptance gate: starts an orchestratord instance, upgrades a populated schema through migrations, and requires the Node browser stack",
+      "owner": "docs/qa/orchestrator/153-process-console-release-acceptance.md"
+    },
+    {
+      "path": "scripts/qa/test-process-console-ui.sh",
+      "enforcement": "manual-runbook",
+      "reason": "requires the Node/Playwright browser stack to drive the process console UI",
+      "owner": "docs/qa/orchestrator/154-process-console-functional-ui-regression.md"
+    },
+    {
+      "path": "scripts/qa/test-process-console-vertical-flow.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance with bound ports and drives an end-to-end recovery and notification flow",
+      "owner": "docs/qa/orchestrator/150-process-console-recovery-notifications-e2e.md"
+    },
+    {
+      "path": "scripts/qa/test-process-timeline.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance with bound ports and populates the timeline read model",
+      "owner": "docs/qa/orchestrator/142-process-timeline-read-model.md"
+    },
+    {
+      "path": "scripts/qa/test-self-bootstrap-cycle2-regression.sh",
+      "enforcement": "manual-runbook",
+      "reason": "builds a release binary and drives the self-bootstrap cycle against the shared data/agent_orchestrator.db working database",
+      "owner": "docs/qa/self-bootstrap/04-cycle2-validation-and-runtime-timestamps.md"
+    },
+    {
+      "path": "scripts/qa/test-slack-dedicated-app-provisioning.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance with bound ports and requires the Node browser stack to drive provisioning",
+      "owner": "docs/qa/orchestrator/163-dedicated-slack-app-auto-provisioning.md"
+    },
+    {
+      "path": "scripts/qa/test-slack-live-certification.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "slack-certification-recorded",
+      "providerIsolation": { "mode": "no-provider" },
+      "note": "Asserts checkpoint, redaction, cleanup, and recorded provider contracts using literal fixtures; it loads no live Slack secrets."
+    },
+    {
+      "path": "scripts/qa/test-slack-managed-live-smoke.sh",
+      "enforcement": "manual-runbook",
+      "reason": "consumes real provider credentials/quota (posts to a real Slack workspace using SLACK_LIVE_* driver bot tokens)",
+      "owner": "docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md"
+    },
+    {
+      "path": "scripts/qa/test-slack-managed-shared-oauth.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts orchestratord instances with bound ports and requires the Node browser stack to drive the shared OAuth flow",
+      "owner": "docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md"
+    },
+    {
+      "path": "scripts/qa/test-slack-reaction-source.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance with bound ports and replays reaction source events",
+      "owner": "docs/qa/orchestrator/155-slack-reaction-source-event-contract.md"
+    },
+    {
+      "path": "scripts/qa/test-slack-reaction-task-routing.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance with bound ports alongside a local fake Slack API server",
+      "owner": "docs/qa/orchestrator/158-slack-permalink-canonical-task-routing.md"
+    },
+    {
+      "path": "scripts/qa/test-slack-skill-automation-release.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance with bound ports and requires the Node browser stack for the release acceptance flow",
+      "owner": "docs/qa/orchestrator/161-slack-reaction-skill-automation-release.md"
+    },
+    {
+      "path": "scripts/qa/test-slack-skill-automation-vertical.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts orchestratord instances with bound ports alongside a local fake Slack API server on 127.0.0.1:19315",
+      "owner": "docs/qa/orchestrator/161-slack-reaction-skill-automation-release.md"
+    },
+    {
+      "path": "scripts/qa/test-source-automation-operations.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance with bound ports and drives source automation reliability operations",
+      "owner": "docs/qa/orchestrator/159-source-automation-reliability-operations.md"
+    },
+    {
+      "path": "scripts/qa/test-source-automation-ui.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance with bound ports and requires the Node browser stack to drive the source automation UI",
+      "owner": "docs/qa/orchestrator/160-process-console-source-automation-ui.md"
+    },
+    {
+      "path": "scripts/qa/test-source-events-slack.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance with bound ports and replays Slack source events",
+      "owner": "docs/qa/orchestrator/155-slack-reaction-source-event-contract.md"
+    },
+    {
+      "path": "scripts/qa/test-source-task-binding.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance with bound ports and mutates source-to-task bindings",
+      "owner": "docs/qa/orchestrator/157-source-task-binding-badge-matching.md"
+    },
+    {
+      "path": "scripts/qa/test-source-task-template.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance with bound ports and invokes skill-backed task templates",
+      "owner": "docs/qa/orchestrator/156-source-task-template-skill-invocation.md"
+    },
+    {
+      "path": "scripts/qa/test-qa-gate-surface.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": { "mode": "no-provider" }
+    },
+    {
+      "path": "scripts/qa/test-webhook-trigger.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance and binds a webhook listener port",
+      "owner": "docs/qa/orchestrator/128-webhook-trigger-infrastructure.md"
+    },
+    {
+      "path": "scripts/qa/test-wp05-integration.sh",
+      "enforcement": "manual-runbook",
+      "reason": "builds a release binary and drives multi-layer composition scenarios against a live CLI",
+      "owner": "docs/qa/orchestrator/51-primitive-composition.md"
+    }
+  ]
+}

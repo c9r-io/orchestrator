@@ -11,7 +11,7 @@
 
 FR-116 introduced provider-neutral `shell/cli`, `claude/cli`, and `codex/cli` drivers, but a global `RunnerExecutorKind` still selected a legacy shell or Claude streaming backend. Four production Agent manifests also omitted `spec.driver`.
 
-The initial FR-126 implementation migrated every production Agent, normalized historical command-only manifests, and removed global executor selection. A strict closure audit later found that its aggregate inventory and synthetic shell pilots did not prove the original per-production-object acceptance criteria. The FR was reopened to add exact inventory, offline parity, explicit compatibility/rollback boundaries, and a mandatory release gate.
+The initial FR-126 implementation migrated every production Agent, normalized historical command-only manifests, and removed global executor selection. A strict closure audit later found that its aggregate inventory and synthetic shell pilots did not prove the original per-production-object acceptance criteria. The FR was reopened to add exact inventory, offline parity, explicit compatibility/rollback boundaries, and a mandatory aggregate gate. That gate was authored but not wired into any workflow; FR-127 later put it in the `governance` job of `.github/workflows/ci.yml`.
 
 The evidence remediation also exposed a runtime defect: typed `driver_tool_use` events were recorded, but item-level typed signals were not promoted to the task convergence context. A `mark_done` workflow therefore completed only after reaching its cycle ceiling. The scheduler now promotes typed signals before loop continuation evaluation.
 
@@ -111,7 +111,13 @@ No SQLite schema change is required. Provider `SessionRef` material remains priv
 7. All CLI drivers share policy, sandbox, rlimit, process-group, environment, output-capture, and redaction infrastructure.
 8. Typed tool signals are promoted from item accumulators into task convergence state.
 9. `RunnerExecutorKind`, `ShellRunnerExecutor`, `StreamingAgentRunner`, and the global provider-session bridge remain deleted.
-10. The default FR-126 aggregate is the release gate; `FR126_FAST=1` is explicitly non-certifying.
+10. The certifying aggregate is the CI workflow, not any single script invocation.
+    FR-127 wired `test-agent-driver-execution-migration.sh` into the `governance` job with
+    `FR126_FAST=1`, because the repository-wide gates its default mode re-runs — `cargo fmt`,
+    strict Clippy, `cargo test --workspace`, `test-coordination-strangler.sh`,
+    `coverage-governance.sh --fixture-test`, and `qa-doc-lint.sh` — all execute as sibling
+    jobs in the same workflow. Outside CI, `FR126_FAST=1` remains non-certifying on its own:
+    a local run that skips those gates has not reproduced the aggregate.
 11. Governance fixtures label production admission separately from runtime Apply compatibility and assert the warning/promotion contract.
 12. A deterministic documentation alignment script checks EN/ZH guides, architecture, authoring skill, operational showcases, released design status, fixture layering, and stable diagnostics; `qa-doc-lint` and the FR-126 aggregate both execute it.
 13. DD-102/DD-103 retain their historical first-cut detail behind explicit

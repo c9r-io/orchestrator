@@ -111,6 +111,84 @@ jobs:
         env:
           PROTOC: /usr/bin/protoc
 
+  governance:
+    name: QA gate enforcement surface
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y jq ruby ripgrep sqlite3 protobuf-compiler
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: governance
+
+      # No ci-required gate may reach a real provider CLI. GitHub runners ship
+      # neither binary today; these stubs turn a future accidental invocation
+      # into a visible failure instead of silent credential and quota spend.
+      - name: Install failing provider stubs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/provider-stubs"
+          for provider in claude codex; do
+            cat > "$RUNNER_TEMP/provider-stubs/$provider" <<'STUB'
+          #!/usr/bin/env bash
+          echo "FR-127: a ci-required QA gate invoked a real provider CLI ($(basename "$0"))." >&2
+          echo "FR-127: CI gates must never consume real provider credentials or quota." >&2
+          echo "FR-127: see config/governance/qa-gate-surface.json for the isolation contract." >&2
+          exit 97
+          STUB
+            chmod 755 "$RUNNER_TEMP/provider-stubs/$provider"
+          done
+          echo "$RUNNER_TEMP/provider-stubs" >> "$GITHUB_PATH"
+
+      - name: Verify gate enforcement surface
+        run: ./scripts/qa/test-qa-gate-surface.sh
+
+      - name: Verify gate enforcement surface negative fixtures
+        run: ./scripts/qa/test-qa-gate-surface.sh --fixture-test
+
+      - name: QA documentation lint and Agent driver documentation alignment
+        run: ./scripts/qa-doc-lint.sh
+
+      - name: Coordination governance inventory
+        run: ./scripts/qa/test-coordination-governance.sh
+
+      - name: Legacy coordination decommission contracts
+        run: ./scripts/qa/test-legacy-coordination-decommission.sh
+        env:
+          PROTOC: /usr/bin/protoc
+
+      - name: Recorded Codex session resume contracts
+        run: ./scripts/qa/test-codex-session-resume.sh
+        env:
+          PROTOC: /usr/bin/protoc
+
+      - name: Filesystem trigger contracts
+        run: ./scripts/qa/test-filesystem-trigger.sh
+        env:
+          PROTOC: /usr/bin/protoc
+
+      - name: Agent driver production parity
+        run: ./scripts/qa/test-agent-driver-production-parity.sh
+        env:
+          PROTOC: /usr/bin/protoc
+
+      # FR126_FAST=1 skips the repository-wide gates (fmt, clippy, workspace tests,
+      # coordination strangler, coverage fixtures, qa-doc-lint) that already run as
+      # sibling jobs in this workflow. The certifying aggregate is the workflow.
+      - name: Agent driver execution migration contracts
+        run: FR126_FAST=1 ./scripts/qa/test-agent-driver-execution-migration.sh
+        env:
+          PROTOC: /usr/bin/protoc
+
   coverage-policy-fixtures:
     name: Coverage policy fixtures (${{ matrix.os }})
     strategy:

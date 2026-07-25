@@ -39,7 +39,10 @@ FR-126 的第三轮闭环审计证明：只检查 CLI `--help` 无法发现资�
   runner selection seam）与破坏性 manifest 变更（`legacy_runner_executor_removed`、
   `legacy_agent_command_deprecated`）。已发布段落属历史记录，不受此约束。
 
-该脚本由 `scripts/qa-doc-lint.sh` 和 FR-126 默认 release gate 调用。
+该脚本由 `scripts/qa-doc-lint.sh` 调用，而 `qa-doc-lint.sh` 由 `.github/workflows/ci.yml`
+的 `governance` job 在每次 push/PR 上执行（FR-127 接线）。其执行面分类记录在
+`config/governance/qa-gate-surface.json`，并由 `scripts/qa/test-qa-gate-surface.sh` 的
+wiring 检查断言——该断言会在这条声明与实际 workflow 不一致时失败。
 
 **覆盖策略**：retired-semantics 扫描以 `git ls-files '*.md'` 为默认全集，再减去
 带理由的豁免清单（当前为空），而不是逐轮增长的目标文件白名单。前四轮审计

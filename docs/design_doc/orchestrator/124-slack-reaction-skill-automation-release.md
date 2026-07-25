@@ -59,7 +59,7 @@ No new RPC, Tauri command, HTTP route, CLI command, table, or column is introduc
 
 The governed release interfaces are:
 
-- `./scripts/qa/test-slack-skill-automation-release.sh` — fail-fast clean-tree release gate;
+- `./scripts/qa/test-slack-skill-automation-release.sh` — fail-fast clean-tree acceptance script, human-invoked; it is classified `manual-runbook` in `config/governance/qa-gate-surface.json` because it needs a daemon and the Node browser stack, so no workflow runs it;
 - `KEEP_RELEASE_QA=1` — retain aggregate logs after success; failure logs are retained automatically;
 - `FR113_PREVIOUS_REF` — override the pinned compatible previous daemon commit for rollback qualification;
 - `KEEP_QA=1` — retain the isolated vertical fixture for diagnosis;

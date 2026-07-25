@@ -13,6 +13,8 @@ FR-081
 
 Daemon must already be running (webhook server enabled by default on `127.0.0.1:19090`).
 
+Automated runner: `scripts/qa/test-per-trigger-webhook-auth.sh` executes these scenarios end to end. It starts a daemon and binds webhook port 19091, so it is classified `manual-runbook` in `config/governance/qa-gate-surface.json` and is not run by any workflow.
+
 FR-099 compatibility note: the HMAC format in this document applies to the generic `/webhook/...` endpoint. A Trigger with `webhook.provider: slack` uses Slack `v0:{timestamp}:{raw_body}` verification, timestamp tolerance, and `/source/slack/{project}/{trigger}`; validate that path with `docs/qa/orchestrator/146-source-events-and-slack-binding.md`. CEL payload filtering on the legacy synchronous endpoint is unchanged.
 
 ## Scenario 1: Webhook config types compile
