@@ -37,8 +37,28 @@ slack_cert_sha256_text() {
   fi
 }
 
+# Octal permission bits, on both BSD and GNU stat.
+#
+# The previous form was `stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"`,
+# which is broken on GNU: there `-f` is --file-system and takes no format, so
+# '%Lp' is read as a second operand. GNU then prints the filesystem block for
+# "$1" on *stdout*, fails on the missing '%Lp', and the `||` fallback appends
+# the real mode to that output. The caller compared the result against "600" and
+# never matched. This ran green for its whole life because the job that executes
+# it had no ripgrep and exited before reaching any assertion (FR-134).
+#
+# Reordering alone would fix today's platforms and leave the same shape, so the
+# output is validated instead: whatever answers must look like an octal mode.
 slack_cert_file_mode() {
-  stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"
+  local mode
+  for mode in "$(stat -c '%a' "$1" 2>/dev/null)" "$(stat -f '%Lp' "$1" 2>/dev/null)"; do
+    if [[ "$mode" =~ ^[0-7]+$ ]]; then
+      printf '%s' "$mode"
+      return 0
+    fi
+  done
+  echo "cannot read permission bits of $1 with either BSD or GNU stat" >&2
+  return 1
 }
 
 slack_cert_require_private_file() {
