@@ -82,8 +82,9 @@ git add -A && bash scripts/qa/test-qa-gate-surface.sh
 
 ### Expected Result
 
-- Step 1: `FR-127 gate surface fixtures: 27 passed, 0 failed`. Fixtures 8-16 are FR-134's;
-  each reports `(isolated to <check>)`, meaning it fails its target and leaves the others passing.
+- Step 1: `FR-127 gate surface fixtures: 27 passed, 0 failed`. Fixtures 8-21 are FR-134's; each
+  reports `(isolated to <check>)`, meaning it fails its target and leaves the others passing.
+  Fixtures 1-7 are FR-127's and still pass unchanged.
 - Step 2 exits 1 with three checks red — wiring, provider isolation, stale claims. Before this FR
   the same tree produced `5 passed, 0 failed`.
 - Fixtures 8 and 9 cover the wiring shapes that are *not* execution: a commented-out `run:`, an
@@ -312,6 +313,13 @@ assertions and reproduces `5 passed, 0 failed` under the four mutations. Both re
 CLI away from CI and keep a disabled gate from looking enforced. Both are asserted by execution:
 `assert_provider_shadow` resolves the provider through the PATH the run will use, and
 `check_provider_isolation` executes that assertion in both directions rather than reading it.
+
+**Local and CI results are not interchangeable, and this FR can show the gap numerically.**
+`test-agent-driver-production-parity.sh` reports `11 passed, 0 failed` locally in 44 seconds — the
+same gate reported `8 passed, 3 failed` in CI, on every run since it was wired. The three
+assertions in the gap are FR-126's retirement-parity evidence, and the only difference between the
+two environments is that one has the repository's history and the other has one commit of it. Any
+claim in this document that rests on a local run alone should be read with that in mind.
 
 ## Checklist
 
