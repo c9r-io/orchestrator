@@ -66,6 +66,59 @@ DD-139 将这条记为"accepted cost：与 sibling `test`/`clippy` job 重复执
 
 次生问题：脚本以 `>/dev/null 2>&1` 吞掉 cargo 输出，CI 日志中只有 `FAIL: cargo test --workspace` 一行，根因无法从日志判定，需本地复现与交叉比对才能定位。诊断信息的丢失使门禁失败的修复成本远高于必要。
 
+## FR-128 闭环后审计并入的两项
+
+FR-128（台账再生工具）已闭环，其交付质量经独立复核确认：四项棘轮基线以独立实现重算得 `53 / 30 / 9 / 0`，与台账逐项吻合；`cfg(test)` 扫描口径的修正方向正确（挤掉被误计入的测试代码，而非放松）；检查本身还从 `count > baseline`（单调）收紧为 `count != baseline`（精确相等）。以下两项缺陷不足以单开 FR，且与本 FR 的需求 4 同源，故并入实施批次。
+
+### 缺陷 X：`strip_test_modules` 以文本计数括号，字符串字面量会使棘轮静默失效
+
+对 `scripts/qa/coordination-governance.rb` 的真实实现验证：
+
+```rust
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn t() { assert_eq!(fmt("{"), "{"); }
+}
+
+pub fn legacy() {
+    let c = captures();      // 应被计数
+}
+```
+
+结果 `raw=1 → after strip=0`。`depth` 逐行统计 `{`/`}` 而不做词法分析，字符串字面量中的花括号使深度永不归零，该 `cfg(test)` 块的范围一路吃到文件末尾，其后的生产代码全部从扫描中消失。
+
+全仓扫描确认已存在 **3 处**永不闭合的 `cfg(test)` 块：
+
+| 文件 | 起始行 | 失衡来源 |
+|---|---|---|
+| `core/src/error.rs` | 283 / 750 | `format!("{err}")`、`"{{bad"` |
+| `core/src/source_task_template.rs` | 363 / 539 | `"{source_message_url"` |
+| `crates/orchestrator-scheduler/src/scheduler/coordination_tools.rs` | 634 / 1118 | `.body("{")` |
+
+三处均为尾部测试模块，其后无生产代码，被吃区域内 legacy 模式命中数为 0，**因此当前基线正确，缺陷是潜伏而非已发作**。
+
+潜伏性与新的精确相等检查叠加后构成真实风险：一旦此类模块之后新增生产代码，或某个中部 `cfg(test)` 模块出现字符串花括号，该区域的 legacy 用量将永久不可见——计数不会移动，`count != baseline` 不会触发，门禁保持绿色。棘轮静默失效开放。
+
+FR-128 的 QA 测试 7 覆盖了"中部位置 + 非 `tests` 命名"，但括号是平衡的；**在本仓库已出现三次的失效形态未被测到**。
+
+### 缺陷 Y：语义变更留下 6 处被证伪的陈述
+
+棘轮语义已由单调改为精确相等，下列陈述未随之更新：
+
+```
+docs/design_doc/orchestrator/136-coordination-strangler-completion.md:136   "a monotonic source baseline"
+docs/design_doc/orchestrator/136-coordination-strangler-completion.md:169   "monotonic source counters"
+docs/design_doc/orchestrator/138-agent-driver-execution-migration.md:260    "source baselines remain monotonic"
+docs/architecture.md:140                                                   "monotonic legacy-coordination ratchet"
+docs/design_doc/README.md:106                                              "monotonic legacy ratchet"
+docs/design_doc/orchestrator/130-coordination-collapse-mcp-tools.md:116     "exact production inventory and monotonic ratchet"
+```
+
+前三条经上下文确认无歧义指向 `sourceBaseline`。`docs/qa/orchestrator/178-governance-ledger-regeneration.md:17` 自身写的是"the ratchets **were** monotonic"——语义变更是被知晓的，只是未横扫其余文档面。这正是 `fr-governance` Phase 5"本次变更是否证伪了仓库别处的既有陈述"未执行到位。
+
+本 FR 的需求 4（stale-claim 扫描改为全集减豁免）落地后，这一类漂移本应被自动捕获；缺陷 Y 因此既是待修项，也是需求 4 的现成验收样本。
+
 ## 目标
 
 - 把 `test-qa-gate-surface.sh` 中三处以文本存在性为代理的判定，替换为对执行事实的判定。
@@ -129,7 +182,25 @@ DD-139 将这条记为"accepted cost：与 sibling `test`/`clippy` job 重复执
 - 新增检查：`ci-required` 门禁不得处于已知持续失败状态；若确需在修复期内保持红色，必须在台账中显式标注为 `known-failing` 并附 ticket 或 FR 引用与预期修复期限。
 - 该维度的更新方式需可脚本化（例如从 `gh run` 拉取），不得依赖人工誊写——否则它会退化成与被治理对象同类的陈旧声明。
 
-### 9. 修正 QA-177 的计数陈述
+### 9. 棘轮扫描的词法安全
+
+- `strip_test_modules` 在统计括号深度前，须先剥除字符串字面量、字符字面量与行注释；不要求完整 Rust 词法器，但必须使 `format!("{err}")`、`"{{bad"`、`.body("{")` 三种已存在形态不再破坏深度计数。
+- 补充负向 fixture：一个含字符串花括号的 `cfg(test)` 模块，其后的生产 legacy 用量必须仍被计数。该 fixture 须在修复前失败。
+- 修复后重算四项棘轮，确认基线不变（当前三处均为尾部模块，正确实现不应改变 `53 / 30 / 9 / 0`）。基线若发生变化，说明存在此前未发现的被吃区域，须逐项说明。
+- 附加防御：新增检查断言不存在"跑到文件末尾仍未闭合"的 `cfg(test)` 块，使同类失衡在引入时即可见，而不是等到棘轮读数出错。
+
+### 10. 语义变更的陈旧陈述清偿
+
+- 修正缺陷 Y 列出的 6 处 `monotonic` 表述，使其与精确相等语义一致。
+- `docs/feature_request/FR-133-dependency-policy-gate.md:58` 引用"与 FR-124/125 的 `sourceBaseline` 棘轮同一模式"，同属过期，一并更正。
+- 需求 4 的全集扫描落地后，须验证它能捕获这一类漂移；若捕获不到，说明其匹配模式只覆盖"CI 强制执行"一类声明，需评估是否扩展到语义契约类陈述，或明确记录该边界。
+
+### 11. `--write` 的 CI 识别面
+
+- `coordination-governance.rb` 的写保护当前仅判断 `ENV.key?("CI")`。未设置该变量的自托管 runner 不会被拦。
+- 扩展识别面（如 `GITHUB_ACTIONS`、通用 CI 变量集合），并补测试。实际风险低——CI 从不调用 `--write`——但这是"防止 review gate 沦为装饰"的唯一屏障，成本近零。
+
+### 12. 修正 QA-177 的计数陈述
 
 - QA-177 Scenario 3 记为"All 10 `ci-required` gates"，而台账声明 12（差额为两条 `invokedBy` 条目）。更正为准确表述，或说明 10 指直接调用数。
 
@@ -151,7 +222,13 @@ DD-139 将这条记为"accepted cost：与 sibling `test`/`clippy` job 重复执
 - [ ] 无 `ci-required` 门禁以 `>/dev/null 2>&1` 丢弃失败命令输出；负向验证：故意使某条 cargo 命令失败，CI 日志足以定位根因
 - [ ] 台账记录每个 `ci-required` 门禁最近一次真实 CI 结论，且该维度可脚本化更新
 - [ ] 存活性检查对处于持续失败且未标注 `known-failing` 的门禁失败
-- [ ] QA-177 的门禁计数陈述与台账一致
+- [ ] 含字符串花括号的 `cfg(test)` fixture 在修复前使棘轮漏计、修复后正确计数
+- [ ] 修复后四项棘轮仍为 `53 / 30 / 9 / 0`；若变化则逐项说明被吃区域
+- [ ] 存在检查断言无"跑到文件末尾仍未闭合"的 `cfg(test)` 块
+- [ ] 6 处 `monotonic` 表述与 FR-133 的引用均已更正
+- [ ] 已验证需求 4 的全集扫描能否捕获语义契约类漂移；捕获不到时其边界有书面记录
+- [ ] `--write` 的 CI 识别面已扩展并有测试
+- [x] QA-177 的门禁计数陈述与台账一致 —— 已由 `dd993346` 解决（11 次调用对应 13 个条目，两条经 `invokedBy` 间接接线）
 - [ ] `cargo test --workspace`、strict Clippy 与全部既有 CI job 通过
 
 ## QA 计划
@@ -163,4 +240,6 @@ DD-139 将这条记为"accepted cost：与 sibling `test`/`clippy` job 重复执
 - **依赖缺失的先证后修**：在补 ripgrep 之前先跑依赖一致性检查，必须失败并指名两个 job；补齐后转绿。顺序不可颠倒，否则无法证明检查有效而非恒真。
 - **存活性检查自证**：把一个当前为绿的 `ci-required` 门禁临时标为持续失败态，存活性检查必须失败；恢复后通过。反向亦须验证：真实红门禁未标注 `known-failing` 时不得放行。
 - **诊断保真验证**：临时让某个 `ci-required` 门禁中的 cargo 命令失败，断言 CI 日志包含足以定位根因的编译器输出，而非仅一行 `FAIL:`。本 FR 的发现 B 正是因为缺少这一点而需要本地复现才能定位。
+- **词法安全先证后修**：先加入含字符串花括号的 `cfg(test)` fixture，确认它在当前实现下漏计，再修复。同时对三处已存在的失衡块做回归——它们目前是尾部模块因而无害，修复后须确认基线读数不变，以区分"修好了"与"换了一种错法"。
+- **陈旧陈述的双向验证**：修正 6 处表述后，再故意在任一设计文档写回 `monotonic source baseline`，确认需求 4 的扫描能否捕获。捕获不到即说明扫描只覆盖"CI 强制执行"类声明，该边界须写入设计记录而非默认成立。
 - **CI 实证**：修复后推送并观察真实 workflow 运行结果，而非仅本地执行。本 FR 的两个新发现均只在真实 CI 中可见——发现 A 因本地已装 ripgrep 而不可见，发现 B 因 macOS 提供 Tauri 系统框架而不可见。**本地绿不等于 CI 绿，CI 绿不等于门禁在守，门禁被引用也不等于门禁能跑。**
