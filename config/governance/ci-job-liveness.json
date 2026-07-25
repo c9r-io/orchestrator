@@ -8,63 +8,58 @@
       "jobs": {
         "async-lock-governance": {
           "conclusion": "success",
-          "runId": "30158487388",
-          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd"
+          "runId": "30166725904",
+          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
         },
         "fmt": {
           "conclusion": "success",
-          "runId": "30158487388",
-          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd"
+          "runId": "30166725904",
+          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
         },
         "clippy": {
           "conclusion": "success",
-          "runId": "30158487388",
-          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd"
+          "runId": "30166725904",
+          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
         },
         "test": {
           "conclusion": "success",
-          "runId": "30158487388",
-          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd"
+          "runId": "30166725904",
+          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
         },
         "coordination-strangler": {
-          "conclusion": "failure",
-          "runId": "30158487388",
-          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd",
-          "knownFailing": {
-            "reference": "FR-134",
-            "reason": "the job never installed ripgrep, so test-coordination-strangler.sh exited on its own command -v preamble before asserting anything. Fixed by 34d3b582; this record predates that commit and flips to success on the next refresh.",
-            "expectedBy": "2026-07-26"
-          }
+          "conclusion": "success",
+          "runId": "30166725904",
+          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
         },
         "governance": {
           "conclusion": "failure",
-          "runId": "30158487388",
-          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd",
+          "runId": "30166725904",
+          "headSha": "a69378153eeadc60f863068816cb8bd70822997d",
           "knownFailing": {
             "reference": "FR-134",
-            "reason": "test-governance-ledger-tooling.sh case 3 calls --write with CI inherited and is refused by the mechanism its own case 2 verifies, killing the job under set -e. Fixed in this FR.",
-            "expectedBy": "2026-07-26"
+            "reason": "ledger bootstrap only. Every one of this job's nineteen gate outcomes was success in the recorded run; the job is red because the liveness check reported its own staleness, and it could not be fresh until a run existed on the ci.yml this FR rewrote. Refreshing from that run — this record — clears the condition, so the next run has a fresh ledger and this annotation drops on the refresh after it.",
+            "expectedBy": "2026-07-27"
           }
+        },
+        "ci-environment-parity": {
+          "conclusion": "success",
+          "runId": "30166725904",
+          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
         },
         "coverage-policy-fixtures": {
           "conclusion": "success",
-          "runId": "30158487388",
-          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd"
+          "runId": "30166725904",
+          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
         },
         "slack-certification-recorded": {
-          "conclusion": "failure",
-          "runId": "30158487388",
-          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd",
-          "knownFailing": {
-            "reference": "FR-134",
-            "reason": "the job installed nothing at all, so both of its gates exited on missing rg. Fixed by 34d3b582 on both matrix legs.",
-            "expectedBy": "2026-07-26"
-          }
+          "conclusion": "success",
+          "runId": "30166725904",
+          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
         },
         "boundary-coverage": {
           "conclusion": "failure",
-          "runId": "30158487388",
-          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd",
+          "runId": "30166725904",
+          "headSha": "a69378153eeadc60f863068816cb8bd70822997d",
           "knownFailing": {
             "reference": "FR-135",
             "reason": "coverage-governance.sh:38 expands an empty array under set -u, which bash 3.2 on the macOS runner rejects as unbound. Red for six consecutive runs before anything noticed, which is why this ledger covers every CI job rather than only the classified gates.",
@@ -73,23 +68,13 @@
         },
         "miri": {
           "conclusion": "success",
-          "runId": "30158487388",
-          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd"
+          "runId": "30166725904",
+          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
         },
         "cross-compile": {
           "conclusion": "success",
-          "runId": "30158487388",
-          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd"
-        },
-        "ci-environment-parity": {
-          "conclusion": "not-run",
-          "runId": "",
-          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd",
-          "knownFailing": {
-            "reference": "FR-134",
-            "reason": "job introduced by this FR; it has no real run yet. The record and every other entry in this file are stale against the ci.yml this FR rewrote, which is the freshness rule working — refresh from the first run after the push.",
-            "expectedBy": "2026-07-26"
-          }
+          "runId": "30166725904",
+          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
         }
       }
     },
@@ -110,8 +95,8 @@
       "jobs": {
         "cargo-audit": {
           "conclusion": "success",
-          "runId": "30158487378",
-          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd"
+          "runId": "30166725902",
+          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
         }
       }
     },
