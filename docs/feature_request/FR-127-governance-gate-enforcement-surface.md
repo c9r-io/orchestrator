@@ -61,6 +61,17 @@ scripts/qa/*.{sh,rb} 总数            46
 - 修正 `docs/design_doc/orchestrator/guide-alignment.md` 中关于"FR-126 默认 release gate"的表述，使其与实际 workflow 一致。
 - 检查是否存在同类失效声明（其他 DD/QA 文档声称某脚本"由 CI 执行"但实际未接线），一并修正。
 
+### 5. CI 执行面的真实 provider 隔离不变量
+
+2026-07-25 的补充核查确认：拟接入 CI 的四个脚本均不消耗真实 provider token——两个是纯静态文本扫描，一个是 `cargo test` + 静态断言（不启 daemon），一个通过 `cp fake-claude → $QA_ROOT/bin/claude` + `export PATH` 遮蔽真实 CLI。92 个 fixture bundle 中仅 4 个声明 `provider: claude|codex`，其中 2 个以 `binary: fake-*` 显式钉死，1 个仅被 `apply` 而从不执行。
+
+但这份安全性目前**无门禁保护**：`agent-driver-production-parity.yaml` 未覆盖 `binary`，其隔离完全依赖脚本中的单行 `export PATH`。若该行在重构中丢失，测试仍会通过，只是静默改走真实 `claude`——没有任何机制会报警。
+
+- 建立不变量：任何 `enforcement: ci-required` 的脚本不得可达真实 provider 二进制。
+- 判定方式二选一或并用：fixture 显式声明 `binary: fake-*`；或脚本在启动 daemon 前遮蔽 PATH 且门禁断言该遮蔽存在。
+- 推荐补强：为 CI job 设置一个不含真实 `claude`/`codex` 的 PATH，或注入一个会立即失败并打印明确诊断的 stub，使"意外调用真实 provider"成为**可见失败**而非静默消耗。
+- `certify-codex-session-resume.sh`（调用真实 `codex`，版本钉死 `0.144.5`）与 5 个 Slack 凭证脚本永久标注为非 `ci-required`，其分类理由需明确写为"消耗真实凭证/配额"。
+
 ## 验收标准
 
 - [ ] `config/governance/qa-gate-surface.json`（或等价物）覆盖全部 46 个脚本，无未分类项
@@ -69,6 +80,9 @@ scripts/qa/*.{sh,rb} 总数            46
 - [ ] 5 个孤儿脚本各自有书面处置结论并已落实
 - [ ] `guide-alignment.md` 的 release gate 声明与 `.github/workflows/` 实际内容一致
 - [ ] 全仓不存在"声称由 CI 执行但实际未接线"的门禁声明
+- [ ] 每个 `ci-required` 脚本的 provider 隔离方式被门禁断言（`binary: fake-*` 或已验证的 PATH 遮蔽）
+- [ ] 负向 fixture：删除 `test-agent-driver-production-parity.sh` 的 `export PATH` 行会使隔离门禁失败
+- [ ] `certify-codex-session-resume.sh` 与 5 个 Slack 凭证脚本被标注为非 `ci-required`，理由为"消耗真实凭证/配额"
 - [ ] `cargo test --workspace`、strict Clippy、既有 CI job 全部通过
 
 ## QA 计划
@@ -77,3 +91,5 @@ scripts/qa/*.{sh,rb} 总数            46
 - **门禁真实生效证明**：在临时分支上故意引入一处退役语义（如在任意 Markdown 中写入 `runner.executor: streaming` 可用配置），确认 CI 的 `governance` job 失败而非通过。此为区分"接线了"与"看起来接线了"的唯一证据。
 - **依赖可用性**：确认 CI runner 上 `jq`/`ruby`/`rg` 均已安装，脚本的 `command -v` 前置检查不会因环境缺失而误报。
 - **分层归属回归**：若采用 PR/nightly 分层，验证 nightly job 确实被调度且失败可见（非静默）。
+- **provider 隔离负向 fixture**：临时移除 `test-agent-driver-production-parity.sh` 的 `export PATH` 行，隔离门禁必须失败；恢复后通过。这是本 FR 中唯一防止"CI 静默消耗真实 token"的检查，不能只做正向验证。
+- **无真实 CLI 环境验证**：在 PATH 中不存在 `claude`/`codex` 的环境下运行全部 `ci-required` 脚本，应全部通过——若有脚本因此失败，说明它实际依赖真实 provider，分类有误。
