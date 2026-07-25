@@ -142,6 +142,46 @@ FR-129（Skill 单一来源与镜像完整性）已闭环，是这一批治理 F
 
 `DD-141` 的 Known Limits 诚实列举了三项限制（不解析 frontmatter、`notSkills` 是逃生舱、大小写敏感性），但未包含此项。
 
+## FR-130 部分闭环后审计并入的两项
+
+FR-130 的需求 1（边界冻结）与需求 3（迁移语义等价）已闭环，需求 2（crate 提取）与需求 4 明确标为未开始，FR 保留在原地并改为 `In Progress`——这是本批 FR 中第一个没有把真正的重活一并硬闭环的。台账数字经独立复核全部属实（`52 / 924 / 143` 与 `rusqlite` 的 `200 / 37`、6 个依赖 crate、46 表 + 92 索引），`cargo test -p agent-orchestrator schema_snapshot` 实跑 4 passed，断点续跑确认遍历**全部 74 个中断点**而非抽样。DD-142 还主动纠正了 FR 原文四处事实错误，其中一处是我原文的 14 文件清单与"core 不再直接依赖 rusqlite"这一验收标准根本不相容。
+
+### 缺陷 W：括号缺陷被搬进共享扫描器，波及第二个台账
+
+FR-130 把 `strip_test_modules` 抽取到 `scripts/lib/rust_source.rb` 供两个治理台账共用（并以 Case 9 断言两个门禁都无私有副本——做法本身是对的）。但**缺陷 X 所述的文本式括号计数被原样搬入**，`scripts/lib/rust_source.rb:68` 仍是 `depth += lines[cursor].count("{") - lines[cursor].count("}")`。
+
+对新台账的直接验证：
+
+```rust
+#[cfg(test)]
+mod tests { fn t() { assert_eq!(fmt("{"), "{"); } }
+
+pub fn new_persistence_path(conn: &rusqlite::Connection) { ... }
+```
+
+```
+rusqlite refs — raw=1  visible to ledger=0
+```
+
+在 FR-130 的场景里后果比 FR-128 严重：
+
+- 本 FR 的全部目的是把 core 的 `rusqlite` 引用从 200 推向 0，而提取要重度编辑的正是那 37 个文件；
+- `core-boundary-ledger.json` 同样采用精确相等，被藏起来的引用不会让计数移动，门禁保持绿；
+- core 中已有 2 个文件带永不闭合的 `cfg(test)` 块——`core/src/error.rs`（第 283 行起）与 `core/src/source_task_template.rs`（第 363 行起）；
+- 其中 `error.rs` 恰是 FR-130 正文点名的阻塞项（第 154 行 `impl From<rusqlite::Error> for OrchestratorError`），必然会被改动。
+
+当前无实际损害：`error.rs` 的生产引用位于被吃区域之前，区域内第 428 行的引用本就是测试代码。但"收敛到 0"这一结论的可信度取决于先修掉此缺陷。
+
+时序值得记录：本 FR 的需求 9 已于 `96ba7a7d` 提交，早于该工作两个提交，QA-180 也引用了本 FR 的另一条结论。抽取的恰是被标记为有缺陷的函数，既未修复也未列入 DD-142 的 Known Limits（该节诚实列了另外三条）。
+
+### 缺陷 V：门禁分类的非递归 glob 盲点
+
+`scripts/qa/test-qa-gate-surface.sh:44` 以 `ls scripts/qa/*.sh scripts/qa/*.rb` 枚举待分类脚本，**不递归**。放置一个 `scripts/qa/lib/hidden-gate.sh` 后，5 个 check 全部通过，该文件完全不可见。
+
+DD-142 发现了这一点并主动绕开——把共享库放在 `scripts/lib/` 而非 `scripts/qa/lib/`，原话是"Exploiting that blind spot to avoid classification would be a governance evasion inside the governance tooling"。判断正确，但盲点本身仍在。
+
+这是同一模式在本 FR 中的第三个实例：需求 4（stale-claim 白名单）、需求 12（镜像根枚举）、以及此处的非递归 glob——**枚举式覆盖面只守得住已知的形状**。
+
 ## 目标
 
 - 把 `test-qa-gate-surface.sh` 中三处以文本存在性为代理的判定，替换为对执行事实的判定。
@@ -207,10 +247,13 @@ FR-129（Skill 单一来源与镜像完整性）已闭环，是这一批治理 F
 
 ### 9. 棘轮扫描的词法安全
 
-- `strip_test_modules` 在统计括号深度前，须先剥除字符串字面量、字符字面量与行注释；不要求完整 Rust 词法器，但必须使 `format!("{err}")`、`"{{bad"`、`.body("{")` 三种已存在形态不再破坏深度计数。
-- 补充负向 fixture：一个含字符串花括号的 `cfg(test)` 模块，其后的生产 legacy 用量必须仍被计数。该 fixture 须在修复前失败。
-- 修复后重算四项棘轮，确认基线不变（当前三处均为尾部模块，正确实现不应改变 `53 / 30 / 9 / 0`）。基线若发生变化，说明存在此前未发现的被吃区域，须逐项说明。
-- 附加防御：新增检查断言不存在"跑到文件末尾仍未闭合"的 `cfg(test)` 块，使同类失衡在引入时即可见，而不是等到棘轮读数出错。
+修复点是 `scripts/lib/rust_source.rb` 的 `strip_test_modules`——FR-130 已将其抽取为共享库，因此单点修复同时覆盖 `coordination-governance.rb` 与 `core-boundary.rb` 两个台账，而单点遗漏也同时波及两者。
+
+- 统计括号深度前须先剥除字符串字面量、字符字面量与行注释；不要求完整 Rust 词法器，但必须使 `format!("{err}")`、`"{{bad"`、`.body("{")` 三种已存在形态不再破坏深度计数。
+- 补充负向 fixture 两条，因为两个台账数的是不同的东西：一条证明 `cfg(test)` 之后的生产 legacy 用量仍被计数，一条证明其后的生产 `rusqlite` 引用仍被计数。两条都须在修复前失败。
+- 修复后重算全部棘轮，确认基线不变——协调侧应仍为 `53 / 30 / 9 / 0`，边界侧应仍为 `200 / 37` 与 `52 / 924 / 143`。任一变化都说明存在此前未发现的被吃区域，须逐项说明而非直接接受新数字。
+- 附加防御：新增检查断言不存在"跑到文件末尾仍未闭合"的 `cfg(test)` 块。当前 core 中的 `error.rs`（283 行起）与 `source_task_template.rs`（363 行起）即为该形态，二者恰在 FR-130 提取的必改路径上。
+- 该修复应排在 FR-130 需求 2 之前：提取会重度编辑那 37 个文件，在扫描器可靠之前得出的"收敛到 0"不构成证据。
 
 ### 10. 语义变更的陈旧陈述清偿
 
@@ -220,7 +263,7 @@ FR-129（Skill 单一来源与镜像完整性）已闭环，是这一批治理 F
 
 ### 11. `--write` 的 CI 识别面
 
-- `coordination-governance.rb` 的写保护当前仅判断 `ENV.key?("CI")`。未设置该变量的自托管 runner 不会被拦。
+- `coordination-governance.rb:443` 与 `core-boundary.rb:141` 的写保护均仅判断 `ENV.key?("CI")`。未设置该变量的自托管 runner 不会被拦。新门禁复制了同一限制，说明这需要一处共用实现而非各写一遍。
 - 扩展识别面（如 `GITHUB_ACTIONS`、通用 CI 变量集合），并补测试。实际风险低——CI 从不调用 `--write`——但这是"防止 review gate 沦为装饰"的唯一屏障，成本近零。
 
 ### 12. 镜像根的发现式覆盖
@@ -230,7 +273,14 @@ FR-129（Skill 单一来源与镜像完整性）已闭环，是这一批治理 F
 - 补负向 fixture：一个只含符号链接的未声明根必须使门禁失败；将其声明进 `mirrorRoots` 后，该根随即受覆盖率与形状检查约束（即错名错指的条目仍应失败）。
 - 与需求 4 共享同一原则：覆盖面由发现得出，枚举只用于豁免。二者若能共用"全集减豁免"的实现骨架则共用。
 
-### 13. 修正 QA-177 的计数陈述
+### 13. 门禁分类的递归覆盖
+
+- `test-qa-gate-surface.sh` 的待分类脚本枚举改为递归发现 `scripts/qa/**` 下的 `*.sh` / `*.rb`，而非 `ls scripts/qa/*.{sh,rb}`。
+- 需一并决定 `scripts/qa/fixtures/**` 与潜在的 `scripts/qa/lib/**` 如何分类：作为受支持的 fixture / library 类别单独标注，或纳入豁免并写明理由。不得靠"glob 匹配不到"来表达豁免。
+- 补负向 fixture：`scripts/qa/lib/hidden-gate.sh` 必须使分类检查失败。
+- 与需求 4、12 合并考虑：三处的根因相同，若能共用"发现得出覆盖面、枚举仅用于豁免"的实现骨架则共用。
+
+### 14. 修正 QA-177 的计数陈述
 
 - QA-177 Scenario 3 记为"All 10 `ci-required` gates"，而台账声明 12（差额为两条 `invokedBy` 条目）。更正为准确表述，或说明 10 指直接调用数。
 
@@ -260,6 +310,9 @@ FR-129（Skill 单一来源与镜像完整性）已闭环，是这一批治理 F
 - [ ] `--write` 的 CI 识别面已扩展并有测试
 - [ ] 只含符号链接的未声明镜像根使镜像门禁失败；声明后其错名错指条目仍被形状检查捕获
 - [ ] 镜像根覆盖面由被追踪符号链接发现得出，而非由 `mirrorRoots` 枚举决定
+- [ ] `scripts/qa/lib/hidden-gate.sh` 使分类检查失败；`scripts/qa/**` 下的子目录脚本各有分类或带理由的豁免
+- [ ] 词法修复后 `core-boundary-ledger.json` 的 `200 / 37` 与 `52 / 924 / 143` 不变；变化项逐条说明
+- [ ] `cfg(test)` 之后的生产 `rusqlite` 引用在修复前不可见、修复后被计数（独立于协调侧的那条 fixture）
 - [x] QA-177 的门禁计数陈述与台账一致 —— 已由 `dd993346` 解决（11 次调用对应 13 个条目，两条经 `invokedBy` 间接接线）
 - [ ] `cargo test --workspace`、strict Clippy 与全部既有 CI job 通过
 
