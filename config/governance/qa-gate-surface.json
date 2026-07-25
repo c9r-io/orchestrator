@@ -475,6 +475,30 @@
       "enforcement": "manual-runbook",
       "reason": "builds a release binary and drives multi-layer composition scenarios against a live CLI",
       "owner": "docs/qa/orchestrator/51-primitive-composition.md"
+    },
+    {
+      "path": "scripts/qa/ci-liveness.rb",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": { "mode": "no-provider" },
+      "note": "verification is offline: it reads the ledger, the workflows and git. Only --refresh contacts GitHub, and that mode refuses to run unattended."
+    },
+    {
+      "path": "scripts/qa/test-ci-environment-parity.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "ci-environment-parity",
+      "providerIsolation": { "mode": "no-provider" },
+      "note": "runs each in-scope gate twice, so it gets its own job rather than doubling the governance job's runtime. Scope excludes the cargo-bearing gates on cost; see the script header."
+    },
+    {
+      "path": "scripts/qa/test-ci-liveness.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": { "mode": "no-provider" },
+      "note": "each case builds a throwaway git repository under $TMPDIR, because the freshness rule is a statement about history and needs its own history to manipulate. Nothing here contacts GitHub."
     }
   ]
 }

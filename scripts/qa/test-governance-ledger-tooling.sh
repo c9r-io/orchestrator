@@ -95,10 +95,18 @@ else
 fi
 
 # ── 3. A no-op regeneration must not rewrite 510 reviewed lines ──
-
+#
+# Run with the CI variables cleared. Case 2 above verifies that --write refuses
+# under CI; this case needs it to proceed, so inheriting the environment makes
+# the two mutually exclusive. Under CI the refusal exits 2 and set -e takes the
+# whole gate with it — which is why this script had never once succeeded in the
+# job it was wired into, while passing 8/8 on every developer machine. The
+# environment a gate runs in is part of the gate.
 DIR="$(new_case write-round-trip)"
 BEFORE="$(digest "$DIR/$LEDGER")"
-ruby "$DIR/$GATE" --emit-inventory --emit-baseline --write >/dev/null 2>&1
+env -u CI -u CONTINUOUS_INTEGRATION -u GITHUB_ACTIONS -u GITLAB_CI \
+    -u BUILDKITE -u CIRCLECI -u TEAMCITY_VERSION -u BUILD_NUMBER \
+  ruby "$DIR/$GATE" --emit-inventory --emit-baseline --write >/dev/null 2>&1
 AFTER="$(digest "$DIR/$LEDGER")"
 if [[ "$BEFORE" == "$AFTER" ]]; then
   pass "a no-op --write leaves the ledger byte-identical"
@@ -123,7 +131,11 @@ set -e
 if [[ "$DRILL_STATUS" -ne 0 ]] &&
   grep -q "command-rules.yaml#session-agent" "$WORK/drill.err" &&
   grep -q "spec key(s): driver" "$WORK/drill.err"; then
-  (cd "$DIR" && ruby "$GATE" --emit-inventory --write >/dev/null 2>&1)
+  # Cleared for the same reason as case 3: this exercises the recovery path,
+  # which the CI refusal is designed to block.
+  (cd "$DIR" && env -u CI -u CONTINUOUS_INTEGRATION -u GITHUB_ACTIONS -u GITLAB_CI \
+      -u BUILDKITE -u CIRCLECI -u TEAMCITY_VERSION -u BUILD_NUMBER \
+    ruby "$GATE" --emit-inventory --write >/dev/null 2>&1)
   set +e
   (cd "$DIR" && ruby "$GATE" >/dev/null 2>&1)
   RECOVERED=$?

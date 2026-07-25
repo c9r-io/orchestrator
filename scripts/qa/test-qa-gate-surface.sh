@@ -27,6 +27,9 @@ done
 WORKFLOW_MODEL="$REPO_ROOT/scripts/lib/workflow_model.rb"
 MANIFEST_MODEL="$REPO_ROOT/scripts/lib/manifest_model.rb"
 
+# shellcheck source=../lib/gate_preamble.sh
+. "$REPO_ROOT/scripts/lib/gate_preamble.sh"
+
 if [[ "${1:-}" != "" && "${1:-}" != "--fixture-test" ]]; then
   echo "usage: $0 [--fixture-test]" >&2
   exit 2
@@ -449,46 +452,10 @@ check_no_stale_claim_exemptions() {
   return $rc
 }
 
-# The commands a gate checks for before it does anything. Read from the gate's
-# own preamble, because that is the list that actually decides whether it runs:
-# a gate exits there, having asserted nothing, and the job goes red for a reason
-# that looks nothing like the contract it was meant to verify.
-#
-# Two shapes exist in this repository and both are handled: a `for X in a b c`
-# loop whose body tests `command -v "$X"`, and a bare `command -v name`. A ruby
-# gate is invoked as `ruby <path>` and so needs ruby whether it says so or not.
-script_required_commands() {
-  local file="$1"
-  {
-    [[ "$file" == *.rb ]] && echo ruby
-    [[ "$file" == *.sh ]] && sed -E 's/(^|[[:space:]])#.*$//' "$file" | awk '
-      match($0, /^[[:space:]]*for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in[[:space:]]+/) {
-        header = $0
-        sub(/^[[:space:]]*for[[:space:]]+/, "", header)
-        split(header, parts, /[[:space:]]+/)
-        variable = parts[1]
-        body = $0
-        sub(/^.*[[:space:]]in[[:space:]]+/, "", body)
-        sub(/;.*$/, "", body)
-        pending_variable = variable
-        pending_words = body
-        next
-      }
-      pending_variable != "" && $0 ~ ("command -v \"\\$" pending_variable "\"") {
-        count = split(pending_words, words, /[[:space:]]+/)
-        for (index_ = 1; index_ <= count; index_++) {
-          if (words[index_] != "" && words[index_] !~ /^[$"]/) print words[index_]
-        }
-        pending_variable = ""
-        next
-      }
-      match($0, /command -v [A-Za-z][A-Za-z0-9_.-]*/) {
-        token = substr($0, RSTART + 11, RLENGTH - 11)
-        print token
-      }
-    '
-  } | LC_ALL=C sort -u
-}
+# A gate's declared dependencies come from scripts/lib/gate_preamble.sh, shared
+# with test-ci-environment-parity.sh so the two cannot answer the same question
+# differently.
+script_required_commands() { gate_required_commands "$1"; }
 
 # The commands a job puts on PATH: the declared runner baseline, plus whatever
 # its apt/brew installs and its actions provide, mapped through the manifest.

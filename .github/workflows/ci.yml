@@ -153,63 +153,112 @@ jobs:
       - name: Install failing provider stubs
         uses: ./.github/actions/provider-stubs
 
+      # Every step below reports independently. A serial job stops at its first
+      # failure, so one red gate hides every diagnosis after it: FR-134's
+      # workspace-scope defect sat invisible behind the ledger tooling's
+      # self-lock for two runs. `continue-on-error` lets one run surface every
+      # problem, and the aggregate step at the end is what fails the job.
+      - name: Verify CI job liveness
+        id: liveness
+        continue-on-error: true
+        run: ./scripts/qa/ci-liveness.rb
+
+      - name: Verify CI job liveness negative fixtures
+        id: liveness-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-ci-liveness.sh
+
       - name: Verify gate enforcement surface
+        id: surface
+        continue-on-error: true
         run: ./scripts/qa/test-qa-gate-surface.sh
 
       - name: Verify gate enforcement surface negative fixtures
+        id: surface-fixtures
+        continue-on-error: true
         run: ./scripts/qa/test-qa-gate-surface.sh --fixture-test
 
       - name: Verify skill mirror integrity
+        id: mirror
+        continue-on-error: true
         run: ./scripts/qa/test-skill-mirror-integrity.sh
 
       - name: Verify skill mirror integrity negative fixtures
+        id: mirror-fixtures
+        continue-on-error: true
         run: ./scripts/qa/test-skill-mirror-integrity.sh --fixture-test
 
       - name: Verify docs publishing integrity
+        id: publishing
+        continue-on-error: true
         run: ./scripts/qa/test-docs-publishing-integrity.sh
 
       - name: Verify docs publishing integrity negative fixtures
+        id: publishing-fixtures
+        continue-on-error: true
         run: ./scripts/qa/test-docs-publishing-integrity.sh --fixture-test
 
       - name: Verify markdown link integrity
+        id: links
+        continue-on-error: true
         run: ./scripts/qa/test-markdown-link-integrity.sh
 
       - name: Verify markdown link integrity fixtures
+        id: links-fixtures
+        continue-on-error: true
         run: ./scripts/qa/test-markdown-link-integrity.sh --fixture-test
 
       - name: QA documentation lint and Agent driver documentation alignment
+        id: doc-lint
+        continue-on-error: true
         run: ./scripts/qa-doc-lint.sh
 
       - name: Coordination governance inventory
+        id: coordination
+        continue-on-error: true
         run: ./scripts/qa/test-coordination-governance.sh
 
       - name: Governance ledger regeneration tooling
+        id: ledger-tooling
+        continue-on-error: true
         run: ./scripts/qa/test-governance-ledger-tooling.sh
 
       - name: Core crate boundary and schema snapshot
+        id: core-boundary
+        continue-on-error: true
         run: ./scripts/qa/test-core-boundary.sh
         env:
           PROTOC: /usr/bin/protoc
 
       - name: Design doc and QA lifecycle metadata
+        id: doc-lifecycle
+        continue-on-error: true
         run: ./scripts/qa/test-doc-lifecycle.sh
 
       - name: Legacy coordination decommission contracts
+        id: decommission
+        continue-on-error: true
         run: ./scripts/qa/test-legacy-coordination-decommission.sh
         env:
           PROTOC: /usr/bin/protoc
 
       - name: Recorded Codex session resume contracts
+        id: codex-resume
+        continue-on-error: true
         run: ./scripts/qa/test-codex-session-resume.sh
         env:
           PROTOC: /usr/bin/protoc
 
       - name: Filesystem trigger contracts
+        id: filesystem-trigger
+        continue-on-error: true
         run: ./scripts/qa/test-filesystem-trigger.sh
         env:
           PROTOC: /usr/bin/protoc
 
       - name: Agent driver production parity
+        id: parity
+        continue-on-error: true
         run: ./scripts/qa/test-agent-driver-production-parity.sh
         env:
           PROTOC: /usr/bin/protoc
@@ -218,9 +267,83 @@ jobs:
       # coordination strangler, coverage fixtures, qa-doc-lint) that already run as
       # sibling jobs in this workflow. The certifying aggregate is the workflow.
       - name: Agent driver execution migration contracts
+        id: execution-migration
+        continue-on-error: true
         run: FR126_FAST=1 ./scripts/qa/test-agent-driver-execution-migration.sh
         env:
           PROTOC: /usr/bin/protoc
+
+      # This is the step that fails the job. Every gate above records its real
+      # outcome and keeps going, so one run reports every problem instead of
+      # only the first — which is how FR-134's workspace-scope defect stayed
+      # invisible behind the ledger tooling's self-lock across two runs.
+      - name: Governance result
+        if: always()
+        shell: bash
+        env:
+          OUTCOMES: |
+            liveness=${{ steps.liveness.outcome }}
+            liveness-fixtures=${{ steps.liveness-fixtures.outcome }}
+            surface=${{ steps.surface.outcome }}
+            surface-fixtures=${{ steps.surface-fixtures.outcome }}
+            mirror=${{ steps.mirror.outcome }}
+            mirror-fixtures=${{ steps.mirror-fixtures.outcome }}
+            publishing=${{ steps.publishing.outcome }}
+            publishing-fixtures=${{ steps.publishing-fixtures.outcome }}
+            links=${{ steps.links.outcome }}
+            links-fixtures=${{ steps.links-fixtures.outcome }}
+            doc-lint=${{ steps.doc-lint.outcome }}
+            coordination=${{ steps.coordination.outcome }}
+            ledger-tooling=${{ steps.ledger-tooling.outcome }}
+            core-boundary=${{ steps.core-boundary.outcome }}
+            doc-lifecycle=${{ steps.doc-lifecycle.outcome }}
+            decommission=${{ steps.decommission.outcome }}
+            codex-resume=${{ steps.codex-resume.outcome }}
+            filesystem-trigger=${{ steps.filesystem-trigger.outcome }}
+            parity=${{ steps.parity.outcome }}
+            execution-migration=${{ steps.execution-migration.outcome }}
+        run: |
+          set -uo pipefail
+          failed=0
+          while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            gate="${line%%=*}"
+            outcome="${line#*=}"
+            printf '%-22s %s\n' "$gate" "$outcome"
+            [[ "$outcome" == "success" || "$outcome" == "skipped" ]] || failed=1
+          done <<< "$OUTCOMES"
+          echo ""
+          if [[ "$failed" -ne 0 ]]; then
+            echo "one or more governance gates failed; each is reported above and in its own step" >&2
+            exit 1
+          fi
+          echo "all governance gates passed"
+
+  ci-environment-parity:
+    name: CI environment parity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y jq ruby ripgrep sqlite3 protobuf-compiler
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install failing provider stubs
+        uses: ./.github/actions/provider-stubs
+
+      # Runs each in-scope gate twice, with and without the CI variables, so it
+      # gets its own job rather than doubling the governance job's runtime.
+      - name: Verify gates behave identically with and without CI set
+        run: ./scripts/qa/test-ci-environment-parity.sh
+
+      - name: Verify the comparison can fail
+        run: ./scripts/qa/test-ci-environment-parity.sh --fixture-test
 
   coverage-policy-fixtures:
     name: Coverage policy fixtures (${{ matrix.os }})

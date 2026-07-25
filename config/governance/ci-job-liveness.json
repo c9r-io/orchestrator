@@ -1,0 +1,124 @@
+{
+  "version": 1,
+  "description": "Last real conclusion of every job in every push/pull_request workflow. The object list is discovered by parsing .github/workflows, not enumerated here, because the enforcement surface ledger only classifies scripts/qa/* and would never have looked at boundary-coverage, test, clippy, miri or cross-compile. Verified offline by scripts/qa/ci-liveness.rb in the ci.yml governance job; refreshed from `gh run` locally with --refresh --write.",
+  "workflows": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "inScope": true,
+      "jobs": {
+        "async-lock-governance": {
+          "conclusion": "success",
+          "runId": "30158487388",
+          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd"
+        },
+        "fmt": {
+          "conclusion": "success",
+          "runId": "30158487388",
+          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd"
+        },
+        "clippy": {
+          "conclusion": "success",
+          "runId": "30158487388",
+          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd"
+        },
+        "test": {
+          "conclusion": "success",
+          "runId": "30158487388",
+          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd"
+        },
+        "coordination-strangler": {
+          "conclusion": "failure",
+          "runId": "30158487388",
+          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd",
+          "knownFailing": {
+            "reference": "FR-134",
+            "reason": "the job never installed ripgrep, so test-coordination-strangler.sh exited on its own command -v preamble before asserting anything. Fixed by 34d3b582; this record predates that commit and flips to success on the next refresh.",
+            "expectedBy": "2026-07-26"
+          }
+        },
+        "governance": {
+          "conclusion": "failure",
+          "runId": "30158487388",
+          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd",
+          "knownFailing": {
+            "reference": "FR-134",
+            "reason": "test-governance-ledger-tooling.sh case 3 calls --write with CI inherited and is refused by the mechanism its own case 2 verifies, killing the job under set -e. Fixed in this FR.",
+            "expectedBy": "2026-07-26"
+          }
+        },
+        "coverage-policy-fixtures": {
+          "conclusion": "success",
+          "runId": "30158487388",
+          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd"
+        },
+        "slack-certification-recorded": {
+          "conclusion": "failure",
+          "runId": "30158487388",
+          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd",
+          "knownFailing": {
+            "reference": "FR-134",
+            "reason": "the job installed nothing at all, so both of its gates exited on missing rg. Fixed by 34d3b582 on both matrix legs.",
+            "expectedBy": "2026-07-26"
+          }
+        },
+        "boundary-coverage": {
+          "conclusion": "failure",
+          "runId": "30158487388",
+          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd",
+          "knownFailing": {
+            "reference": "FR-135",
+            "reason": "coverage-governance.sh:38 expands an empty array under set -u, which bash 3.2 on the macOS runner rejects as unbound. Red for six consecutive runs before anything noticed, which is why this ledger covers every CI job rather than only the classified gates.",
+            "expectedBy": "2026-08-15"
+          }
+        },
+        "miri": {
+          "conclusion": "success",
+          "runId": "30158487388",
+          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd"
+        },
+        "cross-compile": {
+          "conclusion": "success",
+          "runId": "30158487388",
+          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd"
+        },
+        "ci-environment-parity": {
+          "conclusion": "not-run",
+          "runId": "",
+          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd",
+          "knownFailing": {
+            "reference": "FR-134",
+            "reason": "job introduced by this FR; it has no real run yet. The record and every other entry in this file are stale against the ci.yml this FR rewrote, which is the freshness rule working — refresh from the first run after the push.",
+            "expectedBy": "2026-07-26"
+          }
+        }
+      }
+    },
+    {
+      "path": ".github/workflows/docs.yml",
+      "inScope": true,
+      "jobs": {
+        "deploy": {
+          "conclusion": "success",
+          "runId": "30157536507",
+          "headSha": "161dba197a4d29af16fdb9a25aee72d5e87df4f4"
+        }
+      }
+    },
+    {
+      "path": ".github/workflows/security.yml",
+      "inScope": true,
+      "jobs": {
+        "cargo-audit": {
+          "conclusion": "success",
+          "runId": "30158487378",
+          "headSha": "d7e368c770ddfbbd4fdc3d59eeccd463e4fa8cbd"
+        }
+      }
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "inScope": false,
+      "reason": "triggered by v* tags and workflow_dispatch only, so it has no last-run-on-main to assert. A release that fails is visible at the moment someone cuts it, and recording a stale tag build here would say less than nothing."
+    }
+  ]
+}

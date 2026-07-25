@@ -6,6 +6,16 @@
 
 set -euo pipefail
 
+# Declared so the surface gate can check them against the job that runs this,
+# and so the environment-parity gate knows this one pays for a workspace build.
+# Without a preamble a gate declares nothing and neither check can see it.
+for required in cargo rg; do
+  command -v "$required" >/dev/null 2>&1 || {
+    echo "missing required command: $required" >&2
+    exit 1
+  }
+done
+
 PASS=0
 FAIL=0
 
