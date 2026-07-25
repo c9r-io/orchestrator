@@ -97,7 +97,7 @@ Structural wiring proves a step exists; it does not prove the step can fail. Thi
 
 ### Steps
 
-1. Create `docs/design_doc/orchestrator/zz-fr127-gate-proof.md` containing the retired phrase ``The `streaming` executor drives `claude` ``.
+1. Create `docs/design_doc/orchestrator/zz-fr127-gate-proof.md` containing one of the retired phrases from `STALE_PATTERN` in `scripts/qa/test-agent-driver-documentation-alignment.sh` — for example the one asserting that the removed `streaming` executor drives the Claude CLI. Copy it from that pattern list rather than from here: this document is itself scanned, so reproducing the literal phrase would make the gate fail on this file.
 2. `git add` the file. The retired-semantics scan enumerates `git ls-files '*.md'`, so an untracked file is invisible to it; a real commit or PR stages the file.
 3. `./scripts/qa-doc-lint.sh`
 4. Remove the file and unstage it, then re-run `./scripts/qa-doc-lint.sh`.

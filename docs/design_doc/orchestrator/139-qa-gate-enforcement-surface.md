@@ -99,6 +99,12 @@ Wiring produced two findings that structural review had not:
 
 The second finding is the clearest statement of why this FR existed: the cost of an unwired gate is not that it might catch something later, but that it can be silently wrong for arbitrarily long.
 
+### A corrected premise
+
+FR-127 asserted that "the 5 Slack credential scripts" plus `certify-codex-session-resume.sh` must be classified non-`ci-required` with the reason "consumes real credentials/quota". Classifying by actual behavior found only **two** scripts that consume real provider credentials: `certify-slack-managed-live.sh` in its live subcommands, and `test-slack-managed-live-smoke.sh`, which posts to a real workspace using `SLACK_LIVE_*` bot tokens. The remaining Slack gates address synthetic hostnames (`qa-workspace.slack.com`, `private-fr114-workspace.slack.com`) or start a local fake Slack API server; they are non-CI because they need a daemon or the Node browser stack, which is a different reason and is recorded as such.
+
+Classifying six scripts as credential-consuming when two are would have been a false statement inside the artifact whose purpose is to stop false statements about enforcement. Each entry therefore carries the reason that is true of it.
+
 ### Accepted costs
 
 - `test-filesystem-trigger.sh` scenarios 1–2 re-run `cargo test --workspace` and strict Clippy, duplicating the sibling `test` and `clippy` jobs. Accepted because the `governance` job already builds the workspace and shares the Rust cache; recorded in its manifest entry rather than left implicit.
