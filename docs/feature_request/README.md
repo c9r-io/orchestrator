@@ -80,6 +80,7 @@
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
 | FR-125 | 遗留协调机器分级退役（Deprecate → Remove） | P2 | Proposed |
+| FR-126 | Agent 执行路径迁移 — legacy command → typed driver（解锁 ShellRunnerExecutor 退役） | P2 | Proposed |
 
 ## 说明
 
