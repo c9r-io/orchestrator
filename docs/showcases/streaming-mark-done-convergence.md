@@ -1,22 +1,26 @@
-# Showcase: Loop convergence driven by a typed tool (`'mark_done' in tools_called`)
+# Showcase: Typed-driver loop convergence (`'mark_done' in tools_called`)
 
-End-to-end demonstration of the streaming-runner pivot (design docs
-[101](../design_doc/orchestrator/101-streaming-agent-runner-architecture-pivot.md) →
-[102](../design_doc/orchestrator/102-stream-json-event-ingestion.md) →
-[103](../design_doc/orchestrator/103-cel-stream-run-signals.md)):
+This end-to-end example uses a per-Agent `claude/cli` typed driver to converge a
+workflow from a structured tool call. The current execution model is documented
+in design docs [127](../design_doc/orchestrator/127-agent-driver-abstraction.md)
+and [138](../design_doc/orchestrator/138-agent-driver-execution-migration.md);
+design docs [101](../design_doc/orchestrator/101-streaming-agent-runner-architecture-pivot.md)–[103](../design_doc/orchestrator/103-cel-stream-run-signals.md)
+record the historical first cut that preceded typed drivers.
 
-> A streaming agent expresses completion by **calling a typed MCP tool**
-> (`mark_done`). The orchestrator parses the `stream-json` stream into structured
-> signals (`tools_called`, `tool_error_count`, `run_cost_usd`, …), and the loop
-> guard converges on **`'mark_done' in tools_called`** — coordination driven by
-> what the agent *did*, not by regex-scraping stdout.
+> The `claude/cli` driver expresses completion by **calling a typed MCP tool**
+> (`mark_done`). Orchestrator normalizes the provider stream into driver events
+> and typed artifacts, derives signals such as `tools_called`, and evaluates
+> **`'mark_done' in tools_called`** without scraping stdout.
+
+The global `streaming` executor and its compatibility bridge have been removed.
+Provider execution is selected only by `Agent.spec.driver`.
 
 Manifest: [`docs/workflow/streaming-mark-done-convergence.yaml`](../workflow/streaming-mark-done-convergence.yaml).
 
 ## Run it
 
-The `streaming` executor drives `claude` and hosts the orchestrator-owned
-`mark_done` tool via the `orch-mcp-tools` MCP server. Use an **isolated data
+The manifest selects the `claude/cli` driver and allows the orchestrator-owned
+`mark_done` tool through the `orch-mcp-tools` MCP server. Use an **isolated data
 dir** so the demo never touches your real runtime DB.
 
 ```bash
@@ -39,35 +43,41 @@ TID=$(./target/debug/orchestrator task create --name demo \
 ./target/debug/orchestrator task trace "$TID"
 ```
 
-## What happens (captured run, claude-haiku)
+## What happens
 
 The loop is configured to run **up to 3 cycles** (`mode: infinite`, `max_cycles: 3`),
 but converges as soon as the agent calls `mark_done`.
 
-The agent loads the tool and calls it — `agent_tool_call` events:
+The driver normalizes the provider interaction into current event types:
 
 ```
-ToolSearch              # select:mcp__orch__mark_done
-mcp__orch__mark_done    # the orchestrator-owned typed tool
+driver_started
+driver_tool_use         name="mcp__orch__mark_done"
+driver_tool_result      is_error=false
+driver_finished         outcome="success"
 ```
 
-The orchestrator projects structured signals onto the run (visible in the
-finalize/convergence context vars):
+Validation converts those events into a `ToolCall` artifact, a
+`driver_tool_result` artifact, and a `driver_terminal` artifact. Only after the
+structured terminal exists does Orchestrator derive and promote the CEL signals:
 
 ```
-tools_called   = ["ToolSearch","mark_done"]   # MCP prefixes stripped → bare names
-num_tool_calls = 2
-run_cost_usd   = 0.0233
-run_turns      = 2
+"mark_done" in tools_called = true   # MCP prefix stripped → bare name
+tool_error_count           = 0
+agent_reported_error = false
 ```
+
+The provider may also emit discovery tools such as `ToolSearch`; convergence
+depends only on the normalized `mark_done` entry.
 
 The loop guard evaluates `'mark_done' in tools_called` and **terminates at cycle 1**:
 
 ```
 cycle_started        cycle=1
-agent_tool_call      ToolSearch
-agent_tool_call      mcp__orch__mark_done
-agent_run_summary    num_tool_calls=1
+...                  optional provider discovery events
+driver_tool_use      mcp__orch__mark_done
+driver_tool_result   is_error=false
+driver_finished      outcome=success
 workflow_terminated  reason="agent signaled completion via the mark_done tool"  cycle=1
 task_completed
 ```
@@ -87,9 +97,9 @@ cycle_started        cycle=3
 loop_guard_decision  cycle=3  max_cycles_reached
 ```
 
-The loop converges **iff** the agent signals via the typed tool. That is the
-pivot's payoff: the agent's structured action — not parsed text — drives
-orchestration.
+The loop converges **iff** the typed artifacts record the tool call and a
+successful `driver_terminal`. The agent's structured action—not parsed
+text—drives orchestration.
 
 ## Notes
 

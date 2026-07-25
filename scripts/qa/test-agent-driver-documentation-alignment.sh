@@ -30,7 +30,7 @@ done
 
 cd "$REPO_ROOT"
 
-STALE_PATTERN='executor:[[:space:]]*shell.*(default|默认).*(\||｜)[[:space:]]*streaming|When a step runs under the `streaming` runner executor|当步骤在 `streaming` 运行器下执行时|deprecated global streaming executor calls a provider-owned compatibility bridge|global streaming executor and CEL path remain compatibility bridges|Legacy command Agents use the default shell executor|keep a legacy shell Agent|reassign the workflow capability to a legacy command Agent|保留旧 command Agent一个发布周期|保留旧 command Agent 一个发布周期'
+STALE_PATTERN='executor:[[:space:]]*shell.*(default|默认).*(\||｜)[[:space:]]*streaming|When a step runs under the `streaming` runner executor|当步骤在 `streaming` 运行器下执行时|deprecated global streaming executor calls a provider-owned compatibility bridge|global streaming executor and CEL path remain compatibility bridges|Legacy command Agents use the default shell executor|keep a legacy shell Agent|reassign the workflow capability to a legacy command Agent|保留旧 command Agent一个发布周期|保留旧 command Agent 一个发布周期|The `streaming` executor drives `claude`|End-to-end demonstration of the streaming-runner pivot'
 ALIGNMENT_TARGETS=(
   docs/guide/02-resource-model.md
   docs/guide/zh/02-resource-model.md
@@ -40,6 +40,7 @@ ALIGNMENT_TARGETS=(
   docs/architecture.md
   docs/design_doc/orchestrator/101-streaming-agent-runner-architecture-pivot.md
   docs/design_doc/orchestrator/127-agent-driver-abstraction.md
+  docs/showcases
   .claude/skills/orchestrator-guide/SKILL.md
   .claude/skills/orchestrator-guide/references/resource-and-steps.md
 )
@@ -94,6 +95,23 @@ rg -q 'There is no global streaming executor or provider-owned compatibility bri
   fail "DD-127 still exposes the removed compatibility bridge"
 pass "released design records distinguish history from current execution"
 
+SHOWCASE=docs/showcases/streaming-mark-done-convergence.md
+for guide in docs/guide/04-cel-prehooks.md docs/guide/zh/04-cel-prehooks.md; do
+  rg -q 'docs/showcases/streaming-mark-done-convergence\.md' "$guide" ||
+    fail "$guide does not link the governed typed-driver showcase"
+done
+test -f "$SHOWCASE" || fail "linked typed-driver showcase is missing"
+pass "EN/ZH CEL guides resolve to the governed mark-done showcase"
+
+for term in 'claude/cli' 'driver_tool_use' 'driver_tool_result' 'driver_terminal'; do
+  rg -q "$term" "$SHOWCASE" ||
+    fail "typed-driver showcase omits current semantic: $term"
+done
+rg -q 'global `streaming` executor and its compatibility bridge have been removed' \
+  "$SHOWCASE" ||
+  fail "typed-driver showcase does not fence the removed execution seam"
+pass "mark-done showcase describes only current typed-driver execution"
+
 jq -e '
   .executionCases[]
   | select(.name == "new-command-only-agent-is-rejected")
@@ -130,6 +148,8 @@ if [[ "$FIXTURE_TEST" == "1" ]]; then
     'executor: shell # shell (default) | streaming' \
     'When a step runs under the `streaming` runner executor' \
     'The deprecated global streaming executor calls a provider-owned compatibility bridge while manifests migrate.' \
+    'End-to-end demonstration of the streaming-runner pivot' \
+    'The `streaming` executor drives `claude` and hosts the mark_done tool.' \
     >"$fixture_file"
   if ! rg -q -i "$STALE_PATTERN" "$fixture_file"; then
     fail "negative fixture did not trigger retired-semantics detector"

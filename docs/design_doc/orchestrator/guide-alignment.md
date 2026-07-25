@@ -23,7 +23,7 @@ FR-018 建立了一个**编译驱动的文档治理流程**：实际编译项目
 
 ## 2026-07-25 Follow-up：Agent Driver 语义子门禁
 
-FR-126 的第三轮闭环审计证明：只检查 CLI `--help` 无法发现资源模型和执行语义漂移。EN/ZH 指南仍可能把已删除的 `runner.executor: streaming` 描述为可用配置，或把 typed driver 信号归因于旧 runner。
+FR-126 的第三轮闭环审计证明：只检查 CLI `--help` 无法发现资源模型和执行语义漂移。EN/ZH 指南仍可能把已删除的 `runner.executor: streaming` 描述为可用配置，或把 typed driver 信号归因于旧 runner。第四轮审计进一步证明，只检查指南本身也不够：指南链接到的可执行 showcase 仍可能保留相反的旧语义。
 
 因此新增 `scripts/qa/test-agent-driver-documentation-alignment.sh`，只冻结高风险且可确定性判断的 driver 不变量：
 
@@ -32,8 +32,16 @@ FR-126 的第三轮闭环审计证明：只检查 CLI `--help` 无法发现资�
 - `driver_terminal` 和 normalized typed artifacts 是信号来源；
 - 新 Agent 与回滚都使用显式 driver；
 - production admission 与 runtime compatibility 分层明确。
+- `docs/showcases/**/*.md` 不得把退役 executor 描述为当前运行路径；
+- EN/ZH CEL 指南必须链接到存在且具备 `claude/cli`、normalized driver
+  events 与 `driver_terminal` 正向语义的 mark-done showcase。
 
-该脚本由 `scripts/qa-doc-lint.sh` 和 FR-126 默认 release gate 调用。完整 CLI 命令树、翻译质量和叙述性内容仍由本设计的五阶段 Skill 流程负责。
+该脚本由 `scripts/qa-doc-lint.sh` 和 FR-126 默认 release gate 调用。showcase
+采用目录级扫描而不是单文件白名单，使后续新增页面也进入 retired-semantics
+棘轮。DD-102/DD-103 等增量设计记录保留历史正文，只要求显式标注已被当前
+typed-driver seam 取代；DD-58 的事故背景和 DD-137 已完成的移交记录不是当前
+操作指南，不纳入静态禁词扫描。完整 CLI 命令树、翻译质量和叙述性内容仍由
+本设计的五阶段 Skill 流程负责。
 
 ## 设计方案
 

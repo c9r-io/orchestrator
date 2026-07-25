@@ -5,13 +5,13 @@ self_referential_safe: true
 # Orchestrator - Agent Driver Execution Migration
 
 **Module**: Orchestrator Runner / Scheduler / Workflow Governance
-**Scope**: exact production inventory, offline production-contract parity, typed convergence, documentation semantics, legacy runner rollback, and release closure
+**Scope**: exact production inventory, offline production-contract parity, typed convergence, linked showcase semantics, legacy runner rollback, and release closure
 **Scenarios**: 5
 **Priority**: High
 
 ## Background
 
-FR-126 removes global runner backend selection after every production Agent moves to a typed driver. A strict closure audit reopened the FR because aggregate counts and synthetic shell pilots did not prove parity for the four migrated production contracts. A later audit found that EN/ZH guides, architecture, an authoring skill, and released design status still described retired execution behavior because `docs/guide` was outside the closure lint.
+FR-126 removes global runner backend selection after every production Agent moves to a typed driver. A strict closure audit reopened the FR because aggregate counts and synthetic shell pilots did not prove parity for the four migrated production contracts. A later audit found that EN/ZH guides, architecture, an authoring skill, and released design status still described retired execution behavior because `docs/guide` was outside the closure lint. A fourth audit followed the corrected guide links and found that the operational mark-done showcase still advertised the removed executor because `docs/showcases` was outside the deterministic target set.
 
 All executable workflows in this document use the deterministic mock bundle below. They do not apply `docs/workflow` or invoke a real provider:
 
@@ -221,7 +221,10 @@ Verify production admission and historical compatibility are distinct, while rem
 - Historical runtime Apply warns and persists `shell/cli`; it never leaves a command-only runtime consumer.
 - The fixture and Ruby helper name the production-admission layer rather than presenting it as daemon Apply behavior.
 - `runner.executor=streaming` and scheduler missing-driver state fail with stable retirement diagnostics.
-- EN/ZH guides bind structured signals to typed driver artifacts and do not advertise a streaming executor; architecture, authoring skill, DD-101, and DD-127 agree.
+- EN/ZH guides bind structured signals to typed driver artifacts and do not advertise a streaming executor; architecture, authoring skill, DD-101, DD-102, DD-103, and DD-127 agree.
+- Both CEL guides reference the existing mark-done showcase; every showcase is
+  scanned for retired semantics, and the linked page names `claude/cli`,
+  `driver_tool_use`, `driver_tool_result`, and `driver_terminal`.
 - The stale-documentation negative fixture is detected.
 - The compatibility commit interval is ordered and reachable.
 - The runner-removal source patch remains reverse-applicable.
@@ -256,10 +259,10 @@ Close FR-126 only when every original repository and coordination gate is part o
 ### Expected
 
 - Inventory and source-retirement ratchets pass.
-- Agent driver documentation alignment reports 8 passes and zero failures.
+- Agent driver documentation alignment reports 10 passes and zero failures.
 - Production parity reports 11 passes and zero failures.
 - Coordination strangler reports 20 passes and zero failures.
-- `cargo fmt --all -- --check`, `cargo test --workspace`, strict Clippy, coverage governance, and QA lint—including `docs/guide` driver semantics—all pass.
+- `cargo fmt --all -- --check`, `cargo test --workspace`, strict Clippy, coverage governance, and QA lint—including `docs/guide` and `docs/showcases` driver semantics—all pass.
 - Fast-mode output is never accepted as release certification.
 
 ---
@@ -268,8 +271,8 @@ Close FR-126 only when every original repository and coordination gate is part o
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Exact per-Agent production inventory | ☑ PASS | 2026-07-25 | Codex | Clean-tree governance reproduced 20 fingerprinted typed Agents, zero production command-only/global streaming consumers, and an explicit production/runtime decision-layer fixture. |
-| 2 | Three production shell contracts preserve observable behavior | ☑ PASS | 2026-07-25 | Codex | All three compatibility/typed pairs matched terminal state, exit code, canonical stdout hash, recorded baseline, and normalized driver events. |
-| 3 | Streaming mark-done typed Claude matches the recorded contract | ☑ PASS | 2026-07-25 | Codex | Fake Claude completed with exit `0` in one cycle; typed tool use/result and terminal evidence were present and the provider session stayed private. |
-| 4 | Admission, compatibility, removal, rollback, and documentation boundaries | ☑ PASS | 2026-07-25 | Codex | Runtime promotion, production rejection, scheduler fail-closed, reverse apply, EN/ZH/architecture/skill/design alignment, and stale-text negative fixture all passed; documentation gate `8/8`. |
-| 5 | Mandatory aggregate release and guide alignment | ☑ PASS | 2026-07-25 | Codex | Clean-tree aggregate `7/7`; production parity `11/11`, coordination strangler `20/20`, workspace tests, strict Clippy, format, coverage governance, and guide-aware QA lint passed. |
+| 1 | Exact per-Agent production inventory | ☐ PENDING | — | — | Reopened audit requires a fresh clean-tree aggregate. |
+| 2 | Three production shell contracts preserve observable behavior | ☐ PENDING | — | — | Reopened audit requires a fresh clean-tree aggregate. |
+| 3 | Streaming mark-done typed Claude matches the recorded contract | ☐ PENDING | — | — | Reopened audit requires a fresh clean-tree aggregate. |
+| 4 | Admission, compatibility, removal, rollback, and documentation boundaries | ☐ PENDING | — | — | Expanded to linked showcase semantics and directory-wide scanning. |
+| 5 | Mandatory aggregate release and guide alignment | ☐ PENDING | — | — | Awaiting clean-tree release certification. |

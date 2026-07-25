@@ -7,6 +7,16 @@
 **Created**: 2026-06-28
 **Last Updated**: 2026-06-28
 
+> **Post-release status (superseded execution seam, 2026-07-25):** this record
+> captures the first CEL signal projection built on streaming-runner artifacts.
+> Current Agent execution uses per-Agent typed drivers; normalized tool artifacts
+> plus `driver_terminal` now produce the same coordination signals, and the
+> global streaming runner has been deleted by FR-126. References below to a
+> streaming runner describe historical implementation context, not a current
+> prerequisite or configuration path. See
+> [DD-127](127-agent-driver-abstraction.md) and
+> [DD-138](138-agent-driver-execution-migration.md).
+
 > **Implementation status (2026-06-28):** landed (unified approach). Extracted a shared `bind_pipeline_vars` helper (`core/src/prehook/context.rs`) now used by all three CEL builders — upgrading convergence (gains JSON-array→`list`) and finalize (gains a new `ItemFinalizeContext.vars` bag, populated in `to_finalize_context`) to prehook parity. `agent_orchestrator::stream_json::stream_signal_vars` derives the six signals from a run's artifacts; `item_executor/apply.rs` injects them into the accumulator's pipeline vars (empty for non-streaming runs). Verified: whole workspace + tests compile, core lib 1578 tests pass (incl. new prehook/convergence/finalize signal-consumption tests + `stream_signal_vars` derivation tests), scheduler 437, fmt clean.
 
 ## Background

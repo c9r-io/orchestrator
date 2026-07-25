@@ -17,6 +17,14 @@ The evidence remediation also exposed a runtime defect: typed `driver_tool_use` 
 
 A third closure audit found a different class of gap: EN/ZH user guides still advertised the removed global streaming executor, CEL documentation attributed typed signals to that executor, released design records described a deleted compatibility bridge as current, and the production governance fixture did not name its stricter decision layer. The default closure chain had no deterministic check over `docs/guide`, architecture, or the repository authoring skill. FR-126 was reopened again to align those surfaces and add a fail-closed documentation semantics gate.
 
+A fourth audit followed the links from the corrected CEL guides and found that
+their operational mark-done showcase still described the removed `streaming`
+executor as current. The first documentation gate listed ten known files and
+never scanned `docs/showcases`, so it could certify the guides while their
+recommended next page remained stale. FR-126 was reopened once more to align the
+showcase, cover the entire showcase directory, and verify the linked page's
+positive typed-driver semantics.
+
 ## Goals
 
 - Keep zero command-only Agent and global streaming consumers in production.
@@ -28,6 +36,7 @@ A third closure audit found a different class of gap: EN/ZH user guides still ad
 - Retain executable compatibility-window and rollback evidence.
 - Make every original repository gate mandatory for release certification.
 - Keep EN/ZH guides, architecture, authoring skills, and released design status aligned with the typed-driver runtime.
+- Keep operational showcases reached from those guides aligned with the same runtime.
 - Make production-admission rejection and runtime compatibility promotion machine-readable as separate decisions.
 
 ## Non-goals
@@ -41,7 +50,7 @@ A third closure audit found a different class of gap: EN/ZH user guides still ad
 
 ## Scope
 
-- In scope: production Agent manifests, governance inventory, compatibility normalization, typed signal projection, loop convergence, offline parity fixtures, runner removal rollback, normative guide/architecture/skill semantics, and aggregate QA.
+- In scope: production Agent manifests, governance inventory, compatibility normalization, typed signal projection, loop convergence, offline parity fixtures, runner removal rollback, normative guide/architecture/skill/showcase semantics, and aggregate QA.
 - Out of scope: GUI behavior, database schema changes, live provider certification, and generic coordination-state redesign.
 
 ## Interfaces And Data
@@ -104,7 +113,11 @@ No SQLite schema change is required. Provider `SessionRef` material remains priv
 9. `RunnerExecutorKind`, `ShellRunnerExecutor`, `StreamingAgentRunner`, and the global provider-session bridge remain deleted.
 10. The default FR-126 aggregate is the release gate; `FR126_FAST=1` is explicitly non-certifying.
 11. Governance fixtures label production admission separately from runtime Apply compatibility and assert the warning/promotion contract.
-12. A deterministic documentation alignment script checks EN/ZH guides, architecture, authoring skill, released design status, fixture layering, and stable diagnostics; `qa-doc-lint` and the FR-126 aggregate both execute it.
+12. A deterministic documentation alignment script checks EN/ZH guides, architecture, authoring skill, operational showcases, released design status, fixture layering, and stable diagnostics; `qa-doc-lint` and the FR-126 aggregate both execute it.
+13. DD-102/DD-103 retain their historical first-cut detail behind explicit
+    superseded-execution-seam banners. DD-58 remains a dated incident analysis,
+    while DD-137 already records that runner removal transferred to and completed
+    in FR-126; neither is current authoring guidance.
 
 ## Documentation Alignment Boundary
 
@@ -114,6 +127,10 @@ The LLM-driven guide-alignment workflow remains useful for broad CLI prose revie
 - CEL signals are attributed to the removed global executor rather than typed `driver_terminal` and normalized tool artifacts;
 - architecture or authoring guidance recommends new command-only Agents;
 - DD-101/DD-127 describe the deleted compatibility bridge as current;
+- any Markdown file under `docs/showcases/` presents the removed executor as a
+  current runnable path;
+- the EN/ZH CEL guides stop referencing the governed mark-done showcase, or that
+  page stops naming `claude/cli`, normalized tool events, and `driver_terminal`;
 - the governance fixture omits its `production-manifest-governance` layer or runtime compatibility outcome;
 - documented stable diagnostics disappear from production source.
 
@@ -176,7 +193,7 @@ This proves the source removal patch remains mechanically reversible without app
 - Risk: a fast local run is mistaken for release certification.
   - Mitigation: full gates are default; only explicit `FR126_FAST=1` skips them and the script labels that mode non-certifying.
 - Risk: runtime migration completes while user-facing guides keep advertising retired configuration.
-  - Mitigation: execute the driver documentation alignment ratchet from both `qa-doc-lint` and the FR-126 aggregate, including a negative fixture.
+  - Mitigation: execute the driver documentation alignment ratchet from both `qa-doc-lint` and the FR-126 aggregate, scan the entire showcase directory, verify the EN/ZH downstream link, and include representative guide and showcase phrases in the negative fixture.
 
 ## Observability
 
@@ -184,7 +201,7 @@ This proves the source removal patch remains mechanically reversible without app
 - Events: `driver_started`, `driver_tool_use`, `driver_tool_result`, `driver_usage`, and `driver_finished` are normalized and session-safe.
 - Inventory: exact per-Agent identity, driver, Workflow association, and fingerprint are emitted as JSON.
 - QA evidence: terminal states, output hashes, typed event counts, cycle count, and session-persistence result are written by the isolated harness.
-- Documentation evidence: EN/ZH semantics, design-record status, authoring examples, fixture decision layers, and source diagnostic presence are reported as a bounded alignment result.
+- Documentation evidence: EN/ZH semantics, linked showcase semantics, design-record status, authoring examples, fixture decision layers, and source diagnostic presence are reported as a bounded alignment result.
 
 ## Operations / Release
 
@@ -217,7 +234,7 @@ This proves the source removal patch remains mechanically reversible without app
 - Unit: typed artifact signals, item-to-task promotion, shell factory, command rules, stdin EOF, RuntimePolicy rejection, TTY, failed terminal, sandbox, cancellation, and redaction.
 - Integration: three production shell compatibility/typed pairs plus typed fake-Claude mark-done convergence in an isolated daemon.
 - Governance: exact production inventory, layered negative admission fixtures, manifest fingerprints, compatibility ancestry, and zero legacy source symbols.
-- Documentation: EN/ZH and architecture/skill/design alignment plus a stale-semantics negative fixture.
+- Documentation: EN/ZH, linked showcase, architecture/skill/design alignment plus a stale-semantics negative fixture.
 - Repository: coordination strangler, format, workspace tests, strict Clippy, coverage governance, and QA lint (which also executes documentation alignment).
 
 ## QA Docs
@@ -235,6 +252,9 @@ This proves the source removal patch remains mechanically reversible without app
 - `command_rules`, prompt delivery, TTY, sandbox, cancellation, events, and session privacy remain governed.
 - The execution ledger is `removed` and source baselines remain monotonic.
 - EN/ZH guides and authoring surfaces describe only typed-driver execution, with parse-only/compatibility boundaries explicit.
+- Every operational showcase is scanned for retired execution semantics, and
+  the mark-done page linked by both CEL guides documents current typed-driver
+  events and artifacts.
 - Governance fixtures machine-readably distinguish production admission from runtime compatibility.
 - The stale-documentation negative fixture and `qa-doc-lint` integration pass.
 - The default aggregate and every repository gate pass.

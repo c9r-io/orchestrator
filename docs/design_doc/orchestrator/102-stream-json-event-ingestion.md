@@ -7,6 +7,15 @@
 **Created**: 2026-06-28
 **Last Updated**: 2026-06-28
 
+> **Post-release status (superseded execution seam, 2026-07-25):** this record
+> describes the first stream-json ingestion increment behind the historical
+> streaming runner. Current Agent execution uses per-Agent typed drivers, which
+> normalize provider output into `driver_*` events and typed artifacts including
+> `driver_terminal`; the global streaming runner and `RunnerExecutorKind` have
+> been deleted by FR-126. References below to a streaming runner are historical,
+> not current configuration guidance. See [DD-127](127-agent-driver-abstraction.md)
+> and [DD-138](138-agent-driver-execution-migration.md).
+
 > **Implementation status (2026-06-28):** landed. Added a tolerant stream-json parser (`core/src/stream_json.rs` → `StreamRun`/`StreamToolCall`), an additive `ArtifactKind::ToolCall` variant, a detection-gated branch in `validate_phase_output` that projects tool calls onto `AgentOutput.artifacts` plus a `stream_run_summary` artifact and `metrics.api_calls`, and event projection in `record_phase_results` emitting `agent_tool_call` / `agent_run_summary` / `stream_truncated` (with promoted `step`/`step_scope`). No schema or pipeline-control-flow change; non-streaming runs are unaffected (detection-gated). The projection is factored into a testable `project_stream_events`. Verified: workspace compiles, 437 scheduler tests pass (including a DB-backed integration test that runs `validate_phase_output` → `project_stream_events` → `insert_event` and reads back `agent_tool_call`/`agent_run_summary` rows, asserting the promoted `step` column), parser + validation unit tests green.
 
 ## Background
