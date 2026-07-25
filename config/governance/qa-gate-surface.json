@@ -43,6 +43,78 @@
     }
   ],
   "staleClaimExemptions": [],
+  "commandSources": {
+    "description": "What each CI job puts on PATH, so a ci-required gate's `command -v` preamble can be checked against the job that runs it. FR-134 found three ci-required gates exiting on `missing command: rg` before their first assertion, in two jobs that had been green-lit by a wiring check which only asked whether they were referenced.",
+    "runnerBaseline": [
+      "awk",
+      "bash",
+      "curl",
+      "date",
+      "git",
+      "jq",
+      "mktemp",
+      "shasum",
+      "stat"
+    ],
+    "runnerBaselineReason": "Present on both ubuntu-latest and macos-latest runner images. This is the one input that cannot be derived from the repository, so it is declared — and deliberately minimal: anything a job could plausibly need to install is left out, which makes the check strict rather than permissive. ripgrep is absent from both images and is exactly what this list must not paper over.",
+    "packages": {
+      "jq": [
+        "jq"
+      ],
+      "ripgrep": [
+        "rg"
+      ],
+      "ruby": [
+        "ruby"
+      ],
+      "sqlite3": [
+        "sqlite3"
+      ],
+      "protobuf-compiler": [
+        "protoc"
+      ],
+      "musl-tools": [
+        "musl-gcc"
+      ]
+    },
+    "actions": {
+      "actions/checkout": [],
+      "actions/setup-node": [
+        "node",
+        "npm",
+        "npx"
+      ],
+      "dtolnay/rust-toolchain": [
+        "cargo",
+        "rustc",
+        "rustup"
+      ],
+      "Swatinem/rust-cache": [],
+      "taiki-e/install-action": [],
+      "actions/upload-artifact": [],
+      "./.github/actions/provider-stubs": []
+    }
+  },
+  "workspaceScope": {
+    "excludes": [
+      "orchestrator-gui"
+    ],
+    "siblingJobs": [
+      "test",
+      "clippy"
+    ],
+    "reason": "No job in .github/workflows installs the Tauri and webkit system dependencies, so orchestrator-gui has never been built on Linux. The sibling test and clippy jobs exclude it; a ci-required gate that runs the workspace without that exclusion is not duplicating them, it is a superset whose extra part cannot pass. DD-139 recorded this as an accepted duplication cost, which was wrong. Building the GUI on Linux belongs to FR-076 requirement 1."
+  },
+  "providerStubs": {
+    "action": "./.github/actions/provider-stubs",
+    "description": "Installs claude and codex stubs that exit 97. Required in every job that runs a ci-required gate whose provider isolation is anything other than no-provider, so that isolation is never the single barrier. FR-127 installed them inline in the governance job only, which left the coordination-strangler job — whose gate rests entirely on fixture pinning — with no second line at all.",
+    "exemptJobs": [
+      {
+        "job": "slack-certification-recorded",
+        "reason": "every ci-required gate in this job is no-provider: neither test-slack-live-certification.sh nor certify-slack-managed-live.sh applies a manifest bundle, and the recorded-contract fixtures contain no agent driver at all"
+      }
+    ]
+  },
   "scripts": [
     {
       "path": "scripts/qa/certify-codex-session-resume.sh",

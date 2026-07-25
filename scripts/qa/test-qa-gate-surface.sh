@@ -449,6 +449,198 @@ check_no_stale_claim_exemptions() {
   return $rc
 }
 
+# The commands a gate checks for before it does anything. Read from the gate's
+# own preamble, because that is the list that actually decides whether it runs:
+# a gate exits there, having asserted nothing, and the job goes red for a reason
+# that looks nothing like the contract it was meant to verify.
+#
+# Two shapes exist in this repository and both are handled: a `for X in a b c`
+# loop whose body tests `command -v "$X"`, and a bare `command -v name`. A ruby
+# gate is invoked as `ruby <path>` and so needs ruby whether it says so or not.
+script_required_commands() {
+  local file="$1"
+  {
+    [[ "$file" == *.rb ]] && echo ruby
+    [[ "$file" == *.sh ]] && sed -E 's/(^|[[:space:]])#.*$//' "$file" | awk '
+      match($0, /^[[:space:]]*for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in[[:space:]]+/) {
+        header = $0
+        sub(/^[[:space:]]*for[[:space:]]+/, "", header)
+        split(header, parts, /[[:space:]]+/)
+        variable = parts[1]
+        body = $0
+        sub(/^.*[[:space:]]in[[:space:]]+/, "", body)
+        sub(/;.*$/, "", body)
+        pending_variable = variable
+        pending_words = body
+        next
+      }
+      pending_variable != "" && $0 ~ ("command -v \"\\$" pending_variable "\"") {
+        count = split(pending_words, words, /[[:space:]]+/)
+        for (index_ = 1; index_ <= count; index_++) {
+          if (words[index_] != "" && words[index_] !~ /^[$"]/) print words[index_]
+        }
+        pending_variable = ""
+        next
+      }
+      match($0, /command -v [A-Za-z][A-Za-z0-9_.-]*/) {
+        token = substr($0, RSTART + 11, RLENGTH - 11)
+        print token
+      }
+    '
+  } | LC_ALL=C sort -u
+}
+
+# The commands a job puts on PATH: the declared runner baseline, plus whatever
+# its apt/brew installs and its actions provide, mapped through the manifest.
+# The mapping lives in the manifest because "the ripgrep package provides rg" is
+# a claim about Debian that a reviewer should be able to see and correct.
+job_provided_commands() {
+  local root="$1" workflow="$2" job="$3"
+  local manifest="$root/$MANIFEST_REL"
+  {
+    jq -r '.commandSources.runnerBaseline[]' "$manifest"
+    while IFS=$'\t' read -r kind value; do
+      [[ -z "$kind" ]] && continue
+      case "$kind" in
+        apt|brew)
+          jq -r --arg p "$value" '.commandSources.packages[$p][]? // empty' "$manifest"
+          ;;
+        action)
+          jq -r --arg a "$value" '.commandSources.actions[$a][]? // empty' "$manifest"
+          ;;
+        action-tool)
+          echo "$value"
+          ;;
+      esac
+    done < <(ruby "$WORKFLOW_MODEL" installs "$root/$workflow" "$job" 2>/dev/null)
+  } | LC_ALL=C sort -u
+}
+
+# Check 6: a ci-required gate's dependencies must be satisfied by the job that
+# runs it. "Wired" and "able to run" are different claims; FR-127 asserted only
+# the first, and test-coordination-strangler.sh satisfied it while failing in CI
+# on every push.
+check_job_dependencies() {
+  local root="$1"
+  local manifest="$root/$MANIFEST_REL" rc=0 path workflow job missing
+  while IFS=$'\t' read -r path workflow job; do
+    [[ -z "$path" ]] && continue
+    [[ -f "$root/$path" ]] || continue
+    [[ -f "$root/$workflow" ]] || continue
+    missing="$(comm -23 <(script_required_commands "$root/$path") \
+                        <(job_provided_commands "$root" "$workflow" "$job"))"
+    if [[ -n "$missing" ]]; then
+      echo "    $path: job '$job' in $workflow does not provide: $(printf '%s ' $missing)" >&2
+      echo "      the gate exits on its own missing-command preamble, asserting nothing" >&2
+      rc=1
+    fi
+  done < <(jq -r '
+    .scripts[]
+    | select(.enforcement == "ci-required")
+    | [.path, (.workflow // "null"), (.job // "null")]
+    | @tsv' "$manifest")
+  return $rc
+}
+
+# Check 7: a ci-required gate that runs the whole workspace must exclude what
+# the sibling jobs exclude, or say why not.
+#
+# DD-139 called test-filesystem-trigger.sh's `cargo test --workspace` an
+# accepted duplication of the sibling test job. It is not a duplicate, it is a
+# superset, and the extra member is the one crate no job can build on Linux.
+# That was invisible locally because macOS supplies the Tauri frameworks.
+check_workspace_scope() {
+  local root="$1"
+  local manifest="$root/$MANIFEST_REL" rc=0 path declared exclude
+  local -a excludes=()
+  while read -r exclude; do
+    [[ -n "$exclude" ]] && excludes+=("$exclude")
+  done < <(jq -r '.workspaceScope.excludes[]' "$manifest")
+
+  while IFS=$'\t' read -r path declared; do
+    [[ -z "$path" ]] && continue
+    [[ -f "$root/$path" ]] || continue
+    [[ "$declared" != "null" && -n "$declared" ]] && continue
+    local line
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      for exclude in "${excludes[@]}"; do
+        if [[ "$line" != *"--exclude $exclude"* ]]; then
+          echo "    $path: runs the workspace without --exclude $exclude and declares no reason:" >&2
+          echo "      $(echo "$line" | sed 's/^[[:space:]]*//')" >&2
+          rc=1
+        fi
+      done
+    # Quoted strings are stripped alongside comments: `pass "cargo test
+    # --workspace"` is a message reporting on the command, not the command.
+    # Matching it would make the check unsatisfiable, and the natural way to
+    # silence that is to reword the message — which fixes nothing.
+    done < <(sed -E 's/(^|[[:space:]])#.*$//; s/"[^"]*"//g' "$root/$path" \
+      | grep -E 'cargo (test|clippy|build|check)[^|;&]*--workspace' || true)
+  done < <(jq -r '
+    .scripts[]
+    | select(.enforcement == "ci-required")
+    | [.path, (.workspaceScopeReason // "null")]
+    | @tsv' "$manifest")
+  return $rc
+}
+
+# Check 8: a ci-required gate may not throw away the output of a command whose
+# failure it reports.
+#
+# The CI log for a failing test-filesystem-trigger.sh read `FAIL: cargo test
+# --workspace` and nothing else, because the command was run as
+# `>/dev/null 2>&1`. Diagnosing it needed a local reproduction and a
+# cross-comparison against a sibling job. A gate that can fail without saying
+# why costs more than it saves.
+check_diagnostics_preserved() {
+  local root="$1"
+  local manifest="$root/$MANIFEST_REL" rc=0 path hits
+  while read -r path; do
+    [[ -z "$path" ]] && continue
+    [[ -f "$root/$path" ]] || continue
+    hits="$(sed -E 's/(^|[[:space:]])#.*$//' "$root/$path" \
+      | grep -nE 'cargo [^|;&]*>[[:space:]]*/dev/null[[:space:]]*2>&1' || true)"
+    if [[ -n "$hits" ]]; then
+      echo "    $path: discards the output of a cargo command it reports on:" >&2
+      printf '      %s\n' "$hits" >&2
+      rc=1
+    fi
+  done < <(jq -r '.scripts[] | select(.enforcement == "ci-required") | .path' "$manifest")
+  return $rc
+}
+
+# Check 9: every job running a gate that is not no-provider installs the stubs.
+#
+# The exit-97 stubs are the backstop for when a gate's own isolation fails. They
+# were installed in the governance job only, so the coordination-strangler job —
+# whose gate rests entirely on fixture pinning, the mechanism FR-134 defect 3
+# defeated — had no second line at all.
+check_provider_stub_coverage() {
+  local root="$1"
+  local manifest="$root/$MANIFEST_REL" rc=0 workflow job action exempt
+  action="$(jq -r '.providerStubs.action' "$manifest")"
+  while IFS=$'\t' read -r workflow job; do
+    [[ -z "$workflow" ]] && continue
+    [[ -f "$root/$workflow" ]] || continue
+    exempt="$(jq -r --arg j "$job" \
+      '[.providerStubs.exemptJobs[]? | select(.job == $j and ((.reason // "") | length > 0))] | length' "$manifest")"
+    [[ "$exempt" -gt 0 ]] && continue
+    if ! ruby "$WORKFLOW_MODEL" installs "$root/$workflow" "$job" 2>/dev/null \
+      | grep -qxF "action	$action"; then
+      echo "    job '$job' in $workflow runs a gate that can reach a provider but does not install the stubs" >&2
+      echo "      add: uses: $action" >&2
+      rc=1
+    fi
+  done < <(jq -r '
+    .scripts[]
+    | select(.enforcement == "ci-required")
+    | select((.providerIsolation.mode // "no-provider") != "no-provider")
+    | [(.workflow // "null"), (.job // "null")]
+    | @tsv' "$manifest" | LC_ALL=C sort -u)
+  return $rc
+}
+
 # The registry. Both modes read it: verification runs every entry, and the
 # fixture mode asserts that it names every check_* the file defines and that
 # each one has at least one negative fixture. A check that exists but is not
@@ -462,6 +654,10 @@ ALL_CHECKS=(
   check_provider_isolation
   check_no_stale_claims
   check_no_stale_claim_exemptions
+  check_job_dependencies
+  check_workspace_scope
+  check_diagnostics_preserved
+  check_provider_stub_coverage
 )
 
 run_all_checks() {
@@ -759,6 +955,30 @@ if check_no_stale_claim_exemptions "$REPO_ROOT"; then
   pass "every stale-claim exemption still names a tracked file that still makes a claim"
 else
   fail "a stale-claim exemption has outlived the claim it excuses"
+fi
+
+if check_job_dependencies "$REPO_ROOT"; then
+  pass "every ci-required gate's required commands are provided by the job that runs it"
+else
+  fail "a ci-required gate exits on a missing command before asserting anything"
+fi
+
+if check_workspace_scope "$REPO_ROOT"; then
+  pass "every ci-required gate's workspace scope matches its sibling jobs or declares why not"
+else
+  fail "a ci-required gate runs a wider workspace than any job can build"
+fi
+
+if check_diagnostics_preserved "$REPO_ROOT"; then
+  pass "no ci-required gate discards the output of a command it reports on"
+else
+  fail "a ci-required gate can fail without saying why"
+fi
+
+if check_provider_stub_coverage "$REPO_ROOT"; then
+  pass "every job running a provider-capable gate installs the failing provider stubs"
+else
+  fail "a provider-capable gate runs in a job with no stub backstop"
 fi
 
 echo ""
