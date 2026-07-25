@@ -331,8 +331,14 @@ jobs:
     name: CI environment parity
     runs-on: ubuntu-latest
     steps:
+      # This job runs gates that are declared against other jobs, so it needs
+      # what those gates need. ci-liveness.rb reads history; without it the
+      # comparison still passes — both sides fail identically — but it would be
+      # comparing two degraded runs and proving nothing about the real one.
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y jq ruby ripgrep sqlite3 protobuf-compiler

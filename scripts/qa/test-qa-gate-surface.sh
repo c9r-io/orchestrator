@@ -613,7 +613,11 @@ check_diagnostics_preserved() {
 # ordered interval, and the runner-removal patch is mechanically revertible.
 # None of them had ever been verified in CI, and the failure was invisible
 # because an earlier step in the same job stopped the run before reaching them.
-GIT_HISTORY_PATTERN='git (merge-base|cat-file|rev-list|describe)\b|git (diff|show|log)[^|;&]*(COMMIT|\^)'
+# Matches the shell form `git merge-base …` and the Ruby form
+# `git("merge-base", …)`, because ci-liveness.rb uses the second and the first
+# pattern written here missed it entirely. A gate that reaches history through a
+# helper needs the history just as much as one that types the command out.
+GIT_HISTORY_PATTERN='\bgit\b[^|;&]{0,80}\b(merge-base|cat-file|rev-list|describe)\b|git (diff|show|log)[^|;&]*(COMMIT|\^)'
 check_git_history_available() {
   local root="$1"
   local manifest="$root/$MANIFEST_REL" rc=0 path workflow job depth
