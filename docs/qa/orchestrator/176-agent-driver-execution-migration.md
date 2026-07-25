@@ -271,8 +271,8 @@ Close FR-126 only when every original repository and coordination gate is part o
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Exact per-Agent production inventory | ☐ PENDING | — | — | Reopened audit requires a fresh clean-tree aggregate. |
-| 2 | Three production shell contracts preserve observable behavior | ☐ PENDING | — | — | Reopened audit requires a fresh clean-tree aggregate. |
-| 3 | Streaming mark-done typed Claude matches the recorded contract | ☐ PENDING | — | — | Reopened audit requires a fresh clean-tree aggregate. |
-| 4 | Admission, compatibility, removal, rollback, and documentation boundaries | ☐ PENDING | — | — | Expanded to linked showcase semantics and directory-wide scanning. |
-| 5 | Mandatory aggregate release and guide alignment | ☐ PENDING | — | — | Awaiting clean-tree release certification. |
+| 1 | Exact per-Agent production inventory | ☑ PASS | 2026-07-25 | Codex | Clean-tree governance reproduced 20 fingerprinted typed Agents and zero production command-only/global streaming consumers. |
+| 2 | Three production shell contracts preserve observable behavior | ☑ PASS | 2026-07-25 | Codex | Production parity `11/11`; all three compatibility/typed pairs retained terminal, output, event, and rollback contracts. |
+| 3 | Streaming mark-done typed Claude matches the recorded contract | ☑ PASS | 2026-07-25 | Codex | Fake Claude produced one typed tool use/result, converged in one cycle, and persisted no provider session material. |
+| 4 | Admission, compatibility, removal, rollback, and documentation boundaries | ☑ PASS | 2026-07-25 | Codex | Expanded documentation gate `10/10`: all showcases scanned, EN/ZH links resolved, linked page asserted current typed-driver semantics, and negative fixture failed closed. |
+| 5 | Mandatory aggregate release and guide alignment | ☑ PASS | 2026-07-25 | Codex | Clean-tree aggregate `7/7`; coordination strangler `20/20`, workspace tests, strict Clippy, format, coverage governance, and QA lint passed. |

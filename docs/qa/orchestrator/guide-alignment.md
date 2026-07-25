@@ -104,4 +104,4 @@
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ⏳ | S1–S6 historical PASS; expanded S7 Agent driver + linked showcase semantics awaits clean-tree rerun (`10/10` expected) |
+| 1 | All scenarios verified | ✅ | S1–S6 historical PASS; expanded S7 Agent driver + linked showcase semantics `10/10` and clean-tree guide-aware QA lint PASS on 2026-07-25 |
