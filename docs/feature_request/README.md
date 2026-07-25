@@ -84,6 +84,7 @@
 | FR-132 | QA/DD 文档生命周期治理 | P2 | Proposed |
 | FR-133 | 依赖策略门禁 — 重复版本、许可证与来源约束 | P3 | Proposed |
 | FR-134 | 门禁执行事实校验 — 消除 FR-127 的文本存在性代理 | P1 | Proposed |
+| FR-135 | 边界层覆盖率 job 恢复 — bash 3.2 空数组与产物路径 | P1 | Proposed |
 
 ## 说明
 
@@ -94,6 +95,7 @@
 - `Implemented`: 需求已完成并进入维护阶段
 - 已闭环并删除的 FR，应由对应 `docs/design_doc/**` 与 `docs/qa/**` 继续承载设计和验证信息
 - FR-127 至 FR-133 源自 2026-07-25 的技术负债深挖，共同特征是**治理编写侧严格而执行侧未接线**：门禁、镜像、同步链路、依赖策略均存在"写了但不跑"或"从未被检查"的缺口。FR-127、FR-128 与 FR-129 均已闭环——执行面已打开，既有门禁的维护摩擦已降低，镜像缺口已消除；后续实施顺序为 FR-131 / FR-132 / FR-133（各自的门禁挂到该执行面上）→ FR-130 的剩余部分（唯一的结构性重构，与其余各项无依赖）。FR-076 的需求 1（GUI CI 集成）同源，已在该 FR 内单独提升为 P1
+- FR-135 源自 FR-127/128 接线后的真实 CI 观察：`boundary-coverage` job 在最近全部 6 次运行中失败于 `scripts/coverage-governance.sh:38` 的 `branch_args[@]: unbound variable`——macOS runner 的 bash 3.2 在 `set -u` 下拒绝展开空数组，而 bash 4+ 展开为零参数。姊妹 job `coverage-policy-fixtures` 因 `--fixture-test` 在第 16 行 `exec` 到 node 而永不经过该行，两个 job 调用同一脚本却覆盖不相交路径，前者全绿掩盖了后者自 `1c0b170d`（42 个提交前）起从未执行过覆盖率比对
 - FR-134 源自 FR-127 的闭环后严格审计：对 `scripts/qa/test-qa-gate-surface.sh` 施加变异测试，发现 4 个可复现漏洞，其中 3 个共享同一根因——用文本存在性代替执行事实（注释掉的 `run:` 步骤、注释掉的 `export PATH` 遮蔽、整文件计数而非逐 agent 关联的 bundle 校验），第 4 个是 stale-claim 扫描退回白名单模式而漏掉 83 个被追踪 Markdown。FR-127 的实质交付（执行面 3→12、台账双向完整、发现红了整个 FR 周期的 `test-legacy-coordination-decommission.sh`）不受影响，故不撤销其闭环
 - FR-129 已闭环删除；其镜像策略数据文件、逐镜像根的双向覆盖比对、规范符号链接形状校验、**逐个打开 `<root>/<name>/SKILL.md` 并要求非空常规文件的读取校验**（结构性检查全绿而仅该项失败的 fixture 4a 即为本 FR 缺陷的最小形态）、策略陈旧声明检测、"源树之外不得存在被追踪的 `SKILL.md`"的单一来源规则（删除只是一次性动作，该规则才是持久不变量），以及"检查不得从注册表中消失、亦不得无负向 fixture"的自校验现由 `docs/design_doc/orchestrator/141-skill-mirror-integrity.md`、`docs/qa/orchestrator/179-skill-mirror-integrity.md`、`config/governance/skill-mirrors.json`、`scripts/qa/test-skill-mirror-integrity.sh` 与 `.github/workflows/ci.yml` 的 `governance` job 承载。FR 原文的三处事实偏差（"30 个 skill" 实为 29 个 skill 加非 skill 的 `tools/`、`skills/orchestrator-guide/` 并非 `package-skills.sh` 产出而是无生产者、该副本非"容易漂移"而是已漂移约 32KB）与其遗漏的 `.cursor/skills` 第二镜像已在 DD-141 中留档
 - FR-130 的需求 1（边界冻结）与需求 3（迁移等价证明）已闭环，FR 文档保留并降为剩余的需求 2/4；其边界台账（core 的 52 `pub mod`、924 公开项、**逐文件** 200 处 `rusqlite` 引用、6 个直接依赖 rusqlite 的 crate）、双向精确比对的棘轮、74 条迁移产出的 46 表 + 92 索引 schema 基线，以及幂等性与全部 74 个中断点的续跑等价验证，现由 `docs/design_doc/orchestrator/142-core-boundary-freeze.md`、`docs/qa/orchestrator/180-core-boundary-freeze.md`、`config/governance/core-boundary-ledger.json`、`config/governance/schema-snapshot.sql`、`scripts/lib/rust_source.rb`、`scripts/qa/core-boundary.rb` 与 `scripts/qa/test-core-boundary.sh` 承载。FR 原文的关键偏差是需求 2 的文件清单（14 个文件 11049 行）与其验收标准"core 不再直接依赖 rusqlite"不相容——实际有 37 个文件 200 处引用，其中约 22 个在同一函数内混装 SQL 与领域逻辑；另有"43 个 `too_many_arguments`"实为全工作区总数（core 仅 3 个）、公开项 742 漏计 `pub async fn`（实为 924）、51 张表实为 46 表 + 92 索引，均已在 DD-142 与重写后的 FR 中留档

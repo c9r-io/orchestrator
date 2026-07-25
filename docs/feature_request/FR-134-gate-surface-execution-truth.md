@@ -182,6 +182,36 @@ DD-142 发现了这一点并主动绕开——把共享库放在 `scripts/lib/` 
 
 这是同一模式在本 FR 中的第三个实例：需求 4（stale-claim 白名单）、需求 12（镜像根枚举）、以及此处的非递归 glob——**枚举式覆盖面只守得住已知的形状**。
 
+## 第二次真实 CI 运行：一个被自己验证的机制锁死的门禁
+
+Run `30156418299`（commit `c9044183`）的 `governance` job 失败在一个**新**位置：
+
+```
+Governance ledger regeneration tooling
+  PASS: --emit-inventory reproduces the reviewed inventory byte for byte
+  PASS: --write refuses under CI (exit 2) and leaves the ledger untouched
+  ##[error]Process completed with exit code 2
+```
+
+`scripts/qa/test-governance-ledger-tooling.sh:101` 直接调用 `--write`：
+
+```bash
+ruby "$DIR/$GATE" --emit-inventory --emit-baseline --write >/dev/null 2>&1
+```
+
+而 `--write` 的设计正是在 `CI` 存在时退出 2。脚本带 `set -euo pipefail`，于是整个门禁死在这一行。本地一行复现：
+
+```
+CI=1 bash scripts/qa/test-governance-ledger-tooling.sh   → EXIT=2（停在第 2 个用例后）
+     bash scripts/qa/test-governance-ledger-tooling.sh   → EXIT=0（8/8 全绿）
+```
+
+**该门禁自 FR-128 将其接入 CI 起从未在 CI 中成功过一次。** 它的第 2 个用例专门验证"`--write` 在 CI 下拒绝执行"、验证通过，随后第 3 个用例又去调用 `--write`，被自己刚刚验证过的机制拦下。
+
+这个形态比需求 8 现有表述更具体：不是"门禁碰巧红着没人看"，而是**门禁的正向用例与其自身的安全机制互斥**，且这种互斥只在门禁实际运行的环境里显现。FR-128 的闭环认证是本地跑的 8/8，结构上看不到它。
+
+副作用一并记录：该步骤排在 `Filesystem trigger contracts` 之前，因此它的失败**遮住了缺陷 B（workspace 范围超集）**。缺陷 B 仍然存在，只是当前不可见——这也说明 job 内串行步骤的首个失败会掩盖其后所有诊断。
+
 ## 目标
 
 - 把 `test-qa-gate-surface.sh` 中三处以文本存在性为代理的判定，替换为对执行事实的判定。
@@ -245,6 +275,14 @@ DD-142 发现了这一点并主动绕开——把共享库放在 `scripts/lib/` 
 - 新增检查：`ci-required` 门禁不得处于已知持续失败状态；若确需在修复期内保持红色，必须在台账中显式标注为 `known-failing` 并附 ticket 或 FR 引用与预期修复期限。
 - 该维度的更新方式需可脚本化（例如从 `gh run` 拉取），不得依赖人工誊写——否则它会退化成与被治理对象同类的陈旧声明。
 
+**环境等价性**——存活性不只是"有没有人在看"，还包括门禁能否在其运行环境中通过：
+
+- 修复 `test-governance-ledger-tooling.sh:101` 的自锁：第 3 个用例应在清除 `CI` 的子进程中调用（`env -u CI ruby ...`），或改为断言"非 CI 环境下 no-op `--write` 不改动文件"并显式记录该用例的环境前提。
+- 新增负向 fixture：以 `CI=1` 运行全部 `ci-required` 门禁，任一因环境变量差异而失败即报错。这是唯一能在本地捕获此类缺陷的方式——它们按定义在无 `CI` 的开发机上不可见。
+- 门禁若存在"仅在特定环境下成立"的用例，须在脚本内显式声明该前提并在其他环境下跳过而非失败。
+- 同理适用于 shell 版本：`boundary-coverage` 只跑在 macOS，其失败源于 bash 3.2 与 bash 5 的空数组语义差异（见 FR-135）。"在我机器上绿"与"在该 job 的 runner 上绿"是两个命题。
+- **诊断可见性**：job 内串行步骤的首个失败会掩盖其后全部诊断。本 FR 的缺陷 B 当前就被账本工具的失败遮住。评估是否让 `governance` job 的各步骤独立报告（例如收集失败后统一退出），使一次运行能暴露多个问题。
+
 ### 9. 棘轮扫描的词法安全
 
 修复点是 `scripts/lib/rust_source.rb` 的 `strip_test_modules`——FR-130 已将其抽取为共享库，因此单点修复同时覆盖 `coordination-governance.rb` 与 `core-boundary.rb` 两个台账，而单点遗漏也同时波及两者。
@@ -302,6 +340,9 @@ DD-142 发现了这一点并主动绕开——把共享库放在 `scripts/lib/` 
 - [ ] 无 `ci-required` 门禁以 `>/dev/null 2>&1` 丢弃失败命令输出；负向验证：故意使某条 cargo 命令失败，CI 日志足以定位根因
 - [ ] 台账记录每个 `ci-required` 门禁最近一次真实 CI 结论，且该维度可脚本化更新
 - [ ] 存活性检查对处于持续失败且未标注 `known-failing` 的门禁失败
+- [ ] `CI=1 bash scripts/qa/test-governance-ledger-tooling.sh` 退出 0；修复前该命令退出 2
+- [ ] 存在一条以 `CI=1` 运行全部 `ci-required` 门禁的检查，任一因环境变量差异失败即报错
+- [ ] `governance` job 一次运行能同时暴露账本工具与 workspace 范围两个问题（诊断不再被首个失败掩盖）
 - [ ] 含字符串花括号的 `cfg(test)` fixture 在修复前使棘轮漏计、修复后正确计数
 - [ ] 修复后四项棘轮仍为 `53 / 30 / 9 / 0`；若变化则逐项说明被吃区域
 - [ ] 存在检查断言无"跑到文件末尾仍未闭合"的 `cfg(test)` 块
