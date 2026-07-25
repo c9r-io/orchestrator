@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-060
+---
+
 # Design Doc 77: 减少 QA 场景中的不安全操作
 
 ## 背景

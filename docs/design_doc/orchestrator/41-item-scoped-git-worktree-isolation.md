@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-029
+---
+
 # Item-Scoped Git Worktree Isolation
 
 ## Summary

@@ -1,3 +1,8 @@
+---
+lifecycle: superseded
+superseded_by: docs/design_doc/orchestrator/138-agent-driver-execution-migration.md
+---
+
 # Orchestrator - Structured Stream-Run Signals in CEL
 
 **Module**: orchestrator

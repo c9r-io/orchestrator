@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-116
+---
+
 # Orchestrator - Agent Driver Abstraction
 
 **Module**: Orchestrator Config / Runner / Scheduler  

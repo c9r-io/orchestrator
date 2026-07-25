@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-025
+---
+
 # Design Doc #37: config_load Module Split and Responsibility Segregation (FR-025)
 
 ## Status

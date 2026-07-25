@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-046
+---
+
 # Design Doc 58: Agent Subprocess Daemon PID Guard
 
 ## 背景

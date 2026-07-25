@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-040
+---
+
 # Design Doc 52: Prehook Self-Referential Safe Filter
 
 **FR**: FR-040

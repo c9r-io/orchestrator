@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-049
+---
+
 # QA-103: Prehook CEL Pipeline Variables
 
 ## 关联

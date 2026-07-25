@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-047
+---
+
 # Design Doc 59: Core Crate Split Phase 1 — orchestrator-config Extraction
 
 ## Context

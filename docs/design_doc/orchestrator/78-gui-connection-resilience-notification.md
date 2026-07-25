@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-068
+---
+
 # DD-078: GUI 连接韧性与系统通知
 
 ## 概述

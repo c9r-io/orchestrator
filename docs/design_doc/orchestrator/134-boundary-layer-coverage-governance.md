@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-122
+---
+
 # Orchestrator - Boundary Layer Coverage Governance
 
 **Module**: Orchestrator

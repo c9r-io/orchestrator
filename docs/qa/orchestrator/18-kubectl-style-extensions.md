@@ -1,4 +1,5 @@
 ---
+lifecycle: active
 self_referential_safe: true
 ---
 

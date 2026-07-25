@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-056
+---
+
 # QA-110 — Agent Health Policy 可配置化
 
 | 字段 | 值 |

@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-088
+---
+
 # Design Doc: QA Doctor Observability CLI
 
 ## Summary

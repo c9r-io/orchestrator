@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-066
+---
+
 # DD-076: GUI 实时状态推送与许愿池数据隔离
 
 ## 概述

@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-027
+---
+
 # Design Doc #39: Worker Notify Wakeup Governance (FR-027)
 
 ## Status

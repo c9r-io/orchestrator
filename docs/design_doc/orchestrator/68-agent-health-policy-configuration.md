@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-056
+---
+
 # DD-068 — Agent Health Policy 可配置化
 
 | 字段 | 值 |

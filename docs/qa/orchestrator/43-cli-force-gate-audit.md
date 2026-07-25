@@ -1,6 +1,8 @@
 ---
+lifecycle: active
 self_referential_safe: true
 ---
+
 # Orchestrator - CLI Force Gate Audit
 
 **Module**: orchestrator

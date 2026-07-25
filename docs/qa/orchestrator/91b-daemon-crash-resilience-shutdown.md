@@ -1,6 +1,8 @@
 ---
+lifecycle: active
 self_referential_safe: true
 ---
+
 # QA: Daemon Crash Resilience — Graceful Shutdown & Regression (FR-032)
 
 **Split from**: `docs/qa/orchestrator/91-daemon-crash-resilience.md`

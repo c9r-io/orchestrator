@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-073
+---
+
 # Design Doc 83: Documentation Site & Landing Page
 
 ## FR Reference

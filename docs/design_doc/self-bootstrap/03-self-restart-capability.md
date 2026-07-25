@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Self-Bootstrap - Self-Restart Capability
 
 **Module**: self-bootstrap

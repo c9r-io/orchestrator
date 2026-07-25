@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-089
+---
+
 # DD-095: SecretStore Key Emergency Recovery
 
 ## Context

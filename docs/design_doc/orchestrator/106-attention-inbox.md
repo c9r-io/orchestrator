@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-096
+---
+
 # Orchestrator - Attention Inbox
 
 **Module**: Orchestrator  

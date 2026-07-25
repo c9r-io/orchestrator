@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-041
+---
+
 # Design Doc 53: Self-Restart Socket Continuity
 
 **FR**: FR-041

@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-116
+---
+
 # Orchestrator Runner - Codex Session Resume Conformance
 
 **Module**: Orchestrator Runner / Agent Driver

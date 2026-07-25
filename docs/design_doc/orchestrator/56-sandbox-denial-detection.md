@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-044
+---
+
 # Design Doc 56: Sandbox denial detection & self_test empty-change guard (FR-044)
 
 ## Overview

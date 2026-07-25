@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Orchestrator - Workflow Primitives (WP02 / WP03 / WP04)
 
 **Module**: orchestrator

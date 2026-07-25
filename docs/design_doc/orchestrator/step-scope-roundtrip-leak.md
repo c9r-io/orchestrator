@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-094
+---
+
 # Design: Custom Step ID Scope Round-Trip Leak Fix (FR-094)
 
 ## Problem

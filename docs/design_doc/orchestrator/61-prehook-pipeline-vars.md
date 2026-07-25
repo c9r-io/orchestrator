@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-049
+---
+
 # Design Doc 61: Prehook CEL Pipeline Variables (FR-049)
 
 ## Overview

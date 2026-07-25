@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-028
+---
+
 # Design Doc #40: Benchmark Score Capture (FR-028)
 
 ## Status

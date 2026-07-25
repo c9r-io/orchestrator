@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-053
+---
+
 # Design Doc 65: Parallel Dispatch Completeness Guard (FR-053)
 
 **关联 FR**: FR-053

@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Streaming Runner Pivot — Overview
 
 **Module**: orchestrator

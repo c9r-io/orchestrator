@@ -1,4 +1,6 @@
 ---
+lifecycle: active
+related_fr: FR-045
 self_referential_safe: false
 self_referential_safe_scenarios: [S5]
 ---

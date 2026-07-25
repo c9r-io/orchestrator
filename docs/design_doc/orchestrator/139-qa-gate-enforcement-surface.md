@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-127
+---
+
 # DD-139: QA Gate Enforcement Surface
 
 **Status**: Implemented (FR-127)

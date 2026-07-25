@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-067
+---
+
 # DD-077: GUI CLI 功能对齐 — RPC 覆盖补全
 
 ## 概述

@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-102
+---
+
 # Orchestrator - Agent Session Control Plane Hardening
 
 **Module**: Orchestrator  

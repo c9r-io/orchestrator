@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-070
+---
+
 # QA 122: evo_apply_winner 可观测性增强
 
 > **FR-125 supersession**: item-select and diff observability remain current,

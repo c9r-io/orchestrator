@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-110
+---
+
 # Orchestrator - Slack Permalink And Canonical Task Routing
 
 **Module**: Orchestrator  

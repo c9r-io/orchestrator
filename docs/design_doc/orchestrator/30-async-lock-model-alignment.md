@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-016
+---
+
 # Async Lock Model Alignment
 
 **Related FR**: `FR-016`  

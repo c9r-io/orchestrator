@@ -1,6 +1,8 @@
 ---
+lifecycle: active
 self_referential_safe: true
 ---
+
 # Orchestrator - Daemon Crash Resilience And Worker Survival
 
 **Module**: orchestrator

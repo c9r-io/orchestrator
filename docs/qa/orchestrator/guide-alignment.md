@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-018
+---
+
 # 用户指南编译验证对齐
 
 **Scope**: 验证 FR-018 guide-alignment skill 的文档对齐能力，确认 `docs/guide/` EN/ZH 文档与 CLI `--help` 实际输出一致。

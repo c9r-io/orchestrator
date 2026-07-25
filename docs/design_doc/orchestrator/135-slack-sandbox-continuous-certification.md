@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-123
+---
+
 # Orchestrator - Slack Sandbox Continuous Certification
 
 **Module**: Orchestrator / Slack Integration Gateway

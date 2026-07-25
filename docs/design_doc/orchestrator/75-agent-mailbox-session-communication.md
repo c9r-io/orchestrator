@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-065
+---
+
 # Design Doc 75: Agent 间通信接口草案 — Mailbox + Session Control Plane
 
 > 来源：FR-065 | 状态：接口草案（实施前须再次与用户对齐）

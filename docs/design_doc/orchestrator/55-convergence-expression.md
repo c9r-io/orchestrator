@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-043
+---
+
 # Design Doc 55: loop_guard convergence expression (FR-043)
 
 ## Overview

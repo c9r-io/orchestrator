@@ -1,4 +1,6 @@
 ---
+lifecycle: active
+related_fr: FR-027
 self_referential_safe: true
 ---
 

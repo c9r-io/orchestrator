@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-038
+---
+
 # Design Doc 50: Daemon Restart In-Flight Step Completion Race Condition
 
 **关联 FR**: FR-038

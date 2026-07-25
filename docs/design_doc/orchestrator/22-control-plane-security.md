@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-010
+---
+
 # Orchestrator - Control Plane Security
 
 **Module**: orchestrator

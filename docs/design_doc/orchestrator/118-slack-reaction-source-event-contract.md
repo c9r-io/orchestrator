@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-107
+---
+
 # Orchestrator - Slack Reaction Source Event Contract
 
 **Module**: Orchestrator

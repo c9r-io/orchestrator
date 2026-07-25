@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-019
+---
+
 # libc 跨平台编译修复
 
 **Related FR**: `FR-019`

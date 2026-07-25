@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-054
+---
+
 # Design Doc 66: Incremental Item Progress (FR-054)
 
 ## Problem

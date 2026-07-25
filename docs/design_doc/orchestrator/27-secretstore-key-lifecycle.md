@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-012
+---
+
 # Design Doc 27: SecretStore Key Lifecycle Governance
 
 **FR**: FR-012

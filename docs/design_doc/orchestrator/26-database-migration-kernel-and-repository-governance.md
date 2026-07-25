@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-009
+---
+
 # Orchestrator - Database Migration Kernel and Repository Governance
 
 **Module**: orchestrator

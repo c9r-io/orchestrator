@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-126
+---
+
 # Orchestrator Runner - Agent Driver Execution Migration
 
 **Module**: Orchestrator Runner / Scheduler / Workflow Governance

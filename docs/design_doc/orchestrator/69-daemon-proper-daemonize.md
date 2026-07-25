@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-057
+---
+
 # 69 — orchestratord 真正 Daemon 化
 
 > FR-057 | P1 | 2026-03-16

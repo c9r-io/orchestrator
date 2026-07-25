@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Orchestrator - Scheduler Repository Refactor and Error Observability
 
 **Module**: orchestrator

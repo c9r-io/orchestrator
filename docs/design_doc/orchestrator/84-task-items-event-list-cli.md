@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-078
+---
+
 # Design Doc 84: Task Items & Event List CLI Commands
 
 ## FR Reference

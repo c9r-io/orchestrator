@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-097
+---
+
 # Orchestrator - Handoff And Safe Resume
 
 **Module**: Orchestrator  

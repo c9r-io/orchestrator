@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-020
+---
+
 # Design Doc #32: Automate protoc Dependency (FR-020)
 
 ## Status

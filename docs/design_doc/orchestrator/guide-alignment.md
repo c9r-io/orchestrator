@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-018
+---
+
 # 用户指南编译验证对齐
 
 **Related FR**: `FR-018`

@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-014
+---
+
 # Error Semantics Governance
 
 **Related FR**: `FR-014` (closed; feature request doc removed after implementation)  

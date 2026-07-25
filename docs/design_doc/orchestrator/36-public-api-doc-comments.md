@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-022
+---
+
 # Design Doc: Public API Doc Comments (FR-022)
 
 ## Overview

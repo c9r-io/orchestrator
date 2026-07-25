@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Self-Bootstrap - Build Version Hash
 
 **Module**: self-bootstrap

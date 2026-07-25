@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-118
+---
+
 # Orchestrator-Owned Coordination MCP Tools
 
 **Module**: orchestrator scheduler / runner / agent drivers

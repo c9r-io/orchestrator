@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # QA 109b: Parallel Spawn Stagger Delay — Compatibility (FR-055)
 
 Split from doc 109: unknown-field warning compatibility check.

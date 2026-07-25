@@ -1,6 +1,9 @@
 ---
+lifecycle: active
+related_fr: FR-093
 self_referential_safe: true
 ---
+
 # QA: FR-093 Sandbox Configurable Readable Paths
 
 Verifies that ExecutionProfile supports an `readable_paths` field that grants

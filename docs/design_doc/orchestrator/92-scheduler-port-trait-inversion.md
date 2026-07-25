@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Design Doc 92: Scheduler Port — Trait-Based Inversion for scheduler_service.rs Decomposition
 
 **Module**: orchestrator

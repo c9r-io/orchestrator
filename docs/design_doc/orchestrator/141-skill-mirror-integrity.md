@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-129
+---
+
 # DD-141: Skill Single Source And Mirror Integrity
 
 **Status**: Implemented (FR-129)

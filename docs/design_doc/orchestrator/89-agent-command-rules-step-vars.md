@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-084
+---
+
 # Design Doc 89: Agent Command Rules + Step Vars
 
 ## Origin

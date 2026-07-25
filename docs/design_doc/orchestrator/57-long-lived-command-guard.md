@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-045
+---
+
 # Design Doc 57: Long-Lived Command Guard
 
 ## Problem

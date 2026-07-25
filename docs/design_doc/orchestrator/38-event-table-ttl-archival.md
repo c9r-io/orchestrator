@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-026
+---
+
 # 38 — Event Table TTL & Archival
 
 ## 概述

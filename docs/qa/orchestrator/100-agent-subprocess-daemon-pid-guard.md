@@ -1,6 +1,9 @@
 ---
+lifecycle: active
+related_fr: FR-046
 self_referential_safe: false
 ---
+
 # Agent Subprocess Daemon PID Guard
 
 **Module**: orchestrator

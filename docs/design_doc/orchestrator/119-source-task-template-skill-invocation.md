@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-108
+---
+
 # Orchestrator - Source Task Template And Skill Invocation
 
 **Module**: Orchestrator  

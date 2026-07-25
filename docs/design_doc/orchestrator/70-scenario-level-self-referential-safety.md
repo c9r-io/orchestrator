@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-058
+---
+
 # Design Doc 70: Scenario-Level Self-Referential Safety
 
 **FR**: FR-058

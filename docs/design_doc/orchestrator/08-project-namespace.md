@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Orchestrator - Project Namespace
 
 **Module**: orchestrator

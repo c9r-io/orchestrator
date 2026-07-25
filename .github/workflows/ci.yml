@@ -195,6 +195,9 @@ jobs:
         env:
           PROTOC: /usr/bin/protoc
 
+      - name: Design doc and QA lifecycle metadata
+        run: ./scripts/qa/test-doc-lifecycle.sh
+
       - name: Legacy coordination decommission contracts
         run: ./scripts/qa/test-legacy-coordination-decommission.sh
         env:

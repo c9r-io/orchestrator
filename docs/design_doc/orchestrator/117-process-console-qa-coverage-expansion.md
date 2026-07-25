@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Orchestrator - Process Console QA Coverage Expansion
 
 **Module**: Orchestrator GUI

@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-062
+---
+
 # DD-072: Agent Health 状态可观测性
 
 ## 概述

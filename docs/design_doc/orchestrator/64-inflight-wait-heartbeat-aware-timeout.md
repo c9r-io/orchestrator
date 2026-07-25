@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-052
+---
+
 # Design Doc 64: Heartbeat-Aware Inflight Wait Timeout (FR-052)
 
 **关联 FR**: FR-052

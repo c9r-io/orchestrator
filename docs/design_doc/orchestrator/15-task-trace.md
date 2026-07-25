@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Task Trace - Post-Mortem Diagnostics Command
 
 **Module**: orchestrator

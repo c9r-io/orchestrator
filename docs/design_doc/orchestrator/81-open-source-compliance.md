@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-071
+---
+
 # Design Doc 81: Open-Source Compliance Infrastructure
 
 ## FR Reference

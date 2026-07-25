@@ -1,3 +1,8 @@
+---
+lifecycle: superseded
+superseded_by: docs/design_doc/orchestrator/138-agent-driver-execution-migration.md
+---
+
 # Orchestrator - Streaming Agent Runner Architecture Pivot
 
 **Module**: orchestrator

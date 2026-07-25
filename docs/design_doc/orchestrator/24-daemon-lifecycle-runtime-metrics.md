@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-005
+---
+
 # Orchestrator - Daemon Lifecycle And Runtime Metrics
 
 **Module**: orchestrator

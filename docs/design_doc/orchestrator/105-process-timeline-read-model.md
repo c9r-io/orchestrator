@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-095
+---
+
 # Orchestrator - Process Timeline Read Model
 
 **Module**: Orchestrator  

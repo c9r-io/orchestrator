@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Self-Bootstrap - Self-Referential Safety Policy Alignment
 
 **Module**: self-bootstrap

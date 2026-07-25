@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Orchestrator - 配置验证测试
 
 **Module**: orchestrator

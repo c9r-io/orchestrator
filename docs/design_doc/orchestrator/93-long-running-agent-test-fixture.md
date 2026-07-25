@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Design Doc 93: Long-Running Agent Test Fixture for Inflight Wait Scenarios
 
 **Related**: FR-052 (Heartbeat-Aware Inflight Wait Timeout), QA Doc 106, Design Doc 64

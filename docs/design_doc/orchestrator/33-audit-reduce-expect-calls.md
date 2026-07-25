@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-021
+---
+
 # Design Doc #33: Audit and Reduce expect() Calls (FR-021)
 
 ## Status

@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-071
+---
+
 # QA 123: Open-Source Compliance Infrastructure
 
 ## FR Reference

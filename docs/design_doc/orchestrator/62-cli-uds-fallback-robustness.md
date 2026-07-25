@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-050
+---
+
 # Design Doc 62: CLI UDS 连接回退鲁棒性 (FR-050)
 
 ## Overview

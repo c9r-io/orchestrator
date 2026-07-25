@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-098
+---
+
 # Orchestrator - Agent Session Control Plane
 
 **Module**: orchestrator

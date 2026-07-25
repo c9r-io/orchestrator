@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Parallel Item-Scoped Step Execution
 
 **Module**: orchestrator

@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-034
+---
+
 # Design Doc 44: Self-Referential Daemon PID Guard
 
 **FR**: FR-034

@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-015
+---
+
 # Clone Reduction and Shared Ownership Governance
 
 **Related FR**: `FR-015`  

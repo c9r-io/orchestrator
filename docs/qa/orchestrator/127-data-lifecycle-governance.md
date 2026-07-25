@@ -1,4 +1,6 @@
 ---
+lifecycle: active
+related_fr: FR-079
 self_referential_safe: false
 self_referential_safe_scenarios: [S1, S2, S3, S4, S8]
 ---

@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-114
+---
+
 # Orchestrator - Managed Slack Connection And Shared OAuth
 
 **Module**: Orchestrator / Slack Integration Gateway

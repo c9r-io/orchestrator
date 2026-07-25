@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Structured Logging And Output Separation
 
 **Module**: orchestrator

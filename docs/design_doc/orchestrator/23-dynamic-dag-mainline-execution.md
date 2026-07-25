@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Dynamic DAG Mainline Execution
 
 **Module**: orchestrator  

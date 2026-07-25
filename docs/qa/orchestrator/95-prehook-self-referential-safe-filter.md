@@ -1,6 +1,9 @@
 ---
+lifecycle: active
+related_fr: FR-040
 self_referential_safe: true
 ---
+
 # Prehook Self-Referential Safe Filter
 
 **Module**: orchestrator

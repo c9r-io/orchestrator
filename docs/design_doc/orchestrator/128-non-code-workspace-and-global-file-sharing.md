@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-117
+---
+
 # Orchestrator - Non-Code Workspace And Global File Sharing
 
 **Module**: orchestrator  

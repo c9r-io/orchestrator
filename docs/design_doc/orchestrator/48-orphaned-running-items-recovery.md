@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-033
+---
+
 # Design Doc 48: Daemon 重启后孤立 Running Items 自动恢复 (FR-033)
 
 ## Problem

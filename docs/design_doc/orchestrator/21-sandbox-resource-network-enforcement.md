@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-006
+---
+
 # Orchestrator - Sandbox Resource And Network Enforcement
 
 **Module**: orchestrator

@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-037
+---
+
 # Design Doc 49: Dynamic Items Cycle Overflow — Proactive max_cycles Enforcement
 
 **关联 FR**: FR-037

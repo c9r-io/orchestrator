@@ -1,0 +1,2366 @@
+{
+  "schemaVersion": 1,
+  "scope": "every Markdown file under docs/design_doc and docs/qa, excluding files named README.md and any path containing a component that begins with an underscore",
+  "counts": {
+    "documents": 378,
+    "active": 375,
+    "superseded": 3,
+    "withRelatedFr": 242
+  },
+  "documents": {
+    "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/08-project-namespace.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/09-scheduler-repository-refactor.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/10-structured-output-worker-scheduler.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/100-plugin-sandbox-isolation.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/101-streaming-agent-runner-architecture-pivot.md": {
+      "lifecycle": "superseded",
+      "supersededBy": "docs/design_doc/orchestrator/138-agent-driver-execution-migration.md"
+    },
+    "docs/design_doc/orchestrator/102-stream-json-event-ingestion.md": {
+      "lifecycle": "superseded",
+      "supersededBy": "docs/design_doc/orchestrator/138-agent-driver-execution-migration.md"
+    },
+    "docs/design_doc/orchestrator/103-cel-stream-run-signals.md": {
+      "lifecycle": "superseded",
+      "supersededBy": "docs/design_doc/orchestrator/138-agent-driver-execution-migration.md"
+    },
+    "docs/design_doc/orchestrator/105-process-timeline-read-model.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-095"
+      ]
+    },
+    "docs/design_doc/orchestrator/106-attention-inbox.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-096"
+      ]
+    },
+    "docs/design_doc/orchestrator/107-handoff-and-safe-resume.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-097"
+      ]
+    },
+    "docs/design_doc/orchestrator/108-agent-session-control-plane.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-098"
+      ]
+    },
+    "docs/design_doc/orchestrator/109-source-events-and-slack-binding.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-099"
+      ]
+    },
+    "docs/design_doc/orchestrator/11-performance-io-queue-optimizations.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/110-process-console-information-architecture.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-100"
+      ]
+    },
+    "docs/design_doc/orchestrator/111-control-plane-action-audit-envelope.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-101"
+      ]
+    },
+    "docs/design_doc/orchestrator/112-agent-session-control-plane-hardening.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-102"
+      ]
+    },
+    "docs/design_doc/orchestrator/113-process-console-recovery-notifications-e2e.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-103"
+      ]
+    },
+    "docs/design_doc/orchestrator/114-process-console-operational-metrics.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-104"
+      ]
+    },
+    "docs/design_doc/orchestrator/115-session-runtime-policy-authority.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-105"
+      ]
+    },
+    "docs/design_doc/orchestrator/116-process-console-release-acceptance.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-106"
+      ]
+    },
+    "docs/design_doc/orchestrator/117-process-console-qa-coverage-expansion.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/118-slack-reaction-source-event-contract.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-107"
+      ]
+    },
+    "docs/design_doc/orchestrator/119-source-task-template-skill-invocation.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-108"
+      ]
+    },
+    "docs/design_doc/orchestrator/12-degenerate-cycle-loop-guard.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-035"
+      ]
+    },
+    "docs/design_doc/orchestrator/12-step-scope-segment-execution.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/120-source-task-binding-badge-matching.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-109"
+      ]
+    },
+    "docs/design_doc/orchestrator/121-slack-permalink-canonical-task-routing.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-110"
+      ]
+    },
+    "docs/design_doc/orchestrator/122-source-automation-reliability-operations.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-111"
+      ]
+    },
+    "docs/design_doc/orchestrator/123-process-console-source-automation-ui.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-112"
+      ]
+    },
+    "docs/design_doc/orchestrator/124-slack-reaction-skill-automation-release.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-113"
+      ]
+    },
+    "docs/design_doc/orchestrator/125-managed-slack-connection-shared-oauth.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-114"
+      ]
+    },
+    "docs/design_doc/orchestrator/126-dedicated-slack-app-auto-provisioning.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-115"
+      ]
+    },
+    "docs/design_doc/orchestrator/127-agent-driver-abstraction.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-116"
+      ]
+    },
+    "docs/design_doc/orchestrator/128-non-code-workspace-and-global-file-sharing.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-117"
+      ]
+    },
+    "docs/design_doc/orchestrator/129-codex-session-resume-conformance.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-116"
+      ]
+    },
+    "docs/design_doc/orchestrator/13-unified-step-execution-model.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-008"
+      ]
+    },
+    "docs/design_doc/orchestrator/130-coordination-collapse-mcp-tools.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-118"
+      ]
+    },
+    "docs/design_doc/orchestrator/131-expert-resources-governed-editing.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-119"
+      ]
+    },
+    "docs/design_doc/orchestrator/132-handoff-dialog-focus-lifecycle.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-120"
+      ]
+    },
+    "docs/design_doc/orchestrator/133-attention-mutation-error-reconciliation.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-121"
+      ]
+    },
+    "docs/design_doc/orchestrator/134-boundary-layer-coverage-governance.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-122"
+      ]
+    },
+    "docs/design_doc/orchestrator/135-slack-sandbox-continuous-certification.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-123"
+      ]
+    },
+    "docs/design_doc/orchestrator/136-coordination-strangler-completion.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-124"
+      ]
+    },
+    "docs/design_doc/orchestrator/137-legacy-coordination-decommission.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-125"
+      ]
+    },
+    "docs/design_doc/orchestrator/138-agent-driver-execution-migration.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-126"
+      ]
+    },
+    "docs/design_doc/orchestrator/139-qa-gate-enforcement-surface.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-127"
+      ]
+    },
+    "docs/design_doc/orchestrator/140-governance-ledger-regeneration.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-128"
+      ]
+    },
+    "docs/design_doc/orchestrator/141-skill-mirror-integrity.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-129"
+      ]
+    },
+    "docs/design_doc/orchestrator/142-core-boundary-freeze.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/143-docs-publishing-integrity.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-131"
+      ]
+    },
+    "docs/design_doc/orchestrator/15-task-trace.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/16-structured-logging.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/17-envstore-secretstore-agent-env.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/18-prompt-delivery-abstraction.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/19-parallel-item-execution.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/20-workflow-primitives-wp02-wp03-wp04.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/21-sandbox-resource-network-enforcement.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-006"
+      ]
+    },
+    "docs/design_doc/orchestrator/22-control-plane-security.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-010"
+      ]
+    },
+    "docs/design_doc/orchestrator/23-dynamic-dag-mainline-execution.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/24-daemon-lifecycle-runtime-metrics.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-005"
+      ]
+    },
+    "docs/design_doc/orchestrator/25-database-persistence-bootstrap-repositories.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-009"
+      ]
+    },
+    "docs/design_doc/orchestrator/26-database-migration-kernel-and-repository-governance.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-009"
+      ]
+    },
+    "docs/design_doc/orchestrator/27-grpc-control-plane-protection.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-013"
+      ]
+    },
+    "docs/design_doc/orchestrator/27-secretstore-key-lifecycle.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-012"
+      ]
+    },
+    "docs/design_doc/orchestrator/28-error-semantics-governance.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-014"
+      ]
+    },
+    "docs/design_doc/orchestrator/29-clone-reduction-and-shared-ownership.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-015"
+      ]
+    },
+    "docs/design_doc/orchestrator/30-async-lock-model-alignment.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-016"
+      ]
+    },
+    "docs/design_doc/orchestrator/31-libc-cross-platform-compilation.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-019"
+      ]
+    },
+    "docs/design_doc/orchestrator/32-automate-protoc-dependency.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-020"
+      ]
+    },
+    "docs/design_doc/orchestrator/33-audit-reduce-expect-calls.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-021"
+      ]
+    },
+    "docs/design_doc/orchestrator/34-integration-test-coverage.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-023"
+      ]
+    },
+    "docs/design_doc/orchestrator/35-audit-unsafe-blocks.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-024"
+      ]
+    },
+    "docs/design_doc/orchestrator/36-public-api-doc-comments.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-022"
+      ]
+    },
+    "docs/design_doc/orchestrator/37-config-load-module-split.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-025"
+      ]
+    },
+    "docs/design_doc/orchestrator/38-event-table-ttl-archival.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-026"
+      ]
+    },
+    "docs/design_doc/orchestrator/39-worker-notify-wakeup.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-027"
+      ]
+    },
+    "docs/design_doc/orchestrator/40-benchmark-score-capture.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-028"
+      ]
+    },
+    "docs/design_doc/orchestrator/41-item-scoped-git-worktree-isolation.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-029"
+      ]
+    },
+    "docs/design_doc/orchestrator/42-self-evolution-db-schema-alignment.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-030"
+      ]
+    },
+    "docs/design_doc/orchestrator/43-step-variable-expansion-governance.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/44-self-referential-daemon-pid-guard.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-034"
+      ]
+    },
+    "docs/design_doc/orchestrator/45-plan-output-context-overflow-mitigation.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-036"
+      ]
+    },
+    "docs/design_doc/orchestrator/46-unquoted-json-extraction.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-031"
+      ]
+    },
+    "docs/design_doc/orchestrator/47-daemon-crash-resilience.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-032"
+      ]
+    },
+    "docs/design_doc/orchestrator/48-orphaned-running-items-recovery.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-033"
+      ]
+    },
+    "docs/design_doc/orchestrator/49-dynamic-items-cycle-overflow.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-037"
+      ]
+    },
+    "docs/design_doc/orchestrator/50-inflight-step-completion-race.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-038"
+      ]
+    },
+    "docs/design_doc/orchestrator/51-trigger-resource-cron-event-driven-task-creation.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-039"
+      ]
+    },
+    "docs/design_doc/orchestrator/52-prehook-self-referential-safe-filter.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-040"
+      ]
+    },
+    "docs/design_doc/orchestrator/53-self-restart-socket-continuity.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-041"
+      ]
+    },
+    "docs/design_doc/orchestrator/54-follow-task-logs-callback.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-042"
+      ]
+    },
+    "docs/design_doc/orchestrator/55-convergence-expression.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-043"
+      ]
+    },
+    "docs/design_doc/orchestrator/56-sandbox-denial-detection.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-044"
+      ]
+    },
+    "docs/design_doc/orchestrator/57-long-lived-command-guard.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-045"
+      ]
+    },
+    "docs/design_doc/orchestrator/58-agent-subprocess-daemon-pid-guard.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-046"
+      ]
+    },
+    "docs/design_doc/orchestrator/59-core-crate-split-config.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-047"
+      ]
+    },
+    "docs/design_doc/orchestrator/60-core-crate-split-scheduler.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-048"
+      ]
+    },
+    "docs/design_doc/orchestrator/61-prehook-pipeline-vars.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-049"
+      ]
+    },
+    "docs/design_doc/orchestrator/62-cli-uds-fallback-robustness.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-050"
+      ]
+    },
+    "docs/design_doc/orchestrator/63-workflow-yaml-unknown-field-warning.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-051"
+      ]
+    },
+    "docs/design_doc/orchestrator/64-inflight-wait-heartbeat-aware-timeout.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-052"
+      ]
+    },
+    "docs/design_doc/orchestrator/65-parallel-dispatch-completeness-guard.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-053"
+      ]
+    },
+    "docs/design_doc/orchestrator/66-incremental-item-progress.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-054"
+      ]
+    },
+    "docs/design_doc/orchestrator/67-parallel-spawn-stagger-delay.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-055"
+      ]
+    },
+    "docs/design_doc/orchestrator/68-agent-health-policy-configuration.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-056"
+      ]
+    },
+    "docs/design_doc/orchestrator/69-daemon-proper-daemonize.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-057"
+      ]
+    },
+    "docs/design_doc/orchestrator/70-scenario-level-self-referential-safety.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-058"
+      ]
+    },
+    "docs/design_doc/orchestrator/71-logging-env-var-override.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-061"
+      ]
+    },
+    "docs/design_doc/orchestrator/72-agent-health-state-observability.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-062"
+      ]
+    },
+    "docs/design_doc/orchestrator/73-gui-architecture-tauri-grpc.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-063"
+      ]
+    },
+    "docs/design_doc/orchestrator/74-gui-uiux-wish-pool-progress.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-064"
+      ]
+    },
+    "docs/design_doc/orchestrator/75-agent-mailbox-session-communication.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-065"
+      ]
+    },
+    "docs/design_doc/orchestrator/76-gui-realtime-wish-isolation.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-066"
+      ]
+    },
+    "docs/design_doc/orchestrator/77-gui-cli-rpc-parity.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-067"
+      ]
+    },
+    "docs/design_doc/orchestrator/77-reduce-unsafe-qa-operations.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-060"
+      ]
+    },
+    "docs/design_doc/orchestrator/78-gui-connection-resilience-notification.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-068"
+      ]
+    },
+    "docs/design_doc/orchestrator/79-gui-polish-theme-i18n-responsive.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-069"
+      ]
+    },
+    "docs/design_doc/orchestrator/80-evo-apply-winner-observability.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-070"
+      ]
+    },
+    "docs/design_doc/orchestrator/81-open-source-compliance.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-071"
+      ]
+    },
+    "docs/design_doc/orchestrator/82-homebrew-tap-distribution.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-072"
+      ]
+    },
+    "docs/design_doc/orchestrator/83-documentation-site.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-073"
+      ]
+    },
+    "docs/design_doc/orchestrator/84-task-items-event-list-cli.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-078"
+      ]
+    },
+    "docs/design_doc/orchestrator/85-data-lifecycle-governance.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-079"
+      ]
+    },
+    "docs/design_doc/orchestrator/86-webhook-trigger-infrastructure.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-080"
+      ]
+    },
+    "docs/design_doc/orchestrator/87-per-trigger-webhook-auth.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-081"
+      ]
+    },
+    "docs/design_doc/orchestrator/88-integration-manifest-packages.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-082"
+      ]
+    },
+    "docs/design_doc/orchestrator/89-agent-command-rules-step-vars.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-084"
+      ]
+    },
+    "docs/design_doc/orchestrator/90-workflow-template-library.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-077"
+      ]
+    },
+    "docs/design_doc/orchestrator/91-filesystem-trigger.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-085"
+      ]
+    },
+    "docs/design_doc/orchestrator/92-daemon-config-hot-reload.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/92-scheduler-port-trait-inversion.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/93-long-running-agent-test-fixture.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/94-agent-selection-threshold-verification.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-086"
+      ]
+    },
+    "docs/design_doc/orchestrator/95-secretstore-key-emergency-recovery.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-089"
+      ]
+    },
+    "docs/design_doc/orchestrator/96-crd-plugin-system.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-083"
+      ]
+    },
+    "docs/design_doc/orchestrator/97-agent-health-policy-cli-fixtures.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-087"
+      ]
+    },
+    "docs/design_doc/orchestrator/98-lightweight-step-run.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-090"
+      ]
+    },
+    "docs/design_doc/orchestrator/99-linux-sandbox-filesystem-isolation.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-091"
+      ]
+    },
+    "docs/design_doc/orchestrator/agent-drain-enabled.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-017"
+      ]
+    },
+    "docs/design_doc/orchestrator/configurable-spill-path.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-092"
+      ]
+    },
+    "docs/design_doc/orchestrator/guide-alignment.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-018"
+      ]
+    },
+    "docs/design_doc/orchestrator/qa-doctor-observability.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-088"
+      ]
+    },
+    "docs/design_doc/orchestrator/sandbox-readable-paths.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-093"
+      ]
+    },
+    "docs/design_doc/orchestrator/step-scope-roundtrip-leak.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-094"
+      ]
+    },
+    "docs/design_doc/orchestrator/streaming-runner-pivot-overview.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/self-bootstrap/01-survival-mechanism.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/self-bootstrap/02-binary-snapshot-verification.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/self-bootstrap/03-self-restart-capability.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/self-bootstrap/04-build-version-hash.md": {
+      "lifecycle": "active"
+    },
+    "docs/design_doc/self-bootstrap/05-self-referential-safety-policy-alignment.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/00-command-contract.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/01-cli-agent-orchestration.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/02-cli-task-lifecycle.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/03-cli-edit-export.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/04-cli-config-db.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/05-workflow-execution.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/06-cli-output-formats.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/07-capability-orchestration.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/08-project-namespace.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/09-agent-selection-strategy.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/10-agent-collaboration.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/10-config-error-handling.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/100-agent-command-rules-step-vars.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-084"
+      ]
+    },
+    "docs/qa/orchestrator/100-agent-subprocess-daemon-pid-guard.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-046"
+      ]
+    },
+    "docs/qa/orchestrator/100-configurable-spill-path.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-092"
+      ]
+    },
+    "docs/qa/orchestrator/100b-agent-command-rules-step-vars-advanced.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/100b-configurable-spill-path-regression.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/101-core-crate-split-config.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-047"
+      ]
+    },
+    "docs/qa/orchestrator/101-sandbox-readable-paths.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-093"
+      ]
+    },
+    "docs/qa/orchestrator/101b-sandbox-readable-paths-regression.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/102-core-crate-split-scheduler.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-048"
+      ]
+    },
+    "docs/qa/orchestrator/103-prehook-pipeline-vars.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-049"
+      ]
+    },
+    "docs/qa/orchestrator/104-cli-uds-fallback-robustness.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-050"
+      ]
+    },
+    "docs/qa/orchestrator/105-workflow-yaml-unknown-field-warning.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-051"
+      ]
+    },
+    "docs/qa/orchestrator/106-inflight-wait-heartbeat-aware-timeout.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-052"
+      ]
+    },
+    "docs/qa/orchestrator/107-parallel-dispatch-completeness-guard.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-053"
+      ]
+    },
+    "docs/qa/orchestrator/108-incremental-item-progress.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-054"
+      ]
+    },
+    "docs/qa/orchestrator/109-parallel-spawn-stagger-delay.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-055"
+      ]
+    },
+    "docs/qa/orchestrator/109b-parallel-spawn-stagger-delay-compat.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/11-config-creation-flow.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/110-agent-health-policy-configuration.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-056"
+      ]
+    },
+    "docs/qa/orchestrator/110b-agent-health-policy-advanced.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-086"
+      ]
+    },
+    "docs/qa/orchestrator/111-daemon-proper-daemonize.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-057"
+      ]
+    },
+    "docs/qa/orchestrator/112-scenario-level-self-referential-safety.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-058"
+      ]
+    },
+    "docs/qa/orchestrator/113-logging-env-var-override.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-061"
+      ]
+    },
+    "docs/qa/orchestrator/114-agent-health-state-observability.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-062"
+      ]
+    },
+    "docs/qa/orchestrator/115-agent-mailbox-session-communication.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-065"
+      ]
+    },
+    "docs/qa/orchestrator/116-gui-architecture-tauri-grpc.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-063"
+      ]
+    },
+    "docs/qa/orchestrator/117-gui-uiux-wish-pool-progress.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-064"
+      ]
+    },
+    "docs/qa/orchestrator/118-gui-realtime-wish-isolation.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-066"
+      ]
+    },
+    "docs/qa/orchestrator/119-gui-cli-rpc-parity.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-067"
+      ]
+    },
+    "docs/qa/orchestrator/12-config-validation.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/120-gui-connection-resilience.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-068"
+      ]
+    },
+    "docs/qa/orchestrator/120b-gui-notification-error-humanization.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-068"
+      ]
+    },
+    "docs/qa/orchestrator/121-gui-polish-visual.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-069"
+      ]
+    },
+    "docs/qa/orchestrator/121b-gui-i18n-ux.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-069"
+      ]
+    },
+    "docs/qa/orchestrator/122-evo-apply-winner-observability.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-070"
+      ]
+    },
+    "docs/qa/orchestrator/123-open-source-compliance.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-071"
+      ]
+    },
+    "docs/qa/orchestrator/124-homebrew-tap-distribution.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-072"
+      ]
+    },
+    "docs/qa/orchestrator/125-documentation-site.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-073"
+      ]
+    },
+    "docs/qa/orchestrator/125b-documentation-site-advanced.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/126-task-items-event-list-cli.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-078"
+      ]
+    },
+    "docs/qa/orchestrator/127-data-lifecycle-governance.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-079"
+      ]
+    },
+    "docs/qa/orchestrator/128-webhook-trigger-infrastructure.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-080"
+      ]
+    },
+    "docs/qa/orchestrator/129-per-trigger-webhook-auth-cel-filter.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-081"
+      ]
+    },
+    "docs/qa/orchestrator/129b-per-trigger-webhook-auth-cel-filter-advanced.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/13-dynamic-orchestration.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/130-integration-manifest-packages.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-082"
+      ]
+    },
+    "docs/qa/orchestrator/130b-integration-manifest-packages-advanced.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/131-workflow-template-library.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-077"
+      ]
+    },
+    "docs/qa/orchestrator/131b-workflow-template-library-advanced.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/131c-workflow-template-library-regression.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/132-filesystem-trigger.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-085"
+      ]
+    },
+    "docs/qa/orchestrator/132b-filesystem-trigger-advanced.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/132c-filesystem-trigger-regression.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/133-daemon-config-hot-reload.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/134-qa-doctor-observability.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-088"
+      ]
+    },
+    "docs/qa/orchestrator/135-secretstore-key-emergency-recovery.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-089"
+      ]
+    },
+    "docs/qa/orchestrator/136-crd-plugin-system.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-083"
+      ]
+    },
+    "docs/qa/orchestrator/137-plugin-policy-governance.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/138-lightweight-step-run.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-090"
+      ]
+    },
+    "docs/qa/orchestrator/138b-lightweight-step-run-direct-assembly.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/139-linux-sandbox-filesystem-isolation.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-091"
+      ]
+    },
+    "docs/qa/orchestrator/139b-linux-sandbox-filesystem-isolation-integration.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/14-config-validation-enhanced.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/140-plugin-sandbox-isolation.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/141-step-scope-roundtrip-leak.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-094"
+      ]
+    },
+    "docs/qa/orchestrator/141b-step-scope-directory-scan-diagnostics.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/142-process-timeline-read-model.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-095"
+      ]
+    },
+    "docs/qa/orchestrator/143-attention-inbox.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-096"
+      ]
+    },
+    "docs/qa/orchestrator/144-handoff-and-safe-resume.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-097"
+      ]
+    },
+    "docs/qa/orchestrator/145-agent-session-control-plane.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-098"
+      ]
+    },
+    "docs/qa/orchestrator/146-source-events-and-slack-binding.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-099"
+      ]
+    },
+    "docs/qa/orchestrator/147-process-console-ui.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-100"
+      ]
+    },
+    "docs/qa/orchestrator/148-control-plane-action-audit-envelope.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-101"
+      ]
+    },
+    "docs/qa/orchestrator/149-agent-session-control-plane-hardening.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-102"
+      ]
+    },
+    "docs/qa/orchestrator/15-workflow-multi-target-files.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/150-process-console-recovery-notifications-e2e.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-103"
+      ]
+    },
+    "docs/qa/orchestrator/151-process-console-operational-metrics.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-104"
+      ]
+    },
+    "docs/qa/orchestrator/152-session-runtime-policy-authority.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-105"
+      ]
+    },
+    "docs/qa/orchestrator/153-process-console-release-acceptance.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-106"
+      ]
+    },
+    "docs/qa/orchestrator/154-process-console-functional-ui-regression.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/155-slack-reaction-source-event-contract.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-107"
+      ]
+    },
+    "docs/qa/orchestrator/156-source-task-template-skill-invocation.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-108"
+      ]
+    },
+    "docs/qa/orchestrator/157-source-task-binding-badge-matching.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-109"
+      ]
+    },
+    "docs/qa/orchestrator/158-slack-permalink-canonical-task-routing.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-110"
+      ]
+    },
+    "docs/qa/orchestrator/159-source-automation-reliability-operations.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-111"
+      ]
+    },
+    "docs/qa/orchestrator/16-capability-config-view-fields.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/160-process-console-source-automation-ui.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/161-slack-reaction-skill-automation-release.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-113"
+      ]
+    },
+    "docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-114"
+      ]
+    },
+    "docs/qa/orchestrator/163-dedicated-slack-app-auto-provisioning.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-115"
+      ]
+    },
+    "docs/qa/orchestrator/164-agent-driver-abstraction.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-116"
+      ]
+    },
+    "docs/qa/orchestrator/165-non-code-workspace-and-global-file-sharing.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-117"
+      ]
+    },
+    "docs/qa/orchestrator/166-codex-session-resume-conformance.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/167-global-skill-directory-provenance.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/168-coordination-collapse-mcp-tools.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-118"
+      ]
+    },
+    "docs/qa/orchestrator/169-expert-resources-governed-editing.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-119"
+      ]
+    },
+    "docs/qa/orchestrator/17-dynamic-yaml-integration.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/170-handoff-dialog-focus-lifecycle.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-120"
+      ]
+    },
+    "docs/qa/orchestrator/171-attention-mutation-error-reconciliation.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-121"
+      ]
+    },
+    "docs/qa/orchestrator/172-boundary-layer-coverage-governance.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-122"
+      ]
+    },
+    "docs/qa/orchestrator/173-slack-sandbox-continuous-certification.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-123"
+      ]
+    },
+    "docs/qa/orchestrator/174-coordination-strangler-completion.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-124"
+      ]
+    },
+    "docs/qa/orchestrator/175-legacy-coordination-decommission.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-125"
+      ]
+    },
+    "docs/qa/orchestrator/176-agent-driver-execution-migration.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/177-qa-gate-enforcement-surface.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-127"
+      ]
+    },
+    "docs/qa/orchestrator/178-governance-ledger-regeneration.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-128"
+      ]
+    },
+    "docs/qa/orchestrator/179-skill-mirror-integrity.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-129"
+      ]
+    },
+    "docs/qa/orchestrator/18-kubectl-style-extensions.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/180-core-boundary-freeze.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/181-docs-publishing-integrity.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-131"
+      ]
+    },
+    "docs/qa/orchestrator/19-scheduler-repository-refactor-regression.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/20-structured-output-worker-scheduler.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/21-runner-security-observability.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/22-performance-io-queue-optimizations.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/23-dynamic-plan-step-exec-tty.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/24-exec-interactive-simulation.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/25-session-attach-reattach.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/26-self-bootstrap-workflow.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/27-self-test-step.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/28-self-bootstrap-pipeline.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/29-step-scope-segment-execution.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/30-unified-step-execution-model.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/31-runner-policy-defaults-compatibility.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/32-task-trace.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/33-fatal-agent-error-detection.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/34-config-heal-auditability.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/35-legacy-observability-backfill.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/36-structured-logging.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/37-envstore-secretstore-resources.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/38-agent-env-resolution.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/39-prompt-delivery.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/40-custom-resource-definitions.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/41-project-scoped-agent-selection.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/42-crd-unified-resource-store.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/43-cli-force-gate-audit.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/44-parallel-item-execution.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/45-cli-unsafe-mode.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/46-persistent-store.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/47-task-spawning.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/48-dynamic-items-selection.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/49-invariant-constraints.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/50-engine-wiring-store-invariant-itemselect.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/51-primitive-composition.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/52-engine-wiring-dynamic-items-selection.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/53-client-server-architecture.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/54-step-execution-profiles.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/55-sandbox-write-boundaries.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/56-sandbox-denial-anomaly-trace.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-044"
+      ]
+    },
+    "docs/qa/orchestrator/56-sandbox-resource-network-enforcement.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-006"
+      ]
+    },
+    "docs/qa/orchestrator/57-sandbox-resource-limits-extended.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/58-control-plane-security.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-010"
+      ]
+    },
+    "docs/qa/orchestrator/58b-control-plane-uds-policy.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/59-dynamic-dag-mainline-execution.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/60-daemon-lifecycle-runtime-metrics.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-005"
+      ]
+    },
+    "docs/qa/orchestrator/61-chain-steps-execution.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-008"
+      ]
+    },
+    "docs/qa/orchestrator/62-database-persistence-bootstrap-repositories.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-009"
+      ]
+    },
+    "docs/qa/orchestrator/63-database-migration-kernel-and-repository-governance.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-009"
+      ]
+    },
+    "docs/qa/orchestrator/64-secretstore-key-lifecycle.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-012"
+      ]
+    },
+    "docs/qa/orchestrator/65-grpc-control-plane-protection.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-013"
+      ]
+    },
+    "docs/qa/orchestrator/66-error-semantics-governance.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-014"
+      ]
+    },
+    "docs/qa/orchestrator/67-clone-reduction-and-shared-ownership.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-015"
+      ]
+    },
+    "docs/qa/orchestrator/68-clone-reduction-follow-up.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-015"
+      ]
+    },
+    "docs/qa/orchestrator/69-async-lock-model-alignment.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-016"
+      ]
+    },
+    "docs/qa/orchestrator/70-libc-cross-platform-compilation.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-019"
+      ]
+    },
+    "docs/qa/orchestrator/71-automate-protoc-dependency.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-020"
+      ]
+    },
+    "docs/qa/orchestrator/72-audit-reduce-expect-calls.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-021"
+      ]
+    },
+    "docs/qa/orchestrator/73-integration-test-coverage.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-023"
+      ]
+    },
+    "docs/qa/orchestrator/73b-integration-test-coverage-advanced.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/74-audit-unsafe-blocks.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-024"
+      ]
+    },
+    "docs/qa/orchestrator/75-public-api-doc-comments.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-022"
+      ]
+    },
+    "docs/qa/orchestrator/75b-public-api-doc-comments-legacy.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/76-config-load-module-split.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-025"
+      ]
+    },
+    "docs/qa/orchestrator/77-event-table-ttl-archival.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-026"
+      ]
+    },
+    "docs/qa/orchestrator/78-worker-notify-wakeup.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-027"
+      ]
+    },
+    "docs/qa/orchestrator/79-benchmark-score-capture.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-028"
+      ]
+    },
+    "docs/qa/orchestrator/80-item-scoped-git-worktree-isolation.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-029"
+      ]
+    },
+    "docs/qa/orchestrator/81-self-evolution-db-schema-alignment.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-030"
+      ]
+    },
+    "docs/qa/orchestrator/82-step-variable-expansion-completeness.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/83-generate-items-mixed-text-extraction.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/84-generate-items-regression-narrowing.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/85-daemon-crash-resilience.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/86-orphaned-running-items-recovery.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-033"
+      ]
+    },
+    "docs/qa/orchestrator/87-self-referential-daemon-pid-guard.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-034"
+      ]
+    },
+    "docs/qa/orchestrator/88-degenerate-cycle-loop-guard.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-035"
+      ]
+    },
+    "docs/qa/orchestrator/89-plan-output-context-overflow-mitigation.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-036"
+      ]
+    },
+    "docs/qa/orchestrator/89b-plan-output-spill-regression.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/90-unquoted-json-extraction.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-031"
+      ]
+    },
+    "docs/qa/orchestrator/90b-unquoted-json-extraction-advanced.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/91-daemon-crash-resilience.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-032"
+      ]
+    },
+    "docs/qa/orchestrator/91b-daemon-crash-resilience-shutdown.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/92-dynamic-items-cycle-overflow.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-037"
+      ]
+    },
+    "docs/qa/orchestrator/93-inflight-step-completion-race.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-038"
+      ]
+    },
+    "docs/qa/orchestrator/94-trigger-resource-cron-event-driven.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-039"
+      ]
+    },
+    "docs/qa/orchestrator/94b-trigger-resource-advanced.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/orchestrator/95-prehook-self-referential-safe-filter.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-040"
+      ]
+    },
+    "docs/qa/orchestrator/96-self-restart-socket-continuity.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-041"
+      ]
+    },
+    "docs/qa/orchestrator/97-follow-task-logs-callback.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-042"
+      ]
+    },
+    "docs/qa/orchestrator/98-convergence-expression.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-043"
+      ]
+    },
+    "docs/qa/orchestrator/99-long-lived-command-guard.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-045"
+      ]
+    },
+    "docs/qa/orchestrator/agent-drain-enabled.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-017"
+      ]
+    },
+    "docs/qa/orchestrator/guide-alignment.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-018"
+      ]
+    },
+    "docs/qa/orchestrator/smoke-orchestrator.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/self-bootstrap/01-survival-binary-checkpoint-self-test.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/self-bootstrap/02-survival-enforcement-watchdog.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/self-bootstrap/04-cycle2-validation-and-runtime-timestamps.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/self-bootstrap/05-survival-smoke-binary-snapshot.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/self-bootstrap/06-survival-smoke-binary-snapshot-verification.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/self-bootstrap/07-self-restart-process-continuity.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/self-bootstrap/08-build-version-hash.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/self-bootstrap/09-self-restart-old-new-sha256-audit.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/self-bootstrap/10-self-referential-safety-policy-alignment.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/self-bootstrap/scenario2-binary-rollback.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/self-bootstrap/scenario3-binary-skip-disabled.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/self-bootstrap/scenario4-self-test-pass.md": {
+      "lifecycle": "active"
+    },
+    "docs/qa/self-bootstrap/smoke-self-bootstrap.md": {
+      "lifecycle": "active"
+    }
+  },
+  "byFeatureRequest": {
+    "FR-005": [
+      "docs/design_doc/orchestrator/24-daemon-lifecycle-runtime-metrics.md",
+      "docs/qa/orchestrator/60-daemon-lifecycle-runtime-metrics.md"
+    ],
+    "FR-006": [
+      "docs/design_doc/orchestrator/21-sandbox-resource-network-enforcement.md",
+      "docs/qa/orchestrator/56-sandbox-resource-network-enforcement.md"
+    ],
+    "FR-008": [
+      "docs/design_doc/orchestrator/13-unified-step-execution-model.md",
+      "docs/qa/orchestrator/61-chain-steps-execution.md"
+    ],
+    "FR-009": [
+      "docs/design_doc/orchestrator/25-database-persistence-bootstrap-repositories.md",
+      "docs/design_doc/orchestrator/26-database-migration-kernel-and-repository-governance.md",
+      "docs/qa/orchestrator/62-database-persistence-bootstrap-repositories.md",
+      "docs/qa/orchestrator/63-database-migration-kernel-and-repository-governance.md"
+    ],
+    "FR-010": [
+      "docs/design_doc/orchestrator/22-control-plane-security.md",
+      "docs/qa/orchestrator/58-control-plane-security.md"
+    ],
+    "FR-012": [
+      "docs/design_doc/orchestrator/27-secretstore-key-lifecycle.md",
+      "docs/qa/orchestrator/64-secretstore-key-lifecycle.md"
+    ],
+    "FR-013": [
+      "docs/design_doc/orchestrator/27-grpc-control-plane-protection.md",
+      "docs/qa/orchestrator/65-grpc-control-plane-protection.md"
+    ],
+    "FR-014": [
+      "docs/design_doc/orchestrator/28-error-semantics-governance.md",
+      "docs/qa/orchestrator/66-error-semantics-governance.md"
+    ],
+    "FR-015": [
+      "docs/design_doc/orchestrator/29-clone-reduction-and-shared-ownership.md",
+      "docs/qa/orchestrator/67-clone-reduction-and-shared-ownership.md",
+      "docs/qa/orchestrator/68-clone-reduction-follow-up.md"
+    ],
+    "FR-016": [
+      "docs/design_doc/orchestrator/30-async-lock-model-alignment.md",
+      "docs/qa/orchestrator/69-async-lock-model-alignment.md"
+    ],
+    "FR-017": [
+      "docs/design_doc/orchestrator/agent-drain-enabled.md",
+      "docs/qa/orchestrator/agent-drain-enabled.md"
+    ],
+    "FR-018": [
+      "docs/design_doc/orchestrator/guide-alignment.md",
+      "docs/qa/orchestrator/guide-alignment.md"
+    ],
+    "FR-019": [
+      "docs/design_doc/orchestrator/31-libc-cross-platform-compilation.md",
+      "docs/qa/orchestrator/70-libc-cross-platform-compilation.md"
+    ],
+    "FR-020": [
+      "docs/design_doc/orchestrator/32-automate-protoc-dependency.md",
+      "docs/qa/orchestrator/71-automate-protoc-dependency.md"
+    ],
+    "FR-021": [
+      "docs/design_doc/orchestrator/33-audit-reduce-expect-calls.md",
+      "docs/qa/orchestrator/72-audit-reduce-expect-calls.md"
+    ],
+    "FR-022": [
+      "docs/design_doc/orchestrator/36-public-api-doc-comments.md",
+      "docs/qa/orchestrator/75-public-api-doc-comments.md"
+    ],
+    "FR-023": [
+      "docs/design_doc/orchestrator/34-integration-test-coverage.md",
+      "docs/qa/orchestrator/73-integration-test-coverage.md"
+    ],
+    "FR-024": [
+      "docs/design_doc/orchestrator/35-audit-unsafe-blocks.md",
+      "docs/qa/orchestrator/74-audit-unsafe-blocks.md"
+    ],
+    "FR-025": [
+      "docs/design_doc/orchestrator/37-config-load-module-split.md",
+      "docs/qa/orchestrator/76-config-load-module-split.md"
+    ],
+    "FR-026": [
+      "docs/design_doc/orchestrator/38-event-table-ttl-archival.md",
+      "docs/qa/orchestrator/77-event-table-ttl-archival.md"
+    ],
+    "FR-027": [
+      "docs/design_doc/orchestrator/39-worker-notify-wakeup.md",
+      "docs/qa/orchestrator/78-worker-notify-wakeup.md"
+    ],
+    "FR-028": [
+      "docs/design_doc/orchestrator/40-benchmark-score-capture.md",
+      "docs/qa/orchestrator/79-benchmark-score-capture.md"
+    ],
+    "FR-029": [
+      "docs/design_doc/orchestrator/41-item-scoped-git-worktree-isolation.md",
+      "docs/qa/orchestrator/80-item-scoped-git-worktree-isolation.md"
+    ],
+    "FR-030": [
+      "docs/design_doc/orchestrator/42-self-evolution-db-schema-alignment.md",
+      "docs/qa/orchestrator/81-self-evolution-db-schema-alignment.md"
+    ],
+    "FR-031": [
+      "docs/design_doc/orchestrator/46-unquoted-json-extraction.md",
+      "docs/qa/orchestrator/90-unquoted-json-extraction.md"
+    ],
+    "FR-032": [
+      "docs/design_doc/orchestrator/47-daemon-crash-resilience.md",
+      "docs/qa/orchestrator/91-daemon-crash-resilience.md"
+    ],
+    "FR-033": [
+      "docs/design_doc/orchestrator/48-orphaned-running-items-recovery.md",
+      "docs/qa/orchestrator/86-orphaned-running-items-recovery.md"
+    ],
+    "FR-034": [
+      "docs/design_doc/orchestrator/44-self-referential-daemon-pid-guard.md",
+      "docs/qa/orchestrator/87-self-referential-daemon-pid-guard.md"
+    ],
+    "FR-035": [
+      "docs/design_doc/orchestrator/12-degenerate-cycle-loop-guard.md",
+      "docs/qa/orchestrator/88-degenerate-cycle-loop-guard.md"
+    ],
+    "FR-036": [
+      "docs/design_doc/orchestrator/45-plan-output-context-overflow-mitigation.md",
+      "docs/qa/orchestrator/89-plan-output-context-overflow-mitigation.md"
+    ],
+    "FR-037": [
+      "docs/design_doc/orchestrator/49-dynamic-items-cycle-overflow.md",
+      "docs/qa/orchestrator/92-dynamic-items-cycle-overflow.md"
+    ],
+    "FR-038": [
+      "docs/design_doc/orchestrator/50-inflight-step-completion-race.md",
+      "docs/qa/orchestrator/93-inflight-step-completion-race.md"
+    ],
+    "FR-039": [
+      "docs/design_doc/orchestrator/51-trigger-resource-cron-event-driven-task-creation.md",
+      "docs/qa/orchestrator/94-trigger-resource-cron-event-driven.md"
+    ],
+    "FR-040": [
+      "docs/design_doc/orchestrator/52-prehook-self-referential-safe-filter.md",
+      "docs/qa/orchestrator/95-prehook-self-referential-safe-filter.md"
+    ],
+    "FR-041": [
+      "docs/design_doc/orchestrator/53-self-restart-socket-continuity.md",
+      "docs/qa/orchestrator/96-self-restart-socket-continuity.md"
+    ],
+    "FR-042": [
+      "docs/design_doc/orchestrator/54-follow-task-logs-callback.md",
+      "docs/qa/orchestrator/97-follow-task-logs-callback.md"
+    ],
+    "FR-043": [
+      "docs/design_doc/orchestrator/55-convergence-expression.md",
+      "docs/qa/orchestrator/98-convergence-expression.md"
+    ],
+    "FR-044": [
+      "docs/design_doc/orchestrator/56-sandbox-denial-detection.md",
+      "docs/qa/orchestrator/56-sandbox-denial-anomaly-trace.md"
+    ],
+    "FR-045": [
+      "docs/design_doc/orchestrator/57-long-lived-command-guard.md",
+      "docs/qa/orchestrator/99-long-lived-command-guard.md"
+    ],
+    "FR-046": [
+      "docs/design_doc/orchestrator/58-agent-subprocess-daemon-pid-guard.md",
+      "docs/qa/orchestrator/100-agent-subprocess-daemon-pid-guard.md"
+    ],
+    "FR-047": [
+      "docs/design_doc/orchestrator/59-core-crate-split-config.md",
+      "docs/qa/orchestrator/101-core-crate-split-config.md"
+    ],
+    "FR-048": [
+      "docs/design_doc/orchestrator/60-core-crate-split-scheduler.md",
+      "docs/qa/orchestrator/102-core-crate-split-scheduler.md"
+    ],
+    "FR-049": [
+      "docs/design_doc/orchestrator/61-prehook-pipeline-vars.md",
+      "docs/qa/orchestrator/103-prehook-pipeline-vars.md"
+    ],
+    "FR-050": [
+      "docs/design_doc/orchestrator/62-cli-uds-fallback-robustness.md",
+      "docs/qa/orchestrator/104-cli-uds-fallback-robustness.md"
+    ],
+    "FR-051": [
+      "docs/design_doc/orchestrator/63-workflow-yaml-unknown-field-warning.md",
+      "docs/qa/orchestrator/105-workflow-yaml-unknown-field-warning.md"
+    ],
+    "FR-052": [
+      "docs/design_doc/orchestrator/64-inflight-wait-heartbeat-aware-timeout.md",
+      "docs/qa/orchestrator/106-inflight-wait-heartbeat-aware-timeout.md"
+    ],
+    "FR-053": [
+      "docs/design_doc/orchestrator/65-parallel-dispatch-completeness-guard.md",
+      "docs/qa/orchestrator/107-parallel-dispatch-completeness-guard.md"
+    ],
+    "FR-054": [
+      "docs/design_doc/orchestrator/66-incremental-item-progress.md",
+      "docs/qa/orchestrator/108-incremental-item-progress.md"
+    ],
+    "FR-055": [
+      "docs/design_doc/orchestrator/67-parallel-spawn-stagger-delay.md",
+      "docs/qa/orchestrator/109-parallel-spawn-stagger-delay.md"
+    ],
+    "FR-056": [
+      "docs/design_doc/orchestrator/68-agent-health-policy-configuration.md",
+      "docs/qa/orchestrator/110-agent-health-policy-configuration.md"
+    ],
+    "FR-057": [
+      "docs/design_doc/orchestrator/69-daemon-proper-daemonize.md",
+      "docs/qa/orchestrator/111-daemon-proper-daemonize.md"
+    ],
+    "FR-058": [
+      "docs/design_doc/orchestrator/70-scenario-level-self-referential-safety.md",
+      "docs/qa/orchestrator/112-scenario-level-self-referential-safety.md"
+    ],
+    "FR-060": [
+      "docs/design_doc/orchestrator/77-reduce-unsafe-qa-operations.md"
+    ],
+    "FR-061": [
+      "docs/design_doc/orchestrator/71-logging-env-var-override.md",
+      "docs/qa/orchestrator/113-logging-env-var-override.md"
+    ],
+    "FR-062": [
+      "docs/design_doc/orchestrator/72-agent-health-state-observability.md",
+      "docs/qa/orchestrator/114-agent-health-state-observability.md"
+    ],
+    "FR-063": [
+      "docs/design_doc/orchestrator/73-gui-architecture-tauri-grpc.md",
+      "docs/qa/orchestrator/116-gui-architecture-tauri-grpc.md"
+    ],
+    "FR-064": [
+      "docs/design_doc/orchestrator/74-gui-uiux-wish-pool-progress.md",
+      "docs/qa/orchestrator/117-gui-uiux-wish-pool-progress.md"
+    ],
+    "FR-065": [
+      "docs/design_doc/orchestrator/75-agent-mailbox-session-communication.md",
+      "docs/qa/orchestrator/115-agent-mailbox-session-communication.md"
+    ],
+    "FR-066": [
+      "docs/design_doc/orchestrator/76-gui-realtime-wish-isolation.md",
+      "docs/qa/orchestrator/118-gui-realtime-wish-isolation.md"
+    ],
+    "FR-067": [
+      "docs/design_doc/orchestrator/77-gui-cli-rpc-parity.md",
+      "docs/qa/orchestrator/119-gui-cli-rpc-parity.md"
+    ],
+    "FR-068": [
+      "docs/design_doc/orchestrator/78-gui-connection-resilience-notification.md",
+      "docs/qa/orchestrator/120-gui-connection-resilience.md",
+      "docs/qa/orchestrator/120b-gui-notification-error-humanization.md"
+    ],
+    "FR-069": [
+      "docs/design_doc/orchestrator/79-gui-polish-theme-i18n-responsive.md",
+      "docs/qa/orchestrator/121-gui-polish-visual.md",
+      "docs/qa/orchestrator/121b-gui-i18n-ux.md"
+    ],
+    "FR-070": [
+      "docs/design_doc/orchestrator/80-evo-apply-winner-observability.md",
+      "docs/qa/orchestrator/122-evo-apply-winner-observability.md"
+    ],
+    "FR-071": [
+      "docs/design_doc/orchestrator/81-open-source-compliance.md",
+      "docs/qa/orchestrator/123-open-source-compliance.md"
+    ],
+    "FR-072": [
+      "docs/design_doc/orchestrator/82-homebrew-tap-distribution.md",
+      "docs/qa/orchestrator/124-homebrew-tap-distribution.md"
+    ],
+    "FR-073": [
+      "docs/design_doc/orchestrator/83-documentation-site.md",
+      "docs/qa/orchestrator/125-documentation-site.md"
+    ],
+    "FR-077": [
+      "docs/design_doc/orchestrator/90-workflow-template-library.md",
+      "docs/qa/orchestrator/131-workflow-template-library.md"
+    ],
+    "FR-078": [
+      "docs/design_doc/orchestrator/84-task-items-event-list-cli.md",
+      "docs/qa/orchestrator/126-task-items-event-list-cli.md"
+    ],
+    "FR-079": [
+      "docs/design_doc/orchestrator/85-data-lifecycle-governance.md",
+      "docs/qa/orchestrator/127-data-lifecycle-governance.md"
+    ],
+    "FR-080": [
+      "docs/design_doc/orchestrator/86-webhook-trigger-infrastructure.md",
+      "docs/qa/orchestrator/128-webhook-trigger-infrastructure.md"
+    ],
+    "FR-081": [
+      "docs/design_doc/orchestrator/87-per-trigger-webhook-auth.md",
+      "docs/qa/orchestrator/129-per-trigger-webhook-auth-cel-filter.md"
+    ],
+    "FR-082": [
+      "docs/design_doc/orchestrator/88-integration-manifest-packages.md",
+      "docs/qa/orchestrator/130-integration-manifest-packages.md"
+    ],
+    "FR-083": [
+      "docs/design_doc/orchestrator/96-crd-plugin-system.md",
+      "docs/qa/orchestrator/136-crd-plugin-system.md"
+    ],
+    "FR-084": [
+      "docs/design_doc/orchestrator/89-agent-command-rules-step-vars.md",
+      "docs/qa/orchestrator/100-agent-command-rules-step-vars.md"
+    ],
+    "FR-085": [
+      "docs/design_doc/orchestrator/91-filesystem-trigger.md",
+      "docs/qa/orchestrator/132-filesystem-trigger.md"
+    ],
+    "FR-086": [
+      "docs/design_doc/orchestrator/94-agent-selection-threshold-verification.md",
+      "docs/qa/orchestrator/110b-agent-health-policy-advanced.md"
+    ],
+    "FR-087": [
+      "docs/design_doc/orchestrator/97-agent-health-policy-cli-fixtures.md"
+    ],
+    "FR-088": [
+      "docs/design_doc/orchestrator/qa-doctor-observability.md",
+      "docs/qa/orchestrator/134-qa-doctor-observability.md"
+    ],
+    "FR-089": [
+      "docs/design_doc/orchestrator/95-secretstore-key-emergency-recovery.md",
+      "docs/qa/orchestrator/135-secretstore-key-emergency-recovery.md"
+    ],
+    "FR-090": [
+      "docs/design_doc/orchestrator/98-lightweight-step-run.md",
+      "docs/qa/orchestrator/138-lightweight-step-run.md"
+    ],
+    "FR-091": [
+      "docs/design_doc/orchestrator/99-linux-sandbox-filesystem-isolation.md",
+      "docs/qa/orchestrator/139-linux-sandbox-filesystem-isolation.md"
+    ],
+    "FR-092": [
+      "docs/design_doc/orchestrator/configurable-spill-path.md",
+      "docs/qa/orchestrator/100-configurable-spill-path.md"
+    ],
+    "FR-093": [
+      "docs/design_doc/orchestrator/sandbox-readable-paths.md",
+      "docs/qa/orchestrator/101-sandbox-readable-paths.md"
+    ],
+    "FR-094": [
+      "docs/design_doc/orchestrator/step-scope-roundtrip-leak.md",
+      "docs/qa/orchestrator/141-step-scope-roundtrip-leak.md"
+    ],
+    "FR-095": [
+      "docs/design_doc/orchestrator/105-process-timeline-read-model.md",
+      "docs/qa/orchestrator/142-process-timeline-read-model.md"
+    ],
+    "FR-096": [
+      "docs/design_doc/orchestrator/106-attention-inbox.md",
+      "docs/qa/orchestrator/143-attention-inbox.md"
+    ],
+    "FR-097": [
+      "docs/design_doc/orchestrator/107-handoff-and-safe-resume.md",
+      "docs/qa/orchestrator/144-handoff-and-safe-resume.md"
+    ],
+    "FR-098": [
+      "docs/design_doc/orchestrator/108-agent-session-control-plane.md",
+      "docs/qa/orchestrator/145-agent-session-control-plane.md"
+    ],
+    "FR-099": [
+      "docs/design_doc/orchestrator/109-source-events-and-slack-binding.md",
+      "docs/qa/orchestrator/146-source-events-and-slack-binding.md"
+    ],
+    "FR-100": [
+      "docs/design_doc/orchestrator/110-process-console-information-architecture.md",
+      "docs/qa/orchestrator/147-process-console-ui.md"
+    ],
+    "FR-101": [
+      "docs/design_doc/orchestrator/111-control-plane-action-audit-envelope.md",
+      "docs/qa/orchestrator/148-control-plane-action-audit-envelope.md"
+    ],
+    "FR-102": [
+      "docs/design_doc/orchestrator/112-agent-session-control-plane-hardening.md",
+      "docs/qa/orchestrator/149-agent-session-control-plane-hardening.md"
+    ],
+    "FR-103": [
+      "docs/design_doc/orchestrator/113-process-console-recovery-notifications-e2e.md",
+      "docs/qa/orchestrator/150-process-console-recovery-notifications-e2e.md"
+    ],
+    "FR-104": [
+      "docs/design_doc/orchestrator/114-process-console-operational-metrics.md",
+      "docs/qa/orchestrator/151-process-console-operational-metrics.md"
+    ],
+    "FR-105": [
+      "docs/design_doc/orchestrator/115-session-runtime-policy-authority.md",
+      "docs/qa/orchestrator/152-session-runtime-policy-authority.md"
+    ],
+    "FR-106": [
+      "docs/design_doc/orchestrator/116-process-console-release-acceptance.md",
+      "docs/qa/orchestrator/153-process-console-release-acceptance.md"
+    ],
+    "FR-107": [
+      "docs/design_doc/orchestrator/118-slack-reaction-source-event-contract.md",
+      "docs/qa/orchestrator/155-slack-reaction-source-event-contract.md"
+    ],
+    "FR-108": [
+      "docs/design_doc/orchestrator/119-source-task-template-skill-invocation.md",
+      "docs/qa/orchestrator/156-source-task-template-skill-invocation.md"
+    ],
+    "FR-109": [
+      "docs/design_doc/orchestrator/120-source-task-binding-badge-matching.md",
+      "docs/qa/orchestrator/157-source-task-binding-badge-matching.md"
+    ],
+    "FR-110": [
+      "docs/design_doc/orchestrator/121-slack-permalink-canonical-task-routing.md",
+      "docs/qa/orchestrator/158-slack-permalink-canonical-task-routing.md"
+    ],
+    "FR-111": [
+      "docs/design_doc/orchestrator/122-source-automation-reliability-operations.md",
+      "docs/qa/orchestrator/159-source-automation-reliability-operations.md"
+    ],
+    "FR-112": [
+      "docs/design_doc/orchestrator/123-process-console-source-automation-ui.md"
+    ],
+    "FR-113": [
+      "docs/design_doc/orchestrator/124-slack-reaction-skill-automation-release.md",
+      "docs/qa/orchestrator/161-slack-reaction-skill-automation-release.md"
+    ],
+    "FR-114": [
+      "docs/design_doc/orchestrator/125-managed-slack-connection-shared-oauth.md",
+      "docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md"
+    ],
+    "FR-115": [
+      "docs/design_doc/orchestrator/126-dedicated-slack-app-auto-provisioning.md",
+      "docs/qa/orchestrator/163-dedicated-slack-app-auto-provisioning.md"
+    ],
+    "FR-116": [
+      "docs/design_doc/orchestrator/127-agent-driver-abstraction.md",
+      "docs/design_doc/orchestrator/129-codex-session-resume-conformance.md",
+      "docs/qa/orchestrator/164-agent-driver-abstraction.md"
+    ],
+    "FR-117": [
+      "docs/design_doc/orchestrator/128-non-code-workspace-and-global-file-sharing.md",
+      "docs/qa/orchestrator/165-non-code-workspace-and-global-file-sharing.md"
+    ],
+    "FR-118": [
+      "docs/design_doc/orchestrator/130-coordination-collapse-mcp-tools.md",
+      "docs/qa/orchestrator/168-coordination-collapse-mcp-tools.md"
+    ],
+    "FR-119": [
+      "docs/design_doc/orchestrator/131-expert-resources-governed-editing.md",
+      "docs/qa/orchestrator/169-expert-resources-governed-editing.md"
+    ],
+    "FR-120": [
+      "docs/design_doc/orchestrator/132-handoff-dialog-focus-lifecycle.md",
+      "docs/qa/orchestrator/170-handoff-dialog-focus-lifecycle.md"
+    ],
+    "FR-121": [
+      "docs/design_doc/orchestrator/133-attention-mutation-error-reconciliation.md",
+      "docs/qa/orchestrator/171-attention-mutation-error-reconciliation.md"
+    ],
+    "FR-122": [
+      "docs/design_doc/orchestrator/134-boundary-layer-coverage-governance.md",
+      "docs/qa/orchestrator/172-boundary-layer-coverage-governance.md"
+    ],
+    "FR-123": [
+      "docs/design_doc/orchestrator/135-slack-sandbox-continuous-certification.md",
+      "docs/qa/orchestrator/173-slack-sandbox-continuous-certification.md"
+    ],
+    "FR-124": [
+      "docs/design_doc/orchestrator/136-coordination-strangler-completion.md",
+      "docs/qa/orchestrator/174-coordination-strangler-completion.md"
+    ],
+    "FR-125": [
+      "docs/design_doc/orchestrator/137-legacy-coordination-decommission.md",
+      "docs/qa/orchestrator/175-legacy-coordination-decommission.md"
+    ],
+    "FR-126": [
+      "docs/design_doc/orchestrator/138-agent-driver-execution-migration.md"
+    ],
+    "FR-127": [
+      "docs/design_doc/orchestrator/139-qa-gate-enforcement-surface.md",
+      "docs/qa/orchestrator/177-qa-gate-enforcement-surface.md"
+    ],
+    "FR-128": [
+      "docs/design_doc/orchestrator/140-governance-ledger-regeneration.md",
+      "docs/qa/orchestrator/178-governance-ledger-regeneration.md"
+    ],
+    "FR-129": [
+      "docs/design_doc/orchestrator/141-skill-mirror-integrity.md",
+      "docs/qa/orchestrator/179-skill-mirror-integrity.md"
+    ],
+    "FR-131": [
+      "docs/design_doc/orchestrator/143-docs-publishing-integrity.md",
+      "docs/qa/orchestrator/181-docs-publishing-integrity.md"
+    ]
+  },
+  "supersedes": {
+    "docs/design_doc/orchestrator/138-agent-driver-execution-migration.md": [
+      "docs/design_doc/orchestrator/101-streaming-agent-runner-architecture-pivot.md",
+      "docs/design_doc/orchestrator/102-stream-json-event-ingestion.md",
+      "docs/design_doc/orchestrator/103-cel-stream-run-signals.md"
+    ]
+  }
+}

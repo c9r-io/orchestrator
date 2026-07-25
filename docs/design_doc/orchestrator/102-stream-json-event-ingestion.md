@@ -1,3 +1,8 @@
+---
+lifecycle: superseded
+superseded_by: docs/design_doc/orchestrator/138-agent-driver-execution-migration.md
+---
+
 # Orchestrator - Stream-JSON Event Ingestion
 
 **Module**: orchestrator

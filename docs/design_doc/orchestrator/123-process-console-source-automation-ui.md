@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-112
+---
+
 # Orchestrator - Process Console Source Automation UI
 
 **Module**: Orchestrator

@@ -1,6 +1,9 @@
 ---
+lifecycle: active
+related_fr: FR-033
 self_referential_safe: true
 ---
+
 # Orchestrator - Orphaned Running Items Auto-Recovery
 
 **Module**: orchestrator

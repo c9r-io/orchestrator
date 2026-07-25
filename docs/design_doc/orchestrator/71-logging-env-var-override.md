@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-061
+---
+
 # DD-071: Daemon 日志环境变量覆盖
 
 ## 概述

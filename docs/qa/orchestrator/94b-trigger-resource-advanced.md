@@ -1,4 +1,5 @@
 ---
+lifecycle: active
 self_referential_safe: false
 self_referential_safe_scenarios: [S2]
 ---

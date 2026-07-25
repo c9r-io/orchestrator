@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Orchestrator - Performance IO and Queue Optimization
 
 **Module**: orchestrator

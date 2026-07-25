@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-103
+---
+
 # Orchestrator - Process Console Recovery, Attention Notifications, And Live E2E
 
 **Module**: Orchestrator  

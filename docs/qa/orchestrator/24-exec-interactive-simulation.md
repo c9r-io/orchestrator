@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Orchestrator - Exec Interactive Simulation
 
 **Module**: orchestrator  

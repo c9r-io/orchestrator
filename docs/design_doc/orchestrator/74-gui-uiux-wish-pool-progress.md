@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-064
+---
+
 # DD-074: GUI 交互设计 — 许愿池 + 进度观察 + 专家模式
 
 ## 概述

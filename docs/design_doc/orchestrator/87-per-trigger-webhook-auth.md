@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-081
+---
+
 # Design Doc 87: Per-Trigger Webhook Auth & CEL Payload Filter
 
 ## FR Reference

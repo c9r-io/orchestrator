@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-111
+---
+
 # Orchestrator - Source Automation Reliability And Operations
 
 **Module**: Orchestrator

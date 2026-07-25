@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-080
+---
+
 # Design Doc 86: Webhook Trigger Infrastructure
 
 ## FR Reference

@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-109
+---
+
 # Orchestrator - Source Task Binding And Badge Matching
 
 **Module**: Orchestrator

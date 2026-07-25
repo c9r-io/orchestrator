@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-048
+---
+
 # Design Doc 60: Core Crate Split Phase 2 — orchestrator-scheduler Extraction
 
 ## Context

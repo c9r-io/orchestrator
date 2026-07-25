@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-063
+---
+
 # DD-073: GUI 架构 — Tauri 2.x + gRPC 安全客户端
 
 ## 概述

@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Self-Bootstrap - Survival Mechanism (4-Layer Protection)
 
 **Module**: self-bootstrap

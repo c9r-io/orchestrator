@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # QA: Public API Doc Comments — Legacy Exemption Cleanup (FR-022)
 
 **Split from**: `docs/qa/orchestrator/75-public-api-doc-comments.md`

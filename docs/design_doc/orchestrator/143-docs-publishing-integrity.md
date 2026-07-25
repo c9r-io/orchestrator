@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-131
+---
+
 # DD-143: Documentation Publishing Single Source and Link Integrity
 
 **Status**: Implemented (FR-131)

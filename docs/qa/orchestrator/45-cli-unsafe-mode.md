@@ -1,6 +1,8 @@
 ---
+lifecycle: active
 self_referential_safe: false
 ---
+
 # Orchestrator - CLI Unsafe Mode
 
 **Module**: orchestrator

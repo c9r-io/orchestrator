@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Self-Bootstrap - Binary Snapshot Unit Tests
 
 **Module**: self-bootstrap

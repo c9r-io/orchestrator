@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Orchestrator - Step Variable Expansion Governance
 
 **Module**: orchestrator

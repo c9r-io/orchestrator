@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-128
+---
+
 # DD-140: Governance Ledger Regeneration And Review
 
 **Status**: Implemented (FR-128)

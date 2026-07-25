@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # QA 125b: Documentation Site — Advanced Scenarios
 
 > Split from [125-documentation-site.md](125-documentation-site.md) to enforce the 5-scenario cap.

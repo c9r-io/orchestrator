@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-087
+---
+
 # DD-097: Agent Health Policy CLI 测试夹具
 
 | 字段 | 值 |

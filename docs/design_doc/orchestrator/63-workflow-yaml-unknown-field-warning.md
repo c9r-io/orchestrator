@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-051
+---
+
 # Design Doc 63: Workflow YAML 步骤定义未知字段警告 (FR-051)
 
 ## Overview

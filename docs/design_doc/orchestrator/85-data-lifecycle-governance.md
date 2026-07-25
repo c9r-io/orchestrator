@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-079
+---
+
 # Design Doc 85: Data Lifecycle Governance
 
 ## FR Reference

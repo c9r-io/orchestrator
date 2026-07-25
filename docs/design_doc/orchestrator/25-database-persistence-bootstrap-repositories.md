@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-009
+---
+
 # Orchestrator - Database Persistence Bootstrap and Repository Boundaries
 
 **Module**: orchestrator

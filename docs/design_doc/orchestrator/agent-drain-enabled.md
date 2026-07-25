@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-017
+---
+
 # Agent Drain 与 Enabled 开关
 
 **Related FR**: `FR-017`

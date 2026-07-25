@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Orchestrator - Engine Wiring: Dynamic Items & Item Selection (WP03-WP04 Integration)
 
 **Module**: orchestrator

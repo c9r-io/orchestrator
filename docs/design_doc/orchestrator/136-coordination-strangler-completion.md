@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-124
+---
+
 # Coordination Strangler Completion
 
 **Module**: Orchestrator Scheduler / Workflow Governance  

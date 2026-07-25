@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Orchestrator - Prompt Delivery Abstraction Layer
 
 **Module**: orchestrator

@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-031
+---
+
 # Design Doc 46: generate_items 对 LLM 非标准 JSON 输出的容错解析 (FR-031)
 
 ## Problem

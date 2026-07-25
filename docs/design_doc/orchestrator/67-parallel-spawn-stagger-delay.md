@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-055
+---
+
 # Design Doc 67: Parallel Spawn Stagger Delay (FR-055)
 
 ## Problem

@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-086
+---
+
 # QA-110b — Agent Health Policy 高级场景
 
 Split from doc 110: capability threshold and check output.

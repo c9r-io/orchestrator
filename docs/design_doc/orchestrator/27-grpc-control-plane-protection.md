@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-013
+---
+
 # Orchestrator - gRPC Control Plane Protection
 
 **Module**: orchestrator

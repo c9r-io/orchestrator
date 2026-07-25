@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-077
+---
+
 # Design Doc 90: Workflow Template Library
 
 ## Origin

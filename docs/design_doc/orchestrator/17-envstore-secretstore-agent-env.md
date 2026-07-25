@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Orchestrator - EnvStore/SecretStore Resources and Agent Env Configuration
 
 **Module**: orchestrator

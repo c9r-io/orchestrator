@@ -1,6 +1,9 @@
 ---
+lifecycle: active
+related_fr: FR-041
 self_referential_safe: false
 ---
+
 # Self-Restart Socket Continuity
 
 **Module**: orchestrator

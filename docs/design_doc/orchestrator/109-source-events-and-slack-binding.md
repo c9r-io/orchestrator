@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-099
+---
+
 # Orchestrator - Source Events And Slack Process Binding
 
 **Module**: Orchestrator  

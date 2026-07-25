@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-115
+---
+
 # Orchestrator - Dedicated Slack App Auto Provisioning
 
 **Module**: Orchestrator / Slack Integration Gateway

@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Orchestrator - Dynamic Plan Step Injection and Exec TTY
 
 **Module**: orchestrator  

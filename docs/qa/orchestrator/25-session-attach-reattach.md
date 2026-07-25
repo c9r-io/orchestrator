@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Orchestrator - Real Session Attach/Re-attach
 
 **Module**: orchestrator

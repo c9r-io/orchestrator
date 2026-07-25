@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Orchestrator - Engine Wiring: Store I/O, Invariants, Item Select (WP01-WP04 Integration)
 
 **Module**: orchestrator

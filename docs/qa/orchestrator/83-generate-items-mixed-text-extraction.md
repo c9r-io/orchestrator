@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Orchestrator - generate_items Extraction from Non-Pure-JSON Agent Output
 
 **Module**: orchestrator

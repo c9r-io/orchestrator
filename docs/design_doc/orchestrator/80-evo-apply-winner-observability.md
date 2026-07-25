@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-070
+---
+
 # Design Doc 80: evo_apply_winner 可观测性增强
 
 ## 来源

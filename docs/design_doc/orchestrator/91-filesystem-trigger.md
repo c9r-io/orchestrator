@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-085
+---
+
 # Design Doc 91: Filesystem Trigger
 
 ## Origin

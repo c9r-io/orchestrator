@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-104
+---
+
 # Orchestrator - Process Console Operational Metrics And Local Dashboard
 
 **Module**: Orchestrator  

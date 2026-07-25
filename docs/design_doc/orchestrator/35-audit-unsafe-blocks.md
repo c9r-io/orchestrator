@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-024
+---
+
 # Design Doc: Audit Unsafe Blocks (FR-024)
 
 ## Overview

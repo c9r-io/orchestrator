@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-036
+---
+
 # Design Doc 45: Plan Output Context Overflow Mitigation (FR-036)
 
 ## Problem

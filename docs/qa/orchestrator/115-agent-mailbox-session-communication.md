@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-065
+---
+
 # QA-115: Agent 间通信接口草案 — Mailbox + Session Control Plane
 
 > 验证对象：`docs/design_doc/orchestrator/75-agent-mailbox-session-communication.md`

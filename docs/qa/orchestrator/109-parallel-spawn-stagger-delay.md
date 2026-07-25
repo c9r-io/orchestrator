@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-055
+---
+
 # QA 109: Parallel Spawn Stagger Delay (FR-055)
 
 ## Scenario 1: Default behavior (no stagger)

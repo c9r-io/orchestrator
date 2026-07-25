@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-030
+---
+
 # Design Doc #42: Self-Evolution DB Schema Alignment (FR-030)
 
 ## Status

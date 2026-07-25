@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-119
+---
+
 # Orchestrator GUI - Expert Resources Governed Editing
 
 **Module**: Orchestrator Core / Daemon / GUI

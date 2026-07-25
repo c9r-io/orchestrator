@@ -1,6 +1,9 @@
 ---
+lifecycle: active
+related_fr: FR-092
 self_referential_safe: true
 ---
+
 # QA: FR-092 Configurable Spill Path
 
 Verifies that pipeline variable spill files are written to the workspace-configured `artifacts_dir` instead of `{data_dir}/logs/`.

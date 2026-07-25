@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-039
+---
+
 # Design Doc 51: Trigger Resource — Cron & Event-Driven Task Creation
 
 **关联 FR**: FR-039

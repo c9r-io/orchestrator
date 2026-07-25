@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-054
+---
+
 # QA 108: Incremental Item Progress (FR-054)
 
 ## 概述

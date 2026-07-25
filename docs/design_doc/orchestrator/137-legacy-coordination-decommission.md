@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-125
+---
+
 # Legacy Coordination Decommission
 
 **Module**: Orchestrator Scheduler / Workflow Governance  

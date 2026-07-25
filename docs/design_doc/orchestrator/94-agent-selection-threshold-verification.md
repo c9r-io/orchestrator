@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-086
+---
+
 # DD-094: Agent Selection Threshold Verification
 
 ## 背景

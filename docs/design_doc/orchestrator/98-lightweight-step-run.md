@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-090
+---
+
 # Design Doc: FR-090 Lightweight Step Run
 
 ## Problem

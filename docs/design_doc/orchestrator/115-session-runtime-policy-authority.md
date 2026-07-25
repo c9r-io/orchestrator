@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-105
+---
+
 # Orchestrator - Session RuntimePolicy Authority
 
 **Module**: Orchestrator  

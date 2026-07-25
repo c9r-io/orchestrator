@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-008
+---
+
 # Orchestrator - Unified Step Execution Model
 
 **Module**: orchestrator

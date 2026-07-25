@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-121
+---
+
 # Orchestrator - Attention Mutation Error Reconciliation
 
 **Module**: Orchestrator

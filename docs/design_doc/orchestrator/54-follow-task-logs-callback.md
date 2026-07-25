@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-042
+---
+
 # follow_task_logs Callback Refactor
 
 **Module**: orchestrator

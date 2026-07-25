@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-072
+---
+
 # Design Doc 82: Distribution Channels — Homebrew Tap & Cargo
 
 ## FR Reference

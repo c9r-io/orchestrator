@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Self-Bootstrap - Binary Snapshot Verification Function
 
 **Module**: self-bootstrap

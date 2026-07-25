@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-101
+---
+
 # Orchestrator - Canonical Control-Plane Action Audit Envelope
 
 **Module**: Orchestrator  

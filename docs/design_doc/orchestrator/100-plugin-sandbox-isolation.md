@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Orchestrator - Plugin Sandbox Isolation
 
 **Module**: Orchestrator

@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Orchestrator - CLI Agent Orchestration Testing
 
 **Module**: orchestrator

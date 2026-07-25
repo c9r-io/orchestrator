@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-106
+---
+
 # Orchestrator - Process Console v1 Release Acceptance
 
 **Module**: Orchestrator  

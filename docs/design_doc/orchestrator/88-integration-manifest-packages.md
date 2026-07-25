@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-082
+---
+
 # Design Doc 88: Integration Manifest Packages
 
 ## FR Reference

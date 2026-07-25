@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-069
+---
+
 # Design Doc 079: GUI 体验打磨 — 主题切换 / 动画 / i18n / 响应式 / 构建分发
 
 **FR**: FR-069

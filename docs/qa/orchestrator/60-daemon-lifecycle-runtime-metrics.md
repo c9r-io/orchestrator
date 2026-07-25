@@ -1,6 +1,9 @@
 ---
+lifecycle: active
+related_fr: FR-005
 self_referential_safe: false
 ---
+
 # Orchestrator - Daemon Lifecycle And Runtime Metrics
 
 **Module**: orchestrator

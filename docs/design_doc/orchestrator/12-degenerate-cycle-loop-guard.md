@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-035
+---
+
 # Orchestrator - Degenerate Cycle Detection and Circuit Breaker
 
 **Module**: orchestrator

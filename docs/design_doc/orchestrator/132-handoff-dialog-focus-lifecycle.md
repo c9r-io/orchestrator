@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-120
+---
+
 # Orchestrator GUI - Handoff Dialog Focus Lifecycle
 
 **Module**: Orchestrator GUI  

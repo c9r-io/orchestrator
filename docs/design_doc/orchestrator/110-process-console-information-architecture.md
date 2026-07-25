@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-100
+---
+
 # Orchestrator - Agent Process Console Information Architecture
 
 **Module**: Orchestrator GUI

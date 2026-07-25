@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Orchestrator - Structured Output Mainline and Worker Scheduler
 
 **Module**: orchestrator

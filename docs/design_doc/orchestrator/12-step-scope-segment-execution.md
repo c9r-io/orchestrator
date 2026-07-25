@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Orchestrator - StepScope & Segment-Based Execution
 
 **Module**: orchestrator

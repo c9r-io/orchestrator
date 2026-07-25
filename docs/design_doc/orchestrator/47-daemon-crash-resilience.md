@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-032
+---
+
 # Design Doc 47: Daemon 进程崩溃韧性与 Worker 存活保障 (FR-032)
 
 ## Problem

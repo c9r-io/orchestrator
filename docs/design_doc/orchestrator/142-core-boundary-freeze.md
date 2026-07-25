@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # DD-142: Core Crate Boundary Freeze And Migration Schema Baseline
 
 **Status**: Implemented (FR-130, requirements 1 and 3; requirements 2 and 4 remain open)

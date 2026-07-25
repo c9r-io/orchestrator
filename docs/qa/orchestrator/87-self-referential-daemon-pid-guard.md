@@ -1,6 +1,9 @@
 ---
+lifecycle: active
+related_fr: FR-034
 self_referential_safe: false
 ---
+
 # Self-Referential Daemon PID Guard
 
 **Module**: orchestrator

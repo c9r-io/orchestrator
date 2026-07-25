@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-083
+---
+
 # Design Doc: CRD Plugin System
 
 ## Summary

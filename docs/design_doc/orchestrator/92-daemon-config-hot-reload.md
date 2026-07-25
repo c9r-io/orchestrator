@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Design Doc 92: Daemon Configuration Hot Reload
 
 ## FR Reference

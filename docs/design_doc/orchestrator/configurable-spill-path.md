@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-092
+---
+
 # Design: Pipeline Variable Spill Path Configurable (FR-092)
 
 ## Problem

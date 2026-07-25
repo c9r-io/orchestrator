@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-113
+---
+
 # Orchestrator - Slack Reaction Skill Automation Release
 
 **Module**: Orchestrator  

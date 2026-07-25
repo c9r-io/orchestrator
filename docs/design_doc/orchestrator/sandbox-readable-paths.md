@@ -1,3 +1,8 @@
+---
+lifecycle: active
+related_fr: FR-093
+---
+
 # Design: Sandbox Configurable Readable Paths (FR-093)
 
 ## Problem
