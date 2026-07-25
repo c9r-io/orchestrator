@@ -21,7 +21,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 GATE="scripts/qa/coordination-governance.rb"
 LEDGER="config/governance/coordination-collapse-ledger.json"
-# The gate requires its shared source scanner (FR-130 / DD-141). A case repo is
+# The gate requires its shared source scanner (FR-130 / DD-142). A case repo is
 # built from `git ls-files`, so any working-tree-only dependency has to be named
 # here or the gate under test dies on a missing require before asserting
 # anything.

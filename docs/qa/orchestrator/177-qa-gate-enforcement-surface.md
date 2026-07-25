@@ -41,7 +41,7 @@ Primary entry points:
 ### Expected result
 
 - Step 1 exits 0 and prints `FR-127 gate surface: 5 passed, 0 failed`.
-- Steps 2 and 3 report the same count (46), and step 1's summary line reports `13 of 46 gates are ci-required`. FR-127 closed at 12 of 45; FR-128 added `test-governance-ledger-tooling.sh`. The assertion that matters is that the two counts agree, not the value.
+- Steps 2 and 3 report the same count (49), and step 1's summary line reports `16 of 49 gates are ci-required`. FR-127 closed at 12 of 45; FR-128 added `test-governance-ledger-tooling.sh`, FR-129 the skill mirror gates, and FR-130 `core-boundary.rb` with `test-core-boundary.sh`. The assertion that matters is that the two counts agree, not the value — which is why this document records the value as history rather than as an expectation.
 - A script on disk with no manifest entry, and a manifest entry with no script on disk, both fail. Scenario 2 proves this rather than asserting it.
 
 ## Scenario 2: Each Check Rejects Its Own Defect
@@ -79,7 +79,7 @@ This is the scenario that distinguishes a gate that is enforced from a gate that
 2. `jq -r '.scripts[] | select(.enforcement == "ci-required") | "\(.providerIsolation.mode)\t\(.path)"' config/governance/qa-gate-surface.json`
 3. Confirm fixture 5 of Scenario 2 reports `isolated to check_provider_isolation`.
 4. Create a directory containing executables named `claude` and `codex` that print a diagnostic and `exit 97`, and prepend it to `PATH`.
-5. Run every `ci-required` gate: `test-qa-gate-surface.sh`, `test-coordination-governance.sh`, `test-codex-session-resume.sh`, `test-legacy-coordination-decommission.sh`, `test-filesystem-trigger.sh`, `test-agent-driver-production-parity.sh`, `test-slack-live-certification.sh`, `certify-slack-managed-live.sh status`, `qa-doc-lint.sh`, `test-governance-ledger-tooling.sh`, and `FR126_FAST=1 test-agent-driver-execution-migration.sh`. That is 11 invocations for 13 manifest entries: `coordination-governance.rb` and `test-agent-driver-documentation-alignment.sh` are `ci-required` through their declared `invokedBy` wrappers rather than directly.
+5. Run every `ci-required` gate: `test-qa-gate-surface.sh`, `test-coordination-governance.sh`, `test-codex-session-resume.sh`, `test-legacy-coordination-decommission.sh`, `test-coordination-strangler.sh`, `test-filesystem-trigger.sh`, `test-agent-driver-production-parity.sh`, `test-slack-live-certification.sh`, `certify-slack-managed-live.sh status`, `qa-doc-lint.sh`, `test-governance-ledger-tooling.sh`, `test-skill-mirror-integrity.sh`, `test-core-boundary.sh`, and `FR126_FAST=1 test-agent-driver-execution-migration.sh`. That is 14 invocations for 16 manifest entries: `coordination-governance.rb`, `core-boundary.rb` and `test-agent-driver-documentation-alignment.sh` are `ci-required` through their declared `invokedBy` wrappers rather than directly, and `qa-doc-lint.sh` is the wrapper for the last of those rather than a `scripts/qa` entry itself. Derive the list from the manifest rather than from this paragraph — a later FR adds gates, and a hand-maintained enumeration is the thing that goes stale.
 6. Search every captured log for the stub diagnostic.
 
 ### Expected result
@@ -138,8 +138,8 @@ A run of this document counts as closure evidence only when all of the following
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Every gate is classified, in both directions | ☑ PASS | 2026-07-25 | Claude | Surface gate `5/5`; manifest and disk both report 46 gates, 13 of them `ci-required` (45 and 12 at FR-127 closure, before FR-128 added `test-governance-ledger-tooling.sh`). |
+| 1 | Every gate is classified, in both directions | ☑ PASS | 2026-07-25 | Claude | Surface gate `5/5`; manifest and disk both report 49 gates, 16 of them `ci-required` (45 and 12 at FR-127 closure; FR-128, FR-129 and FR-130 each added gates). |
 | 2 | Each check rejects its own defect | ☑ PASS | 2026-07-25 | Claude | Fixtures `8/8`; every defect was confirmed to fail its target check while the other four still passed on the same tree. Working tree byte-identical afterwards. |
-| 3 | No ci-required gate can reach a real provider | ☑ PASS | 2026-07-25 | Claude | All 10 `ci-required` gates exited 0 behind `exit 97` stubs shadowing `claude` and `codex`, and no log contained the stub diagnostic — none invoked a provider at all. |
+| 3 | No ci-required gate can reach a real provider | ☑ PASS | 2026-07-25 | Claude | The 10 `ci-required` gates at FR-127's closure exited 0 behind `exit 97` stubs shadowing `claude` and `codex`, and no log contained the stub diagnostic. Re-run for the gates added since — `test-governance-ledger-tooling.sh`, `test-skill-mirror-integrity.sh`, `test-core-boundary.sh`, `test-coordination-strangler.sh` — all exit 0 behind the same stubs with zero diagnostic hits. A gate promoted to `ci-required` is not covered by an earlier run of this scenario; it has to be swept when it lands. |
 | 4 | The wired gates actually fail the build | ☑ PASS | 2026-07-25 | Claude | A staged Markdown file carrying a retired phrase made `qa-doc-lint.sh` exit 1 naming the file and line; removing it returned exit 0. An unstaged file does not trip the scan, which enumerates `git ls-files`. |
 | 5 | No document claims enforcement it does not have | ☑ PASS | 2026-07-25 | Claude | Three stale claims corrected. The check found the third (DD-124) itself on its first run, after two had been found by hand. |

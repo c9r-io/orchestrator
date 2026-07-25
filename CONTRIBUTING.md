@@ -103,6 +103,33 @@ not a convention: the mismatch report derives the previous spec from `git show H
 splitting the commit both breaks the diagnosis and leaves the intermediate revision failing the gate.
 See [DD-140](docs/design_doc/orchestrator/140-governance-ledger-regeneration.md).
 
+## Changing The Core Crate Or A Migration
+
+`core` is frozen at its current boundary by `config/governance/core-boundary-ledger.json`: its
+top-level `pub mod` count, its public item count, and every one of its 200 `rusqlite`
+references, per file. Adding a module or a `rusqlite` reference turns the boundary gate red,
+and so does removing one — the comparison is exact in both directions, because a decrease is
+the goal and blessing it is the review that matters.
+
+```bash
+ruby scripts/qa/core-boundary.rb                       # names the file and the count that moved
+ruby scripts/qa/core-boundary.rb --emit-baseline       # print the candidate and read it
+ruby scripts/qa/core-boundary.rb --emit-baseline --write   # apply it locally
+```
+
+Adding a migration changes the schema of 46 tables. The reviewed result lives in
+`config/governance/schema-snapshot.sql`, and the migration chain is tested against it:
+
+```bash
+cargo test -p agent-orchestrator schema_snapshot                        # verify
+UPDATE_SCHEMA_SNAPSHOT=1 cargo test -p agent-orchestrator schema_snapshot   # regenerate
+```
+
+**Commit the regenerated ledger or snapshot in the same commit as the change that caused it.**
+The snapshot diff is the only place a schema change is legible to a reviewer, and an
+intermediate revision that fails the gate is one nobody can bisect through. `--write` refuses
+to run under `CI`. See [DD-142](docs/design_doc/orchestrator/142-core-boundary-freeze.md).
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).

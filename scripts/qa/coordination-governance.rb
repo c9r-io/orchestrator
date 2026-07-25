@@ -9,7 +9,7 @@ require_relative "../lib/rust_source"
 
 # The Rust source scan and the ledger serialisation are shared with
 # scripts/qa/core-boundary.rb. Both ledgers must count the same tree the same
-# way, so the scanner is one file rather than two lookalikes (DD-141).
+# way, so the scanner is one file rather than two lookalikes (DD-142).
 include RustSource
 
 KNOWN_BUILTINS = %w[
