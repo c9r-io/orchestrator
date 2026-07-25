@@ -235,6 +235,11 @@ and the surface grew only by the three files this FR had to write (53 → 56, 20
   correctly in 22 tracked files — ten of them about fencing tokens, delivery cursors and change
   streams, the rest describing this very change — so such a list would be noise on arrival. The
   eight statements FR-134 owed were fixed by hand.
+- **Dependency and history checks are per *declared* job.** `test-ci-environment-parity.sh` runs
+  gates that are declared against `governance`, so nothing verifies that *its* job provides what
+  those gates need — the parity job was given full history by hand for exactly this reason, not
+  because a check demanded it. Modelling "which jobs actually execute which gates, transitively"
+  would need the workflow model to follow invocation through shell, which is where this stopped.
 - **The runner baseline is an enumeration.** It is the one input that cannot be discovered, and it
   is exactly the shape this FR spent its length removing everywhere else. Mitigated by minimality
   and by CI being the proof, not eliminated.
