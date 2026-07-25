@@ -21,13 +21,19 @@ options = {
   ledger: "config/governance/coordination-collapse-ledger.json",
   output: nil,
   require_complete: false,
-  test_fixtures: false
+  test_fixtures: false,
+  emit_inventory: false,
+  emit_baseline: false,
+  write: false
 }
 OptionParser.new do |parser|
   parser.on("--ledger PATH") { |value| options[:ledger] = value }
   parser.on("--output PATH") { |value| options[:output] = value }
   parser.on("--require-complete") { options[:require_complete] = true }
   parser.on("--test-fixtures") { options[:test_fixtures] = true }
+  parser.on("--emit-inventory") { options[:emit_inventory] = true }
+  parser.on("--emit-baseline") { options[:emit_baseline] = true }
+  parser.on("--write") { options[:write] = true }
 end.parse!
 
 repo_root = Pathname.new(File.expand_path("../..", __dir__))
@@ -182,6 +188,109 @@ def agent_manifest_fingerprint(document)
   Digest::SHA256.hexdigest(JSON.generate(canonical_json(governed)))
 end
 
+INVENTORY_FIELDS = %w[
+  file
+  name
+  classification
+  migrationTarget
+  manifestFingerprint
+].freeze
+
+# The single definition of the reviewed production Agent inventory. Both the
+# ledger comparison and --emit-inventory call this, so a regenerated candidate
+# cannot differ in ordering or field selection from what the gate compares.
+def production_agent_inventory(agents)
+  agents
+    .sort_by { |agent| [agent["file"], agent["name"]] }
+    .map { |agent| agent.slice(*INVENTORY_FIELDS) }
+end
+
+# Ruby's JSON.pretty_generate writes an empty array as "[\n\n]". The reviewed
+# ledger uses "[]", so a --write round trip would otherwise move eight lines
+# that no reviewer asked to change.
+def ledger_json(value)
+  JSON.pretty_generate(value)
+    .gsub(/\[\n\s*\n\s*\]/, "[]")
+    .gsub(/\{\n\s*\n\s*\}/, "{}") + "\n"
+end
+
+# The ledger records a fingerprint, never a spec, so the reviewed spec exists
+# nowhere in it and a fingerprint mismatch cannot by itself say what changed.
+# HEAD is the reviewed state precisely because the ledger and the spec it
+# describes must move in one commit (DD-140). That rule is what makes this diff
+# well defined; when it is broken, the report below says so instead of guessing.
+def head_agent_specs(repo_root, file)
+  blob = IO.popen(
+    ["git", "-C", repo_root.to_s, "show", "HEAD:#{file}"],
+    err: File::NULL,
+    &:read
+  )
+  return nil unless $?.success?
+
+  YAML.load_stream(blob).compact.each_with_object({}) do |document, specs|
+    next unless document.is_a?(Hash) && document["kind"] == "Agent"
+    specs[document.dig("metadata", "name")] = document["spec"]
+  end
+rescue Psych::SyntaxError, Errno::ENOENT, SystemCallError
+  nil
+end
+
+def spec_change_description(repo_root, head_cache, file, name, current_spec)
+  head_cache[file] = head_agent_specs(repo_root, file) unless head_cache.key?(file)
+  reviewed = head_cache[file]
+  return "manifestFingerprint changed; the HEAD copy of #{file} is unreadable, " \
+    "so the changed spec keys cannot be derived" if reviewed.nil?
+
+  before = reviewed[name]
+  return "manifestFingerprint changed; #{name} is absent from the HEAD copy of #{file}" if before.nil?
+
+  if before == current_spec
+    return "manifestFingerprint changed but the spec already matches HEAD, so the " \
+      "spec was committed without its ledger update; they must land in one commit"
+  end
+
+  before_keys = before.is_a?(Hash) ? before.keys : []
+  after_keys = current_spec.is_a?(Hash) ? current_spec.keys : []
+  changed = (before_keys | after_keys).sort.reject do |key|
+    (before.is_a?(Hash) ? before[key] : nil) == (current_spec.is_a?(Hash) ? current_spec[key] : nil)
+  end
+  "manifestFingerprint changed in spec key(s): #{changed.join(", ")}"
+end
+
+def inventory_mismatch_report(repo_root, expected, actual, specs)
+  identity = ->(entry) { [entry["file"], entry["name"]] }
+  expected_by = expected.to_h { |entry| [identity.call(entry), entry] }
+  actual_by = actual.to_h { |entry| [identity.call(entry), entry] }
+  head_cache = {}
+  lines = []
+
+  (actual_by.keys - expected_by.keys).sort.each do |file, name|
+    lines << "  + #{file}##{name} exists in the repository and not in the ledger"
+  end
+  (expected_by.keys - actual_by.keys).sort.each do |file, name|
+    lines << "  - #{file}##{name} exists in the ledger and not in the repository"
+  end
+  (expected_by.keys & actual_by.keys).sort.each do |key|
+    before = expected_by[key]
+    after = actual_by[key]
+    next if before == after
+
+    file, name = key
+    changes = %w[classification migrationTarget].map do |field|
+      next if before[field] == after[field]
+      "#{field} #{before[field].inspect} -> #{after[field].inspect}"
+    end.compact
+    if before["manifestFingerprint"] != after["manifestFingerprint"]
+      changes << spec_change_description(repo_root, head_cache, file, name, specs[key])
+    end
+    lines << "  ~ #{file}##{name}: #{changes.join("; ")}"
+  end
+
+  lines << "  regenerate with --emit-inventory, review the diff, and commit the " \
+    "ledger together with the change that caused it"
+  lines
+end
+
 # This ratchet evaluates documents as candidates for reviewed production roots.
 # It is deliberately stricter than daemon Apply: historical command-only Agents
 # remain accepted at runtime ingress, warn, and are persisted as shell/cli.
@@ -215,6 +324,42 @@ def rust_source_files(repo_root)
   files + manifests.select(&:file?)
 end
 
+# The ledger's sourceBaseline.scope excludes inline cfg(test) modules. Matching
+# a single trailing `mod tests { ... }` per file does not implement that: a test
+# module named anything else, or followed by production code, was scanned in
+# full. FR-128 found ten such lines (nine PipelineVariables in the scheduler
+# item_executor tests, one output_json_path in task_repository) inflating the
+# ratchets with test-only usage. Brace-matching every cfg(test) module makes the
+# implementation mean what the scope says.
+def strip_test_modules(source)
+  lines = source.lines
+  excluded = []
+  index = 0
+  while index < lines.length
+    attribute = lines[index].match?(/^\s*#\[cfg\(test\)\]/)
+    declaration = lines[index + 1]
+    if attribute && declaration && declaration.match?(/^\s*(pub(\([^)]*\))?\s+)?mod\s+\w+\s*\{/)
+      depth = 0
+      opened = false
+      cursor = index + 1
+      while cursor < lines.length
+        depth += lines[cursor].count("{") - lines[cursor].count("}")
+        opened ||= lines[cursor].include?("{")
+        break if opened && depth <= 0
+        cursor += 1
+      end
+      excluded << (index..cursor)
+      index = cursor
+    end
+    index += 1
+  end
+  return source if excluded.empty?
+
+  lines.each_with_index.reject do |_, position|
+    excluded.any? { |range| range.cover?(position) }
+  end.map(&:first).join
+end
+
 def source_counts(files)
   counts = {
     "capturesOrJsonPath" => 0,
@@ -224,12 +369,7 @@ def source_counts(files)
   }
   files.each do |path|
     source = File.read(path)
-    if path.extname == ".rs"
-      source = source.sub(
-        /^\s*#\[cfg\(test\)\]\s*\n\s*mod tests\s*\{.*\z/m,
-        ""
-      )
-    end
+    source = strip_test_modules(source) if path.extname == ".rs"
     source.each_line do |line|
       counts["capturesOrJsonPath"] += 1 if line.match?(/captures|json_path/)
       counts["pipelineVariables"] += 1 if line.include?("PipelineVariables")
@@ -300,6 +440,7 @@ end
 
 documents = []
 agents = []
+agent_specs = {}
 runtime_policies = []
 Array(ledger["productionRoots"]).each do |root|
   Dir[repo_root.join(root, "**/*.{yaml,yml}").to_s].sort.each do |path|
@@ -316,6 +457,8 @@ Array(ledger["productionRoots"]).each do |root|
         }
       elsif document["kind"] == "Agent"
         driver_id = explicit_driver_id(document)
+        agent_specs[[relative_path(repo_root, path), document.dig("metadata", "name")]] =
+          document["spec"]
         agents << {
           "file" => relative_path(repo_root, path),
           "name" => document.dig("metadata", "name"),
@@ -338,6 +481,52 @@ Array(ledger["productionRoots"]).each do |root|
   rescue Psych::SyntaxError => error
     errors << "#{relative_path(repo_root, path)} is not valid YAML: #{error.message}"
   end
+end
+
+actual_agents = production_agent_inventory(agents)
+
+if options[:emit_inventory] || options[:emit_baseline]
+  unless errors.empty?
+    warn "refusing to emit a candidate from a repository that does not parse:"
+    errors.each { |error| warn "  - #{error}" }
+    exit 1
+  end
+
+  candidate = {}
+  candidate["productionAgents"] = actual_agents if options[:emit_inventory]
+  if options[:emit_baseline]
+    baseline = (ledger["sourceBaseline"] || {}).dup
+    source_counts(rust_source_files(repo_root)).each { |name, count| baseline[name] = count }
+    candidate["sourceBaseline"] = baseline
+  end
+
+  if options[:write]
+    # A regenerated candidate is a proposal for a human to review in a diff. In
+    # CI there is no human, and an automatic ledger rewrite would turn the
+    # review gate into decoration.
+    if ENV.key?("CI")
+      warn "refusing --write under CI: a regenerated ledger must be reviewed by a human"
+      warn "run the emit modes locally, read the diff, and commit the ledger with the spec change"
+      exit 2
+    end
+    updated = ledger
+    updated["retirement"]["shellRunnerExecutor"]["productionAgents"] = candidate["productionAgents"] if candidate.key?("productionAgents")
+    updated["sourceBaseline"] = candidate["sourceBaseline"] if candidate.key?("sourceBaseline")
+    File.write(ledger_path, ledger_json(updated))
+    warn "wrote #{options[:ledger]}; review the diff and commit it with the change that caused it"
+    exit 0
+  end
+
+  # A single flag emits that section bare so it can be diffed against the
+  # ledger slice directly; both flags emit a keyed object.
+  payload = candidate.length == 1 ? candidate.values.first : candidate
+  puts JSON.pretty_generate(payload)
+  exit 0
+end
+
+if options[:write]
+  warn "--write requires --emit-inventory and/or --emit-baseline"
+  exit 2
 end
 
 ledger_workflows = Array(ledger["workflows"])
@@ -392,10 +581,17 @@ source_counts = source_counts(rust_source_files(repo_root))
 source_baseline = ledger["sourceBaseline"] || {}
 source_counts.each do |name, count|
   baseline = source_baseline[name]
+  # Exact, not monotonic. A count that drops below its baseline leaves the
+  # ledger asserting debt the repository no longer carries, and the gate stays
+  # green while saying something false. FR-128 found capturesOrJsonPath sitting
+  # at 54 against a reviewed 55 for exactly that reason. --emit-baseline is the
+  # recovery, so tightening costs a regeneration rather than an argument.
   if !baseline.is_a?(Integer)
     errors << "source baseline #{name} is missing"
-  elsif count > baseline
-    errors << "source touch #{name} increased from #{baseline} to #{count}"
+  elsif count != baseline
+    direction = count > baseline ? "increased" : "decreased"
+    errors << "source touch #{name} #{direction} from #{baseline} to #{count}; " \
+      "regenerate with --emit-baseline and review the diff"
   end
 end
 
@@ -498,17 +694,11 @@ if expected_driver_counts.is_a?(Hash) && expected_driver_counts != driver_counts
   errors << "production driver counts changed from #{expected_driver_counts.inspect} to #{driver_counts.inspect}"
 end
 expected_agents = retirement.dig("shellRunnerExecutor", "productionAgents")
-actual_agents = agents.sort_by { |agent| [agent["file"], agent["name"]] }.map do |agent|
-  agent.slice(
-    "file",
-    "name",
-    "classification",
-    "migrationTarget",
-    "manifestFingerprint"
-  )
-end
 if expected_agents.is_a?(Array) && expected_agents != actual_agents
   errors << "production Agent execution inventory differs from the reviewed ledger"
+  inventory_mismatch_report(repo_root, expected_agents, actual_agents, agent_specs).each do |line|
+    errors << line
+  end
 end
 expected_direct_commands =
   retirement.dig("shellRunnerExecutor", "productionDirectStepCommandCount")

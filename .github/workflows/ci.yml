@@ -161,6 +161,9 @@ jobs:
       - name: Coordination governance inventory
         run: ./scripts/qa/test-coordination-governance.sh
 
+      - name: Governance ledger regeneration tooling
+        run: ./scripts/qa/test-governance-ledger-tooling.sh
+
       - name: Legacy coordination decommission contracts
         run: ./scripts/qa/test-legacy-coordination-decommission.sh
         env:

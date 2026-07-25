@@ -104,6 +104,14 @@
       "providerIsolation": { "mode": "no-provider" }
     },
     {
+      "path": "scripts/qa/test-governance-ledger-tooling.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": { "mode": "no-provider" },
+      "note": "builds throwaway git repositories from the tracked files so that `git show HEAD:` resolves to the state under test; never writes to the working tree."
+    },
+    {
       "path": "scripts/qa/test-coordination-strangler.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",

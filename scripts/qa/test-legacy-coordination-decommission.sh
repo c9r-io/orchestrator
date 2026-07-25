@@ -38,7 +38,7 @@ jq -e '
   .productionConsumers.celCoordination == [] and
   (.productionConsumers.pipelineVariables | length) == 2 and
   (.executionInventory.legacyCommandOnlyAgents | length) == 0 and
-  .sourceTouches.capturesOrJsonPath <= 55
+  .sourceTouches.capturesOrJsonPath <= 53
 ' "$INVENTORY" >/dev/null
 # The legacy Agent count was 4 when FR-125 froze this ratchet. FR-126 migrated
 # every command-only Agent to an explicit driver and drove it to 0, which
