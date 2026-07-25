@@ -404,19 +404,44 @@ scanned_markdown() {
            <(printf '%s\n' "$exempt")
 }
 
+# Prose only: fenced code blocks are dropped before matching.
+#
+# A claim is something a document asserts. A reproduction command inside a fence
+# is sample text — it shows what an injected defect looks like, and treating it
+# as an assertion makes the gate unable to document its own fixtures. FR-134's
+# text was itself blocked by this while describing the four reproductions, and
+# QA 183 was blocked again while recording them.
+#
+# The alternative was an exemption per document, which would grow by one entry
+# every time someone writes about the gate — the enumeration failure this FR
+# spent its length removing. The markdown link gate already draws exactly this
+# line for exactly this reason, so the two now agree about what a fence means.
+# Prose in the same file is still read: fixtures 7 and 13 append plain sentences
+# and are still caught.
+prose_only_corpus() {
+  local root="$1" path
+  while read -r path; do
+    [[ -z "$path" ]] && continue
+    [[ -f "$root/$path" ]] || continue
+    awk -v file="$path" '
+      /^[ \t]*(```|~~~)/ { fence = !fence; next }
+      !fence { printf "%s:%d:%s\n", file, NR, $0 }
+    ' "$root/$path"
+  done < <(scanned_markdown "$root")
+}
+
 check_no_stale_claims() {
   local root="$1"
   local manifest="$root/$MANIFEST_REL" rc=0 path base hits corpus
-  corpus="$(scanned_markdown "$root")"
+  corpus="$(prose_only_corpus "$root")"
   [[ -z "$corpus" ]] && {
-    echo "    no tracked Markdown found; the scan would pass vacuously" >&2
+    echo "    no tracked Markdown prose found; the scan would pass vacuously" >&2
     return 1
   }
   while read -r path; do
     [[ -z "$path" ]] && continue
     base="$(basename "$path")"
-    hits="$(cd "$root" && printf '%s\n' "$corpus" | tr '\n' '\0' \
-      | xargs -0 rg -n --no-heading -F "$base" 2>/dev/null | rg -P "$CI_CLAIM_PATTERN" || true)"
+    hits="$(printf '%s\n' "$corpus" | grep -F "$base" | rg -P "$CI_CLAIM_PATTERN" || true)"
     if [[ -n "$hits" ]]; then
       echo "    $path is not ci-required but is documented as CI-enforced:" >&2
       printf '      %s\n' "$hits" >&2
@@ -856,6 +881,25 @@ BUNDLE
     >> "$d/README.md"
   (cd "$d" && git add README.md >/dev/null 2>&1 || true)
   expect_fail "fixture 13" "$d" check_no_stale_claims "a claim in README.md is inside the scan, not outside it"
+
+  # 13b. Positive control for the same rule: the identical sentence inside a
+  #      fenced block is a reproduction being described, not a claim being made.
+  #      Without this the gate cannot document its own fixtures, and the FR that
+  #      specified it was itself blocked while writing them down. This is the
+  #      assertion that would fail if someone "fixed" the false positive by
+  #      dropping fence handling instead of adding an exemption.
+  d="$(new_case f13b)"
+  {
+    printf '\nReproduction:\n\n```bash\n'
+    printf 'printf "Enforced by the release gate via test-webhook-trigger.sh." >> README.md\n'
+    printf '```\n'
+  } >> "$d/README.md"
+  (cd "$d" && git add README.md >/dev/null 2>&1 || true)
+  if check_no_stale_claims "$d" >/dev/null 2>&1; then
+    pass "fixture 13b: the same sentence inside a fenced block is described, not claimed"
+  else
+    fail "fixture 13b: a fenced reproduction was read as a claim; the gate cannot document itself"
+  fi
 
   # 14. An exemption for a file that no longer makes any claim. Without this the
   #     exemption list is just the old whitelist wearing a reason.
