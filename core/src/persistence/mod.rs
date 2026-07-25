@@ -18,5 +18,7 @@ pub mod migration_steps;
 pub mod repository;
 /// Persistence bootstrap entrypoints.
 pub mod schema;
+/// Reviewed schema baseline for the registered migration chain (test-only).
+mod schema_snapshot;
 /// SQLite-specific connection helpers.
 pub mod sqlite;

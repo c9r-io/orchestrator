@@ -5,6 +5,12 @@ require "digest"
 require "optparse"
 require "pathname"
 require "yaml"
+require_relative "../lib/rust_source"
+
+# The Rust source scan and the ledger serialisation are shared with
+# scripts/qa/core-boundary.rb. Both ledgers must count the same tree the same
+# way, so the scanner is one file rather than two lookalikes (DD-141).
+include RustSource
 
 KNOWN_BUILTINS = %w[
   init_once
@@ -40,10 +46,6 @@ repo_root = Pathname.new(File.expand_path("../..", __dir__))
 ledger_path = repo_root.join(options[:ledger])
 ledger = JSON.parse(File.read(ledger_path))
 errors = []
-
-def relative_path(root, path)
-  Pathname.new(path).relative_path_from(root).to_s
-end
 
 def workflow_touches(document)
   touches = []
@@ -205,15 +207,6 @@ def production_agent_inventory(agents)
     .map { |agent| agent.slice(*INVENTORY_FIELDS) }
 end
 
-# Ruby's JSON.pretty_generate writes an empty array as "[\n\n]". The reviewed
-# ledger uses "[]", so a --write round trip would otherwise move eight lines
-# that no reviewer asked to change.
-def ledger_json(value)
-  JSON.pretty_generate(value)
-    .gsub(/\[\n\s*\n\s*\]/, "[]")
-    .gsub(/\{\n\s*\n\s*\}/, "{}") + "\n"
-end
-
 # The ledger records a fingerprint, never a spec, so the reviewed spec exists
 # nowhere in it and a fingerprint mismatch cannot by itself say what changed.
 # HEAD is the reviewed state precisely because the ledger and the spec it
@@ -305,61 +298,6 @@ def production_execution_document_accepted?(document)
   end
 end
 
-def rust_source_files(repo_root)
-  roots = [repo_root.join("core/src")]
-  roots.concat(Dir[repo_root.join("crates/*/src").to_s].map { |path| Pathname.new(path) })
-  files = roots.flat_map do |root|
-    Dir[root.join("**/*").to_s].each_with_object([]) do |path, files|
-      pathname = Pathname.new(path)
-      next unless pathname.file?
-      next unless pathname.extname == ".rs"
-      relative = pathname.relative_path_from(repo_root).to_s
-      next if relative.split("/").include?("tests")
-      next if pathname.basename.to_s.match?(/test.*\.rs\z/)
-      files << pathname
-    end
-  end
-  manifests = [repo_root.join("core/Cargo.toml")]
-  manifests.concat(Dir[repo_root.join("crates/*/Cargo.toml").to_s].map { |path| Pathname.new(path) })
-  files + manifests.select(&:file?)
-end
-
-# The ledger's sourceBaseline.scope excludes inline cfg(test) modules. Matching
-# a single trailing `mod tests { ... }` per file does not implement that: a test
-# module named anything else, or followed by production code, was scanned in
-# full. FR-128 found ten such lines (nine PipelineVariables in the scheduler
-# item_executor tests, one output_json_path in task_repository) inflating the
-# ratchets with test-only usage. Brace-matching every cfg(test) module makes the
-# implementation mean what the scope says.
-def strip_test_modules(source)
-  lines = source.lines
-  excluded = []
-  index = 0
-  while index < lines.length
-    attribute = lines[index].match?(/^\s*#\[cfg\(test\)\]/)
-    declaration = lines[index + 1]
-    if attribute && declaration && declaration.match?(/^\s*(pub(\([^)]*\))?\s+)?mod\s+\w+\s*\{/)
-      depth = 0
-      opened = false
-      cursor = index + 1
-      while cursor < lines.length
-        depth += lines[cursor].count("{") - lines[cursor].count("}")
-        opened ||= lines[cursor].include?("{")
-        break if opened && depth <= 0
-        cursor += 1
-      end
-      excluded << (index..cursor)
-      index = cursor
-    end
-    index += 1
-  end
-  return source if excluded.empty?
-
-  lines.each_with_index.reject do |_, position|
-    excluded.any? { |range| range.cover?(position) }
-  end.map(&:first).join
-end
-
 def source_counts(files)
   counts = {
     "capturesOrJsonPath" => 0,
@@ -368,9 +306,7 @@ def source_counts(files)
     "legacyRunnerSelection" => 0
   }
   files.each do |path|
-    source = File.read(path)
-    source = strip_test_modules(source) if path.extname == ".rs"
-    source.each_line do |line|
+    scannable_source(path).each_line do |line|
       counts["capturesOrJsonPath"] += 1 if line.match?(/captures|json_path/)
       counts["pipelineVariables"] += 1 if line.include?("PipelineVariables")
       counts["celInterpreter"] += 1 if line.match?(/cel_interpreter|cel-interpreter/)

@@ -21,6 +21,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 GATE="scripts/qa/coordination-governance.rb"
 LEDGER="config/governance/coordination-collapse-ledger.json"
+# The gate requires its shared source scanner (FR-130 / DD-141). A case repo is
+# built from `git ls-files`, so any working-tree-only dependency has to be named
+# here or the gate under test dies on a missing require before asserting
+# anything.
+GATE_LIB="scripts/lib/rust_source.rb"
 
 for command in ruby jq git; do
   command -v "$command" >/dev/null 2>&1 || {
@@ -52,6 +57,8 @@ new_case() {
   tar -cf - -C "$REPO_ROOT" $(cd "$REPO_ROOT" && git ls-files) | tar -xf - -C "$dir"
   cp "$REPO_ROOT/$LEDGER" "$dir/$LEDGER"
   cp "$REPO_ROOT/$GATE" "$dir/$GATE"
+  mkdir -p "$dir/$(dirname "$GATE_LIB")"
+  cp "$REPO_ROOT/$GATE_LIB" "$dir/$GATE_LIB"
   git -C "$dir" init -q .
   git -C "$dir" add -A
   git -C "$dir" -c user.email=qa@local -c user.name=qa commit -qm "reviewed state"

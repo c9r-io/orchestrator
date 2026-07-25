@@ -170,6 +170,11 @@ jobs:
       - name: Governance ledger regeneration tooling
         run: ./scripts/qa/test-governance-ledger-tooling.sh
 
+      - name: Core crate boundary and schema snapshot
+        run: ./scripts/qa/test-core-boundary.sh
+        env:
+          PROTOC: /usr/bin/protoc
+
       - name: Legacy coordination decommission contracts
         run: ./scripts/qa/test-legacy-coordination-decommission.sh
         env:

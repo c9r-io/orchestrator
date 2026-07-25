@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "scope": "non-test Rust source under core/src, excluding inline cfg(test) modules, files under a tests directory, and files named test*.rs; crate dependents are read from the member Cargo.toml manifests",
+  "coreSurface": {
+    "files": 143,
+    "pubMod": 52,
+    "publicItems": 924
+  },
+  "rusqlite": {
+    "total": 200,
+    "files": {
+      "core/src/action_audit.rs": 9,
+      "core/src/async_database.rs": 17,
+      "core/src/attention.rs": 3,
+      "core/src/config_load/build.rs": 2,
+      "core/src/config_load/persist.rs": 1,
+      "core/src/db.rs": 1,
+      "core/src/db_maintenance.rs": 1,
+      "core/src/db_write.rs": 1,
+      "core/src/error.rs": 2,
+      "core/src/event_cleanup.rs": 5,
+      "core/src/events.rs": 3,
+      "core/src/handoff.rs": 5,
+      "core/src/lib.rs": 1,
+      "core/src/migration.rs": 1,
+      "core/src/persistence/migration.rs": 2,
+      "core/src/persistence/migration_steps.rs": 3,
+      "core/src/persistence/repository/config.rs": 3,
+      "core/src/persistence/repository/scheduler.rs": 3,
+      "core/src/persistence/repository/session.rs": 10,
+      "core/src/persistence/repository/workflow_store.rs": 14,
+      "core/src/persistence/sqlite.rs": 1,
+      "core/src/process_metrics.rs": 3,
+      "core/src/service/bootstrap.rs": 7,
+      "core/src/service/resource/delete.rs": 1,
+      "core/src/session_store.rs": 3,
+      "core/src/source.rs": 5,
+      "core/src/source_automation.rs": 7,
+      "core/src/source_connection.rs": 5,
+      "core/src/task_cleanup.rs": 1,
+      "core/src/task_ops.rs": 4,
+      "core/src/task_repository/items.rs": 2,
+      "core/src/task_repository/mod.rs": 45,
+      "core/src/task_repository/queries.rs": 4,
+      "core/src/task_repository/state.rs": 2,
+      "core/src/task_repository/types.rs": 1,
+      "core/src/task_repository/write_ops.rs": 4,
+      "core/src/trigger_engine.rs": 18
+    }
+  },
+  "rusqliteDependentCrates": [
+    "core",
+    "crates/daemon",
+    "crates/integration-tests",
+    "crates/orchestrator-scheduler",
+    "crates/orchestrator-security",
+    "crates/slack-gateway"
+  ]
+}

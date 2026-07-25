@@ -1,0 +1,290 @@
+#!/usr/bin/env bash
+#
+# FR-130 core boundary freeze — QA gate.
+#
+# Verifies that scripts/qa/core-boundary.rb actually holds the core crate
+# boundary, and that core/src/persistence/schema_snapshot.rs actually holds the
+# migration chain's schema. A gate observed only passing has not been observed
+# doing anything, so every case below is paired with a defect it must reject.
+#
+# Safety: every mutation happens inside a temporary copy under $TMPDIR. The
+# working tree is never written, no daemon is started, no database outside
+# $TMPDIR is touched, and no provider is invoked.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+GATE="scripts/qa/core-boundary.rb"
+GATE_LIB="scripts/lib/rust_source.rb"
+COORD_GATE="scripts/qa/coordination-governance.rb"
+COORD_LEDGER="config/governance/coordination-collapse-ledger.json"
+LEDGER="config/governance/core-boundary-ledger.json"
+SNAPSHOT="config/governance/schema-snapshot.sql"
+
+for command in ruby cargo; do
+  command -v "$command" >/dev/null 2>&1 || {
+    echo "missing required command: $command" >&2
+    exit 1
+  }
+done
+
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/fr130-core-boundary.XXXXXX")"
+cleanup() { rm -rf "$WORK"; }
+trap cleanup EXIT
+
+PASS=0
+FAIL=0
+pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
+fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
+
+digest() { ruby -rdigest -e 'print Digest::SHA256.file(ARGV[0]).hexdigest' "$1"; }
+
+# A case copies only what the gate scans: core/src, the member manifests and
+# their sources, the ledgers, and the two ruby gates with their shared library.
+# Copying the repository wholesale would drag in target/ and make each case cost
+# gigabytes.
+new_case() {
+  local dir
+  dir="$WORK/$1"
+  mkdir -p "$dir/config/governance" "$dir/scripts/qa" "$dir/scripts/lib" "$dir/crates" "$dir/docs"
+  cp -R "$REPO_ROOT/core" "$dir/core"
+  local crate name
+  for crate in "$REPO_ROOT"/crates/*/; do
+    name="$(basename "$crate")"
+    mkdir -p "$dir/crates/$name"
+    [[ -f "$crate/Cargo.toml" ]] && cp "$crate/Cargo.toml" "$dir/crates/$name/Cargo.toml"
+    [[ -d "$crate/src" ]] && cp -R "$crate/src" "$dir/crates/$name/src"
+  done
+  cp -R "$REPO_ROOT/docs/workflow" "$dir/docs/workflow"
+  cp "$REPO_ROOT/$LEDGER" "$dir/$LEDGER"
+  cp "$REPO_ROOT/$COORD_LEDGER" "$dir/$COORD_LEDGER"
+  cp "$REPO_ROOT/$GATE" "$dir/$GATE"
+  cp "$REPO_ROOT/$COORD_GATE" "$dir/$COORD_GATE"
+  cp "$REPO_ROOT/$GATE_LIB" "$dir/$GATE_LIB"
+  echo "$dir"
+}
+
+echo "FR-130 core boundary"
+echo ""
+
+# --- Case 1: the gate passes on the repository -------------------------------
+echo "Case 1: the gate holds on the working tree"
+if (cd "$REPO_ROOT" && ruby "$GATE" > "$WORK/case1.out" 2> "$WORK/case1.err"); then
+  if grep -q "Core boundary: PASS" "$WORK/case1.out"; then
+    pass "the core boundary gate passes on the repository"
+  else
+    fail "the gate exited 0 without printing its PASS summary"
+  fi
+else
+  fail "the core boundary gate does not pass on the repository"
+  cat "$WORK/case1.err" >&2
+fi
+echo ""
+
+# --- Case 2: the emitted candidate is the reviewed ledger --------------------
+# The recovery path and the compared value have to be the same thing. If they
+# can differ, regenerating produces a ledger the gate then rejects, and the
+# reviewer is told to fix a file the tool just wrote.
+echo "Case 2: --emit-baseline reproduces the reviewed ledger byte for byte"
+(cd "$REPO_ROOT" && ruby "$GATE" --emit-baseline) > "$WORK/emitted.json" 2>/dev/null || true
+if cmp -s "$WORK/emitted.json" "$REPO_ROOT/$LEDGER"; then
+  pass "the emitted candidate is byte-identical to the committed ledger"
+else
+  fail "--emit-baseline differs from the ledger the gate compares against"
+  diff "$REPO_ROOT/$LEDGER" "$WORK/emitted.json" | head -20 >&2 || true
+fi
+echo ""
+
+# --- Case 3: a widened module surface fails ----------------------------------
+echo "Case 3: a new top-level pub mod in core fails the gate"
+DIR="$(new_case pub-mod)"
+printf '\npub mod fr130_probe;\n' >> "$DIR/core/src/lib.rs"
+set +e
+(cd "$DIR" && ruby "$GATE" > "$WORK/case3.out" 2> "$WORK/case3.err")
+STATUS=$?
+set -e
+if [[ "$STATUS" -ne 0 ]] && grep -q "coreSurface.pubMod 52 -> 53" "$WORK/case3.err"; then
+  pass "a new pub mod fails and the report names the count it moved"
+else
+  fail "a new pub mod did not fail the gate with a named pubMod change (exit $STATUS)"
+  cat "$WORK/case3.err" >&2
+fi
+echo ""
+
+# --- Case 4: a new rusqlite touch point fails --------------------------------
+echo "Case 4: a new rusqlite reference in core fails the gate"
+DIR="$(new_case rusqlite-added)"
+printf '\nuse rusqlite::Connection;\n' >> "$DIR/core/src/health.rs"
+set +e
+(cd "$DIR" && ruby "$GATE" > "$WORK/case4.out" 2> "$WORK/case4.err")
+STATUS=$?
+set -e
+if [[ "$STATUS" -ne 0 ]] && grep -q "+ core/src/health.rs references rusqlite" "$WORK/case4.err"; then
+  pass "a new rusqlite touch point fails and the report names the file"
+else
+  fail "a new rusqlite reference did not fail the gate naming the file (exit $STATUS)"
+  cat "$WORK/case4.err" >&2
+fi
+echo ""
+
+# --- Case 5: a removed rusqlite touch point also fails -----------------------
+# This is the case FR-128 paid for. Under the monotonic ratchet FR-130 asked
+# for, a decrease passes silently and the ledger goes on asserting debt the
+# repository no longer carries — green, and false. Here a decrease is the goal,
+# which is exactly why it has to be blessed rather than absorbed.
+echo "Case 5: a removed rusqlite reference also fails, so the ledger cannot go stale"
+DIR="$(new_case rusqlite-removed)"
+grep -v rusqlite "$REPO_ROOT/core/src/db.rs" > "$DIR/core/src/db.rs"
+set +e
+(cd "$DIR" && ruby "$GATE" > "$WORK/case5.out" 2> "$WORK/case5.err")
+STATUS=$?
+set -e
+if [[ "$STATUS" -ne 0 ]] && grep -q "\- core/src/db.rs no longer references rusqlite" "$WORK/case5.err"; then
+  pass "a decrease fails too, and the report says the ledger over-claims"
+else
+  fail "removing a rusqlite reference did not fail the gate (exit $STATUS)"
+  cat "$WORK/case5.err" >&2
+fi
+echo ""
+
+# --- Case 6: cfg(test) is out of scope, for both gates -----------------------
+# Written as an assertion about the emitted baseline rather than about
+# strip_test_modules. Testing the helper directly proves a function exists, not
+# that the counting path calls it — the textual-presence-as-execution-fact error
+# FR-134 documents. Both gates are checked with one probe because they share one
+# scanner: if either grew a private copy that drifted, one baseline would move.
+echo "Case 6: a cfg(test) module moves neither gate's baseline"
+DIR="$(new_case scope-fidelity)"
+PROBE="$DIR/core/src/prehook/mod.rs"
+# Captured without `set -e`: a gate that cannot run at all must be reported as a
+# failed case, not abort the run and take the remaining cases with it.
+set +e
+BOUNDARY_BEFORE="$(cd "$DIR" && ruby "$GATE" --emit-baseline 2> "$WORK/case6-boundary.err")"
+BOUNDARY_BEFORE_STATUS=$?
+COORD_BEFORE="$(cd "$DIR" && ruby "$COORD_GATE" --emit-baseline 2> "$WORK/case6-coord.err")"
+COORD_BEFORE_STATUS=$?
+set -e
+ruby -e '
+path = ARGV[0]
+lines = File.readlines(path)
+probe = <<~RUST
+  #[cfg(test)]
+  mod fr130_scope_probe {
+      use rusqlite::Connection;
+      fn probe(_conn: &Connection) {
+          let _ = "captures json_path";
+          let _ = PipelineVariables::default();
+      }
+  }
+RUST
+lines.insert(lines.length / 2, probe)
+File.write(path, lines.join)
+' "$PROBE"
+set +e
+BOUNDARY_AFTER="$(cd "$DIR" && ruby "$GATE" --emit-baseline 2>> "$WORK/case6-boundary.err")"
+BOUNDARY_AFTER_STATUS=$?
+COORD_AFTER="$(cd "$DIR" && ruby "$COORD_GATE" --emit-baseline 2>> "$WORK/case6-coord.err")"
+COORD_AFTER_STATUS=$?
+set -e
+if [[ "$BOUNDARY_BEFORE_STATUS" -ne 0 || "$COORD_BEFORE_STATUS" -ne 0 ||
+  "$BOUNDARY_AFTER_STATUS" -ne 0 || "$COORD_AFTER_STATUS" -ne 0 ]]; then
+  fail "a gate could not emit a baseline, so the scope comparison proves nothing"
+  cat "$WORK/case6-boundary.err" "$WORK/case6-coord.err" >&2
+elif [[ "$BOUNDARY_BEFORE" == "$BOUNDARY_AFTER" && "$COORD_BEFORE" == "$COORD_AFTER" ]]; then
+  pass "test-only rusqlite, captures and PipelineVariables lines are excluded by both gates"
+else
+  fail "a cfg(test) module changed an emitted baseline; the scan does not match its scope"
+  diff <(echo "$BOUNDARY_BEFORE") <(echo "$BOUNDARY_AFTER") >&2 || true
+  diff <(echo "$COORD_BEFORE") <(echo "$COORD_AFTER") >&2 || true
+fi
+echo ""
+
+# --- Case 7: --write refuses under CI ----------------------------------------
+echo "Case 7: --write refuses to run under CI"
+DIR="$(new_case ci-write)"
+BEFORE="$(digest "$DIR/$LEDGER")"
+set +e
+(cd "$DIR" && CI=1 ruby "$GATE" --emit-baseline --write > "$WORK/case7.out" 2> "$WORK/case7.err")
+STATUS=$?
+set -e
+AFTER="$(digest "$DIR/$LEDGER")"
+if [[ "$STATUS" -ne 0 && "$BEFORE" == "$AFTER" ]] &&
+  grep -q "refusing --write under CI" "$WORK/case7.err"; then
+  pass "--write refuses under CI (exit $STATUS) and leaves the ledger untouched"
+else
+  fail "--write did not refuse under CI or modified the ledger (exit $STATUS)"
+  cat "$WORK/case7.err" >&2
+fi
+echo ""
+
+# --- Case 8: the schema snapshot rejects a schema that is not the reviewed one
+# The snapshot is FR-130's pre-extraction baseline. A baseline that cannot fail
+# is not a baseline, so the comparison is pointed at a copy with one table
+# removed and required to name that table.
+echo "Case 8: the schema snapshot rejects a schema that differs from the reviewed one"
+DOCTORED="$WORK/doctored-schema.sql"
+grep -v '^CREATE TABLE tasks ' "$REPO_ROOT/$SNAPSHOT" > "$DOCTORED"
+if cmp -s "$DOCTORED" "$REPO_ROOT/$SNAPSHOT"; then
+  fail "the doctored snapshot is identical to the reviewed one; the fixture is inert"
+else
+  set +e
+  (cd "$REPO_ROOT" && SCHEMA_SNAPSHOT_PATH="$DOCTORED" \
+    cargo test -p agent-orchestrator schema_snapshot > "$WORK/case8-bad.log" 2>&1)
+  BAD_STATUS=$?
+  (cd "$REPO_ROOT" && cargo test -p agent-orchestrator schema_snapshot \
+    > "$WORK/case8-good.log" 2>&1)
+  GOOD_STATUS=$?
+  set -e
+  if [[ "$BAD_STATUS" -ne 0 && "$GOOD_STATUS" -eq 0 ]] &&
+    grep -q '+ CREATE TABLE tasks ' "$WORK/case8-bad.log"; then
+    pass "a missing table fails the snapshot and is named in the diff; the real snapshot passes"
+  else
+    fail "the schema snapshot did not reject a doctored baseline (bad=$BAD_STATUS good=$GOOD_STATUS)"
+    tail -20 "$WORK/case8-bad.log" >&2
+  fi
+fi
+echo ""
+
+# --- Case 9: the scanner is one implementation, not two ----------------------
+# Case 6 shows the two gates agree today. This shows they agree because they are
+# the same code: remove the shared library and neither can run. A gate that
+# survived this would be carrying a private copy free to drift.
+#
+# The assertion is a controlled before-and-after inside one directory. "Both
+# gates fail once the library is gone" is not enough on its own — a gate that was
+# already broken for an unrelated reason satisfies it, and that is exactly how
+# this case passed for the wrong reason against mutation M7 during the FR-130
+# mutation run. Requiring both to pass first is what makes the failure
+# attributable to the removal.
+echo "Case 9: neither gate can run without the shared scanner"
+DIR="$(new_case shared-scanner)"
+set +e
+(cd "$DIR" && ruby "$GATE" > /dev/null 2> "$WORK/case9-boundary-before.err")
+BOUNDARY_BEFORE_STATUS=$?
+(cd "$DIR" && ruby "$COORD_GATE" > /dev/null 2> "$WORK/case9-coord-before.err")
+COORD_BEFORE_STATUS=$?
+set -e
+rm "$DIR/$GATE_LIB"
+set +e
+(cd "$DIR" && ruby "$GATE" > /dev/null 2> "$WORK/case9-boundary.err")
+BOUNDARY_STATUS=$?
+(cd "$DIR" && ruby "$COORD_GATE" > /dev/null 2> "$WORK/case9-coord.err")
+COORD_STATUS=$?
+set -e
+if [[ "$BOUNDARY_BEFORE_STATUS" -ne 0 || "$COORD_BEFORE_STATUS" -ne 0 ]]; then
+  fail "a gate already failed with the shared scanner present, so its later failure proves nothing" \
+    "(boundary=$BOUNDARY_BEFORE_STATUS coordination=$COORD_BEFORE_STATUS)"
+  cat "$WORK/case9-boundary-before.err" "$WORK/case9-coord-before.err" >&2
+elif [[ "$BOUNDARY_STATUS" -ne 0 && "$COORD_STATUS" -ne 0 ]] &&
+  grep -q "rust_source" "$WORK/case9-boundary.err" &&
+  grep -q "rust_source" "$WORK/case9-coord.err"; then
+  pass "both gates pass with scripts/lib/rust_source.rb and fail without it; neither holds a private copy"
+else
+  fail "a gate ran without the shared scanner (boundary=$BOUNDARY_STATUS coordination=$COORD_STATUS)"
+  cat "$WORK/case9-boundary.err" "$WORK/case9-coord.err" >&2
+fi
+echo ""
+
+echo "FR-130 core boundary: $PASS passed, $FAIL failed"
+[[ "$FAIL" -eq 0 ]]
