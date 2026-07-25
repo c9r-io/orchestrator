@@ -37,10 +37,16 @@ jq -e '
   .productionConsumers.capturesOrJsonPath == [] and
   .productionConsumers.celCoordination == [] and
   (.productionConsumers.pipelineVariables | length) == 2 and
-  (.executionInventory.legacyCommandOnlyAgents | length) == 4 and
+  (.executionInventory.legacyCommandOnlyAgents | length) == 0 and
   .sourceTouches.capturesOrJsonPath <= 55
 ' "$INVENTORY" >/dev/null
-pass "machine-readable inventory proves 0 capture/JSONPath, 0 coordination CEL, 2 generic variable, and 4 legacy Agent consumers"
+# The legacy Agent count was 4 when FR-125 froze this ratchet. FR-126 migrated
+# every command-only Agent to an explicit driver and drove it to 0, which
+# falsified the older assertion; FR-127 found it while wiring this gate into CI,
+# because until then nothing executed it. The ratchet only tightens: a
+# reintroduced command-only Agent must fail here and in
+# test-agent-driver-execution-migration.sh, which asserts the same emptiness.
+pass "machine-readable inventory proves 0 capture/JSONPath, 0 coordination CEL, 2 generic variable, and 0 legacy Agent consumers"
 
 if rg -n \
   'apply_captures|pending_generate_items|extract_json_array' \
