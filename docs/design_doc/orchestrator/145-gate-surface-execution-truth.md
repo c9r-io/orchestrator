@@ -120,6 +120,14 @@ Three further checks come from the same observation that a gate has an environme
   one crate no job installs the Tauri dependencies to build.
 - `check_diagnostics_preserved` forbids discarding the output of a cargo command whose failure the
   gate reports. The CI log that started this read `FAIL: cargo test --workspace` and nothing else.
+- `check_git_history_available` requires a gate that queries history to run in a job that fetched
+  any. This one was found by the diagnostics change on its first run, and it is the most
+  consequential of the three: `test-agent-driver-production-parity.sh` proves FR-126's removal with
+  `git cat-file`, `git merge-base --is-ancestor`, and a reverse `git apply` of the removal patch —
+  the recorded baseline is reachable, the compatibility window is an ordered interval, the patch is
+  mechanically revertible. That is the retirement-parity evidence the governance process requires
+  before a removal counts as closed, and `actions/checkout` fetches one commit unless told
+  otherwise, so all three had failed on every run and passed on every developer machine.
 
 ### CI liveness
 
@@ -153,6 +161,16 @@ unattended.
 The governance job's steps now record their outcome and continue; a final step fails on any of
 them. A serial job stops at its first failure and reports nothing after it, which is how the
 workspace-scope defect stayed invisible behind the ledger tooling's self-lock across two runs.
+
+It paid for itself immediately. Its first real run printed nineteen outcomes and three of them were
+red — the liveness ledger reporting its own staleness, the stale-claim scan tripping over this FR's
+own QA document, and the agent-driver parity gate. That third one had been failing on every run
+since it was wired, behind two earlier failures, and nobody had seen it. Under the old serial
+arrangement each of those would have cost a separate push to discover.
+
+The same run also showed why the aggregate has to be a separate step: `continue-on-error` makes
+GitHub report a step's `conclusion` as success while `outcome` holds the truth, so a reader looking
+at the step list alone sees green. The summary table is what makes the outcomes legible.
 
 ### The lexer, and why the obvious fix is worse than the defect
 

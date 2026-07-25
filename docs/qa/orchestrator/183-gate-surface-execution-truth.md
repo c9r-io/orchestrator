@@ -30,10 +30,10 @@ themselves the provider-isolation machinery, and their fixtures use stubs. See D
 Primary entry points:
 
 ```bash
-./scripts/qa/test-qa-gate-surface.sh                   # 11 checks
-./scripts/qa/test-qa-gate-surface.sh --fixture-test    # 24 assertions: 20 negative fixtures,
-                                                       # a positive control, a behavioural case,
-                                                       # and two meta-assertions
+./scripts/qa/test-qa-gate-surface.sh                   # 12 checks
+./scripts/qa/test-qa-gate-surface.sh --fixture-test    # 27 assertions: 21 negative fixtures, two
+                                                       # positive controls, a behavioural case,
+                                                       # and three meta-assertions
 ./scripts/qa/test-skill-mirror-integrity.sh --fixture-test
 ./scripts/qa/test-ci-liveness.sh                       # 9 liveness fixtures
 ./scripts/qa/test-ci-environment-parity.sh             # and --fixture-test
@@ -82,7 +82,7 @@ git add -A && bash scripts/qa/test-qa-gate-surface.sh
 
 ### Expected Result
 
-- Step 1: `FR-127 gate surface fixtures: 24 passed, 0 failed`. Fixtures 8-16 are FR-134's;
+- Step 1: `FR-127 gate surface fixtures: 27 passed, 0 failed`. Fixtures 8-16 are FR-134's;
   each reports `(isolated to <check>)`, meaning it fails its target and leaves the others passing.
 - Step 2 exits 1 with three checks red — wiring, provider isolation, stale claims. Before this FR
   the same tree produced `5 passed, 0 failed`.
@@ -125,6 +125,16 @@ gh run view <run-id> --json jobs -q '.jobs[]|"\(.conclusion)\t\(.name)"'
   `error[E0425] … fr134_sentinel` and requires that text to reach the gate's output. A gate that
   satisfied the source rule while still swallowing output passes the check and fails this.
 - In real CI both repaired jobs reach their assertions instead of stopping at `command -v`.
+- The governance job's step-level reporting prints every gate's outcome and a final step fails on
+  any of them. Its first real run printed nineteen outcomes with three red, one of which —
+  `test-agent-driver-production-parity.sh` — had been failing on every run since it was wired,
+  behind two earlier failures in a job that stopped at the first. Note that `continue-on-error`
+  makes GitHub report each step's `conclusion` as success while `outcome` holds the truth, so the
+  step list alone reads green; the summary table is what makes the run legible.
+- `check_git_history_available` covers the cause: `git cat-file`, `git merge-base` and the reverse
+  `git apply` that carry FR-126's retirement-parity evidence all fail on the single commit
+  `actions/checkout` fetches by default, and all pass on any developer machine. Fixture 21 reverts
+  `fetch-depth: 0` and requires the failure.
 
 ---
 
@@ -265,6 +275,7 @@ them.
 | `check_workspace_scope` | 1 |
 | `check_diagnostics_preserved` | 1 |
 | `check_provider_stub_coverage` | 1 |
+| `check_git_history_available` | 1 |
 | `check_mirror_roots_discovered` | 1 |
 | `check_environment_parity` | 1 |
 
