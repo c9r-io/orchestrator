@@ -342,3 +342,18 @@ This FR adds one condition the others did not need: **a local pass is not the ev
 FR-134's CI findings were invisible on a developer machine — ripgrep is installed there, and macOS
 supplies the Tauri frameworks as system libraries. The certifying observation is a real workflow
 run read through `gh run view`, and the CI liveness ledger records its outcome.
+
+## Recorded Runs
+
+Every one of these was read from `gh run view`, not inferred.
+
+| Run | Commit | Result | What it established |
+|---|---|---|---|
+| `30157805181` | `179188cf` | 11 of 16 green | The starting state, before any of this work: Slack certification ×2 and coordination-strangler dying on `missing command: rg`, governance dying in the ledger tooling, boundary-coverage red |
+| `30161196185` | `0a1f15d5` | coordination-strangler and macOS Slack recovered | The ripgrep repair reaching its assertions. Also the first run of step-level reporting, which printed nineteen outcomes and exposed the agent-driver parity gate failing on git history — a failure that had been behind two earlier ones since it was wired |
+| `30163246436` | `52d0d43a` | ubuntu Slack recovered | The `stat` repair. Also caught the parity gate recursing into itself, a hang rather than a failure |
+| `30165034918` | `9fd60030` | `parity=success` | FR-126's retirement-parity evidence verified in CI for the first time. Exposed the `pipefail`/SIGPIPE race and the `CI=false` test that ignored `GITHUB_ACTIONS` |
+| `30166725904` | `a6937815` | **all nineteen governance gates green**; job red on `liveness` alone | The state the liveness ledger was refreshed from |
+
+`boundary-coverage` is red in every one of these and is FR-135's; it carries a `known-failing`
+annotation naming that FR, which is what the liveness rule is for.
