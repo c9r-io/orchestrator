@@ -86,7 +86,7 @@ The five unreferenced scripts were each decided, with no "keep pending" option:
 | `test-filesystem-trigger.sh` | `ci-required` | static structure assertions over the fs watcher |
 | `test-per-trigger-webhook-auth.sh` | `manual-runbook` | needs a daemon and webhook port 19091; bound to QA 129 |
 
-Two further gates that were deterministic and daemon-free but unwired — `test-codex-session-resume.sh` (asserts a recorded transcript; the live counterpart is the separate `certify-codex-session-resume.sh`) and `test-legacy-coordination-decommission.sh` — were also promoted to `ci-required`. The surface is 12 `ci-required` of 45 gates.
+Two further gates that were deterministic and daemon-free but unwired — `test-codex-session-resume.sh` (asserts a recorded transcript; the live counterpart is the separate `certify-codex-session-resume.sh`) and `test-legacy-coordination-decommission.sh` — were also promoted to `ci-required`. The surface was 12 `ci-required` of 45 gates at FR-127's closure; FR-128 added `test-governance-ledger-tooling.sh`, making it 13 of 46.
 
 ## Consequences
 
