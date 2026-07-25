@@ -602,7 +602,42 @@ check_diagnostics_preserved() {
   return $rc
 }
 
-# Check 9: every job running a gate that is not no-provider installs the stubs.
+# Check 9: a gate that reads git history must run in a job that has some.
+#
+# actions/checkout fetches one commit unless told otherwise, so `git merge-base`,
+# `git cat-file` and `git diff <sha>^ <sha>` all fail in CI while passing on any
+# developer machine, which has the whole clone. FR-134 found three assertions in
+# this state — and not just any three: they are the retirement-parity evidence
+# that the governance process requires before a removal can be called closed.
+# The recorded baseline commit is reachable, the compatibility window is an
+# ordered interval, and the runner-removal patch is mechanically revertible.
+# None of them had ever been verified in CI, and the failure was invisible
+# because an earlier step in the same job stopped the run before reaching them.
+GIT_HISTORY_PATTERN='git (merge-base|cat-file|rev-list|describe)\b|git (diff|show|log)[^|;&]*(COMMIT|\^)'
+check_git_history_available() {
+  local root="$1"
+  local manifest="$root/$MANIFEST_REL" rc=0 path workflow job depth
+  while IFS=$'\t' read -r path workflow job; do
+    [[ -z "$path" ]] && continue
+    [[ -f "$root/$path" ]] || continue
+    [[ -f "$root/$workflow" ]] || continue
+    sed -E 's/(^|[[:space:]])#.*$//' "$root/$path" | rg -qP "$GIT_HISTORY_PATTERN" || continue
+    depth="$(ruby "$WORKFLOW_MODEL" checkout-depth "$root/$workflow" "$job" 2>/dev/null)"
+    if [[ "$depth" != "0" ]]; then
+      echo "    $path reads git history but job '$job' checks out with fetch-depth $depth" >&2
+      echo "      every history query fails on a shallow clone, and passes on any" >&2
+      echo "      developer machine, so the gate is green locally and dead in CI" >&2
+      rc=1
+    fi
+  done < <(jq -r '
+    .scripts[]
+    | select(.enforcement == "ci-required")
+    | [.path, (.workflow // "null"), (.job // "null")]
+    | @tsv' "$manifest")
+  return $rc
+}
+
+# Check 10: every job running a gate that is not no-provider installs the stubs.
 #
 # The exit-97 stubs are the backstop for when a gate's own isolation fails. They
 # were installed in the governance job only, so the coordination-strangler job —
@@ -650,6 +685,7 @@ ALL_CHECKS=(
   check_workspace_scope
   check_diagnostics_preserved
   check_provider_stub_coverage
+  check_git_history_available
 )
 
 run_all_checks() {
@@ -659,6 +695,36 @@ run_all_checks() {
     "$check" "$root" || return 1
   done
   return 0
+}
+
+describe_check() {
+  case "$1" in
+    check_surface_complete)
+      echo "every scripts/qa file at any depth is classified and every classified path exists on disk|manifest and scripts/qa disagree" ;;
+    check_support_files_declared)
+      echo "every support file declares a known role and a reason|a support file has an unknown role or no reason" ;;
+    check_reason_and_owner)
+      echo "every non-ci-required gate declares a reason and an owner document that exists|a non-ci-required gate is missing its reason or owner document" ;;
+    check_wiring_truth)
+      echo "every ci-required gate is executed by a live step of the workflow job it declares|a ci-required gate is not actually executed by its declared workflow job" ;;
+    check_provider_isolation)
+      echo "every ci-required gate has a provider isolation mechanism that was executed and rejects its own absence|a ci-required gate can reach an unpinned provider binary" ;;
+    check_no_stale_claims)
+      echo "no tracked Markdown prose claims CI or release-gate enforcement for a gate that has none|a document claims CI enforcement that does not exist" ;;
+    check_no_stale_claim_exemptions)
+      echo "every stale-claim exemption still names a tracked file that still makes a claim|a stale-claim exemption has outlived the claim it excuses" ;;
+    check_job_dependencies)
+      echo "every ci-required gate's required commands are provided by the job that runs it|a ci-required gate exits on a missing command before asserting anything" ;;
+    check_workspace_scope)
+      echo "every ci-required gate's workspace scope matches its sibling jobs or declares why not|a ci-required gate runs a wider workspace than any job can build" ;;
+    check_diagnostics_preserved)
+      echo "no ci-required gate discards the output of a command it reports on|a ci-required gate can fail without saying why" ;;
+    check_provider_stub_coverage)
+      echo "every job running a provider-capable gate installs the failing provider stubs|a provider-capable gate runs in a job with no stub backstop" ;;
+    check_git_history_available)
+      echo "every ci-required gate that reads git history runs in a job that fetches it|a ci-required gate queries history its job did not fetch" ;;
+    *) return 1 ;;
+  esac
 }
 
 # ── Fixture mode ────────────────────────────────────────────────────────────────
@@ -958,6 +1024,18 @@ BUNDLE
     expect_fail "fixture 20" "$d" check_provider_stub_coverage "a provider-capable job without the stub backstop fails"
   fi
 
+  # 21. The governance job's checkout reverted to a shallow clone. This is the
+  #     defect as it actually existed: three retirement-parity assertions —
+  #     the recorded baseline commit is reachable, the compatibility window is
+  #     an ordered interval, and the removal patch is reverse-applicable — had
+  #     never once passed in CI, and passed on every developer machine.
+  d="$(new_case f21)"
+  if inject "fixture 21" "$d/.github/workflows/ci.yml" \
+    perl -0pi -e 's{(  governance:.*?uses: actions/checkout\@v7\n)        with:\n          fetch-depth: 0\n}{$1}s' \
+      "$d/.github/workflows/ci.yml"; then
+    expect_fail "fixture 21" "$d" check_git_history_available "a gate reading git history in a shallow-checkout job fails"
+  fi
+
   # ── Behavioural: the diagnostics rule is about output reaching the log ──
   #
   # check_diagnostics_preserved reads the source, which is a proxy for "the CI
@@ -1001,6 +1079,23 @@ FAKE
       | sed 's/^/      registered but not defined: /' >&2
   fi
 
+  # Registered is not the same as run. check_git_history_available was defined
+  # and registered and never called by verification mode, because adding it to
+  # ALL_CHECKS and adding a call were separate edits. That is enforcement which
+  # exists and does not execute — this script's own subject, one level up.
+  # Verification now iterates ALL_CHECKS, and this holds the description table
+  # to it so a check cannot be registered without a line a reader can see.
+  UNDESCRIBED=""
+  for check in "${ALL_CHECKS[@]}"; do
+    describe_check "$check" >/dev/null 2>&1 || UNDESCRIBED+="$check"$'\n'
+  done
+  if [[ -z "$UNDESCRIBED" ]]; then
+    pass "meta: every registered check is run and named by verification mode"
+  else
+    fail "meta: a registered check has no description, so verification cannot report it"
+    printf '      %s\n' $UNDESCRIBED >&2
+  fi
+
   UNTESTED="$(comm -23 <(printf '%s\n' "$REGISTERED") \
                        <(printf '%s\n' "${TARGETED[@]}" | LC_ALL=C sort -u))"
   if [[ -z "$UNTESTED" ]]; then
@@ -1017,75 +1112,31 @@ FAKE
 fi
 
 # ── Verification mode ───────────────────────────────────────────────────────────
+#
+# Driven from ALL_CHECKS rather than a hand-written list of calls. The two forms
+# drift: check_git_history_available was defined, registered, and silently never
+# run here, because adding it to the registry and adding a call are separate
+# edits and only one of them is anybody's habit. That is the same shape as a
+# gate wired into no job — enforcement that exists and does not execute — one
+# level up, inside the script that exists to catch it.
+#
+# A check with no description is a failure, not a default message: the summary
+# line is what a reader sees, and an unnamed check reads as noise.
 
 echo "=== FR-127: QA gate enforcement surface ==="
 echo ""
 
-if check_surface_complete "$REPO_ROOT"; then
-  pass "every scripts/qa file at any depth is classified and every classified path exists on disk"
-else
-  fail "manifest and scripts/qa disagree"
-fi
-
-if check_support_files_declared "$REPO_ROOT"; then
-  pass "every support file declares a known role and a reason"
-else
-  fail "a support file has an unknown role or no reason"
-fi
-
-if check_reason_and_owner "$REPO_ROOT"; then
-  pass "every non-ci-required gate declares a reason and an owner document that exists"
-else
-  fail "a non-ci-required gate is missing its reason or owner document"
-fi
-
-if check_wiring_truth "$REPO_ROOT"; then
-  pass "every ci-required gate is executed by a live step of the workflow job it declares"
-else
-  fail "a ci-required gate is not actually executed by its declared workflow job"
-fi
-
-if check_provider_isolation "$REPO_ROOT"; then
-  pass "every ci-required gate has a provider isolation mechanism that was executed and rejects its own absence"
-else
-  fail "a ci-required gate can reach an unpinned provider binary"
-fi
-
-if check_no_stale_claims "$REPO_ROOT"; then
-  pass "no tracked Markdown claims CI or release-gate enforcement for a gate that has none"
-else
-  fail "a document claims CI enforcement that does not exist"
-fi
-
-if check_no_stale_claim_exemptions "$REPO_ROOT"; then
-  pass "every stale-claim exemption still names a tracked file that still makes a claim"
-else
-  fail "a stale-claim exemption has outlived the claim it excuses"
-fi
-
-if check_job_dependencies "$REPO_ROOT"; then
-  pass "every ci-required gate's required commands are provided by the job that runs it"
-else
-  fail "a ci-required gate exits on a missing command before asserting anything"
-fi
-
-if check_workspace_scope "$REPO_ROOT"; then
-  pass "every ci-required gate's workspace scope matches its sibling jobs or declares why not"
-else
-  fail "a ci-required gate runs a wider workspace than any job can build"
-fi
-
-if check_diagnostics_preserved "$REPO_ROOT"; then
-  pass "no ci-required gate discards the output of a command it reports on"
-else
-  fail "a ci-required gate can fail without saying why"
-fi
-
-if check_provider_stub_coverage "$REPO_ROOT"; then
-  pass "every job running a provider-capable gate installs the failing provider stubs"
-else
-  fail "a provider-capable gate runs in a job with no stub backstop"
-fi
+for check in "${ALL_CHECKS[@]}"; do
+  if ! description="$(describe_check "$check")"; then
+    fail "$check is registered but has no description; add one beside the check"
+    continue
+  fi
+  if "$check" "$REPO_ROOT"; then
+    pass "${description%%|*}"
+  else
+    fail "${description##*|}"
+  fi
+done
 
 echo ""
 CI_COUNT="$(jq '[.scripts[] | select(.enforcement == "ci-required")] | length' "$REPO_ROOT/$MANIFEST_REL")"

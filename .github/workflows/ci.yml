@@ -123,8 +123,16 @@ jobs:
     name: QA gate enforcement surface
     runs-on: ubuntu-latest
     steps:
+      # Full history. test-agent-driver-production-parity.sh proves FR-126's
+      # retirement evidence with `git cat-file`, `git merge-base` and a reverse
+      # `git apply` of the removal patch — the parity record that has to hold
+      # before a removal counts as closed. All three fail on the single commit
+      # actions/checkout fetches by default, and all three pass on any developer
+      # machine, so they had never once been verified in CI.
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y jq ruby ripgrep sqlite3 protobuf-compiler

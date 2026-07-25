@@ -174,6 +174,18 @@ module WorkflowModel
     end.uniq
   end
 
+  # The `fetch-depth` the job's checkout asks for, or "1" when it asks for
+  # nothing — actions/checkout fetches a single commit by default, so a job that
+  # says nothing has no history at all. Returns "none" when the job does not
+  # check out.
+  def checkout_depth(path, name)
+    step = steps(path, name).reject { |candidate| disabled?(candidate) }
+      .find { |candidate| candidate["uses"].to_s.start_with?("actions/checkout") }
+    return "none" unless step
+
+    ((step["with"] || {})["fetch-depth"] || 1).to_s
+  end
+
   def step_names(path, name)
     steps(path, name).map { |step| step["name"] }.compact
   end
@@ -192,6 +204,8 @@ if $PROGRAM_NAME == __FILE__
     puts WorkflowModel.runs_on(ARGV[0], ARGV[1])
   when "step-names"
     puts WorkflowModel.step_names(ARGV[0], ARGV[1])
+  when "checkout-depth"
+    puts WorkflowModel.checkout_depth(ARGV[0], ARGV[1])
   when "executes"
     exit(WorkflowModel.executes?(ARGV[0], ARGV[1], ARGV[2]) ? 0 : 1)
   else
