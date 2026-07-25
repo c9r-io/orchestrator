@@ -23,7 +23,11 @@ impl AgentDriver for ShellCliDriver {
     }
 
     async fn start(&self, request: DriverStartRequest<'_>) -> Result<Box<dyn DriverSession>> {
-        let child = spawn_command(&request, request.legacy_command, false)?;
+        let child = spawn_command(
+            &request,
+            request.shell_command,
+            request.stdin_payload.is_some(),
+        )?;
         Ok(Box::new(
             ProcessSession::start(
                 DriverProvider::Shell,
@@ -31,7 +35,8 @@ impl AgentDriver for ShellCliDriver {
                 request.stdout,
                 request.stderr,
                 request.redaction_patterns.to_vec(),
-                None,
+                request.stdin_payload.map(str::to_string),
+                true,
             )
             .await?,
         ))
@@ -70,6 +75,7 @@ impl AgentDriver for ClaudeCliDriver {
                 request.stderr,
                 request.redaction_patterns.to_vec(),
                 Some(initial_input),
+                false,
             )
             .await?,
         ))
@@ -96,6 +102,7 @@ impl AgentDriver for CodexCliDriver {
                 request.stderr,
                 request.redaction_patterns.to_vec(),
                 None,
+                false,
             )
             .await?,
         ))
@@ -253,28 +260,6 @@ fn write_per_run_mcp_config(
     Ok(path)
 }
 
-/// Compatibility bridge for the deprecated global streaming executor.
-/// Provider flags remain confined to the Claude driver module while existing
-/// manifests migrate to per-Agent driver configuration.
-pub(crate) fn prepare_legacy_claude_streaming_command(
-    base_command: &str,
-    session_ref: Option<&str>,
-) -> Result<String> {
-    let directory = std::env::temp_dir().join(format!("orch-streaming-{}", uuid::Uuid::new_v4()));
-    let config_path = write_per_run_mcp_config(&directory, None)?;
-    let mut command = base_command.to_string();
-    if let Some(reference) = session_ref {
-        let reference = super::SessionRef::from_provider(reference.to_string())?;
-        command.push_str(" --resume ");
-        command.push_str(&quote(reference.expose_secret()));
-    }
-    Ok(format!(
-        "{command} --output-format stream-json --verbose --mcp-config {} \
-         --strict-mcp-config --allowedTools mcp__orch --permission-mode bypassPermissions",
-        quote(&config_path.to_string_lossy()),
-    ))
-}
-
 fn resolve_mcp_tools_bin() -> Result<PathBuf> {
     if let Ok(value) = std::env::var("ORCH_MCP_TOOLS_BIN")
         && !value.is_empty()
@@ -295,12 +280,13 @@ fn quote(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::driver::SessionRef;
+    use crate::driver::{DriverEvent, SessionRef};
     use orchestrator_config::config::{AgentDriverConfig, DriverOptions, DriverTransport};
     use std::collections::HashMap;
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt as _;
     use tempfile::tempdir;
+    use tokio_stream::StreamExt as _;
 
     fn driver(provider: DriverProvider) -> AgentDriverConfig {
         AgentDriverConfig {
@@ -322,7 +308,8 @@ mod tests {
             runner: Box::leak(Box::new(
                 orchestrator_config::config::RunnerConfig::default(),
             )),
-            legacy_command: "echo ok",
+            shell_command: "echo ok",
+            stdin_payload: None,
             prompt: "fix it's tests",
             cwd,
             stdout: tempfile::tempfile().unwrap(),
@@ -355,6 +342,50 @@ mod tests {
         assert!(command.ends_with(r"-- 'fix it'\''s tests'"));
     }
 
+    #[tokio::test]
+    async fn shell_driver_delivers_stdin_payload_and_closes_stdin() {
+        let root = tempdir().unwrap();
+        let stdout_path = root.path().join("stdout.log");
+        let stderr_path = root.path().join("stderr.log");
+        let config = driver(DriverProvider::Shell);
+        let runner = orchestrator_config::config::RunnerConfig {
+            policy: orchestrator_config::config::RunnerPolicy::Unsafe,
+            ..Default::default()
+        };
+        let extra_env = HashMap::new();
+        let profile = crate::runner::ResolvedExecutionProfile::host();
+        let mut session = ShellCliDriver
+            .start(DriverStartRequest {
+                driver: &config,
+                runner: &runner,
+                shell_command: "cat",
+                stdin_payload: Some("prompt over stdin"),
+                prompt: "prompt over stdin",
+                cwd: root.path(),
+                stdout: std::fs::File::create(&stdout_path).unwrap(),
+                stderr: std::fs::File::create(&stderr_path).unwrap(),
+                redaction_patterns: &[],
+                extra_env: &extra_env,
+                execution_profile: &profile,
+                artifacts_dir: root.path(),
+                session_ref: None,
+                mcp_callback: None,
+            })
+            .await
+            .unwrap();
+
+        let mut events = session.take_events().unwrap();
+        while let Some(event) = events.next().await {
+            if matches!(event.unwrap(), DriverEvent::Finished { .. }) {
+                break;
+            }
+        }
+        assert_eq!(
+            std::fs::read_to_string(stdout_path).unwrap(),
+            "prompt over stdin\n"
+        );
+    }
+
     #[test]
     fn codex_resume_command_matches_certified_cli_grammar() {
         let root = tempdir().unwrap();
@@ -383,14 +414,6 @@ mod tests {
             std::fs::metadata(first_path).unwrap().permissions().mode() & 0o777,
             0o600
         );
-    }
-
-    #[test]
-    fn legacy_streaming_compatibility_uses_unique_provider_owned_config() {
-        let command = prepare_legacy_claude_streaming_command("claude -p 'do it'", None).unwrap();
-        assert!(command.contains("--output-format stream-json"));
-        assert!(command.contains("--strict-mcp-config"));
-        assert!(command.contains("orch-streaming-"));
     }
 
     #[test]

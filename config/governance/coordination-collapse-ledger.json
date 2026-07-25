@@ -30,7 +30,8 @@
     "scope": "non-test Rust source under core/src and crates/*/src, excluding inline cfg(test) modules, plus member Cargo.toml manifests",
     "capturesOrJsonPath": 55,
     "pipelineVariables": 39,
-    "celInterpreter": 9
+    "celInterpreter": 9,
+    "legacyRunnerSelection": 0
   },
   "consumerInventory": {
     "capturesOrJsonPath": {
@@ -82,7 +83,7 @@
       ]
     },
     "shellRunnerExecutor": {
-      "state": "frozen",
+      "state": "removed",
       "productionAgentCount": 20,
       "productionLegacyAgentCount": 0,
       "productionDriverCounts": {
@@ -92,7 +93,13 @@
       },
       "productionDirectStepCommandCount": 3,
       "productionGlobalStreamingExecutorCount": 0,
-      "removeAfter": "FR-126 migrates the remaining command-only Agent manifests to typed drivers"
+      "compatibilityWindow": {
+        "openedBy": "FR-116 typed Agent driver abstraction",
+        "closedBy": "FR-126 Agent execution migration",
+        "legacyFixture": "command-only Agent apply promotes to shell/cli with a stable deprecation warning",
+        "rollbackEvidence": "docs/qa/orchestrator/176-agent-driver-execution-migration.md"
+      },
+      "sharedSpawnSubstrate": "retained for driver and engine-owned command policy, sandbox, resource-limit, process-group, env, and redaction enforcement"
     }
   },
   "workflows": [

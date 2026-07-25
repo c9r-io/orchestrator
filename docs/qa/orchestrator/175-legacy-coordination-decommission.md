@@ -16,6 +16,12 @@ FR-125 removes the zero-consumer capture/JSONPath production runtime after the
 FR-124 compatibility window. It does not remove governance CEL or every generic
 pipeline-variable compatibility surface.
 
+> Historical baseline: this document records the FR-125 closure state. FR-126
+> subsequently migrated the four command-only Agents and removed
+> `ShellRunnerExecutor`; use
+> `docs/qa/orchestrator/176-agent-driver-execution-migration.md` for the current
+> execution inventory and rerunnable assertions.
+
 Primary entry point:
 
 ```bash

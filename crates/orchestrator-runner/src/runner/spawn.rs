@@ -1,33 +1,12 @@
 use super::policy::enforce_runner_policy;
 use super::profile::ResolvedExecutionProfile;
 use super::sandbox::{build_command_for_profile, classify_sandbox_spawn_error};
-use super::streaming::StreamingAgentRunner;
 use crate::output_capture::{OutputCaptureHandles, spawn_sanitized_output_capture};
 use anyhow::{Context, Result};
-use orchestrator_config::config::{RunnerConfig, RunnerExecutorKind, RunnerPolicy};
+use orchestrator_config::config::{RunnerConfig, RunnerPolicy};
 use std::fs::File;
 use std::path::Path;
 use std::process::Stdio;
-
-/// Groups the inputs required to spawn a runner command.
-pub struct SpawnParams<'a> {
-    /// Runner configuration describing shell and policy settings.
-    pub runner: &'a RunnerConfig,
-    /// Command string to execute.
-    pub command: &'a str,
-    /// Working directory for the spawned process.
-    pub cwd: &'a Path,
-    /// StdIO wiring strategy to apply to the child process.
-    pub stdio_mode: RunnerStdioMode,
-    /// Extra environment variables resolved for the selected agent.
-    pub extra_env: &'a std::collections::HashMap<String, String>,
-    /// Whether stdin should be piped to the child.
-    pub pipe_stdin: bool,
-    /// Resolved execution profile controlling sandbox behavior.
-    pub execution_profile: &'a ResolvedExecutionProfile,
-    /// Optional opaque provider session token resolved inside the runner boundary.
-    pub provider_session_token: Option<&'a str>,
-}
 
 /// Selects how the runner child's stdout and stderr are wired.
 pub enum RunnerStdioMode {
@@ -42,50 +21,10 @@ pub enum RunnerStdioMode {
     Piped,
 }
 
-/// Abstraction over runner process spawning backends.
-pub trait RunnerExecutor {
-    /// Spawns a runner child process using the supplied parameters.
-    fn spawn(&self, params: SpawnParams<'_>) -> Result<tokio::process::Child>;
-}
-
-#[derive(Debug, Default)]
-/// Default runner executor that shells out through the configured shell binary.
-pub struct ShellRunnerExecutor;
-
-impl RunnerExecutor for ShellRunnerExecutor {
-    fn spawn(&self, params: SpawnParams<'_>) -> Result<tokio::process::Child> {
-        let SpawnParams {
-            runner,
-            command,
-            cwd,
-            stdio_mode,
-            extra_env,
-            pipe_stdin,
-            execution_profile,
-            provider_session_token,
-        } = params;
-        if provider_session_token.is_some() {
-            anyhow::bail!(
-                "provider session resume requires a compatible streaming runner; restart from the logical boundary in a new session"
-            );
-        }
-        spawn_command_via_shell(
-            runner,
-            command,
-            cwd,
-            stdio_mode,
-            extra_env,
-            pipe_stdin,
-            execution_profile,
-        )
-    }
-}
-
 /// Spawns `command` through the configured shell, applying runner policy,
 /// sandbox profile, resource limits, and environment handling.
 ///
-/// Shared by [`ShellRunnerExecutor`] and the streaming runner so both go
-/// through the same policy/sandbox/env path; only the command string differs.
+/// Shared by typed CLI drivers and engine-owned commands.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_command_via_shell(
     runner: &RunnerConfig,
@@ -177,54 +116,15 @@ pub fn spawn_with_runner(
     pipe_stdin: bool,
     execution_profile: &ResolvedExecutionProfile,
 ) -> Result<tokio::process::Child> {
-    spawn_with_runner_session(
+    spawn_command_via_shell(
         runner,
         command,
         cwd,
-        stdout,
-        stderr,
+        RunnerStdioMode::Files { stdout, stderr },
         extra_env,
         pipe_stdin,
         execution_profile,
-        None,
     )
-}
-
-/// Spawns a runner process and optionally asks its provider adapter to reuse a session.
-#[allow(clippy::too_many_arguments)]
-pub fn spawn_with_runner_session(
-    runner: &RunnerConfig,
-    command: &str,
-    cwd: &Path,
-    stdout: File,
-    stderr: File,
-    extra_env: &std::collections::HashMap<String, String>,
-    pipe_stdin: bool,
-    execution_profile: &ResolvedExecutionProfile,
-    provider_session_token: Option<&str>,
-) -> Result<tokio::process::Child> {
-    match runner.executor {
-        RunnerExecutorKind::Shell => ShellRunnerExecutor.spawn(SpawnParams {
-            runner,
-            command,
-            cwd,
-            stdio_mode: RunnerStdioMode::Files { stdout, stderr },
-            extra_env,
-            pipe_stdin,
-            execution_profile,
-            provider_session_token,
-        }),
-        RunnerExecutorKind::Streaming => StreamingAgentRunner.spawn(SpawnParams {
-            runner,
-            command,
-            cwd,
-            stdio_mode: RunnerStdioMode::Files { stdout, stderr },
-            extra_env,
-            pipe_stdin,
-            execution_profile,
-            provider_session_token,
-        }),
-    }
 }
 
 /// Bundles a spawned child process with its asynchronous output capture handles.
@@ -248,56 +148,15 @@ pub fn spawn_with_runner_and_capture(
     pipe_stdin: bool,
     execution_profile: &ResolvedExecutionProfile,
 ) -> Result<CapturedChild> {
-    spawn_with_runner_and_capture_session(
+    let mut child = spawn_command_via_shell(
         runner,
         command,
         cwd,
-        stdout,
-        stderr,
-        redaction_patterns,
+        RunnerStdioMode::Piped,
         extra_env,
         pipe_stdin,
         execution_profile,
-        None,
-    )
-}
-
-/// Spawns a captured runner and optionally reuses an opaque provider session.
-#[allow(clippy::too_many_arguments)]
-pub fn spawn_with_runner_and_capture_session(
-    runner: &RunnerConfig,
-    command: &str,
-    cwd: &Path,
-    stdout: File,
-    stderr: File,
-    redaction_patterns: Vec<String>,
-    extra_env: &std::collections::HashMap<String, String>,
-    pipe_stdin: bool,
-    execution_profile: &ResolvedExecutionProfile,
-    provider_session_token: Option<&str>,
-) -> Result<CapturedChild> {
-    let mut child = match runner.executor {
-        RunnerExecutorKind::Shell => ShellRunnerExecutor.spawn(SpawnParams {
-            runner,
-            command,
-            cwd,
-            stdio_mode: RunnerStdioMode::Piped,
-            extra_env,
-            pipe_stdin,
-            execution_profile,
-            provider_session_token,
-        })?,
-        RunnerExecutorKind::Streaming => StreamingAgentRunner.spawn(SpawnParams {
-            runner,
-            command,
-            cwd,
-            stdio_mode: RunnerStdioMode::Piped,
-            extra_env,
-            pipe_stdin,
-            execution_profile,
-            provider_session_token,
-        })?,
-    };
+    )?;
     let child_stdout = child
         .stdout
         .take()

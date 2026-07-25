@@ -82,12 +82,24 @@ if ! "$ORCH" task list -o json >/dev/null 2>&1; then
 fi
 
 PROJECT="qa-agent-driver"
-"$ORCH" apply --project "$PROJECT" -f "$FIXTURE" > "$QA_ROOT/apply.out"
+"$ORCH" apply --project "$PROJECT" -f "$FIXTURE" > "$QA_ROOT/apply.out" 2>&1
 if rg -q 'agent/(legacy-shell-pilot|explicit-shell-pilot|claude-driver|codex-driver)' \
   "$QA_ROOT/apply.out"; then
   pass "all three driver providers and the compatibility pilot apply successfully"
 else
   fail "driver fixture apply output is incomplete"
+fi
+if rg -q 'legacy_agent_command_deprecated.*shell/cli' "$QA_ROOT/apply.out"; then
+  pass "command-only compatibility fixture emits the stable promotion warning"
+else
+  fail "command-only Agent promotion warning is missing"
+fi
+"$ORCH" describe agent/legacy-shell-pilot --project "$PROJECT" \
+  > "$QA_ROOT/legacy-agent.out"
+if rg -q 'provider: shell' "$QA_ROOT/legacy-agent.out"; then
+  pass "command-only compatibility fixture persists as typed shell/cli"
+else
+  fail "promoted Agent does not describe as typed shell/cli"
 fi
 
 create_and_run() {
@@ -125,10 +137,10 @@ else
   fail "shell pilot diverged: legacy=$LEGACY_STATUS/$LEGACY_EXIT explicit=$EXPLICIT_STATUS/$EXPLICIT_EXIT"
 fi
 
-DRIVER_EVENT_COUNT="$(sqlite3 "$DB" "SELECT COUNT(*) FROM events WHERE task_id='$EXPLICIT_ID' AND event_type LIKE 'driver_%';")"
-if [[ "$DRIVER_EVENT_COUNT" -ge 1 ]] && \
+DRIVER_EVENT_COUNT="$(sqlite3 "$DB" "SELECT COUNT(*) FROM events WHERE task_id IN ('$LEGACY_ID', '$EXPLICIT_ID') AND event_type LIKE 'driver_%';")"
+if [[ "$DRIVER_EVENT_COUNT" -ge 2 ]] && \
    ! rg -q 'provider-session-secret|thread-secret|secret-session' "$QA_ROOT"; then
-  pass "normalized driver events persist without provider session material"
+  pass "both promoted and explicit shell runs persist normalized driver events without provider session material"
 else
   fail "driver event projection or session privacy evidence is missing"
 fi

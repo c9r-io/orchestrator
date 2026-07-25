@@ -11,7 +11,9 @@ spec:
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
-  name: echo_fail
+  # Replace the TestHarness default qa Agent so this failure fixture has one
+  # deterministic candidate instead of racing a successful fallback Agent.
+  name: echo
 spec:
   capabilities:
     - qa

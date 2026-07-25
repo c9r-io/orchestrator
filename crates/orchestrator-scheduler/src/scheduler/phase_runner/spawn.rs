@@ -1,7 +1,7 @@
 use agent_orchestrator::config::StepScope;
 use agent_orchestrator::driver::{DriverStartRequest, SessionRef, create_driver, driver_id};
 use agent_orchestrator::events::insert_event;
-use agent_orchestrator::runner::spawn_with_runner_and_capture_session;
+use agent_orchestrator::runner::spawn_with_runner_and_capture;
 use agent_orchestrator::session_store;
 use agent_orchestrator::state::InnerState;
 use anyhow::{Context, Result};
@@ -94,9 +94,12 @@ pub(super) async fn spawn_phase_process(
     };
     // For stdin delivery in TTY mode, we already warned and fell back to arg
     let effective_pipe_stdin = req_pipe_stdin && !tty;
-    if let Some(driver_config) = setup.driver.clone() {
+    let typed_shell_tty = tty && supports_tty_driver(setup.driver.as_ref());
+    if let Some(driver_config) = setup.driver.clone()
+        && !typed_shell_tty
+    {
         if tty {
-            anyhow::bail!("explicit Agent drivers do not support TTY sessions");
+            anyhow::bail!("only the shell/cli Agent driver supports TTY sessions");
         }
         let driver = create_driver(&driver_config)?;
         let provider_session =
@@ -131,7 +134,12 @@ pub(super) async fn spawn_phase_process(
             .start(DriverStartRequest {
                 driver: &driver_config,
                 runner: &setup.runner,
-                legacy_command: &command_to_run,
+                shell_command: &command_to_run,
+                stdin_payload: if effective_pipe_stdin {
+                    prompt_payload.as_deref()
+                } else {
+                    None
+                },
                 prompt,
                 cwd: workspace_root,
                 stdout: std::mem::replace(&mut setup.stdout_file, tempfile_placeholder()?),
@@ -177,8 +185,15 @@ pub(super) async fn spawn_phase_process(
             tty_early_return: None,
         });
     }
-    let provider_session_token = resolve_provider_session_token(state, task_id).await?;
-    let captured = spawn_with_runner_and_capture_session(
+    if setup.driver.is_none() && agent_id != "builtin" {
+        anyhow::bail!(
+            "[legacy_agent_execution_removed] Agent '{agent_id}' has no typed driver; re-apply it to promote command-only configuration to shell/cli"
+        );
+    }
+    // Engine-owned direct Step commands deliberately keep the shared safe
+    // spawn substrate. They are not Agent execution and therefore do not
+    // require a provider driver.
+    let captured = spawn_with_runner_and_capture(
         &setup.runner,
         &command_to_run,
         workspace_root,
@@ -188,7 +203,6 @@ pub(super) async fn spawn_phase_process(
         &setup.resolved_extra_env,
         effective_pipe_stdin,
         &setup.execution_profile,
-        provider_session_token.as_deref(),
     )?;
     let mut child = captured.child;
     let mut output_capture = Some(captured.output_capture);
@@ -296,6 +310,7 @@ pub(super) async fn spawn_phase_process(
             "agent_id": agent_id,
             "run_id": setup.run_id,
             "pid": child_pid,
+            "driver": setup.driver.as_ref().map(driver_id),
             "command_preview": preview,
             "execution_profile": setup.execution_profile.name,
         }),
@@ -346,61 +361,18 @@ fn should_start_coordination_tool_host(
     enabled && hosting == agent_orchestrator::config::ToolHosting::Stdio
 }
 
+fn supports_tty_driver(driver: Option<&agent_orchestrator::config::AgentDriverConfig>) -> bool {
+    driver.is_some_and(|driver| {
+        driver.provider == agent_orchestrator::config::DriverProvider::Shell
+            && driver.transport == agent_orchestrator::config::DriverTransport::Cli
+    })
+}
+
 pub(super) async fn remember_provider_session(task_id: &str, reference: SessionRef) {
     provider_sessions()
         .lock()
         .await
         .insert(task_id.to_string(), reference);
-}
-
-async fn resolve_provider_session_token(
-    state: &InnerState,
-    task_id: &str,
-) -> Result<Option<String>> {
-    let task_id = task_id.to_owned();
-    state
-        .async_database
-        .reader()
-        .call(move |conn| {
-            use rusqlite::OptionalExtension as _;
-            let reference: Option<String> = conn
-                .query_row(
-                    "SELECT resume_token FROM tasks WHERE id=?1",
-                    [&task_id],
-                    |row| row.get(0),
-                )
-                .optional()?
-                .flatten();
-            let Some(reference) = reference else {
-                return Ok(None);
-            };
-            let Some(run_id) = reference.strip_prefix("command-run:") else {
-                return Err(tokio_rusqlite::Error::Other(
-                    anyhow::anyhow!(
-                        "unsupported provider session reference; restart from the logical boundary in a new session"
-                    )
-                    .into(),
-                ));
-            };
-            let token: Option<String> = conn
-                .query_row(
-                    "SELECT session_id FROM command_runs WHERE id=?1",
-                    [run_id],
-                    |row| row.get(0),
-                )
-                .optional()?
-                .flatten();
-            token.map(Some).ok_or_else(|| {
-                tokio_rusqlite::Error::Other(
-                    anyhow::anyhow!(
-                        "provider session is no longer available; restart from the logical boundary in a new session"
-                    )
-                    .into(),
-                )
-            })
-        })
-        .await
-        .map_err(agent_orchestrator::async_database::flatten_err)
 }
 
 /// Create a throwaway file handle used as a placeholder after the real file is moved out.
@@ -450,5 +422,19 @@ mod tests {
             true,
             ToolHosting::Stdio
         ));
+    }
+
+    #[test]
+    fn tty_is_only_supported_by_typed_shell_cli_driver() {
+        let shell = agent_orchestrator::config::AgentDriverConfig::shell_cli();
+        let mut claude = shell.clone();
+        claude.provider = agent_orchestrator::config::DriverProvider::Claude;
+        let mut shell_sdk = shell.clone();
+        shell_sdk.transport = agent_orchestrator::config::DriverTransport::Sdk;
+
+        assert!(supports_tty_driver(Some(&shell)));
+        assert!(!supports_tty_driver(Some(&claude)));
+        assert!(!supports_tty_driver(Some(&shell_sdk)));
+        assert!(!supports_tty_driver(None));
     }
 }

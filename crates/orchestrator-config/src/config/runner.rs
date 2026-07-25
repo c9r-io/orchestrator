@@ -11,20 +11,6 @@ pub enum RunnerPolicy {
     Allowlist,
 }
 
-/// Execution backend used by the runner.
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum RunnerExecutorKind {
-    /// Execute commands through a shell process.
-    #[default]
-    Shell,
-    /// Drive an agent CLI in `stream-json` mode with orchestrator-owned MCP
-    /// tools, replacing the one-shot shell-text contract with a structured,
-    /// tool-calling contract. See
-    /// `docs/design_doc/orchestrator/101-streaming-agent-runner-architecture-pivot.md`.
-    Streaming,
-}
-
 /// Configuration for command execution in orchestrated steps.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunnerConfig {
@@ -36,9 +22,6 @@ pub struct RunnerConfig {
     /// Security policy applied to shell execution.
     #[serde(default)]
     pub policy: RunnerPolicy,
-    /// Execution backend used for step commands.
-    #[serde(default)]
-    pub executor: RunnerExecutorKind,
     /// Shell binaries allowed when `policy` is `Allowlist`.
     #[serde(default = "default_allowed_shells")]
     pub allowed_shells: Vec<String>,
@@ -95,7 +78,6 @@ impl Default for RunnerConfig {
             shell: "/bin/bash".to_string(),
             shell_arg: default_shell_arg(),
             policy: RunnerPolicy::Allowlist,
-            executor: RunnerExecutorKind::Shell,
             allowed_shells: default_allowed_shells(),
             allowed_shell_args: default_allowed_shell_args(),
             env_allowlist: default_env_allowlist(),
@@ -122,7 +104,6 @@ mod tests {
         assert_eq!(cfg.shell, "/bin/bash");
         assert_eq!(cfg.shell_arg, "-lc");
         assert_eq!(cfg.policy, RunnerPolicy::Allowlist);
-        assert_eq!(cfg.executor, RunnerExecutorKind::Shell);
         assert_eq!(cfg.allowed_shells.len(), 3);
         assert!(cfg.allowed_shells.contains(&"/bin/bash".to_string()));
         assert_eq!(cfg.allowed_shell_args, vec!["-lc", "-c"]);
@@ -136,22 +117,6 @@ mod tests {
     fn test_runner_policy_default() {
         let policy = RunnerPolicy::default();
         assert_eq!(policy, RunnerPolicy::Allowlist);
-    }
-
-    #[test]
-    fn test_runner_executor_kind_default() {
-        let kind = RunnerExecutorKind::default();
-        assert_eq!(kind, RunnerExecutorKind::Shell);
-    }
-
-    #[test]
-    fn test_runner_executor_kind_streaming_serde() {
-        let kind = RunnerExecutorKind::Streaming;
-        let json = serde_json::to_string(&kind).expect("serialize streaming kind");
-        assert_eq!(json, r#""streaming""#);
-        let back: RunnerExecutorKind =
-            serde_json::from_str(&json).expect("deserialize streaming kind");
-        assert_eq!(back, RunnerExecutorKind::Streaming);
     }
 
     #[test]

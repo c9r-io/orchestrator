@@ -78,7 +78,7 @@ pub fn create_driver(config: &AgentDriverConfig) -> Result<Box<dyn super::AgentD
 }
 
 /// Validates one Agent driver independently of workflow requirements.
-pub fn validate_driver_config(config: &AgentDriverConfig, legacy_command: &str) -> Result<()> {
+pub fn validate_driver_config(config: &AgentDriverConfig, shell_command: &str) -> Result<()> {
     if config.transport == DriverTransport::Sdk {
         // The shape is retained for apply-time safety diagnostics, but no SDK implementation exists.
         if config.provider == DriverProvider::Shell {
@@ -87,7 +87,7 @@ pub fn validate_driver_config(config: &AgentDriverConfig, legacy_command: &str) 
     }
     match config.provider {
         DriverProvider::Shell => {
-            if legacy_command.trim().is_empty() {
+            if shell_command.trim().is_empty() {
                 bail!("driver shell/cli requires agent.spec.command");
             }
             if config.claude.is_some() || config.codex.is_some() {
@@ -95,7 +95,7 @@ pub fn validate_driver_config(config: &AgentDriverConfig, legacy_command: &str) 
             }
         }
         DriverProvider::Claude => {
-            if !legacy_command.trim().is_empty() {
+            if !shell_command.trim().is_empty() {
                 bail!("claude driver constructs its command; agent.spec.command must be omitted");
             }
             if config.codex.is_some() || config.shell.is_some() {
@@ -103,7 +103,7 @@ pub fn validate_driver_config(config: &AgentDriverConfig, legacy_command: &str) 
             }
         }
         DriverProvider::Codex => {
-            if !legacy_command.trim().is_empty() {
+            if !shell_command.trim().is_empty() {
                 bail!("codex driver constructs its command; agent.spec.command must be omitted");
             }
             if config.claude.is_some() || config.shell.is_some() {
@@ -197,7 +197,7 @@ mod tests {
     }
 
     #[test]
-    fn vendor_driver_rejects_legacy_command_and_parent_cwd() {
+    fn vendor_driver_rejects_shell_command_and_parent_cwd() {
         let mut config = driver(DriverProvider::Claude);
         assert!(validate_driver_config(&config, "claude -p x").is_err());
         config.options.cwd = Some("../escape".to_string());

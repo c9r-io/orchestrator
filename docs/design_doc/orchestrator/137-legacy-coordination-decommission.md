@@ -18,6 +18,10 @@ FR-125 advances that freeze to selective removal. It removes only channels with
 zero production consumers, preserves deterministic governance, and records
 instead of hiding the remaining compatibility dependencies.
 
+FR-126 subsequently closed the transferred command-only Agent dependency and
+removed the legacy runner selection seam; see
+`docs/design_doc/orchestrator/138-agent-driver-execution-migration.md`.
+
 ## Goals
 
 - Produce a machine-readable inventory for capture/JSONPath,

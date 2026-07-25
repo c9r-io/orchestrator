@@ -112,7 +112,8 @@ GROUP BY event_type;
 ### Steps
 
 1. Apply the FR-116 fixture in the isolated daemon.
-2. Create and start one task with `legacy-shell-pilot` and one with `explicit-shell-pilot`.
+2. Create and start one task with the command-only compatibility
+   `legacy-shell-pilot` and one with `explicit-shell-pilot`.
 3. Compare task terminal state, command-run exit code, and event evidence.
 4. Count the Agent YAML lines for legacy and explicit shell forms.
 5. Run workspace build/tests, strict Clippy, and documentation lint.
@@ -120,9 +121,13 @@ GROUP BY event_type;
 ### Expected
 
 - Both pilots finish `completed` with command-run exit code `0`.
-- The explicit path additionally emits normalized driver events; legacy output semantics are unchanged.
+- Apply emits `[legacy_agent_command_deprecated]`, persists the compatibility
+  Agent as `shell/cli`, and both paths emit normalized driver events; shell
+  output semantics are unchanged.
 - The explicit shell Agent adds five effective YAML lines for driver ownership; workflow behavior remains equivalent.
-- All existing shell, streaming compatibility, scheduler, CLI/daemon, and gRPC tests remain green.
+- All existing shell, scheduler, CLI/daemon, and gRPC tests remain green. The
+  global streaming executor was subsequently retired by FR-126; use QA-176 for
+  current removal evidence.
 
 ## Checklist
 

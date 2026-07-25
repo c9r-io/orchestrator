@@ -1,9 +1,7 @@
 use crate::cli_types::{
     OrchestratorResource, ResourceKind, ResourceSpec, ResumeSpec, RunnerSpec, RuntimePolicySpec,
 };
-use crate::config::{
-    OrchestratorConfig, ResumeConfig, RunnerConfig, RunnerExecutorKind, RunnerPolicy,
-};
+use crate::config::{OrchestratorConfig, ResumeConfig, RunnerConfig, RunnerPolicy};
 use anyhow::{Result, anyhow};
 
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
@@ -28,6 +26,16 @@ impl Resource for RuntimePolicyResource {
 
     fn validate(&self) -> Result<()> {
         super::validate_resource_name(self.name())?;
+        if self.spec.runner.executor == "streaming" {
+            return Err(anyhow!(
+                "[legacy_runner_executor_removed] runner.executor=streaming was removed; configure a typed Agent driver instead"
+            ));
+        }
+        if self.spec.runner.executor != "shell" {
+            return Err(anyhow!(
+                "runner.executor must be shell; the field is retained only for manifest compatibility"
+            ));
+        }
         if self.spec.runner.policy == "allowlist" {
             let mut errors = Vec::new();
             if self.spec.runner.allowed_shells.is_empty() {
@@ -158,11 +166,6 @@ pub(crate) fn runner_spec_to_config(spec: &RunnerSpec) -> RunnerConfig {
             "unsafe" | "legacy" => RunnerPolicy::Unsafe,
             _ => RunnerPolicy::Allowlist,
         },
-        executor: match spec.executor.as_str() {
-            "streaming" => RunnerExecutorKind::Streaming,
-            "shell" => RunnerExecutorKind::Shell,
-            _ => RunnerExecutorKind::Shell,
-        },
         allowed_shells: spec.allowed_shells.clone(),
         allowed_shell_args: spec.allowed_shell_args.clone(),
         env_allowlist: spec.env_allowlist.clone(),
@@ -179,10 +182,9 @@ pub(crate) fn runner_config_to_spec(config: &RunnerConfig) -> RunnerSpec {
             RunnerPolicy::Unsafe => "unsafe".to_string(),
             RunnerPolicy::Allowlist => "allowlist".to_string(),
         },
-        executor: match config.executor {
-            RunnerExecutorKind::Shell => "shell".to_string(),
-            RunnerExecutorKind::Streaming => "streaming".to_string(),
-        },
+        // Parse-only compatibility field. Execution is selected per Agent
+        // through `spec.driver`, never through a global runner switch.
+        executor: "shell".to_string(),
         allowed_shells: config.allowed_shells.clone(),
         allowed_shell_args: config.allowed_shell_args.clone(),
         env_allowlist: config.env_allowlist.clone(),
@@ -293,7 +295,6 @@ mod tests {
         let config = runner_spec_to_config(&spec);
         assert_eq!(config.shell, "/bin/zsh");
         assert!(matches!(config.policy, RunnerPolicy::Allowlist));
-        assert!(matches!(config.executor, RunnerExecutorKind::Shell));
         assert_eq!(config.allowed_shells, vec!["/bin/bash".to_string()]);
         assert_eq!(config.env_allowlist, vec!["PATH".to_string()]);
 
@@ -346,6 +347,19 @@ mod tests {
         }
         let resource = dispatch_resource(manifest).expect("dispatch should succeed");
         assert!(resource.validate().is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_removed_streaming_executor() {
+        let mut manifest = runtime_policy_manifest();
+        if let ResourceSpec::RuntimePolicy(ref mut spec) = manifest.spec {
+            spec.runner.executor = "streaming".to_string();
+        }
+        let resource = dispatch_resource(manifest).expect("dispatch should succeed");
+        let error = resource
+            .validate()
+            .expect_err("removed global executor must fail closed");
+        assert!(error.to_string().contains("legacy_runner_executor_removed"));
     }
 
     #[test]

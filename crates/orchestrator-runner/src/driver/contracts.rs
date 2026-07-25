@@ -228,8 +228,10 @@ pub struct DriverStartRequest<'a> {
     pub driver: &'a orchestrator_config::config::AgentDriverConfig,
     /// Process-wide runner policy shared by every driver.
     pub runner: &'a orchestrator_config::config::RunnerConfig,
-    /// Legacy shell command, used only by the shell driver.
-    pub legacy_command: &'a str,
+    /// Governed command template consumed only by the shell driver.
+    pub shell_command: &'a str,
+    /// Optional initial stdin payload for shell prompt delivery.
+    pub stdin_payload: Option<&'a str>,
     /// Rendered prompt delivered according to provider protocol.
     pub prompt: &'a str,
     /// Governed workspace root.

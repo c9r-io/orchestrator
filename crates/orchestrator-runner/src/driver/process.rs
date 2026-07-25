@@ -32,6 +32,7 @@ impl ProcessSession {
         stderr_file: File,
         redaction_patterns: Vec<String>,
         initial_input: Option<String>,
+        close_stdin_after_initial_input: bool,
     ) -> Result<Self> {
         let pid = child.id();
         let stdout = child
@@ -75,6 +76,9 @@ impl ProcessSession {
                 .context("driver child missing stdin for initial message")?;
             handle.write_all(input.as_bytes()).await?;
             handle.flush().await?;
+            if close_stdin_after_initial_input {
+                *guard = None;
+            }
         }
 
         let wait_terminal = terminal_emitted.clone();

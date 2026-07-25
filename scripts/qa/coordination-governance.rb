@@ -184,7 +184,8 @@ def source_counts(files)
   counts = {
     "capturesOrJsonPath" => 0,
     "pipelineVariables" => 0,
-    "celInterpreter" => 0
+    "celInterpreter" => 0,
+    "legacyRunnerSelection" => 0
   }
   files.each do |path|
     source = File.read(path)
@@ -198,6 +199,9 @@ def source_counts(files)
       counts["capturesOrJsonPath"] += 1 if line.match?(/captures|json_path/)
       counts["pipelineVariables"] += 1 if line.include?("PipelineVariables")
       counts["celInterpreter"] += 1 if line.match?(/cel_interpreter|cel-interpreter/)
+      counts["legacyRunnerSelection"] += 1 if line.match?(
+        /RunnerExecutorKind|ShellRunnerExecutor|StreamingAgentRunner|spawn_with_runner(?:_and_capture)?_session|prepare_legacy_claude_streaming_command/
+      )
     end
   end
   counts
@@ -450,7 +454,8 @@ report = {
   "sourceBaseline" => source_baseline.slice(
     "capturesOrJsonPath",
     "pipelineVariables",
-    "celInterpreter"
+    "celInterpreter",
+    "legacyRunnerSelection"
   ),
   "preservedChannels" => actual_channels,
   "typedStateDecision" => ledger.dig("decision", "typedState"),

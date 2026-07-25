@@ -170,11 +170,12 @@ pub(super) async fn validate_driver_events_stage(
         tokens_consumed: (tokens > 0).then_some(tokens),
         ..ExecutionMetrics::default()
     });
+    let success = final_exit_code == 0;
 
     Ok(ValidatedOutput {
         final_exit_code,
-        success: final_exit_code == 0,
-        validation_status: "passed",
+        success,
+        validation_status: if success { "passed" } else { "failed" },
         validation_event_payload_json: None,
         redacted_output: output,
         sandbox_denied: false,
@@ -221,5 +222,32 @@ mod driver_tests {
         assert!(validated.success);
         assert_eq!(validated.redacted_output.stdout, "normalized answer");
         assert!(std::fs::metadata(stdout_path).expect("metadata").len() > 256 * 1024);
+    }
+
+    #[tokio::test]
+    async fn failed_driver_terminal_is_a_hard_validation_failure() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let stderr_path = directory.path().join("stderr.log");
+        std::fs::write(&stderr_path, "provider failed").expect("stderr");
+        let events = vec![DriverEvent::Finished {
+            outcome: DriverOutcome::Failed,
+            exit_code: 1,
+        }];
+
+        let validated = validate_driver_events_stage(
+            "qa",
+            Uuid::new_v4(),
+            "shell-driver",
+            1,
+            &events,
+            &stderr_path,
+            &[],
+        )
+        .await
+        .expect("fold failed terminal");
+
+        assert!(!validated.success);
+        assert_eq!(validated.final_exit_code, 1);
+        assert_eq!(validated.validation_status, "failed");
     }
 }
