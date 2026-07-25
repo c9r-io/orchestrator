@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Infrastructure Security - Dependency Audit And Supply Chain (Generic)
 
 **Module**: Infrastructure Security  

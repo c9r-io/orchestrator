@@ -135,7 +135,7 @@ This step is self-referential by construction: the same effort that authored the
    - **Closed**: all acceptance criteria met, all QA scenarios pass, no open items
    - **Partially done**: some criteria met, others remain
 
-### 5.1 Lifecycle metadata (mandatory for every DD and QA document)
+### 5.1 Lifecycle metadata (mandatory for every DD, QA and security document)
 
 Every file under `docs/design_doc/**` and `docs/qa/**` carries YAML frontmatter declaring its
 lifecycle. `scripts/qa/doc-lifecycle.rb` enforces this in CI, and a new document without it fails

@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Input Validation - SSRF Tests (Generic)
 
 **Module**: Input Validation  

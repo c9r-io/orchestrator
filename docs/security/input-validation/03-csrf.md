@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Input Validation - CSRF Tests (Generic)
 
 **Module**: Input Validation  

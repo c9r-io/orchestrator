@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # API Security - Rate Limiting And DoS Protections (Generic)
 
 **Module**: API Security  

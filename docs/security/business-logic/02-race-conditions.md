@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Business Logic Security - Race Condition Tests (Generic)
 
 **Module**: Business Logic Security  

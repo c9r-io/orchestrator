@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Logging And Monitoring - Log Security And Audit Coverage Tests (Generic)
 
 **Module**: Logging And Error Handling  

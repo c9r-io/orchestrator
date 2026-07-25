@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Data Security - Sensitive Data Exposure And Masking Tests (Generic)
 
 **Module**: Data Security  

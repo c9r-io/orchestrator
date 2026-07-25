@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Business Logic Security - Workflow Abuse And Replay Tests (Generic)
 
 **Module**: Business Logic Security  

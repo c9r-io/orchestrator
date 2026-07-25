@@ -36,11 +36,17 @@ require "yaml"
 # gates for no behavioural gain. Only the serialiser is used here.
 require_relative "../lib/rust_source"
 
-DOC_ROOTS = ["docs/design_doc", "docs/qa"].freeze
+# docs/security carries FR closure artifacts on the same footing as docs/qa —
+# FR-117 and FR-117-A are borne by docs/security/authorization/02-file-sharing-ceiling.md
+# and docs/security/file-security/02-workspace-home-isolation.md — so its documents
+# go stale the same way and are governed the same way. FR-132 scoped itself to two
+# roots and left these 18 documents ungoverned; the gate was green because they were
+# never looked at, which is the failure this ledger exists to prevent.
+DOC_ROOTS = ["docs/design_doc", "docs/qa", "docs/security"].freeze
 LIFECYCLES = %w[active superseded].freeze
 RELATED_FR = /\AFR-\d+(?:,\s*FR-\d+)*\z/.freeze
-SCOPE = "every Markdown file under docs/design_doc and docs/qa, excluding files named " \
-  "README.md and any path containing a component that begins with an underscore".freeze
+SCOPE = "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding " \
+  "files named README.md and any path containing a component that begins with an underscore".freeze
 
 options = {
   index: "config/governance/doc-lifecycle-index.json",

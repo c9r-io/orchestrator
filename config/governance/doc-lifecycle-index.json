@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "scope": "every Markdown file under docs/design_doc and docs/qa, excluding files named README.md and any path containing a component that begins with an underscore",
+  "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 380,
-    "active": 377,
+    "documents": 399,
+    "active": 396,
     "superseded": 3,
     "withRelatedFr": 244
   },
@@ -1881,6 +1881,63 @@
       "lifecycle": "active"
     },
     "docs/qa/self-bootstrap/smoke-self-bootstrap.md": {
+      "lifecycle": "active"
+    },
+    "docs/security/api-security/01-rest-api.md": {
+      "lifecycle": "active"
+    },
+    "docs/security/api-security/02-rate-limiting.md": {
+      "lifecycle": "active"
+    },
+    "docs/security/authentication/01-authentication.md": {
+      "lifecycle": "active"
+    },
+    "docs/security/authorization/01-access-control.md": {
+      "lifecycle": "active"
+    },
+    "docs/security/authorization/02-file-sharing-ceiling.md": {
+      "lifecycle": "active"
+    },
+    "docs/security/business-logic/01-workflow-abuse.md": {
+      "lifecycle": "active"
+    },
+    "docs/security/business-logic/02-race-conditions.md": {
+      "lifecycle": "active"
+    },
+    "docs/security/data-security/01-sensitive-data.md": {
+      "lifecycle": "active"
+    },
+    "docs/security/file-security/01-file-upload.md": {
+      "lifecycle": "active"
+    },
+    "docs/security/file-security/02-workspace-home-isolation.md": {
+      "lifecycle": "active"
+    },
+    "docs/security/infrastructure/01-tls-headers-cors.md": {
+      "lifecycle": "active"
+    },
+    "docs/security/infrastructure/02-dependency-supply-chain.md": {
+      "lifecycle": "active"
+    },
+    "docs/security/input-validation/01-injection.md": {
+      "lifecycle": "active"
+    },
+    "docs/security/input-validation/02-xss.md": {
+      "lifecycle": "active"
+    },
+    "docs/security/input-validation/03-csrf.md": {
+      "lifecycle": "active"
+    },
+    "docs/security/input-validation/04-ssrf.md": {
+      "lifecycle": "active"
+    },
+    "docs/security/logging-monitoring/01-log-security.md": {
+      "lifecycle": "active"
+    },
+    "docs/security/session-management/01-session-security.md": {
+      "lifecycle": "active"
+    },
+    "docs/security/slack-gateway-threat-model.md": {
       "lifecycle": "active"
     }
   },

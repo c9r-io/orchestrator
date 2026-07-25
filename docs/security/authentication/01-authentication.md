@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Authentication Security - Login And Token Tests (Generic)
 
 **Module**: Authentication  

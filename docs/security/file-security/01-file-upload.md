@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # File Security - Upload/Download Tests (Generic)
 
 **Module**: File Security  

@@ -21,7 +21,7 @@ described a deleted execution seam; nothing had marked them.
 `scripts/qa/doc-lifecycle.rb` enforces the metadata and generates
 `config/governance/doc-lifecycle-index.json`, which carries the two reverse directions
 `docs/feature_request/README.md` cannot: document → feature request, and superseded → successor.
-Current state: 380 governed documents, 377 active, 3 superseded, 244 with `related_fr` across 121
+Current state: 399 governed documents, 396 active, 3 superseded, 244 with `related_fr` across 121
 feature requests.
 
 All scenarios below are read-only against the working tree or operate on copies under `$TMPDIR`.
@@ -54,7 +54,7 @@ ruby scripts/qa/doc-lifecycle.rb --emit-index         # the regeneration path
 
 ### Expected Result
 
-- Step 1 exits 0 and prints `Doc lifecycle: PASS` with `380 governed document(s): 377 active, 3
+- Step 1 exits 0 and prints `Doc lifecycle: PASS` with `399 governed document(s): 396 active, 3
   superseded`.
 - Step 3 produces no output: the regeneration path reproduces the committed index byte for byte.
 - Step 4 confirms the scan walks the filesystem. A roster would guard only what existed when it was

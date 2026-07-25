@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Slack Integration Gateway Threat Model
 
 **Scope**: FR-114 shared OAuth, FR-115 dedicated Slack App provisioning,

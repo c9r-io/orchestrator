@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Session Management - Session/Cookie Security Tests (Generic)
 
 **Module**: Session Management  

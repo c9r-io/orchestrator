@@ -143,7 +143,7 @@
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
       "providerIsolation": { "mode": "no-provider" },
-      "note": "mutates copies of docs/design_doc and docs/qa under a temporary directory; it starts no daemon, compiles nothing, and never writes the working tree, so no provider binary is reachable."
+      "note": "mutates copies of docs/design_doc, docs/qa and docs/security under a temporary directory; it starts no daemon, compiles nothing, and never writes the working tree, so no provider binary is reachable."
     },
     {
       "path": "scripts/qa/test-coordination-strangler.sh",

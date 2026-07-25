@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Input Validation - XSS Tests (Generic)
 
 **Module**: Input Validation  

@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Input Validation - Injection Tests (Generic)
 
 **Module**: Input Validation  

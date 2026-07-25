@@ -190,3 +190,8 @@ assert the gate does not report them; "fixing" them would have been damage.
   negatives for a class of false positives.
 - **Reference-style links (`[text][ref]`) are not extracted.** The repository has none; if one is
   ever written, the gate is silent rather than wrong.
+- **HTML anchors (`<a href="...">`) are not extracted either**, for the same reason and with the
+  same consequence. Verified by probe: a file carrying a reference definition, an HTML anchor and
+  an inline link to three missing targets reports only the inline one. The repository currently
+  has zero of both forms, so today's clean result is accurate; both would need adding if either
+  syntax ever enters the docs.

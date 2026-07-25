@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Task Workspace HOME Isolation
 
 **Scope**: FR-117 task cwd/HOME confinement and lifecycle  

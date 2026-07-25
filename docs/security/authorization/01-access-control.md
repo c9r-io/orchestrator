@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Authorization Security - Access Control And Privilege Tests (Generic)
 
 **Module**: Authorization  

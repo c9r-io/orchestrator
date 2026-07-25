@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # API Security - REST API Tests (Generic)
 
 **Module**: API Security  

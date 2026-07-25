@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # File-Sharing Ceiling Authorization
 
 **Scope**: FR-117 daemon-owned host path authority  

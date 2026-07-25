@@ -84,7 +84,7 @@ the other, and the FR was right to ask for both.
 
 The FR proposed a phased backfill behind an exemption list under a ratchet. Because `lifecycle:
 active` is mechanical for every document that is not one of the three known fences, the whole
-surface was backfilled in one pass instead: 380 documents, 377 active, 3 superseded, 244 carrying
+surface was backfilled in one pass instead: 399 documents, 396 active, 3 superseded, 244 carrying
 `related_fr`.
 
 This is strictly stronger than a shrinking exemption list. There is no list to grow, no ratchet to
@@ -103,7 +103,7 @@ authored and reviewed sentences naming an FR and the documents that carry it, an
 `**Related Plan**:` header where its value *begins* with an FR id. Most `**Related Plan**` values are
 free prose describing the plan rather than naming it, and those were left alone.
 
-That yields 244 of 380 documents. The remaining 136 have no `related_fr`, which is the honest
+That yields 244 of 399 documents. The remaining 136 have no `related_fr`, which is the honest
 result: a gate enforcing 136 plausible guesses would be worse than a gate enforcing 244 facts.
 
 ### Parsing, not matching
@@ -116,7 +116,7 @@ forgiving one.
 
 ### Coverage is walked, not listed
 
-`governed_documents` globs the two roots. Nothing anywhere names the set of scanned files. This is
+`governed_documents` globs the three roots. Nothing anywhere names the set of scanned files. This is
 the specific failure mode a hand-listed roster has: it guards exactly what was known when it was
 written, and the next document lands outside it in silence.
 
@@ -165,11 +165,42 @@ This is the same shape FR-130's case 9 had, and the same correction applies: an 
 attribution. Case 9 now requires the diagnostic `is not FR-<number>` in the gate's stderr, which no
 other failure produces.
 
+## 2026-07-25 follow-up: `docs/security` added to the governed roots
+
+The post-closure audit of FR-132 found that `DOC_ROOTS` held two entries while `docs/security`
+held **19 governed documents with zero frontmatter**, and the gate reported `12 passed, 0 failed`
+throughout — green because those files were never looked at, which is the failure this ledger
+exists to prevent.
+
+They are not a different class of document. `docs/security/authorization/02-file-sharing-ceiling.md`
+and `docs/security/file-security/02-workspace-home-isolation.md` are named in
+`docs/feature_request/README.md` as the closure artifacts carrying FR-117 and FR-117-A, on the same
+footing as a DD or a QA doc. `qa-doc-gen`'s own cross-doc scan has always listed `docs/security/`
+beside `docs/qa/`. A security document goes stale exactly the way a design record does.
+
+The cause was in FR-132's own wording — it scoped itself to "`docs/design_doc/**` 与 `docs/qa/**`" —
+so the implementation was faithful to a requirement that was too narrow. This is the third instance
+of the pattern FR-134 tracks: **an enumerated surface guards what was known when it was written.**
+`governed_documents` derives coverage from the filesystem within each root, but the roster of roots
+was itself a hand-written list of two.
+
+Changes: `DOC_ROOTS` and `SCOPE` gained `docs/security`; all 19 documents were backfilled with
+`lifecycle: active` and no `related_fr`. Attribution was deliberately left empty rather than
+inferred from the first `FR-NNN` appearing in each file — that string is usually a citation, not
+authorship, and guessing it would have put 11 unreviewed attributions into the reverse index.
+The index moved from 380 to 399 documents; `byFeatureRequest` is unchanged at 244 across 121 FRs,
+which is the visible consequence of not guessing.
+
+Residual: `docs/uiux/` (11 documents) and `docs/showcases/` (36, both locales) remain outside the roots.
+Showcases are published product surface governed by DD-143's publishing gate rather than closure
+records, so they are deliberately out. `docs/uiux/` is the open question — it was not examined in
+this pass and should be resolved the next time an FR touches it.
+
 ## Consequences
 
 ### What this establishes
 
-- "Is this document still true?" is answerable by reading one line, for all 380 documents.
+- "Is this document still true?" is answerable by reading one line, for all 399 documents.
 - The three documents FR-126 had to fence by hand now say so structurally, pointing at DD-138.
 - A design doc reaches its feature request, and a superseded document reaches its successor.
 - A new DD or QA document cannot land unclassified: the wrapper's case 1 runs the gate against the

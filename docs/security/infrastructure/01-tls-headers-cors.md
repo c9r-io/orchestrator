@@ -1,3 +1,7 @@
+---
+lifecycle: active
+---
+
 # Infrastructure Security - TLS/Security Headers/CORS Baseline (Generic)
 
 **Module**: Infrastructure Security  
