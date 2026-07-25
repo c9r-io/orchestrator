@@ -4,6 +4,11 @@ self_referential_safe: true
 
 # QA-105: Workflow YAML 步骤定义未知字段警告
 
+> **Superseded by FR-125 / QA-175**: the spelling suggestion may remain for
+> diagnostics, but placing captures under `behavior.captures` is no longer a
+> valid production workflow. Semantic validation rejects it with
+> `[legacy_coordination_removed]`.
+
 ## 关联
 - FR-051
 - Design Doc 63

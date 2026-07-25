@@ -9,6 +9,11 @@ self_referential_safe: true
 **Scenarios**: 5
 **Priority**: High
 
+> **FR-125 supersession**: `behavior.captures` and JSONPath-backed post-actions
+> now fail semantic validation with stable retirement diagnostics. Older
+> capture-validity expectations below are historical; current acceptance is
+> QA-175.
+
 ---
 
 ## Background

@@ -79,7 +79,6 @@
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
-| FR-125 | 遗留协调机器分级退役（Deprecate → Remove） | P2 | Proposed |
 | FR-126 | Agent 执行路径迁移 — legacy command → typed driver（解锁 ShellRunnerExecutor 退役） | P2 | Proposed |
 
 ## 说明
@@ -90,6 +89,7 @@
 - `In Progress`: 已有部分阶段落地，剩余阶段仍在治理中
 - `Implemented`: 需求已完成并进入维护阶段
 - 已闭环并删除的 FR，应由对应 `docs/design_doc/**` 与 `docs/qa/**` 继续承载设计和验证信息
+- FR-125 已闭环删除；其精确消费者清单、capture/JSONPath 生产路径退役、窄化持久状态、显式兼容性阻塞项与退役后工具工作流证据现由 `docs/design_doc/orchestrator/137-legacy-coordination-decommission.md`、`docs/qa/orchestrator/175-legacy-coordination-decommission.md`、`config/governance/coordination-collapse-ledger.json` 与 `scripts/qa/test-legacy-coordination-decommission.sh` 承载
 - FR-124 已闭环删除；其 11 个生产 Workflow 精确分类、7 个非 governance-only 迁移、逐工作流 legacy/tool 对等证据、显式 tool/session 边界、`record_metric`、self-bootstrap 两周期生存回归、冻结棘轮与三级退役标准现由 `docs/design_doc/orchestrator/136-coordination-strangler-completion.md`、`docs/qa/orchestrator/174-coordination-strangler-completion.md`、`config/governance/coordination-collapse-ledger.json`、`fixtures/manifests/bundles/coordination-strangler-parity.yaml` 与 `scripts/qa/test-coordination-strangler.sh` 承载
 - FR-123 已闭环删除；其 shared/dedicated/组合认证入口、可恢复 provider checkpoint、inert 最小 secret 环境、同消息双 badge smoke、recorded provider CI、可过期安全证据、README/release 状态与显式清理 inventory 现由 `docs/design_doc/orchestrator/135-slack-sandbox-continuous-certification.md`、`docs/qa/orchestrator/173-slack-sandbox-continuous-certification.md`、`docs/guide/slack-managed-sandbox-certification-runbook.md`、`docs/qa/evidence/slack-live-certification-latest.json` 与 `scripts/qa/certify-slack-managed-live.sh` 承载
 - FR-122 已闭环删除；其统一覆盖率命令、批准基线非回退门禁、Rust branch `unsupported` 语义、五类 daemon 边界矩阵、CLI/Tauri 真实 gRPC 适配器模板及 FR-095～FR-118 证据索引现由 `docs/design_doc/orchestrator/134-boundary-layer-coverage-governance.md`、`docs/qa/orchestrator/172-boundary-layer-coverage-governance.md`、`coverage/boundary-baseline.json`、`coverage/README.md` 与 `scripts/coverage-governance.sh` 承载

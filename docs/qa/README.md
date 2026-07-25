@@ -176,7 +176,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/76-config-load-module-split.md` | - | FR-025: config_load module split and responsibility segregation |
 | orchestrator | `docs/qa/orchestrator/77-event-table-ttl-archival.md` | 5 | Event table TTL and archival: event stats, cleanup, archive to JSONL |
 | orchestrator | `docs/qa/orchestrator/78-worker-notify-wakeup.md` | - | FR-027: worker notify wakeup governance, wake-file removal |
-| orchestrator | `docs/qa/orchestrator/79-benchmark-score-capture.md` | - | FR-028: benchmark score capture, json_path extraction, item_select |
+| orchestrator | `docs/qa/orchestrator/79-benchmark-score-capture.md` | - | Historical FR-028 capture/JSONPath evidence; production path retired by FR-125 / QA-175 |
 | orchestrator | `docs/qa/orchestrator/80-item-scoped-git-worktree-isolation.md` | 4 | Item-scoped git worktree isolation: config round-trip, vendored protoc, workspace regression, self-evolution manifest |
 | orchestrator | `docs/qa/orchestrator/81-self-evolution-db-schema-alignment.md` | - | FR-030: self-evolution DB schema alignment, monitoring queries |
 | orchestrator | `docs/qa/orchestrator/82-step-variable-expansion-completeness.md` | 5 | Variable expansion completeness: renderer helpers, runtime propagation, step-family coverage matrix, and unexpanded-placeholder anomaly guard |
@@ -229,7 +229,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/120b-gui-notification-error-humanization.md` | 4 | GUI 系统通知与错误信息人性化 |
 | orchestrator | `docs/qa/orchestrator/121-gui-polish-visual.md` | 4 | GUI 体验打磨 — 主题 / 动画 / DAG / 日志 |
 | orchestrator | `docs/qa/orchestrator/121b-gui-i18n-ux.md` | 3 | GUI i18n / 响应式 / 构建分发 |
-| orchestrator | `docs/qa/orchestrator/122-evo-apply-winner-observability.md` | - | FR-070: evo_apply_winner observability — item_select events, diff stats, captures |
+| orchestrator | `docs/qa/orchestrator/122-evo-apply-winner-observability.md` | - | FR-070 item_select/diff observability; capture scenarios superseded by FR-125 / QA-175 |
 | orchestrator | `docs/qa/orchestrator/123-open-source-compliance.md` | 6 | FR-071: open-source compliance — LICENSE, CHANGELOG, templates, release |
 | orchestrator | `docs/qa/orchestrator/124-homebrew-tap-distribution.md` | - | FR-072: Homebrew tap formula, cargo publish, release workflow distribution |
 | orchestrator | `docs/qa/orchestrator/125-documentation-site.md` | 5 | FR-073: VitePress doc site, EN/ZH landing, search, language switcher |
@@ -296,6 +296,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/172-boundary-layer-coverage-governance.md` | 5 | FR-122 machine-readable component/module coverage, approved baseline enforcement, explicit branch support, daemon risk matrices, CLI/Tauri tonic adapters, and evidence traceability |
 | orchestrator | `docs/qa/orchestrator/173-slack-sandbox-continuous-certification.md` | 5 | FR-123 unified shared/dedicated live modes, checkpoint resume, minimal secret custody, recorded provider CI, expiring safe evidence, and reviewed cleanup |
 | orchestrator | `docs/qa/orchestrator/174-coordination-strangler-completion.md` | 5 | FR-124 exact production inventory, seven independent legacy/tool pairs, explicit tool/session boundaries, two-cycle self-bootstrap survival, and retirement ratchet |
+| orchestrator | `docs/qa/orchestrator/175-legacy-coordination-decommission.md` | 5 | FR-125 exact consumer inventory, capture/JSONPath production removal, narrow residual state, explicit blockers, and post-retirement tool/repository closure |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
@@ -348,6 +349,7 @@ PR CI.
 | FR-117 | DD-128 / QA-165, QA-167 extension | Yes | Local Slack pilot | `test-non-code-workspace.sh` | Yes | No public provider |
 | FR-118 | DD-130 / QA-168 | Yes | Authenticated tool host | `test-coordination-collapse.sh` | No | No |
 | FR-124 | DD-136 / QA-174 | Yes | Seven legacy/tool pairs | `test-coordination-strangler.sh` | No | No |
+| FR-125 | DD-137 / QA-175 | Yes | Seven post-retirement tool workflows | `test-legacy-coordination-decommission.sh` | No | No |
 
 Evidence rows are maintained when an owning FR closes. A later hardening FR may
 supersede an earlier QA document without erasing the historical design link.

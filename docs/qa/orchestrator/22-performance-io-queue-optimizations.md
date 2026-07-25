@@ -10,6 +10,10 @@ self_referential_safe_scenarios: [S1, S2, S3]
 **Scenarios**: 5
 **Priority**: High
 
+> **FR-125 supersession**: IO and queue assertions remain current. Any
+> `apply_captures*` command below exercises the test-only rollback oracle, not a
+> production output or spill path. Current retirement acceptance is QA-175.
+
 ---
 
 ## Background

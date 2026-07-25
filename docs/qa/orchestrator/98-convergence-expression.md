@@ -4,6 +4,11 @@ self_referential_safe: true
 
 # QA-98: convergence_expr 收敛条件表达式
 
+> **FR-125 compatibility note**: generic CEL variable injection remains for
+> public/command-rule compatibility, but the production ledger proves zero CEL
+> coordination consumers. New coordination use is rejected; deterministic
+> governance expressions remain supported.
+
 ## 关联
 - FR-043
 - Design Doc 55

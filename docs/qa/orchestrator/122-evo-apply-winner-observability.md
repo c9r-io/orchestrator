@@ -1,5 +1,10 @@
 # QA 122: evo_apply_winner 可观测性增强
 
+> **FR-125 supersession**: item-select and diff observability remain current,
+> but capture-missing events and `apply_captures` scenarios are historical
+> test-only rollback evidence. `item_select` now reads typed numeric metrics;
+> current acceptance is QA-175.
+
 验证 FR-070 四项可观测性需求的正确实现。
 
 ## 前置条件
@@ -14,7 +19,7 @@
 **步骤**:
 1. 运行 `execute_item_select` 单元测试验证 unparseable metric_var 错误逻辑：
    ```bash
-   cargo test -p orchestrator-scheduler --lib test_unparseable_metric_var_fails -- --nocapture
+   cargo test -p orchestrator-scheduler --lib test_missing_metric_var_fails -- --nocapture
    ```
 2. 代码审查 — 确认 `item_select_failed` 事件发射逻辑：
    ```bash

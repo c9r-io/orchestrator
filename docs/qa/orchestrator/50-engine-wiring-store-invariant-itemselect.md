@@ -5,6 +5,12 @@
 **Scenarios**: 5
 **Priority**: High
 
+> **FR-125 supersession**: `store_inputs` remains as a reviewed compatibility
+> blocker, but capture-populated `store_outputs`, JSONPath post-actions, and
+> `pending_generate_items` are no longer production wiring. Typed daemon tools
+> and `ExecutionSignals.metrics` own those paths. Scenarios depending on the
+> removed wiring are historical; see QA-175.
+
 ---
 
 ## Background

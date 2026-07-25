@@ -6,6 +6,12 @@ self_referential_safe: true
 
 Validates FR-084: agent `command_rules` (CEL conditional command selection), step `step_vars` (temporary pipeline variable overlay), and `command_rule_index` audit column.
 
+> **FR-125 compatibility note**: command-rule CEL and `step_vars` remain
+> supported compatibility surfaces and are explicit blockers to removing the
+> generic variable map. Capture-specific assertions in this historical document
+> are test-only rollback evidence; new production coordination consumers are
+> rejected by the ledger.
+
 > Advanced scenarios (6-8) are in [100b-agent-command-rules-step-vars-advanced.md](100b-agent-command-rules-step-vars-advanced.md).
 
 ## Scenario 1: command_rules serde roundtrip

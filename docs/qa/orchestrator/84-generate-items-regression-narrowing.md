@@ -9,6 +9,11 @@ self_referential_safe: false
 **Scenarios**: 3
 **Priority**: High
 
+> **Superseded by FR-125 / QA-175**: `pending_generate_items` no longer exists.
+> The daemon-owned `generate_items` tool persists typed items immediately, and
+> restart boundaries refresh them from the repository. The defect history below
+> is retained for provenance.
+
 ---
 
 ## Background

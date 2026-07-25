@@ -4,6 +4,11 @@ self_referential_safe: true
 
 # QA #79: Benchmark Score Capture (FR-028)
 
+> **Superseded by FR-125 / QA-175**: production score capture and JSONPath
+> extraction are retired. `record_metric` now supplies a typed bounded numeric
+> value to `item_select`. The capture tests below are retained only as a
+> test-only rollback oracle; legacy manifests are rejected.
+
 ## Scope
 
 Verify that benchmark scores can be extracted from agent JSON output into pipeline variables, that stream-json output is supported, and that `item_select` can choose the higher-scoring candidate.

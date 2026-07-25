@@ -5,6 +5,11 @@
 **Scenarios**: 5
 **Priority**: High
 
+> **Superseded by FR-125 / QA-175**: the production JSONPath post-action and
+> mixed-text extraction path described here has been removed. Authenticated
+> `generate_items` tool calls now submit typed item payloads directly. These
+> scenarios remain historical rollback context only.
+
 ---
 
 ## Background

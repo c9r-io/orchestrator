@@ -7,6 +7,10 @@
 **Created**: 2026-07-25  
 **Last Updated**: 2026-07-25
 
+> **FR-125 supersession**: this document remains the authority for migration and
+> compatibility-window evidence. Capture/JSONPath production execution has
+> since been removed. See DD-137 and QA-175 for the current runtime contract.
+
 ## Background
 
 DD-130 proved that daemon-owned MCP tools can replace declarative coordination
@@ -149,11 +153,11 @@ production workflows meet those conditions.
 - Config: no new environment variables or database migration.
 - CI: `.github/workflows/ci.yml` runs
   `scripts/qa/test-coordination-strangler.sh` on Ubuntu.
-- Rollback: revert an individual production manifest to its reviewed legacy
-  form and update the ledger in the same change. The compatibility executor
-  remains available.
-- Compatibility: legacy manifests continue to parse and execute; they cannot be
-  added to production roots without an explicit ledger review.
+- Rollback: first revert FR-125's production-path removal, then use the retained
+  legacy fixture and test-only oracle against this document's parity evidence.
+- Compatibility: legacy manifest shapes remain parseable for stable diagnostics,
+  but validation rejects their execution. Arbitrary variables and governance
+  CEL remain supported pending a separately governed migration.
 
 ## Test Plan
 

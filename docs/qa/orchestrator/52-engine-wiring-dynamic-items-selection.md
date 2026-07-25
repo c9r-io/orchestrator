@@ -5,6 +5,11 @@
 **Scenarios**: 2
 **Priority**: High
 
+> **FR-125 supersession**: deferred `pending_generate_items` and JSONPath
+> generation have been removed from production. Dynamic items are now created
+> directly through the authenticated daemon tool, and item selection reads typed
+> numeric metrics. The legacy scenario below is rollback history; see QA-175.
+
 ---
 
 ## Background

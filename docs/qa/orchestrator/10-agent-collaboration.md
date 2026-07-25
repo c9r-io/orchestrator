@@ -9,6 +9,12 @@ self_referential_safe: true
 **Scenarios**: 5
 **Priority**: High
 
+> **FR-125 supersession**: capture/JSONPath extraction is no longer a
+> production collaboration path. Capture-named unit tests in this historical
+> document are test-only rollback oracles. Use
+> `docs/qa/orchestrator/175-legacy-coordination-decommission.md` for current
+> acceptance.
+
 ---
 
 ## Background
@@ -17,7 +23,7 @@ This document validates collaboration-related behavior after scheduler mainline 
 
 - phase output validation and normalization into `AgentOutput`
 - event and trace publication for phase execution results
-- capture extraction from agent output (exit code, JSON path)
+- historical capture extraction rollback evidence (test-only after FR-125)
 - template placeholders in scheduler execution path
 - structured prehook context fields availability
 

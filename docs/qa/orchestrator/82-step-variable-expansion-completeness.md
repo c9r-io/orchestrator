@@ -27,7 +27,8 @@ Placeholder families covered by this document:
 
 - Basic placeholders: `{rel_path}`, `{ticket_paths}`, `{phase}`, `{task_id}`, `{cycle}`, `{unresolved_items}`
 - Runtime context: `{item_id}`, `{workspace_root}`, `{source_tree}`
-- Pipeline vars: `{goal}`, `{diff}`, `{plan_output}`, `{plan_output_path}`, `{build_output}`, `{test_output}`, `{build_errors}`, `{test_failures}`, and arbitrary `{key}` entries in `pipeline.vars`
+- Narrow preserved channel: `{goal}` from `pipeline.preserved.goal`
+- Compatibility pipeline vars: `{diff}`, `{plan_output}`, `{plan_output_path}`, `{build_output}`, `{test_output}`, `{build_errors}`, `{test_failures}`, and arbitrary `{key}` entries in `pipeline.vars`
 - Advanced placeholders: `{upstream[i].exit_code}`, `{upstream[i].confidence}`, `{upstream[i].quality_score}`, `{upstream[i].duration_ms}`, `{upstream[i].artifacts[j].content}`, shared-state `{key}`, and `{artifacts.count}`
 
 Design doc: `docs/design_doc/orchestrator/43-step-variable-expansion-governance.md`

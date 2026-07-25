@@ -10,6 +10,10 @@ self_referential_safe_scenarios: [S1, S2, S3]
 **Scenarios**: 5
 **Priority**: High
 
+> **FR-125 supersession**: structured output persistence remains current, but
+> JSONPath capture assertions below are retained only as test-oracle evidence.
+> Production workflows must use typed driver/tool results; see QA-175.
+
 ---
 
 ## Background

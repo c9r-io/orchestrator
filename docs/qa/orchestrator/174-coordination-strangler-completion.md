@@ -9,6 +9,11 @@ self_referential_safe: true
 **Scenarios**: 5  
 **Priority**: High
 
+> **FR-125 update**: this document remains the authority for the completed
+> compatibility window and historical seven-pair parity evidence. Production
+> validation now rejects the legacy halves. The script derives and executes only
+> the seven tool workflows; current removal acceptance is QA-175.
+
 ## Background
 
 This document closes the gap between the single FR-118 coordination pilot and
@@ -19,10 +24,10 @@ or network access are required.
 Primary entry point:
 
 ```bash
-FR124_ALLOW_DIRTY=1 ./scripts/qa/test-coordination-strangler.sh
+FR125_ALLOW_DIRTY=1 ./scripts/qa/test-coordination-strangler.sh
 ```
 
-Omit `FR124_ALLOW_DIRTY=1` for clean-tree certification.
+Omit `FR125_ALLOW_DIRTY=1` for clean-tree certification.
 
 ---
 
@@ -48,8 +53,9 @@ coordination cannot enter silently.
    ```
 
 2. Inspect the reported classification and migration counts.
-3. Confirm the negative capture fixture is rejected.
-4. Confirm reviewed CEL governance and sandbox-safety fixtures are accepted.
+3. Confirm capture, JSONPath post-action, generic safety-variable, and new
+   `store_inputs` fixtures are rejected.
+4. Confirm reviewed CEL governance is accepted.
 5. Compare source counters with the ledger baseline.
 
 ### Expected
@@ -58,43 +64,43 @@ coordination cannot enter silently.
   4 governance-only.
 - The completed ledger has 7 migrated and 4 classified workflows.
 - Unreviewed capture/JSONPath coordination is rejected.
-- Reviewed deterministic CEL and safety-signal use are not misclassified.
-- Source counters do not exceed `143 / 47 / 9`.
+- Reviewed deterministic CEL is not misclassified.
+- Source counters do not exceed the production-only post-retirement
+  `55 / 39 / 9` baseline.
 
 ---
 
-## Scenario 2: Seven Independent Legacy/Tool Parity Pairs
+## Scenario 2: Historical Parity Evidence And Seven Tool Regressions
 
 ### Preconditions
 
 - Build `orchestratord`, `orchestrator`, and `orch-mcp-tools`.
-- Apply only the deterministic mock fixture:
+- Retain the deterministic mock fixture:
 
   ```bash
-  orchestrator apply \
-    --project qa-coordination-strangler \
+  target/debug/orchestrator manifest validate \
     -f fixtures/manifests/bundles/coordination-strangler-parity.yaml
   ```
 
 ### Goal
 
-Prove every migrated production workflow has an independent behavior-equivalent
-legacy/tool scenario.
+Preserve every migrated workflow's historical independent parity evidence while
+proving its tool path remains sufficient after legacy removal.
 
 ### Steps
 
 1. Run `./scripts/qa/test-coordination-strangler.sh`.
-2. For each of `command_rules`, `qa_loop`, `plan_execute`, `full-qa`,
-   `self-bootstrap`, `promotion`, and `self-evolution`, inspect its paired task
-   IDs.
-3. Compare terminal task states.
+2. Confirm the complete fixture is rejected with a stable retirement code.
+3. For each of `command_rules`, `qa_loop`, `plan_execute`, `full-qa`,
+   `self-bootstrap`, `promotion`, and `self-evolution`, inspect its tool task ID.
 4. Query the typed task's driver and authoritative coordination events.
 5. Confirm dynamic-item and metric-selection scenarios reached their
    deterministic downstream steps.
 
 ### Expected
 
-- Every legacy and tool task reaches `completed`.
+- The legacy fixture is retained but cannot enter production execution.
+- Every tool task reaches `completed`.
 - Tool-driven QA items converge to their governed terminal status.
 - Every tool-driven coordination scenario records both provider events and
   daemon receipts.
@@ -163,16 +169,18 @@ does not weaken the production survival envelope.
 
 ### Steps
 
-1. Execute `parity-bootstrap-legacy` and `parity-bootstrap-tools`.
+1. Execute `parity-bootstrap-tools`.
 2. Query `cycle_started` and self-test-related events for the tool task.
 3. Confirm the tool path creates `docs/qa/pilot.md` through `generate_items`.
 4. Inspect the production manifest for binary snapshot, `self_test`,
    `self_restart`, self-reference, rollback, and watchdog references.
-5. Compare terminal states.
+5. Confirm the historical legacy terminal result remains recorded in this
+   document and FR-124 evidence.
 
 ### Expected
 
-- Both variants reach `completed`.
+- The tool variant reaches `completed`; the legacy manifest is rejected before
+  execution.
 - The tool variant emits exactly two `cycle_started` events.
 - The real builtin `self_test` executes successfully.
 - All four survival layers remain represented by production code, manifest,
@@ -216,7 +224,8 @@ Confirm the strangler gate participates in normal repository quality controls.
 - CI contains the `coordination-strangler` job.
 - The ledger has no pending workflow and every migrated workflow links this QA
   evidence.
-- Legacy execution remains available only as frozen compatibility.
+- Legacy execution is removed; only the fixture and test-only rollback oracle
+  remain.
 
 ---
 
