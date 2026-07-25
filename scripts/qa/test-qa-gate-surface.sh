@@ -154,7 +154,7 @@ workflow_job_runs() {
 
 workflow_has_job() {
   local workflow_file="$1" job="$2"
-  ruby "$WORKFLOW_MODEL" jobs "$workflow_file" 2>/dev/null | grep -qxF "$job"
+  grep -qxF "$job" <<< "$(ruby "$WORKFLOW_MODEL" jobs "$workflow_file" 2>/dev/null)"
 }
 
 # Check 3: every ci-required entry is genuinely wired into the declared workflow job.
@@ -201,7 +201,7 @@ check_wiring_truth() {
       # read as text. Comment stripping is what keeps a disabled call from
       # counting; a full shell parse would be a second implementation of bash
       # for one link in the chain.
-      if ! sed -E 's/(^|[[:space:]])#.*$//' "$root/$invoked_by" | grep -qF "$path"; then
+      if ! grep -qF "$path" <<< "$(sed -E 's/(^|[[:space:]])#.*$//' "$root/$invoked_by")"; then
         echo "    $path: declared invoker $invoked_by does not call it" >&2
         rc=1
       fi
@@ -285,7 +285,7 @@ path_shadow_covers_bundle() {
     [[ -f "$root/$bundle" ]] || continue
     while read -r provider; do
       [[ -z "$provider" ]] && continue
-      if ! printf '%s' "$asserted" | grep -qw "$provider"; then
+      if ! grep -qw "$provider" <<< "$asserted"; then
         echo "    $path: $bundle declares provider $provider, which the shadow assertion does not cover" >&2
         rc=1
       fi
@@ -336,15 +336,15 @@ check_provider_isolation() {
         #    assertion's arguments.
         local source_text
         source_text="$(sed -E 's/(^|[[:space:]])#.*$//' "$root/$path")"
-        if ! printf '%s\n' "$source_text" | grep -Eq 'cp .*"\$QA_ROOT/bin/(claude|codex)"'; then
+        if ! grep -Eq 'cp .*"\$QA_ROOT/bin/(claude|codex)"' <<< "$source_text"; then
           echo "    $path: path-shadow isolation requires copying a fake provider into \$QA_ROOT/bin" >&2
           rc=1
         fi
-        if ! printf '%s\n' "$source_text" | grep -Eq 'export PATH="\$QA_ROOT/bin:\$PATH"'; then
+        if ! grep -Eq 'export PATH="\$QA_ROOT/bin:\$PATH"' <<< "$source_text"; then
           echo "    $path: path-shadow isolation requires exporting \$QA_ROOT/bin ahead of PATH" >&2
           rc=1
         fi
-        if ! printf '%s\n' "$source_text" | grep -q 'assert_provider_shadow'; then
+        if ! grep -q 'assert_provider_shadow' <<< "$source_text"; then
           echo "    $path: path-shadow isolation requires calling assert_provider_shadow" >&2
           echo "      after the PATH export, so the shadow proves itself on every run" >&2
           rc=1
@@ -625,7 +625,7 @@ check_git_history_available() {
     [[ -z "$path" ]] && continue
     [[ -f "$root/$path" ]] || continue
     [[ -f "$root/$workflow" ]] || continue
-    sed -E 's/(^|[[:space:]])#.*$//' "$root/$path" | rg -qP "$GIT_HISTORY_PATTERN" || continue
+    rg -qP "$GIT_HISTORY_PATTERN" <<< "$(sed -E 's/(^|[[:space:]])#.*$//' "$root/$path")" || continue
     depth="$(ruby "$WORKFLOW_MODEL" checkout-depth "$root/$workflow" "$job" 2>/dev/null)"
     if [[ "$depth" != "0" ]]; then
       echo "    $path reads git history but job '$job' checks out with fetch-depth $depth" >&2
@@ -657,8 +657,8 @@ check_provider_stub_coverage() {
     exempt="$(jq -r --arg j "$job" \
       '[.providerStubs.exemptJobs[]? | select(.job == $j and ((.reason // "") | length > 0))] | length' "$manifest")"
     [[ "$exempt" -gt 0 ]] && continue
-    if ! ruby "$WORKFLOW_MODEL" installs "$root/$workflow" "$job" 2>/dev/null \
-      | grep -qxF "action	$action"; then
+    if ! grep -qxF "action	$action" \
+      <<< "$(ruby "$WORKFLOW_MODEL" installs "$root/$workflow" "$job" 2>/dev/null)"; then
       echo "    job '$job' in $workflow runs a gate that can reach a provider but does not install the stubs" >&2
       echo "      add: uses: $action" >&2
       rc=1

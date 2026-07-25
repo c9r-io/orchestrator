@@ -56,5 +56,5 @@ gate_required_commands() {
 
 # True when the gate declares a dependency on the given command.
 gate_requires() {
-  gate_required_commands "$1" | grep -qxF "$2"
+  grep -qxF "$2" <<< "$(gate_required_commands "$1")"
 }

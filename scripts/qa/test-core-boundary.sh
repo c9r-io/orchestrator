@@ -254,10 +254,18 @@ fi
 # And the other direction: CI=false is how a developer says "treat this as
 # interactive". A guard that only tests for presence would block it, and the
 # recovery path this ledger depends on would be unusable on that machine.
+#
+# Every other indicator has to be cleared, not just CI. This case ran green
+# locally and failed in CI on its first real run, because the runner also
+# exports GITHUB_ACTIONS and the guard was right to keep refusing — the test was
+# wrong, not the guard. That is the same environment-dependence this FR is
+# about, in a test written to check it.
 DIR="$(new_case ci-write-false)"
 BEFORE="$(digest "$DIR/$LEDGER")"
 set +e
-(cd "$DIR" && CI=false ruby "$GATE" --emit-baseline --write > /dev/null 2> "$WORK/case7c.err")
+(cd "$DIR" && env -u CONTINUOUS_INTEGRATION -u GITHUB_ACTIONS -u GITLAB_CI \
+    -u BUILDKITE -u CIRCLECI -u TEAMCITY_VERSION -u BUILD_NUMBER \
+  CI=false ruby "$GATE" --emit-baseline --write > /dev/null 2> "$WORK/case7c.err")
 STATUS=$?
 set -e
 AFTER="$(digest "$DIR/$LEDGER")"

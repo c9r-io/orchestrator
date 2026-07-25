@@ -221,7 +221,7 @@ GATE
 }
 JSON
   cp "${BASH_SOURCE[0]}" "$d/scripts/qa/test-ci-environment-parity.sh"
-  if in_scope_gates "$d" | grep -q 'test-ci-environment-parity'; then
+  if grep -q 'test-ci-environment-parity' <<< "$(in_scope_gates "$d")"; then
     fail "this gate selected itself; running it would recurse until the job times out"
   else
     pass "this gate excludes itself from the set it runs"
