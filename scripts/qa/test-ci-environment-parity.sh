@@ -51,6 +51,17 @@ FAIL=0
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 
+# Second condition on the recursion, because excluding this file by path only
+# closes the cycle it can see. If some other in-scope gate ever invokes this one,
+# the path check is blind and the job hangs again — which is the failure mode
+# that matters here, since a hang produces no output to diagnose from.
+if [[ -n "${FR134_PARITY_RUNNING:-}" ]]; then
+  echo "refusing to recurse: this gate is already running in a parent process" >&2
+  echo "a gate that runs every ci-required gate must not be one of them" >&2
+  exit 3
+fi
+export FR134_PARITY_RUNNING=1
+
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/fr134-env-parity.XXXXXX")"
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
@@ -76,11 +87,19 @@ set_ci_env() {
 # The gates to compare: ci-required, on disk, and not paying for a workspace
 # build. Derived from the manifest and the gate's own preamble rather than
 # listed, so a new gate is in scope the day it lands.
+SELF_REL="scripts/qa/$(basename "${BASH_SOURCE[0]}")"
+
 in_scope_gates() {
   local root="$1" path
   while read -r path; do
     [[ -z "$path" ]] && continue
     [[ -f "$root/$path" ]] || continue
+    # This script is a ci-required gate with no cargo dependency, so it selects
+    # itself, runs itself, and recurses until the job times out. It did: the
+    # first CI run of this job sat at 52 minutes before anyone looked. Derived
+    # from BASH_SOURCE rather than written as a literal, so renaming the file
+    # cannot quietly reopen it.
+    [[ "$path" == "$SELF_REL" ]] && continue
     # Declared dependency, not textual mention. "Contains the word cargo"
     # excluded test-qa-gate-surface.sh, which names cargo inside a regular
     # expression and never runs it — the same substitution of text for
@@ -186,6 +205,33 @@ GATE
     pass "a gate that fails identically in both environments is not an environment difference"
   else
     fail "a uniformly failing gate was misreported as an environment difference"
+  fi
+
+  # This gate must never select itself. It did, and the job ran for 52 minutes
+  # before the recursion was noticed — a hang leaves no failure output to read,
+  # so nothing about it looks like a defect until someone checks the clock.
+  d="$FIXTURE_ROOT/self-selection"
+  cp -R "$BASE" "$d"
+  cat > "$d/$MANIFEST_REL" <<'JSON'
+{
+  "scripts": [
+    { "path": "scripts/qa/test-stable.sh", "enforcement": "ci-required" },
+    { "path": "scripts/qa/test-ci-environment-parity.sh", "enforcement": "ci-required" }
+  ]
+}
+JSON
+  cp "${BASH_SOURCE[0]}" "$d/scripts/qa/test-ci-environment-parity.sh"
+  if in_scope_gates "$d" | grep -q 'test-ci-environment-parity'; then
+    fail "this gate selected itself; running it would recurse until the job times out"
+  else
+    pass "this gate excludes itself from the set it runs"
+  fi
+
+  # And the independent guard, for a cycle the path check cannot see.
+  if FR134_PARITY_RUNNING=1 bash "${BASH_SOURCE[0]}" >/dev/null 2>&1; then
+    fail "a nested invocation was allowed to proceed"
+  else
+    pass "a nested invocation refuses rather than recursing"
   fi
 
   # Meta, as elsewhere: the registry has to name every check the file defines.
