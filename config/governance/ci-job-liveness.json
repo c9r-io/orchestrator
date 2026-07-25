@@ -8,58 +8,53 @@
       "jobs": {
         "async-lock-governance": {
           "conclusion": "success",
-          "runId": "30166725904",
-          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
+          "runId": "30167831584",
+          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
         },
         "fmt": {
           "conclusion": "success",
-          "runId": "30166725904",
-          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
+          "runId": "30167831584",
+          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
         },
         "clippy": {
           "conclusion": "success",
-          "runId": "30166725904",
-          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
+          "runId": "30167831584",
+          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
         },
         "test": {
           "conclusion": "success",
-          "runId": "30166725904",
-          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
+          "runId": "30167831584",
+          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
         },
         "coordination-strangler": {
           "conclusion": "success",
-          "runId": "30166725904",
-          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
+          "runId": "30167831584",
+          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
         },
         "governance": {
-          "conclusion": "failure",
-          "runId": "30166725904",
-          "headSha": "a69378153eeadc60f863068816cb8bd70822997d",
-          "knownFailing": {
-            "reference": "FR-134",
-            "reason": "ledger bootstrap only. Every one of this job's nineteen gate outcomes was success in the recorded run; the job is red because the liveness check reported its own staleness, and it could not be fresh until a run existed on the ci.yml this FR rewrote. Refreshing from that run — this record — clears the condition, so the next run has a fresh ledger and this annotation drops on the refresh after it.",
-            "expectedBy": "2026-07-27"
-          }
+          "conclusion": "success",
+          "runId": "30167831584",
+          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
         },
         "ci-environment-parity": {
           "conclusion": "success",
-          "runId": "30166725904",
-          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
+          "runId": "30167831584",
+          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
         },
         "coverage-policy-fixtures": {
           "conclusion": "success",
-          "runId": "30166725904",
-          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
+          "runId": "30167831584",
+          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
         },
         "slack-certification-recorded": {
           "conclusion": "success",
-          "runId": "30166725904",
-          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
+          "runId": "30167831584",
+          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
         },
         "boundary-coverage": {
           "conclusion": "failure",
-          "runId": "30166725904",
-          "headSha": "a69378153eeadc60f863068816cb8bd70822997d",
+          "runId": "30167831584",
+          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438",
           "knownFailing": {
             "reference": "FR-135",
             "reason": "coverage-governance.sh:38 expands an empty array under set -u, which bash 3.2 on the macOS runner rejects as unbound. Red for six consecutive runs before anything noticed, which is why this ledger covers every CI job rather than only the classified gates.",
@@ -68,13 +63,13 @@
         },
         "miri": {
           "conclusion": "success",
-          "runId": "30166725904",
-          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
+          "runId": "30167831584",
+          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
         },
         "cross-compile": {
           "conclusion": "success",
-          "runId": "30166725904",
-          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
+          "runId": "30167831584",
+          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
         }
       }
     },
@@ -95,8 +90,8 @@
       "jobs": {
         "cargo-audit": {
           "conclusion": "success",
-          "runId": "30166725902",
-          "headSha": "a69378153eeadc60f863068816cb8bd70822997d"
+          "runId": "30167831597",
+          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
         }
       }
     },

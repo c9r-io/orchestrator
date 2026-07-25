@@ -354,6 +354,14 @@ Every one of these was read from `gh run view`, not inferred.
 | `30163246436` | `52d0d43a` | ubuntu Slack recovered | The `stat` repair. Also caught the parity gate recursing into itself, a hang rather than a failure |
 | `30165034918` | `9fd60030` | `parity=success` | FR-126's retirement-parity evidence verified in CI for the first time. Exposed the `pipefail`/SIGPIPE race and the `CI=false` test that ignored `GITHUB_ACTIONS` |
 | `30166725904` | `a6937815` | **all nineteen governance gates green**; job red on `liveness` alone | The state the liveness ledger was refreshed from |
+| `30167831584` | `34d60faa` | **16 of 17 jobs green** — the certifying run | `liveness=success` and the governance job green. The only red job is `boundary-coverage`, annotated to FR-135 |
 
 `boundary-coverage` is red in every one of these and is FR-135's; it carries a `known-failing`
-annotation naming that FR, which is what the liveness rule is for.
+annotation naming that FR, which is what the liveness rule is for. The starting state was
+**11 of 16 green**; the certifying run is **16 of 17**, and the one that remains is owned.
+
+The annotation lifecycle closed itself. `governance` was recorded as failing with a bootstrap
+reason — its nineteen gates were green and only the liveness check was red, reporting its own
+staleness — and the refresh taken after the certifying run found it green and dropped the
+annotation without being asked. That is the rule that says an annotation may not outlive the
+failure it excuses, working on the first failure it was applied to.
