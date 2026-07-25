@@ -67,7 +67,7 @@ both mirrors: it is a shared script bundle with no `SKILL.md`, declared `notSkil
 
 ### Preconditions
 
-- `jq` is installed.
+- `jq` and `git` are installed.
 - Clean worktree.
 
 ### Steps
@@ -86,7 +86,7 @@ done
 
 ### Expected result
 
-- Step 1 exits `0` and reports `5 passed, 0 failed`, with `skills: 29`.
+- Step 1 exits `0` and reports `6 passed, 0 failed`, with `skills: 29`.
 - Step 2 lists `.agents/skills` and `.cursor/skills`.
 - Step 3 prints `0` — no skill is currently exempted; the mirrors are complete rather than
   selectively excused.
@@ -141,7 +141,7 @@ done
 
 ### Preconditions
 
-- `jq` is installed. The fixtures run entirely under `$TMPDIR`; the worktree is not touched.
+- `jq` and `git` are installed. The fixtures run entirely under `$TMPDIR`; the worktree is not touched.
 
 ### Steps
 
@@ -150,8 +150,8 @@ done
 
 ### Expected result
 
-- Step 1 exits `0` and reports `17 passed, 0 failed`, including:
-  - two positive controls — the unmodified copy passes all five checks, and the copy preserved
+- Step 1 exits `0` and reports `19 passed, 0 failed`, including:
+  - two positive controls — the unmodified copy passes all six checks, and the copy preserved
     symlinks rather than flattening them into directories;
   - **fixture 4a**, isolated to `check_skill_md_readable`: a `SKILL.md` that is a directory passes
     every structural check and fails only the read. This is the FR-129 defect reduced to its
@@ -161,7 +161,9 @@ done
   - fixture 1 (unmirrored, unexempted skill), fixture 2 (mirror replaced by a real directory
     holding a real copy — readable, and still wrong), fixture 3 (dangling symlink), fixture 5
     (exemption for a skill that no longer exists), fixture 6 (directory with no `SKILL.md` and no
-    `notSkills` entry), fixture 7 (exemption with no substantive reason);
+    `notSkills` entry), fixture 7 (exemption with no substantive reason), and **fixture 8** (the deleted
+    `skills/orchestrator-guide` copy restored and tracked — a deletion is not a rule, so the
+    invariant enforced is "one tracked copy of a skill's content", not "this path is absent");
   - two meta-assertions: `ALL_CHECKS` names every check function the file defines, and every
     registered check is proven by at least one negative fixture.
 - Each fixture line ends with `(isolated to [...])`. Fixtures 3 and 4b name two checks, because a
@@ -205,11 +207,14 @@ Recorded during implementation, run against a copy placed in `scripts/qa/` and r
 
 ---
 
-## Scenario 5: The Unproduced Third Copy Is Gone And Packaging Still Works
+## Scenario 5: The Unproduced Third Copy Is Gone, Cannot Return, And Packaging Still Works
 
 `skills/orchestrator-guide/` was a git-tracked copy with no producer — `scripts/package-skills.sh`
 reads `.claude/skills/` and writes `dist/`, never `skills/` — and it had already drifted ~32KB
 from the source. It was deleted rather than pinned.
+
+A deletion is not a rule, so step 6 checks the invariant that outlives it: a skill's content may
+be tracked in exactly one place, enforced by `check_no_content_copies` and proven by fixture 8.
 
 ### Preconditions
 
@@ -222,6 +227,7 @@ from the source. It was deleted rather than pinned.
 3. `bash scripts/package-skills.sh v0-fr129-check && tar tzf dist/orchestrator-skills-v0-fr129-check.tar.gz`
 4. `rm -f dist/orchestrator-skills-v0-fr129-check.tar.gz`
 5. `rg -n '\.gemini' -S`
+6. `git ls-files '*SKILL.md' | grep -v '^\.claude/skills/'`
 
 ### Expected result
 
@@ -234,6 +240,9 @@ from the source. It was deleted rather than pinned.
   deleted copy.
 - Step 5 prints nothing. `SKILLS.md` previously documented a `.gemini/skills/` mirror that did not
   exist on disk; the line was removed.
+- Step 6 prints nothing — every tracked `SKILL.md` lives under `.claude/skills/`. The mirrors do
+  not appear here at all, because git records them as symlinks (`.agents/skills/ops`) rather than
+  as files inside them, which is precisely what makes a hit on this command a real copy.
 
 ### Reverse-applicable removal evidence
 
@@ -246,8 +255,8 @@ artifact stands between the commit and its inverse.
 
 ## Checklist
 
-- [ ] `./scripts/qa/test-skill-mirror-integrity.sh` — 5 passed, 0 failed, 29 skills
-- [ ] `./scripts/qa/test-skill-mirror-integrity.sh --fixture-test` — 17 passed, 0 failed
+- [ ] `./scripts/qa/test-skill-mirror-integrity.sh` — 6 passed, 0 failed, 29 skills
+- [ ] `./scripts/qa/test-skill-mirror-integrity.sh --fixture-test` — 19 passed, 0 failed
 - [ ] `./scripts/qa/test-qa-gate-surface.sh` — 5 passed, 0 failed, 14 of 47 ci-required
 - [ ] `./scripts/qa-doc-lint.sh` — PASS
 - [ ] `cargo test --workspace` — all pass

@@ -11,8 +11,9 @@ on the mirror roots, the exemptions, and the entries under `.claude/skills/` tha
 skills at all (`tools/` is a shared script bundle with no `SKILL.md`).
 
 `scripts/qa/test-skill-mirror-integrity.sh` enforces this in the `ci.yml` governance job. It
-checks the mirror shape and, separately, opens every `<root>/<name>/SKILL.md` and requires a
-non-empty regular file — the read that structural checks cannot substitute for.
+checks the mirror shape, rejects any tracked `SKILL.md` outside `.claude/skills/`, and, separately,
+opens every `<root>/<name>/SKILL.md` and requires a non-empty regular file — the read that
+structural checks cannot substitute for.
 
 ## Platform Loop
 

@@ -22,10 +22,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 POLICY_REL="config/governance/skill-mirrors.json"
 
-command -v jq >/dev/null 2>&1 || {
-  echo "missing required command: jq" >&2
-  exit 1
-}
+for required in jq git; do
+  command -v "$required" >/dev/null 2>&1 || {
+    echo "missing required command: $required" >&2
+    exit 1
+  }
+done
 
 if [[ "${1:-}" != "" && "${1:-}" != "--fixture-test" ]]; then
   echo "usage: $0 [--fixture-test]" >&2
@@ -246,8 +248,27 @@ check_no_stale_claims() {
   return $rc
 }
 
+# Check 6: single source. A skill's content may be tracked in exactly one place.
+# Mirrors are symlinks, so git lists them as the link path (`.agents/skills/ops`) and
+# never as `.agents/skills/ops/SKILL.md` — any tracked SKILL.md outside the source
+# tree is therefore a real copy, which is how `skills/orchestrator-guide` drifted 32KB
+# from the authority before FR-129 deleted it. Deleting it once does not keep it gone.
+check_no_content_copies() {
+  local root="$1" src path rc=0
+  src="$(policy_source "$root")"
+
+  while IFS= read -r path; do
+    [[ -z "$path" ]] && continue
+    if [[ "$path" != "$src/"* ]]; then
+      echo "    $path is a tracked SKILL.md outside $src; mirrors must be symlinks, not copies" >&2
+      rc=1
+    fi
+  done <<< "$(git -C "$root" ls-files '*SKILL.md')"
+  return $rc
+}
+
 ALL_CHECKS=(check_source_inventory check_mirror_coverage check_mirror_shape
-            check_skill_md_readable check_no_stale_claims)
+            check_skill_md_readable check_no_stale_claims check_no_content_copies)
 
 run_all_checks() {
   local root="$1" check rc=0
@@ -282,6 +303,12 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
     .claude/skills \
     .agents/skills \
     .cursor/skills) | (cd "$BASE" && tar xf -)
+
+  # check_no_content_copies asks git which SKILL.md files are tracked, so the fixture
+  # tree has to be a repository. Throwaway, under $TMPDIR, never pushed or committed —
+  # the index alone answers `ls-files`.
+  git -C "$BASE" init -q
+  git -C "$BASE" add -A
 
   new_case() {
     local dir="$FIXTURE_ROOT/$1"
@@ -394,6 +421,16 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
     "$BASE/$POLICY_REL" > "$d/$POLICY_REL"
   expect_fail "fixture 7" "$d" "check_no_stale_claims" \
     "an exemption without a substantive reason is rejected"
+
+  # 8. The deleted third copy, restored. FR-129 removed skills/orchestrator-guide,
+  #    but a deletion is not a rule — nothing stops the copy from reappearing and
+  #    drifting again, which is exactly what it had already done.
+  d="$(new_case f8)"
+  mkdir -p "$d/skills/orchestrator-guide"
+  cp "$d/.claude/skills/orchestrator-guide/SKILL.md" "$d/skills/orchestrator-guide/SKILL.md"
+  git -C "$d" add -A
+  expect_fail "fixture 8" "$d" "check_no_content_copies" \
+    "a tracked SKILL.md outside the source tree is a content copy, not a mirror"
 
   # FR-134's lesson applied to this script itself: a check that is deleted from
   # ALL_CHECKS stops running in verification mode, and nothing above would notice —

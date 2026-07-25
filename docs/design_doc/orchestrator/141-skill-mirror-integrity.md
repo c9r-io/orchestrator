@@ -65,7 +65,7 @@ Exemptions are keyed by `(skill, mirrorRoot)` rather than by skill alone. A skil
 cannot run under one runtime can still be mirrored to another; an all-or-nothing exemption would
 force an over-broad decision.
 
-### 2. Five checks, one of which is a read
+### 2. Six checks, one of which is a read
 
 `scripts/qa/test-skill-mirror-integrity.sh`:
 
@@ -76,8 +76,9 @@ force an over-broad decision.
 | `check_mirror_shape` | Every mirror entry is a symlink — not a directory, not a regular file, not a copy — whose target is the same-named source skill and exists. The expected relative target is *derived* from the root's depth rather than hardcoded to `../../`, so a mirror root at another depth is checked correctly rather than accidentally. |
 | `check_skill_md_readable` | Opens `<root>/<name>/SKILL.md` the way a consuming runtime does and requires a non-empty regular file. |
 | `check_no_stale_claims` | Every `notSkills` path and every exemption's skill still exists; every exemption's `mirrorRoot` is declared; every exemption carries a substantive reason. |
+| `check_no_content_copies` | Every tracked `SKILL.md` in the repository lives under the source tree. Mirrors are symlinks, so git lists them as the link path and never as `<root>/<name>/SKILL.md`; a tracked `SKILL.md` anywhere else is therefore a real copy. |
 
-`check_skill_md_readable` is the load-bearing one and the reason the other four are not
+`check_skill_md_readable` is the load-bearing one and the reason the other five are not
 sufficient. The production defect passed every structural property; only the read failed. The
 distinction is preserved in the fixture set, below, by a case in which shape is *perfect* and the
 read still fails.
@@ -92,8 +93,10 @@ checks at once and destroy each fixture's ability to isolate.
 `--fixture-test` copies only the governed inputs into `mktemp -d` and injects one defect per case.
 It uses `tar`, not `cp -R`, because the mirrors are symlinks and `cp -R` would flatten them into
 directories — every fixture would then be exercising a tree that does not resemble the repository.
-Two positive controls guard this: the unmodified copy must pass all five checks, and the copy must
-still contain symlinks.
+Two positive controls guard this: the unmodified copy must pass all six checks, and the copy must
+still contain symlinks. The copy is also `git init`-ed and staged, because
+`check_no_content_copies` asks git which `SKILL.md` files are tracked; the index alone answers
+that, so nothing is committed and the repository is thrown away with the fixture root.
 
 Each fixture asserts its target check fails **and** every other check passes, so a fixture proves
 the check it names rather than tripping an earlier one.
@@ -108,6 +111,7 @@ the check it names rather than tripping an earlier one.
 | 5 | An exemption naming a skill that no longer exists | stale claims |
 | 6 | A directory with no `SKILL.md` and no `notSkills` entry | inventory |
 | 7 | An exemption whose reason explains nothing | stale claims |
+| 8 | The deleted `skills/orchestrator-guide` copy, restored and tracked | content copies |
 
 Fixtures 3 and 4b legitimately trip two checks each — a dangling or directory-shaped mirror is
 both malformed and unreadable. Their expectation lists say so rather than papering over it, and
@@ -141,6 +145,11 @@ consumer, and had already drifted. Pinning it would have required a resync follo
 lockstep obligation, in exchange for a directory nothing reads. `skills/orchestrator-guide.skill`,
 a zip archive of the same content, went with it — it could not have been content-compared by the
 same mechanism anyway.
+
+A deletion, however, is not a rule. Nothing about removing the directory stops an equivalent copy
+from reappearing and drifting again, which is why `check_no_content_copies` exists: the invariant
+that survives is "one tracked copy of a skill's content", not "this particular path is absent".
+Fixture 8 restores the deleted copy and requires the gate to reject it.
 
 `scripts/package-skills.sh` needed no change; it already sourced from `.claude/skills/`. Both user
 guides already instruct users to install from `.claude/skills/orchestrator-guide`.
