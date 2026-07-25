@@ -418,16 +418,18 @@ scanned_markdown() {
 # line for exactly this reason, so the two now agree about what a fence means.
 # Prose in the same file is still read: fixtures 7 and 13 append plain sentences
 # and are still caught.
+#
+# One awk over the whole corpus, not one per file. The per-file form spawned a
+# process for each of ~590 files on every call, and this check is called once
+# per fixture per run — tens of thousands of spawns, which is tolerable on a
+# developer machine and not on a runner.
 prose_only_corpus() {
-  local root="$1" path
-  while read -r path; do
-    [[ -z "$path" ]] && continue
-    [[ -f "$root/$path" ]] || continue
-    awk -v file="$path" '
-      /^[ \t]*(```|~~~)/ { fence = !fence; next }
-      !fence { printf "%s:%d:%s\n", file, NR, $0 }
-    ' "$root/$path"
-  done < <(scanned_markdown "$root")
+  local root="$1"
+  (cd "$root" && scanned_markdown "$root" | tr '\n' '\0' | xargs -0 awk '
+    FNR == 1 { fence = 0 }
+    /^[ \t]*(```|~~~)/ { fence = !fence; next }
+    !fence { printf "%s:%d:%s\n", FILENAME, FNR, $0 }
+  ')
 }
 
 check_no_stale_claims() {
