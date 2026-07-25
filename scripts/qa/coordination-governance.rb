@@ -6,6 +6,7 @@ require "optparse"
 require "pathname"
 require "yaml"
 require_relative "../lib/rust_source"
+require_relative "../lib/ci_env"
 
 # The Rust source scan and the ledger serialisation are shared with
 # scripts/qa/core-boundary.rb. Both ledgers must count the same tree the same
@@ -440,11 +441,10 @@ if options[:emit_inventory] || options[:emit_baseline]
     # A regenerated candidate is a proposal for a human to review in a diff. In
     # CI there is no human, and an automatic ledger rewrite would turn the
     # review gate into decoration.
-    if ENV.key?("CI")
-      warn "refusing --write under CI: a regenerated ledger must be reviewed by a human"
-      warn "run the emit modes locally, read the diff, and commit the ledger with the spec change"
-      exit 2
-    end
+    CiEnv.refuse_unattended_write!(
+      "ledger",
+      "run the emit modes locally, read the diff, and commit the ledger with the spec change"
+    )
     updated = ledger
     updated["retirement"]["shellRunnerExecutor"]["productionAgents"] = candidate["productionAgents"] if candidate.key?("productionAgents")
     updated["sourceBaseline"] = candidate["sourceBaseline"] if candidate.key?("sourceBaseline")

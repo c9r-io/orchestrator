@@ -17,6 +17,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 GATE="scripts/qa/core-boundary.rb"
 GATE_LIB="scripts/lib/rust_source.rb"
+# Every shared library the two ruby gates require. A case repo is assembled by
+# copying, so a library missing from this list makes the gate under test die on
+# its require — and a case that expects the gate to fail then passes for the
+# wrong reason. Case 9 removes GATE_LIB deliberately and is the exception.
+GATE_LIBS=(
+  scripts/lib/rust_source.rb
+  scripts/lib/rust_lexer.rb
+  scripts/lib/ci_env.rb
+)
 COORD_GATE="scripts/qa/coordination-governance.rb"
 COORD_LEDGER="config/governance/coordination-collapse-ledger.json"
 LEDGER="config/governance/core-boundary-ledger.json"
@@ -61,7 +70,10 @@ new_case() {
   cp "$REPO_ROOT/$COORD_LEDGER" "$dir/$COORD_LEDGER"
   cp "$REPO_ROOT/$GATE" "$dir/$GATE"
   cp "$REPO_ROOT/$COORD_GATE" "$dir/$COORD_GATE"
-  cp "$REPO_ROOT/$GATE_LIB" "$dir/$GATE_LIB"
+  local lib
+  for lib in "${GATE_LIBS[@]}"; do
+    cp "$REPO_ROOT/$lib" "$dir/$lib"
+  done
   echo "$dir"
 }
 
@@ -283,6 +295,142 @@ elif [[ "$BOUNDARY_STATUS" -ne 0 && "$COORD_STATUS" -ne 0 ]] &&
 else
   fail "a gate ran without the shared scanner (boundary=$BOUNDARY_STATUS coordination=$COORD_STATUS)"
   cat "$WORK/case9-boundary.err" "$WORK/case9-coord.err" >&2
+fi
+echo ""
+
+# --- Case 10: a brace inside a literal does not hide the code after it -------
+# FR-134 defects X and W. The scanner used to count `{` and `}` textually, so
+# `.body("{")` inside a cfg(test) module left the depth counter above zero, the
+# module's range ran to end of file, and every production line after it vanished
+# from both ledgers. The counts do not move when that happens, and both ledgers
+# now compare for exact equality, so the ratchet stays green over a growing
+# blind spot.
+#
+# Two ledgers count different things, so the probe carries both: a production
+# rusqlite reference for the boundary ledger and production captures /
+# PipelineVariables lines for the coordination one. The assertion is that both
+# baselines MOVE. Before the lexer fix they do not move at all, which is the
+# defect stated as a test.
+echo "Case 10: production code after a brace-unbalanced cfg(test) module is still counted"
+DIR="$(new_case lexical-safety)"
+PROBE="$DIR/core/src/prehook/mod.rs"
+set +e
+BOUNDARY_BEFORE="$(cd "$DIR" && ruby "$GATE" --emit-baseline 2> "$WORK/case10-b.err")"
+COORD_BEFORE="$(cd "$DIR" && ruby "$COORD_GATE" --emit-baseline 2> "$WORK/case10-c.err")"
+set -e
+ruby -e '
+path = ARGV[0]
+lines = File.readlines(path)
+# The unbalanced literals are the three shapes this repository actually
+# contains: an interpolated format string, an escaped brace, and a lone brace
+# passed as an argument. Each opens a brace the old counter never closed.
+probe = <<~'"'"'RUST'"'"'
+  #[cfg(test)]
+  mod fr134_unbalanced_probe {
+      #[test]
+      fn braces_inside_literals() {
+          let _ = format!("{err}", err = 1);
+          let _ = "{{bad";
+          let _ = String::from("{");
+      }
+  }
+
+  pub fn fr134_production_after_probe(conn: &rusqlite::Connection) {
+      let _ = conn;
+      let _ = "captures json_path";
+      let _ = PipelineVariables::default();
+  }
+RUST
+lines.insert(lines.length / 2, probe)
+File.write(path, lines.join)
+' "$PROBE"
+set +e
+BOUNDARY_AFTER="$(cd "$DIR" && ruby "$GATE" --emit-baseline 2>> "$WORK/case10-b.err")"
+COORD_AFTER="$(cd "$DIR" && ruby "$COORD_GATE" --emit-baseline 2>> "$WORK/case10-c.err")"
+set -e
+if [[ -z "$BOUNDARY_BEFORE" || -z "$COORD_BEFORE" || -z "$BOUNDARY_AFTER" || -z "$COORD_AFTER" ]]; then
+  fail "a gate could not emit a baseline, so the visibility comparison proves nothing"
+  cat "$WORK/case10-b.err" "$WORK/case10-c.err" >&2
+elif [[ "$BOUNDARY_BEFORE" != "$BOUNDARY_AFTER" && "$COORD_BEFORE" != "$COORD_AFTER" ]]; then
+  pass "production rusqlite, captures and PipelineVariables after an unbalanced literal reach both ledgers"
+else
+  fail "a brace inside a literal hid the production code after it from a ledger"
+  [[ "$BOUNDARY_BEFORE" == "$BOUNDARY_AFTER" ]] && echo "    core boundary baseline did not move" >&2
+  [[ "$COORD_BEFORE" == "$COORD_AFTER" ]] && echo "    coordination baseline did not move" >&2
+fi
+echo ""
+
+# --- Case 11: the fix does not close a module early --------------------------
+# The other direction, and the reason the fix is a lexer rather than a regular
+# expression. A per-line masker cannot see a raw string that spans lines: it
+# reads the closing line's `}` as code, decides the module ended there, and
+# hands the rest of the test module to the ledgers as production usage. The
+# repository already contains this shape at item_generate.rs:199, so a fix that
+# gets it wrong moves capturesOrJsonPath from 53 to 60.
+echo "Case 11: a multi-line raw string does not end a cfg(test) module early"
+DIR="$(new_case raw-string-safety)"
+PROBE="$DIR/core/src/prehook/mod.rs"
+set +e
+BOUNDARY_BEFORE="$(cd "$DIR" && ruby "$GATE" --emit-baseline 2> "$WORK/case11-b.err")"
+COORD_BEFORE="$(cd "$DIR" && ruby "$COORD_GATE" --emit-baseline 2> "$WORK/case11-c.err")"
+set -e
+ruby -e '
+path = ARGV[0]
+lines = File.readlines(path)
+probe = <<~'"'"'RUST'"'"'
+  #[cfg(test)]
+  mod fr134_raw_string_probe {
+      #[test]
+      fn raw_string_spans_lines() {
+          let fixture = r#"{"items": [
+              {"id": "a", "json_path": "$.items"}
+          ]}"#;
+          let _ = fixture;
+          let _ = rusqlite::Connection::open_in_memory();
+          let _ = "captures json_path";
+          let _ = PipelineVariables::default();
+      }
+  }
+RUST
+lines.insert(lines.length / 2, probe)
+File.write(path, lines.join)
+' "$PROBE"
+set +e
+BOUNDARY_AFTER="$(cd "$DIR" && ruby "$GATE" --emit-baseline 2>> "$WORK/case11-b.err")"
+COORD_AFTER="$(cd "$DIR" && ruby "$COORD_GATE" --emit-baseline 2>> "$WORK/case11-c.err")"
+set -e
+if [[ -z "$BOUNDARY_BEFORE" || -z "$COORD_BEFORE" || -z "$BOUNDARY_AFTER" || -z "$COORD_AFTER" ]]; then
+  fail "a gate could not emit a baseline, so the raw string comparison proves nothing"
+  cat "$WORK/case11-b.err" "$WORK/case11-c.err" >&2
+elif [[ "$BOUNDARY_BEFORE" == "$BOUNDARY_AFTER" && "$COORD_BEFORE" == "$COORD_AFTER" ]]; then
+  pass "a test module containing a multi-line raw string stays excluded from both ledgers"
+else
+  fail "a multi-line raw string ended a cfg(test) module early and leaked test code into a ledger"
+  diff <(echo "$BOUNDARY_BEFORE") <(echo "$BOUNDARY_AFTER") >&2 || true
+  diff <(echo "$COORD_BEFORE") <(echo "$COORD_AFTER") >&2 || true
+fi
+echo ""
+
+# --- Case 12: no cfg(test) module in the tree runs off the end ---------------
+# Cases 10 and 11 prove the scanner handles the shapes. This proves the tree has
+# none it cannot handle. A module whose depth never returns to zero excludes
+# everything after it, and that is silent in the counts by construction — the
+# hidden lines simply stop being counted, so no baseline moves to signal it.
+echo "Case 12: no cfg(test) module in the scanned tree fails to close"
+UNCLOSED="$(cd "$REPO_ROOT" && ruby -e '
+$LOAD_PATH.unshift "scripts/lib"
+require "rust_source"
+require "pathname"
+RustSource.unclosed_test_modules(Pathname.new(Dir.pwd)).each { |path, line| puts "#{path}:#{line}" }
+' 2> "$WORK/case12.err")"
+if [[ -n "$(cat "$WORK/case12.err")" ]]; then
+  fail "the unclosed-module scan could not run"
+  cat "$WORK/case12.err" >&2
+elif [[ -z "$UNCLOSED" ]]; then
+  pass "every cfg(test) module in core/src and crates/*/src closes"
+else
+  fail "a cfg(test) module never closes, hiding every line after it from both ledgers:"
+  printf '    %s\n' $UNCLOSED >&2
 fi
 echo ""
 

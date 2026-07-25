@@ -134,6 +134,14 @@ cp "$FAKE_CLAUDE" "$QA_ROOT/bin/claude"
 chmod 700 "$QA_ROOT/bin/claude"
 export PATH="$QA_ROOT/bin:$PATH"
 
+# The shadow is the only barrier between this run and a real provider CLI: the
+# bundle it applies declares provider: claude with no fake binary pin. Assert it
+# is actually in effect rather than assuming the line above took — a commented
+# out or reordered export leaves this gate spending real credentials, and the
+# surface gate cannot see that from the outside. FR-134 requirement 2.
+. "$REPO_ROOT/scripts/lib/provider_isolation.sh"
+assert_provider_shadow "$QA_ROOT/bin" claude
+
 (
   cd "$QA_ROOT/workspace"
   "$ORCHD" --foreground --bind "$BIND_ADDR" --workers 1 --webhook-bind none \

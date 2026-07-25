@@ -19,6 +19,7 @@ require "json"
 require "optparse"
 require "pathname"
 require_relative "../lib/rust_source"
+require_relative "../lib/ci_env"
 
 # The scan is shared with scripts/qa/coordination-governance.rb. Both ledgers
 # count the same tree, and stripping inline cfg(test) modules moves this ledger's
@@ -138,11 +139,10 @@ if options[:emit_baseline]
     # A regenerated ledger is a proposal for a human to read in a diff. In CI
     # there is no human, and an automatic rewrite would turn the review gate into
     # decoration.
-    if ENV.key?("CI")
-      warn "refusing --write under CI: a regenerated ledger must be reviewed by a human"
-      warn "run --emit-baseline locally, read the diff, and commit the ledger with the change"
-      exit 2
-    end
+    CiEnv.refuse_unattended_write!(
+      "ledger",
+      "run --emit-baseline locally, read the diff, and commit the ledger with the change"
+    )
     File.write(ledger_path, ledger_json(actual))
     warn "wrote #{options[:ledger]}; review the diff and commit it with the change that caused it"
     exit 0

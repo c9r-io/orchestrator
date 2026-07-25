@@ -21,7 +21,11 @@ GATE="scripts/qa/doc-lifecycle.rb"
 # copying, so a working-tree-only dependency has to be named here or the gate
 # under test dies on a missing require before asserting anything — which is how
 # the FR-130 wrapper first failed.
-GATE_LIB="scripts/lib/rust_source.rb"
+GATE_LIBS=(
+  scripts/lib/rust_source.rb
+  scripts/lib/rust_lexer.rb
+  scripts/lib/ci_env.rb
+)
 INDEX="config/governance/doc-lifecycle-index.json"
 
 command -v ruby >/dev/null 2>&1 || { echo "missing required command: ruby" >&2; exit 1; }
@@ -47,7 +51,10 @@ new_case() {
   cp -R "$REPO_ROOT/docs/qa" "$dir/docs/qa"
   cp "$REPO_ROOT/$INDEX" "$dir/$INDEX"
   cp "$REPO_ROOT/$GATE" "$dir/$GATE"
-  cp "$REPO_ROOT/$GATE_LIB" "$dir/$GATE_LIB"
+  local lib
+  for lib in "${GATE_LIBS[@]}"; do
+    cp "$REPO_ROOT/$lib" "$dir/$lib"
+  done
   echo "$dir"
 }
 

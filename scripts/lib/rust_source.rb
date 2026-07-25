@@ -15,6 +15,7 @@
 
 require "json"
 require "pathname"
+require_relative "rust_lexer"
 
 module RustSource
   module_function
@@ -55,6 +56,9 @@ module RustSource
   # the implementation mean what the scope says.
   def strip_test_modules(source)
     lines = source.lines
+    # Braces are counted on a lexically masked copy — see RustLexer for why a
+    # per-line regex is not enough — while the ranges index the real lines.
+    counted = RustLexer.mask_literals(source).lines
     excluded = []
     index = 0
     while index < lines.length
@@ -65,8 +69,8 @@ module RustSource
         opened = false
         cursor = index + 1
         while cursor < lines.length
-          depth += lines[cursor].count("{") - lines[cursor].count("}")
-          opened ||= lines[cursor].include?("{")
+          depth += counted[cursor].count("{") - counted[cursor].count("}")
+          opened ||= counted[cursor].include?("{")
           break if opened && depth <= 0
           cursor += 1
         end
@@ -80,6 +84,42 @@ module RustSource
     lines.each_with_index.reject do |_, position|
       excluded.any? { |range| range.cover?(position) }
     end.map(&:first).join
+  end
+
+  # A `cfg(test)` module whose depth never returns to zero has no end, so
+  # strip_test_modules excludes everything after it. That is invisible in the
+  # ledger numbers — the hidden lines simply stop being counted — so it is
+  # asserted directly. Returns [[path, line_number], ...].
+  def unclosed_test_modules(repo_root)
+    rust_source_files(repo_root).each_with_object([]) do |path, found|
+      next unless path.extname == ".rs"
+
+      lines = File.read(path).lines
+      counted = RustLexer.mask_literals(lines.join).lines
+      index = 0
+      while index < lines.length
+        declaration = lines[index + 1]
+        if lines[index].match?(/^\s*#\[cfg\(test\)\]/) && declaration &&
+           declaration.match?(/^\s*(pub(\([^)]*\))?\s+)?mod\s+\w+\s*\{/)
+          depth = 0
+          opened = false
+          cursor = index + 1
+          closed = false
+          while cursor < lines.length
+            depth += counted[cursor].count("{") - counted[cursor].count("}")
+            opened ||= counted[cursor].include?("{")
+            if opened && depth <= 0
+              closed = true
+              break
+            end
+            cursor += 1
+          end
+          found << [relative_path(repo_root, path), index + 1] unless closed
+          index = cursor
+        end
+        index += 1
+      end
+    end
   end
 
   # Reads a source file the way the ledgers count it.

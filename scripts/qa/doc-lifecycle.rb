@@ -28,6 +28,7 @@
 require "json"
 require "optparse"
 require "pathname"
+require_relative "../lib/ci_env"
 require "yaml"
 
 # The JSON normalisation is shared with the coordination and core-boundary
@@ -259,11 +260,10 @@ if options[:emit_index]
     # A regenerated index is a proposal for a human to read in a diff. In CI there
     # is no human, and an automatic rewrite would turn the review gate into
     # decoration.
-    if ENV.key?("CI")
-      warn "refusing --write under CI: a regenerated index must be reviewed by a human"
-      warn "run --emit-index locally, read the diff, and commit the index with the change"
-      exit 2
-    end
+    CiEnv.refuse_unattended_write!(
+      "index",
+      "run --emit-index locally, read the diff, and commit the index with the change"
+    )
     unless errors.empty?
       warn "refusing to write an index built from documents that fail validation:"
       errors.each { |error| warn "  #{error}" }
