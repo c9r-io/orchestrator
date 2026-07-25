@@ -56,6 +56,11 @@ Reduced from 371 lines to 74 lines:
 
 - Free plan: unlimited bandwidth, builds, requests
 - Auto-deploy on push to `main` when `site/**` or `docs/guide/**` changes
+
+> **Note**: the publish set and the deploy trigger have both widened since. `docs/showcases/**`
+> is published too, `site/{en,zh}/{guide,showcases}` are all generated and gitignored, and the
+> declared set now lives in `config/governance/docs-publishing.json`. See
+> [DD-143](143-docs-publishing-integrity.md).
 - Uses `cloudflare/wrangler-action@v3`
 - Requires `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets
 

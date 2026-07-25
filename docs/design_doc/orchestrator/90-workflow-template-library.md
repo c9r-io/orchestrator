@@ -58,5 +58,9 @@ FR 标记 CLI 模板命令为可选。当前通过 `orchestrator apply -f docs/w
 - `site/en/showcases/{hello-world,qa-loop,plan-execute,scheduled-scan,fr-watch}.md`
 - `site/zh/showcases/{hello-world,qa-loop,plan-execute,scheduled-scan,fr-watch}.md`
 
+> **Note**: these ten pages were authored by hand here and are now generated from
+> `docs/showcases/` by `scripts/sync-docs.mjs`. Edit the source, not the page. See
+> [DD-143](143-docs-publishing-integrity.md).
+
 ### Config
 - `site/.vitepress/config.ts` — sidebar Templates group

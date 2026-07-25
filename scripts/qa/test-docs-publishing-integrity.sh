@@ -538,6 +538,17 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
   expect_fail "fixture 8" "$d" "check_nav_complete" \
     "a page that is published with nothing linking it fails the reachability check"
 
+  # 9b. The other direction of the bijection: a page on the site that no source
+  #     declares. FR-131 asked for both directions by name, and the reverse is the one
+  #     a set comparison in only one direction quietly permits forever.
+  d="$(new_case f9b)"
+  perl -0pi -e 's/f !== "README\.md" && //' "$d/$SYNC_REL"
+  nav="$(policy_nav "$d")"
+  perl -0pi -e 's|(\{ text: "Vision", link: "/en/guide/vision" \},)|$1\n                { text: "R", link: "/en/guide/README" },|' "$d/$nav"
+  perl -0pi -e 's|(\{ text: "愿景", link: "/zh/guide/vision" \},)|$1\n                { text: "R", link: "/zh/guide/README" },|' "$d/$nav"
+  expect_fail "fixture 9b" "$d" "check_publish_bijection" \
+    "a page the site publishes that no source declares fails the same comparison in reverse"
+
   # 9. Two sources collapsing onto one published slug. The loser is overwritten with
   #    no diagnostic, and which one loses depends on directory order.
   d="$(new_case f9)"
