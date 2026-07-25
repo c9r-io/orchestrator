@@ -1,7 +1,7 @@
 # Orchestrator Runner - Agent Driver Execution Migration
 
 **Module**: Orchestrator Runner / Scheduler / Workflow Governance
-**Status**: Verification
+**Status**: Released
 **Related Plan**: FR-126 command-only Agent migration, legacy runner retirement, strict evidence remediation, and documentation alignment ratchet
 **Related QA**: `docs/qa/orchestrator/176-agent-driver-execution-migration.md`
 **Created**: 2026-07-25

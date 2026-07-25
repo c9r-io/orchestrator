@@ -268,8 +268,8 @@ Close FR-126 only when every original repository and coordination gate is part o
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Exact per-Agent production inventory | ☐ | | | |
-| 2 | Three production shell contracts preserve observable behavior | ☐ | | | |
-| 3 | Streaming mark-done typed Claude matches the recorded contract | ☐ | | | |
-| 4 | Admission, compatibility, removal, rollback, and documentation boundaries | ☐ | | | |
-| 5 | Mandatory aggregate release and guide alignment | ☐ | | | |
+| 1 | Exact per-Agent production inventory | ☑ PASS | 2026-07-25 | Codex | Clean-tree governance reproduced 20 fingerprinted typed Agents, zero production command-only/global streaming consumers, and an explicit production/runtime decision-layer fixture. |
+| 2 | Three production shell contracts preserve observable behavior | ☑ PASS | 2026-07-25 | Codex | All three compatibility/typed pairs matched terminal state, exit code, canonical stdout hash, recorded baseline, and normalized driver events. |
+| 3 | Streaming mark-done typed Claude matches the recorded contract | ☑ PASS | 2026-07-25 | Codex | Fake Claude completed with exit `0` in one cycle; typed tool use/result and terminal evidence were present and the provider session stayed private. |
+| 4 | Admission, compatibility, removal, rollback, and documentation boundaries | ☑ PASS | 2026-07-25 | Codex | Runtime promotion, production rejection, scheduler fail-closed, reverse apply, EN/ZH/architecture/skill/design alignment, and stale-text negative fixture all passed; documentation gate `8/8`. |
+| 5 | Mandatory aggregate release and guide alignment | ☑ PASS | 2026-07-25 | Codex | Clean-tree aggregate `7/7`; production parity `11/11`, coordination strangler `20/20`, workspace tests, strict Clippy, format, coverage governance, and guide-aware QA lint passed. |

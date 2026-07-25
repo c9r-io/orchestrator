@@ -101,4 +101,4 @@
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☐ | S1–S6 historical PASS; S7 pending FR-126 release certification |
+| 1 | All scenarios verified | ✅ | S1–S6 historical PASS; S7 Agent driver semantics `8/8` and guide-aware QA lint PASS on 2026-07-25 |
