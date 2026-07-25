@@ -118,9 +118,9 @@ pub(super) async fn record_phase_results(
                 }))?,
             });
         }
-        // Project stream-json structured records (from the streaming runner)
-        // into events: one per tool call, plus a run summary. Non-streaming runs
-        // carry no such artifacts, so this is a no-op for them.
+        // Project structured run records into events: one per tool call, plus a
+        // run summary. Plain shell runs carry no such artifacts, so this is a
+        // no-op for them.
         events.extend(project_stream_events(
             &validated.redacted_output.artifacts,
             task_id,

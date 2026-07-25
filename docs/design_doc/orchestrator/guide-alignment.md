@@ -34,14 +34,20 @@ FR-126 的第三轮闭环审计证明：只检查 CLI `--help` 无法发现资�
 - production admission 与 runtime compatibility 分层明确。
 - `docs/showcases/**/*.md` 不得把退役 executor 描述为当前运行路径；
 - EN/ZH CEL 指南必须链接到存在且具备 `claude/cli`、normalized driver
-  events 与 `driver_terminal` 正向语义的 mark-done showcase。
+  events 与 `driver_terminal` 正向语义的 mark-done showcase；
+- `CHANGELOG.md` 的 `[Unreleased]` 段必须记录退役（`### Removed`、被删除的
+  runner selection seam）与破坏性 manifest 变更（`legacy_runner_executor_removed`、
+  `legacy_agent_command_deprecated`）。已发布段落属历史记录，不受此约束。
 
-该脚本由 `scripts/qa-doc-lint.sh` 和 FR-126 默认 release gate 调用。showcase
-采用目录级扫描而不是单文件白名单，使后续新增页面也进入 retired-semantics
-棘轮。DD-102/DD-103 等增量设计记录保留历史正文，只要求显式标注已被当前
-typed-driver seam 取代；DD-58 的事故背景和 DD-137 已完成的移交记录不是当前
-操作指南，不纳入静态禁词扫描。完整 CLI 命令树、翻译质量和叙述性内容仍由
-本设计的五阶段 Skill 流程负责。
+该脚本由 `scripts/qa-doc-lint.sh` 和 FR-126 默认 release gate 调用。
+
+**覆盖策略**：retired-semantics 扫描以 `git ls-files '*.md'` 为默认全集，再减去
+带理由的豁免清单（当前为空），而不是逐轮增长的目标文件白名单。前四轮审计
+依次暴露 guide → 设计文档 → showcase → CHANGELOG，每轮都是"白名单之外的那一个"；
+默认全集消除了这一类漏网面。DD-102/DD-103 等增量设计记录保留历史正文，只要求
+显式标注已被当前 typed-driver seam 取代；DD-58 的事故背景和 DD-137 已完成的移交
+记录同理，其措辞本身不构成当前配置主张，因此无需豁免即可通过。完整 CLI 命令树、
+翻译质量和叙述性内容仍由本设计的五阶段 Skill 流程负责。
 
 ## 设计方案
 

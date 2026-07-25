@@ -92,10 +92,14 @@
 
    - EN/ZH resource model 不把 `runner.executor: streaming` 作为可用选项
    - EN/ZH CEL 文档把信号来源绑定到 typed driver / `driver_terminal`
-   - 全部 `docs/showcases/**/*.md` 进入退役执行语义扫描
+   - 退役执行语义扫描以 `git ls-files '*.md'` 全集为默认覆盖面（豁免清单当前为空），
+     而非枚举目标文件
    - EN/ZH CEL 指南链接的 mark-done showcase 包含 `claude/cli`、
      `driver_tool_use`、`driver_tool_result` 与 `driver_terminal`
-   - negative fixture 能检测旧 runner 与 showcase 操作文案
+   - `CHANGELOG.md` 的 `[Unreleased]` 记录 `### Removed`、被删除的
+     `RunnerExecutorKind` seam、`legacy_runner_executor_removed` 与
+     `legacy_agent_command_deprecated`
+   - negative fixture 能检测旧 runner、showcase 操作文案与 CHANGELOG 旧措辞
    - 两个命令均退出 `0`
 
 ---
@@ -104,4 +108,4 @@
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ✅ | S1–S6 historical PASS; expanded S7 Agent driver + linked showcase semantics `10/10` and clean-tree guide-aware QA lint PASS on 2026-07-25 |
+| 1 | All scenarios verified | ✅ | S1–S6 historical PASS; expanded S7 Agent driver + linked showcase + CHANGELOG semantics `11/11` under repo-wide Markdown coverage, each new assertion independently falsified, and clean-tree guide-aware QA lint PASS on 2026-07-25 |

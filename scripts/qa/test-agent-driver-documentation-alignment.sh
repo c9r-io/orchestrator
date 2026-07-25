@@ -24,31 +24,30 @@ fail() {
   exit 1
 }
 
-for command in jq rg; do
+for command in git jq rg; do
   command -v "$command" >/dev/null 2>&1 || fail "missing required command: $command"
 done
 
 cd "$REPO_ROOT"
 
-STALE_PATTERN='executor:[[:space:]]*shell.*(default|默认).*(\||｜)[[:space:]]*streaming|When a step runs under the `streaming` runner executor|当步骤在 `streaming` 运行器下执行时|deprecated global streaming executor calls a provider-owned compatibility bridge|global streaming executor and CEL path remain compatibility bridges|Legacy command Agents use the default shell executor|keep a legacy shell Agent|reassign the workflow capability to a legacy command Agent|保留旧 command Agent一个发布周期|保留旧 command Agent 一个发布周期|The `streaming` executor drives `claude`|End-to-end demonstration of the streaming-runner pivot'
-ALIGNMENT_TARGETS=(
-  docs/guide/02-resource-model.md
-  docs/guide/zh/02-resource-model.md
-  docs/guide/04-cel-prehooks.md
-  docs/guide/zh/04-cel-prehooks.md
-  docs/guide/agent-driver-model.md
-  docs/architecture.md
-  docs/design_doc/orchestrator/101-streaming-agent-runner-architecture-pivot.md
-  docs/design_doc/orchestrator/127-agent-driver-abstraction.md
-  docs/showcases
-  .claude/skills/orchestrator-guide/SKILL.md
-  .claude/skills/orchestrator-guide/references/resource-and-steps.md
-)
+STALE_PATTERN='executor:[[:space:]]*shell.*(default|默认).*(\||｜)[[:space:]]*streaming|When a step runs under the `streaming` runner executor|当步骤在 `streaming` 运行器下执行时|deprecated global streaming executor|global streaming executor and CEL path remain compatibility bridges|Legacy command Agents use the default shell executor|keep a legacy shell Agent|reassign the workflow capability to a legacy command Agent|保留旧 command Agent一个发布周期|保留旧 command Agent 一个发布周期|The `streaming` executor drives `claude`|End-to-end demonstration of the streaming-runner pivot'
+
+# Every tracked Markdown surface is scanned by default. A target list enumerated
+# by hand only ever covers the drift already discovered, so exemptions are
+# subtracted here and each one must carry its reason. Released CHANGELOG
+# sections and design records that fence themselves with an explicit historical
+# banner do not need an exemption: their wording is not a stale claim.
+EXEMPT_PATTERN='^$' # no exempted surfaces
+ALIGNMENT_TARGETS=()
+while IFS= read -r doc; do
+  ALIGNMENT_TARGETS+=("$doc")
+done < <(git ls-files '*.md' | grep -Ev "$EXEMPT_PATTERN")
+[[ ${#ALIGNMENT_TARGETS[@]} -gt 0 ]] || fail "no Markdown surfaces resolved for alignment scan"
 
 if rg -n -i "$STALE_PATTERN" "${ALIGNMENT_TARGETS[@]}"; then
   fail "retired runner or command-only authoring guidance remains"
 fi
-pass "retired runner and command-only authoring phrases are absent"
+pass "retired runner and command-only authoring phrases are absent from every tracked Markdown surface"
 
 rg -q 'legacy_runner_executor_removed' docs/guide/02-resource-model.md ||
   fail "English resource guide omits the streaming executor rejection"
@@ -133,6 +132,17 @@ if rg -q 'def execution_document_accepted?' scripts/qa/coordination-governance.r
 fi
 pass "governance fixtures distinguish production admission from runtime compatibility"
 
+UNRELEASED="$(awk '/^## \[Unreleased\]/{flag=1;next} /^## \[/{flag=0} flag' CHANGELOG.md)"
+printf '%s' "$UNRELEASED" | rg -q '^### Removed[[:space:]]*$' ||
+  fail "CHANGELOG [Unreleased] does not record the retirement under ### Removed"
+printf '%s' "$UNRELEASED" | rg -q 'RunnerExecutorKind' ||
+  fail "CHANGELOG [Unreleased] does not name the removed runner selection seam"
+printf '%s' "$UNRELEASED" | rg -q 'legacy_runner_executor_removed' ||
+  fail "CHANGELOG [Unreleased] does not record the breaking manifest rejection"
+printf '%s' "$UNRELEASED" | rg -q 'legacy_agent_command_deprecated' ||
+  fail "CHANGELOG [Unreleased] does not record the command-only compatibility window"
+pass "CHANGELOG records the retirement and its breaking manifest change"
+
 rg -q 'legacy_runner_executor_removed' core/src crates --glob '*.rs' ||
   fail "documented runner rejection code is absent from source"
 rg -q 'legacy_agent_command_deprecated' core/src crates --glob '*.rs' ||
@@ -148,6 +158,7 @@ if [[ "$FIXTURE_TEST" == "1" ]]; then
     'executor: shell # shell (default) | streaming' \
     'When a step runs under the `streaming` runner executor' \
     'The deprecated global streaming executor calls a provider-owned compatibility bridge while manifests migrate.' \
+    '- Explicit driver phases use setup; the deprecated global streaming executor is now a provider-owned compatibility bridge while legacy manifests migrate' \
     'End-to-end demonstration of the streaming-runner pivot' \
     'The `streaming` executor drives `claude` and hosts the mark_done tool.' \
     >"$fixture_file"
