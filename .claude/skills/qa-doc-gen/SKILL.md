@@ -1,6 +1,6 @@
 ---
 name: qa-doc-gen
-description: "Generate or update QA/security/UIUX test documentation after confirmed feature implementation plans or completed refactors. Use this skill AFTER plan approval or code completion to: (1) add new QA test docs for new behavior, (2) generate design docs, and (3) run cross-doc impact analysis across docs/qa/, docs/security/, and docs/uiux/ to update stale steps, expectations, and assertions. Triggers when users ask to create QA docs, update test docs after implementation, or sync QA/security/UIUX docs after behavior changes."
+description: "Generate or update QA/security/UIUX test documentation after confirmed feature implementation plans or completed refactors. Use this skill AFTER plan approval or code completion to: (1) add new QA test docs for new behavior, (2) generate design docs, and (3) run repo-wide cross-doc impact analysis (docs/qa/, docs/security/, docs/uiux/, docs/guide/ and its translations, docs/design_doc/, docs/showcases/, root Markdown including CHANGELOG.md, and .claude/skills/) to update stale steps, expectations, and assertions. Triggers when users ask to create QA docs, update test docs after implementation, or sync QA/security/UIUX docs after behavior changes."
 ---
 
 # QA Doc Gen
@@ -29,6 +29,7 @@ From the confirmed plan and merged implementation, extract:
 - **Module**: Which module it belongs to (used as the folder under `docs/qa/`, e.g. `docs/qa/{module}/`)
 - **Behavior**: Normal flow, error cases, edge cases
 - **Behavior deltas**: What changed compared to old docs (auth rules, token types, permission boundaries, UI routes, API contracts, redirects)
+- **Falsified statements**: Which existing statements anywhere in the repo this change makes *untrue* — a removed config value still documented as available, a mechanism still described as current, a compatibility claim that no longer holds. List these explicitly; they drive Step 5 and are the most common source of doc drift surviving a "closed" change.
 - **UI interactions**: Pages, buttons, forms involved
 - **UI entry points**: Navigation links, quick links, sidebar items, or buttons that lead to the feature
 - **API endpoints**: If applicable, include method, path, request/response
@@ -116,18 +117,31 @@ For each feature behavior in the plan, generate scenarios covering:
 | Boundary | Max length, empty string, special chars |
 | Cascade effects | Delete with dependent data |
 | UI entry point | Verify navigation entry exists and reaches the target page |
+| Retirement parity | A migrated object still produces the same observable result as before migration (terminal state, exit code, output, events) |
+| Downstream link integrity | A page the docs send readers to describes the current mechanism, not the removed one |
+| Negative fixture | An injected violating sample makes the assertion fail, proving the check can fail at all |
 
-Not every type is needed for every feature. UI entry point is mandatory for UI-facing changes.
+Not every type is needed for every feature. UI entry point is mandatory for UI-facing changes. Retirement parity and negative fixture are mandatory whenever a change removes or migrates an existing path.
 
 ## Step 5: Run Cross-Doc Impact Analysis (Mandatory)
 
-After creating/updating the primary docs, always scan and classify potential impacts in:
+After creating/updating the primary docs, always scan and classify potential impacts.
 
-- `docs/qa/**/*.md`
-- `docs/security/**/*.md`
-- `docs/uiux/**/*.md`
+### Scope: repo-wide by default, with an explicit exemption list
 
-Use search patterns based on behavior deltas, for example:
+Scan **every** Markdown surface, not a fixed list of directories:
+
+- `docs/**/*.md` — including `docs/guide/` (and translations such as `docs/guide/zh/`), `docs/design_doc/`, `docs/showcases/`, `docs/qa/`, `docs/security/`, `docs/uiux/`
+- Repo-root Markdown — `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `docs/architecture.md`
+- `.claude/skills/**/*.md` — authoring guidance that tells future contributors how to configure the thing you changed
+
+Then exempt, **and state the reason for each exemption in the report**. Legitimate exemptions are narrow: a historical design record that carries an explicit "superseded / historical context" banner, or a released CHANGELOG section that correctly describes what shipped at the time. An entry still under `[Unreleased]` is never exempt — it has not shipped, so a stale one will ship as a false statement.
+
+A whitelist of known files is not an acceptable scope. Drift concentrates in whatever the whitelist omits, and each iteration only adds the one file just discovered.
+
+Translated documents count as separate surfaces: fixing `docs/guide/x.md` without `docs/guide/zh/x.md` leaves half the readers with the removed mechanism.
+
+Use search patterns based on behavior deltas and the falsified statements from Step 1, for example:
 
 - route changes (`/dashboard`, `/settings`, `/auth/callback`)
 - token model changes (`id_token`, `access_token`, `token exchange`)
@@ -160,11 +174,21 @@ After creating the design doc(s), update `docs/design_doc/README.md`:
 
 If the cross-doc impact analysis (Step 5) modified files under `docs/security/` or `docs/uiux/`, update their respective `README.md` indexes as well.
 
+## Step 9: Default Coverage Strategy For Semantic Gates
+
+When a doc invariant is worth freezing into an automated check (a script wired into `qa-doc-lint.sh` or a release gate), apply the same scoping rule as Step 5:
+
+1. **Scan the whole surface by default**, then subtract an explicit exemption list. Do not enumerate target files.
+2. A target list that grows by one file per audit round is the symptom to avoid — it means the gate is following discoveries rather than preventing them.
+3. Freeze the invariant in **both directions**: a negative pattern that must be absent, and a positive assertion that the current mechanism is described. Absence checks alone pass on a page that says nothing.
+4. When a governed page links onward, assert the **link target** is governed too. Readers follow the link; the gate should follow it as well.
+5. Ship a **negative fixture** proving the gate fails on a violating sample. An unfalsifiable gate is indistinguishable from no gate.
+
 ## Output Requirements
 
 In the final response, always include:
 
 1. New docs created/updated for the feature itself
-2. Cross-doc impact list grouped by `qa/security/uiux`
+2. Cross-doc impact list, covering every surface from Step 5 (guides and their translations, design records, showcases, root Markdown including `CHANGELOG.md`, authoring skills), not only `qa/security/uiux`
 3. Updated files and rationale per file
-4. Remaining docs reviewed but unchanged (with reason)
+4. Remaining docs reviewed but unchanged (with reason), and every exemption with its justification

@@ -53,6 +53,8 @@ Apply these rules in order:
 2. If this repo uses `docs/qa/_manifest.yaml`, regenerate it with scenario counts and governance flags.
 3. If QA behavior changes affect security/UIUX expectations, add alignment notes to:
 : `docs/security/README.md`, `docs/uiux/README.md`.
+4. Check `CHANGELOG.md` consistency.
+: Entries under `[Unreleased]` have not shipped, so a stale one will publish as a false statement. Verify no unreleased entry describes a mechanism the repo has since removed or replaced, that removals appear under `### Removed`, and that user-visible incompatibilities are recorded with the exact diagnostic users will hit. Released sections are historical and stay as written.
 
 ## Step 5: Validate and Report
 
