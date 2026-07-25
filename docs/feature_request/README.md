@@ -79,6 +79,7 @@
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
+| FR-126 | Agent 执行路径迁移 — 用户指南语义与闭环门禁补强 | P1 | In Progress |
 
 ## 说明
 
@@ -211,4 +212,4 @@
 - FR-094 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/step-scope-roundtrip-leak.md` 与 `docs/qa/orchestrator/141-step-scope-roundtrip-leak.md` 承载（自定义 step id 的显式 scope 跨 spec↔config 往返漂移修复：`resolved_scope` capability fallback 限定为 conventions 已知 id、`workflow_step_config_to_spec` 不再省略默认值优化、`task_ops::resolve_task_targets` 在 `QaDirectoryScan` 触发时发出 `qa_directory_scan_triggered` info 事件，超过 50 个 item 升级为 `qa_directory_scan_oversize` warning；6 个回归单测覆盖三层修复 + 一个端到端 round-trip dry-run，复制了 v3 retest 中 D1/E1 的 180-item 爆炸场景）
 - FR-119 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/131-expert-resources-governed-editing.md` 与 `docs/qa/orchestrator/169-expert-resources-governed-editing.md` 承载（五类 daemon 权威资源目录、可应用 canonical Describe、受审核 revision fence Apply、Action Audit 隐私与可访问 Expert UI 均已闭环）
 - FR-120 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/132-handoff-dialog-focus-lifecycle.md` 与 `docs/qa/orchestrator/170-handoff-dialog-focus-lifecycle.md` 承载（手动与 Attention 自动审查入口、焦点围栏与确定性恢复、异步失效防护、失败可操作性和 Chromium 可访问性均已闭环）
-- FR-126 已经严格复审补证后重新闭环删除；逐 Agent inventory、四个生产迁移对象的离线 parity、兼容/冻结边界、typed mark-done 单周期收敛与可执行回滚证据现由 `docs/design_doc/orchestrator/138-agent-driver-execution-migration.md` 和 `docs/qa/orchestrator/176-agent-driver-execution-migration.md` 承载。
+- FR-126 经第三轮严格审计重新打开；runtime 实现保持不变，当前修复 EN/ZH 用户指南、架构/skill/设计说明的 typed driver 语义，并将确定性 guide alignment 纳入默认闭环门禁。

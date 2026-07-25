@@ -61,6 +61,10 @@ if rg -n \
 fi
 pass "legacy runner types and provider-session compatibility bridge are absent from production source"
 
+"$SCRIPT_DIR/test-agent-driver-documentation-alignment.sh" --fixture-test \
+  > "$EVIDENCE_DIR/documentation-alignment.log"
+pass "EN/ZH guides, architecture, authoring skill, design records, and governance layers align with typed drivers"
+
 cargo test -p orchestrator-config \
   shell_cli_factory_is_explicit_and_safe_by_default >/dev/null
 cargo test -p orchestrator-runner \

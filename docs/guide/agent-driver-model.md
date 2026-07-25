@@ -2,7 +2,7 @@
 
 Agent Driver lets an Agent declare **which provider protocol it speaks** without putting provider CLI flags into workflow YAML. Workflows ask for behavior—multi-turn conversation, tools, approval events, session attachment, or workspace access—and Orchestrator rejects incompatible combinations before a task starts.
 
-Use a driver when you want provider-neutral workflow definitions, structured tool/usage events, or safe provider session attachment. Keep `spec.command` when a script or existing one-shot Agent already works and does not need those features.
+Use a typed driver for every new Agent. A one-shot script uses an explicit `shell/cli` driver together with `spec.command`; Claude and Codex use provider-owned command construction. Historical command-only input remains runtime-compatible, but Apply emits `[legacy_agent_command_deprecated]` and persists it as `shell/cli`, so it is not a recommended authoring form.
 
 ## Quick Start
 
@@ -188,9 +188,9 @@ Migrate one capability pool at a time:
 2. Dry-run the workflow requirements.
 3. Run a deterministic pilot and compare terminal state, evidence, sandbox behavior, and cost.
 4. Move the production capability to the driver Agent.
-5. Keep the legacy Agent disabled or on a fallback capability for one release window.
+5. Keep the previous explicit-driver Agent disabled or on a fallback capability for one release window.
 
-Rollback by restoring the workflow capability to the legacy command Agent and reapplying the old manifest. There is no driver database migration to reverse.
+Rollback by restoring the workflow capability to an explicit `shell/cli` Agent and reapplying the reviewed manifest. Do not restore a command-only Agent; that shape exists only for compatibility ingress. There is no driver database migration to reverse.
 
 The complete runnable example is `fixtures/manifests/bundles/agent-driver-fixture.yaml`; the verification entry point is `scripts/qa/test-agent-driver-abstraction.sh`.
 
@@ -200,7 +200,7 @@ The complete runnable example is `fixtures/manifests/bundles/agent-driver-fixtur
 
 Agent Driver 的作用，是让 Agent 声明“自己使用哪一种供应商协议”，而不是把 Claude/Codex 的命令行参数散落在 workflow YAML 中。Workflow 只声明需要的能力；如果 Agent 不支持，`apply` 会直接拒绝，任务不会进入运行态。
 
-已有的一次性脚本可以继续使用 `spec.command`。当你需要结构化工具事件、多轮输入、权限审批或供应商 session 接力时，再迁移到 driver。
+新的 Agent 都应显式配置 typed driver。已有的一次性脚本使用 `spec.command` 时，也应同时声明 `shell/cli`；Claude/Codex 的命令由 provider adapter 构造。历史 command-only 输入仍可进入 runtime 兼容入口，但 Apply 会发出 `[legacy_agent_command_deprecated]` 并持久化为 `shell/cli`，不应继续作为新配置写法。
 
 ## 最小配置
 
@@ -309,6 +309,8 @@ orchestrator apply --dry-run --project my-project -f agents.yaml
 2. 对 workflow 做 dry-run；
 3. 运行确定性 pilot，对比完成状态、退出码、事件、沙箱和成本；
 4. 再把生产 capability 切到 driver Agent；
-5. 保留旧 command Agent 一个发布周期，作为显式回退。
+5. 保留上一个显式 driver Agent 一个发布周期，作为回退。
+
+回滚时把 workflow capability 恢复到经过审查的显式 `shell/cli` Agent；不要恢复 command-only Agent，因为它只属于兼容入口。
 
 可运行示例见 `fixtures/manifests/bundles/agent-driver-fixture.yaml`；完整验证执行 `scripts/qa/test-agent-driver-abstraction.sh`。

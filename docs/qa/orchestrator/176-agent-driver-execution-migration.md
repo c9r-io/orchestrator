@@ -5,13 +5,13 @@ self_referential_safe: true
 # Orchestrator - Agent Driver Execution Migration
 
 **Module**: Orchestrator Runner / Scheduler / Workflow Governance
-**Scope**: exact production inventory, offline production-contract parity, typed convergence, legacy runner rollback, and release closure
+**Scope**: exact production inventory, offline production-contract parity, typed convergence, documentation semantics, legacy runner rollback, and release closure
 **Scenarios**: 5
 **Priority**: High
 
 ## Background
 
-FR-126 removes global runner backend selection after every production Agent moves to a typed driver. A strict closure audit reopened the FR because aggregate counts and synthetic shell pilots did not prove parity for the four migrated production contracts.
+FR-126 removes global runner backend selection after every production Agent moves to a typed driver. A strict closure audit reopened the FR because aggregate counts and synthetic shell pilots did not prove parity for the four migrated production contracts. A later audit found that EN/ZH guides, architecture, an authoring skill, and released design status still described retired execution behavior because `docs/guide` was outside the closure lint.
 
 All executable workflows in this document use the deterministic mock bundle below. They do not apply `docs/workflow` or invoke a real provider:
 
@@ -56,6 +56,7 @@ Prove every production Agent has an individually reviewed typed-driver identity 
 2. Inspect `.executionInventory.agents`.
 3. Verify every entry includes `file`, `name`, `workflows`, `classification`, `migrationTarget`, and a 64-character `manifestFingerprint`.
 4. Inspect `.executionInventory.legacyCommandOnlyAgents`, `.globalStreamingExecutors`, and `.sourceTouches.legacyRunnerSelection`.
+5. Inspect `new-command-only-agent-is-rejected` in `scripts/qa/fixtures/coordination-governance-cases.json`.
 
 ### Expected
 
@@ -65,6 +66,7 @@ Prove every production Agent has an individually reviewed typed-driver identity 
 - Every Agent is associated with at least one Workflow in the same production file.
 - Command-only Agents, global streaming executors, and legacy runner source touches are all zero.
 - A production Agent identity, driver, or governed spec change fails against the reviewed ledger.
+- The command-only fixture declares `evaluationLayer=production-manifest-governance` and separately records runtime acceptance, `[legacy_agent_command_deprecated]`, and persisted `shell/cli`.
 
 ---
 
@@ -187,7 +189,12 @@ Verify production admission and historical compatibility are distinct, while rem
 ### Steps
 
 1. Run the governance negative fixtures.
-2. Run:
+2. Run the documentation alignment negative fixture:
+
+   ```bash
+   ./scripts/qa/test-agent-driver-documentation-alignment.sh --fixture-test
+   ```
+3. Run:
 
    ```bash
    cargo test -p agent-orchestrator \
@@ -196,8 +203,8 @@ Verify production admission and historical compatibility are distinct, while rem
      validate_rejects_removed_streaming_executor
    ```
 
-3. Verify `openedByCommit` is an ancestor of `closedByCommit` in the ledger compatibility window.
-4. Reverse-check the runner-removal source patch:
+4. Verify `openedByCommit` is an ancestor of `closedByCommit` in the ledger compatibility window.
+5. Reverse-check the runner-removal source patch:
 
    ```bash
    git diff c0d58e6e^ c0d58e6e -- \
@@ -212,14 +219,17 @@ Verify production admission and historical compatibility are distinct, while rem
 
 - Production governance rejects raw command-only Agent manifests.
 - Historical runtime Apply warns and persists `shell/cli`; it never leaves a command-only runtime consumer.
+- The fixture and Ruby helper name the production-admission layer rather than presenting it as daemon Apply behavior.
 - `runner.executor=streaming` and scheduler missing-driver state fail with stable retirement diagnostics.
+- EN/ZH guides bind structured signals to typed driver artifacts and do not advertise a streaming executor; architecture, authoring skill, DD-101, and DD-127 agree.
+- The stale-documentation negative fixture is detected.
 - The compatibility commit interval is ordered and reachable.
 - The runner-removal source patch remains reverse-applicable.
 - `command_rules` remain supported only by `shell/cli`.
 
 ---
 
-## Scenario 5: Mandatory Aggregate Release Closure
+## Scenario 5: Mandatory Aggregate Release And Guide Alignment
 
 ### Preconditions
 
@@ -239,15 +249,17 @@ Close FR-126 only when every original repository and coordination gate is part o
    ./scripts/qa/test-agent-driver-execution-migration.sh
    ```
 
-2. Confirm the command runs the production parity harness and coordination strangler.
+2. Confirm the command runs the production parity harness, documentation alignment harness, and coordination strangler.
 3. Confirm it runs format, workspace tests, strict Clippy, coverage governance, and QA documentation lint.
+4. Run `./scripts/qa-doc-lint.sh` directly and confirm it invokes the Agent driver guide alignment check.
 
 ### Expected
 
 - Inventory and source-retirement ratchets pass.
+- Agent driver documentation alignment reports 8 passes and zero failures.
 - Production parity reports 11 passes and zero failures.
 - Coordination strangler reports 20 passes and zero failures.
-- `cargo fmt --all -- --check`, `cargo test --workspace`, strict Clippy, coverage governance, and QA lint all pass.
+- `cargo fmt --all -- --check`, `cargo test --workspace`, strict Clippy, coverage governance, and QA lint—including `docs/guide` driver semantics—all pass.
 - Fast-mode output is never accepted as release certification.
 
 ---
@@ -256,8 +268,8 @@ Close FR-126 only when every original repository and coordination gate is part o
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Exact per-Agent production inventory | ☑ PASS | 2026-07-25 | Codex | 20 fingerprinted Agents; `shell-script=3`, `ai-provider=17`; command-only, global streaming, and legacy runner source counts are zero. |
-| 2 | Three production shell contracts preserve observable behavior | ☑ PASS | 2026-07-25 | Codex | All three compatibility/typed pairs matched terminal state, exit code, canonical stdout hash, recorded baseline, and normalized driver events. |
-| 3 | Streaming mark-done typed Claude matches the recorded contract | ☑ PASS | 2026-07-25 | Codex | Fake Claude completed with exit `0` in one cycle; typed tool use/result and terminal evidence were present and the provider session stayed private. |
-| 4 | Admission, compatibility, removal, and rollback boundaries | ☑ PASS | 2026-07-25 | Codex | Admission rejection, Apply promotion warning, scheduler fail-closed behavior, commit ancestry, reverse apply, and shell-only command rules passed. |
-| 5 | Mandatory aggregate release closure | ☑ PASS | 2026-07-25 | Codex | Production parity `11/11`, coordination strangler `20/20`, workspace tests, strict Clippy, format, coverage governance, and QA lint passed; aggregate `6/6`. |
+| 1 | Exact per-Agent production inventory | ☐ | | | |
+| 2 | Three production shell contracts preserve observable behavior | ☐ | | | |
+| 3 | Streaming mark-done typed Claude matches the recorded contract | ☐ | | | |
+| 4 | Admission, compatibility, removal, rollback, and documentation boundaries | ☐ | | | |
+| 5 | Mandatory aggregate release and guide alignment | ☐ | | | |

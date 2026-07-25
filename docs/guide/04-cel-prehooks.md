@@ -92,14 +92,16 @@ All pipeline variables captured by previous steps are available in prehook expre
 
 **Scope merging**: Both task-scoped and item-scoped pipeline variables are available. When names collide, item-scoped values take precedence.
 
-**Availability**: Pipeline variables (including the streaming-run signals below) are bound the same way into prehook, **convergence guard** (`loop.convergence_expr`), and **finalize rule** (`finalize.rules`) expressions.
+**Availability**: Pipeline variables (including the typed-driver signals below) are bound the same way into prehook, **convergence guard** (`loop.convergence_expr`), and **finalize rule** (`finalize.rules`) expressions.
 
-#### Streaming-Run Signals
+#### Typed-Driver Run Signals
 
-When a step runs under the `streaming` runner executor, the agent's `stream-json`
-output is parsed into structured signals and injected as pipeline variables, so
-coordination can be driven by what the agent *did* (which typed tools it called)
-rather than by scraping stdout:
+When a typed driver emits normalized tool artifacts and a `driver_terminal`
+artifact, Orchestrator derives structured signals and injects them as pipeline
+variables. Coordination can therefore be driven by what the agent *did* rather
+than by scraping stdout. A plain shell output without a structured terminal
+artifact does not create these signals. The removed global `streaming` executor
+is not a configuration prerequisite.
 
 | Variable | CEL Type | Meaning |
 |---|---|---|

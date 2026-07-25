@@ -64,7 +64,7 @@ If `work_dir` is omitted, the daemon creates a private `0700` HOME/cwd for each 
 
 ## 2. Agent
 
-An Agent is an execution unit with declared capabilities and either a legacy shell command template or an explicit provider driver.
+An Agent is an execution unit with declared capabilities and an explicit provider driver. Historical command-only manifests are accepted only at the runtime compatibility ingress, where Apply emits `[legacy_agent_command_deprecated]` and persists an explicit `shell/cli` driver.
 
 ```yaml
 apiVersion: orchestrator.dev/v2
@@ -77,8 +77,13 @@ spec:
     - implement
     - ticket_fix
     - align_tests
-  command: >-            # shell command template; {prompt} is injected at runtime
-    claude --print -p '{prompt}'
+  driver:
+    provider: claude
+    transport: cli
+    options:
+      model: sonnet
+      maxTurns: 8
+      permissionMode: governed
   metadata:              # optional metadata for selection scoring
     cost: 100
     description: "Primary code generation agent"
@@ -92,19 +97,18 @@ spec:
       refValue:                  # import a single key from a SecretStore
         name: api-keys
         key: OPENAI_API_KEY
-  promptDelivery: arg    # how the prompt reaches the agent (default: arg)
 ```
 
 | Field | Required | Description |
 |-------|----------|-------------|
 | `capabilities` | Yes | What this agent can do (matched against step `required_capability`) |
-| `command` | Conditional | Legacy shell command template. Required when `driver` is absent and for `provider: shell`; omitted for Claude/Codex drivers |
-| `driver` | No | Typed provider/transport adapter (`shell`, `claude`, or `codex`; CLI transport is executable) |
+| `command` | Conditional | Shell command template; required for an explicit `shell/cli` driver and omitted for Claude/Codex drivers. Command-only input is compatibility-only and is promoted with a warning |
+| `driver` | Yes for new manifests | Typed provider/transport adapter (`shell`, `claude`, or `codex`; CLI transport is executable) |
 | `metadata.cost` | No | Used by agent selection strategy for cost-aware routing |
 | `metadata.description` | No | Human-readable description of the agent |
 | `selection` | No | Agent selection strategy override (see below) |
 | `env` | No | Environment variables: direct values, `fromRef` (import all from store), or `refValue` (single key from store) |
-| `promptDelivery` | No | How the rendered prompt reaches the agent: `stdin`, `file`, `env`, or `arg` (default: `arg`) |
+| `promptDelivery` | No | How the rendered prompt reaches an explicit shell driver: `stdin`, `file`, `env`, or `arg` (default: `arg`) |
 
 ### Agent Drivers
 
@@ -245,16 +249,14 @@ metadata:
   name: default
 spec:
   runner:
-    executor: shell    # shell (default) | streaming
-    # … shell, policy, allowed_shells, env_allowlist, redaction_patterns
+    shell: /bin/bash
+    policy_mode: strict
+    # … allowed_shells, env_allowlist, redaction_patterns
   resume: { ... }
   observability: { ... }
 ```
 
-**`runner.executor`** selects the legacy global execution backend. New provider-aware Agents should use `spec.driver`:
-
-- `shell` (default) — runs each step's command as a one-shot shell process; output is captured as text/JSON.
-- `streaming` — drives the agent CLI in `stream-json` mode with orchestrator-owned MCP tools, exposing structured signals (`tools_called`, `run_cost_usd`, …) to coordination CEL. See `docs/design_doc/orchestrator/streaming-runner-pivot-overview.md` and the [showcase](../showcases/streaming-mark-done-convergence.md).
+Do not set **`runner.executor`** in new manifests. It is a parse-only compatibility field: `shell` is accepted solely for historical round-trip compatibility, while `streaming` is rejected during Apply with `[legacy_runner_executor_removed]`. Provider execution belongs to each Agent's `spec.driver`; use `shell/cli`, `claude/cli`, or `codex/cli`.
 
 ## 7. ExecutionProfile
 

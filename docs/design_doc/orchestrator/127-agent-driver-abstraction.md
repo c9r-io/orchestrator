@@ -5,7 +5,9 @@
 **Related Plan**: FR-116  
 **Related QA**: `docs/qa/orchestrator/164-agent-driver-abstraction.md`, `docs/qa/orchestrator/166-codex-session-resume-conformance.md`
 **Created**: 2026-07-22  
-**Last Updated**: 2026-07-22
+**Last Updated**: 2026-07-25
+
+> **Post-release execution update (FR-126):** every production Agent now has an explicit typed driver. Historical command-only input remains accepted only at runtime compatibility ingress, where Apply emits `[legacy_agent_command_deprecated]` and persists `shell/cli`. The global streaming executor and provider-session compatibility bridge have been deleted. See [DD-138](138-agent-driver-execution-migration.md).
 
 ## Background
 
@@ -25,8 +27,8 @@ FR-116 makes the provider protocol an Agent-owned `driver`. `RunnerConfig` and `
 
 ## Non-goals
 
-- Removing legacy `Agent.spec.command`; it remains the compatibility default.
-- Migrating every historical workflow manifest in one release. The pilot manifest is flag-free; legacy examples are grandfathered until separately migrated.
+- Removing `Agent.spec.command`; an explicit `shell/cli` driver still uses it, and command-only historical input is normalized at compatibility ingress.
+- Migrating every historical manifest as part of FR-116 itself. FR-126 subsequently completed the production migration.
 - Implementing in-process SDK execution or permitting SDK workspace mutation.
 - Moving approval, RBAC, Action Audit, or Attention policy into a provider adapter.
 - Persisting a provider token in the public command-run/session model. Cross-step attachment is daemon-memory scoped; daemon crash recovery restarts at an Orchestrator logical boundary.
@@ -82,13 +84,13 @@ behavior:
 - `DriverInput`: user message, tool result, permission decision, and interrupt;
 - `SessionRef`: no `Serialize` or `Display`; redacted `Debug` only.
 
-The scheduler uses the following flow for explicit drivers:
+The scheduler uses the following flow for drivers:
 
 ```text
 setup → start → consume → fold → record
 ```
 
-Legacy command agents keep the existing `setup → spawn → wait → validate → record` path. Both paths share `spawn_command_via_shell`, so policy validation, daemon-PID protection, sandbox construction, process groups, rlimits, environment allowlists, and secret redaction remain common.
+Command-only manifests are promoted to `shell/cli` before scheduling; an unnormalized missing driver fails closed with `[legacy_agent_execution_removed]`. All CLI drivers share the safe spawn substrate, so policy validation, daemon-PID protection, sandbox construction, process groups, rlimits, environment allowlists, and secret redaction remain common.
 
 ## Provider Implementations
 
@@ -99,7 +101,7 @@ Legacy command agents keep the existing `setup → spawn → wait → validate �
 | `codex/cli` | No | None | Yes | No | Guaranteed | Yes |
 | `claude/sdk`, `codex/sdk` | Descriptor | HTTP | Yes | Yes | Cooperative | No |
 
-Provider flags and JSON schemas exist only in `crates/orchestrator-runner/src/driver/`. The deprecated global streaming executor calls a provider-owned compatibility bridge while manifests migrate.
+Provider flags and JSON schemas exist only in `crates/orchestrator-runner/src/driver/`. There is no global streaming executor or provider-owned compatibility bridge; provider execution is selected only by `Agent.spec.driver`.
 
 Claude input is JSONL over stdin. Claude and Codex JSONL output are normalized before the scheduler observes them. Unknown provider records remain in the redacted raw artifact but do not become invented semantic events.
 
@@ -146,13 +148,13 @@ Claude stdio MCP configuration is created at:
 {run_artifacts}/driver/mcp.json
 ```
 
-The directory is unique to the command run and the file is mode `0600` on Unix. Concurrent runs therefore cannot overwrite another run's binary path or future per-run token. The legacy streaming compatibility bridge also uses a UUID-scoped temporary directory instead of the former shared `$TMPDIR/orch-streaming-mcp.json`.
+The directory is unique to the command run and the file is mode `0600` on Unix. Concurrent runs therefore cannot overwrite another run's binary path or future per-run token. The removed legacy bridge's former shared `$TMPDIR/orch-streaming-mcp.json` path is not used.
 
 ## Pilot And Compatibility
 
-`fixtures/manifests/bundles/agent-driver-fixture.yaml` contains legacy shell, explicit shell, Claude, and Codex Agents plus four workflows. The two shell pilots execute the same command and converge to `completed / exit 0`.
+`fixtures/manifests/bundles/agent-driver-fixture.yaml` retains a command-only compatibility case alongside explicit shell, Claude, and Codex Agents. The command-only case is accepted with a warning and promoted to `shell/cli`; the two shell pilots execute the same command and converge to `completed / exit 0`.
 
-The legacy Agent block is 9 effective YAML lines; the explicit shell block is 14, a five-line cost for typed provider/transport ownership. Workflow behavior is otherwise identical. Existing command agents require no migration and retain their previous validation/output semantics.
+The original command-only Agent block was 9 effective YAML lines; the explicit shell block was 14, a five-line cost for typed provider/transport ownership. Runtime compatibility preserves terminal behavior, but new and production manifests must use the explicit form.
 
 ## Risks And Mitigations
 
@@ -164,10 +166,10 @@ The legacy Agent block is 9 effective YAML lines; the explicit shell block is 14
 
 ## Operations And Rollback
 
-- Roll out explicit drivers per Agent; keep a legacy shell Agent with a distinct capability for immediate fallback.
+- Roll out explicit drivers per Agent; keep the previous reviewed explicit driver Agent with a distinct capability for immediate fallback.
 - Use `orchestrator apply --dry-run` before changing a production capability pool.
 - Do not use `rawArgs` as ordinary configuration. If unavoidable, enable unsafe mode only for the reviewed apply and retain its Action Audit record.
-- Rollback is additive: reassign the workflow capability to a legacy command Agent. No database migration or destructive conversion is required.
+- Rollback is additive: reassign the workflow capability to a reviewed explicit `shell/cli` Agent. Do not reintroduce command-only production configuration. No database migration or destructive conversion is required.
 - A previous binary ignores no persisted driver run state because provider session material is not persisted in the public model. It cannot parse a new Agent driver manifest, so restore the prior manifest before binary rollback.
 
 ## Test Plan And Evidence

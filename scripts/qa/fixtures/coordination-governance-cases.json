@@ -2,7 +2,14 @@
   "executionCases": [
     {
       "name": "new-command-only-agent-is-rejected",
+      "evaluationLayer": "production-manifest-governance",
+      "rationale": "Reviewed production manifests must declare an explicit typed driver; this is not the daemon Apply compatibility decision.",
       "expectedAccepted": false,
+      "runtimeCompatibility": {
+        "accepted": true,
+        "warningCode": "legacy_agent_command_deprecated",
+        "persistedDriver": "shell/cli"
+      },
       "document": {
         "kind": "Agent",
         "metadata": {"name": "legacy-shell"},
@@ -14,6 +21,8 @@
     },
     {
       "name": "explicit-shell-driver-agent-is-accepted",
+      "evaluationLayer": "production-manifest-governance",
+      "rationale": "Reviewed production manifests accept an explicit shell/cli driver.",
       "expectedAccepted": true,
       "document": {
         "kind": "Agent",
@@ -30,6 +39,8 @@
     },
     {
       "name": "global-streaming-executor-is-rejected",
+      "evaluationLayer": "production-manifest-governance",
+      "rationale": "The removed global streaming executor is rejected by both production governance and daemon Apply.",
       "expectedAccepted": false,
       "document": {
         "kind": "RuntimePolicy",

@@ -64,7 +64,7 @@ spec:
 
 ## 2. Agent（代理）
 
-Agent 是具有声明能力的执行单元，可以使用旧式 shell 命令模板，也可以显式选择供应商 driver。
+Agent 是具有声明能力并显式选择 provider driver 的执行单元。历史 command-only manifest 只在 runtime 兼容入口被接受；Apply 会发出 `[legacy_agent_command_deprecated]`，并持久化显式 `shell/cli` driver。
 
 ```yaml
 apiVersion: orchestrator.dev/v2
@@ -77,8 +77,13 @@ spec:
     - implement
     - ticket_fix
     - align_tests
-  command: >-            # shell 命令模板；{prompt} 在运行时注入
-    claude --print -p '{prompt}'
+  driver:
+    provider: claude
+    transport: cli
+    options:
+      model: sonnet
+      maxTurns: 8
+      permissionMode: governed
   metadata:              # 可选元数据，用于选择评分
     cost: 100
     description: "主代码生成代理"
@@ -92,19 +97,18 @@ spec:
       refValue:                  # 从 SecretStore 导入单个键
         name: api-keys
         key: OPENAI_API_KEY
-  promptDelivery: arg    # 提示词如何传递给代理（默认：arg）
 ```
 
 | 字段 | 必填 | 说明 |
 |------|------|------|
 | `capabilities` | 是 | 此代理能做什么（与步骤的 `required_capability` 匹配） |
-| `command` | 条件必填 | 未配置 `driver` 时必填；`provider: shell` 也需要；Claude/Codex driver 应省略 |
-| `driver` | 否 | 类型化的 provider/transport adapter（`shell`、`claude`、`codex`；当前可执行 transport 为 CLI） |
+| `command` | 条件必填 | 显式 `shell/cli` driver 必填；Claude/Codex driver 应省略。command-only 输入仅用于兼容，并会在告警后被提升 |
+| `driver` | 新 manifest 必填 | 类型化的 provider/transport adapter（`shell`、`claude`、`codex`；当前可执行 transport 为 CLI） |
 | `metadata.cost` | 否 | 用于代理选择策略的成本感知路由 |
 | `metadata.description` | 否 | 代理的人类可读描述 |
 | `selection` | 否 | 代理选择策略覆盖（见下文） |
 | `env` | 否 | 环境变量：直接值、`fromRef`（从存储导入全部）、或 `refValue`（从存储导入单个键） |
-| `promptDelivery` | 否 | 提示词传递方式：`stdin`、`file`、`env` 或 `arg`（默认：`arg`） |
+| `promptDelivery` | 否 | 显式 shell driver 的提示词传递方式：`stdin`、`file`、`env` 或 `arg`（默认：`arg`） |
 
 ### Agent Driver
 
@@ -245,16 +249,14 @@ metadata:
   name: default
 spec:
   runner:
-    executor: shell    # shell（默认）| streaming
-    # … shell、policy、allowed_shells、env_allowlist、redaction_patterns
+    shell: /bin/bash
+    policy_mode: strict
+    # … allowed_shells、env_allowlist、redaction_patterns
   resume: { ... }
   observability: { ... }
 ```
 
-**`runner.executor`** 只选择旧式全局执行后端。新的供应商感知 Agent 应使用 `spec.driver`：
-
-- `shell`（默认）—— 将每个步骤的命令作为一次性 shell 进程运行，输出按文本/JSON 捕获。
-- `streaming` —— 以 `stream-json` 模式驱动 agent CLI，并提供 orchestrator 自持的 MCP 工具，把结构化信号（`tools_called`、`run_cost_usd` 等）暴露给编排 CEL。见 `docs/design_doc/orchestrator/101-streaming-agent-runner-architecture-pivot.md` 与[演示](../../showcases/streaming-mark-done-convergence.md)。
+新 manifest 不应设置 **`runner.executor`**。它只是 parse-only 兼容字段：`shell` 仅为历史 round-trip 兼容而接受；`streaming` 会在 Apply 时以 `[legacy_runner_executor_removed]` 被拒绝。Provider 执行归属于每个 Agent 的 `spec.driver`；请选择 `shell/cli`、`claude/cli` 或 `codex/cli`。
 
 ## 7. ExecutionProfile（执行 Profile）
 

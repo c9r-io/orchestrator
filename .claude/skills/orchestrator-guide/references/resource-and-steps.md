@@ -41,7 +41,13 @@ metadata:
   name: coder
 spec:
   capabilities: [implement, ticket_fix, align_tests]
-  command: "claude --print -p '{prompt}'"
+  driver:
+    provider: claude
+    transport: cli
+    options:
+      model: sonnet
+      maxTurns: 8
+      permissionMode: governed
   env:
     - fromRef: claude-opus             # import all keys from SecretStore
     - name: RUST_BACKTRACE
@@ -53,6 +59,11 @@ spec:
   metadata:
     cost: 100               # lower = preferred in selection
 ```
+
+New Agents use an explicit driver. A one-shot script declares both `command` and
+`driver: {provider: shell, transport: cli}`. Historical command-only input is
+accepted only by the runtime compatibility ingress, which emits
+`[legacy_agent_command_deprecated]` and persists `shell/cli`.
 
 Selection priority: capability match (required) → cost (lower preferred) → project-scoped overrides global.
 

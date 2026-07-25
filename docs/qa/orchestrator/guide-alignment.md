@@ -81,10 +81,24 @@
    - 输出 "OK"
    - Skill 包含五阶段流程（Compile、Parse、Compare、Auto-Fix、Report）
 
+7. 验证 Agent Driver 高风险语义已进入确定性文档门禁：
+
+   ```bash
+   ./scripts/qa/test-agent-driver-documentation-alignment.sh --fixture-test
+   ./scripts/qa-doc-lint.sh
+   ```
+
+   Expected:
+
+   - EN/ZH resource model 不把 `runner.executor: streaming` 作为可用选项
+   - EN/ZH CEL 文档把信号来源绑定到 typed driver / `driver_terminal`
+   - negative fixture 能检测旧 runner 文案
+   - 两个命令均退出 `0`
+
 ---
 
 ## Checklist
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ✅ | S1–S6 all PASS |
+| 1 | All scenarios verified | ☐ | S1–S6 historical PASS; S7 pending FR-126 release certification |

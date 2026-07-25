@@ -5,13 +5,13 @@
 **Related Plan**: Replace the one-shot shell-text agent contract with a long-lived, bidirectional, structured streaming contract (stream-json) where the agent calls orchestrator-owned typed tools (MCP), collapsing coordination logic out of the YAML/CEL declarative layer
 **Related QA**: [QA-164](../../qa/orchestrator/164-agent-driver-abstraction.md), [QA-168](../../qa/orchestrator/168-coordination-collapse-mcp-tools.md)
 **Created**: 2026-06-27
-**Last Updated**: 2026-07-23
+**Last Updated**: 2026-07-25
 
-> **Implementation status (pivot complete, 2026-07-23):** the 2026-06-28 first cut proved structured tool calling behind `RunnerExecutorKind::Streaming`. FR-116 then introduced per-Agent provider drivers and direct normalized event consumption ([DD-127](127-agent-driver-abstraction.md)). FR-118 replaced canned MCP responses with authenticated daemon-owned tools, migrated a parity pilot away from CEL/captures/post-actions, and measured the remaining cross-step channels ([DD-130](130-coordination-collapse-mcp-tools.md)). The global streaming executor and CEL path remain compatibility bridges while manifests migrate; they are no longer blockers to the pivot.
+> **Implementation status (superseded execution seam, 2026-07-25):** the 2026-06-28 first cut proved structured tool calling behind `RunnerExecutorKind::Streaming`. FR-116 then introduced per-Agent provider drivers and direct normalized event consumption ([DD-127](127-agent-driver-abstraction.md)); FR-126 migrated every production Agent and deleted the global streaming executor, provider-session compatibility bridge, and runner selection seam ([DD-138](138-agent-driver-execution-migration.md)). References below to `StreamingAgentRunner`, `ShellRunnerExecutor`, streaming opt-in, or shell-default rollback describe the historical pivot and are not current configuration guidance.
 
-## Background
+## Historical Background
 
-The orchestrator currently treats an agent as a **one-shot shell black box**:
+At the start of this decision record, the orchestrator treated an agent as a **one-shot shell black box**:
 
 - An agent is a shell command template with a `{prompt}` placeholder — `AgentSpec.command` e.g. `claude -p "{prompt}"` (`core/src/resource/agent.rs:33`).
 - Execution is `/bin/sh -c "<rendered command>"` spawned via `tokio::process::Command`, optionally wrapped by a sandbox (`crates/orchestrator-runner/src/runner/spawn.rs`, `sandbox.rs:351`). Spawning happens behind the `RunnerExecutor` trait, today implemented only by `ShellRunnerExecutor` (`spawn.rs:52`).
@@ -119,11 +119,11 @@ Wrinkles observed (carried into Risks): MCP tools may be **deferred** — the ag
 - Metrics: reuse existing step/run metrics; add per-turn token/cost capture from `result` events.
 - Tracing: ingest `tool_use`/`tool_result`/`result` events into the `events` table; this is strictly richer than the current stdout/stderr file capture (tool I/O becomes first-class structured events rather than parsed text).
 
-## Operations / Release
+## Historical Operations / Release
 
-- Additive and opt-in: agents select the streaming runner via spec; default remains shell.
+- The original rollout was additive and opt-in: agents selected the streaming runner via spec while shell remained the default.
 - Pilot first: rewrite one workflow (candidate: the QA fix-loop or `self-bootstrap`) and compare YAML size and behavior against the shell version side by side.
-- Rollback: remove the streaming opt-in from the agent spec to revert to `ShellRunnerExecutor`.
+- The original rollback removed streaming opt-in to restore `ShellRunnerExecutor`; current rollback uses a reviewed explicit `shell/cli` Agent because both legacy executors are removed.
 
 ## Migration Plan (completed)
 

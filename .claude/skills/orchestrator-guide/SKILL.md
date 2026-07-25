@@ -87,7 +87,7 @@ All resources use `apiVersion: orchestrator.dev/v2` with `metadata.name` and `sp
 | Kind | Scope | Purpose |
 |------|-------|---------|
 | Workspace | project | File system context: root_path, qa_targets, ticket_dir, self_referential |
-| Agent | project | Execution unit: capabilities list + command template with `{prompt}` |
+| Agent | project | Execution unit: capabilities plus an explicit `shell/cli`, `claude/cli`, or `codex/cli` driver |
 | StepTemplate | project | Prompt content with pipeline variables (`{goal}`, `{diff}`, `{source_tree}`, etc.) |
 | Workflow | project | Step pipeline + loop policy + finalize rules + safety config |
 | ExecutionProfile | project | Sandbox/isolation policy: fs_mode, network_mode, resource limits |
@@ -121,6 +121,9 @@ metadata:
 spec:
   capabilities: [qa]
   command: "echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"
+  driver:
+    provider: shell
+    transport: cli
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow

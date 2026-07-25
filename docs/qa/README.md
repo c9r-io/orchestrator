@@ -297,9 +297,9 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/173-slack-sandbox-continuous-certification.md` | 5 | FR-123 unified shared/dedicated live modes, checkpoint resume, minimal secret custody, recorded provider CI, expiring safe evidence, and reviewed cleanup |
 | orchestrator | `docs/qa/orchestrator/174-coordination-strangler-completion.md` | 5 | FR-124 exact production inventory, seven independent legacy/tool pairs, explicit tool/session boundaries, two-cycle self-bootstrap survival, and retirement ratchet |
 | orchestrator | `docs/qa/orchestrator/175-legacy-coordination-decommission.md` | 5 | FR-125 exact consumer inventory, capture/JSONPath production removal, narrow residual state, explicit blockers, and post-retirement tool/repository closure |
-| orchestrator | `docs/qa/orchestrator/176-agent-driver-execution-migration.md` | 5 | FR-126 per-Agent fingerprints, three production shell parity pairs, fake-Claude one-cycle convergence, compatibility/rollback boundaries, and mandatory repository closure |
+| orchestrator | `docs/qa/orchestrator/176-agent-driver-execution-migration.md` | 5 | FR-126 per-Agent fingerprints, production shell/fake-Claude parity, layered compatibility, EN/ZH guide semantics, rollback, and mandatory repository closure |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
-| orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
+| orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018 compile-driven EN/ZH guide review plus FR-126 deterministic Agent driver semantics gate |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
 | script | `docs/qa/script/` | 6 | Executable QA scripts |
 | self-bootstrap | `docs/qa/self-bootstrap/smoke-self-bootstrap.md` | - | Smoke test: self-bootstrap basics |
@@ -351,7 +351,7 @@ PR CI.
 | FR-118 | DD-130 / QA-168 | Yes | Authenticated tool host | `test-coordination-collapse.sh` | No | No |
 | FR-124 | DD-136 / QA-174 | Yes | Seven legacy/tool pairs | `test-coordination-strangler.sh` | No | No |
 | FR-125 | DD-137 / QA-175 | Yes | Seven post-retirement tool workflows | `test-legacy-coordination-decommission.sh` | No | No |
-| FR-126 | DD-138 / QA-176 | Yes | Three production shell pairs + recorded/fake Claude parity | `test-agent-driver-execution-migration.sh` | No | No |
+| FR-126 | DD-138 / QA-176 | Yes | Three production shell pairs + recorded/fake Claude parity + guide negative fixture | `test-agent-driver-execution-migration.sh` | No | No |
 
 Evidence rows are maintained when an owning FR closes. A later hardening FR may
 supersede an earlier QA document without erasing the historical design link.

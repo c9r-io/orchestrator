@@ -92,11 +92,11 @@
 
 **作用域合并**：task 作用域与 item 作用域的管道变量都可用；同名时 item 作用域优先。
 
-**可用范围**：管道变量（包括下面的流式运行信号）以相同方式绑定进 prehook、**收敛守卫**（`loop.convergence_expr`）和 **finalize 规则**（`finalize.rules`）表达式。
+**可用范围**：管道变量（包括下面的 typed-driver 信号）以相同方式绑定进 prehook、**收敛守卫**（`loop.convergence_expr`）和 **finalize 规则**（`finalize.rules`）表达式。
 
-#### 流式运行信号（Streaming-Run Signals）
+#### Typed-Driver 运行信号
 
-当步骤在 `streaming` 运行器下执行时，agent 的 `stream-json` 输出会被解析成结构化信号并注入为管道变量，使编排可以**由 agent 实际调用了哪些 typed 工具**驱动，而非靠正则刮 stdout。这些信号与其他管道变量一样，可在 prehook、收敛守卫（`loop.convergence_expr`）和 finalize 规则（`finalize.rules`）表达式中使用：
+当 typed driver 产生标准化工具 artifact 和 `driver_terminal` artifact 时，Orchestrator 会派生结构化信号并注入为管道变量，使编排可以**由 agent 实际调用了哪些 typed 工具**驱动，而非靠正则刮 stdout。没有结构化 terminal artifact 的普通 shell 输出不会产生这些信号；已删除的全局 `streaming` executor 不是配置前提。这些信号与其他管道变量一样，可在 prehook、收敛守卫（`loop.convergence_expr`）和 finalize 规则（`finalize.rules`）表达式中使用：
 
 | 变量 | 类型 | 说明 |
 |------|------|------|

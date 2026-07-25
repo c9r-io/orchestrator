@@ -182,7 +182,10 @@ def agent_manifest_fingerprint(document)
   Digest::SHA256.hexdigest(JSON.generate(canonical_json(governed)))
 end
 
-def execution_document_accepted?(document)
+# This ratchet evaluates documents as candidates for reviewed production roots.
+# It is deliberately stricter than daemon Apply: historical command-only Agents
+# remain accepted at runtime ingress, warn, and are persisted as shell/cli.
+def production_execution_document_accepted?(document)
   case document["kind"]
   when "Agent"
     !explicit_driver_id(document).nil?
@@ -246,11 +249,39 @@ if options[:test_fixtures]
   fixture = JSON.parse(File.read(fixture_path))
   fixture_errors = []
   Array(fixture["executionCases"]).each do |test_case|
-    accepted = execution_document_accepted?(test_case.fetch("document"))
+    layer = test_case["evaluationLayer"]
+    rationale = test_case["rationale"].to_s.strip
+    if layer != "production-manifest-governance"
+      fixture_errors << "#{test_case.fetch("name")}: execution case must declare " \
+        "evaluationLayer=production-manifest-governance"
+    end
+    if rationale.empty?
+      fixture_errors << "#{test_case.fetch("name")}: execution case must explain its layer"
+    end
+
+    document = test_case.fetch("document")
+    accepted = production_execution_document_accepted?(document)
     next if accepted == test_case.fetch("expectedAccepted")
 
     fixture_errors << "#{test_case.fetch("name")}: expected accepted=" \
       "#{test_case.fetch("expectedAccepted")}, got #{accepted}"
+  end
+  command_only_case = Array(fixture["executionCases"]).find do |test_case|
+    document = test_case["document"] || {}
+    document["kind"] == "Agent" &&
+      document.dig("spec", "command").to_s.strip != "" &&
+      explicit_driver_id(document).nil?
+  end
+  expected_runtime_compatibility = {
+    "accepted" => true,
+    "warningCode" => "legacy_agent_command_deprecated",
+    "persistedDriver" => "shell/cli"
+  }
+  if command_only_case.nil?
+    fixture_errors << "execution cases must include a command-only production rejection"
+  elsif command_only_case["runtimeCompatibility"] != expected_runtime_compatibility
+    fixture_errors << "command-only production rejection must document runtime " \
+      "acceptance, warning, and shell/cli promotion"
   end
   Array(fixture["cases"]).each do |test_case|
     touches = workflow_touches(test_case.fetch("workflow"))

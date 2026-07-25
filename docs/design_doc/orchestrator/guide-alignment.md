@@ -19,7 +19,21 @@ FR-018 建立了一个**编译驱动的文档治理流程**：实际编译项目
 非目标：
 
 - 不修改 CLI 本身的命令结构或参数命名。
-- 不建立 CI 自动门禁（可作为后续增强）。
+- 不把完整的 LLM/编译驱动指南比对改造成 CI 自动门禁；稳定且高风险的局部语义可以由独立确定性 ratchet 覆盖。
+
+## 2026-07-25 Follow-up：Agent Driver 语义子门禁
+
+FR-126 的第三轮闭环审计证明：只检查 CLI `--help` 无法发现资源模型和执行语义漂移。EN/ZH 指南仍可能把已删除的 `runner.executor: streaming` 描述为可用配置，或把 typed driver 信号归因于旧 runner。
+
+因此新增 `scripts/qa/test-agent-driver-documentation-alignment.sh`，只冻结高风险且可确定性判断的 driver 不变量：
+
+- `streaming` executor 不得作为可用配置出现；
+- `shell` executor 仅是 parse-only round-trip 兼容；
+- `driver_terminal` 和 normalized typed artifacts 是信号来源；
+- 新 Agent 与回滚都使用显式 driver；
+- production admission 与 runtime compatibility 分层明确。
+
+该脚本由 `scripts/qa-doc-lint.sh` 和 FR-126 默认 release gate 调用。完整 CLI 命令树、翻译质量和叙述性内容仍由本设计的五阶段 Skill 流程负责。
 
 ## 设计方案
 
