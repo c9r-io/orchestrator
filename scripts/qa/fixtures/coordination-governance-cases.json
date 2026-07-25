@@ -49,24 +49,66 @@
       }
     },
     {
-      "name": "reviewed-safety-signal-is-accepted",
-      "expectedAccepted": true,
-      "approvedTouches": [
-        {
-          "step": "safety-review",
-          "kind": "step_vars",
-          "names": ["denial"]
-        }
-      ],
+      "name": "new-generic-safety-variable-consumer-is-rejected",
+      "expectedAccepted": false,
+      "approvedTouches": [],
       "workflow": {
         "kind": "Workflow",
-        "metadata": {"name": "allowed-safety"},
+        "metadata": {"name": "rejected-generic-safety"},
         "spec": {
           "steps": [
             {
               "id": "safety-review",
               "step_vars": {
                 "denial": "last_sandbox_denial_reason"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "new-store-input-consumer-is-rejected",
+      "expectedAccepted": false,
+      "approvedTouches": [],
+      "workflow": {
+        "kind": "Workflow",
+        "metadata": {"name": "rejected-store-input"},
+        "spec": {
+          "steps": [
+            {
+              "id": "restore-state",
+              "store_inputs": [
+                {
+                  "store": "runtime",
+                  "key": "legacy_state",
+                  "as_var": "legacy_state"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "new-json-path-post-action-is-rejected",
+      "expectedAccepted": false,
+      "approvedTouches": [],
+      "workflow": {
+        "kind": "Workflow",
+        "metadata": {"name": "rejected-json-path-post-action"},
+        "spec": {
+          "steps": [
+            {
+              "id": "expand",
+              "behavior": {
+                "post_actions": [
+                  {
+                    "type": "generate_items",
+                    "from_var": "legacy_payload",
+                    "json_path": "$.items"
+                  }
+                ]
               }
             }
           ]

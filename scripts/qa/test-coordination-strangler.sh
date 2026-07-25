@@ -39,20 +39,36 @@ for command in cargo git jq mktemp rg ruby sqlite3; do
 done
 
 cd "$REPO_ROOT"
-if [[ "${FR124_ALLOW_DIRTY:-0}" != "1" && -n "$(git status --porcelain)" ]]; then
-  echo "FR-124 QA requires a clean worktree (or FR124_ALLOW_DIRTY=1)" >&2
+if [[ "${FR125_ALLOW_DIRTY:-${FR124_ALLOW_DIRTY:-0}}" != "1" &&
+      -n "$(git status --porcelain)" ]]; then
+  echo "coordination QA requires a clean worktree (or FR125_ALLOW_DIRTY=1)" >&2
   git status --short >&2
   exit 1
 fi
 
-ruby scripts/qa/coordination-governance.rb --test-fixtures >/dev/null
-pass "inventory, ratchet, rejection, governance, and safety fixtures pass"
+ruby scripts/qa/coordination-governance.rb --test-fixtures --require-complete >/dev/null
+pass "inventory, ratchet, rejection, governance, and consumer fixtures pass"
 
 cargo build -p orchestratord -p orchestrator-cli >/dev/null
 cargo build -p orchestrator-runner --bin orch-mcp-tools >/dev/null
 cargo test -p orchestrator-scheduler authenticated_host_executes_real_coordination_tools \
   >/dev/null
 pass "typed coordination host and all real tool contracts pass offline"
+
+TOOL_FIXTURE="$QA_ROOT/coordination-tools-only.yaml"
+ruby -ryaml -e '
+  source, output = ARGV
+  documents = YAML.load_stream(File.read(source)).compact.select do |document|
+    document["kind"] != "Workflow" ||
+      document.dig("metadata", "name").to_s.end_with?("-tools")
+  end
+  File.open(output, "w") do |file|
+    documents.each_with_index do |document, index|
+      file.write("---\n") unless index.zero?
+      file.write(YAML.dump(document).sub(/\A---\s*\n/, ""))
+    end
+  end
+' "$FIXTURE" "$TOOL_FIXTURE"
 
 export HOME="$QA_HOME"
 export ORCHESTRATORD_DATA_DIR="$QA_ROOT/data"
@@ -91,16 +107,26 @@ if ! "$ORCH" task list -o json >/dev/null 2>&1; then
   exit 1
 fi
 
+if "$ORCH" manifest validate -f "$FIXTURE" >"$QA_ROOT/legacy-validate.out" 2>&1; then
+  fail "legacy capture/JSONPath parity fixture unexpectedly validates"
+elif rg -q '\[legacy_(coordination|json_path)_removed\]' \
+  "$QA_ROOT/legacy-validate.out"; then
+  pass "legacy fixture is retained as rollback evidence and rejected by production validation"
+else
+  cat "$QA_ROOT/legacy-validate.out" >&2
+  fail "legacy fixture failed without the stable retirement diagnostic"
+fi
+
 PROJECT="qa-coordination-strangler"
 (
   cd "$QA_ROOT/workspace"
-  "$ORCH" apply --project "$PROJECT" -f "$FIXTURE" > "$QA_ROOT/apply.out"
+  "$ORCH" apply --project "$PROJECT" -f "$TOOL_FIXTURE" > "$QA_ROOT/apply.out"
 )
-if [[ "$(rg -c '^workflow/' "$QA_ROOT/apply.out")" -eq 14 ]]; then
-  pass "all seven independent legacy/tool pairs apply"
+if [[ "$(rg -c '^workflow/' "$QA_ROOT/apply.out")" -eq 7 ]]; then
+  pass "all seven post-retirement tool workflows apply"
 else
   cat "$QA_ROOT/apply.out" >&2
-  fail "parity matrix did not apply all fourteen workflows"
+  fail "tool matrix did not apply all seven workflows"
 fi
 
 create_and_wait() {
@@ -136,16 +162,13 @@ declare -A PRODUCTION=(
 )
 EVIDENCE='[]'
 for name in "${CASES[@]}"; do
-  legacy="$(create_and_wait "parity-${name}-legacy")"
   tools="$(create_and_wait "parity-${name}-tools")"
-  legacy_id="${legacy%%|*}"
   tools_id="${tools%%|*}"
-  legacy_status="${legacy##*|}"
   tools_status="${tools##*|}"
-  if [[ "$legacy_status" == "completed" && "$tools_status" == "completed" ]]; then
-    pass "${PRODUCTION[$name]} legacy/tool terminal parity is completed"
+  if [[ "$tools_status" == "completed" ]]; then
+    pass "${PRODUCTION[$name]} post-retirement tool workflow completed"
   else
-    fail "${PRODUCTION[$name]} diverged: legacy=$legacy_status tools=$tools_status"
+    fail "${PRODUCTION[$name]} tool workflow ended as $tools_status"
   fi
   tool_events="$(sqlite3 "$DB" "SELECT COUNT(*) FROM events WHERE task_id='$tools_id' AND event_type IN ('driver_tool_use','driver_tool_result','coordination_tool_started','coordination_tool_completed');")"
   if [[ "$name" == "command" || "$tool_events" -ge 4 ]]; then
@@ -155,11 +178,10 @@ for name in "${CASES[@]}"; do
   fi
   EVIDENCE="$(jq -c \
     --arg workflow "${PRODUCTION[$name]}" \
-    --arg legacy_task "$legacy_id" \
     --arg tool_task "$tools_id" \
     --arg terminal "$tools_status" \
     --argjson tool_events "$tool_events" \
-    '. + [{workflow:$workflow,legacy_task:$legacy_task,tool_task:$tool_task,terminal:$terminal,typed_event_count:$tool_events}]' \
+    '. + [{workflow:$workflow,tool_task:$tool_task,terminal:$terminal,typed_event_count:$tool_events}]' \
     <<<"$EVIDENCE")"
 done
 
@@ -194,8 +216,8 @@ jq -n \
 
 if [[ "$FAIL" -ne 0 ]]; then
   sed -n '1,360p' "$QA_ROOT/daemon.log" >&2
-  echo "FR-124 QA: $PASS passed, $FAIL failed" >&2
+  echo "coordination strangler QA: $PASS passed, $FAIL failed" >&2
   exit 1
 fi
-echo "FR-124 QA: $PASS passed, 0 failed"
+echo "coordination strangler QA: $PASS passed, 0 failed"
 cat "$QA_ROOT/coordination-strangler-evidence.json"

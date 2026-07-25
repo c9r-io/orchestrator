@@ -86,6 +86,46 @@ def workflow_touches(document)
         "names" => step["step_vars"].keys.sort
       }
     end
+    unless Array(step["store_inputs"]).empty?
+      touches << {
+        "step" => step_id,
+        "kind" => "store_inputs",
+        "bindings" => Array(step["store_inputs"]).map do |input|
+          {
+            "store" => input["store"],
+            "key" => input["key"],
+            "as_var" => input["as_var"]
+          }
+        end.sort_by { |input| [input["store"], input["key"], input["as_var"]] }
+      }
+    end
+    unless Array(step["store_outputs"]).empty?
+      touches << {
+        "step" => step_id,
+        "kind" => "store_outputs",
+        "bindings" => Array(step["store_outputs"]).map do |output|
+          {
+            "store" => output["store"],
+            "key" => output["key"],
+            "from_var" => output["from_var"]
+          }
+        end.sort_by { |output| [output["store"], output["key"], output["from_var"]] }
+      }
+    end
+    unless Array(step["outputs"]).empty?
+      touches << {
+        "step" => step_id,
+        "kind" => "outputs",
+        "names" => Array(step["outputs"]).sort
+      }
+    end
+    if step["pipe_to"]
+      touches << {
+        "step" => step_id,
+        "kind" => "pipe_to",
+        "target" => step["pipe_to"]
+      }
+    end
   end
   Array(document.dig("spec", "loop", "convergence_expr")).each_with_index do |expression, index|
     touches << {
@@ -124,7 +164,14 @@ def source_counts(files)
     "celInterpreter" => 0
   }
   files.each do |path|
-    File.foreach(path) do |line|
+    source = File.read(path)
+    if path.extname == ".rs"
+      source = source.sub(
+        /^\s*#\[cfg\(test\)\]\s*\n\s*mod tests\s*\{.*\z/m,
+        ""
+      )
+    end
+    source.each_line do |line|
       counts["capturesOrJsonPath"] += 1 if line.match?(/captures|json_path/)
       counts["pipelineVariables"] += 1 if line.include?("PipelineVariables")
       counts["celInterpreter"] += 1 if line.match?(/cel_interpreter|cel-interpreter/)
@@ -155,15 +202,26 @@ if options[:test_fixtures]
 end
 
 documents = []
+agents = []
 Array(ledger["productionRoots"]).each do |root|
   Dir[repo_root.join(root, "**/*.{yaml,yml}").to_s].sort.each do |path|
     YAML.load_stream(File.read(path)).compact.each do |document|
-      next unless document.is_a?(Hash) && document["kind"] == "Workflow"
-      documents << {
-        "file" => relative_path(repo_root, path),
-        "name" => document.dig("metadata", "name"),
-        "touches" => workflow_touches(document)
-      }
+      next unless document.is_a?(Hash)
+      if document["kind"] == "Workflow"
+        documents << {
+          "file" => relative_path(repo_root, path),
+          "name" => document.dig("metadata", "name"),
+          "touches" => workflow_touches(document)
+        }
+      elsif document["kind"] == "Agent"
+        agents << {
+          "file" => relative_path(repo_root, path),
+          "name" => document.dig("metadata", "name"),
+          "legacyCommandOnly" => !document.dig("spec", "command").to_s.empty? &&
+            document.dig("spec", "driver").nil?,
+          "driver" => document.dig("spec", "driver")
+        }
+      end
     end
   rescue Psych::SyntaxError => error
     errors << "#{relative_path(repo_root, path)} is not valid YAML: #{error.message}"
@@ -234,6 +292,79 @@ retirement = ledger["retirement"] || {}
   errors << "retirement policy #{stage} is missing" unless retirement.key?(stage)
 end
 
+capture_consumers = documents.flat_map do |document|
+  document["touches"].map do |touch|
+    next unless touch["kind"] == "capture" ||
+      (touch["kind"] == "post_action" && touch.key?("json_path"))
+    {"file" => document["file"], "workflow" => document["name"], "touch" => touch}
+  end.compact
+end
+pipeline_consumer_kinds = %w[
+  capture
+  step_vars
+  store_inputs
+  store_outputs
+  outputs
+  pipe_to
+].freeze
+pipeline_consumers = documents.flat_map do |document|
+  document["touches"].map do |touch|
+    next unless pipeline_consumer_kinds.include?(touch["kind"])
+    {"file" => document["file"], "workflow" => document["name"], "touch" => touch}
+  end.compact
+end
+governance_cel_names = %w[
+  active_ticket_count
+  api_publishable
+  is_last_cycle
+  mark_done
+  qa_file_path
+  self_referential_safe
+  self_referential_safe_scenarios
+  endsWith
+  size
+  startsWith
+  tools_called
+  true
+  false
+  in
+].freeze
+cel_coordination_consumers = documents.flat_map do |document|
+  document["touches"].map do |touch|
+    next unless %w[prehook convergence].include?(touch["kind"])
+    expression = touch["expression"].to_s.gsub(
+      /"(?:\\.|[^"])*"|'(?:\\.|[^'])*'/,
+      " "
+    )
+    identifiers = expression.scan(/[A-Za-z_][A-Za-z0-9_]*/).uniq
+    unexpected = identifiers - governance_cel_names
+    next if unexpected.empty?
+    {
+      "file" => document["file"],
+      "workflow" => document["name"],
+      "touch" => touch,
+      "coordinationIdentifiers" => unexpected.sort
+    }
+  end.compact
+end
+legacy_command_agents = agents.select { |agent| agent["legacyCommandOnly"] }
+
+expected_inventory = ledger["consumerInventory"] || {}
+{
+  "capturesOrJsonPath" => capture_consumers,
+  "pipelineVariables" => pipeline_consumers,
+  "celCoordination" => cel_coordination_consumers
+}.each do |channel, consumers|
+  expected = expected_inventory.dig(channel, "productionConsumerCount")
+  if expected.is_a?(Integer) && expected != consumers.length
+    errors << "#{channel} production consumer count changed from #{expected} to #{consumers.length}"
+  end
+end
+expected_legacy_agents = retirement.dig("shellRunnerExecutor", "productionLegacyAgentCount")
+if expected_legacy_agents.is_a?(Integer) && expected_legacy_agents != legacy_command_agents.length
+  errors << "legacy command-only Agent count changed from #{expected_legacy_agents} to #{legacy_command_agents.length}"
+end
+
 report = {
   "schemaVersion" => 1,
   "workflowCount" => documents.length,
@@ -249,6 +380,15 @@ report = {
   ),
   "preservedChannels" => actual_channels,
   "typedStateDecision" => ledger.dig("decision", "typedState"),
+  "productionConsumers" => {
+    "capturesOrJsonPath" => capture_consumers,
+    "pipelineVariables" => pipeline_consumers,
+    "celCoordination" => cel_coordination_consumers
+  },
+  "executionInventory" => {
+    "agentDocuments" => agents.length,
+    "legacyCommandOnlyAgents" => legacy_command_agents
+  },
   "errors" => errors
 }
 

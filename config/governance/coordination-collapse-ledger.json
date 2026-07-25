@@ -27,10 +27,39 @@
     }
   ],
   "sourceBaseline": {
-    "scope": "non-test Rust source under core/src and crates/*/src plus member Cargo.toml manifests",
-    "capturesOrJsonPath": 143,
-    "pipelineVariables": 47,
+    "scope": "non-test Rust source under core/src and crates/*/src, excluding inline cfg(test) modules, plus member Cargo.toml manifests",
+    "capturesOrJsonPath": 55,
+    "pipelineVariables": 39,
     "celInterpreter": 9
+  },
+  "consumerInventory": {
+    "capturesOrJsonPath": {
+      "state": "removed",
+      "productionConsumerCount": 0,
+      "internalMachine": "test-only compatibility oracle in orchestrator-scheduler item_executor tests",
+      "compatibilityWindow": {
+        "openedBy": "FR-124 freeze ratchet",
+        "closedBy": "FR-125 production path removal",
+        "evidence": "docs/qa/orchestrator/174-coordination-strangler-completion.md"
+      }
+    },
+    "pipelineVariables": {
+      "state": "deprecated-blocked",
+      "productionConsumerCount": 2,
+      "preservedCarrier": "PreservedExecutionChannels",
+      "blockers": [
+        "public immutable initial and item variable bindings",
+        "step-local store_inputs bindings in promotion and self-evolution",
+        "command-rules and public CEL compatibility variables",
+        "generic output and template compatibility"
+      ],
+      "next": "govern a follow-up FR after store and public manifest compatibility migration"
+    },
+    "celCoordination": {
+      "state": "zero-production-coordination-consumers",
+      "productionConsumerCount": 0,
+      "dependency": "retained for deterministic governance gates"
+    }
   },
   "retirement": {
     "freeze": {
@@ -54,7 +83,8 @@
     },
     "shellRunnerExecutor": {
       "state": "frozen",
-      "removeAfter": "all non-governance production workflows have independent tool-path parity evidence"
+      "productionLegacyAgentCount": 4,
+      "removeAfter": "FR-126 migrates the remaining command-only Agent manifests to typed drivers"
     }
   },
   "workflows": [
@@ -146,6 +176,17 @@
       "status": "migrated",
       "evidence": "docs/qa/orchestrator/174-coordination-strangler-completion.md",
       "approvedTouches": [
+        {
+          "step": "gather_updates",
+          "kind": "store_inputs",
+          "bindings": [
+            {
+              "store": "promotion",
+              "key": "last_published_sha",
+              "as_var": "last_published_sha"
+            }
+          ]
+        },
         {
           "step": "publish",
           "kind": "prehook",
@@ -248,6 +289,17 @@
       "status": "migrated",
       "evidence": "docs/qa/orchestrator/174-coordination-strangler-completion.md",
       "approvedTouches": [
+        {
+          "step": "evo_apply_winner",
+          "kind": "store_inputs",
+          "bindings": [
+            {
+              "store": "evolution",
+              "key": "winner_latest",
+              "as_var": "prev_winner"
+            }
+          ]
+        },
         {
           "step": "select_best",
           "kind": "builtin",
