@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "4bac6915bb3aa357c060a6d1679f6c96068c90bd",
+  "contracts": {
+    "hello-world": {
+      "productionFile": "docs/workflow/hello-world.yaml",
+      "productionAgent": "echo-agent",
+      "legacyDriver": "command-only shell",
+      "targetDriver": "shell/cli",
+      "terminal": "completed",
+      "exitCode": 0,
+      "stdoutSha256": "687f3856db8ab75a1feefa35a7d5362a0556cb5706ea754f18296df3c93ad868"
+    },
+    "scheduled-scan": {
+      "productionFile": "docs/workflow/scheduled-scan.yaml",
+      "productionAgent": "scan-agent",
+      "legacyDriver": "command-only shell",
+      "targetDriver": "shell/cli",
+      "terminal": "completed",
+      "exitCode": 0,
+      "stdoutSha256": "7dcf27ecdf8678ba29248a97c14e53d62fcb1d5842b5d18a718d46e40c3576e4"
+    },
+    "fr-watch": {
+      "productionFile": "docs/workflow/fr-watch.yaml",
+      "productionAgent": "fr-governance-agent",
+      "legacyDriver": "command-only shell",
+      "targetDriver": "shell/cli",
+      "terminal": "completed",
+      "exitCode": 0,
+      "stdoutSha256": "3358bdb6d86b53b0e384d6ffc93ad65340462c18fdcae5eec0631fb2112f2132"
+    },
+    "streaming-mark-done": {
+      "productionFile": "docs/workflow/streaming-mark-done-convergence.yaml",
+      "productionAgent": "streamer",
+      "legacyDriver": "global streaming Claude command",
+      "targetDriver": "claude/cli",
+      "legacySpecSha256": "942f534ca7d7a33ee139e8d08fb7816a192648415aa80a064c082f897012d22b",
+      "terminal": "completed",
+      "exitCode": 0,
+      "maxCycles": 1,
+      "requiredTool": "mark_done",
+      "requiredEvents": [
+        "driver_tool_use",
+        "driver_tool_result"
+      ],
+      "sessionMaterialPersisted": false
+    }
+  }
+}

@@ -223,23 +223,26 @@ fn bare_tool_name(name: &str) -> String {
     name.to_string()
 }
 
-/// Derives well-known CEL pipeline variables from a streaming run's artifacts
-/// (the `ToolCall` / `stream_run_summary` artifacts produced by
-/// `output_validation`). Returns an empty vec for non-streaming runs (no
-/// `stream_run_summary` artifact), so callers inject nothing and behavior is
-/// unchanged.
+/// Derives well-known CEL pipeline variables from a structured run's artifacts.
+/// Both legacy `stream_run_summary` and typed `driver_terminal` artifacts are
+/// accepted; plain shell output still returns no signals.
 ///
 /// Emitted (typed when bound into CEL): `tools_called` (list<string>),
 /// `tool_error_count` / `num_tool_calls` / `run_turns` (int),
 /// `agent_reported_error` (bool), `run_cost_usd` (double).
 pub fn stream_signal_vars(artifacts: &[Artifact]) -> Vec<(String, String)> {
-    let summary = artifacts.iter().find_map(|a| match &a.kind {
-        ArtifactKind::Data { schema } if schema.as_str() == "stream_run_summary" => {
-            Some(a.content.clone().unwrap_or(Value::Null))
+    let terminal = artifacts.iter().find_map(|artifact| match &artifact.kind {
+        ArtifactKind::Data { schema }
+            if schema == "stream_run_summary" || schema == "driver_terminal" =>
+        {
+            Some((
+                schema.as_str(),
+                artifact.content.clone().unwrap_or(Value::Null),
+            ))
         }
         _ => None,
     });
-    let Some(summary) = summary else {
+    let Some((terminal_schema, summary)) = terminal else {
         return Vec::new();
     };
 
@@ -262,8 +265,26 @@ pub fn stream_signal_vars(artifacts: &[Artifact]) -> Vec<(String, String)> {
             if errored {
                 tool_error_count += 1;
             }
+        } else if let ArtifactKind::Data { schema } = &artifact.kind
+            && schema == "driver_tool_result"
+            && artifact
+                .content
+                .as_ref()
+                .and_then(|content| content.get("is_error"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        {
+            tool_error_count += 1;
         }
     }
+    let agent_reported_error = if terminal_schema == "driver_terminal" {
+        summary.get("outcome").and_then(Value::as_str) != Some("success")
+    } else {
+        summary
+            .get("is_error")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    };
 
     let mut out = vec![
         (
@@ -274,11 +295,7 @@ pub fn stream_signal_vars(artifacts: &[Artifact]) -> Vec<(String, String)> {
         ("num_tool_calls".to_string(), num_tool_calls.to_string()),
         (
             "agent_reported_error".to_string(),
-            summary
-                .get("is_error")
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
-                .to_string(),
+            agent_reported_error.to_string(),
         ),
     ];
     if let Some(cost) = summary.get("cost_usd").and_then(Value::as_f64) {
@@ -383,6 +400,35 @@ mod tests {
         assert_eq!(vars.get("tool_error_count").map(String::as_str), Some("0"));
         assert_eq!(vars.get("num_tool_calls").map(String::as_str), Some("2"));
         assert_eq!(vars.get("run_turns").map(String::as_str), Some("3"));
+        assert_eq!(
+            vars.get("agent_reported_error").map(String::as_str),
+            Some("false")
+        );
+    }
+
+    #[test]
+    fn typed_driver_artifacts_derive_convergence_signals() {
+        use serde_json::json;
+        let artifacts = vec![
+            Artifact::new(ArtifactKind::ToolCall {
+                tool: "mcp__orch__mark_done".to_string(),
+            })
+            .with_content(json!({"call_id": "done-1", "args": {}})),
+            Artifact::new(ArtifactKind::Data {
+                schema: "driver_tool_result".to_string(),
+            })
+            .with_content(json!({"call_id": "done-1", "is_error": false})),
+            Artifact::new(ArtifactKind::Data {
+                schema: "driver_terminal".to_string(),
+            })
+            .with_content(json!({"outcome": "success", "exit_code": 0})),
+        ];
+        let vars: HashMap<String, String> = stream_signal_vars(&artifacts).into_iter().collect();
+        assert_eq!(
+            vars.get("tools_called").map(String::as_str),
+            Some(r#"["mark_done"]"#)
+        );
+        assert_eq!(vars.get("tool_error_count").map(String::as_str), Some("0"));
         assert_eq!(
             vars.get("agent_reported_error").map(String::as_str),
             Some("false")

@@ -91,13 +91,158 @@
         "claude/cli": 17,
         "codex/cli": 0
       },
+      "productionAgents": [
+        {
+          "file": "docs/workflow/command-rules.yaml",
+          "name": "session-agent",
+          "classification": "ai-provider",
+          "migrationTarget": "claude/cli",
+          "manifestFingerprint": "d2fb36e18c0d1a58b00e7d41af18be87a5e8ecba3998d489cc5c72c1733321fa"
+        },
+        {
+          "file": "docs/workflow/fr-watch.yaml",
+          "name": "fr-governance-agent",
+          "classification": "shell-script",
+          "migrationTarget": "shell/cli",
+          "manifestFingerprint": "9e2b380517527f85eb2559f231431dc0e6bdf70d423f58759818b97a1688e458"
+        },
+        {
+          "file": "docs/workflow/full-qa.yaml",
+          "name": "qa-fixer",
+          "classification": "ai-provider",
+          "migrationTarget": "claude/cli",
+          "manifestFingerprint": "ef92a390e40dab9d71848df2d8b1aae68c248e06c54c225fa7d2d59e93781fa3"
+        },
+        {
+          "file": "docs/workflow/full-qa.yaml",
+          "name": "qa-reviewer",
+          "classification": "ai-provider",
+          "migrationTarget": "claude/cli",
+          "manifestFingerprint": "8956ec7109083c2d9454e7c5c4b80a60b47a5db0dc57bf83525dfd79e7d3fb46"
+        },
+        {
+          "file": "docs/workflow/full-qa.yaml",
+          "name": "qa-tester",
+          "classification": "ai-provider",
+          "migrationTarget": "claude/cli",
+          "manifestFingerprint": "b98bc85d8c4509967bf46537e058c7ab21d1606ded3f9b98b8a9527f65e2b52d"
+        },
+        {
+          "file": "docs/workflow/hello-world.yaml",
+          "name": "echo-agent",
+          "classification": "shell-script",
+          "migrationTarget": "shell/cli",
+          "manifestFingerprint": "c9c1a24dce696bd2cb63b1f58eeaa22914c63ea29ab6581f1cba8399cf798569"
+        },
+        {
+          "file": "docs/workflow/plan-execute.yaml",
+          "name": "coder",
+          "classification": "ai-provider",
+          "migrationTarget": "claude/cli",
+          "manifestFingerprint": "e7cfcc2dc06d9a968898aa10c7b7430f4cff0345d1dbb0039a95d9695f0c8325"
+        },
+        {
+          "file": "docs/workflow/plan-execute.yaml",
+          "name": "planner",
+          "classification": "ai-provider",
+          "migrationTarget": "claude/cli",
+          "manifestFingerprint": "769f8ddd67aea562a2fcc62f9c3095b9449763bb09f0b52d837504012b229fce"
+        },
+        {
+          "file": "docs/workflow/promotion.yaml",
+          "name": "content-analyst",
+          "classification": "ai-provider",
+          "migrationTarget": "claude/cli",
+          "manifestFingerprint": "e744f53d6602bab10d1e0f2be1b3dfdfc8f02dc6df22d3944ea765220d02fe5f"
+        },
+        {
+          "file": "docs/workflow/promotion.yaml",
+          "name": "content-writer",
+          "classification": "ai-provider",
+          "migrationTarget": "claude/cli",
+          "manifestFingerprint": "7c27d371b649ecd2e3cf0bace3cc49ace82333039d1863062dd6f1a6fb12c243"
+        },
+        {
+          "file": "docs/workflow/qa-loop.yaml",
+          "name": "qa-coordinator",
+          "classification": "ai-provider",
+          "migrationTarget": "claude/cli",
+          "manifestFingerprint": "41047eb571c85135291bb8e28d4ab9c61394e764687b765585f7621a99be9667"
+        },
+        {
+          "file": "docs/workflow/scheduled-scan.yaml",
+          "name": "scan-agent",
+          "classification": "shell-script",
+          "migrationTarget": "shell/cli",
+          "manifestFingerprint": "c580c7c58809c88bca2783ff61ee7747f61e2496db5242d2aae527231bb31373"
+        },
+        {
+          "file": "docs/workflow/self-bootstrap.yaml",
+          "name": "architect",
+          "classification": "ai-provider",
+          "migrationTarget": "claude/cli",
+          "manifestFingerprint": "a28b6e441bd905c16c8b9fbae3a6183f96707f29263c7f97f2770085b0af1783"
+        },
+        {
+          "file": "docs/workflow/self-bootstrap.yaml",
+          "name": "coder",
+          "classification": "ai-provider",
+          "migrationTarget": "claude/cli",
+          "manifestFingerprint": "78004feab12b23dceac598041f6218c2e0db34bd4f348936395fc785d2f29ca8"
+        },
+        {
+          "file": "docs/workflow/self-bootstrap.yaml",
+          "name": "reviewer",
+          "classification": "ai-provider",
+          "migrationTarget": "claude/cli",
+          "manifestFingerprint": "d315fe05dfe1ff801049d30b33b477b03e1f1d12cf6a0f73a2b5f126c22eb605"
+        },
+        {
+          "file": "docs/workflow/self-bootstrap.yaml",
+          "name": "tester",
+          "classification": "ai-provider",
+          "migrationTarget": "claude/cli",
+          "manifestFingerprint": "c51489bdeb39887fa9b66dbe353b30b626bb38801fc91c9516e8021246d7ee7e"
+        },
+        {
+          "file": "docs/workflow/self-evolution.yaml",
+          "name": "evo_architect",
+          "classification": "ai-provider",
+          "migrationTarget": "claude/cli",
+          "manifestFingerprint": "76b20c164319000ed0ef1b8996c7e1200aee747ed1378f48b636ce1ab17dd160"
+        },
+        {
+          "file": "docs/workflow/self-evolution.yaml",
+          "name": "evo_coder",
+          "classification": "ai-provider",
+          "migrationTarget": "claude/cli",
+          "manifestFingerprint": "e29bc30e538e5bc88a83267415e2cce2a0180df55ed48b3646223bd1b3ed31cc"
+        },
+        {
+          "file": "docs/workflow/self-evolution.yaml",
+          "name": "evo_reviewer",
+          "classification": "ai-provider",
+          "migrationTarget": "claude/cli",
+          "manifestFingerprint": "243410b93249cfb36eca91b8fc7a003afaf3944630e06d541005d75103af557f"
+        },
+        {
+          "file": "docs/workflow/streaming-mark-done-convergence.yaml",
+          "name": "streamer",
+          "classification": "ai-provider",
+          "migrationTarget": "claude/cli",
+          "manifestFingerprint": "cfab773435c36afd9e5489b643fb5eac96a4c292782ec865f36ea01aef3b6728"
+        }
+      ],
       "productionDirectStepCommandCount": 3,
       "productionGlobalStreamingExecutorCount": 0,
       "compatibilityWindow": {
         "openedBy": "FR-116 typed Agent driver abstraction",
+        "openedByCommit": "e06a404be9d70e9768a4f8ee0e5d2be86aa7972a",
         "closedBy": "FR-126 Agent execution migration",
+        "closedByCommit": "c0d58e6e12349f3460e5c9e7be104a7f2c1548d6",
+        "scope": "legacy runtime executor selection; command-only manifest ingress remains warning-and-promotion compatible",
         "legacyFixture": "command-only Agent apply promotes to shell/cli with a stable deprecation warning",
-        "rollbackEvidence": "docs/qa/orchestrator/176-agent-driver-execution-migration.md"
+        "rollbackEvidence": "reverse-apply check for c0d58e6e plus docs/qa/orchestrator/176-agent-driver-execution-migration.md"
       },
       "sharedSpawnSubstrate": "retained for driver and engine-owned command policy, sandbox, resource-limit, process-group, env, and redaction enforcement"
     }

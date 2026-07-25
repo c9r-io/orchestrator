@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require "json"
+require "digest"
 require "optparse"
 require "pathname"
 require "yaml"
@@ -150,6 +151,37 @@ def explicit_driver_id(document)
   "#{provider}/#{transport}"
 end
 
+def canonical_json(value)
+  case value
+  when Hash
+    value.keys.sort.to_h { |key| [key, canonical_json(value.fetch(key))] }
+  when Array
+    value.map { |item| canonical_json(item) }
+  else
+    value
+  end
+end
+
+def execution_classification(driver_id)
+  case driver_id
+  when "shell/cli"
+    "shell-script"
+  when "claude/cli", "codex/cli"
+    "ai-provider"
+  else
+    "unclassified"
+  end
+end
+
+def agent_manifest_fingerprint(document)
+  governed = {
+    "kind" => document["kind"],
+    "metadata" => {"name" => document.dig("metadata", "name")},
+    "spec" => document["spec"]
+  }
+  Digest::SHA256.hexdigest(JSON.generate(canonical_json(governed)))
+end
+
 def execution_document_accepted?(document)
   case document["kind"]
   when "Agent"
@@ -252,13 +284,17 @@ Array(ledger["productionRoots"]).each do |root|
           end
         }
       elsif document["kind"] == "Agent"
+        driver_id = explicit_driver_id(document)
         agents << {
           "file" => relative_path(repo_root, path),
           "name" => document.dig("metadata", "name"),
           "legacyCommandOnly" => !document.dig("spec", "command").to_s.empty? &&
             document.dig("spec", "driver").nil?,
           "driver" => document.dig("spec", "driver"),
-          "driverId" => explicit_driver_id(document)
+          "driverId" => driver_id,
+          "classification" => execution_classification(driver_id),
+          "migrationTarget" => driver_id,
+          "manifestFingerprint" => agent_manifest_fingerprint(document)
         }
       elsif document["kind"] == "RuntimePolicy"
         runtime_policies << {
@@ -430,6 +466,19 @@ expected_driver_counts = retirement.dig("shellRunnerExecutor", "productionDriver
 if expected_driver_counts.is_a?(Hash) && expected_driver_counts != driver_counts
   errors << "production driver counts changed from #{expected_driver_counts.inspect} to #{driver_counts.inspect}"
 end
+expected_agents = retirement.dig("shellRunnerExecutor", "productionAgents")
+actual_agents = agents.sort_by { |agent| [agent["file"], agent["name"]] }.map do |agent|
+  agent.slice(
+    "file",
+    "name",
+    "classification",
+    "migrationTarget",
+    "manifestFingerprint"
+  )
+end
+if expected_agents.is_a?(Array) && expected_agents != actual_agents
+  errors << "production Agent execution inventory differs from the reviewed ledger"
+end
 expected_direct_commands =
   retirement.dig("shellRunnerExecutor", "productionDirectStepCommandCount")
 if expected_direct_commands.is_a?(Integer) &&
@@ -466,6 +515,14 @@ report = {
   },
   "executionInventory" => {
     "agentDocuments" => agents.length,
+    "agents" => agents.sort_by { |agent| [agent["file"], agent["name"]] }.map do |agent|
+      agent.merge(
+        "workflows" => documents
+          .select { |document| document["file"] == agent["file"] }
+          .map { |document| document["name"] }
+          .sort
+      )
+    end,
     "legacyCommandOnlyAgents" => legacy_command_agents,
     "driverCounts" => driver_counts,
     "directStepCommands" => direct_step_commands,

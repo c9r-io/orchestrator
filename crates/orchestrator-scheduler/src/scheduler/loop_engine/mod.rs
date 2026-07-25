@@ -635,21 +635,50 @@ async fn execute_cycle_segments(
 
         segment::finalize_items(state, task_id, task_ctx, &items, &mut item_state).await?;
 
-        // Promote item-level captured pipeline vars to task context so that
-        // convergence expressions can reference variables captured from
-        // item-scoped steps (e.g. `delta_lines` from a QA capture).
+        // Promote item-level state to task context so convergence expressions
+        // can consume both governed variables and typed driver signals.
         for acc in item_state.values() {
-            for (key, val) in &acc.pipeline_vars.vars {
-                task_ctx
-                    .pipeline_vars
-                    .vars
-                    .entry(key.clone())
-                    .or_insert_with(|| val.clone());
-            }
+            promote_item_pipeline_state(
+                &mut task_ctx.pipeline_vars.vars,
+                &mut task_ctx.pipeline_vars.signals,
+                &acc.pipeline_vars.vars,
+                &acc.pipeline_vars.signals,
+            );
         }
     }
 
     Ok(CycleSegmentOutcome::Completed)
+}
+
+fn promote_item_pipeline_state(
+    task_vars: &mut HashMap<String, String>,
+    task_signals: &mut agent_orchestrator::config::ExecutionSignals,
+    item_vars: &HashMap<String, String>,
+    item_signals: &agent_orchestrator::config::ExecutionSignals,
+) {
+    for (key, value) in item_vars {
+        task_vars
+            .entry(key.clone())
+            .or_insert_with(|| value.clone());
+    }
+    if item_signals.self_test_exit_code.is_some() {
+        task_signals.self_test_exit_code = item_signals.self_test_exit_code;
+    }
+    task_signals.self_test_passed |= item_signals.self_test_passed;
+    for tool in &item_signals.tools_called {
+        if !task_signals.tools_called.contains(tool) {
+            task_signals.tools_called.push(tool.clone());
+        }
+    }
+    task_signals.tool_error_count = task_signals
+        .tool_error_count
+        .max(item_signals.tool_error_count);
+    task_signals.metrics.extend(
+        item_signals
+            .metrics
+            .iter()
+            .map(|(name, value)| (name.clone(), *value)),
+    );
 }
 
 /// FR-035 L2: Checks if the last 3 cycle intervals were all shorter than

@@ -1,0 +1,215 @@
+# FR-126 offline production-contract parity fixture.
+# This bundle mirrors only deterministic execution contracts from production
+# manifests. It never invokes a real provider or applies docs/workflow directly.
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: driver-migration-parity
+spec:
+  root_path: "."
+  qa_targets: [docs/qa]
+  ticket_dir: docs/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: hello-legacy
+spec:
+  capabilities: [hello_legacy]
+  command: >-
+    echo '{"confidence":0.95,"quality_score":0.9, "artifacts":[{"kind":"analysis","findings":[ {"title":"hello-world","description":"Workflow executed successfully.","severity":"info"} ]}]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: hello-typed
+spec:
+  capabilities: [hello_typed]
+  command: >-
+    echo '{"confidence":0.95,"quality_score":0.9, "artifacts":[{"kind":"analysis","findings":[ {"title":"hello-world","description":"Workflow executed successfully.","severity":"info"} ]}]}'
+  driver:
+    provider: shell
+    transport: cli
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: scheduled-legacy
+spec:
+  capabilities: [scheduled_legacy]
+  command: >-
+    echo '{"confidence":0.94,"quality_score":0.91, "artifacts":[{"kind":"analysis","findings":[ {"title":"no-critical-issues","description":"No critical security issues found. 2 low-severity recommendations noted.","severity":"info"} ]}]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: scheduled-typed
+spec:
+  capabilities: [scheduled_typed]
+  command: >-
+    echo '{"confidence":0.94,"quality_score":0.91, "artifacts":[{"kind":"analysis","findings":[ {"title":"no-critical-issues","description":"No critical security issues found. 2 low-severity recommendations noted.","severity":"info"} ]}]}'
+  driver:
+    provider: shell
+    transport: cli
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: fr-watch-legacy
+spec:
+  capabilities: [fr_watch_legacy]
+  command: >-
+    echo '{"confidence":0.93,"quality_score":0.90, "artifacts":[{"kind":"analysis","findings":[ {"title":"fr-triaged","description":"FR triaged: P1 priority, medium complexity, no blocking dependencies.","severity":"info"} ]}]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: fr-watch-typed
+spec:
+  capabilities: [fr_watch_typed]
+  command: >-
+    echo '{"confidence":0.93,"quality_score":0.90, "artifacts":[{"kind":"analysis","findings":[ {"title":"fr-triaged","description":"FR triaged: P1 priority, medium complexity, no blocking dependencies.","severity":"info"} ]}]}'
+  driver:
+    provider: shell
+    transport: cli
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: streaming-parity-prompt
+spec:
+  prompt: >-
+    Call mcp__orch__mark_done exactly once with a one-line summary, then finish.
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: streaming-typed
+spec:
+  capabilities: [streaming_typed]
+  driver:
+    provider: claude
+    transport: cli
+    options:
+      model: haiku
+      maxTurns: 4
+      permissionMode: governed
+      allowedTools:
+        - mcp__orch__mark_done
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: parity-hello-legacy
+spec:
+  steps:
+    - id: run
+      type: hello_legacy
+      required_capability: hello_legacy
+      enabled: true
+      repeatable: false
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: parity-hello-typed
+spec:
+  steps:
+    - id: run
+      type: hello_typed
+      required_capability: hello_typed
+      enabled: true
+      repeatable: false
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: parity-scheduled-legacy
+spec:
+  steps:
+    - id: run
+      type: scheduled_legacy
+      required_capability: scheduled_legacy
+      enabled: true
+      repeatable: false
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: parity-scheduled-typed
+spec:
+  steps:
+    - id: run
+      type: scheduled_typed
+      required_capability: scheduled_typed
+      enabled: true
+      repeatable: false
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: parity-fr-watch-legacy
+spec:
+  steps:
+    - id: run
+      type: fr_watch_legacy
+      required_capability: fr_watch_legacy
+      enabled: true
+      repeatable: false
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: parity-fr-watch-typed
+spec:
+  steps:
+    - id: run
+      type: fr_watch_typed
+      required_capability: fr_watch_typed
+      enabled: true
+      repeatable: false
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: parity-streaming-typed
+spec:
+  max_parallel: 1
+  steps:
+    - id: signal
+      type: streaming_typed
+      scope: task
+      required_capability: streaming_typed
+      template: streaming-parity-prompt
+      enabled: true
+      repeatable: true
+      behavior:
+        driverRequirements:
+          multiTurn: true
+          toolHosting: stdio
+          workspaceAccess: read
+    - id: loop_guard
+      type: loop_guard
+      builtin: loop_guard
+      is_guard: true
+      enabled: true
+  loop:
+    mode: infinite
+    max_cycles: 3
+    stop_when_no_unresolved: false
+    convergence_expr:
+      - engine: cel
+        when: "'mark_done' in tools_called"
+        reason: "recorded legacy and typed driver contracts both converge on mark_done"

@@ -34,6 +34,14 @@ ruby scripts/qa/coordination-governance.rb \
   --output "$INVENTORY" >/dev/null
 
 jq -e '
+  (.executionInventory.agents | length) == 20 and
+  ([.executionInventory.agents[] | select(.classification == "shell-script")] | length) == 3 and
+  ([.executionInventory.agents[] | select(.classification == "ai-provider")] | length) == 17 and
+  all(.executionInventory.agents[];
+    (.workflows | length) > 0 and
+    (.migrationTarget | type) == "string" and
+    (.manifestFingerprint | test("^[0-9a-f]{64}$"))
+  ) and
   .executionInventory.legacyCommandOnlyAgents == [] and
   .executionInventory.driverCounts == {
     "shell/cli": 3,
@@ -43,7 +51,7 @@ jq -e '
   .executionInventory.globalStreamingExecutors == [] and
   .sourceTouches.legacyRunnerSelection == 0
 ' "$INVENTORY" >/dev/null
-pass "production inventory has 0 command-only Agents, 0 global streaming executors, and 0 legacy runner selection symbols"
+pass "production inventory has 20 individually fingerprinted typed Agents and zero legacy consumers"
 
 if rg -n \
   'RunnerExecutorKind|ShellRunnerExecutor|StreamingAgentRunner|spawn_with_runner(_and_capture)?_session|prepare_legacy_claude_streaming_command' \
@@ -78,10 +86,24 @@ FR116_ALLOW_DIRTY=1 KEEP_FR116_QA="${KEEP_FR126_QA:-0}" \
   > "$EVIDENCE_DIR/agent-driver-isolated.log"
 pass "isolated daemon proves promoted and explicit shell Agents converge through typed drivers"
 
-if [[ "${FR126_FULL:-0}" == "1" ]]; then
+FR126_ALLOW_DIRTY="${FR126_ALLOW_DIRTY:-0}" \
+  KEEP_FR126_QA="${KEEP_FR126_QA:-0}" \
+  "$SCRIPT_DIR/test-agent-driver-production-parity.sh" \
+  > "$EVIDENCE_DIR/production-parity.log"
+pass "all four production migration contracts pass offline parity and rollback checks"
+
+if [[ "${FR126_FAST:-0}" != "1" ]]; then
+  cargo fmt --all -- --check
+  FR125_ALLOW_DIRTY="${FR126_ALLOW_DIRTY:-0}" \
+    "$SCRIPT_DIR/test-coordination-strangler.sh" \
+    > "$EVIDENCE_DIR/coordination-strangler.log"
   cargo test --workspace
   cargo clippy --workspace --all-targets -- -D warnings
-  pass "optional full workspace and strict Clippy gates pass"
+  ./scripts/coverage-governance.sh --fixture-test
+  ./scripts/qa-doc-lint.sh
+  pass "mandatory format, strangler, workspace, strict Clippy, coverage, and QA documentation gates pass"
+else
+  pass "fast iteration mode explicitly skipped release-only repository gates"
 fi
 
 echo "FR-126 QA: $PASS passed, 0 failed"

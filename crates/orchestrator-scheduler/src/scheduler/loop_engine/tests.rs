@@ -2166,3 +2166,35 @@ async fn inflight_wait_timeout_diagnostic_fields() {
     assert_eq!(pids_arr.len(), 1);
     assert_eq!(pids_arr[0].as_i64().unwrap(), pid);
 }
+
+#[test]
+fn item_driver_signals_are_promoted_for_task_convergence() {
+    let mut task = PipelineVariables::default();
+    task.vars.insert("existing".to_string(), "task".to_string());
+    task.signals.tools_called.push("read_file".to_string());
+    task.signals.tool_error_count = 1;
+
+    let mut item = PipelineVariables::default();
+    item.vars
+        .insert("captured".to_string(), "value".to_string());
+    item.signals.self_test_exit_code = Some(0);
+    item.signals.self_test_passed = true;
+    item.signals.tools_called = vec!["read_file".to_string(), "mark_done".to_string()];
+    item.signals.tool_error_count = 2;
+    item.signals.metrics.insert("score".to_string(), 91.0);
+
+    super::promote_item_pipeline_state(
+        &mut task.vars,
+        &mut task.signals,
+        &item.vars,
+        &item.signals,
+    );
+
+    assert_eq!(task.vars.get("existing").map(String::as_str), Some("task"));
+    assert_eq!(task.vars.get("captured").map(String::as_str), Some("value"));
+    assert_eq!(task.signals.self_test_exit_code, Some(0));
+    assert!(task.signals.self_test_passed);
+    assert_eq!(task.signals.tools_called, vec!["read_file", "mark_done"]);
+    assert_eq!(task.signals.tool_error_count, 2);
+    assert_eq!(task.signals.metrics.get("score"), Some(&91.0));
+}
