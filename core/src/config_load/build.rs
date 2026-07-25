@@ -96,6 +96,13 @@ fn validate_agent_drivers_in_project(
                     "[driver_config_invalid] project '{project_id}' agent '{agent_id}': {error}"
                 )
             })?;
+            crate::driver::validate_driver_command_rules(driver, &agent.command_rules).map_err(
+                |error| {
+                    anyhow::anyhow!(
+                        "[driver_config_invalid] project '{project_id}' agent '{agent_id}': {error}"
+                    )
+                },
+            )?;
         } else if agent.command.trim().is_empty() {
             anyhow::bail!(
                 "[driver_config_invalid] project '{project_id}' agent '{agent_id}' requires command or driver"

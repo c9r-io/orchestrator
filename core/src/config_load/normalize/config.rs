@@ -23,6 +23,11 @@ pub(crate) fn normalize_config(mut config: OrchestratorConfig) -> OrchestratorCo
         });
 
     for project in config.projects.values_mut() {
+        for agent in project.agents.values_mut() {
+            if agent.driver.is_none() && !agent.command.trim().is_empty() {
+                agent.driver = Some(crate::config::AgentDriverConfig::shell_cli());
+            }
+        }
         for workflow in project.workflows.values_mut() {
             normalize_workflow_config(workflow);
         }

@@ -806,6 +806,66 @@ fn normalize_config_rebuilds_resource_store_from_config_snapshot() {
 }
 
 #[test]
+fn normalize_config_promotes_legacy_command_agent_to_shell_driver() {
+    let mut config = OrchestratorConfig::default();
+    config
+        .projects
+        .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
+        .or_default()
+        .agents
+        .insert(
+            "legacy-shell".to_string(),
+            crate::config::AgentConfig {
+                command: "echo {prompt}".to_string(),
+                ..Default::default()
+            },
+        );
+
+    let normalized = normalize_config(config);
+    let driver = normalized.projects[crate::config::DEFAULT_PROJECT_ID].agents["legacy-shell"]
+        .driver
+        .as_ref()
+        .expect("legacy command agent should be promoted");
+
+    assert_eq!(driver.provider, crate::config::DriverProvider::Shell);
+    assert_eq!(driver.transport, crate::config::DriverTransport::Cli);
+}
+
+#[test]
+fn normalize_config_preserves_explicit_agent_driver() {
+    let mut config = OrchestratorConfig::default();
+    let explicit = crate::config::AgentDriverConfig {
+        provider: crate::config::DriverProvider::Claude,
+        transport: crate::config::DriverTransport::Cli,
+        binary: Some("claude-test".to_string()),
+        options: Default::default(),
+        claude: None,
+        codex: None,
+        shell: None,
+        raw_args: vec![],
+        unsafe_raw_args: false,
+    };
+    config
+        .projects
+        .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
+        .or_default()
+        .agents
+        .insert(
+            "typed-claude".to_string(),
+            crate::config::AgentConfig {
+                driver: Some(explicit.clone()),
+                ..Default::default()
+            },
+        );
+
+    let normalized = normalize_config(config);
+    assert_eq!(
+        normalized.projects[crate::config::DEFAULT_PROJECT_ID].agents["typed-claude"].driver,
+        Some(explicit)
+    );
+}
+
+#[test]
 fn normalize_config_clears_stale_store() {
     let mut config = OrchestratorConfig::default();
     // Manually put a stale entry in the store
@@ -860,6 +920,9 @@ fn normalize_config_idempotent_double_call() {
             },
         );
     let first = normalize_config(config);
+    let expected_driver = first.projects[crate::config::DEFAULT_PROJECT_ID].agents["idem-ag"]
+        .driver
+        .clone();
     let second = normalize_config(first);
 
     assert!(
@@ -877,4 +940,8 @@ fn normalize_config_idempotent_double_call() {
             .is_some()
     );
     assert_eq!(second.custom_resource_definitions.len(), 13);
+    assert_eq!(
+        second.projects[crate::config::DEFAULT_PROJECT_ID].agents["idem-ag"].driver,
+        expected_driver
+    );
 }

@@ -188,6 +188,26 @@ pub struct AgentDriverConfig {
     pub unsafe_raw_args: bool,
 }
 
+impl AgentDriverConfig {
+    /// Creates the explicit typed driver used for shell command execution.
+    ///
+    /// This is also the deterministic compatibility target for legacy Agents
+    /// that declare `spec.command` without `spec.driver`.
+    pub fn shell_cli() -> Self {
+        Self {
+            provider: DriverProvider::Shell,
+            transport: DriverTransport::Cli,
+            binary: None,
+            options: DriverOptions::default(),
+            claude: None,
+            codex: None,
+            shell: None,
+            raw_args: Vec::new(),
+            unsafe_raw_args: false,
+        }
+    }
+}
+
 fn is_default_driver_options(value: &DriverOptions) -> bool {
     *value == DriverOptions::default()
 }
@@ -227,6 +247,18 @@ impl Default for DriverRequirements {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shell_cli_factory_is_explicit_and_safe_by_default() {
+        let driver = AgentDriverConfig::shell_cli();
+
+        assert_eq!(driver.provider, DriverProvider::Shell);
+        assert_eq!(driver.transport, DriverTransport::Cli);
+        assert_eq!(driver.options, DriverOptions::default());
+        assert!(driver.binary.is_none());
+        assert!(driver.raw_args.is_empty());
+        assert!(!driver.unsafe_raw_args);
+    }
 
     #[test]
     fn driver_manifest_roundtrip_keeps_provider_and_transport_orthogonal() {

@@ -51,6 +51,44 @@ spec:
 }
 
 #[test]
+fn apply_legacy_command_agent_warns_and_persists_shell_driver() {
+    let mut fixture = TestState::new();
+    let state = fixture.build();
+    let manifest = "apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: legacy-command
+spec:
+  capabilities: [implement]
+  command: echo {prompt}
+";
+
+    let response = apply_manifests(
+        &state,
+        manifest,
+        false,
+        Some(crate::config::DEFAULT_PROJECT_ID),
+        false,
+    )
+    .expect("legacy Agent should be accepted during compatibility window");
+    assert!(
+        response
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("legacy_agent_command_deprecated"))
+    );
+
+    let active = read_active_config(&state).expect("read active config");
+    let agent = &active.config.projects[crate::config::DEFAULT_PROJECT_ID].agents["legacy-command"];
+    let driver = agent
+        .driver
+        .as_ref()
+        .expect("normalized Agent should persist a typed driver");
+    assert_eq!(driver.provider, crate::config::DriverProvider::Shell);
+    assert_eq!(driver.transport, crate::config::DriverTransport::Cli);
+}
+
+#[test]
 fn apply_without_prune_keeps_existing_resources_not_in_manifest() {
     let mut fixture = TestState::new();
     let state = fixture.build();

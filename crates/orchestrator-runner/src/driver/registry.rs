@@ -1,7 +1,8 @@
 use super::contracts::DriverCapabilities;
 use anyhow::{Result, bail};
 use orchestrator_config::config::{
-    AgentDriverConfig, CancelSemantics, DriverProvider, DriverTransport, ToolHosting,
+    AgentCommandRule, AgentDriverConfig, CancelSemantics, DriverProvider, DriverTransport,
+    ToolHosting,
 };
 use std::path::{Component, Path};
 
@@ -133,6 +134,21 @@ pub fn validate_driver_config(config: &AgentDriverConfig, legacy_command: &str) 
     Ok(())
 }
 
+/// Validates that conditional shell command selection is only used by the
+/// provider that actually consumes those commands.
+pub fn validate_driver_command_rules(
+    config: &AgentDriverConfig,
+    command_rules: &[AgentCommandRule],
+) -> Result<()> {
+    if !command_rules.is_empty() && config.provider != DriverProvider::Shell {
+        bail!(
+            "agent.spec.command_rules require driver shell/cli; driver {} constructs its own command",
+            driver_id(config)
+        );
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -186,5 +202,18 @@ mod tests {
         assert!(validate_driver_config(&config, "claude -p x").is_err());
         config.options.cwd = Some("../escape".to_string());
         assert!(validate_driver_config(&config, "").is_err());
+    }
+
+    #[test]
+    fn command_rules_are_only_supported_by_shell_driver() {
+        let rules = vec![AgentCommandRule {
+            when: "true".to_string(),
+            command: "echo selected".to_string(),
+        }];
+
+        assert!(validate_driver_command_rules(&driver(DriverProvider::Shell), &rules).is_ok());
+        let error = validate_driver_command_rules(&driver(DriverProvider::Claude), &rules)
+            .expect_err("vendor driver must reject shell command rules");
+        assert!(error.to_string().contains("require driver shell/cli"));
     }
 }

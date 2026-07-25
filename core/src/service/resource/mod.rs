@@ -87,9 +87,16 @@ pub fn apply_manifests(
                     ));
                     continue;
                 }
-                // Collect warnings for workflow resources (unknown fields, uncaptured vars)
-                if let crate::resource::RegisteredResource::Workflow(ref wf) = registered {
-                    warnings.extend(wf.collect_warnings());
+                // Collect non-fatal compatibility and schema warnings before
+                // normalization persists the resource.
+                match registered {
+                    crate::resource::RegisteredResource::Workflow(ref wf) => {
+                        warnings.extend(wf.collect_warnings());
+                    }
+                    crate::resource::RegisteredResource::Agent(ref agent) => {
+                        warnings.extend(agent.collect_warnings());
+                    }
+                    _ => {}
                 }
                 if let Some(meta_project) = registered.metadata_project()
                     && meta_project != cli_project

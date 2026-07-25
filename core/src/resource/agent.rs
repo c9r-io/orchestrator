@@ -37,6 +37,7 @@ impl Resource for AgentResource {
         }
         if let Some(driver) = self.spec.driver.as_ref() {
             crate::driver::validate_driver_config(driver, &self.spec.command)?;
+            crate::driver::validate_driver_command_rules(driver, &self.spec.command_rules)?;
         }
         Ok(())
     }
@@ -86,6 +87,21 @@ impl Resource for AgentResource {
         project_id: Option<&str>,
     ) -> bool {
         super::helpers::delete_from_store_project(config, "Agent", name, project_id)
+    }
+}
+
+impl AgentResource {
+    /// Returns compatibility warnings that are safe to surface before apply
+    /// normalization persists an explicit typed driver.
+    pub fn collect_warnings(&self) -> Vec<String> {
+        if self.spec.driver.is_none() && !self.spec.command.trim().is_empty() {
+            vec![format!(
+                "[legacy_agent_command_deprecated] Agent '{}' omits spec.driver; applying it promotes the Agent to driver shell/cli",
+                self.name()
+            )]
+        } else {
+            Vec::new()
+        }
     }
 }
 
@@ -262,6 +278,45 @@ mod tests {
             },
         };
         assert!(agent.validate().is_ok());
+        assert_eq!(agent.collect_warnings().len(), 1);
+        assert!(agent.collect_warnings()[0].contains("legacy_agent_command_deprecated"));
+    }
+
+    #[test]
+    fn agent_validate_rejects_command_rules_for_vendor_driver() {
+        let agent = AgentResource {
+            metadata: super::super::metadata_with_name("ag-vendor-rules"),
+            spec: AgentSpec {
+                enabled: None,
+                command: String::new(),
+                driver: Some(crate::config::AgentDriverConfig {
+                    provider: crate::config::DriverProvider::Claude,
+                    transport: crate::config::DriverTransport::Cli,
+                    binary: None,
+                    options: Default::default(),
+                    claude: None,
+                    codex: None,
+                    shell: None,
+                    raw_args: vec![],
+                    unsafe_raw_args: false,
+                }),
+                capabilities: None,
+                metadata: None,
+                selection: None,
+                env: None,
+                prompt_delivery: None,
+                health_policy: None,
+                command_rules: vec![crate::config::AgentCommandRule {
+                    when: "true".to_string(),
+                    command: "echo selected".to_string(),
+                }],
+            },
+        };
+
+        let error = agent
+            .validate()
+            .expect_err("vendor driver command rules should fail closed");
+        assert!(error.to_string().contains("require driver shell/cli"));
     }
 
     #[test]
