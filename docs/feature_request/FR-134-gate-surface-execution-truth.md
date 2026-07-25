@@ -269,11 +269,25 @@ CI=1 bash scripts/qa/test-governance-ledger-tooling.sh   → EXIT=2（停在第 
 - `test-filesystem-trigger.sh` 的范围差异按上述规则处置：对齐 sibling 的 `--exclude orchestrator-gui`，或声明该门禁要求完整 workspace 并由其 job 安装 Tauri 依赖（后者属 FR-076 需求 1 范围，本 FR 不实施，只需记录归属）。
 - 禁止 `ci-required` 门禁把失败命令的输出丢弃：`>/dev/null 2>&1` 形态的调用须改为捕获到日志并在失败时回显，使 CI 日志足以定位根因而无需本地复现。
 
-### 8. 门禁存活性
+### 8. CI 存活性
 
-- 台账新增一个维度，记录每个 `ci-required` 门禁最近一次真实 CI 执行的结论与 run 引用。
-- 新增检查：`ci-required` 门禁不得处于已知持续失败状态；若确需在修复期内保持红色，必须在台账中显式标注为 `known-failing` 并附 ticket 或 FR 引用与预期修复期限。
-- 该维度的更新方式需可脚本化（例如从 `gh run` 拉取），不得依赖人工誊写——否则它会退化成与被治理对象同类的陈旧声明。
+**作用域为 `ci.yml` 的全部 job，而非仅台账中的 `ci-required` 门禁。** 这条区分是必要的：
+`qa-gate-surface.json` 只分类 `scripts/qa/*`，因此 `boundary-coverage`、`Rust test`、`clippy`、
+`miri`、`cross-compile` 等 job **都不在台账里**。`boundary-coverage` 已连红 6 次，
+按原措辞的检查根本不会看它一眼。
+
+这是本 FR 反复出现的那个模式的又一次实例：**存活性台账覆盖的是它认识的门禁，
+而不是它实际运行其上的 CI**。因此对象须由发现得出——解析 `.github/workflows/*.yml` 的
+job 列表——枚举只用于 `known-failing` 标注。
+
+- 台账新增一个维度，记录**每个 CI job** 最近一次真实执行的结论与 run 引用。
+- 新增检查：任何 job 不得处于已知持续失败状态；若确需在修复期内保持红色，必须显式标注为
+  `known-failing` 并附 ticket 或 FR 引用与预期修复期限。
+- job 清单由解析 workflow 得出；workflow 新增 job 而台账无对应条目即失败。
+- 该维度的更新方式需可脚本化（例如从 `gh run` 拉取），不得依赖人工誊写——否则它会退化成
+  与被治理对象同类的陈旧声明。
+- FR-135 修复的是 `boundary-coverage` 这一处具体故障；本条扩容后才能保证**下一个**
+  红了没人管的 job 会被发现。二者互不替代。
 
 **环境等价性**——存活性不只是"有没有人在看"，还包括门禁能否在其运行环境中通过：
 
@@ -338,8 +352,9 @@ CI=1 bash scripts/qa/test-governance-ledger-tooling.sh   → EXIT=2（停在第 
 - [ ] 修复后两个 job 的门禁能执行到各自的断言，而非停在 `command -v` 前置检查
 - [ ] workspace 范围差异被检查捕获；`test-filesystem-trigger.sh` 的差异已对齐或带理由声明，归属记录清楚
 - [ ] 无 `ci-required` 门禁以 `>/dev/null 2>&1` 丢弃失败命令输出；负向验证：故意使某条 cargo 命令失败，CI 日志足以定位根因
-- [ ] 台账记录每个 `ci-required` 门禁最近一次真实 CI 结论，且该维度可脚本化更新
-- [ ] 存活性检查对处于持续失败且未标注 `known-failing` 的门禁失败
+- [ ] 台账记录 **`ci.yml` 每个 job** 最近一次真实执行结论，且该维度可脚本化更新
+- [ ] 存活性检查对处于持续失败且未标注 `known-failing` 的 job 失败，`boundary-coverage` 即为验证样本
+- [ ] job 清单由解析 workflow 得出；负向 fixture 证明"workflow 新增 job 而台账无条目"会失败
 - [ ] `CI=1 bash scripts/qa/test-governance-ledger-tooling.sh` 退出 0；修复前该命令退出 2
 - [ ] 存在一条以 `CI=1` 运行全部 `ci-required` 门禁的检查，任一因环境变量差异失败即报错
 - [ ] `governance` job 一次运行能同时暴露账本工具与 workspace 范围两个问题（诊断不再被首个失败掩盖）
