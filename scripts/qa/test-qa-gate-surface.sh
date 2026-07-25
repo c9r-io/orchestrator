@@ -685,6 +685,25 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
   # rejects the defect, and every other check still passes on the same tree.
   TARGETED=()
 
+  # Applies a mutation and proves it landed. A fixture whose mutation silently
+  # fails to match reports "the check accepted the injected defect" when nothing
+  # was injected — it accuses the check of the fixture's own bug. That happened
+  # here the moment ci.yml's steps gained `id:` lines and two pattern-based
+  # fixtures stopped matching, so the guard is not hypothetical.
+  inject() {
+    local label="$1" file="$2"
+    shift 2
+    local before after
+    before="$(shasum "$file" | cut -d' ' -f1)"
+    "$@"
+    after="$(shasum "$file" | cut -d' ' -f1)"
+    if [[ "$before" == "$after" ]]; then
+      fail "$label: the mutation did not apply to ${file##*/}; the fixture proves nothing"
+      return 1
+    fi
+    return 0
+  }
+
   expect_fail() {
     local name="$1"
     local dir="$2"
@@ -768,17 +787,23 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
   #    Deletion is the case an author has in mind; commenting out with a note is
   #    what actually happens during a flaky-test triage.
   d="$(new_case f8)"
-  perl -0pi -e 's{      - name: Filesystem trigger contracts\n        run: \./scripts/qa/test-filesystem-trigger\.sh}{      - name: Filesystem trigger contracts\n        # disabled: ./scripts/qa/test-filesystem-trigger.sh was flaky}' \
-    "$d/.github/workflows/ci.yml"
-  expect_fail "fixture 8" "$d" check_wiring_truth "a run: step commented out with an explanation is not wiring"
+  if inject "fixture 8" "$d/.github/workflows/ci.yml" \
+    perl -pi -e 's{^(\s*)run: \./scripts/qa/test-filesystem-trigger\.sh$}{$1# disabled: ./scripts/qa/test-filesystem-trigger.sh was flaky}' \
+      "$d/.github/workflows/ci.yml"; then
+    expect_fail "fixture 8" "$d" check_wiring_truth "a run: step commented out with an explanation is not wiring"
+  fi
 
   # 9. The same claim made three other ways, none of which executes anything.
   #    One fixture per shape would triple the runtime for one assertion, so they
   #    share a tree: any of them counting as wiring fails the check.
   d="$(new_case f9)"
-  perl -0pi -e 's{      - name: Legacy coordination decommission contracts\n        run: \./scripts/qa/test-legacy-coordination-decommission\.sh}{      - name: runs ./scripts/qa/test-legacy-coordination-decommission.sh\n        if: false\n        run: |\n          cat > /dev/null <<EOF\n          ./scripts/qa/test-legacy-coordination-decommission.sh\n          EOF}' \
-    "$d/.github/workflows/ci.yml"
-  expect_fail "fixture 9" "$d" check_wiring_truth "an if: false step, a name: mention and a heredoc body are not wiring"
+  if inject "fixture 9" "$d/.github/workflows/ci.yml" \
+    perl -pi -e '
+      s{^(\s*)- name: Legacy coordination decommission contracts$}{$1- name: runs ./scripts/qa/test-legacy-coordination-decommission.sh};
+      s{^(\s*)run: \./scripts/qa/test-legacy-coordination-decommission\.sh$}{$1if: false\n$1run: |\n$1  cat > /dev/null <<EOF\n$1  ./scripts/qa/test-legacy-coordination-decommission.sh\n$1  EOF};
+    ' "$d/.github/workflows/ci.yml"; then
+    expect_fail "fixture 9" "$d" check_wiring_truth "an if: false step, a name: mention and a heredoc body are not wiring"
+  fi
 
   # 10. An unpinned agent balanced by a fake binary on an unrelated one. Under
   #     the whole-file count this reads as providers=2 pins=2 and passes.
@@ -808,17 +833,21 @@ BUNDLE
   #     line; commenting it out is the mutation the old grep could not see,
   #     because a commented line contains the same characters.
   d="$(new_case f11)"
-  perl -pi -e 's{^assert_provider_shadow}{# assert_provider_shadow}' \
-    "$d/scripts/qa/test-agent-driver-production-parity.sh"
-  expect_fail "fixture 11" "$d" check_provider_isolation "commenting out the shadow assertion fails the isolation check"
+  if inject "fixture 11" "$d/scripts/qa/test-agent-driver-production-parity.sh" \
+    perl -pi -e 's{^assert_provider_shadow}{# assert_provider_shadow}' \
+      "$d/scripts/qa/test-agent-driver-production-parity.sh"; then
+    expect_fail "fixture 11" "$d" check_provider_isolation "commenting out the shadow assertion fails the isolation check"
+  fi
 
   # 12. The shared assertion neutered so it can no longer detect a missing
   #     shadow. The call site is untouched, so only executing the mechanism
   #     catches this — no amount of reading the gate would.
   d="$(new_case f12)"
-  perl -0pi -e 's/^assert_provider_shadow\(\) \{$/assert_provider_shadow() {\n  return 0/m' \
-    "$d/scripts/lib/provider_isolation.sh"
-  expect_fail "fixture 12" "$d" check_provider_isolation "an isolation assertion that cannot fail is not an assertion"
+  if inject "fixture 12" "$d/scripts/lib/provider_isolation.sh" \
+    perl -0pi -e 's/^assert_provider_shadow\(\) \{$/assert_provider_shadow() {\n  return 0/m' \
+      "$d/scripts/lib/provider_isolation.sh"; then
+    expect_fail "fixture 12" "$d" check_provider_isolation "an isolation assertion that cannot fail is not an assertion"
+  fi
 
   # 13. A claim planted outside the old scan scope. README.md is one of 41
   #     tracked Markdown files that docs + .claude/skills never reached.
@@ -851,16 +880,20 @@ BUNDLE
   # 17. ripgrep removed from the job that installs it. This is the defect that
   #     was live in two jobs for a full FR cycle, restated as a fixture.
   d="$(new_case f17)"
-  perl -pi -e 's/ jq ruby ripgrep sqlite3 protobuf-compiler/ jq ruby sqlite3 protobuf-compiler/' \
-    "$d/.github/workflows/ci.yml"
-  expect_fail "fixture 17" "$d" check_job_dependencies "a job that stops installing ripgrep can no longer run the gates that need it"
+  if inject "fixture 17" "$d/.github/workflows/ci.yml" \
+    perl -pi -e 's/ jq ruby ripgrep sqlite3 protobuf-compiler/ jq ruby sqlite3 protobuf-compiler/' \
+      "$d/.github/workflows/ci.yml"; then
+    expect_fail "fixture 17" "$d" check_job_dependencies "a job that stops installing ripgrep can no longer run the gates that need it"
+  fi
 
   # 18. The workspace exclusion dropped, recreating the superset that could
   #     never build on Linux.
   d="$(new_case f18)"
-  perl -pi -e 's/ --workspace --exclude orchestrator-gui/ --workspace/' \
-    "$d/scripts/qa/test-filesystem-trigger.sh"
-  expect_fail "fixture 18" "$d" check_workspace_scope "a gate widening past its sibling jobs without a declared reason fails"
+  if inject "fixture 18" "$d/scripts/qa/test-filesystem-trigger.sh" \
+    perl -pi -e 's/ --workspace --exclude orchestrator-gui/ --workspace/' \
+      "$d/scripts/qa/test-filesystem-trigger.sh"; then
+    expect_fail "fixture 18" "$d" check_workspace_scope "a gate widening past its sibling jobs without a declared reason fails"
+  fi
 
   # 19. A cargo command whose output is thrown away. No --workspace, so this
   #     targets the diagnostics rule and nothing else.
@@ -875,9 +908,11 @@ BUNDLE
 
   # 20. The stub backstop removed from the job whose gate has no other barrier.
   d="$(new_case f20)"
-  perl -0pi -e 's{      # This job.s gate is isolated by fixture pinning alone.*?\n      - name: Install failing provider stubs\n        uses: \./\.github/actions/provider-stubs\n\n}{}s' \
-    "$d/.github/workflows/ci.yml"
-  expect_fail "fixture 20" "$d" check_provider_stub_coverage "a provider-capable job without the stub backstop fails"
+  if inject "fixture 20" "$d/.github/workflows/ci.yml" \
+    perl -0pi -e 's{      # This job.s gate is isolated by fixture pinning alone.*?\n      - name: Install failing provider stubs\n        uses: \./\.github/actions/provider-stubs\n\n}{}s' \
+      "$d/.github/workflows/ci.yml"; then
+    expect_fail "fixture 20" "$d" check_provider_stub_coverage "a provider-capable job without the stub backstop fails"
+  fi
 
   # ── Behavioural: the diagnostics rule is about output reaching the log ──
   #
