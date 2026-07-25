@@ -108,6 +108,7 @@ impl AgentContext {
         result = result.replace("{source_tree}", &self.workspace_root.to_string_lossy());
 
         if let Some(pipeline) = pipeline {
+            result = result.replace("{goal}", &escape_for_bash_dquote(&pipeline.preserved.goal));
             result = result.replace(
                 "{build_output}",
                 &escape_for_bash_dquote(&pipeline.prev_stdout),
@@ -311,5 +312,25 @@ mod tests {
         assert!(rendered.contains("\\`mod.rs\\`"));
         assert!(rendered.contains("\\`api.rs\\`"));
         assert!(!rendered.contains(" `resource.rs` "));
+    }
+
+    #[test]
+    fn test_preserved_goal_is_rendered_without_generic_variable() {
+        let ctx = AgentContext::new(
+            "task1".to_string(),
+            "item1".to_string(),
+            1,
+            "plan".to_string(),
+            PathBuf::from("/workspace"),
+            "ws1".to_string(),
+        );
+        let mut pipeline = orchestrator_config::config::PipelineVariables::default();
+        pipeline.preserved.goal = "Ship `safe`".to_string();
+
+        let rendered =
+            ctx.render_template_with_pipeline(r#"claude "Goal: {goal}""#, Some(&pipeline));
+
+        assert_eq!(rendered, r#"claude "Goal: Ship \`safe\`""#);
+        assert!(!pipeline.vars.contains_key("goal"));
     }
 }

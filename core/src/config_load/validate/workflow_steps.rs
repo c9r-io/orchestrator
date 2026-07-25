@@ -1,8 +1,8 @@
 use super::common::AgentLookup;
 use crate::cli_types::WorkflowStepSpec;
 use crate::config::{
-    CancelSemantics, CaptureSource, DriverTransport, SideEffectClass, StepSemanticKind,
-    ToolHosting, WorkflowStepConfig, WorkspaceAccess, resolve_step_semantic_kind,
+    CancelSemantics, DriverTransport, PostAction, SideEffectClass, StepSemanticKind, ToolHosting,
+    WorkflowStepConfig, WorkspaceAccess, resolve_step_semantic_kind,
 };
 use anyhow::Result;
 use std::collections::HashSet;
@@ -54,21 +54,24 @@ pub(super) fn validate_workflow_steps<A: AgentLookup>(
         if !is_self_contained {
             validate_driver_candidates(step, workflow_id, key, agents)?;
         }
-        for capture in &step.behavior.captures {
-            if capture.json_path.is_some()
-                && !matches!(
-                    capture.source,
-                    CaptureSource::Stdout | CaptureSource::Stderr
-                )
-            {
-                anyhow::bail!(
-                    "workflow '{}' step '{}' capture '{}' uses json_path with unsupported source '{:?}'",
-                    workflow_id,
-                    step.id,
-                    capture.var,
-                    capture.source
-                );
-            }
+        if !step.behavior.captures.is_empty() {
+            anyhow::bail!(
+                "[legacy_coordination_removed] workflow '{}' step '{}' uses behavior.captures; use typed driver/tool results",
+                workflow_id,
+                step.id
+            );
+        }
+        if step.behavior.post_actions.iter().any(|action| {
+            matches!(
+                action,
+                PostAction::SpawnTasks(_) | PostAction::GenerateItems(_)
+            )
+        }) {
+            anyhow::bail!(
+                "[legacy_json_path_removed] workflow '{}' step '{}' uses a JSONPath-backed post-action; use typed daemon tools",
+                workflow_id,
+                step.id
+            );
         }
         if let Some(prehook) = step.prehook.as_ref() {
             crate::prehook::validate_step_prehook(prehook, workflow_id, key)?;
@@ -211,6 +214,7 @@ const BUILTIN_CEL_VARS: &[&str] = &[
     "cycle",
     "max_cycles",
     "is_last_cycle",
+    "api_publishable",
     "last_sandbox_denied",
     "sandbox_denied_count",
     "last_sandbox_denial_reason",

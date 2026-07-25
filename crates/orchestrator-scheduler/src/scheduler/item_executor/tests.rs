@@ -24,6 +24,89 @@ fn empty_pipeline() -> PipelineVariables {
         build_errors: Vec::new(),
         test_failures: Vec::new(),
         vars: HashMap::new(),
+        ..PipelineVariables::default()
+    }
+}
+
+// Test-only compatibility oracle retained for rollback evidence. Production
+// builds contain no capture/JSONPath extraction path.
+impl StepExecutionAccumulator {
+    fn apply_captures(
+        &mut self,
+        captures: &[CaptureDecl],
+        artifacts_dir: &std::path::Path,
+        task_id: &str,
+        step_id: &str,
+        result: &agent_orchestrator::dto::RunResult,
+    ) -> Vec<String> {
+        let mut missing = Vec::new();
+        for capture in captures {
+            match capture.source {
+                CaptureSource::ExitCode => {
+                    self.exit_codes
+                        .insert(step_id.to_string(), result.exit_code);
+                    self.pipeline_vars
+                        .vars
+                        .insert(capture.var.clone(), result.exit_code.to_string());
+                }
+                CaptureSource::FailedFlag => {
+                    let failed = !result.is_success();
+                    self.flags.insert(capture.var.clone(), failed);
+                    self.pipeline_vars
+                        .vars
+                        .insert(capture.var.clone(), failed.to_string());
+                }
+                CaptureSource::SuccessFlag => {
+                    let success = result.is_success();
+                    self.flags.insert(capture.var.clone(), success);
+                    self.pipeline_vars
+                        .vars
+                        .insert(capture.var.clone(), success.to_string());
+                }
+                CaptureSource::Stdout | CaptureSource::Stderr => {
+                    let Some(output) = result.output.as_ref() else {
+                        continue;
+                    };
+                    let raw = if capture.source == CaptureSource::Stdout {
+                        &output.stdout
+                    } else {
+                        &output.stderr
+                    };
+                    let value = capture.json_path.as_deref().and_then(|path| {
+                        let effective =
+                            agent_orchestrator::json_extract::extract_stream_json_result(raw)
+                                .unwrap_or_else(|| raw.clone());
+                        serde_json::from_str::<serde_json::Value>(&effective)
+                            .ok()
+                            .and_then(|json| {
+                                agent_orchestrator::json_extract::extract_field(&json, path)
+                            })
+                    });
+                    if capture.json_path.is_some() && value.is_none() {
+                        missing.push(capture.var.clone());
+                    }
+                    let value = value.unwrap_or_else(|| {
+                        if capture.json_path.is_some() {
+                            String::new()
+                        } else {
+                            raw.clone()
+                        }
+                    });
+                    if capture.source == CaptureSource::Stdout {
+                        spill_large_var(
+                            artifacts_dir,
+                            task_id,
+                            &capture.var,
+                            value,
+                            &mut self.pipeline_vars,
+                        );
+                    } else {
+                        self.pipeline_vars.vars.insert(capture.var.clone(), value);
+                    }
+                }
+            }
+        }
+        missing
     }
 }
 
@@ -569,6 +652,31 @@ fn merge_task_pipeline_vars_preserves_existing_build_errors() {
     );
 }
 
+#[test]
+fn narrow_preserved_channels_survive_accumulator_merge_without_generic_keys() {
+    let mut pipeline = empty_pipeline();
+    pipeline.preserved.goal = "ship".to_string();
+    pipeline.preserved.last_sandbox_denied = true;
+    pipeline.preserved.sandbox_denied_count = 2;
+    pipeline.preserved.last_sandbox_denial_reason = Some("network".to_string());
+
+    let mut acc = StepExecutionAccumulator::new(pipeline.clone());
+    acc.merge_task_pipeline_vars(&pipeline);
+
+    assert_eq!(acc.pipeline_vars.preserved, pipeline.preserved);
+    assert!(acc.last_sandbox_denied);
+    assert_eq!(acc.sandbox_denied_count, 2);
+    assert_eq!(acc.last_sandbox_denial_reason.as_deref(), Some("network"));
+    for name in [
+        "goal",
+        "last_sandbox_denied",
+        "sandbox_denied_count",
+        "last_sandbox_denial_reason",
+    ] {
+        assert!(!acc.pipeline_vars.vars.contains_key(name));
+    }
+}
+
 // ── apply_captures() ─────────────────────
 
 #[test]
@@ -931,11 +1039,17 @@ fn benchmark_score_capture_can_drive_item_select_max() {
     let items = vec![
         ItemEvalState {
             item_id: "approach-a".to_string(),
-            pipeline_vars: first.pipeline_vars.vars.clone(),
+            metrics: HashMap::from([(
+                "score".to_string(),
+                first.pipeline_vars.vars["score"].parse().unwrap(),
+            )]),
         },
         ItemEvalState {
             item_id: "approach-b".to_string(),
-            pipeline_vars: second.pipeline_vars.vars.clone(),
+            metrics: HashMap::from([(
+                "score".to_string(),
+                second.pipeline_vars.vars["score"].parse().unwrap(),
+            )]),
         },
     ];
     let config = ItemSelectConfig {
@@ -1049,12 +1163,8 @@ fn to_prehook_context_fix_required_from_tickets_even_without_qa_failed() {
 #[test]
 fn to_prehook_context_self_test_vars() {
     let mut acc = StepExecutionAccumulator::new(empty_pipeline());
-    acc.pipeline_vars
-        .vars
-        .insert("self_test_exit_code".to_string(), "0".to_string());
-    acc.pipeline_vars
-        .vars
-        .insert("self_test_passed".to_string(), "true".to_string());
+    acc.pipeline_vars.signals.self_test_exit_code = Some(0);
+    acc.pipeline_vars.signals.self_test_passed = true;
 
     let item = make_item("item-1", "test.md");
     let ctx = make_task_ctx(vec![], Some(1), 1);

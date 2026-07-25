@@ -424,7 +424,7 @@ fn normalize_sets_loop_guard_builtin_and_is_guard() {
 }
 
 #[test]
-fn normalize_sets_default_behavior_for_qa_step() {
+fn normalize_sets_non_coordination_defaults_for_qa_step() {
     let mut workflow = make_workflow(vec![make_step("qa", true)]);
     normalize_workflow_config(&mut workflow);
     let qa = workflow
@@ -436,17 +436,12 @@ fn normalize_sets_default_behavior_for_qa_step() {
         qa.behavior.collect_artifacts,
         "qa step should have collect_artifacts=true"
     );
-    assert!(
-        qa.behavior
-            .captures
-            .iter()
-            .any(|c| c.var == "qa_failed" && c.source == CaptureSource::FailedFlag),
-        "qa step should capture qa_failed from FailedFlag"
-    );
+    assert!(qa.behavior.captures.is_empty());
+    assert!(qa.behavior.post_actions.is_empty());
 }
 
 #[test]
-fn normalize_sets_default_behavior_for_fix_step() {
+fn normalize_does_not_inject_coordination_for_fix_step() {
     let mut workflow = make_workflow(vec![make_step("fix", true)]);
     normalize_workflow_config(&mut workflow);
     let fix = workflow
@@ -454,17 +449,12 @@ fn normalize_sets_default_behavior_for_fix_step() {
         .iter()
         .find(|s| s.id == "fix")
         .expect("fix step should exist");
-    assert!(
-        fix.behavior
-            .captures
-            .iter()
-            .any(|c| c.var == "fix_success" && c.source == CaptureSource::SuccessFlag),
-        "fix step should capture fix_success from SuccessFlag"
-    );
+    assert!(fix.behavior.captures.is_empty());
+    assert!(fix.behavior.post_actions.is_empty());
 }
 
 #[test]
-fn normalize_sets_default_behavior_for_retest_step() {
+fn normalize_sets_non_coordination_defaults_for_retest_step() {
     let mut workflow = make_workflow(vec![make_step("retest", true)]);
     normalize_workflow_config(&mut workflow);
     let retest = workflow
@@ -476,14 +466,8 @@ fn normalize_sets_default_behavior_for_retest_step() {
         retest.behavior.collect_artifacts,
         "retest step should have collect_artifacts=true"
     );
-    assert!(
-        retest
-            .behavior
-            .captures
-            .iter()
-            .any(|c| c.var == "retest_success" && c.source == CaptureSource::SuccessFlag),
-        "retest step should capture retest_success from SuccessFlag"
-    );
+    assert!(retest.behavior.captures.is_empty());
+    assert!(retest.behavior.post_actions.is_empty());
 }
 
 #[test]

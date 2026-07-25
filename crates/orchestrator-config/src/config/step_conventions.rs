@@ -6,7 +6,7 @@
 //! if the ID has no entry here and no explicit configuration, the universal
 //! fallback rule applies: `required_capability = step_id`.
 
-use super::{CaptureDecl, CaptureSource, PostAction, StepScope};
+use super::StepScope;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -28,10 +28,6 @@ pub struct StepConvention {
     pub is_guard: bool,
     /// Default collect_artifacts flag.
     pub collect_artifacts: bool,
-    /// Default captures to inject when user hasn't configured them.
-    pub captures: Vec<CaptureDecl>,
-    /// Default post_actions to inject when user hasn't configured them.
-    pub post_actions: Vec<PostAction>,
 }
 
 /// Registry of step conventions, keyed by step ID.
@@ -57,36 +53,6 @@ impl StepConventionRegistry {
                 _ => StepScope::Task,
             });
 
-            let captures = entry
-                .captures
-                .into_iter()
-                .filter_map(|c| {
-                    let source = match c.source.as_str() {
-                        "failed_flag" => CaptureSource::FailedFlag,
-                        "success_flag" => CaptureSource::SuccessFlag,
-                        "stdout" => CaptureSource::Stdout,
-                        "stderr" => CaptureSource::Stderr,
-                        "exit_code" => CaptureSource::ExitCode,
-                        _ => return None,
-                    };
-                    Some(CaptureDecl {
-                        var: c.var,
-                        source,
-                        json_path: None,
-                    })
-                })
-                .collect();
-
-            let post_actions = entry
-                .post_actions
-                .into_iter()
-                .filter_map(|a| match a.as_str() {
-                    "create_ticket" => Some(PostAction::CreateTicket),
-                    "scan_tickets" => Some(PostAction::ScanTickets),
-                    _ => None,
-                })
-                .collect();
-
             conventions.insert(
                 id,
                 StepConvention {
@@ -94,8 +60,6 @@ impl StepConventionRegistry {
                     scope,
                     is_guard: entry.is_guard,
                     collect_artifacts: entry.collect_artifacts,
-                    captures,
-                    post_actions,
                 },
             );
         }
@@ -150,16 +114,6 @@ struct RawStepConvention {
     is_guard: bool,
     #[serde(default)]
     collect_artifacts: bool,
-    #[serde(default)]
-    captures: Vec<RawCapture>,
-    #[serde(default)]
-    post_actions: Vec<String>,
-}
-
-#[derive(Deserialize)]
-struct RawCapture {
-    var: String,
-    source: String,
 }
 
 // ── Tests ────────────────────────────────────────────────────────────
@@ -237,26 +191,17 @@ mod tests {
     }
 
     #[test]
-    fn qa_step_has_captures_and_post_actions() {
+    fn qa_step_collects_artifacts_without_legacy_coordination_defaults() {
         let registry = StepConventionRegistry::builtin();
         let qa = registry.lookup("qa").unwrap();
         assert!(qa.collect_artifacts);
-        assert_eq!(qa.captures.len(), 1);
-        assert_eq!(qa.captures[0].var, "qa_failed");
-        assert_eq!(qa.captures[0].source, CaptureSource::FailedFlag);
-        assert_eq!(qa.post_actions.len(), 1);
-        assert_eq!(qa.post_actions[0], PostAction::CreateTicket);
     }
 
     #[test]
-    fn fix_step_has_captures() {
+    fn fix_step_has_no_implicit_coordination_behavior() {
         let registry = StepConventionRegistry::builtin();
         let fix = registry.lookup("fix").unwrap();
         assert!(!fix.collect_artifacts);
-        assert_eq!(fix.captures.len(), 1);
-        assert_eq!(fix.captures[0].var, "fix_success");
-        assert_eq!(fix.captures[0].source, CaptureSource::SuccessFlag);
-        assert!(fix.post_actions.is_empty());
     }
 
     #[test]

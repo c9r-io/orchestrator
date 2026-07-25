@@ -1,6 +1,4 @@
-use crate::scheduler::spawn::{
-    SpawnContext, execute_spawn_task, execute_spawn_tasks, validate_spawn_depth,
-};
+use crate::scheduler::spawn::{SpawnContext, execute_spawn_task, validate_spawn_depth};
 use agent_orchestrator::config::{
     OnFailureAction, OnSuccessAction, PostAction, TaskExecutionStep, TaskRuntimeContext,
 };
@@ -13,7 +11,7 @@ use agent_orchestrator::ticket::{
 use anyhow::Result;
 use serde_json::json;
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::warn;
 
 use super::accumulator::StepExecutionAccumulator;
 use super::dispatch_builtin::is_execution_hard_failure;
@@ -36,27 +34,41 @@ pub(super) async fn apply_step_results(
     result: &agent_orchestrator::dto::RunResult,
     acc: &mut StepExecutionAccumulator,
 ) -> Result<bool> {
-    // 3. Capture outputs
+    // 3. Record canonical typed step outcomes. Legacy capture extraction has
+    // been removed; these flags are scheduler-owned execution facts.
     acc.exit_codes.insert(step.id.clone(), result.exit_code);
-    let captures_missing = acc.apply_captures(
-        &step.behavior.captures,
-        &task_ctx.artifacts_dir,
-        task_id,
-        &step.id,
-        result,
-    );
+    match phase {
+        "qa" | "qa_testing" => {
+            acc.flags
+                .insert("qa_failed".to_string(), !result.is_success());
+        }
+        "fix" | "ticket_fix" => {
+            acc.flags
+                .insert("fix_success".to_string(), result.is_success());
+        }
+        "retest" => {
+            acc.flags
+                .insert("retest_success".to_string(), result.is_success());
+        }
+        _ => {}
+    }
     acc.step_ran.insert(step.id.clone(), true);
     acc.apply_run_diagnostics(result);
     apply_coordination_tool_effects(result, acc);
 
-    // Inject streaming-run signals (tools_called, tool_error_count, run_cost_usd, …)
-    // as typed pipeline vars so prehook / convergence / finalize CEL can drive
-    // coordination from what the agent did. Empty for non-streaming runs.
-    if let Some(output) = result.output.as_ref()
-        && !uses_coordination_tool_model(&output.artifacts)
-    {
+    // Project only the explicitly governed streaming signals into typed state.
+    if let Some(output) = result.output.as_ref() {
         for (key, value) in agent_orchestrator::stream_json::stream_signal_vars(&output.artifacts) {
-            acc.pipeline_vars.vars.insert(key, value);
+            match key.as_str() {
+                "tools_called" => {
+                    acc.pipeline_vars.signals.tools_called =
+                        serde_json::from_str(&value).unwrap_or_default();
+                }
+                "tool_error_count" => {
+                    acc.pipeline_vars.signals.tool_error_count = value.parse().unwrap_or(0);
+                }
+                _ => {}
+            }
         }
     }
 
@@ -171,47 +183,6 @@ pub(super) async fn apply_step_results(
                         Err(e) => warn!(error = %e, "spawn_task failed"),
                     }
                 }
-            }
-            PostAction::SpawnTasks(spawn_action) if result.is_success() => {
-                if let Err(e) =
-                    validate_spawn_depth(task_ctx.spawn_depth, task_ctx.safety.max_spawn_depth)
-                {
-                    warn!(error = %e, "spawn_tasks skipped: depth limit");
-                } else {
-                    let spawn_ctx = SpawnContext {
-                        state,
-                        parent_task_id: task_id,
-                        parent_project_id: &task_ctx.project_id,
-                        parent_workspace_id: &task_ctx.workspace_id,
-                        parent_workflow_id: &task_ctx.workflow_id,
-                        parent_spawn_depth: task_ctx.spawn_depth,
-                        pipeline_vars: &acc.pipeline_vars.vars,
-                    };
-                    match execute_spawn_tasks(&spawn_ctx, spawn_action) {
-                        Ok(child_ids) => {
-                            info!(count = child_ids.len(), "spawned batch tasks");
-                            insert_event(
-                                state,
-                                task_id,
-                                Some(item_id),
-                                "tasks_spawned",
-                                json!({"child_task_ids": child_ids}),
-                            )
-                            .await?;
-                        }
-                        Err(e) => warn!(error = %e, "spawn_tasks failed"),
-                    }
-                }
-            }
-            PostAction::GenerateItems(gen_action) => {
-                // Buffer for application after segment completes
-                tracing::info!(
-                    from_var = %gen_action.from_var,
-                    json_path = %gen_action.json_path,
-                    replace = gen_action.replace,
-                    "buffering GenerateItems post-action"
-                );
-                acc.pending_generate_items = Some(gen_action.clone());
             }
             PostAction::StorePut {
                 store,
@@ -340,9 +311,6 @@ pub(super) async fn apply_step_results(
     if let Some(parent_step) = parent_step {
         payload["parent_step"] = json!(parent_step);
     }
-    if !captures_missing.is_empty() {
-        payload["captures_missing"] = json!(captures_missing);
-    }
     insert_event(state, task_id, Some(item_id), finish_event_type, payload).await?;
 
     if is_execution_hard_failure(result) {
@@ -450,8 +418,9 @@ fn apply_coordination_tool_effects(
                     receipt.get("value").and_then(serde_json::Value::as_f64),
                 ) {
                     acc.pipeline_vars
-                        .vars
-                        .insert(name.to_string(), value.to_string());
+                        .signals
+                        .metrics
+                        .insert(name.to_string(), value);
                 }
             }
             _ => {}
@@ -461,25 +430,6 @@ fn apply_coordination_tool_effects(
 
 fn bare_tool_name(tool: &str) -> String {
     tool.strip_prefix("mcp__orch__").unwrap_or(tool).to_string()
-}
-
-fn uses_coordination_tool_model(artifacts: &[agent_orchestrator::collab::Artifact]) -> bool {
-    use agent_orchestrator::collab::ArtifactKind;
-    artifacts.iter().any(|artifact| {
-        let ArtifactKind::ToolCall { tool } = &artifact.kind else {
-            return false;
-        };
-        matches!(
-            bare_tool_name(tool).as_str(),
-            "run_tests"
-                | "mark_item"
-                | "mark_done"
-                | "create_ticket"
-                | "scan_tickets"
-                | "generate_items"
-                | "record_metric"
-        )
-    })
 }
 
 fn parse_tool_result_payload(payload: &serde_json::Value) -> Option<serde_json::Value> {
@@ -653,7 +603,6 @@ mod coordination_effect_tests {
                 "is_error":false
             })),
         ];
-        assert!(uses_coordination_tool_model(&artifacts));
         let result = result_with_artifacts(artifacts);
         let mut accumulator = accumulator();
 
@@ -678,15 +627,14 @@ mod coordination_effect_tests {
                 "is_error":false
             })),
         ];
-        assert!(uses_coordination_tool_model(&artifacts));
         let result = result_with_artifacts(artifacts);
         let mut accumulator = accumulator();
 
         apply_coordination_tool_effects(&result, &mut accumulator);
 
         assert_eq!(
-            accumulator.pipeline_vars.vars.get("score"),
-            Some(&"0.91".to_string())
+            accumulator.pipeline_vars.signals.metrics.get("score"),
+            Some(&0.91)
         );
     }
 

@@ -137,19 +137,26 @@ pub(super) async fn evaluate_loop_continuation(
         let conv_ctx = ConvergenceContext {
             cycle: task_ctx.current_cycle,
             active_ticket_count: unresolved,
-            self_test_passed: task_ctx
-                .pipeline_vars
-                .vars
-                .get("self_test_passed")
-                .map(|v| v == "true")
-                .unwrap_or(false),
+            self_test_passed: task_ctx.pipeline_vars.signals.self_test_passed,
             max_cycles: task_ctx
                 .execution_plan
                 .loop_policy
                 .guard
                 .max_cycles
                 .unwrap_or(0),
-            vars: task_ctx.pipeline_vars.vars.clone(),
+            vars: {
+                let mut vars = task_ctx.pipeline_vars.vars.clone();
+                vars.insert(
+                    "tools_called".to_string(),
+                    serde_json::to_string(&task_ctx.pipeline_vars.signals.tools_called)
+                        .unwrap_or_else(|_| "[]".to_string()),
+                );
+                vars.insert(
+                    "tool_error_count".to_string(),
+                    task_ctx.pipeline_vars.signals.tool_error_count.to_string(),
+                );
+                vars
+            },
         };
         for entry in exprs {
             match evaluate_convergence_expression(entry.when.trim(), &conv_ctx) {

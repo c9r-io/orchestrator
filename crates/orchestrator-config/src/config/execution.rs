@@ -365,8 +365,7 @@ pub struct StepPrehookContext {
     /// Non-empty only when the doc is marked unsafe but has safe scenarios.
     #[serde(default)]
     pub self_referential_safe_scenarios: Vec<String>,
-    /// User-defined pipeline variables (from step captures).
-    /// Available in prehook CEL expressions with automatic type inference.
+    /// Deprecated compatibility payload. It is not injected into CEL.
     #[serde(default)]
     pub vars: std::collections::HashMap<String, String>,
 }
@@ -382,7 +381,7 @@ pub struct ConvergenceContext {
     pub self_test_passed: bool,
     /// Max cycles configured for the workflow.
     pub max_cycles: u32,
-    /// User-defined pipeline variables (from step captures).
+    /// Deprecated compatibility payload. It is not injected into CEL.
     pub vars: std::collections::HashMap<String, String>,
 }
 
@@ -476,8 +475,7 @@ pub struct ItemFinalizeContext {
     pub sandbox_denied_count: u32,
     /// Human-readable reason for the latest sandbox denial.
     pub last_sandbox_denial_reason: Option<String>,
-    /// Captured pipeline variables (including streaming-run signals such as
-    /// `tools_called` / `tool_error_count`), bound into CEL with type inference.
+    /// Deprecated compatibility payload. It is not injected into CEL.
     pub vars: std::collections::HashMap<String, String>,
 }
 

@@ -32,22 +32,11 @@ steps:
   qa:
     scope: item
     collect_artifacts: true
-    captures:
-      - var: qa_failed
-        source: failed_flag
-    post_actions:
-      - create_ticket
   fix:
     scope: item
-    captures:
-      - var: fix_success
-        source: success_flag
   retest:
     scope: item
     collect_artifacts: true
-    captures:
-      - var: retest_success
-        source: success_flag
   build:
     scope: task
   test:
@@ -65,16 +54,8 @@ steps:
   qa_testing:
     scope: item
     collect_artifacts: true
-    captures:
-      - var: qa_failed
-        source: failed_flag
-    post_actions:
-      - create_ticket
   ticket_fix:
     scope: item
-    captures:
-      - var: fix_success
-        source: success_flag
   doc_governance:
     scope: task
   align_tests:

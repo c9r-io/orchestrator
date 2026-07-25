@@ -425,6 +425,7 @@ pub async fn load_task_runtime_context(
             if !task_goal.is_empty() {
                 pv.vars.entry("goal".to_string()).or_insert(task_goal);
             }
+            pv.normalize_preserved_channels();
             pv
         },
         pinned_invariants: std::sync::Arc::new(safety.invariants.clone()),
@@ -533,10 +534,8 @@ mod tests {
         assert_eq!(ctx.current_cycle, 0);
         assert!(ctx.init_done);
         assert!(!ctx.execution_plan.finalize.rules.is_empty());
-        assert_eq!(
-            ctx.pipeline_vars.vars.get("goal").map(String::as_str),
-            Some("runtime-test-goal")
-        );
+        assert_eq!(ctx.pipeline_vars.preserved.goal, "runtime-test-goal");
+        assert!(!ctx.pipeline_vars.vars.contains_key("goal"));
         assert!(!ctx.execution_plan.steps.is_empty());
     }
 

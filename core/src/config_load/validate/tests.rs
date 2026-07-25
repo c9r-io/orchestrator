@@ -348,10 +348,7 @@ fn validate_workflow_config_rejects_json_path_on_exit_code_capture() {
     let err = validate_workflow_config(&config, &workflow, "test-workflow")
         .expect_err("json_path on exit_code should be rejected");
 
-    assert!(
-        err.to_string()
-            .contains("uses json_path with unsupported source")
-    );
+    assert!(err.to_string().contains("[legacy_coordination_removed]"));
 }
 
 #[test]

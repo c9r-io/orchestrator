@@ -1,14 +1,7 @@
 use agent_orchestrator::config::{
-    CaptureSource, ItemFinalizeContext, PipelineVariables, StepPrehookContext, TaskRuntimeContext,
-};
-use agent_orchestrator::json_extract::{
-    extract_field, extract_stream_json_result, repair_unquoted_json,
+    ItemFinalizeContext, PipelineVariables, StepPrehookContext, TaskRuntimeContext,
 };
 use std::collections::HashMap;
-use std::path::Path;
-use tracing::warn;
-
-use super::spill::spill_large_var;
 
 /// Accumulator that tracks state across steps in the unified execution loop.
 pub struct StepExecutionAccumulator {
@@ -30,12 +23,13 @@ pub struct StepExecutionAccumulator {
     pub sandbox_denied_count: u32,
     pub last_sandbox_denial_reason: Option<String>,
     pub terminal: bool,
-    /// Buffered GenerateItems action from a post-action, to be applied after segment completes.
-    pub pending_generate_items: Option<agent_orchestrator::config::GenerateItemsAction>,
 }
 
 impl StepExecutionAccumulator {
     pub fn new(pipeline_vars: PipelineVariables) -> Self {
+        let last_sandbox_denied = pipeline_vars.preserved.last_sandbox_denied;
+        let sandbox_denied_count = pipeline_vars.preserved.sandbox_denied_count;
+        let last_sandbox_denial_reason = pipeline_vars.preserved.last_sandbox_denial_reason.clone();
         Self {
             item_status: "pending".to_string(),
             pipeline_vars,
@@ -51,11 +45,10 @@ impl StepExecutionAccumulator {
             qa_quality_score: None,
             fix_confidence: None,
             fix_quality_score: None,
-            last_sandbox_denied: false,
-            sandbox_denied_count: 0,
-            last_sandbox_denial_reason: None,
+            last_sandbox_denied,
+            sandbox_denied_count,
+            last_sandbox_denial_reason,
             terminal: false,
-            pending_generate_items: None,
         }
     }
 
@@ -72,27 +65,25 @@ impl StepExecutionAccumulator {
         if self.pipeline_vars.test_failures.is_empty() {
             self.pipeline_vars.test_failures = task_pipeline_vars.test_failures.clone();
         }
+        if self.pipeline_vars.preserved.goal.is_empty() {
+            self.pipeline_vars.preserved.goal = task_pipeline_vars.preserved.goal.clone();
+        }
         if !self.last_sandbox_denied {
-            self.last_sandbox_denied = task_pipeline_vars
-                .vars
-                .get("last_sandbox_denied")
-                .map(|v| v == "true")
-                .unwrap_or(false);
+            self.last_sandbox_denied = task_pipeline_vars.preserved.last_sandbox_denied;
         }
         if self.sandbox_denied_count == 0 {
-            self.sandbox_denied_count = task_pipeline_vars
-                .vars
-                .get("sandbox_denied_count")
-                .and_then(|v| v.parse::<u32>().ok())
-                .unwrap_or(0);
+            self.sandbox_denied_count = task_pipeline_vars.preserved.sandbox_denied_count;
         }
         if self.last_sandbox_denial_reason.is_none() {
             self.last_sandbox_denial_reason = task_pipeline_vars
-                .vars
-                .get("last_sandbox_denial_reason")
-                .filter(|v| !v.is_empty())
-                .cloned();
+                .preserved
+                .last_sandbox_denial_reason
+                .clone();
         }
+        self.pipeline_vars.preserved.last_sandbox_denied = self.last_sandbox_denied;
+        self.pipeline_vars.preserved.sandbox_denied_count = self.sandbox_denied_count;
+        self.pipeline_vars.preserved.last_sandbox_denial_reason =
+            self.last_sandbox_denial_reason.clone();
     }
 
     /// Collect all step IDs that match a capability, including canonical aliases.
@@ -160,17 +151,8 @@ impl StepExecutionAccumulator {
             test_failure_count: self.pipeline_vars.test_failures.len() as i64,
             build_exit_code: self.exit_codes.get("build").copied(),
             test_exit_code: self.exit_codes.get("test").copied(),
-            self_test_exit_code: self
-                .pipeline_vars
-                .vars
-                .get("self_test_exit_code")
-                .and_then(|v| v.parse::<i64>().ok()),
-            self_test_passed: self
-                .pipeline_vars
-                .vars
-                .get("self_test_passed")
-                .map(|v| v == "true")
-                .unwrap_or(false),
+            self_test_exit_code: self.pipeline_vars.signals.self_test_exit_code,
+            self_test_passed: self.pipeline_vars.signals.self_test_passed,
             max_cycles,
             is_last_cycle: task_ctx.current_cycle >= max_cycles,
             last_sandbox_denied: self.last_sandbox_denied,
@@ -328,121 +310,9 @@ impl StepExecutionAccumulator {
         if result.sandbox_denied {
             self.sandbox_denied_count += 1;
         }
-        self.pipeline_vars.vars.insert(
-            "last_sandbox_denied".to_string(),
-            self.last_sandbox_denied.to_string(),
-        );
-        self.pipeline_vars.vars.insert(
-            "sandbox_denied_count".to_string(),
-            self.sandbox_denied_count.to_string(),
-        );
-        self.pipeline_vars.vars.insert(
-            "last_sandbox_denial_reason".to_string(),
-            self.last_sandbox_denial_reason.clone().unwrap_or_default(),
-        );
-    }
-
-    /// Apply capture declarations from a step result into the accumulator.
-    /// Returns the list of variable names whose capture extraction failed (value was `None`).
-    pub fn apply_captures(
-        &mut self,
-        captures: &[agent_orchestrator::config::CaptureDecl],
-        artifacts_dir: &Path,
-        task_id: &str,
-        step_id: &str,
-        result: &agent_orchestrator::dto::RunResult,
-    ) -> Vec<String> {
-        let mut missing = Vec::new();
-        for cap in captures {
-            match cap.source {
-                CaptureSource::ExitCode => {
-                    self.exit_codes
-                        .insert(step_id.to_string(), result.exit_code);
-                    self.pipeline_vars
-                        .vars
-                        .insert(cap.var.clone(), result.exit_code.to_string());
-                }
-                CaptureSource::FailedFlag => {
-                    let failed = !result.is_success();
-                    self.flags.insert(cap.var.clone(), failed);
-                    self.pipeline_vars
-                        .vars
-                        .insert(cap.var.clone(), failed.to_string());
-                }
-                CaptureSource::SuccessFlag => {
-                    let success = result.is_success();
-                    self.flags.insert(cap.var.clone(), success);
-                    self.pipeline_vars
-                        .vars
-                        .insert(cap.var.clone(), success.to_string());
-                }
-                CaptureSource::Stdout => {
-                    if let Some(ref output) = result.output {
-                        let value =
-                            capture_text_field(&output.stdout, &cap.var, cap.json_path.as_deref());
-                        match value {
-                            Some(value) => {
-                                spill_large_var(
-                                    artifacts_dir,
-                                    task_id,
-                                    &cap.var,
-                                    value,
-                                    &mut self.pipeline_vars,
-                                );
-                            }
-                            None => {
-                                missing.push(cap.var.clone());
-                                self.pipeline_vars
-                                    .vars
-                                    .insert(cap.var.clone(), String::new());
-                            }
-                        }
-                    }
-                }
-                CaptureSource::Stderr => {
-                    if let Some(ref output) = result.output {
-                        let value =
-                            capture_text_field(&output.stderr, &cap.var, cap.json_path.as_deref());
-                        if value.is_none() {
-                            missing.push(cap.var.clone());
-                        }
-                        self.pipeline_vars
-                            .vars
-                            .insert(cap.var.clone(), value.unwrap_or_default());
-                    }
-                }
-            }
-        }
-        missing
-    }
-}
-
-fn capture_text_field(raw: &str, var_name: &str, json_path: Option<&str>) -> Option<String> {
-    let Some(json_path) = json_path else {
-        return Some(raw.to_string());
-    };
-
-    let effective = extract_stream_json_result(raw).unwrap_or_else(|| raw.to_string());
-    let parsed = serde_json::from_str::<serde_json::Value>(&effective).or_else(|_| {
-        let repaired = repair_unquoted_json(&effective);
-        serde_json::from_str::<serde_json::Value>(&repaired)
-    });
-    match parsed {
-        Ok(value) => match extract_field(&value, json_path) {
-            Some(extracted) => Some(extracted),
-            None => {
-                warn!(var = %var_name, json_path = %json_path, "capture json_path did not resolve");
-                None
-            }
-        },
-        Err(error) => {
-            warn!(
-                var = %var_name,
-                json_path = %json_path,
-                error = %error,
-                "capture json_path source is not valid JSON"
-            );
-            None
-        }
+        self.pipeline_vars.preserved.last_sandbox_denied = self.last_sandbox_denied;
+        self.pipeline_vars.preserved.sandbox_denied_count = self.sandbox_denied_count;
+        self.pipeline_vars.preserved.last_sandbox_denial_reason =
+            self.last_sandbox_denial_reason.clone();
     }
 }

@@ -8,8 +8,15 @@ use tracing::info;
 pub struct ItemEvalState {
     /// Candidate item identifier.
     pub item_id: String,
-    /// Pipeline variables captured for the candidate item.
-    pub pipeline_vars: HashMap<String, String>,
+    /// Numeric observations accepted by the typed `record_metric` tool.
+    pub metrics: HashMap<String, f64>,
+}
+
+fn winner_vars(item: &ItemEvalState) -> HashMap<String, String> {
+    item.metrics
+        .iter()
+        .map(|(name, value)| (name.clone(), value.to_string()))
+        .collect()
 }
 
 /// Execute item selection across evaluated items based on the given config.
@@ -25,7 +32,7 @@ pub fn execute_item_select(
         return Ok(SelectionResult {
             winner_id: item.item_id.clone(),
             eliminated_ids: vec![],
-            winner_vars: item.pipeline_vars.clone(),
+            winner_vars: winner_vars(item),
         });
     }
 
@@ -53,7 +60,7 @@ pub fn execute_item_select(
     Ok(SelectionResult {
         winner_id: winner.item_id.clone(),
         eliminated_ids,
-        winner_vars: winner.pipeline_vars.clone(),
+        winner_vars: winner_vars(winner),
     })
 }
 
@@ -70,10 +77,8 @@ fn select_min_max(
 
     let mut scored: Vec<(usize, f64)> = Vec::new();
     for (idx, item) in items.iter().enumerate() {
-        if let Some(val_str) = item.pipeline_vars.get(metric_var)
-            && let Ok(val) = val_str.parse::<f64>()
-        {
-            scored.push((idx, val));
+        if let Some(value) = item.metrics.get(metric_var) {
+            scored.push((idx, *value));
         }
     }
 
@@ -114,10 +119,9 @@ fn select_threshold(items: &[ItemEvalState], config: &ItemSelectConfig) -> Resul
         .iter()
         .enumerate()
         .filter(|(_, item)| {
-            item.pipeline_vars
+            item.metrics
                 .get(metric_var)
-                .and_then(|v| v.parse::<f64>().ok())
-                .map(|v| v >= threshold)
+                .map(|value| *value >= threshold)
                 .unwrap_or(false)
         })
         .map(|(idx, _)| idx)
@@ -141,11 +145,7 @@ fn select_weighted(items: &[ItemEvalState], config: &ItemSelectConfig) -> Result
     for (idx, item) in items.iter().enumerate() {
         let mut total = 0.0;
         for (var, weight) in weights {
-            let val = item
-                .pipeline_vars
-                .get(var)
-                .and_then(|v| v.parse::<f64>().ok())
-                .unwrap_or(0.0);
+            let val = item.metrics.get(var).copied().unwrap_or(0.0);
             total += val * weight;
         }
         scores.push((idx, total));
@@ -183,13 +183,10 @@ mod tests {
     use super::*;
     use agent_orchestrator::config::{SelectionStrategy, TieBreak};
 
-    fn make_item(id: &str, vars: Vec<(&str, &str)>) -> ItemEvalState {
+    fn make_item(id: &str, vars: Vec<(&str, f64)>) -> ItemEvalState {
         ItemEvalState {
             item_id: id.to_string(),
-            pipeline_vars: vars
-                .into_iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect(),
+            metrics: vars.into_iter().map(|(k, v)| (k.to_string(), v)).collect(),
         }
     }
 
@@ -207,9 +204,9 @@ mod tests {
     #[test]
     fn test_select_min() {
         let items = vec![
-            make_item("a", vec![("score", "5.0")]),
-            make_item("b", vec![("score", "2.0")]),
-            make_item("c", vec![("score", "8.0")]),
+            make_item("a", vec![("score", 5.0)]),
+            make_item("b", vec![("score", 2.0)]),
+            make_item("c", vec![("score", 8.0)]),
         ];
         let config = make_config(SelectionStrategy::Min);
         let result = execute_item_select(&items, &config).unwrap();
@@ -220,9 +217,9 @@ mod tests {
     #[test]
     fn test_select_max() {
         let items = vec![
-            make_item("a", vec![("score", "5.0")]),
-            make_item("b", vec![("score", "2.0")]),
-            make_item("c", vec![("score", "8.0")]),
+            make_item("a", vec![("score", 5.0)]),
+            make_item("b", vec![("score", 2.0)]),
+            make_item("c", vec![("score", 8.0)]),
         ];
         let config = make_config(SelectionStrategy::Max);
         let result = execute_item_select(&items, &config).unwrap();
@@ -232,9 +229,9 @@ mod tests {
     #[test]
     fn test_select_threshold() {
         let items = vec![
-            make_item("a", vec![("score", "3.0")]),
-            make_item("b", vec![("score", "7.0")]),
-            make_item("c", vec![("score", "9.0")]),
+            make_item("a", vec![("score", 3.0)]),
+            make_item("b", vec![("score", 7.0)]),
+            make_item("c", vec![("score", 9.0)]),
         ];
         let mut config = make_config(SelectionStrategy::Threshold);
         config.threshold = Some(5.0);
@@ -246,8 +243,8 @@ mod tests {
     #[test]
     fn test_select_weighted() {
         let items = vec![
-            make_item("a", vec![("quality", "8.0"), ("speed", "2.0")]),
-            make_item("b", vec![("quality", "5.0"), ("speed", "9.0")]),
+            make_item("a", vec![("quality", 8.0), ("speed", 2.0)]),
+            make_item("b", vec![("quality", 5.0), ("speed", 9.0)]),
         ];
         let mut weights = HashMap::new();
         weights.insert("quality".to_string(), 0.7);
@@ -270,7 +267,7 @@ mod tests {
 
     #[test]
     fn test_single_item() {
-        let items = vec![make_item("only", vec![("score", "5.0")])];
+        let items = vec![make_item("only", vec![("score", 5.0)])];
         let config = make_config(SelectionStrategy::Min);
         let result = execute_item_select(&items, &config).unwrap();
         assert_eq!(result.winner_id, "only");
@@ -285,10 +282,10 @@ mod tests {
     }
 
     #[test]
-    fn test_unparseable_metric_var_fails() {
+    fn test_missing_metric_var_fails() {
         let items = vec![
-            make_item("a", vec![("other_var", "hello")]),
-            make_item("b", vec![("other_var", "world")]),
+            make_item("a", vec![("other_var", 1.0)]),
+            make_item("b", vec![("other_var", 2.0)]),
         ];
         let config = make_config(SelectionStrategy::Max);
         let err = execute_item_select(&items, &config).unwrap_err();
@@ -302,21 +299,21 @@ mod tests {
     #[test]
     fn test_select_max_picks_highest_score() {
         let items = vec![
-            make_item("a", vec![("score", "85.0")]),
-            make_item("b", vec![("score", "72.0")]),
+            make_item("a", vec![("score", 85.0)]),
+            make_item("b", vec![("score", 72.0)]),
         ];
         let config = make_config(SelectionStrategy::Max);
         let result = execute_item_select(&items, &config).unwrap();
         assert_eq!(result.winner_id, "a");
         assert_eq!(result.eliminated_ids, vec!["b"]);
-        assert_eq!(result.winner_vars.get("score").unwrap(), "85.0");
+        assert_eq!(result.winner_vars.get("score").unwrap(), "85");
     }
 
     #[test]
     fn test_tie_break_last() {
         let items = vec![
-            make_item("a", vec![("score", "5.0")]),
-            make_item("b", vec![("score", "5.0")]),
+            make_item("a", vec![("score", 5.0)]),
+            make_item("b", vec![("score", 5.0)]),
         ];
         let mut config = make_config(SelectionStrategy::Min);
         config.tie_break = TieBreak::Last;

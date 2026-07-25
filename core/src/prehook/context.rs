@@ -2,45 +2,44 @@ use crate::config::{ConvergenceContext, ItemFinalizeContext, StepPrehookContext}
 use anyhow::Result;
 use cel_interpreter::Context as CelContext;
 
-/// Binds captured pipeline variables into a CEL context with type inference: a
-/// JSON string array becomes `list<string>`, otherwise `i64 → f64 → bool → string`.
-/// Spilled/truncated values are skipped (too large for CEL). Shared by the
-/// prehook, convergence, and finalize builders so all three expose pipeline vars
-/// — including streaming-run signals like `tools_called` — identically. Call
-/// before built-in fields so built-ins take precedence on name collisions.
-fn bind_pipeline_vars<'a>(
+/// Bind compatibility variables before explicit governance fields.
+///
+/// Production coordination consumers are forbidden by the governance ledger,
+/// but this compatibility surface remains until command rules and public
+/// initial/item input bindings receive a separately governed migration.
+fn bind_compatibility_vars<'a>(
     cel_context: &mut CelContext<'a>,
     vars: &'a std::collections::HashMap<String, String>,
     err_prefix: &str,
 ) -> Result<()> {
-    for (key, val) in vars {
-        if val.contains("[truncated") {
+    for (key, value) in vars {
+        if value.contains("[truncated") {
             continue;
         }
-        if val.starts_with('[')
-            && let Ok(arr) = serde_json::from_str::<Vec<String>>(val)
+        if value.starts_with('[')
+            && let Ok(items) = serde_json::from_str::<Vec<String>>(value)
         {
             cel_context
-                .add_variable(key.as_str(), arr)
-                .map_err(|e| anyhow::anyhow!("{err_prefix}: {e}"))?;
+                .add_variable(key.as_str(), items)
+                .map_err(|error| anyhow::anyhow!("{err_prefix}: {error}"))?;
             continue;
         }
-        if let Ok(i) = val.parse::<i64>() {
+        if let Ok(integer) = value.parse::<i64>() {
             cel_context
-                .add_variable(key.as_str(), i)
-                .map_err(|e| anyhow::anyhow!("{err_prefix}: {e}"))?;
-        } else if let Ok(f) = val.parse::<f64>() {
+                .add_variable(key.as_str(), integer)
+                .map_err(|error| anyhow::anyhow!("{err_prefix}: {error}"))?;
+        } else if let Ok(float) = value.parse::<f64>() {
             cel_context
-                .add_variable(key.as_str(), f)
-                .map_err(|e| anyhow::anyhow!("{err_prefix}: {e}"))?;
-        } else if let Ok(b) = val.parse::<bool>() {
+                .add_variable(key.as_str(), float)
+                .map_err(|error| anyhow::anyhow!("{err_prefix}: {error}"))?;
+        } else if let Ok(boolean) = value.parse::<bool>() {
             cel_context
-                .add_variable(key.as_str(), b)
-                .map_err(|e| anyhow::anyhow!("{err_prefix}: {e}"))?;
+                .add_variable(key.as_str(), boolean)
+                .map_err(|error| anyhow::anyhow!("{err_prefix}: {error}"))?;
         } else {
             cel_context
-                .add_variable(key.as_str(), val.clone())
-                .map_err(|e| anyhow::anyhow!("{err_prefix}: {e}"))?;
+                .add_variable(key.as_str(), value.clone())
+                .map_err(|error| anyhow::anyhow!("{err_prefix}: {error}"))?;
         }
     }
     Ok(())
@@ -50,10 +49,8 @@ pub(super) fn build_step_prehook_cel_context(
     context: &StepPrehookContext,
 ) -> Result<CelContext<'_>> {
     let mut cel_context = CelContext::default();
-    let err_msg_prefix = format!("step '{}' prehook context build failed", context.step);
-    // Inject user-defined pipeline variables first so built-in variables take
-    // precedence when names collide (built-ins are added below and overwrite).
-    bind_pipeline_vars(&mut cel_context, &context.vars, &err_msg_prefix)?;
+    let err_prefix = format!("step '{}' prehook context build failed", context.step);
+    bind_compatibility_vars(&mut cel_context, &context.vars, &err_prefix)?;
     cel_context
         .add_variable("context", context.clone())
         .map_err(|err| {
@@ -101,6 +98,21 @@ pub(super) fn build_step_prehook_cel_context(
         })?;
     cel_context
         .add_variable("is_last_cycle", context.is_last_cycle)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable(
+            "api_publishable",
+            context
+                .vars
+                .get("api_publishable")
+                .is_some_and(|value| value == "true"),
+        )
         .map_err(|err| {
             anyhow::anyhow!(
                 "step '{}' prehook context build failed: {}",
@@ -335,9 +347,7 @@ pub(super) fn build_step_prehook_cel_context(
 
 pub(super) fn build_finalize_cel_context(context: &ItemFinalizeContext) -> Result<CelContext<'_>> {
     let mut cel_context = CelContext::default();
-    // Inject pipeline variables first so built-in fields take precedence on
-    // name collisions; this is what exposes streaming-run signals to finalize.
-    bind_pipeline_vars(
+    bind_compatibility_vars(
         &mut cel_context,
         &context.vars,
         "finalize context build failed",
@@ -473,6 +483,7 @@ pub(super) fn build_convergence_cel_context(
 ) -> Result<CelContext<'_>> {
     let mut cel_context = CelContext::default();
     let err_msg = "convergence context build failed";
+    bind_compatibility_vars(&mut cel_context, &context.vars, err_msg)?;
     cel_context
         .add_variable("cycle", context.cycle as i64)
         .map_err(|e| anyhow::anyhow!("{err_msg}: {e}"))?;
@@ -485,7 +496,25 @@ pub(super) fn build_convergence_cel_context(
     cel_context
         .add_variable("max_cycles", context.max_cycles as i64)
         .map_err(|e| anyhow::anyhow!("{err_msg}: {e}"))?;
-    // Inject user-defined pipeline variables (typed, incl. JSON-array → list).
-    bind_pipeline_vars(&mut cel_context, &context.vars, err_msg)?;
+    cel_context
+        .add_variable(
+            "tools_called",
+            context
+                .vars
+                .get("tools_called")
+                .and_then(|value| serde_json::from_str::<Vec<String>>(value).ok())
+                .unwrap_or_default(),
+        )
+        .map_err(|e| anyhow::anyhow!("{err_msg}: {e}"))?;
+    cel_context
+        .add_variable(
+            "tool_error_count",
+            context
+                .vars
+                .get("tool_error_count")
+                .and_then(|value| value.parse::<i64>().ok())
+                .unwrap_or(0),
+        )
+        .map_err(|e| anyhow::anyhow!("{err_msg}: {e}"))?;
     Ok(cel_context)
 }

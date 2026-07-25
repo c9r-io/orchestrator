@@ -1504,7 +1504,7 @@ fn build_segments_item_select_is_task_scoped() {
 }
 
 #[test]
-fn collect_item_eval_states_maps_pipeline_vars() {
+fn collect_item_eval_states_maps_typed_metrics() {
     let items = vec![
         agent_orchestrator::dto::TaskItemRow {
             id: "item-a".into(),
@@ -1527,29 +1527,25 @@ fn collect_item_eval_states_maps_pipeline_vars() {
     let mut acc_a = StepExecutionAccumulator::new(PipelineVariables::default());
     acc_a
         .pipeline_vars
-        .vars
-        .insert("error_count".into(), "3".into());
+        .signals
+        .metrics
+        .insert("error_count".into(), 3.0);
     item_state.insert("item-a".to_string(), acc_a);
 
     let mut acc_b = StepExecutionAccumulator::new(PipelineVariables::default());
     acc_b
         .pipeline_vars
-        .vars
-        .insert("error_count".into(), "1".into());
+        .signals
+        .metrics
+        .insert("error_count".into(), 1.0);
     item_state.insert("item-b".to_string(), acc_b);
 
     let eval_states = collect_item_eval_states(&items, &item_state);
     assert_eq!(eval_states.len(), 2);
     assert_eq!(eval_states[0].item_id, "item-a");
-    assert_eq!(
-        eval_states[0].pipeline_vars.get("error_count").unwrap(),
-        "3"
-    );
+    assert_eq!(eval_states[0].metrics.get("error_count").unwrap(), &3.0);
     assert_eq!(eval_states[1].item_id, "item-b");
-    assert_eq!(
-        eval_states[1].pipeline_vars.get("error_count").unwrap(),
-        "1"
-    );
+    assert_eq!(eval_states[1].metrics.get("error_count").unwrap(), &1.0);
 }
 
 #[test]

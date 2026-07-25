@@ -63,12 +63,8 @@ pub(super) async fn execute_builtin_step_dispatch(
             });
             let exit_code = self_test_result.exit_code;
             let passed = exit_code == 0;
-            acc.pipeline_vars
-                .vars
-                .insert("self_test_exit_code".to_string(), exit_code.to_string());
-            acc.pipeline_vars
-                .vars
-                .insert("self_test_passed".to_string(), passed.to_string());
+            acc.pipeline_vars.signals.self_test_exit_code = Some(exit_code as i64);
+            acc.pipeline_vars.signals.self_test_passed = passed;
             if !self_test_result.error_output.is_empty() {
                 crate::scheduler::item_executor::spill::spill_large_var(
                     &task_ctx.artifacts_dir,
@@ -108,33 +104,6 @@ pub(super) async fn execute_builtin_step_dispatch(
             }
             acc.step_ran.insert(step.id.clone(), true);
             acc.exit_codes.insert(step.id.clone(), exit_code as i64);
-            // Apply captures
-            let synth_result = agent_orchestrator::dto::RunResult {
-                success: passed,
-                exit_code: exit_code as i64,
-                stdout_path: String::new(),
-                stderr_path: String::new(),
-                timed_out: false,
-                duration_ms: None,
-                output: None,
-                validation_status: "passed".to_string(),
-                agent_id: "builtin".to_string(),
-                run_id: String::new(),
-                execution_profile: "host".to_string(),
-                execution_mode: "host".to_string(),
-                sandbox_denied: false,
-                sandbox_denial_reason: None,
-                sandbox_violation_kind: None,
-                sandbox_resource_kind: None,
-                sandbox_network_target: None,
-            };
-            let _captures_missing = acc.apply_captures(
-                &step.behavior.captures,
-                &task_ctx.artifacts_dir,
-                task_id,
-                &step.id,
-                &synth_result,
-            );
             Ok(BuiltinStepOutcome::Handled { success: passed })
         }
 
