@@ -172,6 +172,26 @@ The same run also showed why the aggregate has to be a separate step: `continue-
 GitHub report a step's `conclusion` as success while `outcome` holds the truth, so a reader looking
 at the step list alone sees green. The summary table is what makes the outcomes legible.
 
+### Two defects this FR wrote, and how they were found
+
+Both were invisible locally and appeared on the first real run, which is the
+argument this FR makes about everything else, turned on its own output.
+
+**`producer | grep -q` under `set -o pipefail`.** `grep -q` exits at the first match, the producer
+takes SIGPIPE, and the pipeline reports the producer's death as its own status. `check_wiring_truth`
+read `sed … | grep -qF "$path"` and announced that two gates were not called by their declared
+invoker, with `sed: couldn't write 80 items to stdout: Broken pipe` sitting in the log next to the
+accusation. Locally `sed` always finished first. Every such pipeline in these files is now a
+here-string, which has no pipe and therefore no race.
+
+**A test of environment handling that did not handle the environment.** The `CI=false` case cleared
+`CI` and left `GITHUB_ACTIONS` set, which the runner exports — so the write guard kept refusing and
+was right to. The test was wrong, not the guard. It now clears every indicator before setting the
+one under test.
+
+Neither is exotic. Both are the same shape as the defects this FR was filed about: something that
+holds on a developer machine and does not hold where it runs.
+
 ### The lexer, and why the obvious fix is worse than the defect
 
 Both ledgers decide what a `#[cfg(test)]` module covers by counting braces, and a brace inside a
