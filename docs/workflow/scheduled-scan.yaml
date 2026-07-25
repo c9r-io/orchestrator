@@ -75,6 +75,9 @@ spec:
     "artifacts":[{"kind":"analysis","findings":[
     {"title":"no-critical-issues","description":"No critical security issues found. 2 low-severity recommendations noted.","severity":"info"}
     ]}]}'
+  driver:
+    provider: shell
+    transport: cli
 ---
 # ── Workflow ──────────────────────────────────────────────────────────
 ---

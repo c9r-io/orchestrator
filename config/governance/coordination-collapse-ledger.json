@@ -83,7 +83,15 @@
     },
     "shellRunnerExecutor": {
       "state": "frozen",
-      "productionLegacyAgentCount": 4,
+      "productionAgentCount": 20,
+      "productionLegacyAgentCount": 0,
+      "productionDriverCounts": {
+        "shell/cli": 3,
+        "claude/cli": 17,
+        "codex/cli": 0
+      },
+      "productionDirectStepCommandCount": 3,
+      "productionGlobalStreamingExecutorCount": 0,
       "removeAfter": "FR-126 migrates the remaining command-only Agent manifests to typed drivers"
     }
   },

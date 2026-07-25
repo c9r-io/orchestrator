@@ -79,6 +79,9 @@ spec:
     "artifacts":[{"kind":"analysis","findings":[
     {"title":"fr-triaged","description":"FR triaged: P1 priority, medium complexity, no blocking dependencies.","severity":"info"}
     ]}]}'
+  driver:
+    provider: shell
+    transport: cli
 ---
 # ── Workflow ──────────────────────────────────────────────────────────
 ---

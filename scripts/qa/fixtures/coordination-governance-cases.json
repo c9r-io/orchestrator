@@ -1,4 +1,47 @@
 {
+  "executionCases": [
+    {
+      "name": "new-command-only-agent-is-rejected",
+      "expectedAccepted": false,
+      "document": {
+        "kind": "Agent",
+        "metadata": {"name": "legacy-shell"},
+        "spec": {
+          "capabilities": ["general"],
+          "command": "echo ok"
+        }
+      }
+    },
+    {
+      "name": "explicit-shell-driver-agent-is-accepted",
+      "expectedAccepted": true,
+      "document": {
+        "kind": "Agent",
+        "metadata": {"name": "typed-shell"},
+        "spec": {
+          "capabilities": ["general"],
+          "command": "echo ok",
+          "driver": {
+            "provider": "shell",
+            "transport": "cli"
+          }
+        }
+      }
+    },
+    {
+      "name": "global-streaming-executor-is-rejected",
+      "expectedAccepted": false,
+      "document": {
+        "kind": "RuntimePolicy",
+        "metadata": {"name": "legacy-streaming"},
+        "spec": {
+          "runner": {
+            "executor": "streaming"
+          }
+        }
+      }
+    }
+  ],
   "cases": [
     {
       "name": "new-captured-coordination-is-rejected",

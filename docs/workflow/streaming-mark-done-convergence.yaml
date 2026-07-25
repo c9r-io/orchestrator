@@ -1,14 +1,13 @@
 # Streaming agent converges a loop by calling the `mark_done` MCP tool.
 #
-# Demonstrates the streaming-runner pivot end to end (design docs 101–103):
+# Demonstrates the typed Claude driver end to end (design docs 101–103, 127):
 # the agent expresses completion via a typed MCP tool, the orchestrator parses
 # the stream-json into structured signals (`tools_called`), and the loop guard
 # converges on `'mark_done' in tools_called` — coordination driven by what the
 # agent DID, not by regex-scraped stdout.
 #
-# Requires the "streaming" runner executor (RuntimePolicy below) and the
-# `orch-mcp-tools` binary built alongside the daemon (it is resolved next to
-# `orchestratord`, or via $ORCH_MCP_TOOLS_BIN).
+# Requires the `orch-mcp-tools` binary built alongside the daemon (it is
+# resolved next to `orchestratord`, or via $ORCH_MCP_TOOLS_BIN).
 #
 # See docs/showcases/streaming-mark-done-convergence.md for the run + captured output.
 apiVersion: orchestrator.dev/v2
@@ -29,7 +28,6 @@ spec:
     shell: /bin/bash
     shell_arg: "-lc"
     policy: unsafe          # demo convenience: pass full env so `claude` can auth
-    executor: streaming     # ← drives agents via stream-json + orchestrator MCP tools
     allowed_shells: [/bin/bash, /bin/zsh, /bin/sh]
     allowed_shell_args: ["-lc", "-c"]
     env_allowlist: [PATH, HOME, USER, LANG, TERM]
@@ -60,7 +58,15 @@ metadata:
 spec:
   capabilities:
     - signal
-  command: claude -p "{prompt}" --model haiku
+  driver:
+    provider: claude
+    transport: cli
+    options:
+      model: haiku
+      maxTurns: 4
+      permissionMode: governed
+      allowedTools:
+        - mcp__orch__mark_done
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow
@@ -76,6 +82,11 @@ spec:
       template: signal_done
       enabled: true
       repeatable: true
+      behavior:
+        driverRequirements:
+          multiTurn: true
+          toolHosting: stdio
+          workspaceAccess: read
     - id: loop_guard
       type: loop_guard
       builtin: loop_guard

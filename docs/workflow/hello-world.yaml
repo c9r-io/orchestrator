@@ -28,6 +28,9 @@ spec:
     "artifacts":[{"kind":"analysis","findings":[
     {"title":"hello-world","description":"Workflow executed successfully.","severity":"info"}
     ]}]}'
+  driver:
+    provider: shell
+    transport: cli
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow

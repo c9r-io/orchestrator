@@ -138,6 +138,29 @@ def workflow_touches(document)
   touches
 end
 
+def explicit_driver_id(document)
+  driver = document.dig("spec", "driver")
+  return nil unless driver.is_a?(Hash)
+
+  provider = driver["provider"].to_s
+  return nil if provider.empty?
+
+  transport = driver["transport"].to_s
+  transport = "cli" if transport.empty?
+  "#{provider}/#{transport}"
+end
+
+def execution_document_accepted?(document)
+  case document["kind"]
+  when "Agent"
+    !explicit_driver_id(document).nil?
+  when "RuntimePolicy"
+    document.dig("spec", "runner", "executor") != "streaming"
+  else
+    true
+  end
+end
+
 def rust_source_files(repo_root)
   roots = [repo_root.join("core/src")]
   roots.concat(Dir[repo_root.join("crates/*/src").to_s].map { |path| Pathname.new(path) })
@@ -186,6 +209,13 @@ if options[:test_fixtures]
   )
   fixture = JSON.parse(File.read(fixture_path))
   fixture_errors = []
+  Array(fixture["executionCases"]).each do |test_case|
+    accepted = execution_document_accepted?(test_case.fetch("document"))
+    next if accepted == test_case.fetch("expectedAccepted")
+
+    fixture_errors << "#{test_case.fetch("name")}: expected accepted=" \
+      "#{test_case.fetch("expectedAccepted")}, got #{accepted}"
+  end
   Array(fixture["cases"]).each do |test_case|
     touches = workflow_touches(test_case.fetch("workflow"))
     unexpected = touches - Array(test_case["approvedTouches"])
@@ -203,6 +233,7 @@ end
 
 documents = []
 agents = []
+runtime_policies = []
 Array(ledger["productionRoots"]).each do |root|
   Dir[repo_root.join(root, "**/*.{yaml,yml}").to_s].sort.each do |path|
     YAML.load_stream(File.read(path)).compact.each do |document|
@@ -211,7 +242,10 @@ Array(ledger["productionRoots"]).each do |root|
         documents << {
           "file" => relative_path(repo_root, path),
           "name" => document.dig("metadata", "name"),
-          "touches" => workflow_touches(document)
+          "touches" => workflow_touches(document),
+          "directStepCommands" => Array(document.dig("spec", "steps")).each_with_object([]) do |step, commands|
+            commands << step["id"] unless step["command"].to_s.empty?
+          end
         }
       elsif document["kind"] == "Agent"
         agents << {
@@ -219,7 +253,14 @@ Array(ledger["productionRoots"]).each do |root|
           "name" => document.dig("metadata", "name"),
           "legacyCommandOnly" => !document.dig("spec", "command").to_s.empty? &&
             document.dig("spec", "driver").nil?,
-          "driver" => document.dig("spec", "driver")
+          "driver" => document.dig("spec", "driver"),
+          "driverId" => explicit_driver_id(document)
+        }
+      elsif document["kind"] == "RuntimePolicy"
+        runtime_policies << {
+          "file" => relative_path(repo_root, path),
+          "name" => document.dig("metadata", "name"),
+          "executor" => document.dig("spec", "runner", "executor")
         }
       end
     end
@@ -348,6 +389,19 @@ cel_coordination_consumers = documents.flat_map do |document|
   end.compact
 end
 legacy_command_agents = agents.select { |agent| agent["legacyCommandOnly"] }
+driver_ids = %w[shell/cli claude/cli codex/cli]
+driver_ids |= agents.map { |agent| agent["driverId"] }.compact
+driver_counts = driver_ids.to_h do |driver_id|
+  [driver_id, agents.count { |agent| agent["driverId"] == driver_id }]
+end
+direct_step_commands = documents.flat_map do |document|
+  document["directStepCommands"].map do |step|
+    {"file" => document["file"], "workflow" => document["name"], "step" => step}
+  end
+end
+global_streaming_executors = runtime_policies.select do |policy|
+  policy["executor"] == "streaming"
+end
 
 expected_inventory = ledger["consumerInventory"] || {}
 {
@@ -363,6 +417,26 @@ end
 expected_legacy_agents = retirement.dig("shellRunnerExecutor", "productionLegacyAgentCount")
 if expected_legacy_agents.is_a?(Integer) && expected_legacy_agents != legacy_command_agents.length
   errors << "legacy command-only Agent count changed from #{expected_legacy_agents} to #{legacy_command_agents.length}"
+end
+expected_agent_count = retirement.dig("shellRunnerExecutor", "productionAgentCount")
+if expected_agent_count.is_a?(Integer) && expected_agent_count != agents.length
+  errors << "production Agent count changed from #{expected_agent_count} to #{agents.length}"
+end
+expected_driver_counts = retirement.dig("shellRunnerExecutor", "productionDriverCounts")
+if expected_driver_counts.is_a?(Hash) && expected_driver_counts != driver_counts
+  errors << "production driver counts changed from #{expected_driver_counts.inspect} to #{driver_counts.inspect}"
+end
+expected_direct_commands =
+  retirement.dig("shellRunnerExecutor", "productionDirectStepCommandCount")
+if expected_direct_commands.is_a?(Integer) &&
+    expected_direct_commands != direct_step_commands.length
+  errors << "production direct Step command count changed from #{expected_direct_commands} to #{direct_step_commands.length}"
+end
+expected_global_streaming =
+  retirement.dig("shellRunnerExecutor", "productionGlobalStreamingExecutorCount")
+if expected_global_streaming.is_a?(Integer) &&
+    expected_global_streaming != global_streaming_executors.length
+  errors << "global streaming executor count changed from #{expected_global_streaming} to #{global_streaming_executors.length}"
 end
 
 report = {
@@ -387,7 +461,10 @@ report = {
   },
   "executionInventory" => {
     "agentDocuments" => agents.length,
-    "legacyCommandOnlyAgents" => legacy_command_agents
+    "legacyCommandOnlyAgents" => legacy_command_agents,
+    "driverCounts" => driver_counts,
+    "directStepCommands" => direct_step_commands,
+    "globalStreamingExecutors" => global_streaming_executors
   },
   "errors" => errors
 }
