@@ -79,7 +79,6 @@
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
-| FR-127 | 治理门禁执行面补完 — QA 门禁 CI 接线与脚本执行面分类 | P0 | Proposed |
 | FR-128 | 治理台账再生与审阅工具 | P1 | Proposed |
 | FR-129 | Skill 单一来源与镜像完整性 | P1 | Proposed |
 | FR-130 | Core Crate 拆分 Phase 3 — persistence 提取 | P1 | Proposed |
@@ -95,7 +94,8 @@
 - `In Progress`: 已有部分阶段落地，剩余阶段仍在治理中
 - `Implemented`: 需求已完成并进入维护阶段
 - 已闭环并删除的 FR，应由对应 `docs/design_doc/**` 与 `docs/qa/**` 继续承载设计和验证信息
-- FR-127 至 FR-133 源自 2026-07-25 的技术负债深挖，共同特征是**治理编写侧严格而执行侧未接线**：门禁、镜像、同步链路、依赖策略均存在"写了但不跑"或"从未被检查"的缺口。建议实施顺序为 FR-127（打开执行面）→ FR-129 / FR-131 / FR-132 / FR-133（各自的门禁挂到该执行面上）→ FR-128（降低既有门禁的维护摩擦）→ FR-130（唯一的结构性重构，与其余各项无依赖）。FR-076 的需求 1（GUI CI 集成）同源，已在该 FR 内单独提升为 P1
+- FR-127 至 FR-133 源自 2026-07-25 的技术负债深挖，共同特征是**治理编写侧严格而执行侧未接线**：门禁、镜像、同步链路、依赖策略均存在"写了但不跑"或"从未被检查"的缺口。FR-127 已闭环，执行面已打开；后续实施顺序为 FR-127（已完成）→ FR-129 / FR-131 / FR-132 / FR-133（各自的门禁挂到该执行面上）→ FR-128（降低既有门禁的维护摩擦）→ FR-130（唯一的结构性重构，与其余各项无依赖）。FR-076 的需求 1（GUI CI 集成）同源，已在该 FR 内单独提升为 P1
+- FR-127 已闭环删除；其门禁执行面分类、清单与磁盘双向比对、workflow 接线真实性校验、provider 隔离不变量、失效治理声明扫描与七个互相隔离的负向 fixture 现由 `docs/design_doc/orchestrator/139-qa-gate-enforcement-surface.md`、`docs/qa/orchestrator/177-qa-gate-enforcement-surface.md`、`config/governance/qa-gate-surface.json`、`scripts/qa/test-qa-gate-surface.sh` 与 `.github/workflows/ci.yml` 的 `governance` job 承载
 - FR-125 已闭环删除；其精确消费者清单、capture/JSONPath 生产路径退役、窄化持久状态、显式兼容性阻塞项与退役后工具工作流证据现由 `docs/design_doc/orchestrator/137-legacy-coordination-decommission.md`、`docs/qa/orchestrator/175-legacy-coordination-decommission.md`、`config/governance/coordination-collapse-ledger.json` 与 `scripts/qa/test-legacy-coordination-decommission.sh` 承载
 - FR-124 已闭环删除；其 11 个生产 Workflow 精确分类、7 个非 governance-only 迁移、逐工作流 legacy/tool 对等证据、显式 tool/session 边界、`record_metric`、self-bootstrap 两周期生存回归、冻结棘轮与三级退役标准现由 `docs/design_doc/orchestrator/136-coordination-strangler-completion.md`、`docs/qa/orchestrator/174-coordination-strangler-completion.md`、`config/governance/coordination-collapse-ledger.json`、`fixtures/manifests/bundles/coordination-strangler-parity.yaml` 与 `scripts/qa/test-coordination-strangler.sh` 承载
 - FR-123 已闭环删除；其 shared/dedicated/组合认证入口、可恢复 provider checkpoint、inert 最小 secret 环境、同消息双 badge smoke、recorded provider CI、可过期安全证据、README/release 状态与显式清理 inventory 现由 `docs/design_doc/orchestrator/135-slack-sandbox-continuous-certification.md`、`docs/qa/orchestrator/173-slack-sandbox-continuous-certification.md`、`docs/guide/slack-managed-sandbox-certification-runbook.md`、`docs/qa/evidence/slack-live-certification-latest.json` 与 `scripts/qa/certify-slack-managed-live.sh` 承载

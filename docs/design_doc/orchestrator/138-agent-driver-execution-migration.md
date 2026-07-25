@@ -197,7 +197,7 @@ This proves the source removal patch remains mechanically reversible without app
 - Risk: rollback documentation becomes stale.
   - Mitigation: run the reverse-patch applicability check during every aggregate certification.
 - Risk: a fast local run is mistaken for release certification.
-  - Mitigation: full gates are default; only explicit `FR126_FAST=1` skips them and the script labels that mode non-certifying.
+  - Mitigation: full gates are default; only explicit `FR126_FAST=1` skips them and the script labels that mode non-certifying. The one place fast mode is certifying is the `governance` job in `.github/workflows/ci.yml`, where each skipped gate runs as a sibling job of the same workflow; `config/governance/qa-gate-surface.json` records that this is deliberate.
 - Risk: runtime migration completes while user-facing guides keep advertising retired configuration.
   - Mitigation: execute the driver documentation alignment ratchet from both `qa-doc-lint` and the FR-126 aggregate, scan the entire showcase directory, verify the EN/ZH downstream link, and include representative guide and showcase phrases in the negative fixture.
 
@@ -226,7 +226,8 @@ This proves the source removal patch remains mechanically reversible without app
   ./scripts/qa/test-agent-driver-documentation-alignment.sh --fixture-test
   ```
 
-- Local iteration only:
+- Local iteration only (in CI the same flag is set by the `governance` job, where the
+  skipped gates run as sibling jobs):
 
   ```bash
   FR126_FAST=1 FR126_ALLOW_DIRTY=1 \
