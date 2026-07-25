@@ -200,8 +200,13 @@ ruby scripts/qa/ci-liveness.rb
   the CI job sat at 52 minutes, and a hang looks like nothing at all because it produces no failure
   output. Self-exclusion is derived from `BASH_SOURCE`, and a sentinel variable closes the indirect
   case that path exclusion cannot see. Verification mode takes about 7.5 minutes for 15 gates.
-- `core-boundary.rb --write` exits 2 under `GITHUB_ACTIONS` alone. Before this FR only `CI` was
-  checked, so a runner that does not export it wrote the reviewed ledger unattended.
+- `core-boundary.rb --write` exits 2 under `GITHUB_ACTIONS` alone, and `test-core-boundary.sh`
+  case 7b holds it. Against the pre-FR-134 guard that case reports
+  `--write ran with only GITHUB_ACTIONS set (exit 0)` — it wrote the reviewed ledger with no
+  human present. Case 7c is the other direction: `CI=false` must be treated as interactive, or the
+  recovery path this ledger depends on is unusable on a machine that sets it; the old guard tested
+  for presence and refused. Both cases fail on the old implementation and pass on the new one,
+  which is what makes them evidence rather than decoration.
 - `ci-liveness.rb` passes only when every job of every in-scope workflow has a record that is
   fresh against its workflow, and every non-success record names a reference and a reason.
 

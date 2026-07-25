@@ -228,6 +228,45 @@ else
   fail "--write did not refuse under CI or modified the ledger (exit $STATUS)"
   cat "$WORK/case7.err" >&2
 fi
+
+# `CI` is a GitHub and Travis convention, not a universal one. A self-hosted
+# runner or a cron job that exports GITHUB_ACTIONS but not CI walked straight
+# through the old guard and rewrote the reviewed ledger with no human present —
+# the single barrier keeping the review gate from being decoration. FR-134
+# widened the surface; this is the half of it that can regress silently, because
+# the CI=1 case above keeps passing either way.
+DIR="$(new_case ci-write-github-actions)"
+BEFORE="$(digest "$DIR/$LEDGER")"
+set +e
+(cd "$DIR" && env -u CI GITHUB_ACTIONS=true ruby "$GATE" --emit-baseline --write \
+  > "$WORK/case7b.out" 2> "$WORK/case7b.err")
+STATUS=$?
+set -e
+AFTER="$(digest "$DIR/$LEDGER")"
+if [[ "$STATUS" -ne 0 && "$BEFORE" == "$AFTER" ]] &&
+  grep -q "refusing --write under GITHUB_ACTIONS" "$WORK/case7b.err"; then
+  pass "--write refuses under GITHUB_ACTIONS with CI unset, and names why"
+else
+  fail "--write ran with only GITHUB_ACTIONS set (exit $STATUS), or modified the ledger"
+  cat "$WORK/case7b.err" >&2
+fi
+
+# And the other direction: CI=false is how a developer says "treat this as
+# interactive". A guard that only tests for presence would block it, and the
+# recovery path this ledger depends on would be unusable on that machine.
+DIR="$(new_case ci-write-false)"
+BEFORE="$(digest "$DIR/$LEDGER")"
+set +e
+(cd "$DIR" && CI=false ruby "$GATE" --emit-baseline --write > /dev/null 2> "$WORK/case7c.err")
+STATUS=$?
+set -e
+AFTER="$(digest "$DIR/$LEDGER")"
+if [[ "$STATUS" -eq 0 && "$BEFORE" == "$AFTER" ]]; then
+  pass "CI=false is treated as interactive, and a no-op write still changes nothing"
+else
+  fail "CI=false was treated as unattended (exit $STATUS) or the write was not a no-op"
+  cat "$WORK/case7c.err" >&2
+fi
 echo ""
 
 # --- Case 8: the schema snapshot rejects a schema that is not the reviewed one

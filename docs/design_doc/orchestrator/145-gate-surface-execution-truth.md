@@ -200,6 +200,14 @@ that crate's last coverage rather than aligned anything. Building it in CI belon
 **Delete the broken mirror symlink rather than declare its directory.** It resolves nowhere and
 nothing references it. Declaring it would have made a root out of a mistake.
 
+**Add three gates, against the FR's own non-goal.** FR-134 listed "do not grow the number of gates
+in `scripts/qa/` or add new semantic assertions" as a non-goal, and its requirement 8 then asks for
+a liveness ledger with a check, a discovery-based job list, and a `CI=1` parity run — none of which
+can exist without new gates. The requirement is specific and the non-goal is general, so the
+requirement won, exactly as FR-131's acceptance criterion beat its non-goal about navigation. What
+the non-goal was protecting is intact: no existing script's `enforcement` classification changed,
+and the surface grew only by the three files this FR had to write (53 → 56, 20 → 23 `ci-required`).
+
 ## Known limits
 
 - **The stale-claim scan does not catch semantic drift.** Verified rather than assumed: writing
