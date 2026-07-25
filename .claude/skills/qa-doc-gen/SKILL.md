@@ -183,6 +183,8 @@ When a doc invariant is worth freezing into an automated check (a script wired i
 3. Freeze the invariant in **both directions**: a negative pattern that must be absent, and a positive assertion that the current mechanism is described. Absence checks alone pass on a page that says nothing.
 4. When a governed page links onward, assert the **link target** is governed too. Readers follow the link; the gate should follow it as well.
 5. Ship a **negative fixture** proving the gate fails on a violating sample. An unfalsifiable gate is indistinguishable from no gate.
+6. **Derive the surface's own boundary; declare only the exemptions.** Rule 1 governs which files inside a surface get scanned; this one governs what counts as the surface. A declared list of roots, a non-recursive `ls dir/*.ext`, or a hardcoded set of directories all guard exactly what existed when they were written, and the next root or subdirectory is invisible rather than failing. Enumerate the surface from the repository — `git ls-files`, tracked symlinks resolving into the source tree, a recursive glob — and reserve the hand-written list for exemptions that carry reasons.
+7. **Choose the mutation the implementation is least likely to survive.** A fixture that deletes a required line tests the case the author already imagined; one that comments it out, renames it, or leaves it present but unreachable tests the case they did not. When a check matches text, at minimum include a fixture where the text is present and the fact is false.
 
 ## Output Requirements
 

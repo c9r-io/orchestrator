@@ -73,14 +73,29 @@ When the FR removes or migrates an existing execution path, structural evidence 
 
 Also assert at least one **end-to-end behavior** that depended on the old path and must still hold — typically the thing the migrated object exists to do. A migration whose acceptance criteria are entirely counts and symbol-absence checks will pass while the migrated feature is broken.
 
-### 4.4 Execute QA verification
+### 4.4 Assertion strength: never let a proxy be the only check
+
+When an assertion's subject is **whether something actually happens** — a command executes, a surface is fully covered, a block really closes — text matching approximates it cheaply and wrongly. Four consecutive post-closure audits of governance FRs found the same three shapes, each written by someone who understood the domain and reached for the five-minute version:
+
+1. **Text presence standing in for execution.** `grep -F "$script" "$job_block"` is satisfied by a commented-out step, by the script's name in a `name:` field, or by a mention in a heredoc. A `grep 'export PATH=...'` isolation check is satisfied by that line commented out. Both gates then certify an enforcement that does not run.
+2. **Enumeration standing in for coverage.** A hand-listed set of scanned files, a declared list of mirror roots, a non-recursive `ls dir/*.sh` — each guards exactly what was known when it was written. The next instance lands outside it silently. The tell: the list grows by one entry per audit round.
+3. **Counting or regex standing in for parsing.** Counting `{` and `}` per line to find a block's end breaks on a brace inside a string literal and silently swallows the rest of the file. Comparing whole-file totals ("as many `binary: fake-*` lines as `provider:` lines") does not establish the per-object association the contract claims.
+
+The rule: **a proxy may be an additional condition, never the only one.** Pair it with something that observes the fact itself — parse the workflow step rather than grep the block, run the gate behind a stub that fails loudly if the real binary is reached, derive the covered set from the repository rather than from a list, associate per object rather than per file total.
+
+Two habits that catch these before review does:
+
+- **Pick the mutation the implementation is least likely to catch.** A negative fixture that deletes a line proves less than one that comments it out, because deletion is the case the author had in mind. State which mutation each fixture applies and why that one.
+- **Ask what the assertion would still pass on.** If the answer includes a state you would consider broken, the assertion is a proxy and needs a second condition.
+
+### 4.5 Execute QA verification
 
 1. Run `cargo test --workspace` — all unit/integration tests pass
 2. Run `cargo clippy --workspace --all-targets -- -D warnings` — no warnings
 3. Run automated QA script if created — all scenarios pass
 4. For scenarios that can't be automated, verify by code inspection or CLI spot-check
 
-### 4.5 Certification validity conditions
+### 4.6 Certification validity conditions
 
 A QA run only counts as closure evidence when all of these hold. If any fails, the run is void — fix the condition and re-run rather than reporting the result.
 
@@ -90,7 +105,7 @@ A QA run only counts as closure evidence when all of these hold. If any fails, t
 4. **True exit code** — invoke as `bash script > log 2>&1` and capture `$?` directly. Piping into `tail`/`head` reports the pager's status, masking a failed script.
 5. **Complete output** — the script's final summary line must be present in the log. Its absence means the run terminated early regardless of the reported status.
 
-### 4.6 QA safety principles
+### 4.7 QA safety principles
 
 Follow these principles from past governance experience:
 
@@ -112,7 +127,9 @@ This step is self-referential by construction: the same effort that authored the
 2. For each acceptance criterion, verify implementation by referencing QA test results, then adversarially:
    - Ask **"what input or state would make this assertion false?"** and confirm a test exists that would actually fail in that case (a negative fixture, not only a positive one).
    - Reject criteria satisfied purely by structural checks (counts equal, symbol absent, file present). Each needs at least one behavioral assertion alongside it.
-   - Check whether the change **falsified any existing statement** elsewhere in the repo — user guides, design records, showcases, README indexes, CHANGELOG. A closed FR that leaves the documentation describing the removed mechanism is not closed.
+   - Apply the 4.4 proxy test to each new assertion: name a broken state it would still pass on. Text-presence, enumeration and count-based checks fail this most often, and a gate that certifies enforcement it cannot observe is worse than no gate — it converts an unknown into a false assurance.
+   - Check whether the change **falsified any existing statement** elsewhere in the repo — user guides, design records, showcases, README indexes, CHANGELOG. A closed FR that leaves the documentation describing the removed mechanism is not closed. When the change alters a *semantic* rather than adding one — monotonic becoming exact, advisory becoming blocking — search for the old term by name; prose describing the previous rule is the most common survivor.
+   - If a defect in shared tooling was reported by a prior audit and this FR touches that tooling, either fix it or record it in the design record's known limits. Extracting a known-defective function into a shared library multiplies its blast radius; inheriting it silently is a regression even when nothing breaks today.
 3. Classify the FR:
    - **Closed**: all acceptance criteria met, all QA scenarios pass, no open items
    - **Partially done**: some criteria met, others remain
