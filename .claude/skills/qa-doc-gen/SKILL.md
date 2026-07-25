@@ -79,6 +79,32 @@ Read `references/design-doc-template.md` for the exact format template.
 3. **Decision capture**: Record assumptions, in-scope/out-of-scope, and the minimal rollback strategy.
 4. **Observability**: If the plan mentions it, include logs/metrics/tracing hooks; otherwise add a brief "Default Recommendations" section.
 
+### Lifecycle frontmatter (mandatory)
+
+Every generated design doc and QA doc opens with lifecycle frontmatter.
+`scripts/qa/doc-lifecycle.rb` enforces it in CI, so a document generated without it fails the build:
+
+```yaml
+---
+lifecycle: active          # active | superseded
+related_fr: FR-132         # optional; omit rather than guess at the attribution
+---
+```
+
+If the cross-doc impact analysis in Step 5 finds a document whose mechanism this change *replaced*
+rather than extended, set that document to `lifecycle: superseded` and add `superseded_by:` naming
+the successor's repo-relative path. Keep its prose banner too — the gate reads the metadata, a
+human reads the banner. A post-release update is not supersession.
+
+Note that `lifecycle` is a different axis from the `**Status**:` header some design docs carry:
+that one records implementation maturity, and a `Released` document can be superseded.
+
+After generating documents, regenerate the reverse index in the same commit:
+
+```bash
+ruby scripts/qa/doc-lifecycle.rb --emit-index --write
+```
+
 ## Step 4: Generate QA Document
 
 Read `references/qa-doc-template.md` for the exact format template.
@@ -169,6 +195,8 @@ After creating the design doc(s), update `docs/design_doc/README.md`:
 
 1. Add the new document to its module's index table
 2. Keep the README lightweight and project-agnostic
+3. Regenerate `config/governance/doc-lifecycle-index.json` with
+   `ruby scripts/qa/doc-lifecycle.rb --emit-index --write` and commit it alongside the documents
 
 ## Step 8: Update Other Indexes When Changed
 

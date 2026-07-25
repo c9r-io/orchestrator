@@ -130,6 +130,37 @@ The snapshot diff is the only place a schema change is legible to a reviewer, an
 intermediate revision that fails the gate is one nobody can bisect through. `--write` refuses
 to run under `CI`. See [DD-142](docs/design_doc/orchestrator/142-core-boundary-freeze.md).
 
+## Adding Or Retiring A Design Doc Or QA Doc
+
+Every file under `docs/design_doc/` and `docs/qa/` declares its lifecycle in YAML frontmatter, and
+`config/governance/doc-lifecycle-index.json` is generated from those declarations. A new document
+without frontmatter fails the build, and so does an index that has drifted from the documents —
+the comparison is exact in both directions.
+
+```yaml
+---
+lifecycle: active          # active | superseded
+related_fr: FR-132         # optional; omit rather than guess at the attribution
+---
+```
+
+```bash
+ruby scripts/qa/doc-lifecycle.rb                     # names the document and what is wrong with it
+ruby scripts/qa/doc-lifecycle.rb --emit-index        # print the candidate index and read it
+ruby scripts/qa/doc-lifecycle.rb --emit-index --write   # apply it locally
+```
+
+When a change replaces the mechanism an existing document describes, set that document to
+`lifecycle: superseded` and add `superseded_by:` naming the successor. Do not delete it — the
+history is the audit trail, and the prose banner is what a human reads. A document that merely
+received a post-release update is still active.
+
+`lifecycle` is not the `**Status**:` header some design docs carry: that one records implementation
+maturity, and a `Released` document can be superseded.
+
+**Commit the regenerated index in the same commit as the document change.** `--write` refuses to
+run under `CI`. See [DD-144](docs/design_doc/orchestrator/144-doc-lifecycle-governance.md).
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).

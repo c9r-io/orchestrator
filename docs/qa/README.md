@@ -24,6 +24,25 @@ This directory contains reproducible, verifiable QA test documents.
 4. Use `workspace info <workspace-id>` positional argument (no `--workspace-id`).
 5. Do not use removed path assumptions like `cd orchestrator`.
 6. GUI documents must include an explicit **Entry Visibility** scenario that verifies the normal discoverable route.
+7. Every document opens with lifecycle frontmatter (see below), alongside the existing
+   `self_referential_safe` declaration.
+
+## Lifecycle Frontmatter (Enforced)
+
+`scripts/qa/doc-lifecycle.rb` requires every document here to declare whether it still describes
+the live behaviour, and fails CI when one arrives without it:
+
+```yaml
+---
+lifecycle: active            # active | superseded
+related_fr: FR-132           # optional; omit rather than guess
+self_referential_safe: true  # existing safety declaration, unchanged
+---
+```
+
+When a later change replaces the behaviour a document verifies, set `lifecycle: superseded` and add
+`superseded_by:` naming the successor's repository-relative path. Regenerate the reverse index in
+the same commit with `ruby scripts/qa/doc-lifecycle.rb --emit-index --write`.
 
 ## Test Scripts
 
@@ -303,6 +322,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/179-skill-mirror-integrity.md` | 5 | FR-129 skill mirror coverage across every declared root, the read that proves each mirrored `SKILL.md` opens as a regular file, isolated corruption fixtures including a shape-perfect read-only failure, gate wiring truth, and removal of the unproduced third copy under a single-source rule that stops it returning |
 | orchestrator | `docs/qa/orchestrator/180-core-boundary-freeze.md` | 5 | FR-130 core crate boundary frozen in both directions with a per-file `rusqlite` inventory, the reviewed migration schema baseline with a doctored-snapshot negative fixture, idempotency and resume-to-identical-schema at all 74 interruption points, and one Rust source scanner shared by both governance ledgers |
 | orchestrator | `docs/qa/orchestrator/181-docs-publishing-integrity.md` | 5 | FR-131 showcase sources recovered and single-sourced, publish set proven by running the generator and diffing in both directions, navigation reachability gated in both directions, 36 hand-maintained site pages untracked with per-object evidence, and every relative markdown link resolved without reporting the eight that were never broken |
+| orchestrator | `docs/qa/orchestrator/182-doc-lifecycle-governance.md` | 5 | FR-132 lifecycle frontmatter on all 378 design and QA documents, the three genuinely superseded documents pointed at their successor by human inspection, twelve gate cases each isolated by a targeted mutation, exact-equality reverse index with a CI write refusal, and the existing documentation gates proven unaffected |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018 compile-driven EN/ZH guide review plus FR-126 deterministic Agent driver semantics gate |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |

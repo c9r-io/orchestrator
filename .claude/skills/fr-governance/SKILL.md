@@ -53,6 +53,7 @@ Create `docs/qa/orchestrator/<N>-<topic>.md` with verification scenarios followi
 - Each scenario has: Steps, Expected result
 - Steps use concrete CLI commands, `cargo test` invocations, or `grep`/`rg` checks
 - Mark the document with appropriate safety frontmatter (`self_referential_safe: true/false`)
+- Declare lifecycle metadata (`lifecycle: active`, plus `related_fr: FR-<N>`) — see §5.1
 
 ### 4.2 Create automated QA script (when applicable)
 
@@ -134,6 +135,35 @@ This step is self-referential by construction: the same effort that authored the
    - **Closed**: all acceptance criteria met, all QA scenarios pass, no open items
    - **Partially done**: some criteria met, others remain
 
+### 5.1 Lifecycle metadata (mandatory for every DD and QA document)
+
+Every file under `docs/design_doc/**` and `docs/qa/**` carries YAML frontmatter declaring its
+lifecycle. `scripts/qa/doc-lifecycle.rb` enforces this in CI, and a new document without it fails
+the build.
+
+```yaml
+---
+lifecycle: active          # active | superseded
+related_fr: FR-132         # optional; omit rather than guess
+---
+```
+
+When this FR **supersedes** an existing DD or QA document — the mechanism it describes was replaced,
+not merely extended — flip that document to `lifecycle: superseded` and add
+`superseded_by: <repo-relative path>` naming the successor. Leave the document's prose fence in
+place: the gate reads metadata, a human reads the banner, and neither replaces the other. Do not
+mark a document superseded because it received a post-release update; that is still the live path.
+
+Regenerate the reverse index in the same commit:
+
+```bash
+ruby scripts/qa/doc-lifecycle.rb --emit-index --write   # then read the diff
+```
+
+`lifecycle` is deliberately not `status`: many design docs carry a `**Status**:` header meaning
+implementation maturity, which is an independent axis. A document can be `Released` and superseded
+at once.
+
 ### If closed (all criteria met):
 
 1. Create design doc under `docs/design_doc/orchestrator/` documenting the design decisions
@@ -146,7 +176,8 @@ This step is self-referential by construction: the same effort that authored the
 5. Update `docs/feature_request/README.md`:
    - Remove the FR row from the table (or mark status)
    - Add a closure note following the existing pattern: `FR-XXX 已闭环删除；其设计与验证信息现由 docs/design_doc/... 与 docs/qa/... 承载`
-6. Commit all closure artifacts together
+6. Regenerate `config/governance/doc-lifecycle-index.json` (§5.1) so the new DD/QA pair is indexed
+7. Commit all closure artifacts together
 
 ### If partially done:
 
