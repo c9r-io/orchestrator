@@ -85,6 +85,7 @@
 | FR-131 | 文档发布链路单一来源与链接完整性门禁 | P2 | Proposed |
 | FR-132 | QA/DD 文档生命周期治理 | P2 | Proposed |
 | FR-133 | 依赖策略门禁 — 重复版本、许可证与来源约束 | P3 | Proposed |
+| FR-134 | 门禁执行事实校验 — 消除 FR-127 的文本存在性代理 | P1 | Proposed |
 
 ## 说明
 
@@ -95,6 +96,7 @@
 - `Implemented`: 需求已完成并进入维护阶段
 - 已闭环并删除的 FR，应由对应 `docs/design_doc/**` 与 `docs/qa/**` 继续承载设计和验证信息
 - FR-127 至 FR-133 源自 2026-07-25 的技术负债深挖，共同特征是**治理编写侧严格而执行侧未接线**：门禁、镜像、同步链路、依赖策略均存在"写了但不跑"或"从未被检查"的缺口。FR-127 已闭环，执行面已打开；后续实施顺序为 FR-127（已完成）→ FR-129 / FR-131 / FR-132 / FR-133（各自的门禁挂到该执行面上）→ FR-128（降低既有门禁的维护摩擦）→ FR-130（唯一的结构性重构，与其余各项无依赖）。FR-076 的需求 1（GUI CI 集成）同源，已在该 FR 内单独提升为 P1
+- FR-134 源自 FR-127 的闭环后严格审计：对 `scripts/qa/test-qa-gate-surface.sh` 施加变异测试，发现 4 个可复现漏洞，其中 3 个共享同一根因——用文本存在性代替执行事实（注释掉的 `run:` 步骤、注释掉的 `export PATH` 遮蔽、整文件计数而非逐 agent 关联的 bundle 校验），第 4 个是 stale-claim 扫描退回白名单模式而漏掉 83 个被追踪 Markdown。FR-127 的实质交付（执行面 3→12、台账双向完整、发现红了整个 FR 周期的 `test-legacy-coordination-decommission.sh`）不受影响，故不撤销其闭环
 - FR-127 已闭环删除；其门禁执行面分类、清单与磁盘双向比对、workflow 接线真实性校验、provider 隔离不变量、失效治理声明扫描与七个互相隔离的负向 fixture 现由 `docs/design_doc/orchestrator/139-qa-gate-enforcement-surface.md`、`docs/qa/orchestrator/177-qa-gate-enforcement-surface.md`、`config/governance/qa-gate-surface.json`、`scripts/qa/test-qa-gate-surface.sh` 与 `.github/workflows/ci.yml` 的 `governance` job 承载
 - FR-125 已闭环删除；其精确消费者清单、capture/JSONPath 生产路径退役、窄化持久状态、显式兼容性阻塞项与退役后工具工作流证据现由 `docs/design_doc/orchestrator/137-legacy-coordination-decommission.md`、`docs/qa/orchestrator/175-legacy-coordination-decommission.md`、`config/governance/coordination-collapse-ledger.json` 与 `scripts/qa/test-legacy-coordination-decommission.sh` 承载
 - FR-124 已闭环删除；其 11 个生产 Workflow 精确分类、7 个非 governance-only 迁移、逐工作流 legacy/tool 对等证据、显式 tool/session 边界、`record_metric`、self-bootstrap 两周期生存回归、冻结棘轮与三级退役标准现由 `docs/design_doc/orchestrator/136-coordination-strangler-completion.md`、`docs/qa/orchestrator/174-coordination-strangler-completion.md`、`config/governance/coordination-collapse-ledger.json`、`fixtures/manifests/bundles/coordination-strangler-parity.yaml` 与 `scripts/qa/test-coordination-strangler.sh` 承载
