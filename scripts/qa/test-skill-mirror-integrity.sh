@@ -267,8 +267,48 @@ check_no_content_copies() {
   return $rc
 }
 
+# Check 7: the set of mirror roots is discovered, not declared.
+#
+# The other six checks all operate on `mirrorRoots`, so they verify the roots
+# somebody remembered to list and are silent about the rest. FR-134 built a
+# `.windsurf/skills/` containing one correct symlink and one misnamed symlink
+# pointing at the wrong skill, and all six passed.
+#
+# This is the failure mode that created FR-129 in the first place: its own text
+# missed `.cursor/skills`, which held 16 of 29 skills and had never been checked.
+# The repository's history says roots come and go — SKILLS.md once declared a
+# `.gemini/skills/` that did not exist on disk — so the covered set has to come
+# from the repository and the declaration has to be the exemption, not the scope.
+#
+# Tracked symlinks are read from the index (mode 120000) with their targets, so
+# this costs one git call and no filesystem walk. The target is matched as text:
+# a symlink that points into the source is mirror-shaped wherever it happens to
+# live, including a broken one inside the source directory itself.
+check_mirror_roots_discovered() {
+  local root="$1"
+  local policy="$root/$POLICY_REL" rc=0 source_dir link target root_dir
+  source_dir="$(jq -r '.source' "$policy")"
+
+  while IFS= read -r link; do
+    [[ -z "$link" ]] && continue
+    target="$(git -C "$root" cat-file blob ":$link" 2>/dev/null || true)"
+    [[ "$target" == *"$source_dir/"* ]] || continue
+    root_dir="$(dirname "$link")"
+    # A symlink directly inside the source is not a mirror of it.
+    [[ "$root_dir" == "$source_dir" ]] && continue
+    if ! jq -e --arg r "$root_dir" '.mirrorRoots | index($r)' "$policy" >/dev/null; then
+      echo "    $link -> $target" >&2
+      echo "      points into $source_dir from '$root_dir', which is not a declared mirrorRoot" >&2
+      echo "      declare it so coverage, shape and readability apply to it, or delete it" >&2
+      rc=1
+    fi
+  done < <(git -C "$root" ls-files -s | awk '$1 == "120000" { $1=$2=$3=""; sub(/^[[:space:]]+/, ""); print }')
+  return $rc
+}
+
 ALL_CHECKS=(check_source_inventory check_mirror_coverage check_mirror_shape
-            check_skill_md_readable check_no_stale_claims check_no_content_copies)
+            check_skill_md_readable check_no_stale_claims check_no_content_copies
+            check_mirror_roots_discovered)
 
 run_all_checks() {
   local root="$1" check rc=0
@@ -431,6 +471,42 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
   git -C "$d" add -A
   expect_fail "fixture 8" "$d" "check_no_content_copies" \
     "a tracked SKILL.md outside the source tree is a content copy, not a mirror"
+
+  # 9. An undeclared mirror root containing nothing but symlinks.
+  #
+  #    The reproduction from FR-134: a `.windsurf/skills/` holding one correct
+  #    symlink and one misnamed symlink pointing at the wrong skill. All six
+  #    original checks passed on it, because all six read mirrorRoots.
+  #
+  #    Symlinks specifically, not copies. check_no_content_copies already sees an
+  #    undeclared root that holds real files, so the copy case was never the gap;
+  #    the symlink case was, and symlinks are the shape this repository documents.
+  d="$(new_case f9)"
+  mkdir -p "$d/.windsurf/skills"
+  ln -s ../../.claude/skills/fr-governance "$d/.windsurf/skills/fr-governance"
+  ln -s ../../.claude/skills/qa-doc-gen "$d/.windsurf/skills/BROKEN-wrong-target"
+  git -C "$d" add -A >/dev/null 2>&1
+  expect_fail "fixture 9" "$d" "check_mirror_roots_discovered" \
+    "a root full of symlinks into the source is discovered even though nothing declared it"
+
+  # 9b. The other half, and the one that decides whether this is worth having:
+  #     declaring the root must subject it to the existing checks, not excuse it
+  #     from them. If declaring were the escape hatch, fixture 9 would just be
+  #     teaching people to write one line of JSON.
+  d="$(new_case f9b)"
+  mkdir -p "$d/.windsurf/skills"
+  ln -s ../../.claude/skills/qa-doc-gen "$d/.windsurf/skills/BROKEN-wrong-target"
+  jq '.mirrorRoots += [".windsurf/skills"]' "$BASE/$POLICY_REL" > "$d/$POLICY_REL"
+  git -C "$d" add -A >/dev/null 2>&1
+  if check_mirror_roots_discovered "$d" >/dev/null 2>&1; then
+    if check_mirror_coverage "$d" >/dev/null 2>&1 && check_mirror_shape "$d" >/dev/null 2>&1; then
+      fail "fixture 9b: declaring a root excused it from coverage and shape"
+    else
+      pass "fixture 9b: declaring a root subjects it to the other checks rather than exempting it"
+    fi
+  else
+    fail "fixture 9b: the root was declared but discovery still rejected it"
+  fi
 
   # FR-134's lesson applied to this script itself: a check that is deleted from
   # ALL_CHECKS stops running in verification mode, and nothing above would notice —
