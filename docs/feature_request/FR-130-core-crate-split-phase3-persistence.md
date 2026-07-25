@@ -58,14 +58,18 @@ crate 清单。`scripts/qa/core-boundary.rb` 以**精确相等**比对，`--emit
 
 在 Phase A 开始之前，下列两项必须完成：
 
-1. **[FR-134](FR-134-gate-surface-execution-truth.md) 需求 9 — 扫描器词法安全。**
-   `scripts/lib/rust_source.rb` 的 `strip_test_modules` 按行统计花括号，字符串字面量中的
-   `{` 会使 `cfg(test)` 块永不闭合，其后的生产代码从扫描中消失。已验证：`cfg(test)` 之后的
-   生产 `rusqlite` 引用 `raw=1 → visible=0`。core 中已有两个该形态的文件——`error.rs`
-   （283 行起）与 `source_task_template.rs`（363 行起）——而 `error.rs` 正是 Phase C 的对象。
+1. ~~扫描器词法安全~~ — **已由 FR-134 需求 9 完成**，见
+   [DD-145](../design_doc/orchestrator/145-gate-surface-execution-truth.md)。
+   `scripts/lib/rust_source.rb` 的 `strip_test_modules` 曾按行统计花括号，字符串字面量中的
+   `{` 会使 `cfg(test)` 块永不闭合，其后的生产代码从扫描中消失；`error.rs`（283 行起）与
+   `source_task_template.rs`（363 行起）正是该形态，而 `error.rs` 是 Phase C 的对象。现由
+   `scripts/lib/rust_lexer.rb` 跨行维护字符串、字符、原始字符串与嵌套注释状态，
+   `test-core-boundary.sh` 的 Case 10/11/12 双向固定：缺陷方向（被隐藏的生产代码必须重新
+   被计数）与过修方向（含跨行原始字符串的尾部测试模块不得被提前闭合）。
 
-   **本 FR 的成功判据是 200 → 0 的收敛，而这个数字由该扫描器产出。在尺子可靠之前得出的
-   收敛结论不构成证据。** 修复后须确认基线仍为 `200 / 37`：不变才说明只修了缺陷、没换口径。
+   **本 FR 的成功判据是 200 → 0 的收敛，而这个数字由该扫描器产出。** 修复后基线经确认仍为
+   `200 / 37`——不变才说明只修了缺陷、没换口径；一个逐行正则的"显然修法"会把
+   `capturesOrJsonPath` 从 53 推到 60，正是靠这条判据挡下的。尺子现已可信。
 
 2. **[FR-136](FR-136-persistence-dependency-chokepoint-decision.md) — 依赖收口决策。**
    除 core 外另有 4 个生产 crate、23 个文件、75 处直接引用 `rusqlite`。若不先决定新 crate
