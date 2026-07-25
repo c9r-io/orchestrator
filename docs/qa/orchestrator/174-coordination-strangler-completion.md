@@ -65,8 +65,10 @@ coordination cannot enter silently.
 - The completed ledger has 7 migrated and 4 classified workflows.
 - Unreviewed capture/JSONPath coordination is rejected.
 - Reviewed deterministic CEL is not misclassified.
-- Source counters do not exceed the production-only post-retirement
-  `55 / 39 / 9` baseline.
+- Source counters match the production-only post-retirement `53 / 30 / 9`
+  baseline exactly. FR-128 retightened it from `55 / 39 / 9`: the scan now
+  excludes every inline `cfg(test)` module as `sourceBaseline.scope` always
+  claimed, and the comparison is exact rather than monotonic.
 
 ---
 

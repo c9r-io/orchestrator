@@ -66,10 +66,13 @@ Prove each retirement decision is backed by an exact production inventory.
 - Coordination CEL consumers: 0.
 - Generic pipeline-variable manifest consumers: exactly 2 reviewed
   `store_inputs`.
-- Command-only Agent manifests: exactly 4.
-- Production-only capture/JSONPath source touches do not exceed 55, down from
-  143.
-- Any unreviewed consumer or counter increase fails the command.
+- Command-only Agent manifests: exactly 0. FR-125 froze the count at 4 and
+  FR-126 migrated every one of them.
+- Production-only capture/JSONPath source touches equal 53, down from 143.
+- Any unreviewed consumer fails the command, and any counter that moves in
+  either direction fails it: FR-128 made the source ratchets exact, because a
+  count below its baseline leaves the ledger asserting debt the repository no
+  longer carries while the gate reports green.
 
 ---
 
@@ -247,7 +250,7 @@ Close the feature against repository-wide quality gates.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|---|---|---|---|---|
-| 1 | Reproducible consumer inventory and ratchet | PASS | 2026-07-25 | Codex | Governance inventory reproduced 0 capture/JSONPath consumers, 0 coordination CEL consumers, 2 reviewed generic-variable consumers, 4 command-only Agents, and source baseline 55/39/9. |
+| 1 | Reproducible consumer inventory and ratchet | PASS | 2026-07-25 | Codex | Governance inventory reproduced 0 capture/JSONPath consumers, 0 coordination CEL consumers, 2 reviewed generic-variable consumers, 4 command-only Agents, and source baseline 55/39/9. Superseded 2026-07-25 by FR-126 (command-only Agents to 0) and FR-128 (baseline 53/30/9, compared exactly); re-running this scenario today reports those figures. |
 | 2 | Legacy manifests fail closed with rollback evidence | PASS | 2026-07-25 | Codex | Isolated validation returned the stable retirement diagnostic; the historical fixture and test-only compatibility oracle remain. |
 | 3 | Narrow residual state preserves behavior | PASS | 2026-07-25 | Codex | Migration, precedence, rendering, accumulator, runtime normalization, and governance CEL regressions passed. |
 | 4 | Seven post-retirement tool workflows and survival boundaries | PASS | 2026-07-25 | Codex | Strangler suite passed 20/20 checks across all seven tool-only workflows, including self-bootstrap survival evidence. |

@@ -83,6 +83,26 @@ orchestrator task list
 - **Async safety**: `std::sync::RwLock` restricted to approved files (see `scripts/check-async-lock-governance.sh`)
 - **Commits**: conventional format — `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
 
+## Changing A Production Agent
+
+Production Agents under `docs/workflow/` are pinned by fingerprint in
+`config/governance/coordination-collapse-ledger.json`, so a spec change turns the coordination
+governance gate red until the ledger is updated. The update is a human reading a diff:
+
+```bash
+ruby scripts/qa/coordination-governance.rb                  # names the Agent and the changed spec keys
+ruby scripts/qa/coordination-governance.rb --emit-inventory # print the candidate and review it
+ruby scripts/qa/coordination-governance.rb --emit-inventory --write   # apply it locally
+```
+
+`--emit-baseline` does the same for the four source-touch ratchets, which are compared exactly.
+`--write` refuses to run under `CI`.
+
+**Commit the ledger update in the same commit as the change that caused it.** This is a constraint,
+not a convention: the mismatch report derives the previous spec from `git show HEAD:<file>`, so
+splitting the commit both breaks the diagnosis and leaves the intermediate revision failing the gate.
+See [DD-140](docs/design_doc/orchestrator/140-governance-ledger-regeneration.md).
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).

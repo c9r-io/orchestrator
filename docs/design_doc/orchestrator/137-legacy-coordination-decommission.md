@@ -85,7 +85,7 @@ counts. `scripts/qa/coordination-governance.rb` reproduces the inventory:
 | capture / JSONPath | 0 | removed |
 | coordination CEL | 0 | removed while governance CEL remains |
 | generic `PipelineVariables` | 2 | deprecated, blocked |
-| command-only Agent manifests | 4 | frozen, transferred to FR-126 |
+| command-only Agent manifests | 4 | frozen, transferred to FR-126, which drove the count to 0; the ledger pins 0 |
 
 The two generic-variable consumers are reviewed `store_inputs` bindings in
 `promotion` and `self-evolution`. Public initial/item inputs, command-rule CEL,
@@ -143,7 +143,11 @@ and generic output/template compatibility are additional code-level blockers.
 - Events: existing typed driver and coordination-tool events remain the runtime
   evidence chain; no new telemetry payload is introduced.
 - Metrics: the production-only source ratchet decreases capture/JSONPath
-  touches from 143 to 55 and rejects any increase above the reviewed baseline.
+  touches from 143 to 53 and requires an exact match with the reviewed
+  baseline. FR-125 recorded 55 and rejected only increases; FR-128 corrected the
+  `cfg(test)` exclusion the ledger's `scope` already claimed and made the
+  comparison exact, so a decrease can no longer leave the ledger overstating
+  debt while the gate stays green. See [DD-140](140-governance-ledger-regeneration.md).
 
 ## Operations / Release
 
