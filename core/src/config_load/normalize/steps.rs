@@ -12,10 +12,10 @@ pub(crate) fn apply_default_step_behavior(step: &mut WorkflowStepConfig) {
         .or(step.required_capability.as_deref())
         .unwrap_or(&step.id);
 
-    if let Some(conv) = CONVENTIONS.lookup(key) {
-        if conv.collect_artifacts {
-            step.behavior.collect_artifacts = true;
-        }
+    if let Some(conv) = CONVENTIONS.lookup(key)
+        && conv.collect_artifacts
+    {
+        step.behavior.collect_artifacts = true;
     }
 }
 
