@@ -29,11 +29,49 @@ FR-127 已闭环，其核心交付是真实的：`ci-required` 门禁从 3 个�
 
 （客观边界：GitHub 托管 runner 当前不预装 `claude`/`codex`，因此 CI 内实际消耗 token 目前不可能发生。风险面是本地执行、自托管 runner，以及未来 runner 镜像变化。这是"当前无损害"，不是"机制成立"。）
 
+## 首次真实 CI 运行推翻的前提
+
+FR-127 闭环后首次把 `main` 推送到 GitHub 并观察真实 workflow（run `30152482382`，commit `cf958e3c`），结果为 **11 成功 / 5 失败**。两个失败暴露了本地验证无法看到的问题，且都不在 FR-127 已披露的限制之内。
+
+### 发现 A：`ci-required` 门禁的系统依赖与其所在 job 不一致
+
+```
+Coordination strangler governance and parity → missing required command: rg
+Slack certification recorded contracts ×2    → FAIL: missing command: rg
+```
+
+`coordination-strangler` job 与 `slack-certification-recorded` job 均未安装 ripgrep（前者装的是 `jq ruby sqlite3 protobuf-compiler`）。脚本在起始的 `command -v` 前置检查处即退出，**一条断言都未执行**。
+
+推论极为重要：FR-127 立论为"46 个门禁只有 3 个在 CI"，实测是**那 3 个里至少 2 个是死的**——它们被 job 引用、被 workflow 调度、在日志中出现，但从未验证过任何东西。新建的 `governance` job 恰好安装了 ripgrep，说明依赖需求是已知的，只是没有回头核对既有 job。
+
+**这构成 FR-127 门禁的第五个缺口，且与前四个不同源**：`check_wiring_truth` 只断言"脚本被其声明的 job 引用"，从不断言"被引用的门禁实际可执行"。`test-coordination-strangler.sh` 完全满足 wiring 检查，同时在 CI 中持续失败。**"接线了"不等于"在守"**——这是 FR-127 所要终结的那句话的下一层。
+
+### 发现 B：`ci-required` 门禁的 workspace 范围与 sibling job 不一致
+
+`governance` job 因 `test-filesystem-trigger.sh` 失败：
+
+```bash
+# 脚本（test-filesystem-trigger.sh:20,26）
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+
+# sibling job（ci.yml:66,87）
+cargo test   --workspace --exclude orchestrator-gui
+cargo clippy --workspace --exclude orchestrator-gui --all-targets -- -D warnings
+```
+
+核查确认 `.github/workflows/` 中**没有任何 job 安装 Tauri/webkit 依赖**，`orchestrator-gui` 从未在 Linux 上构建过，因此脚本的无 exclude 版本在 ubuntu 上必然失败。本地 `cargo check -p orchestrator-gui --all-targets` 在 macOS 上 exit 0，确认是平台依赖缺失而非代码缺陷。
+
+DD-139 将这条记为"accepted cost：与 sibling `test`/`clippy` job 重复执行"。它不是重复，**是超集**，而超集多出的那一部分正是 sibling job 刻意排除的。该判断在本地无法证伪，因为 macOS 上 Tauri 依赖由系统框架提供。
+
+次生问题：脚本以 `>/dev/null 2>&1` 吞掉 cargo 输出，CI 日志中只有 `FAIL: cargo test --workspace` 一行，根因无法从日志判定，需本地复现与交叉比对才能定位。诊断信息的丢失使门禁失败的修复成本远高于必要。
+
 ## 目标
 
 - 把 `test-qa-gate-surface.sh` 中三处以文本存在性为代理的判定，替换为对执行事实的判定。
 - 把 stale-claim 扫描的覆盖面从白名单改为全集减豁免，与同仓库既有门禁的策略统一。
 - 把 provider stub 兜底推广到所有执行 provider 相关门禁的 job，使兜底不再依赖单个 job 的配置。
+- 把台账的断言从"门禁被声明为 ci-required"推进到"门禁在真实 CI 中确实可执行且当前为绿"，使死门禁无法继续被 wiring 检查背书。
 
 ## 非目标
 
@@ -73,7 +111,25 @@ FR-127 已闭环，其核心交付是真实的：`ci-required` 门禁从 3 个�
 - 把 `governance` job 的 `exit 97` stub 安装步骤提取为可复用步骤，应用到所有执行 provider 相关门禁的 job，至少包含 `coordination-strangler`。
 - 记录哪些 job 无需 stub 及其理由。
 
-### 6. 修正 QA-177 的计数陈述
+### 6. 系统依赖一致性校验
+
+- 新增检查：每个 `ci-required` 脚本的 `command -v` 前置依赖列表，必须是其声明 job 的依赖安装步骤所提供命令的子集。
+- 该检查须能同时覆盖 apt 安装、runner 预装与工具 action 三类来源；无法静态判定的来源需在台账中显式声明。
+- 修复现存不一致：`coordination-strangler` 与 `slack-certification-recorded` 两个 job 缺少 ripgrep。修复本身属实施范围，但**先补齐检查再修复**，以证明检查确实会在修复前失败。
+
+### 7. Workspace 范围与诊断保真
+
+- 新增检查：`ci-required` 门禁若执行 `cargo test`/`cargo clippy`，其 workspace 范围必须与 `ci.yml` 中同名 sibling job 的范围一致，或在台账中带理由声明差异。
+- `test-filesystem-trigger.sh` 的范围差异按上述规则处置：对齐 sibling 的 `--exclude orchestrator-gui`，或声明该门禁要求完整 workspace 并由其 job 安装 Tauri 依赖（后者属 FR-076 需求 1 范围，本 FR 不实施，只需记录归属）。
+- 禁止 `ci-required` 门禁把失败命令的输出丢弃：`>/dev/null 2>&1` 形态的调用须改为捕获到日志并在失败时回显，使 CI 日志足以定位根因而无需本地复现。
+
+### 8. 门禁存活性
+
+- 台账新增一个维度，记录每个 `ci-required` 门禁最近一次真实 CI 执行的结论与 run 引用。
+- 新增检查：`ci-required` 门禁不得处于已知持续失败状态；若确需在修复期内保持红色，必须在台账中显式标注为 `known-failing` 并附 ticket 或 FR 引用与预期修复期限。
+- 该维度的更新方式需可脚本化（例如从 `gh run` 拉取），不得依赖人工誊写——否则它会退化成与被治理对象同类的陈旧声明。
+
+### 9. 修正 QA-177 的计数陈述
 
 - QA-177 Scenario 3 记为"All 10 `ci-required` gates"，而台账声明 12（差额为两条 `invokedBy` 条目）。更正为准确表述，或说明 10 指直接调用数。
 
@@ -89,6 +145,12 @@ FR-127 已闭环，其核心交付是真实的：`ci-required` 门禁从 3 个�
 - [ ] 既有 7 条 fixture 与正向控制仍全部通过，`ci-required` 分类结论无变化
 - [ ] `exit 97` stub 已覆盖 `coordination-strangler` 等全部 provider 相关 job，例外有书面理由
 - [ ] stale-claim 扫描覆盖 `git ls-files '*.md'` 全集，豁免项各带理由，且全集下无误报
+- [ ] 依赖一致性检查在修复 ripgrep 缺失**之前**即失败，指名 `coordination-strangler` 与 `slack-certification-recorded` 两个 job
+- [ ] 修复后两个 job 的门禁能执行到各自的断言，而非停在 `command -v` 前置检查
+- [ ] workspace 范围差异被检查捕获；`test-filesystem-trigger.sh` 的差异已对齐或带理由声明，归属记录清楚
+- [ ] 无 `ci-required` 门禁以 `>/dev/null 2>&1` 丢弃失败命令输出；负向验证：故意使某条 cargo 命令失败，CI 日志足以定位根因
+- [ ] 台账记录每个 `ci-required` 门禁最近一次真实 CI 结论，且该维度可脚本化更新
+- [ ] 存活性检查对处于持续失败且未标注 `known-failing` 的门禁失败
 - [ ] QA-177 的门禁计数陈述与台账一致
 - [ ] `cargo test --workspace`、strict Clippy 与全部既有 CI job 通过
 
@@ -98,4 +160,7 @@ FR-127 已闭环，其核心交付是真实的：`ci-required` 门禁从 3 个�
 - **变异类别扩展**：除"注释掉"外，补充 `if: false`、步骤被 `name:` 提及但无 `run:`、脚本名出现在 job 内 heredoc 文本中三种形态，确认均被判为未接线。
 - **运行时探针自证**：对 `test-agent-driver-production-parity.sh` 故意移除隔离后运行探针，stub 必须被触发（exit 97 可见），恢复后不触发。
 - **全集扫描误报基线**：在改为全集后先做一次干跑，记录所有命中项并逐条判定为真阳性或需豁免，避免用扩大豁免清单的方式让门禁变绿。
-- **CI 实证**：修复后推送并观察真实 workflow 运行结果，而非仅本地执行——FR-127 的教训是本地绿不等于 CI 绿，而 CI 绿不等于门禁真的在守。
+- **依赖缺失的先证后修**：在补 ripgrep 之前先跑依赖一致性检查，必须失败并指名两个 job；补齐后转绿。顺序不可颠倒，否则无法证明检查有效而非恒真。
+- **存活性检查自证**：把一个当前为绿的 `ci-required` 门禁临时标为持续失败态，存活性检查必须失败；恢复后通过。反向亦须验证：真实红门禁未标注 `known-failing` 时不得放行。
+- **诊断保真验证**：临时让某个 `ci-required` 门禁中的 cargo 命令失败，断言 CI 日志包含足以定位根因的编译器输出，而非仅一行 `FAIL:`。本 FR 的发现 B 正是因为缺少这一点而需要本地复现才能定位。
+- **CI 实证**：修复后推送并观察真实 workflow 运行结果，而非仅本地执行。本 FR 的两个新发现均只在真实 CI 中可见——发现 A 因本地已装 ripgrep 而不可见，发现 B 因 macOS 提供 Tauri 系统框架而不可见。**本地绿不等于 CI 绿，CI 绿不等于门禁在守，门禁被引用也不等于门禁能跑。**
