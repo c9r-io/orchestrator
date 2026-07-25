@@ -83,9 +83,9 @@ loop:
 
 ### 替换为真实 Agent
 
-参见 [Hello World 自定义指南](/zh/showcases/hello-world#替换为真实-agent)。
+参见 [Hello World 自定义指南](hello-world.md#替换为真实-agent)。
 
 ## 进阶参考
 
-- [全量 QA 执行](/zh/showcases/full-qa-execution) — 生产级全量 QA workflow（含 CEL prehook 安全过滤）
-- [工作流配置](/zh/guide/workflow-configuration) — 步骤执行模型与循环策略
+- [Full QA Execution](../full-qa-execution.md) — 生产级全量 QA workflow（含 CEL prehook 安全过滤，暂无中文版）
+- [Workflow Configuration](../../guide/zh/03-workflow-configuration.md) — 步骤执行模型与循环策略

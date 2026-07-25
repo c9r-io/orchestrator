@@ -1,60 +1,65 @@
-# 多模型 × 多外壳 SDLC Benchmark 执行计划
+# Multi-Model x Multi-Shell SDLC Benchmark Execution Plan
 
-> **Harness Engineering 执行计划**：本文档是一个 agent 可执行场景，用来展示 orchestrator 这个 control plane 如何组织环境、工作流、约束与反馈闭环，而不是一次性的 prompt 调用。
+> **Harness Engineering execution plan**: this is an agent-executable scenario that shows how the control plane coordinates environment, workflow, guardrails, and feedback loops rather than a one-off agent call.
 >
-> **Agent 协作**：本文档是一个 Agent 可执行的计划。在 AI 编码 Agent（Claude Code、OpenCode、Codex 等）中打开本项目，Agent 读取本计划后，通过 orchestrator CLI 调度其他 Agent 协作完成任务 — 从资源部署、任务执行到结果评估，全程自主完成。
+> **Agent Collaboration**: This document is an agent-executable plan. Open this project in an AI coding agent (Claude Code, OpenCode, Codex, etc.) — the agent reads this plan and orchestrates other agents via the orchestrator CLI to collaboratively complete the task, from resource deployment and execution to result evaluation, fully autonomously.
 
-## 1. Benchmark 目标
+## 1. Benchmark Objective
 
-通过控制变量法，在相同的任务目标和 Workflow 下，分别替换 **LLM 模型**和 **Agent 外壳**，评估两个独立维度的性能差异：
+Using the controlled variable method, under the same task goal and Workflow, substitute different **LLM models** and **Agent shells** to evaluate performance differences across two independent dimensions:
 
-- **综合维度**：替换外壳+模型组合（OpenCode/MiniMax, Gemini CLI/Flash, Codex/GPT-5.4-mini），观察不同 Agent 外壳和模型对任务完成度、代码质量的综合影响
+- **Model dimension**: Fix the shell (e.g., Claude Code), swap the model (Opus / Sonnet / GLM-5 / Gemini / GPT-5.4), and observe how model capability affects task completion and code quality
+- **Shell dimension**: Fix the model (e.g., Opus 4.6), swap the shell (Claude Code / OpenCode / Codex / Gemini CLI), and observe how the shell toolchain affects execution efficiency and results
 
-## 2. 变量矩阵
+## 2. Variable Matrix
 
-| ID | 外壳 | 模型 | Agent Manifest | SecretStore |
-|----|------|------|----------------|-------------|
-| C1 | OpenCode | MiniMax-M2.7-highspeed | `fixtures/benchmarks/agent-opencode-glm5.yaml` | `fixtures/benchmarks/secrets-glm5.yaml` |
-| D1 | Gemini CLI | gemini-3-flash-preview | `fixtures/benchmarks/agent-gemini-pro.yaml` | `fixtures/benchmarks/secrets-gemini.yaml` |
-| E1 | Codex CLI | gpt-5.4-mini | `fixtures/benchmarks/agent-codex-gpt54.yaml` | `fixtures/benchmarks/secrets-openai.yaml` |
+| ID | Shell | Model | Agent Manifest | SecretStore |
+|----|-------|-------|----------------|-------------|
+| A1 | Claude Code | Opus 4.6 | `fixtures/benchmarks/agent-claude-opus.yaml` | `fixtures/benchmarks/secrets-claude-opus.yaml` |
+| B1 | OpenCode | Opus 4.6 | `fixtures/benchmarks/agent-opencode-opus.yaml` | `fixtures/benchmarks/secrets-claude-opus.yaml` |
+| C1 | OpenCode | GLM-5 | `fixtures/benchmarks/agent-opencode-glm5.yaml` | `fixtures/benchmarks/secrets-glm5.yaml` |
+| D1 | Gemini CLI | Gemini 3.1 Pro | `fixtures/benchmarks/agent-gemini-pro.yaml` | `fixtures/benchmarks/secrets-gemini.yaml` |
+| E1 | Codex CLI | GPT-5.4 | `fixtures/benchmarks/agent-codex-gpt54.yaml` | `fixtures/benchmarks/secrets-openai.yaml` |
 
-**控制变量分析组：**
+**Controlled Variable Analysis Groups:**
 
-| 对比 | 固定变量 | 变化变量 | 观察目标 |
-|------|----------|----------|----------|
-| C1 vs D1 vs E1 | 相同 goal & workflow | 外壳+模型 | 综合差异 |
+| Comparison | Fixed Variable | Changed Variable | Observation Target |
+|------------|----------------|------------------|--------------------|
+| A1 vs B1 | Opus 4.6 | Claude Code vs OpenCode | Shell difference |
+| B1 vs C1 | OpenCode | Opus 4.6 vs GLM-5 | Model difference |
+| A1 vs D1 vs E1 | — | All combinations | Overall difference |
 
-> 可按需扩展：创建新的 Agent + SecretStore manifest 即可。
+> Extensible as needed: simply create new Agent + SecretStore manifests.
 
-## 3. 前置条件
+## 3. Prerequisites
 
-执行者（Agent）应首先验证以下条件：
+The executor (Agent) should first verify the following conditions:
 
-- `orchestrator --version` 和 `orchestratord --version` 可执行
-- daemon 正在运行（`orchestrator daemon status`），如未运行则启动：`orchestratord --foreground --workers 2 &`
-- 矩阵中涉及的外壳已安装（`opencode --version`、`gemini --version`、`codex --version`）
-- `fixtures/benchmarks/secrets-*.yaml` 中的 API 密钥已填入（非 `<placeholder>` 值）
+- `orchestrator --version` and `orchestratord --version` are executable
+- The daemon is running (`orchestrator daemon status`); if not, start it: `orchestratord --foreground --workers 2 &`
+- The shells listed in the matrix are installed (`claude --version`, `opencode --version`, `gemini --version`, `codex --version`, etc.)
+- API keys in `fixtures/benchmarks/secrets-*.yaml` have been filled in (not `<placeholder>` values)
 
-## 4. 统一任务目标
+## 4. Unified Task Goal
 
-所有组合使用完全相同的 goal（控制变量）：
+All combinations use the exact same goal (controlled variable):
 
 ```
 Implement a retry mechanism for gRPC client connections with exponential backoff and configurable max retries. Add unit tests.
 ```
 
-## 5. 执行流程（逐组合执行）
+## 5. Execution Flow (Per Combination)
 
-对矩阵中的每个组合 ID，按以下步骤执行：
+For each combination ID in the matrix, follow these steps:
 
-### 5.1 环境准备
+### 5.1 Environment Preparation
 
 ```bash
 cd "$ORCHESTRATOR_ROOT"
 git stash --include-untracked || true
 ```
 
-### 5.2 部署资源
+### 5.2 Deploy Resources
 
 ```bash
 orchestrator apply -f fixtures/benchmarks/<secret_file> --project benchmark
@@ -62,14 +67,14 @@ orchestrator apply -f fixtures/benchmarks/<agent_file> --project benchmark
 orchestrator apply -f fixtures/benchmarks/workflow-benchmark-bootstrap.yaml --project benchmark
 ```
 
-验证：
+Verify:
 
 ```bash
 orchestrator get agents --project benchmark -o json
 orchestrator get workflows --project benchmark -o json
 ```
 
-### 5.3 创建任务
+### 5.3 Create Task
 
 ```bash
 orchestrator task create \
@@ -78,17 +83,17 @@ orchestrator task create \
   --goal "Implement a retry mechanism for gRPC client connections with exponential backoff and configurable max retries. Add unit tests."
 ```
 
-记录返回的 `task_id`。
+Record the returned `task_id`.
 
-### 5.4 监控至完成
+### 5.4 Monitor Until Completion
 
 ```bash
 orchestrator task watch <task_id> --timeout 1800
 ```
 
-如超时或失败，记录状态后继续下一个组合。
+If it times out or fails, record the status and proceed to the next combination.
 
-### 5.5 收集结果
+### 5.5 Collect Results
 
 ```bash
 orchestrator task info <task_id> -o json
@@ -97,14 +102,14 @@ orchestrator task items <task_id> -o json
 orchestrator task trace <task_id> --json
 ```
 
-### 5.6 保存产出物快照
+### 5.6 Save Artifact Snapshot
 
 ```bash
 git diff > results/<combo_id>-diff.patch
 git diff --stat > results/<combo_id>-diffstat.txt
 ```
 
-### 5.7 恢复环境
+### 5.7 Restore Environment
 
 ```bash
 git checkout -- .
@@ -112,160 +117,167 @@ git clean -fd
 git stash pop || true
 ```
 
-重复 5.1–5.7 直到所有组合执行完毕。
+Repeat steps 5.1–5.7 until all combinations have been executed.
 
-## 6. 评估阶段
+## 6. Evaluation Phase
 
-所有组合执行完成后，**宿主 agent**（执行本计划的 agent，而非被评测的目标 agent）对 `results/` 目录下的全部产出进行统一评估。
+After all combinations have been executed, the **host agent** (the agent executing this plan — not the target agents being benchmarked) performs a unified evaluation of all artifacts in the `results/` directory.
 
-> **评估者独立性**：Workflow 中包含一个 `benchmark_eval` 步骤，由每个目标 agent 作为循环内自检执行。但 §6.2 中的权威六维评分由宿主 agent 在事后检查收集的产出物（diff、事件日志、任务 trace）后给出。这种分离确保评估者独立于被评估者 — 相当于裁判不参赛。
+> **Evaluator independence**: The workflow includes an in-loop `benchmark_eval` step executed by each target agent as a self-check. However, the authoritative six-dimension scores in §6.2 are produced by the host agent examining collected artifacts (diffs, event logs, task traces) post-hoc. This separation ensures the evaluator is independent of the evaluated agent — the same principle as having a referee who isn't also a player.
 
-### 6.1 定量指标（从 JSON 结果中提取）
+### 6.1 Quantitative Metrics (Extracted from JSON Results)
 
-| 指标 | 数据来源 |
-|------|----------|
-| 完成状态 | `task info` → `status` (completed/failed) |
-| 总耗时 | `task info` → `started_at` 到 `completed_at` |
-| 执行轮次 | `event list` → `cycle_completed` 事件计数 |
-| 步骤成功率 | `event list` → `step_finished` 中 `success: true` 的比例 |
+| Metric | Data Source |
+|--------|------------|
+| Completion status | `task info` → `status` (completed/failed) |
+| Total duration | `task info` → `started_at` to `completed_at` |
+| Execution cycles | `event list` → `cycle_completed` event count |
+| Step success rate | `event list` → proportion of `step_finished` with `success: true` |
 
-### 6.2 六维评估（宿主 Agent 事后评估）
+### 6.2 Six-Dimension Evaluation (Host Agent Post-Hoc)
 
-**宿主 agent** 逐一应用各组合的 diff，执行 `git diff --stat`、构建/测试/lint 命令，并检查收集的 JSON 产出物。若 diff 为空，任务完成度直接记 0 分，其余维度跳过。
+The **host agent** applies the diff from each combination, runs `git diff --stat`, build/test/lint commands, and inspects the collected JSON artifacts. If the diff is empty, Task Completion scores 0 and remaining dimensions are skipped.
 
-| 维度 | 分值 | 评分标准 |
-|------|------|----------|
-| **任务完成度** | 0-10 | 0 = 无代码变更；5 = 部分实现，缺少关键需求；10 = 所有需求均以可运行代码实现 |
-| **代码质量** | 0-10 | 0 = 语法错误或构建失败；5 = 可编译但非惯用风格；10 = 正确、惯用、简洁 |
-| **测试覆盖** | 0-10 | 0 = 无测试；5 = 有测试但缺少边界情况；10 = 覆盖新增/变更代码的完整单元测试 |
-| **执行效率** | 0-10 | 基于 `task info` 时间戳的 wall time：0 = 超时(>30min)；5 = 10-15min；10 = 5min 以内 |
-| **步骤成功率** | 0-10 | 从 `event list` JSON 中提取：`step_finished` 事件中 `success: true` 的比例，线性映射到 0-10 |
-| **工程规范** | 0-10 | 0 = lint 失败/缺少错误处理；5 = 干净编译；10 = 错误处理、文档注释、安全标注、零警告 |
+| Dimension | Score | Scoring Rubric |
+|-----------|-------|----------------|
+| **Task Completion** | 0-10 | 0 = no code changes; 5 = partial implementation missing key requirements; 10 = all requirements addressed with working code |
+| **Code Quality** | 0-10 | 0 = syntax errors or broken build; 5 = compiles but non-idiomatic; 10 = correct, idiomatic, concise |
+| **Test Coverage** | 0-10 | 0 = no tests; 5 = tests exist but miss edge cases; 10 = comprehensive unit tests covering new/changed code |
+| **Execution Efficiency** | 0-10 | Based on wall time from `task info` timestamps: 0 = timeout (>30min); 5 = 10-15min; 10 = under 5min |
+| **Step Success Rate** | 0-10 | From `event list` JSON: proportion of `step_finished` events with `success: true`, linearly mapped to 0-10 |
+| **Engineering Standards** | 0-10 | 0 = lint failures / missing error handling; 5 = compiles clean; 10 = error handling, doc comments, safety annotations, zero warnings |
 
-宿主 agent 逐一应用 patch 后运行 `cargo check`、`cargo test`、`cargo clippy`，然后输出六维 JSON 评分（总分 0-60）。
+The host agent applies each patch, runs `cargo check`, `cargo test`, and `cargo clippy`, then outputs a six-dimension JSON score (total 0-60).
 
-> **数据来源**：执行效率和步骤成功率来自定量数据（时间戳、事件日志），非主观判断。其余四个维度由宿主 agent 在针对实际代码产出运行项目工具链后评估。
+> **Data sources**: Execution Efficiency and Step Success Rate are derived from quantitative data (timestamps, event logs), not subjective judgment. The remaining four dimensions are assessed by the host agent after running the project's toolchain against the actual code output.
 
-### 6.3 输出评估报告
+### 6.3 Output Evaluation Report
 
-以 markdown 表格 + 雷达图格式输出对比结果：
+Output the comparison results in markdown table + radar chart format:
 
 ```markdown
-| 组合 | 外壳 | 模型 | 状态 | 耗时 | 轮次 | 完成度 | 质量 | 测试 | 效率 | 成功率 | 规范 | 总分(/60) | 备注 |
-|------|------|------|------|------|------|--------|------|------|------|--------|------|-----------|------|
-| C1   | OpenCode     | MiniMax-M2.7-highspeed  | | | | | | | | | | | |
-| D1   | Gemini CLI   | gemini-3-flash-preview  | | | | | | | | | | | |
-| E1   | Codex CLI    | gpt-5.4-mini            | | | | | | | | | | | |
+| Combo | Shell | Model | Status | Duration | Cycles | Completion | Quality | Tests | Efficiency | Success | Standards | Total(/60) | Notes |
+|-------|-------|-------|--------|----------|--------|------------|---------|-------|------------|---------|-----------|------------|-------|
+| A1    | Claude Code  | Opus 4.6      | | | | | | | | | | | |
+| B1    | OpenCode     | Opus 4.6      | | | | | | | | | | | |
+| C1    | OpenCode     | GLM-5         | | | | | | | | | | | |
+| D1    | Gemini CLI   | Gemini 3.1 Pro| | | | | | | | | | | |
+| E1    | Codex CLI    | GPT-5.4       | | | | | | | | | | | |
 ```
 
-最后给出总结分析：
+Finally, provide a summary analysis along two dimensions:
 
-1. **综合对比**（C1 vs D1 vs E1）：六维雷达图对比不同外壳+模型组合的优劣势
-2. **综合排名**：所有组合的推荐程度
+1. **Model dimension** (comparing B1 vs C1: same shell OpenCode, different models): impact of model capability on results
+2. **Shell dimension** (comparing A1 vs B1: same model Opus, different shells): impact of toolchain on execution efficiency
+3. **Overall ranking**: six-dimension radar chart comparison, recommendation ranking of all combinations
 
-## 7. 约束
+## 7. Constraints
 
-- **控制变量**：每次只改变一个变量（模型或外壳），workflow 和 goal 保持不变
-- **环境隔离**：每个组合执行前后恢复干净的 git 状态
-- **超时保护**：单次任务 30 分钟超时
-- **成本意识**：三个组合均使用低成本模型（MiniMax-highspeed / Flash / mini），单次任务成本可控
-- **可复现性**：所有 manifest 版本化在 `fixtures/benchmarks/`
+- **Controlled variables**: Change only one variable at a time (model or shell); the workflow and goal remain unchanged
+- **Environment isolation**: Restore a clean git state before and after each combination execution
+- **Timeout protection**: 30-minute timeout per task
+- **Cost awareness**: Opus is approximately 5x the cost of Sonnet; confirm budget before batch execution
+- **Reproducibility**: All manifests are versioned in `fixtures/benchmarks/`
 
-## 8. 实例：一键执行 Benchmark
+## 8. Example: One-Click Benchmark Execution
 
-### 8.1 用户前置准备（手动完成）
+### 8.1 User Prerequisites (Manual Steps)
 
-在将 prompt 交给 AI 编码 Agent 之前，用户需自行完成以下认证和环境准备：
+Before handing the prompt to your AI coding agent, complete the following authentication and setup:
 
-**认证各 Agent CLI**（按需选择你要测试的外壳）：
+**Authenticate each Agent CLI** (select the shells you want to test):
 
-| 外壳 | 认证方式 |
-|------|----------|
-| OpenCode | `opencode auth` 交互式配置 provider 和 API key |
-| Gemini CLI | 首次运行 `gemini` 时在工具内完成 Google 账号登录，或设置 `GEMINI_API_KEY` 环境变量 |
-| Codex CLI | 首次运行 `codex` 时在工具内完成登录，或设置 `OPENAI_API_KEY` 环境变量 |
+| Shell | Authentication |
+|-------|----------------|
+| OpenCode | `opencode auth` — interactive provider and API key setup |
+| Gemini CLI | Complete Google account login inside the tool on first run, or set `GEMINI_API_KEY` env var |
+| Codex CLI | Complete login inside the tool on first run, or set `OPENAI_API_KEY` env var |
 
-**确认环境就绪**：
+**Verify environment is ready**:
 
 ```bash
-# 确认各 CLI 已安装且能正常响应
+# Confirm each CLI is installed and responds
 opencode --version
 gemini --version
 codex --version
 
-# 确认 orchestrator 已构建安装
+# Confirm orchestrator is built and installed
 orchestrator --version
 orchestratord --version
 
-# 确认 SecretStore manifest 中的密钥已填入（非 placeholder）
-# 编辑 fixtures/benchmarks/secrets-*.yaml
+# Confirm SecretStore manifests have real keys (not placeholders)
+# Edit fixtures/benchmarks/secrets-*.yaml
 ```
 
-### 8.2 可直接执行的 Prompt
+### 8.2 Ready-to-Execute Prompt
 
-完成上述准备后，在 AI 编码 Agent（如 Claude Code）中粘贴以下 prompt 即可启动全流程：
+Once the above is done, paste the following prompt into your AI coding agent (e.g., Claude Code) to start the full workflow:
 
 ````
-执行 docs/showcases/benchmark-multi-model-execution.md 多模型 benchmark 测试。
+Execute the multi-model benchmark test per docs/showcases/benchmark-multi-model-execution.md.
 
-## 背景
-- 变量矩阵为 3 组：C1 (OpenCode+MiniMax), D1 (Gemini CLI+Flash), E1 (Codex CLI+GPT-5.4-mini)
-- Agent manifests / SecretStores / Workflow 位于 fixtures/benchmarks/
-- 各 CLI 已认证，遇到认证问题报告给用户
+## Context
+- Variable matrix: 3 combos (trimmed; expand to 5 per section 2) — C1 (OpenCode+MiniMax), D1 (Gemini CLI+Flash), E1 (Codex CLI+GPT-5.4-mini)
+- Agent manifests / SecretStores / Workflow are in fixtures/benchmarks/
+- All CLIs are authenticated; report auth failures to the user
 
-## 执行前清理
-1. 重新构建: cargo build --release -p orchestratord -p orchestrator-cli，安装到 ~/.cargo/bin/
-2. 重启 daemon: kill 旧进程 → orchestratord --foreground --workers 2
-3. 清理 benchmark 项目残留资产:
+## Pre-execution cleanup
+1. Rebuild: cargo build --release -p orchestratord -p orchestrator-cli, install to ~/.cargo/bin/
+2. Restart daemon: kill old process → orchestratord --foreground --workers 2
+3. Clean residual benchmark project assets:
    - orchestrator task delete --all -p benchmark -f
-   - orchestrator get agents/workflows/workspaces -p benchmark → 逐个 delete
+   - orchestrator get agents/workflows/workspaces -p benchmark → delete each
 4. mkdir -p results
 
-## 执行流程
-对 C1 → D1 → E1 逐组执行 showcase 文档中的 5.1-5.7 步骤:
+## Execution flow
+Execute showcase doc steps 5.1-5.7 sequentially for C1 → D1 → E1:
 - apply secrets → apply agent → apply workflow
 - task create → task watch --timeout 1800
-- 收集结果 (task info/event list/task items/task trace -o json)
-- git diff 保存到 results/<combo_id>-*
-- git checkout/clean 恢复环境（注意保留 results/ 目录）
-- delete 当前组 agent（保留 workflow/workspace 共用；如遇 capability 校验错误则一并删除 workflow 重建）
+- Collect results (task info/event list/task items/task trace -o json)
+- Save git diff to results/<combo_id>-*
+- git checkout/clean to restore environment (preserve results/ directory)
+- Delete current combo's agent (keep workflow/workspace shared; if capability validation errors occur, delete workflow too and recreate)
 
-每组之间清理 agent 以避免 capability 冲突。
+Clean agent between combos to avoid capability conflicts.
 
-## 评估
-全部组合完成后，按文档 6.1-6.3 节的六维评估标准生成 results/benchmark-report.md。
+## Evaluation
+After all combos complete, generate results/benchmark-report.md per doc sections 6.1-6.3 using the six-dimension evaluation criteria.
 
-## 异常处理
-- 超时或失败：记录状态后继续下一组
-- 认证失败：报告给用户，等待修复后继续
+## Error handling
+- Timeout or failure: record status and continue to next combo
+- Auth failure: report to user, wait for fix before continuing
 ````
 
-### 8.3 实际执行结果参考（2026-04-05）
+### 8.3 Actual Execution Results Reference (2026-04-05)
 
-以下是使用上述 prompt 在 orchestrator v0.3.0 上执行的真实结果：
+Below are real results from executing the above prompt on orchestrator v0.3.0 with a trimmed matrix (C1/D1/E1).
 
-**六维评估总览**
+> **Evaluation context**: The host agent (Claude Code / Opus 4.6) orchestrated execution of all three target agents, collected artifacts, and produced the final six-dimension scores. The entire flow — from resource deployment through monitoring, artifact collection, and scoring — ran autonomously with zero human intervention.
+>
+> **Reproducibility**: All manifests are versioned in `fixtures/benchmarks/`. Raw artifacts (diffs, event logs, task traces) are in `results/`. The ready-to-execute prompt in §8.2 is the exact prompt used for this run. A1 and B1 are intentionally left unexecuted — see §2 for the full matrix.
 
-| 组合 | 外壳 | 模型 | 状态 | 耗时 | 完成度 | 质量 | 测试 | 效率 | 成功率 | 规范 | 总分(/60) | 备注 |
-|------|------|------|------|------|--------|------|------|------|--------|------|-----------|------|
-| C1 | OpenCode | MiniMax-M2.7 | completed | 5m27s | 2 | 1 | 0 | 8 | 8 | 1 | 20 | 仅修改 1 个测试文件，未实现 retry |
-| D1 | Gemini CLI | Flash-preview | timeout | >44m | 7 | 6 | 4 | 1 | 3 | 5 | 26 | 实现完整但超时(30min) |
-| E1 | Codex CLI | GPT-5.4-mini | completed | 5m14s | 9 | 7 | 5 | 9 | 8 | 6 | 44 | 完整实现，速度最快 |
+**Six-Dimension Evaluation Overview**
 
-**执行时间分解**
+| Combo | Shell | Model | Status | Duration | Completion | Quality | Tests | Efficiency | Success | Standards | Total(/60) | Notes |
+|-------|-------|-------|--------|----------|------------|---------|-------|------------|---------|-----------|------------|-------|
+| C1 | OpenCode | MiniMax-M2.7 | completed | 5m27s | 2 | 1 | 0 | 8 | 8 | 1 | 20 | Modified 1 test file only, no retry impl |
+| D1 | Gemini CLI | Flash-preview | timeout | >44m | 7 | 6 | 4 | 1 | 3 | 5 | 26 | Full implementation but timed out (30min) |
+| E1 | Codex CLI | GPT-5.4-mini | completed | 5m14s | 9 | 7 | 5 | 9 | 8 | 6 | 44 | Full implementation, fastest |
 
-| 组合 | plan | implement | self_test | eval | 总耗时 |
-|------|------|-----------|-----------|------|--------|
+**Execution Time Breakdown**
+
+| Combo | plan | implement | self_test | eval | Total |
+|-------|------|-----------|-----------|------|-------|
 | C1 | 117s | 92s | 0s | 95s | 327s |
 | D1 | 1094s | >1590s | — | — | >2685s |
 | E1 | 85s | 202s | 0s | 27s | 314s |
 
-**代码产出**
+**Code Output**
 
-| 组合 | 变更文件数 | 增/删行数 | 核心变更 |
-|------|-----------|-----------|----------|
-| C1 | 1 | +4/-3 | 仅改了一个测试文件 |
-| D1 | 8 | +278/-76 | connect.rs + CLI 多处集成 |
-| E1 | 9 | +267/-73 | connect.rs + CLI + GUI 集成 |
+| Combo | Files Changed | Lines +/- | Core Changes |
+|-------|---------------|-----------|--------------|
+| C1 | 1 | +4/-3 | Only modified a test file |
+| D1 | 8 | +278/-76 | connect.rs + CLI integration |
+| E1 | 9 | +267/-73 | connect.rs + CLI + GUI integration |
 
-**结论：** E1 (Codex/GPT-5.4-mini) 以 5 分 14 秒完成全部流程，六维总分 44/60，是明确的 winner。D1 产出代码量与 E1 相当但超时；C1 未能完成实际任务。
+**Conclusion:** E1 (Codex/GPT-5.4-mini) completed the full workflow in 5m14s with a six-dimension score of 44/60, the clear winner. D1 produced comparable code volume to E1 but timed out; C1 failed to complete the actual task.

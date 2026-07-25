@@ -1,29 +1,29 @@
-# Hello World 模板
+# Hello World Template
 
-> **Harness Engineering 模板**：这个 showcase 展示 orchestrator 作为 agent-first 软件交付控制面的一个能力切片，把 agent、workflow、policy 和反馈闭环固化为可复用的工程资产。
+> **Harness Engineering template**: this showcase demonstrates one concrete capability slice of orchestrator as a control plane for agent-first software delivery.
 >
-> **模板用途**：最小可运行 workflow — 一个 Workspace、一个 Agent、一个 Workflow，零 API 成本。
+> **Purpose**: The simplest runnable workflow — one Workspace, one Agent, one Workflow. Zero API cost.
 
-## 适用场景
+## Use Cases
 
-- 初次接触 orchestrator，验证安装和基本流程
-- 快速了解 Workspace → Agent → Workflow 的资源关系
-- 作为自定义 workflow 的起点骨架
+- First contact with orchestrator — verify installation and basic flow
+- Understand the Workspace → Agent → Workflow resource relationship
+- Starting skeleton for custom workflows
 
-## 前置条件
+## Prerequisites
 
-- `orchestratord` 运行中（`orchestratord --foreground --workers 2`）
-- 已执行 `orchestrator init`
+- `orchestratord` is running (`orchestratord --foreground --workers 2`)
+- Database initialized (`orchestrator init`)
 
-## 使用步骤
+## Steps
 
-### 1. 部署资源
+### 1. Deploy Resources
 
 ```bash
 orchestrator apply -f docs/workflow/hello-world.yaml --project hello-world
 ```
 
-### 2. 确认资源已加载
+### 2. Verify Resources
 
 ```bash
 orchestrator get workspaces --project hello-world
@@ -31,7 +31,7 @@ orchestrator get agents --project hello-world
 orchestrator get workflows --project hello-world
 ```
 
-### 3. 创建并运行任务
+### 3. Create and Run a Task
 
 ```bash
 orchestrator task create \
@@ -41,7 +41,7 @@ orchestrator task create \
   --project hello-world
 ```
 
-### 4. 查看结果
+### 4. Inspect Results
 
 ```bash
 orchestrator task list --project hello-world
@@ -49,9 +49,9 @@ orchestrator task info <task_id>
 orchestrator task logs <task_id>
 ```
 
-## 预期输出
+## Expected Output
 
-echo agent 返回固定 JSON：
+The echo agent returns a fixed JSON response:
 
 ```json
 {
@@ -68,13 +68,13 @@ echo agent 返回固定 JSON：
 }
 ```
 
-任务应在数秒内完成，状态变为 `Completed`。
+The task completes within seconds with status `Completed`.
 
-## 自定义指南
+## Customization Guide
 
-### 替换为真实 Agent
+### Replace with a Real Agent
 
-将 echo agent 的 `command` 替换为真实 AI agent：
+Swap the echo agent's `command` for a real AI agent:
 
 ```yaml
 # Claude Code
@@ -84,14 +84,14 @@ command: claude -p "{prompt}" --verbose --output-format stream-json
 command: opencode -p "{prompt}"
 ```
 
-替换后需配置对应的 API key（通过 SecretStore 或环境变量）。
+You will need to configure the corresponding API key (via SecretStore or environment variables).
 
-### 添加更多步骤
+### Add More Steps
 
-在 Workflow 的 `steps` 中添加新步骤，并确保 Agent 拥有对应的 `capability`。
+Add steps to the Workflow's `steps` list and ensure the Agent has the matching `capability`.
 
-## 进阶参考
+## Further Reading
 
-- [Quick Start](../guide/01-quickstart.md) — 完整的 5 分钟上手教程
-- [Resource Model](../guide/02-resource-model.md) — 深入理解资源模型
-- [QA Loop 模板](qa-loop.md) — 下一步：多步骤 workflow
+- [Quick Start](../guide/01-quickstart.md) — Full 5-minute onboarding tutorial
+- [Resource Model](../guide/02-resource-model.md) — Deep dive into resource kinds
+- [QA Loop Template](qa-loop.md) — Next step: multi-step workflows

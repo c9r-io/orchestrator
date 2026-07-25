@@ -37,6 +37,48 @@ export default defineConfig({
                 { text: "CLI Reference", link: "/en/guide/cli-reference" },
               ],
             },
+            {
+              text: "Execution Model",
+              items: [
+                {
+                  text: "Agent Driver Model",
+                  link: "/en/guide/agent-driver-model",
+                },
+                {
+                  text: "Coordination Tools",
+                  link: "/en/guide/coordination-tools",
+                },
+                {
+                  text: "Non-code Workspaces",
+                  link: "/en/guide/non-code-workspace",
+                },
+              ],
+            },
+            {
+              text: "Operations",
+              items: [
+                {
+                  text: "Process Console Operations",
+                  link: "/en/guide/agent-process-console-v1-operations",
+                },
+                {
+                  text: "Slack Reaction Skill Automation",
+                  link: "/en/guide/slack-reaction-skill-automation",
+                },
+                {
+                  text: "Managed Slack Connections",
+                  link: "/en/guide/slack-managed-connections",
+                },
+                {
+                  text: "Dedicated Slack App Provisioning",
+                  link: "/en/guide/slack-dedicated-app-provisioning",
+                },
+                {
+                  text: "Slack Sandbox Certification Runbook",
+                  link: "/en/guide/slack-managed-sandbox-certification-runbook",
+                },
+              ],
+            },
           ],
           "/en/showcases/": [
             {
@@ -104,6 +146,10 @@ export default defineConfig({
                   text: "Manual Testing",
                   link: "/en/showcases/orchestrator-usage-manual-testing",
                 },
+                {
+                  text: "Typed-Driver Convergence",
+                  link: "/en/showcases/streaming-mark-done-convergence",
+                },
               ],
             },
           ],
@@ -136,6 +182,28 @@ export default defineConfig({
                 { text: "高级特性", link: "/zh/guide/advanced-features" },
                 { text: "自举引导", link: "/zh/guide/self-bootstrap" },
                 { text: "CLI 参考", link: "/zh/guide/cli-reference" },
+              ],
+            },
+            {
+              text: "执行模型",
+              items: [
+                {
+                  text: "协作工具",
+                  link: "/zh/guide/coordination-tools",
+                },
+                {
+                  text: "非代码工作区",
+                  link: "/zh/guide/non-code-workspace",
+                },
+              ],
+            },
+            {
+              text: "运维",
+              items: [
+                {
+                  text: "Agent Process Console",
+                  link: "/zh/guide/agent-process-console",
+                },
               ],
             },
           ],
@@ -197,6 +265,14 @@ export default defineConfig({
                 {
                   text: "密钥轮替",
                   link: "/zh/showcases/secret-rotation-workflow",
+                },
+                {
+                  text: "手动测试指南",
+                  link: "/zh/showcases/orchestrator-usage-manual-testing",
+                },
+                {
+                  text: "Typed-Driver 收敛",
+                  link: "/zh/showcases/streaming-mark-done-convergence",
                 },
               ],
             },

@@ -195,7 +195,7 @@ orchestrator run \
 
 ## 进阶参考
 
-- [Plan-Execute 模板](/zh/showcases/plan-execute) — 多步 workflow 模板，配合 `--step` 实现部分执行
-- [Hello World 模板](/zh/showcases/hello-world) — 最小可运行 workflow
-- [CLI 参考](/zh/guide/cli-reference) — `run` 命令完整参数说明
-- [工作流配置](/zh/guide/workflow-configuration) — Step 定义、scope、loop policy 详解
+- [Plan-Execute 模板](plan-execute.md) — 多步 workflow 模板，配合 `--step` 实现部分执行
+- [Hello World 模板](hello-world.md) — 最小可运行 workflow
+- [CLI Reference](../../guide/zh/07-cli-reference.md) — `run` 命令完整参数说明
+- [Workflow 配置](../../guide/zh/03-workflow-configuration.md) — Step 定义、scope、loop policy 详解

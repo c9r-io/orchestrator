@@ -92,6 +92,6 @@ command: opencode -p "{prompt}"
 
 ## 进阶参考
 
-- [快速开始](/zh/guide/quickstart) — 完整的 5 分钟上手教程
-- [资源模型](/zh/guide/resource-model) — 深入理解资源模型
-- [QA Loop 模板](/zh/showcases/qa-loop) — 下一步：多步骤 workflow
+- [Quick Start](../../guide/zh/01-quickstart.md) — 完整的 5 分钟上手教程
+- [Resource Model](../../guide/zh/02-resource-model.md) — 深入理解资源模型
+- [QA Loop 模板](qa-loop.md) — 下一步：多步骤 workflow

@@ -1,54 +1,52 @@
-# Webhook Integration 模板
+# Webhook Integration Template
 
-> **Slack source note (FR-099):** production Slack process binding now uses the native durable endpoint `POST /source/slack/{project}/{trigger}` with Slack `v0` signature verification, timestamp replay protection, normalized source events, and asynchronous routing. The generic `/webhook/...` and CRD-plugin examples below remain valid for custom integrations, but they do not provide source-event persistence or thread-to-process bindings. See `docs/design_doc/orchestrator/109-source-events-and-slack-binding.md`.
-
-> **Harness Engineering 模板**：这个 showcase 展示 orchestrator 作为 agent-first 软件交付控制面的一个能力切片，把 agent、workflow、policy 和反馈闭环固化为可复用的工程资产。
+> **Harness Engineering template**: this showcase demonstrates one concrete capability slice of orchestrator as a control plane for agent-first software delivery.
 >
-> **模板用途**：Webhook 驱动的外部平台集成 — 展示 Trigger webhook 源、per-trigger 签名认证、CEL payload 过滤、CRD 插件系统和集成 manifest 包。
+> **Purpose**: Webhook-driven external platform integration — demonstrates webhook triggers, per-trigger signature authentication, CEL payload filtering, CRD plugin system, and integration manifest packages.
 
-## 适用场景
+## Use Cases
 
-- 接收 GitHub push/PR 事件，自动触发代码审查或安全扫描
-- 接收 Slack 消息/命令，驱动 agent 响应
-- 接收 LINE 消息，驱动客服自动化
-- 任何需要 webhook 回调触发 agent 工作流的场景
+- Receive GitHub push/PR events, auto-trigger code review or security scan
+- Receive Slack messages/commands, drive agent responses
+- Receive LINE messages, drive customer service automation
+- Any scenario requiring webhook callbacks to trigger agent workflows
 
-## 前置条件
+## Prerequisites
 
-- `orchestratord` 运行中（webhook 服务默认监听 `127.0.0.1:19090`；可通过 `--webhook-bind <ADDR>` 更改）
-- 已执行 `orchestrator init`
-- 可选：`orchestrator-integrations` 仓库已克隆
+- `orchestratord` running (webhook server enabled by default on `127.0.0.1:19090`; use `--webhook-bind <ADDR>` to change)
+- Database initialized (`orchestrator init`)
+- Optional: `orchestrator-integrations` repository cloned
 
-## 使用步骤
+## Steps
 
-### 1. 部署集成包（以 GitHub 为例）
+### 1. Deploy an Integration Package (GitHub Example)
 
 ```bash
-# 克隆集成仓库
+# Clone the integrations repository
 git clone https://github.com/c9r-io/orchestrator-integrations.git
 
-# 准备密钥
+# Prepare secrets
 cp orchestrator-integrations/github/secrets-template.yaml secrets.yaml
-# 编辑 secrets.yaml，填入 GitHub Webhook Secret
+# Edit secrets.yaml with your GitHub Webhook Secret
 vim secrets.yaml
 
-# 部署资源
+# Deploy resources
 orchestrator apply -f secrets.yaml
 orchestrator apply -f orchestrator-integrations/github/trigger-push.yaml
 ```
 
-### 2. 配置 GitHub Webhook
+### 2. Configure GitHub Webhook
 
-在 GitHub 仓库 Settings → Webhooks 中添加：
+In your GitHub repository Settings > Webhooks:
 - **Payload URL**: `http://<your-host>:19090/webhook/github-push`
 - **Content type**: `application/json`
-- **Secret**: 与 SecretStore 中 `webhook_secret` 值一致
+- **Secret**: must match the `webhook_secret` value in your SecretStore
 - **Events**: `push`
 
-### 3. 手动测试
+### 3. Manual Test
 
 ```bash
-# 模拟一个 webhook 请求（带 HMAC 签名）
+# Simulate a webhook request with HMAC signature
 SECRET="your-webhook-secret"
 BODY='{"ref":"refs/heads/main","commits":[{"message":"test"}]}'
 SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" -hex | awk '{print "sha256="$NF}')
@@ -59,18 +57,18 @@ curl -X POST http://127.0.0.1:19090/webhook/github-push \
   -d "$BODY"
 ```
 
-### 4. 查看结果
+### 4. Check Results
 
 ```bash
 orchestrator get task
 orchestrator task logs <task_id>
 ```
 
-## 核心特性
+## Key Features
 
-### Per-Trigger 签名认证
+### Per-Trigger Signature Authentication
 
-每个 trigger 可独立配置 SecretStore 引用和签名 header：
+Each trigger can independently configure its own SecretStore reference and signature header:
 
 ```yaml
 kind: SecretStore
@@ -88,40 +86,40 @@ spec:
     source: webhook
     webhook:
       secret:
-        fromRef: github-webhook          # 引用 SecretStore
-      signatureHeader: X-Hub-Signature-256  # GitHub 签名 header
+        fromRef: github-webhook          # SecretStore reference
+      signatureHeader: X-Hub-Signature-256  # Platform signature header
     filter:
-      condition: "payload_ref != ''"     # CEL 过滤
+      condition: "payload_ref != ''"     # CEL filter
   action:
     workflow: handle-push
     workspace: default
 ```
 
-签名验证支持多密钥轮替 — SecretStore 中的所有 value 都会依次尝试，任意一个匹配即通过。
+Signature verification supports multi-key rotation — all values in the SecretStore are tried, any match is accepted.
 
-### CEL Payload 过滤
+### CEL Payload Filtering
 
-用 CEL 表达式精确匹配感兴趣的事件：
+Use CEL expressions to match only the events you care about:
 
 ```yaml
-# 仅匹配 main 分支 push
+# Match only main branch push
 filter:
   condition: "payload_ref == 'refs/heads/main'"
 
-# Slack: 仅匹配 event_callback 类型
+# Slack: match only event_callback type
 filter:
   condition: "payload_type == 'event_callback'"
 
-# GitHub: 仅匹配 PR opened
+# GitHub: match only PR opened
 filter:
   condition: "payload_action == 'opened'"
 ```
 
-Webhook JSON body 的顶层字段自动注入为 `payload_<field>` CEL 变量。
+Top-level fields from the webhook JSON body are automatically injected as `payload_<field>` CEL variables.
 
-### CRD 插件系统认证
+### CRD Plugin Authentication
 
-对于 HMAC-SHA256 无法覆盖的认证场景（如 Slack v0 签名算法、自定义 token 验证），可通过 CRD 插件定义自定义认证逻辑：
+For authentication scenarios beyond HMAC-SHA256 (e.g., Slack v0 signatures, custom token validation), use CRD plugins to define custom auth logic:
 
 ```yaml
 kind: CustomResourceDefinition
@@ -136,28 +134,28 @@ spec:
       schema:
         type: object
   plugins:
-    # 自定义签名验证 — 替代内置 HMAC
+    # Custom signature verification — replaces built-in HMAC
     - name: verify-slack-v0
       type: interceptor
       phase: webhook.authenticate
       command: "scripts/verify-slack-v0-sig.sh"
       timeout: 5
 
-    # Payload 标准化 — 将 Slack 特有格式转为统一 JSON
+    # Payload normalization — converts platform-specific format to standard JSON
     - name: normalize-payload
       type: transformer
       phase: webhook.transform
       command: "scripts/normalize-slack-payload.sh"
       timeout: 5
 
-    # 定期令牌刷新
+    # Periodic token refresh
     - name: refresh-token
       type: cron
       schedule: "0 */6 * * *"
       command: "scripts/refresh-slack-token.sh"
 ```
 
-Trigger 通过 `crdRef` 关联 CRD 插件：
+Link the trigger to CRD plugins via `crdRef`:
 
 ```yaml
 kind: Trigger
@@ -167,129 +165,114 @@ spec:
   event:
     source: webhook
     webhook:
-      crdRef: SlackIntegration    # 启用 CRD 插件
-      secret:
-        fromRef: slack-signing    # 仍可配合 SecretStore
+      crdRef: SlackIntegration    # Enable CRD plugins
   action:
     workflow: handle-slack
     workspace: default
 ```
 
-**插件执行流程**：
+**Plugin execution flow**:
 
 ```
-Webhook 请求到达
-  → CRD interceptor (webhook.authenticate) — 自定义认证
-  → 解析 JSON body
-  → CRD transformer (webhook.transform) — payload 标准化
-  → CEL filter — 事件过滤
-  → 触发 Workflow
+Webhook request arrives
+  -> CRD interceptor (webhook.authenticate) — custom auth
+  -> Parse JSON body
+  -> CRD transformer (webhook.transform) — payload normalization
+  -> CEL filter — event filtering
+  -> Trigger workflow
 ```
 
-**插件脚本示例 — Slack v0 签名验证**：
+### Plugin Policy Governance
+
+CRD plugin commands execute as shell processes in the daemon context. To prevent privilege escalation, all plugin commands are subject to a **plugin policy** (`{data_dir}/plugin-policy.yaml`).
+
+**Default behavior**: Allowlist mode with an empty allowlist — all plugin commands are **blocked** until you explicitly permit them.
+
+Create `~/.orchestratord/plugin-policy.yaml`:
+
+```yaml
+mode: allowlist                          # deny | allowlist | audit
+allowed_command_prefixes:
+  - scripts/                             # permit scripts/ directory
+  - /usr/local/bin/orchestrator-plugins/ # permit system-installed plugins
+max_timeout_secs: 30                     # cap per-plugin timeout
+enforce_on_hooks: true                   # also enforce on lifecycle hooks
+```
+
+**Policy modes**:
+
+| Mode | Behavior |
+|------|----------|
+| `allowlist` | Only commands matching `allowed_command_prefixes` are accepted. Built-in denied patterns (curl, wget, nc, eval, base64) are always blocked. |
+| `deny` | All CRDs with plugins are rejected. |
+| `audit` | All commands are accepted, but violations are logged as warnings. Use for migration. |
+
+**RBAC elevation**: Applying a CRD that contains plugins or lifecycle hooks requires **Admin** role (not Operator). With the default UDS transport, configure `uds-policy.yaml` to restrict agent access:
+
+```yaml
+# ~/.orchestratord/control-plane/uds-policy.yaml
+max_role: operator   # agents cannot apply CRDs with plugins
+```
+
+**Audit trail**: Every plugin apply and execution is logged to the `plugin_audit` SQLite table:
+
+```sql
+SELECT created_at, action, crd_kind, plugin_name, command, result
+FROM plugin_audit ORDER BY created_at DESC LIMIT 10;
+```
+
+### Built-in Tool Library
+
+CRD plugin scripts can call `orchestrator tool` built-in utilities:
 
 ```bash
-#!/bin/sh
-# verify-slack-v0-sig.sh
-# 接收环境变量: WEBHOOK_BODY, WEBHOOK_HEADER_X_SLACK_SIGNATURE,
-#               WEBHOOK_HEADER_X_SLACK_REQUEST_TIMESTAMP
-# 退出 0 = 通过, 非 0 = 拒绝
-
-TIMESTAMP="$WEBHOOK_HEADER_X_SLACK_REQUEST_TIMESTAMP"
-EXPECTED="$WEBHOOK_HEADER_X_SLACK_SIGNATURE"
-SECRET=$(orchestrator tool payload-extract --path signing_secret \
-  < <(orchestrator describe secretstore/slack-signing -o json))
-
-BASESTRING="v0:${TIMESTAMP}:${WEBHOOK_BODY}"
-COMPUTED="v0=$(echo -n "$BASESTRING" | openssl dgst -sha256 -hmac "$SECRET" -hex | awk '{print $NF}')"
-
-if [ "$COMPUTED" = "$EXPECTED" ]; then
-  exit 0
-else
-  echo "signature mismatch" >&2
-  exit 1
-fi
-```
-
-### 内置工具库
-
-CRD 插件脚本可调用 `orchestrator tool` 内置工具：
-
-```bash
-# HMAC 签名验证
+# HMAC signature verification
 orchestrator tool webhook-verify-hmac \
   --secret "$SECRET" --body "$BODY" --signature "$SIG"
 
-# JSON 路径提取（从 stdin 读取）
+# JSON path extraction (reads from stdin)
 echo '{"event":{"type":"message"}}' | \
   orchestrator tool payload-extract --path event.type
 
-# SecretStore 密钥原子更新
+# Atomic SecretStore key update
 orchestrator tool secret-rotate my-store my-key --value "new-secret"
 ```
 
-## 可用集成包
+## Available Integration Packages
 
-| 平台 | 签名 Header | 仓库路径 |
-|------|------------|---------|
+| Platform | Signature Header | Repository Path |
+|----------|-----------------|-----------------|
 | GitHub | `X-Hub-Signature-256` | `orchestrator-integrations/github/` |
 | Slack | `X-Slack-Signature` | `orchestrator-integrations/slack/` |
 | LINE | `X-Line-Signature` | `orchestrator-integrations/line/` |
 
-每个集成包包含：
-- `secrets-template.yaml` — SecretStore 模板
-- `trigger-*.yaml` — 预配置的 webhook trigger
-- `step-template-*.yaml` — 可选的 payload 解析 StepTemplate
-- `README.md` — 平台特定的设置指南
+Each package includes:
+- `secrets-template.yaml` — SecretStore template
+- `trigger-*.yaml` — Pre-configured webhook triggers
+- `step-template-*.yaml` — Optional payload parsing StepTemplates
+- `README.md` — Platform-specific setup guide
 
-## 自定义指南
+## Customization
 
-### 添加新平台集成
+### Adding a New Platform Integration
 
-1. 创建 SecretStore：
-```yaml
-kind: SecretStore
-metadata:
-  name: my-platform-signing
-spec:
-  data:
-    signing_secret: "<your-secret>"
-```
+1. Create a SecretStore for your platform's signing secret
+2. Create a Trigger with webhook source, pointing to the SecretStore
+3. If custom auth is needed, define a CRD with interceptor plugins
 
-2. 创建 Trigger：
-```yaml
-kind: Trigger
-metadata:
-  name: my-platform-events
-spec:
-  event:
-    source: webhook
-    webhook:
-      secret:
-        fromRef: my-platform-signing
-      signatureHeader: X-My-Platform-Signature
-    filter:
-      condition: "payload_action == 'created'"
-  action:
-    workflow: handle-my-platform
-    workspace: default
-```
+### Multiple Webhooks Side-by-Side
 
-3. 如需自定义认证，创建 CRD + 插件脚本（参见上方"CRD 插件系统认证"）。
-
-### 多 Webhook 共存
-
-同一个 daemon 可同时接收多个平台的 webhook，每个 trigger 独立配置认证：
+A single daemon can receive webhooks from multiple platforms simultaneously, each trigger independently authenticated:
 
 ```
-POST /webhook/github-push     → github-webhook SecretStore
-POST /webhook/slack-events     → slack-signing SecretStore + CRD 插件
-POST /webhook/line-message     → line-channel SecretStore
+POST /webhook/github-push     -> github-webhook SecretStore
+POST /webhook/slack-events     -> slack-signing SecretStore + CRD plugins
+POST /webhook/line-message     -> line-channel SecretStore
 ```
 
-## 进阶参考
+## Further Reading
 
-- [Scheduled Scan 模板](scheduled-scan.md) — Cron Trigger 示例
-- [FR Watch 模板](fr-watch.md) — Filesystem Trigger + CEL 过滤示例
-- [Secret Rotation Workflow](secret-rotation-workflow.md) — 密钥轮替示例
-- [Advanced Features](../guide/05-advanced-features.md) — CRD 和 Trigger 详解
+- [Scheduled Scan Template](scheduled-scan.md) — Cron trigger example
+- [FR Watch Template](fr-watch.md) — Filesystem trigger + CEL filtering example
+- [Secret Rotation Workflow](secret-rotation-workflow.md) — Secret rotation example
+- [Advanced Features](../guide/05-advanced-features.md) — CRDs and Triggers in depth

@@ -1,30 +1,30 @@
-# QA Loop 模板
+# QA Loop Template
 
-> **Harness Engineering 模板**：这个 showcase 展示 orchestrator 作为 agent-first 软件交付控制面的一个能力切片，把 agent、workflow、policy 和反馈闭环固化为可复用的工程资产。
+> **Harness Engineering template**: this showcase demonstrates one concrete capability slice of orchestrator as a control plane for agent-first software delivery.
 >
-> **模板用途**：QA 测试→修复→回归验证循环 — 展示多步骤 workflow 和 capability 匹配。
+> **Purpose**: QA test → fix → retest cycle — demonstrates multi-step workflows and capability-based agent selection.
 
-## 适用场景
+## Use Cases
 
-- 对项目文档或代码进行自动化 QA 测试
-- 发现问题后自动创建 ticket、修复并回归验证
-- 需要 QA → ticket_scan → fix → retest 标准链路的场景
+- Automated QA testing against project documentation or code
+- Automatic ticket creation, issue fixing, and regression verification
+- Standard QA → ticket_scan → fix → retest pipeline
 
-## 前置条件
+## Prerequisites
 
-- `orchestratord` 运行中
-- 已执行 `orchestrator init`
-- 项目目录下有 `docs/qa/` 和 `docs/ticket/`（可为空）
+- `orchestratord` is running
+- Database initialized (`orchestrator init`)
+- Project has `docs/qa/` and `docs/ticket/` directories (can be empty)
 
-## 使用步骤
+## Steps
 
-### 1. 部署资源
+### 1. Deploy Resources
 
 ```bash
 orchestrator apply -f docs/workflow/qa-loop.yaml --project qa-loop
 ```
 
-### 2. 创建并运行任务
+### 2. Create and Run a Task
 
 ```bash
 orchestrator task create \
@@ -34,34 +34,34 @@ orchestrator task create \
   --project qa-loop
 ```
 
-### 3. 查看结果
+### 3. Inspect Results
 
 ```bash
 orchestrator task list --project qa-loop
 orchestrator task logs <task_id>
 ```
 
-## 工作流步骤
+## Workflow Steps
 
 ```
 qa (qa-agent) → ticket_scan (builtin) → fix (fix-agent) → retest (fix-agent)
 ```
 
-1. **qa** — 扫描 `qa_targets` 下的文档，执行测试场景
-2. **ticket_scan** — 内置步骤，扫描 `ticket_dir` 下的 ticket 文件
-3. **fix** — 修复发现的问题
-4. **retest** — 回归验证修复是否生效
+1. **qa** — Scans documents under `qa_targets`, executes test scenarios
+2. **ticket_scan** — Built-in step, scans `ticket_dir` for ticket files
+3. **fix** — Resolves issues found during QA
+4. **retest** — Regression verification to confirm fixes
 
-### Capability 匹配
+### Capability Matching
 
-- `qa-agent` 拥有 `qa` capability → 被分配到 qa 步骤
-- `fix-agent` 拥有 `fix` + `retest` capability → 被分配到 fix 和 retest 步骤
+- `qa-agent` has `qa` capability → assigned to the qa step
+- `fix-agent` has `fix` + `retest` capabilities → assigned to fix and retest steps
 
-## 自定义指南
+## Customization Guide
 
-### 启用循环模式
+### Enable Loop Mode
 
-将 `loop.mode` 从 `once` 改为 `fixed`，设置 `max_cycles` 实现多轮迭代：
+Change `loop.mode` from `once` to `fixed` with `max_cycles` for multi-round iteration:
 
 ```yaml
 loop:
@@ -69,9 +69,9 @@ loop:
   max_cycles: 3
 ```
 
-### 添加 Loop Guard
+### Add a Loop Guard
 
-在步骤列表末尾添加 loop guard 步骤，让 agent 判断是否需要继续循环：
+Append a loop guard step so an agent decides whether to continue:
 
 ```yaml
 - id: loop_guard
@@ -81,11 +81,11 @@ loop:
   repeatable: true
 ```
 
-### 替换为真实 Agent
+### Replace with Real Agents
 
-参见 [Hello World 自定义指南](hello-world.md#替换为真实-agent)。
+See [Hello World Customization Guide](hello-world.md#replace-with-a-real-agent).
 
-## 进阶参考
+## Further Reading
 
-- [Full QA Execution](full-qa-execution.md) — 生产级全量 QA workflow（含 CEL prehook 安全过滤）
-- [Workflow Configuration](../guide/03-workflow-configuration.md) — 步骤执行模型与循环策略
+- [Full QA Execution](full-qa-execution.md) — Production-grade full QA workflow with CEL prehook safety filtering
+- [Workflow Configuration](../guide/03-workflow-configuration.md) — Step execution model and loop strategies

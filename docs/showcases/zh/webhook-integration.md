@@ -1,4 +1,6 @@
-# Webhook 集成模板
+# Webhook Integration 模板
+
+> **Slack source note (FR-099):** production Slack process binding now uses the native durable endpoint `POST /source/slack/{project}/{trigger}` with Slack `v0` signature verification, timestamp replay protection, normalized source events, and asynchronous routing. The generic `/webhook/...` and CRD-plugin examples below remain valid for custom integrations, but they do not provide source-event persistence or thread-to-process bindings. See `docs/design_doc/orchestrator/109-source-events-and-slack-binding.md`.
 
 > **Harness Engineering 模板**：这个 showcase 展示 orchestrator 作为 agent-first 软件交付控制面的一个能力切片，把 agent、workflow、policy 和反馈闭环固化为可复用的工程资产。
 >
@@ -37,7 +39,7 @@ orchestrator apply -f orchestrator-integrations/github/trigger-push.yaml
 
 ### 2. 配置 GitHub Webhook
 
-在 GitHub 仓库 Settings > Webhooks 中添加：
+在 GitHub 仓库 Settings → Webhooks 中添加：
 - **Payload URL**: `http://<your-host>:19090/webhook/github-push`
 - **Content type**: `application/json`
 - **Secret**: 与 SecretStore 中 `webhook_secret` 值一致
@@ -166,6 +168,8 @@ spec:
     source: webhook
     webhook:
       crdRef: SlackIntegration    # 启用 CRD 插件
+      secret:
+        fromRef: slack-signing    # 仍可配合 SecretStore
   action:
     workflow: handle-slack
     workspace: default
@@ -175,11 +179,36 @@ spec:
 
 ```
 Webhook 请求到达
-  -> CRD interceptor (webhook.authenticate) — 自定义认证
-  -> 解析 JSON body
-  -> CRD transformer (webhook.transform) — payload 标准化
-  -> CEL filter — 事件过滤
-  -> 触发 Workflow
+  → CRD interceptor (webhook.authenticate) — 自定义认证
+  → 解析 JSON body
+  → CRD transformer (webhook.transform) — payload 标准化
+  → CEL filter — 事件过滤
+  → 触发 Workflow
+```
+
+**插件脚本示例 — Slack v0 签名验证**：
+
+```bash
+#!/bin/sh
+# verify-slack-v0-sig.sh
+# 接收环境变量: WEBHOOK_BODY, WEBHOOK_HEADER_X_SLACK_SIGNATURE,
+#               WEBHOOK_HEADER_X_SLACK_REQUEST_TIMESTAMP
+# 退出 0 = 通过, 非 0 = 拒绝
+
+TIMESTAMP="$WEBHOOK_HEADER_X_SLACK_REQUEST_TIMESTAMP"
+EXPECTED="$WEBHOOK_HEADER_X_SLACK_SIGNATURE"
+SECRET=$(orchestrator tool payload-extract --path signing_secret \
+  < <(orchestrator describe secretstore/slack-signing -o json))
+
+BASESTRING="v0:${TIMESTAMP}:${WEBHOOK_BODY}"
+COMPUTED="v0=$(echo -n "$BASESTRING" | openssl dgst -sha256 -hmac "$SECRET" -hex | awk '{print $NF}')"
+
+if [ "$COMPUTED" = "$EXPECTED" ]; then
+  exit 0
+else
+  echo "signature mismatch" >&2
+  exit 1
+fi
 ```
 
 ### 插件策略治理
@@ -256,22 +285,50 @@ orchestrator tool secret-rotate my-store my-key --value "new-secret"
 
 ### 添加新平台集成
 
-1. 创建 SecretStore（平台签名密钥）
-2. 创建 Trigger（webhook source + SecretStore 引用）
-3. 如需自定义认证，创建 CRD + 插件脚本
+1. 创建 SecretStore：
+```yaml
+kind: SecretStore
+metadata:
+  name: my-platform-signing
+spec:
+  data:
+    signing_secret: "<your-secret>"
+```
+
+2. 创建 Trigger：
+```yaml
+kind: Trigger
+metadata:
+  name: my-platform-events
+spec:
+  event:
+    source: webhook
+    webhook:
+      secret:
+        fromRef: my-platform-signing
+      signatureHeader: X-My-Platform-Signature
+    filter:
+      condition: "payload_action == 'created'"
+  action:
+    workflow: handle-my-platform
+    workspace: default
+```
+
+3. 如需自定义认证，创建 CRD + 插件脚本（参见上方"CRD 插件系统认证"）。
 
 ### 多 Webhook 共存
 
 同一个 daemon 可同时接收多个平台的 webhook，每个 trigger 独立配置认证：
 
 ```
-POST /webhook/github-push     -> github-webhook SecretStore
-POST /webhook/slack-events     -> slack-signing SecretStore + CRD 插件
-POST /webhook/line-message     -> line-channel SecretStore
+POST /webhook/github-push     → github-webhook SecretStore
+POST /webhook/slack-events     → slack-signing SecretStore + CRD 插件
+POST /webhook/line-message     → line-channel SecretStore
 ```
 
 ## 进阶参考
 
-- [Scheduled Scan 模板](scheduled-scan) — Cron Trigger 示例
-- [FR Watch 模板](fr-watch) — Filesystem Trigger + CEL 过滤示例
-- [密钥轮替 Workflow](secret-rotation-workflow) — 密钥轮替示例
+- [Scheduled Scan 模板](scheduled-scan.md) — Cron Trigger 示例
+- [FR Watch 模板](fr-watch.md) — Filesystem Trigger + CEL 过滤示例
+- [Secret Rotation Workflow](secret-rotation-workflow.md) — 密钥轮替示例
+- [Advanced Features](../../guide/zh/05-advanced-features.md) — CRD 和 Trigger 详解

@@ -116,10 +116,10 @@ events:
 
 ### 替换为真实 Agent
 
-参见 [Hello World 自定义指南](/zh/showcases/hello-world#替换为真实-agent)。使用真实 agent 后，fr_triage 步骤将实际读取 FR 文档并产出分诊报告。
+参见 [Hello World 自定义指南](hello-world.md#替换为真实-agent)。使用真实 agent 后，fr_triage 步骤将实际读取 FR 文档并产出分诊报告。
 
 ## 进阶参考
 
-- [Scheduled Scan 模板](/zh/showcases/scheduled-scan) — Cron Trigger 示例
-- [密钥轮替](/zh/showcases/secret-rotation-workflow) — Webhook Trigger 示例
-- [高级特性](/zh/guide/advanced-features) — Trigger 资源详解
+- [Scheduled Scan 模板](scheduled-scan.md) — Cron Trigger 示例
+- [Secret Rotation Workflow](secret-rotation-workflow.md) — Webhook Trigger 示例
+- [Advanced Features](../../guide/zh/05-advanced-features.md) — Trigger 资源详解

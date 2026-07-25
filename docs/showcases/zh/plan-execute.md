@@ -120,6 +120,6 @@ loop:
 
 ## 进阶参考
 
-- [自举引导执行](/zh/showcases/self-bootstrap-execution-template) — 生产级计划-执行-验证 workflow（8 个 StepTemplate + 4 个 Agent + CEL prehook）
-- [CEL 前置钩子](/zh/guide/cel-prehooks) — 动态控制流详解
-- [工作流配置](/zh/guide/workflow-configuration) — scope、loop、safety 配置
+- [Self-Bootstrap Execution](self-bootstrap-execution-template.md) — 生产级计划-执行-验证 workflow（8 个 StepTemplate + 4 个 Agent + CEL prehook）
+- [CEL Prehooks](../../guide/zh/04-cel-prehooks.md) — 动态控制流详解
+- [Workflow Configuration](../../guide/zh/03-workflow-configuration.md) — scope、loop、safety 配置

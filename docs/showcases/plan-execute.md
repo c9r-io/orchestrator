@@ -1,29 +1,29 @@
-# Plan-Execute 模板
+# Plan-Execute Template
 
-> **Harness Engineering 模板**：这个 showcase 展示 orchestrator 作为 agent-first 软件交付控制面的一个能力切片，把 agent、workflow、policy 和反馈闭环固化为可复用的工程资产。
+> **Harness Engineering template**: this showcase demonstrates one concrete capability slice of orchestrator as a control plane for agent-first software delivery.
 >
-> **模板用途**：计划→实现→验证三阶段迭代 — 展示 StepTemplate、多 Agent 协作和变量传递。
+> **Purpose**: Plan → implement → verify three-phase iteration — demonstrates StepTemplate, multi-agent collaboration, and variable propagation.
 
-## 适用场景
+## Use Cases
 
-- 任何需要"先规划、再实现、后验证"的开发任务
-- 功能开发、Bug 修复、重构等软件工程场景
-- 需要将计划与执行分离，由不同 Agent 各司其职的场景
+- Any development task requiring "plan first, implement second, verify last"
+- Feature development, bug fixes, refactoring
+- Separating planning from execution with different agents for each role
 
-## 前置条件
+## Prerequisites
 
-- `orchestratord` 运行中
-- 已执行 `orchestrator init`
+- `orchestratord` is running
+- Database initialized (`orchestrator init`)
 
-## 使用步骤
+## Steps
 
-### 1. 部署资源
+### 1. Deploy Resources
 
 ```bash
 orchestrator apply -f docs/workflow/plan-execute.yaml --project plan-exec
 ```
 
-### 2. 创建并运行任务
+### 2. Create and Run a Task
 
 ```bash
 orchestrator task create \
@@ -33,26 +33,26 @@ orchestrator task create \
   --project plan-exec
 ```
 
-### 3. 查看结果
+### 3. Inspect Results
 
 ```bash
 orchestrator task list --project plan-exec
 orchestrator task logs <task_id>
 ```
 
-## 工作流步骤
+## Workflow Steps
 
 ```
 plan (planner) → implement (coder) → verify (coder)
 ```
 
-1. **plan** — 由 planner agent 生成实现计划，输出被自动捕获
-2. **implement** — 由 coder agent 按计划实施，通过 `{plan_output_path}` 读取上一步计划
-3. **verify** — 由 coder agent 验证实现是否符合计划
+1. **plan** — Planner agent generates an implementation plan; output is automatically captured
+2. **implement** — Coder agent follows the plan via `{plan_output_path}`
+3. **verify** — Coder agent verifies the implementation matches the plan
 
-### 核心特性：StepTemplate
+### Key Feature: StepTemplate
 
-每个步骤使用独立的 StepTemplate 定义 prompt，与 Agent 解耦：
+Each step uses an independent StepTemplate to define its prompt, decoupled from the Agent:
 
 ```yaml
 kind: StepTemplate
@@ -65,24 +65,24 @@ spec:
     ...
 ```
 
-**Pipeline 变量**（自动注入）：
-- `{goal}` — task 创建时指定的目标
-- `{source_tree}` — Workspace 的 root_path
-- `{diff}` — 当前 cycle 的 git diff
-- `{plan_output_path}` — plan 步骤输出的文件路径
+**Pipeline variables** (auto-injected):
+- `{goal}` — the goal specified at task creation
+- `{source_tree}` — the Workspace root_path
+- `{diff}` — git diff in the current cycle
+- `{plan_output_path}` — file path of the plan step's captured output
 
-### 核心特性：多 Agent 协作
+### Key Feature: Multi-Agent Collaboration
 
-- **planner** agent（capability: `plan`）— 专注规划
-- **coder** agent（capability: `implement`, `verify`）— 专注编码和验证
+- **planner** agent (capability: `plan`) — focuses on planning
+- **coder** agent (capability: `implement`, `verify`) — focuses on coding and verification
 
-Orchestrator 根据步骤的 `required_capability` 自动匹配 Agent。
+The orchestrator matches agents to steps based on `required_capability`.
 
-## 自定义指南
+## Customization Guide
 
-### 添加 QA 步骤
+### Add QA Steps
 
-在 verify 之后添加 QA 测试步骤：
+Append a QA testing step after verify:
 
 ```yaml
 - id: qa_testing
@@ -93,11 +93,11 @@ Orchestrator 根据步骤的 `required_capability` 自动匹配 Agent。
   enabled: true
 ```
 
-`scope: item` 表示按 QA 文件扇出并行执行。
+`scope: item` means the step fans out in parallel per QA file.
 
-### 启用 2-Cycle 模式
+### Enable 2-Cycle Mode
 
-第 1 轮实现，第 2 轮回归验证：
+Cycle 1 for implementation, cycle 2 for regression verification:
 
 ```yaml
 loop:
@@ -105,9 +105,9 @@ loop:
   max_cycles: 2
 ```
 
-### 添加 Prehook 条件控制
+### Add Prehook Conditional Control
 
-使用 CEL 表达式按条件启用步骤：
+Use CEL expressions to conditionally enable steps:
 
 ```yaml
 - id: verify
@@ -118,8 +118,8 @@ loop:
     reason: "Only verify in the second cycle"
 ```
 
-## 进阶参考
+## Further Reading
 
-- [Self-Bootstrap Execution](self-bootstrap-execution-template.md) — 生产级计划-执行-验证 workflow（8 个 StepTemplate + 4 个 Agent + CEL prehook）
-- [CEL Prehooks](../guide/04-cel-prehooks.md) — 动态控制流详解
-- [Workflow Configuration](../guide/03-workflow-configuration.md) — scope、loop、safety 配置
+- [Self-Bootstrap Execution](self-bootstrap-execution-template.md) — Production-grade plan-execute-verify workflow (8 StepTemplates + 4 Agents + CEL prehooks)
+- [CEL Prehooks](../guide/04-cel-prehooks.md) — Dynamic control flow via CEL expressions
+- [Workflow Configuration](../guide/03-workflow-configuration.md) — Scope, loop, and safety configuration

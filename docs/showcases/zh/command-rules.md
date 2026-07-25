@@ -123,6 +123,6 @@ command_rules:
 
 ## 进阶参考
 
-- [Plan & Execute 模板](/zh/showcases/plan-execute) — StepTemplate 和变量传递基础
-- [自举引导执行](/zh/showcases/self-bootstrap-execution-template) — 生产级多步骤 workflow
-- [CEL 前置钩子](/zh/guide/cel-prehooks) — CEL 表达式语法参考
+- [Plan & Execute 模板](plan-execute.md) — StepTemplate 和变量传递基础
+- [Self-Bootstrap Execution](self-bootstrap-execution-template.md) — 生产级多步骤 workflow
+- [CEL Prehooks](../../guide/zh/04-cel-prehooks.md) — CEL 表达式语法参考

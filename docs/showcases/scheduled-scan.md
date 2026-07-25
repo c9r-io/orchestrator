@@ -1,29 +1,29 @@
-# Scheduled Scan 模板
+# Scheduled Scan Template
 
-> **Harness Engineering 模板**：这个 showcase 展示 orchestrator 作为 agent-first 软件交付控制面的一个能力切片，把 agent、workflow、policy 和反馈闭环固化为可复用的工程资产。
+> **Harness Engineering template**: this showcase demonstrates one concrete capability slice of orchestrator as a control plane for agent-first software delivery.
 >
-> **模板用途**：定时触发的安全审计 — 展示 Trigger 资源、cron 调度和 agent 驱动的安全分析。
+> **Purpose**: Cron-triggered security audit — demonstrates agent-driven security analysis, static checks, and the Trigger resource.
 
-## 适用场景
+## Use Cases
 
-- 定期安全审计：agent 驱动的威胁建模 + 静态工具扫描
-- 合规检查：定期审查架构安全性和依赖健康度
-- 任何需要周期性自动执行的审计任务
+- Periodic security audits: agent-driven threat modeling + static tool scanning
+- Compliance checks: regular architecture security and dependency health reviews
+- Any periodically recurring audit task
 
-## 前置条件
+## Prerequisites
 
-- `orchestratord` 运行中（webhook 服务默认监听 `127.0.0.1:19090`）
-- 已执行 `orchestrator init`
+- `orchestratord` is running (webhook server enabled by default on `127.0.0.1:19090`)
+- Database initialized (`orchestrator init`)
 
-## 使用步骤
+## Steps
 
-### 1. 部署资源
+### 1. Deploy Resources
 
 ```bash
 orchestrator apply -f docs/workflow/scheduled-scan.yaml --project scan
 ```
 
-### 2. 手动触发一次（测试）
+### 2. Manual Run (Test)
 
 ```bash
 orchestrator task create \
@@ -33,40 +33,40 @@ orchestrator task create \
   --project scan
 ```
 
-### 3. 查看结果
+### 3. Inspect Results
 
 ```bash
 orchestrator task list --project scan
 orchestrator task logs <task_id>
 ```
 
-### 4. 验证 Trigger 已注册
+### 4. Verify Trigger Registration
 
 ```bash
 orchestrator get triggers --project scan
 ```
 
-Cron trigger `weekly-scan` 会在每周一凌晨 3:00 UTC 自动创建新任务。
+The `weekly-scan` cron trigger will automatically create new tasks every Monday at 3:00 AM UTC.
 
-## 工作流步骤
+## Workflow Steps
 
 ```
 agent_audit (scan-agent) → static_check (scan-agent)
 ```
 
-1. **agent_audit** — Agent 驱动的安全分析：识别信任边界、审查认证授权逻辑、检查注入向量、评估密钥处理和错误暴露
-2. **static_check** — 静态工具扫描：依赖审计（cargo audit / npm audit）、秘密扫描、已知漏洞模式检查
+1. **agent_audit** — Agent-driven security analysis: identify trust boundaries, review auth logic, check injection vectors, assess secrets handling and error exposure
+2. **static_check** — Static tool scanning: dependency audit (cargo audit / npm audit), secret scanning, known vulnerability pattern checks
 
-### 为什么 Agent 分析优先？
+### Why Agent Analysis First?
 
-传统静态扫描只能发现已知模式（CVE、正则匹配），而 AI agent 能：
-- 理解业务逻辑中的安全隐患（如权限绕过、TOCTOU 竞态）
-- 进行威胁建模（识别信任边界和攻击面）
-- 给出上下文感知的修复建议
+Traditional static scanning only catches known patterns (CVEs, regex matches). AI agents can:
+- Understand security implications in business logic (permission bypasses, TOCTOU races)
+- Perform threat modeling (identify trust boundaries and attack surfaces)
+- Provide context-aware remediation advice
 
-静态扫描作为补充，覆盖 agent 可能遗漏的机械性检查（依赖 CVE、硬编码凭证正则匹配等）。
+Static scanning complements by covering mechanical checks the agent might miss (dependency CVEs, hardcoded credential regex, etc.).
 
-### 核心特性：Trigger
+### Key Feature: Trigger
 
 ```yaml
 kind: Trigger
@@ -74,44 +74,44 @@ metadata:
   name: weekly-scan
 spec:
   cron:
-    schedule: "0 3 * * 1"    # 每周一凌晨 3:00
+    schedule: "0 3 * * 1"    # Every Monday at 3:00 AM
     timezone: "UTC"
   action:
     workflow: scheduled_scan
     workspace: default
     goal: "Weekly automated security audit"
-    start: true              # 创建后自动启动
-  concurrency_policy: Forbid  # 防止重叠执行
+    start: true              # Auto-start after creation
+  concurrency_policy: Forbid  # Prevent overlapping executions
 ```
 
-## 自定义指南
+## Customization Guide
 
-### 调整执行频率
+### Adjust Frequency
 
 ```yaml
-# 每天凌晨 2:00
+# Daily at 2:00 AM
 schedule: "0 2 * * *"
 
-# 每 6 小时
+# Every 6 hours
 schedule: "0 */6 * * *"
 
-# 每月 1 日
+# Monthly on the 1st
 schedule: "0 0 1 * *"
 ```
 
-### 替换为真实 Agent
+### Replace with a Real Agent
 
-将 echo command 替换为真实 agent：
+Swap the echo command for a real agent:
 
 ```yaml
 command: claude -p "{prompt}" --verbose --output-format stream-json
 ```
 
-替换后 agent 将实际执行威胁建模分析和静态扫描命令。
+The agent will then perform actual threat modeling and run static scan commands.
 
-### 自定义 StepTemplate prompt
+### Customize StepTemplate Prompts
 
-根据项目技术栈调整 static_check 的 prompt：
+Adjust the static_check prompt for your tech stack:
 
 ```yaml
 prompt: >-
@@ -121,9 +121,9 @@ prompt: >-
   - Check for `unsafe` blocks without safety comments
 ```
 
-### 添加 Webhook Trigger
+### Add a Webhook Trigger
 
-除了 cron，还可以通过 webhook 事件触发（如 CI push 后自动扫描）：
+Trigger scans via webhook events (e.g., after CI push):
 
 ```yaml
 kind: Trigger
@@ -140,8 +140,8 @@ spec:
     start: true
 ```
 
-## 进阶参考
+## Further Reading
 
-- [FR Watch 模板](fr-watch.md) — Webhook Trigger 示例（文件监控驱动）
-- [Secret Rotation Workflow](secret-rotation-workflow.md) — 生产级 cron trigger 示例
-- [Advanced Features](../guide/05-advanced-features.md) — Trigger 资源详解
+- [FR Watch Template](fr-watch.md) — Webhook Trigger example (file system monitoring)
+- [Secret Rotation Workflow](secret-rotation-workflow.md) — Production cron trigger example
+- [Advanced Features](../guide/05-advanced-features.md) — Trigger resource details

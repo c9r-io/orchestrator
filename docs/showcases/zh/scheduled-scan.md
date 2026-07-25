@@ -142,6 +142,6 @@ spec:
 
 ## 进阶参考
 
-- [FR Watch 模板](/zh/showcases/fr-watch) — Webhook Trigger 示例（文件监控驱动）
-- [密钥轮替](/zh/showcases/secret-rotation-workflow) — 生产级 cron trigger 示例
-- [高级特性](/zh/guide/advanced-features) — Trigger 资源详解
+- [FR Watch 模板](fr-watch.md) — Webhook Trigger 示例（文件监控驱动）
+- [Secret Rotation Workflow](secret-rotation-workflow.md) — 生产级 cron trigger 示例
+- [Advanced Features](../../guide/zh/05-advanced-features.md) — Trigger 资源详解

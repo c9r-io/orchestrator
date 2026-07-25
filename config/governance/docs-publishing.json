@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "description": "Single source of truth for the published documentation set. `scripts/sync-docs.mjs` reads this file to decide what to generate, and `scripts/qa/test-docs-publishing-integrity.sh` verifies the result against the repository in the ci.yml governance job. Every page under a collection's site output is generated: nothing in it may be tracked by git, and nothing may be authored there. A slug that exists in one locale and not the other fails the gate unless it appears in `translationGaps`, and a gap naming a slug or collection that no longer exists fails it too.",
+  "source": "docs",
+  "siteRoot": "site",
+  "collections": [
+    {
+      "name": "guide",
+      "sources": { "en": "docs/guide", "zh": "docs/guide/zh" },
+      "stripNumericPrefix": true,
+      "requireBilingual": false,
+      "requireBilingualReason": "EN/ZH guide parity is the guide-alignment skill's scope, not this gate's. An untranslated chapter is simply absent from that locale's site rather than served in the wrong language, which is why the guide collection declares no fallback. The visible consequence is that VitePress still renders a language-switcher link on the seven asymmetric chapters (six EN-only, one ZH-only) and that link 404s; closing it means translating them, not changing the publishing rule.",
+      "fallback": null
+    },
+    {
+      "name": "showcases",
+      "sources": { "en": "docs/showcases", "zh": "docs/showcases/zh" },
+      "stripNumericPrefix": true,
+      "requireBilingual": true,
+      "fallback": "declared-gaps"
+    }
+  ],
+  "translationGaps": [
+    {
+      "collection": "showcases",
+      "slug": "full-qa-execution",
+      "absentSource": "zh",
+      "owedTranslation": "en",
+      "reason": "No English translation exists. The Chinese text occupies the `en` source slot because every repository reference points at docs/showcases/full-qa-execution.md, and both site routes are served from it. The owed work is an English translation, after which the Chinese text moves to docs/showcases/zh/ and this entry is deleted."
+    },
+    {
+      "collection": "showcases",
+      "slug": "streaming-mark-done-convergence",
+      "absentSource": "zh",
+      "owedTranslation": "zh",
+      "reason": "No Chinese translation exists. The English text is the `en` source and is served at both routes. It is the typed-driver showcase the EN/ZH CEL guides send readers to, and scripts/qa/test-agent-driver-documentation-alignment.sh governs its content, so the path must stay docs/showcases/streaming-mark-done-convergence.md."
+    }
+  ],
+  "navConfig": "site/.vitepress/config.ts",
+  "navExemptions": []
+}
