@@ -765,8 +765,11 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
   expect_fail "fixture 3" "$d" check_reason_and_owner "a manual-runbook entry with an empty reason fails the completeness check"
 
   # 4. ci-required entry whose declared job does not reference it.
+  #    Repointed at coordination-strangler rather than clippy: that job installs
+  #    ruby, which this gate needs, so the fixture isolates the wiring failure
+  #    instead of also tripping the dependency check.
   d="$(new_case f4)"
-  jq '(.scripts[] | select(.path == "scripts/qa/test-coordination-governance.sh") | .job) = "clippy"' \
+  jq '(.scripts[] | select(.path == "scripts/qa/test-coordination-governance.sh") | .job) = "coordination-strangler"' \
     "$BASE/$MANIFEST_REL" > "$d/$MANIFEST_REL"
   expect_fail "fixture 4" "$d" check_wiring_truth "a ci-required entry pointing at a job that does not run it fails the wiring check"
 
@@ -877,6 +880,63 @@ BUNDLE
   jq '(.supportFiles[] | select(.path == "scripts/qa/lib/slack-live-certification-lib.sh") | .role) = "whatever"' \
     "$BASE/$MANIFEST_REL" > "$d/$MANIFEST_REL"
   expect_fail "fixture 16" "$d" check_support_files_declared "a support file cannot invent its own role"
+
+  # 17. ripgrep removed from the job that installs it. This is the defect that
+  #     was live in two jobs for a full FR cycle, restated as a fixture.
+  d="$(new_case f17)"
+  perl -pi -e 's/ jq ruby ripgrep sqlite3 protobuf-compiler/ jq ruby sqlite3 protobuf-compiler/' \
+    "$d/.github/workflows/ci.yml"
+  expect_fail "fixture 17" "$d" check_job_dependencies "a job that stops installing ripgrep can no longer run the gates that need it"
+
+  # 18. The workspace exclusion dropped, recreating the superset that could
+  #     never build on Linux.
+  d="$(new_case f18)"
+  perl -pi -e 's/ --workspace --exclude orchestrator-gui/ --workspace/' \
+    "$d/scripts/qa/test-filesystem-trigger.sh"
+  expect_fail "fixture 18" "$d" check_workspace_scope "a gate widening past its sibling jobs without a declared reason fails"
+
+  # 19. A cargo command whose output is thrown away. No --workspace, so this
+  #     targets the diagnostics rule and nothing else.
+  #     The redirection is assembled from a variable rather than written out:
+  #     this file is itself a ci-required gate, so a source line containing the
+  #     literal pattern would make the check fail on the check's own fixture.
+  d="$(new_case f19)"
+  DISCARD='>/dev/null 2>&1'
+  printf '\nif cargo test -p agent-orchestrator %s; then :; fi\n' "$DISCARD" \
+    >> "$d/scripts/qa/test-filesystem-trigger.sh"
+  expect_fail "fixture 19" "$d" check_diagnostics_preserved "a cargo command with its output discarded fails the diagnostics rule"
+
+  # 20. The stub backstop removed from the job whose gate has no other barrier.
+  d="$(new_case f20)"
+  perl -0pi -e 's{      # This job.s gate is isolated by fixture pinning alone.*?\n      - name: Install failing provider stubs\n        uses: \./\.github/actions/provider-stubs\n\n}{}s' \
+    "$d/.github/workflows/ci.yml"
+  expect_fail "fixture 20" "$d" check_provider_stub_coverage "a provider-capable job without the stub backstop fails"
+
+  # ── Behavioural: the diagnostics rule is about output reaching the log ──
+  #
+  # check_diagnostics_preserved reads the source, which is a proxy for "the CI
+  # log will be diagnosable". Pair it with the fact: put a cargo on PATH that
+  # fails with a recognisable compiler error and require that error to come
+  # back out of the gate. A gate that satisfied the source rule while still
+  # swallowing output would pass the check and fail this.
+  d="$(new_case behavioural-diagnostics)"
+  mkdir -p "$d/fakebin"
+  cat > "$d/fakebin/cargo" <<'FAKE'
+#!/usr/bin/env bash
+echo "error[E0425]: cannot find value \`fr134_sentinel\` in this scope" >&2
+exit 1
+FAKE
+  chmod 755 "$d/fakebin/cargo"
+  # Captured to a file rather than piped: the gate is expected to exit non-zero
+  # here, and under pipefail a pipeline reports that instead of grep's verdict.
+  PATH="$d/fakebin:$PATH" bash "$d/scripts/qa/test-filesystem-trigger.sh" \
+    > "$FIXTURE_ROOT/diagnostics.log" 2>&1 || true
+  if grep -q 'error\[E0425\].*fr134_sentinel' "$FIXTURE_ROOT/diagnostics.log"; then
+    pass "behavioural: a failing cargo command's diagnosis reaches the gate's output"
+  else
+    fail "behavioural: a failing cargo command's output did not reach the gate's output"
+    tail -20 "$FIXTURE_ROOT/diagnostics.log" >&2
+  fi
 
   # ── Meta: the registry and the fixture set have to stay in step ──
   #

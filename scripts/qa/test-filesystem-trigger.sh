@@ -12,31 +12,49 @@ FAIL=0
 pass() { PASS=$((PASS + 1)); echo "  PASS: $1"; }
 fail() { FAIL=$((FAIL + 1)); echo "  FAIL: $1"; }
 
+LOG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/fr085-filesystem-trigger.XXXXXX")"
+cleanup() { rm -rf "$LOG_DIR"; }
+trap cleanup EXIT
+
+# Runs a cargo command, keeping its output. Discarding it with >/dev/null 2>&1
+# is why a real CI failure here read `FAIL: cargo test --workspace` and nothing
+# else, and had to be reproduced locally and cross-compared against a sibling
+# job before anyone could say what broke. On failure the tail of the log goes to
+# stderr, so the CI log carries the compiler's diagnosis.
+run_cargo() {
+  local label="$1"
+  shift
+  local log="$LOG_DIR/$(echo "$label" | tr -c 'A-Za-z0-9' '-').log"
+  if "$@" > "$log" 2>&1; then
+    pass "$label"
+  else
+    fail "$label"
+    echo "    --- last 40 lines of $* ---" >&2
+    tail -40 "$log" >&2
+    echo "    --- end ---" >&2
+  fi
+}
+
 echo "=== QA 132: Filesystem Trigger ==="
 echo ""
 
 # ── Scenario 1: Compilation and tests ─────────────────────────────────────────
+# orchestrator-gui is excluded to match the sibling test and clippy jobs. No job
+# in .github/workflows installs the Tauri and webkit system dependencies, so the
+# unexcluded form is not a duplicate of those jobs but a superset whose extra
+# member cannot build on Linux at all. It passed locally because macOS provides
+# those frameworks as system libraries. Building the GUI in CI is FR-076's.
 echo "--- Scenario 1: Compilation and tests ---"
-if cargo test --workspace >/dev/null 2>&1; then
-  pass "cargo test --workspace"
-else
-  fail "cargo test --workspace"
-fi
-
-if cargo clippy --workspace --all-targets -- -D warnings >/dev/null 2>&1; then
-  pass "cargo clippy clean"
-else
-  fail "cargo clippy"
-fi
+run_cargo "cargo test --workspace" \
+  cargo test --workspace --exclude orchestrator-gui
+run_cargo "cargo clippy clean" \
+  cargo clippy --workspace --exclude orchestrator-gui --all-targets -- -D warnings
 
 # ── Scenario 6: serde roundtrip ──────────────────────────────────────────────
 echo ""
 echo "--- Scenario 6: serde roundtrip ---"
-if cargo test -p agent-orchestrator -- trigger_yaml_roundtrip_filesystem >/dev/null 2>&1; then
-  pass "trigger_yaml_roundtrip_filesystem"
-else
-  fail "trigger_yaml_roundtrip_filesystem"
-fi
+run_cargo "trigger_yaml_roundtrip_filesystem" \
+  cargo test -p agent-orchestrator -- trigger_yaml_roundtrip_filesystem
 
 # ── Scenario 7: Unit tests for filesystem validation ─────────────────────────
 echo ""
@@ -46,11 +64,7 @@ for test_name in \
   trigger_validate_filesystem_requires_paths \
   trigger_validate_filesystem_requires_block \
   trigger_validate_filesystem_rejects_invalid_events; do
-  if cargo test -p agent-orchestrator -- "$test_name" >/dev/null 2>&1; then
-    pass "$test_name"
-  else
-    fail "$test_name"
-  fi
+  run_cargo "$test_name" cargo test -p agent-orchestrator -- "$test_name"
 done
 
 # ── Scenario 8: Config types exist ───────────────────────────────────────────

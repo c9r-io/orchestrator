@@ -1,0 +1,25 @@
+name: Install failing provider stubs
+description: >-
+  Puts claude and codex stubs that exit 97 ahead of PATH, so a ci-required QA
+  gate whose own provider isolation has failed produces a loud, attributable
+  failure instead of spending real credentials and quota.
+
+runs:
+  using: composite
+  steps:
+    - name: Install failing provider stubs
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "$RUNNER_TEMP/provider-stubs"
+        for provider in claude codex; do
+          cat > "$RUNNER_TEMP/provider-stubs/$provider" <<'STUB'
+        #!/usr/bin/env bash
+        echo "FR-127: a ci-required QA gate invoked a real provider CLI ($(basename "$0"))." >&2
+        echo "FR-127: CI gates must never consume real provider credentials or quota." >&2
+        echo "FR-127: see config/governance/qa-gate-surface.json for the isolation contract." >&2
+        exit 97
+        STUB
+          chmod 755 "$RUNNER_TEMP/provider-stubs/$provider"
+        done
+        echo "$RUNNER_TEMP/provider-stubs" >> "$GITHUB_PATH"

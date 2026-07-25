@@ -158,7 +158,8 @@
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
       "providerIsolation": { "mode": "no-provider" },
-      "note": "Run with FR126_FAST=1 in CI. The repository-wide gates that the default mode re-runs (fmt, clippy, workspace tests, coordination strangler, coverage fixtures, qa-doc-lint) all execute as sibling jobs in the same workflow, so the certifying aggregate is the workflow, not this single invocation."
+      "note": "Run with FR126_FAST=1 in CI. The repository-wide gates that the default mode re-runs (fmt, clippy, workspace tests, coordination strangler, coverage fixtures, qa-doc-lint) all execute as sibling jobs in the same workflow, so the certifying aggregate is the workflow, not this single invocation.",
+      "workspaceScopeReason": "The unexcluded `cargo test --workspace` sits behind `FR126_FAST != 1`, and ci.yml runs this gate with FR126_FAST=1, so CI never reaches it. It runs in the local release aggregate on macOS, where the Tauri frameworks are system libraries — and that is currently the only place orchestrator-gui is compiled at all, since the sibling test and clippy jobs exclude it and no job installs its dependencies. Excluding it here to match them would delete the crate's last coverage rather than align anything. FR-076 requirement 1 owns building it in CI."
     },
     {
       "path": "scripts/qa/test-agent-driver-production-parity.sh",

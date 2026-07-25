@@ -95,8 +95,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # ripgrep is not in either runner image. Without it this job's gate exited
+      # on its own `command -v` preamble, having asserted nothing, on every push
+      # since it was wired — while the surface gate certified it as enforced.
       - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y jq ruby sqlite3 protobuf-compiler
+        run: sudo apt-get update && sudo apt-get install -y jq ruby ripgrep sqlite3 protobuf-compiler
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -105,6 +108,11 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           key: coordination-strangler
+
+      # This job's gate is isolated by fixture pinning alone, which is the
+      # mechanism FR-134 defect 3 defeated. The stubs are its second line.
+      - name: Install failing provider stubs
+        uses: ./.github/actions/provider-stubs
 
       - name: Verify production inventory, ratchet, and per-workflow parity
         run: ./scripts/qa/test-coordination-strangler.sh
@@ -140,22 +148,10 @@ jobs:
       # No ci-required gate may reach a real provider CLI. GitHub runners ship
       # neither binary today; these stubs turn a future accidental invocation
       # into a visible failure instead of silent credential and quota spend.
+      # Extracted to a composite action so it is not one job's private
+      # arrangement — coordination-strangler needs the same backstop.
       - name: Install failing provider stubs
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/provider-stubs"
-          for provider in claude codex; do
-            cat > "$RUNNER_TEMP/provider-stubs/$provider" <<'STUB'
-          #!/usr/bin/env bash
-          echo "FR-127: a ci-required QA gate invoked a real provider CLI ($(basename "$0"))." >&2
-          echo "FR-127: CI gates must never consume real provider credentials or quota." >&2
-          echo "FR-127: see config/governance/qa-gate-surface.json for the isolation contract." >&2
-          exit 97
-          STUB
-            chmod 755 "$RUNNER_TEMP/provider-stubs/$provider"
-          done
-          echo "$RUNNER_TEMP/provider-stubs" >> "$GITHUB_PATH"
+        uses: ./.github/actions/provider-stubs
 
       - name: Verify gate enforcement surface
         run: ./scripts/qa/test-qa-gate-surface.sh
@@ -259,6 +255,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      # Both gates below require ripgrep, which neither runner image ships.
+      # They had been exiting on their missing-command preamble on every push.
+      - name: Install ripgrep (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
+      - name: Install ripgrep (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ripgrep
 
       - name: Verify checkpoint, redaction, cleanup, and recorded provider contracts
         run: ./scripts/qa/test-slack-live-certification.sh
