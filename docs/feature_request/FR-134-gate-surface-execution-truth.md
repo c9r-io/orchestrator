@@ -119,6 +119,29 @@ docs/design_doc/orchestrator/130-coordination-collapse-mcp-tools.md:116     "exa
 
 本 FR 的需求 4（stale-claim 扫描改为全集减豁免）落地后，这一类漂移本应被自动捕获；缺陷 Y 因此既是待修项，也是需求 4 的现成验收样本。
 
+## FR-129 闭环后审计并入的一项
+
+FR-129（Skill 单一来源与镜像完整性）已闭环，是这一批治理 FR 中实现质量最高的一个：6 个 check、19 条负向 fixture 断言，其中 fixture 4a（"一个是目录的 `SKILL.md` 通过全部结构性检查，只有读取失败"）是本 FR 缺陷的最小形态并被隔离到读取检查；两条 meta 断言（每个 check 都在注册表中、每个注册 check 都至少有一条负向 fixture 证明）为其余治理门禁树立了标准。三次针对性攻击（错指目标的符号链接、陈旧 `notSkills` 条目、未声明根中的真实副本）均被正确拦截。
+
+### 缺陷 Z：未声明的镜像根完全不可见
+
+`config/governance/skill-mirrors.json` 以 `mirrorRoots` 枚举需要检查的镜像根。覆盖率、形状、读取三项检查只在已声明的根上执行，没有任何机制发现新出现的根。
+
+复现——建立一个只含符号链接的 `.windsurf/skills/`，其中一条故意错名错指，且只覆盖 29 个 skill 中的 1 个：
+
+```
+.windsurf/skills/fr-governance       -> ../../.claude/skills/fr-governance
+.windsurf/skills/BROKEN-wrong-target -> ../../.claude/skills/qa-doc-gen
+```
+
+结果：**6 个 check 全部通过**。
+
+这与本 FR 需求 4 的缺陷 4 同源——**枚举式覆盖面只能守住已知的那些**——但后果更具体：这正是催生 FR-129 的失效模式本身。FR-129 原文遗漏了 `.cursor/skills`，而它当时握有 29 个 skill 中的 16 个且从未被检查。门禁现在保证两个已声明根完美，对第三个根依然沉默。本仓库的历史已证明根会增减：FR-129 的 CHANGELOG 记录了 `SKILLS.md` 曾声明一个磁盘上并不存在的 `.gemini/skills/` 根。
+
+部分缓解：若未声明根中放的是**副本**，`check_no_content_copies` 会捕获（已验证）。仅全符号链接的未声明根不可见——而符号链接恰是本仓库文档化的约定形状，因此这是更可能出现的形态。
+
+`DD-141` 的 Known Limits 诚实列举了三项限制（不解析 frontmatter、`notSkills` 是逃生舱、大小写敏感性），但未包含此项。
+
 ## 目标
 
 - 把 `test-qa-gate-surface.sh` 中三处以文本存在性为代理的判定，替换为对执行事实的判定。
@@ -200,7 +223,14 @@ docs/design_doc/orchestrator/130-coordination-collapse-mcp-tools.md:116     "exa
 - `coordination-governance.rb` 的写保护当前仅判断 `ENV.key?("CI")`。未设置该变量的自托管 runner 不会被拦。
 - 扩展识别面（如 `GITHUB_ACTIONS`、通用 CI 变量集合），并补测试。实际风险低——CI 从不调用 `--write`——但这是"防止 review gate 沦为装饰"的唯一屏障，成本近零。
 
-### 12. 修正 QA-177 的计数陈述
+### 12. 镜像根的发现式覆盖
+
+- `scripts/qa/test-skill-mirror-integrity.sh` 新增检查：发现仓库中所有指向 `.claude/skills/` 的被追踪符号链接，要求其所在根必须在 `mirrorRoots` 中声明。
+- 实现提示：`git ls-files -s` 中 mode `120000` 的条目即全部被追踪的符号链接，按目标是否解析进源树筛选即可，无需遍历文件系统。
+- 补负向 fixture：一个只含符号链接的未声明根必须使门禁失败；将其声明进 `mirrorRoots` 后，该根随即受覆盖率与形状检查约束（即错名错指的条目仍应失败）。
+- 与需求 4 共享同一原则：覆盖面由发现得出，枚举只用于豁免。二者若能共用"全集减豁免"的实现骨架则共用。
+
+### 13. 修正 QA-177 的计数陈述
 
 - QA-177 Scenario 3 记为"All 10 `ci-required` gates"，而台账声明 12（差额为两条 `invokedBy` 条目）。更正为准确表述，或说明 10 指直接调用数。
 
@@ -228,6 +258,8 @@ docs/design_doc/orchestrator/130-coordination-collapse-mcp-tools.md:116     "exa
 - [ ] 6 处 `monotonic` 表述与 FR-133 的引用均已更正
 - [ ] 已验证需求 4 的全集扫描能否捕获语义契约类漂移；捕获不到时其边界有书面记录
 - [ ] `--write` 的 CI 识别面已扩展并有测试
+- [ ] 只含符号链接的未声明镜像根使镜像门禁失败；声明后其错名错指条目仍被形状检查捕获
+- [ ] 镜像根覆盖面由被追踪符号链接发现得出，而非由 `mirrorRoots` 枚举决定
 - [x] QA-177 的门禁计数陈述与台账一致 —— 已由 `dd993346` 解决（11 次调用对应 13 个条目，两条经 `invokedBy` 间接接线）
 - [ ] `cargo test --workspace`、strict Clippy 与全部既有 CI job 通过
 
@@ -242,4 +274,5 @@ docs/design_doc/orchestrator/130-coordination-collapse-mcp-tools.md:116     "exa
 - **诊断保真验证**：临时让某个 `ci-required` 门禁中的 cargo 命令失败，断言 CI 日志包含足以定位根因的编译器输出，而非仅一行 `FAIL:`。本 FR 的发现 B 正是因为缺少这一点而需要本地复现才能定位。
 - **词法安全先证后修**：先加入含字符串花括号的 `cfg(test)` fixture，确认它在当前实现下漏计，再修复。同时对三处已存在的失衡块做回归——它们目前是尾部模块因而无害，修复后须确认基线读数不变，以区分"修好了"与"换了一种错法"。
 - **陈旧陈述的双向验证**：修正 6 处表述后，再故意在任一设计文档写回 `monotonic source baseline`，确认需求 4 的扫描能否捕获。捕获不到即说明扫描只覆盖"CI 强制执行"类声明，该边界须写入设计记录而非默认成立。
+- **发现式覆盖的双向验证**：未声明根必须失败；声明后必须立刻受既有三项检查约束。只验证前者会让"声明即豁免"成为绕过路径。
 - **CI 实证**：修复后推送并观察真实 workflow 运行结果，而非仅本地执行。本 FR 的两个新发现均只在真实 CI 中可见——发现 A 因本地已装 ripgrep 而不可见，发现 B 因 macOS 提供 Tauri 系统框架而不可见。**本地绿不等于 CI 绿，CI 绿不等于门禁在守，门禁被引用也不等于门禁能跑。**
