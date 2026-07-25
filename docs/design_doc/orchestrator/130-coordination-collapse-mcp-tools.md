@@ -118,5 +118,5 @@ deterministic governance even after coordination consumers reach zero.
 - `crates/orchestrator-scheduler/src/scheduler/item_executor/apply.rs` — tool-effect folding.
 - `fixtures/manifests/bundles/coordination-collapse-pilot.yaml` — parity fixture.
 - `scripts/qa/test-coordination-collapse.sh` — reproducible closure gate.
-- `config/governance/coordination-collapse-ledger.json` — exact production inventory and monotonic ratchet.
+- `config/governance/coordination-collapse-ledger.json` — exact production inventory and exact-equality ratchet.
 - `scripts/qa/test-coordination-strangler.sh` — per-production-workflow parity and self-bootstrap gate.

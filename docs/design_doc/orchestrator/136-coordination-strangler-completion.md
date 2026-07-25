@@ -138,8 +138,11 @@ production workflows meet those conditions.
   binary snapshot, `self_test`, self-reference policy, `self_restart`, and
   watchdog evidence.
 - Risk: a new capture is disguised as harmless compatibility.  
-  Mitigation: exact per-workflow touch allowances and a monotonic source baseline
-  reject additions until the ledger is deliberately reviewed.
+  Mitigation: exact per-workflow touch allowances and an exact-equality source
+  baseline reject any change, in either direction, until the ledger is
+  deliberately reviewed. FR-128 tightened this from the monotonic form, under
+  which a decrease passed silently — and a decrease is the event the baseline
+  exists to record.
 
 ## Observability
 
@@ -171,7 +174,7 @@ production workflows meet those conditions.
 - Integration: seven network-free legacy/tool pairs on an isolated daemon,
   including dynamic items, metric selection, typed events, and two cycles.
 - Governance: exact inventory, negative capture fixture, allowed CEL fixture,
-  allowed safety fixture, monotonic source counters, and completion evidence.
+  allowed safety fixture, exact-equality source counters, and completion evidence.
 - Repository: formatting, workspace tests, strict Clippy, QA document lint, and
   boundary coverage governance.
 

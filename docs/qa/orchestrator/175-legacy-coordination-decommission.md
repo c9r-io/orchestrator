@@ -241,7 +241,7 @@ Close the feature against repository-wide quality gates.
 
 - All commands pass.
 - Boundary negative fixtures reject weakened coverage.
-- The ledger remains exact and monotonic.
+- The ledger remains exact: a count that moves in either direction fails.
 - `ShellRunnerExecutor` remains frozen with four consumers assigned to FR-126.
 - The two generic-variable consumers remain visible as an accepted blocker, not
   an unverified removal claim.

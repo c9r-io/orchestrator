@@ -173,7 +173,7 @@ and generic output/template compatibility are additional code-level blockers.
 - Unit: legacy-state normalization, narrow carrier rendering and accumulator
   propagation, typed metrics, self-test signals, and stable validation errors.
 - Integration: seven deterministic tool workflows on an isolated daemon.
-- Governance: exact consumer counts, negative consumer fixtures, monotonic
+- Governance: exact consumer counts, negative consumer fixtures, exact-equality
   source counts, and boundary coverage fixtures.
 - Repository: workspace tests, strict Clippy, formatting, and QA document lint.
 

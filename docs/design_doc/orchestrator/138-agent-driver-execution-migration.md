@@ -262,7 +262,8 @@ This proves the source removal patch remains mechanically reversible without app
 - Production admission rejects command-only Agents while historical Apply warns and promotes.
 - Legacy runner selection remains absent with an ordered compatibility interval and executable rollback check.
 - `command_rules`, prompt delivery, TTY, sandbox, cancellation, events, and session privacy remain governed.
-- The execution ledger is `removed` and source baselines remain monotonic.
+- The execution ledger is `removed` and source baselines match the reviewed
+  counts exactly, in both directions.
 - EN/ZH guides and authoring surfaces describe only typed-driver execution, with parse-only/compatibility boundaries explicit.
 - Every operational showcase is scanned for retired execution semantics, and
   the mark-done page linked by both CEL guides documents current typed-driver
