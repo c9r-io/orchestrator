@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "description": "Exemptions for scripts/qa/test-markdown-link-integrity.sh, which resolves every relative markdown link in `git ls-files '*.md'` and runs in the ci.yml governance job. The default is that a link resolves; an exemption is the record of a deliberate exception, and one naming a file that no longer contains the link fails the gate. Links inside code spans and fenced code blocks are not links and need no exemption — the scanner never sees them.",
+  "exemptions": []
+}

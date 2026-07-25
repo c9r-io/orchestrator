@@ -45,7 +45,8 @@ cargo clippy --workspace --all-targets -- -D clippy::unwrap_used -D clippy::pani
 
 ## Linux x86 Check
 
-To validate the Linux GNU `setrlimit` ABI used by [runner.rs](core/src/runner.rs), run:
+To validate the Linux GNU `setrlimit` ABI used by
+[resource_limits.rs](../crates/orchestrator-runner/src/runner/resource_limits.rs), run:
 
 ```bash
 ./scripts/check-linux-x86-rlimit.sh

@@ -139,6 +139,14 @@
       }
     },
     {
+      "path": "scripts/qa/test-docs-publishing-integrity.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": { "mode": "no-provider" },
+      "note": "Reads docs/guide, docs/showcases and site/.vitepress/config.ts, and runs scripts/sync-docs.mjs into a $TMPDIR destination so the working tree is never written. It starts no daemon and applies no manifest bundle, so no provider binary is reachable. It also runs in the docs.yml deploy job before the site build. Contract in config/governance/docs-publishing.json."
+    },
+    {
       "path": "scripts/qa/test-expert-resources-governed-editing.sh",
       "enforcement": "manual-runbook",
       "reason": "starts an orchestratord instance with bound ports and edits governed workspace resources",
@@ -182,6 +190,14 @@
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
       "providerIsolation": { "mode": "no-provider" }
+    },
+    {
+      "path": "scripts/qa/test-markdown-link-integrity.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": { "mode": "no-provider" },
+      "note": "Resolves relative markdown link targets in `git ls-files '*.md'` with jq, git and awk, and builds its fixtures as a synthetic corpus under $TMPDIR. It reads only, starts no daemon, and reaches no provider binary. Exemptions in config/governance/markdown-links.json."
     },
     {
       "path": "scripts/qa/test-non-code-workspace.sh",

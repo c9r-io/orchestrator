@@ -6,6 +6,9 @@ on:
     paths:
       - 'site/**'
       - 'docs/guide/**'
+      - 'docs/showcases/**'
+      - 'scripts/sync-docs.mjs'
+      - 'config/governance/docs-publishing.json'
   workflow_dispatch:
 
 permissions:
@@ -24,11 +27,20 @@ jobs:
         with:
           node-version: 22
 
+      # The publishing gate below reads config/governance/docs-publishing.json with
+      # jq. Installed rather than assumed, so a runner image change fails the step
+      # instead of the gate.
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y jq
+
       - name: Install dependencies
         working-directory: site
         run: npm ci
 
-      - name: Sync guide docs to site
+      - name: Verify docs publishing integrity
+        run: ./scripts/qa/test-docs-publishing-integrity.sh
+
+      - name: Sync docs to site
         run: node scripts/sync-docs.mjs
 
       - name: Build

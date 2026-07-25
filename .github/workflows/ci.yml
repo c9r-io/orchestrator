@@ -124,6 +124,14 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      # test-docs-publishing-integrity.sh runs scripts/sync-docs.mjs to compare what
+      # the generator produces against what the policy declares. Without Node the gate
+      # exits on its own missing-command preamble rather than passing silently.
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
         with:
@@ -160,6 +168,18 @@ jobs:
 
       - name: Verify skill mirror integrity negative fixtures
         run: ./scripts/qa/test-skill-mirror-integrity.sh --fixture-test
+
+      - name: Verify docs publishing integrity
+        run: ./scripts/qa/test-docs-publishing-integrity.sh
+
+      - name: Verify docs publishing integrity negative fixtures
+        run: ./scripts/qa/test-docs-publishing-integrity.sh --fixture-test
+
+      - name: Verify markdown link integrity
+        run: ./scripts/qa/test-markdown-link-integrity.sh
+
+      - name: Verify markdown link integrity fixtures
+        run: ./scripts/qa/test-markdown-link-integrity.sh --fixture-test
 
       - name: QA documentation lint and Agent driver documentation alignment
         run: ./scripts/qa-doc-lint.sh
