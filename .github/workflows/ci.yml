@@ -155,6 +155,12 @@ jobs:
       - name: Verify gate enforcement surface negative fixtures
         run: ./scripts/qa/test-qa-gate-surface.sh --fixture-test
 
+      - name: Verify skill mirror integrity
+        run: ./scripts/qa/test-skill-mirror-integrity.sh
+
+      - name: Verify skill mirror integrity negative fixtures
+        run: ./scripts/qa/test-skill-mirror-integrity.sh --fixture-test
+
       - name: QA documentation lint and Agent driver documentation alignment
         run: ./scripts/qa-doc-lint.sh
 

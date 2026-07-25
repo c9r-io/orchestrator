@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "description": "Single source of truth for skill mirroring. `.claude/skills` is authoritative; every other runtime sees the same skills through symlink mirrors, never through copies. Verified by scripts/qa/test-skill-mirror-integrity.sh, which runs in the ci.yml governance job. A skill absent from a declared mirror root fails the gate unless it appears in `exemptions`, and an exemption naming a skill or root that no longer exists fails it too.",
+  "source": ".claude/skills",
+  "mirrorRoots": [
+    ".agents/skills",
+    ".cursor/skills"
+  ],
+  "mirrorShape": "Each mirrored skill is a symlink at <mirrorRoot>/<name> pointing to ../../.claude/skills/<name>. The per-file shape <mirrorRoot>/<name>/SKILL.md -> <directory> is the defect FR-129 was filed to fix: it satisfies every structural check while making the skill unreadable (EISDIR) to any runtime that opens the file.",
+  "notSkills": [
+    {
+      "path": "tools",
+      "reason": "shared script bundle (qa-api-test.sh, grpc-smoke.sh, grpcurl-docker.sh) invoked by the qa-testing skill; it has no SKILL.md and is not itself a skill, so it is neither mirrored nor exempted"
+    }
+  ],
+  "exemptions": []
+}

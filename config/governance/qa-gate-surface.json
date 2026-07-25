@@ -215,6 +215,14 @@
       "owner": "docs/qa/self-bootstrap/04-cycle2-validation-and-runtime-timestamps.md"
     },
     {
+      "path": "scripts/qa/test-skill-mirror-integrity.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": { "mode": "no-provider" },
+      "note": "Reads .claude/skills and the declared mirror roots and runs its negative fixtures on a temp copy. It starts no daemon and applies no manifest bundle, so no provider binary is reachable. Contract in config/governance/skill-mirrors.json."
+    },
+    {
       "path": "scripts/qa/test-slack-dedicated-app-provisioning.sh",
       "enforcement": "manual-runbook",
       "reason": "starts an orchestratord instance with bound ports and requires the Node browser stack to drive provisioning",

@@ -1,9 +1,18 @@
 # Skills
 
-This repo stores skills under `.claude/skills/`. Other tools discover them via symlinks under:
-- `.cursor/skills/`
-- `.gemini/skills/`
+This repo stores skills under `.claude/skills/`, which is the single authoritative source.
+Other tools discover the same skills via symlinks under:
 - `.agents/skills/`
+- `.cursor/skills/`
+
+Mirrors are symlinks, never copies. Every skill is mirrored into every root unless it is
+listed with a written reason in `config/governance/skill-mirrors.json`, which is the authority
+on the mirror roots, the exemptions, and the entries under `.claude/skills/` that are not
+skills at all (`tools/` is a shared script bundle with no `SKILL.md`).
+
+`scripts/qa/test-skill-mirror-integrity.sh` enforces this in the `ci.yml` governance job. It
+checks the mirror shape and, separately, opens every `<root>/<name>/SKILL.md` and requires a
+non-empty regular file — the read that structural checks cannot substitute for.
 
 ## Platform Loop
 
