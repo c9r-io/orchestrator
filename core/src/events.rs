@@ -1,11 +1,29 @@
-use crate::async_database::flatten_err;
 use crate::db::open_conn;
 use crate::state::InnerState;
 use anyhow::Result;
-use rusqlite::{Connection, params};
+use orchestrator_persistence::events::{StepEventRow, latest_step_spawn_payload, step_event_rows};
 use serde_json::Value;
 use std::path::Path;
 use tracing::{debug, error, info, warn};
+
+/// The event types this module treats as step-related.
+///
+/// A domain policy, so it lives here and is passed to the row query rather than
+/// written into a `WHERE` clause below the boundary. Adding a step event type is
+/// then a change to this list and nothing else.
+const STEP_EVENT_TYPES: &[&str] = &[
+    "step_started",
+    "step_finished",
+    "step_skipped",
+    "step_heartbeat",
+    "step_spawned",
+    "step_timeout",
+    "cycle_started",
+    "sandbox_denied",
+    "sandbox_resource_exceeded",
+    "sandbox_network_blocked",
+    "daemon_pid_kill_blocked",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Step scope inferred from persisted event payloads.
@@ -176,25 +194,15 @@ pub fn query_latest_step_log_paths(
     task_id: &str,
 ) -> Result<Option<(String, String, String)>> {
     let conn = open_conn(db_path)?;
-    query_latest_step_log_paths_with_conn(&conn, task_id)
+    Ok(step_log_paths_from_payload(latest_step_spawn_payload(
+        &conn, task_id,
+    )))
 }
 
-fn query_latest_step_log_paths_with_conn(
-    conn: &Connection,
-    task_id: &str,
-) -> Result<Option<(String, String, String)>> {
-    let result: Option<(String,)> = conn
-        .query_row(
-            "SELECT payload_json FROM events
-             WHERE task_id = ?1 AND event_type IN ('step_spawned', 'step_started')
-             ORDER BY id DESC LIMIT 1",
-            params![task_id],
-            |row| Ok((row.get::<_, String>(0)?,)),
-        )
-        .ok();
-
-    match result {
-        Some((payload_json,)) => {
+/// Interprets the latest spawn payload into `(phase, stdout, stderr)`.
+fn step_log_paths_from_payload(payload: Option<String>) -> Option<(String, String, String)> {
+    match payload {
+        Some(payload_json) => {
             let v: Value = serde_json::from_str(&payload_json).unwrap_or_default();
             let phase = v["phase"]
                 .as_str()
@@ -204,48 +212,42 @@ fn query_latest_step_log_paths_with_conn(
             let stdout = v["stdout_path"].as_str().unwrap_or("").to_string();
             let stderr = v["stderr_path"].as_str().unwrap_or("").to_string();
             if phase.is_empty() || stdout.is_empty() {
-                Ok(None)
+                None
             } else {
-                Ok(Some((phase, stdout, stderr)))
+                Some((phase, stdout, stderr))
             }
         }
-        None => Ok(None),
+        None => None,
     }
 }
 
 /// Query all step-related events for a task, parsed into StepEvent structs.
 pub fn query_step_events(db_path: &Path, task_id: &str) -> Result<Vec<StepEvent>> {
     let conn = open_conn(db_path)?;
-    query_step_events_with_conn(&conn, task_id)
+    Ok(step_events_from_rows(step_event_rows(
+        &conn,
+        task_id,
+        STEP_EVENT_TYPES,
+    )?))
 }
 
-fn query_step_events_with_conn(conn: &Connection, task_id: &str) -> Result<Vec<StepEvent>> {
-    let mut stmt = conn.prepare(
-        "SELECT event_type, payload_json, created_at, task_item_id, step, step_scope FROM events
-         WHERE task_id = ?1
-           AND event_type IN ('step_started', 'step_finished', 'step_skipped', 'step_heartbeat', 'step_spawned', 'step_timeout', 'cycle_started', 'sandbox_denied', 'sandbox_resource_exceeded', 'sandbox_network_blocked', 'daemon_pid_kill_blocked')
-         ORDER BY id ASC",
-    )?;
-    let rows = stmt.query_map(params![task_id], |row| {
-        let event_type: String = row.get(0)?;
-        let payload_json: String = row.get(1)?;
-        let created_at: String = row.get(2)?;
-        let task_item_id: Option<String> = row.get(3)?;
-        let col_step: Option<String> = row.get(4)?;
-        let col_step_scope: Option<String> = row.get(5)?;
-        Ok((
+/// Interprets raw `events` rows into [`StepEvent`]s.
+///
+/// This is the half that was interleaved with the query: promoted columns win
+/// over payload JSON, a missing scope is inferred from the payload, and every
+/// other field is read out of JSON with a default. None of it is a database
+/// concern, and separating it means it can be exercised without one.
+fn step_events_from_rows(rows: Vec<StepEventRow>) -> Vec<StepEvent> {
+    let mut events = Vec::new();
+    for row in rows {
+        let StepEventRow {
             event_type,
             payload_json,
             created_at,
             task_item_id,
-            col_step,
-            col_step_scope,
-        ))
-    })?;
-
-    let mut events = Vec::new();
-    for row in rows {
-        let (event_type, payload_json, created_at, task_item_id, col_step, col_step_scope) = row?;
+            step: col_step,
+            step_scope: col_step_scope,
+        } = row;
         let v: Value = serde_json::from_str(&payload_json).unwrap_or_default();
 
         // Use promoted column values first, fall back to JSON parsing
@@ -287,7 +289,7 @@ fn query_step_events_with_conn(conn: &Connection, task_id: &str) -> Result<Vec<S
             created_at,
         });
     }
-    Ok(events)
+    events
 }
 
 /// Async variant of [`query_latest_step_log_paths`] backed by the shared async reader.
@@ -295,30 +297,23 @@ pub async fn query_latest_step_log_paths_async(
     state: &InnerState,
     task_id: &str,
 ) -> Result<Option<(String, String, String)>> {
-    let task_id = task_id.to_owned();
-    state
-        .async_database
-        .reader()
-        .call(move |conn| {
-            query_latest_step_log_paths_with_conn(conn, &task_id)
-                .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
-        })
-        .await
-        .map_err(flatten_err)
+    let payload = orchestrator_persistence::events::latest_step_spawn_payload_async(
+        &state.async_database,
+        task_id,
+    )
+    .await?;
+    Ok(step_log_paths_from_payload(payload))
 }
 
 /// Async variant of [`query_step_events`] backed by the shared async reader.
 pub async fn query_step_events_async(state: &InnerState, task_id: &str) -> Result<Vec<StepEvent>> {
-    let task_id = task_id.to_owned();
-    state
-        .async_database
-        .reader()
-        .call(move |conn| {
-            query_step_events_with_conn(conn, &task_id)
-                .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
-        })
-        .await
-        .map_err(flatten_err)
+    let rows = orchestrator_persistence::events::step_event_rows_async(
+        &state.async_database,
+        task_id,
+        STEP_EVENT_TYPES,
+    )
+    .await?;
+    Ok(step_events_from_rows(rows))
 }
 
 #[cfg(test)]
@@ -637,5 +632,60 @@ mod tests {
         assert_eq!(events[0].pid, Some(12345));
         assert_eq!(events[0].pid_alive, Some(true));
         assert_eq!(events[0].output_state.as_deref(), Some("low_output"));
+    }
+    /// The interpretation half of the FR-130 Phase B split, with no database.
+    ///
+    /// The rule this pins is the one that was hardest to see while the query and
+    /// the parsing shared a function: a promoted column wins over the payload,
+    /// and only a missing column falls back to inferring from JSON. A test that
+    /// went through SQLite would have to arrange for promoted columns to be
+    /// absent, which is a migration-era state that is awkward to produce and easy
+    /// to get subtly wrong.
+    #[test]
+    fn a_promoted_column_wins_over_the_payload_and_a_missing_one_falls_back() {
+        let rows = vec![
+            StepEventRow {
+                event_type: "step_started".to_string(),
+                payload_json: r#"{"step":"from-payload","step_scope":"item"}"#.to_string(),
+                created_at: "2026-07-26T00:00:00Z".to_string(),
+                task_item_id: None,
+                step: Some("from-column".to_string()),
+                step_scope: Some("task".to_string()),
+            },
+            StepEventRow {
+                event_type: "step_finished".to_string(),
+                payload_json: r#"{"step":"from-payload","step_scope":"item"}"#.to_string(),
+                created_at: "2026-07-26T00:00:01Z".to_string(),
+                task_item_id: Some("item-1".to_string()),
+                step: None,
+                step_scope: None,
+            },
+        ];
+
+        let events = step_events_from_rows(rows);
+        assert_eq!(events.len(), 2);
+
+        assert_eq!(events[0].step.as_deref(), Some("from-column"));
+        assert_eq!(events[0].step_scope, Some(ObservedStepScope::Task));
+
+        assert_eq!(events[1].step.as_deref(), Some("from-payload"));
+        assert_eq!(events[1].step_scope, Some(ObservedStepScope::Item));
+    }
+
+    /// An unrecognised promoted scope is `None` rather than a fallback to the
+    /// payload. Worth pinning separately because the two look alike in the code
+    /// and differ in behaviour: a row written by a future version with a scope
+    /// this build does not know must not be silently reinterpreted.
+    #[test]
+    fn an_unrecognised_promoted_scope_does_not_fall_back_to_the_payload() {
+        let events = step_events_from_rows(vec![StepEventRow {
+            event_type: "step_started".to_string(),
+            payload_json: r#"{"step_scope":"item"}"#.to_string(),
+            created_at: "2026-07-26T00:00:00Z".to_string(),
+            task_item_id: None,
+            step: None,
+            step_scope: Some("galaxy".to_string()),
+        }]);
+        assert_eq!(events[0].step_scope, None);
     }
 }

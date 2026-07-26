@@ -32,6 +32,8 @@ pub mod db_maintenance;
 pub mod db_write;
 /// Row and read-model shapes the repositories produce and consume.
 pub mod dto;
+/// Row access for the `events` table.
+pub mod events;
 /// Public schema migration model and execution helpers.
 pub mod migration;
 /// Individual migration step implementations.

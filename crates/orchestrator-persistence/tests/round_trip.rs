@@ -263,6 +263,48 @@ async fn the_retention_query_selects_only_old_terminal_tasks() {
     );
 }
 
+/// The step-event row query moved out of `core::events` in FR-130 Phase B, and
+/// its event-type filter moved *up* into core as a constant. Both halves of that
+/// need pinning: the query must honour the list it is given, and must not carry
+/// its own.
+#[tokio::test]
+async fn step_event_rows_honour_the_event_type_list_they_are_given() {
+    use orchestrator_persistence::events::step_event_rows;
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let db_path = temp.path().join("events.db");
+    PersistenceBootstrap::ensure_current(&db_path).expect("bootstrap");
+    let conn = open_conn(&db_path).expect("open connection");
+    seed_task(&conn);
+
+    for kind in ["step_started", "step_finished", "task_created"] {
+        conn.execute(
+            "INSERT INTO events (task_id, event_type, payload_json, created_at)
+             VALUES (?1, ?2, '{}', datetime('now'))",
+            rusqlite::params![TASK_ID, kind],
+        )
+        .expect("seed event");
+    }
+
+    let selected = step_event_rows(&conn, TASK_ID, &["step_started"]).expect("query");
+    assert_eq!(
+        selected
+            .iter()
+            .map(|row| row.event_type.as_str())
+            .collect::<Vec<_>>(),
+        ["step_started"],
+        "the query did not restrict itself to the requested event type"
+    );
+
+    let two = step_event_rows(&conn, TASK_ID, &["step_started", "task_created"]).expect("query");
+    assert_eq!(two.len(), 2, "a two-type list did not return both types");
+
+    // The list is the caller's policy, so an empty list means nothing — not
+    // everything, which is what a query carrying its own WHERE clause would do.
+    let none = step_event_rows(&conn, TASK_ID, &[]).expect("query");
+    assert!(none.is_empty(), "an empty event-type list returned rows");
+}
+
 /// The negative half. Every assertion above runs against a bootstrapped
 /// database, so all of them would also pass if `PersistenceBootstrap` were the
 /// only thing still working. Against a database that never ran the chain, the
