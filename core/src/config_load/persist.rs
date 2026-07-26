@@ -164,8 +164,8 @@ mod tests {
     // nothing else, so at file scope this import held the file on the ledger for
     // a line no production build compiles (FR-130 Phase A found the same shape in
     // db_write.rs).
-    use rusqlite::params;
     use crate::config_load::{ConfigSelfHealChange, ConfigSelfHealRule};
+    use rusqlite::params;
     use std::collections::HashMap;
 
     fn seed_heal_log(db_path: &Path, version: i64) {

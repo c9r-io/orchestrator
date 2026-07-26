@@ -205,6 +205,64 @@ async fn delete_project_resources_removes_one_project_and_leaves_the_others() {
     );
 }
 
+/// The terminal-task retention query moved out of `core::task_cleanup` in
+/// FR-130 Phase B. Its contract is the filter, not the `Ok`: a query that
+/// returned every task would satisfy a test that only checked the call
+/// succeeded, and auto-cleanup would then delete running work.
+#[tokio::test]
+async fn the_retention_query_selects_only_old_terminal_tasks() {
+    use orchestrator_persistence::task_repository::queries;
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let db_path = temp.path().join("retention.db");
+    PersistenceBootstrap::ensure_current(&db_path).expect("bootstrap");
+    let conn = open_conn(&db_path).expect("open connection");
+
+    // (id, status, age in days). The three exclusions are each a different
+    // reason: wrong status, too recent, and both.
+    for (id, status, age_days) in [
+        ("old-completed", "completed", 30),
+        ("old-failed", "failed", 30),
+        ("old-cancelled", "cancelled", 30),
+        ("old-running", "running", 30),
+        ("new-completed", "completed", 0),
+        ("new-running", "running", 0),
+    ] {
+        conn.execute(
+            "INSERT INTO tasks (
+                id, name, status, goal, target_files_json, mode, workspace_id, workflow_id,
+                project_id, workspace_root, qa_targets_json, ticket_dir, created_at, updated_at
+             ) VALUES (?1, ?1, ?2, '', '[]', 'auto', 'default', 'basic', 'default',
+                       '/tmp', '[]', '/tmp/tickets', datetime('now'),
+                       datetime('now', ?3))",
+            rusqlite::params![id, status, format!("-{age_days} days")],
+        )
+        .expect("seed task");
+    }
+
+    let mut selected =
+        queries::list_terminal_tasks_older_than(&conn, 7, 50).expect("retention query");
+    selected.sort();
+    assert_eq!(
+        selected,
+        vec![
+            "old-cancelled".to_string(),
+            "old-completed".to_string(),
+            "old-failed".to_string()
+        ],
+        "the retention query selected the wrong set"
+    );
+
+    let capped = queries::list_terminal_tasks_older_than(&conn, 7, 2).expect("capped query");
+    assert_eq!(capped.len(), 2, "LIMIT was not applied");
+
+    let none = queries::list_terminal_tasks_older_than(&conn, 365, 50).expect("wide window");
+    assert!(
+        none.is_empty(),
+        "a 365-day retention window still selected tasks 30 days old"
+    );
+}
+
 /// The negative half. Every assertion above runs against a bootstrapped
 /// database, so all of them would also pass if `PersistenceBootstrap` were the
 /// only thing still working. Against a database that never ran the chain, the

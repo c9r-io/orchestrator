@@ -288,6 +288,32 @@ pub fn load_task_item_counts(conn: &Connection, task_id: &str) -> Result<(i64, i
     .with_context(|| format!("load task item counts for task_id={task_id}"))
 }
 
+/// Lists ids of tasks in a terminal state whose `updated_at` is older than
+/// `retention_days`, capped at `limit`.
+///
+/// `retention_days` and `limit` are interpolated rather than bound, because
+/// SQLite will not accept a parameter inside `datetime('now', ?)`'s modifier or
+/// after `LIMIT`. Both are `u32` from configuration, so there is no string to
+/// inject; the types are the guard, and that is why the signature takes `u32`
+/// rather than something more convenient.
+pub fn list_terminal_tasks_older_than(
+    conn: &Connection,
+    retention_days: u32,
+    limit: u32,
+) -> Result<Vec<String>> {
+    let sql = format!(
+        "SELECT id FROM tasks \
+         WHERE status IN ('completed','failed','cancelled') \
+           AND updated_at < datetime('now', '-{retention_days} days') \
+         LIMIT {limit}"
+    );
+    let mut statement = conn.prepare(&sql)?;
+    let ids = statement
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(ids)
+}
+
 /// Lists every task id, newest first.
 pub fn list_task_ids_ordered_by_created_desc(conn: &Connection) -> Result<Vec<String>> {
     let mut stmt = conn.prepare("SELECT id FROM tasks ORDER BY created_at DESC")?;

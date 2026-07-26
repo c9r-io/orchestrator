@@ -687,6 +687,22 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Lists ids of terminal tasks older than `retention_days`, capped at `limit`.
+    pub async fn list_terminal_tasks_older_than(
+        &self,
+        retention_days: u32,
+        limit: u32,
+    ) -> Result<Vec<String>> {
+        self.async_db
+            .reader()
+            .call(move |conn| {
+                queries::list_terminal_tasks_older_than(conn, retention_days, limit)
+                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
     /// Deletes a task and returns log paths that should be removed.
     pub async fn delete_task_and_collect_log_paths(&self, task_id: &str) -> Result<Vec<String>> {
         let task_id = task_id.to_owned();

@@ -279,14 +279,14 @@
     },
     "crates/orchestrator-persistence/src/task_repository/mod.rs": {
       "crate": "crates/orchestrator-persistence",
-      "rusqlite": 45,
+      "rusqlite": 46,
       "sql": 0,
       "category": "persistence-layer"
     },
     "crates/orchestrator-persistence/src/task_repository/queries.rs": {
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 4,
-      "sql": 26,
+      "sql": 27,
       "category": "persistence-layer"
     },
     "crates/orchestrator-persistence/src/task_repository/state.rs": {
@@ -377,7 +377,7 @@
   "totals": {
     "members": 14,
     "referencedFiles": 34,
-    "rusqlite": 168,
-    "sql": 376
+    "rusqlite": 169,
+    "sql": 377
   }
 }
