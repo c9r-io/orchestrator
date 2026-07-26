@@ -641,5 +641,55 @@ else
 fi
 echo ""
 
+# --- Case 18: the build-script path is read from [package], not from anywhere --
+# FR-139 read the `build` key with a whole-file regex, so any `build = "..."` in
+# any table redirected the scan away from the real script — a dependency named
+# `build`, a `[package.metadata.*]` table a tool defined for itself. scanRoots
+# caught every form of it, which is what an outer freeze is for, but the reading
+# itself was the mistake driver_declarations exists to avoid.
+#
+# Both directions, because a fix that simply stopped honouring `build` would pass
+# the negative half and silently drop renamed scripts from the scan.
+echo "Case 18: the build key is honoured in [package] and ignored elsewhere"
+DIR="$(new_case build-key)"
+DECOY_PKG="$DIR/crates/cli/Cargo.toml"
+cat >> "$DECOY_PKG" <<'TOML'
+
+[package.metadata.fr139-probe]
+build = "nowhere.rs"
+TOML
+run_gate "$DIR" case18a
+if [[ "$STATUS" -eq 0 ]]; then
+  pass "a build key outside [package] does not redirect the scan"
+else
+  fail "a decoy build key outside [package] moved the scan (exit $STATUS)"
+  cat "$WORK/case18a.err" >&2
+fi
+
+# The positive half. The script is renamed and [package] says so, so the scan has
+# to follow it — and scanRoots has to show both ends of the move.
+DIR="$(new_case build-key-rename)"
+if [[ ! -f "$DIR/crates/daemon/build.rs" ]]; then
+  fail "the fixture has no build script to rename; new_case did not copy it"
+else
+  mv "$DIR/crates/daemon/build.rs" "$DIR/crates/daemon/renamed_build.rs"
+  ruby -e '
+    path = ARGV[0]
+    text = File.read(path)
+    abort "the fixture manifest has no [package] table" unless text.include?("[package]")
+    File.write(path, text.sub("[package]\n", "[package]\nbuild = \"renamed_build.rs\"\n"))
+  ' "$DIR/crates/daemon/Cargo.toml"
+  run_gate "$DIR" case18b
+  if [[ "$STATUS" -ne 0 ]] &&
+    grep -q "+ crates/daemon/renamed_build.rs is scanned and is not in the reviewed root list" "$WORK/case18b.err" &&
+    grep -q "\- crates/daemon/build.rs is in the reviewed root list and is no longer scanned" "$WORK/case18b.err"; then
+    pass "a renamed build script is followed, and both ends of the move are named"
+  else
+    fail "a renamed build script was not followed (exit $STATUS)"
+    cat "$WORK/case18b.err" >&2
+  fi
+fi
+echo ""
+
 echo "FR-136 persistence dependency chokepoint: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]]

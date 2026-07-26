@@ -173,13 +173,38 @@ end
 # The path is read from the manifest rather than assumed, because Cargo lets a
 # package name it (`build = "custom.rs"`), and a member that renamed its build
 # script would otherwise drop out of the scan silently.
+#
+# Read from `[package]` and nowhere else. `build` is only a build-script path
+# there; anywhere else the same key means something unrelated — a dependency
+# named `build`, a `[package.metadata.*]` table a tool defined for itself — and a
+# whole-file match redirects the scan away from the real script on any of them.
+# That was the first shape of this function, and it is the mistake
+# driver_declarations above exists to avoid: FR-136 replaced core-boundary.rb's
+# `File.read(manifest).match?(...)` with section parsing for exactly this reason,
+# and this function was written two functions below it doing the whole-file match
+# again. `scanRoots` caught every form of it loudly, which is the point of having
+# an outer freeze — but a gate should not need its own backstop to read a
+# manifest correctly.
+def build_script_name(manifest_path)
+  return nil unless manifest_path.file?
+
+  section = nil
+  File.readlines(manifest_path).each do |line|
+    if (header = line[/^\s*\[([^\]]+)\]\s*$/, 1])
+      section = header
+      next
+    end
+    next unless section == "package"
+
+    declared = line[/^\s*build\s*=\s*"([^"]+)"/, 1]
+    return declared if declared
+  end
+  nil
+end
+
 def member_scan_roots(repo_root, member)
   manifest = repo_root.join(member, "Cargo.toml")
-  script = "build.rs"
-  if manifest.file?
-    declared = File.read(manifest)[/^\s*build\s*=\s*"([^"]+)"/, 1]
-    script = declared if declared
-  end
+  script = build_script_name(manifest) || "build.rs"
   [repo_root.join(member, "src"), repo_root.join(member, script)].select(&:exist?)
 end
 

@@ -344,6 +344,17 @@ FR-139's `+2` is entirely `PRAGMA`'s. The build script's path is read from the
 manifest's `build` key rather than assumed, so a member that renames it does not
 drop out of the scan silently.
 
+That key is read from `[package]` and nowhere else. FR-139 first read it with a
+whole-file regex, so any `build = "…"` in any table redirected the walk away from
+the real script — a dependency named `build`, a `[package.metadata.*]` table a
+tool defined for itself. `scanRoots` caught all three forms tried against it and
+named both ends of the move, which is what an outer freeze is for; the reading
+itself was still the mistake `driver_declarations` exists to avoid, two functions
+above it. Case 18 fixes both halves in place: a decoy outside `[package]` must
+leave the scan alone, and a genuine rename must still be followed — a fix that
+merely stopped honouring `build` would pass the first half and silently drop
+renamed scripts.
+
 The scope check itself was the third layer of the same problem: `expected["scope"]
 != SCOPE` compares the ledger's copy of the prose to the constant — prose against
 prose. It agreed throughout, because both said the same wrong thing. The ledger
@@ -389,10 +400,10 @@ smaller number. Case 17 is its negative fixture.
   as agreement, which is exactly what it did until FR-139. `scanRoots` is the
   check with a real subject; the prose check is retained for what it does, not
   as evidence about the scan.
-- The build script is found at the path the manifest declares (`build = "…"`,
-  defaulting to `build.rs`). Cargo's own autodiscovery has further forms; a
-  member using one of them would be scanned for its `src` tree only, and the
-  `scanRoots` diff is what would show it.
+- The build script is found at the path the `[package]` table declares
+  (`build = "…"`, defaulting to `build.rs`). Cargo's own autodiscovery has
+  further forms; a member using one of them would be scanned for its `src` tree
+  only, and the `scanRoots` diff is what would show it.
 - `OUTCOMES` in the `governance` job is a hand-written enumeration that nothing
   guards, so this gate's ability to fail the build rests on a line a future
   author has to remember to add for their own gate. That defect is FR-137's, not

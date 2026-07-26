@@ -221,6 +221,9 @@ or invokes a provider.
 6. Confirm `config/governance/persistence-dependency-ledger.json` lists all five
    member build scripts under `scanRoots`, and that `crates/daemon` and
    `crates/orchestrator-scheduler` — the two `forbidden` crates — are among them.
+7. Read case 18. Its first half appends a `[package.metadata.fr139-probe]` table
+   carrying `build = "nowhere.rs"` to `crates/cli/Cargo.toml`; its second half
+   renames `crates/daemon/build.rs` and declares the new name in `[package]`.
 
 ### Expected Result
 
@@ -242,6 +245,11 @@ or invokes a provider.
   the constant, prose against prose, and it agreed for all of FR-136 while the
   constant said "its non-test Rust source" and the walk read only
   `<member>/src`.
+- Case 18's first half **passes** and its second half fails naming both ends of
+  the move. Both halves are needed: FR-139 read the `build` key with a whole-file
+  regex, so any table carrying that key moved the walk off the real script, and a
+  fix that simply stopped honouring `build` would satisfy the first half while
+  silently dropping renamed scripts from the scan.
 
 ### Notes
 
