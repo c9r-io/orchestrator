@@ -283,6 +283,12 @@
       "sql": 29,
       "category": "persistence-layer"
     },
+    "crates/orchestrator-persistence/src/source_connections.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 15,
+      "sql": 23,
+      "category": "persistence-layer"
+    },
     "crates/orchestrator-persistence/src/source_events.rs": {
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 11,
@@ -406,8 +412,8 @@
   },
   "totals": {
     "members": 14,
-    "referencedFiles": 39,
-    "rusqlite": 200,
-    "sql": 433
+    "referencedFiles": 40,
+    "rusqlite": 215,
+    "sql": 456
   }
 }

@@ -1,9 +1,16 @@
 //! Durable provider connection lifecycle with project-scoped, secret-free projections.
+//!
+//! The five tables and their statements live in
+//! `orchestrator_persistence::source_connections` (FR-130 B13). What stays here
+//! is the contract: field bounds, which provisioning modes may hold a managed
+//! OAuth intent, which terminal statuses a caller may ask for, what each refused
+//! fence means to an operator, and how a stored mode/state string and the
+//! capability and scope JSON become typed values.
 
-use crate::async_database::{AsyncDatabase, flatten_err};
+use crate::async_database::AsyncDatabase;
 use crate::config_load::now_ts;
 use anyhow::{Context, Result, bail};
-use rusqlite::{Connection, OptionalExtension, params};
+use orchestrator_persistence::source_connections as store;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::{future::Future, pin::Pin};
@@ -467,31 +474,64 @@ impl AsyncSourceConnectionRepository {
 
     /// Returns or creates the stable daemon identity used for Gateway ownership.
     pub async fn daemon_id(&self) -> Result<String> {
-        self.db
-            .writer()
-            .call(|conn| daemon_id(conn).map_err(other))
-            .await
-            .map_err(flatten_err)
+        store::daemon_id(&self.db, format!("daemon-{}", Uuid::new_v4()), now_ts()).await
     }
 
     /// Activates or idempotently reauthorizes one verified installation.
     pub async fn activate(&self, input: ActivateSourceConnection) -> Result<SourceConnection> {
-        self.db
-            .writer()
-            .call(move |conn| activate(conn, input).map_err(other))
-            .await
-            .map_err(flatten_err)
+        validate_activation(&input)?;
+        let outcome = store::activate(
+            &self.db,
+            store::NewActivation {
+                id: input.id,
+                project_id: input.project_id,
+                provider: input.provider,
+                display_label: input.display_label,
+                provisioning_mode: input.provisioning_mode.as_str().to_string(),
+                installation_id: input.installation_id,
+                installation_id_digest: input.installation_id_digest,
+                enterprise_id_digest: input.enterprise_id_digest,
+                owner_daemon_id: input.owner_daemon_id,
+                generation: input.generation,
+                version: input.version,
+                capabilities_json: serde_json::to_string(&input.capabilities)?,
+                scopes_json: serde_json::to_string(&input.scopes)?,
+                trigger_name: input.trigger_name,
+                gateway_origin: input.gateway_origin,
+                pairing_secret_ciphertext: input.pairing_secret_ciphertext,
+                last_acked_cursor: input.last_acked_cursor,
+                app_ownership: input.app_ownership,
+                app_id_digest: input.app_id_digest,
+                manifest_version: input.manifest_version,
+                provision_state: input.provision_state,
+                provision_error_code: input.provision_error_code,
+                request_id: input.request_id,
+            },
+            now_ts(),
+        )
+        .await?;
+        match outcome {
+            store::Activation::Created(row) | store::Activation::Reauthorized(row) => {
+                connection_from_row(row)
+            }
+            store::Activation::OwnerConflict => {
+                bail!("SourceConnection installation already has another owner")
+            }
+            store::Activation::StaleFence => {
+                bail!("SourceConnection credential generation or version is stale")
+            }
+            store::Activation::ReauthorizationConflict => {
+                bail!("SourceConnection reauthorization conflict")
+            }
+        }
     }
 
     /// Gets one connection only when it belongs to the requested project.
     pub async fn get(&self, project_id: &str, id: &str) -> Result<Option<SourceConnection>> {
-        let project_id = project_id.to_string();
-        let id = id.to_string();
-        self.db
-            .reader()
-            .call(move |conn| read_connection(conn, &project_id, &id).map_err(other))
-            .await
-            .map_err(flatten_err)
+        store::read_connection(&self.db, project_id.to_string(), id.to_string())
+            .await?
+            .map(connection_from_row)
+            .transpose()
     }
 
     /// Lists connections inside one project boundary.
@@ -502,38 +542,17 @@ impl AsyncSourceConnectionRepository {
         include_disconnected: bool,
         limit: usize,
     ) -> Result<Vec<SourceConnection>> {
-        let project_id = project_id.to_string();
-        let provider = provider.map(str::to_string);
-        self.db
-            .reader()
-            .call(move |conn| {
-                let mut statement = conn.prepare(
-                    "SELECT id FROM source_connections
-                     WHERE project_id=?1 AND (?2 IS NULL OR provider=?2)
-                       AND (?3 OR state!='disconnected')
-                     ORDER BY updated_at DESC,id DESC LIMIT ?4",
-                )?;
-                let ids = statement
-                    .query_map(
-                        params![
-                            project_id,
-                            provider,
-                            include_disconnected,
-                            limit.clamp(1, 500)
-                        ],
-                        |row| row.get::<_, String>(0),
-                    )?
-                    .collect::<std::result::Result<Vec<_>, _>>()?;
-                ids.into_iter()
-                    .map(|id| {
-                        read_connection(conn, &project_id, &id)?
-                            .context("SourceConnection disappeared during list")
-                    })
-                    .collect::<Result<Vec<_>>>()
-                    .map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        store::list_connections(
+            &self.db,
+            project_id.to_string(),
+            provider.map(str::to_string),
+            include_disconnected,
+            limit,
+        )
+        .await?
+        .into_iter()
+        .map(connection_from_row)
+        .collect()
     }
 
     /// Returns encrypted adapter credentials after project and owner fences pass.
@@ -543,32 +562,20 @@ impl AsyncSourceConnectionRepository {
         id: &str,
         owner_daemon_id: &str,
     ) -> Result<Option<SourceConnectionCredential>> {
-        let project_id = project_id.to_string();
-        let id = id.to_string();
-        let owner_daemon_id = owner_daemon_id.to_string();
-        self.db
-            .reader()
-            .call(move |conn| {
-                Ok(conn
-                    .query_row(
-                        "SELECT installation_id,owner_daemon_id,generation,gateway_origin,
-                            pairing_secret_ciphertext FROM source_connections
-                     WHERE id=?1 AND project_id=?2 AND owner_daemon_id=?3 AND state='active'",
-                        params![id, project_id, owner_daemon_id],
-                        |row| {
-                            Ok(SourceConnectionCredential {
-                                installation_id: row.get(0)?,
-                                owner_daemon_id: row.get(1)?,
-                                generation: row.get(2)?,
-                                gateway_origin: row.get(3)?,
-                                pairing_secret_ciphertext: row.get(4)?,
-                            })
-                        },
-                    )
-                    .optional()?)
-            })
-            .await
-            .map_err(flatten_err)
+        Ok(store::read_credential(
+            &self.db,
+            project_id.to_string(),
+            id.to_string(),
+            owner_daemon_id.to_string(),
+        )
+        .await?
+        .map(|row| SourceConnectionCredential {
+            installation_id: row.installation_id,
+            owner_daemon_id: row.owner_daemon_id,
+            generation: row.generation,
+            gateway_origin: row.gateway_origin,
+            pairing_secret_ciphertext: row.pairing_secret_ciphertext,
+        }))
     }
 
     /// Stores a resumable OAuth intent without exposing state or polling credentials.
@@ -576,11 +583,26 @@ impl AsyncSourceConnectionRepository {
         &self,
         input: StoreSourceConnectionIntent,
     ) -> Result<SourceConnectionIntent> {
-        self.db
-            .writer()
-            .call(move |conn| store_intent(conn, input).map_err(other))
-            .await
-            .map_err(flatten_err)
+        validate_intent(&input)?;
+        let row = store::store_intent(
+            &self.db,
+            store::NewIntent {
+                id: input.id,
+                project_id: input.project_id,
+                provider: input.provider,
+                display_label: input.display_label,
+                provisioning_mode: input.provisioning_mode.as_str().to_string(),
+                owner_daemon_id: input.owner_daemon_id,
+                actor_digest: input.actor_digest,
+                gateway_intent_id: input.gateway_intent_id,
+                authorize_url_ciphertext: input.authorize_url_ciphertext,
+                poll_secret_ciphertext: input.poll_secret_ciphertext,
+                expires_at: input.expires_at,
+            },
+            now_ts(),
+        )
+        .await?;
+        intent_from_row(row)
     }
 
     /// Reads one encrypted intent only within its project and daemon owner boundary.
@@ -590,16 +612,24 @@ impl AsyncSourceConnectionRepository {
         id: &str,
         owner_daemon_id: &str,
     ) -> Result<Option<SourceConnectionIntentCredential>> {
-        let project_id = project_id.to_string();
-        let id = id.to_string();
-        let owner_daemon_id = owner_daemon_id.to_string();
-        self.db
-            .reader()
-            .call(move |conn| {
-                read_intent_credential(conn, &project_id, &id, &owner_daemon_id).map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        let Some((intent, credential)) = store::read_intent_credential(
+            &self.db,
+            project_id.to_string(),
+            id.to_string(),
+            owner_daemon_id.to_string(),
+        )
+        .await?
+        else {
+            return Ok(None);
+        };
+        Ok(Some(SourceConnectionIntentCredential {
+            intent: intent_from_row(intent)?,
+            gateway_intent_id: credential.gateway_intent_id,
+            authorize_url_ciphertext: credential.authorize_url_ciphertext,
+            poll_secret_ciphertext: credential.poll_secret_ciphertext,
+            owner_daemon_id: credential.owner_daemon_id,
+            display_label: credential.display_label,
+        }))
     }
 
     /// Advances one OAuth intent to a terminal state exactly once.
@@ -614,31 +644,18 @@ impl AsyncSourceConnectionRepository {
         if !matches!(status, "completed" | "cancelled" | "expired" | "failed") {
             bail!("invalid terminal SourceConnection intent status");
         }
-        let project_id = project_id.to_string();
-        let id = id.to_string();
-        let status = status.to_string();
-        let connection_id = connection_id.map(str::to_string);
-        let error_code = error_code.map(str::to_string);
-        self.db
-            .writer()
-            .call(move |conn| {
-                let changed = conn.execute(
-                    "UPDATE source_connection_intents SET status=?3,connection_id=?4,error_code=?5,
-                     updated_at=?6 WHERE id=?1 AND project_id=?2 AND status='pending'",
-                    params![id, project_id, status, connection_id, error_code, now_ts()],
-                )?;
-                if changed != 1 {
-                    return Err(other(anyhow::anyhow!(
-                        "SourceConnection intent is not pending or project does not match"
-                    )));
-                }
-                read_intent(conn, &project_id, &id)
-                    .map_err(other)?
-                    .context("completed SourceConnection intent missing")
-                    .map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        let row = store::complete_intent(
+            &self.db,
+            project_id.to_string(),
+            id.to_string(),
+            status.to_string(),
+            connection_id.map(str::to_string),
+            error_code.map(str::to_string),
+            now_ts(),
+        )
+        .await?
+        .context("SourceConnection intent is not pending or project does not match")?;
+        intent_from_row(row)
     }
 
     /// Applies a governed lifecycle transition using optimistic concurrency.
@@ -651,26 +668,22 @@ impl AsyncSourceConnectionRepository {
         error_code: Option<&str>,
         request_id: &str,
     ) -> Result<SourceConnection> {
-        let project_id = project_id.to_string();
-        let id = id.to_string();
-        let error_code = error_code.map(str::to_string);
-        let request_id = request_id.to_string();
-        self.db
-            .writer()
-            .call(move |conn| {
-                transition(
-                    conn,
-                    &project_id,
-                    &id,
-                    expected_version,
-                    state,
-                    error_code.as_deref(),
-                    &request_id,
-                )
-                .map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        if expected_version < 1 || request_id.trim().is_empty() {
+            bail!("SourceConnection transition requires version and request ID");
+        }
+        let row = store::transition(
+            &self.db,
+            project_id.to_string(),
+            id.to_string(),
+            expected_version,
+            state.as_str().to_string(),
+            error_code.map(str::to_string),
+            request_id.to_string(),
+            now_ts(),
+        )
+        .await?
+        .context("SourceConnection version conflict or project boundary mismatch")?;
+        connection_from_row(row)
     }
 
     /// Records a successful Gateway ownership transfer and fences this daemon from delivery.
@@ -689,49 +702,21 @@ impl AsyncSourceConnectionRepository {
         if input.expected_version < 1 || input.generation < 1 {
             bail!("SourceConnection transfer fences must be positive");
         }
-        self.db
-            .writer()
-            .call(move |conn| {
-                let transaction = conn.transaction()?;
-                let now = now_ts();
-                let changed = transaction.execute(
-                    "UPDATE source_connections SET owner_daemon_id=?4,generation=?5,
-                     pairing_secret_ciphertext=NULL,state='suspended',version=version+1,
-                     last_error_code='owner_transfer_pending_acceptance',updated_at=?6
-                     WHERE id=?1 AND project_id=?2 AND version=?3 AND state='active'",
-                    params![
-                        input.id,
-                        input.project_id,
-                        input.expected_version,
-                        input.target_daemon_id,
-                        input.generation,
-                        now,
-                    ],
-                )?;
-                if changed != 1 {
-                    return Err(other(anyhow::anyhow!(
-                        "SourceConnection transfer version conflict or connection inactive"
-                    )));
-                }
-                append_change(
-                    &transaction,
-                    &input.id,
-                    &input.project_id,
-                    input.expected_version + 1,
-                    SourceConnectionState::Suspended,
-                    Some("owner_transfer_pending_acceptance"),
-                    Some(&input.request_id),
-                    &now,
-                )
-                .map_err(other)?;
-                transaction.commit()?;
-                read_connection(conn, &input.project_id, &input.id)
-                    .map_err(other)?
-                    .context("transferred SourceConnection missing")
-                    .map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        let row = store::transfer_owner(
+            &self.db,
+            store::OwnerTransfer {
+                id: input.id,
+                project_id: input.project_id,
+                expected_version: input.expected_version,
+                target_daemon_id: input.target_daemon_id,
+                generation: input.generation,
+                request_id: input.request_id,
+            },
+            now_ts(),
+        )
+        .await?
+        .context("SourceConnection transfer version conflict or connection inactive")?;
+        connection_from_row(row)
     }
 
     /// Records durable delivery progress with a monotonic cursor fence.
@@ -745,26 +730,19 @@ impl AsyncSourceConnectionRepository {
         if cursor < 0 || lag < 0 {
             bail!("SourceConnection cursor and lag must be non-negative");
         }
-        let project_id = project_id.to_string();
-        let id = id.to_string();
-        self.db
-            .writer()
-            .call(move |conn| {
-                let changed = conn.execute(
-                    "UPDATE source_connections SET last_acked_cursor=?3,delivery_lag=?4,
-                     last_delivery_at=?5,updated_at=?5
-                     WHERE id=?1 AND project_id=?2 AND state='active' AND last_acked_cursor<=?3",
-                    params![id, project_id, cursor, lag, now_ts()],
-                )?;
-                if changed != 1 {
-                    return Err(other(anyhow::anyhow!(
-                        "SourceConnection delivery cursor is stale or connection inactive"
-                    )));
-                }
-                Ok(())
-            })
-            .await
-            .map_err(flatten_err)
+        if !store::record_delivery(
+            &self.db,
+            project_id.to_string(),
+            id.to_string(),
+            cursor,
+            lag,
+            now_ts(),
+        )
+        .await?
+        {
+            bail!("SourceConnection delivery cursor is stale or connection inactive");
+        }
+        Ok(())
     }
 
     /// Reads project-scoped changes after a monotonic cursor.
@@ -774,12 +752,22 @@ impl AsyncSourceConnectionRepository {
         after: i64,
         limit: usize,
     ) -> Result<Vec<SourceConnectionChange>> {
-        let project_id = project_id.to_string();
-        self.db
-            .reader()
-            .call(move |conn| read_changes(conn, &project_id, after, limit).map_err(other))
-            .await
-            .map_err(flatten_err)
+        store::read_changes(&self.db, project_id.to_string(), after, limit)
+            .await?
+            .into_iter()
+            .map(|row| {
+                Ok(SourceConnectionChange {
+                    cursor: row.cursor,
+                    connection_id: row.connection_id,
+                    project_id: row.project_id,
+                    connection_version: row.connection_version,
+                    state: SourceConnectionState::parse(&row.state)?,
+                    error_code: row.error_code,
+                    request_id: row.request_id,
+                    created_at: row.created_at,
+                })
+            })
+            .collect()
     }
 
     /// Creates one secret-free dedicated App provisioning checkpoint.
@@ -787,11 +775,36 @@ impl AsyncSourceConnectionRepository {
         &self,
         input: StoreDedicatedProvisioning,
     ) -> Result<DedicatedProvisioning> {
-        self.db
-            .writer()
-            .call(move |conn| store_dedicated_provisioning(conn, input).map_err(other))
-            .await
-            .map_err(flatten_err)
+        for (label, value, max) in [
+            ("provisioning ID", input.id.as_str(), 128),
+            ("project", input.project_id.as_str(), 128),
+            ("display label", input.display_label.as_str(), 128),
+            ("owner daemon", input.owner_daemon_id.as_str(), 128),
+            ("manifest version", input.manifest_version.as_str(), 64),
+            ("manifest digest", input.manifest_digest.as_str(), 128),
+            ("expiry", input.expires_at.as_str(), 64),
+        ] {
+            if value.trim().is_empty() || value.len() > max {
+                bail!("dedicated Slack {label} must contain 1-{max} characters");
+            }
+        }
+        Ok(provisioning_from_row(
+            store::store_provisioning(
+                &self.db,
+                store::NewProvisioning {
+                    id: input.id,
+                    project_id: input.project_id,
+                    display_label: input.display_label,
+                    owner_daemon_id: input.owner_daemon_id,
+                    target_connection_id: input.target_connection_id,
+                    manifest_version: input.manifest_version,
+                    manifest_digest: input.manifest_digest,
+                    expires_at: input.expires_at,
+                },
+                now_ts(),
+            )
+            .await?,
+        ))
     }
 
     /// Reads one dedicated provisioning checkpoint inside its project boundary.
@@ -800,13 +813,11 @@ impl AsyncSourceConnectionRepository {
         project_id: &str,
         id: &str,
     ) -> Result<Option<DedicatedProvisioning>> {
-        let project_id = project_id.to_string();
-        let id = id.to_string();
-        self.db
-            .reader()
-            .call(move |conn| read_dedicated_provisioning(conn, &project_id, &id).map_err(other))
-            .await
-            .map_err(flatten_err)
+        Ok(
+            store::read_provisioning(&self.db, project_id.to_string(), id.to_string())
+                .await?
+                .map(provisioning_from_row),
+        )
     }
 
     /// Resolves the encrypted exact App identity behind one active connection.
@@ -815,32 +826,15 @@ impl AsyncSourceConnectionRepository {
         project_id: &str,
         connection_id: &str,
     ) -> Result<Option<DedicatedAppIdentityCredential>> {
-        let project_id = project_id.to_string();
-        let connection_id = connection_id.to_string();
-        self.db
-            .reader()
-            .call(move |conn| {
-                conn.query_row(
-                    "SELECT p.id,p.app_id_ciphertext,p.app_id_digest
-                     FROM source_connection_provisioning p
-                     JOIN source_connection_intents i ON i.id=p.oauth_intent_id
-                     JOIN source_connections c ON c.id=i.connection_id AND c.project_id=p.project_id
-                     WHERE p.project_id=?1 AND c.id=?2 AND p.status='completed'
-                       AND c.provisioning_mode='managed_dedicated'",
-                    params![project_id, connection_id],
-                    |row| {
-                        Ok(DedicatedAppIdentityCredential {
-                            provisioning_id: row.get(0)?,
-                            app_id_ciphertext: row.get(1)?,
-                            app_id_digest: row.get(2)?,
-                        })
-                    },
-                )
-                .optional()
-                .map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        Ok(
+            store::read_app_identity(&self.db, project_id.to_string(), connection_id.to_string())
+                .await?
+                .map(|row| DedicatedAppIdentityCredential {
+                    provisioning_id: row.provisioning_id,
+                    app_id_ciphertext: row.app_id_ciphertext,
+                    app_id_digest: row.app_id_digest,
+                }),
+        )
     }
 
     /// Advances a dedicated checkpoint with an exact prior-state fence.
@@ -848,11 +842,27 @@ impl AsyncSourceConnectionRepository {
         &self,
         input: UpdateDedicatedProvisioning,
     ) -> Result<DedicatedProvisioning> {
-        self.db
-            .writer()
-            .call(move |conn| update_dedicated_provisioning(conn, input).map_err(other))
-            .await
-            .map_err(flatten_err)
+        if !valid_provision_status(&input.expected_status) || !valid_provision_status(&input.status)
+        {
+            bail!("invalid dedicated Slack provisioning state");
+        }
+        let row = store::update_provisioning(
+            &self.db,
+            store::ProvisioningUpdate {
+                id: input.id,
+                project_id: input.project_id,
+                expected_status: input.expected_status,
+                status: input.status,
+                app_id_ciphertext: input.app_id_ciphertext,
+                app_id_digest: input.app_id_digest,
+                oauth_intent_id: input.oauth_intent_id,
+                error_code: input.error_code,
+            },
+            now_ts(),
+        )
+        .await?
+        .context("dedicated Slack provisioning state conflict")?;
+        Ok(provisioning_from_row(row))
     }
 
     /// Updates dedicated App lifecycle metadata with the SourceConnection version fence.
@@ -860,187 +870,113 @@ impl AsyncSourceConnectionRepository {
         &self,
         input: UpdateDedicatedConnectionLifecycle,
     ) -> Result<SourceConnection> {
-        self.db
-            .writer()
-            .call(move |conn| update_dedicated_connection_lifecycle(conn, input).map_err(other))
-            .await
-            .map_err(flatten_err)
-    }
-}
-
-fn valid_provision_status(value: &str) -> bool {
-    matches!(
-        value,
-        "awaiting_approval"
-            | "creating"
-            | "handoff_pending"
-            | "oauth_pending"
-            | "attention"
-            | "abandoned"
-            | "completed"
-    )
-}
-
-fn store_dedicated_provisioning(
-    conn: &Connection,
-    input: StoreDedicatedProvisioning,
-) -> Result<DedicatedProvisioning> {
-    for (label, value, max) in [
-        ("provisioning ID", input.id.as_str(), 128),
-        ("project", input.project_id.as_str(), 128),
-        ("display label", input.display_label.as_str(), 128),
-        ("owner daemon", input.owner_daemon_id.as_str(), 128),
-        ("manifest version", input.manifest_version.as_str(), 64),
-        ("manifest digest", input.manifest_digest.as_str(), 128),
-        ("expiry", input.expires_at.as_str(), 64),
-    ] {
-        if value.trim().is_empty() || value.len() > max {
-            bail!("dedicated Slack {label} must contain 1-{max} characters");
+        if input.expected_version < 1
+            || input.manifest_version.trim().is_empty()
+            || input.manifest_version.len() > 64
+            || !matches!(
+                input.provision_state.as_str(),
+                "completed" | "reauthorization_required" | "app_deleted"
+            )
+            || input.request_id.trim().is_empty()
+        {
+            bail!("invalid dedicated Slack App lifecycle update");
         }
-    }
-    let now = now_ts();
-    conn.execute(
-        "INSERT INTO source_connection_provisioning
-         (id,project_id,display_label,owner_daemon_id,target_connection_id,status,
-          manifest_version,manifest_digest,expires_at,created_at,updated_at)
-         VALUES(?1,?2,?3,?4,?5,'awaiting_approval',?6,?7,?8,?9,?9)",
-        params![
-            input.id,
-            input.project_id,
-            input.display_label,
-            input.owner_daemon_id,
-            input.target_connection_id,
-            input.manifest_version,
-            input.manifest_digest,
-            input.expires_at,
-            now,
-        ],
-    )?;
-    read_dedicated_provisioning(conn, &input.project_id, &input.id)?
-        .context("stored dedicated provisioning checkpoint missing")
-}
-
-fn update_dedicated_provisioning(
-    conn: &Connection,
-    input: UpdateDedicatedProvisioning,
-) -> Result<DedicatedProvisioning> {
-    if !valid_provision_status(&input.expected_status) || !valid_provision_status(&input.status) {
-        bail!("invalid dedicated Slack provisioning state");
-    }
-    let changed = conn.execute(
-        "UPDATE source_connection_provisioning SET status=?4,
-         app_id_ciphertext=COALESCE(?5,app_id_ciphertext),
-         app_id_digest=COALESCE(?6,app_id_digest),
-         oauth_intent_id=COALESCE(?7,oauth_intent_id),error_code=?8,updated_at=?9
-         WHERE id=?1 AND project_id=?2 AND status=?3",
-        params![
-            input.id,
-            input.project_id,
-            input.expected_status,
-            input.status,
-            input.app_id_ciphertext,
-            input.app_id_digest,
-            input.oauth_intent_id,
-            input.error_code,
+        let row = store::update_dedicated_lifecycle(
+            &self.db,
+            store::LifecycleUpdate {
+                id: input.id,
+                project_id: input.project_id,
+                expected_version: input.expected_version,
+                state: input.state.as_str().to_string(),
+                manifest_version: input.manifest_version,
+                provision_state: input.provision_state,
+                error_code: input.error_code,
+                request_id: input.request_id,
+            },
             now_ts(),
-        ],
-    )?;
-    if changed != 1 {
-        bail!("dedicated Slack provisioning state conflict");
-    }
-    read_dedicated_provisioning(conn, &input.project_id, &input.id)?
-        .context("updated dedicated provisioning checkpoint missing")
-}
-
-fn read_dedicated_provisioning(
-    conn: &Connection,
-    project_id: &str,
-    id: &str,
-) -> Result<Option<DedicatedProvisioning>> {
-    conn.query_row(
-        "SELECT id,project_id,display_label,owner_daemon_id,target_connection_id,status,
-         manifest_version,manifest_digest,app_id_digest,oauth_intent_id,error_code,
-         expires_at,created_at,updated_at
-         FROM source_connection_provisioning WHERE id=?1 AND project_id=?2",
-        params![id, project_id],
-        |row| {
-            Ok(DedicatedProvisioning {
-                id: row.get(0)?,
-                project_id: row.get(1)?,
-                display_label: row.get(2)?,
-                owner_daemon_id: row.get(3)?,
-                target_connection_id: row.get(4)?,
-                status: row.get(5)?,
-                manifest_version: row.get(6)?,
-                manifest_digest: row.get(7)?,
-                app_id_digest: row.get(8)?,
-                oauth_intent_id: row.get(9)?,
-                error_code: row.get(10)?,
-                expires_at: row.get(11)?,
-                created_at: row.get(12)?,
-                updated_at: row.get(13)?,
-            })
-        },
-    )
-    .optional()
-    .map_err(Into::into)
-}
-
-fn update_dedicated_connection_lifecycle(
-    conn: &Connection,
-    input: UpdateDedicatedConnectionLifecycle,
-) -> Result<SourceConnection> {
-    if input.expected_version < 1
-        || input.manifest_version.trim().is_empty()
-        || input.manifest_version.len() > 64
-        || !matches!(
-            input.provision_state.as_str(),
-            "completed" | "reauthorization_required" | "app_deleted"
         )
-        || input.request_id.trim().is_empty()
-    {
-        bail!("invalid dedicated Slack App lifecycle update");
+        .await?
+        .context("dedicated SourceConnection version or mode conflict")?;
+        connection_from_row(row)
     }
-    let transaction = conn.unchecked_transaction()?;
-    let now = now_ts();
-    let changed = transaction.execute(
-        "UPDATE source_connections SET state=?4,version=version+1,manifest_version=?5,
-         provision_state=?6,provision_error_code=?7,last_error_code=?7,updated_at=?8
-         WHERE id=?1 AND project_id=?2 AND version=?3
-           AND provisioning_mode='managed_dedicated'",
-        params![
-            input.id,
-            input.project_id,
-            input.expected_version,
-            input.state.as_str(),
-            input.manifest_version,
-            input.provision_state,
-            input.error_code,
-            now,
-        ],
-    )?;
-    if changed != 1 {
-        bail!("dedicated SourceConnection version or mode conflict");
-    }
-    append_change(
-        &transaction,
-        &input.id,
-        &input.project_id,
-        input.expected_version + 1,
-        input.state,
-        input.error_code.as_deref(),
-        Some(&input.request_id),
-        &now,
-    )?;
-    transaction.commit()?;
-    read_connection(conn, &input.project_id, &input.id)?
-        .context("updated dedicated SourceConnection missing")
 }
 
-fn store_intent(
-    conn: &Connection,
-    input: StoreSourceConnectionIntent,
-) -> Result<SourceConnectionIntent> {
+/// Turns a stored row into the typed connection.
+///
+/// The mode, the state and the two JSON columns are parsed here rather than in
+/// the row mapper below the boundary, where a `serde_json` failure would have to
+/// be reported as a column-conversion failure against an invented column index.
+fn connection_from_row(row: store::SourceConnectionRow) -> Result<SourceConnection> {
+    Ok(SourceConnection {
+        provisioning_mode: SourceConnectionMode::parse(&row.provisioning_mode)?,
+        state: SourceConnectionState::parse(&row.state)?,
+        capabilities: serde_json::from_str(&row.capabilities_json)
+            .with_context(|| format!("parse stored capabilities of SourceConnection {}", row.id))?,
+        scopes: serde_json::from_str(&row.scopes_json)
+            .with_context(|| format!("parse stored scopes of SourceConnection {}", row.id))?,
+        id: row.id,
+        project_id: row.project_id,
+        provider: row.provider,
+        display_label: row.display_label,
+        app_ownership: row.app_ownership,
+        app_id_digest: row.app_id_digest,
+        manifest_version: row.manifest_version,
+        provision_state: row.provision_state,
+        provision_error_code: row.provision_error_code,
+        installation_id: row.installation_id,
+        installation_id_digest: row.installation_id_digest,
+        enterprise_id_digest: row.enterprise_id_digest,
+        owner_daemon_id: row.owner_daemon_id,
+        generation: row.generation,
+        version: row.version,
+        trigger_name: row.trigger_name,
+        last_delivery_at: row.last_delivery_at,
+        last_acked_cursor: row.last_acked_cursor,
+        delivery_lag: row.delivery_lag,
+        last_error_code: row.last_error_code,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        reauthorized_at: row.reauthorized_at,
+        disconnected_at: row.disconnected_at,
+    })
+}
+
+fn intent_from_row(row: store::IntentRow) -> Result<SourceConnectionIntent> {
+    Ok(SourceConnectionIntent {
+        provisioning_mode: SourceConnectionMode::parse(&row.provisioning_mode)?,
+        id: row.id,
+        project_id: row.project_id,
+        provider: row.provider,
+        status: row.status,
+        connection_id: row.connection_id,
+        error_code: row.error_code,
+        expires_at: row.expires_at,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+    })
+}
+
+fn provisioning_from_row(row: store::ProvisioningRow) -> DedicatedProvisioning {
+    DedicatedProvisioning {
+        id: row.id,
+        project_id: row.project_id,
+        display_label: row.display_label,
+        owner_daemon_id: row.owner_daemon_id,
+        target_connection_id: row.target_connection_id,
+        status: row.status,
+        manifest_version: row.manifest_version,
+        manifest_digest: row.manifest_digest,
+        app_id_digest: row.app_id_digest,
+        oauth_intent_id: row.oauth_intent_id,
+        error_code: row.error_code,
+        expires_at: row.expires_at,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+    }
+}
+
+/// The contract an OAuth intent must satisfy before it is worth storing.
+fn validate_intent(input: &StoreSourceConnectionIntent) -> Result<()> {
     for (label, value) in [
         ("intent ID", input.id.as_str()),
         ("project", input.project_id.as_str()),
@@ -1065,253 +1001,20 @@ fn store_intent(
     ) {
         bail!("manual SourceConnection does not use managed OAuth intents");
     }
-    let now = now_ts();
-    conn.execute(
-        "INSERT INTO source_connection_intents
-         (id,project_id,provider,display_label,provisioning_mode,owner_daemon_id,actor_digest,
-          gateway_intent_id,authorize_url_ciphertext,poll_secret_ciphertext,status,
-          expires_at,created_at,updated_at)
-         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,'pending',?11,?12,?12)",
-        params![
-            input.id,
-            input.project_id,
-            input.provider,
-            input.display_label,
-            input.provisioning_mode.as_str(),
-            input.owner_daemon_id,
-            input.actor_digest,
-            input.gateway_intent_id,
-            input.authorize_url_ciphertext,
-            input.poll_secret_ciphertext,
-            input.expires_at,
-            now,
-        ],
-    )?;
-    read_intent(conn, &input.project_id, &input.id)?.context("stored intent missing")
+    Ok(())
 }
 
-fn read_intent(
-    conn: &Connection,
-    project_id: &str,
-    id: &str,
-) -> Result<Option<SourceConnectionIntent>> {
-    conn.query_row(
-        "SELECT id,project_id,provider,provisioning_mode,status,connection_id,error_code,
-         expires_at,created_at,updated_at FROM source_connection_intents
-         WHERE id=?1 AND project_id=?2",
-        params![id, project_id],
-        |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, String>(4)?,
-                row.get::<_, Option<String>>(5)?,
-                row.get::<_, Option<String>>(6)?,
-                row.get::<_, String>(7)?,
-                row.get::<_, String>(8)?,
-                row.get::<_, String>(9)?,
-            ))
-        },
+fn valid_provision_status(value: &str) -> bool {
+    matches!(
+        value,
+        "awaiting_approval"
+            | "creating"
+            | "handoff_pending"
+            | "oauth_pending"
+            | "attention"
+            | "abandoned"
+            | "completed"
     )
-    .optional()?
-    .map(
-        |(
-            id,
-            project_id,
-            provider,
-            mode,
-            status,
-            connection_id,
-            error_code,
-            expires,
-            created,
-            updated,
-        )| {
-            Ok(SourceConnectionIntent {
-                id,
-                project_id,
-                provider,
-                provisioning_mode: SourceConnectionMode::parse(&mode)?,
-                status,
-                connection_id,
-                error_code,
-                expires_at: expires,
-                created_at: created,
-                updated_at: updated,
-            })
-        },
-    )
-    .transpose()
-}
-
-fn read_intent_credential(
-    conn: &Connection,
-    project_id: &str,
-    id: &str,
-    owner_daemon_id: &str,
-) -> Result<Option<SourceConnectionIntentCredential>> {
-    let Some(intent) = read_intent(conn, project_id, id)? else {
-        return Ok(None);
-    };
-    conn.query_row(
-        "SELECT gateway_intent_id,authorize_url_ciphertext,poll_secret_ciphertext,owner_daemon_id,
-            display_label
-         FROM source_connection_intents WHERE id=?1 AND project_id=?2 AND owner_daemon_id=?3",
-        params![id, project_id, owner_daemon_id],
-        |row| {
-            Ok(SourceConnectionIntentCredential {
-                intent: intent.clone(),
-                gateway_intent_id: row.get(0)?,
-                authorize_url_ciphertext: row.get(1)?,
-                poll_secret_ciphertext: row.get(2)?,
-                owner_daemon_id: row.get(3)?,
-                display_label: row.get(4)?,
-            })
-        },
-    )
-    .optional()
-    .map_err(Into::into)
-}
-
-fn daemon_id(conn: &Connection) -> Result<String> {
-    if let Some(value) = conn
-        .query_row(
-            "SELECT daemon_id FROM source_daemon_identity WHERE singleton=1",
-            [],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()?
-    {
-        return Ok(value);
-    }
-    let value = format!("daemon-{}", Uuid::new_v4());
-    conn.execute(
-        "INSERT OR IGNORE INTO source_daemon_identity(singleton,daemon_id,created_at)
-         VALUES(1,?1,?2)",
-        params![value, now_ts()],
-    )?;
-    conn.query_row(
-        "SELECT daemon_id FROM source_daemon_identity WHERE singleton=1",
-        [],
-        |row| row.get(0),
-    )
-    .map_err(Into::into)
-}
-
-fn activate(conn: &Connection, input: ActivateSourceConnection) -> Result<SourceConnection> {
-    validate_activation(&input)?;
-    let transaction = conn.unchecked_transaction()?;
-    let now = now_ts();
-    let existing = transaction
-        .query_row(
-            "SELECT id,project_id,owner_daemon_id,generation,version,state FROM source_connections
-             WHERE provider=?1 AND installation_id=?2 AND state!='disconnected'",
-            params![input.provider, input.installation_id],
-            |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, i64>(3)?,
-                    row.get::<_, i64>(4)?,
-                    row.get::<_, String>(5)?,
-                ))
-            },
-        )
-        .optional()?;
-    let version = if let Some((id, project, owner, generation, version, state)) = existing {
-        if project != input.project_id || owner != input.owner_daemon_id || id != input.id {
-            bail!("SourceConnection installation already has another owner");
-        }
-        if input.generation < generation || input.version < version {
-            bail!("SourceConnection credential generation or version is stale");
-        }
-        let changed = transaction.execute(
-            "UPDATE source_connections SET display_label=?2,provisioning_mode=?3,
-             app_ownership=?4,app_id_digest=?5,manifest_version=?6,provision_state=?7,
-             provision_error_code=?8,generation=?9,version=?10,state='active',
-             capabilities_json=?11,scopes_json=?12,trigger_name=?13,gateway_origin=?14,
-             pairing_secret_ciphertext=?15,last_error_code=NULL,
-             last_acked_cursor=MAX(last_acked_cursor,?16),updated_at=?17,
-             reauthorized_at=CASE WHEN ?9>generation THEN ?17 ELSE reauthorized_at END,
-             disconnected_at=NULL WHERE id=?1 AND generation<=?9 AND version<=?10",
-            params![
-                input.id,
-                input.display_label,
-                input.provisioning_mode.as_str(),
-                input.app_ownership,
-                input.app_id_digest,
-                input.manifest_version,
-                input.provision_state,
-                input.provision_error_code,
-                input.generation,
-                input.version,
-                serde_json::to_string(&input.capabilities)?,
-                serde_json::to_string(&input.scopes)?,
-                input.trigger_name,
-                input.gateway_origin,
-                input.pairing_secret_ciphertext,
-                input.last_acked_cursor,
-                now,
-            ],
-        )?;
-        if changed != 1 || state == "disconnected" {
-            bail!("SourceConnection reauthorization conflict");
-        }
-        input.version
-    } else {
-        transaction.execute(
-            "INSERT INTO source_connections
-             (id,project_id,provider,display_label,provisioning_mode,installation_id,
-              installation_id_digest,enterprise_id_digest,owner_daemon_id,generation,version,
-              state,capabilities_json,scopes_json,trigger_name,gateway_origin,
-              pairing_secret_ciphertext,last_acked_cursor,created_at,updated_at,app_ownership,
-              app_id_digest,manifest_version,provision_state,provision_error_code)
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,'active',?12,?13,?14,?15,
-                    ?16,?17,?18,?18,?19,?20,?21,?22,?23)",
-            params![
-                input.id,
-                input.project_id,
-                input.provider,
-                input.display_label,
-                input.provisioning_mode.as_str(),
-                input.installation_id,
-                input.installation_id_digest,
-                input.enterprise_id_digest,
-                input.owner_daemon_id,
-                input.generation,
-                input.version,
-                serde_json::to_string(&input.capabilities)?,
-                serde_json::to_string(&input.scopes)?,
-                input.trigger_name,
-                input.gateway_origin,
-                input.pairing_secret_ciphertext,
-                input.last_acked_cursor,
-                now,
-                input.app_ownership,
-                input.app_id_digest,
-                input.manifest_version,
-                input.provision_state,
-                input.provision_error_code,
-            ],
-        )?;
-        input.version
-    };
-    append_change(
-        &transaction,
-        &input.id,
-        &input.project_id,
-        version,
-        SourceConnectionState::Active,
-        None,
-        Some(&input.request_id),
-        &now,
-    )?;
-    transaction.commit()?;
-    read_connection(conn, &input.project_id, &input.id)?
-        .context("activated SourceConnection missing")
 }
 
 fn validate_activation(input: &ActivateSourceConnection) -> Result<()> {
@@ -1355,197 +1058,6 @@ fn validate_activation(input: &ActivateSourceConnection) -> Result<()> {
         bail!("SourceConnection generation and version must be positive");
     }
     Ok(())
-}
-
-fn transition(
-    conn: &Connection,
-    project_id: &str,
-    id: &str,
-    expected_version: i64,
-    state: SourceConnectionState,
-    error_code: Option<&str>,
-    request_id: &str,
-) -> Result<SourceConnection> {
-    if expected_version < 1 || request_id.trim().is_empty() {
-        bail!("SourceConnection transition requires version and request ID");
-    }
-    let transaction = conn.unchecked_transaction()?;
-    let now = now_ts();
-    let clear_credentials = state == SourceConnectionState::Disconnected;
-    let changed = transaction.execute(
-        "UPDATE source_connections SET state=?4,version=version+1,last_error_code=?5,
-         pairing_secret_ciphertext=CASE WHEN ?6 THEN NULL ELSE pairing_secret_ciphertext END,
-         disconnected_at=CASE WHEN ?6 THEN ?7 ELSE disconnected_at END,updated_at=?7
-         WHERE id=?1 AND project_id=?2 AND version=?3",
-        params![
-            id,
-            project_id,
-            expected_version,
-            state.as_str(),
-            error_code,
-            clear_credentials,
-            now,
-        ],
-    )?;
-    if changed != 1 {
-        bail!("SourceConnection version conflict or project boundary mismatch");
-    }
-    let version = expected_version + 1;
-    append_change(
-        &transaction,
-        id,
-        project_id,
-        version,
-        state,
-        error_code,
-        Some(request_id),
-        &now,
-    )?;
-    transaction.commit()?;
-    read_connection(conn, project_id, id)?.context("transitioned SourceConnection missing")
-}
-
-fn read_connection(
-    conn: &Connection,
-    project_id: &str,
-    id: &str,
-) -> Result<Option<SourceConnection>> {
-    conn.query_row(
-        "SELECT id,project_id,provider,display_label,provisioning_mode,installation_id,
-         installation_id_digest,enterprise_id_digest,owner_daemon_id,generation,version,state,
-         capabilities_json,scopes_json,trigger_name,last_delivery_at,last_acked_cursor,
-         delivery_lag,last_error_code,created_at,updated_at,reauthorized_at,disconnected_at,
-         app_ownership,app_id_digest,manifest_version,provision_state,provision_error_code
-         FROM source_connections WHERE id=?1 AND project_id=?2",
-        params![id, project_id],
-        |row| {
-            let mode = row.get::<_, String>(4)?;
-            let state = row.get::<_, String>(11)?;
-            let capabilities = row.get::<_, String>(12)?;
-            let scopes = row.get::<_, String>(13)?;
-            Ok((mode, state, capabilities, scopes, row_to_fields(row)?))
-        },
-    )
-    .optional()?
-    .map(|(mode, state, capabilities, scopes, fields)| {
-        let mut connection = fields;
-        connection.provisioning_mode = SourceConnectionMode::parse(&mode)?;
-        connection.state = SourceConnectionState::parse(&state)?;
-        connection.capabilities = serde_json::from_str(&capabilities)?;
-        connection.scopes = serde_json::from_str(&scopes)?;
-        Ok(connection)
-    })
-    .transpose()
-}
-
-fn row_to_fields(row: &rusqlite::Row<'_>) -> rusqlite::Result<SourceConnection> {
-    Ok(SourceConnection {
-        id: row.get(0)?,
-        project_id: row.get(1)?,
-        provider: row.get(2)?,
-        display_label: row.get(3)?,
-        provisioning_mode: SourceConnectionMode::Manual,
-        app_ownership: row.get(23)?,
-        app_id_digest: row.get(24)?,
-        manifest_version: row.get(25)?,
-        provision_state: row.get(26)?,
-        provision_error_code: row.get(27)?,
-        installation_id: row.get(5)?,
-        installation_id_digest: row.get(6)?,
-        enterprise_id_digest: row.get(7)?,
-        owner_daemon_id: row.get(8)?,
-        generation: row.get(9)?,
-        version: row.get(10)?,
-        state: SourceConnectionState::Connecting,
-        capabilities: vec![],
-        scopes: vec![],
-        trigger_name: row.get(14)?,
-        last_delivery_at: row.get(15)?,
-        last_acked_cursor: row.get(16)?,
-        delivery_lag: row.get(17)?,
-        last_error_code: row.get(18)?,
-        created_at: row.get(19)?,
-        updated_at: row.get(20)?,
-        reauthorized_at: row.get(21)?,
-        disconnected_at: row.get(22)?,
-    })
-}
-
-#[allow(clippy::too_many_arguments)]
-fn append_change(
-    conn: &Connection,
-    id: &str,
-    project_id: &str,
-    version: i64,
-    state: SourceConnectionState,
-    error_code: Option<&str>,
-    request_id: Option<&str>,
-    created_at: &str,
-) -> Result<()> {
-    conn.execute(
-        "INSERT INTO source_connection_changes
-         (connection_id,project_id,connection_version,state,error_code,request_id,created_at)
-         VALUES(?1,?2,?3,?4,?5,?6,?7)",
-        params![
-            id,
-            project_id,
-            version,
-            state.as_str(),
-            error_code,
-            request_id,
-            created_at,
-        ],
-    )?;
-    Ok(())
-}
-
-fn read_changes(
-    conn: &Connection,
-    project_id: &str,
-    after: i64,
-    limit: usize,
-) -> Result<Vec<SourceConnectionChange>> {
-    let mut statement = conn.prepare(
-        "SELECT id,connection_id,project_id,connection_version,state,error_code,request_id,created_at
-         FROM source_connection_changes WHERE project_id=?1 AND id>?2 ORDER BY id LIMIT ?3",
-    )?;
-    let rows = statement
-        .query_map(
-            params![project_id, after.max(0), limit.clamp(1, 500)],
-            |row| {
-                Ok((
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, i64>(3)?,
-                    row.get::<_, String>(4)?,
-                    row.get::<_, Option<String>>(5)?,
-                    row.get::<_, Option<String>>(6)?,
-                    row.get::<_, String>(7)?,
-                ))
-            },
-        )?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-    rows.into_iter()
-        .map(
-            |(cursor, connection_id, project_id, version, state, error_code, request_id, at)| {
-                Ok(SourceConnectionChange {
-                    cursor,
-                    connection_id,
-                    project_id,
-                    connection_version: version,
-                    state: SourceConnectionState::parse(&state)?,
-                    error_code,
-                    request_id,
-                    created_at: at,
-                })
-            },
-        )
-        .collect()
-}
-
-fn other(error: impl Into<anyhow::Error>) -> tokio_rusqlite::Error {
-    tokio_rusqlite::Error::Other(error.into().into())
 }
 
 #[cfg(test)]

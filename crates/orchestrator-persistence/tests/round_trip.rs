@@ -1074,3 +1074,605 @@ async fn source_routing_guards_hold_the_line_they_are_there_for() {
         "a succeeded command was offered for a second run"
     );
 }
+
+/// FR-130 B13: the SourceConnection statements moved out of
+/// `core::source_connection`. Nine of them carry a fence, and three of those
+/// fences exist in more than one copy — `version=?3` in three statements,
+/// `state='active'` in four, `owner_daemon_id=?3` in two. A fence with two
+/// copies needs two mutations; B11 learned that by mutating the wrong copy and
+/// watching the assertion pass.
+#[tokio::test]
+async fn source_connection_fences_are_each_load_bearing() {
+    use orchestrator_persistence::source_connections as store;
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let db_path = temp.path().join("connections.db");
+    PersistenceBootstrap::ensure_current(&db_path).expect("bootstrap schema");
+    let db = AsyncDatabase::open(&db_path).await.expect("open async db");
+    let now = orchestrator_persistence::now_ts();
+
+    let activation = |version: i64, generation: i64, owner: &str| store::NewActivation {
+        id: "conn-1".to_string(),
+        project_id: "alpha".to_string(),
+        provider: "slack".to_string(),
+        display_label: "Alpha workspace".to_string(),
+        provisioning_mode: "managed_shared".to_string(),
+        installation_id: "T111".to_string(),
+        installation_id_digest: "digest-T111".to_string(),
+        enterprise_id_digest: None,
+        owner_daemon_id: owner.to_string(),
+        generation,
+        version,
+        capabilities_json: r#"["chat"]"#.to_string(),
+        scopes_json: r#"["chat:write"]"#.to_string(),
+        trigger_name: None,
+        gateway_origin: Some("https://gw.example".to_string()),
+        pairing_secret_ciphertext: Some("cipher".to_string()),
+        last_acked_cursor: 5,
+        app_ownership: "orchestrator".to_string(),
+        app_id_digest: None,
+        manifest_version: None,
+        provision_state: None,
+        provision_error_code: None,
+        request_id: "req-activate".to_string(),
+    };
+
+    let created = store::activate(&db, activation(1, 1, "daemon-a"), now.clone())
+        .await
+        .expect("activate");
+    assert!(
+        matches!(created, store::Activation::Created(_)),
+        "a first activation was not reported as a creation: {created:?}"
+    );
+
+    // The activation fences, one assertion each. All three are refusals, which
+    // is the direction that matters: accepting any of them hands an
+    // installation to the wrong owner or rolls a credential backwards.
+    assert!(
+        matches!(
+            store::activate(&db, activation(1, 1, "daemon-b"), now.clone())
+                .await
+                .expect("activate under another owner"),
+            store::Activation::OwnerConflict
+        ),
+        "a live installation was reauthorized by a different daemon"
+    );
+    assert!(
+        matches!(
+            store::activate(&db, activation(0, 1, "daemon-a"), now.clone())
+                .await
+                .expect("activate with a stale version"),
+            store::Activation::StaleFence
+        ),
+        "an activation older than the stored version was accepted"
+    );
+    assert!(
+        matches!(
+            store::activate(&db, activation(2, 2, "daemon-a"), now.clone())
+                .await
+                .expect("reauthorize"),
+            store::Activation::Reauthorized(_)
+        ),
+        "a legitimate reauthorization was refused"
+    );
+
+    let row = store::read_connection(&db, "alpha".to_string(), "conn-1".to_string())
+        .await
+        .expect("read")
+        .expect("row");
+    assert_eq!(row.version, 2);
+
+    // `record_delivery`'s monotonic fence: forward is accepted, backward is not.
+    assert!(
+        store::record_delivery(
+            &db,
+            "alpha".to_string(),
+            "conn-1".to_string(),
+            9,
+            1,
+            now.clone()
+        )
+        .await
+        .expect("advance the cursor")
+    );
+    assert!(
+        !store::record_delivery(
+            &db,
+            "alpha".to_string(),
+            "conn-1".to_string(),
+            4,
+            0,
+            now.clone()
+        )
+        .await
+        .expect("rewind the cursor"),
+        "a delivery acknowledgement moved the cursor backwards"
+    );
+
+    // `last_acked_cursor=MAX(last_acked_cursor,?16)` in the reauthorization
+    // statement. The cursor is now 9; this reauthorization offers 5, which is
+    // what a provider re-handshake carrying a stale checkpoint looks like.
+    // Taking it would replay every event between 5 and 9. The assertion has to
+    // come *after* the cursor advanced — checking it before, when offered and
+    // stored are both 5, passes with `MAX` removed.
+    assert!(
+        matches!(
+            store::activate(&db, activation(3, 3, "daemon-a"), now.clone())
+                .await
+                .expect("reauthorize with a stale cursor"),
+            store::Activation::Reauthorized(_)
+        ),
+        "a legitimate reauthorization was refused"
+    );
+    let row = store::read_connection(&db, "alpha".to_string(), "conn-1".to_string())
+        .await
+        .expect("read")
+        .expect("row");
+    assert_eq!(
+        row.last_acked_cursor, 9,
+        "a reauthorization rewound the delivery cursor and would replay events"
+    );
+    assert_eq!(row.version, 3);
+
+    // The project fence on the read, separately from every write fence.
+    assert!(
+        store::read_connection(&db, "beta".to_string(), "conn-1".to_string())
+            .await
+            .expect("cross-project read")
+            .is_none(),
+        "a read reached a connection in another project"
+    );
+
+    // The credential fence is three conditions at once. Each is checked in the
+    // direction that must say no, because any one of them alone releasing the
+    // pairing secret is a credential leak.
+    assert!(
+        store::read_credential(
+            &db,
+            "alpha".to_string(),
+            "conn-1".to_string(),
+            "daemon-a".to_string()
+        )
+        .await
+        .expect("credential")
+        .is_some(),
+        "the owning daemon could not read its own credential"
+    );
+    assert!(
+        store::read_credential(
+            &db,
+            "alpha".to_string(),
+            "conn-1".to_string(),
+            "daemon-b".to_string()
+        )
+        .await
+        .expect("credential under another owner")
+        .is_none(),
+        "a credential was released to a daemon that does not own the connection"
+    );
+    assert!(
+        store::read_credential(
+            &db,
+            "beta".to_string(),
+            "conn-1".to_string(),
+            "daemon-a".to_string()
+        )
+        .await
+        .expect("credential from another project")
+        .is_none(),
+        "a credential crossed a project boundary"
+    );
+
+    // `transition`: the optimistic version fence, copy one of three.
+    assert!(
+        store::transition(
+            &db,
+            "alpha".to_string(),
+            "conn-1".to_string(),
+            99,
+            "suspended".to_string(),
+            None,
+            "req-t".to_string(),
+            now.clone(),
+        )
+        .await
+        .expect("transition on a wrong version")
+        .is_none(),
+        "a transition was applied against a version that does not match"
+    );
+    let suspended = store::transition(
+        &db,
+        "alpha".to_string(),
+        "conn-1".to_string(),
+        3,
+        "suspended".to_string(),
+        Some("operator".to_string()),
+        "req-t".to_string(),
+        now.clone(),
+    )
+    .await
+    .expect("transition")
+    .expect("row");
+    assert_eq!(suspended.state, "suspended");
+    assert_eq!(suspended.version, 4, "the version did not advance");
+
+    // `transfer_owner`: version fence (copy two) *and* `state='active'`. The
+    // connection is suspended right now, so the active fence is what refuses.
+    assert!(
+        store::transfer_owner(
+            &db,
+            store::OwnerTransfer {
+                id: "conn-1".to_string(),
+                project_id: "alpha".to_string(),
+                expected_version: 4,
+                target_daemon_id: "daemon-b".to_string(),
+                generation: 4,
+                request_id: "req-x".to_string(),
+            },
+            now.clone(),
+        )
+        .await
+        .expect("transfer a suspended connection")
+        .is_none(),
+        "ownership of a non-active connection was transferred"
+    );
+    // Back to active, then refuse on the version fence alone.
+    store::transition(
+        &db,
+        "alpha".to_string(),
+        "conn-1".to_string(),
+        4,
+        "active".to_string(),
+        None,
+        "req-t2".to_string(),
+        now.clone(),
+    )
+    .await
+    .expect("reactivate")
+    .expect("row");
+    assert!(
+        store::transfer_owner(
+            &db,
+            store::OwnerTransfer {
+                id: "conn-1".to_string(),
+                project_id: "alpha".to_string(),
+                expected_version: 99,
+                target_daemon_id: "daemon-b".to_string(),
+                generation: 3,
+                request_id: "req-x".to_string(),
+            },
+            now.clone(),
+        )
+        .await
+        .expect("transfer on a wrong version")
+        .is_none(),
+        "ownership was transferred against a version that does not match"
+    );
+    let transferred = store::transfer_owner(
+        &db,
+        store::OwnerTransfer {
+            id: "conn-1".to_string(),
+            project_id: "alpha".to_string(),
+            expected_version: 5,
+            target_daemon_id: "daemon-b".to_string(),
+            generation: 4,
+            request_id: "req-x".to_string(),
+        },
+        now.clone(),
+    )
+    .await
+    .expect("transfer")
+    .expect("row");
+    assert_eq!(transferred.owner_daemon_id, "daemon-b");
+    assert_eq!(
+        transferred.state, "suspended",
+        "a transfer left the connection deliverable by its old owner"
+    );
+
+    // The credential goes in the same statement that moves ownership. A
+    // transfer that changed owner and left the secret behind is the state that
+    // fence exists to prevent, and it is not observable from `owner_daemon_id`.
+    assert!(
+        store::read_credential(
+            &db,
+            "alpha".to_string(),
+            "conn-1".to_string(),
+            "daemon-b".to_string()
+        )
+        .await
+        .expect("credential after transfer")
+        .is_none(),
+        "the pairing secret survived an ownership transfer"
+    );
+
+    // `record_delivery`'s `state='active'` fence, separately from its monotonic
+    // one: the connection is suspended after the transfer, so a *forward*
+    // cursor must still be refused. Without this, the fence that stops a
+    // fenced-out daemon from acknowledging deliveries is unpinned — the
+    // monotonic assertion above passes with it gone.
+    assert!(
+        !store::record_delivery(
+            &db,
+            "alpha".to_string(),
+            "conn-1".to_string(),
+            20,
+            0,
+            now.clone()
+        )
+        .await
+        .expect("advance the cursor on a suspended connection"),
+        "a suspended connection accepted a delivery acknowledgement"
+    );
+
+    // Every one of those transitions wrote a change-log row, in the same
+    // transaction as the state change.
+    let changes = store::read_changes(&db, "alpha".to_string(), 0, 100)
+        .await
+        .expect("changes");
+    let states: Vec<&str> = changes.iter().map(|c| c.state.as_str()).collect();
+    assert_eq!(
+        states,
+        vec![
+            "active",
+            "active",
+            "active",
+            "suspended",
+            "active",
+            "suspended"
+        ],
+        "the change log did not record every state change in order"
+    );
+    assert!(
+        store::read_changes(&db, "beta".to_string(), 0, 100)
+            .await
+            .expect("changes in another project")
+            .is_empty(),
+        "the change log crossed a project boundary"
+    );
+
+    // The dedicated-App lifecycle update carries two fences at once — the third
+    // copy of `version=?3`, and `provisioning_mode='managed_dedicated'`. It gets
+    // its own connection, in its own project, so the change log asserted above
+    // stays what it was.
+    let dedicated = store::NewActivation {
+        id: "conn-ded".to_string(),
+        project_id: "gamma".to_string(),
+        provisioning_mode: "managed_dedicated".to_string(),
+        installation_id: "T222".to_string(),
+        installation_id_digest: "digest-T222".to_string(),
+        app_ownership: "workspace".to_string(),
+        app_id_digest: Some("digest-app".to_string()),
+        manifest_version: Some("v1".to_string()),
+        request_id: "req-ded".to_string(),
+        ..activation(1, 1, "daemon-a")
+    };
+    store::activate(&db, dedicated, now.clone())
+        .await
+        .expect("activate the dedicated connection");
+
+    let lifecycle = |id: &str, project: &str, version: i64| store::LifecycleUpdate {
+        id: id.to_string(),
+        project_id: project.to_string(),
+        expected_version: version,
+        state: "attention".to_string(),
+        manifest_version: "v2".to_string(),
+        provision_state: "reauthorization_required".to_string(),
+        error_code: Some("manifest_upgraded".to_string()),
+        request_id: "req-life".to_string(),
+    };
+    assert!(
+        store::update_dedicated_lifecycle(&db, lifecycle("conn-ded", "gamma", 99), now.clone())
+            .await
+            .expect("lifecycle update on a wrong version")
+            .is_none(),
+        "a dedicated lifecycle update was applied against a version that does not match"
+    );
+    // `conn-1` is `managed_shared` and sits at version 6 after the transfer, so
+    // only the mode fence can refuse this one.
+    assert!(
+        store::update_dedicated_lifecycle(&db, lifecycle("conn-1", "alpha", 6), now.clone())
+            .await
+            .expect("lifecycle update on a shared connection")
+            .is_none(),
+        "a dedicated-App lifecycle update was applied to a managed_shared connection"
+    );
+    let upgraded =
+        store::update_dedicated_lifecycle(&db, lifecycle("conn-ded", "gamma", 1), now.clone())
+            .await
+            .expect("lifecycle update")
+            .expect("row");
+    assert_eq!(upgraded.state, "attention");
+    assert_eq!(upgraded.manifest_version.as_deref(), Some("v2"));
+    assert_eq!(upgraded.version, 2, "the version did not advance");
+}
+
+/// FR-130 B13: the intent and dedicated-provisioning fences, which are the
+/// other half of `source_connection.rs` and guard credential release and
+/// exactly-once OAuth completion.
+#[tokio::test]
+async fn source_connection_intent_and_provisioning_fences_hold() {
+    use orchestrator_persistence::source_connections as store;
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let db_path = temp.path().join("intents.db");
+    PersistenceBootstrap::ensure_current(&db_path).expect("bootstrap schema");
+    let db = AsyncDatabase::open(&db_path).await.expect("open async db");
+    let now = orchestrator_persistence::now_ts();
+
+    // The daemon identity is a singleton: a second call must return the first
+    // value, not the candidate it was handed.
+    let first = store::daemon_id(&db, "daemon-first".to_string(), now.clone())
+        .await
+        .expect("daemon id");
+    let second = store::daemon_id(&db, "daemon-second".to_string(), now.clone())
+        .await
+        .expect("daemon id again");
+    assert_eq!(
+        first, "daemon-first",
+        "the first caller did not get its own candidate"
+    );
+    assert_eq!(
+        second, first,
+        "a second call minted a new daemon identity instead of returning the stored one"
+    );
+    // What this does *not* cover, measured rather than assumed: the read-back
+    // after `INSERT OR IGNORE`. Replacing it with `Ok(candidate)` passes. The
+    // ignore only fires when another writer inserted between this call's check
+    // and its insert, and a single `AsyncDatabase` serializes its writer, so the
+    // race needs two processes on one file. No fixture here reaches it. The
+    // read-back stays because two daemons *can* share a database; it is
+    // defensive code with no test, and saying so is better than implying the
+    // assertion above covers it.
+
+    store::store_intent(
+        &db,
+        store::NewIntent {
+            id: "intent-1".to_string(),
+            project_id: "alpha".to_string(),
+            provider: "slack".to_string(),
+            display_label: "Alpha".to_string(),
+            provisioning_mode: "managed_shared".to_string(),
+            owner_daemon_id: "daemon-a".to_string(),
+            actor_digest: "actor".to_string(),
+            gateway_intent_id: "gw-1".to_string(),
+            authorize_url_ciphertext: "auth-cipher".to_string(),
+            poll_secret_ciphertext: "poll-cipher".to_string(),
+            expires_at: now.clone(),
+        },
+        now.clone(),
+    )
+    .await
+    .expect("store intent");
+
+    // `owner_daemon_id=?3`, copy two of two. The encrypted authorize URL and
+    // polling secret are the payload; releasing them to a non-owner is the leak.
+    assert!(
+        store::read_intent_credential(
+            &db,
+            "alpha".to_string(),
+            "intent-1".to_string(),
+            "daemon-a".to_string()
+        )
+        .await
+        .expect("intent credential")
+        .is_some(),
+        "the owning daemon could not read its own intent credential"
+    );
+    assert!(
+        store::read_intent_credential(
+            &db,
+            "alpha".to_string(),
+            "intent-1".to_string(),
+            "daemon-b".to_string()
+        )
+        .await
+        .expect("intent credential under another owner")
+        .is_none(),
+        "an intent credential was released to a daemon that does not own it"
+    );
+    assert!(
+        store::read_intent_credential(
+            &db,
+            "beta".to_string(),
+            "intent-1".to_string(),
+            "daemon-a".to_string()
+        )
+        .await
+        .expect("intent credential from another project")
+        .is_none(),
+        "an intent credential crossed a project boundary"
+    );
+
+    // `status='pending'` makes intent completion exactly-once.
+    assert!(
+        store::complete_intent(
+            &db,
+            "alpha".to_string(),
+            "intent-1".to_string(),
+            "completed".to_string(),
+            None,
+            None,
+            now.clone(),
+        )
+        .await
+        .expect("complete")
+        .is_some()
+    );
+    assert!(
+        store::complete_intent(
+            &db,
+            "alpha".to_string(),
+            "intent-1".to_string(),
+            "failed".to_string(),
+            None,
+            Some("late".to_string()),
+            now.clone(),
+        )
+        .await
+        .expect("complete twice")
+        .is_none(),
+        "a terminal OAuth intent was reopened by a second completion"
+    );
+
+    // The dedicated-provisioning status fence, plus `COALESCE` on the values a
+    // later step must not blank.
+    store::store_provisioning(
+        &db,
+        store::NewProvisioning {
+            id: "prov-1".to_string(),
+            project_id: "alpha".to_string(),
+            display_label: "Alpha".to_string(),
+            owner_daemon_id: "daemon-a".to_string(),
+            target_connection_id: None,
+            manifest_version: "v1".to_string(),
+            manifest_digest: "digest-v1".to_string(),
+            expires_at: now.clone(),
+        },
+        now.clone(),
+    )
+    .await
+    .expect("store provisioning");
+
+    let update = |expected: &str, status: &str, app_id: Option<&str>| store::ProvisioningUpdate {
+        id: "prov-1".to_string(),
+        project_id: "alpha".to_string(),
+        expected_status: expected.to_string(),
+        status: status.to_string(),
+        app_id_ciphertext: app_id.map(str::to_string),
+        app_id_digest: app_id.map(|value| format!("digest-{value}")),
+        oauth_intent_id: None,
+        error_code: None,
+    };
+    assert!(
+        store::update_provisioning(&db, update("completed", "abandoned", None), now.clone())
+            .await
+            .expect("update from a status it does not hold")
+            .is_none(),
+        "a provisioning checkpoint advanced from a status it was not in"
+    );
+    let creating = store::update_provisioning(
+        &db,
+        update("awaiting_approval", "creating", Some("app-1")),
+        now.clone(),
+    )
+    .await
+    .expect("advance")
+    .expect("row");
+    assert_eq!(creating.app_id_digest.as_deref(), Some("digest-app-1"));
+
+    // COALESCE: a later step that carries no App id must not erase the one the
+    // earlier step recorded, or the dedicated App becomes unreachable.
+    let handed_off = store::update_provisioning(
+        &db,
+        update("creating", "handoff_pending", None),
+        now.clone(),
+    )
+    .await
+    .expect("advance again")
+    .expect("row");
+    assert_eq!(
+        handed_off.app_id_digest.as_deref(),
+        Some("digest-app-1"),
+        "a later provisioning step erased the App identity an earlier one recorded"
+    );
+}

@@ -48,6 +48,8 @@ pub mod repository;
 pub mod schema;
 /// Agent session rows: creation, state transitions, reader/writer attachment.
 pub mod session_store;
+/// The SourceConnection tables and the statements over them.
+pub mod source_connections;
 /// The source-ingestion tables and the statements over them.
 pub mod source_events;
 /// SQLite-specific connection helpers.
