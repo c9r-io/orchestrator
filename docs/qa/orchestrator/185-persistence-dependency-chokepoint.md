@@ -8,7 +8,7 @@ self_referential_safe: true
 
 **Module**: Architecture / Governance
 **Scope**: the FR-136 chokepoint decision, its machine-readable classification of every driver reference outside core, the two-condition gate that holds it, and the assertion that FR-136 introduced no production code
-**Scenarios**: 6
+**Scenarios**: 5
 **Priority**: High
 
 ## Background
@@ -185,11 +185,14 @@ or invokes a provider.
 
 ---
 
-## Scenario 5: The Gate Is Wired, And Wiring Is Read Rather Than Grepped
+## Scenario 5: The Gate Is Enforced, And The FR Changed Nothing Else
+
+Two assertions about the change rather than about the mechanism: that the gate
+can actually fail the build, and that FR-136 delivered only a decision.
 
 ### Preconditions
 
-- A clean working tree.
+- A clean working tree; the FR-136 closure commits identified.
 
 ### Steps
 
@@ -200,7 +203,10 @@ or invokes a provider.
 3. Confirm the `governance` job in `.github/workflows/ci.yml` has a
    `persistence-dependency` step **and** a matching `persistence-dependency=`
    line in the `Governance result` step's `OUTCOMES`.
-4. Run `ruby scripts/qa/ci-liveness.rb`.
+4. Run `git diff --stat <base>..HEAD` across the FR-136 commits and confirm no
+   path under `core/` or `crates/*/src/` appears.
+5. Run `cargo test --workspace` and
+   `cargo clippy --workspace --all-targets -- -D warnings`.
 
 ### Expected Result
 
@@ -213,32 +219,20 @@ or invokes a provider.
   `continue-on-error: true` that is absent from that list fails silently while
   the job reports all gates green. Omitting the line would have left this gate
   wired and unable to fail the build.
-- Step 4 passes with no `knownFailing` annotation.
-
----
-
-## Scenario 6: FR-136 Introduced No Production Code
-
-### Preconditions
-
-- The FR-136 closure commits identified.
-
-### Steps
-
-1. Run `git diff --stat <base>..HEAD` across the FR-136 commits.
-2. Confirm no path under `core/` or `crates/*/src/` appears.
-3. Run `cargo test --workspace`.
-4. Run `cargo clippy --workspace --all-targets -- -D warnings`.
-
-### Expected Result
-
-- Step 2 holds. The changed set is documentation, governance configuration and
-  gate scripts only.
-- Steps 3 and 4 pass. They confirm the tree is unmoved rather than exercising new
+- Step 4 holds. The changed set is documentation, governance configuration and
+  gate scripts only. This is an acceptance criterion of FR-136 in its own right:
+  the value of the FR is that the decision precedes the extraction, and once
+  implementation is mixed in, the decision stops being one that can be overturned
+  cheaply.
+- Step 5 passes. These confirm the tree is unmoved rather than exercising new
   behaviour; there is no new Rust code for them to cover.
-- This is an acceptance criterion of FR-136 in its own right. The value of the FR
-  is that the decision precedes the extraction — once implementation is mixed in,
-  the decision stops being one that can be overturned cheaply.
+
+### Notes
+
+- `ruby scripts/qa/ci-liveness.rb` fails immediately after this change and is
+  expected to: editing `.github/workflows/ci.yml` invalidates every recorded job
+  conclusion, because the record describes a pipeline that no longer exists. It
+  is refreshed from `gh run` after CI has run on the new pipeline, not before.
 
 ---
 
@@ -250,8 +244,7 @@ or invokes a provider.
 | 2 | The rule discriminates between crates | ☑ PASS | 2026-07-26 | Claude |
 | 3 | The gate sees SQL that names no driver | ☑ PASS | 2026-07-26 | Claude |
 | 4 | Coverage comes from the member list, not a glob | ☑ PASS | 2026-07-26 | Claude |
-| 5 | The gate is wired, and wiring is read rather than grepped | ☑ PASS | 2026-07-26 | Claude |
-| 6 | FR-136 introduced no production code | ☑ PASS | 2026-07-26 | Claude |
+| 5 | The gate is enforced, and the FR changed nothing else | ☑ PASS | 2026-07-26 | Claude |
 
 ## Certification Conditions
 
