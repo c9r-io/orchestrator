@@ -8,6 +8,12 @@
 [DD-142](../design_doc/orchestrator/142-core-boundary-freeze.md) 与
 [QA 180](../qa/orchestrator/180-core-boundary-freeze.md) 承载。
 
+**需求 2 的 Phase A 与 Phase C 已闭环，Phase B 进行中（6 / 18 文件）**，其设计与验证由
+[DD-148](../design_doc/orchestrator/148-persistence-crate-extraction.md) 与
+[QA 186](../qa/orchestrator/186-persistence-crate-extraction.md) 承载。
+core 已从 200 处 `rusqlite` 引用 / 37 文件降至 **75 处 / 13 文件**，逐文件结论见下面的
+「逐文件处置表」。
+
 **2026-07-25 重写**：原需求 2（crate 提取）实际包含三件粒度、风险与前置条件都不同的事，
 原需求 4 经实测近乎空转。本文档按此重新切分，并将"非 core crate 直接依赖 `rusqlite`"
 一轴移交 FR-136，该 FR 已闭环，结论由
@@ -152,14 +158,77 @@ crate 清单。`scripts/qa/core-boundary.rb` 以**精确相等**比对，`--emit
 - 台账 `rusqlite.files` 的收敛即为机器可读的进度证明——每批之后该文件的条目应消失或减少。
 - 每批之后 `schema-snapshot.sql` 不变。
 
-### ⏳ Phase C：`error.rs` 的驱动耦合决策
+#### 引用形态分类（2026-07-26 治理期实测）
 
-`core/src/error.rs:154` 持有 `impl From<rusqlite::Error> for OrchestratorError`。无论移动
-哪些文件，core 的错误类型都仍与驱动耦合——这是一个单点阻塞，且**需要先出方案再动手**：
-是引入 port 层错误类型并在边界转换，还是接受该耦合并显式记录理由。
+**83 处中约 61% 不是 SQL，而是驱动错误管道**；而 SQL 文本本身在字符串字面量里，
+尺子从不计数：
 
-该文件同时是前置条件 1 中扫描器缺陷的受影响文件之一（`cfg(test)` 块自 283 行起未闭合），
-处置前须确认扫描器已修复。
+| 形态 | 数量 | 例 |
+|---|---|---|
+| error-adapter | 28 | `tokio_rusqlite::Error::Other(e.into())`、`-> tokio_rusqlite::Error` |
+| sql-params | 21 | `rusqlite::params![…]`、`params_from_iter`、`ToSql` |
+| import | 12 | `use rusqlite::{Connection, OptionalExtension, params};` |
+| error-construction | 11 | `rusqlite::Error::FromSqlConversionFailure`、`rusqlite::types::Type` |
+| connection-type | 6 | `conn: &rusqlite::Connection` |
+| row-mapping | 4 | `row: &rusqlite::Row`、`rusqlite::Result<T>` |
+
+其中六个文件带着**完全相同**的两行 `fn other(…) -> tokio_rusqlite::Error` 助手，
+所以"18 个各自独立的设计判断"高估了差异性。
+
+**由此产生的诱惑，以及为什么不采纳**：给 `AsyncDatabase` 加接受 `anyhow::Result`
+闭包的方法、删掉那六份 `fn other`，能在**不搬动任何一条 SQL** 的前提下把 83 收敛掉约 39。
+这与 Phase A 拒绝为 `core/src/migration.rs` 加 `run_pending_count` 是同一笔交易，只是规模
+大二十倍。**本 FR 不采纳。** Phase B 的目标是逐文件处置，台账是它的证据而非目标。
+（也核对过这个改动能否以另一条理由立足——DD-147 里 `daemon` 与 `orchestrator-scheduler`
+的 forbidden 残量。不能：它们 39 处中有 27 处是 sql-params，只有 9 处是 error-adapter。）
+
+#### 逐文件处置表
+
+| 文件 | 引用 | 行数 | 处置 |
+|---|---|---|---|
+| `lib.rs` | ~~1~~ 0 | 178 | ✅ **已修正陈述**（B0）。唯一一处非代码引用：文档注释把 `async_database` 描述为仍在 core，Phase A 已使其为假 |
+| `service/resource/delete.rs` | ~~1~~ 0 | 452 | ✅ **已迁出**（B1）。`DELETE FROM resources` → `db::delete_project_resources`；同时解锁 Phase C |
+| `config_load/persist.rs` | ~~1~~ 0 | 465 | ✅ **已修正范围**（B2）。生产代码零引用；`#[cfg(test)] use` 在文件级被扫描器计为生产 |
+| `task_cleanup.rs` | ~~1~~ 0 | 290 | ✅ **已拆分**（B3）。保留查询 → `queries::list_terminal_tasks_older_than`；级联删除改用既有 async repository 方法（原为手写重复）；文件系统清理留在 core |
+| `config_load/build.rs` | ~~2~~ 0 | 918 | ✅ **已拆分**（B4）。删除守卫改吃 `db::DeletionGuardQueries` port；守卫逻辑现可无数据库单测 |
+| `events.rs` | ~~3~~ 0 | 700 | ✅ **已拆分**（B5）。行访问 → `events::{StepEventRow, step_event_rows}`；payload 解释留在 core；事件类型清单**上移**为 core 的 `STEP_EVENT_TYPES` 并作参数下传 |
+| `trigger_engine.rs` | 18 | 1130 | ⏳ 未处置。error-adapter 7 + sql-params 11。最大的一个，SQL 分散在多个 `writer().call` 闭包内 |
+| `action_audit.rs` | 9 | 742 | ⏳ 未处置。error-adapter 6 + row-mapping 2 + import 1。已有 `reserve`/`list` 等函数收着 SQL，形态接近可整体迁出 |
+| `service/bootstrap.rs` | 7 | 597 | ⏳ 未处置。**全部 7 处是 sql-params**，无 error 管道——这是纯 SQL 迁出，形态最干净 |
+| `source_automation.rs` | 7 | 2008 | ⏳ 未处置。error-construction 4 + error-adapter 2 + import 1 |
+| `source.rs` | 5 | 1337 | ⏳ 未处置。error-adapter 2 + error-construction 2 + import 1 |
+| `source_connection.rs` | 5 | 1923 | ⏳ 未处置。error-adapter 2 + row-mapping 2 + import 1 |
+| `handoff.rs` | 5 | 1288 | ⏳ 未处置。error-adapter 2 + error-construction 2 + import 1 |
+| `event_cleanup.rs` | 5 | 845 | ⏳ 未处置。error-construction 3 + sql-params 2 |
+| `task_ops.rs` | 4 | 1826 | ⏳ 未处置。connection-type 2 + import 2 |
+| `attention.rs` | 3 | 1454 | ⏳ 未处置。**仅 import 1 + `fn other` 2**——只动管道就能清零，正是上面拒绝的那笔交易。其 SQL 未搬走前，诚实的处置是"保留并记录理由" |
+| `process_metrics.rs` | 3 | 1953 | ⏳ 未处置。同 `attention.rs` |
+| `persistence/repository/config.rs` | 3 | 695 | ⏳ **被阻塞**。connection-type 2 + import 1。需 `crd` 先下沉，否则 `persistence → crd → persistence` 成环 |
+
+已处置 6 个文件、9 处引用。core 从 86 处 / 20 文件降至 **75 处 / 13 文件**。
+
+`core/src/migration.rs` 的 1 处是 Phase A 的具名残余（三个无人引用的兼容包装），
+处置它是"下线死掉的公开 API"这一决策，仍归本阶段。
+
+### ✅ Phase C：`error.rs` 的驱动耦合决策（2026-07-26 闭环）
+
+原文把它写成一个单点阻塞，需要在"引入 port 层错误类型并在边界转换"与"接受耦合并记录理由"
+之间先做决定。**两个选项都预设了不存在的消费者。** 在 scratch 副本里删掉该 impl 后
+`cargo check --workspace` 只报 **3 个错误，全部位于
+`core/src/service/resource/delete.rs:225–230`** —— 整个工作区没有别处把
+`rusqlite::Error` 转成 `OrchestratorError`。
+
+所以处置是：先搬走那一段 SQL（Phase B1），该 impl 随即变成死代码并删除。用测量回答了
+问题，而不是在两个为不存在的问题设计的方案之间做选择。
+
+**但 impl 提供的保证必须显式保留。** 它把每个驱动错误都归类为 `ExternalDependency`，
+而这个 category 在 gRPC/CLI 契约上，不是内部细节。B1 的调用点最初用了
+`classify_resource_error`，那是按消息文本分类的——而 SQLite 说"缺表"的措辞是
+`no such table: resources`，会被它的 `not found` 分支读成 `NotFound`。同一个故障、
+不同的 category、且不会有编译错误。现在调用点用一个显式 `external_dependency` 的命名函数，
+并由 `phase_c_preserves_the_external_dependency_category` 以**真实未迁移库产出的真实错误**
+钉住；把该函数改回 `classify_resource_error` 会让测试以
+`left: NotFound, right: ExternalDependency` 失败（已实测）。
 
 ### ❌ 原需求 4：跨边界的 `too_many_arguments` — 不适用，已关闭
 
@@ -217,20 +286,37 @@ gui(7)、daemon(7)。该条对本次提取近乎空转，作为 FR-130 的需求
       再让一个任务穿过每个被搬动的模块，且**每次写入都从另一个模块读回**；
       配对的负向用例针对未迁移的数据库，要求报错而非返回"看似合理的空"。
       另有 core 侧保留的测试从领域侧（`create_task_impl` + `TestState`）驱动同一条路径
-- [x] Phase A 的提取 commit 可机械回退：在 scratch worktree 中对 `A1^..A4`
-      执行 `git revert --no-commit`，45 个路径无冲突，`cargo check --workspace` 通过，
-      两个门禁回到 `143 / 52 / 924`、`200 / 37`、`13 members`——台账与代码一同回退
+- [x] Phase A 的提取 commit 可机械回退：在钉在 `524ed26b` 的 scratch worktree 中
+      **逐个具名**（而非用 `A1^..A4` 区间）revert 四个提交，44 个路径无冲突，
+      `cargo check --workspace` 通过，两个门禁回到 `143 / 52 / 924`、`200 / 37`、
+      `13 members`——台账与代码一同回退。用区间会连带 revert 期间落入的一个无关提交，
+      那证明的是"某组提交可回退"而非"本次提取可回退"（首次执行即犯了这个错，44 与 45 之差）
 
-### Phase B
+### Phase B —— 进行中（6 / 18 文件已处置）
 
-- [ ] 18 个混装文件各有"已迁出 / 已拆分 / 保留并记录理由"的结论
-- [ ] 每批独立提交且各自可回退；每批之后 `schema-snapshot.sql` 未变
-- [ ] 台账 `rusqlite.files` 随每批单调收敛，残余点显式清单化
+- [ ] 18 个混装文件各有"已迁出 / 已拆分 / 保留并记录理由"的结论 —— **6 个已处置，
+      12 个未处置**，逐文件结论见上面的处置表（含每个未处置文件的引用形态与阻塞原因）。
+      未完成，但剩余工作已具名而非"Phase B 的其余部分"
+- [x] 每批独立提交且各自可回退；每批之后 `schema-snapshot.sql` 未变 —— 6 次提交
+      （B0–B5，另加 B6 记录尺子限制），每次都重跑 `cargo test --workspace`、
+      clippy `-D warnings`、`schema_snapshot`，且两个治理台账与代码同 commit 重新冻结
+- [x] 台账 `rusqlite.files` 随每批单调收敛，残余点显式清单化 —— 86 → 75，20 → 13 文件；
+      残余 13 个文件逐一列在处置表中
+- [x] **每条被搬动的语句都有行为断言，而不只是引用消失**：
+      `delete_project_resources`（按项目删、别的项目不受影响、二次调用返回 0）、
+      `list_terminal_tasks_older_than`（三种排除原因各一个 fixture、LIMIT、窗口放宽后为空）、
+      `step_event_rows`（只返回被请求的类型，空清单返回空而非全部）、
+      删除守卫与事件解释两半各自可无数据库单测
 
-### Phase C
+### Phase C —— 已闭环
 
-- [ ] `error.rs` 的驱动耦合已按书面决策处置（转换层或显式保留）
-- [ ] core 对 `rusqlite` 的引用收敛至 0，或残余点带理由记录并被门禁冻结
+- [x] `error.rs` 的驱动耦合已处置 —— `impl From<rusqlite::Error> for OrchestratorError`
+      已删除。不是原文的两个选项之一：实测它只有一个消费者（B1 搬走的那段 SQL），
+      删掉后即为死代码。它保证的 `ExternalDependency` category 由调用点的具名映射函数
+      显式承接，并有反向变异实测
+- [ ] core 对 `rusqlite` 的引用收敛至 0，或残余点带理由记录并被门禁冻结 ——
+      **未达成**：仍有 75 处 / 13 文件，均由 `core-boundary.rb` 以精确相等冻结并逐一具名，
+      但"收敛至 0"要等 Phase B 余下 12 个文件
 
 ## QA 计划（剩余部分）
 

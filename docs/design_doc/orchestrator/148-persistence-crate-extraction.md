@@ -5,7 +5,7 @@ related_fr: FR-130
 
 # DD-148: Persistence Crate Extraction (FR-130 Phase A)
 
-**Status**: Implemented (FR-130 Phase A; Phases B and C remain open)
+**Status**: Implemented (FR-130 Phase A and Phase C; Phase B in progress, 6 of 18 files)
 **Related**: DD-142 (core boundary freeze), DD-147 (persistence dependency chokepoint), QA 186, FR-047, FR-048
 
 ## Background
@@ -15,9 +15,10 @@ public items, and its highest-churn cluster was persistence. FR-047 and FR-048 e
 `orchestrator-config` and `orchestrator-scheduler`; DD-142 froze what remained; DD-147 decided
 who may reach the driver. This is the extraction those three were prerequisites for.
 
-Phase A moved the modules whose boundaries were already clear. Phase B (18 files that interleave
-SQL with domain logic, one commit each) and Phase C (`error.rs`'s `From<rusqlite::Error>`)
-remain open.
+Phase A moved the modules whose boundaries were already clear. Phase C is closed and Phase B is
+in progress: six of its eighteen files are disposed of, and core is at 75 references across 13
+files. FR-130's per-file disposition table records the conclusion for each of the eighteen,
+including the reference shape and blocking reason for the twelve still open.
 
 ### What the extraction moved
 
@@ -188,6 +189,103 @@ Both now read the ledger: case 3 takes `coreSurface.pubMod` and adds one, case 5
 reference. A gate whose entire subject is a set of numbers that are supposed to move cannot have
 fixtures that only work while they do not.
 
+## Phase B and Phase C
+
+### What the reference count actually measures
+
+Classifying all 83 Phase B references by shape was the finding that shaped the phase:
+
+| Shape | Count | Example |
+|---|---|---|
+| error-adapter | 28 | `tokio_rusqlite::Error::Other(e.into())`, `-> tokio_rusqlite::Error` |
+| sql-params | 21 | `rusqlite::params![…]`, `params_from_iter`, `ToSql` |
+| import | 12 | `use rusqlite::{Connection, OptionalExtension, params};` |
+| error-construction | 11 | `rusqlite::Error::FromSqlConversionFailure`, `rusqlite::types::Type` |
+| connection-type | 6 | `conn: &rusqlite::Connection` |
+| row-mapping | 4 | `row: &rusqlite::Row`, `rusqlite::Result<T>` |
+
+About 61% is driver-error plumbing, and SQL text — in string literals — is never counted at all.
+Six files carried an identical two-line `fn other(…) -> tokio_rusqlite::Error`, so "18
+independent design judgements" overstated the variety.
+
+**The shortcut this makes available, and why it was refused.** Giving `AsyncDatabase` closure
+methods that take `anyhow::Result` and deleting those six helpers converges roughly 39 of the 83
+**without moving one SQL statement**. Every mixed function would stay exactly as mixed. It is the
+same trade Phase A refused for `core/src/migration.rs`, twenty times larger. Phase B's goal is
+the per-file disposition; the ledger is evidence of it, not the target.
+
+It was also checked against a second possible justification — DD-147's `forbidden` residual for
+`daemon` and `orchestrator-scheduler` — and does not earn its keep there either: their 39
+references are 27 `sql-params` and only 9 error-adapter, so the API would not clear the residual.
+
+### The dispositions taken
+
+Six files, one commit each, ledger re-frozen in the same commit as the code:
+
+| File | Disposition |
+|---|---|
+| `lib.rs` | Five module doc comments described re-export shims as implementations. One held the ledger's only non-code reference. |
+| `service/resource/delete.rs` | `DELETE FROM resources` moved to `db::delete_project_resources`. Unblocks Phase C. |
+| `config_load/persist.rs` | Production code had zero references; a `#[cfg(test)] use` at file scope was counted as production. |
+| `task_cleanup.rs` | Split. Retention query moved to `queries::list_terminal_tasks_older_than`; the cascade delete was a hand-rolled duplicate of an existing async repository method; filesystem cleanup stayed. |
+| `config_load/build.rs` | Split via a port. `db::DeletionGuardQueries` replaced `&rusqlite::Connection` in the deletion guards. |
+| `events.rs` | Split at the seam already in the code: rows below, payload interpretation above. The event-type filter moved *up* into core as a constant and is passed down. |
+
+Two of them are worth separating from the rest, because they are not refactors: `lib.rs` and
+`config_load/persist.rs` were files whose ledger entries were artefacts of what the scanner
+counts rather than of code that touches the database. Counting them as Phase B progress without
+saying so would misreport nine converged references as nine moved statements.
+
+### Ports where they fit, not where they were proposed
+
+FR-130 proposed a port-layer error type for Phase C. That was the wrong tool there — `error.rs`
+had one dead consumer — and the right one in `config_load/build.rs`, where the deletion guards
+diff two `OrchestratorConfig` snapshots and need exactly four counts and samples from the
+database. `DeletionGuardQueries` is four methods with one impl for `Connection`; a caller holding
+a `Transaction` passes `&*tx`, so the guard still runs inside the caller's transaction, which is
+the property that matters — a count taken outside it could be stale before the delete lands.
+
+The port's justification was that guard logic becomes testable without a database, so that is
+demonstrated rather than asserted: a stub drives both branches with no SQLite, and pins two
+things a database-backed test tends to leave alone — that the refusal names the resource and its
+project, and that a zero count does not go on to query for a sample of blockers.
+
+### Phase C was answered by measurement
+
+`impl From<rusqlite::Error> for OrchestratorError` is deleted. FR-130 framed the choice as
+port-layer conversion versus accepting the coupling; both presume consumers. Deleting it in a
+scratch copy failed with exactly three errors, all in the SQL block B1 moved out.
+
+What the impl guaranteed had to be preserved explicitly, and nearly was not. It categorised every
+driver failure as `ExternalDependency`, which is on the wire. B1's call site first used
+`classify_resource_error`, which classifies by message — and SQLite's phrase for a missing table
+is `no such table: resources`, which that classifier's `not found` branch reads as `NotFound`.
+Same failure, different category, no compile error. The call site now uses a named function that
+is explicitly `external_dependency`, pinned by a test that takes a real error from a real
+unmigrated database and asserts through the production mapping. Mutating it back produces
+`left: NotFound, right: ExternalDependency`.
+
+`error.rs`'s `from_rusqlite_error` test was replaced rather than deleted: removing a test with its
+subject leaves no record of whether the guarantee moved or lapsed.
+
+### The gate's own defects, found by running it
+
+Adding the Phase C case surfaced four problems in `test-persistence-extraction.sh`, all authored
+here:
+
+- The round-trip case asserted `"2 passed"` as a literal and went red when Phase B added a third
+  test. It now derives the count from the file, which also fails if a test disappears.
+- The Phase C proxy grepped for `From<rusqlite::Error>` anywhere in `error.rs` and was satisfied
+  by the doc comment explaining that the impl had been removed. A gate its own explanatory prose
+  can trip is measuring the prose. It is anchored to `^impl` now.
+- The negative fixture appended an undocumented probe to a crate that denies `missing_docs`, so
+  the build stopped on the lint and the case would have passed on an unrelated error.
+- Three cases build fixtures from `git archive HEAD`, so on a dirty worktree they answer a
+  question about the previous commit while printing identical PASS lines — which is how the Phase
+  C case first reported that the conversion still existed. The gate now **refuses to run** on a
+  dirty tree. QA 186 already required a clean one; this makes it a refusal rather than a
+  condition a reader is trusted to check.
+
 ## Consequences
 
 ### What Phase A established
@@ -238,6 +336,11 @@ fixtures that only work while they do not.
   and the schema baseline was always right; only the prose was wrong. It was found by the first
   mutation test of the new extent assertion, whose failure message reports the real count. All
   five documents are corrected.
+- **The ratchet counts the driver's name in prose.** Recorded in DD-142's known limits; found
+  twice during Phase B, the second time in a doc comment written to explain that the driver
+  conversion had been removed. The workaround — naming the driver's error type without spelling
+  its path — trades precision for a metric, and is stated as a cost rather than presented as
+  neutral.
 - The `schema_snapshot` test sits in `core` and exercises a crate below it. Deliberate and
   temporary, as above; it is the one place where the test and the code it tests are in different
   crates on purpose.

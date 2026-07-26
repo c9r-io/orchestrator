@@ -7,7 +7,7 @@ self_referential_safe: true
 # Orchestrator - Persistence Crate Extraction (FR-130 Phase A)
 
 **Module**: Governance / Persistence
-**Scope**: `crates/orchestrator-persistence` extraction — linkage, migration-chain resume extent, write/read round trip, layer direction, schema baseline
+**Scope**: `crates/orchestrator-persistence` extraction — linkage, migration-chain resume extent, write/read round trip, layer direction, driver-error removal, schema baseline
 **Scenarios**: 5
 **Priority**: High
 
@@ -40,7 +40,7 @@ cargo test -p agent-orchestrator schema_snapshot
 
 ---
 
-## Scenario 1: Core Links The Crate, And Cannot Build Without It
+## Scenario 1: The Boundary Is Real, And One-Directional
 
 ### Preconditions
 
@@ -49,25 +49,38 @@ cargo test -p agent-orchestrator schema_snapshot
 
 ### Steps
 
-1. `cargo tree -p agent-orchestrator --depth 1 | grep 'orchestrator-persistence v'`
-2. `bash scripts/qa/test-persistence-extraction.sh` and read Case 1.
-3. Inspect the fixture the gate builds: a `git archive HEAD` copy under `$TMPDIR` whose
+1. `cargo tree -p agent-orchestrator --depth 1 | grep 'orchestrator-persistence v'` — the edge
+   exists.
+2. Inspect the fixture the gate builds: a `git archive HEAD` copy under `$TMPDIR` whose
    `core/Cargo.toml` has the `orchestrator-persistence = ...` line **commented out**, then
    `cargo check -p agent-orchestrator` inside it.
+3. `cargo tree -p orchestrator-persistence | grep 'agent-orchestrator v'` — expect no match.
+4. `grep -rn 'agent_orchestrator::' crates/orchestrator-persistence/src` — expect no match.
+5. `bash scripts/qa/test-persistence-extraction.sh` and read Cases 1 and 4.
 
 ### Expected result
 
-- Step 1 prints the edge.
-- Step 3 exits non-zero and the log names `orchestrator_persistence`.
-- Case 1 reports two passes.
+- Step 1 prints the edge; step 2 exits non-zero with `orchestrator_persistence` in the log;
+  steps 3 and 4 are empty.
+- Cases 1 and 4 report two passes each.
 
-The second assertion is the one that carries the scenario. A declared dependency that no source
-names still satisfies `cargo tree`, so the tree query alone cannot distinguish "core is built on
-this crate" from "core lists it". Compiling without it can.
+Steps 1 and 2 are the "core is built on this crate" half. The second carries it: a declared
+dependency that no source names still satisfies `cargo tree`, so the tree query alone cannot
+distinguish "built on" from "listed". Compiling without it can. The mutation is a comment, not a
+deletion, deliberately — deletion is the case an author has in mind while writing the check, and
+a manifest reader that strips comments would pass a deletion test while accepting a commented-out
+dependency as present.
 
-The mutation is a comment, not a deletion, deliberately. Deletion is the case an author has in
-mind while writing the check; a manifest reader that strips comments would pass a deletion test
-and still accept a commented-out dependency as present.
+Steps 3 and 4 are the direction half, and it is the invariant neither ledger gate checks:
+`core-boundary.rb` counts what is in `core/src`, `persistence-dependency.rb` checks which crates
+name the driver, and a `persistence -> core` edge would leave both green while making the
+extraction a directory rearrangement. Step 3 reads cargo's own resolution, so a transitive path
+through a third member fails it as well as a direct one. Step 4 is the weaker check, kept as a
+second condition rather than the only one: a core path in those sources would not compile today,
+but it is the edit that would change step 3's answer.
+
+The crate's only workspace edges are `orchestrator-config` and `orchestrator-collab`, both leaf
+data crates, reached from two fields of two `dto` structs.
 
 ---
 
@@ -145,29 +158,47 @@ fixture and assert on what was persisted — and they stayed in `core` for exact
 
 ---
 
-## Scenario 4: The Persistence Layer Does Not Depend On Core
+## Scenario 4: Core's Error Type No Longer Converts Driver Errors
+
+### Preconditions
+
+- **Clean worktree.** The gate refuses to run otherwise, and this scenario is why: its fixture is
+  built with `git archive HEAD`, so on a dirty tree it answers a question about the previous
+  commit. The first run of this case reported that the conversion still existed, because at HEAD
+  it did.
 
 ### Steps
 
-1. `cargo tree -p orchestrator-persistence | grep 'agent-orchestrator v'` — expect no match.
-2. `grep -rn 'agent_orchestrator::' crates/orchestrator-persistence/src` — expect no match.
+1. `grep -E '^impl From<rusqlite::Error> for OrchestratorError' core/src/error.rs` — expect no
+   match.
+2. In a `git archive HEAD` copy, append a documented function to `core/src/error.rs` that applies
+   `?` to a `rusqlite::Result` in a function returning `Result<i64>` (the crate's
+   `OrchestratorError` alias), then `cargo check -p agent-orchestrator`. The gate does this as
+   Case 5's second assertion.
 
 ### Expected result
 
-Both are empty; Case 4 reports two passes.
+- Step 1 is empty.
+- Step 2 exits non-zero with ``couldn't convert the error to `OrchestratorError` ``.
 
-This is the invariant Phase A exists to establish, and it is the one neither ledger gate checks.
-`core-boundary.rb` counts what is in `core/src`; `persistence-dependency.rb` checks which crates
-name the driver. A `persistence -> core` edge would leave both green while making the extraction
-a directory rearrangement.
+Step 1 is anchored to a line opening an `impl` block, not a substring search. The first version
+searched for the text anywhere in the file and was satisfied by the doc comment explaining that
+the impl had been removed — a gate its own explanatory prose can trip is measuring the prose.
 
-Step 1 reads cargo's own resolution, so a transitive path through a third member fails it as
-well as a direct one. Step 2 is the weaker check and is kept as a second condition rather than
-the only one: a core path in those sources would not compile today, but it is the edit that
-would change step 1's answer, so it is worth naming where it appears.
+Step 2 is what makes the scenario mean anything. Grepping one file cannot distinguish "removed"
+from "moved to another module and still compiling", and the capability is what matters, not the
+location of a line. The probe carries a doc comment deliberately: core denies `missing_docs`, so
+without one the build stops on the lint and the case passes on an error unrelated to the
+conversion — which is why the assertion matches the specific diagnostic rather than a non-zero
+exit.
 
-Today the crate's only workspace edges are `orchestrator-config` and `orchestrator-collab`,
-both leaf data crates, reached from two fields of two `dto` structs.
+The category the deleted impl guaranteed is asserted separately, in
+`core::service::resource::delete`'s
+`phase_c_preserves_the_external_dependency_category`: a real error from a real unmigrated
+database, mapped through the production function, must be `ExternalDependency`. Mutating that
+function to `classify_resource_error` makes it fail with `left: NotFound, right:
+ExternalDependency`, because SQLite's phrase for a missing table is `no such table: resources`
+and the message classifier reads `not found` anywhere in the text as `NotFound`.
 
 ---
 
@@ -239,13 +270,32 @@ A run of `scripts/qa/test-persistence-extraction.sh` counts as closure evidence 
 5. The final summary line is present in the log. Its absence means the run terminated early
    regardless of the reported status.
 
+## Phase B statement-level assertions
+
+Phase B moves SQL out one statement at a time, and a ledger entry disappearing proves the
+reference moved rather than that the statement still works. Each moved statement therefore gets
+an assertion in `crates/orchestrator-persistence/tests/round_trip.rs`, and each is about the
+contract rather than about `Ok`:
+
+| Moved statement | What the assertion pins |
+|---|---|
+| `db::delete_project_resources` | Two projects seeded; only one loses its rows, the row count is the number deleted, and a second call returns 0. A `DELETE` with a non-matching predicate succeeds and affects nothing, so `Ok` proves nothing. |
+| `queries::list_terminal_tasks_older_than` | Six tasks whose three exclusions each fail for a different reason — wrong status, too recent, both — plus `LIMIT`, plus a 365-day window selecting nothing. A query returning everything would satisfy an `Ok` check, and auto-cleanup would then delete running work. |
+| `events::step_event_rows` | Only the requested event types come back, a two-type list returns both, and an **empty** list returns nothing rather than everything — the filter is the caller's policy, so the query must carry none of its own. |
+
+The two halves that stayed in core are tested without a database at all, which is what the splits
+bought: `config_load::build`'s deletion guards against a stub implementation of
+`db::DeletionGuardQueries`, and `events::step_events_from_rows` against struct literals.
+
 ## Checklist
 
-- [ ] Case 1: the edge is declared, and core fails to compile with it commented out
-- [ ] Case 2: the resume sweep passes and asserts its extent against the applied rows
-- [ ] Case 3: the round trip and its unmigrated-database negative both pass
-- [ ] Case 4: no dependency and no source path from the layer back to core
-- [ ] Case 5: the snapshot is unchanged and predates the first extraction commit
+- [ ] Cases 1 and 4: the edge is declared, core fails to compile with it commented out, and
+      neither cargo's tree nor the sources hold a path from the layer back to core
+- [ ] Case 2: the resume sweep passes, and a `step_by`-shortened copy fails
+- [ ] Case 3: every declared round-trip test passes, including the unmigrated-database negative
+- [ ] Case 5: no `From<rusqlite::Error>` impl, and a `?` on a `rusqlite::Result` no longer compiles
+- [ ] Case 6: the snapshot is unchanged and predates the first extraction commit
+- [ ] The gate refuses to run on a dirty worktree (exit 2)
 - [ ] `cargo test --workspace` green
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings` clean
 - [ ] `ruby scripts/qa/core-boundary.rb` and `ruby scripts/qa/persistence-dependency.rb` pass
