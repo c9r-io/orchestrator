@@ -53,7 +53,7 @@ pub mod crd;
 /// `persistence`.
 pub mod db;
 /// Database maintenance utilities: VACUUM and size reporting.
-pub mod db_maintenance;
+pub use orchestrator_persistence::db_maintenance;
 /// Serialized database write coordination for async callers (**async write layer**).
 ///
 /// Wraps `AsyncSqliteTaskRepository` behind a `DbWriteCoordinator` that

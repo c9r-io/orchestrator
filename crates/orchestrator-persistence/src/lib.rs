@@ -24,6 +24,10 @@
 
 /// Writer/reader connection pair for async database I/O.
 pub mod async_database;
+/// Admin facade: project queries, audit, metrics and reset.
+pub mod db;
+/// Database maintenance utilities: VACUUM and size reporting.
+pub mod db_maintenance;
 /// Async facade for persistence writes that need serialized database access.
 pub mod db_write;
 /// Row and read-model shapes the repositories produce and consume.

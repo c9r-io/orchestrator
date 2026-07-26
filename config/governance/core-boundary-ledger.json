@@ -2,19 +2,17 @@
   "schemaVersion": 1,
   "scope": "non-test Rust source under core/src, excluding inline cfg(test) modules, files under a tests directory, and files named test*.rs",
   "coreSurface": {
-    "files": 130,
-    "pubMod": 51,
-    "publicItems": 685
+    "files": 129,
+    "pubMod": 50,
+    "publicItems": 665
   },
   "rusqlite": {
-    "total": 88,
+    "total": 86,
     "files": {
       "core/src/action_audit.rs": 9,
       "core/src/attention.rs": 3,
       "core/src/config_load/build.rs": 2,
       "core/src/config_load/persist.rs": 1,
-      "core/src/db.rs": 1,
-      "core/src/db_maintenance.rs": 1,
       "core/src/error.rs": 2,
       "core/src/event_cleanup.rs": 5,
       "core/src/events.rs": 3,
