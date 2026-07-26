@@ -17,10 +17,14 @@
 #           deleted: deletion is the mutation an author has in mind, and a
 #           manifest parser that skips comments would pass the deletion test
 #           while accepting a commented-out dependency as present.
-#   Case 2  the resume sweep is run, and it now asserts its own extent against
-#           the rows the database says were applied. `for i in 1..=total` reads
-#           as exhaustive; a step_by inserted for speed leaves it passing over a
-#           fraction of the chain.
+#   Case 2  the resume sweep is run, and a copy of it shortened with step_by is
+#           run too and must fail. `for i in 1..=total` reads as exhaustive; a
+#           step_by inserted for speed leaves it passing over a fraction of the
+#           chain with every remaining iteration correct, which is exactly what
+#           the schema comparison cannot catch. This check began as a grep for
+#           the assertion's text, which a commented-out assertion satisfies.
+#           Running the mutation is also what caught the chain's length being
+#           recorded as 74 in five documents when it is 37.
 #   Case 3  a real write/read round trip through every module the extraction
 #           touched, plus the negative half against an unmigrated database — a
 #           layer that returns empty instead of failing is the state a round trip
@@ -119,13 +123,37 @@ else
   tail -30 "$WORK/case2.log" >&2
 fi
 
-# The negative half: a sweep that stops early must fail on the extent assertion
-# rather than on the schema comparison, which is what tells the two apart.
-if grep -q "must be an interrupt point" core/src/persistence/schema_snapshot.rs &&
-  grep -q "SELECT COUNT(\*) FROM schema_migrations" core/src/persistence/schema_snapshot.rs; then
-  pass "the sweep's extent is compared against the applied rows, not against itself"
+# The negative half, run rather than grepped. The first version of this check
+# looked for "must be an interrupt point" in the source, which is satisfied by
+# the assertion existing — including commented out, since a comment contains the
+# same text. A sweep that stops early has to actually fail, so the mutation is
+# applied to a copy and the test is run against it.
+#
+# step_by(5) rather than a deleted line: shortening for speed is the realistic
+# edit, and it leaves every remaining iteration correct, which is precisely the
+# case a schema comparison cannot catch.
+DIR="$WORK/shortened-sweep"
+mkdir -p "$DIR"
+git archive HEAD | tar -x -C "$DIR"
+ruby -e '
+  path = ARGV[0]
+  text = File.read(path)
+  target = "        for stop_after in 1..=total {"
+  abort "the resume sweep loop is not where this fixture expects it" unless text.include?(target)
+  File.write(path, text.sub(target, "        for stop_after in (1..=total).step_by(5) {"))
+' "$DIR/core/src/persistence/schema_snapshot.rs"
+
+set +e
+(cd "$DIR" && CARGO_TARGET_DIR="$DIR/target" cargo test -p agent-orchestrator \
+  schema_snapshot::tests::an_interrupted_chain_resumes_to_the_same_schema) \
+  >"$WORK/case2-mutant.log" 2>&1
+MUTANT_STATUS=$?
+set -e
+if [[ "$MUTANT_STATUS" -ne 0 ]] && grep -q "must be an interrupt point" "$WORK/case2-mutant.log"; then
+  pass "a sweep shortened with step_by fails on the extent assertion"
 else
-  fail "the sweep does not compare its extent against the applied migration rows"
+  fail "a sweep shortened with step_by still passed (exit $MUTANT_STATUS)"
+  tail -20 "$WORK/case2-mutant.log" >&2
 fi
 echo ""
 

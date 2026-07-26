@@ -27,7 +27,7 @@ FR-047（Phase 1，提取 `orchestrator-config`）与 FR-048（Phase 2，提取 
 | 扫描文件数 | 157 | 143 |
 | `lib.rs` 顶层 `pub mod` | 52 | 52 ✅ |
 | 公开项 | 742 | **924**（原文正则漏掉 `pub async fn`） |
-| 迁移表数 | 51 | **46 张表 + 92 个索引**（74 条已注册迁移） |
+| 迁移表数 | 51 | **46 张表 + 92 个索引**（**37** 条已注册迁移；治理期曾记作 74，那是 `grep -c m00` 的结果，每条迁移被 `name:` 与 `up:` 各匹配一次） |
 | `core/src/lib.rs` churn | 40 次 / 约 400 次提交 | **64 次 / 1022 次提交** |
 | `#[allow(clippy::too_many_arguments)]` | 43（读作 core 内部耦合症状） | 43 是**全工作区**总数；core 只有 **3**，集中在 scheduler(21)、gui(7)、daemon(7) |
 
@@ -48,9 +48,9 @@ crate 清单。`scripts/qa/core-boundary.rb` 以**精确相等**比对，`--emit
 
 ### ✅ 需求 3：迁移语义等价证明
 
-`config/governance/schema-snapshot.sql` 记录 74 条迁移对空库执行后的规范化 schema
+`config/governance/schema-snapshot.sql` 记录 37 条迁移对空库执行后的规范化 schema
 （46 表 + 92 索引）。`core/src/persistence/schema_snapshot.rs` 以 `cargo test` 守住它：
-全链等价、幂等（同时比对 applied 计数与 schema）、以及**在全部 74 个中断点**逐一验证
+全链等价、幂等（同时比对 applied 计数与 schema）、以及**在全部 37 个中断点**逐一验证
 续跑结果与一次跑完全一致。
 
 这条基线必须在提取**之前**提交：提取之后再记录就没有比对对象了。
@@ -173,7 +173,7 @@ gui(7)、daemon(7)。该条对本次提取近乎空转，作为 FR-130 的需求
 
 - [x] `core` 的 `pub mod` 数与公开项数相对基线精确冻结，门禁存在且有负向 fixture
 - [x] 提取前完整迁移链产出的 schema 已以可复现脚本记录并冻结（46 表 + 92 索引）
-- [x] 迁移幂等性与断点续跑回归通过（全部 74 个中断点）
+- [x] 迁移幂等性与断点续跑回归通过（全部 **37** 个中断点；治理期曾记作 74，已更正）
 - [x] 跨边界的 `too_many_arguments` 已书面记录（core 实为 3 个，见 DD-142）
 - [x] 对外 gRPC/CLI 契约无变化，既有集成测试全绿且未修改断言
 

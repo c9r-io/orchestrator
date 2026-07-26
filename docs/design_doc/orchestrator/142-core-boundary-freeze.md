@@ -127,7 +127,7 @@ CI there is no human.
 
 ### The schema baseline
 
-`config/governance/schema-snapshot.sql` is the normalised `sqlite_master` output after the 74
+`config/governance/schema-snapshot.sql` is the normalised `sqlite_master` output after the 37
 registered migrations run against an empty database: 46 tables and 92 indexes, one statement
 per line, sorted. Runs of whitespace are collapsed so that reindenting a migration's DDL is
 not a schema change, while a column, type, constraint or index change still is. `sqlite_%`
@@ -145,7 +145,7 @@ tests:
 | `a_second_bootstrap_applies_nothing_and_changes_nothing` | a non-idempotent step; the snapshot is compared as well as the applied count, because "applied zero" alone would pass for a chain that re-ran its DDL while altering the schema |
 | `an_interrupted_chain_resumes_to_the_same_schema` | a step whose effect depends on being applied in the same pass as its neighbours |
 
-The resume test runs all 74 interruption points rather than a sample. A resume defect lives in
+The resume test runs all 37 interruption points rather than a sample. A resume defect lives in
 one specific migration, and sampling is precisely how you miss it.
 
 Two environment overrides: `UPDATE_SCHEMA_SNAPSHOT=1` rewrites the fixture, and

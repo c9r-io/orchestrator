@@ -112,11 +112,17 @@ echo ""
 echo "Case 3: a new top-level pub mod in core fails the gate"
 DIR="$(new_case pub-mod)"
 printf '\npub mod fr130_probe;\n' >> "$DIR/core/src/lib.rs"
+# Read from the ledger, not written as a literal. This case asserted
+# "52 -> 53" until FR-130 Phase A moved the count to 50, at which point a gate
+# whose whole subject is a number that changes had a fixture that could only
+# work while it did not.
+PUBMOD_BEFORE="$(ruby -rjson -e 'print JSON.parse(File.read(ARGV[0]))["coreSurface"]["pubMod"]' "$REPO_ROOT/$LEDGER")"
+PUBMOD_AFTER=$((PUBMOD_BEFORE + 1))
 set +e
 (cd "$DIR" && ruby "$GATE" > "$WORK/case3.out" 2> "$WORK/case3.err")
 STATUS=$?
 set -e
-if [[ "$STATUS" -ne 0 ]] && grep -q "coreSurface.pubMod 52 -> 53" "$WORK/case3.err"; then
+if [[ "$STATUS" -ne 0 ]] && grep -q "coreSurface.pubMod $PUBMOD_BEFORE -> $PUBMOD_AFTER" "$WORK/case3.err"; then
   pass "a new pub mod fails and the report names the count it moved"
 else
   fail "a new pub mod did not fail the gate with a named pubMod change (exit $STATUS)"
@@ -147,12 +153,20 @@ echo ""
 # which is exactly why it has to be blessed rather than absorbed.
 echo "Case 5: a removed rusqlite reference also fails, so the ledger cannot go stale"
 DIR="$(new_case rusqlite-removed)"
-grep -v rusqlite "$REPO_ROOT/core/src/db.rs" > "$DIR/core/src/db.rs"
+# The target comes from the ledger too. This case stripped core/src/db.rs, which
+# FR-130 Phase A moved out; what stayed behind is a re-export shim whose only
+# rusqlite token sits inside `mod tests`, where the scanner does not count it.
+# Stripping it therefore changed nothing and the case reported a pass-shaped
+# failure. Any ledger entry is a file with at least one *production* reference,
+# which is the only property this case needs.
+REMOVAL_TARGET="$(ruby -rjson -e 'print JSON.parse(File.read(ARGV[0]))["rusqlite"]["files"].keys.min' "$REPO_ROOT/$LEDGER")"
+mkdir -p "$DIR/$(dirname "$REMOVAL_TARGET")"
+grep -v rusqlite "$REPO_ROOT/$REMOVAL_TARGET" > "$DIR/$REMOVAL_TARGET"
 set +e
 (cd "$DIR" && ruby "$GATE" > "$WORK/case5.out" 2> "$WORK/case5.err")
 STATUS=$?
 set -e
-if [[ "$STATUS" -ne 0 ]] && grep -q "\- core/src/db.rs no longer references rusqlite" "$WORK/case5.err"; then
+if [[ "$STATUS" -ne 0 ]] && grep -q "\- $REMOVAL_TARGET no longer references rusqlite" "$WORK/case5.err"; then
   pass "a decrease fails too, and the report says the ledger over-claims"
 else
   fail "removing a rusqlite reference did not fail the gate (exit $STATUS)"

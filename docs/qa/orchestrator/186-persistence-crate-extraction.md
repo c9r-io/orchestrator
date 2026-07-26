@@ -76,14 +76,22 @@ and still accept a commented-out dependency as present.
 ### Steps
 
 1. `cargo test -p agent-orchestrator schema_snapshot::tests::an_interrupted_chain_resumes_to_the_same_schema`
-2. Read the assertions at the end of that test in `core/src/persistence/schema_snapshot.rs`.
+2. Run the same test against a `git archive` copy whose loop header has been rewritten from
+   `for stop_after in 1..=total` to `(1..=total).step_by(5)`. The gate does this as Case 2's
+   second assertion.
 
 ### Expected result
 
 - The test passes.
 - After the loop it compares the number of interrupt points it exercised against
   `SELECT COUNT(*) FROM schema_migrations` on a one-shot bootstrapped database, and separately
-  against `registered_migrations().len()`. All three are 74 today.
+  against `registered_migrations().len()`. All three are 37 today.
+
+  Four other documents said 74. That is `grep -c m00` over `migration.rs`, which matches each
+  entry twice — once in `name:` and once in `up:` — and it had been repeated since FR-130's
+  requirement 3 closed without anyone re-deriving it. The sweep always ran the right number of
+  points; only the prose was wrong. The assertion below is what surfaced it, on its first
+  mutation test.
 
 `for stop_after in 1..=total` reads as exhaustive, which is exactly why it needs an assertion:
 a `.step_by(5)` or a `.take(10)` inserted to make the test faster leaves it passing while
@@ -93,6 +101,16 @@ one.
 
 A shortened *chain* is caught by `full_chain_reproduces_the_reviewed_snapshot`; a shortened
 *sweep* is caught only here.
+
+Step 2 is run, not read. The first version of this check grepped
+`core/src/persistence/schema_snapshot.rs` for the assertion's message — which the assertion
+satisfies by existing, including commented out, since a comment contains the same text. The
+mutation is `step_by(5)` rather than a deleted line because shortening for speed is the
+realistic edit and it leaves every iteration that does run correct, which is precisely the case
+the schema comparison cannot distinguish from a full sweep.
+
+Expected mutant output: `the resume sweep exercised 8 interrupt point(s) but the chain applied
+37 migration(s)`.
 
 ---
 

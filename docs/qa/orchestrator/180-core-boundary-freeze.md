@@ -20,7 +20,7 @@ subject unless the "before" side is recorded first. FR-130 (requirements 1 and 3
 freeze (2026-07-25): 52 top-level `pub mod`, 924 public items across 143 files, 200 `rusqlite`
 references across 37 files, and
 the six crates that take `rusqlite` directly. `config/governance/schema-snapshot.sql` records
-what the 74 registered migrations produce: 46 tables and 92 indexes.
+what the 37 registered migrations produce: 46 tables and 92 indexes.
 
 All scenarios here are read-only against the working tree, or operate on copies under
 `$TMPDIR`. None starts a daemon, mutates the runtime database, or invokes a provider. The only
@@ -138,7 +138,7 @@ moved", "the count is equal" — cannot show that the chain still works.
 - Step 1 passes: a second bootstrap applies zero migrations *and* leaves the schema unchanged.
   The second half matters — "applied zero" alone would pass for a chain that re-ran its DDL
   idempotently while altering the schema.
-- Step 2 passes. It interrupts the chain after every one of the 74 steps and requires the
+- Step 2 passes. It interrupts the chain after every one of the 37 steps and requires the
   resumed database to match the one-shot database exactly. A resume defect lives in one
   specific migration; sampling a few interruption points is how you miss it.
 - Step 3 reports 74, matching the number of interruption points step 2 exercises.
@@ -188,5 +188,5 @@ A run of this document counts as closure evidence only when all of the following
 | 1 | The boundary is frozen in both directions | ☑ PASS | 2026-07-25 | Claude | Gate reports 143 files / 52 pub mod / 924 public items / 200 rusqlite refs across 37 files / 6 dependent crates; emitted candidate byte-identical to the ledger. |
 | 2 | Each case rejects its own defect | ☑ PASS | 2026-07-25 | Claude | `9/9`. Nine mutations run; every case failed against at least one. M7 exposed case 9 passing for the wrong reason, and it was rewritten before shipping. Working tree byte-identical afterwards. |
 | 3 | The migration chain reproduces the reviewed schema | ☑ PASS | 2026-07-25 | Claude | 46 tables, 92 indexes. The doctored-snapshot fixture failed naming `CREATE TABLE tasks` while the real snapshot passed in the same run. |
-| 4 | Migrations are idempotent and resume to the same schema | ☑ PASS | 2026-07-25 | Claude | All 74 interruption points reach the one-shot schema; a second bootstrap applies 0 and changes nothing. |
+| 4 | Migrations are idempotent and resume to the same schema | ☑ PASS | 2026-07-26 | Claude | All 37 interruption points reach the one-shot schema, asserted against the applied-migration rows rather than against the loop's own bound; a second bootstrap applies 0 and changes nothing. (Recorded as 74 on 2026-07-25 — that is `grep -c m00` over `migration.rs`, which matches each entry twice.) |
 | 5 | The two governance gates share one scanner | ☑ PASS | 2026-07-25 | Claude | Case 6 and case 9 both pass; FR-128's gate stayed `8/8` across the extraction, so the move was behaviour-neutral. |

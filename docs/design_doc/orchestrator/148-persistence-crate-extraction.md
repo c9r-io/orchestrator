@@ -169,6 +169,25 @@ mistake and reverted 45 paths instead of 44.
 Recorded in QA 186 rather than run in CI: a gate that hard-codes commit hashes fails permanently
 after any history rewrite.
 
+### Two of DD-142's own fixtures were pinned to numbers this change moved
+
+`test-core-boundary.sh` case 3 asserted the gate's report said `coreSurface.pubMod 52 -> 53`,
+and case 5 stripped `rusqlite` from `core/src/db.rs` and expected the removal to be reported.
+Phase A broke both, in the two different ways a pinned fixture breaks:
+
+- Case 3 **failed loudly**. The gate did its job and said `50 -> 51`; only the fixture's literal
+  was stale.
+- Case 5 **passed vacuously**, which is worse. `core/src/db.rs` still exists as a re-export shim
+  whose only `rusqlite` token sits inside `mod tests`, where the scanner does not count it.
+  Stripping the file changed nothing, so the gate reported success and the case reported that
+  the gate had failed to notice a removal — a negative fixture that had stopped applying a
+  mutation at all.
+
+Both now read the ledger: case 3 takes `coreSurface.pubMod` and adds one, case 5 takes
+`rusqlite.files.keys.min`, which is by construction a file with at least one production
+reference. A gate whose entire subject is a set of numbers that are supposed to move cannot have
+fixtures that only work while they do not.
+
 ## Consequences
 
 ### What Phase A established
@@ -212,6 +231,13 @@ after any history rewrite.
   is a sound ratchet, because a new coupling adds a token wherever it lands, and it is not a
   size estimate. Anyone planning Phase B from the number will plan it wrong. (This limit belongs
   to DD-142's ruler and is recorded there too.)
+- **The chain has 37 registered migrations, not 74.** Five documents said 74 — DD-142, QA 180,
+  the CHANGELOG, FR-130 and this repository's two README indexes — since FR-130's requirement 3
+  closed. 74 is what `grep -c m00` over `migration.rs` returns, because each entry names its
+  step twice, in `name:` and in `up:`. The sweep always ran the right number of interrupt points
+  and the schema baseline was always right; only the prose was wrong. It was found by the first
+  mutation test of the new extent assertion, whose failure message reports the real count. All
+  five documents are corrected.
 - The `schema_snapshot` test sits in `core` and exercises a crate below it. Deliberate and
   temporary, as above; it is the one place where the test and the code it tests are in different
   crates on purpose.
