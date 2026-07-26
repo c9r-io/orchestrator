@@ -7,7 +7,7 @@
     "publicItems": 665
   },
   "rusqlite": {
-    "total": 86,
+    "total": 85,
     "files": {
       "core/src/action_audit.rs": 9,
       "core/src/attention.rs": 3,
@@ -17,7 +17,6 @@
       "core/src/event_cleanup.rs": 5,
       "core/src/events.rs": 3,
       "core/src/handoff.rs": 5,
-      "core/src/lib.rs": 1,
       "core/src/migration.rs": 1,
       "core/src/persistence/repository/config.rs": 3,
       "core/src/process_metrics.rs": 3,

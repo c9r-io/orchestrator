@@ -24,12 +24,11 @@ pub mod action_audit;
 pub mod agent_lifecycle;
 /// Anomaly classification types for scheduler traces and runtime diagnostics.
 pub mod anomaly;
-/// Async SQLite access helpers backed by `tokio_rusqlite` (**foundation layer**).
+/// Re-export of the writer/reader `AsyncDatabase` connection pair.
 ///
-/// Provides a writer/reader `AsyncDatabase` connection pair that bridges tokio
-/// and SQLite's single-writer model.  All async repository implementations
-/// (`task_repository`, `persistence/repository`, `session_store`) build on top
-/// of this layer.
+/// The pair itself lives in `orchestrator-persistence` (FR-130 Phase A). This
+/// module is the re-export plus the tests that drive it through core's schema
+/// bootstrap.
 pub mod async_database;
 /// Persistent human-attention queue models and repository operations.
 pub mod attention;
@@ -43,14 +42,12 @@ pub use orchestrator_config::config;
 pub mod config_load;
 /// Custom resource definitions and resource store projections.
 pub mod crd;
-/// SQLite admin facade (**admin / facade layer**).
+/// Re-export of the admin facade, plus the two entry points that take daemon state.
 ///
-/// Re-exports connection primitives from `persistence::sqlite`, and provides
-/// project-scoped task queries, audit-record insertion, execution-metrics
-/// sampling, and database reset/housekeeping operations.  This is the entry
-/// point for administrative database work; task-execution persistence lives in
-/// `task_repository`, and infrastructure (migrations, domain repos) lives in
-/// `persistence`.
+/// Project-scoped task queries, audit-record insertion, execution-metrics
+/// sampling and database reset live in `orchestrator-persistence` (FR-130
+/// Phase A). What stays here is `reset_db` and `reset_project_data`, which take
+/// `&state::InnerState` and delegate to the `_by_path` forms below that layer.
 pub mod db;
 /// Database maintenance utilities: VACUUM and size reporting.
 pub use orchestrator_persistence::db_maintenance;
@@ -95,13 +92,13 @@ pub use orchestrator_runner::driver;
 pub use orchestrator_runner::output_capture;
 /// Structured output validation and diagnostics.
 pub mod output_validation;
-/// Persistence infrastructure (**infrastructure layer**).
+/// Persistence infrastructure, re-exported from `orchestrator-persistence`.
 ///
-/// Connection management, schema migrations, and domain-specific repository
-/// traits and SQLite implementations: `ConfigRepository`, `SessionRepository`,
-/// `SchedulerRepository`, `WorkflowStoreRepository`.  Distinct from
-/// `task_repository` which covers task-execution abstractions, and from `db`
-/// which provides admin/facade operations.
+/// Connection management, schema migrations, and the session, scheduler,
+/// workflow-store and daemon-metadata repositories all moved below core in
+/// FR-130 Phase A. `ConfigRepository` is the one that stayed: it reads `crd`,
+/// which calls back into `db`, so sinking it would close a cycle. It moves in
+/// Phase B with `crd`.
 pub mod persistence;
 /// Prehook execution models and support helpers.
 pub mod prehook;
@@ -136,7 +133,7 @@ pub mod selection;
 pub mod self_referential_policy;
 /// Service-layer handlers used by the daemon.
 pub mod service;
-/// Session persistence models and repository helpers.
+/// Re-export of the session persistence models and repository helpers.
 pub mod session_store;
 /// Provider-neutral external source events, bindings, and routing persistence.
 pub mod source;
@@ -156,14 +153,12 @@ pub mod stream_json;
 pub mod task_cleanup;
 /// High-level task mutation operations.
 pub mod task_ops;
-/// Task-execution persistence abstraction (**execution layer**).
+/// Re-export of the task-execution persistence abstraction.
 ///
-/// Seven domain-aligned sub-traits compose into the backward-compatible
-/// `TaskRepository` supertrait: `TaskQueryRepository`,
-/// `TaskItemQueryRepository`, `TaskStateRepository`, `TaskItemMutRepository`,
-/// `CommandRunRepository`, `EventRepository`, `TaskGraphRepository`.
-/// The async wrapper `AsyncSqliteTaskRepository` is the primary runtime
-/// implementation.
+/// The seven sub-traits composing `TaskRepository` and their synchronous and
+/// asynchronous SQLite implementations live in `orchestrator-persistence`
+/// (FR-130 Phase A). This module is the re-export plus the tests that drive
+/// them through real task creation.
 pub mod task_repository;
 /// Ticket discovery, preview, and creation helpers.
 pub mod ticket;
