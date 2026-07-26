@@ -1,28 +1,31 @@
-use anyhow::Result;
-use rusqlite::Connection;
-
-pub use crate::persistence::migration::Migration;
-
-/// Returns the current schema version (0 if no migrations have run).
-pub fn current_version(conn: &Connection) -> Result<u32> {
-    crate::persistence::migration::current_version(conn)
-}
-
-/// Run all pending migrations. Returns the number of migrations applied.
-pub fn run_pending(conn: &Connection, migrations: &[Migration]) -> Result<u32> {
-    crate::persistence::migration::run_pending(conn, migrations).map(|summary| summary.count())
-}
-
-/// All registered migrations in version order.
-pub fn all_migrations() -> Vec<Migration> {
-    crate::persistence::migration::registered_migrations()
-}
+//! Retired. The migration chain lives in `orchestrator-persistence`.
+//!
+//! This module used to carry three wrappers — `current_version`, `run_pending`
+//! and `all_migrations` — left behind when FR-130 Phase A moved the chain out.
+//! FR-130 B12 removed them, because a scan of the workspace found **zero**
+//! production callers: the only uses were this file's own test module and one
+//! `use` inside `core::action_audit`'s tests. A compatibility shim that nothing
+//! is compatible with is not a shim; it is a second name for the real API, and
+//! the cost of keeping it is that `crate::migration::run_pending` and
+//! `orchestrator_persistence::migration::run_pending` can drift apart —
+//! this one already had, returning a bare count where the real one returns a
+//! summary of what was applied.
+//!
+//! What remains is the test module. Those tests exercise the registered chain
+//! end to end and against partial chains, and they belong to core no less for
+//! calling the layer below directly. `core::persistence::migration` is the path
+//! they use; it is the same re-export every other core module already uses.
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use anyhow::Result;
+    use rusqlite::Connection;
+
     use crate::async_database::AsyncDatabase;
     use crate::db::configure_conn;
+    use crate::persistence::migration::{
+        Migration, current_version, registered_migrations as all_migrations, run_pending,
+    };
     use crate::persistence::migration_steps::HISTORICAL_AGENT_PLACEHOLDER;
     use crate::process_metrics::{
         AsyncProcessMetricsRepository, MetricObservation, SUPPORTED_BUCKET_SECONDS,
@@ -66,7 +69,7 @@ mod tests {
         let migrations = all_migrations();
         let applied = run_pending(&conn, &migrations).expect("run_pending");
         let latest_version = migrations.last().expect("at least one migration").version;
-        assert_eq!(applied, latest_version);
+        assert_eq!(applied.count(), latest_version);
         assert_eq!(current_version(&conn).expect("version"), latest_version);
     }
 
@@ -77,7 +80,7 @@ mod tests {
         run_pending(&conn, &migrations).expect("first run");
         let applied = run_pending(&conn, &migrations).expect("second run");
         let latest_version = migrations.last().expect("at least one migration").version;
-        assert_eq!(applied, 0);
+        assert_eq!(applied.count(), 0);
         assert_eq!(current_version(&conn).expect("version"), latest_version);
     }
 
@@ -89,7 +92,7 @@ mod tests {
         let applied = run_pending(&conn, &migrations).expect("upgrade blank db");
         let latest_version = migrations.last().expect("latest migration").version;
 
-        assert_eq!(applied, latest_version);
+        assert_eq!(applied.count(), latest_version);
         assert_eq!(current_version(&conn).expect("version"), latest_version);
     }
 
@@ -112,7 +115,7 @@ mod tests {
         let applied = run_pending(&conn, &migrations).expect("upgrade mid-schema db");
         let latest_version = migrations.last().expect("latest migration").version;
 
-        assert_eq!(applied, latest_version - 8);
+        assert_eq!(applied.count(), latest_version - 8);
         assert_eq!(
             current_version(&conn).expect("latest version"),
             latest_version
@@ -137,7 +140,7 @@ mod tests {
         );
 
         let applied = run_pending(&conn, &migrations).expect("recover partial upgrade");
-        assert_eq!(applied, 1);
+        assert_eq!(applied.count(), 1);
         assert_eq!(
             current_version(&conn).expect("recovered version"),
             latest_version
@@ -153,7 +156,7 @@ mod tests {
 
         let applied = run_pending(&conn, &migrations).expect("rerun current db");
 
-        assert_eq!(applied, 0);
+        assert_eq!(applied.count(), 0);
         assert_eq!(current_version(&conn).expect("version"), latest_version);
     }
 
@@ -179,7 +182,7 @@ mod tests {
         )
         .expect("populate audit row");
 
-        assert_eq!(run_pending(&conn, &migrations).expect("upgrade"), 7);
+        assert_eq!(run_pending(&conn, &migrations).expect("upgrade").count(), 7);
         let preserved: i64 = conn
             .query_row("SELECT COUNT(*) FROM control_plane_audit", [], |row| {
                 row.get(0)
@@ -325,7 +328,9 @@ mod tests {
         .expect("seed canonical audit joins");
 
         assert_eq!(
-            run_pending(&conn, &migrations).expect("upgrade to latest"),
+            run_pending(&conn, &migrations)
+                .expect("upgrade to latest")
+                .count(),
             6
         );
         assert_eq!(current_version(&conn).expect("latest version"), 37);
@@ -483,7 +488,12 @@ mod tests {
         )
         .expect("seed populated source automation route");
 
-        assert_eq!(run_pending(&conn, &migrations).expect("upgrade to v37"), 4);
+        assert_eq!(
+            run_pending(&conn, &migrations)
+                .expect("upgrade to v37")
+                .count(),
+            4
+        );
         assert_eq!(current_version(&conn).expect("latest version"), 37);
         let route: (String, i64, i64, i64, i64) = conn
             .query_row(
@@ -561,7 +571,12 @@ mod tests {
         )
         .expect("seed populated v34 task");
 
-        assert_eq!(run_pending(&conn, &migrations).expect("upgrade to v37"), 3);
+        assert_eq!(
+            run_pending(&conn, &migrations)
+                .expect("upgrade to v37")
+                .count(),
+            3
+        );
         assert_eq!(current_version(&conn).expect("latest version"), 37);
         let task: (String, String) = conn
             .query_row(
@@ -608,13 +623,13 @@ mod tests {
             },
         ];
         let applied = run_pending(&conn, &partial).expect("partial run");
-        assert_eq!(applied, 2);
+        assert_eq!(applied.count(), 2);
         assert_eq!(current_version(&conn).expect("version"), 2);
 
         // Apply the full set after running the first two — only the remainder should execute.
         let applied = run_pending(&conn, &all).expect("full run");
         let latest_version = all.last().expect("at least one migration").version;
-        assert_eq!(applied, latest_version - 2);
+        assert_eq!(applied.count(), latest_version - 2);
         assert_eq!(current_version(&conn).expect("version"), latest_version);
     }
 

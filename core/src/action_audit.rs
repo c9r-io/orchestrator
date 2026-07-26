@@ -277,7 +277,7 @@ mod tests {
     use crate::db::configure_conn;
     // Inside the test module on purpose: the boundary scanner strips `cfg(test)`
     // blocks, and a file-scope import would count this fixture as production use.
-    use crate::migration::{all_migrations, run_pending};
+    use crate::persistence::migration::{registered_migrations as all_migrations, run_pending};
     use rusqlite::Connection;
     use tempfile::tempdir;
 
