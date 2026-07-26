@@ -70,6 +70,7 @@ trap cleanup EXIT
 
 PASS=0
 FAIL=0
+SKIP=0
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 
@@ -298,10 +299,28 @@ fi
 # The baseline predates the extraction. That is what makes it a baseline rather
 # than a record of the outcome, and it is a fact about history, so it is read
 # from history.
+#
+# `git log --reverse -1` does not give the oldest match. `-1` limits before
+# `--reverse` reorders, so it returns the newest — measured: against
+# `--grep='FR-130 A'` it yields A4, not A1. It was masked because 'FR-130 A1'
+# matches exactly one commit, and a fixup or a revert naming A1 would have
+# unmasked it by weakening the window this assertion exists to close. Take the
+# last line of the full list instead.
 BASELINE_COMMIT="$(git log --format=%H -1 -- "$SNAPSHOT")"
-FIRST_MOVE="$(git log --format=%H --reverse --grep='FR-130 A1' -1)"
+FIRST_MOVE="$(git log --format=%H --grep='FR-130 A1' | tail -1)"
 if [[ -z "$FIRST_MOVE" ]]; then
-  pass "no FR-130 A1 commit in range; baseline ordering not assertable here"
+  # Absent subject, and the two reasons are not the same fact. A shallow clone
+  # legitimately cannot see the commit; a full checkout that cannot find it means
+  # the message was reworded or the history rewritten, and then this assertion has
+  # silently stopped covering anything. The first is reported as skipped, the
+  # second fails. Reporting either as a pass — which is what this branch did —
+  # counts an assertion that examined nothing.
+  if [[ "$(git rev-parse --is-shallow-repository)" == "true" ]]; then
+    SKIP=$((SKIP + 1))
+    echo "  SKIP: shallow clone; baseline ordering is not assertable here" >&2
+  else
+    fail "no commit matching 'FR-130 A1' in a full history; the baseline-ordering assertion has no subject"
+  fi
 elif [[ -n "$BASELINE_COMMIT" ]] && git merge-base --is-ancestor "$BASELINE_COMMIT" "$FIRST_MOVE"; then
   pass "the baseline was committed before the first extraction commit"
 else
@@ -309,5 +328,10 @@ else
 fi
 echo ""
 
-echo "FR-130 Phase A persistence crate extraction: $PASS passed, $FAIL failed"
+# Skips are reported in the summary, not folded into the pass count. A run that
+# examined less than a full one has to say so on the line a reader stops at.
+if [[ "$SKIP" -gt 0 ]]; then
+  echo "WARNING: $SKIP assertion(s) skipped; this run examined less than a full checkout does" >&2
+fi
+echo "FR-130 Phase A persistence crate extraction: $PASS passed, $FAIL failed, $SKIP skipped"
 [[ "$FAIL" -eq 0 ]]
