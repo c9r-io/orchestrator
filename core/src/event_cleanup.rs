@@ -1,30 +1,21 @@
 //! TTL-based event cleanup, optional archival, and statistics.
 //!
-//! Provides functions to purge old events for completed/failed/cancelled tasks,
-//! optionally archiving them to JSONL before deletion.
+//! The retention *statements* live in
+//! `orchestrator_persistence::event_retention` (FR-130 B10). What stayed here is
+//! the archive: grouping rows by task and date, rendering a JSONL line, and
+//! writing files. That work used to run inside the SQLite writer's closure, so
+//! every `create_dir_all` and `writeln!` failure had to be wrapped as a driver
+//! type-conversion failure to satisfy the closure's return type — a disk error
+//! reported as a type-conversion error. Out here it is just `anyhow`.
 
 use crate::async_database::AsyncDatabase;
 use crate::dto::EventDto;
-use anyhow::Result;
-use serde_json::Value;
+use anyhow::{Context, Result};
+use orchestrator_persistence::event_retention as retention;
 use std::path::Path;
 use tracing::info;
 
-/// Aggregate statistics about the events table.
-#[derive(Debug, Clone)]
-pub struct EventStats {
-    /// Total number of rows in the events table.
-    pub total_rows: u64,
-    /// Earliest `created_at` timestamp, if any events exist.
-    pub earliest: Option<String>,
-    /// Latest `created_at` timestamp, if any events exist.
-    pub latest: Option<String>,
-    /// Event counts grouped by the owning task's status.
-    pub by_task_status: Vec<(String, u64)>,
-}
-
-/// Terminal task statuses whose events are eligible for cleanup.
-const TERMINAL_STATUSES: &str = "'completed','failed','cancelled'";
+pub use orchestrator_persistence::event_retention::EventStats;
 
 /// Delete events older than `retention_days` whose owning task is in a terminal
 /// status. At most `batch_limit` rows are deleted per invocation to avoid long
@@ -36,25 +27,7 @@ pub async fn cleanup_old_events(
     retention_days: u32,
     batch_limit: u32,
 ) -> Result<u64> {
-    let days = retention_days;
-    let limit = batch_limit;
-    let deleted: u64 = db
-        .writer()
-        .call(move |conn| {
-            let sql = format!(
-                "DELETE FROM events WHERE rowid IN (\
-                   SELECT events.rowid FROM events \
-                   INNER JOIN tasks ON events.task_id = tasks.id \
-                   WHERE events.created_at < datetime('now', '-{days} days') \
-                     AND tasks.status IN ({TERMINAL_STATUSES}) \
-                   LIMIT {limit}\
-                 )"
-            );
-            let count = conn.execute(&sql, [])?;
-            Ok(count as u64)
-        })
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let deleted = retention::delete_old_terminal_events(db, retention_days, batch_limit).await?;
     if deleted > 0 {
         info!(deleted, retention_days, "event cleanup: deleted old events");
     }
@@ -64,25 +37,9 @@ pub async fn cleanup_old_events(
 /// Count events that would be deleted by `cleanup_old_events` without actually
 /// deleting them (dry-run).
 pub async fn count_pending_cleanup(db: &AsyncDatabase, retention_days: u32) -> Result<u64> {
-    let days = retention_days;
-    let count: u64 = db
-        .reader()
-        .call(move |conn| {
-            let sql = format!(
-                "SELECT COUNT(*) FROM events \
-                 INNER JOIN tasks ON events.task_id = tasks.id \
-                 WHERE events.created_at < datetime('now', '-{days} days') \
-                   AND tasks.status IN ({TERMINAL_STATUSES})"
-            );
-            let count: i64 = conn.query_row(&sql, [], |row| row.get(0))?;
-            Ok(count as u64)
-        })
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    Ok(count)
+    retention::count_old_terminal_events(db, retention_days).await
 }
 
-/// Gather statistics about the events table.
 /// List events for a specific task, optionally filtered by event type prefix.
 pub async fn list_task_events(
     db: &AsyncDatabase,
@@ -90,244 +47,101 @@ pub async fn list_task_events(
     event_type_filter: Option<&str>,
     limit: u32,
 ) -> Result<Vec<EventDto>> {
-    let task_id = task_id.to_string();
-    let type_filter = event_type_filter.map(|s| s.to_string());
     let limit = if limit == 0 { 50 } else { limit };
-    let events = db
-        .reader()
-        .call(move |conn| {
-            let (sql, params): (String, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(
-                ref prefix,
-            ) = type_filter
-            {
-                (
-                    format!(
-                        "SELECT id, task_id, task_item_id, event_type, payload_json, created_at \
-                             FROM events WHERE task_id = ?1 AND event_type LIKE ?2 \
-                             ORDER BY id DESC LIMIT {limit}"
-                    ),
-                    vec![Box::new(task_id.clone()), Box::new(format!("{prefix}%"))],
-                )
-            } else {
-                (
-                    format!(
-                        "SELECT id, task_id, task_item_id, event_type, payload_json, created_at \
-                             FROM events WHERE task_id = ?1 \
-                             ORDER BY id DESC LIMIT {limit}"
-                    ),
-                    vec![Box::new(task_id.clone())],
-                )
-            };
-            let mut stmt = conn.prepare(&sql)?;
-            let rows = stmt
-                .query_map(rusqlite::params_from_iter(params.iter()), |row| {
-                    let payload_str: String = row.get(4)?;
-                    let payload: Value = serde_json::from_str(&payload_str).unwrap_or(Value::Null);
-                    Ok(EventDto {
-                        id: row.get(0)?,
-                        task_id: row.get(1)?,
-                        task_item_id: row.get(2)?,
-                        event_type: row.get(3)?,
-                        payload,
-                        created_at: row.get(5)?,
-                    })
-                })?
-                .filter_map(|r| r.ok())
-                .collect();
-            Ok(rows)
-        })
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    Ok(events)
+    retention::list_task_events(
+        db,
+        task_id.to_string(),
+        event_type_filter.map(str::to_string),
+        limit,
+    )
+    .await
 }
 
 /// Compute aggregate statistics for the events table.
 pub async fn event_stats(db: &AsyncDatabase) -> Result<EventStats> {
-    let stats = db
-        .reader()
-        .call(|conn| {
-            let total_rows: i64 =
-                conn.query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))?;
-            let earliest: Option<String> = conn
-                .query_row("SELECT MIN(created_at) FROM events", [], |row| row.get(0))
-                .unwrap_or(None);
-            let latest: Option<String> = conn
-                .query_row("SELECT MAX(created_at) FROM events", [], |row| row.get(0))
-                .unwrap_or(None);
-
-            let mut stmt = conn.prepare(
-                "SELECT COALESCE(t.status, 'unknown'), COUNT(*) \
-                 FROM events e \
-                 LEFT JOIN tasks t ON e.task_id = t.id \
-                 GROUP BY t.status \
-                 ORDER BY COUNT(*) DESC",
-            )?;
-            let by_task_status: Vec<(String, u64)> = stmt
-                .query_map([], |row| {
-                    let status: String = row.get(0)?;
-                    let count: i64 = row.get(1)?;
-                    Ok((status, count as u64))
-                })?
-                .filter_map(|r| r.ok())
-                .collect();
-
-            Ok(EventStats {
-                total_rows: total_rows as u64,
-                earliest,
-                latest,
-                by_task_status,
-            })
-        })
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    Ok(stats)
+    retention::event_stats(db).await
 }
 
 /// Archive events eligible for cleanup to JSONL files, then delete them.
 ///
 /// Events are written to `{archive_dir}/{task_id}/{date}.jsonl` with one JSON
 /// object per line. Returns the number of events archived and deleted.
+///
+/// Selection and deletion are two calls rather than one, and the files are
+/// written between them. That ordering is deliberate: a crash after the write
+/// leaves the events still in the table, so the next run archives them again —
+/// duplicate lines in an append-only file, which a reader can dedupe. The other
+/// order would lose them.
 pub async fn archive_events(
     db: &AsyncDatabase,
     archive_dir: &Path,
     retention_days: u32,
     batch_limit: u32,
 ) -> Result<u64> {
-    let dir = archive_dir.to_path_buf();
-    let days = retention_days;
-    let limit = batch_limit;
-    let archived: u64 = db
-        .writer()
-        .call(move |conn| {
-            // Select events to archive
-            let sql = format!(
-                "SELECT events.rowid, events.task_id, events.task_item_id, \
-                        events.event_type, events.payload_json, events.created_at, \
-                        events.step, events.step_scope, events.cycle \
-                 FROM events \
-                 INNER JOIN tasks ON events.task_id = tasks.id \
-                 WHERE events.created_at < datetime('now', '-{days} days') \
-                   AND tasks.status IN ({TERMINAL_STATUSES}) \
-                 LIMIT {limit}"
-            );
-            let mut stmt = conn.prepare(&sql)?;
-
-            struct ArchiveRow {
-                rowid: i64,
-                task_id: String,
-                task_item_id: Option<String>,
-                event_type: String,
-                payload_json: String,
-                created_at: String,
-                step: Option<String>,
-                step_scope: Option<String>,
-                cycle: Option<i64>,
-            }
-
-            let rows: Vec<ArchiveRow> = stmt
-                .query_map([], |row| {
-                    Ok(ArchiveRow {
-                        rowid: row.get(0)?,
-                        task_id: row.get(1)?,
-                        task_item_id: row.get(2)?,
-                        event_type: row.get(3)?,
-                        payload_json: row.get(4)?,
-                        created_at: row.get(5)?,
-                        step: row.get(6)?,
-                        step_scope: row.get(7)?,
-                        cycle: row.get(8)?,
-                    })
-                })?
-                .filter_map(|r| r.ok())
-                .collect();
-
-            if rows.is_empty() {
-                return Ok(0u64);
-            }
-
-            // Group by task_id and write JSONL
-            use std::collections::HashMap;
-            use std::io::Write;
-            let mut grouped: HashMap<String, Vec<String>> = HashMap::new();
-            let mut rowids = Vec::with_capacity(rows.len());
-            for row in &rows {
-                let (
-                    rowid,
-                    task_id,
-                    task_item_id,
-                    event_type,
-                    payload_json,
-                    created_at,
-                    step,
-                    step_scope,
-                    cycle,
-                ) = (
-                    &row.rowid,
-                    &row.task_id,
-                    &row.task_item_id,
-                    &row.event_type,
-                    &row.payload_json,
-                    &row.created_at,
-                    &row.step,
-                    &row.step_scope,
-                    &row.cycle,
-                );
-                rowids.push(*rowid);
-                // Extract date from created_at (first 10 chars: YYYY-MM-DD)
-                let date = if created_at.len() >= 10 {
-                    &created_at[..10]
-                } else {
-                    created_at.as_str()
-                };
-                let line = serde_json::json!({
-                    "task_id": task_id,
-                    "task_item_id": task_item_id,
-                    "event_type": event_type,
-                    "payload_json": payload_json,
-                    "created_at": created_at,
-                    "step": step,
-                    "step_scope": step_scope,
-                    "cycle": cycle,
-                });
-                let key = format!("{task_id}/{date}");
-                grouped.entry(key).or_default().push(line.to_string());
-            }
-            for (key, lines) in &grouped {
-                let path = dir.join(format!("{key}.jsonl"));
-                if let Some(parent) = path.parent() {
-                    std::fs::create_dir_all(parent)
-                        .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
-                }
-                let mut f = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(&path)
-                    .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
-                for line in lines {
-                    writeln!(f, "{line}")
-                        .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
-                }
-            }
-
-            // Delete archived events by rowid
-            let placeholders: Vec<String> = rowids.iter().map(|id| id.to_string()).collect();
-            let delete_sql = format!(
-                "DELETE FROM events WHERE rowid IN ({})",
-                placeholders.join(",")
-            );
-            conn.execute(&delete_sql, [])?;
-
-            Ok(rows.len() as u64)
-        })
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    if archived > 0 {
-        info!(
-            archived,
-            retention_days, "event cleanup: archived and deleted events"
-        );
+    let rows = retention::select_archivable_events(db, retention_days, batch_limit).await?;
+    if rows.is_empty() {
+        return Ok(0);
     }
+    let rowids: Vec<i64> = rows.iter().map(|row| row.rowid).collect();
+    write_archive_files(archive_dir, &rows)?;
+    retention::delete_events_by_rowid(db, rowids).await?;
+    let archived = rows.len() as u64;
+    info!(
+        archived,
+        retention_days, "event cleanup: archived and deleted events"
+    );
     Ok(archived)
+}
+
+/// Groups archivable events by `{task_id}/{date}` and appends one JSON line per
+/// event to the matching file.
+fn write_archive_files(archive_dir: &Path, rows: &[retention::ArchivableEvent]) -> Result<()> {
+    use std::collections::BTreeMap;
+    use std::io::Write;
+
+    let mut grouped: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for row in rows {
+        // The date is the first 10 characters of an RFC 3339 timestamp. A
+        // shorter string is not one, and grouping it whole is better than
+        // slicing into a character boundary that may not exist.
+        let date = if row.created_at.len() >= 10 {
+            &row.created_at[..10]
+        } else {
+            row.created_at.as_str()
+        };
+        let line = serde_json::json!({
+            "task_id": row.task_id,
+            "task_item_id": row.task_item_id,
+            "event_type": row.event_type,
+            "payload_json": row.payload_json,
+            "created_at": row.created_at,
+            "step": row.step,
+            "step_scope": row.step_scope,
+            "cycle": row.cycle,
+        });
+        grouped
+            .entry(format!("{}/{date}", row.task_id))
+            .or_default()
+            .push(line.to_string());
+    }
+
+    for (key, lines) in &grouped {
+        let path = archive_dir.join(format!("{key}.jsonl"));
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("create event archive directory {}", parent.display()))?;
+        }
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .with_context(|| format!("open event archive {}", path.display()))?;
+        for line in lines {
+            writeln!(file, "{line}")
+                .with_context(|| format!("append to event archive {}", path.display()))?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

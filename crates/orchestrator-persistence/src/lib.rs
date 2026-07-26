@@ -34,6 +34,8 @@ pub mod db_maintenance;
 pub mod db_write;
 /// Row and read-model shapes the repositories produce and consume.
 pub mod dto;
+/// Retention queries over the `events` table: age, volume and rows.
+pub mod event_retention;
 /// Row access for the `events` table.
 pub mod events;
 /// Public schema migration model and execution helpers.
