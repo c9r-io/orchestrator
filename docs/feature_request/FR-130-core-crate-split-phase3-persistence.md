@@ -10,7 +10,8 @@
 
 **2026-07-25 重写**：原需求 2（crate 提取）实际包含三件粒度、风险与前置条件都不同的事，
 原需求 4 经实测近乎空转。本文档按此重新切分，并将"非 core crate 直接依赖 `rusqlite`"
-一轴移交 [FR-136](FR-136-persistence-dependency-chokepoint-decision.md)。
+一轴移交 FR-136，该 FR 已闭环，结论由
+[DD-147](../design_doc/orchestrator/147-persistence-dependency-chokepoint.md) 承载。
 
 ## 背景
 
@@ -71,8 +72,11 @@ crate 清单。`scripts/qa/core-boundary.rb` 以**精确相等**比对，`--emit
    `200 / 37`——不变才说明只修了缺陷、没换口径；一个逐行正则的"显然修法"会把
    `capturesOrJsonPath` 从 53 推到 60，正是靠这条判据挡下的。尺子现已可信。
 
-2. **[FR-136](FR-136-persistence-dependency-chokepoint-decision.md) — 依赖收口决策。**
-   除 core 外另有 4 个生产 crate、23 个文件、75 处直接引用 `rusqlite`。若不先决定新 crate
+2. **FR-136 — 依赖收口决策（已闭环，见
+   [DD-147](../design_doc/orchestrator/147-persistence-dependency-chokepoint.md)）。**
+   除 core 外另有 4 个生产 crate、15 个文件、55 处直接引用 `rusqlite`（本条原写作
+   23 个文件 75 处，那是把测试代码计入的 `grep` 结果；治理期已按 DD-142 的口径改正）。
+   若不先决定新 crate
    是收口点还是共享底座，提取最可能的结局是 `orchestrator-persistence` 被 5 个 crate 共同
    依赖，驱动传播面一个字节没减少，只是多了一层目录结构。
 
