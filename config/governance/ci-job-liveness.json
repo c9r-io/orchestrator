@@ -8,68 +8,63 @@
       "jobs": {
         "async-lock-governance": {
           "conclusion": "success",
-          "runId": "30182768742",
-          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
+          "runId": "30183916749",
+          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
         },
         "fmt": {
           "conclusion": "success",
-          "runId": "30182768742",
-          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
+          "runId": "30183916749",
+          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
         },
         "clippy": {
           "conclusion": "success",
-          "runId": "30182768742",
-          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
+          "runId": "30183916749",
+          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
         },
         "test": {
           "conclusion": "success",
-          "runId": "30182768742",
-          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
+          "runId": "30183916749",
+          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
         },
         "coordination-strangler": {
           "conclusion": "success",
-          "runId": "30182768742",
-          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
+          "runId": "30183916749",
+          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
         },
         "governance": {
-          "conclusion": "failure",
-          "runId": "30182768742",
-          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7",
-          "knownFailing": {
-            "reference": "FR-135",
-            "reason": "Failed at c9ada747 on three things this commit repairs: qa-doc-lint rejecting QA-184 for a sixth scenario, the doc lifecycle index not yet regenerated for DD-146/QA-184, and its own liveness record being stale because this FR changed ci.yml. A job cannot record its own recovery in one pass — the run that would record success is the run this record blocks — so the annotation is the designed second step and is removed by the next refresh.",
-            "expectedBy": "2026-07-27"
-          }
+          "conclusion": "success",
+          "runId": "30183916749",
+          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
         },
         "ci-environment-parity": {
           "conclusion": "success",
-          "runId": "30182768742",
-          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
+          "runId": "30183916749",
+          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
         },
         "coverage-policy-fixtures": {
           "conclusion": "success",
-          "runId": "30182768742",
-          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
+          "runId": "30183916749",
+          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
         },
         "slack-certification-recorded": {
           "conclusion": "success",
-          "runId": "30182768742",
-          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
+          "runId": "30183916749",
+          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
         },
         "boundary-coverage": {
           "conclusion": "success",
-          "runId": "30182768742",
-          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
+          "runId": "30183916749",
+          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
         },
         "miri": {
           "conclusion": "success",
-          "runId": "30182768742",
-          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
+          "runId": "30183916749",
+          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
         },
         "cross-compile": {
           "conclusion": "success",
-          "runId": "30182768742",
-          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
+          "runId": "30183916749",
+          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
         }
       }
     },
@@ -90,8 +85,8 @@
       "jobs": {
         "cargo-audit": {
           "conclusion": "success",
-          "runId": "30182768731",
-          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
+          "runId": "30183916751",
+          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
         }
       }
     },
