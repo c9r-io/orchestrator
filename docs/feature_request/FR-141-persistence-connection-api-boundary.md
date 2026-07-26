@@ -79,6 +79,16 @@ API，每次都拿到一个真实的驱动连接。条件 2 能抓住它们**用
 - `flatten_err(err: tokio_rusqlite::Error) -> anyhow::Error`（`async_database.rs:71`）同属
   公开面上的驱动类型，一并处置。
 
+- **处置对象由需求 4 的解析器给出，不由这里的清单给出。** 本 FR 初稿只列了上面三项，
+  而实际还有 `db::open_conn` 与 `sqlite::open_conn`（各返回 `rusqlite::Connection`，两个模块
+  都是 `pub mod`），共 **5** 项。漏掉它们的原因正是这个仓库反复消灭的那一类：初稿用
+  `-> .*rusqlite::` 检索签名，而这两处写的是 `Connection`——`use rusqlite::Connection` 之后
+  的裸类型名。**枚举式清单只守得住写它时已知的东西**，所以实施顺序是先建需求 4 的断言、
+  由它列出全集，再按全集处置；上面五项是当前已知值，不是范围定义。
+  （`core/src/persistence/repository/config.rs` 的 3 处残余中，`open_conn` 与递给
+  `orchestrator-security` 的 `&rusqlite::Connection` 正属此列——FR-130 Phase B 把它连同
+  `attention.rs`、`process_metrics.rs` 一并移交本 FR。）
+
 ### 2. 调用点迁移，按 crate 分批
 
 - 165 个调用点分批迁移：**core（126）、daemon（27）、orchestrator-scheduler（12）**。
