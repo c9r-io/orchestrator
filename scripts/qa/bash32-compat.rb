@@ -146,18 +146,26 @@ module Bash32Compat
     findings
   end
 
+  # A builtin only matters where a builtin can run. Without this, the rules
+  # below match the word wherever it appears — in a path like
+  # `$WORK/hazard/mapfile.sh`, in a space-separated list of rule names, in any
+  # string that happens to contain it. Those are mentions, and the subject here
+  # is invocation. Expansion rules do not use it, because an expansion is not a
+  # command.
+  COMMAND_POSITION = /(?:\A|[;&|(){}]|\b(?:if|then|else|elif|do|while|until|not)\b)\s*/.freeze
+
   # Builtins and expansions that bash 3.2 does not have at all. Every entry was
   # executed against /bin/bash 3.2 and the recorded failure is what it produced.
   BUILTIN_RULES = [
     {
       rule: "associative-array",
-      pattern: /(?<![\w-])(?:declare|local|typeset)\s+-[A-Za-z]*A[A-Za-z]*\s/,
+      pattern: /#{COMMAND_POSITION}(?:declare|local|typeset)\s+-[A-Za-z]*A[A-Za-z]*\s/,
       detail: "bash 3.2 has no associative arrays: `declare: -A: invalid option`",
       fix: "use a `case` lookup function or parallel indexed arrays"
     },
     {
       rule: "mapfile",
-      pattern: /(?<![\w-])(?:mapfile|readarray)(?![\w-])/,
+      pattern: /#{COMMAND_POSITION}(?:mapfile|readarray)(?![\w-])/,
       detail: "bash 3.2 has no `mapfile`/`readarray`: `mapfile: command not found`",
       fix: "use `while IFS= read -r line; do arr+=(\"$line\"); done < <(...)`"
     },
@@ -169,19 +177,19 @@ module Bash32Compat
     },
     {
       rule: "nameref",
-      pattern: /(?<![\w-])(?:declare|local|typeset)\s+-[A-Za-z]*n[A-Za-z]*\s/,
+      pattern: /#{COMMAND_POSITION}(?:declare|local|typeset)\s+-[A-Za-z]*n[A-Za-z]*\s/,
       detail: "bash 3.2 has no name references: `local: -n: invalid option`",
       fix: "pass the value, or use `eval` with an explicit guard"
     },
     {
       rule: "wait-n",
-      pattern: /(?<![\w-])wait\s+-n(?![\w-])/,
+      pattern: /#{COMMAND_POSITION}wait\s+-n(?![\w-])/,
       detail: "bash 3.2 has no `wait -n`: `wait: -n: invalid option`",
       fix: "wait on explicit PIDs"
     },
     {
       rule: "globstar",
-      pattern: /(?<![\w-])shopt\s+(?:-[A-Za-z]+\s+)*globstar(?![\w-])/,
+      pattern: /#{COMMAND_POSITION}shopt\s+(?:-[A-Za-z]+\s+)*globstar(?![\w-])/,
       detail: "bash 3.2 has no `globstar`: `shopt: globstar: invalid shell option name`",
       fix: "use `find` or `git ls-files`"
     }
