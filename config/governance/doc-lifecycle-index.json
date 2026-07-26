@@ -302,7 +302,8 @@
     "docs/design_doc/orchestrator/147-persistence-dependency-chokepoint.md": {
       "lifecycle": "active",
       "relatedFr": [
-        "FR-136"
+        "FR-136",
+        "FR-139"
       ]
     },
     "docs/design_doc/orchestrator/15-task-trace.md": {
@@ -1478,7 +1479,8 @@
     "docs/qa/orchestrator/185-persistence-dependency-chokepoint.md": {
       "lifecycle": "active",
       "relatedFr": [
-        "FR-136"
+        "FR-136",
+        "FR-139"
       ]
     },
     "docs/qa/orchestrator/19-scheduler-repository-refactor-regression.md": {
@@ -2473,6 +2475,10 @@
       "docs/qa/orchestrator/184-bash32-compatibility.md"
     ],
     "FR-136": [
+      "docs/design_doc/orchestrator/147-persistence-dependency-chokepoint.md",
+      "docs/qa/orchestrator/185-persistence-dependency-chokepoint.md"
+    ],
+    "FR-139": [
       "docs/design_doc/orchestrator/147-persistence-dependency-chokepoint.md",
       "docs/qa/orchestrator/185-persistence-dependency-chokepoint.md"
     ]

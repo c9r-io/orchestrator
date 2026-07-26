@@ -1,13 +1,13 @@
 ---
 lifecycle: active
-related_fr: FR-136
+related_fr: FR-136, FR-139
 ---
 
 # DD-147: The Persistence Dependency Chokepoint
 
 **Module**: Architecture / Governance
-**Status**: Implemented (FR-136)
-**Related Plan**: FR-136
+**Status**: Implemented (FR-136), corrected (FR-139)
+**Related Plan**: FR-136, FR-139
 **Related QA**: `docs/qa/orchestrator/185-persistence-dependency-chokepoint.md`
 **Related**: DD-142 (core boundary freeze), DD-139 (QA gate enforcement surface), DD-145 (gate surface execution truth)
 **Created**: 2026-07-26
@@ -65,7 +65,7 @@ to a persistence layer sitting above it. It cannot, without inverting that edge.
 It has no workspace dependencies at all. `GatewayStore::open`
 (`crates/slack-gateway/src/store.rs:164`) opens the path from
 `SLACK_GATEWAY_DATABASE`, which `config.rs:23` documents as the "Gateway-owned
-SQLite database path". Its 55 SQL statements never touch
+SQLite database path". Its 56 SQL statements never touch
 `agent_orchestrator.db`. Routing it through a shared persistence crate would
 *create* coupling that does not exist — the exact outcome this FR exists to
 avoid, arrived at from the other direction.
@@ -117,7 +117,7 @@ rejected because it leaves `task_state.rs` in place.
 ### `exempt` is not `permitted`
 
 `orchestrator-security` keeps its connection, and its residual is frozen at
-6 driver references and 22 SQL statements across 4 files. Inverting a dependency
+6 driver references and 23 SQL statements across 4 files. Inverting a dependency
 edge to recover six references is not proportionate; leaving the growth
 unwatched is not acceptable either. `separate-database` is the same shape for a
 different reason: slack-gateway is frozen so that it cannot quietly begin opening
@@ -141,9 +141,12 @@ So the gate asserts two independent things, and neither is alone:
   `[dependencies]` and `[dev-dependencies]` are different facts. Both
   `rusqlite` and `tokio-rusqlite` count; freezing only the former leaves the
   async wrapper as an unguarded second door.
-- **Condition 2 — who may use.** For every non-core member file, the per-file
-  count of SQL statement literals and driver references is frozen by **exact
-  equality in both directions**.
+- **Condition 2 — who may use.** For every non-core member file — its `src` tree
+  and its Cargo build script, because condition 1 treats `[build-dependencies]`
+  as a production declaration and the two halves have to mean the same thing by
+  "production" — the per-file count of SQL statement literals and driver
+  references is frozen by **exact equality in both directions**. The roots the
+  walk visits are themselves frozen in the ledger as `scanRoots`.
 
 Exact equality rather than a monotonic ratchet is FR-128's decision, inherited
 deliberately. Under a monotonic rule a decrease passes silently, and here a
@@ -158,10 +161,13 @@ off and the declaration itself starts failing.
 ### Requirement 1 stated as an assertion
 
 Every file the scan finds carries a reviewed `category`, and a file without one
-is `unclassified`, which fails. The classified driver references are then summed
-and required to equal the scanned total. A file added to the tree cannot be
-absorbed as "already reviewed", and the coverage claim is derived rather than
-asserted in prose.
+is `unclassified`, which fails. A file added to the tree cannot be absorbed as
+"already reviewed": it arrives uncategorised and fails here, and it is absent
+from the ledger's `references` and fails condition 2's exact equality as well.
+
+FR-136 also summed the categorised references and required the total to equal
+the scanned total. That branch could not fail — see [Corrections](#corrections-fr-139)
+— and FR-139 removed it.
 
 The four categories are what the code shows, not the four FR-136 proposed. "Pure
 data access" and "type penetration" are not disjoint in this codebase, and "test
@@ -261,7 +267,90 @@ is the exclusion walk on its own. `rust_source_files` still hardcodes `core/src`
 plus `crates/*/src` — the right scope for the two ledgers that count core, and
 the wrong one for a question about the workspace. This gate derives its roots
 from the member list and calls the shared walk, so the discovery is its own and
-only the counting is shared.
+only the counting is shared. FR-139 taught that walk to accept a single file as
+a root as well as a directory, which is what a build script is; the alternative
+was for this gate to restate the exclusion rules locally, and two statements of
+one scope is the condition the library exists to prevent.
+
+## Corrections (FR-139)
+
+A post-closure audit of this gate found three defects. All three are fixed; the
+first two had falsified statements in this document, which is why they are
+recorded here rather than only in the changelog.
+
+### The sum branch was the scan compared to itself
+
+`classification_errors` summed `references`' driver counts and required the
+result to equal `totals["rusqlite"]`. But `totals["rusqlite"]` *is* that sum:
+same reduction, same hash, no rewrite in between. No input could make it fail —
+a file with no category was counted into the total and then found equal to it.
+It was confirmed empirically on a `git archive` copy, with the `unclassified`
+branch and the reference freeze disabled so the sum branch spoke alone: a
+file carrying one driver reference and no category reported `PASS`.
+
+This document had stated it as a live guarantee ("the categorised references
+sum to the scan"), and so had QA-185. Coverage was never actually missing —
+`reference_errors` reports an unledgered file by exact equality — but the
+document claimed an enforcement the code did not provide, which is worse than
+claiming nothing. The branch is deleted, and `test-persistence-dependency.sh`
+case 16 is what the surviving `unclassified` branch now owes: an input that
+makes it fail, isolated so no other assertion fires.
+
+### `PRAGMA` was not a SQL verb
+
+`SQL_STATEMENT` matched nine verbs and not `PRAGMA`. The narrow, uppercase,
+quote-anchored shape is correct and was kept — remeasured for FR-139, a
+case-insensitive match reads 20 help strings in `crates/cli/src/commands/guide.rs`
+as SQL. Only a real verb was missing. Adding `PRAGMA` and nothing else moves the
+ledger from 112 to 114 statements, with the delta being exactly
+`orchestrator-security/src/lib.rs` +1 and `slack-gateway/src/store.rs` +1 and no
+other file moving at all. That two-sided figure is the evidence, not the gate
+turning green: any other number would mean the match was relaxed rather than
+repaired.
+
+`orchestrator-security/src/lib.rs:104` is the pointed case. It is an `exempt`
+crate running `PRAGMA foreign_keys = ON` on a connection, precisely the shape
+condition 2 exists to see, and its ledger entry recorded one statement where
+there are two. It matters for FR-130 Phase B, whose per-file disposition is
+"SQL migrated out / domain logic stays / kept with a reason" read off these
+counts: a file judged migrated while still holding a `PRAGMA` read as clean.
+
+`VACUUM`, `BEGIN`, `COMMIT` and `WITH` were measured the same way and rejected.
+Every hit on this tree is prose or a log message — `daemon/src/server/system.rs:140`
+and `integration-tests/src/lib.rs:1600` both log `"VACUUM"` — so they would buy
+false positives and no statements. Case 14 asserts the non-counting direction at
+the same strength as case 12 asserts the counting one.
+
+The anchor also now steps over a leading escape sequence, so
+`"\n            SELECT …"` counts. There are zero such literals on this tree;
+this closes a free bypass before it is used rather than repairing an undercount,
+and the total is 114 with or without it.
+
+### The scan was narrower than the scope prose
+
+`SCOPE` said "its non-test Rust source" and the walk read only `<member>/src`.
+Five members ship a Cargo build script — `cli`, `daemon`, `gui`,
+`orchestrator-scheduler`, `proto` — and `daemon` and `orchestrator-scheduler`
+are the two `forbidden` crates. Meanwhile condition 1 classifies
+`[build-dependencies]` as a **production** declaration. So the gate governed who
+may declare a build-time driver dependency while refusing to open the only file
+that could consume one.
+
+Both directions were available: widen the scan, or narrow the prose and accept
+the gap. Widening is the one that leaves the two conditions agreeing about what
+"production" means, and it costs nothing measurable — all five build scripts hold
+zero driver references and zero SQL, so the `references` section is unchanged and
+FR-139's `+2` is entirely `PRAGMA`'s. The build script's path is read from the
+manifest's `build` key rather than assumed, so a member that renames it does not
+drop out of the scan silently.
+
+The scope check itself was the third layer of the same problem: `expected["scope"]
+!= SCOPE` compares the ledger's copy of the prose to the constant — prose against
+prose. It agreed throughout, because both said the same wrong thing. The ledger
+now also carries `scanRoots`, the roots the walk actually visited, frozen and
+compared in both directions. A reviewer reads `crates/daemon/build.rs` in the
+reviewed state, and narrowing the walk produces a diff rather than a quietly
+smaller number. Case 17 is its negative fixture.
 
 ## Known limits
 
@@ -276,12 +365,34 @@ only the counting is shared.
 - The `exempt` and `separate-database` roles are frozen at their current
   residual, not driven to zero. That is the decision, not an omission.
 - `category` is a reviewed judgement and nothing verifies it. The gate asserts
-  that every scanned file *has* one and that the categorised references sum to
-  the scan, so a file cannot arrive unclassified — but a file miscategorised as
-  `borrowed-connection-raw-sql` when it opens its own connection would pass.
-  Nothing depends on the category: the rule is driven by `role`, which is
-  per crate. The categories are the extraction work-list, and their correctness
-  rests on review, as `role` and the decision prose do.
+  that every scanned file *has* one, so a file cannot arrive unclassified — but a
+  file miscategorised as `borrowed-connection-raw-sql` when it opens its own
+  connection would pass. Nothing depends on the category: the rule is driven by
+  `role`, which is per crate. The categories are the extraction work-list, and
+  their correctness rests on review, as `role` and the decision prose do.
+- **A production module named `test*.rs` is invisible to condition 2.** The
+  shared walk (`scripts/lib/rust_source.rb:56`) excludes any file whose basename
+  matches `test*.rs`, by filename rather than by `cfg(test)`. That rule is right
+  for the tree it was written against — the files it drops in `core` are
+  `task_repository/tests/*` and similar real test code — but it decides on the
+  name, so a production module can be hidden behind one.
+  `crates/orchestrator-runner/src/test_env.rs` is the live instance: `lib.rs:23`
+  declares it `pub(crate) mod test_env;` with no `cfg`, so it compiles into
+  production and the scan never opens it. It holds zero driver references and
+  zero SQL today. FR-139 recorded this rather than fixing it because the
+  exclusion is shared with `core-boundary.rb`, whose reviewed `200 / 37` is
+  derived from it; changing the rule moves that ledger too, and that is a
+  separate reviewed change, not a side effect of this one.
+- The `scope` string is compared against the ledger's copy of itself. That
+  catches a ledger left behind by an edit to the constant, and nothing more —
+  both sides are prose, so a constant that has stopped describing the scan reads
+  as agreement, which is exactly what it did until FR-139. `scanRoots` is the
+  check with a real subject; the prose check is retained for what it does, not
+  as evidence about the scan.
+- The build script is found at the path the manifest declares (`build = "…"`,
+  defaulting to `build.rs`). Cargo's own autodiscovery has further forms; a
+  member using one of them would be scanned for its `src` tree only, and the
+  `scanRoots` diff is what would show it.
 - `OUTCOMES` in the `governance` job is a hand-written enumeration that nothing
   guards, so this gate's ability to fail the build rests on a line a future
   author has to remember to add for their own gate. That defect is FR-137's, not

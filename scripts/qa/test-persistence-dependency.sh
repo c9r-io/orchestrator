@@ -4,11 +4,11 @@
 #
 # Verifies that scripts/qa/persistence-dependency.rb actually holds the decision
 # rather than reporting on it. A gate observed only passing has not been observed
-# doing anything, so every case below applies a mutation it must reject — and
-# case 4 applies one it must NOT reject, because a rule that fails on every
-# change is a ratchet, not a policy.
+# doing anything, so every case below applies a mutation it must reject — except
+# cases 4 and 14, which apply ones it must NOT reject, because a rule that fails
+# on every change is a ratchet, not a policy.
 #
-# The two cases that carry the argument:
+# The cases that carry the argument:
 #
 #   Case 4  an exempt crate adds a driver declaration and the gate stays green.
 #           Without it, "the gate fails when I touch a manifest" is indistinguishable
@@ -17,6 +17,17 @@
 #           This is the state a manifest-only gate reports as clean, and it is not
 #           hypothetical: crates/orchestrator-security/src/secret_store_crypto.rs
 #           runs four production SQL statements with zero driver references today.
+#   Case 14 log prose must NOT be counted as SQL, asserted in the same file a real
+#           statement then proves is scanned — so the green is about the prose and
+#           not about the location. Cases 12 and 13 make the match stricter; this
+#           is what stops the repair from becoming a relaxation.
+#   Case 15 a forbidden crate's build script runs SQL. Condition 1 already treats
+#           [build-dependencies] as production; until FR-139 condition 2 never
+#           opened the file that would use it.
+#
+# Cases 12 to 17 are FR-139's. FR-136 shipped this suite with an assertion no
+# input could fail (see case 16) and a scan narrower than its own scope prose
+# (case 17).
 #
 # Safety: every mutation happens inside a temporary copy under $TMPDIR. The
 # working tree is never written, no daemon is started, no database is touched,
@@ -56,9 +67,13 @@ fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 digest() { ruby -rdigest -e 'print Digest::SHA256.file(ARGV[0]).hexdigest' "$1"; }
 
 # A case copies what the gate reads: the root manifest (its member list is the
-# discovery source), core/src, every member's manifest and sources, the ledger,
-# the gate and its libraries. Copying the repository wholesale would drag in
-# target/ and cost gigabytes per case.
+# discovery source), core/src, every member's manifest, sources and build
+# script, the ledger, the gate and its libraries. Copying the repository
+# wholesale would drag in target/ and cost gigabytes per case.
+#
+# The build script is copied because FR-139 widened the scan to include it. Case
+# 15 asserts a build script is read; without the copy that case would exercise a
+# root the gate reports as missing, and would pass for the wrong reason.
 new_case() {
   local dir crate name
   dir="$WORK/$1"
@@ -70,8 +85,9 @@ new_case() {
   for crate in "$REPO_ROOT"/crates/*/; do
     name="$(basename "$crate")"
     mkdir -p "$dir/crates/$name"
-    [[ -f "$crate/Cargo.toml" ]] && cp "$crate/Cargo.toml" "$dir/crates/$name/Cargo.toml"
-    [[ -d "$crate/src" ]] && cp -R "$crate/src" "$dir/crates/$name/src"
+    if [[ -f "$crate/Cargo.toml" ]]; then cp "$crate/Cargo.toml" "$dir/crates/$name/Cargo.toml"; fi
+    if [[ -d "$crate/src" ]]; then cp -R "$crate/src" "$dir/crates/$name/src"; fi
+    if [[ -f "$crate/build.rs" ]]; then cp "$crate/build.rs" "$dir/crates/$name/build.rs"; fi
   done
   cp "$REPO_ROOT/$LEDGER" "$dir/$LEDGER"
   cp "$REPO_ROOT/$GATE" "$dir/$GATE"
@@ -407,6 +423,221 @@ if [[ "$STATUS" -ne 0 ]] && grep -q "ledger scope prose does not match" "$WORK/c
 else
   fail "a drifted scope prose did not fail the gate (exit $STATUS)"
   cat "$WORK/case11.err" >&2
+fi
+echo ""
+
+# --- Cases 12 to 17: FR-139 ---------------------------------------------------
+# The scan's ruler and its reach. Cases 12 to 14 are about what counts as a SQL
+# statement, 15 and 17 about what the scan reads, 16 about the one classification
+# assertion that survived FR-139.
+#
+# Cases 12 to 14 all mutate a file that is ALREADY in the ledger with a known
+# count. A new file would trip reference_errors and the unclassified branch at
+# once, and the case could not say which assertion it exercised. Mutating a
+# ledgered file leaves exactly one diagnostic: `~ <file> sql N -> N+1`.
+PROBE_FILE="crates/daemon/src/server/attention.rs"
+PROBE_SQL_BEFORE=1
+
+# --- Case 12: PRAGMA is a SQL statement --------------------------------------
+# The verb FR-139 added. It matters because PRAGMA is how a crate configures the
+# connection it was handed, which is condition 2's whole subject: before this,
+# crates/orchestrator-security/src/lib.rs ran `PRAGMA foreign_keys = ON` on the
+# orchestrator database and the ledger recorded that file as running one
+# statement when it runs two.
+echo "Case 12: a PRAGMA statement is counted"
+DIR="$(new_case pragma-counted)"
+cat >> "$DIR/$PROBE_FILE" <<'RUST'
+
+pub fn fr139_pragma_probe(conn: &Connection) -> anyhow::Result<()> {
+    conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+    Ok(())
+}
+RUST
+run_gate "$DIR" case12
+if [[ "$STATUS" -ne 0 ]] &&
+  grep -q "~ $PROBE_FILE sql $PROBE_SQL_BEFORE -> $((PROBE_SQL_BEFORE + 1))" "$WORK/case12.err"; then
+  pass "a PRAGMA statement moves the per-file count and fails the gate"
+else
+  fail "a PRAGMA statement was not counted (exit $STATUS)"
+  cat "$WORK/case12.err" >&2
+fi
+echo ""
+
+# --- Case 13: a literal opening with an escape sequence ----------------------
+# `"\n            SELECT …"` is `"`, backslash, `n` in the source text. An anchor
+# of `"\s*` cannot step over the backslash, so this shape was a free bypass:
+# reformat a statement across lines and it stops being counted. There are zero
+# such literals on this tree, so the fixture is the only place the shape exists —
+# which is the point of writing it before one appears rather than after.
+echo "Case 13: a SQL literal opening with an escaped newline is counted"
+DIR="$(new_case escaped-newline)"
+cat >> "$DIR/$PROBE_FILE" <<'RUST'
+
+pub fn fr139_escape_probe() -> &'static str {
+    "\n            SELECT id FROM tasks WHERE id = ?1"
+}
+RUST
+run_gate "$DIR" case13
+if [[ "$STATUS" -ne 0 ]] &&
+  grep -q "~ $PROBE_FILE sql $PROBE_SQL_BEFORE -> $((PROBE_SQL_BEFORE + 1))" "$WORK/case13.err"; then
+  pass "a statement hidden behind a leading escape sequence is counted"
+else
+  fail "an escaped-newline SQL literal was not counted (exit $STATUS)"
+  cat "$WORK/case13.err" >&2
+fi
+echo ""
+
+# --- Case 14: prose is not SQL, and the green is not vacuous -----------------
+# The tempting repair for cases 12 and 13 is to relax the match — drop the
+# uppercase requirement, or add VACUUM/BEGIN/COMMIT. Measured on this tree, a
+# case-insensitive match reads 20 help strings in crates/cli/src/commands/guide.rs
+# as SQL, and every VACUUM hit outside core is a log message. So "must not be
+# counted" is asserted at the same strength as "must be counted".
+#
+# The two halves are one case on purpose. "The gate stayed green after I added
+# prose" is also satisfied by the file never being read at all, which is a state
+# this suite would consider broken. The second half appends one real statement to
+# the SAME file and requires the count to move by exactly one — so the green in
+# the first half is green about the prose, not about the location.
+echo "Case 14: log prose is not counted, and the file it sits in is really scanned"
+DIR="$(new_case prose-not-sql)"
+# The last line is not prose in a string — it is an in-set verb, uppercase, in a
+# comment with no quote before it. That covers the other way this could break:
+# the two fixtures above answer "was the verb set widened", this one answers
+# "was the opening-quote anchor dropped", and neither implies the other.
+cat >> "$DIR/$PROBE_FILE" <<'RUST'
+
+pub fn fr139_prose_probe(count: u64) -> Vec<String> {
+    vec![
+        format!("VACUUM complete: {count}"),
+        "BEGIN the migration once the operator confirms".to_string(),
+        "update the task and create a workspace, then delete the draft".to_string(),
+        "Created index for the guide; DROPPED support is not implied".to_string(),
+    ]
+}
+
+// SELECT, INSERT and DELETE name statements; PRAGMA configures a connection.
+RUST
+run_gate "$DIR" case14a
+if [[ "$STATUS" -eq 0 ]]; then
+  cat >> "$DIR/$PROBE_FILE" <<'RUST'
+
+pub fn fr139_prose_control(conn: &Connection) -> anyhow::Result<()> {
+    conn.execute_batch("PRAGMA journal_mode = WAL;")?;
+    Ok(())
+}
+RUST
+  run_gate "$DIR" case14b
+  if [[ "$STATUS" -ne 0 ]] &&
+    grep -q "~ $PROBE_FILE sql $PROBE_SQL_BEFORE -> $((PROBE_SQL_BEFORE + 1))" "$WORK/case14b.err"; then
+    pass "four prose strings count as zero statements, in a file one real statement proves is scanned"
+  else
+    fail "the control statement did not move the count, so case 14's green proved nothing (exit $STATUS)"
+    cat "$WORK/case14b.err" >&2
+  fi
+else
+  fail "log prose was read as SQL (exit $STATUS); the match has been relaxed"
+  cat "$WORK/case14a.err" >&2
+fi
+echo ""
+
+# --- Case 15: a build script is production source ----------------------------
+# Condition 1 counts [build-dependencies] as a production declaration
+# (persistence-dependency.rb, driver_declarations). Until FR-139 condition 2
+# read only <member>/src, so the gate governed a build-time driver declaration
+# whose only possible consumer it refused to open. Five members ship a build
+# script and two of them — daemon and orchestrator-scheduler — are `forbidden`.
+#
+# The mutation withholds the driver token deliberately, the same choice case 7
+# makes: `conn.execute(sql, [])` needs no rusqlite path, so a token inventory
+# sees nothing and only the per-file SQL residual does.
+echo "Case 15: SQL in a forbidden crate's build script fails"
+DIR="$(new_case build-script)"
+BUILD="$DIR/crates/daemon/build.rs"
+if [[ ! -f "$BUILD" ]]; then
+  fail "the fixture has no build script to mutate; new_case did not copy it"
+elif grep -q 'rusqlite' "$BUILD"; then
+  fail "the build script already names the driver; the fixture would not isolate condition 2"
+else
+  cat >> "$BUILD" <<'RUST'
+
+fn fr139_build_probe(conn: &Connection) {
+    let _ = conn.execute("DELETE FROM tasks", []);
+}
+RUST
+  if grep -q 'rusqlite' "$BUILD"; then
+    fail "the fixture introduced a driver token; it no longer isolates condition 2"
+  fi
+  run_gate "$DIR" case15
+  if [[ "$STATUS" -ne 0 ]] &&
+    grep -q "+ crates/daemon/build.rs has 0 driver reference(s) and 1 SQL statement(s)" "$WORK/case15.err"; then
+    pass "a build script is scanned as production source, with no driver token in it"
+  else
+    fail "SQL in a forbidden crate's build script did not fail the gate (exit $STATUS)"
+    cat "$WORK/case15.err" >&2
+  fi
+fi
+echo ""
+
+# --- Case 16: the classification assertion can fail --------------------------
+# classification_errors used to have a second branch summing the categorised
+# references and requiring the total to equal the scan. Both sides were the same
+# reduction over the same hash, so no input could make it fail; FR-139 deleted
+# it and this case is what the surviving branch owes in its place.
+#
+# The mutation deletes the `category` key rather than setting it to
+# "unclassified". Setting the sentinel is the case the author had in mind; the
+# absent key is the one a real edit produces, and it reaches the branch through
+# the `|| "unclassified"` default instead of through the literal. The counts are
+# left untouched so reference_errors stays silent and the diagnostic is
+# unambiguously this branch's.
+echo "Case 16: a scanned file with no reviewed category fails"
+DIR="$(new_case no-category)"
+ruby -rjson -e '
+path = ARGV[0]
+ledger = JSON.parse(File.read(path))
+target = ARGV[1]
+abort "the fixture target is not in the ledger" unless ledger["references"].key?(target)
+ledger["references"][target].delete("category")
+File.write(path, JSON.pretty_generate(ledger) + "\n")
+' "$DIR/$LEDGER" "crates/daemon/src/server/handoff.rs"
+run_gate "$DIR" case16
+if [[ "$STATUS" -ne 0 ]] &&
+  grep -q "1 file(s) touch persistence with no reviewed category" "$WORK/case16.err" &&
+  grep -q "crates/daemon/src/server/handoff.rs" "$WORK/case16.err" &&
+  ! grep -q "persistence touch points differ" "$WORK/case16.err"; then
+  pass "a file whose category was dropped fails on the classification branch alone"
+else
+  fail "a scanned file with no reviewed category did not fail as expected (exit $STATUS)"
+  cat "$WORK/case16.err" >&2
+fi
+echo ""
+
+# --- Case 17: the reviewed root list is frozen -------------------------------
+# The scope check compares the ledger's prose to the gate's constant — prose to
+# prose. It agreed for the whole of FR-136 while the constant said "its non-test
+# Rust source" and the walk read only <member>/src. scanRoots is the counterpart
+# with a subject: the roots the walk just visited, frozen and compared both ways,
+# so narrowing the scan produces a diff a reviewer reads rather than a smaller
+# number nobody sees.
+echo "Case 17: the reviewed scan-root list is frozen in both directions"
+DIR="$(new_case scan-roots)"
+ruby -rjson -e '
+path = ARGV[0]
+ledger = JSON.parse(File.read(path))
+root = ARGV[1]
+abort "the fixture root is not in scanRoots" unless (ledger["scanRoots"] || []).include?(root)
+ledger["scanRoots"] -= [root]
+File.write(path, JSON.pretty_generate(ledger) + "\n")
+' "$DIR/$LEDGER" "crates/daemon/build.rs"
+run_gate "$DIR" case17
+if [[ "$STATUS" -ne 0 ]] &&
+  grep -q "the roots this gate reads differ from the reviewed ledger" "$WORK/case17.err" &&
+  grep -q "+ crates/daemon/build.rs is scanned and is not in the reviewed root list" "$WORK/case17.err"; then
+  pass "a scan root missing from the reviewed list fails, naming the root"
+else
+  fail "a drifted scan-root list did not fail the gate (exit $STATUS)"
+  cat "$WORK/case17.err" >&2
 fi
 echo ""
 

@@ -1,6 +1,25 @@
 {
-  "schemaVersion": 1,
-  "scope": "every workspace member listed in the root Cargo.toml, its Cargo.toml parsed by dependency section, and its non-test Rust source outside core/src excluding inline cfg(test) modules, files under a tests directory, and files named test*.rs",
+  "schemaVersion": 2,
+  "scope": "every workspace member listed in the root Cargo.toml, its Cargo.toml parsed by dependency section, and its non-test Rust source outside core — its src tree and its Cargo build script — excluding inline cfg(test) modules, files under a tests directory, and files named test*.rs",
+  "scanRoots": [
+    "crates/cli/build.rs",
+    "crates/cli/src",
+    "crates/daemon/build.rs",
+    "crates/daemon/src",
+    "crates/gui/build.rs",
+    "crates/gui/src",
+    "crates/integration-tests/src",
+    "crates/orchestrator-client/src",
+    "crates/orchestrator-collab/src",
+    "crates/orchestrator-config/src",
+    "crates/orchestrator-runner/src",
+    "crates/orchestrator-scheduler/build.rs",
+    "crates/orchestrator-scheduler/src",
+    "crates/orchestrator-security/src",
+    "crates/proto/build.rs",
+    "crates/proto/src",
+    "crates/slack-gateway/src"
+  ],
   "decision": {
     "form": "scoped-layered-chokepoint",
     "database": "agent_orchestrator.db",
@@ -207,7 +226,7 @@
     "crates/orchestrator-security/src/lib.rs": {
       "crate": "crates/orchestrator-security",
       "rusqlite": 2,
-      "sql": 1,
+      "sql": 2,
       "category": "owned-connection"
     },
     "crates/orchestrator-security/src/secret_key_audit.rs": {
@@ -231,7 +250,7 @@
     "crates/slack-gateway/src/store.rs": {
       "crate": "crates/slack-gateway",
       "rusqlite": 10,
-      "sql": 55,
+      "sql": 56,
       "category": "owned-connection"
     }
   },
@@ -239,6 +258,6 @@
     "members": 13,
     "referencedFiles": 16,
     "rusqlite": 55,
-    "sql": 112
+    "sql": 114
   }
 }

@@ -45,16 +45,24 @@ module RustSource
   # crates/ is simply not scanned, silently. FR-136's gate derives its roots from
   # the [workspace] members list and calls this directly, so the discovery is its
   # own and only the counting is shared.
+  #
+  # A root may be a directory or a single file. FR-139 needed the second form:
+  # a Cargo build script is one file at the member root, `Dir[file/**/*]` yields
+  # nothing for it, and a caller working around that would have had to restate
+  # the exclusion rules — which is how two implementations of one scope begin.
+  # Both forms run through the same filter below.
   def rust_files_under(repo_root, roots)
     roots.flat_map do |root|
-      Dir[Pathname.new(root).join("**/*").to_s].each_with_object([]) do |path, collected|
-        pathname = Pathname.new(path)
-        next unless pathname.file?
-        next unless pathname.extname == ".rs"
-        relative = pathname.relative_path_from(repo_root).to_s
+      pathname = Pathname.new(root)
+      candidates = pathname.file? ? [pathname] : Dir[pathname.join("**/*").to_s]
+      candidates.each_with_object([]) do |path, collected|
+        candidate = Pathname.new(path)
+        next unless candidate.file?
+        next unless candidate.extname == ".rs"
+        relative = candidate.relative_path_from(repo_root).to_s
         next if relative.split("/").include?("tests")
-        next if pathname.basename.to_s.match?(/test.*\.rs\z/)
-        collected << pathname
+        next if candidate.basename.to_s.match?(/test.*\.rs\z/)
+        collected << candidate
       end
     end
   end

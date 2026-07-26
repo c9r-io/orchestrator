@@ -43,10 +43,17 @@ require_relative "../lib/ci_env"
 # reviewed 200, and between this ledger's 55 and the 75 FR-136 was drafted from.
 include RustSource
 
+# The prose half of the scan's definition. It is compared against the ledger's
+# copy below, which catches a ledger that stopped following the constant — and
+# nothing more. Prose cannot say whether the constant describes what the code
+# does; FR-139 found it claiming "its non-test Rust source" while the walk read
+# only <member>/src, so five build scripts, two of them in `forbidden` crates,
+# were governed by condition 1 and invisible to condition 2. `scanRoots` in the
+# ledger is what observes the scan; this string is what a reader is owed.
 SCOPE = "every workspace member listed in the root Cargo.toml, its Cargo.toml " \
-  "parsed by dependency section, and its non-test Rust source outside core/src " \
-  "excluding inline cfg(test) modules, files under a tests directory, and files " \
-  "named test*.rs".freeze
+  "parsed by dependency section, and its non-test Rust source outside core — " \
+  "its src tree and its Cargo build script — excluding inline cfg(test) " \
+  "modules, files under a tests directory, and files named test*.rs".freeze
 
 # rusqlite and tokio-rusqlite both carry the driver. Freezing only the former
 # leaves the async wrapper as an unguarded second door.
@@ -57,8 +64,24 @@ DRIVER_KEY = /^\s*((?:tokio-)?rusqlite)\s*=/
 # case-insensitive match reads "update", "create" and "delete" out of ordinary
 # English in ordinary strings — the first draft of this gate found 26 statements
 # in daemon where there are 19, and four in crates/orchestrator-config where
-# there are none.
-SQL_STATEMENT = /"\s*(?:SELECT|INSERT|UPDATE|DELETE|CREATE TABLE|CREATE INDEX|DROP|ALTER|REPLACE INTO)\b/
+# there are none. Measured again for FR-139: relaxing to case-insensitive reads
+# 20 help strings in crates/cli/src/commands/guide.rs as SQL.
+#
+# PRAGMA is the one verb FR-139 added, and the narrow shape is deliberately
+# unchanged around it. It has two real hits and zero false ones —
+# orchestrator-security/src/lib.rs (an `exempt` crate running SQL on a borrowed
+# connection, exactly the shape condition 2 exists for) and
+# slack-gateway/src/store.rs. VACUUM, BEGIN, COMMIT and WITH were measured the
+# same way and rejected: every hit on this tree is a log message or prose
+# (daemon/src/server/system.rs:140 and integration-tests/src/lib.rs:1600 both
+# log "VACUUM"), so adding them would buy false positives and no statements.
+#
+# The anchor crosses a leading escape sequence as well as leading whitespace.
+# `"\n            SELECT …"` is `"`, `\`, `n` in the source text, which `"\s*`
+# cannot step over. There are zero such literals on this tree today, so this is
+# closing a free bypass rather than repairing an undercount — the total is 114
+# with or without the escape branch.
+SQL_STATEMENT = /"(?:\\[nrt]|\s)*(?:SELECT|INSERT|UPDATE|DELETE|CREATE TABLE|CREATE INDEX|DROP|ALTER|REPLACE INTO|PRAGMA)\b/
 
 # What each role permits. `forbidden` is the only role whose current state and
 # target state differ: scheduler and daemon declare the driver today, and the
@@ -136,6 +159,30 @@ def driver_declarations(manifest_path)
   found.transform_values { |names| names.uniq.sort }
 end
 
+# What the scan actually reads for one member: its src tree, and its Cargo build
+# script.
+#
+# The build script is here because condition 1 already counts
+# [build-dependencies] as a *production* declaration (see driver_declarations
+# below). Reading the manifest half of build-time driver use while refusing to
+# read the source half governs a usage the gate can never see: five members ship
+# a build script, and crates/daemon and crates/orchestrator-scheduler — the two
+# `forbidden` crates — are two of them. All five hold zero driver references and
+# zero SQL today, so FR-139 closed a latent hole rather than a live one.
+#
+# The path is read from the manifest rather than assumed, because Cargo lets a
+# package name it (`build = "custom.rs"`), and a member that renamed its build
+# script would otherwise drop out of the scan silently.
+def member_scan_roots(repo_root, member)
+  manifest = repo_root.join(member, "Cargo.toml")
+  script = "build.rs"
+  if manifest.file?
+    declared = File.read(manifest)[/^\s*build\s*=\s*"([^"]+)"/, 1]
+    script = declared if declared
+  end
+  [repo_root.join(member, "src"), repo_root.join(member, script)].select(&:exist?)
+end
+
 # Every non-core member source file that either names the driver or executes SQL.
 # The union matters: the two sets are not the same, and the difference is where
 # a driver-token inventory goes blind.
@@ -144,9 +191,8 @@ end
 # that helper globs crates/*/src, so a member declared anywhere else has its
 # manifest discovered by condition 1 and its source read by nobody. Only the
 # counting is shared; the discovery is this gate's own.
-def member_references(repo_root, members)
-  roots = members.reject { |member| member == "core" }
-  files = rust_files_under(repo_root, roots.map { |member| repo_root.join(member, "src") })
+def member_references(repo_root, scanned_members, roots)
+  files = rust_files_under(repo_root, roots)
 
   files.each_with_object({}) do |path, collected|
     source = scannable_source(path)
@@ -155,7 +201,7 @@ def member_references(repo_root, members)
     next if driver.zero? && sql.zero?
 
     relative = relative_path(repo_root, path)
-    member = roots.select { |root| relative.start_with?("#{root}/") }.max_by(&:length)
+    member = scanned_members.select { |root| relative.start_with?("#{root}/") }.max_by(&:length)
     collected[relative] = { "crate" => member, "rusqlite" => driver, "sql" => sql }
   end.sort.to_h
 end
@@ -180,12 +226,21 @@ def snapshot(repo_root, ledger_path)
   declarations = members.to_h do |member|
     [member, driver_declarations(repo_root.join(member, "Cargo.toml"))]
   end
-  references = member_references(repo_root, members).to_h do |file, entry|
+  scanned_members = members.reject { |member| member == "core" }
+  roots = scanned_members.flat_map { |member| member_scan_roots(repo_root, member) }
+  references = member_references(repo_root, scanned_members, roots).to_h do |file, entry|
     [file, entry.merge("category" => reviewed["categories"][file] || "unclassified")]
   end
   {
-    "schemaVersion" => 1,
+    "schemaVersion" => 2,
     "scope" => SCOPE,
+    # The roots the walk actually visited, as opposed to the roots SCOPE says it
+    # visits. Frozen in the ledger and compared by exact equality in both
+    # directions, so narrowing the walk is a review event with a diff rather
+    # than a silently smaller number. This is the counterpart the scope check
+    # lacked: prose compared to prose cannot fail on a scan that stopped
+    # matching its own description.
+    "scanRoots" => roots.map { |root| relative_path(repo_root, root) }.sort,
     "decision" => reviewed["decision"],
     "roles" => members.to_h { |member| [member, reviewed["roles"][member] || { "role" => "unclassified" }] },
     "declarations" => declarations,
@@ -266,19 +321,23 @@ def reference_errors(expected, actual)
 end
 
 # Requirement 1 stated as an assertion rather than as prose. Every file the scan
-# finds carries a reviewed category, and the category totals add up to the scan
-# total — so a file added to the tree cannot be absorbed as "already reviewed".
+# finds carries a reviewed category, so a file added to the tree cannot be
+# absorbed as "already reviewed" — it arrives as `unclassified` and fails.
+#
+# There used to be a second branch here: sum the categorised references and
+# require the total to equal the scanned total. It could not fail. `references`
+# and `totals["rusqlite"]` are the same reduction over the same hash with no
+# rewrite between them, so the comparison was the scan against itself; a file
+# with no category was counted into the total and then found equal to it. FR-139
+# removed it, because the branch's own acceptance test — produce an input that
+# makes it fail — has no answer. Coverage was never lost: an unledgered file
+# fails on reference_errors' exact equality, and an unreviewed one fails above.
 def classification_errors(snapshot)
   errors = []
   unclassified = snapshot["references"].select { |_, entry| entry["category"] == "unclassified" }
   unless unclassified.empty?
     errors << "  #{unclassified.length} file(s) touch persistence with no reviewed category:\n" +
       unclassified.keys.sort.map { |file| "    #{file}" }.join("\n")
-  end
-  classified = snapshot["references"].values.sum { |entry| entry["rusqlite"] }
-  unless classified == snapshot["totals"]["rusqlite"]
-    errors << "  classified driver references #{classified} do not sum to the scanned " \
-      "total #{snapshot['totals']['rusqlite']}"
   end
   errors
 end
@@ -313,9 +372,30 @@ end
 expected = JSON.parse(File.read(ledger_path))
 errors = []
 
+# Two checks, and the first one alone is what FR-139 found insufficient.
+#
+# The scope check compares the ledger's copy of the prose to the constant. That
+# catches a ledger left behind by an edit to SCOPE and nothing else: both sides
+# are prose, so a constant that has stopped describing the scan reads as
+# agreement. It was agreeing right up until FR-139, while the walk read only
+# <member>/src and the prose said "its non-test Rust source".
+#
+# The scanRoots check compares the ledger's reviewed root list to the roots the
+# scan just walked. That one has a real subject — narrowing the walk changes the
+# list, and a reviewer reading the ledger sees crates/daemon/build.rs in it.
 if expected["scope"] != SCOPE
   errors << "ledger scope prose does not match the scan this gate implements; " \
     "the ledger describes something the gate does not measure"
+end
+
+expected_roots = expected["scanRoots"] || []
+if expected_roots.sort != actual["scanRoots"]
+  detail = []
+  added = actual["scanRoots"] - expected_roots
+  removed = expected_roots - actual["scanRoots"]
+  detail << "  + #{added.sort.join(', ')} is scanned and is not in the reviewed root list" unless added.empty?
+  detail << "  - #{removed.sort.join(', ')} is in the reviewed root list and is no longer scanned" unless removed.empty?
+  errors << "the roots this gate reads differ from the reviewed ledger:\n#{detail.join("\n")}"
 end
 
 if (expected["roles"] || {}).keys.sort != actual["roles"].keys.sort
