@@ -13,6 +13,7 @@ rust-version.workspace = true
 orchestrator-collab = { path = "../orchestrator-collab", version = "0.3.1" }
 orchestrator-config = { path = "../orchestrator-config", version = "0.3.1" }
 anyhow = "1.0"
+async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -20,6 +21,11 @@ serde_json = "1.0"
 tokio-rusqlite = "0.5"
 uuid = { version = "1.11", features = ["serde", "v4"] }
 tracing = "0.1"
+
+# session_store classifies a session row by whether its PID is still live, so
+# the row's meaning depends on a liveness check. Unix-gated to match core.
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.26.0"

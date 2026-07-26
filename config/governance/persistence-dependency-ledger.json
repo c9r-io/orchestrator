@@ -217,10 +217,40 @@
       "sql": 111,
       "category": "persistence-layer"
     },
+    "crates/orchestrator-persistence/src/repository/daemon_meta.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 0,
+      "sql": 2,
+      "category": "persistence-layer"
+    },
+    "crates/orchestrator-persistence/src/repository/scheduler.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 3,
+      "sql": 4,
+      "category": "persistence-layer"
+    },
+    "crates/orchestrator-persistence/src/repository/session.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 10,
+      "sql": 0,
+      "category": "persistence-layer"
+    },
+    "crates/orchestrator-persistence/src/repository/workflow_store.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 14,
+      "sql": 6,
+      "category": "persistence-layer"
+    },
     "crates/orchestrator-persistence/src/schema.rs": {
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 0,
       "sql": 1,
+      "category": "persistence-layer"
+    },
+    "crates/orchestrator-persistence/src/session_store.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 3,
+      "sql": 29,
       "category": "persistence-layer"
     },
     "crates/orchestrator-persistence/src/sqlite.rs": {
@@ -334,8 +364,8 @@
   },
   "totals": {
     "members": 14,
-    "referencedFiles": 27,
-    "rusqlite": 136,
-    "sql": 305
+    "referencedFiles": 32,
+    "rusqlite": 166,
+    "sql": 346
   }
 }

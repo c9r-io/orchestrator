@@ -32,8 +32,12 @@ pub mod dto;
 pub mod migration;
 /// Individual migration step implementations.
 pub mod migration_steps;
+/// Domain-specific repository traits and their SQLite implementations.
+pub mod repository;
 /// Persistence bootstrap entrypoints.
 pub mod schema;
+/// Agent session rows: creation, state transitions, reader/writer attachment.
+pub mod session_store;
 /// SQLite-specific connection helpers.
 pub mod sqlite;
 /// Task-execution persistence: tasks, items, command runs and events.

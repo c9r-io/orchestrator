@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "scope": "non-test Rust source under core/src, excluding inline cfg(test) modules, files under a tests directory, and files named test*.rs",
   "coreSurface": {
-    "files": 131,
+    "files": 130,
     "pubMod": 51,
-    "publicItems": 736
+    "publicItems": 685
   },
   "rusqlite": {
-    "total": 118,
+    "total": 88,
     "files": {
       "core/src/action_audit.rs": 9,
       "core/src/attention.rs": 3,
@@ -22,13 +22,9 @@
       "core/src/lib.rs": 1,
       "core/src/migration.rs": 1,
       "core/src/persistence/repository/config.rs": 3,
-      "core/src/persistence/repository/scheduler.rs": 3,
-      "core/src/persistence/repository/session.rs": 10,
-      "core/src/persistence/repository/workflow_store.rs": 14,
       "core/src/process_metrics.rs": 3,
       "core/src/service/bootstrap.rs": 7,
       "core/src/service/resource/delete.rs": 1,
-      "core/src/session_store.rs": 3,
       "core/src/source.rs": 5,
       "core/src/source_automation.rs": 7,
       "core/src/source_connection.rs": 5,
