@@ -6,8 +6,6 @@ use crate::persistence::repository::{ConfigRepository, HealLogEntry, SqliteConfi
 use crate::resource::export_manifest_resources;
 use crate::secret_store_crypto::redact_secret_data_map;
 use anyhow::{Context, Result};
-#[cfg(test)]
-use rusqlite::params;
 use std::path::Path;
 
 #[cfg(test)]
@@ -161,6 +159,12 @@ pub fn persist_config_for_delete(
 mod tests {
     use super::*;
     use crate::config_load::tests::make_test_db;
+    // Inside the module, not at file scope. `#[cfg(test)]` on a `use` is invisible
+    // to the boundary scanner, which excludes `#[cfg(test)] mod` blocks and
+    // nothing else, so at file scope this import held the file on the ledger for
+    // a line no production build compiles (FR-130 Phase A found the same shape in
+    // db_write.rs).
+    use rusqlite::params;
     use crate::config_load::{ConfigSelfHealChange, ConfigSelfHealRule};
     use std::collections::HashMap;
 
