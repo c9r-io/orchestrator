@@ -275,3 +275,15 @@ only the counting is shared.
   freeze turns any such edit into a review event rather than a false pass.
 - The `exempt` and `separate-database` roles are frozen at their current
   residual, not driven to zero. That is the decision, not an omission.
+- `category` is a reviewed judgement and nothing verifies it. The gate asserts
+  that every scanned file *has* one and that the categorised references sum to
+  the scan, so a file cannot arrive unclassified — but a file miscategorised as
+  `borrowed-connection-raw-sql` when it opens its own connection would pass.
+  Nothing depends on the category: the rule is driven by `role`, which is
+  per crate. The categories are the extraction work-list, and their correctness
+  rests on review, as `role` and the decision prose do.
+- `OUTCOMES` in the `governance` job is a hand-written enumeration that nothing
+  guards, so this gate's ability to fail the build rests on a line a future
+  author has to remember to add for their own gate. That defect is FR-137's, not
+  this one's; the 21 step ids and 21 `OUTCOMES` entries were confirmed to have an
+  empty difference when this gate was wired.
