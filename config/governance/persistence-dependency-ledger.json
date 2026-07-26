@@ -235,6 +235,12 @@
       "sql": 2,
       "category": "persistence-layer"
     },
+    "crates/orchestrator-persistence/src/handoff_store.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 9,
+      "sql": 18,
+      "category": "persistence-layer"
+    },
     "crates/orchestrator-persistence/src/migration.rs": {
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 2,
@@ -412,8 +418,8 @@
   },
   "totals": {
     "members": 14,
-    "referencedFiles": 40,
-    "rusqlite": 215,
-    "sql": 456
+    "referencedFiles": 41,
+    "rusqlite": 224,
+    "sql": 474
   }
 }

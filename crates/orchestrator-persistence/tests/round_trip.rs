@@ -1676,3 +1676,272 @@ async fn source_connection_intent_and_provisioning_fences_hold() {
         "a later provisioning step erased the App identity an earlier one recorded"
     );
 }
+
+/// FR-130 B14: the handoff and resume statements moved out of `core::handoff`.
+/// Four fences, each in exactly one statement (verified by grep before
+/// mutating, not assumed): the snapshot identity, the reservation's retry
+/// identity, the plan's `status='planned' AND expected_state_version`, and the
+/// completion's `status='executing'`.
+#[tokio::test]
+async fn handoff_snapshot_and_resume_fences_hold() {
+    use orchestrator_persistence::handoff_store as store;
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let db_path = temp.path().join("handoff.db");
+    PersistenceBootstrap::ensure_current(&db_path).expect("bootstrap schema");
+    let conn = open_conn(&db_path).expect("open database");
+    seed_task(&conn);
+    let db = AsyncDatabase::open(&db_path).await.expect("open async db");
+    let now = orchestrator_persistence::now_ts();
+
+    // A task that does not exist is `None`, not an error and not an empty
+    // projection — core turns it into "task not found".
+    assert!(
+        store::snapshot_inputs(&db, "no-such-task".to_string())
+            .await
+            .expect("inputs for a missing task")
+            .is_none(),
+        "a missing task produced snapshot inputs"
+    );
+    assert!(
+        store::boundary_inputs(&db, "no-such-task".to_string())
+            .await
+            .expect("boundary inputs for a missing task")
+            .is_none(),
+        "a missing task produced boundary inputs"
+    );
+    let inputs = store::snapshot_inputs(&db, TASK_ID.to_string())
+        .await
+        .expect("inputs")
+        .expect("the seeded task");
+    assert_eq!(inputs.project_id, "default");
+    assert_eq!(inputs.max_cursor, 0, "a task with no events has no cursor");
+
+    // The snapshot identity is `(task_id, cursor, content_hash)`. Two callers
+    // projecting the same task at the same cursor must converge on one row —
+    // a briefing is meant to be immutable evidence, and two rows for one
+    // projection means two operators can cite different "the" handoff.
+    let snapshot = |id: &str, hash: &str| store::NewSnapshot {
+        id: id.to_string(),
+        project_id: "default".to_string(),
+        task_id: TASK_ID.to_string(),
+        source_event_cursor: 0,
+        projection_version: 1,
+        briefing_json: r#"{"summary":"first"}"#.to_string(),
+        content_hash: hash.to_string(),
+        state_version: "sv-1".to_string(),
+        generated_by: "operator".to_string(),
+        created_at: now.clone(),
+    };
+    let first = store::find_or_insert_snapshot(&db, snapshot("snap-1", "hash-a"))
+        .await
+        .expect("insert");
+    assert_eq!(first.id, "snap-1");
+    let again = store::find_or_insert_snapshot(&db, snapshot("snap-2", "hash-a"))
+        .await
+        .expect("insert again");
+    assert_eq!(
+        again.id, "snap-1",
+        "the same projection was recorded twice under two identifiers"
+    );
+    // A different content hash is a different projection and does get its own row.
+    let other = store::find_or_insert_snapshot(&db, snapshot("snap-3", "hash-b"))
+        .await
+        .expect("insert a different projection");
+    assert_eq!(other.id, "snap-3");
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM handoff_snapshots", [], |row| {
+            row.get(0)
+        })
+        .expect("count snapshots");
+    assert_eq!(count, 2, "the snapshot table holds a row it should not");
+
+    // And the identity is scoped to the task. Two tasks can reach the same
+    // cursor with the same briefing hash — an empty task at cursor 0 is the
+    // ordinary case — and handing task B the snapshot recorded for task A is a
+    // briefing that describes the wrong process. Asserted with a second task
+    // because with only one, `task_id=?1` never discriminates and commenting it
+    // out passes.
+    conn.execute(
+        "INSERT INTO tasks (
+            id, name, status, goal, target_files_json, mode, workspace_id, workflow_id,
+            project_id, workspace_root, qa_targets_json, ticket_dir, created_at, updated_at
+         ) VALUES ('task-second', 'second', 'pending', 'be distinct', '[]', 'qa',
+                   ?1, 'wf-round-trip', 'default', '/tmp/second', '[]', '/tmp/tickets', ?2, ?2)",
+        rusqlite::params![WORKSPACE, now],
+    )
+    .expect("seed a second task");
+    let mut twin = snapshot("snap-4", "hash-a");
+    twin.task_id = "task-second".to_string();
+    let second_task = store::find_or_insert_snapshot(&db, twin)
+        .await
+        .expect("insert for the second task");
+    assert_eq!(
+        second_task.id, "snap-4",
+        "a second task was handed the snapshot recorded for the first"
+    );
+    assert_eq!(second_task.task_id, "task-second");
+
+    let plan = |id: &str, version: &str| store::NewResumePlan {
+        id: id.to_string(),
+        project_id: "default".to_string(),
+        task_id: TASK_ID.to_string(),
+        attention_item_id: None,
+        boundary_id: format!("boundary-{id}"),
+        mode: "restart_from_boundary".to_string(),
+        expected_state_version: version.to_string(),
+        side_effect_class: "idempotent".to_string(),
+        replay_safe: true,
+        elevated_confirmation_required: false,
+        consequence_json: r#"{"mode":"restart_from_boundary"}"#.to_string(),
+        execution_input_json: r#"{"id":"boundary"}"#.to_string(),
+        provider_command_run_id: None,
+        expires_at: now.clone(),
+        created_by: "operator".to_string(),
+        created_at: now.clone(),
+    };
+    store::insert_plan(&db, plan("plan-1", "sv-1"))
+        .await
+        .expect("insert plan");
+    let read = store::read_plan(&db, "plan-1".to_string())
+        .await
+        .expect("read plan")
+        .expect("the plan");
+    assert_eq!(read.status, "planned");
+    assert_eq!(read.expected_state_version, "sv-1");
+
+    let execution = |id: &str, plan_id: &str, key: &str, version: &str| store::NewExecution {
+        id: id.to_string(),
+        plan_id: plan_id.to_string(),
+        actor: "operator".to_string(),
+        operator_reason: "reviewed".to_string(),
+        idempotency_key: key.to_string(),
+        request_hash: "rh".to_string(),
+        verified_state_version: version.to_string(),
+        created_at: now.clone(),
+    };
+
+    // The version fence. This is the condition that makes it safe for the
+    // caller to compute its `git`-backed state version *before* the
+    // transaction: if the plan moved in between, nothing is written.
+    assert_eq!(
+        store::reserve_execution(&db, execution("exec-x", "plan-1", "key-x", "sv-MOVED"))
+            .await
+            .expect("reserve against a moved version"),
+        store::Reservation::PlanMoved,
+        "a reservation was taken against a state version the plan no longer holds"
+    );
+    let executions_after_refusal: i64 = conn
+        .query_row("SELECT COUNT(*) FROM resume_executions", [], |row| {
+            row.get(0)
+        })
+        .expect("count executions");
+    assert_eq!(
+        executions_after_refusal, 0,
+        "a refused reservation still wrote an execution row"
+    );
+    assert_eq!(
+        store::read_plan(&db, "plan-1".to_string())
+            .await
+            .expect("read")
+            .expect("plan")
+            .status,
+        "planned",
+        "a refused reservation still moved the plan out of planned"
+    );
+
+    // The reservation itself, then the retry identity.
+    assert_eq!(
+        store::reserve_execution(&db, execution("exec-1", "plan-1", "key-1", "sv-1"))
+            .await
+            .expect("reserve"),
+        store::Reservation::Reserved {
+            id: "exec-1".to_string()
+        }
+    );
+    assert_eq!(
+        store::reserve_execution(&db, execution("exec-2", "plan-1", "key-1", "sv-1"))
+            .await
+            .expect("reserve under the same retry identity"),
+        store::Reservation::Existing {
+            id: "exec-1".to_string(),
+            status: "executing".to_string()
+        },
+        "a retried reservation minted a second execution"
+    );
+
+    // `status='planned'`: the plan is `executing` now, so a *different* retry
+    // identity must not open a second execution against it. This is the fence
+    // the statement it replaces did not check the result of — the old code
+    // inserted the execution row and then ran the update without looking at
+    // how many rows changed, so two callers could both believe they owned it.
+    assert_eq!(
+        store::reserve_execution(&db, execution("exec-3", "plan-1", "key-2", "sv-1"))
+            .await
+            .expect("reserve a second time under a new key"),
+        store::Reservation::PlanMoved,
+        "a second operator reserved a plan that was already executing"
+    );
+
+    // `status='executing'` on completion, in both directions.
+    assert!(
+        store::complete_execution(
+            &db,
+            "exec-1".to_string(),
+            "succeeded".to_string(),
+            Some(TASK_ID.to_string()),
+            None,
+            now.clone(),
+        )
+        .await
+        .expect("complete")
+    );
+    assert!(
+        !store::complete_execution(
+            &db,
+            "exec-1".to_string(),
+            "failed".to_string(),
+            None,
+            Some("late".to_string()),
+            now.clone(),
+        )
+        .await
+        .expect("complete twice"),
+        "a terminal execution was completed a second time"
+    );
+    assert!(
+        !store::complete_execution(
+            &db,
+            "exec-never".to_string(),
+            "succeeded".to_string(),
+            None,
+            None,
+            now.clone(),
+        )
+        .await
+        .expect("complete something never reserved"),
+        "a completion succeeded for an execution that was never reserved"
+    );
+    // The plan follows the execution, in the same transaction.
+    let (status, error): (String, Option<String>) = conn
+        .query_row(
+            "SELECT status, error_code FROM resume_executions WHERE id='exec-1'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("read the execution");
+    assert_eq!(status, "succeeded");
+    assert_eq!(
+        error, None,
+        "a terminal execution picked up a late error code"
+    );
+    assert_eq!(
+        store::read_plan(&db, "plan-1".to_string())
+            .await
+            .expect("read")
+            .expect("plan")
+            .status,
+        "succeeded",
+        "the plan did not follow its execution to a terminal status"
+    );
+}

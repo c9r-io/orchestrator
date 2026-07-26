@@ -38,6 +38,8 @@ pub mod dto;
 pub mod event_retention;
 /// Row access for the `events` table.
 pub mod events;
+/// The handoff and resume tables and the statements over them.
+pub mod handoff_store;
 /// Public schema migration model and execution helpers.
 pub mod migration;
 /// Individual migration step implementations.

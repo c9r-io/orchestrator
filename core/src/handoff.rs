@@ -3,13 +3,18 @@
 //! A handoff is a deterministic projection of persisted orchestration state. A resume plan is a
 //! separate, expiring intent record: callers must reserve execution with the same state version
 //! before any scheduler or workspace mutation is attempted.
+//!
+//! The three tables live in `orchestrator_persistence::handoff_store` (FR-130
+//! B14). What stays here is the projection: what a briefing contains, how a
+//! workspace is digested, how a state version is hashed, which resume modes a
+//! boundary supports, and what an expired or stale plan means.
 
-use crate::async_database::{AsyncDatabase, flatten_err};
+use crate::async_database::AsyncDatabase;
 use crate::config::SideEffectClass;
 use crate::config_load::now_ts;
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{Duration, Utc};
-use rusqlite::{Connection, OptionalExtension, params};
+use orchestrator_persistence::handoff_store as store;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
@@ -217,35 +222,79 @@ impl AsyncHandoffRepository {
         requested_cursor: Option<i64>,
         actor: &str,
     ) -> Result<HandoffSnapshot> {
-        let task_id = task_id.to_owned();
-        let actor = actor.to_owned();
-        self.db
-            .writer()
-            .call(move |conn| {
-                generate_snapshot(conn, &task_id, requested_cursor, &actor).map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        let inputs = store::snapshot_inputs(&self.db, task_id.to_string())
+            .await?
+            .ok_or_else(|| anyhow!("task not found: {task_id}"))?;
+        let cursor = requested_cursor.unwrap_or(inputs.max_cursor);
+        if cursor > inputs.max_cursor || cursor < 0 {
+            bail!(
+                "invalid handoff cursor {cursor}; latest is {}",
+                inputs.max_cursor
+            );
+        }
+        let events: Vec<(String, Value, String)> =
+            store::events_up_to(&self.db, task_id.to_string(), cursor)
+                .await?
+                .into_iter()
+                .map(|event| {
+                    (
+                        event.event_type,
+                        serde_json::from_str::<Value>(&event.payload_json).unwrap_or_default(),
+                        event.created_at,
+                    )
+                })
+                .collect();
+
+        let briefing = project_briefing(
+            inputs.goal.clone(),
+            inputs.status.clone(),
+            inputs.current_cycle,
+            &events,
+        );
+        // Out here on purpose: this runs three `git` subprocesses and reads
+        // every untracked file in the workspace. It used to happen inside the
+        // SQLite writer's closure.
+        let state_version = task_state_version(&inputs.state_version)?;
+        let content_hash = hash_value(&json!({
+            "task_id": task_id,
+            "cursor": cursor,
+            "projection_version": PROJECTION_VERSION,
+            "briefing": briefing,
+        }))?;
+
+        let row = store::find_or_insert_snapshot(
+            &self.db,
+            store::NewSnapshot {
+                id: Uuid::new_v4().to_string(),
+                project_id: inputs.project_id,
+                task_id: task_id.to_string(),
+                source_event_cursor: cursor,
+                projection_version: PROJECTION_VERSION,
+                briefing_json: serde_json::to_string(&briefing)?,
+                content_hash,
+                state_version,
+                generated_by: actor.to_string(),
+                created_at: now_ts(),
+            },
+        )
+        .await?;
+        snapshot_from_row(row)
     }
 
     /// Returns one immutable snapshot.
     pub async fn get_snapshot(&self, id: &str) -> Result<Option<HandoffSnapshot>> {
-        let id = id.to_owned();
-        self.db
-            .reader()
-            .call(move |conn| read_snapshot(conn, &id).map_err(other))
-            .await
-            .map_err(flatten_err)
+        store::read_snapshot(&self.db, id.to_string())
+            .await?
+            .map(snapshot_from_row)
+            .transpose()
     }
 
     /// Lists logical resume boundaries without changing task or workspace state.
     pub async fn list_boundaries(&self, task_id: &str) -> Result<Vec<ResumeBoundary>> {
-        let task_id = task_id.to_owned();
-        self.db
-            .reader()
-            .call(move |conn| list_boundaries(conn, &task_id).map_err(other))
-            .await
-            .map_err(flatten_err)
+        let inputs = store::boundary_inputs(&self.db, task_id.to_string())
+            .await?
+            .ok_or_else(|| anyhow!("task not found: {task_id}"))?;
+        project_boundaries(task_id, &inputs)
     }
 
     /// Persists an expiring consequence preview. No task or workspace mutation occurs.
@@ -257,35 +306,74 @@ impl AsyncHandoffRepository {
         actor: &str,
         attention_item_id: Option<&str>,
     ) -> Result<ResumePlan> {
-        let task_id = task_id.to_owned();
-        let boundary_id = boundary_id.to_owned();
-        let actor = actor.to_owned();
-        let attention_item_id = attention_item_id.map(str::to_owned);
-        self.db
-            .writer()
-            .call(move |conn| {
-                create_plan(
-                    conn,
-                    &task_id,
-                    &boundary_id,
-                    mode,
-                    &actor,
-                    attention_item_id.as_deref(),
-                )
-                .map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        let inputs = store::boundary_inputs(&self.db, task_id.to_string())
+            .await?
+            .ok_or_else(|| anyhow!("task not found: {task_id}"))?;
+        let boundary = project_boundaries(task_id, &inputs)?
+            .into_iter()
+            .find(|boundary| boundary.id == boundary_id)
+            .ok_or_else(|| anyhow!("resume boundary is stale or unknown"))?;
+        if mode == ResumeMode::RetryItem && boundary.task_item_id.is_none() {
+            bail!("retry_item requires an item-scoped boundary");
+        }
+        if mode == ResumeMode::ResumeProviderSession && !boundary.provider_session_available {
+            bail!("provider session is unavailable; create a restart_from_boundary plan instead");
+        }
+        let plan_id = Uuid::new_v4().to_string();
+        let elevated = !boundary.replay_safe;
+        let consequence = json!({
+            "mode": mode,
+            "task_id": task_id,
+            "boundary_id": boundary.id,
+            "step_id": boundary.step_id,
+            "task_item_id": boundary.task_item_id,
+            "creates_correlated_child": mode == ResumeMode::RestartFromBoundary || mode == ResumeMode::ResumeProviderSession,
+            "workspace_rollback": false,
+            "provider_session_reuse": mode == ResumeMode::ResumeProviderSession,
+            "fallback_mode": if mode == ResumeMode::ResumeProviderSession { Value::String("restart_from_boundary".to_string()) } else { Value::Null },
+        });
+        let expires_at = (Utc::now() + Duration::minutes(15)).to_rfc3339();
+        store::insert_plan(
+            &self.db,
+            store::NewResumePlan {
+                id: plan_id.clone(),
+                project_id: inputs.project_id.clone(),
+                task_id: task_id.to_string(),
+                attention_item_id: attention_item_id.map(str::to_string),
+                boundary_id: boundary.id.clone(),
+                mode: mode.as_str().to_string(),
+                expected_state_version: boundary.state_version.clone(),
+                side_effect_class: side_effect_label(boundary.side_effect_class).to_string(),
+                replay_safe: boundary.replay_safe,
+                elevated_confirmation_required: elevated,
+                consequence_json: serde_json::to_string(&consequence)?,
+                execution_input_json: serde_json::to_string(&boundary)?,
+                provider_command_run_id: boundary.command_run_id.clone(),
+                expires_at: expires_at.clone(),
+                created_by: actor.to_string(),
+                created_at: now_ts(),
+            },
+        )
+        .await?;
+        Ok(ResumePlan {
+            id: plan_id,
+            task_id: task_id.to_string(),
+            expected_state_version: boundary.state_version.clone(),
+            boundary,
+            mode,
+            consequence,
+            elevated_confirmation_required: elevated,
+            expires_at,
+            status: "planned".to_string(),
+        })
     }
 
     /// Returns one persisted resume plan while its referenced boundary is still available.
     pub async fn get_plan(&self, id: &str) -> Result<Option<ResumePlan>> {
-        let id = id.to_owned();
-        self.db
-            .reader()
-            .call(move |conn| read_plan(conn, &id).map_err(other))
-            .await
-            .map_err(flatten_err)
+        store::read_plan(&self.db, id.to_string())
+            .await?
+            .map(|row| plan_from_row(id, row))
+            .transpose()
     }
 
     /// Atomically reserves a plan after stale-state, expiry, policy and confirmation checks.
@@ -295,12 +383,74 @@ impl AsyncHandoffRepository {
         plan_id: &str,
         request: ResumeExecutionRequest,
     ) -> Result<ResumeExecutionReservation> {
-        let plan_id = plan_id.to_owned();
-        self.db
-            .writer()
-            .call(move |conn| reserve_execution(conn, &plan_id, &request).map_err(other))
-            .await
-            .map_err(flatten_err)
+        if request.idempotency_key.trim().is_empty() || request.operator_reason.trim().is_empty() {
+            bail!("idempotency_key and operator_reason are required");
+        }
+        let plan = store::read_plan(&self.db, plan_id.to_string())
+            .await?
+            .ok_or_else(|| anyhow!("resume plan not found"))?;
+        if plan.status != "planned" {
+            bail!("resume plan is not executable: {}", plan.status);
+        }
+        if chrono::DateTime::parse_from_rfc3339(&plan.expires_at)? < Utc::now() {
+            bail!("resume plan has expired");
+        }
+        // The `git`-backed digest, computed before the reservation rather than
+        // inside its transaction. What that opens — the plan moving in between —
+        // is closed by the store, which re-fences on both `status='planned'` and
+        // this same `expected_state_version` and writes nothing if either moved.
+        let inputs = store::state_version_inputs(&self.db, plan.task_id.clone())
+            .await?
+            .ok_or_else(|| anyhow!("resume plan references a task that no longer exists"))?;
+        let current_version = task_state_version(&inputs)?;
+        if request.expected_state_version != plan.expected_state_version
+            || current_version != plan.expected_state_version
+        {
+            bail!("stale resume plan: task state changed; generate a new consequence preview");
+        }
+        if plan.elevated_confirmation_required != 0
+            && (!request.elevated_policy_enabled || !request.elevated_confirmation)
+        {
+            bail!("non-idempotent replay denied: elevated policy and confirmation are required");
+        }
+        let request_hash = hash_value(&json!({
+            "plan_id": plan_id,
+            "expected_state_version": request.expected_state_version,
+            "actor": request.actor,
+            "operator_reason": request.operator_reason,
+            "elevated_confirmation": request.elevated_confirmation,
+        }))?;
+        let outcome = store::reserve_execution(
+            &self.db,
+            store::NewExecution {
+                id: Uuid::new_v4().to_string(),
+                plan_id: plan_id.to_string(),
+                actor: request.actor.clone(),
+                operator_reason: request.operator_reason.clone(),
+                idempotency_key: request.idempotency_key.clone(),
+                request_hash,
+                verified_state_version: plan.expected_state_version.clone(),
+                created_at: now_ts(),
+            },
+        )
+        .await?;
+        match outcome {
+            store::Reservation::Existing { id, status } => Ok(ResumeExecutionReservation {
+                id,
+                plan_id: plan_id.to_string(),
+                should_execute: false,
+                status,
+            }),
+            store::Reservation::Reserved { id } => Ok(ResumeExecutionReservation {
+                id,
+                plan_id: plan_id.to_string(),
+                should_execute: true,
+                status: "executing".to_string(),
+            }),
+            store::Reservation::PlanMoved => {
+                bail!("stale resume plan: task state changed; generate a new consequence preview")
+            }
+        }
     }
 
     /// Completes an owned execution reservation after the scheduler mutation finishes.
@@ -310,149 +460,61 @@ impl AsyncHandoffRepository {
         child_task_id: Option<&str>,
         error_code: Option<&str>,
     ) -> Result<()> {
-        let execution_id = execution_id.to_owned();
-        let child_task_id = child_task_id.map(str::to_owned);
-        let error_code = error_code.map(str::to_owned);
-        self.db
-            .writer()
-            .call(move |conn| {
-                let tx = conn.unchecked_transaction()?;
-                let status = if error_code.is_some() { "failed" } else { "succeeded" };
-                let plan_id: String = tx.query_row(
-                    "SELECT plan_id FROM resume_executions WHERE id=?1 AND status='executing'",
-                    [&execution_id],
-                    |row| row.get(0),
-                )?;
-                tx.execute(
-                    "UPDATE resume_executions SET status=?1, child_task_id=?2, error_code=?3, completed_at=?4 WHERE id=?5",
-                    params![status, child_task_id, error_code, now_ts(), execution_id],
-                )?;
-                tx.execute(
-                    "UPDATE resume_plans SET status=?1, executed_at=?2 WHERE id=?3",
-                    params![status, now_ts(), plan_id],
-                )?;
-                tx.commit()?;
-                Ok(())
-            })
-            .await
-            .map_err(flatten_err)
+        let status = if error_code.is_some() {
+            "failed"
+        } else {
+            "succeeded"
+        };
+        if !store::complete_execution(
+            &self.db,
+            execution_id.to_string(),
+            status.to_string(),
+            child_task_id.map(str::to_string),
+            error_code.map(str::to_string),
+            now_ts(),
+        )
+        .await?
+        {
+            bail!("resume execution reservation is missing or already terminal");
+        }
+        Ok(())
     }
 }
 
-fn generate_snapshot(
-    conn: &Connection,
-    task_id: &str,
-    requested_cursor: Option<i64>,
-    actor: &str,
-) -> Result<HandoffSnapshot> {
-    let (project_id, goal, status, cycle): (String, String, String, i64) = conn
-        .query_row(
-            "SELECT project_id, goal, status, current_cycle FROM tasks WHERE id=?1",
-            [task_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-        )
-        .map_err(|_| anyhow!("task not found: {task_id}"))?;
-    let max_cursor: i64 = conn.query_row(
-        "SELECT COALESCE(MAX(id), 0) FROM events WHERE task_id=?1",
-        [task_id],
-        |row| row.get(0),
-    )?;
-    let cursor = requested_cursor.unwrap_or(max_cursor);
-    if cursor > max_cursor || cursor < 0 {
-        bail!("invalid handoff cursor {cursor}; latest is {max_cursor}");
-    }
-
-    let mut stmt = conn.prepare(
-        "SELECT event_type, payload_json, created_at FROM events
-         WHERE task_id=?1 AND id<=?2 ORDER BY id ASC",
-    )?;
-    let events = stmt
-        .query_map(params![task_id, cursor], |row| {
-            let payload: String = row.get(1)?;
-            Ok((
-                row.get::<_, String>(0)?,
-                serde_json::from_str::<Value>(&payload).unwrap_or_default(),
-                row.get::<_, String>(2)?,
-            ))
-        })?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-
-    let briefing = project_briefing(goal, status, cycle, &events);
-    let state_version = task_state_version(conn, task_id)?;
-    let hash_input = json!({
-        "task_id": task_id,
-        "cursor": cursor,
-        "projection_version": PROJECTION_VERSION,
-        "briefing": briefing,
-    });
-    let content_hash = hash_value(&hash_input)?;
-
-    if let Some(existing_id) = conn
-        .query_row(
-            "SELECT id FROM handoff_snapshots WHERE task_id=?1 AND source_event_cursor=?2 AND content_hash=?3",
-            params![task_id, cursor, content_hash],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()?
-    {
-        return read_snapshot(conn, &existing_id)?
-            .ok_or_else(|| anyhow!("handoff snapshot disappeared"));
-    }
-
-    let id = Uuid::new_v4().to_string();
-    let created_at = now_ts();
-    conn.execute(
-        "INSERT INTO handoff_snapshots
-         (id, project_id, task_id, source_event_cursor, projection_version, briefing_json,
-          content_hash, state_version, generated_by, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-        params![
-            id,
-            project_id,
-            task_id,
-            cursor,
-            PROJECTION_VERSION,
-            serde_json::to_string(&briefing)?,
-            content_hash,
-            state_version,
-            actor,
-            created_at,
-        ],
-    )?;
-    read_snapshot(conn, &id)?.ok_or_else(|| anyhow!("failed to persist handoff snapshot"))
+/// Parses a stored snapshot row back into its typed form.
+///
+/// The briefing is this module's type, so the parse lives here; below the
+/// boundary a `serde_json` failure would have to be reported as a
+/// column-conversion failure against an invented column index.
+fn snapshot_from_row(row: store::SnapshotRow) -> Result<HandoffSnapshot> {
+    Ok(HandoffSnapshot {
+        briefing: serde_json::from_str(&row.briefing_json)
+            .with_context(|| format!("parse briefing of handoff snapshot {}", row.id))?,
+        id: row.id,
+        project_id: row.project_id,
+        task_id: row.task_id,
+        source_event_cursor: row.source_event_cursor,
+        projection_version: row.projection_version,
+        content_hash: row.content_hash,
+        state_version: row.state_version,
+        generated_by: row.generated_by,
+        created_at: row.created_at,
+    })
 }
 
-fn read_snapshot(conn: &Connection, id: &str) -> Result<Option<HandoffSnapshot>> {
-    conn.query_row(
-        "SELECT id, project_id, task_id, source_event_cursor, projection_version, briefing_json,
-                content_hash, state_version, generated_by, created_at
-         FROM handoff_snapshots WHERE id=?1",
-        [id],
-        |row| {
-            let raw: String = row.get(5)?;
-            let briefing = serde_json::from_str(&raw).map_err(|err| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    raw.len(),
-                    rusqlite::types::Type::Text,
-                    Box::new(err),
-                )
-            })?;
-            Ok(HandoffSnapshot {
-                id: row.get(0)?,
-                project_id: row.get(1)?,
-                task_id: row.get(2)?,
-                source_event_cursor: row.get(3)?,
-                projection_version: row.get(4)?,
-                briefing,
-                content_hash: row.get(6)?,
-                state_version: row.get(7)?,
-                generated_by: row.get(8)?,
-                created_at: row.get(9)?,
-            })
-        },
-    )
-    .optional()
-    .map_err(Into::into)
+fn plan_from_row(id: &str, row: store::ResumePlanRow) -> Result<ResumePlan> {
+    Ok(ResumePlan {
+        id: id.to_string(),
+        task_id: row.task_id,
+        boundary: serde_json::from_str(&row.execution_input_json)
+            .context("resume plan boundary snapshot is invalid")?,
+        mode: ResumeMode::parse(&row.mode)?,
+        expected_state_version: row.expected_state_version,
+        consequence: serde_json::from_str(&row.consequence_json)?,
+        elevated_confirmation_required: row.elevated_confirmation_required != 0,
+        expires_at: row.expires_at,
+        status: row.status,
+    })
 }
 
 fn project_briefing(
@@ -580,31 +642,35 @@ fn truncate_text(value: &str) -> String {
     value.chars().take(MAX_TEXT_CHARS).collect()
 }
 
-fn task_state_version(conn: &Connection, task_id: &str) -> Result<String> {
-    let (mut value, workspace_root): (Value, String) = conn.query_row(
-        "SELECT status, current_cycle, init_done, pipeline_vars_json, execution_plan_json,
-                updated_at, (SELECT COALESCE(MAX(id), 0) FROM events WHERE task_id=tasks.id),
-                workspace_root
-         FROM tasks WHERE id=?1",
-        [task_id],
-        |row| {
-            let pipeline: Option<String> = row.get(3)?;
-            let plan: Option<String> = row.get(4)?;
-            Ok((json!({
-                "status": row.get::<_, String>(0)?,
-                "current_cycle": row.get::<_, i64>(1)?,
-                "init_done": row.get::<_, i64>(2)?,
-                "pipeline_vars": pipeline.as_deref().and_then(|raw| serde_json::from_str::<Value>(raw).ok()).unwrap_or_default(),
-                "execution_plan": plan.as_deref().and_then(|raw| serde_json::from_str::<Value>(raw).ok()).unwrap_or_default(),
-                "updated_at": row.get::<_, String>(5)?,
-                "event_cursor": row.get::<_, i64>(6)?,
-            }), row.get(7)?))
-        },
-    )?;
+/// Hashes the task columns that define a resume-relevant state version,
+/// together with a digest of the workspace on disk.
+///
+/// Takes the columns rather than a connection: [`workspace_state_digest`] runs
+/// three `git` subprocesses and reads every untracked file in the workspace,
+/// and this used to run inside the SQLite writer's closure — and, in
+/// `reserve_execution`, inside its transaction.
+fn task_state_version(inputs: &store::StateVersionInputs) -> Result<String> {
+    let mut value = json!({
+        "status": inputs.status,
+        "current_cycle": inputs.current_cycle,
+        "init_done": inputs.init_done,
+        "pipeline_vars": inputs
+            .pipeline_vars_json
+            .as_deref()
+            .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+            .unwrap_or_default(),
+        "execution_plan": inputs
+            .execution_plan_json
+            .as_deref()
+            .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+            .unwrap_or_default(),
+        "updated_at": inputs.updated_at,
+        "event_cursor": inputs.event_cursor,
+    });
     if let Some(object) = value.as_object_mut() {
         object.insert(
             "workspace_state".to_string(),
-            Value::String(workspace_state_digest(Path::new(&workspace_root))),
+            Value::String(workspace_state_digest(Path::new(&inputs.workspace_root))),
         );
     }
     hash_value(&value)
@@ -684,34 +750,21 @@ fn workspace_state_digest(root: &Path) -> String {
     encode_hex(&digest.finalize())
 }
 
-fn list_boundaries(conn: &Connection, task_id: &str) -> Result<Vec<ResumeBoundary>> {
-    let (cycle, execution_plan): (i64, String) = conn.query_row(
-        "SELECT current_cycle, execution_plan_json FROM tasks WHERE id=?1",
-        [task_id],
-        |row| Ok((row.get(0)?, row.get(1)?)),
-    )?;
-    let state_version = task_state_version(conn, task_id)?;
-    let plan: Value = serde_json::from_str(&execution_plan).unwrap_or_default();
+/// Projects the resume boundaries a task offers, from rows already read.
+fn project_boundaries(
+    task_id: &str,
+    inputs: &store::BoundaryInputs,
+) -> Result<Vec<ResumeBoundary>> {
+    let cycle = inputs.current_cycle;
+    let state_version = task_state_version(&inputs.state_version)?;
+    let plan: Value = serde_json::from_str(&inputs.execution_plan_json).unwrap_or_default();
     let steps = plan
         .get("steps")
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let failed_item: Option<String> = conn
-        .query_row(
-            "SELECT id FROM task_items WHERE task_id=?1 AND status='failed' ORDER BY order_no ASC LIMIT 1",
-            [task_id],
-            |row| row.get(0),
-        )
-        .optional()?;
-    let latest_run: Option<(String, Option<String>)> = conn
-        .query_row(
-            "SELECT cr.id, cr.session_id FROM command_runs cr JOIN task_items ti ON ti.id=cr.task_item_id
-             WHERE ti.task_id=?1 ORDER BY cr.started_at DESC LIMIT 1",
-            [task_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .optional()?;
+    let failed_item = inputs.failed_item_id.clone();
+    let latest_run = inputs.latest_run.clone();
 
     let mut boundaries = Vec::new();
     for step in steps {
@@ -804,218 +857,6 @@ fn stable_boundary_id(
     format!("rb-{}", encode_hex(&Sha256::digest(raw.as_bytes())))
 }
 
-fn create_plan(
-    conn: &Connection,
-    task_id: &str,
-    boundary_id: &str,
-    mode: ResumeMode,
-    actor: &str,
-    attention_item_id: Option<&str>,
-) -> Result<ResumePlan> {
-    let boundary = list_boundaries(conn, task_id)?
-        .into_iter()
-        .find(|boundary| boundary.id == boundary_id)
-        .ok_or_else(|| anyhow!("resume boundary is stale or unknown"))?;
-    if mode == ResumeMode::RetryItem && boundary.task_item_id.is_none() {
-        bail!("retry_item requires an item-scoped boundary");
-    }
-    if mode == ResumeMode::ResumeProviderSession && !boundary.provider_session_available {
-        bail!("provider session is unavailable; create a restart_from_boundary plan instead");
-    }
-    let plan_id = Uuid::new_v4().to_string();
-    let elevated = !boundary.replay_safe;
-    let consequence = json!({
-        "mode": mode,
-        "task_id": task_id,
-        "boundary_id": boundary.id,
-        "step_id": boundary.step_id,
-        "task_item_id": boundary.task_item_id,
-        "creates_correlated_child": mode == ResumeMode::RestartFromBoundary || mode == ResumeMode::ResumeProviderSession,
-        "workspace_rollback": false,
-        "provider_session_reuse": mode == ResumeMode::ResumeProviderSession,
-        "fallback_mode": if mode == ResumeMode::ResumeProviderSession { Value::String("restart_from_boundary".to_string()) } else { Value::Null },
-    });
-    let expires_at = (Utc::now() + Duration::minutes(15)).to_rfc3339();
-    let project_id: String = conn.query_row(
-        "SELECT project_id FROM tasks WHERE id=?1",
-        [task_id],
-        |row| row.get(0),
-    )?;
-    conn.execute(
-        "INSERT INTO resume_plans
-         (id, project_id, task_id, attention_item_id, boundary_id, mode,
-          expected_state_version, side_effect_class, replay_safe,
-          elevated_confirmation_required, consequence_json, execution_input_json,
-          provider_command_run_id, status, expires_at, created_by, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
-                 'planned', ?14, ?15, ?16)",
-        params![
-            plan_id,
-            project_id,
-            task_id,
-            attention_item_id,
-            boundary.id,
-            mode.as_str(),
-            boundary.state_version,
-            side_effect_label(boundary.side_effect_class),
-            i64::from(boundary.replay_safe),
-            i64::from(elevated),
-            serde_json::to_string(&consequence)?,
-            serde_json::to_string(&boundary)?,
-            boundary.command_run_id,
-            expires_at,
-            actor,
-            now_ts(),
-        ],
-    )?;
-    Ok(ResumePlan {
-        id: plan_id,
-        task_id: task_id.to_string(),
-        expected_state_version: boundary.state_version.clone(),
-        boundary,
-        mode,
-        consequence,
-        elevated_confirmation_required: elevated,
-        expires_at,
-        status: "planned".to_string(),
-    })
-}
-
-fn reserve_execution(
-    conn: &Connection,
-    plan_id: &str,
-    request: &ResumeExecutionRequest,
-) -> Result<ResumeExecutionReservation> {
-    if request.idempotency_key.trim().is_empty() || request.operator_reason.trim().is_empty() {
-        bail!("idempotency_key and operator_reason are required");
-    }
-    let tx = conn.unchecked_transaction()?;
-    if let Some(existing) = tx
-        .query_row(
-            "SELECT id, status FROM resume_executions WHERE plan_id=?1 AND idempotency_key=?2",
-            params![plan_id, request.idempotency_key],
-            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
-        )
-        .optional()?
-    {
-        tx.commit()?;
-        return Ok(ResumeExecutionReservation {
-            id: existing.0,
-            plan_id: plan_id.to_string(),
-            should_execute: false,
-            status: existing.1,
-        });
-    }
-    let (task_id, planned_version, status, expires_at, elevated): (
-        String,
-        String,
-        String,
-        String,
-        i64,
-    ) = tx.query_row(
-        "SELECT task_id, expected_state_version, status, expires_at,
-                elevated_confirmation_required FROM resume_plans WHERE id=?1",
-        [plan_id],
-        |row| {
-            Ok((
-                row.get(0)?,
-                row.get(1)?,
-                row.get(2)?,
-                row.get(3)?,
-                row.get(4)?,
-            ))
-        },
-    )?;
-    if status != "planned" {
-        bail!("resume plan is not executable: {status}");
-    }
-    let expires = chrono::DateTime::parse_from_rfc3339(&expires_at)?;
-    if expires < Utc::now() {
-        bail!("resume plan has expired");
-    }
-    let current_version = task_state_version(&tx, &task_id)?;
-    if request.expected_state_version != planned_version || current_version != planned_version {
-        bail!("stale resume plan: task state changed; generate a new consequence preview");
-    }
-    if elevated != 0 && (!request.elevated_policy_enabled || !request.elevated_confirmation) {
-        bail!("non-idempotent replay denied: elevated policy and confirmation are required");
-    }
-    let request_hash = hash_value(&json!({
-        "plan_id": plan_id,
-        "expected_state_version": request.expected_state_version,
-        "actor": request.actor,
-        "operator_reason": request.operator_reason,
-        "elevated_confirmation": request.elevated_confirmation,
-    }))?;
-    let id = Uuid::new_v4().to_string();
-    tx.execute(
-        "INSERT INTO resume_executions
-         (id, plan_id, actor, operator_reason, idempotency_key, request_hash, status, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'executing', ?7)",
-        params![
-            id,
-            plan_id,
-            request.actor,
-            request.operator_reason,
-            request.idempotency_key,
-            request_hash,
-            now_ts(),
-        ],
-    )?;
-    tx.execute(
-        "UPDATE resume_plans SET status='executing' WHERE id=?1 AND status='planned'",
-        [plan_id],
-    )?;
-    tx.commit()?;
-    Ok(ResumeExecutionReservation {
-        id,
-        plan_id: plan_id.to_string(),
-        should_execute: true,
-        status: "executing".to_string(),
-    })
-}
-
-fn read_plan(conn: &Connection, id: &str) -> Result<Option<ResumePlan>> {
-    let row = conn
-        .query_row(
-            "SELECT task_id, mode, expected_state_version, consequence_json,
-                    execution_input_json, elevated_confirmation_required, expires_at, status
-             FROM resume_plans WHERE id=?1",
-            [id],
-            |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                    row.get::<_, String>(4)?,
-                    row.get::<_, i64>(5)?,
-                    row.get::<_, String>(6)?,
-                    row.get::<_, String>(7)?,
-                ))
-            },
-        )
-        .optional()?;
-    let Some((task_id, mode, state_version, consequence, boundary_json, elevated, expires, status)) =
-        row
-    else {
-        return Ok(None);
-    };
-    let boundary =
-        serde_json::from_str(&boundary_json).context("resume plan boundary snapshot is invalid")?;
-    Ok(Some(ResumePlan {
-        id: id.to_string(),
-        task_id,
-        boundary,
-        mode: ResumeMode::parse(&mode)?,
-        expected_state_version: state_version,
-        consequence: serde_json::from_str(&consequence)?,
-        elevated_confirmation_required: elevated != 0,
-        expires_at: expires,
-        status,
-    }))
-}
-
 fn side_effect_label(value: SideEffectClass) -> &'static str {
     match value {
         SideEffectClass::None => "none",
@@ -1056,14 +897,13 @@ fn encode_hex(bytes: &[u8]) -> String {
     output
 }
 
-fn other(error: anyhow::Error) -> tokio_rusqlite::Error {
-    tokio_rusqlite::Error::Other(error.into())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::db::init_schema;
+    // Inside the test module on purpose: the boundary scanner strips `cfg(test)`
+    // blocks, and a file-scope import would count this fixture as production.
+    use rusqlite::Connection;
     use tempfile::tempdir;
 
     async fn repository() -> (tempfile::TempDir, AsyncHandoffRepository) {
