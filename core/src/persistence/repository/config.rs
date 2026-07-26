@@ -662,7 +662,11 @@ impl ConfigRepository for SqliteConfigRepository {
         };
         let conn = self.open_conn()?;
         let tx = conn.unchecked_transaction()?;
-        crate::config_load::enforce_deletion_guards_for_removals(&tx, deleted_resources)?;
+        // `&*tx` rather than `&tx`: the guard takes the port, which is implemented
+        // for Connection, and Transaction derefs to it. The guard therefore still
+        // runs inside this transaction, which is the property that matters — a
+        // count taken outside it could be stale by the time the delete lands.
+        crate::config_load::enforce_deletion_guards_for_removals(&*tx, deleted_resources)?;
         for deletion in deleted_resources {
             let _ = delete_resource_row(
                 &tx,

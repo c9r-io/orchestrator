@@ -430,3 +430,66 @@ pub fn delete_project_resources(db_path: &Path, project: &str) -> Result<usize> 
     tx.commit()?;
     Ok(removed)
 }
+
+/// The queries a deletion guard needs to decide whether a workspace or workflow
+/// can be removed.
+///
+/// A port, and the reason it exists is that its caller is not persistence code.
+/// `core::config_load::enforce_deletion_guards` diffs two `OrchestratorConfig`
+/// snapshots and formats a refusal message; the only thing it needs from the
+/// database is "how many non-terminal tasks, and name a few". Taking a
+/// `&rusqlite::Connection` for that put the driver's type in the signature of a
+/// function that has no other relationship to it, and made the guard logic
+/// untestable without a real database.
+///
+/// Implemented for [`rusqlite::Connection`], which is also how a caller holding
+/// a `Transaction` uses it — `Transaction` derefs to `Connection`, so `&*tx`
+/// satisfies it and the guard runs inside the caller's transaction as before.
+pub trait DeletionGuardQueries {
+    /// Counts non-terminal tasks belonging to a workspace.
+    fn non_terminal_tasks_in_workspace(&self, project_id: &str, workspace_id: &str) -> Result<i64>;
+    /// Names up to `limit` non-terminal tasks belonging to a workspace.
+    fn sample_non_terminal_tasks_in_workspace(
+        &self,
+        project_id: &str,
+        workspace_id: &str,
+        limit: usize,
+    ) -> Result<Vec<TaskReference>>;
+    /// Counts non-terminal tasks belonging to a workflow.
+    fn non_terminal_tasks_in_workflow(&self, project_id: &str, workflow_id: &str) -> Result<i64>;
+    /// Names up to `limit` non-terminal tasks belonging to a workflow.
+    fn sample_non_terminal_tasks_in_workflow(
+        &self,
+        project_id: &str,
+        workflow_id: &str,
+        limit: usize,
+    ) -> Result<Vec<TaskReference>>;
+}
+
+impl DeletionGuardQueries for Connection {
+    fn non_terminal_tasks_in_workspace(&self, project_id: &str, workspace_id: &str) -> Result<i64> {
+        count_non_terminal_tasks_by_workspace(self, project_id, workspace_id)
+    }
+
+    fn sample_non_terminal_tasks_in_workspace(
+        &self,
+        project_id: &str,
+        workspace_id: &str,
+        limit: usize,
+    ) -> Result<Vec<TaskReference>> {
+        list_non_terminal_tasks_by_workspace(self, project_id, workspace_id, limit)
+    }
+
+    fn non_terminal_tasks_in_workflow(&self, project_id: &str, workflow_id: &str) -> Result<i64> {
+        count_non_terminal_tasks_by_workflow(self, project_id, workflow_id)
+    }
+
+    fn sample_non_terminal_tasks_in_workflow(
+        &self,
+        project_id: &str,
+        workflow_id: &str,
+        limit: usize,
+    ) -> Result<Vec<TaskReference>> {
+        list_non_terminal_tasks_by_workflow(self, project_id, workflow_id, limit)
+    }
+}

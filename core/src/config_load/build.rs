@@ -1,8 +1,4 @@
 use crate::config::{ActiveConfig, OrchestratorConfig, TaskExecutionPlan, WorkflowConfig};
-use crate::db::{
-    count_non_terminal_tasks_by_workflow, count_non_terminal_tasks_by_workspace,
-    list_non_terminal_tasks_by_workflow, list_non_terminal_tasks_by_workspace,
-};
 use crate::persistence::repository::{ConfigRepository, SqliteConfigRepository};
 use anyhow::{Context, Result};
 use std::path::Path;
@@ -244,7 +240,7 @@ pub(crate) fn task_step_from_workflow_step(
 
 /// Enforces deletion guards for all resources removed between two config snapshots.
 pub fn enforce_deletion_guards(
-    conn: &rusqlite::Connection,
+    queries: &dyn crate::db::DeletionGuardQueries,
     previous: &OrchestratorConfig,
     candidate: &OrchestratorConfig,
 ) -> Result<()> {
@@ -287,25 +283,21 @@ pub fn enforce_deletion_guards(
         }
     }
 
-    enforce_deletion_guards_for_removals(conn, &removals)
+    enforce_deletion_guards_for_removals(queries, &removals)
 }
 
 /// Enforces deletion guards for an explicit list of removed resources.
 pub fn enforce_deletion_guards_for_removals(
-    conn: &rusqlite::Connection,
+    queries: &dyn crate::db::DeletionGuardQueries,
     removals: &[ResourceRemoval],
 ) -> Result<()> {
     for removal in removals {
         match removal.kind.as_str() {
             "Workspace" => {
-                let task_count = count_non_terminal_tasks_by_workspace(
-                    conn,
-                    &removal.project_id,
-                    &removal.name,
-                )?;
+                let task_count =
+                    queries.non_terminal_tasks_in_workspace(&removal.project_id, &removal.name)?;
                 if task_count > 0 {
-                    let blockers = list_non_terminal_tasks_by_workspace(
-                        conn,
+                    let blockers = queries.sample_non_terminal_tasks_in_workspace(
                         &removal.project_id,
                         &removal.name,
                         5,
@@ -324,10 +316,9 @@ pub fn enforce_deletion_guards_for_removals(
             }
             "Workflow" => {
                 let task_count =
-                    count_non_terminal_tasks_by_workflow(conn, &removal.project_id, &removal.name)?;
+                    queries.non_terminal_tasks_in_workflow(&removal.project_id, &removal.name)?;
                 if task_count > 0 {
-                    let blockers = list_non_terminal_tasks_by_workflow(
-                        conn,
+                    let blockers = queries.sample_non_terminal_tasks_in_workflow(
                         &removal.project_id,
                         &removal.name,
                         5,
@@ -835,5 +826,101 @@ mod tests {
             "same workflow id in another project should not block"
         );
         std::fs::remove_file(&db_path).ok();
+    }
+    /// The deletion guard's logic, exercised with no database at all.
+    ///
+    /// This is what the `DeletionGuardQueries` port bought (FR-130 Phase B): the
+    /// guard used to take `&rusqlite::Connection`, so the only way to reach these
+    /// branches was to build a schema, insert tasks, and read the refusal back out
+    /// through SQLite. The decision being tested — refuse when a count is
+    /// non-zero, name up to five blockers, permit otherwise — has nothing to do
+    /// with SQLite, and now neither does the test.
+    ///
+    /// It also pins the parts a database-backed test tends not to: that a zero
+    /// count is not queried for a sample, and that the refusal names the resource
+    /// and its project.
+    struct StubGuardQueries {
+        workspace_count: i64,
+        sampled: std::cell::RefCell<Vec<String>>,
+    }
+
+    impl crate::db::DeletionGuardQueries for StubGuardQueries {
+        fn non_terminal_tasks_in_workspace(&self, _project: &str, _workspace: &str) -> Result<i64> {
+            Ok(self.workspace_count)
+        }
+
+        fn sample_non_terminal_tasks_in_workspace(
+            &self,
+            _project: &str,
+            workspace: &str,
+            limit: usize,
+        ) -> Result<Vec<crate::db::TaskReference>> {
+            self.sampled.borrow_mut().push(workspace.to_string());
+            Ok((0..self.workspace_count.min(limit as i64))
+                .map(|index| crate::db::TaskReference {
+                    task_id: format!("task-{index}"),
+                    status: "running".to_string(),
+                })
+                .collect())
+        }
+
+        fn non_terminal_tasks_in_workflow(&self, _project: &str, _workflow: &str) -> Result<i64> {
+            Ok(0)
+        }
+
+        fn sample_non_terminal_tasks_in_workflow(
+            &self,
+            _project: &str,
+            _workflow: &str,
+            _limit: usize,
+        ) -> Result<Vec<crate::db::TaskReference>> {
+            Ok(Vec::new())
+        }
+    }
+
+    fn workspace_removal() -> Vec<ResourceRemoval> {
+        vec![ResourceRemoval {
+            kind: "Workspace".to_string(),
+            project_id: "alpha".to_string(),
+            name: "docs".to_string(),
+        }]
+    }
+
+    #[test]
+    fn deletion_guard_refuses_a_workspace_with_non_terminal_tasks() {
+        let queries = StubGuardQueries {
+            workspace_count: 3,
+            sampled: std::cell::RefCell::new(Vec::new()),
+        };
+        let error = enforce_deletion_guards_for_removals(&queries, &workspace_removal())
+            .expect_err("a workspace with running tasks must not be deletable");
+        let message = error.to_string();
+        assert!(
+            message.contains("docs"),
+            "refusal does not name the workspace: {message}"
+        );
+        assert!(
+            message.contains("alpha"),
+            "refusal does not name the project: {message}"
+        );
+        assert_eq!(
+            queries.sampled.borrow().as_slice(),
+            ["docs".to_string()],
+            "the blocker sample was not taken for the removed workspace"
+        );
+    }
+
+    #[test]
+    fn deletion_guard_permits_a_workspace_with_no_tasks_without_sampling() {
+        let queries = StubGuardQueries {
+            workspace_count: 0,
+            sampled: std::cell::RefCell::new(Vec::new()),
+        };
+        enforce_deletion_guards_for_removals(&queries, &workspace_removal())
+            .expect("a workspace with no non-terminal tasks is deletable");
+        assert!(
+            queries.sampled.borrow().is_empty(),
+            "a zero count still queried for a sample of blockers"
+        );
     }
 }
