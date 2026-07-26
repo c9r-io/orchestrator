@@ -83,6 +83,7 @@
 | FR-133 | 依赖策略门禁 — 重复版本、许可证与来源约束 | P3 | Proposed |
 | FR-135 | 边界层覆盖率 job 恢复 — bash 3.2 空数组与产物路径 | P1 | Proposed |
 | FR-136 | 持久化依赖收口决策 — 新 crate 是收口点还是共享依赖 | P1 | Proposed |
+| FR-137 | governance job 聚合清单的完整性断言 | P2 | Proposed |
 
 ## 说明
 
@@ -93,6 +94,7 @@
 - `Implemented`: 需求已完成并进入维护阶段
 - 已闭环并删除的 FR，应由对应 `docs/design_doc/**` 与 `docs/qa/**` 继续承载设计和验证信息
 - FR-127 至 FR-133 源自 2026-07-25 的技术负债深挖，共同特征是**治理编写侧严格而执行侧未接线**：门禁、镜像、同步链路、依赖策略均存在"写了但不跑"或"从未被检查"的缺口。FR-127、FR-128、FR-129、FR-131、FR-132 与 FR-134 均已闭环——执行面已打开并改由执行事实校验，覆盖面改为发现式，既有门禁的维护摩擦已降低，镜像缺口已消除，文档发布链路已单一来源化，CI 每个 job 的存活性进入台账；后续实施顺序为 FR-135（`boundary-coverage` 是当前唯一带 `known-failing` 标注的红 job）→ FR-133（门禁挂到该执行面上）→ FR-130 的剩余部分（唯一的结构性重构，与其余各项无依赖）。FR-076 的需求 1（GUI CI 集成）同源，已在该 FR 内单独提升为 P1
+- FR-137 源自 FR-134 的闭环后审计：`governance` job 的 20 个门禁步骤改为 `continue-on-error: true` 后由末尾 `Governance result` 汇总，但那份 `OUTCOMES` 是手写枚举且无人守护——插入一个带 `id:`、`continue-on-error: true` 且恒失败、却不在 `OUTCOMES` 中的步骤，门禁仍报 12/12 全绿。这是 FR-134 在别处消灭了六次的枚举式覆盖面，出现在它自己为诊断可见性所做的修复里。当前 20 个 id 与 20 条 `OUTCOMES` 差集为空，故属潜伏而非已发作
 - FR-136 从 FR-130 的边界冻结中析出：除 core 外另有 4 个生产 crate（scheduler 37 处 / daemon 22 / slack-gateway 9 / security 7，共 23 个文件 75 处）直接依赖 `rusqlite`，`integration-tests` 的声明为 dev-dependency。在 core 里定义 port trait 无法阻止这些 crate 转而直接依赖新 crate，因此"新 crate 是收口点还是又一个共享底座"是必须先于提取作出的架构决策。FR-130 的 Phase A 以此为前置
 - FR-135 源自 FR-127/128 接线后的真实 CI 观察：`boundary-coverage` job 在最近全部 6 次运行中失败于 `scripts/coverage-governance.sh:38` 的 `branch_args[@]: unbound variable`——macOS runner 的 bash 3.2 在 `set -u` 下拒绝展开空数组，而 bash 4+ 展开为零参数。姊妹 job `coverage-policy-fixtures` 因 `--fixture-test` 在第 16 行 `exec` 到 node 而永不经过该行，两个 job 调用同一脚本却覆盖不相交路径，前者全绿掩盖了后者自 `1c0b170d`（42 个提交前）起从未执行过覆盖率比对
 - FR-134 已闭环删除；其**以执行事实取代文本存在性**的四项判定（由解析 workflow step 得出的接线真实性、逐 agent 关联的 bundle 钉死校验、真实执行并双向验证的 provider 遮蔽断言、全集减豁免的 stale-claim 扫描）、**由发现而非枚举得出的覆盖面**（`git ls-files '*.md'` 全集、递归的 `scripts/qa/**` 分类与 `supportFiles[]`、由 git index 中被追踪符号链接推导的镜像根、由解析 workflow 得出的 CI job 清单）、**门禁可运行性**（依赖一致性、workspace 范围、诊断保真、provider stub 覆盖）、CI 存活性台账与环境等价性门禁，以及共享 Rust 词法器，现由 `docs/design_doc/orchestrator/145-gate-surface-execution-truth.md`、`docs/qa/orchestrator/183-gate-surface-execution-truth.md`、`config/governance/ci-job-liveness.json`、`config/governance/qa-gate-surface.json`、`scripts/lib/{rust_lexer,workflow_model,manifest_model,ci_env,gate_preamble,provider_isolation}.*`、`scripts/qa/{ci-liveness.rb,test-ci-liveness.sh,test-ci-environment-parity.sh,test-qa-gate-surface.sh,test-skill-mirror-integrity.sh}` 与 `.github/workflows/ci.yml`（`governance` 与新增的 `ci-environment-parity` job、`./.github/actions/provider-stubs` 复合 action）承载。
