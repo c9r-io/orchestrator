@@ -8,68 +8,68 @@
       "jobs": {
         "async-lock-governance": {
           "conclusion": "success",
-          "runId": "30167831584",
-          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
+          "runId": "30182768742",
+          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
         },
         "fmt": {
           "conclusion": "success",
-          "runId": "30167831584",
-          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
+          "runId": "30182768742",
+          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
         },
         "clippy": {
           "conclusion": "success",
-          "runId": "30167831584",
-          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
+          "runId": "30182768742",
+          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
         },
         "test": {
           "conclusion": "success",
-          "runId": "30167831584",
-          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
+          "runId": "30182768742",
+          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
         },
         "coordination-strangler": {
           "conclusion": "success",
-          "runId": "30167831584",
-          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
+          "runId": "30182768742",
+          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
         },
         "governance": {
-          "conclusion": "success",
-          "runId": "30167831584",
-          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
+          "conclusion": "failure",
+          "runId": "30182768742",
+          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7",
+          "knownFailing": {
+            "reference": "FR-135",
+            "reason": "Failed at c9ada747 on three things this commit repairs: qa-doc-lint rejecting QA-184 for a sixth scenario, the doc lifecycle index not yet regenerated for DD-146/QA-184, and its own liveness record being stale because this FR changed ci.yml. A job cannot record its own recovery in one pass — the run that would record success is the run this record blocks — so the annotation is the designed second step and is removed by the next refresh.",
+            "expectedBy": "2026-07-27"
+          }
         },
         "ci-environment-parity": {
           "conclusion": "success",
-          "runId": "30167831584",
-          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
+          "runId": "30182768742",
+          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
         },
         "coverage-policy-fixtures": {
           "conclusion": "success",
-          "runId": "30167831584",
-          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
+          "runId": "30182768742",
+          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
         },
         "slack-certification-recorded": {
           "conclusion": "success",
-          "runId": "30167831584",
-          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
+          "runId": "30182768742",
+          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
         },
         "boundary-coverage": {
-          "conclusion": "failure",
-          "runId": "30167831584",
-          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438",
-          "knownFailing": {
-            "reference": "FR-135",
-            "reason": "coverage-governance.sh:38 expands an empty array under set -u, which bash 3.2 on the macOS runner rejects as unbound. Red for six consecutive runs before anything noticed, which is why this ledger covers every CI job rather than only the classified gates.",
-            "expectedBy": "2026-08-15"
-          }
+          "conclusion": "success",
+          "runId": "30182768742",
+          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
         },
         "miri": {
           "conclusion": "success",
-          "runId": "30167831584",
-          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
+          "runId": "30182768742",
+          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
         },
         "cross-compile": {
           "conclusion": "success",
-          "runId": "30167831584",
-          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
+          "runId": "30182768742",
+          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
         }
       }
     },
@@ -90,8 +90,8 @@
       "jobs": {
         "cargo-audit": {
           "conclusion": "success",
-          "runId": "30167831597",
-          "headSha": "34d60faaf24c3aa404d6bafa4b1c2df141e36438"
+          "runId": "30182768731",
+          "headSha": "c9ada747c68b53293ee0b406c1d54a6be39a25d7"
         }
       }
     },

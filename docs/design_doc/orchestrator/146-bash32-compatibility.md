@@ -283,3 +283,11 @@ is position-independent.
 - bash 3.2 has more incompatibilities than the seven classes here. These are the
   ones this repository has actually hit; a new one arrives unguarded until it is
   added.
+- Recovering this job exposed a property of `config/governance/ci-job-liveness.json`
+  worth writing down: **the `governance` job cannot record its own recovery in
+  one pass.** Its liveness step runs inside itself, so any commit that touches
+  `ci.yml` makes the job's own record stale, the job goes red, and the refreshed
+  record then says `failure` — which the next run reads and fails on again. The
+  `knownFailing` annotation is the designed escape and converges in two steps,
+  which is what FR-135 used; it is not a defect so much as a shape a reader
+  should know before assuming the annotation means something is broken.
