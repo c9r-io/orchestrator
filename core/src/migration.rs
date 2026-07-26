@@ -23,15 +23,28 @@ mod tests {
     use super::*;
     use crate::async_database::AsyncDatabase;
     use crate::db::configure_conn;
-    use crate::persistence::migration_steps::{
-        HISTORICAL_AGENT_PLACEHOLDER, m0001_baseline_schema, m0009_normalize_unspecified_agent_ids,
-    };
+    use crate::persistence::migration_steps::HISTORICAL_AGENT_PLACEHOLDER;
     use crate::process_metrics::{
         AsyncProcessMetricsRepository, MetricObservation, SUPPORTED_BUCKET_SECONDS,
     };
     use std::collections::BTreeMap;
     use std::sync::Arc;
     use tempfile::tempdir;
+
+    /// The registered migration at `version`, for tests that need a partial
+    /// chain.
+    ///
+    /// The step functions live in `orchestrator-persistence` and are private to
+    /// it; the registration list is the supported way to reach one. Building
+    /// the chain out of the registered entries is also the stronger test — a
+    /// hand-written `Migration { version, name, up }` asserts against a copy,
+    /// and a copy stays green when the registration it mirrors changes.
+    fn registered(version: u32) -> Migration {
+        all_migrations()
+            .into_iter()
+            .find(|migration| migration.version == version)
+            .unwrap_or_else(|| panic!("migration {version} is registered"))
+    }
 
     fn mem_conn() -> Connection {
         let conn = Connection::open_in_memory().expect("open in-memory sqlite");
@@ -614,19 +627,11 @@ mod tests {
         }
 
         // Run migration 1 first so we have tables
-        let first = vec![Migration {
-            version: 1,
-            name: "m0001_baseline_schema",
-            up: m0001_baseline_schema,
-        }];
+        let first = vec![registered(1)];
         run_pending(&conn, &first).expect("first migration");
 
         let bad = vec![
-            Migration {
-                version: 1,
-                name: "m0001_baseline_schema",
-                up: m0001_baseline_schema,
-            },
+            registered(1),
             Migration {
                 version: 2,
                 name: "m_fail",
@@ -642,11 +647,7 @@ mod tests {
     #[test]
     fn baseline_schema_creates_all_tables() {
         let conn = mem_conn();
-        let migrations = vec![Migration {
-            version: 1,
-            name: "m0001_baseline_schema",
-            up: m0001_baseline_schema,
-        }];
+        let migrations = vec![registered(1)];
         run_pending(&conn, &migrations).expect("run baseline");
 
         let tables: Vec<String> = {
@@ -701,11 +702,7 @@ mod tests {
         .expect("create old tasks table");
 
         // Run baseline — should not fail
-        let migrations = vec![Migration {
-            version: 1,
-            name: "m0001_baseline_schema",
-            up: m0001_baseline_schema,
-        }];
+        let migrations = vec![registered(1)];
         run_pending(&conn, &migrations).expect("baseline on existing db");
     }
 
@@ -876,11 +873,7 @@ mod tests {
         )
         .expect("insert command run with historical placeholder");
 
-        let normalize = vec![Migration {
-            version: 9,
-            name: "m0009_normalize_unspecified_agent_ids",
-            up: m0009_normalize_unspecified_agent_ids,
-        }];
+        let normalize = vec![registered(9)];
 
         conn.execute("DELETE FROM schema_migrations WHERE version >= 9", [])
             .expect("clear migration 9+ records");

@@ -1,0 +1,19 @@
+[package]
+name = "orchestrator-persistence"
+version = "0.3.1"
+description = "SQLite persistence layer for the Agent Orchestrator — migration chain, connections, and repositories"
+repository = "https://github.com/c9r-io/orchestrator"
+keywords = ["orchestrator", "agent", "persistence", "sqlite"]
+categories = ["development-tools"]
+license = "MIT"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow = "1.0"
+rusqlite = { version = "0.31", features = ["bundled"] }
+serde_json = "1.0"
+tracing = "0.1"
+
+[dev-dependencies]
+tempfile = "3.26.0"

@@ -63,6 +63,7 @@ dependencies = [
  "nix",
  "orchestrator-collab",
  "orchestrator-config",
+ "orchestrator-persistence",
  "orchestrator-proto",
  "orchestrator-runner",
  "orchestrator-security",
@@ -3321,6 +3322,17 @@ dependencies = [
  "tokio-rusqlite",
  "tokio-stream",
  "tonic",
+]
+
+[[package]]
+name = "orchestrator-persistence"
+version = "0.3.1"
+dependencies = [
+ "anyhow",
+ "rusqlite",
+ "serde_json",
+ "tempfile",
+ "tracing",
 ]
 
 [[package]]

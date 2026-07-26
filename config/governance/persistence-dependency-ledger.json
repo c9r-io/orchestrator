@@ -12,6 +12,7 @@
     "crates/orchestrator-client/src",
     "crates/orchestrator-collab/src",
     "crates/orchestrator-config/src",
+    "crates/orchestrator-persistence/src",
     "crates/orchestrator-runner/src",
     "crates/orchestrator-scheduler/build.rs",
     "crates/orchestrator-scheduler/src",
@@ -63,6 +64,10 @@
     "crates/orchestrator-config": {
       "role": "none",
       "reason": "no relationship to persistence; reaching for the driver here would be a new consumer, not a residual"
+    },
+    "crates/orchestrator-persistence": {
+      "role": "persistence",
+      "reason": "the persistence layer itself, as FR-130 Phase A. It owns agent_orchestrator.db: the connections that open it, the migration chain that shapes it, and the repositories that read and write it. Naming the driver here is the decision recorded above, not a residual to pay down"
     },
     "crates/orchestrator-runner": {
       "role": "none",
@@ -128,6 +133,12 @@
       "dependencies": [],
       "devDependencies": []
     },
+    "crates/orchestrator-persistence": {
+      "dependencies": [
+        "rusqlite"
+      ],
+      "devDependencies": []
+    },
     "crates/orchestrator-runner": {
       "dependencies": [],
       "devDependencies": []
@@ -186,6 +197,30 @@
       "rusqlite": 1,
       "sql": 2,
       "category": "borrowed-connection-raw-sql"
+    },
+    "crates/orchestrator-persistence/src/migration.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 2,
+      "sql": 4,
+      "category": "persistence-layer"
+    },
+    "crates/orchestrator-persistence/src/migration_steps.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 3,
+      "sql": 111,
+      "category": "persistence-layer"
+    },
+    "crates/orchestrator-persistence/src/schema.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 0,
+      "sql": 1,
+      "category": "persistence-layer"
+    },
+    "crates/orchestrator-persistence/src/sqlite.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 1,
+      "sql": 1,
+      "category": "persistence-layer"
     },
     "crates/orchestrator-scheduler/src/scheduler/item_generate.rs": {
       "crate": "crates/orchestrator-scheduler",
@@ -255,9 +290,9 @@
     }
   },
   "totals": {
-    "members": 13,
-    "referencedFiles": 16,
-    "rusqlite": 55,
-    "sql": 114
+    "members": 14,
+    "referencedFiles": 20,
+    "rusqlite": 61,
+    "sql": 231
   }
 }

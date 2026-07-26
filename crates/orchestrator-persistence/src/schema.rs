@@ -1,6 +1,6 @@
-use crate::persistence::migration as schema_migration;
-pub use crate::persistence::migration::SchemaStatus;
-use crate::persistence::sqlite::open_conn;
+use crate::migration as schema_migration;
+pub use crate::migration::SchemaStatus;
+use crate::sqlite::open_conn;
 use anyhow::{Context, Result};
 use std::path::Path;
 

@@ -1,7 +1,14 @@
 use anyhow::{Context, Result};
 use rusqlite::Connection;
 
-pub(crate) const HISTORICAL_AGENT_PLACEHOLDER: &str = "legacy";
+/// The `agent_id` value historical rows carried before agents were named, and
+/// the value `m0009_normalize_unspecified_agent_ids` rewrites to `unspecified`.
+///
+/// Public because it is part of the migration chain's contract rather than an
+/// implementation detail: a caller asserting that the normalisation happened
+/// has to name the value being normalised away, and naming it by literal is how
+/// such an assertion goes stale without failing.
+pub const HISTORICAL_AGENT_PLACEHOLDER: &str = "legacy";
 
 fn ensure_column_exists(conn: &Connection, table: &str, column: &str, ddl: &str) -> Result<()> {
     let mut stmt = conn

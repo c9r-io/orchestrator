@@ -5,6 +5,7 @@ members = [
     "crates/orchestrator-collab",
     "crates/orchestrator-config",
     "crates/orchestrator-runner",
+    "crates/orchestrator-persistence",
     "crates/orchestrator-security",
     "crates/orchestrator-scheduler",
     "crates/proto",
