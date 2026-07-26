@@ -246,7 +246,8 @@ is position-independent.
 ### What this establishes
 
 - The `boundary-coverage` job reaches the coverage comparison on the macOS
-  runner.
+  runner. Observed: run `30182768742`, `coverage governance passed`, a 3.9 MB
+  artifact uploaded, the job's first success.
 - Every tracked shell file is checked for constructs bash 3.2 rejects, on a set
   derived from git rather than declared.
 - The rules are executed, not just matched: each class is run under a real bash

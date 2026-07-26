@@ -8,7 +8,7 @@ self_referential_safe: true
 
 **Module**: CI / Governance
 **Scope**: bash 3.2 hazard elimination and its gate, the coverage-governance shell main path, diagnostic fidelity of the artifact upload step, and the observed recovery of the `boundary-coverage` job
-**Scenarios**: 6
+**Scenarios**: 5
 **Priority**: High
 
 ## Background
@@ -136,7 +136,7 @@ This is the acceptance criterion stated as an experiment. It needs a real bash
 
 ---
 
-## Scenario 4: The Shell Main Path Is Exercised Without Collecting Coverage
+## Scenario 4: The Shell Main Path Is Exercised, And Its Failure Is Not Masked
 
 ### Preconditions
 
@@ -149,6 +149,9 @@ This is the acceptance criterion stated as an experiment. It needs a real bash
 2. Confirm the reported interpreter and whether 3.2 semantics were in force.
 3. Confirm the collection argv is asserted exactly, not by substring.
 4. Confirm case 5 asserts `--fixture-test` never reaches the cargo path.
+5. Read the `boundary-coverage` job's upload step in `.github/workflows/ci.yml`
+   and confirm `if: always()` is retained while `if-no-files-found` is `warn`.
+6. Set it back to `error`, re-run the wrapper, then revert.
 
 ### Expected Result
 
@@ -164,35 +167,16 @@ This is the acceptance criterion stated as an experiment. It needs a real bash
 - Step 4 confirms the FR's premise rather than assuming it. If the `exec` on
   line 16 ever stopped short-circuiting, the fixtures job would begin covering
   the main path and this gate's reason for existing would change.
-
----
-
-## Scenario 5: A Generation Failure Is The First Error A Reader Sees
-
-### Preconditions
-
-- None; this is read from the workflow.
-
-### Steps
-
-1. Read the `boundary-coverage` job's upload step in `.github/workflows/ci.yml`.
-2. Confirm `if: always()` is retained and `if-no-files-found` is `warn`.
-3. Set it back to `error` and run
-   `./scripts/qa/test-coverage-governance-mainpath.sh`.
-4. Revert.
-
-### Expected Result
-
-- Step 2 holds. `always()` is kept deliberately: artifacts are most worth
+- Step 5 holds. `always()` is kept deliberately: artifacts are most worth
   reading when the *comparison* fails, and that is a successful generation.
-- Step 3 fails case 6, naming the job and step. That case parses the workflow —
-  the two settings are separate keys and grepping for either says nothing about
-  the pair, which is what causes the masking.
-- Step 4 restores a passing run.
+- Step 6 fails case 6, naming the job and step, and reverting restores a passing
+  run. That case parses the workflow — the two settings are separate keys and
+  grepping for either says nothing about the pair, which is what causes the
+  masking.
 
 ---
 
-## Scenario 6: The Job Actually Recovered On A Real Runner
+## Scenario 5: The Job Actually Recovered On A Real Runner
 
 The defect only appears on a macOS runner and had been masked by the upload step
 for 77 commits. A local pass is not evidence that it is fixed.
@@ -226,6 +210,25 @@ for 77 commits. A local pass is not evidence that it is fixed.
 - If the comparison itself fails on its merits after the job is recovered, that
   is a separate issue: FR-135 does not adjust `coverage/boundary-baseline.json`.
 
+### Observed
+
+Run `30182612498` (`d1f878be`) — the bash 3.2 fix alone. `Boundary coverage
+non-regression` ran two and a half minutes into `cargo llvm-cov` and failed on
+`tauri::generate_context!`, which reads `frontendDist: ../../gui/dist` at
+compile time; nothing in the job built the bundle. The upload step reported
+`##[warning]No files were found`, not `##[error]` — requirement 4 verified on a
+real runner. The macOS fixtures leg reported `legacy interpreter: /bin/bash
+(3.2.57(1)-release)` and `23 passed, 0 failed, 0 skipped`; the ubuntu leg
+reported `5.2.21` with `15 passed, 0 failed, 8 skipped` and its warning.
+
+Run `30182768742` (`c9ada747`) — with the frontend build added. `Boundary
+coverage non-regression`: **success**, the first in the job's existence. The log
+reaches `coverage summary written to target/coverage-governance/summary.json`,
+then `coverage governance passed`, and uploads a 3.9 MB artifact
+(`boundary-coverage-macOS-ARM64`, id `8626122997`). The non-regression
+comparison ran against the approved baseline and passed, so the separate-issue
+clause did not arise.
+
 ---
 
 ## Checklist
@@ -235,9 +238,8 @@ for 77 commits. A local pass is not evidence that it is fixed.
 | 1 | The defect reproduces before the fix and not after | ☑ PASS | 2026-07-26 | Claude |
 | 2 | No tracked shell file carries a bash 3.2 hazard | ☑ PASS | 2026-07-26 | Claude |
 | 3 | Each rejection the gate claims is real, and each rule is too | ☑ PASS | 2026-07-26 | Claude |
-| 4 | The shell main path is exercised without collecting coverage | ☑ PASS | 2026-07-26 | Claude |
-| 5 | A generation failure is the first error a reader sees | ☑ PASS | 2026-07-26 | Claude |
-| 6 | The job actually recovered on a real runner | ☐ PENDING | | |
+| 4 | The shell main path is exercised, and its failure is not masked | ☑ PASS | 2026-07-26 | Claude |
+| 5 | The job actually recovered on a real runner | ☑ PASS | 2026-07-26 | Claude |
 
 ## Certification Conditions
 

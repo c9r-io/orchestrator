@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 401,
-    "active": 398,
+    "documents": 403,
+    "active": 400,
     "superseded": 3,
-    "withRelatedFr": 246
+    "withRelatedFr": 248
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -291,6 +291,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-134"
+      ]
+    },
+    "docs/design_doc/orchestrator/146-bash32-compatibility.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-135"
       ]
     },
     "docs/design_doc/orchestrator/15-task-trace.md": {
@@ -1457,6 +1463,12 @@
         "FR-134"
       ]
     },
+    "docs/qa/orchestrator/184-bash32-compatibility.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-135"
+      ]
+    },
     "docs/qa/orchestrator/19-scheduler-repository-refactor-regression.md": {
       "lifecycle": "active"
     },
@@ -2443,6 +2455,10 @@
     "FR-134": [
       "docs/design_doc/orchestrator/145-gate-surface-execution-truth.md",
       "docs/qa/orchestrator/183-gate-surface-execution-truth.md"
+    ],
+    "FR-135": [
+      "docs/design_doc/orchestrator/146-bash32-compatibility.md",
+      "docs/qa/orchestrator/184-bash32-compatibility.md"
     ]
   },
   "supersedes": {
