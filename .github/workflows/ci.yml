@@ -238,6 +238,11 @@ jobs:
         env:
           PROTOC: /usr/bin/protoc
 
+      - name: Persistence dependency chokepoint
+        id: persistence-dependency
+        continue-on-error: true
+        run: ./scripts/qa/test-persistence-dependency.sh
+
       - name: Design doc and QA lifecycle metadata
         id: doc-lifecycle
         continue-on-error: true
@@ -304,6 +309,7 @@ jobs:
             coordination=${{ steps.coordination.outcome }}
             ledger-tooling=${{ steps.ledger-tooling.outcome }}
             core-boundary=${{ steps.core-boundary.outcome }}
+            persistence-dependency=${{ steps.persistence-dependency.outcome }}
             doc-lifecycle=${{ steps.doc-lifecycle.outcome }}
             decommission=${{ steps.decommission.outcome }}
             codex-resume=${{ steps.codex-resume.outcome }}

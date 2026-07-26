@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 403,
-    "active": 400,
+    "documents": 405,
+    "active": 402,
     "superseded": 3,
-    "withRelatedFr": 248
+    "withRelatedFr": 250
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -297,6 +297,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-135"
+      ]
+    },
+    "docs/design_doc/orchestrator/147-persistence-dependency-chokepoint.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-136"
       ]
     },
     "docs/design_doc/orchestrator/15-task-trace.md": {
@@ -1469,6 +1475,12 @@
         "FR-135"
       ]
     },
+    "docs/qa/orchestrator/185-persistence-dependency-chokepoint.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-136"
+      ]
+    },
     "docs/qa/orchestrator/19-scheduler-repository-refactor-regression.md": {
       "lifecycle": "active"
     },
@@ -2459,6 +2471,10 @@
     "FR-135": [
       "docs/design_doc/orchestrator/146-bash32-compatibility.md",
       "docs/qa/orchestrator/184-bash32-compatibility.md"
+    ],
+    "FR-136": [
+      "docs/design_doc/orchestrator/147-persistence-dependency-chokepoint.md",
+      "docs/qa/orchestrator/185-persistence-dependency-chokepoint.md"
     ]
   },
   "supersedes": {

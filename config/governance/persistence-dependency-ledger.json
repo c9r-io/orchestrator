@@ -1,0 +1,244 @@
+{
+  "schemaVersion": 1,
+  "scope": "every workspace member listed in the root Cargo.toml, its Cargo.toml parsed by dependency section, and its non-test Rust source outside core/src excluding inline cfg(test) modules, files under a tests directory, and files named test*.rs",
+  "decision": {
+    "form": "scoped-layered-chokepoint",
+    "database": "agent_orchestrator.db",
+    "summary": "The orchestrator database has one persistence layer: core today, orchestrator-persistence after FR-130 Phase A. Crates above that layer may not reach the driver; the two that do today carry a frozen residual until FR-130 pays it down. The line is drawn at the database rather than at the crate graph because two of the six driver-holding crates are not above the layer at all: orchestrator-security sits below core, and slack-gateway owns a different database.",
+    "decisiveCase": "crates/orchestrator-scheduler/src/scheduler/task_state.rs holds eight production driver references inside scheduling logic. It is forbidden. FR-136 states that if even this file may stay where it is, the form chosen is really B; it may not.",
+    "rejectedForms": {
+      "A": "Strict: only orchestrator-persistence names the driver. Rejected because core depends on orchestrator-security, so strict A requires persistence to sit below security or the edge to be inverted, and because slack-gateway has no workspace dependencies and its own database — strict A would manufacture an edge for a database that shares nothing with this one.",
+      "B": "Controlled sharing: freeze today's list, review additions. Rejected because it leaves task_state.rs in place, which FR-136 names as the test for whether a decision is really B."
+    }
+  },
+  "roles": {
+    "core": {
+      "role": "persistence",
+      "reason": "the persistence layer today; orchestrator-persistence inherits this role at FR-130 Phase A"
+    },
+    "crates/cli": {
+      "role": "none",
+      "reason": "no relationship to persistence; reaching for the driver here would be a new consumer, not a residual"
+    },
+    "crates/daemon": {
+      "role": "forbidden",
+      "reason": "sits above core and borrows its AsyncDatabase connection to run raw SQL in gRPC handlers; 22 driver references and 19 SQL statements to migrate",
+      "residualDeclaration": true
+    },
+    "crates/gui": {
+      "role": "none",
+      "reason": "no relationship to persistence; reaching for the driver here would be a new consumer, not a residual"
+    },
+    "crates/integration-tests": {
+      "role": "test-only",
+      "reason": "declares the driver under [dev-dependencies] and uses it in tests/trigger_fire.rs to assert against the database directly, which is legitimate for a test. Frozen to the dev section so it cannot become a production dependency"
+    },
+    "crates/orchestrator-client": {
+      "role": "none",
+      "reason": "no relationship to persistence; reaching for the driver here would be a new consumer, not a residual"
+    },
+    "crates/orchestrator-collab": {
+      "role": "none",
+      "reason": "no relationship to persistence; reaching for the driver here would be a new consumer, not a residual"
+    },
+    "crates/orchestrator-config": {
+      "role": "none",
+      "reason": "no relationship to persistence; reaching for the driver here would be a new consumer, not a residual"
+    },
+    "crates/orchestrator-runner": {
+      "role": "none",
+      "reason": "no relationship to persistence; reaching for the driver here would be a new consumer, not a residual"
+    },
+    "crates/orchestrator-scheduler": {
+      "role": "forbidden",
+      "reason": "sits above core and borrows its AsyncDatabase connection to run raw SQL in scheduling logic; 17 driver references and 16 SQL statements to migrate",
+      "residualDeclaration": true
+    },
+    "crates/orchestrator-security": {
+      "role": "exempt",
+      "reason": "core depends on orchestrator-security, not the reverse, so it cannot route through a layer above it. It opens the orchestrator database by path with its own synchronous connection and owns secret_keys, secret_key_audit and the encrypted resources rows. Frozen rather than migrated: inverting the edge to save six references is not proportionate"
+    },
+    "crates/proto": {
+      "role": "none",
+      "reason": "no relationship to persistence; reaching for the driver here would be a new consumer, not a residual"
+    },
+    "crates/slack-gateway": {
+      "role": "separate-database",
+      "reason": "no workspace dependencies at all, and GatewayStore::open opens SLACK_GATEWAY_DATABASE, documented in config.rs as the gateway-owned database. Its 55 SQL statements never touch agent_orchestrator.db, so it is outside this chokepoint. Frozen so it cannot quietly begin opening the orchestrator database"
+    }
+  },
+  "declarations": {
+    "core": {
+      "dependencies": [
+        "rusqlite",
+        "tokio-rusqlite"
+      ],
+      "devDependencies": []
+    },
+    "crates/cli": {
+      "dependencies": [],
+      "devDependencies": []
+    },
+    "crates/daemon": {
+      "dependencies": [
+        "rusqlite",
+        "tokio-rusqlite"
+      ],
+      "devDependencies": []
+    },
+    "crates/gui": {
+      "dependencies": [],
+      "devDependencies": []
+    },
+    "crates/integration-tests": {
+      "dependencies": [],
+      "devDependencies": [
+        "rusqlite",
+        "tokio-rusqlite"
+      ]
+    },
+    "crates/orchestrator-client": {
+      "dependencies": [],
+      "devDependencies": []
+    },
+    "crates/orchestrator-collab": {
+      "dependencies": [],
+      "devDependencies": []
+    },
+    "crates/orchestrator-config": {
+      "dependencies": [],
+      "devDependencies": []
+    },
+    "crates/orchestrator-runner": {
+      "dependencies": [],
+      "devDependencies": []
+    },
+    "crates/orchestrator-scheduler": {
+      "dependencies": [
+        "rusqlite",
+        "tokio-rusqlite"
+      ],
+      "devDependencies": []
+    },
+    "crates/orchestrator-security": {
+      "dependencies": [
+        "rusqlite"
+      ],
+      "devDependencies": []
+    },
+    "crates/proto": {
+      "dependencies": [],
+      "devDependencies": []
+    },
+    "crates/slack-gateway": {
+      "dependencies": [
+        "rusqlite"
+      ],
+      "devDependencies": []
+    }
+  },
+  "references": {
+    "crates/daemon/src/main.rs": {
+      "crate": "crates/daemon",
+      "rusqlite": 1,
+      "sql": 0,
+      "category": "driver-error-type"
+    },
+    "crates/daemon/src/server/attention.rs": {
+      "crate": "crates/daemon",
+      "rusqlite": 1,
+      "sql": 1,
+      "category": "borrowed-connection-raw-sql"
+    },
+    "crates/daemon/src/server/handoff.rs": {
+      "crate": "crates/daemon",
+      "rusqlite": 1,
+      "sql": 4,
+      "category": "borrowed-connection-raw-sql"
+    },
+    "crates/daemon/src/server/session.rs": {
+      "crate": "crates/daemon",
+      "rusqlite": 18,
+      "sql": 12,
+      "category": "borrowed-connection-raw-sql"
+    },
+    "crates/daemon/src/server/source.rs": {
+      "crate": "crates/daemon",
+      "rusqlite": 1,
+      "sql": 2,
+      "category": "borrowed-connection-raw-sql"
+    },
+    "crates/orchestrator-scheduler/src/scheduler/item_generate.rs": {
+      "crate": "crates/orchestrator-scheduler",
+      "rusqlite": 3,
+      "sql": 3,
+      "category": "borrowed-connection-raw-sql"
+    },
+    "crates/orchestrator-scheduler/src/scheduler/phase_runner/spawn.rs": {
+      "crate": "crates/orchestrator-scheduler",
+      "rusqlite": 1,
+      "sql": 0,
+      "category": "driver-error-type"
+    },
+    "crates/orchestrator-scheduler/src/scheduler/runtime.rs": {
+      "crate": "crates/orchestrator-scheduler",
+      "rusqlite": 1,
+      "sql": 1,
+      "category": "borrowed-connection-raw-sql"
+    },
+    "crates/orchestrator-scheduler/src/scheduler/safety/restart.rs": {
+      "crate": "crates/orchestrator-scheduler",
+      "rusqlite": 2,
+      "sql": 2,
+      "category": "borrowed-connection-raw-sql"
+    },
+    "crates/orchestrator-scheduler/src/scheduler/spawn.rs": {
+      "crate": "crates/orchestrator-scheduler",
+      "rusqlite": 2,
+      "sql": 2,
+      "category": "borrowed-connection-raw-sql"
+    },
+    "crates/orchestrator-scheduler/src/scheduler/task_state.rs": {
+      "crate": "crates/orchestrator-scheduler",
+      "rusqlite": 8,
+      "sql": 8,
+      "category": "borrowed-connection-raw-sql"
+    },
+    "crates/orchestrator-security/src/lib.rs": {
+      "crate": "crates/orchestrator-security",
+      "rusqlite": 2,
+      "sql": 1,
+      "category": "owned-connection"
+    },
+    "crates/orchestrator-security/src/secret_key_audit.rs": {
+      "crate": "crates/orchestrator-security",
+      "rusqlite": 3,
+      "sql": 3,
+      "category": "owned-connection"
+    },
+    "crates/orchestrator-security/src/secret_key_lifecycle.rs": {
+      "crate": "crates/orchestrator-security",
+      "rusqlite": 1,
+      "sql": 14,
+      "category": "owned-connection"
+    },
+    "crates/orchestrator-security/src/secret_store_crypto.rs": {
+      "crate": "crates/orchestrator-security",
+      "rusqlite": 0,
+      "sql": 4,
+      "category": "owned-connection"
+    },
+    "crates/slack-gateway/src/store.rs": {
+      "crate": "crates/slack-gateway",
+      "rusqlite": 10,
+      "sql": 55,
+      "category": "owned-connection"
+    }
+  },
+  "totals": {
+    "members": 13,
+    "referencedFiles": 16,
+    "rusqlite": 55,
+    "sql": 112
+  }
+}

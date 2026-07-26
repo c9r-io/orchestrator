@@ -31,8 +31,7 @@ CORE_ROOT = "core/src/".freeze
 # is deliberately not matched: it is not crate-external surface.
 PUBLIC_ITEM = /^\s*pub (?:async )?(?:fn|struct|enum|trait|type|const) /
 SCOPE = "non-test Rust source under core/src, excluding inline cfg(test) modules, " \
-  "files under a tests directory, and files named test*.rs; crate dependents are " \
-  "read from the member Cargo.toml manifests".freeze
+  "files under a tests directory, and files named test*.rs".freeze
 
 options = {
   ledger: "config/governance/core-boundary-ledger.json",
@@ -83,25 +82,21 @@ def rusqlite_touch_points(repo_root, files)
   }
 end
 
-# core is not the persistence chokepoint the FR assumed: six crates take rusqlite
-# directly. Freezing the list makes a seventh a review event rather than a
-# discovery made during the extraction.
-def rusqlite_dependent_crates(repo_root)
-  manifests = [repo_root.join("core/Cargo.toml")]
-  manifests.concat(Dir[repo_root.join("crates/*/Cargo.toml").to_s].map { |path| Pathname.new(path) })
-  manifests.select(&:file?).select do |manifest|
-    File.read(manifest).match?(/^\s*(?:tokio-)?rusqlite\s*=/)
-  end.map { |manifest| relative_path(repo_root, manifest.dirname) }.sort
-end
-
+# The list of crates taking rusqlite directly used to live here, as
+# `rusqliteDependentCrates`. FR-136 moved it to
+# config/governance/persistence-dependency-ledger.json, for three reasons:
+# it is a fact about the workspace rather than about core's boundary; it was
+# computed from a crates/* glob, so a member declared anywhere else was invisible
+# to it; and it read the whole manifest, so crates/integration-tests sat in the
+# frozen list beside four production crates although its declaration is a
+# [dev-dependency]. Nothing in this file freezes it now — one rule, one place.
 def boundary_snapshot(repo_root)
   files = core_source_files(repo_root)
   {
     "schemaVersion" => 1,
     "scope" => SCOPE,
     "coreSurface" => core_surface(repo_root, files),
-    "rusqlite" => rusqlite_touch_points(repo_root, files),
-    "rusqliteDependentCrates" => rusqlite_dependent_crates(repo_root)
+    "rusqlite" => rusqlite_touch_points(repo_root, files)
   }
 end
 
@@ -186,23 +181,13 @@ unless rusqlite_lines.empty?
   errors << "core rusqlite touch points differ from the reviewed ledger:\n#{rusqlite_lines.join("\n")}"
 end
 
-if expected["rusqliteDependentCrates"] != actual["rusqliteDependentCrates"]
-  added = actual["rusqliteDependentCrates"] - (expected["rusqliteDependentCrates"] || [])
-  removed = (expected["rusqliteDependentCrates"] || []) - actual["rusqliteDependentCrates"]
-  detail = []
-  detail << "  + #{added.join(", ")}" unless added.empty?
-  detail << "  - #{removed.join(", ")}" unless removed.empty?
-  errors << "crates depending directly on rusqlite differ from the reviewed ledger:\n#{detail.join("\n")}"
-end
-
 if errors.empty?
   puts "Core boundary: PASS"
   puts "  core/src files: #{actual["coreSurface"]["files"]}, " \
     "pub mod: #{actual["coreSurface"]["pubMod"]}, " \
     "public items: #{actual["coreSurface"]["publicItems"]}"
   puts "  rusqlite: #{actual["rusqlite"]["total"]} reference(s) across " \
-    "#{actual["rusqlite"]["files"].length} file(s) in core, " \
-    "#{actual["rusqliteDependentCrates"].length} crate(s) depend on it directly"
+    "#{actual["rusqlite"]["files"].length} file(s) in core"
   exit 0
 end
 

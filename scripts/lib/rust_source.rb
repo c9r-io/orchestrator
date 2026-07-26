@@ -31,8 +31,23 @@ module RustSource
   def rust_source_files(repo_root)
     roots = [repo_root.join("core/src")]
     roots.concat(Dir[repo_root.join("crates/*/src").to_s].map { |path| Pathname.new(path) })
-    files = roots.flat_map do |root|
-      Dir[root.join("**/*").to_s].each_with_object([]) do |path, collected|
+    manifests = [repo_root.join("core/Cargo.toml")]
+    manifests.concat(Dir[repo_root.join("crates/*/Cargo.toml").to_s].map { |path| Pathname.new(path) })
+    rust_files_under(repo_root, roots) + manifests.select(&:file?)
+  end
+
+  # The exclusion rules on their own, so a caller that discovers its roots
+  # differently does not have to restate them.
+  #
+  # rust_source_files above hardcodes core/src plus crates/*/src. That is the
+  # right scope for the two ledgers that count core, and the wrong one for
+  # anything asking a question about the workspace: a member declared outside
+  # crates/ is simply not scanned, silently. FR-136's gate derives its roots from
+  # the [workspace] members list and calls this directly, so the discovery is its
+  # own and only the counting is shared.
+  def rust_files_under(repo_root, roots)
+    roots.flat_map do |root|
+      Dir[Pathname.new(root).join("**/*").to_s].each_with_object([]) do |path, collected|
         pathname = Pathname.new(path)
         next unless pathname.file?
         next unless pathname.extname == ".rs"
@@ -42,9 +57,6 @@ module RustSource
         collected << pathname
       end
     end
-    manifests = [repo_root.join("core/Cargo.toml")]
-    manifests.concat(Dir[repo_root.join("crates/*/Cargo.toml").to_s].map { |path| Pathname.new(path) })
-    files + manifests.select(&:file?)
   end
 
   # Both ledgers' scope prose excludes inline cfg(test) modules. Matching a

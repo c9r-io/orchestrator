@@ -234,6 +234,23 @@
       "note": "mutates copies of core/src under a temporary directory; the only compilation is the workspace's own cargo test, and the working tree is never written."
     },
     {
+      "path": "scripts/qa/persistence-dependency.rb",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "invokedBy": "scripts/qa/test-persistence-dependency.sh",
+      "providerIsolation": { "mode": "no-provider" },
+      "note": "the FR-136 persistence chokepoint rule; case 1 of its wrapper runs it against the working tree, so the wrapper's CI step is what fails the build when a crate reaches for the SQLite driver or a frozen residual moves."
+    },
+    {
+      "path": "scripts/qa/test-persistence-dependency.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": { "mode": "no-provider" },
+      "note": "mutates copies of the member manifests and sources under a temporary directory; nothing is compiled, no database is opened, and the working tree is never written."
+    },
+    {
       "path": "scripts/qa/doc-lifecycle.rb",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",

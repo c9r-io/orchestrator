@@ -155,7 +155,14 @@ gui(7)、daemon(7)。该条对本次提取近乎空转，作为 FR-130 的需求
 
 - [ ] FR-134 需求 9 已闭环，且修复后 `core-boundary-ledger.json` 的 `200 / 37` 与
       `52 / 924 / 143` 未变化（变化项须逐条说明）
-- [ ] FR-136 已闭环，收口形态已选定
+- [x] FR-136 已闭环，收口形态已选定 —— 分层收口，线画在 `agent_orchestrator.db` 上：
+      core／`orchestrator-persistence` 为持久化层，`orchestrator-scheduler` 与 `daemon`
+      禁止直接持有驱动（`task_state.rs` 在被禁止的一侧），`orchestrator-security` 因位于
+      core 之下而书面豁免，`slack-gateway` 因自有数据库而不在范围内。Phase A 的迁出目标由
+      `config/governance/persistence-dependency-ledger.json` 的逐文件残量给出；两个 forbidden
+      crate 的 `residualDeclaration` 在残量清零后摘除，届时其 `Cargo.toml` 中的驱动声明本身
+      开始失败。跨 crate 事务接口无需设计：两者合计 0 处显式事务，实为多语句工作单元。
+      见 [DD-147](../design_doc/orchestrator/147-persistence-dependency-chokepoint.md)
 
 ### Phase A
 

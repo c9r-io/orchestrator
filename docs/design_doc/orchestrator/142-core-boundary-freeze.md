@@ -86,10 +86,18 @@ the governed directory says what it is.
 | `scope` | prose defining exactly what is counted, checked against the gate's own constant |
 | `coreSurface` | `files` 143, `pubMod` 52, `publicItems` 924 |
 | `rusqlite` | `total` 200 and a per-file map of 37 entries |
-| `rusqliteDependentCrates` | the six crates taking `rusqlite` directly |
 
 The per-file map is the ratchet and the extraction work-list at once. FR-130's remaining half
 inherits a machine-readable inventory rather than the prose list that was wrong.
+
+This ledger also carried `rusqliteDependentCrates`, the six crates taking `rusqlite` directly.
+FR-136 moved it to `config/governance/persistence-dependency-ledger.json`. It was a fact about
+the workspace rather than about core's boundary, and both halves of how it was computed were
+wrong for the question it was being asked: the crate list came from a `crates/*` glob, so a
+member declared anywhere else was invisible to it, and the match read the whole manifest, so
+`crates/integration-tests` sat in the frozen list beside four production crates although its
+declaration is a `[dev-dependency]`. See
+[DD-147](147-persistence-dependency-chokepoint.md).
 
 `scope` is compared, not merely stored. FR-128's lesson was that scope prose and scan
 behaviour drift silently — the coordination ledger claimed to exclude `cfg(test)` modules

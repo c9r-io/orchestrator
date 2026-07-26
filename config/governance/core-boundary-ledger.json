@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "scope": "non-test Rust source under core/src, excluding inline cfg(test) modules, files under a tests directory, and files named test*.rs; crate dependents are read from the member Cargo.toml manifests",
+  "scope": "non-test Rust source under core/src, excluding inline cfg(test) modules, files under a tests directory, and files named test*.rs",
   "coreSurface": {
     "files": 143,
     "pubMod": 52,
@@ -47,13 +47,5 @@
       "core/src/task_repository/write_ops.rs": 4,
       "core/src/trigger_engine.rs": 18
     }
-  },
-  "rusqliteDependentCrates": [
-    "core",
-    "crates/daemon",
-    "crates/integration-tests",
-    "crates/orchestrator-scheduler",
-    "crates/orchestrator-security",
-    "crates/slack-gateway"
-  ]
+  }
 }
