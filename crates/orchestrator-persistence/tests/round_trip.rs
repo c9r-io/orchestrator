@@ -492,3 +492,203 @@ fn the_secret_store_probe_matches_the_key_and_only_inside_a_secret_store() {
         "a prefix of a referenced key id was reported as a reference"
     );
 }
+
+/// FR-130 B8: the `control_action_audit` statements moved out of
+/// `core::action_audit`. `reserve` is `INSERT OR IGNORE` followed by one of two
+/// different reads, and which read ran is the fact the caller's conflict rule
+/// turns on — so the assertion is on the case, not merely on getting a row back.
+#[tokio::test]
+async fn a_reservation_reports_which_prior_row_it_found() {
+    use orchestrator_persistence::control_action_audit::{self as audit, Reservation};
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let db_path = temp.path().join("audit.db");
+    PersistenceBootstrap::ensure_current(&db_path).expect("bootstrap schema");
+    let db = AsyncDatabase::open(&db_path).await.expect("open async db");
+
+    let row = |request_id: &str, key: Option<&str>, hash: &str| audit::NewActionAudit {
+        request_id: request_id.to_string(),
+        schema_version: 1,
+        project_id: "default".to_string(),
+        actor: Some("uid:501".to_string()),
+        resolved_role: Some("operator".to_string()),
+        transport: "uds".to_string(),
+        target_type: "attention_item".to_string(),
+        target_id: "attn-1".to_string(),
+        action: "attention.claim".to_string(),
+        reason_code: "operator_triage".to_string(),
+        operator_reason: None,
+        idempotency_key: key.map(str::to_string),
+        expected_version: None,
+        fencing_token: None,
+        request_hash: hash.to_string(),
+    };
+
+    let first = audit::reserve(&db, row("req-1", Some("retry-1"), "hash-a"))
+        .await
+        .expect("first reservation");
+    assert!(
+        matches!(first, Reservation::Claimed(ref record) if record.request_id == "req-1"),
+        "a fresh insert did not claim the row: {first:?}"
+    );
+
+    // A different request id under the same retry identity: the retry read is
+    // the only one that can find this, and it must name the *original* request.
+    let retry = audit::reserve(&db, row("req-2", Some("retry-1"), "hash-a"))
+        .await
+        .expect("retry reservation");
+    match retry {
+        Reservation::PriorByRetryIdentity(record) => {
+            assert_eq!(record.request_id, "req-1", "the retry found the wrong row");
+        }
+        other => panic!("a retry under an existing identity reported {other:?}"),
+    }
+
+    // No retry identity, request id reused: the other read.
+    audit::reserve(&db, row("req-3", None, "hash-b"))
+        .await
+        .expect("keyless reservation");
+    let reused = audit::reserve(&db, row("req-3", None, "hash-b"))
+        .await
+        .expect("keyless re-reservation");
+    assert!(
+        matches!(reused, Reservation::PriorByRequestId(_)),
+        "a reused request id without a retry identity reported {reused:?}"
+    );
+
+    // A denied row must not hold a retry identity hostage. Under a *fresh*
+    // request id that is the partial unique index doing the work, since a denied
+    // row is outside its predicate.
+    audit::insert_terminal(
+        &db,
+        row("req-denied", Some("retry-denied"), "hash-c"),
+        "denied".to_string(),
+        "authorization_denied".to_string(),
+    )
+    .await
+    .expect("record a denial");
+    let after_denial = audit::reserve(&db, row("req-after", Some("retry-denied"), "hash-c"))
+        .await
+        .expect("reservation after a denial");
+    assert!(
+        matches!(after_denial, Reservation::Claimed(_)),
+        "a denied row blocked a later authorized attempt: {after_denial:?}"
+    );
+
+    // Under the *same* request id it is the `status IN ('reserved','succeeded')`
+    // filter on the retry read, and that one is load-bearing: the insert is
+    // ignored on the primary key, and without the filter the denied row would
+    // come back as a prior reservation whose hash matches — so the caller would
+    // be told the action was already handled and would skip it silently.
+    audit::insert_terminal(
+        &db,
+        row("req-both", Some("retry-both"), "hash-d"),
+        "denied".to_string(),
+        "authorization_denied".to_string(),
+    )
+    .await
+    .expect("record a denial under req-both");
+    let error = audit::reserve(&db, row("req-both", Some("retry-both"), "hash-d"))
+        .await
+        .expect_err("re-reserving a denied request id must not succeed");
+    assert!(
+        error
+            .to_string()
+            .contains("reservation conflict without existing row"),
+        "a denied row was handed back as a prior reservation: {error}"
+    );
+}
+
+/// FR-130 B8: `complete`'s `AND status='reserved'` guard, and the project scope
+/// on the read and list statements. Both are the halves that say *no*, so both
+/// are asserted in that direction.
+#[tokio::test]
+async fn completing_an_envelope_is_guarded_and_reads_stay_inside_the_project() {
+    use orchestrator_persistence::control_action_audit as audit;
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let db_path = temp.path().join("audit-complete.db");
+    PersistenceBootstrap::ensure_current(&db_path).expect("bootstrap schema");
+    let db = AsyncDatabase::open(&db_path).await.expect("open async db");
+
+    let row = |request_id: &str, project: &str| audit::NewActionAudit {
+        request_id: request_id.to_string(),
+        schema_version: 1,
+        project_id: project.to_string(),
+        actor: None,
+        resolved_role: None,
+        transport: "tcp".to_string(),
+        target_type: "resource".to_string(),
+        target_id: "res-1".to_string(),
+        action: "resource.apply".to_string(),
+        reason_code: "operator_apply".to_string(),
+        operator_reason: None,
+        idempotency_key: None,
+        expected_version: None,
+        fencing_token: None,
+        request_hash: "hash".to_string(),
+    };
+
+    audit::reserve(&db, row("req-a", "alpha"))
+        .await
+        .expect("reserve alpha");
+    audit::reserve(&db, row("req-b", "beta"))
+        .await
+        .expect("reserve beta");
+
+    let completed = audit::complete(
+        &db,
+        "req-a".to_string(),
+        "succeeded".to_string(),
+        None,
+        Some("resource".to_string()),
+        Some("res-1".to_string()),
+    )
+    .await
+    .expect("complete");
+    assert_eq!(completed.status, "succeeded");
+    assert_eq!(completed.result_id.as_deref(), Some("res-1"));
+
+    // Completing again must not rewrite a terminal row. Without the
+    // `status='reserved'` guard this second call would silently turn a
+    // succeeded envelope into a failed one.
+    let second = audit::complete(
+        &db,
+        "req-a".to_string(),
+        "failed".to_string(),
+        Some("late_failure".to_string()),
+        None,
+        None,
+    )
+    .await
+    .expect("complete twice");
+    assert_eq!(
+        second.status, "succeeded",
+        "a terminal envelope was rewritten by a second completion"
+    );
+    assert_eq!(
+        second.error_code, None,
+        "a terminal envelope picked up a late error code"
+    );
+
+    // The project scope is on the statement, not on the caller.
+    assert!(
+        audit::get(&db, "alpha".to_string(), "req-b".to_string())
+            .await
+            .expect("cross-project get")
+            .is_none(),
+        "a read reached a row belonging to another project"
+    );
+    let listed = audit::list(
+        &db,
+        audit::ActionAuditFilter {
+            project_id: "alpha".to_string(),
+            limit: 100,
+            ..Default::default()
+        },
+    )
+    .await
+    .expect("list alpha");
+    assert_eq!(listed.len(), 1, "the list crossed a project boundary");
+    assert_eq!(listed[0].request_id, "req-a");
+}

@@ -24,6 +24,8 @@
 
 /// Writer/reader connection pair for async database I/O.
 pub mod async_database;
+/// The `control_action_audit` table and the statements over it.
+pub mod control_action_audit;
 /// Admin facade: project queries, audit, metrics and reset.
 pub mod db;
 /// Database maintenance utilities: VACUUM and size reporting.

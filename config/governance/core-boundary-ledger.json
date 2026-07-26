@@ -4,12 +4,11 @@
   "coreSurface": {
     "files": 129,
     "pubMod": 50,
-    "publicItems": 665
+    "publicItems": 663
   },
   "rusqlite": {
-    "total": 68,
+    "total": 59,
     "files": {
-      "core/src/action_audit.rs": 9,
       "core/src/attention.rs": 3,
       "core/src/event_cleanup.rs": 5,
       "core/src/handoff.rs": 5,

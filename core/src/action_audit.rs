@@ -1,15 +1,22 @@
 //! Canonical, bounded audit records for state-changing control-plane actions.
+//!
+//! The contract lives here: which fields are bounded and how, how a canonical
+//! request is reduced to a hash, which lifecycle statuses a caller may ask for,
+//! and what it means when a retry identity comes back attached to a different
+//! request. The table those decisions are written to lives in
+//! `orchestrator_persistence::control_action_audit` (FR-130 B8), which reports
+//! *which* row it ended up holding and leaves the meaning to this module.
 
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
-use rusqlite::{Connection, OptionalExtension, params};
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use crate::async_database::{AsyncDatabase, flatten_err};
-use crate::config_load::now_ts;
+use crate::async_database::AsyncDatabase;
+use orchestrator_persistence::control_action_audit::{self as store, NewActionAudit, Reservation};
+
+pub use orchestrator_persistence::control_action_audit::{ActionAuditFilter, ActionAuditRecord};
 
 const SCHEMA_VERSION: i64 = 1;
 const MAX_REASON_BYTES: usize = 500;
@@ -47,78 +54,6 @@ pub struct ActionAuditReservation {
     pub canonical_request: Value,
 }
 
-/// Durable canonical action audit envelope returned by read APIs.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ActionAuditRecord {
-    /// Request identifier joining transport, domain and event evidence.
-    pub request_id: String,
-    /// Envelope schema version.
-    pub schema_version: i64,
-    /// Project isolation scope.
-    pub project_id: String,
-    /// Trusted actor identity when authentication succeeded.
-    pub actor: Option<String>,
-    /// Locally resolved role.
-    pub resolved_role: Option<String>,
-    /// Request transport.
-    pub transport: String,
-    /// Target kind.
-    pub target_type: String,
-    /// Target identifier.
-    pub target_id: String,
-    /// Closed action identifier.
-    pub action: String,
-    /// Machine-readable reason code.
-    pub reason_code: String,
-    /// Optional bounded operator explanation.
-    pub operator_reason: Option<String>,
-    /// Retry identity when applicable.
-    pub idempotency_key: Option<String>,
-    /// Expected optimistic state version.
-    pub expected_version: Option<String>,
-    /// Lease fencing token when applicable.
-    pub fencing_token: Option<i64>,
-    /// SHA-256 over allowlisted canonical inputs.
-    pub request_hash: String,
-    /// Lifecycle status (`reserved`, `succeeded`, `failed`, or `denied`).
-    pub status: String,
-    /// Stable terminal error code.
-    pub error_code: Option<String>,
-    /// Result reference kind.
-    pub result_type: Option<String>,
-    /// Result reference identifier.
-    pub result_id: Option<String>,
-    /// Creation timestamp.
-    pub created_at: String,
-    /// Last update timestamp.
-    pub updated_at: String,
-    /// Terminal timestamp.
-    pub completed_at: Option<String>,
-}
-
-/// Project-scoped list filters for canonical action audit records.
-#[derive(Debug, Clone, Default)]
-pub struct ActionAuditFilter {
-    /// Required project isolation scope.
-    pub project_id: String,
-    /// Optional actor filter.
-    pub actor: Option<String>,
-    /// Optional target kind filter.
-    pub target_type: Option<String>,
-    /// Optional target identifier filter.
-    pub target_id: Option<String>,
-    /// Optional action filter.
-    pub action: Option<String>,
-    /// Optional status filter.
-    pub status: Option<String>,
-    /// Inclusive lower timestamp bound.
-    pub from_time: Option<String>,
-    /// Exclusive upper timestamp bound.
-    pub to_time: Option<String>,
-    /// Maximum row count.
-    pub limit: usize,
-}
-
 /// Result of reserving an action audit envelope.
 #[derive(Debug, Clone)]
 pub struct ActionAuditReservationResult {
@@ -141,17 +76,37 @@ impl AsyncActionAuditRepository {
     }
 
     /// Reserves an envelope or returns a matching prior reservation.
+    ///
+    /// The store reports which row it ended up holding; the rule that a prior
+    /// row with a different `request_hash` is a conflict rather than a retry is
+    /// applied here, because it is a control-plane contract and not a property
+    /// of the table.
     pub async fn reserve(
         &self,
         input: ActionAuditReservation,
     ) -> Result<ActionAuditReservationResult> {
-        self.db
-            .writer()
-            .call(move |conn| {
-                reserve(conn, input).map_err(|error| tokio_rusqlite::Error::Other(error.into()))
-            })
-            .await
-            .map_err(flatten_err)
+        validate(&input)?;
+        let request_hash = canonical_request_hash(&input.canonical_request)?;
+        let outcome = store::reserve(&self.db, new_audit(input, request_hash.clone())).await?;
+        let (should_execute, record) = match outcome {
+            Reservation::Claimed(record) => (true, record),
+            Reservation::PriorByRetryIdentity(record) => {
+                if record.request_hash != request_hash {
+                    bail!("idempotency key was reused with a different canonical request");
+                }
+                (false, record)
+            }
+            Reservation::PriorByRequestId(record) => {
+                if record.request_hash != request_hash {
+                    bail!("request_id was reused with a different canonical request");
+                }
+                (false, record)
+            }
+        };
+        Ok(ActionAuditReservationResult {
+            record,
+            should_execute,
+        })
     }
 
     /// Persists an authorization denial without allowing its retry identity to block a later
@@ -161,15 +116,7 @@ impl AsyncActionAuditRepository {
         input: ActionAuditReservation,
         error_code: &str,
     ) -> Result<ActionAuditRecord> {
-        let error_code = error_code.to_owned();
-        self.db
-            .writer()
-            .call(move |conn| {
-                insert_terminal(conn, input, "denied", &error_code)
-                    .map_err(|error| tokio_rusqlite::Error::Other(error.into()))
-            })
-            .await
-            .map_err(flatten_err)
+        self.insert_terminal(input, "denied", error_code).await
     }
 
     /// Persists a failed pre-mutation attempt, including idempotency conflicts, under its own
@@ -179,15 +126,30 @@ impl AsyncActionAuditRepository {
         input: ActionAuditReservation,
         error_code: &str,
     ) -> Result<ActionAuditRecord> {
-        let error_code = error_code.to_owned();
-        self.db
-            .writer()
-            .call(move |conn| {
-                insert_terminal(conn, input, "failed", &error_code)
-                    .map_err(|error| tokio_rusqlite::Error::Other(error.into()))
-            })
-            .await
-            .map_err(flatten_err)
+        self.insert_terminal(input, "failed", error_code).await
+    }
+
+    async fn insert_terminal(
+        &self,
+        input: ActionAuditReservation,
+        status: &str,
+        error_code: &str,
+    ) -> Result<ActionAuditRecord> {
+        validate(&input)?;
+        if !matches!(status, "failed" | "denied") {
+            bail!("invalid direct terminal action audit status");
+        }
+        if error_code.trim().is_empty() || error_code.len() > 64 {
+            bail!("error_code must contain 1-64 characters");
+        }
+        let request_hash = canonical_request_hash(&input.canonical_request)?;
+        store::insert_terminal(
+            &self.db,
+            new_audit(input, request_hash),
+            status.to_owned(),
+            error_code.to_owned(),
+        )
+        .await
     }
 
     /// Marks an envelope terminal with an allowlisted result reference.
@@ -199,26 +161,18 @@ impl AsyncActionAuditRepository {
         result_type: Option<&str>,
         result_id: Option<&str>,
     ) -> Result<ActionAuditRecord> {
-        let request_id = request_id.to_owned();
-        let status = status.to_owned();
-        let error_code = error_code.map(str::to_owned);
-        let result_type = result_type.map(str::to_owned);
-        let result_id = result_id.map(str::to_owned);
-        self.db
-            .writer()
-            .call(move |conn| {
-                complete(
-                    conn,
-                    &request_id,
-                    &status,
-                    error_code.as_deref(),
-                    result_type.as_deref(),
-                    result_id.as_deref(),
-                )
-                .map_err(|error| tokio_rusqlite::Error::Other(error.into()))
-            })
-            .await
-            .map_err(flatten_err)
+        if !matches!(status, "succeeded" | "failed" | "denied") {
+            bail!("invalid terminal action audit status");
+        }
+        store::complete(
+            &self.db,
+            request_id.to_owned(),
+            status.to_owned(),
+            error_code.map(str::to_owned),
+            result_type.map(str::to_owned),
+            result_id.map(str::to_owned),
+        )
+        .await
     }
 
     /// Gets one envelope within its project scope.
@@ -227,27 +181,38 @@ impl AsyncActionAuditRepository {
         project_id: &str,
         request_id: &str,
     ) -> Result<Option<ActionAuditRecord>> {
-        let project_id = project_id.to_owned();
-        let request_id = request_id.to_owned();
-        self.db
-            .reader()
-            .call(move |conn| {
-                read(conn, &project_id, &request_id)
-                    .map_err(|error| tokio_rusqlite::Error::Other(error.into()))
-            })
-            .await
-            .map_err(flatten_err)
+        store::get(&self.db, project_id.to_owned(), request_id.to_owned()).await
     }
 
     /// Lists envelopes using bounded, project-scoped filters.
     pub async fn list(&self, filter: ActionAuditFilter) -> Result<Vec<ActionAuditRecord>> {
-        self.db
-            .reader()
-            .call(move |conn| {
-                list(conn, &filter).map_err(|error| tokio_rusqlite::Error::Other(error.into()))
-            })
-            .await
-            .map_err(flatten_err)
+        if filter.project_id.trim().is_empty() {
+            bail!("project_id is required");
+        }
+        store::list(&self.db, filter).await
+    }
+}
+
+/// Projects a validated reservation and its already-computed hash onto the row
+/// the store writes. `canonical_request` is deliberately not carried across:
+/// only its hash is durable.
+fn new_audit(input: ActionAuditReservation, request_hash: String) -> NewActionAudit {
+    NewActionAudit {
+        request_id: input.request_id,
+        schema_version: SCHEMA_VERSION,
+        project_id: input.project_id,
+        actor: input.actor,
+        resolved_role: input.resolved_role,
+        transport: input.transport,
+        target_type: input.target_type,
+        target_id: input.target_id,
+        action: input.action,
+        reason_code: input.reason_code,
+        operator_reason: input.operator_reason,
+        idempotency_key: input.idempotency_key,
+        expected_version: input.expected_version,
+        fencing_token: input.fencing_token,
+        request_hash,
     }
 }
 
@@ -305,263 +270,15 @@ fn validate(input: &ActionAuditReservation) -> Result<()> {
     Ok(())
 }
 
-fn reserve(
-    conn: &Connection,
-    input: ActionAuditReservation,
-) -> Result<ActionAuditReservationResult> {
-    validate(&input)?;
-    let request_hash = canonical_request_hash(&input.canonical_request)?;
-    let now = now_ts();
-    let inserted = conn.execute(
-        "INSERT OR IGNORE INTO control_action_audit
-         (request_id,schema_version,project_id,actor,resolved_role,transport,target_type,target_id,
-          action,reason_code,operator_reason,idempotency_key,expected_version,fencing_token,
-          request_hash,status,created_at,updated_at)
-         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,'reserved',?16,?16)",
-        params![
-            input.request_id,
-            SCHEMA_VERSION,
-            input.project_id,
-            input.actor,
-            input.resolved_role,
-            input.transport,
-            input.target_type,
-            input.target_id,
-            input.action,
-            input.reason_code,
-            input.operator_reason,
-            input.idempotency_key,
-            input.expected_version,
-            input.fencing_token,
-            request_hash,
-            now,
-        ],
-    )?;
-    let record = if inserted == 1 {
-        read_by_request_id(conn, &input.request_id)?.context("reserved action audit missing")?
-    } else if let Some(key) = input.idempotency_key.as_deref() {
-        let existing = read_by_retry_identity(
-            conn,
-            &input.project_id,
-            &input.target_type,
-            &input.target_id,
-            &input.action,
-            key,
-        )?
-        .context("action audit reservation conflict without existing row")?;
-        if existing.request_hash != request_hash {
-            bail!("idempotency key was reused with a different canonical request");
-        }
-        existing
-    } else {
-        let existing = read_by_request_id(conn, &input.request_id)?
-            .context("request_id was reused without a matching action audit")?;
-        if existing.request_hash != request_hash {
-            bail!("request_id was reused with a different canonical request");
-        }
-        existing
-    };
-    Ok(ActionAuditReservationResult {
-        should_execute: inserted == 1,
-        record,
-    })
-}
-
-fn insert_terminal(
-    conn: &Connection,
-    input: ActionAuditReservation,
-    status: &str,
-    error_code: &str,
-) -> Result<ActionAuditRecord> {
-    validate(&input)?;
-    if !matches!(status, "failed" | "denied") {
-        bail!("invalid direct terminal action audit status");
-    }
-    if error_code.trim().is_empty() || error_code.len() > 64 {
-        bail!("error_code must contain 1-64 characters");
-    }
-    let request_hash = canonical_request_hash(&input.canonical_request)?;
-    let now = now_ts();
-    conn.execute(
-        "INSERT INTO control_action_audit
-         (request_id,schema_version,project_id,actor,resolved_role,transport,target_type,target_id,
-          action,reason_code,operator_reason,idempotency_key,expected_version,fencing_token,
-          request_hash,status,error_code,created_at,updated_at,completed_at)
-         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?18,?18)",
-        params![
-            input.request_id,
-            SCHEMA_VERSION,
-            input.project_id,
-            input.actor,
-            input.resolved_role,
-            input.transport,
-            input.target_type,
-            input.target_id,
-            input.action,
-            input.reason_code,
-            input.operator_reason,
-            input.idempotency_key,
-            input.expected_version,
-            input.fencing_token,
-            request_hash,
-            status,
-            error_code,
-            now,
-        ],
-    )?;
-    read_by_request_id(conn, &input.request_id)?.context("terminal action audit missing")
-}
-
-fn complete(
-    conn: &Connection,
-    request_id: &str,
-    status: &str,
-    error_code: Option<&str>,
-    result_type: Option<&str>,
-    result_id: Option<&str>,
-) -> Result<ActionAuditRecord> {
-    if !matches!(status, "succeeded" | "failed" | "denied") {
-        bail!("invalid terminal action audit status");
-    }
-    let now = now_ts();
-    let changed = conn.execute(
-        "UPDATE control_action_audit SET status=?2,error_code=?3,result_type=?4,result_id=?5,
-         updated_at=?6,completed_at=?6 WHERE request_id=?1 AND status='reserved'",
-        params![request_id, status, error_code, result_type, result_id, now],
-    )?;
-    if changed == 0 {
-        return read_by_request_id(conn, request_id)?.context("action audit record not found");
-    }
-    read_by_request_id(conn, request_id)?.context("completed action audit missing")
-}
-
-fn read(
-    conn: &Connection,
-    project_id: &str,
-    request_id: &str,
-) -> Result<Option<ActionAuditRecord>> {
-    conn.query_row(
-        "SELECT request_id,schema_version,project_id,actor,resolved_role,transport,target_type,
-                target_id,action,reason_code,operator_reason,idempotency_key,expected_version,
-                fencing_token,request_hash,status,error_code,result_type,result_id,created_at,
-                updated_at,completed_at
-         FROM control_action_audit WHERE project_id=?1 AND request_id=?2",
-        params![project_id, request_id],
-        map_record,
-    )
-    .optional()
-    .map_err(Into::into)
-}
-
-fn read_by_request_id(conn: &Connection, request_id: &str) -> Result<Option<ActionAuditRecord>> {
-    conn.query_row(
-        "SELECT request_id,schema_version,project_id,actor,resolved_role,transport,target_type,
-                target_id,action,reason_code,operator_reason,idempotency_key,expected_version,
-                fencing_token,request_hash,status,error_code,result_type,result_id,created_at,
-                updated_at,completed_at
-         FROM control_action_audit WHERE request_id=?1",
-        [request_id],
-        map_record,
-    )
-    .optional()
-    .map_err(Into::into)
-}
-
-fn read_by_retry_identity(
-    conn: &Connection,
-    project_id: &str,
-    target_type: &str,
-    target_id: &str,
-    action: &str,
-    key: &str,
-) -> Result<Option<ActionAuditRecord>> {
-    conn.query_row(
-        "SELECT request_id,schema_version,project_id,actor,resolved_role,transport,target_type,
-                target_id,action,reason_code,operator_reason,idempotency_key,expected_version,
-                fencing_token,request_hash,status,error_code,result_type,result_id,created_at,
-                updated_at,completed_at
-         FROM control_action_audit
-         WHERE project_id=?1 AND target_type=?2 AND target_id=?3 AND action=?4
-           AND idempotency_key=?5 AND status IN ('reserved','succeeded')",
-        params![project_id, target_type, target_id, action, key],
-        map_record,
-    )
-    .optional()
-    .map_err(Into::into)
-}
-
-fn list(conn: &Connection, filter: &ActionAuditFilter) -> Result<Vec<ActionAuditRecord>> {
-    if filter.project_id.trim().is_empty() {
-        bail!("project_id is required");
-    }
-    let limit = filter.limit.clamp(1, 500) as i64;
-    let mut statement = conn.prepare(
-        "SELECT request_id,schema_version,project_id,actor,resolved_role,transport,target_type,
-                target_id,action,reason_code,operator_reason,idempotency_key,expected_version,
-                fencing_token,request_hash,status,error_code,result_type,result_id,created_at,
-                updated_at,completed_at
-         FROM control_action_audit
-         WHERE project_id=?1
-           AND (?2 IS NULL OR actor=?2)
-           AND (?3 IS NULL OR target_type=?3)
-           AND (?4 IS NULL OR target_id=?4)
-           AND (?5 IS NULL OR action=?5)
-           AND (?6 IS NULL OR status=?6)
-           AND (?7 IS NULL OR created_at>=?7)
-           AND (?8 IS NULL OR created_at<?8)
-         ORDER BY created_at DESC, request_id DESC LIMIT ?9",
-    )?;
-    let rows = statement.query_map(
-        params![
-            filter.project_id,
-            filter.actor,
-            filter.target_type,
-            filter.target_id,
-            filter.action,
-            filter.status,
-            filter.from_time,
-            filter.to_time,
-            limit,
-        ],
-        map_record,
-    )?;
-    rows.collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(Into::into)
-}
-
-fn map_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<ActionAuditRecord> {
-    Ok(ActionAuditRecord {
-        request_id: row.get(0)?,
-        schema_version: row.get(1)?,
-        project_id: row.get(2)?,
-        actor: row.get(3)?,
-        resolved_role: row.get(4)?,
-        transport: row.get(5)?,
-        target_type: row.get(6)?,
-        target_id: row.get(7)?,
-        action: row.get(8)?,
-        reason_code: row.get(9)?,
-        operator_reason: row.get(10)?,
-        idempotency_key: row.get(11)?,
-        expected_version: row.get(12)?,
-        fencing_token: row.get(13)?,
-        request_hash: row.get(14)?,
-        status: row.get(15)?,
-        error_code: row.get(16)?,
-        result_type: row.get(17)?,
-        result_id: row.get(18)?,
-        created_at: row.get(19)?,
-        updated_at: row.get(20)?,
-        completed_at: row.get(21)?,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::async_database::AsyncDatabase;
     use crate::db::configure_conn;
+    // Inside the test module on purpose: the boundary scanner strips `cfg(test)`
+    // blocks, and a file-scope import would count this fixture as production use.
     use crate::migration::{all_migrations, run_pending};
+    use rusqlite::Connection;
     use tempfile::tempdir;
 
     async fn repository() -> (tempfile::TempDir, AsyncActionAuditRepository) {
