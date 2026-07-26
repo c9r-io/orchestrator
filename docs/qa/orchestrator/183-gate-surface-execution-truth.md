@@ -30,9 +30,10 @@ themselves the provider-isolation machinery, and their fixtures use stubs. See D
 Primary entry points:
 
 ```bash
-./scripts/qa/test-qa-gate-surface.sh                   # 12 checks
-./scripts/qa/test-qa-gate-surface.sh --fixture-test    # 27 assertions: 21 negative fixtures, two
-                                                       # positive controls, a behavioural case,
+./scripts/qa/test-qa-gate-surface.sh                   # 13 checks (12 from FR-134, plus the
+                                                       # aggregation check FR-137 added; see QA-187)
+./scripts/qa/test-qa-gate-surface.sh --fixture-test    # 33 assertions: 24 negative fixtures, two
+                                                       # positive controls, four behavioural cases,
                                                        # and three meta-assertions
 ./scripts/qa/test-skill-mirror-integrity.sh --fixture-test
 ./scripts/qa/test-ci-liveness.sh                       # 9 liveness fixtures

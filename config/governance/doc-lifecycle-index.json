@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 407,
-    "active": 404,
+    "documents": 409,
+    "active": 406,
     "superseded": 3,
-    "withRelatedFr": 252
+    "withRelatedFr": 254
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -310,6 +310,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-130"
+      ]
+    },
+    "docs/design_doc/orchestrator/149-governance-aggregation-completeness.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-137"
       ]
     },
     "docs/design_doc/orchestrator/15-task-trace.md": {
@@ -1495,6 +1501,12 @@
         "FR-130"
       ]
     },
+    "docs/qa/orchestrator/187-governance-aggregation-completeness.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-137"
+      ]
+    },
     "docs/qa/orchestrator/19-scheduler-repository-refactor-regression.md": {
       "lifecycle": "active"
     },
@@ -2493,6 +2505,10 @@
     "FR-136": [
       "docs/design_doc/orchestrator/147-persistence-dependency-chokepoint.md",
       "docs/qa/orchestrator/185-persistence-dependency-chokepoint.md"
+    ],
+    "FR-137": [
+      "docs/design_doc/orchestrator/149-governance-aggregation-completeness.md",
+      "docs/qa/orchestrator/187-governance-aggregation-completeness.md"
     ],
     "FR-139": [
       "docs/design_doc/orchestrator/147-persistence-dependency-chokepoint.md",

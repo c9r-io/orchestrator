@@ -248,6 +248,13 @@ and the surface grew only by the three files this FR had to write (53 → 56, 20
 
 ## Known limits
 
+- **The aggregate outcome list was itself an unguarded enumeration.** Recorded here after the fact,
+  because this document should have said it. "One run, every diagnosis" below rests on a
+  hand-written `OUTCOMES` block, and nothing asserted it was complete: a `continue-on-error` step
+  left out of it fails on every run inside a job that reports success. That is the same enumeration
+  shape this FR removed in six other places, sitting inside its own fix. The list grew 19 → 20 → 21
+  → 22 across four cycles with no check on it. Closed by FR-137, which derives the coverage from
+  the parsed workflow — see [DD-149](149-governance-aggregation-completeness.md).
 - **The stale-claim scan does not catch semantic drift.** Verified rather than assumed: writing
   `monotonic legacy-coordination ratchet` back into `docs/architecture.md` and running the gate
   passes. It matches a script name beside enforcement wording, and a claim about ratchet semantics
