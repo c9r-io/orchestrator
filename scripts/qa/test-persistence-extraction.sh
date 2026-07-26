@@ -187,9 +187,20 @@ echo "Case 3: a task written through the layer reads back through the layer"
 
 # The expected count is derived from the file, not written here. It was "2
 # passed" until FR-130 Phase B added a third test, at which point a green suite
-# reported a gate failure — and the same literal would have hidden a test
-# silently disappearing, which is the direction that matters.
-ROUND_TRIP_TESTS="$(grep -c '^#\[tokio::test\]$' "$CRATE/tests/round_trip.rs")"
+# reported a gate failure.
+#
+# What the derivation buys is that declared and passing must agree: a test that
+# is present but filtered out, ignored, or silently not run fails the gate. What
+# it does not buy is protection against deletion — remove a test and both sides
+# fall together. Only the floor below guards that, and it guards it at 2. Said
+# here rather than left to be assumed.
+#
+# The derivation counts *both* test attributes. Counting only `#[tokio::test]`
+# was the same defect one level down: Phase B's second round added three
+# synchronous `#[test]` cases, the suite went green at 12, and the gate failed
+# demanding 8. A derivation that reads part of the file is a literal with extra
+# steps.
+ROUND_TRIP_TESTS="$(grep -cE '^#\[(tokio::)?test\]$' "$CRATE/tests/round_trip.rs")"
 if [[ "$ROUND_TRIP_TESTS" -lt 2 ]]; then
   fail "round_trip.rs declares $ROUND_TRIP_TESTS test(s); the round trip and its negative are both required"
 else
