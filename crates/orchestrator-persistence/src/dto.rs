@@ -32,7 +32,7 @@ pub struct CreateTaskPayload {
 #[derive(Debug, Serialize)]
 pub struct ConfigOverview {
     /// Fully materialized configuration object.
-    pub config: crate::config::OrchestratorConfig,
+    pub config: orchestrator_config::config::OrchestratorConfig,
     /// YAML serialization of [`Self::config`].
     pub yaml: String,
     /// Monotonic configuration version stored in persistence.
@@ -340,7 +340,7 @@ pub struct RunResult {
     /// Measured duration in milliseconds when available.
     pub duration_ms: Option<u64>,
     /// Structured agent output parsed from the run.
-    pub output: Option<crate::collab::AgentOutput>,
+    pub output: Option<orchestrator_collab::output::AgentOutput>,
     /// Validation status assigned after output validation.
     pub validation_status: String,
     /// Agent identifier that performed the run.

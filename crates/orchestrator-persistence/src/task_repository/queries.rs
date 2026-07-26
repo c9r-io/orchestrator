@@ -10,6 +10,7 @@ use super::TaskDetailRows;
 use super::types::{NewTaskGraphRun, NewTaskGraphSnapshot, TaskLogRunRow, TaskRuntimeRow};
 use rusqlite::Connection;
 
+/// Resolves a full task id or a unique id prefix to the full id.
 pub fn resolve_task_id(conn: &Connection, task_id_or_prefix: &str) -> Result<String> {
     let mut stmt = conn.prepare("SELECT id FROM tasks WHERE id = ?1")?;
     let exact_match: Option<String> = stmt
@@ -34,6 +35,7 @@ pub fn resolve_task_id(conn: &Connection, task_id_or_prefix: &str) -> Result<Str
     }
 }
 
+/// Loads the summary row for one task.
 pub fn load_task_summary(conn: &Connection, task_id: &str) -> Result<TaskSummary> {
     let mut stmt = conn.prepare(
         "SELECT id, name, status, started_at, completed_at, goal, target_files_json, project_id, workspace_id, workflow_id, created_at, updated_at, parent_task_id, spawn_reason, spawn_depth FROM tasks WHERE id = ?1",
@@ -71,6 +73,7 @@ pub fn load_task_summary(conn: &Connection, task_id: &str) -> Result<TaskSummary
     .with_context(|| format!("load task summary for task_id={task_id}"))
 }
 
+/// Loads a task's items, command runs and events in one pass.
 pub fn load_task_detail_rows(conn: &Connection, task_id: &str) -> Result<TaskDetailRows> {
     let mut items_stmt = conn.prepare(
         "SELECT id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, updated_at FROM task_items WHERE task_id = ?1 ORDER BY order_no",
@@ -269,6 +272,7 @@ pub fn load_task_timeline_source(
     })
 }
 
+/// Returns `(total, resolved, failed)` item counts for a task.
 pub fn load_task_item_counts(conn: &Connection, task_id: &str) -> Result<(i64, i64, i64)> {
     conn.query_row(
         "SELECT COUNT(*), SUM(CASE WHEN status IN ('qa_passed','fixed','verified','skipped','unresolved') THEN 1 ELSE 0 END), SUM(CASE WHEN status IN ('qa_failed','unresolved') THEN 1 ELSE 0 END) FROM task_items WHERE task_id = ?1",
@@ -284,6 +288,7 @@ pub fn load_task_item_counts(conn: &Connection, task_id: &str) -> Result<(i64, i
     .with_context(|| format!("load task item counts for task_id={task_id}"))
 }
 
+/// Lists every task id, newest first.
 pub fn list_task_ids_ordered_by_created_desc(conn: &Connection) -> Result<Vec<String>> {
     let mut stmt = conn.prepare("SELECT id FROM tasks ORDER BY created_at DESC")?;
     let ids = stmt
@@ -292,6 +297,8 @@ pub fn list_task_ids_ordered_by_created_desc(conn: &Connection) -> Result<Vec<St
     Ok(ids)
 }
 
+/// Finds the most recently updated task that can be resumed, optionally
+/// counting `pending` tasks as resumable.
 pub fn find_latest_resumable_task_id(
     conn: &Connection,
     include_pending: bool,
@@ -314,6 +321,7 @@ pub fn find_latest_resumable_task_id(
     Ok(None)
 }
 
+/// Loads the columns the scheduler needs to resume or continue a task.
 pub fn load_task_runtime_row(conn: &Connection, task_id: &str) -> Result<TaskRuntimeRow> {
     let row = conn.query_row(
         "SELECT workspace_id, workflow_id, workspace_root, ticket_dir, execution_plan_json, current_cycle, init_done, COALESCE(goal,''), COALESCE(project_id,''), pipeline_vars_json, COALESCE(spawn_depth,0), step_filter_json, initial_vars_json, COALESCE(artifacts_dir,'') FROM tasks WHERE id = ?1",
@@ -340,6 +348,7 @@ pub fn load_task_runtime_row(conn: &Connection, task_id: &str) -> Result<TaskRun
     Ok(row)
 }
 
+/// Returns the first item of a task in `order_no` order, if it has one.
 pub fn first_task_item_id(conn: &Connection, task_id: &str) -> Result<Option<String>> {
     conn.query_row(
         "SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1",
@@ -350,6 +359,7 @@ pub fn first_task_item_id(conn: &Connection, task_id: &str) -> Result<Option<Str
     .context("query first task item")
 }
 
+/// Counts items still `unresolved` or `qa_failed` for a task.
 pub fn count_unresolved_items(conn: &Connection, task_id: &str) -> Result<i64> {
     conn.query_row(
         "SELECT COUNT(*) FROM task_items WHERE task_id = ?1 AND status IN ('unresolved','qa_failed')",
@@ -380,6 +390,7 @@ pub fn count_stale_pending_items(conn: &Connection, task_id: &str) -> Result<i64
     .context("count stale pending items")
 }
 
+/// Lists a task's items with the fields one execution cycle needs.
 pub fn list_task_items_for_cycle(conn: &Connection, task_id: &str) -> Result<Vec<TaskItemRow>> {
     let mut stmt = conn.prepare(
         "SELECT id, qa_file_path, dynamic_vars_json, label, source, status
@@ -406,6 +417,7 @@ pub fn list_task_items_for_cycle(conn: &Connection, task_id: &str) -> Result<Vec
     Ok(rows)
 }
 
+/// Returns a task's status, or `None` when the task does not exist.
 pub fn load_task_status(conn: &Connection, task_id: &str) -> Result<Option<String>> {
     conn.query_row(
         "SELECT status FROM tasks WHERE id = ?1",
@@ -416,6 +428,7 @@ pub fn load_task_status(conn: &Connection, task_id: &str) -> Result<Option<Strin
     .with_context(|| format!("load task status for task_id={task_id}"))
 }
 
+/// Returns a task's name, or `None` when the task does not exist.
 pub fn load_task_name(conn: &Connection, task_id: &str) -> Result<Option<String>> {
     conn.query_row(
         "SELECT name FROM tasks WHERE id = ?1",
@@ -426,6 +439,8 @@ pub fn load_task_name(conn: &Connection, task_id: &str) -> Result<Option<String>
     .with_context(|| format!("load task name for task_id={task_id}"))
 }
 
+/// Lists the most recent command runs of a task with their log paths, newest
+/// first, capped at `limit`.
 pub fn list_task_log_runs(
     conn: &Connection,
     task_id: &str,
@@ -453,6 +468,7 @@ pub fn list_task_log_runs(
     Ok(rows)
 }
 
+/// Inserts one task-graph planning run.
 pub fn insert_task_graph_run(conn: &Connection, run: &NewTaskGraphRun) -> Result<()> {
     conn.execute(
         "INSERT INTO task_graph_runs (
@@ -473,13 +489,14 @@ pub fn insert_task_graph_run(conn: &Connection, run: &NewTaskGraphRun) -> Result
             run.entry_node_id,
             run.node_count,
             run.edge_count,
-            crate::config_load::now_ts(),
-            crate::config_load::now_ts(),
+            crate::now_ts(),
+            crate::now_ts(),
         ],
     )?;
     Ok(())
 }
 
+/// Updates a task-graph run's status and bumps its `updated_at`.
 pub fn update_task_graph_run_status(
     conn: &Connection,
     graph_run_id: &str,
@@ -487,11 +504,12 @@ pub fn update_task_graph_run_status(
 ) -> Result<()> {
     conn.execute(
         "UPDATE task_graph_runs SET status = ?2, updated_at = ?3 WHERE graph_run_id = ?1",
-        params![graph_run_id, status, crate::config_load::now_ts()],
+        params![graph_run_id, status, crate::now_ts()],
     )?;
     Ok(())
 }
 
+/// Inserts one task-graph snapshot belonging to a planning run.
 pub fn insert_task_graph_snapshot(
     conn: &Connection,
     snapshot: &NewTaskGraphSnapshot,
@@ -508,12 +526,14 @@ pub fn insert_task_graph_snapshot(
             snapshot.task_id,
             snapshot.snapshot_kind,
             snapshot.payload_json,
-            crate::config_load::now_ts(),
+            crate::now_ts(),
         ],
     )?;
     Ok(())
 }
 
+/// Loads every task-graph run of a task together with its snapshots, for the
+/// graph debug surface.
 pub fn load_task_graph_debug_bundles(
     conn: &Connection,
     task_id: &str,

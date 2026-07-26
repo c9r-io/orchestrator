@@ -3329,10 +3329,16 @@ name = "orchestrator-persistence"
 version = "0.3.1"
 dependencies = [
  "anyhow",
+ "chrono",
+ "orchestrator-collab",
+ "orchestrator-config",
  "rusqlite",
+ "serde",
  "serde_json",
  "tempfile",
+ "tokio-rusqlite",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

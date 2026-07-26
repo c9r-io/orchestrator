@@ -1,4 +1,4 @@
-use crate::db::open_conn;
+use crate::sqlite::open_conn;
 use anyhow::Result;
 use rusqlite::Connection;
 use std::path::PathBuf;

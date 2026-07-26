@@ -1,4 +1,4 @@
-use crate::config_load::now_ts;
+use crate::now_ts;
 use anyhow::Result;
 use rusqlite::{OptionalExtension, params};
 use std::collections::HashSet;
@@ -48,6 +48,12 @@ pub fn set_task_item_terminal_status(
     Ok(())
 }
 
+/// Deletes a task and everything hanging off it, returning the log file paths
+/// the caller still has to unlink.
+///
+/// The row cascade and the filesystem cleanup are split deliberately: this
+/// layer owns the database and knows nothing about where logs live, and the
+/// caller owns the files and must not be asked to reproduce the cascade.
 pub fn delete_task_and_collect_log_paths(conn: &Connection, task_id: &str) -> Result<Vec<String>> {
     let exists = conn
         .query_row(

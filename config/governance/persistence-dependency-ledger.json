@@ -135,7 +135,8 @@
     },
     "crates/orchestrator-persistence": {
       "dependencies": [
-        "rusqlite"
+        "rusqlite",
+        "tokio-rusqlite"
       ],
       "devDependencies": []
     },
@@ -198,6 +199,12 @@
       "sql": 2,
       "category": "borrowed-connection-raw-sql"
     },
+    "crates/orchestrator-persistence/src/async_database.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 17,
+      "sql": 0,
+      "category": "persistence-layer"
+    },
     "crates/orchestrator-persistence/src/migration.rs": {
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 2,
@@ -220,6 +227,42 @@
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 1,
       "sql": 1,
+      "category": "persistence-layer"
+    },
+    "crates/orchestrator-persistence/src/task_repository/items.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 2,
+      "sql": 11,
+      "category": "persistence-layer"
+    },
+    "crates/orchestrator-persistence/src/task_repository/mod.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 45,
+      "sql": 0,
+      "category": "persistence-layer"
+    },
+    "crates/orchestrator-persistence/src/task_repository/queries.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 4,
+      "sql": 26,
+      "category": "persistence-layer"
+    },
+    "crates/orchestrator-persistence/src/task_repository/state.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 2,
+      "sql": 27,
+      "category": "persistence-layer"
+    },
+    "crates/orchestrator-persistence/src/task_repository/types.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 1,
+      "sql": 0,
+      "category": "persistence-layer"
+    },
+    "crates/orchestrator-persistence/src/task_repository/write_ops.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 4,
+      "sql": 10,
       "category": "persistence-layer"
     },
     "crates/orchestrator-scheduler/src/scheduler/item_generate.rs": {
@@ -291,8 +334,8 @@
   },
   "totals": {
     "members": 14,
-    "referencedFiles": 20,
-    "rusqlite": 61,
-    "sql": 231
+    "referencedFiles": 27,
+    "rusqlite": 136,
+    "sql": 305
   }
 }

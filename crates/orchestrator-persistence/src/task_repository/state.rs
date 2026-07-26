@@ -1,9 +1,11 @@
-use crate::config_load::now_ts;
+use crate::now_ts;
 use anyhow::Result;
 use rusqlite::{OptionalExtension, params};
 
 use rusqlite::Connection;
 
+/// Sets a task's status, recording the completion timestamp when the status is
+/// terminal.
 pub fn set_task_status(
     conn: &Connection,
     task_id: &str,
@@ -68,6 +70,8 @@ pub fn reset_unresolved_items(conn: &Connection, task_id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Puts a task into the shape a fresh start batch expects: unresolved items
+/// back to pending, in-flight runs cleared, cycle counter reset.
 pub fn prepare_task_for_start_batch(conn: &Connection, task_id: &str) -> Result<()> {
     let tx = conn.unchecked_transaction()?;
     let status: Option<String> = tx
@@ -114,6 +118,7 @@ pub fn prepare_task_for_start_batch(conn: &Connection, task_id: &str) -> Result<
     Ok(())
 }
 
+/// Records the cycle counter and init flag reached by a task.
 pub fn update_task_cycle_state(
     conn: &Connection,
     task_id: &str,

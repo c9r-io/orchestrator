@@ -2,21 +2,19 @@
   "schemaVersion": 1,
   "scope": "non-test Rust source under core/src, excluding inline cfg(test) modules, files under a tests directory, and files named test*.rs",
   "coreSurface": {
-    "files": 139,
-    "pubMod": 52,
-    "publicItems": 901
+    "files": 131,
+    "pubMod": 51,
+    "publicItems": 736
   },
   "rusqlite": {
-    "total": 194,
+    "total": 118,
     "files": {
       "core/src/action_audit.rs": 9,
-      "core/src/async_database.rs": 17,
       "core/src/attention.rs": 3,
       "core/src/config_load/build.rs": 2,
       "core/src/config_load/persist.rs": 1,
       "core/src/db.rs": 1,
       "core/src/db_maintenance.rs": 1,
-      "core/src/db_write.rs": 1,
       "core/src/error.rs": 2,
       "core/src/event_cleanup.rs": 5,
       "core/src/events.rs": 3,
@@ -36,12 +34,6 @@
       "core/src/source_connection.rs": 5,
       "core/src/task_cleanup.rs": 1,
       "core/src/task_ops.rs": 4,
-      "core/src/task_repository/items.rs": 2,
-      "core/src/task_repository/mod.rs": 45,
-      "core/src/task_repository/queries.rs": 4,
-      "core/src/task_repository/state.rs": 2,
-      "core/src/task_repository/types.rs": 1,
-      "core/src/task_repository/write_ops.rs": 4,
       "core/src/trigger_engine.rs": 18
     }
   }

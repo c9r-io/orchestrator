@@ -1,4 +1,4 @@
-use crate::config_load::now_ts;
+use crate::now_ts;
 use anyhow::Result;
 use rusqlite::{Connection, params};
 

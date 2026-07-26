@@ -5,7 +5,7 @@
 //! related items, runs, events, and log files.
 
 use crate::async_database::AsyncDatabase;
-use crate::task_repository::items::delete_task_and_collect_log_paths;
+use crate::task_repository::delete_task_and_collect_log_paths;
 use anyhow::Result;
 use std::path::Path;
 use tracing::info;

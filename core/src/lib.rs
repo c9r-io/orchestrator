@@ -61,7 +61,10 @@ pub mod db_maintenance;
 /// persistence through the single-writer connection.
 pub mod db_write;
 /// Data transfer objects returned by public task and event APIs.
-pub mod dto;
+///
+/// They are the row and read-model shapes the repositories produce, so they
+/// moved with the repositories (FR-130 Phase A) and are re-exported here.
+pub use orchestrator_persistence::dto;
 pub mod dynamic_orchestration;
 /// Environment resolution utilities for command execution.
 pub use orchestrator_config::env_resolve;

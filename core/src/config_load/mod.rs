@@ -22,9 +22,14 @@ pub(crate) use validate::validate_workflow_config_with_agents;
 use std::path::PathBuf;
 
 /// Returns the current UTC timestamp encoded as RFC 3339.
-pub fn now_ts() -> String {
-    chrono::Utc::now().to_rfc3339()
-}
+///
+/// Defined in `orchestrator-persistence` and re-exported here so the many
+/// existing `crate::config_load::now_ts` call sites keep resolving. It lives
+/// there because the format is a database contract — every caller in this
+/// repository is writing a `created_at` or `updated_at` column — and a second
+/// definition beside the first is how two rows in one table come to disagree
+/// about what a timestamp looks like.
+pub use orchestrator_persistence::now_ts;
 
 /// Returns the daemon data directory (`~/.orchestratord` by default).
 ///
