@@ -291,6 +291,8 @@ contract rather than about `Ok`:
 | `source_events::*` | Five guards, each mutated and each caught. See below. |
 | `source_connections::*` | Sixteen fences, each mutated. Three of them exist in more than one statement — `version=?3` in three, `state='active'` in four, `owner_daemon_id=?3` in two — and every copy got its own mutation. Credential release is asserted in all three refusing directions (wrong project, wrong owner, not active), because any one of them alone leaking the pairing secret is a credential leak. |
 | `handoff_store::*` | Four fences, each in exactly one statement (verified by grep, not assumed): the snapshot identity, the reservation's retry identity, `status='planned' AND expected_state_version`, and `status='executing'`. Plus a mutation that restores the *old* shape — an unchecked `UPDATE … WHERE status='planned'` — which fails. |
+| `source_automation_routes::*` | Twenty-eight mutations, one per guard copy, with the copies counted by grep first: `version=?` in three statements, `lease_token=?2` in two, `attempt_count < max_attempts` in two, the due-state allowlist in two, the replayable-state allowlist in two, `completed_at IS NULL` in two. Reservation is asserted in all three outcomes — reserved, found existing, and identity collision — and the collision case asserts that *nothing* was written, including the source event's link, because pointing an event at another route is worse than leaving it unlinked. |
+| `trigger_state::*` | Thirteen mutations, twelve caught. Both reads and the upsert are asserted across two projects sharing a trigger name, because without the project in the key one project's schedule throttles another's. The fire count is asserted to go up rather than reset, and `created_at` to survive an update. Retention is asserted against a fixture with a row on the wrong side of every column it filters on — a failed run, another trigger, another project — and in both offset directions. |
 
 The two halves that stayed in core are tested without a database at all, which is what the splits
 bought: `config_load::build`'s deletion guards against a stub implementation of
@@ -326,6 +328,27 @@ the events ahead of the task insert, and deleting the transaction outright. With
 at statement one, rollback has nothing to undo. A green assertion here is not evidence of
 atomicity, and the test says so.
 
+**Six more guards have no reachable fixture, and five of them are in one function.** The fourth
+round measured this rather than assuming it, and each is noted at the statement it guards. In
+`claim_due`, the claiming `UPDATE` repeats three conditions its candidate `SELECT` already applied
+and then checks `changed != 1`; all four survive deletion, because the two statements run in one
+transaction against a single-writer database and the row cannot move in between. The in-memory
+installation set survives too — the SQL occupancy probe catches the same case, since a route
+claimed earlier in the loop already holds an unexpired lease. `status NOT IN ('routed','ignored')`
+in `transition_leased` survives because every terminal transition also releases the lease, so the
+token fence refuses first. And `delete_tasks`'s empty-list early return survives because SQLite
+accepts `IN ()` and matches nothing. Four of the six are defence against a second writer that does
+not exist yet; two are saved work. Keeping them is reasonable; claiming a test protects them is
+not.
+
+**Two more assertions passed their first mutation, and the fix was a fixture nobody would guess.**
+The attempt ceiling and the live-lease filter each exist in the claim's `SELECT` and in its
+`UPDATE`, and the obvious assertion — "an exhausted route is not claimed" — reaches neither,
+because either copy alone refuses it. What reaches the `SELECT` copy is *starvation*: the
+candidate window is a fixed multiple of the batch size, so a route that is still selected but not
+claimable costs a slot, and four of them sorted ahead of a live route hide it entirely. Both
+fixtures ask for one route with four blockers, and both fail when their `SELECT` copy is deleted.
+
 **`daemon_id`'s read-back has no reachable fixture either.** Replacing it with `Ok(candidate)`
 passes. `INSERT OR IGNORE` is only ignored when another writer inserted between this call's check
 and its insert, and one `AsyncDatabase` serializes its writer, so the race needs two processes on
@@ -347,3 +370,5 @@ is defensive code with no coverage rather than letting the assertion above it im
       re-frozen in the batch's own commit, `phase_c_preserves_the_external_dependency_category`
       passing and unmodified, and the batch revertible when named as a single commit
 - [ ] `ruby scripts/qa/core-boundary.rb` and `ruby scripts/qa/persistence-dependency.rb` pass
+- [ ] Every guard with no failing mutation is named — in the test beside the statement and in the
+      table above — rather than left to read as covered

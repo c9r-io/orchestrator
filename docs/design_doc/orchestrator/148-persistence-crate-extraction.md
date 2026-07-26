@@ -5,7 +5,7 @@ related_fr: FR-130
 
 # DD-148: Persistence Crate Extraction (FR-130 Phase A)
 
-**Status**: Implemented (FR-130 Phase A and Phase C; Phase B in progress, 16 of 18 files disposed)
+**Status**: Implemented (FR-130 Phases A, B and C; all 18 Phase B files disposed)
 **Related**: DD-142 (core boundary freeze), DD-147 (persistence dependency chokepoint), QA 186, FR-047, FR-048
 
 ## Background
@@ -15,9 +15,11 @@ public items, and its highest-churn cluster was persistence. FR-047 and FR-048 e
 `orchestrator-config` and `orchestrator-scheduler`; DD-142 froze what remained; DD-147 decided
 who may reach the driver. This is the extraction those three were prerequisites for.
 
-Phase A moved the modules whose boundaries were already clear. Phase C is closed and Phase B is
-in progress: six of its eighteen files are disposed of, and core is at 75 references across 13
-files. FR-130's per-file disposition table records the conclusion for each of the eighteen,
+Phase A moved the modules whose boundaries were already clear. All three phases are now closed:
+each of Phase B's eighteen files has a written conclusion, and core is at 9 references across 3
+files, every one of them the driver connection type on the layer's own public API — FR-141's
+subject, not this FR's. FR-130's per-file disposition table records the conclusion for each of the
+eighteen,
 including the reference shape and blocking reason for the twelve still open.
 
 ### What the extraction moved
@@ -372,26 +374,137 @@ processes on one file. The read-back stays, because two daemons can share a data
 second such case — the first was task creation's transaction in B9 — and both are written into
 the test rather than left as green assertions that read like coverage.
 
+### The fourth round: `source_automation.rs` and `trigger_engine.rs`
+
+The two largest remaining files, split by the pattern the previous rounds established.
+
+`source_automation.rs` (B15) gave up four tables and 33 statements. It carried the last two
+`FromSqlConversionFailure` constructions in `core`: `read_execution_snapshot` parsed two JSON
+snapshots inside a row mapper, so a malformed snapshot had to be reported as a column-conversion
+failure against an index computed from the string's own length. The snapshots now cross as text
+and parse above with the route named. Its row types were all flat columns, so they sank whole and
+are re-exported — the shape `ActionAuditRecord` took in B8.
+
+Two smaller shapes changed with it. `adopt_generation` used to read the row and check three rules
+in Rust before writing; the three are now fences on the write itself, so a rejection is one
+statement rather than a read followed by a write that could disagree with it. And the audit
+request id of a new generation is derived in `core` beside the other three id derivations instead
+of being formatted inside a transaction.
+
+`trigger_engine.rs` (B16) gave up the `trigger_state` table and the task reads around it — seven
+statements. Two decisions that had no name acquired one. `ACTIVE_TASK_STATUSES` was a `matches!`
+arm inside a connection closure, and it is what decides whether a `Skip` trigger stays shut.
+`trigger_task_name` was `format!("trigger-{}")` written twice, once by the fire path and once by
+the cleanup query; if those two ever disagreed, history cleanup would match nothing and the limit
+would stop applying with no error anywhere.
+
+### Guards that no fixture can reach
+
+B15 and B16 ran 41 mutations between them. Thirty-five were caught. The six that were not are
+recorded here and in the tests, because a guard with no failing mutation and no note beside it
+reads as covered:
+
+| Guard | Why nothing reaches it |
+|---|---|
+| The claim `UPDATE`'s re-check of `attempt_count`, `next_attempt_at` and `lease_expires_at` | The candidate `SELECT` in the same transaction already applied them, and a single-writer database gives the row no chance to move in between. |
+| `if changed != 1 { continue }` after that `UPDATE` | Same reason: the `UPDATE` cannot fail to move a row the `SELECT` just admitted. |
+| The in-memory installation set in `claim_due` | The SQL occupancy probe catches the same case — a route claimed earlier in the loop already holds an unexpired lease by the time the next candidate is read. The set is a saved query. |
+| `status NOT IN ('routed','ignored')` in `transition_leased` | Every transition that reaches a terminal state also releases the lease, so `lease_token=?2` refuses first and the terminal check is never the reason. |
+| `delete_tasks`'s empty-list early return | SQLite accepts `IN ()` and matches nothing, so skipping the statement changes no answer. Measured, not assumed. |
+
+Four of these are defence against a second writer that does not exist yet. That is a reasonable
+thing to keep and an unreasonable thing to claim a test protects. The fifth and sixth are saved
+work rather than guarantees, and both now say so in the code.
+
+Four assertions also passed their first mutation, each naming a gap in itself rather than in the
+code — the same shape the third round found. The attempt ceiling and the live-lease filter each
+needed a *candidate-window starvation* fixture to reach their `SELECT` copy: because the window is
+a fixed multiple of the batch size, a route that is still selected but not claimable costs a slot,
+and enough of them ahead of a live route starve it. Asserting "the exhausted route was not
+claimed" reaches neither copy, because both refuse it.
+
+### Moving a statement is when someone finally reads it
+
+B16's `DELETE FROM tasks` is the fourth round's version of B11's five unguarded fences. Trigger
+history limits have never applied to a task that actually ran: the delete clears no child rows,
+`task_items` does not cascade, and every task a trigger creates has items. The error is caught and
+logged by the caller, so the only symptom is that the history never shrinks. It is recorded in
+Known limits below and pinned by an assertion in the round-trip test, and it is not fixed here —
+fixing it decides whether a history limit may delete a task's items, events and command runs,
+which is not a question a statement-moving batch should answer.
+
+### `config.rs` was not blocked on `crd`
+
+Phase A recorded `persistence/repository/config.rs` as blocked, with the unblock condition that
+`crd` must sink into its own crate first, because the file holds 17 references to `crate::crd` and
+`crd/plugins.rs` calls back into `db.rs`. That was the right answer to Phase A's question, which
+was whether the *whole file* could move.
+
+It is the wrong answer to Phase B's question, and re-deriving it at closure showed why. Phase B
+asks whether the file's *statements* can move. They can: they are over
+`orchestrator_config_versions`, `config_heal_log`, `resources`, `resource_versions` and
+`sqlite_master`, all flat columns with `spec_json` and `metadata_json` as text. Not one of them
+names a `crd` type — the `crd` types appear only in the callers that build a `ResourceStore` out
+of the rows. There is no cycle, and nothing for a `crd`-sinking FR to own.
+
+What the file's three references actually are is the driver connection type: an import,
+`open_conn(&self) -> Result<rusqlite::Connection>` (which is `orchestrator_persistence::db`'s
+`open_conn`, re-exported), and a `&rusqlite::Connection` parameter handed on to
+`orchestrator-security`'s key-audit writer. Moving the statements down would not clear those,
+because they exist so that `core` can obtain a connection and pass it — which is FR-141
+requirement 4 word for word: the persistence layer's public API must not hand out driver types.
+So `config.rs` is disposed the same way `attention.rs` and `process_metrics.rs` are: kept, with
+the reason recorded, pointing at FR-141.
+
+This correction matters beyond one file. A blocker written for one question and inherited by
+another is invisible: it is already written down, already has a reason, and reads as settled. The
+only thing that catches it is asking again at closure whether the reason still answers the
+question being asked.
+
+### Reverting a batch is not the same as undoing it
+
+Every batch here carries a proof that its commit reverts mechanically. That proof is about form,
+not about safety, and one batch makes the difference concrete.
+
+B14 took a `git` subprocess tree out of the SQLite writer's transaction. Doing so meant the
+caller verifies the state version before the write, so the store had to re-fence on
+`status='planned' AND expected_state_version`. The code it replaced inserted the execution row and
+*then* ran `UPDATE … WHERE status='planned'` without checking how many rows changed — two
+operators racing could both believe they owned the same resume execution.
+
+Reverting B14 puts that race back. Anyone who reverts it on the grounds that "the batch is proved
+revertible" will have reintroduced a live defect while citing evidence that says nothing about it.
+The revert proofs establish that the commits are independent, and nothing more.
+
+### The guard audit has a blind spot, and it is the three files that stayed
+
+The most valuable output of Phase B was not the sixteen files that moved. It was the SQL
+invariants that turned out to have no test at all — B11's five routing fences, B14's resume race,
+and the four assertions across B13–B16 that passed their first mutation. Every one of those was
+found because a statement was being moved and somebody had to read it.
+
+Three files were not moved: `attention.rs`, `process_metrics.rs` and
+`persistence/repository/config.rs`. **Their SQL guards have not been audited, and this mechanism
+will never reach them**, because the mechanism is migration. Nothing in this design record or in
+FR-130 should be read as evidence about them; they were judged on their reference shape, not on
+their invariants.
+
+All three are in FR-141's scope — the 165 call sites it migrates include theirs — so the audit has
+an owner and an occasion. Whoever takes FR-141 should treat those three as a guard audit as well
+as an API migration, because it will be the first time anyone reads their statements with a reason
+to ask what each one is holding shut.
+
 ### What is left, and why each is left
 
-Two files are undisposed. Neither is blocked; both are the same shape as `source.rs` and
-`source_connection.rs`, and the pattern above applies directly.
+| File | Refs | Disposition |
+|---|---|---|
+| `attention.rs` | 3 | Kept. Import 1 + the two-line `fn other` adapter. Its SQL is entirely inside `writer().call` closures; clearing the count means either moving the file whole or changing the pipe, and the pipe change is FR-141's. |
+| `process_metrics.rs` | 3 | Kept, same shape and same reason. |
+| `persistence/repository/config.rs` | 3 | Kept. Connection-type 2 + import 1, all of them the driver connection the layer hands out. See above — not blocked, and not blocked on `crd`. |
 
-| File | Refs | Statements | Shape |
-|---|---|---|---|
-| `trigger_engine.rs` | 18 | — | error-adapter 7 + sql-params 11, spread across several `writer().call` closures. |
-| `source_automation.rs` | 7 | 33 | error-construction 4 + error-adapter 2 + import 1; 21 async methods, with five domain rules interleaved inside transactions (stale lease, replayability, cross-binding refusal). |
-
-`source_automation.rs` carries the last two `FromSqlConversionFailure` constructions in core:
-`read_execution_snapshot` parses two JSON snapshots inside a row mapper. It takes the same
-treatment as `source.rs` and `handoff.rs` — the snapshots cross as text and parse above. Its row
-types are all plain columns with no enums and no JSON, so they can sink whole and be re-exported,
-the shape `ActionAuditRecord` took in B8.
-
-They are undisposed because this round's budget ran out, **not** because judging them produced
-that answer. FR-130's rule is that "kept, with the reason recorded" is only written when the file
-was actually judged and the conclusion was that it should not move. For both of these the
-conclusion is that they should move, so they are recorded as undisposed.
+Nine references across three files, each named in `core-boundary-ledger.json` and frozen by exact
+equality in both directions. Each has the same successor, and that successor exists: FR-141, whose
+own non-goals require it to start only after Phase B closes.
 
 ### Ports where they fit, not where they were proposed
 
@@ -501,3 +614,18 @@ here:
 - The `schema_snapshot` test sits in `core` and exercises a crate below it. Deliberate and
   temporary, as above; it is the one place where the test and the code it tests are in different
   crates on purpose.
+- **Trigger history limits do not delete anything that ran.** `trigger_state::delete_tasks` is a
+  bare `DELETE FROM tasks`, moved unchanged from `trigger_engine::cleanup_history`. It clears no
+  child rows, and `task_items` references `tasks(id)` without `ON DELETE CASCADE`
+  (`migration_steps.rs:71`), while some other child tables do cascade. So the delete is refused
+  with `FOREIGN KEY constraint failed` for any task that has items — which is every task a trigger
+  fire creates. `cleanup_history` propagates the error and its caller logs it, so the trigger
+  keeps firing and the history simply never shrinks. Found in B16 by asking what each moved
+  statement would do if it were wrong; recorded rather than fixed, because the fix decides whether
+  a history limit may delete a task's items, events and command runs, and nobody has answered that
+  yet. `task_cleanup.rs` already deletes through the repository's cascade, which is probably where
+  this should route. Pinned by `trigger_history_retention_keeps_the_newest_and_selects_nothing_else`
+  so the behaviour is a known state rather than a surprise.
+- **The guard audit covers only the files that moved.** Recorded in full above. `attention.rs`,
+  `process_metrics.rs` and `config.rs` had their reference shape judged, not their invariants, and
+  the mechanism that read every other file's guards cannot reach them.

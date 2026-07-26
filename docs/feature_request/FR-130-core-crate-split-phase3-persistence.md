@@ -2,18 +2,19 @@
 
 ## 优先级: P1
 
-## 状态: In Progress
+## 状态: 可闭环（三个 phase 均已完成，18 个文件全部处置；闭环判断与依据见文末）
 
 需求 1（边界识别与冻结基线）与需求 3（迁移语义等价证明）已闭环，其设计与验证由
 [DD-142](../design_doc/orchestrator/142-core-boundary-freeze.md) 与
 [QA 180](../qa/orchestrator/180-core-boundary-freeze.md) 承载。
 
-**需求 2 的 Phase A 与 Phase C 已闭环，Phase B 进行中（16 / 18 文件已有书面处置：
-13 个已迁出或拆分、2 个保留并记录理由、1 个被阻塞；2 个未处置）**，其设计与验证由
+**需求 2 的 Phase A、Phase B 与 Phase C 均已闭环（18 / 18 文件各有一条书面处置：
+15 个已迁出或拆分、3 个保留并记录理由）**，其设计与验证由
 [DD-148](../design_doc/orchestrator/148-persistence-crate-extraction.md) 与
 [QA 186](../qa/orchestrator/186-persistence-crate-extraction.md) 承载。
-core 已从 200 处 `rusqlite` 引用 / 37 文件降至 **34 处 / 5 文件**，逐文件结论见下面的
-「逐文件处置表」。
+core 已从 200 处 `rusqlite` 引用 / 37 文件降至 **9 处 / 3 文件**，逐文件结论见下面的
+「逐文件处置表」。残余 9 处全部是**持久化层交出的驱动连接类型**，属
+[FR-141](FR-141-persistence-connection-api-boundary.md) 的对象而非本 FR 的。
 
 **2026-07-25 重写**：原需求 2（crate 提取）实际包含三件粒度、风险与前置条件都不同的事，
 原需求 4 经实测近乎空转。本文档按此重新切分，并将"非 core crate 直接依赖 `rusqlite`"
@@ -126,6 +127,8 @@ crate 清单。`scripts/qa/core-boundary.rb` 以**精确相等**比对，`--emit
   调用 `crate::db::insert_plugin_audit`，`db.rs` 是 Phase A 文件。若 `db.rs` 与 `config.rs`
   同时下沉而 `crd` 留在 core，得到的是 `persistence → crd → persistence` 循环依赖。
   它位于 `persistence/` 目录下但是一个**领域仓储**——目录位置与结构类别不是一回事。
+  **这条只对 Phase A 的问题成立**（整个文件能否下沉）。Phase B 问的是语句能否下沉，
+  那个答案不同，见下面处置表中该文件那一行。
 - **`core/src/session_store.rs`（3 处）移入 Phase A。** 其全部 import 是 `async_database`、
   `config_load::now_ts`、`persistence::repository::{SessionRepository, SqliteSessionRepository}`
   与 `db`，无任何领域耦合；且 Phase A 的 `persistence/repository/session.rs` **依赖它**——
@@ -136,7 +139,7 @@ crate 清单。`scripts/qa/core-boundary.rb` 以**精确相等**比对，`--emit
 验收以 `schema-snapshot.sql` **逐次不变**为行为证据——纯结构性的"符号已移动"不足以
 证明迁移仍然正确。
 
-### ⏳ Phase B：混装文件的逐批拆分
+### ✅ Phase B：混装文件的逐批拆分（2026-07-27 闭环）
 
 **18 个文件**（原文写作 22，与上表不符；上表为准），SQL 与领域逻辑在同一函数内，
 各自是一次独立的设计判断：
@@ -193,10 +196,10 @@ crate 清单。`scripts/qa/core-boundary.rb` 以**精确相等**比对，`--emit
 | `task_cleanup.rs` | ~~1~~ 0 | 290 | ✅ **已拆分**（B3）。保留查询 → `queries::list_terminal_tasks_older_than`；级联删除改用既有 async repository 方法（原为手写重复）；文件系统清理留在 core |
 | `config_load/build.rs` | ~~2~~ 0 | 918 | ✅ **已拆分**（B4）。删除守卫改吃 `db::DeletionGuardQueries` port；守卫逻辑现可无数据库单测 |
 | `events.rs` | ~~3~~ 0 | 700 | ✅ **已拆分**（B5）。行访问 → `events::{StepEventRow, step_event_rows}`；payload 解释留在 core；事件类型清单**上移**为 core 的 `STEP_EVENT_TYPES` 并作参数下传 |
-| `trigger_engine.rs` | 18 | 1130 | ⏳ **未处置**。error-adapter 7 + sql-params 11。SQL 分散在多个 `writer().call` 闭包内，形态同 `source.rs`（B11），可按同一模式迁出 |
+| `trigger_engine.rs` | ~~18~~ 0 | 1130→983 | ✅ **已拆分**（B16）。`trigger_state` 表与周边任务读共 7 条语句 → `trigger_state`；调度判断留在 core。两条此前无名的判断获得了名字：`ACTIVE_TASK_STATUSES`（原为闭包内的 `matches!` 分支，它决定 `Skip` 策略是否让触发器一直关着）与 `trigger_task_name`（原为写在两处的 `format!`，两处一旦不一致，历史清理会静默匹配不到任何东西）。**搬迁中发现一个真实缺陷**：`DELETE FROM tasks` 不清子行而 `task_items` 不级联，所以触发器历史上限对任何真正跑过的任务都被 FK 拒绝、从未生效；已记入 DD-148 的 Known limits 并由断言钉住当前行为，未在本批修复 |
 | `action_audit.rs` | ~~9~~ 0 | 742→442 | ✅ **已拆分**（B8）。表与 7 条语句 → `control_action_audit`；字段边界、canonical hash、生命周期 allowlist、幂等冲突规则留在 core。存储只报告 `Reservation::{Claimed, PriorByRetryIdentity, PriorByRequestId}`，不解释其含义 |
 | `service/bootstrap.rs` | ~~7~~ 0 | 597 | ✅ **已拆分**（B7）。6 条 scope backfill + SecretStore 引用探针 → `db`；渲染 workspace_root、序列化 qa_targets、`unwrap_or(false)` 留在 core |
-| `source_automation.rs` | 7 | 2008 | ⏳ **未处置**。error-construction 4 + error-adapter 2 + import 1 |
+| `source_automation.rs` | ~~7~~ 0 | 2008→686 | ✅ **已拆分**（B15）。四张表 33 条语句 → `source_automation_routes`；字段边界、automation key 与由它派生的四个标识符、退避、哪些状态释放租约、状态投影的时龄算术、以及每个被拒绝的 fence 对运维意味着什么留在 core。这一批清掉了 core 里**最后两处 `FromSqlConversionFailure`**。**28 处变异，其中 5 处无可达 fixture**，逐条记在测试里而不是留成绿断言 |
 | `source.rs` | ~~5~~ 0 | 1337→650 | ✅ **已拆分**（B11）。四张表 24 条语句 → `source_events`；校验、确定性 id 推导、30 秒退避、终态 allowlist 留在 core。**发现 5 处安全护栏此前无任何测试守护**，见下 |
 | `source_connection.rs` | ~~5~~ 0 | 1923→1100 | ✅ **已拆分**（B13）。五张表 23 条语句 → `source_connections`；字段边界、模式/终态 allowlist、每个被拒绝的 fence 对运维意味着什么、以及枚举与 JSON 的解析留在 core。**16 处 fence 逐一变异，其中 3 处各有多份拷贝**（`version=?3` ×3、`state='active'` ×4、`owner_daemon_id=?3` ×2），每份拷贝各做一次变异 |
 | `handoff.rs` | ~~5~~ 0 | 1288→930 | ✅ **已拆分**（B14）。三张表 18 条语句 → `handoff_store`。**动它的理由不在引用数里**：`task_state_version` 跑三个 `git` 子进程并读遍工作区未跟踪文件，而每个调用点都在 `writer().call` 闭包内，`reserve_execution` 更是在其**事务内**——单写者数据库的写锁被一个外部进程树占住。现在读取以 inputs 形式返回，投影、摘要与哈希都在 core |
@@ -204,10 +207,11 @@ crate 清单。`scripts/qa/core-boundary.rb` 以**精确相等**比对，`--emit
 | `task_ops.rs` | ~~4~~ 0 | 1826 | ✅ **已拆分**（B9）。两条重复的建任务写路径合并为一个事务 → `task_repository::creation`；FR-094 诊断事件改为**构造**而非写入 |
 | `attention.rs` | 3 | 1454 | ⏸️ **保留并记录理由**。import 1 + `fn other` 2。其 SQL 全部在 `writer().call` 闭包内，与 `source.rs` 同形；要清零就得整体迁出，而**只动管道的那条路已被本 FR 拒绝**并移交 [FR-141](FR-141-persistence-connection-api-boundary.md)。今天没有搬 SQL，所以今天的诚实结论就是保留 |
 | `process_metrics.rs` | 3 | 1953 | ⏸️ **保留并记录理由**。同 `attention.rs`，理由同上，同样指向 FR-141 |
-| `persistence/repository/config.rs` | 3 | 695 | 🚧 **被阻塞**。connection-type 2 + import 1。它 `use crate::resource::export_manifest_resources` 与 `crate::secret_store_crypto`，二者都在 core。**解锁条件**：`crd`（资源/清单模型）先下沉到独立 crate 或 `orchestrator-config`，否则迁出会造成 `persistence → crd → persistence` 成环 |
+| `persistence/repository/config.rs` | 3 | 695 | ⏸️ **保留并记录理由**（2026-07-27 更正，原记作「被阻塞，解锁条件是 crd 先下沉」）。connection-type 2 + import 1，三处**全部是驱动连接类型**：import、`open_conn(&self) -> Result<rusqlite::Connection>`（即持久化层 `db::open_conn` 的再导出）、以及交给 orchestrator-security 密钥审计的 `&rusqlite::Connection`。**原解锁条件是错的**：它回答的是 Phase A 的问题（整个文件能否下沉），而 Phase B 问的是语句能否下沉——本文件的语句全部落在 `orchestrator_config_versions`、`config_heal_log`、`resources`、`resource_versions` 与 `sqlite_master` 上，皆为平字段加 JSON 文本，**没有任何一条需要 crd 类型**，不成环，也没有任何东西需要一个 crd 下沉 FR 来承接。而即便把语句全部搬下去也清不掉这三处，因为它们存在的理由是 core 要拿到并传递一个连接——这正是 [FR-141](FR-141-persistence-connection-api-boundary.md) 需求 4 的原话 |
 
-已处置 **13 / 18**，另有 3 个已写明处置（2 个保留、1 个被阻塞），共 **16 / 18**。
-core 从 86 处 / 20 文件降至 **34 处 / 5 文件**。
+**18 / 18 各有一条书面处置**：15 个已迁出或拆分，3 个保留并记录理由（`attention.rs`、
+`process_metrics.rs`、`persistence/repository/config.rs`），三者指向同一个后继 FR-141。
+core 从 200 处 / 37 文件降至 **9 处 / 3 文件**。
 
 Phase A 的具名残余 `core/src/migration.rs`（1 处）已在 B12 处置：三个兼容包装
 **全工作区零生产调用者**，作为「下线死掉的公开 API」删除。删除时立刻暴露了它掩盖的漂移
@@ -230,25 +234,25 @@ Phase A 的具名残余 `core/src/migration.rs`（1 处）已在 B12 处置：�
 现由 `source_routing_guards_hold_the_line_they_are_there_for` 逐条钉住。
 **这一批真正的产出不是搬走了 24 条语句，而是这五条护栏此前由零个测试承担。**
 
-#### 剩余工作（2 个文件）
+#### 残余 9 处，以及为什么每一处都有一个真实的后继
 
-| 文件 | 引用 | 语句 | 形态 |
-|---|---|---|---|
-| `trigger_engine.rs` | 18 | — | error-adapter 7 + sql-params 11，SQL 分散在多个 `writer().call` 闭包内 |
-| `source_automation.rs` | 7 | 33 | error-construction 4 + error-adapter 2 + import 1；21 个 async 方法，5 处领域规则夹在事务内（租约陈旧、可重放性、跨 binding 拒绝） |
+三个保留文件的引用形态完全相同：**持久化层把驱动类型放在公开 API 上，所以 core 手里有一个
+连接**。`attention.rs` 与 `process_metrics.rs` 是 `writer()` 交出的 `tokio_rusqlite::Connection`
+加两行 `fn other`；`config.rs` 是 `db::open_conn` 交出的 `rusqlite::Connection`。这是一件事，
+不是三件。
 
-两者都**不是被阻塞**，形态与 `source.rs`／`source_connection.rs` 相同，B8/B11/B13/B14
-建立的模式直接适用：持久化层拿到**异步**函数（吃 `&AsyncDatabase`，自己持有
-`writer().call` 与错误适配器），core 保留校验、id 推导、退避、状态机 allowlist 与解释；
-写—条件读—规则三者纠缠处，存储返回**具名分支**而不是解释它。
+它的后继是 FR-141，而且是一个**真实存在且已排好序**的后继：FR-141 的非目标里写明
+「不与 FR-130 Phase B 并行……须在 Phase B 闭环之后开始」，它的需求 4 是
+「`orchestrator-persistence` 的公开 API 不得出现 `rusqlite` / `tokio_rusqlite` 类型」，
+它的迁移面 165 个调用点包含这三个文件的全部。Phase B 闭环正是它的前置条件。
 
-`source_automation.rs` 的两处 `FromSqlConversionFailure`（`read_execution_snapshot` 在 row
-mapper 内解析两份 JSON 快照）按 B11/B13/B14 的做法处理：快照以文本过边界，在 core 解析。
-它的行类型（`SourceAutomationRoute` 等）全是平字段、无枚举无 JSON，可整体下沉后由 core
-re-export，形态同 B8 的 `ActionAuditRecord`。
-
-**未处置的原因是本轮预算用尽，不是判断结果。** 按本 FR 的规则，「保留并记录理由」只在
-实际判断过且结论是「不应搬」时才写；这两个文件的结论是应搬，所以它们记作未处置。
+**同时要交待一件本机制照不到的事**：Phase B 最有价值的产出不是搬走的 16 个文件，而是那些
+从来没有测试守护的 SQL 不变量（B11 的五处路由护栏、B14 顺手关掉的 resume 竞态、B13–B16 四条
+第一次变异就通过的断言）。它们全部是因为「有人正在搬这条语句、不得不读它」才被发现的。
+**这三个保留文件的护栏没有被审计过，而这个机制永远照不到它们**——因为机制就是搬迁。
+本 FR 与 DD-148 对它们的结论只涉及引用形态，不构成对其不变量的任何证据。接手 FR-141 的人
+应当把这三个文件当作一次护栏审计，而不只是一次 API 迁移；那将是第一次有人带着问题去读它们的
+语句。已记入 DD-148 的 Known limits。
 
 ### ✅ Phase C：`error.rs` 的驱动耦合决策（2026-07-26 闭环）
 
@@ -332,16 +336,18 @@ gui(7)、daemon(7)。该条对本次提取近乎空转，作为 FR-130 的需求
       `13 members`——台账与代码一同回退。用区间会连带 revert 期间落入的一个无关提交，
       那证明的是"某组提交可回退"而非"本次提取可回退"（首次执行即犯了这个错，44 与 45 之差）
 
-### Phase B —— 进行中（6 / 18 文件已处置）
+### Phase B —— 已闭环（2026-07-27）
 
-- [ ] 18 个混装文件各有"已迁出 / 已拆分 / 保留并记录理由"的结论 —— **6 个已处置，
-      12 个未处置**，逐文件结论见上面的处置表（含每个未处置文件的引用形态与阻塞原因）。
-      未完成，但剩余工作已具名而非"Phase B 的其余部分"
-- [x] 每批独立提交且各自可回退；每批之后 `schema-snapshot.sql` 未变 —— 6 次提交
-      （B0–B5，另加 B6 记录尺子限制），每次都重跑 `cargo test --workspace`、
-      clippy `-D warnings`、`schema_snapshot`，且两个治理台账与代码同 commit 重新冻结
-- [x] 台账 `rusqlite.files` 随每批单调收敛，残余点显式清单化 —— 86 → 75，20 → 13 文件；
-      残余 13 个文件逐一列在处置表中
+- [x] 18 个混装文件各有"已迁出 / 已拆分 / 保留并记录理由"的结论 —— **18 / 18**：
+      15 个已迁出或拆分，3 个保留并记录理由，逐文件结论见上面的处置表。
+      三个保留文件指向同一个后继 FR-141，且该后继存在并以 Phase B 闭环为其前置条件
+- [x] 每批独立提交且各自可回退；每批之后 `schema-snapshot.sql` 未变 —— B0–B16,
+      每批一次提交、一次 QA、一次**逐个 commit 具名**（不用 range）的回退证明，
+      每次都重跑 `cargo test --workspace`、clippy `-D warnings`、`schema_snapshot`、
+      以及未经修改的 `phase_c_preserves_the_external_dependency_category`，
+      且两个治理台账与代码同 commit 重新冻结
+- [x] 台账 `rusqlite.files` 随每批单调收敛，残余点显式清单化 —— 86 → 9，20 → 3 文件；
+      残余 3 个文件逐一列在处置表中，并由 `core-boundary.rb` 以精确相等双向冻结
 - [x] **每条被搬动的语句都有行为断言，而不只是引用消失**：
       `delete_project_resources`（按项目删、别的项目不受影响、二次调用返回 0）、
       `list_terminal_tasks_older_than`（三种排除原因各一个 fixture、LIMIT、窗口放宽后为空）、
@@ -354,9 +360,12 @@ gui(7)、daemon(7)。该条对本次提取近乎空转，作为 FR-130 的需求
       已删除。不是原文的两个选项之一：实测它只有一个消费者（B1 搬走的那段 SQL），
       删掉后即为死代码。它保证的 `ExternalDependency` category 由调用点的具名映射函数
       显式承接，并有反向变异实测
-- [ ] core 对 `rusqlite` 的引用收敛至 0，或残余点带理由记录并被门禁冻结 ——
-      **未达成**：仍有 75 处 / 13 文件，均由 `core-boundary.rb` 以精确相等冻结并逐一具名，
-      但"收敛至 0"要等 Phase B 余下 12 个文件
+- [x] core 对 `rusqlite` 的引用收敛至 0，或残余点带理由记录并被门禁冻结 ——
+      **以第二条分支达成**：残余 9 处 / 3 文件，逐一具名、各带书面理由、由
+      `core-boundary.rb` 以精确相等在两个方向上冻结。不取第一条分支是一次判断而非放弃：
+      这 9 处是**持久化层公开 API 上的驱动连接类型**，清掉它们要改的是那个 API 而不是这三个
+      文件，规模是跨三个 crate 的 165 个调用点，判据在 API 边界上而不在棘轮上。
+      本 FR 若为了让计数归零而顺手改那个 API，就正好做了它在 Phase B 开头明确拒绝过的那件事
 
 ## QA 计划（剩余部分）
 
@@ -370,3 +379,30 @@ gui(7)、daemon(7)。该条对本次提取近乎空转，作为 FR-130 的需求
   分批要求的技术理由，不只是流程偏好。
 - **尺子先于测量**：Phase A 开始前重跑边界门禁，确认修复后的扫描器给出与冻结时相同的
   `200 / 37`。若数字变化，说明冻结时的基线本身受缺陷影响，须先重新冻结再开始提取。
+
+## 闭环判断（2026-07-27）
+
+**判断：本 FR 可以闭环。**
+
+判据不是「三个 phase 都做完了」，也不是「还有残余所以不能关」——两个默认答案都有惯性。
+沿用上一轮定下的那条：**「保留并记录理由」与「被阻塞」是合法的闭环状态，因为各自带着一个决策
+和一个后继；没有决策的不是。** 于是问题变成：每一条残余是否都有一个真实存在的后继。
+
+三条残余（`attention.rs`、`process_metrics.rs`、`persistence/repository/config.rs`，各 3 处）
+指向同一个后继 FR-141。它存在、已立项、需求 4 就是这三处引用的形态本身、迁移面包含它们的
+全部调用点，而且它的非目标写明须在 Phase B 闭环之后开始——所以这不只是「有后继」，
+是**本 FR 闭环恰好是那个后继的前置条件**。
+
+第三条残余原本是唯一一个后继不存在的：它记作「被阻塞，解锁条件是 crd 先下沉」，而全仓只有
+本 FR 提到 crd，本 FR 一关它就无主。收尾时重新推导发现**那个解锁条件是错的**——它回答的是
+Phase A 的问题（整个文件能否下沉，答案是会成环），而 Phase B 问的是语句能否下沉，
+那些语句没有一条需要 crd 类型。所以不需要立一个 FR 承接 crd 下沉：没有东西需要被承接。
+详见处置表该行与 DD-148。
+
+反过来说一条没有被后继覆盖的：**这三个文件的 SQL 护栏从未被审计**，而做审计的那个机制
+（搬迁时不得不逐条读语句）永远照不到它们。这一条已写进 DD-148 的 Known limits 并在上面
+点名，交给 FR-141 一并处理。它不阻塞本 FR 闭环——它是一件被明确记下来的未做之事，
+不是一件被默认已做的事。
+
+**闭环手续尚未执行**（删除本文件、更新 `docs/feature_request/README.md`、重生成
+`doc-lifecycle-index.json`）。判断与依据先落在这里，删除是一次独立的动作。
