@@ -32,7 +32,7 @@ Primary entry points:
 ```bash
 ./scripts/qa/test-qa-gate-surface.sh                   # 13 checks (12 from FR-134, plus the
                                                        # aggregation check FR-137 added; see QA-187)
-./scripts/qa/test-qa-gate-surface.sh --fixture-test    # 33 assertions: 24 negative fixtures, two
+./scripts/qa/test-qa-gate-surface.sh --fixture-test    # 34 assertions: 24 negative fixtures, three
                                                        # positive controls, four behavioural cases,
                                                        # and three meta-assertions
 ./scripts/qa/test-skill-mirror-integrity.sh --fixture-test

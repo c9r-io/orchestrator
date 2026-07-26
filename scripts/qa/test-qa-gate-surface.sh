@@ -1148,6 +1148,24 @@ BUNDLE
     expect_fail "fixture 22" "$d" check_continue_on_error_aggregated "a continue-on-error step missing from OUTCOMES fails on every run inside a job that passes"
   fi
 
+  # 22b. Positive control for the same rule, and the half of FR-137's acceptance
+  #      criterion that says the step passes "once added to OUTCOMES". Fixtures
+  #      22, 23 and 24 only ever ask the check to say no, and every one of them
+  #      is satisfied by a check that rejects any edited ci.yml — or that always
+  #      returns 1. This is the assertion that makes it say yes, for the right
+  #      reason, on a tree that is not the pristine one.
+  d="$(new_case f22b)"
+  if inject "fixture 22b" "$d/.github/workflows/ci.yml" \
+    perl -0pi -e 's{^(      - name: Governance result$)}{      - name: FR-137 orphan gate\n        id: fr137-orphan\n        continue-on-error: true\n        run: exit 1\n\n$1}m; s{^(            execution-migration=\$\{\{ steps\.execution-migration\.outcome \}\})$}{$1\n            fr137-orphan=\${{ steps.fr137-orphan.outcome }}}m' \
+      "$d/.github/workflows/ci.yml"; then
+    if check_continue_on_error_aggregated "$d" >/dev/null 2>&1; then
+      pass "fixture 22b: the same step with its OUTCOMES line added passes, so the check is not just rejecting the edit"
+    else
+      fail "fixture 22b: a correctly aggregated step was rejected"
+      check_continue_on_error_aggregated "$d" >&2 || true
+    fi
+  fi
+
   # 23. The dangling direction: a record naming a step that is not there, which
   #     is what a rename leaves behind. Only the OUTCOMES block is touched, so
   #     this cannot also trip the omission direction — the two are asserted

@@ -31,7 +31,7 @@ Primary entry points:
 
 ```bash
 ./scripts/qa/test-qa-gate-surface.sh                   # 13 checks
-./scripts/qa/test-qa-gate-surface.sh --fixture-test    # 33 assertions: 24 negative fixtures, two
+./scripts/qa/test-qa-gate-surface.sh --fixture-test    # 34 assertions: 24 negative fixtures, three
                                                        # positive controls, four behavioural cases,
                                                        # and three meta-assertions
 ruby scripts/lib/workflow_model.rb outcome-facts .     # the facts the check reasons over
@@ -51,7 +51,8 @@ The reproduction FR-137 was filed on.
 ### Steps
 
 ```bash
-# 1. The resident fixture, with its isolation assertion.
+# 1. The resident fixtures: the defect rejected, and the same step accepted
+#    once its OUTCOMES line is added.
 ./scripts/qa/test-qa-gate-surface.sh --fixture-test 2>&1 | grep 'fixture 22'
 
 # 2. End to end on a throwaway copy: insert a gate that fails on every run and
@@ -71,6 +72,12 @@ tail -3 surface.log
   `isolated to` clause is the assertion that the fixture fails the check it names **and** that the
   other twelve checks still pass on the same tree — so it is not passing by tripping something
   else.
+- `PASS: fixture 22b: the same step with its OUTCOMES line added passes ...`. This is the half of
+  the criterion that is easy to skip, and skipping it is the difference between a rule and a
+  tripwire: fixtures 22, 23 and 24 only ever ask the check to say *no*, so all three are satisfied
+  by a check that rejects any edited `ci.yml` — or that returns 1 unconditionally. 22b applies the
+  same edit, aggregates it correctly, and requires a pass. The unmodified-repository positive
+  control does not cover this, because it never leaves the pristine tree.
 - Step 2 exits non-zero with `FAIL: a job swallows a step's failure without aggregating it, ...`
   and a diagnostic naming `.github/workflows/ci.yml job 'governance'` and the id `unaggregated`.
 - The same tree passes the classification, wiring and dependency checks. That is the scenario: the
@@ -245,7 +252,7 @@ below.
 | Command | Result | Notes |
 |---|---|---|
 | `bash scripts/qa/test-qa-gate-surface.sh` | `13 passed, 0 failed` | verification mode |
-| `bash scripts/qa/test-qa-gate-surface.sh --fixture-test` | `33 passed, 0 failed` | 24 negative fixtures, 2 positive controls, 4 behavioural, 3 meta |
+| `bash scripts/qa/test-qa-gate-surface.sh --fixture-test` | `34 passed, 0 failed` | 24 negative fixtures, 3 positive controls, 4 behavioural, 3 meta |
 | `/bin/bash scripts/qa/test-qa-gate-surface.sh` | `13 passed, 0 failed` | GNU bash 3.2.57, compensating for the FR-138 scan gap |
 | `ruby scripts/qa/bash32-compat.rb` | `PASS (97 files, 0 findings)` | see the scan-gap caveat above |
 | `ruby scripts/qa/ci-liveness.rb` | `PASS (14 jobs, 3 workflows)` | the other consumer of `workflow_model.rb` |

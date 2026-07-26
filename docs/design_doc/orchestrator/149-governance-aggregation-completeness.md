@@ -115,6 +115,13 @@ Each has its own negative fixture, and the three fixtures are deliberately disjo
 touches only the `OUTCOMES` block so that it cannot also trip direction 2. A single fixture
 satisfying two rules would leave either one free to be deleted without a test noticing.
 
+All three ask the check to say *no*, which means all three are satisfied by a check that rejects
+any edited `ci.yml`, or that returns 1 unconditionally. Fixture 22b applies the same edit as 22 and
+adds the `OUTCOMES` line, and requires a pass. The existing positive control does not reach this —
+it never leaves the pristine tree, so it cannot distinguish "correct" from "unmodified". This is
+also the half of FR-137's acceptance criterion that reads "and passes once added to `OUTCOMES`",
+which is the easiest half to leave unwritten.
+
 ### Referenced is not load-bearing
 
 The check is structural: it proves each swallowed outcome is *referenced*. An aggregate step that
