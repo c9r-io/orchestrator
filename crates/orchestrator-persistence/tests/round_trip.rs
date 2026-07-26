@@ -1945,3 +1945,974 @@ async fn handoff_snapshot_and_resume_fences_hold() {
         "the plan did not follow its execution to a terminal status"
     );
 }
+
+/// Seeds a `source_events` row so a route has something to reference, and
+/// returns its identifier.
+async fn seed_source_event(db: &AsyncDatabase, id: &str, now: &str) -> String {
+    use orchestrator_persistence::source_events as events;
+
+    events::ingest_event(
+        db,
+        events::NewSourceEvent {
+            id: id.to_string(),
+            project_id: "default".to_string(),
+            provider: "slack".to_string(),
+            installation_id: "T-seed".to_string(),
+            external_event_id: format!("ext-{id}"),
+            event_type: "reaction_added".to_string(),
+            external_actor_id: "U1".to_string(),
+            conversation_id: Some("C1".to_string()),
+            thread_id: None,
+            occurred_at: now.to_string(),
+            received_at: now.to_string(),
+            normalized_payload_json: r#"{"kind":"reaction"}"#.to_string(),
+            raw_payload_ref: None,
+            payload_hash: format!("hash-{id}"),
+        },
+    )
+    .await
+    .expect("seed source event");
+    id.to_string()
+}
+
+#[tokio::test]
+async fn source_automation_reservation_and_claim_fences_hold() {
+    use orchestrator_persistence::source_automation_routes as store;
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let db_path = temp.path().join("automation.db");
+    PersistenceBootstrap::ensure_current(&db_path).expect("bootstrap schema");
+    let conn = open_conn(&db_path).expect("open database");
+    seed_task(&conn);
+    let db = AsyncDatabase::open(&db_path).await.expect("open async db");
+    let now = orchestrator_persistence::now_ts();
+
+    let route = |id: &str, event: &str, installation: &str, reaction: &str| store::NewRoute {
+        id: id.to_string(),
+        automation_key: format!("key-{id}-{reaction}"),
+        request_id: format!("req-{id}-{reaction}"),
+        deterministic_task_id: format!("auto-{id}-{reaction}"),
+        identity: store::RouteIdentity {
+            project_id: "default".to_string(),
+            installation_id: installation.to_string(),
+            message_identity: format!("msg-{id}"),
+            reaction: reaction.to_string(),
+            resolved_role: "maintainer".to_string(),
+            binding_name: "binding-a".to_string(),
+        },
+        source_event_id: event.to_string(),
+        provider: "slack".to_string(),
+        channel_id: "C1".to_string(),
+        message_ts: "1700000000.000100".to_string(),
+        binding_revision: "rev-1".to_string(),
+        template_name: "template-a".to_string(),
+        template_hash: "th-1".to_string(),
+        binding_snapshot_json: r#"{"binding":1}"#.to_string(),
+        template_snapshot_json: r#"{"template":1}"#.to_string(),
+        credential_store: "store-a".to_string(),
+        credential_key: "key-a".to_string(),
+        created_at: now.clone(),
+    };
+
+    let first_event = seed_source_event(&db, "evt-1", &now).await;
+    let second_event = seed_source_event(&db, "evt-2", &now).await;
+
+    // A first delivery reserves the identity; a duplicate delivery of the same
+    // badge finds it. Only the first caller may execute the mutation, which is
+    // what stops one reaction from creating two tasks.
+    let reserved = store::reserve(&db, route("route-1", &first_event, "T-1", "rocket"))
+        .await
+        .expect("reserve");
+    let store::Reservation::Reserved(first) = reserved else {
+        panic!("a fresh identity was not reported as reserved");
+    };
+    assert_eq!(first.status, "matched");
+    assert_eq!(first.generation, 1);
+
+    let duplicate = store::reserve(&db, route("route-1", &second_event, "T-1", "rocket"))
+        .await
+        .expect("reserve again");
+    let store::Reservation::Existing(existing) = duplicate else {
+        panic!("a duplicate delivery claimed to have reserved the identity");
+    };
+    assert_eq!(existing.source_event_id, "evt-1", "the route changed hands");
+
+    // The losing delivery is still linked to the route it lost to. An event
+    // left unlinked looks unrouted to every operator query there is.
+    let linked: Option<String> = conn
+        .query_row(
+            "SELECT automation_route_id FROM source_events WHERE id='evt-2'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("read the losing event");
+    assert_eq!(
+        linked.as_deref(),
+        Some("route-1"),
+        "the duplicate delivery was not linked to the route it lost to"
+    );
+    // And only one generation exists: a second delivery must not fork the
+    // frozen config the first one captured.
+    let generations: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM source_automation_route_generations WHERE route_id='route-1'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count generations");
+    assert_eq!(generations, 1, "a duplicate delivery forked the generation");
+
+    // The route id is a truncated digest over the identity columns, so the
+    // reservation re-reads the row it landed on. A row under this id with a
+    // different identity is a collision, and nothing at all may be written —
+    // including the event link, because pointing an event at someone else's
+    // route is worse than leaving it unlinked.
+    let third_event = seed_source_event(&db, "evt-3", &now).await;
+    let mut colliding = route("route-1", &third_event, "T-1", "eyes");
+    colliding.automation_key = "key-colliding".to_string();
+    colliding.request_id = "req-colliding".to_string();
+    colliding.deterministic_task_id = "auto-colliding".to_string();
+    let store::Reservation::IdentityCollision(found) = store::reserve(&db, colliding)
+        .await
+        .expect("reserve colliding")
+    else {
+        panic!("a row with a different identity was accepted as this route");
+    };
+    assert_eq!(found.reaction, "rocket");
+    let unlinked: Option<String> = conn
+        .query_row(
+            "SELECT automation_route_id FROM source_events WHERE id='evt-3'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("read the colliding event");
+    assert_eq!(
+        unlinked, None,
+        "a collision left the event pointing at a route that is not its own"
+    );
+
+    // One installation may hold one active route at a time, and that rule is
+    // carried by two separate mechanisms: a set within a single claim batch,
+    // and a SQL probe for a lease taken by an earlier batch. Neither covers
+    // the other's case.
+    let fourth_event = seed_source_event(&db, "evt-4", &now).await;
+    let fifth_event = seed_source_event(&db, "evt-5", &now).await;
+    store::reserve(&db, route("route-2", &fourth_event, "T-1", "tada"))
+        .await
+        .expect("reserve a sibling on the same installation");
+    store::reserve(&db, route("route-3", &fifth_event, "T-2", "tada"))
+        .await
+        .expect("reserve on another installation");
+
+    let lease_expiry = "2999-01-01T00:00:00+00:00".to_string();
+    let batch = store::claim_due(
+        &db,
+        store::Claim {
+            owner: "worker-a".to_string(),
+            limit: 10,
+            now: now.clone(),
+            lease_expires_at: lease_expiry.clone(),
+        },
+    )
+    .await
+    .expect("claim");
+    let claimed_installations: Vec<&str> =
+        batch.iter().map(|r| r.installation_id.as_str()).collect();
+    assert_eq!(
+        batch.len(),
+        2,
+        "the batch took {claimed_installations:?} — one installation was claimed twice"
+    );
+    assert!(
+        claimed_installations.contains(&"T-1") && claimed_installations.contains(&"T-2"),
+        "the batch skipped an installation that was free"
+    );
+    assert!(
+        batch.iter().all(|r| r.status == "resolving"
+            && r.lease_owner.as_deref() == Some("worker-a")
+            && r.attempt_count == 1),
+        "a claimed route did not take the lease it was claimed under"
+    );
+
+    // The second mechanism: the route left behind is now blocked by a lease
+    // held from the earlier batch, not by a set inside this one.
+    let blocked = store::claim_due(
+        &db,
+        store::Claim {
+            owner: "worker-b".to_string(),
+            limit: 10,
+            now: now.clone(),
+            lease_expires_at: lease_expiry.clone(),
+        },
+    )
+    .await
+    .expect("claim again");
+    assert!(
+        blocked.is_empty(),
+        "a second worker claimed a route whose installation was already busy"
+    );
+
+    // A lease that has run out is reclaimable, and the attempt it left open is
+    // closed first. Two open attempts on one route makes the history lie about
+    // what a run cost.
+    let later = "2999-06-01T00:00:00+00:00".to_string();
+    let reclaimed = store::claim_due(
+        &db,
+        store::Claim {
+            owner: "worker-c".to_string(),
+            limit: 10,
+            now: later.clone(),
+            lease_expires_at: "2999-12-01T00:00:00+00:00".to_string(),
+        },
+    )
+    .await
+    .expect("reclaim");
+    assert_eq!(reclaimed.len(), 2, "expired leases were not reclaimed");
+    let open_attempts: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM source_automation_route_attempts WHERE completed_at IS NULL",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count open attempts");
+    assert_eq!(
+        open_attempts, 2,
+        "reclaiming a route left its previous attempt open"
+    );
+    let expired: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM source_automation_route_attempts
+             WHERE error_code='route_lease_expired' AND result_state='retrying'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count expired attempts");
+    assert_eq!(
+        expired, 2,
+        "a reclaimed attempt was closed without saying why"
+    );
+
+    // The closeout only touches the attempt that is still open. An attempt
+    // that already recorded why it ended must keep that reason: overwriting it
+    // with `route_lease_expired` would turn every historical failure into a
+    // lease problem, which is the one failure family nobody needs to fix.
+    let reclaimed_token = reclaimed[0].lease_token.clone().expect("a reclaimed lease");
+    let reclaimed_id = reclaimed[0].id.clone();
+    store::transition_leased(
+        &db,
+        store::LeaseTransition {
+            id: reclaimed_id.clone(),
+            lease_token: reclaimed_token,
+            state: "retrying".to_string(),
+            error_code: Some("provider_rate_limited".to_string()),
+            error_category: Some("transient".to_string()),
+            permalink: None,
+            task_id: None,
+            next_attempt_at: Some(later.clone()),
+            retry_after_seconds: Some(30),
+            terminal: false,
+            release: true,
+            now: later.clone(),
+        },
+    )
+    .await
+    .expect("record a real failure")
+    .expect("the lease held");
+    // Park the sibling on the same installation so the claim below has exactly
+    // one candidate and cannot pick the other one instead.
+    conn.execute(
+        "UPDATE source_automation_routes SET status='routed' WHERE id='route-2'",
+        [],
+    )
+    .expect("park the sibling");
+    store::claim_due(
+        &db,
+        store::Claim {
+            owner: "worker-c2".to_string(),
+            limit: 10,
+            now: later.clone(),
+            lease_expires_at: "2999-12-01T00:00:00+00:00".to_string(),
+        },
+    )
+    .await
+    .expect("claim after a recorded failure");
+    let preserved: Vec<Option<String>> = conn
+        .prepare(
+            "SELECT error_code FROM source_automation_route_attempts
+             WHERE route_id=?1 ORDER BY id",
+        )
+        .expect("prepare")
+        .query_map([&reclaimed_id], |row| row.get(0))
+        .expect("query")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect");
+    assert_eq!(
+        preserved,
+        vec![
+            Some("route_lease_expired".to_string()),
+            Some("provider_rate_limited".to_string()),
+            None,
+        ],
+        "the lease-expiry closeout rewrote the history of attempts that had already ended"
+    );
+
+    // The poison-message ceiling: an exhausted route is not claimed again.
+    //
+    // It exists in two statements — the candidate `SELECT` and the claiming
+    // `UPDATE` — but only the `SELECT` copy has a reachable fixture. Both run
+    // inside one transaction against a single-writer database, so a row the
+    // `SELECT` admitted cannot have changed by the time the `UPDATE` reads it;
+    // deleting the `UPDATE`'s copy is green under every fixture here and under
+    // the starvation one below. The same is true of the other three conditions
+    // the `UPDATE` repeats, and of the `changed != 1` check that follows it.
+    // They are defence against a future second writer, not against anything
+    // this schema can currently do.
+    conn.execute(
+        "UPDATE source_automation_routes SET attempt_count=max_attempts,
+         lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,status='retrying'",
+        [],
+    )
+    .expect("exhaust every route");
+    let exhausted = store::claim_due(
+        &db,
+        store::Claim {
+            owner: "worker-d".to_string(),
+            limit: 10,
+            now: later.clone(),
+            lease_expires_at: "2999-12-01T00:00:00+00:00".to_string(),
+        },
+    )
+    .await
+    .expect("claim exhausted");
+    assert!(
+        exhausted.is_empty(),
+        "a route past its attempt ceiling was claimed again"
+    );
+
+    // And this one is for the `SELECT` copy, which the `UPDATE` cannot stand in
+    // for. The candidate window is a fixed multiple of the batch size, so an
+    // exhausted route that is still *selected* consumes a slot: enough of them
+    // ahead of a live route and the live one is never looked at. Asking for one
+    // route with three exhausted routes sorted ahead of it makes the difference
+    // observable, because the window is four.
+    conn.execute("DELETE FROM source_automation_route_changes", [])
+        .expect("clear changes");
+    conn.execute("DELETE FROM source_automation_route_attempts", [])
+        .expect("clear attempts");
+    conn.execute("DELETE FROM source_automation_route_generations", [])
+        .expect("clear generations");
+    conn.execute("DELETE FROM source_automation_routes", [])
+        .expect("clear routes");
+    for index in 0..4 {
+        let event = seed_source_event(&db, &format!("evt-block-{index}"), &now).await;
+        let mut blocker = route(
+            &format!("route-block-{index}"),
+            &event,
+            &format!("T-block-{index}"),
+            "tada",
+        );
+        blocker.created_at = format!("2000-01-0{}T00:00:00+00:00", index + 1);
+        store::reserve(&db, blocker).await.expect("reserve blocker");
+    }
+    conn.execute(
+        "UPDATE source_automation_routes SET attempt_count=max_attempts WHERE id LIKE 'route-block-%'",
+        [],
+    )
+    .expect("exhaust the blockers");
+    let live_event = seed_source_event(&db, "evt-live", &now).await;
+    let mut live = route("route-live", &live_event, "T-live", "tada");
+    live.created_at = "2001-01-01T00:00:00+00:00".to_string();
+    store::reserve(&db, live)
+        .await
+        .expect("reserve the live route");
+    let past_the_blockers = store::claim_due(
+        &db,
+        store::Claim {
+            owner: "worker-e".to_string(),
+            limit: 1,
+            now: later.clone(),
+            lease_expires_at: "2999-12-01T00:00:00+00:00".to_string(),
+        },
+    )
+    .await
+    .expect("claim past the blockers");
+    assert_eq!(
+        past_the_blockers.len(),
+        1,
+        "exhausted routes filled the candidate window and starved a live one"
+    );
+    assert_eq!(past_the_blockers[0].id, "route-live");
+
+    // The live-lease filter is the same shape and needs the same fixture: a
+    // leased route that is still *selected* costs a candidate slot. Here the
+    // four blockers hold unexpired leases instead of being exhausted.
+    conn.execute(
+        "UPDATE source_automation_routes
+         SET attempt_count=0,lease_owner='held',lease_token='tok-'||id,
+             lease_expires_at='2999-12-31T00:00:00+00:00'
+         WHERE id LIKE 'route-block-%'",
+        [],
+    )
+    .expect("lease the blockers");
+    let live_event_2 = seed_source_event(&db, "evt-live-2", &now).await;
+    let mut live_2 = route("route-live-2", &live_event_2, "T-live-2", "tada");
+    live_2.created_at = "2001-01-02T00:00:00+00:00".to_string();
+    store::reserve(&db, live_2)
+        .await
+        .expect("reserve a second live route");
+    let past_the_leases = store::claim_due(
+        &db,
+        store::Claim {
+            owner: "worker-f".to_string(),
+            limit: 1,
+            now: later.clone(),
+            lease_expires_at: "2999-12-01T00:00:00+00:00".to_string(),
+        },
+    )
+    .await
+    .expect("claim past the leased blockers");
+    assert_eq!(
+        past_the_leases.len(),
+        1,
+        "leased routes filled the candidate window and starved a live one"
+    );
+    assert_eq!(past_the_leases[0].id, "route-live-2");
+
+    // One condition here has no fixture at all, and it is worth saying which:
+    // the in-memory set that stops a single batch from taking two routes on one
+    // installation. Deleting it is green, because the SQL probe above catches
+    // the same case — a route claimed earlier in the loop already holds an
+    // unexpired lease by the time the next candidate is examined. The set is a
+    // saved query, not a second guarantee.
+}
+
+#[tokio::test]
+async fn source_automation_lease_and_version_fences_hold() {
+    use orchestrator_persistence::source_automation_routes as store;
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let db_path = temp.path().join("automation-fences.db");
+    PersistenceBootstrap::ensure_current(&db_path).expect("bootstrap schema");
+    let conn = open_conn(&db_path).expect("open database");
+    seed_task(&conn);
+    let db = AsyncDatabase::open(&db_path).await.expect("open async db");
+    let now = orchestrator_persistence::now_ts();
+
+    let route = |id: &str, event: &str, installation: &str| store::NewRoute {
+        id: id.to_string(),
+        automation_key: format!("key-{id}"),
+        request_id: format!("req-{id}"),
+        deterministic_task_id: format!("auto-{id}"),
+        identity: store::RouteIdentity {
+            project_id: "default".to_string(),
+            installation_id: installation.to_string(),
+            message_identity: format!("msg-{id}"),
+            reaction: "rocket".to_string(),
+            resolved_role: "maintainer".to_string(),
+            binding_name: "binding-a".to_string(),
+        },
+        source_event_id: event.to_string(),
+        provider: "slack".to_string(),
+        channel_id: "C1".to_string(),
+        message_ts: "1700000000.000100".to_string(),
+        binding_revision: "rev-1".to_string(),
+        template_name: "template-a".to_string(),
+        template_hash: "th-1".to_string(),
+        binding_snapshot_json: r#"{"binding":1}"#.to_string(),
+        template_snapshot_json: r#"{"template":1}"#.to_string(),
+        credential_store: "store-a".to_string(),
+        credential_key: "key-a".to_string(),
+        created_at: now.clone(),
+    };
+    let transition = |id: &str, token: &str, state: &str| store::LeaseTransition {
+        id: id.to_string(),
+        lease_token: token.to_string(),
+        state: state.to_string(),
+        error_code: None,
+        error_category: None,
+        permalink: None,
+        task_id: None,
+        next_attempt_at: None,
+        retry_after_seconds: None,
+        terminal: matches!(state, "routed" | "needs_attention" | "ignored" | "failed"),
+        release: matches!(
+            state,
+            "routed" | "needs_attention" | "ignored" | "failed" | "retrying" | "suspended"
+        ),
+        now: now.clone(),
+    };
+
+    let event_a = seed_source_event(&db, "evt-a", &now).await;
+    store::reserve(&db, route("route-a", &event_a, "T-a"))
+        .await
+        .expect("reserve");
+    let claimed = store::claim_due(
+        &db,
+        store::Claim {
+            owner: "worker".to_string(),
+            limit: 10,
+            now: now.clone(),
+            lease_expires_at: "2999-01-01T00:00:00+00:00".to_string(),
+        },
+    )
+    .await
+    .expect("claim");
+    let token = claimed[0].lease_token.clone().expect("a claimed lease");
+
+    // The fencing token. A worker whose lease was reclaimed under it must not
+    // be able to write the result of work nobody is waiting for any more.
+    assert!(
+        store::transition_leased(&db, transition("route-a", "not-the-token", "rendered"))
+            .await
+            .expect("transition under a stale token")
+            .is_none(),
+        "a stale fencing token moved the route"
+    );
+
+    // The same fence in `suspend_leased` is a second copy in a second
+    // statement, and the assertion above does not reach it.
+    assert!(
+        store::suspend_leased(
+            &db,
+            "route-a".to_string(),
+            "not-the-token".to_string(),
+            "installation".to_string(),
+            now.clone(),
+        )
+        .await
+        .expect("suspend under a stale token")
+        .is_none(),
+        "a stale fencing token suspended the route"
+    );
+
+    // Resolving a permalink flips `permalink_status`, which is what later
+    // decides whether a replayed route restarts at `rendered` or at `matched`.
+    let mut resolve = transition("route-a", &token, "rendered");
+    resolve.permalink = Some("https://example.invalid/p/1".to_string());
+    let rendered = store::transition_leased(&db, resolve)
+        .await
+        .expect("resolve the permalink")
+        .expect("the lease held");
+    assert_eq!(rendered.permalink_status, "resolved");
+    assert_eq!(rendered.lease_token.as_deref(), Some(token.as_str()));
+
+    // A non-releasing transition leaves the attempt open; a releasing one
+    // closes it and drops the lease.
+    let open_after_render: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM source_automation_route_attempts
+             WHERE route_id='route-a' AND completed_at IS NULL",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count open attempts");
+    assert_eq!(
+        open_after_render, 1,
+        "a mid-flight transition closed the attempt it was still running in"
+    );
+    let attention = store::transition_leased(&db, transition("route-a", &token, "needs_attention"))
+        .await
+        .expect("hand over to an operator")
+        .expect("the lease held");
+    assert_eq!(
+        attention.lease_token, None,
+        "a terminal state kept the lease"
+    );
+    assert!(
+        attention.completed_at.is_some(),
+        "a terminal state left the route without a completion time"
+    );
+    let closed: Option<String> = conn
+        .query_row(
+            "SELECT result_state FROM source_automation_route_attempts
+             WHERE route_id='route-a' ORDER BY id DESC LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .expect("read the last attempt");
+    assert_eq!(closed.as_deref(), Some("needs_attention"));
+
+    // `status NOT IN ('routed','ignored')` in the same statement has no
+    // reachable fixture: every transition that reaches a terminal state also
+    // releases the lease, so `lease_token=?2` refuses the call first and the
+    // terminal check is never the reason. Deleting it from the statement is
+    // green. It stays because a future non-releasing terminal state would need
+    // it, and this note is here so the next reader does not mistake the
+    // assertions above for coverage of it.
+
+    // Optimistic concurrency, copy 1 of 3: `replay`.
+    let stale = attention.version - 1;
+    let store::Mutation::Rejected(refused) =
+        store::replay(&db, "route-a".to_string(), stale, now.clone())
+            .await
+            .expect("replay under a stale version")
+    else {
+        panic!("a stale version replayed the route");
+    };
+    assert_eq!(
+        refused.version, attention.version,
+        "the rejection reported a version the row does not have"
+    );
+    assert_eq!(
+        refused.status, "needs_attention",
+        "the refused call still wrote"
+    );
+
+    // Copy 2 of 3: `ignore`.
+    let store::Mutation::Rejected(_) =
+        store::ignore(&db, "route-a".to_string(), stale, now.clone())
+            .await
+            .expect("ignore under a stale version")
+    else {
+        panic!("a stale version ignored the route");
+    };
+
+    let generation = |version: i64, binding: &str| store::NewGeneration {
+        route_id: "route-a".to_string(),
+        expected_version: version,
+        generation: 2,
+        request_id: "req-route-a-g2".to_string(),
+        deterministic_task_id: "auto-route-a".to_string(),
+        resolved_role: "maintainer".to_string(),
+        binding_name: binding.to_string(),
+        binding_revision: "rev-2".to_string(),
+        template_name: "template-b".to_string(),
+        template_hash: "th-2".to_string(),
+        binding_snapshot_json: r#"{"binding":2}"#.to_string(),
+        template_snapshot_json: r#"{"template":2}"#.to_string(),
+        credential_store: "store-b".to_string(),
+        credential_key: "key-b".to_string(),
+        created_by_request_id: "req-operator".to_string(),
+        now: now.clone(),
+    };
+
+    // Copy 3 of 3: `adopt_generation`.
+    let store::Mutation::Rejected(_) = store::adopt_generation(&db, generation(stale, "binding-a"))
+        .await
+        .expect("adopt under a stale version")
+    else {
+        panic!("a stale version adopted a new generation");
+    };
+
+    // The cross-binding fence, which the version fence does not stand in for:
+    // the version here is current and only the binding is wrong. Adopting
+    // across bindings would keep the deterministic task id while changing what
+    // the task is, so the same badge would silently start doing something else.
+    let store::Mutation::Rejected(kept) =
+        store::adopt_generation(&db, generation(attention.version, "binding-b"))
+            .await
+            .expect("adopt across bindings")
+    else {
+        panic!("a different binding was adopted under the same automation identity");
+    };
+    assert_eq!(kept.binding_name, "binding-a");
+    assert_eq!(
+        kept.binding_revision, "rev-1",
+        "the refused adoption still wrote"
+    );
+    let generations: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM source_automation_route_generations WHERE route_id='route-a'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count generations");
+    assert_eq!(
+        generations, 1,
+        "a refused adoption left a generation behind"
+    );
+
+    // Adopted for real: a new immutable generation, and the route restarts at
+    // `rendered` because its permalink is still resolved.
+    let store::Mutation::Applied(adopted) =
+        store::adopt_generation(&db, generation(attention.version, "binding-a"))
+            .await
+            .expect("adopt")
+    else {
+        panic!("a current version failed to adopt");
+    };
+    assert_eq!(adopted.generation, 2);
+    assert_eq!(adopted.status, "rendered");
+    assert_eq!(
+        adopted.attempt_count, 0,
+        "adoption did not reset the budget"
+    );
+    assert_eq!(adopted.binding_revision, "rev-2");
+    let snapshot = store::read_execution_snapshot(&db, "route-a".to_string())
+        .await
+        .expect("read the snapshot")
+        .expect("a snapshot for the current generation");
+    assert_eq!(
+        snapshot.binding_json, r#"{"binding":2}"#,
+        "the route points at a generation it did not adopt"
+    );
+
+    // The replayable-state allowlist, which is a separate condition from the
+    // version: this call carries the current version and is refused for what
+    // the row *is*. It has a copy in `replay` and a copy in `adopt_generation`.
+    let store::Mutation::Rejected(_) =
+        store::replay(&db, "route-a".to_string(), adopted.version, now.clone())
+            .await
+            .expect("replay a rendered route")
+    else {
+        panic!("a route that was never terminal was replayed");
+    };
+    let store::Mutation::Rejected(_) =
+        store::adopt_generation(&db, generation(adopted.version, "binding-a"))
+            .await
+            .expect("adopt onto a rendered route")
+    else {
+        panic!("a route that was never terminal adopted a generation");
+    };
+    // `ignore` carries a wider allowlist than either — it accepts `retrying`
+    // and `suspended` too — so a fixture that pins one does not pin it.
+    let store::Mutation::Rejected(_) =
+        store::ignore(&db, "route-a".to_string(), adopted.version, now.clone())
+            .await
+            .expect("ignore a rendered route")
+    else {
+        panic!("a rendered route was ignored");
+    };
+    assert!(
+        matches!(
+            store::replay(&db, "no-such-route".to_string(), 1, now.clone())
+                .await
+                .expect("replay a missing route"),
+            store::Mutation::Missing
+        ),
+        "a missing route was reported as a rejected fence rather than as missing"
+    );
+
+    // Scope suspension leaves leased routes alone. A worker mid-transition
+    // holds a lease; taking its row out from under it would make its next
+    // write fail as a stale lease rather than as a suspension.
+    let event_b = seed_source_event(&db, "evt-b", &now).await;
+    store::reserve(&db, route("route-b", &event_b, "T-b"))
+        .await
+        .expect("reserve a second route");
+    let leased = store::claim_due(
+        &db,
+        store::Claim {
+            owner: "worker".to_string(),
+            limit: 10,
+            now: now.clone(),
+            lease_expires_at: "2999-01-01T00:00:00+00:00".to_string(),
+        },
+    )
+    .await
+    .expect("claim the second route");
+    assert_eq!(
+        leased.len(),
+        2,
+        "the adopted route and the new one were not both due"
+    );
+    // Put one of the two back on the retry schedule so the scope suspension
+    // has both a leased route and an unleased one to tell apart. A fixture
+    // where every row is leased would pass with the lease check deleted.
+    let token_a = leased
+        .iter()
+        .find(|r| r.id == "route-a")
+        .and_then(|r| r.lease_token.clone())
+        .expect("route-a holds a lease");
+    store::transition_leased(&db, transition("route-a", &token_a, "retrying"))
+        .await
+        .expect("release route-a")
+        .expect("the lease held");
+    let suspended = store::set_scope_suspended(
+        &db,
+        store::ScopeSuspension {
+            project_id: "default".to_string(),
+            installation_id: None,
+            binding_name: None,
+            scope: "installation".to_string(),
+            suspend: true,
+            now: now.clone(),
+        },
+    )
+    .await
+    .expect("suspend the scope");
+    assert_eq!(
+        suspended, 1,
+        "the scope suspension took a route that was under an active lease"
+    );
+    assert_eq!(
+        store::read_route(&db, "route-b".to_string())
+            .await
+            .expect("read")
+            .expect("route-b")
+            .status,
+        "resolving",
+        "a leased route was suspended out from under its worker"
+    );
+    assert_eq!(
+        store::read_route(&db, "route-a".to_string())
+            .await
+            .expect("read")
+            .expect("route-a")
+            .status,
+        "suspended",
+        "the unleased route in scope was not suspended"
+    );
+
+    // Resuming matches on the scope label that suspended the route, so an
+    // unrelated resume does not undo someone else's pause.
+    assert_eq!(
+        store::set_scope_suspended(
+            &db,
+            store::ScopeSuspension {
+                project_id: "default".to_string(),
+                installation_id: None,
+                binding_name: None,
+                scope: "binding".to_string(),
+                suspend: false,
+                now: now.clone(),
+            },
+        )
+        .await
+        .expect("resume a different scope"),
+        0,
+        "a resume undid a pause taken under a different scope"
+    );
+    assert_eq!(
+        store::set_scope_suspended(
+            &db,
+            store::ScopeSuspension {
+                project_id: "default".to_string(),
+                installation_id: None,
+                binding_name: None,
+                scope: "installation".to_string(),
+                suspend: false,
+                now: now.clone(),
+            },
+        )
+        .await
+        .expect("resume"),
+        1,
+        "the matching scope did not resume its own pause"
+    );
+
+    // The status read has to tell five different counts apart, so the fixture
+    // gives each a different value. Equal counts would let a row swapped
+    // between two of them pass.
+    for (id, event, status) in [
+        ("route-c", "evt-c", "retrying"),
+        ("route-d", "evt-d", "needs_attention"),
+        ("route-e", "evt-e", "needs_attention"),
+        ("route-f", "evt-f", "routed"),
+    ] {
+        let seeded = seed_source_event(&db, event, &now).await;
+        store::reserve(&db, route(id, &seeded, id))
+            .await
+            .expect("reserve a status fixture");
+        conn.execute(
+            "UPDATE source_automation_routes SET status=?2,error_category='transient' WHERE id=?1",
+            rusqlite::params![id, status],
+        )
+        .expect("set the status");
+    }
+    let counts = store::read_status_counts(
+        &db,
+        "default".to_string(),
+        "2999-06-01T00:00:00+00:00".to_string(),
+    )
+    .await
+    .expect("status counts");
+    assert_eq!(
+        counts.retrying_count, 1,
+        "only route-c is on the retry schedule"
+    );
+    assert_eq!(counts.needs_attention_count, 2);
+    assert_eq!(
+        counts.backlog_count, 3,
+        "the backlog counted a route waiting on an operator, or missed a live one"
+    );
+    assert_eq!(counts.failure_categories.get("transient"), Some(&2));
+    assert_eq!(
+        counts.failure_categories.len(),
+        1,
+        "the failure histogram counted routes that are not actionable"
+    );
+    // The lease count is a comparison against the reading clock, so it needs a
+    // fixture on each side of it. route-b's lease runs to 2999-01-01.
+    assert_eq!(
+        counts.active_leases, 0,
+        "a lease that had already expired at the reading clock was counted as active"
+    );
+    assert_eq!(
+        store::read_status_counts(
+            &db,
+            "default".to_string(),
+            "2998-01-01T00:00:00+00:00".to_string(),
+        )
+        .await
+        .expect("status counts under an earlier clock")
+        .active_leases,
+        1,
+        "a lease that was still live at the reading clock was not counted"
+    );
+
+    // Closing an attempt only touches one that is still open. `ignore` runs the
+    // same closeout unconditionally, and a route handed to an operator has no
+    // open attempt left — so without the fence it would rewrite the finished
+    // attempt's outcome, and the history would say the run ended in `ignored`
+    // when it actually ended by asking a human.
+    let token_b = store::read_route(&db, "route-b".to_string())
+        .await
+        .expect("read route-b")
+        .expect("route-b")
+        .lease_token
+        .expect("route-b holds a lease");
+    let handed_over =
+        store::transition_leased(&db, transition("route-b", &token_b, "needs_attention"))
+            .await
+            .expect("hand route-b to an operator")
+            .expect("the lease held");
+    let store::Mutation::Applied(_) =
+        store::ignore(&db, "route-b".to_string(), handed_over.version, now.clone())
+            .await
+            .expect("ignore route-b")
+    else {
+        panic!("an actionable route could not be ignored");
+    };
+    let outcome: Option<String> = conn
+        .query_row(
+            "SELECT result_state FROM source_automation_route_attempts
+             WHERE route_id='route-b' ORDER BY id DESC LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .expect("read route-b's last attempt");
+    assert_eq!(
+        outcome.as_deref(),
+        Some("needs_attention"),
+        "ignoring a route rewrote the outcome of an attempt that had already ended"
+    );
+
+    // Retention drops per-attempt metadata and permalinks for routes that are
+    // finished, and leaves live ones alone.
+    conn.execute(
+        "UPDATE source_automation_routes SET completed_at='2000-01-01T00:00:00+00:00',
+         permalink='https://example.invalid/p/2' WHERE id IN ('route-a','route-f')",
+        [],
+    )
+    .expect("age the finished routes");
+    let touched = store::cleanup_metadata(&db, 30, 100, now.clone())
+        .await
+        .expect("cleanup");
+    assert!(touched > 0, "retention found nothing to do");
+    let surviving: Vec<(String, Option<String>)> = conn
+        .prepare("SELECT id,permalink FROM source_automation_routes WHERE permalink IS NOT NULL")
+        .expect("prepare")
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .expect("query")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect");
+    assert_eq!(
+        surviving,
+        vec![(
+            "route-a".to_string(),
+            Some("https://example.invalid/p/2".to_string())
+        )],
+        "retention expired a permalink on a route that is not finished, or spared one that is"
+    );
+}

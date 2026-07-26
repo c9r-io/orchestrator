@@ -50,6 +50,8 @@ pub mod repository;
 pub mod schema;
 /// Agent session rows: creation, state transitions, reader/writer attachment.
 pub mod session_store;
+/// The source-automation route tables and the statements over them.
+pub mod source_automation_routes;
 /// The SourceConnection tables and the statements over them.
 pub mod source_connections;
 /// The source-ingestion tables and the statements over them.

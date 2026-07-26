@@ -1,14 +1,43 @@
 //! Durable source automation reservation and provenance.
+//!
+//! The route tables live in `orchestrator_persistence::source_automation_routes`.
+//! What stays here is everything that decides rather than stores: what a
+//! well-formed reservation input is, how the stable automation identity and the
+//! deterministic task id are derived, how long a retry waits, which states
+//! release a lease, and what a refused fence means to the operator who asked.
+//!
+//! The row types are the store's and are re-exported below. They are flat
+//! columns with no enums and no embedded JSON, so there is nothing above the
+//! boundary left to parse — with one exception. A route's frozen binding and
+//! template snapshots are `serde_json::Value` here and text down there, and
+//! [`AsyncSourceAutomationRepository::execution_snapshot`] is where they become
+//! typed. That parse used to happen inside a row mapper, where a malformed
+//! snapshot had to be reported as a column-conversion failure against a column
+//! index computed from the string's own length (FR-130 B15).
 
-use crate::async_database::{AsyncDatabase, flatten_err};
+use crate::async_database::AsyncDatabase;
 use crate::config_load::now_ts;
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Duration, Utc};
-use rusqlite::{Connection, OptionalExtension, params};
+use orchestrator_persistence::source_automation_routes as store;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::sync::Arc;
+
+pub use orchestrator_persistence::source_automation_routes::{
+    SourceAutomationRoute, SourceAutomationRouteAttempt, SourceAutomationRouteChange,
+    SourceAutomationRouteFilter,
+};
+
+/// Longest any bounded identity field may be.
+const MAX_IDENTITY_FIELD: usize = 512;
+
+/// Longest a lease owner label may be.
+const MAX_LEASE_OWNER: usize = 128;
+
+/// Bounds on how long a claim may hold a route, whatever the caller asks for.
+const LEASE_SECONDS: std::ops::RangeInclusive<i64> = 15..=300;
 
 /// Immutable input captured before any provider call or task mutation.
 #[derive(Debug, Clone)]
@@ -77,145 +106,6 @@ pub struct AdoptSourceAutomationGeneration {
     pub credential_key: String,
     /// Audit request that authorized generation adoption.
     pub created_by_request_id: String,
-}
-
-/// Durable route projection safe for trusted service-layer use.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SourceAutomationRoute {
-    /// Route identifier.
-    pub id: String,
-    /// Owning project.
-    pub project_id: String,
-    /// Stable automation identity digest.
-    pub automation_key: String,
-    /// First source event that reserved this route.
-    pub source_event_id: String,
-    /// Provider.
-    pub provider: String,
-    /// Installation identity.
-    pub installation_id: String,
-    /// Provider message identity.
-    pub message_identity: String,
-    /// Channel identifier.
-    pub channel_id: String,
-    /// Message timestamp.
-    pub message_ts: String,
-    /// Normalized reaction.
-    pub reaction: String,
-    /// Trusted role resolved for the source actor.
-    pub resolved_role: String,
-    /// Binding resource name.
-    pub binding_name: String,
-    /// Frozen binding revision.
-    pub binding_revision: String,
-    /// Template resource name.
-    pub template_name: String,
-    /// Frozen template hash.
-    pub template_hash: String,
-    /// Protected permalink resolution state.
-    pub permalink_status: String,
-    /// Protected permalink; service callers must enforce role authorization.
-    pub permalink: Option<String>,
-    /// Canonical audit request identifier.
-    pub request_id: String,
-    /// Deterministic task identifier reserved before task creation.
-    pub deterministic_task_id: String,
-    /// Created task identifier.
-    pub task_id: Option<String>,
-    /// Route lifecycle state.
-    pub status: String,
-    /// Stable error code.
-    pub error_code: Option<String>,
-    /// Closed operational error family.
-    pub error_category: Option<String>,
-    /// Frozen configuration generation currently used by the route.
-    pub generation: i64,
-    /// Optimistic route version incremented on every durable transition.
-    pub version: i64,
-    /// Number of claimed execution attempts in the current generation.
-    pub attempt_count: i64,
-    /// Bounded attempt budget pinned to the route.
-    pub max_attempts: i64,
-    /// Earliest time at which a retry may be claimed.
-    pub next_attempt_at: Option<String>,
-    /// Active lease owner, when claimed by a worker.
-    pub lease_owner: Option<String>,
-    /// Opaque fencing token for the active lease.
-    pub lease_token: Option<String>,
-    /// Active lease expiry.
-    pub lease_expires_at: Option<String>,
-    /// Suspension scope that paused this route.
-    pub suspended_scope: Option<String>,
-    /// Most recent attempt start time.
-    pub last_attempt_at: Option<String>,
-    /// Route creation timestamp.
-    pub created_at: String,
-    /// Last transition timestamp.
-    pub updated_at: String,
-    /// Route completion timestamp.
-    pub completed_at: Option<String>,
-}
-
-/// One bounded execution attempt. This projection never contains provider bodies,
-/// rendered goals, permalinks, or credential values.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SourceAutomationRouteAttempt {
-    /// Monotonic attempt row identifier.
-    pub id: i64,
-    /// Parent route.
-    pub route_id: String,
-    /// Frozen configuration generation.
-    pub generation: i64,
-    /// Attempt number within the generation.
-    pub attempt_no: i64,
-    /// Attempt start.
-    pub started_at: String,
-    /// Attempt completion.
-    pub completed_at: Option<String>,
-    /// Resulting route state.
-    pub result_state: Option<String>,
-    /// Stable safe error code.
-    pub error_code: Option<String>,
-    /// Closed error family.
-    pub error_category: Option<String>,
-    /// Bounded provider retry hint.
-    pub retry_after_seconds: Option<i64>,
-}
-
-/// Monotonic route transition used by reconnectable watch clients.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SourceAutomationRouteChange {
-    /// Global change cursor.
-    pub id: i64,
-    /// Changed route.
-    pub route_id: String,
-    /// Route version after the transition.
-    pub route_version: i64,
-    /// Resulting state.
-    pub state: String,
-    /// Stable safe error code.
-    pub error_code: Option<String>,
-    /// Transition time.
-    pub created_at: String,
-}
-
-/// Bounded filters for operator route queries.
-#[derive(Debug, Clone, Default)]
-pub struct SourceAutomationRouteFilter {
-    /// Required project scope when supplied by a project-scoped client.
-    pub project_id: Option<String>,
-    /// Exact state.
-    pub state: Option<String>,
-    /// Exact provider.
-    pub provider: Option<String>,
-    /// Exact binding resource name.
-    pub binding_name: Option<String>,
-    /// Exact canonical task.
-    pub task_id: Option<String>,
-    /// Exclusive keyset cursor `(created_at,id)`.
-    pub before: Option<(String, String)>,
-    /// Requested page size.
-    pub limit: usize,
 }
 
 /// Privacy-safe route worker status.
@@ -336,21 +226,70 @@ impl AsyncSourceAutomationRepository {
         &self,
         input: ReserveSourceAutomationRoute,
     ) -> Result<SourceAutomationReservation> {
-        self.db
-            .writer()
-            .call(move |conn| reserve(conn, input).map_err(other))
-            .await
-            .map_err(flatten_err)
+        for (label, value) in [
+            ("project_id", input.project_id.as_str()),
+            ("source_event_id", input.source_event_id.as_str()),
+            ("installation_id", input.installation_id.as_str()),
+            ("message_identity", input.message_identity.as_str()),
+            ("binding_name", input.binding_name.as_str()),
+        ] {
+            if value.trim().is_empty() || value.len() > MAX_IDENTITY_FIELD {
+                bail!("{label} must contain 1-{MAX_IDENTITY_FIELD} characters");
+            }
+        }
+        let key = automation_key(
+            &input.project_id,
+            &input.installation_id,
+            &input.message_identity,
+            &input.reaction,
+            &input.binding_name,
+        );
+        let outcome = store::reserve(
+            &self.db,
+            store::NewRoute {
+                id: route_id(&key),
+                automation_key: key.clone(),
+                request_id: reservation_request_id(&key),
+                deterministic_task_id: deterministic_automation_task_id(&key),
+                identity: store::RouteIdentity {
+                    project_id: input.project_id,
+                    installation_id: input.installation_id,
+                    message_identity: input.message_identity,
+                    reaction: input.reaction,
+                    resolved_role: input.resolved_role,
+                    binding_name: input.binding_name,
+                },
+                source_event_id: input.source_event_id,
+                provider: input.provider,
+                channel_id: input.channel_id,
+                message_ts: input.message_ts,
+                binding_revision: input.binding_revision,
+                template_name: input.template_name,
+                template_hash: input.template_hash,
+                binding_snapshot_json: serde_json::to_string(&input.binding_snapshot)?,
+                template_snapshot_json: serde_json::to_string(&input.template_snapshot)?,
+                credential_store: input.credential_store,
+                credential_key: input.credential_key,
+                created_at: now_ts(),
+            },
+        )
+        .await?;
+        match outcome {
+            store::Reservation::Reserved(route) => Ok(SourceAutomationReservation {
+                route: *route,
+                should_execute: true,
+            }),
+            store::Reservation::Existing(route) => Ok(SourceAutomationReservation {
+                route: *route,
+                should_execute: false,
+            }),
+            store::Reservation::IdentityCollision(_) => bail!("automation identity collision"),
+        }
     }
 
     /// Loads a route by route ID.
     pub async fn get(&self, id: &str) -> Result<Option<SourceAutomationRoute>> {
-        let id = id.to_owned();
-        self.db
-            .reader()
-            .call(move |conn| read_route(conn, &id).map_err(other))
-            .await
-            .map_err(flatten_err)
+        store::read_route(&self.db, id.to_owned()).await
     }
 
     /// Loads the route linked to a source event.
@@ -358,25 +297,7 @@ impl AsyncSourceAutomationRepository {
         &self,
         source_event_id: &str,
     ) -> Result<Option<SourceAutomationRoute>> {
-        let source_event_id = source_event_id.to_owned();
-        self.db
-            .reader()
-            .call(move |conn| {
-                let id = conn
-                    .query_row(
-                        "SELECT automation_route_id FROM source_events WHERE id=?1",
-                        [&source_event_id],
-                        |row| row.get::<_, Option<String>>(0),
-                    )
-                    .optional()?
-                    .flatten();
-                id.map(|id| read_route(conn, &id))
-                    .transpose()
-                    .map(Option::flatten)
-                    .map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        store::read_route_for_event(&self.db, source_event_id.to_owned()).await
     }
 
     /// Returns the frozen internal snapshots and credential reference.
@@ -384,12 +305,17 @@ impl AsyncSourceAutomationRepository {
         &self,
         id: &str,
     ) -> Result<Option<SourceAutomationExecutionSnapshot>> {
-        let id = id.to_owned();
-        self.db
-            .reader()
-            .call(move |conn| read_execution_snapshot(conn, &id).map_err(other))
-            .await
-            .map_err(flatten_err)
+        let Some(row) = store::read_execution_snapshot(&self.db, id.to_owned()).await? else {
+            return Ok(None);
+        };
+        Ok(Some(SourceAutomationExecutionSnapshot {
+            binding: serde_json::from_str(&row.binding_json)
+                .with_context(|| format!("parse frozen binding snapshot of route {id}"))?,
+            template: serde_json::from_str(&row.template_json)
+                .with_context(|| format!("parse frozen template snapshot of route {id}"))?,
+            credential_store: row.credential_store,
+            credential_key: row.credential_key,
+        }))
     }
 
     /// Atomically claims due routes with one active route per installation.
@@ -402,107 +328,22 @@ impl AsyncSourceAutomationRepository {
         now: DateTime<Utc>,
         lease_seconds: i64,
     ) -> Result<Vec<SourceAutomationRoute>> {
-        if owner.trim().is_empty() || owner.len() > 128 {
-            bail!("route lease owner must contain 1-128 characters");
+        if owner.trim().is_empty() || owner.len() > MAX_LEASE_OWNER {
+            bail!("route lease owner must contain 1-{MAX_LEASE_OWNER} characters");
         }
-        let owner = owner.to_owned();
-        let now = now.to_rfc3339();
-        let lease_expires = (DateTime::parse_from_rfc3339(&now)?.with_timezone(&Utc)
-            + Duration::seconds(lease_seconds.clamp(15, 300)))
+        let lease_expires_at = (now
+            + Duration::seconds(lease_seconds.clamp(*LEASE_SECONDS.start(), *LEASE_SECONDS.end())))
         .to_rfc3339();
-        self.db
-            .writer()
-            .call(move |conn| {
-                (|| -> Result<Vec<SourceAutomationRoute>> {
-                    let tx = conn.unchecked_transaction()?;
-                    let candidate_ids = {
-                        let mut stmt = tx.prepare(
-                            "SELECT id FROM source_automation_routes
-                             WHERE status IN ('matched','retrying','resolving','rendered','creating')
-                               AND attempt_count < max_attempts
-                               AND (next_attempt_at IS NULL OR next_attempt_at<=?1)
-                               AND (lease_expires_at IS NULL OR lease_expires_at<=?1)
-                             ORDER BY COALESCE(next_attempt_at,created_at),created_at,id LIMIT ?2",
-                        )?;
-                        stmt.query_map(params![now, (limit.clamp(1, 100) * 4) as i64], |row| {
-                            row.get::<_, String>(0)
-                        })?
-                        .collect::<std::result::Result<Vec<_>, _>>()?
-                    };
-                    let mut claimed = Vec::new();
-                    let mut installations = HashSet::new();
-                    for id in candidate_ids {
-                        if claimed.len() >= limit.clamp(1, 100) {
-                            break;
-                        }
-                        let installation: String = tx.query_row(
-                            "SELECT installation_id FROM source_automation_routes WHERE id=?1",
-                            [&id],
-                            |row| row.get(0),
-                        )?;
-                        if !installations.insert(installation.clone()) {
-                            continue;
-                        }
-                        let occupied: bool = tx.query_row(
-                            "SELECT EXISTS(SELECT 1 FROM source_automation_routes
-                             WHERE installation_id=?1 AND id!=?2 AND lease_token IS NOT NULL
-                               AND lease_expires_at>?3)",
-                            params![installation, id, now],
-                            |row| row.get(0),
-                        )?;
-                        if occupied {
-                            continue;
-                        }
-                        tx.execute(
-                            "UPDATE source_automation_route_attempts
-                             SET completed_at=?2,result_state='retrying',error_code='route_lease_expired',
-                                 error_category='transient'
-                             WHERE route_id=?1 AND completed_at IS NULL",
-                            params![id, now],
-                        )?;
-                        let token = uuid::Uuid::new_v4().to_string();
-                        let changed = tx.execute(
-                            "UPDATE source_automation_routes SET
-                               status=CASE
-                                 WHEN status='creating' THEN 'creating'
-                                 WHEN permalink_status='resolved' THEN 'rendered'
-                                 ELSE 'resolving' END,
-                               attempt_count=attempt_count+1,version=version+1,
-                               lease_owner=?2,lease_token=?3,lease_expires_at=?4,
-                               lease_claimed_at=?5,last_attempt_at=?5,next_attempt_at=NULL,
-                               error_code=NULL,error_category=NULL,retry_after=NULL,updated_at=?5
-                             WHERE id=?1 AND status IN ('matched','retrying','resolving','rendered','creating')
-                               AND attempt_count < max_attempts
-                               AND (next_attempt_at IS NULL OR next_attempt_at<=?5)
-                               AND (lease_expires_at IS NULL OR lease_expires_at<=?5)",
-                            params![id, owner, token, lease_expires, now],
-                        )?;
-                        if changed != 1 {
-                            continue;
-                        }
-                        tx.execute(
-                            "INSERT INTO source_automation_route_attempts
-                             (route_id,generation,attempt_no,lease_token,started_at)
-                             SELECT r.id,r.generation,
-                               COALESCE((SELECT MAX(a.attempt_no)
-                                         FROM source_automation_route_attempts a
-                                         WHERE a.route_id=r.id AND a.generation=r.generation),0)+1,
-                               r.lease_token,?2
-                             FROM source_automation_routes r WHERE r.id=?1",
-                            params![id, now],
-                        )?;
-                        append_route_change(&tx, &id)?;
-                        claimed.push(
-                            read_route(&tx, &id)?.context("claimed automation route missing")?,
-                        );
-                    }
-                    tx.commit()?;
-                    Ok(claimed)
-                })()
-                .map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        store::claim_due(
+            &self.db,
+            store::Claim {
+                owner: owner.to_owned(),
+                limit,
+                now: now.to_rfc3339(),
+                lease_expires_at,
+            },
+        )
+        .await
     }
 
     /// Stores a validated permalink and advances the leased route to rendering.
@@ -609,45 +450,15 @@ impl AsyncSourceAutomationRepository {
         lease_token: &str,
         scope: &str,
     ) -> Result<SourceAutomationRoute> {
-        let id = id.to_owned();
-        let lease_token = lease_token.to_owned();
-        let scope = scope.to_owned();
-        self.db
-            .writer()
-            .call(move |conn| {
-                (|| -> Result<SourceAutomationRoute> {
-                    let tx = conn.unchecked_transaction()?;
-                    let now = now_ts();
-                    let changed = tx.execute(
-                        "UPDATE source_automation_routes SET status='suspended',
-                         suspended_scope=?3,error_code='automation_scope_suspended',
-                         error_category='policy',version=version+1,updated_at=?4,
-                         next_attempt_at=NULL,lease_owner=NULL,lease_token=NULL,
-                         lease_expires_at=NULL,lease_claimed_at=NULL
-                         WHERE id=?1 AND lease_token=?2",
-                        params![id, lease_token, scope, now],
-                    )?;
-                    if changed != 1 {
-                        bail!("automation route lease is stale");
-                    }
-                    complete_open_attempt(
-                        &tx,
-                        &id,
-                        "suspended",
-                        Some("automation_scope_suspended"),
-                        Some("policy"),
-                        None,
-                        &now,
-                    )?;
-                    append_route_change(&tx, &id)?;
-                    let route = read_route(&tx, &id)?.context("suspended route missing")?;
-                    tx.commit()?;
-                    Ok(route)
-                })()
-                .map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        store::suspend_leased(
+            &self.db,
+            id.to_owned(),
+            lease_token.to_owned(),
+            scope.to_owned(),
+            now_ts(),
+        )
+        .await?
+        .context("automation route lease is stale")
     }
 
     /// Moves a non-actionable invariant failure to a stable terminal state.
@@ -677,42 +488,16 @@ impl AsyncSourceAutomationRepository {
         id: &str,
         expected_version: i64,
     ) -> Result<SourceAutomationMutationResult> {
-        let id = id.to_owned();
-        self.db
-            .writer()
-            .call(move |conn| {
-                (|| -> Result<SourceAutomationMutationResult> {
-                    let tx = conn.unchecked_transaction()?;
-                    let now = now_ts();
-                    let changed = tx.execute(
-                        "UPDATE source_automation_routes SET
-                           status=CASE WHEN permalink_status='resolved' THEN 'rendered' ELSE 'matched' END,
-                           version=version+1,attempt_count=0,next_attempt_at=?3,error_code=NULL,
-                           error_category=NULL,retry_after=NULL,lease_owner=NULL,lease_token=NULL,
-                           lease_expires_at=NULL,lease_claimed_at=NULL,suspended_scope=NULL,
-                           completed_at=NULL,updated_at=?3
-                         WHERE id=?1 AND version=?2 AND status IN ('needs_attention','failed')",
-                        params![id, expected_version, now],
-                    )? == 1;
-                    if !changed {
-                        let current = read_route(&tx, &id)?.context("automation route missing")?;
-                        if current.version != expected_version {
-                            bail!(
-                                "automation route version conflict: expected {expected_version}, current {}",
-                                current.version
-                            );
-                        }
-                        bail!("automation route is not replayable");
-                    }
-                    append_route_change(&tx, &id)?;
-                    let route = read_route(&tx, &id)?.context("replayed automation route missing")?;
-                    tx.commit()?;
-                    Ok(SourceAutomationMutationResult { route, changed })
-                })()
-                .map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        let outcome = store::replay(&self.db, id.to_owned(), expected_version, now_ts()).await?;
+        let route = applied_or_explain(
+            outcome,
+            expected_version,
+            "automation route is not replayable",
+        )?;
+        Ok(SourceAutomationMutationResult {
+            route,
+            changed: true,
+        })
     }
 
     /// Creates a new immutable generation after explicit current-config
@@ -722,96 +507,52 @@ impl AsyncSourceAutomationRepository {
         &self,
         input: AdoptSourceAutomationGeneration,
     ) -> Result<SourceAutomationMutationResult> {
-        self.db
-            .writer()
-            .call(move |conn| {
-                (|| -> Result<SourceAutomationMutationResult> {
-                    let tx = conn.unchecked_transaction()?;
-                    let current = read_route(&tx, &input.route_id)?
-                        .context("automation route missing")?;
-                    if current.version != input.expected_version {
-                        bail!(
-                            "automation route version conflict: expected {}, current {}",
-                            input.expected_version,
-                            current.version
-                        );
-                    }
-                    if !matches!(current.status.as_str(), "needs_attention" | "failed") {
-                        bail!("automation route is not replayable");
-                    }
-                    if current.binding_name != input.binding_name {
-                        bail!("current config selects a different binding; cross-binding reroute is denied");
-                    }
-                    let generation = current.generation + 1;
-                    let request_id = format!(
-                        "req-source-auto-{}-g{generation}",
-                        &current.automation_key[..24]
-                    );
-                    let binding_snapshot = serde_json::to_string(&input.binding_snapshot)?;
-                    let template_snapshot = serde_json::to_string(&input.template_snapshot)?;
-                    let now = now_ts();
-                    tx.execute(
-                        "INSERT INTO source_automation_route_generations
-                         (route_id,generation,binding_name,binding_revision,template_name,template_hash,
-                          binding_snapshot_json,template_snapshot_json,credential_store,credential_key,
-                          request_id,deterministic_task_id,created_by_request_id,created_at)
-                         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
-                        params![
-                            input.route_id,
-                            generation,
-                            input.binding_name,
-                            input.binding_revision,
-                            input.template_name,
-                            input.template_hash,
-                            binding_snapshot,
-                            template_snapshot,
-                            input.credential_store,
-                            input.credential_key,
-                            request_id,
-                            current.deterministic_task_id,
-                            input.created_by_request_id,
-                            now,
-                        ],
-                    )?;
-                    tx.execute(
-                        "UPDATE source_automation_routes SET generation=?2,version=version+1,
-                         resolved_role=?3,binding_revision=?4,template_name=?5,template_hash=?6,
-                         binding_snapshot_json=?7,template_snapshot_json=?8,credential_store=?9,
-                         credential_key=?10,request_id=?11,status=CASE
-                           WHEN permalink_status='resolved' THEN 'rendered' ELSE 'matched' END,
-                         attempt_count=0,next_attempt_at=?12,error_code=NULL,error_category=NULL,
-                         retry_after=NULL,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,
-                         lease_claimed_at=NULL,suspended_scope=NULL,completed_at=NULL,updated_at=?12
-                         WHERE id=?1 AND version=?13",
-                        params![
-                            input.route_id,
-                            generation,
-                            input.resolved_role,
-                            input.binding_revision,
-                            input.template_name,
-                            input.template_hash,
-                            binding_snapshot,
-                            template_snapshot,
-                            input.credential_store,
-                            input.credential_key,
-                            request_id,
-                            now,
-                            input.expected_version,
-                        ],
-                    )?;
-                    append_route_change(&tx, &input.route_id)?;
-                    let route = read_route(&tx, &input.route_id)?
-                        .context("adopted automation route missing")?;
-                    tx.commit()?;
-                    Ok(SourceAutomationMutationResult {
-                        route,
-                        changed: true,
-                    })
-                })()
-                .map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        // Read first, only to learn the generation number the audit request id
+        // embeds. The write fences on `version`, and every mutation of a route
+        // bumps `version`, so a generation that moved under us is a rejected
+        // fence rather than a wrong id.
+        let current = self
+            .get(&input.route_id)
+            .await?
+            .context("automation route missing")?;
+        let generation = current.generation + 1;
+        let outcome = store::adopt_generation(
+            &self.db,
+            store::NewGeneration {
+                route_id: input.route_id,
+                expected_version: input.expected_version,
+                generation,
+                request_id: generation_request_id(&current.automation_key, generation),
+                deterministic_task_id: current.deterministic_task_id,
+                resolved_role: input.resolved_role,
+                binding_name: input.binding_name.clone(),
+                binding_revision: input.binding_revision,
+                template_name: input.template_name,
+                template_hash: input.template_hash,
+                binding_snapshot_json: serde_json::to_string(&input.binding_snapshot)?,
+                template_snapshot_json: serde_json::to_string(&input.template_snapshot)?,
+                credential_store: input.credential_store,
+                credential_key: input.credential_key,
+                created_by_request_id: input.created_by_request_id,
+                now: now_ts(),
+            },
+        )
+        .await?;
+        if let store::Mutation::Rejected(route) = &outcome
+            && route.version == input.expected_version
+            && route.binding_name != input.binding_name
+        {
+            bail!("current config selects a different binding; cross-binding reroute is denied");
+        }
+        let route = applied_or_explain(
+            outcome,
+            input.expected_version,
+            "automation route is not replayable",
+        )?;
+        Ok(SourceAutomationMutationResult {
+            route,
+            changed: true,
+        })
     }
 
     /// Deliberately ignores an actionable route using optimistic concurrency.
@@ -820,40 +561,16 @@ impl AsyncSourceAutomationRepository {
         id: &str,
         expected_version: i64,
     ) -> Result<SourceAutomationMutationResult> {
-        let id = id.to_owned();
-        self.db
-            .writer()
-            .call(move |conn| {
-                (|| -> Result<SourceAutomationMutationResult> {
-                    let tx = conn.unchecked_transaction()?;
-                    let now = now_ts();
-                    let changed = tx.execute(
-                        "UPDATE source_automation_routes SET status='ignored',version=version+1,
-                         next_attempt_at=NULL,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,
-                         lease_claimed_at=NULL,suspended_scope=NULL,updated_at=?3,completed_at=?3
-                         WHERE id=?1 AND version=?2 AND status IN ('needs_attention','failed','retrying','suspended')",
-                        params![id, expected_version, now],
-                    )? == 1;
-                    if !changed {
-                        let current = read_route(&tx, &id)?.context("automation route missing")?;
-                        if current.version != expected_version {
-                            bail!(
-                                "automation route version conflict: expected {expected_version}, current {}",
-                                current.version
-                            );
-                        }
-                        bail!("automation route cannot be ignored from its current state");
-                    }
-                    complete_open_attempt(&tx, &id, "ignored", None, None, None, &now)?;
-                    append_route_change(&tx, &id)?;
-                    let route = read_route(&tx, &id)?.context("ignored automation route missing")?;
-                    tx.commit()?;
-                    Ok(SourceAutomationMutationResult { route, changed })
-                })()
-                .map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        let outcome = store::ignore(&self.db, id.to_owned(), expected_version, now_ts()).await?;
+        let route = applied_or_explain(
+            outcome,
+            expected_version,
+            "automation route cannot be ignored from its current state",
+        )?;
+        Ok(SourceAutomationMutationResult {
+            route,
+            changed: true,
+        })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -868,77 +585,30 @@ impl AsyncSourceAutomationRepository {
         task_id: Option<&str>,
         retry: Option<(String, Option<u64>)>,
     ) -> Result<SourceAutomationRoute> {
-        let id = id.to_owned();
-        let lease_token = lease_token.to_owned();
-        let state = state.to_owned();
-        let error_code = error_code.map(str::to_owned);
-        let error_category = error_category.map(str::to_owned);
-        let permalink = permalink.map(str::to_owned);
-        let task_id = task_id.map(str::to_owned);
-        self.db
-            .writer()
-            .call(move |conn| {
-                (|| -> Result<SourceAutomationRoute> {
-                    let tx = conn.unchecked_transaction()?;
-                    let now = now_ts();
-                    let terminal = matches!(
-                        state.as_str(),
-                        "routed" | "needs_attention" | "ignored" | "failed"
-                    );
-                    let release = terminal || matches!(state.as_str(), "retrying" | "suspended");
-                    let (next_attempt_at, retry_after_seconds) = retry
-                        .map(|(next, hint)| (Some(next), hint))
-                        .unwrap_or((None, None));
-                    let changed = tx.execute(
-                        "UPDATE source_automation_routes SET status=?3,version=version+1,
-                         error_code=?4,error_category=?5,
-                         permalink_status=CASE WHEN ?6 IS NULL THEN permalink_status ELSE 'resolved' END,
-                         permalink=COALESCE(?6,permalink),task_id=COALESCE(?7,task_id),
-                         next_attempt_at=?8,retry_after=?9,updated_at=?10,
-                         completed_at=CASE WHEN ?11 THEN ?10 ELSE completed_at END,
-                         lease_owner=CASE WHEN ?12 THEN NULL ELSE lease_owner END,
-                         lease_token=CASE WHEN ?12 THEN NULL ELSE lease_token END,
-                         lease_expires_at=CASE WHEN ?12 THEN NULL ELSE lease_expires_at END,
-                         lease_claimed_at=CASE WHEN ?12 THEN NULL ELSE lease_claimed_at END
-                         WHERE id=?1 AND lease_token=?2 AND status NOT IN ('routed','ignored')",
-                        params![
-                            id,
-                            lease_token,
-                            state,
-                            error_code,
-                            error_category,
-                            permalink,
-                            task_id,
-                            next_attempt_at,
-                            retry_after_seconds.map(|value| value.to_string()),
-                            now,
-                            terminal,
-                            release,
-                        ],
-                    )?;
-                    if changed != 1 {
-                        bail!("automation route lease is stale or route is terminal");
-                    }
-                    if release {
-                        complete_open_attempt(
-                            &tx,
-                            &id,
-                            &state,
-                            error_code.as_deref(),
-                            error_category.as_deref(),
-                            retry_after_seconds,
-                            &now,
-                        )?;
-                    }
-                    append_route_change(&tx, &id)?;
-                    let route = read_route(&tx, &id)?.context("automation route missing")?;
-                    tx.commit()?;
-                    Ok(route)
-                })()
-                .map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        let terminal = matches!(state, "routed" | "needs_attention" | "ignored" | "failed");
+        let release = terminal || matches!(state, "retrying" | "suspended");
+        let (next_attempt_at, retry_after_seconds) = retry
+            .map(|(next, hint)| (Some(next), hint))
+            .unwrap_or((None, None));
+        store::transition_leased(
+            &self.db,
+            store::LeaseTransition {
+                id: id.to_owned(),
+                lease_token: lease_token.to_owned(),
+                state: state.to_owned(),
+                error_code: error_code.map(str::to_owned),
+                error_category: error_category.map(str::to_owned),
+                permalink: permalink.map(str::to_owned),
+                task_id: task_id.map(str::to_owned),
+                next_attempt_at,
+                retry_after_seconds,
+                terminal,
+                release,
+                now: now_ts(),
+            },
+        )
+        .await?
+        .context("automation route lease is stale or route is terminal")
     }
 
     /// Lists routes with stable keyset pagination and bounded filters.
@@ -946,47 +616,7 @@ impl AsyncSourceAutomationRepository {
         &self,
         filter: SourceAutomationRouteFilter,
     ) -> Result<Vec<SourceAutomationRoute>> {
-        self.db
-            .reader()
-            .call(move |conn| {
-                (|| -> Result<Vec<SourceAutomationRoute>> {
-                    let (before_at, before_id) = filter
-                        .before
-                        .map(|(at, id)| (Some(at), Some(id)))
-                        .unwrap_or((None, None));
-                    let mut stmt = conn.prepare(
-                        "SELECT id FROM source_automation_routes
-                         WHERE (?1 IS NULL OR project_id=?1)
-                           AND (?2 IS NULL OR status=?2)
-                           AND (?3 IS NULL OR provider=?3)
-                           AND (?4 IS NULL OR binding_name=?4)
-                           AND (?5 IS NULL OR task_id=?5)
-                           AND (?6 IS NULL OR created_at<?6 OR (created_at=?6 AND id<?7))
-                         ORDER BY created_at DESC,id DESC LIMIT ?8",
-                    )?;
-                    let ids = stmt
-                        .query_map(
-                            params![
-                                filter.project_id,
-                                filter.state,
-                                filter.provider,
-                                filter.binding_name,
-                                filter.task_id,
-                                before_at,
-                                before_id,
-                                filter.limit.clamp(1, 200) as i64,
-                            ],
-                            |row| row.get::<_, String>(0),
-                        )?
-                        .collect::<std::result::Result<Vec<_>, _>>()?;
-                    ids.into_iter()
-                        .map(|id| read_route(conn, &id)?.context("automation route missing"))
-                        .collect()
-                })()
-                .map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        store::list_routes(&self.db, filter).await
     }
 
     /// Lists a bounded attempt history for one route.
@@ -995,35 +625,7 @@ impl AsyncSourceAutomationRepository {
         route_id: &str,
         limit: usize,
     ) -> Result<Vec<SourceAutomationRouteAttempt>> {
-        let route_id = route_id.to_owned();
-        self.db
-            .reader()
-            .call(move |conn| {
-                let mut stmt = conn.prepare(
-                    "SELECT id,route_id,generation,attempt_no,started_at,completed_at,
-                     result_state,error_code,error_category,retry_after_seconds
-                     FROM source_automation_route_attempts WHERE route_id=?1
-                     ORDER BY generation DESC,attempt_no DESC LIMIT ?2",
-                )?;
-                let rows =
-                    stmt.query_map(params![route_id, limit.clamp(1, 200) as i64], |row| {
-                        Ok(SourceAutomationRouteAttempt {
-                            id: row.get(0)?,
-                            route_id: row.get(1)?,
-                            generation: row.get(2)?,
-                            attempt_no: row.get(3)?,
-                            started_at: row.get(4)?,
-                            completed_at: row.get(5)?,
-                            result_state: row.get(6)?,
-                            error_code: row.get(7)?,
-                            error_category: row.get(8)?,
-                            retry_after_seconds: row.get(9)?,
-                        })
-                    })?;
-                Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
-            })
-            .await
-            .map_err(flatten_err)
+        store::read_attempts(&self.db, route_id.to_owned(), limit).await
     }
 
     /// Reads monotonic route changes after a reconnect cursor.
@@ -1033,34 +635,7 @@ impl AsyncSourceAutomationRepository {
         after: i64,
         limit: usize,
     ) -> Result<Vec<SourceAutomationRouteChange>> {
-        let project_id = project_id.map(str::to_owned);
-        self.db
-            .reader()
-            .call(move |conn| {
-                let mut stmt = conn.prepare(
-                    "SELECT c.id,c.route_id,c.route_version,c.state,c.error_code,c.created_at
-                     FROM source_automation_route_changes c
-                     JOIN source_automation_routes r ON r.id=c.route_id
-                     WHERE c.id>?1 AND (?2 IS NULL OR r.project_id=?2)
-                     ORDER BY c.id LIMIT ?3",
-                )?;
-                let rows = stmt.query_map(
-                    params![after.max(0), project_id, limit.clamp(1, 200) as i64],
-                    |row| {
-                        Ok(SourceAutomationRouteChange {
-                            id: row.get(0)?,
-                            route_id: row.get(1)?,
-                            route_version: row.get(2)?,
-                            state: row.get(3)?,
-                            error_code: row.get(4)?,
-                            created_at: row.get(5)?,
-                        })
-                    },
-                )?;
-                Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
-            })
-            .await
-            .map_err(flatten_err)
+        store::read_changes(&self.db, project_id.map(str::to_owned), after, limit).await
     }
 
     /// Returns privacy-safe worker backlog and failure-family health.
@@ -1069,69 +644,27 @@ impl AsyncSourceAutomationRepository {
         project_id: &str,
         now: DateTime<Utc>,
     ) -> Result<SourceAutomationStatus> {
-        let project_id = project_id.to_owned();
-        self.db
-            .reader()
-            .call(move |conn| {
-                (|| -> Result<SourceAutomationStatus> {
-                    let (backlog_count, oldest, active_leases, retrying_count, needs_attention_count): (
-                        u64,
-                        Option<String>,
-                        u64,
-                        u64,
-                        u64,
-                    ) = conn.query_row(
-                        "SELECT
-                           SUM(CASE WHEN status IN ('matched','resolving','rendered','creating','retrying','suspended') THEN 1 ELSE 0 END),
-                           MIN(CASE WHEN status IN ('matched','resolving','rendered','creating','retrying','suspended') THEN created_at END),
-                           SUM(CASE WHEN lease_token IS NOT NULL AND lease_expires_at>?2 THEN 1 ELSE 0 END),
-                           SUM(CASE WHEN status='retrying' THEN 1 ELSE 0 END),
-                           SUM(CASE WHEN status='needs_attention' THEN 1 ELSE 0 END)
-                         FROM source_automation_routes WHERE project_id=?1",
-                        params![project_id, now.to_rfc3339()],
-                        |row| {
-                            Ok((
-                                row.get::<_, Option<u64>>(0)?.unwrap_or_default(),
-                                row.get(1)?,
-                                row.get::<_, Option<u64>>(2)?.unwrap_or_default(),
-                                row.get::<_, Option<u64>>(3)?.unwrap_or_default(),
-                                row.get::<_, Option<u64>>(4)?.unwrap_or_default(),
-                            ))
-                        },
-                    )?;
-                    let oldest_age_seconds = oldest
-                        .and_then(|value| DateTime::parse_from_rfc3339(&value).ok())
-                        .map(|value| {
-                            now.signed_duration_since(value.with_timezone(&Utc))
-                                .num_seconds()
-                                .max(0) as u64
-                        })
-                        .unwrap_or_default();
-                    let mut stmt = conn.prepare(
-                        "SELECT COALESCE(error_category,'unknown'),COUNT(*)
-                         FROM source_automation_routes WHERE project_id=?1
-                           AND status IN ('needs_attention','failed')
-                         GROUP BY COALESCE(error_category,'unknown') ORDER BY 1 LIMIT 32",
-                    )?;
-                    let failure_categories = stmt
-                        .query_map([&project_id], |row| {
-                            Ok((row.get::<_, String>(0)?, row.get::<_, u64>(1)?))
-                        })?
-                        .collect::<std::result::Result<BTreeMap<_, _>, _>>()?;
-                    Ok(SourceAutomationStatus {
-                        project_id,
-                        backlog_count,
-                        oldest_age_seconds,
-                        active_leases,
-                        retrying_count,
-                        needs_attention_count,
-                        failure_categories,
-                    })
-                })()
-                .map_err(other)
+        let counts =
+            store::read_status_counts(&self.db, project_id.to_owned(), now.to_rfc3339()).await?;
+        let oldest_age_seconds = counts
+            .oldest_created_at
+            .as_deref()
+            .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+            .map(|value| {
+                now.signed_duration_since(value.with_timezone(&Utc))
+                    .num_seconds()
+                    .max(0) as u64
             })
-            .await
-            .map_err(flatten_err)
+            .unwrap_or_default();
+        Ok(SourceAutomationStatus {
+            project_id: project_id.to_owned(),
+            backlog_count: counts.backlog_count,
+            oldest_age_seconds,
+            active_leases: counts.active_leases,
+            retrying_count: counts.retrying_count,
+            needs_attention_count: counts.needs_attention_count,
+            failure_categories: counts.failure_categories,
+        })
     }
 
     /// Pauses unleased routes for an installation or binding scope. Active
@@ -1168,113 +701,47 @@ impl AsyncSourceAutomationRepository {
         scope: &str,
         suspend: bool,
     ) -> Result<usize> {
-        let project_id = project_id.to_owned();
-        let installation_id = installation_id.map(str::to_owned);
-        let binding_name = binding_name.map(str::to_owned);
-        let scope = scope.to_owned();
-        self.db
-            .writer()
-            .call(move |conn| {
-                (|| -> Result<usize> {
-                    let tx = conn.unchecked_transaction()?;
-                    let ids = {
-                        let mut stmt = tx.prepare(
-                            "SELECT id FROM source_automation_routes
-                             WHERE project_id=?1 AND (?2 IS NULL OR installation_id=?2)
-                               AND (?3 IS NULL OR binding_name=?3)
-                               AND lease_token IS NULL
-                               AND ((?5 AND status IN ('matched','retrying','resolving','rendered','creating'))
-                                    OR (NOT ?5 AND status='suspended' AND suspended_scope=?4))",
-                        )?;
-                        stmt.query_map(
-                            params![project_id, installation_id, binding_name, scope, suspend],
-                            |row| row.get::<_, String>(0),
-                        )?
-                        .collect::<std::result::Result<Vec<_>, _>>()?
-                    };
-                    let now = now_ts();
-                    for id in &ids {
-                        if suspend {
-                            tx.execute(
-                                "UPDATE source_automation_routes SET status='suspended',
-                                 suspended_scope=?2,version=version+1,updated_at=?3 WHERE id=?1",
-                                params![id, scope, now],
-                            )?;
-                        } else {
-                            tx.execute(
-                                "UPDATE source_automation_routes SET
-                                 status=CASE WHEN permalink_status='resolved' THEN 'rendered' ELSE 'matched' END,
-                                 suspended_scope=NULL,next_attempt_at=?2,version=version+1,updated_at=?2
-                                 WHERE id=?1",
-                                params![id, now],
-                            )?;
-                        }
-                        append_route_change(&tx, id)?;
-                    }
-                    tx.commit()?;
-                    Ok(ids.len())
-                })()
-                .map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        store::set_scope_suspended(
+            &self.db,
+            store::ScopeSuspension {
+                project_id: project_id.to_owned(),
+                installation_id: installation_id.map(str::to_owned),
+                binding_name: binding_name.map(str::to_owned),
+                scope: scope.to_owned(),
+                suspend,
+                now: now_ts(),
+            },
+        )
+        .await
     }
 
     /// Applies the daemon retention window to sensitive/per-attempt metadata
     /// while retaining route/task/audit provenance.
     pub async fn cleanup_metadata(&self, retention_days: u32, limit: usize) -> Result<u64> {
-        let days = retention_days.clamp(1, 365);
-        let limit = limit.clamp(1, 10_000);
-        self.db
-            .writer()
-            .call(move |conn| {
-                (|| -> Result<u64> {
-                    let tx = conn.unchecked_transaction()?;
-                    let attempts = tx.execute(
-                    &format!(
-                        "DELETE FROM source_automation_route_attempts WHERE id IN (
-                         SELECT a.id FROM source_automation_route_attempts a
-                         JOIN source_automation_routes r ON r.id=a.route_id
-                         WHERE datetime(a.completed_at) < datetime('now','-{days} days')
-                           AND r.status IN ('routed','ignored','failed') LIMIT {limit})"
-                    ),
-                    [],
-                )?;
-                    let changes = tx.execute(
-                    &format!(
-                        "DELETE FROM source_automation_route_changes WHERE id IN (
-                         SELECT c.id FROM source_automation_route_changes c
-                         JOIN source_automation_routes r ON r.id=c.route_id
-                         WHERE datetime(c.created_at) < datetime('now','-{days} days')
-                           AND r.status IN ('routed','ignored','failed') LIMIT {limit})"
-                    ),
-                    [],
-                )?;
-                    let permalink_ids = {
-                        let mut stmt = tx.prepare(&format!(
-                            "SELECT id FROM source_automation_routes
-                             WHERE permalink IS NOT NULL AND status IN ('routed','ignored','failed')
-                               AND datetime(completed_at) < datetime('now','-{days} days') LIMIT {limit}"
-                        ))?;
-                        stmt.query_map([], |row| row.get::<_, String>(0))?
-                            .collect::<std::result::Result<Vec<_>, _>>()?
-                    };
-                    let now = now_ts();
-                    for id in &permalink_ids {
-                        tx.execute(
-                            "UPDATE source_automation_routes SET permalink=NULL,
-                             permalink_status='expired',version=version+1,updated_at=?2 WHERE id=?1",
-                            params![id, now],
-                        )?;
-                        append_route_change(&tx, id)?;
-                    }
-                    tx.commit()?;
-                    Ok((attempts + changes + permalink_ids.len()) as u64)
-                })()
-                .map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        store::cleanup_metadata(&self.db, retention_days, limit, now_ts()).await
+    }
+}
+
+/// Turns a fenced store outcome into the route or into the reason the caller
+/// asked for something the row would not allow.
+///
+/// The store reports that its fence did not hold and hands back the row as it
+/// actually is. Only the caller knows which of its conditions it cares about
+/// naming first, and a version that moved is a different thing to tell an
+/// operator than a state that was never eligible.
+fn applied_or_explain(
+    outcome: store::Mutation,
+    expected_version: i64,
+    ineligible: &str,
+) -> Result<SourceAutomationRoute> {
+    match outcome {
+        store::Mutation::Applied(route) => Ok(*route),
+        store::Mutation::Rejected(route) if route.version != expected_version => bail!(
+            "automation route version conflict: expected {expected_version}, current {}",
+            route.version
+        ),
+        store::Mutation::Rejected(_) => bail!("{ineligible}"),
+        store::Mutation::Missing => bail!("automation route missing"),
     }
 }
 
@@ -1307,253 +774,24 @@ pub fn automation_key(
     )
 }
 
+/// Computes the route identifier for an automation key.
+pub fn route_id(key: &str) -> String {
+    format!("route-{}", &key[..24])
+}
+
 /// Computes the deterministic task ID for an automation key.
 pub fn deterministic_automation_task_id(key: &str) -> String {
     format!("source-auto-{}", &key[..24])
 }
 
-fn reserve(
-    conn: &Connection,
-    input: ReserveSourceAutomationRoute,
-) -> Result<SourceAutomationReservation> {
-    for (label, value) in [
-        ("project_id", input.project_id.as_str()),
-        ("source_event_id", input.source_event_id.as_str()),
-        ("installation_id", input.installation_id.as_str()),
-        ("message_identity", input.message_identity.as_str()),
-        ("binding_name", input.binding_name.as_str()),
-    ] {
-        if value.trim().is_empty() || value.len() > 512 {
-            bail!("{label} must contain 1-512 characters");
-        }
-    }
-    let key = automation_key(
-        &input.project_id,
-        &input.installation_id,
-        &input.message_identity,
-        &input.reaction,
-        &input.binding_name,
-    );
-    let id = format!("route-{}", &key[..24]);
-    let task_id = deterministic_automation_task_id(&key);
-    let request_id = format!("req-source-auto-{}", &key[..24]);
-    let binding_snapshot = serde_json::to_string(&input.binding_snapshot)?;
-    let template_snapshot = serde_json::to_string(&input.template_snapshot)?;
-    let now = now_ts();
-    let tx = conn.unchecked_transaction()?;
-    let inserted = tx.execute(
-        "INSERT OR IGNORE INTO source_automation_routes
-         (id,project_id,automation_key,source_event_id,provider,installation_id,message_identity,
-          channel_id,message_ts,reaction,resolved_role,binding_name,binding_revision,template_name,template_hash,
-          binding_snapshot_json,template_snapshot_json,credential_store,credential_key,request_id,
-          deterministic_task_id,status,created_at,updated_at)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,
-                 'matched',?22,?22)",
-        params![
-            id,
-            input.project_id,
-            key,
-            input.source_event_id,
-            input.provider,
-            input.installation_id,
-            input.message_identity,
-            input.channel_id,
-            input.message_ts,
-            input.reaction,
-            input.resolved_role,
-            input.binding_name,
-            input.binding_revision,
-            input.template_name,
-            input.template_hash,
-            binding_snapshot,
-            template_snapshot,
-            input.credential_store,
-            input.credential_key,
-            request_id,
-            task_id,
-            now
-        ],
-    )? == 1;
-    let should_execute = inserted;
-    if inserted {
-        tx.execute(
-            "INSERT INTO source_automation_route_generations
-             (route_id,generation,binding_name,binding_revision,template_name,template_hash,
-              binding_snapshot_json,template_snapshot_json,credential_store,credential_key,
-              request_id,deterministic_task_id,created_at)
-             VALUES(?1,1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
-            params![
-                id,
-                input.binding_name,
-                input.binding_revision,
-                input.template_name,
-                input.template_hash,
-                binding_snapshot,
-                template_snapshot,
-                input.credential_store,
-                input.credential_key,
-                request_id,
-                task_id,
-                now,
-            ],
-        )?;
-        append_route_change(&tx, &id)?;
-    }
-    tx.execute(
-        "UPDATE source_events SET automation_route_id=?2 WHERE id=?1",
-        params![input.source_event_id, id],
-    )?;
-    tx.execute(
-        "UPDATE source_routing_attempts SET automation_route_id=?2
-         WHERE source_event_id=?1 AND attempt_no=(SELECT routing_attempts FROM source_events WHERE id=?1)",
-        params![input.source_event_id, id],
-    )?;
-    let route = read_route(&tx, &id)?.context("reserved automation route missing")?;
-    if route.project_id != input.project_id
-        || route.installation_id != input.installation_id
-        || route.message_identity != input.message_identity
-        || route.reaction != input.reaction
-        || route.resolved_role != input.resolved_role
-        || route.binding_name != input.binding_name
-    {
-        bail!("automation identity collision");
-    }
-    tx.commit()?;
-    Ok(SourceAutomationReservation {
-        route,
-        should_execute,
-    })
+/// Computes the canonical audit request ID of a route's first generation.
+pub fn reservation_request_id(key: &str) -> String {
+    format!("req-source-auto-{}", &key[..24])
 }
 
-fn read_route(conn: &Connection, id: &str) -> Result<Option<SourceAutomationRoute>> {
-    conn.query_row(
-        "SELECT id,project_id,automation_key,source_event_id,provider,installation_id,
-         message_identity,channel_id,message_ts,reaction,resolved_role,binding_name,binding_revision,
-         template_name,template_hash,permalink_status,permalink,request_id,
-         deterministic_task_id,task_id,status,error_code,error_category,generation,version,
-         attempt_count,max_attempts,next_attempt_at,lease_owner,lease_token,lease_expires_at,
-         suspended_scope,last_attempt_at,created_at,updated_at,completed_at
-         FROM source_automation_routes WHERE id=?1",
-        [id],
-        |row| {
-            Ok(SourceAutomationRoute {
-                id: row.get(0)?,
-                project_id: row.get(1)?,
-                automation_key: row.get(2)?,
-                source_event_id: row.get(3)?,
-                provider: row.get(4)?,
-                installation_id: row.get(5)?,
-                message_identity: row.get(6)?,
-                channel_id: row.get(7)?,
-                message_ts: row.get(8)?,
-                reaction: row.get(9)?,
-                resolved_role: row.get(10)?,
-                binding_name: row.get(11)?,
-                binding_revision: row.get(12)?,
-                template_name: row.get(13)?,
-                template_hash: row.get(14)?,
-                permalink_status: row.get(15)?,
-                permalink: row.get(16)?,
-                request_id: row.get(17)?,
-                deterministic_task_id: row.get(18)?,
-                task_id: row.get(19)?,
-                status: row.get(20)?,
-                error_code: row.get(21)?,
-                error_category: row.get(22)?,
-                generation: row.get(23)?,
-                version: row.get(24)?,
-                attempt_count: row.get(25)?,
-                max_attempts: row.get(26)?,
-                next_attempt_at: row.get(27)?,
-                lease_owner: row.get(28)?,
-                lease_token: row.get(29)?,
-                lease_expires_at: row.get(30)?,
-                suspended_scope: row.get(31)?,
-                last_attempt_at: row.get(32)?,
-                created_at: row.get(33)?,
-                updated_at: row.get(34)?,
-                completed_at: row.get(35)?,
-            })
-        },
-    )
-    .optional()
-    .map_err(Into::into)
-}
-
-fn read_execution_snapshot(
-    conn: &Connection,
-    id: &str,
-) -> Result<Option<SourceAutomationExecutionSnapshot>> {
-    conn.query_row(
-        "SELECT g.binding_snapshot_json,g.template_snapshot_json,g.credential_store,g.credential_key
-         FROM source_automation_routes r
-         JOIN source_automation_route_generations g
-           ON g.route_id=r.id AND g.generation=r.generation
-         WHERE r.id=?1",
-        [id],
-        |row| {
-            let binding: String = row.get(0)?;
-            let template: String = row.get(1)?;
-            let binding = serde_json::from_str(&binding).map_err(|error| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    binding.len(),
-                    rusqlite::types::Type::Text,
-                    Box::new(error),
-                )
-            })?;
-            let template = serde_json::from_str(&template).map_err(|error| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    template.len(),
-                    rusqlite::types::Type::Text,
-                    Box::new(error),
-                )
-            })?;
-            Ok(SourceAutomationExecutionSnapshot {
-                binding,
-                template,
-                credential_store: row.get(2)?,
-                credential_key: row.get(3)?,
-            })
-        },
-    )
-    .optional()
-    .map_err(Into::into)
-}
-
-fn append_route_change(conn: &Connection, id: &str) -> Result<()> {
-    conn.execute(
-        "INSERT INTO source_automation_route_changes
-         (route_id,route_version,state,error_code,created_at)
-         SELECT id,version,status,error_code,updated_at FROM source_automation_routes WHERE id=?1",
-        [id],
-    )?;
-    Ok(())
-}
-
-fn complete_open_attempt(
-    conn: &Connection,
-    id: &str,
-    result_state: &str,
-    error_code: Option<&str>,
-    error_category: Option<&str>,
-    retry_after_seconds: Option<u64>,
-    completed_at: &str,
-) -> Result<()> {
-    conn.execute(
-        "UPDATE source_automation_route_attempts SET completed_at=?2,result_state=?3,
-         error_code=?4,error_category=?5,retry_after_seconds=?6
-         WHERE id=(SELECT id FROM source_automation_route_attempts
-                   WHERE route_id=?1 AND completed_at IS NULL ORDER BY id DESC LIMIT 1)",
-        params![
-            id,
-            completed_at,
-            result_state,
-            error_code,
-            error_category,
-            retry_after_seconds.map(|value| value as i64),
-        ],
-    )?;
-    Ok(())
+/// Computes the canonical audit request ID of a later generation.
+pub fn generation_request_id(key: &str, generation: i64) -> String {
+    format!("req-source-auto-{}-g{generation}", &key[..24])
 }
 
 /// Computes deterministic bounded exponential backoff. Provider Retry-After is
@@ -1576,10 +814,6 @@ fn digest_hex(bytes: &[u8]) -> String {
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect()
-}
-
-fn other(error: anyhow::Error) -> tokio_rusqlite::Error {
-    tokio_rusqlite::Error::Other(error.into())
 }
 
 #[cfg(test)]
