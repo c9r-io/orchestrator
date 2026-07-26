@@ -8,63 +8,67 @@
       "jobs": {
         "async-lock-governance": {
           "conclusion": "success",
-          "runId": "30183916749",
-          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
+          "runId": "30189806915",
+          "headSha": "6aeb2ce97816472eacf2a833fea717251492444b"
         },
         "fmt": {
           "conclusion": "success",
-          "runId": "30183916749",
-          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
+          "runId": "30189806915",
+          "headSha": "6aeb2ce97816472eacf2a833fea717251492444b"
         },
         "clippy": {
           "conclusion": "success",
-          "runId": "30183916749",
-          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
+          "runId": "30189806915",
+          "headSha": "6aeb2ce97816472eacf2a833fea717251492444b"
         },
         "test": {
           "conclusion": "success",
-          "runId": "30183916749",
-          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
+          "runId": "30189806915",
+          "headSha": "6aeb2ce97816472eacf2a833fea717251492444b"
         },
         "coordination-strangler": {
           "conclusion": "success",
-          "runId": "30183916749",
-          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
+          "runId": "30189806915",
+          "headSha": "6aeb2ce97816472eacf2a833fea717251492444b"
         },
         "governance": {
-          "conclusion": "success",
-          "runId": "30183916749",
-          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
+          "conclusion": "failure",
+          "runId": "30189806915",
+          "headSha": "6aeb2ce97816472eacf2a833fea717251492444b",
+          "knownFailing": {
+            "reference": "docs/design_doc/orchestrator/146-bash32-compatibility.md",
+            "reason": "Only the liveness step failed in run 30189806915, and only because this ledger still described the pipeline as it stood before b85eef73 added the persistence-dependency step to ci.yml. Every other gate in the job passed, and every other job in the run was green. This is the two-step convergence DD-146 records: the job cannot record its own recovery in one pass, because its liveness step runs inside itself. This refresh makes the record current; the next run should show governance green and the following refresh drops this annotation."
+          }
         },
         "ci-environment-parity": {
           "conclusion": "success",
-          "runId": "30183916749",
-          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
+          "runId": "30189806915",
+          "headSha": "6aeb2ce97816472eacf2a833fea717251492444b"
         },
         "coverage-policy-fixtures": {
           "conclusion": "success",
-          "runId": "30183916749",
-          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
+          "runId": "30189806915",
+          "headSha": "6aeb2ce97816472eacf2a833fea717251492444b"
         },
         "slack-certification-recorded": {
           "conclusion": "success",
-          "runId": "30183916749",
-          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
+          "runId": "30189806915",
+          "headSha": "6aeb2ce97816472eacf2a833fea717251492444b"
         },
         "boundary-coverage": {
           "conclusion": "success",
-          "runId": "30183916749",
-          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
+          "runId": "30189806915",
+          "headSha": "6aeb2ce97816472eacf2a833fea717251492444b"
         },
         "miri": {
           "conclusion": "success",
-          "runId": "30183916749",
-          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
+          "runId": "30189806915",
+          "headSha": "6aeb2ce97816472eacf2a833fea717251492444b"
         },
         "cross-compile": {
           "conclusion": "success",
-          "runId": "30183916749",
-          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
+          "runId": "30189806915",
+          "headSha": "6aeb2ce97816472eacf2a833fea717251492444b"
         }
       }
     },
@@ -85,8 +89,8 @@
       "jobs": {
         "cargo-audit": {
           "conclusion": "success",
-          "runId": "30183916751",
-          "headSha": "37d90d25abf0b0f16cf56aff45af0308f1a6853c"
+          "runId": "30189806930",
+          "headSha": "6aeb2ce97816472eacf2a833fea717251492444b"
         }
       }
     },
