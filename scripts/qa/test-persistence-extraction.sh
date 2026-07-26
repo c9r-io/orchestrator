@@ -302,12 +302,19 @@ fi
 #
 # `git log --reverse -1` does not give the oldest match. `-1` limits before
 # `--reverse` reorders, so it returns the newest — measured: against
-# `--grep='FR-130 A'` it yields A4, not A1. It was masked because 'FR-130 A1'
-# matches exactly one commit, and a fixup or a revert naming A1 would have
+# `--grep='FR-130 A'` it yields A4, not A1. It was masked because the pattern
+# matched exactly one commit, and a fixup or a revert naming A1 would have
 # unmasked it by weakening the window this assertion exists to close. Take the
 # last line of the full list instead.
+#
+# The pattern is the parenthesised batch token, matched literally. A bare
+# `FR-130 A1` also matches any commit whose message merely *discusses* A1 —
+# including the one that wrote this comment, which is how that was noticed.
+# Only a commit titled `… (FR-130 A1)` is an extraction commit; a revert of one
+# carries the token too but is necessarily newer, so taking the oldest still
+# lands on the original.
 BASELINE_COMMIT="$(git log --format=%H -1 -- "$SNAPSHOT")"
-FIRST_MOVE="$(git log --format=%H --grep='FR-130 A1' | tail -1)"
+FIRST_MOVE="$(git log --format=%H --fixed-strings --grep='(FR-130 A1)' | tail -1)"
 if [[ -z "$FIRST_MOVE" ]]; then
   # Absent subject, and the two reasons are not the same fact. A shallow clone
   # legitimately cannot see the commit; a full checkout that cannot find it means
