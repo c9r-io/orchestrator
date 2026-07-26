@@ -10,6 +10,7 @@ use crate::events::insert_event;
 use crate::state::InnerState;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
+use orchestrator_persistence::trigger_state as store;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -471,24 +472,8 @@ impl TriggerEngine {
 
     /// Look up the workflow_id for a task from the database.
     async fn lookup_task_workflow(&self, task_id: &str) -> Option<String> {
-        let tid = task_id.to_owned();
-        let result = self
-            .state
-            .async_database
-            .reader()
-            .call(move |conn| {
-                let wf: Option<String> = conn
-                    .query_row(
-                        "SELECT workflow_id FROM tasks WHERE id = ?1",
-                        rusqlite::params![tid],
-                        |row| row.get(0),
-                    )
-                    .ok();
-                Ok(wf)
-            })
-            .await;
-        match result {
-            Ok(wf) => wf,
+        match store::read_task_workflow(&self.state.async_database, task_id.to_owned()).await {
+            Ok(workflow) => workflow,
             Err(e) => {
                 debug!(task_id, error = %e, "failed to look up task workflow");
                 None
@@ -597,7 +582,7 @@ pub async fn fire_trigger_canonical_with_context(
         .and_then(|a| a.get("target-file"))
         .cloned();
 
-    let task_name = format!("trigger-{trigger_name}");
+    let task_name = trigger_task_name(trigger_name);
 
     let payload = CreateTaskPayload {
         name: Some(task_name),
@@ -677,86 +662,45 @@ async fn load_last_fired(
     trigger_name: &str,
     project: &str,
 ) -> Option<DateTime<Utc>> {
-    let name = trigger_name.to_owned();
-    let proj = project.to_owned();
-    let result = state
-        .async_database
-        .reader()
-        .call(move |conn| {
-            let mut stmt = conn
-                .prepare(
-                    "SELECT last_fired_at FROM trigger_state WHERE trigger_name = ?1 AND project = ?2",
-                )
-                .map_err(|e| tokio_rusqlite::Error::Other(e.into()))?;
-            let ts: Option<String> = stmt
-                .query_row(rusqlite::params![name, proj], |row| row.get(0))
-                .ok();
-            Ok(ts)
-        })
-        .await;
-
-    match result {
+    match store::read_last_fired(
+        &state.async_database,
+        trigger_name.to_owned(),
+        project.to_owned(),
+    )
+    .await
+    {
         Ok(Some(ts)) => ts.parse::<DateTime<Utc>>().ok(),
         _ => None,
     }
 }
 
+/// Task statuses that mean the trigger's previous task has not finished.
+///
+/// A status outside this list is not "finished" in general — it is finished as
+/// far as concurrency policy is concerned, which is the only question asked
+/// here. A status that never reaches a terminal value would hold a `Skip`
+/// trigger shut forever, so this list is the one that decides that.
+const ACTIVE_TASK_STATUSES: [&str; 4] = ["created", "pending", "running", "restart_pending"];
+
 async fn has_active_task(state: &InnerState, trigger_name: &str, project: &str) -> bool {
-    let name = trigger_name.to_owned();
-    let proj = project.to_owned();
-    let result = state
-        .async_database
-        .reader()
-        .call(move |conn| {
-            let last_task_id: Option<String> = conn
-                .query_row(
-                    "SELECT last_task_id FROM trigger_state WHERE trigger_name = ?1 AND project = ?2",
-                    rusqlite::params![name, proj],
-                    |row| row.get(0),
-                )
-                .ok()
-                .flatten();
-
-            if let Some(ref tid) = last_task_id {
-                let status: Option<String> = conn
-                    .query_row(
-                        "SELECT status FROM tasks WHERE id = ?1",
-                        rusqlite::params![tid],
-                        |row| row.get(0),
-                    )
-                    .ok();
-                if let Some(s) = status {
-                    return Ok(matches!(
-                        s.as_str(),
-                        "created" | "pending" | "running" | "restart_pending"
-                    ));
-                }
-            }
-            Ok(false)
-        })
-        .await;
-
-    result.unwrap_or(false)
+    store::read_last_task_status(
+        &state.async_database,
+        trigger_name.to_owned(),
+        project.to_owned(),
+    )
+    .await
+    .ok()
+    .flatten()
+    .is_some_and(|status| ACTIVE_TASK_STATUSES.contains(&status.as_str()))
 }
 
 async fn cancel_active_tasks(state: &InnerState, trigger_name: &str, project: &str) {
-    let name = trigger_name.to_owned();
-    let proj = project.to_owned();
-    let result = state
-        .async_database
-        .reader()
-        .call(move |conn| {
-            let tid: Option<String> = conn
-                .query_row(
-                    "SELECT last_task_id FROM trigger_state WHERE trigger_name = ?1 AND project = ?2",
-                    rusqlite::params![name, proj],
-                    |row| row.get(0),
-                )
-                .ok()
-                .flatten();
-            Ok(tid)
-        })
-        .await;
+    let result = store::read_last_task(
+        &state.async_database,
+        trigger_name.to_owned(),
+        project.to_owned(),
+    )
+    .await;
 
     if let Ok(Some(task_id)) = result
         && let Err(e) = cancel_task_for_trigger(state, &task_id).await
@@ -777,35 +721,29 @@ async fn update_trigger_state(
     task_id: &str,
     status: &str,
 ) {
-    let name = trigger_name.to_owned();
-    let proj = project.to_owned();
-    let tid = task_id.to_owned();
-    let st = status.to_owned();
-    let now = Utc::now().to_rfc3339();
-    let now2 = now.clone();
-
-    if let Err(e) = state
-        .async_database
-        .writer()
-        .call(move |conn| {
-            conn.execute(
-                "INSERT INTO trigger_state (trigger_name, project, last_fired_at, fire_count, last_task_id, last_status, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, 1, ?4, ?5, ?6, ?7)
-                 ON CONFLICT(trigger_name, project) DO UPDATE SET
-                   last_fired_at = ?3,
-                   fire_count = fire_count + 1,
-                   last_task_id = ?4,
-                   last_status = ?5,
-                   updated_at = ?7",
-                rusqlite::params![name, proj, now, tid, st, now2, now2],
-            )
-            .map_err(|e| tokio_rusqlite::Error::Other(e.into()))?;
-            Ok(())
-        })
-        .await
+    if let Err(e) = store::record_fire(
+        &state.async_database,
+        store::TriggerFire {
+            trigger_name: trigger_name.to_owned(),
+            project: project.to_owned(),
+            task_id: task_id.to_owned(),
+            status: status.to_owned(),
+            now: Utc::now().to_rfc3339(),
+        },
+    )
+    .await
     {
         warn!(trigger = trigger_name, error = %e, "failed to update trigger_state");
     }
+}
+
+/// Names the tasks a trigger creates.
+///
+/// Two places depend on this agreeing with itself: the fire path writes it,
+/// and history cleanup selects on it. If they ever disagree, cleanup silently
+/// matches nothing and the history limit stops applying without any error.
+fn trigger_task_name(trigger_name: &str) -> String {
+    format!("trigger-{trigger_name}")
 }
 
 fn emit_trigger_skipped(state: &InnerState, trigger_name: &str, event_type: &str, reason: &str) {
@@ -901,88 +839,33 @@ async fn cleanup_history(
         None => return Ok(()),
     };
 
-    let task_name_pattern = format!("trigger-{trigger_name}");
-    let proj = project.to_owned();
-
-    // For each status category, collect IDs of tasks beyond the retention limit.
+    // A trigger's tasks are named after it; that convention is what makes a
+    // history limit addressable at all.
+    let task_name = trigger_task_name(trigger_name);
     let mut ids_to_delete: Vec<String> = Vec::new();
 
-    if let Some(max_successful) = limit.successful {
-        let pattern = task_name_pattern.clone();
-        let p = proj.clone();
-        let max = max_successful as usize;
-        let ids = state
-            .async_database
-            .reader()
-            .call(move |conn| {
-                let mut stmt = conn
-                    .prepare(
-                        "SELECT id FROM tasks \
-                         WHERE name = ?1 AND project_id = ?2 AND status = 'completed' \
-                         ORDER BY created_at DESC",
-                    )
-                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))?;
-                let rows = stmt
-                    .query_map(rusqlite::params![pattern, p], |row| row.get::<_, String>(0))
-                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))?;
-                let all: Vec<String> = rows.filter_map(|r| r.ok()).collect();
-                Ok(all.into_iter().skip(max).collect::<Vec<String>>())
-            })
+    for (status, keep) in [("completed", limit.successful), ("failed", limit.failed)] {
+        let Some(keep) = keep else {
+            continue;
+        };
+        ids_to_delete.extend(
+            store::tasks_beyond_retention(
+                &state.async_database,
+                task_name.clone(),
+                project.to_owned(),
+                status.to_string(),
+                keep as usize,
+            )
             .await
-            .context("query completed tasks for history cleanup")?;
-        ids_to_delete.extend(ids);
-    }
-
-    if let Some(max_failed) = limit.failed {
-        let pattern = task_name_pattern.clone();
-        let p = proj.clone();
-        let max = max_failed as usize;
-        let ids = state
-            .async_database
-            .reader()
-            .call(move |conn| {
-                let mut stmt = conn
-                    .prepare(
-                        "SELECT id FROM tasks \
-                         WHERE name = ?1 AND project_id = ?2 AND status = 'failed' \
-                         ORDER BY created_at DESC",
-                    )
-                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))?;
-                let rows = stmt
-                    .query_map(rusqlite::params![pattern, p], |row| row.get::<_, String>(0))
-                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))?;
-                let all: Vec<String> = rows.filter_map(|r| r.ok()).collect();
-                Ok(all.into_iter().skip(max).collect::<Vec<String>>())
-            })
-            .await
-            .context("query failed tasks for history cleanup")?;
-        ids_to_delete.extend(ids);
+            .with_context(|| format!("query {status} tasks for history cleanup"))?,
+        );
     }
 
     if ids_to_delete.is_empty() {
         return Ok(());
     }
 
-    state
-        .async_database
-        .writer()
-        .call(move |conn| {
-            let placeholders: Vec<String> =
-                (1..=ids_to_delete.len()).map(|i| format!("?{i}")).collect();
-            let sql = format!(
-                "DELETE FROM tasks WHERE id IN ({})",
-                placeholders.join(", ")
-            );
-            let params: Vec<Box<dyn rusqlite::types::ToSql>> = ids_to_delete
-                .iter()
-                .map(|id| Box::new(id.clone()) as Box<dyn rusqlite::types::ToSql>)
-                .collect();
-            let param_refs: Vec<&dyn rusqlite::types::ToSql> =
-                params.iter().map(|p| p.as_ref()).collect();
-            conn.execute(&sql, param_refs.as_slice())
-                .map_err(|e| tokio_rusqlite::Error::Other(e.into()))?;
-            Ok(())
-        })
+    store::delete_tasks(&state.async_database, ids_to_delete)
         .await
         .context("delete excess trigger history tasks")?;
 

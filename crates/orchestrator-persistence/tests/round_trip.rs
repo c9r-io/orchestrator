@@ -2916,3 +2916,336 @@ async fn source_automation_lease_and_version_fences_hold() {
         "retention expired a permalink on a route that is not finished, or spared one that is"
     );
 }
+
+#[tokio::test]
+async fn trigger_state_reads_are_scoped_and_the_fire_count_only_goes_up() {
+    use orchestrator_persistence::trigger_state as store;
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let db_path = temp.path().join("trigger.db");
+    PersistenceBootstrap::ensure_current(&db_path).expect("bootstrap schema");
+    let conn = open_conn(&db_path).expect("open database");
+    seed_task(&conn);
+    let db = AsyncDatabase::open(&db_path).await.expect("open async db");
+
+    // A trigger that has never fired here reads as absent rather than as an
+    // error — the engine treats "never fired" as "no throttle window".
+    assert_eq!(
+        store::read_last_fired(&db, "nightly".to_string(), "default".to_string())
+            .await
+            .expect("read an unfired trigger"),
+        None
+    );
+    assert_eq!(
+        store::read_last_task(&db, "nightly".to_string(), "default".to_string())
+            .await
+            .expect("read an unfired trigger"),
+        None
+    );
+    assert_eq!(
+        store::read_last_task_status(&db, "nightly".to_string(), "default".to_string())
+            .await
+            .expect("read an unfired trigger"),
+        None
+    );
+
+    store::record_fire(
+        &db,
+        store::TriggerFire {
+            trigger_name: "nightly".to_string(),
+            project: "default".to_string(),
+            task_id: TASK_ID.to_string(),
+            status: "created".to_string(),
+            now: "2026-01-01T00:00:00+00:00".to_string(),
+        },
+    )
+    .await
+    .expect("first fire");
+
+    // The same trigger name in another project is a different row. Without the
+    // project in the key, one project's schedule would throttle another's.
+    assert_eq!(
+        store::read_last_fired(&db, "nightly".to_string(), "other".to_string())
+            .await
+            .expect("read another project"),
+        None,
+        "a fire in one project was visible to another"
+    );
+    assert_eq!(
+        store::read_last_fired(&db, "nightly".to_string(), "default".to_string())
+            .await
+            .expect("read the fired trigger")
+            .as_deref(),
+        Some("2026-01-01T00:00:00+00:00")
+    );
+    assert_eq!(
+        store::read_last_task(&db, "nightly".to_string(), "default".to_string())
+            .await
+            .expect("read the fired trigger")
+            .as_deref(),
+        Some(TASK_ID)
+    );
+
+    // A second fire updates in place and counts up. Reading the count and
+    // writing it back would lose one of two concurrent fires; this must not.
+    store::record_fire(
+        &db,
+        store::TriggerFire {
+            trigger_name: "nightly".to_string(),
+            project: "default".to_string(),
+            task_id: TASK_ID.to_string(),
+            status: "running".to_string(),
+            now: "2026-02-02T00:00:00+00:00".to_string(),
+        },
+    )
+    .await
+    .expect("second fire");
+    let (count, created, updated, fired, status): (i64, String, String, String, String) = conn
+        .query_row(
+            "SELECT fire_count,created_at,updated_at,last_fired_at,last_status
+             FROM trigger_state WHERE trigger_name='nightly' AND project='default'",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .expect("read trigger_state");
+    assert_eq!(count, 2, "the second fire did not count");
+    assert_eq!(
+        created, "2026-01-01T00:00:00+00:00",
+        "an update overwrote the row's creation time"
+    );
+    assert_eq!(updated, "2026-02-02T00:00:00+00:00");
+    assert_eq!(fired, "2026-02-02T00:00:00+00:00");
+    assert_eq!(status, "running");
+    let rows: i64 = conn
+        .query_row("SELECT COUNT(*) FROM trigger_state", [], |row| row.get(0))
+        .expect("count rows");
+    assert_eq!(rows, 1, "the second fire inserted a second row");
+
+    // The status join is what the concurrency policy reads. It has three
+    // absences that all mean "nothing is running", and they are reached by
+    // three different states of the data.
+    assert_eq!(
+        store::read_last_task_status(&db, "nightly".to_string(), "default".to_string())
+            .await
+            .expect("read the joined status")
+            .as_deref(),
+        Some("pending"),
+        "the join read a status that is not the seeded task's"
+    );
+    conn.execute(
+        "UPDATE trigger_state SET last_task_id=NULL WHERE trigger_name='nightly'",
+        [],
+    )
+    .expect("clear the task reference");
+    assert_eq!(
+        store::read_last_task_status(&db, "nightly".to_string(), "default".to_string())
+            .await
+            .expect("read a fire with no task"),
+        None,
+        "a fire that recorded no task reported one as running"
+    );
+    conn.execute(
+        "UPDATE trigger_state SET last_task_id='task-since-deleted' WHERE trigger_name='nightly'",
+        [],
+    )
+    .expect("point at a deleted task");
+    assert_eq!(
+        store::read_last_task_status(&db, "nightly".to_string(), "default".to_string())
+            .await
+            .expect("read a fire whose task is gone"),
+        None,
+        "a deleted task still held the trigger shut"
+    );
+
+    assert_eq!(
+        store::read_task_workflow(&db, TASK_ID.to_string())
+            .await
+            .expect("read the workflow")
+            .as_deref(),
+        Some("wf-round-trip")
+    );
+    assert_eq!(
+        store::read_task_workflow(&db, "no-such-task".to_string())
+            .await
+            .expect("read a missing task"),
+        None
+    );
+}
+
+#[tokio::test]
+async fn trigger_history_retention_keeps_the_newest_and_selects_nothing_else() {
+    use orchestrator_persistence::trigger_state as store;
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let db_path = temp.path().join("retention.db");
+    PersistenceBootstrap::ensure_current(&db_path).expect("bootstrap schema");
+    let conn = open_conn(&db_path).expect("open database");
+    let db = AsyncDatabase::open(&db_path).await.expect("open async db");
+
+    // Four completed runs of one trigger, one failed run of the same trigger,
+    // one completed run of a *different* trigger, and one completed run in
+    // another project. Every column the query filters on has something on the
+    // wrong side of it, so a dropped filter changes the answer.
+    let insert = |id: &str, name: &str, project: &str, status: &str, created: &str| {
+        conn.execute(
+            "INSERT INTO tasks (
+                id, name, status, goal, target_files_json, mode, workspace_id, workflow_id,
+                project_id, workspace_root, qa_targets_json, ticket_dir, created_at, updated_at
+             ) VALUES (?1, ?2, ?3, 'g', '[]', 'qa', 'ws', 'wf', ?4, '/tmp/x', '[]', '/tmp/t', ?5, ?5)",
+            rusqlite::params![id, name, status, project, created],
+        )
+        .expect("insert a history row");
+    };
+    for (index, day) in ["01", "02", "03", "04"].iter().enumerate() {
+        insert(
+            &format!("done-{index}"),
+            "trigger-nightly",
+            "default",
+            "completed",
+            &format!("2026-01-{day}T00:00:00+00:00"),
+        );
+    }
+    insert(
+        "failed-0",
+        "trigger-nightly",
+        "default",
+        "failed",
+        "2026-01-01T00:00:00+00:00",
+    );
+    insert(
+        "other-trigger",
+        "trigger-weekly",
+        "default",
+        "completed",
+        "2026-01-01T00:00:00+00:00",
+    );
+    insert(
+        "other-project",
+        "trigger-nightly",
+        "elsewhere",
+        "completed",
+        "2026-01-01T00:00:00+00:00",
+    );
+
+    let beyond = |keep: usize| {
+        store::tasks_beyond_retention(
+            &db,
+            "trigger-nightly".to_string(),
+            "default".to_string(),
+            "completed".to_string(),
+            keep,
+        )
+    };
+
+    // Keeping two leaves the two oldest of the four, newest-first ordering
+    // decided by `created_at`.
+    let mut excess = beyond(2).await.expect("retention with two kept");
+    excess.sort();
+    assert_eq!(
+        excess,
+        vec!["done-0".to_string(), "done-1".to_string()],
+        "retention selected the wrong end of the history"
+    );
+    assert!(
+        beyond(4)
+            .await
+            .expect("retention with four kept")
+            .is_empty(),
+        "retention selected rows inside the limit"
+    );
+    assert_eq!(
+        beyond(0).await.expect("retention with none kept").len(),
+        4,
+        "a limit of zero did not select the whole history"
+    );
+    // Nothing from the failed run, the other trigger or the other project is in
+    // any of those answers.
+    let all = beyond(0).await.expect("retention with none kept");
+    assert!(
+        !all.iter().any(|id| id == "failed-0"),
+        "retention over completed runs selected a failed one"
+    );
+    assert!(
+        !all.iter().any(|id| id == "other-trigger"),
+        "retention for one trigger selected another trigger's history"
+    );
+    assert!(
+        !all.iter().any(|id| id == "other-project"),
+        "retention in one project selected another project's history"
+    );
+    assert_eq!(
+        store::tasks_beyond_retention(
+            &db,
+            "trigger-nightly".to_string(),
+            "default".to_string(),
+            "failed".to_string(),
+            0,
+        )
+        .await
+        .expect("retention over failed runs"),
+        vec!["failed-0".to_string()],
+        "the status filter reads a status other than the one it was given"
+    );
+
+    // Deleting nothing returns nothing. The early return that skips the
+    // statement is saved work rather than a guard — SQLite accepts `IN ()` and
+    // matches nothing — so this assertion holds with it removed, and says so
+    // rather than reading as coverage of a fence.
+    assert_eq!(
+        store::delete_tasks(&db, Vec::new())
+            .await
+            .expect("delete nothing"),
+        0
+    );
+    assert_eq!(
+        store::delete_tasks(&db, vec!["done-0".to_string(), "done-1".to_string()])
+            .await
+            .expect("delete the excess"),
+        2
+    );
+    let remaining: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM tasks WHERE name='trigger-nightly' AND project_id='default'
+             AND status='completed'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count what is left");
+    assert_eq!(remaining, 2, "the delete took rows it was not given");
+
+    // A task that has any child row referencing it is refused, not deleted:
+    // `tasks` cascades to some children and not to others, and this statement
+    // clears none of them itself. That is the behaviour this call inherited
+    // from `trigger_engine::cleanup_history`, and the reason a trigger history
+    // limit does not currently apply to tasks that ran — every real run has
+    // items. Pinned here so the next reader finds it as a known state rather
+    // than as a surprise; DD-148's known limits carry the detail.
+    seed_task(&conn);
+    let refused = store::delete_tasks(&db, vec![TASK_ID.to_string()]).await;
+    assert!(
+        refused.is_err(),
+        "a task with child rows was deleted; the cascade this test documents has changed"
+    );
+    assert!(
+        format!("{:#}", refused.unwrap_err()).contains("FOREIGN KEY"),
+        "the delete failed for some reason other than the child rows"
+    );
+    assert_eq!(
+        conn.query_row(
+            "SELECT COUNT(*) FROM tasks WHERE id=?1",
+            rusqlite::params![TASK_ID],
+            |row| row.get::<_, i64>(0)
+        )
+        .expect("count the refused task"),
+        1,
+        "the refused delete took the row anyway"
+    );
+}

@@ -60,6 +60,8 @@ pub mod source_events;
 pub mod sqlite;
 /// Task-execution persistence: tasks, items, command runs and events.
 pub mod task_repository;
+/// The `trigger_state` table and the reads the trigger engine makes.
+pub mod trigger_state;
 
 /// Returns the current UTC timestamp encoded as RFC 3339.
 ///
