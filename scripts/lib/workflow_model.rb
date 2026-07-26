@@ -189,6 +189,91 @@ module WorkflowModel
   def step_names(path, name)
     steps(path, name).map { |step| step["name"] }.compact
   end
+
+  # Every workflow in a checkout, discovered rather than listed. A gate that
+  # reasons about workflows and names them in an array guards exactly the ones
+  # that existed when it was written; the next one lands outside it silently.
+  def workflows(root)
+    Dir.glob(File.join(root, ".github", "workflows", "*.{yml,yaml}")).sort
+  end
+
+  # Steps whose failure will not fail the job. `continue-on-error` is only off
+  # when it says so literally — an expression may evaluate either way at run
+  # time, so it counts as on. Same direction as `disabled?`: erring toward "this
+  # step's failure is swallowed" can only make a caller stricter.
+  def continue_on_error_steps(path, name)
+    steps(path, name).select do |step|
+      value = step["continue-on-error"]
+      next false if value.nil?
+
+      !(value == false || value.to_s.strip.casecmp("false").zero?)
+    end
+  end
+
+  # The step ids a job reads as `steps.<id>.outcome`, walked out of the parsed
+  # job rather than scanned out of the file. The distinction matters: the same
+  # text inside a neighbouring job, a comment, or a `name:` is not this job
+  # consuming this step's outcome, and a byte-level scan cannot tell the
+  # difference. Both index forms GitHub accepts are matched, because
+  # `steps['my-id'].outcome` is the form anyone writing an id with a dot in it
+  # is pushed toward.
+  OUTCOME_REFERENCE = /
+    steps
+    (?:
+      \.\s*(?<dot>[A-Za-z_][A-Za-z0-9_-]*)
+      |
+      \s*\[\s*(?<quote>['"])(?<bracket>[^'"]+)\k<quote>\s*\]
+    )
+    \s*\.\s*outcome
+  /x.freeze
+
+  def outcome_references(path, name)
+    found = []
+    walk_strings(job(path, name)) do |text|
+      text.scan(OUTCOME_REFERENCE) { found << (Regexp.last_match[:dot] || Regexp.last_match[:bracket]) }
+    end
+    found.uniq
+  end
+
+  def walk_strings(node, &block)
+    case node
+    when Hash then node.each { |key, value| walk_strings(key, &block); walk_strings(value, &block) }
+    when Array then node.each { |value| walk_strings(value, &block) }
+    when String then block.call(node)
+    end
+  end
+
+  # Every fact a caller needs to decide whether a job aggregates what it
+  # swallows, for a whole checkout, in one process. Three record kinds, tab
+  # separated:
+  #
+  #   coe   <workflow> <job> <id-or-empty> <step name>
+  #   step  <workflow> <job> <id>
+  #   ref   <workflow> <job> <id read as steps.<id>.outcome>
+  #
+  # Facts, not a verdict — the set arithmetic that turns these into "this step's
+  # failure disappears" belongs to the gate, beside the reason it is a rule.
+  # Bulk because the caller runs it once per fixture tree and there are two
+  # dozen of those; a process per job would put minutes into the gate that
+  # FR-140 is open about.
+  def outcome_facts(root)
+    records = []
+    workflows(root).each do |workflow|
+      relative = workflow.sub(%r{\A#{Regexp.escape(root)}/?}, "")
+      jobs(workflow).each do |name|
+        continue_on_error_steps(workflow, name).each do |step|
+          records << ["coe", relative, name, step["id"].to_s, step["name"].to_s]
+        end
+        steps(workflow, name).each do |step|
+          records << ["step", relative, name, step["id"].to_s] if step["id"]
+        end
+        outcome_references(workflow, name).each do |id|
+          records << ["ref", relative, name, id]
+        end
+      end
+    end
+    records
+  end
 end
 
 if $PROGRAM_NAME == __FILE__
@@ -208,8 +293,21 @@ if $PROGRAM_NAME == __FILE__
     puts WorkflowModel.checkout_depth(ARGV[0], ARGV[1])
   when "executes"
     exit(WorkflowModel.executes?(ARGV[0], ARGV[1], ARGV[2]) ? 0 : 1)
+  when "workflows"
+    puts WorkflowModel.workflows(ARGV[0] || ".")
+  when "continue-on-error-steps"
+    # id first so a caller can split on tab; an empty first field is a step whose
+    # failure is swallowed and which has no id to report it under.
+    WorkflowModel.continue_on_error_steps(ARGV[0], ARGV[1]).each do |step|
+      puts "#{step["id"]}\t#{step["name"]}"
+    end
+  when "outcome-references"
+    puts WorkflowModel.outcome_references(ARGV[0], ARGV[1])
+  when "outcome-facts"
+    WorkflowModel.outcome_facts(ARGV[0] || ".").each { |record| puts record.join("\t") }
   else
-    warn "usage: workflow_model.rb {jobs|run-commands|installs|runs-on|step-names|executes} ..."
+    warn "usage: workflow_model.rb {jobs|run-commands|installs|runs-on|step-names|checkout-depth|" \
+         "executes|workflows|continue-on-error-steps|outcome-references|outcome-facts} ..."
     exit 2
   end
 end

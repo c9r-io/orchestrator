@@ -674,6 +674,96 @@ check_provider_stub_coverage() {
   return $rc
 }
 
+# Check 11: a job that swallows a step's failure must aggregate that step.
+#
+# FR-134 made the governance steps `continue-on-error: true` so one run reports
+# every problem instead of only the first, and put a final step that reads each
+# outcome and fails the job. That is the right structure. What guarded it was a
+# hand-written `OUTCOMES` list — the enumeration shape FR-134 spent its length
+# removing everywhere else, reappearing inside its own fix. The list has grown
+# 19 → 20 → 21 → 22 across four FRs, once per cycle, and nothing has ever
+# checked it. Add a gate, forget the `OUTCOMES` line, and the classification,
+# wiring and dependency checks all still pass while that gate fails on every run
+# and the job reports success.
+#
+# Three ways a swallowed failure disappears, and all three are asserted:
+#
+#   - the step has no `id`. Nothing can reference it, so it can never be
+#     aggregated by construction. FR-137 specified the check over steps "with an
+#     id and continue-on-error", which does not see this case at all — and this
+#     is the cheaper mistake to make, because an id is only ever added when
+#     someone already intends to read the outcome.
+#   - the step has an `id` no one reads as `.outcome`. The omission direction:
+#     silent, the job stays green, the gate is dead.
+#   - an `.outcome` names a step the job does not have. The dangling direction.
+#     FR-137 argued this "resolves to empty forever, with the same effect as the
+#     omission". Measured, it is the opposite: an absent step's outcome is the
+#     empty string, the aggregate's loop finds it is neither success nor
+#     skipped, and the job fails — permanently, and for a reason that names a
+#     gate which no longer exists. It is loud rather than silent, and it is
+#     still a defect: the job can never go green again, and the step that was
+#     renamed is now unaggregated in the first sense.
+#
+# Every job of every discovered workflow, not the one job that does this today.
+# Naming `governance` here would make this check the same kind of list it exists
+# to abolish. FR-137's non-goal asked for the narrow form; the general form
+# passes on this repository unchanged, because `governance` is the only job with
+# a `continue-on-error` step at all.
+check_continue_on_error_aggregated() {
+  local root="$1"
+  local rc=0 facts pairs workflow job coe_ids step_ids refs anonymous offenders
+
+  facts="$(ruby "$WORKFLOW_MODEL" outcome-facts "$root" 2>&1)" || {
+    echo "    could not read workflow outcome facts from $root:" >&2
+    printf '      %s\n' "$facts" >&2
+    return 1
+  }
+
+  pairs="$(awk -F'\t' '$1 == "coe" || $1 == "ref" { print $2 "\t" $3 }' <<< "$facts" \
+    | LC_ALL=C sort -u)"
+
+  while IFS=$'\t' read -r workflow job; do
+    [[ -z "$workflow" ]] && continue
+
+    # A step whose failure is swallowed and which carries no id.
+    anonymous="$(awk -F'\t' -v w="$workflow" -v j="$job" \
+      '$1 == "coe" && $2 == w && $3 == j && $4 == "" { print $5 }' <<< "$facts")"
+    if [[ -n "$anonymous" ]]; then
+      echo "    $workflow job '$job': a continue-on-error step has no id, so no step can read its outcome:" >&2
+      printf '      %s\n' "$anonymous" >&2
+      echo "      its failure is swallowed and unreportable; give it an id and aggregate it" >&2
+      rc=1
+    fi
+
+    coe_ids="$(awk -F'\t' -v w="$workflow" -v j="$job" \
+      '$1 == "coe" && $2 == w && $3 == j && $4 != "" { print $4 }' <<< "$facts" | LC_ALL=C sort -u)"
+    step_ids="$(awk -F'\t' -v w="$workflow" -v j="$job" \
+      '$1 == "step" && $2 == w && $3 == j { print $4 }' <<< "$facts" | LC_ALL=C sort -u)"
+    refs="$(awk -F'\t' -v w="$workflow" -v j="$job" \
+      '$1 == "ref" && $2 == w && $3 == j { print $4 }' <<< "$facts" | LC_ALL=C sort -u)"
+
+    # Omission: swallowed, and nothing reads the outcome.
+    offenders="$(comm -23 <(printf '%s\n' "$coe_ids") <(printf '%s\n' "$refs"))"
+    if [[ -n "$offenders" ]]; then
+      echo "    $workflow job '$job': a continue-on-error step's outcome is never read:" >&2
+      printf '      %s\n' $offenders >&2
+      echo "      the step can fail on every run while the job reports success" >&2
+      rc=1
+    fi
+
+    # Dangling: an outcome is read for a step that is not in this job.
+    offenders="$(comm -23 <(printf '%s\n' "$refs") <(printf '%s\n' "$step_ids"))"
+    if [[ -n "$offenders" ]]; then
+      echo "    $workflow job '$job': an outcome is read for a step id the job does not define:" >&2
+      printf '      %s\n' $offenders >&2
+      echo "      the reference resolves to the empty string, so the job can never pass again" >&2
+      rc=1
+    fi
+  done <<< "$pairs"
+
+  return $rc
+}
+
 # The registry. Both modes read it: verification runs every entry, and the
 # fixture mode asserts that it names every check_* the file defines and that
 # each one has at least one negative fixture. A check that exists but is not
@@ -692,6 +782,7 @@ ALL_CHECKS=(
   check_diagnostics_preserved
   check_provider_stub_coverage
   check_git_history_available
+  check_continue_on_error_aggregated
 )
 
 run_all_checks() {
@@ -729,6 +820,8 @@ describe_check() {
       echo "every job running a provider-capable gate installs the failing provider stubs|a provider-capable gate runs in a job with no stub backstop" ;;
     check_git_history_available)
       echo "every ci-required gate that reads git history runs in a job that fetches it|a ci-required gate queries history its job did not fetch" ;;
+    check_continue_on_error_aggregated)
+      echo "every step whose failure a job swallows is aggregated by that job, and every outcome read names a step that exists|a job swallows a step's failure without aggregating it, or reads an outcome for a step it does not have" ;;
     *) return 1 ;;
   esac
 }
@@ -1040,6 +1133,96 @@ BUNDLE
     perl -0pi -e 's{(  governance:.*?uses: actions/checkout\@v7\n)        with:\n          fetch-depth: 0\n}{$1}s' \
       "$d/.github/workflows/ci.yml"; then
     expect_fail "fixture 21" "$d" check_git_history_available "a gate reading git history in a shallow-checkout job fails"
+  fi
+
+  # ── FR-137: the aggregate list was an enumeration nobody guarded ──
+
+  # 22. The omission direction, which is the reproduction FR-137 was filed on: a
+  #     gate that fails on every run, inside a job that reports success, because
+  #     one line was not added to OUTCOMES. Nothing else in this file sees it —
+  #     the step is classified, wired, and has its dependencies.
+  d="$(new_case f22)"
+  if inject "fixture 22" "$d/.github/workflows/ci.yml" \
+    perl -0pi -e 's{^(      - name: Governance result$)}{      - name: FR-137 orphan gate\n        id: fr137-orphan\n        continue-on-error: true\n        run: exit 1\n\n$1}m' \
+      "$d/.github/workflows/ci.yml"; then
+    expect_fail "fixture 22" "$d" check_continue_on_error_aggregated "a continue-on-error step missing from OUTCOMES fails on every run inside a job that passes"
+  fi
+
+  # 23. The dangling direction: a record naming a step that is not there, which
+  #     is what a rename leaves behind. Only the OUTCOMES block is touched, so
+  #     this cannot also trip the omission direction — the two are asserted
+  #     separately because one fixture satisfying both would leave either rule
+  #     free to be deleted.
+  d="$(new_case f23)"
+  if inject "fixture 23" "$d/.github/workflows/ci.yml" \
+    perl -pi -e 's{^(            execution-migration=\$\{\{ steps\.execution-migration\.outcome \}\})$}{$1\n            fr137-ghost=\${{ steps.fr137-ghost.outcome }}}' \
+      "$d/.github/workflows/ci.yml"; then
+    expect_fail "fixture 23" "$d" check_continue_on_error_aggregated "an OUTCOMES record naming a step the job does not define fails the aggregation check"
+  fi
+
+  # 24. The same swallowed failure with no id at all — unaggregatable by
+  #     construction, since there is nothing to write on the left of `.outcome`.
+  #     This is the mutation the implementation is least likely to catch, and
+  #     the one FR-137's own requirement (steps "with an id and
+  #     continue-on-error") would have walked straight past. It is also the
+  #     likelier accident: an id is typed only when someone already means to
+  #     read the outcome, so forgetting the id and forgetting the OUTCOMES line
+  #     are the same lapse.
+  d="$(new_case f24)"
+  if inject "fixture 24" "$d/.github/workflows/ci.yml" \
+    perl -0pi -e 's{^(      - name: Governance result$)}{      - name: FR-137 anonymous gate\n        continue-on-error: true\n        run: exit 1\n\n$1}m' \
+      "$d/.github/workflows/ci.yml"; then
+    expect_fail "fixture 24" "$d" check_continue_on_error_aggregated "a continue-on-error step with no id cannot be aggregated by anything"
+  fi
+
+  # ── Behavioural: the aggregated outcomes really decide the job ──
+  #
+  # check_continue_on_error_aggregated reads structure. It proves each swallowed
+  # step's outcome is referenced, and "referenced" is not "load-bearing": an
+  # aggregate that printed the table and exited 0 would satisfy it completely
+  # while every gate in the job became decoration. So take the real aggregate
+  # script out of ci.yml and run it against outcomes it has never seen.
+  #
+  # The empty-outcome case is here because FR-137 asserted the opposite of what
+  # it does. The FR argued a renamed step leaves a record that "resolves to
+  # empty forever, with the same effect as the omission". Measured, it is the
+  # reverse: the loop finds an outcome that is neither success nor skipped and
+  # fails the job, permanently and loudly. The rule survived the correction;
+  # its stated reason did not, and this assertion is what pins down which.
+  AGGREGATE="$FIXTURE_ROOT/aggregate.sh"
+  ruby -r"$REPO_ROOT/scripts/lib/workflow_model" -e '
+    step = WorkflowModel.steps(ARGV[0], "governance")
+      .find { |candidate| candidate["name"] == "Governance result" }
+    abort("no aggregate step named Governance result") unless step && step["run"]
+    File.write(ARGV[1], step["run"])
+  ' "$BASE/.github/workflows/ci.yml" "$AGGREGATE"
+
+  run_aggregate() {
+    OUTCOMES="$1" bash "$AGGREGATE" > "$FIXTURE_ROOT/aggregate.log" 2>&1
+  }
+
+  if run_aggregate "$(printf 'liveness=success\nsurface=skipped')"; then
+    pass "behavioural: the aggregate passes a run whose outcomes are all success or skipped"
+  else
+    fail "behavioural: the aggregate rejected a run in which every gate passed"
+    cat "$FIXTURE_ROOT/aggregate.log" >&2
+  fi
+
+  if run_aggregate "$(printf 'liveness=success\nsurface=failure')"; then
+    fail "behavioural: the aggregate passed a run in which a gate reported failure"
+    cat "$FIXTURE_ROOT/aggregate.log" >&2
+  elif grep -q '^surface  *failure$' "$FIXTURE_ROOT/aggregate.log"; then
+    pass "behavioural: one failed outcome fails the job, and the aggregate names which gate"
+  else
+    fail "behavioural: the aggregate failed the job without naming the gate that failed"
+    cat "$FIXTURE_ROOT/aggregate.log" >&2
+  fi
+
+  if run_aggregate "$(printf 'liveness=success\nfr137-ghost=')"; then
+    fail "behavioural: an outcome that resolved to nothing was counted as a pass"
+    cat "$FIXTURE_ROOT/aggregate.log" >&2
+  else
+    pass "behavioural: a dangling reference's empty outcome fails the job rather than passing quietly"
   fi
 
   # ── Behavioural: the diagnostics rule is about output reaching the log ──
