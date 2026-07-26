@@ -289,6 +289,8 @@ contract rather than about `Ok`:
 | `task_repository::creation::{insert_task_with_items, reset_task_item}` | Item order is one-based and follows the given paths; the creation event lands; a duplicate task id is a no-op; a reset clears `last_error` and drops the stale command runs that would otherwise let compensation re-finalize the item. |
 | `event_retention::*` | No new assertions — the file arrived with 17 tests already pinned on exactly these statements. Verified they are the reason and not a coincidence: commenting out `AND tasks.status IN (…)` fails three of them, and dropping the archival delete fails three more. |
 | `source_events::*` | Five guards, each mutated and each caught. See below. |
+| `source_connections::*` | Sixteen fences, each mutated. Three of them exist in more than one statement — `version=?3` in three, `state='active'` in four, `owner_daemon_id=?3` in two — and every copy got its own mutation. Credential release is asserted in all three refusing directions (wrong project, wrong owner, not active), because any one of them alone leaking the pairing secret is a credential leak. |
+| `handoff_store::*` | Four fences, each in exactly one statement (verified by grep, not assumed): the snapshot identity, the reservation's retry identity, `status='planned' AND expected_state_version`, and `status='executing'`. Plus a mutation that restores the *old* shape — an unchecked `UPDATE … WHERE status='planned'` — which fails. |
 
 The two halves that stayed in core are tested without a database at all, which is what the splits
 bought: `config_load::build`'s deletion guards against a stub implementation of
@@ -305,6 +307,16 @@ replaced the *first* textual occurrence of the guard, which is `defer_to_automat
 targeting `complete_routing` specifically is what made it fail. Two statements carrying the same
 guard need two mutations, not one.
 
+**Four assertions passed their first mutation, and each named a gap in itself rather than in the
+code.** They are listed because the shape repeats: an assertion that exercises a statement is not
+an assertion that exercises its guard, and the guard needs the input that makes it say no.
+`record_delivery` carries two fences and only the monotonic one was pinned, so the
+`state='active'` fence needed a *forward* cursor on a suspended connection.
+`last_acked_cursor=MAX(…)` was asserted when offered and stored were equal, so it had to move
+after the cursor advanced. `update_dedicated_lifecycle` had no fixture at all. And the snapshot
+identity's `task_id=?1` needed a second task, since two tasks can reach the same cursor with the
+same briefing hash.
+
 **Task creation's transaction has no reachable fixture.** The assertion for
 `insert_task_with_items` covers the rows, the ordering and the duplicate-id no-op, but *not*
 atomicity, and this is recorded in the test rather than left implied. `INSERT INTO tasks` is the
@@ -313,6 +325,12 @@ transaction carries a constraint a caller can violate. Both confirming mutations
 the events ahead of the task insert, and deleting the transaction outright. With the only failure
 at statement one, rollback has nothing to undo. A green assertion here is not evidence of
 atomicity, and the test says so.
+
+**`daemon_id`'s read-back has no reachable fixture either.** Replacing it with `Ok(candidate)`
+passes. `INSERT OR IGNORE` is only ignored when another writer inserted between this call's check
+and its insert, and one `AsyncDatabase` serializes its writer, so the race needs two processes on
+one file. The read-back stays because two daemons can share a database; the test records that it
+is defensive code with no coverage rather than letting the assertion above it imply otherwise.
 
 ## Checklist
 

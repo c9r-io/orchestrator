@@ -8,11 +8,11 @@
 [DD-142](../design_doc/orchestrator/142-core-boundary-freeze.md) 与
 [QA 180](../qa/orchestrator/180-core-boundary-freeze.md) 承载。
 
-**需求 2 的 Phase A 与 Phase C 已闭环，Phase B 进行中（14 / 18 文件已有书面处置：
-11 个已迁出或拆分、2 个保留并记录理由、1 个被阻塞；4 个未处置）**，其设计与验证由
+**需求 2 的 Phase A 与 Phase C 已闭环，Phase B 进行中（16 / 18 文件已有书面处置：
+13 个已迁出或拆分、2 个保留并记录理由、1 个被阻塞；2 个未处置）**，其设计与验证由
 [DD-148](../design_doc/orchestrator/148-persistence-crate-extraction.md) 与
 [QA 186](../qa/orchestrator/186-persistence-crate-extraction.md) 承载。
-core 已从 200 处 `rusqlite` 引用 / 37 文件降至 **44 处 / 7 文件**，逐文件结论见下面的
+core 已从 200 处 `rusqlite` 引用 / 37 文件降至 **34 处 / 5 文件**，逐文件结论见下面的
 「逐文件处置表」。
 
 **2026-07-25 重写**：原需求 2（crate 提取）实际包含三件粒度、风险与前置条件都不同的事，
@@ -198,16 +198,16 @@ crate 清单。`scripts/qa/core-boundary.rb` 以**精确相等**比对，`--emit
 | `service/bootstrap.rs` | ~~7~~ 0 | 597 | ✅ **已拆分**（B7）。6 条 scope backfill + SecretStore 引用探针 → `db`；渲染 workspace_root、序列化 qa_targets、`unwrap_or(false)` 留在 core |
 | `source_automation.rs` | 7 | 2008 | ⏳ **未处置**。error-construction 4 + error-adapter 2 + import 1 |
 | `source.rs` | ~~5~~ 0 | 1337→650 | ✅ **已拆分**（B11）。四张表 24 条语句 → `source_events`；校验、确定性 id 推导、30 秒退避、终态 allowlist 留在 core。**发现 5 处安全护栏此前无任何测试守护**，见下 |
-| `source_connection.rs` | 5 | 1923 | ⏳ **未处置**。error-adapter 2 + row-mapping 2 + import 1 |
-| `handoff.rs` | 5 | 1288 | ⏳ **未处置**。error-adapter 2 + error-construction 2 + import 1。比 `source.rs` 更纠缠：`generate_snapshot` 在同一个 writer 闭包内穿插读取、投影、**以及一个 `git` 子进程**（`workspace_state_digest`）。拆分的正确切法已确定（见 DD-148），但比前几批大 |
+| `source_connection.rs` | ~~5~~ 0 | 1923→1100 | ✅ **已拆分**（B13）。五张表 23 条语句 → `source_connections`；字段边界、模式/终态 allowlist、每个被拒绝的 fence 对运维意味着什么、以及枚举与 JSON 的解析留在 core。**16 处 fence 逐一变异，其中 3 处各有多份拷贝**（`version=?3` ×3、`state='active'` ×4、`owner_daemon_id=?3` ×2），每份拷贝各做一次变异 |
+| `handoff.rs` | ~~5~~ 0 | 1288→930 | ✅ **已拆分**（B14）。三张表 18 条语句 → `handoff_store`。**动它的理由不在引用数里**：`task_state_version` 跑三个 `git` 子进程并读遍工作区未跟踪文件，而每个调用点都在 `writer().call` 闭包内，`reserve_execution` 更是在其**事务内**——单写者数据库的写锁被一个外部进程树占住。现在读取以 inputs 形式返回，投影、摘要与哈希都在 core |
 | `event_cleanup.rs` | ~~5~~ 0 | 845→330 | ✅ **已拆分**（B10）。保留期语句 → `event_retention`；JSONL 归档的分组与写文件留在 core。这一批取消了「磁盘错误伪装成驱动类型转换错误」 |
 | `task_ops.rs` | ~~4~~ 0 | 1826 | ✅ **已拆分**（B9）。两条重复的建任务写路径合并为一个事务 → `task_repository::creation`；FR-094 诊断事件改为**构造**而非写入 |
 | `attention.rs` | 3 | 1454 | ⏸️ **保留并记录理由**。import 1 + `fn other` 2。其 SQL 全部在 `writer().call` 闭包内，与 `source.rs` 同形；要清零就得整体迁出，而**只动管道的那条路已被本 FR 拒绝**并移交 [FR-141](FR-141-persistence-connection-api-boundary.md)。今天没有搬 SQL，所以今天的诚实结论就是保留 |
 | `process_metrics.rs` | 3 | 1953 | ⏸️ **保留并记录理由**。同 `attention.rs`，理由同上，同样指向 FR-141 |
 | `persistence/repository/config.rs` | 3 | 695 | 🚧 **被阻塞**。connection-type 2 + import 1。它 `use crate::resource::export_manifest_resources` 与 `crate::secret_store_crypto`，二者都在 core。**解锁条件**：`crd`（资源/清单模型）先下沉到独立 crate 或 `orchestrator-config`，否则迁出会造成 `persistence → crd → persistence` 成环 |
 
-已处置 **11 / 18**，另有 3 个已写明处置（2 个保留、1 个被阻塞），共 **14 / 18**。
-core 从 86 处 / 20 文件降至 **44 处 / 7 文件**。
+已处置 **13 / 18**，另有 3 个已写明处置（2 个保留、1 个被阻塞），共 **16 / 18**。
+core 从 86 处 / 20 文件降至 **34 处 / 5 文件**。
 
 Phase A 的具名残余 `core/src/migration.rs`（1 处）已在 B12 处置：三个兼容包装
 **全工作区零生产调用者**，作为「下线死掉的公开 API」删除。删除时立刻暴露了它掩盖的漂移
@@ -230,13 +230,25 @@ Phase A 的具名残余 `core/src/migration.rs`（1 处）已在 B12 处置：�
 现由 `source_routing_guards_hold_the_line_they_are_there_for` 逐条钉住。
 **这一批真正的产出不是搬走了 24 条语句，而是这五条护栏此前由零个测试承担。**
 
-#### 剩余工作（4 个文件）
+#### 剩余工作（2 个文件）
 
-`trigger_engine.rs`（18）、`source_automation.rs`（7）、`source_connection.rs`（5）、
-`handoff.rs`（5）。形态已经清楚，B8/B11 建立的模式直接适用：持久化层拿到**异步**函数
-（吃 `&AsyncDatabase`，自己持有 `writer().call` 与错误适配器），core 保留校验、id 推导、
-状态机规则与解释。`handoff.rs` 额外需要把 `workspace_state_digest` 的 `git` 子进程
-移出 writer 闭包。
+| 文件 | 引用 | 语句 | 形态 |
+|---|---|---|---|
+| `trigger_engine.rs` | 18 | — | error-adapter 7 + sql-params 11，SQL 分散在多个 `writer().call` 闭包内 |
+| `source_automation.rs` | 7 | 33 | error-construction 4 + error-adapter 2 + import 1；21 个 async 方法，5 处领域规则夹在事务内（租约陈旧、可重放性、跨 binding 拒绝） |
+
+两者都**不是被阻塞**，形态与 `source.rs`／`source_connection.rs` 相同，B8/B11/B13/B14
+建立的模式直接适用：持久化层拿到**异步**函数（吃 `&AsyncDatabase`，自己持有
+`writer().call` 与错误适配器），core 保留校验、id 推导、退避、状态机 allowlist 与解释；
+写—条件读—规则三者纠缠处，存储返回**具名分支**而不是解释它。
+
+`source_automation.rs` 的两处 `FromSqlConversionFailure`（`read_execution_snapshot` 在 row
+mapper 内解析两份 JSON 快照）按 B11/B13/B14 的做法处理：快照以文本过边界，在 core 解析。
+它的行类型（`SourceAutomationRoute` 等）全是平字段、无枚举无 JSON，可整体下沉后由 core
+re-export，形态同 B8 的 `ActionAuditRecord`。
+
+**未处置的原因是本轮预算用尽，不是判断结果。** 按本 FR 的规则，「保留并记录理由」只在
+实际判断过且结论是「不应搬」时才写；这两个文件的结论是应搬，所以它们记作未处置。
 
 ### ✅ Phase C：`error.rs` 的驱动耦合决策（2026-07-26 闭环）
 

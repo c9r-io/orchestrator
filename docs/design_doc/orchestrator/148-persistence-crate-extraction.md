@@ -5,7 +5,7 @@ related_fr: FR-130
 
 # DD-148: Persistence Crate Extraction (FR-130 Phase A)
 
-**Status**: Implemented (FR-130 Phase A and Phase C; Phase B in progress, 14 of 18 files disposed)
+**Status**: Implemented (FR-130 Phase A and Phase C; Phase B in progress, 16 of 18 files disposed)
 **Related**: DD-142 (core boundary freeze), DD-147 (persistence dependency chokepoint), QA 186, FR-047, FR-048
 
 ## Background
@@ -309,25 +309,89 @@ performed inside a callback that can only return a driver error.
   `source.rs`'s payload now crosses the boundary as text and is parsed in core. `handoff.rs`
   still has this shape; see the remaining work below.
 
+### A third round: `source_connection.rs` and `handoff.rs`
+
+| File | Disposition |
+|---|---|
+| `source_connection.rs` | Split. Five tables, 23 statements moved to `source_connections`; field bounds, the mode and terminal-status allowlists, what each refused fence means to an operator, and the enum and JSON parsing stayed. |
+| `handoff.rs` | Split. Three tables, 18 statements moved to `handoff_store`; the briefing projection, the workspace digest, the state-version hash and the plan rules stayed. |
+
+`handoff.rs` is the file whose reason to move was recorded here before it moved, and it is worth
+restating because the reference count never showed it: `task_state_version` runs three `git`
+subprocesses and reads every untracked file in the workspace, and **every caller invoked it
+inside a `writer().call` closure**. `reserve_execution` did it inside its transaction. On a
+database with one writer, that is the write lock held for the duration of an external process
+tree. The store now returns *inputs* — `snapshot_inputs`, `boundary_inputs`,
+`state_version_inputs`, each one reader closure — and core projects, digests and hashes between
+calls.
+
+That move required one deliberate behaviour change and paid for it in the same commit. With the
+digest computed before the reservation rather than inside it, `reserve_execution` re-fences
+inside its transaction on both `status='planned'` and `expected_state_version`, and writes
+nothing if either moved. This is strictly stronger than what it replaced: the old code read the
+status, inserted the execution row, then ran `UPDATE … WHERE status='planned'` **without checking
+how many rows changed**, so two operators racing could both come away believing they owned the
+execution. Restoring the old shape is one of the mutations, and it fails.
+
+### Counting a guard's copies before mutating it
+
+B11 mutated the first textual occurrence of a routing-state guard, hit a different statement than
+intended, and passed. From B13 the copy count is established by grep before any mutation, and
+recorded:
+
+| File | Guard | Copies |
+|---|---|---|
+| `source_connections.rs` | `version=?3` | 3 |
+| `source_connections.rs` | `state='active'` | 4 |
+| `source_connections.rs` | `owner_daemon_id=?3` | 2 |
+| `handoff_store.rs` | each of its four | 1 |
+
+Sixteen mutations for `source_connections.rs`, eight for `handoff_store.rs`. Four of those
+twenty-four passed on the first attempt and named a real gap in the assertion rather than in the
+code:
+
+- `record_delivery` carries two fences. Asserting that a backward cursor is refused pins only the
+  monotonic one; the `state='active'` fence needed a *forward* cursor on a suspended connection.
+- `last_acked_cursor=MAX(last_acked_cursor,?16)` was asserted when offered and stored were both
+  the same value, so removing `MAX` changed nothing. It has to run after the cursor has advanced.
+- `update_dedicated_lifecycle` had no fixture at all; it needed its own `managed_dedicated`
+  connection.
+- The snapshot identity's `task_id=?1` needed a second task. Two tasks can reach the same cursor
+  with the same briefing hash — an empty task at cursor 0 is the ordinary case — and without that
+  column task B is handed the briefing recorded for task A.
+
+The pattern across all four: an assertion that exercises a statement is not an assertion that
+exercises its guard. The guard needs the input that makes it say no.
+
+### One more unreachable fixture, recorded in place
+
+`daemon_id`'s read-back after `INSERT OR IGNORE` cannot be covered. Replacing it with
+`Ok(candidate)` passes: the ignore only fires when another writer inserted between this call's
+check and its insert, and one `AsyncDatabase` serializes its writer, so the race needs two
+processes on one file. The read-back stays, because two daemons can share a database. This is the
+second such case — the first was task creation's transaction in B9 — and both are written into
+the test rather than left as green assertions that read like coverage.
+
 ### What is left, and why each is left
 
-Four files are undisposed. None of them is blocked; all four are the same shape as `source.rs`
-and would follow the pattern above. They are named here so the remaining work is specified rather
-than "the rest of Phase B".
+Two files are undisposed. Neither is blocked; both are the same shape as `source.rs` and
+`source_connection.rs`, and the pattern above applies directly.
 
-| File | Refs | Lines | Shape |
+| File | Refs | Statements | Shape |
 |---|---|---|---|
-| `trigger_engine.rs` | 18 | 1130 | error-adapter 7 + sql-params 11, spread across several `writer().call` closures. |
-| `source_automation.rs` | 7 | 2008 | error-construction 4 + error-adapter 2 + import 1. |
-| `source_connection.rs` | 5 | 1923 | error-adapter 2 + row-mapping 2 + import 1. |
-| `handoff.rs` | 5 | 1288 | error-adapter 2 + error-construction 2 + import 1. |
+| `trigger_engine.rs` | 18 | — | error-adapter 7 + sql-params 11, spread across several `writer().call` closures. |
+| `source_automation.rs` | 7 | 33 | error-construction 4 + error-adapter 2 + import 1; 21 async methods, with five domain rules interleaved inside transactions (stale lease, replayability, cross-binding refusal). |
 
-`handoff.rs` is the one with a wrinkle worth recording now, because it is not visible from the
-reference count: `generate_snapshot` runs reads, the briefing projection, *and a `git`
-subprocess* (`workspace_state_digest`) inside one writer closure. The subprocess holds the
-SQLite writer for its duration. The split that fixes it is a read call for the snapshot inputs,
-projection and digest in core, then one find-or-insert call — which keeps the idempotency check
-atomic, which is the only part that needs to be.
+`source_automation.rs` carries the last two `FromSqlConversionFailure` constructions in core:
+`read_execution_snapshot` parses two JSON snapshots inside a row mapper. It takes the same
+treatment as `source.rs` and `handoff.rs` — the snapshots cross as text and parse above. Its row
+types are all plain columns with no enums and no JSON, so they can sink whole and be re-exported,
+the shape `ActionAuditRecord` took in B8.
+
+They are undisposed because this round's budget ran out, **not** because judging them produced
+that answer. FR-130's rule is that "kept, with the reason recorded" is only written when the file
+was actually judged and the conclusion was that it should not move. For both of these the
+conclusion is that they should move, so they are recorded as undisposed.
 
 ### Ports where they fit, not where they were proposed
 
