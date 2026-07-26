@@ -178,23 +178,34 @@ from prose.
 Recorded here rather than run in CI: it is a one-time property of a specific commit range, and a
 gate that hard-codes commit hashes fails permanently after any history rewrite.
 
-Executed on 2026-07-26 at `524ed26b` in a scratch `git worktree`:
+Executed on 2026-07-26 in a scratch `git worktree` pinned at `524ed26b`, the commit at which
+Phase A finished:
 
 ```bash
-W=$(mktemp -d); git worktree add -q --detach "$W" HEAD; cd "$W"
-A1=$(git log --format=%H --grep='FR-130 A1' -1)
-A4=$(git log --format=%H --grep='FR-130 A4' -1)
-git revert --no-commit --no-edit "$A1^..$A4"
+W=$(mktemp -d); git worktree add -q --detach "$W" 524ed26b; cd "$W"
+A1=$(git log --format=%H --grep='FR-130 A1' -1); A2=$(git log --format=%H --grep='FR-130 A2' -1)
+A3=$(git log --format=%H --grep='FR-130 A3' -1); A4=$(git log --format=%H --grep='FR-130 A4' -1)
+git revert --no-commit --no-edit "$A4" "$A3" "$A2" "$A1"   # newest first
 cargo check --workspace
 ruby scripts/qa/core-boundary.rb && ruby scripts/qa/persistence-dependency.rb
 ```
 
-Result: the revert applied with no conflicts across 45 paths, `cargo check --workspace`
-finished clean, and both gates reported the pre-extraction state exactly —
-`143 files, 52 pub mod, 924 public items`, `200 rusqlite references across 37 files`,
-`13 members`. The ledgers returning to their original values is the part worth noting: it shows
-the revert restored the governance record along with the code, rather than leaving a tree that
-compiles while its ledgers describe a layout that no longer exists.
+The four commits are named individually rather than as the range `A1^..A4`. An unrelated commit
+(`c0730b78`, a liveness-ledger refresh) landed between A1 and A2, and a range revert takes it
+too — which proves that *some set of commits* reverts, not that the extraction does. The first
+run of this proof used the range and reverted 45 paths; the correct set is 44.
+
+Result: the revert applied with no conflicts across 44 paths, `cargo check --workspace` finished
+clean, and both gates reported the pre-extraction state exactly — `143 files, 52 pub mod, 924
+public items`, `200 rusqlite references across 37 files`, `13 members`. The ledgers returning to
+their original values is the part worth noting: it shows the revert restored the governance
+record along with the code, rather than leaving a tree that compiles while its ledgers describe
+a layout that no longer exists.
+
+The worktree must be pinned at `524ed26b` rather than at `HEAD`. Reverting the extraction from a
+later commit conflicts on `crates/orchestrator-persistence/src/db.rs`, because the closure
+commit edits a file A4's revert deletes. That is expected and is not a defect in the revert: the
+property being proved is that Phase A can be backed out of the tree Phase A produced.
 
 ---
 

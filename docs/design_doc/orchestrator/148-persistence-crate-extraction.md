@@ -155,11 +155,19 @@ QA 186 covers five scenarios. The shape each one is guarding against:
 | 4 | no `agent_orchestrator::` in the sources | cargo's resolved tree has no path to core |
 | 5 | the snapshot file is unchanged | its commit is an ancestor of the first extraction commit |
 
-The reverse-applicable removal patch was executed once at `524ed26b`: `git revert --no-commit`
-over `A1^..A4` applied with no conflicts across 45 paths, `cargo check --workspace` finished
+The reverse-applicable removal patch was executed once against `524ed26b`, the commit at which
+Phase A finished: `git revert --no-commit` over the four extraction commits named individually,
+newest first, applied with no conflicts across 44 paths, `cargo check --workspace` finished
 clean, and both gates reported `143 / 52 / 924`, `200 / 37`, `13 members` — the ledgers returned
-to their pre-extraction values along with the code. Recorded in QA 186 rather than run in CI: a
-gate that hard-codes commit hashes fails permanently after any history rewrite.
+to their pre-extraction values along with the code.
+
+Named individually rather than as the range `A1^..A4`, because an unrelated commit landed
+between A1 and A2 while Phase A was in progress. A range revert takes it too and proves that
+some set of commits reverts, not that the extraction does; the first run of this proof made that
+mistake and reverted 45 paths instead of 44.
+
+Recorded in QA 186 rather than run in CI: a gate that hard-codes commit hashes fails permanently
+after any history rewrite.
 
 ## Consequences
 
