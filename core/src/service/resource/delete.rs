@@ -1,6 +1,22 @@
 use crate::config_load::{ResourceRemoval, persist_config_for_delete, read_active_config};
-use crate::error::{Result, classify_resource_error};
+use crate::error::{OrchestratorError, Result, classify_resource_error};
 use crate::state::InnerState;
+
+/// Maps a persistence failure raised while deleting resources onto the canonical
+/// error type.
+///
+/// `external_dependency`, deliberately, and not `classify_resource_error`.
+/// Until FR-130 Phase C, `impl From<rusqlite::Error> for OrchestratorError`
+/// categorised every driver failure as `ExternalDependency`, and the category is
+/// part of the gRPC and CLI contract rather than an internal detail. The
+/// message-based classifier reads "not found" anywhere in the text as
+/// `NotFound`, and SQLite's word for a missing table is
+/// `no such table: resources` — the same failure, a different category, and no
+/// compile error to notice it. `phase_c_preserves_the_external_dependency_category`
+/// below pins it against exactly that message.
+fn classify_resource_persistence_error(error: anyhow::Error) -> OrchestratorError {
+    OrchestratorError::external_dependency("resource.delete", error)
+}
 
 /// Delete a resource by kind/name.
 pub fn delete_resource(
@@ -221,7 +237,7 @@ pub fn delete_resource_with_references(
 
         // 4. Also remove resource DB rows for this project
         crate::db::delete_project_resources(&state.db_path, name)
-            .map_err(|error| classify_resource_error("resource.delete", error))?;
+            .map_err(classify_resource_persistence_error)?;
 
         // 5. Persist (using delete-safe path)
         persist_config_for_delete(state, config, "project-delete", &[])?;
@@ -439,5 +455,34 @@ mod source_template_reference_tests {
         );
         remove_source_task_binding_references(&mut config, "alpha", "docs", false);
         assert!(source_task_binding_references(&config, "alpha", "docs", false).is_empty());
+    }
+    /// FR-130 Phase C parity: a driver failure surfacing from resource deletion
+    /// must still be `ExternalDependency`, as the deleted blanket
+    /// `From<rusqlite::Error>` impl guaranteed.
+    ///
+    /// The error is a real one from a real unmigrated database rather than a
+    /// hand-written `anyhow!`, because the message is the whole point: SQLite
+    /// reports `no such table: resources`, and the message-based classifier this
+    /// call site must not use would read that as `NotFound`. Asserting through
+    /// the production mapping function rather than restating it is what stops the
+    /// test staying green while the call site drifts.
+    #[test]
+    fn phase_c_preserves_the_external_dependency_category() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let db_path = temp.path().join("unmigrated.db");
+
+        let failure = crate::db::delete_project_resources(&db_path, "any-project")
+            .expect_err("deleting from an unmigrated database must fail");
+        assert!(
+            failure.to_string().contains("no such table"),
+            "the fixture no longer produces the message this test is about: {failure}"
+        );
+
+        let mapped = classify_resource_persistence_error(failure);
+        assert_eq!(
+            mapped.category(),
+            crate::error::ErrorCategory::ExternalDependency
+        );
+        assert_eq!(mapped.operation(), "resource.delete");
     }
 }

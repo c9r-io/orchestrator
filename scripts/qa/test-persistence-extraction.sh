@@ -32,9 +32,18 @@
 #   Case 4  the layer does not depend on core. This is the invariant Phase A
 #           establishes and the one nothing else checks: both ledgers would stay
 #           green with a persistence -> core edge in place.
-#   Case 5  the snapshot the extraction was measured against is byte-identical
+#   Case 5  core's error type no longer converts rusqlite errors. Asserted by
+#           re-introducing a `?` on a rusqlite::Result in a function returning
+#           OrchestratorError and requiring it to stop compiling — grepping
+#           error.rs cannot distinguish "removed" from "moved and still
+#           compiling", which is the state that would matter.
+#   Case 6  the snapshot the extraction was measured against is byte-identical
 #           to the committed one, asserted against the index rather than by
 #           re-running the comparison the test above already ran.
+#
+# The gate refuses to run on a dirty worktree. Cases 1, 2 and 5 build fixtures
+# with `git archive HEAD`, so on a dirty tree they answer a question about the
+# previous commit while printing the same PASS lines.
 #
 # Safety: read-only against the working tree except inside $TMPDIR. No daemon is
 # started, no provider is invoked, and the only databases created are temporary
@@ -65,6 +74,23 @@ pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 
 cd "$REPO_ROOT"
+
+# Three cases build their fixtures with `git archive HEAD`, so they test the
+# committed tree. On a dirty worktree they silently answer a question about the
+# previous commit: the Phase C case was written against an uncommitted deletion
+# and reported that the conversion still existed, because at HEAD it did.
+#
+# QA 186's certification conditions already require a clean worktree. This turns
+# that from a condition a reader is trusted to check into one the gate refuses to
+# run without, because a void run that prints PASS lines is indistinguishable
+# from a real one.
+DIRTY="$(git status --porcelain)"
+if [[ -n "$DIRTY" ]]; then
+  echo "refusing to run: the worktree is dirty, and the fixtures below are built" >&2
+  echo "from 'git archive HEAD' — uncommitted changes would not be under test." >&2
+  echo "$DIRTY" >&2
+  exit 2
+fi
 
 echo "Case 1: core links the extracted crate, and cannot build without it"
 
@@ -159,15 +185,25 @@ echo ""
 
 echo "Case 3: a task written through the layer reads back through the layer"
 
-set +e
-cargo test -p "$MEMBER" --test round_trip >"$WORK/case3.log" 2>&1
-ROUND_TRIP_STATUS=$?
-set -e
-if [[ "$ROUND_TRIP_STATUS" -eq 0 ]] && grep -q "2 passed" "$WORK/case3.log"; then
-  pass "the round trip and its unmigrated-database negative both pass"
+# The expected count is derived from the file, not written here. It was "2
+# passed" until FR-130 Phase B added a third test, at which point a green suite
+# reported a gate failure — and the same literal would have hidden a test
+# silently disappearing, which is the direction that matters.
+ROUND_TRIP_TESTS="$(grep -c '^#\[tokio::test\]$' "$CRATE/tests/round_trip.rs")"
+if [[ "$ROUND_TRIP_TESTS" -lt 2 ]]; then
+  fail "round_trip.rs declares $ROUND_TRIP_TESTS test(s); the round trip and its negative are both required"
 else
-  fail "the round trip did not pass (exit $ROUND_TRIP_STATUS)"
-  tail -30 "$WORK/case3.log" >&2
+  set +e
+  cargo test -p "$MEMBER" --test round_trip >"$WORK/case3.log" 2>&1
+  ROUND_TRIP_STATUS=$?
+  set -e
+  if [[ "$ROUND_TRIP_STATUS" -eq 0 ]] &&
+    grep -q "$ROUND_TRIP_TESTS passed; 0 failed" "$WORK/case3.log"; then
+    pass "all $ROUND_TRIP_TESTS round-trip tests pass, including the unmigrated-database negative"
+  else
+    fail "the round trip did not pass all $ROUND_TRIP_TESTS declared tests (exit $ROUND_TRIP_STATUS)"
+    tail -30 "$WORK/case3.log" >&2
+  fi
 fi
 echo ""
 
@@ -193,7 +229,53 @@ else
 fi
 echo ""
 
-echo "Case 5: the reviewed schema baseline is unchanged"
+echo "Case 5: core's error type no longer converts driver errors"
+
+# The proxy. Anchored to a line that opens an impl block, because the first
+# version of this check searched for the substring anywhere in the file and was
+# then satisfied by the doc comment explaining that the impl had been removed.
+# A gate that its own explanatory prose can trip is measuring the prose.
+if grep -qE '^impl From<rusqlite::Error> for OrchestratorError' core/src/error.rs; then
+  fail "core/src/error.rs still declares From<rusqlite::Error> for OrchestratorError"
+else
+  pass "core/src/error.rs declares no From<rusqlite::Error> impl"
+fi
+
+# The observation. A `?` on a rusqlite::Result inside a function returning
+# OrchestratorError must stop compiling. That is the capability the impl
+# provided, so its absence is what "removed" means; grepping one file cannot
+# tell that from a conversion that moved somewhere else.
+DIR="$WORK/reintroduced-conversion"
+mkdir -p "$DIR"
+git archive HEAD | tar -x -C "$DIR"
+# The doc comment is not decoration: core denies missing_docs, so without it the
+# probe stops the build on the lint and the case passes on an error that has
+# nothing to do with the conversion. The assertion below therefore matches the
+# specific diagnostic rather than merely a non-zero exit.
+cat >> "$DIR/core/src/error.rs" <<'PROBE'
+
+/// FR-130 Phase C fixture: this must not compile.
+pub fn fr130_phase_c_probe(conn: &rusqlite::Connection) -> Result<i64> {
+    let value: i64 = conn.query_row("SELECT 1", [], |row| row.get(0))?;
+    Ok(value)
+}
+PROBE
+
+set +e
+(cd "$DIR" && CARGO_TARGET_DIR="$DIR/target" cargo check -p agent-orchestrator) \
+  >"$WORK/case5-probe.log" 2>&1
+PROBE_STATUS=$?
+set -e
+if [[ "$PROBE_STATUS" -ne 0 ]] &&
+  grep -q "couldn't convert the error to \`OrchestratorError\`" "$WORK/case5-probe.log"; then
+  pass "a ? on a rusqlite::Result no longer converts into OrchestratorError"
+else
+  fail "a rusqlite::Result still converts into OrchestratorError (exit $PROBE_STATUS)"
+  tail -20 "$WORK/case5-probe.log" >&2
+fi
+echo ""
+
+echo "Case 6: the reviewed schema baseline is unchanged"
 
 if git diff --quiet -- "$SNAPSHOT" && git diff --cached --quiet -- "$SNAPSHOT"; then
   pass "$SNAPSHOT is byte-identical to the committed baseline"

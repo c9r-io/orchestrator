@@ -151,12 +151,6 @@ impl From<std::io::Error> for OrchestratorError {
     }
 }
 
-impl From<rusqlite::Error> for OrchestratorError {
-    fn from(value: rusqlite::Error) -> Self {
-        OrchestratorError::external_dependency("internal", value)
-    }
-}
-
 impl From<serde_json::Error> for OrchestratorError {
     fn from(value: serde_json::Error) -> Self {
         OrchestratorError::internal_invariant("internal", value)
@@ -424,14 +418,25 @@ mod tests {
         assert_eq!(err.operation(), "internal");
     }
 
+    /// The `From<rusqlite::Error>` impl this used to exercise was deleted in
+    /// FR-130 Phase C, so `OrchestratorError` no longer names the SQLite driver
+    /// at all. What the impl guaranteed — a driver failure is
+    /// `ExternalDependency` — is now the responsibility of each call site that
+    /// maps one, and is pinned where such a call site exists:
+    /// `service::resource::delete::phase_c_preserves_the_external_dependency_category`.
+    ///
+    /// This test is not simply removed, because deleting a test along with its
+    /// subject leaves no record that the guarantee moved rather than lapsed. The
+    /// assertion that remains is the one that still belongs here: the category
+    /// exists and is spelled the way the wire contract spells it.
     #[test]
-    fn from_rusqlite_error() {
-        let sqlite_err = rusqlite::Error::SqliteFailure(
-            rusqlite::ffi::Error::new(1),
-            Some("db locked".to_string()),
+    fn external_dependency_is_the_category_driver_failures_carry() {
+        let err = OrchestratorError::external_dependency(
+            "internal",
+            anyhow::anyhow!("no such table: resources"),
         );
-        let err: OrchestratorError = sqlite_err.into();
         assert_eq!(err.category(), ErrorCategory::ExternalDependency);
+        assert_eq!(err.category().as_str(), "external_dependency");
         assert_eq!(err.operation(), "internal");
     }
 
