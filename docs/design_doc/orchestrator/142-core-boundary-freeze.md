@@ -236,6 +236,16 @@ measurement. That is the argument for freezing before extracting, restated as ev
 - The schema snapshot certifies DDL, not data. A migration that backfills rows incorrectly
   produces an identical snapshot. `m0002_backfill_historical_defaults` and its kin are covered
   by their own tests, not by this one.
+- **The ratchet counts the token in prose as well as in code.** `scannable_source` strips
+  `cfg(test)` modules and masks nothing else, so a `rusqlite` mention in a comment or doc comment
+  is counted as a reference. Two instances were found and fixed during FR-130 Phase B, and the
+  second is the instructive one: a doc comment written to explain that the driver conversion had
+  been *removed* named the impl, and put the file back on the ledger. The workaround is to name
+  the driver's error type without spelling its path, which is a real cost — precision traded for
+  a metric. Masking comments would change the ledger's scope and every number in it, so it is a
+  change with its own review, not a fix to slip into an unrelated commit. Two related shapes to
+  know about: `#[cfg(test)]` on a `use` at file scope is also counted, because the exclusion
+  matches `mod` blocks only (found twice, in `db_write.rs` and `config_load/persist.rs`).
 - The ratchet counts the token `rusqlite`, not SQL statements. That is the right ruler for its
   job — a new coupling adds the token wherever it lands, so nothing escapes it — and it is not a
   size estimate, which is how FR-130 read it when staging the extraction. `db_write.rs` is 1,441

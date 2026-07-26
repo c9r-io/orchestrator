@@ -6,7 +6,7 @@ use crate::state::InnerState;
 /// error type.
 ///
 /// `external_dependency`, deliberately, and not `classify_resource_error`.
-/// Until FR-130 Phase C, `impl From<rusqlite::Error> for OrchestratorError`
+/// Until FR-130 Phase C, a blanket `From` impl for the SQLite driver's error type
 /// categorised every driver failure as `ExternalDependency`, and the category is
 /// part of the gRPC and CLI contract rather than an internal detail. The
 /// message-based classifier reads "not found" anywhere in the text as
@@ -457,8 +457,8 @@ mod source_template_reference_tests {
         assert!(source_task_binding_references(&config, "alpha", "docs", false).is_empty());
     }
     /// FR-130 Phase C parity: a driver failure surfacing from resource deletion
-    /// must still be `ExternalDependency`, as the deleted blanket
-    /// `From<rusqlite::Error>` impl guaranteed.
+    /// must still be `ExternalDependency`, as the deleted blanket `From` impl for
+    /// the driver's error type guaranteed.
     ///
     /// The error is a real one from a real unmigrated database rather than a
     /// hand-written `anyhow!`, because the message is the whole point: SQLite
