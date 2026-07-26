@@ -83,12 +83,18 @@ crate 清单。`scripts/qa/core-boundary.rb` 以**精确相等**比对，`--emit
 ## 未完成部分
 
 原需求 2 的文件清单与其验收标准不相容，需按台账重写。原文列出 11049 行的 14 个文件并据此
-提出"core 不再直接依赖 rusqlite"，但实际有 **37 个文件、200 处引用**，其中约 22 个文件
+提出"core 不再直接依赖 rusqlite"，但实际有 **37 个文件、200 处引用**，其中 18 个文件
 不在清单内。它们不是"被遗漏的持久化模块"，而是**在同一个函数里混装 SQL 与领域逻辑**，
 所以本来就不在 persistence 目录下。原文清单中的 `core/src/migration_steps.rs` 亦不存在，
 实际路径是 `core/src/persistence/migration_steps.rs`。
 
 因此按风险与前置条件切分为三个阶段，**各自独立可回退**。
+
+**尺子读法（2026-07-26 治理期补记）**：台账数的是 `rusqlite` 这个**词元**的出现次数，
+不是 SQL 语句数。`db_write.rs` 有 1441 行 SQL，计 **1**；`db.rs` 有 1104 行，计 **1**。
+所以 Phase A 的"约 115 处"对应约 12100 行，Phase B 的"约 83 处"对应 **17963 行**——
+数字更小的 Phase B 反而更大。这个计数是合格的棘轮（它能发现新增的耦合），但**不是工作量估计**，
+下面的分期不应被读成按规模排序。
 
 ### ⏳ Phase A：纯持久化模块外迁
 
@@ -98,19 +104,35 @@ crate 清单。`scripts/qa/core-boundary.rb` 以**精确相等**比对，`--emit
 |---|---|
 | `core/src/task_repository/**`（mod 45、queries 4、write_ops 4、items 2、state 2、types 1） | 58 |
 | `core/src/async_database.rs` | 17 |
-| `core/src/persistence/repository/**`（workflow_store 14、session 10、config 3、scheduler 3） | 30 |
+| `core/src/persistence/repository/**`（workflow_store 14、session 10、scheduler 3） | 27 |
 | `core/src/persistence/{migration_steps,migration,sqlite}.rs` | 6 |
 | `core/src/{db,db_write,db_maintenance,migration}.rs` | 4 |
+| `core/src/session_store.rs` | 3 |
 
-约 115 处、23 个文件。这一阶段建立 `orchestrator-persistence` crate 本体，保持
-`#![deny(missing_docs)]` 与既有 lint 约定。
+共 115 处、**18 个文件**（原文写作 23，与上表不符；上表为准）。这一阶段建立
+`orchestrator-persistence` crate 本体，保持 `#![deny(missing_docs)]` 与既有 lint 约定。
+
+两处成员调整，均为**结构性必然**而非偏好，理由记录如下：
+
+- **`core/src/persistence/repository/config.rs`（3 处）移出 Phase A，改属 Phase B。**
+  它有 17 处生产引用指向 `crate::crd`，另有 `crate::resource`；而 `core/src/crd/plugins.rs:328`
+  调用 `crate::db::insert_plugin_audit`，`db.rs` 是 Phase A 文件。若 `db.rs` 与 `config.rs`
+  同时下沉而 `crd` 留在 core，得到的是 `persistence → crd → persistence` 循环依赖。
+  它位于 `persistence/` 目录下但是一个**领域仓储**——目录位置与结构类别不是一回事。
+- **`core/src/session_store.rs`（3 处）移入 Phase A。** 其全部 import 是 `async_database`、
+  `config_load::now_ts`、`persistence::repository::{SessionRepository, SqliteSessionRepository}`
+  与 `db`，无任何领域耦合；且 Phase A 的 `persistence/repository/session.rs` **依赖它**——
+  不带上它，Phase A 无法编译通过。
+
+两项互换后 Phase A 仍为 115 处 / 18 个文件，Phase B 仍为 83 处 / 18 个文件。
 
 验收以 `schema-snapshot.sql` **逐次不变**为行为证据——纯结构性的"符号已移动"不足以
 证明迁移仍然正确。
 
 ### ⏳ Phase B：混装文件的逐批拆分
 
-约 22 个文件，SQL 与领域逻辑在同一函数内，各自是一次独立的设计判断：
+**18 个文件**（原文写作 22，与上表不符；上表为准），SQL 与领域逻辑在同一函数内，
+各自是一次独立的设计判断：
 
 | 文件 | 引用数 |
 |---|---|
@@ -119,11 +141,11 @@ crate 清单。`scripts/qa/core-boundary.rb` 以**精确相等**比对，`--emit
 | `service/bootstrap.rs`、`source_automation.rs` | 各 7 |
 | `event_cleanup.rs`、`handoff.rs`、`source.rs`、`source_connection.rs` | 各 5 |
 | `task_ops.rs` | 4 |
-| `attention.rs`、`events.rs`、`process_metrics.rs`、`session_store.rs` | 各 3 |
+| `attention.rs`、`events.rs`、`process_metrics.rs`、`persistence/repository/config.rs` | 各 3 |
 | `config_load/build.rs` | 2 |
 | `config_load/persist.rs`、`lib.rs`、`service/resource/delete.rs`、`task_cleanup.rs` | 各 1 |
 
-约 83 处。要求：
+共 83 处、17963 行——按上面的"尺子读法"，这一阶段比 Phase A 大。要求：
 
 - **按文件分批**，每批一次提交、一次 QA、一次可回退证据。不接受"一次性大提交"。
 - 每个文件明确处置：整体迁出、拆分（SQL 迁出、领域逻辑留下）、或书面记录保留理由。
@@ -157,8 +179,10 @@ gui(7)、daemon(7)。该条对本次提取近乎空转，作为 FR-130 的需求
 
 ### 前置
 
-- [ ] FR-134 需求 9 已闭环，且修复后 `core-boundary-ledger.json` 的 `200 / 37` 与
-      `52 / 924 / 143` 未变化（变化项须逐条说明）
+- [x] FR-134 需求 9 已闭环，且修复后 `core-boundary-ledger.json` 的 `200 / 37` 与
+      `52 / 924 / 143` 未变化（变化项须逐条说明）—— 2026-07-26 在 `6aeb2ce` 重跑
+      `ruby scripts/qa/core-boundary.rb`：`143 files, 52 pub mod, 924 public items;
+      200 rusqlite reference(s) across 37 file(s)`，无变化项。尺子先于测量，成立
 - [x] FR-136 已闭环，收口形态已选定 —— 分层收口，线画在 `agent_orchestrator.db` 上：
       core／`orchestrator-persistence` 为持久化层，`orchestrator-scheduler` 与 `daemon`
       禁止直接持有驱动（`task_state.rs` 在被禁止的一侧），`orchestrator-security` 因位于
@@ -170,14 +194,19 @@ gui(7)、daemon(7)。该条对本次提取近乎空转，作为 FR-130 的需求
 
 ### Phase A
 
-- [ ] `orchestrator-persistence` crate 存在，承载迁移内核与 repository 实现，`#![deny(missing_docs)]` 通过
-- [ ] 台账中属 Phase A 范围的约 115 处引用已从 core 收敛
+- [ ] `orchestrator-persistence` crate 存在，承载迁移内核与 repository 实现，`#![deny(missing_docs)]` 通过。
+      "存在"不以 `ls` 或成员清单为证——须同时证明 core 真的**链接**了它
+- [ ] 台账中属 Phase A 范围的 115 处引用已从 core 收敛，且移出的每个路径确实出现在
+      `crates/orchestrator-persistence/src/` 下（清单由台账 diff 推导，不手写）
 - [ ] `cargo test -p agent-orchestrator schema_snapshot` 通过，`schema-snapshot.sql` 未变
+- [ ] 逐对象比对：74 个中断点全部走到，且中断点数等于 `registered_migrations().len()`
+      ——链条被悄悄截短时必须失败，而不是以"套件全绿"通过
+- [ ] 至少一条**依赖旧路径的端到端行为**仍成立：隔离实例上建任务、跑任务、读回、列事件
 - [ ] Phase A 的提取 commit 可机械回退（与 FR-126 的 reverse-applicable removal patch 同一标准）
 
 ### Phase B
 
-- [ ] 22 个混装文件各有"已迁出 / 已拆分 / 保留并记录理由"的结论
+- [ ] 18 个混装文件各有"已迁出 / 已拆分 / 保留并记录理由"的结论
 - [ ] 每批独立提交且各自可回退；每批之后 `schema-snapshot.sql` 未变
 - [ ] 台账 `rusqlite.files` 随每批单调收敛，残余点显式清单化
 
