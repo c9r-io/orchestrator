@@ -466,6 +466,16 @@ jobs:
         working-directory: gui
         run: npx playwright install chromium
 
+      # `cargo llvm-cov --workspace` compiles orchestrator-gui, whose
+      # `tauri::generate_context!` reads `frontendDist: ../../gui/dist` at
+      # compile time and panics when that directory is absent. Nothing in this
+      # job produced it, so the crate could not build here — a second blocker
+      # that only became visible once the shell error on line 38 stopped
+      # ending the step first.
+      - name: Build the frontend bundle the Tauri crate compiles against
+        working-directory: gui
+        run: npm run build
+
       - name: Generate and enforce boundary coverage
         run: ./scripts/coverage-governance.sh
 
