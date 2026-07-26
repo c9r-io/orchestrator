@@ -415,3 +415,18 @@ pub fn reset_project_data_by_path(db_path: &Path, project_id: &str) -> Result<Pr
         tickets_cleaned: 0,
     })
 }
+
+/// Deletes every `resources` row belonging to one project.
+///
+/// Separate from [`reset_project_data_by_path`], which clears a project's task
+/// history: this is the declarative-resource half, run when the project itself
+/// is deleted. It is one statement in its own transaction because the caller
+/// has already mutated the in-memory config and is about to persist it; a
+/// failure here has to leave the table untouched rather than half-cleared.
+pub fn delete_project_resources(db_path: &Path, project: &str) -> Result<usize> {
+    let conn = open_conn(db_path)?;
+    let tx = conn.unchecked_transaction()?;
+    let removed = tx.execute("DELETE FROM resources WHERE project = ?1", params![project])?;
+    tx.commit()?;
+    Ok(removed)
+}

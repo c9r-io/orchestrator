@@ -220,15 +220,8 @@ pub fn delete_resource_with_references(
         config.resource_store.remove_all_for_project(name);
 
         // 4. Also remove resource DB rows for this project
-        {
-            let conn = crate::db::open_conn(&state.db_path)?;
-            let tx = conn.unchecked_transaction()?;
-            tx.execute(
-                "DELETE FROM resources WHERE project = ?1",
-                rusqlite::params![name],
-            )?;
-            tx.commit()?;
-        }
+        crate::db::delete_project_resources(&state.db_path, name)
+            .map_err(|error| classify_resource_error("resource.delete", error))?;
 
         // 5. Persist (using delete-safe path)
         persist_config_for_delete(state, config, "project-delete", &[])?;

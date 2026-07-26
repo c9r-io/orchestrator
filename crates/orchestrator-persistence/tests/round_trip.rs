@@ -153,6 +153,58 @@ async fn a_task_written_through_the_layer_reads_back_through_the_layer() {
     );
 }
 
+/// Phase B moves SQL out of core one statement at a time. Each moved statement
+/// gets an assertion here, because the ledger entry disappearing proves the
+/// reference moved and says nothing about whether the statement still does what
+/// its caller needs. The negative half matters as much: `DELETE` against a
+/// non-matching predicate succeeds and affects zero rows, so a function that
+/// deleted the wrong project — or nothing at all — would satisfy a test that
+/// only checked it returned `Ok`.
+#[tokio::test]
+async fn delete_project_resources_removes_one_project_and_leaves_the_others() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let db_path = temp.path().join("resources.db");
+    PersistenceBootstrap::ensure_current(&db_path).expect("bootstrap");
+
+    let conn = open_conn(&db_path).expect("open connection");
+    let now = orchestrator_persistence::now_ts();
+    for (project, name) in [("doomed", "a"), ("doomed", "b"), ("kept", "c")] {
+        conn.execute(
+            "INSERT INTO resources (kind, project, name, api_version, spec_json, metadata_json,
+                                    created_at, updated_at)
+             VALUES ('Agent', ?1, ?2, 'orchestrator.dev/v2', '{}', '{}', ?3, ?3)",
+            rusqlite::params![project, name, now],
+        )
+        .expect("seed resource row");
+    }
+
+    let removed = db::delete_project_resources(&db_path, "doomed").expect("delete");
+    assert_eq!(removed, 2, "the reported row count is not what was deleted");
+
+    let reopened = open_conn(&db_path).expect("reopen");
+    let remaining: Vec<String> = {
+        let mut statement = reopened
+            .prepare("SELECT project || '/' || name FROM resources ORDER BY name")
+            .expect("prepare");
+        statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .expect("query")
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .expect("collect")
+    };
+    assert_eq!(
+        remaining,
+        vec!["kept/c".to_string()],
+        "deleting one project's resources did not leave the other project's alone"
+    );
+
+    let again = db::delete_project_resources(&db_path, "doomed").expect("delete again");
+    assert_eq!(
+        again, 0,
+        "a second delete reported rows it could not have removed"
+    );
+}
+
 /// The negative half. Every assertion above runs against a bootstrapped
 /// database, so all of them would also pass if `PersistenceBootstrap` were the
 /// only thing still working. Against a database that never ran the chain, the
