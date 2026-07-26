@@ -87,7 +87,7 @@ if [ "${#CORE_SCAN_DIRS[@]}" -gt 0 ] && have_rg; then
   # We extract a best-effort list of (METHOD, PATH) with file:line context.
   rg -n --no-heading --pcre2 \
     '\.route\(\s*"([^"]+)"\s*,\s*(?:routing::)?(get|post|put|delete|patch|head|options)\b' \
-    "${CORE_SCAN_DIRS[@]}" -g'*.rs' \
+    ${CORE_SCAN_DIRS[@]+"${CORE_SCAN_DIRS[@]}"} -g'*.rs' \
     --replace '$2 $1' \
     >>"$HTTP_OUT" || true
 
@@ -95,7 +95,7 @@ if [ "${#CORE_SCAN_DIRS[@]}" -gt 0 ] && have_rg; then
   # We capture the chained `.method(...)` segments.
   rg -n --no-heading --pcre2 \
     '\.route\(\s*"([^"]+)"\s*,[^;]*\.\s*(get|post|put|delete|patch|head|options)\b' \
-    "${CORE_SCAN_DIRS[@]}" -g'*.rs' \
+    ${CORE_SCAN_DIRS[@]+"${CORE_SCAN_DIRS[@]}"} -g'*.rs' \
     --replace '$2 $1' \
     >>"$HTTP_OUT" || true
 
@@ -105,7 +105,7 @@ if [ "${#CORE_SCAN_DIRS[@]}" -gt 0 ] && have_rg; then
     echo "# prefix hints (nest/route_prefix style, best-effort)"
     rg -n --no-heading --pcre2 \
       '\.(nest|route_layer|layer)\(\s*"([^"]+)"' \
-      "${CORE_SCAN_DIRS[@]}" -g'*.rs' \
+      ${CORE_SCAN_DIRS[@]+"${CORE_SCAN_DIRS[@]}"} -g'*.rs' \
       --replace '$1 $2' || true
   } >>"$HTTP_OUT"
 
@@ -119,12 +119,19 @@ fi
 echo "==> extracting OpenAPI paths (JSON only, if present)..."
 if have_rg; then
   # Find likely openapi specs; parse JSON specs for /paths.
-  mapfile -t OPENAPI_JSON < <(rg --files -g'openapi*.json' -g'swagger*.json' -g'*openapi*.json' -g'*swagger*.json' . 2>/dev/null || true)
+  # Read loops rather than `mapfile`: bash 3.2 is the only bash macOS ships and
+  # it has no `mapfile` builtin at all.
+  OPENAPI_JSON=()
+  while IFS= read -r line; do OPENAPI_JSON+=("$line"); done \
+    < <(rg --files -g'openapi*.json' -g'swagger*.json' -g'*openapi*.json' -g'*swagger*.json' . 2>/dev/null || true)
   if [ "${#OPENAPI_JSON[@]}" -gt 0 ]; then
-    mapfile -t OPENAPI_JSON < <(printf "%s\n" "${OPENAPI_JSON[@]}" | sed -E 's|^\./||' | sort -u)
+    OPENAPI_SORTED=()
+    while IFS= read -r line; do OPENAPI_SORTED+=("$line"); done \
+      < <(printf "%s\n" ${OPENAPI_JSON[@]+"${OPENAPI_JSON[@]}"} | sed -E 's|^\./||' | sort -u)
+    OPENAPI_JSON=(${OPENAPI_SORTED[@]+"${OPENAPI_SORTED[@]}"})
   fi
   if [ "${#OPENAPI_JSON[@]}" -gt 0 ]; then
-    for f in "${OPENAPI_JSON[@]}"; do
+    for f in ${OPENAPI_JSON[@]+"${OPENAPI_JSON[@]}"}; do
       echo "# file: $f" >>"$OPENAPI_OUT"
       python3 - "$f" >>"$OPENAPI_OUT" <<'PY'
 import json, sys
@@ -146,12 +153,17 @@ fi
 
 echo "==> extracting gRPC services/methods from .proto..."
 if have_rg; then
-  mapfile -t PROTOS < <(rg --files -g'*.proto' "${CORE_SCAN_DIRS[@]}" proto . 2>/dev/null || true)
+  PROTOS=()
+  while IFS= read -r line; do PROTOS+=("$line"); done \
+    < <(rg --files -g'*.proto' ${CORE_SCAN_DIRS[@]+"${CORE_SCAN_DIRS[@]}"} proto . 2>/dev/null || true)
   if [ "${#PROTOS[@]}" -gt 0 ]; then
-    mapfile -t PROTOS < <(printf "%s\n" "${PROTOS[@]}" | sed -E 's|^\./||' | sort -u)
+    PROTOS_SORTED=()
+    while IFS= read -r line; do PROTOS_SORTED+=("$line"); done \
+      < <(printf "%s\n" ${PROTOS[@]+"${PROTOS[@]}"} | sed -E 's|^\./||' | sort -u)
+    PROTOS=(${PROTOS_SORTED[@]+"${PROTOS_SORTED[@]}"})
   fi
   if [ "${#PROTOS[@]}" -gt 0 ]; then
-    for p in "${PROTOS[@]}"; do
+    for p in ${PROTOS[@]+"${PROTOS[@]}"}; do
       echo "# file: $p" >>"$GRPC_OUT"
       rg -n --no-heading '^\s*package\s+|^\s*service\s+|^\s*rpc\s+' "$p" \
         | sed -E 's/\r$//' \
@@ -165,7 +177,7 @@ echo "==> extracting UI routes (React Router heuristics)..."
 if [ "${#PORTAL_SCAN_DIRS[@]}" -gt 0 ] && have_rg; then
   # React Router v7 file-based routing (flatRoutes from @react-router/fs-routes).
   # Example filename: dashboard.settings.email-templates.$type.tsx => /dashboard/settings/email-templates/:type
-  for d in "${PORTAL_SCAN_DIRS[@]}"; do
+  for d in ${PORTAL_SCAN_DIRS[@]+"${PORTAL_SCAN_DIRS[@]}"}; do
     routes_dir="$d/app/routes"
     if [ -d "$routes_dir" ]; then
       find "$routes_dir" -maxdepth 1 -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' \) -print0 \
@@ -202,14 +214,14 @@ if [ "${#PORTAL_SCAN_DIRS[@]}" -gt 0 ] && have_rg; then
   # - JSX routes: <Route path="/x" ... />
   rg --no-heading --no-filename --pcre2 \
     '\bpath\b\s*:\s*"([^"]+)"' \
-    "${PORTAL_SCAN_DIRS[@]}" -g'*.{ts,tsx,js,jsx}' \
+    ${PORTAL_SCAN_DIRS[@]+"${PORTAL_SCAN_DIRS[@]}"} -g'*.{ts,tsx,js,jsx}' \
     --glob='!**/tests/**' --glob='!**/__tests__/**' --glob='!**/*.test.*' \
     --replace '$1' \
     >>"$UI_OUT" || true
 
   rg --no-heading --no-filename --pcre2 \
     '\<Route[^>]*\bpath\s*=\s*"([^"]+)"' \
-    "${PORTAL_SCAN_DIRS[@]}" -g'*.{ts,tsx,js,jsx}' \
+    ${PORTAL_SCAN_DIRS[@]+"${PORTAL_SCAN_DIRS[@]}"} -g'*.{ts,tsx,js,jsx}' \
     --glob='!**/tests/**' --glob='!**/__tests__/**' --glob='!**/*.test.*' \
     --replace '$1' \
     >>"$UI_OUT" || true

@@ -558,7 +558,7 @@ check_workspace_scope() {
     local line
     while IFS= read -r line; do
       [[ -z "$line" ]] && continue
-      for exclude in "${excludes[@]}"; do
+      for exclude in ${excludes[@]+"${excludes[@]}"}; do
         if [[ "$line" != *"--exclude $exclude"* ]]; then
           echo "    $path: runs the workspace without --exclude $exclude and declares no reason:" >&2
           echo "      $(echo "$line" | sed 's/^[[:space:]]*//')" >&2

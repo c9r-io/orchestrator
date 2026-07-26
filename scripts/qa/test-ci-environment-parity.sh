@@ -75,13 +75,13 @@ CI_VARS=(CI CONTINUOUS_INTEGRATION GITHUB_ACTIONS GITLAB_CI BUILDKITE CIRCLECI
 clear_ci_env() {
   local unsets=() name
   for name in "${CI_VARS[@]}"; do unsets+=(-u "$name"); done
-  env "${unsets[@]}" "$@"
+  env ${unsets[@]+"${unsets[@]}"} "$@"
 }
 
 set_ci_env() {
   local unsets=() name
   for name in "${CI_VARS[@]}"; do unsets+=(-u "$name"); done
-  env "${unsets[@]}" CI=1 GITHUB_ACTIONS=true "$@"
+  env ${unsets[@]+"${unsets[@]}"} CI=1 GITHUB_ACTIONS=true "$@"
 }
 
 # The gates to compare: ci-required, on disk, and not paying for a workspace
@@ -119,9 +119,9 @@ compare_environments() {
   [[ "$path" == *.sh ]] && interpreter=(bash)
 
   local without with
-  clear_ci_env "${interpreter[@]}" "$root/$path" \
+  clear_ci_env ${interpreter[@]+"${interpreter[@]}"} "$root/$path" \
     > "$WORK/without.log" 2>&1 && without=0 || without=$?
-  set_ci_env "${interpreter[@]}" "$root/$path" \
+  set_ci_env ${interpreter[@]+"${interpreter[@]}"} "$root/$path" \
     > "$WORK/with.log" 2>&1 && with=0 || with=$?
 
   if [[ "$without" -eq "$with" ]]; then

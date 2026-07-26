@@ -50,7 +50,7 @@ filter_allowed() {
   local allowed=("$@")
   local filtered="$matches"
 
-  for file in "${allowed[@]}"; do
+  for file in ${allowed[@]+"${allowed[@]}"}; do
     filtered="$(printf '%s\n' "$filtered" | grep -v "^${file}:" || true)"
   done
 

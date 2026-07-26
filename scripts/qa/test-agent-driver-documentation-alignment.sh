@@ -44,7 +44,7 @@ while IFS= read -r doc; do
 done < <(git ls-files '*.md' | grep -Ev "$EXEMPT_PATTERN")
 [[ ${#ALIGNMENT_TARGETS[@]} -gt 0 ]] || fail "no Markdown surfaces resolved for alignment scan"
 
-if rg -n -i "$STALE_PATTERN" "${ALIGNMENT_TARGETS[@]}"; then
+if rg -n -i "$STALE_PATTERN" ${ALIGNMENT_TARGETS[@]+"${ALIGNMENT_TARGETS[@]}"}; then
   fail "retired runner or command-only authoring guidance remains"
 fi
 pass "retired runner and command-only authoring phrases are absent from every tracked Markdown surface"

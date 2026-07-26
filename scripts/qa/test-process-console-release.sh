@@ -49,7 +49,7 @@ run_gate() {
     elapsed=$(( $(date +%s) - started ))
     COMPLETED+=("FAIL $name owner=$owner duration=${elapsed}s")
     echo "<== [$name] FAIL owner=$owner duration=${elapsed}s command=$*" >&2
-    printf '%s\n' "${COMPLETED[@]}" >&2
+    printf '%s\n' ${COMPLETED[@]+"${COMPLETED[@]}"} >&2
     return 1
   fi
 }
@@ -74,4 +74,4 @@ run_gate process-metrics FR-104 ./scripts/qa/test-process-console-metrics.sh
 TOTAL_ELAPSED=$(( $(date +%s) - STARTED_AT ))
 echo ""
 echo "Process Console v1 release QA: ${#COMPLETED[@]} gates passed in ${TOTAL_ELAPSED}s"
-printf '  %s\n' "${COMPLETED[@]}"
+printf '  %s\n' ${COMPLETED[@]+"${COMPLETED[@]}"}

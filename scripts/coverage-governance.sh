@@ -36,8 +36,8 @@ fi
 
 echo "[coverage] collecting instrumented Rust tests"
 cargo llvm-cov --workspace --all-targets --all-features \
-  "${branch_args[@]}" --json --output-path "$OUTPUT_DIR/rust.json"
-cargo llvm-cov report "${branch_args[@]}" --lcov --output-path "$OUTPUT_DIR/rust.lcov"
+  ${branch_args[@]+"${branch_args[@]}"} --json --output-path "$OUTPUT_DIR/rust.json"
+cargo llvm-cov report ${branch_args[@]+"${branch_args[@]}"} --lcov --output-path "$OUTPUT_DIR/rust.lcov"
 
 if [[ "$SKIP_FRONTEND" == "1" ]]; then
   if [[ ! -f "$OUTPUT_DIR/frontend.json" ]]; then

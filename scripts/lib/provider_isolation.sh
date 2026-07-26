@@ -33,7 +33,7 @@ assert_provider_shadow() {
   fi
 
   local provider resolved rc=0
-  for provider in "${providers[@]}"; do
+  for provider in ${providers[@]+"${providers[@]}"}; do
     resolved="$(command -v "$provider" 2>/dev/null || true)"
     if [[ -z "$resolved" ]]; then
       continue

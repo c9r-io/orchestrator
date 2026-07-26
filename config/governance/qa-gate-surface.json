@@ -251,6 +251,31 @@
       "note": "mutates copies of docs/design_doc, docs/qa and docs/security under a temporary directory; it starts no daemon, compiles nothing, and never writes the working tree, so no provider binary is reachable."
     },
     {
+      "path": "scripts/qa/bash32-compat.rb",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "coverage-policy-fixtures",
+      "invokedBy": "scripts/qa/test-bash32-compat.sh",
+      "providerIsolation": { "mode": "no-provider" },
+      "note": "scans every tracked shell file for constructs bash 3.2 rejects; case 1 of its wrapper runs it against the working tree, so the wrapper's CI step is what fails the build when a new hazard lands."
+    },
+    {
+      "path": "scripts/qa/test-bash32-compat.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "coverage-policy-fixtures",
+      "providerIsolation": { "mode": "no-provider" },
+      "note": "hosted on the fixtures job because its macOS leg is the only place in CI where /bin/bash is 3.2; BASH_COMPAT cannot restore those semantics, so the ubuntu leg reports its executed half as skipped. Writes fixtures under a temporary directory only."
+    },
+    {
+      "path": "scripts/qa/test-coverage-governance-mainpath.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "coverage-policy-fixtures",
+      "providerIsolation": { "mode": "no-provider" },
+      "note": "runs scripts/coverage-governance.sh with cargo, node, npm, npx, rustc and rg shadowed by stubs under a temporary directory, so the shell main path the boundary-coverage job depends on is exercised without collecting coverage."
+    },
+    {
       "path": "scripts/qa/test-coordination-strangler.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",

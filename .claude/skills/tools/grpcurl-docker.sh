@@ -127,6 +127,6 @@ fi
 # shellcheck disable=SC2086
 exec docker run --rm \
   --network "$NETWORK" \
-  "${MOUNT_ARGS[@]}" \
+  ${MOUNT_ARGS[@]+"${MOUNT_ARGS[@]}"} \
   "$GRPC_IMAGE" \
   "$@"

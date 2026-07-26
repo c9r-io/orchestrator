@@ -61,7 +61,7 @@ echo "==> extracting UI routes (heuristics)..."
 if [ "${#PORTAL_SCAN_DIRS[@]}" -gt 0 ] && have_rg; then
   # React Router v7 file-based routing (flatRoutes from @react-router/fs-routes).
   # Example filename: dashboard.settings.email-templates.$type.tsx => /dashboard/settings/email-templates/:type
-  for d in "${PORTAL_SCAN_DIRS[@]}"; do
+  for d in ${PORTAL_SCAN_DIRS[@]+"${PORTAL_SCAN_DIRS[@]}"}; do
     routes_dir="$d/app/routes"
     if [ -d "$routes_dir" ]; then
       find "$routes_dir" -maxdepth 1 -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' \) -print0 \
@@ -98,14 +98,14 @@ if [ "${#PORTAL_SCAN_DIRS[@]}" -gt 0 ] && have_rg; then
   # - JSX routes: <Route path="/x" ... />
   rg --no-heading --no-filename --pcre2 \
     '\bpath\b\s*:\s*"([^"]+)"' \
-    "${PORTAL_SCAN_DIRS[@]}" -g'*.{ts,tsx,js,jsx}' \
+    ${PORTAL_SCAN_DIRS[@]+"${PORTAL_SCAN_DIRS[@]}"} -g'*.{ts,tsx,js,jsx}' \
     --glob='!**/tests/**' --glob='!**/__tests__/**' --glob='!**/*.test.*' \
     --replace '$1' \
     >>"$UI_ROUTES_OUT" || true
 
   rg --no-heading --no-filename --pcre2 \
     '\<Route[^>]*\bpath\s*=\s*"([^"]+)"' \
-    "${PORTAL_SCAN_DIRS[@]}" -g'*.{ts,tsx,js,jsx}' \
+    ${PORTAL_SCAN_DIRS[@]+"${PORTAL_SCAN_DIRS[@]}"} -g'*.{ts,tsx,js,jsx}' \
     --glob='!**/tests/**' --glob='!**/__tests__/**' --glob='!**/*.test.*' \
     --replace '$1' \
     >>"$UI_ROUTES_OUT" || true
@@ -120,10 +120,10 @@ echo "==> extracting theme hints..."
 if [ "${#PORTAL_SCAN_DIRS[@]}" -gt 0 ] && have_rg; then
   {
     echo "# data-theme usage"
-    rg -n --no-heading --pcre2 'data-theme|dataset\.theme|setAttribute\\(\\s*[\"\\x27]data-theme' "${PORTAL_SCAN_DIRS[@]}" -S -g'*.{ts,tsx,js,jsx,html,css}' || true
+    rg -n --no-heading --pcre2 'data-theme|dataset\.theme|setAttribute\\(\\s*[\"\\x27]data-theme' ${PORTAL_SCAN_DIRS[@]+"${PORTAL_SCAN_DIRS[@]}"} -S -g'*.{ts,tsx,js,jsx,html,css}' || true
     echo
     echo "# localStorage theme key usage"
-    rg -n --no-heading --pcre2 'localStorage\\.(getItem|setItem)\\(\\s*[\"\\x27]theme[\"\\x27]' "${PORTAL_SCAN_DIRS[@]}" -S -g'*.{ts,tsx,js,jsx}' || true
+    rg -n --no-heading --pcre2 'localStorage\\.(getItem|setItem)\\(\\s*[\"\\x27]theme[\"\\x27]' ${PORTAL_SCAN_DIRS[@]+"${PORTAL_SCAN_DIRS[@]}"} -S -g'*.{ts,tsx,js,jsx}' || true
   } >>"$THEME_HINTS_OUT"
 fi
 

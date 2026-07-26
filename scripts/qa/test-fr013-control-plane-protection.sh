@@ -112,7 +112,7 @@ run_parallel() {
     ("$@" || true) &
     pids+=("$!")
   done
-  for pid in "${pids[@]}"; do
+  for pid in ${pids[@]+"${pids[@]}"}; do
     wait "$pid" || true
   done
 }

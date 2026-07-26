@@ -53,7 +53,7 @@ run_gate() {
     COMPLETED+=("FAIL $name owner=$owner duration=${elapsed}s log=$log_file")
     FAILED=1
     echo "<== [$name] FAIL owner=$owner duration=${elapsed}s log=$log_file" >&2
-    printf '  %s\n' "${COMPLETED[@]}" >&2
+    printf '  %s\n' ${COMPLETED[@]+"${COMPLETED[@]}"} >&2
     return 1
   fi
 }
@@ -105,4 +105,4 @@ COMPLETED+=("PASS diagnostic-privacy owner=FR-113 duration=0s")
 TOTAL_ELAPSED=$(( $(date +%s) - STARTED_AT ))
 echo ""
 echo "Slack Reaction Skill Automation release QA: ${#COMPLETED[@]} gates passed in ${TOTAL_ELAPSED}s"
-printf '  %s\n' "${COMPLETED[@]}"
+printf '  %s\n' ${COMPLETED[@]+"${COMPLETED[@]}"}

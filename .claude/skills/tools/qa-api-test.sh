@@ -37,11 +37,11 @@ fi
 if [ -n "$BODY" ]; then
   # Force IPv4 to avoid occasional IPv6 localhost connection issues in sandboxed envs.
   curl -4 -s -X "$METHOD" "${API_BASE_URL}${PATH_PART}" \
-    "${AUTH_HEADER[@]}" \
+    ${AUTH_HEADER[@]+"${AUTH_HEADER[@]}"} \
     -H "Content-Type: application/json" \
     -d "$BODY"
 else
   # Force IPv4 to avoid occasional IPv6 localhost connection issues in sandboxed envs.
   curl -4 -s -X "$METHOD" "${API_BASE_URL}${PATH_PART}" \
-    "${AUTH_HEADER[@]}"
+    ${AUTH_HEADER[@]+"${AUTH_HEADER[@]}"}
 fi

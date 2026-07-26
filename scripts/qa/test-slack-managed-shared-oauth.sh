@@ -51,7 +51,7 @@ run_gate() {
     elapsed=$(( $(date +%s) - started ))
     COMPLETED+=("FAIL $name owner=$owner duration=${elapsed}s log=$log_file")
     FAILED=1
-    printf '  %s\n' "${COMPLETED[@]}" >&2
+    printf '  %s\n' ${COMPLETED[@]+"${COMPLETED[@]}"} >&2
     return 1
   fi
 }
@@ -108,4 +108,4 @@ COMPLETED+=("PASS diagnostic-privacy owner=FR-114 duration=0s")
 TOTAL_ELAPSED=$(( $(date +%s) - STARTED_AT ))
 echo ""
 echo "Managed Slack shared OAuth QA: ${#COMPLETED[@]} gates passed in ${TOTAL_ELAPSED}s"
-printf '  %s\n' "${COMPLETED[@]}"
+printf '  %s\n' ${COMPLETED[@]+"${COMPLETED[@]}"}

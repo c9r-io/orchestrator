@@ -360,7 +360,7 @@ jobs:
         run: ./scripts/qa/test-ci-environment-parity.sh --fixture-test
 
   coverage-policy-fixtures:
-    name: Coverage policy fixtures (${{ matrix.os }})
+    name: Coverage policy fixtures and shell compatibility (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -377,8 +377,26 @@ jobs:
         with:
           node-version: 22
 
+      # macOS ships ruby at /usr/bin/ruby on every image, so only the Linux leg
+      # needs this. Both gates below check for it themselves and exit with a
+      # named diagnostic rather than a stack trace if it is ever absent.
+      - name: Install ruby (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ruby
+
       - name: Verify baseline, unsupported branch, and path fixtures
         run: ./scripts/coverage-governance.sh --fixture-test
+
+      # These two belong on this job because it is the only fast one with a
+      # macOS leg, and macOS is the only place bash 3.2 exists. The heavy
+      # boundary-coverage job used to be the sole exercise of the shell main
+      # path, so a defect on its first line took six runs and a manual read of
+      # the logs to notice.
+      - name: Verify bash 3.2 compatibility
+        run: ./scripts/qa/test-bash32-compat.sh
+
+      - name: Verify the coverage governance main path
+        run: ./scripts/qa/test-coverage-governance-mainpath.sh
 
   slack-certification-recorded:
     name: Slack certification recorded contracts (${{ matrix.os }})
@@ -451,13 +469,19 @@ jobs:
       - name: Generate and enforce boundary coverage
         run: ./scripts/coverage-governance.sh
 
+      # `always()` is kept so the artifacts survive a coverage regression, which
+      # is when they are most worth reading. `if-no-files-found` is `warn` and
+      # not `error` because the combination made this step the only ##[error] in
+      # the summary whenever generation failed: the reader saw "no files were
+      # found" and not the generation error one step above it. The generation
+      # step fails the job on its own; this step has no failure to add.
       - name: Upload auditable coverage artifacts
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: boundary-coverage-${{ runner.os }}-${{ runner.arch }}
           path: target/coverage-governance/
-          if-no-files-found: error
+          if-no-files-found: warn
 
   miri:
     name: Miri unsafe validation

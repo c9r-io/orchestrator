@@ -151,33 +151,40 @@ create_and_wait() {
 
 DB="$QA_ROOT/data/agent_orchestrator.db"
 declare -a CASES=(command qa plan fullqa bootstrap promotion evolution)
-declare -A PRODUCTION=(
-  [command]="command_rules"
-  [qa]="qa_loop"
-  [plan]="plan_execute"
-  [fullqa]="full-qa"
-  [bootstrap]="self-bootstrap"
-  [promotion]="promotion"
-  [evolution]="self-evolution"
-)
+# A `case` lookup rather than `declare -A`: bash 3.2 has no associative arrays,
+# and this repository runs its shell gates on macOS runners where 3.2 is the
+# only bash present. Same mapping, same call sites.
+production_workflow() {
+  case "$1" in
+    command) echo "command_rules" ;;
+    qa) echo "qa_loop" ;;
+    plan) echo "plan_execute" ;;
+    fullqa) echo "full-qa" ;;
+    bootstrap) echo "self-bootstrap" ;;
+    promotion) echo "promotion" ;;
+    evolution) echo "self-evolution" ;;
+    *) echo "unknown case: $1" >&2; return 1 ;;
+  esac
+}
 EVIDENCE='[]'
 for name in "${CASES[@]}"; do
+  workflow="$(production_workflow "$name")"
   tools="$(create_and_wait "parity-${name}-tools")"
   tools_id="${tools%%|*}"
   tools_status="${tools##*|}"
   if [[ "$tools_status" == "completed" ]]; then
-    pass "${PRODUCTION[$name]} post-retirement tool workflow completed"
+    pass "$workflow post-retirement tool workflow completed"
   else
-    fail "${PRODUCTION[$name]} tool workflow ended as $tools_status"
+    fail "$workflow tool workflow ended as $tools_status"
   fi
   tool_events="$(sqlite3 "$DB" "SELECT COUNT(*) FROM events WHERE task_id='$tools_id' AND event_type IN ('driver_tool_use','driver_tool_result','coordination_tool_started','coordination_tool_completed');")"
   if [[ "$name" == "command" || "$tool_events" -ge 4 ]]; then
-    pass "${PRODUCTION[$name]} has typed event evidence"
+    pass "$workflow has typed event evidence"
   else
-    fail "${PRODUCTION[$name]} lacks complete typed event evidence"
+    fail "$workflow lacks complete typed event evidence"
   fi
   EVIDENCE="$(jq -c \
-    --arg workflow "${PRODUCTION[$name]}" \
+    --arg workflow "$workflow" \
     --arg tool_task "$tools_id" \
     --arg terminal "$tools_status" \
     --argjson tool_events "$tool_events" \

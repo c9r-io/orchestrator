@@ -318,7 +318,7 @@ for index in 1 2 3 4; do
   post_reaction "Ev-release-duplicate-$index" agent-implement "$DUPLICATE_TS" "$QA_ROOT/duplicate-$index" &
   POST_PIDS+=("$!")
 done
-for post_pid in "${POST_PIDS[@]}"; do
+for post_pid in ${POST_PIDS[@]+"${POST_PIDS[@]}"}; do
   wait "$post_pid" || fail "concurrent duplicate delivery process failed"
 done
 for index in 1 2 3 4; do
