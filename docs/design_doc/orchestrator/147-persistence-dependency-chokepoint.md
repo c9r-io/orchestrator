@@ -155,8 +155,15 @@ decrease is the migration finishing — the one event this ledger exists to reco
 `forbidden` is the only role whose current and target states differ. Scheduler and
 daemon declare the driver today; the ledger records `residualDeclaration: true`
 and the per-file residual, so the declaration is tolerated while it is paid down
-and condition 2 stops it growing. When FR-130 Phase A finishes, the flag comes
-off and the declaration itself starts failing.
+and condition 2 stops it growing. The flag comes off when the residual reaches
+zero, and the declaration itself then starts failing.
+
+FR-130 Phase A did **not** reach that point, and this paragraph used to say it
+would ("when FR-130 Phase A finishes, the flag comes off"). Phase A moved the
+layer; it did not migrate the callers above it. Scheduler and daemon still hold
+17 and 22 driver references, because they borrow a connection and write SQL in
+place — which is Phase B's work, not Phase A's. The trigger is the residual
+reaching zero, not a phase completing.
 
 ### Requirement 1 stated as an assertion
 
@@ -169,16 +176,22 @@ FR-136 also summed the categorised references and required the total to equal
 the scanned total. That branch could not fail — see [Corrections](#corrections-fr-139)
 — and FR-139 removed it.
 
-The four categories are what the code shows, not the four FR-136 proposed. "Pure
+The categories are what the code shows, not the four FR-136 proposed. "Pure
 data access" and "type penetration" are not disjoint in this codebase, and "test
 assertion" is outside the production scan by construction:
 
 | Category | Files | Meaning |
 |---|---|---|
+| `persistence-layer` | 18 | is the layer, rather than a consumer of it |
 | `borrowed-connection-raw-sql` | 9 | takes core's `AsyncDatabase` connection and writes SQL in place |
-| `driver-error-type` | 2 | names only `tokio_rusqlite::Error::Other` |
 | `owned-connection` | 5 | opens its own `Connection` |
+| `driver-error-type` | 2 | names only `tokio_rusqlite::Error::Other` |
 | `transaction-boundary` | **0** | explicit caller-controlled transaction scope |
+
+`persistence-layer` is FR-130's, added when Phase A made `crates/orchestrator-persistence` a
+scanned member. Every other category describes a relationship *to* the layer; a fifth was
+needed because the layer itself now appears in a scan whose scope is "outside core", and
+classifying it as any of the four would have described the decision as a residual.
 
 ## Requirement 4: there were no transactions to draft for
 

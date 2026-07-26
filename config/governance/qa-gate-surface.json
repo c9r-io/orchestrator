@@ -56,7 +56,7 @@
       "shasum",
       "stat"
     ],
-    "runnerBaselineReason": "Present on both ubuntu-latest and macos-latest runner images. This is the one input that cannot be derived from the repository, so it is declared — and deliberately minimal: anything a job could plausibly need to install is left out, which makes the check strict rather than permissive. ripgrep is absent from both images and is exactly what this list must not paper over.",
+    "runnerBaselineReason": "Present on both ubuntu-latest and macos-latest runner images. This is the one input that cannot be derived from the repository, so it is declared \u2014 and deliberately minimal: anything a job could plausibly need to install is left out, which makes the check strict rather than permissive. ripgrep is absent from both images and is exactly what this list must not paper over.",
     "packages": {
       "jq": [
         "jq"
@@ -107,7 +107,7 @@
   },
   "providerStubs": {
     "action": "./.github/actions/provider-stubs",
-    "description": "Installs claude and codex stubs that exit 97. Required in every job that runs a ci-required gate whose provider isolation is anything other than no-provider, so that isolation is never the single barrier. FR-127 installed them inline in the governance job only, which left the coordination-strangler job — whose gate rests entirely on fixture pinning — with no second line at all.",
+    "description": "Installs claude and codex stubs that exit 97. Required in every job that runs a ci-required gate whose provider isolation is anything other than no-provider, so that isolation is never the single barrier. FR-127 installed them inline in the governance job only, which left the coordination-strangler job \u2014 whose gate rests entirely on fixture pinning \u2014 with no second line at all.",
     "exemptJobs": [
       {
         "job": "slack-certification-recorded",
@@ -127,7 +127,9 @@
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "slack-certification-recorded",
-      "providerIsolation": { "mode": "no-provider" },
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
       "note": "Only the read-only `status` subcommand runs in CI; it reads recorded evidence and loads no secrets. The live certification subcommands consume real Slack credentials and are human-invoked per docs/qa/orchestrator/173-slack-sandbox-continuous-certification.md."
     },
     {
@@ -136,7 +138,9 @@
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
       "invokedBy": "scripts/qa/test-coordination-governance.sh",
-      "providerIsolation": { "mode": "no-provider" }
+      "providerIsolation": {
+        "mode": "no-provider"
+      }
     },
     {
       "path": "scripts/qa/test-agent-driver-abstraction.sh",
@@ -150,23 +154,29 @@
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
       "invokedBy": "scripts/qa-doc-lint.sh",
-      "providerIsolation": { "mode": "no-provider" }
+      "providerIsolation": {
+        "mode": "no-provider"
+      }
     },
     {
       "path": "scripts/qa/test-agent-driver-execution-migration.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
-      "providerIsolation": { "mode": "no-provider" },
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
       "note": "Run with FR126_FAST=1 in CI. The repository-wide gates that the default mode re-runs (fmt, clippy, workspace tests, coordination strangler, coverage fixtures, qa-doc-lint) all execute as sibling jobs in the same workflow, so the certifying aggregate is the workflow, not this single invocation.",
-      "workspaceScopeReason": "The unexcluded `cargo test --workspace` sits behind `FR126_FAST != 1`, and ci.yml runs this gate with FR126_FAST=1, so CI never reaches it. It runs in the local release aggregate on macOS, where the Tauri frameworks are system libraries — and that is currently the only place orchestrator-gui is compiled at all, since the sibling test and clippy jobs exclude it and no job installs its dependencies. Excluding it here to match them would delete the crate's last coverage rather than align anything. FR-076 requirement 1 owns building it in CI."
+      "workspaceScopeReason": "The unexcluded `cargo test --workspace` sits behind `FR126_FAST != 1`, and ci.yml runs this gate with FR126_FAST=1, so CI never reaches it. It runs in the local release aggregate on macOS, where the Tauri frameworks are system libraries \u2014 and that is currently the only place orchestrator-gui is compiled at all, since the sibling test and clippy jobs exclude it and no job installs its dependencies. Excluding it here to match them would delete the crate's last coverage rather than align anything. FR-076 requirement 1 owns building it in CI."
     },
     {
       "path": "scripts/qa/test-agent-driver-production-parity.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
-      "providerIsolation": { "mode": "path-shadow" },
+      "providerIsolation": {
+        "mode": "path-shadow"
+      },
       "note": "fixtures/manifests/bundles/agent-driver-production-parity.yaml declares provider: claude without a binary override, so isolation rests entirely on the PATH shadow. Removing that shadow must fail the surface gate."
     },
     {
@@ -186,7 +196,9 @@
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
-      "providerIsolation": { "mode": "no-provider" },
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
       "note": "Asserts against the recorded fixtures/driver/codex-cli-0.144.5-resume.json transcript; it never invokes the real codex CLI. The live counterpart is certify-codex-session-resume.sh."
     },
     {
@@ -206,14 +218,18 @@
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
-      "providerIsolation": { "mode": "no-provider" }
+      "providerIsolation": {
+        "mode": "no-provider"
+      }
     },
     {
       "path": "scripts/qa/test-governance-ledger-tooling.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
-      "providerIsolation": { "mode": "no-provider" },
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
       "note": "builds throwaway git repositories from the tracked files so that `git show HEAD:` resolves to the state under test; never writes to the working tree."
     },
     {
@@ -222,7 +238,9 @@
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
       "invokedBy": "scripts/qa/test-core-boundary.sh",
-      "providerIsolation": { "mode": "no-provider" },
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
       "note": "the core crate boundary ratchet; case 1 of its wrapper runs it against the working tree, so the wrapper's CI step is what fails the build when core grows."
     },
     {
@@ -230,7 +248,9 @@
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
-      "providerIsolation": { "mode": "no-provider" },
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
       "note": "mutates copies of core/src under a temporary directory; the only compilation is the workspace's own cargo test, and the working tree is never written."
     },
     {
@@ -239,7 +259,9 @@
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
       "invokedBy": "scripts/qa/test-persistence-dependency.sh",
-      "providerIsolation": { "mode": "no-provider" },
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
       "note": "the FR-136 persistence chokepoint rule; case 1 of its wrapper runs it against the working tree, so the wrapper's CI step is what fails the build when a crate reaches for the SQLite driver or a frozen residual moves."
     },
     {
@@ -247,8 +269,20 @@
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
-      "providerIsolation": { "mode": "no-provider" },
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
       "note": "mutates copies of the member manifests and sources under a temporary directory; nothing is compiled, no database is opened, and the working tree is never written."
+    },
+    {
+      "path": "scripts/qa/test-persistence-extraction.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "compiles a git-archive copy of the tracked tree under a temporary directory with core's dependency commented out, and runs cargo tests whose only databases are tempfile::tempdir() files. The working tree is read-only to it apart from that copy, and no daemon is started."
     },
     {
       "path": "scripts/qa/doc-lifecycle.rb",
@@ -256,7 +290,9 @@
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
       "invokedBy": "scripts/qa/test-doc-lifecycle.sh",
-      "providerIsolation": { "mode": "no-provider" },
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
       "note": "the DD/QA lifecycle metadata gate and reverse-index generator; case 1 of its wrapper runs it against the working tree, so the wrapper's CI step is what fails the build when a document arrives unclassified or the index goes stale."
     },
     {
@@ -264,7 +300,9 @@
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
-      "providerIsolation": { "mode": "no-provider" },
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
       "note": "mutates copies of docs/design_doc, docs/qa and docs/security under a temporary directory; it starts no daemon, compiles nothing, and never writes the working tree, so no provider binary is reachable."
     },
     {
@@ -273,7 +311,9 @@
       "workflow": ".github/workflows/ci.yml",
       "job": "coverage-policy-fixtures",
       "invokedBy": "scripts/qa/test-bash32-compat.sh",
-      "providerIsolation": { "mode": "no-provider" },
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
       "note": "scans every tracked shell file for constructs bash 3.2 rejects; case 1 of its wrapper runs it against the working tree, so the wrapper's CI step is what fails the build when a new hazard lands."
     },
     {
@@ -281,7 +321,9 @@
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "coverage-policy-fixtures",
-      "providerIsolation": { "mode": "no-provider" },
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
       "note": "hosted on the fixtures job because its macOS leg is the only place in CI where /bin/bash is 3.2; BASH_COMPAT cannot restore those semantics, so the ubuntu leg reports its executed half as skipped. Writes fixtures under a temporary directory only."
     },
     {
@@ -289,7 +331,9 @@
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "coverage-policy-fixtures",
-      "providerIsolation": { "mode": "no-provider" },
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
       "note": "runs scripts/coverage-governance.sh with cargo, node, npm, npx, rustc and rg shadowed by stubs under a temporary directory, so the shell main path the boundary-coverage job depends on is exercised without collecting coverage."
     },
     {
@@ -307,7 +351,9 @@
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
-      "providerIsolation": { "mode": "no-provider" },
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
       "note": "Reads docs/guide, docs/showcases and site/.vitepress/config.ts, and runs scripts/sync-docs.mjs into a $TMPDIR destination so the working tree is never written. It starts no daemon and applies no manifest bundle, so no provider binary is reachable. It also runs in the docs.yml deploy job before the site build. Contract in config/governance/docs-publishing.json."
     },
     {
@@ -321,7 +367,9 @@
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
-      "providerIsolation": { "mode": "no-provider" },
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
       "note": "Scenarios 1-2 re-run cargo test --workspace and strict clippy, duplicating the sibling test and clippy jobs; the remaining scenarios are static structure assertions over crates/daemon/src/fs_watcher.rs. The duplication is accepted because the governance job already builds the workspace and shares the Rust cache."
     },
     {
@@ -353,14 +401,18 @@
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
-      "providerIsolation": { "mode": "no-provider" }
+      "providerIsolation": {
+        "mode": "no-provider"
+      }
     },
     {
       "path": "scripts/qa/test-markdown-link-integrity.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
-      "providerIsolation": { "mode": "no-provider" },
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
       "note": "Resolves relative markdown link targets in `git ls-files '*.md'` with jq, git and awk, and builds its fixtures as a synthetic corpus under $TMPDIR. It reads only, starts no daemon, and reaches no provider binary. Exemptions in config/governance/markdown-links.json."
     },
     {
@@ -416,7 +468,9 @@
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
-      "providerIsolation": { "mode": "no-provider" },
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
       "note": "Reads .claude/skills and the declared mirror roots and runs its negative fixtures on a temp copy. It starts no daemon and applies no manifest bundle, so no provider binary is reachable. Contract in config/governance/skill-mirrors.json."
     },
     {
@@ -430,7 +484,9 @@
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "slack-certification-recorded",
-      "providerIsolation": { "mode": "no-provider" },
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
       "note": "Asserts checkpoint, redaction, cleanup, and recorded provider contracts using literal fixtures; it loads no live Slack secrets."
     },
     {
@@ -504,7 +560,9 @@
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
-      "providerIsolation": { "mode": "no-provider" }
+      "providerIsolation": {
+        "mode": "no-provider"
+      }
     },
     {
       "path": "scripts/qa/test-webhook-trigger.sh",
@@ -523,7 +581,9 @@
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
-      "providerIsolation": { "mode": "no-provider" },
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
       "note": "verification is offline: it reads the ledger, the workflows and git. Only --refresh contacts GitHub, and that mode refuses to run unattended."
     },
     {
@@ -531,7 +591,9 @@
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "ci-environment-parity",
-      "providerIsolation": { "mode": "no-provider" },
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
       "note": "runs each in-scope gate twice, so it gets its own job rather than doubling the governance job's runtime. Scope excludes the cargo-bearing gates on cost; see the script header."
     },
     {
@@ -539,7 +601,9 @@
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
-      "providerIsolation": { "mode": "no-provider" },
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
       "note": "each case builds a throwaway git repository under $TMPDIR, because the freshness rule is a statement about history and needs its own history to manipulate. Nothing here contacts GitHub."
     }
   ]

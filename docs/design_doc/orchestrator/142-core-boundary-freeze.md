@@ -4,13 +4,17 @@ lifecycle: active
 
 # DD-142: Core Crate Boundary Freeze And Migration Schema Baseline
 
-**Status**: Implemented (FR-130, requirements 1 and 3; requirements 2 and 4 remain open)
-**Related**: DD-140 (governance ledger regeneration), DD-139 (QA gate enforcement surface), FR-047, FR-048, QA 180
+**Status**: Implemented (FR-130, requirements 1 and 3; requirement 2's Phase A is done, Phases B and C remain open; requirement 4 is closed as not applicable)
+**Related**: DD-148 (persistence crate extraction), DD-140 (governance ledger regeneration), DD-139 (QA gate enforcement surface), FR-047, FR-048, QA 180
 
 ## Background
 
-`core` (`agent-orchestrator`) is 79,659 lines across 143 scanned files — 45% of the
-workspace — with 52 top-level `pub mod` and 924 public items. FR-047 and FR-048 extracted
+At the freeze (2026-07-25), `core` (`agent-orchestrator`) was 79,659 lines across 143 scanned
+files — 45% of the workspace — with 52 top-level `pub mod` and 924 public items. Every figure in
+this document is that freeze, which is what it exists to record; FR-130 Phase A has since moved
+it to 129 files, 50 `pub mod`, 665 public items and 86 `rusqlite` references
+(see [DD-148](148-persistence-crate-extraction.md)). The live numbers are in
+`config/governance/core-boundary-ledger.json`, and the gate is what keeps them honest. FR-047 and FR-048 extracted
 `orchestrator-config` and `orchestrator-scheduler`; core is still the god crate underneath
 them, and its highest-churn cluster is persistence: `core/src/lib.rs` has been edited 64
 times in 1,022 commits, `migration.rs` 48, `persistence/migration.rs` 28,
@@ -232,6 +236,16 @@ measurement. That is the argument for freezing before extracting, restated as ev
 - The schema snapshot certifies DDL, not data. A migration that backfills rows incorrectly
   produces an identical snapshot. `m0002_backfill_historical_defaults` and its kin are covered
   by their own tests, not by this one.
-- FR-130 requirements 2 and 4 remain open, and the FR is updated in place rather than closed.
-  The extraction now has a corrected inventory, a schema baseline to be checked against, and a
-  ratchet that will notice if core grows while it waits.
+- The ratchet counts the token `rusqlite`, not SQL statements. That is the right ruler for its
+  job — a new coupling adds the token wherever it lands, so nothing escapes it — and it is not a
+  size estimate, which is how FR-130 read it when staging the extraction. `db_write.rs` is 1,441
+  lines of SQL and counts **1**; `db.rs` is 1,104 lines and counts **1**. Phase A's "115
+  references" was ~12,100 lines; Phase B's "83" is 17,963. The phase with the smaller number is
+  the larger one, and a plan built from these counts will be wrong about effort in both
+  directions. Recorded here rather than fixed: counting statements would make the ratchet
+  fragile against reformatting, and the two questions — "did coupling grow?" and "how big is
+  this?" — want different instruments.
+- FR-130 requirement 2's Phase A is closed, and its Phases B and C remain open; the FR is
+  updated in place rather than closed. See [DD-148](148-persistence-crate-extraction.md) for
+  what Phase A moved and what it deliberately left. Requirement 4 is closed as not applicable
+  (core holds 3 of the workspace's 43 `too_many_arguments` exemptions, not 43).

@@ -9,8 +9,8 @@ pub use orchestrator_persistence::repository::workflow_store::*;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
     use crate::test_utils::TestState;
+    use std::sync::Arc;
 
     const STORE: &str = "test-store";
     const PROJECT: &str = "test-project";

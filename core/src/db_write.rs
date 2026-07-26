@@ -10,7 +10,6 @@
 
 pub use orchestrator_persistence::db_write::*;
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

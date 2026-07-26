@@ -24,7 +24,6 @@ pub mod trait_def;
 pub mod types;
 mod write_ops;
 
-
 pub use command_run::NewCommandRun;
 pub use items::delete_task_and_collect_log_paths;
 pub use trait_def::{

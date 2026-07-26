@@ -175,8 +175,24 @@ mod tests {
         let one_shot_dir = tempfile::tempdir().expect("temp dir");
         let expected = bootstrapped_schema(one_shot_dir.path());
 
+        // What the database itself says ran, rather than what this test intends
+        // to sweep. The two are compared after the loop: `1..=total` looks
+        // exhaustive by construction, but `.step_by(5)` or a `take(10)` inserted
+        // for speed would leave the loop passing while covering a seventh of the
+        // chain. Counting the iterations against the applied rows is the
+        // difference between a sweep and a claim of one (FR-130 Phase A).
+        let applied_rows: usize = {
+            let conn = open_conn(&one_shot_dir.path().join("snapshot.db")).expect("open one-shot");
+            conn.query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .expect("count applied migrations") as usize
+        };
+
         let total = registered_migrations().len();
+        let mut exercised = 0usize;
         for stop_after in 1..=total {
+            exercised += 1;
             let temp = tempfile::tempdir().expect("temp dir");
             let db_path = temp.path().join("resume.db");
             let conn = open_conn(&db_path).expect("open db");
@@ -203,5 +219,15 @@ mod tests {
                  than running the chain in one pass"
             );
         }
+
+        assert_eq!(
+            exercised, applied_rows,
+            "the resume sweep exercised {exercised} interrupt point(s) but the chain applied \
+             {applied_rows} migration(s); every applied migration must be an interrupt point"
+        );
+        assert_eq!(
+            total, applied_rows,
+            "{total} migration(s) are registered but {applied_rows} were applied"
+        );
     }
 }

@@ -343,10 +343,7 @@ pub fn insert_task_execution_metric(db_path: &Path, metric: &TaskExecutionMetric
 /// Takes the database path rather than the daemon state, so this layer does not
 /// need to know that a daemon exists. `crate::db::reset_project_data` in core
 /// keeps the state-taking signature its callers use.
-pub fn reset_project_data_by_path(
-    db_path: &Path,
-    project_id: &str,
-) -> Result<ProjectResetStats> {
+pub fn reset_project_data_by_path(db_path: &Path, project_id: &str) -> Result<ProjectResetStats> {
     let conn = open_conn(db_path)?;
     let tx = conn.unchecked_transaction()?;
 

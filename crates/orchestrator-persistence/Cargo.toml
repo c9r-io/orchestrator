@@ -29,3 +29,4 @@ libc = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.26.0"
+tokio = { version = "1.51", features = ["macros", "rt-multi-thread"] }

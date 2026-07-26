@@ -10,9 +10,9 @@ pub use orchestrator_persistence::session_store::*;
 mod tests {
     use super::*;
     use crate::async_database::AsyncDatabase;
+    use crate::db::{init_schema, open_conn};
     use rusqlite::params;
     use std::sync::Arc;
-    use crate::db::{init_schema, open_conn};
     use tempfile::TempDir;
 
     fn make_db() -> (TempDir, std::path::PathBuf) {

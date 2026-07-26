@@ -34,10 +34,10 @@ pub fn reset_project_data(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rusqlite::params;
     use crate::dto::CreateTaskPayload;
     use crate::task_ops::create_task_impl;
     use crate::test_utils::TestState;
+    use rusqlite::params;
 
     fn tmp_db_path() -> (std::path::PathBuf, std::path::PathBuf) {
         let dir = std::env::temp_dir().join(format!("db-test-{}", uuid::Uuid::new_v4()));

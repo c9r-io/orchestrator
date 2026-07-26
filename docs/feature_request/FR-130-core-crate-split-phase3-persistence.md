@@ -96,7 +96,7 @@ crate 清单。`scripts/qa/core-boundary.rb` 以**精确相等**比对，`--emit
 数字更小的 Phase B 反而更大。这个计数是合格的棘轮（它能发现新增的耦合），但**不是工作量估计**，
 下面的分期不应被读成按规模排序。
 
-### ⏳ Phase A：纯持久化模块外迁
+### ✅ Phase A：纯持久化模块外迁（2026-07-26 闭环）
 
 边界明确、风险可控的部分。以台账 `rusqlite.files` 中路径已在持久化语义下的文件为范围：
 
@@ -192,17 +192,34 @@ gui(7)、daemon(7)。该条对本次提取近乎空转，作为 FR-130 的需求
       开始失败。跨 crate 事务接口无需设计：两者合计 0 处显式事务，实为多语句工作单元。
       见 [DD-147](../design_doc/orchestrator/147-persistence-dependency-chokepoint.md)
 
-### Phase A
+### Phase A —— 已闭环（2026-07-26），其设计与验证由
+[DD-148](../design_doc/orchestrator/148-persistence-crate-extraction.md) 与
+[QA 186](../qa/orchestrator/186-persistence-crate-extraction.md) 承载
 
-- [ ] `orchestrator-persistence` crate 存在，承载迁移内核与 repository 实现，`#![deny(missing_docs)]` 通过。
-      "存在"不以 `ls` 或成员清单为证——须同时证明 core 真的**链接**了它
-- [ ] 台账中属 Phase A 范围的 115 处引用已从 core 收敛，且移出的每个路径确实出现在
-      `crates/orchestrator-persistence/src/` 下（清单由台账 diff 推导，不手写）
-- [ ] `cargo test -p agent-orchestrator schema_snapshot` 通过，`schema-snapshot.sql` 未变
-- [ ] 逐对象比对：74 个中断点全部走到，且中断点数等于 `registered_migrations().len()`
-      ——链条被悄悄截短时必须失败，而不是以"套件全绿"通过
-- [ ] 至少一条**依赖旧路径的端到端行为**仍成立：隔离实例上建任务、跑任务、读回、列事件
-- [ ] Phase A 的提取 commit 可机械回退（与 FR-126 的 reverse-applicable removal patch 同一标准）
+- [x] `orchestrator-persistence` crate 存在，承载迁移内核与 repository 实现，`#![deny(missing_docs)]` 通过。
+      "存在"不以 `ls` 或成员清单为证——把 core 的依赖行**注释掉**（而非删除）后
+      `cargo check -p agent-orchestrator` 必须失败，QA 186 场景 1
+- [x] 台账中属 Phase A 范围的引用已从 core 收敛：**115 处收敛 114 处**。
+      core 从 143 文件 / 52 `pub mod` / 924 公开项 / 200 处引用降至
+      129 / 50 / 665 / 86（20 个文件）。
+      **残余 1 处**：`core/src/migration.rs` 的 `use rusqlite::Connection`。该文件是
+      `persistence::migration` 的三个"兼容"包装，而兼容对象不存在——core 之外无人引用
+      `agent_orchestrator::migration`，core 内唯一调用者是 `action_audit.rs` 的测试模块。
+      收敛它意味着要么下线死掉的公开 API（是决策不是搬运），要么在 persistence crate 里
+      加一个只为把计数推到 0 的 `run_pending_count`（比它消除的残余更糟）。归入 Phase B 的逐文件处置
+- [x] `cargo test -p agent-orchestrator schema_snapshot` 通过，`schema-snapshot.sql`
+      在四个 commit 中逐次字节不变
+- [x] 逐对象比对：中断点扫描现在把**自身覆盖范围**与数据库记录的 `schema_migrations`
+      行数对比。`for i in 1..=total` 读起来像穷举，正是问题所在——为提速插入的 `step_by`
+      会让它在覆盖五分之一链条的情况下静默通过
+- [x] 至少一条**依赖旧路径的端到端行为**仍成立：
+      `crates/orchestrator-persistence/tests/round_trip.rs` 引导真实数据库跑完整链条，
+      再让一个任务穿过每个被搬动的模块，且**每次写入都从另一个模块读回**；
+      配对的负向用例针对未迁移的数据库，要求报错而非返回"看似合理的空"。
+      另有 core 侧保留的测试从领域侧（`create_task_impl` + `TestState`）驱动同一条路径
+- [x] Phase A 的提取 commit 可机械回退：在 scratch worktree 中对 `A1^..A4`
+      执行 `git revert --no-commit`，45 个路径无冲突，`cargo check --workspace` 通过，
+      两个门禁回到 `143 / 52 / 924`、`200 / 37`、`13 members`——台账与代码一同回退
 
 ### Phase B
 

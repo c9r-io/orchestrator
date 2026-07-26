@@ -16,8 +16,9 @@ FR-130 proposes extracting `orchestrator-persistence` out of `core`. Its accepta
 that the migration chain produces the same schema before and after — a comparison with no
 subject unless the "before" side is recorded first. FR-130 (requirements 1 and 3) records it.
 
-`config/governance/core-boundary-ledger.json` freezes what the boundary is today: 52 top-level
-`pub mod`, 924 public items across 143 files, 200 `rusqlite` references across 37 files, and
+`config/governance/core-boundary-ledger.json` froze what the boundary was at the time of the
+freeze (2026-07-25): 52 top-level `pub mod`, 924 public items across 143 files, 200 `rusqlite`
+references across 37 files, and
 the six crates that take `rusqlite` directly. `config/governance/schema-snapshot.sql` records
 what the 74 registered migrations produce: 46 tables and 92 indexes.
 
@@ -49,8 +50,13 @@ cargo test -p agent-orchestrator schema_snapshot            # the schema baselin
 
 ### Expected result
 
-- Step 1 exits 0 and reports `core/src files: 143, pub mod: 52, public items: 924` and
-  `rusqlite: 200 reference(s) across 37 file(s) in core, 6 crate(s) depend on it directly`.
+- Step 1 exits 0 and its reported figures equal the ledger's `coreSurface` and `rusqlite.total`
+  exactly. Those figures are not fixed: FR-130 Phase A moved them to
+  `core/src files: 129, pub mod: 50, public items: 665` and
+  `rusqlite: 86 reference(s) across 20 file(s) in core`, and Phase B will move them again. What
+  this scenario asserts is agreement with the reviewed ledger, in both directions — reading a
+  literal out of this document instead would make the scenario fail on every deliberate
+  reduction, which is the event the ledger exists to record.
 - Step 2 prints nothing. The recovery path and the compared value are the same expression, so
   a regenerated candidate cannot be one the gate then rejects.
 - Step 3 covers the three directions a boundary can move: a new `pub mod` (case 3), a new
