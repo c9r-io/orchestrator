@@ -1,9 +1,16 @@
-//! Provider-neutral external source event and process-binding persistence.
+//! Provider-neutral external source event and process-binding contract.
+//!
+//! The tables and their statements live in
+//! `orchestrator_persistence::source_events` (FR-130 B11). What stays here is
+//! everything a store cannot decide: what a well-formed event looks like, how a
+//! deterministic identifier is derived from provider coordinates, how long a
+//! failed delivery waits before its next attempt, and what it means when an
+//! external id or a retry key comes back attached to something else.
 
-use crate::async_database::{AsyncDatabase, flatten_err};
+use crate::async_database::AsyncDatabase;
 use crate::config_load::now_ts;
 use anyhow::{Context, Result, bail};
-use rusqlite::{Connection, OptionalExtension, params};
+use orchestrator_persistence::source_events as store;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
@@ -285,21 +292,64 @@ impl AsyncSourceRepository {
 
     /// Inserts a normalized event or returns the existing identical event.
     pub async fn ingest(&self, input: IngestSourceEvent) -> Result<IngestResult> {
-        self.db
-            .writer()
-            .call(move |conn| ingest(conn, input).map_err(other))
-            .await
-            .map_err(flatten_err)
+        validate_ingest(&input)?;
+        let normalized_payload_json = serde_json::to_string(&input.event)?;
+        if normalized_payload_json.len() > MAX_NORMALIZED_PAYLOAD_BYTES {
+            bail!("normalized source payload exceeds 65536 bytes");
+        }
+        let id = stable_source_id(
+            &input.event.provider,
+            &input.event.installation_id,
+            &input.event.external_event_id,
+        );
+        let conversation_id = input
+            .event
+            .conversation
+            .as_ref()
+            .map(|value| value.conversation_id.clone());
+        let thread_id = input
+            .event
+            .conversation
+            .as_ref()
+            .and_then(|value| value.thread_id.clone());
+        let payload_hash = input.payload_hash.clone();
+        let (row, inserted) = store::ingest_event(
+            &self.db,
+            store::NewSourceEvent {
+                id,
+                project_id: input.project_id,
+                provider: input.event.provider.clone(),
+                installation_id: input.event.installation_id.clone(),
+                external_event_id: input.event.external_event_id.clone(),
+                event_type: input.event.kind.as_str().to_string(),
+                external_actor_id: input.event.actor.external_id.clone(),
+                conversation_id,
+                thread_id,
+                occurred_at: input.event.occurred_at.clone(),
+                received_at: now_ts(),
+                normalized_payload_json,
+                raw_payload_ref: input.raw_payload_ref,
+                payload_hash: payload_hash.clone(),
+            },
+        )
+        .await?;
+        let event = record_from_row(row)?;
+        // The identifier is derived from provider coordinates, so a second event
+        // arriving under the same coordinates with a different body means the
+        // provider reused an id. Fail closed rather than silently returning the
+        // first body under the second event's name.
+        if event.payload_hash != payload_hash {
+            bail!("external event id was reused with a different payload");
+        }
+        Ok(IngestResult { event, inserted })
     }
 
     /// Returns one source event.
     pub async fn get(&self, id: &str) -> Result<Option<SourceEventRecord>> {
-        let id = id.to_owned();
-        self.db
-            .reader()
-            .call(move |conn| read_event(conn, &id).map_err(other))
-            .await
-            .map_err(flatten_err)
+        store::read_event(&self.db, id.to_owned())
+            .await?
+            .map(record_from_row)
+            .transpose()
     }
 
     /// Lists recent events, optionally scoped to a task or routing state.
@@ -310,66 +360,28 @@ impl AsyncSourceRepository {
         routing_state: Option<&str>,
         limit: usize,
     ) -> Result<Vec<SourceEventRecord>> {
-        let project_id = project_id.map(str::to_owned);
-        let task_id = task_id.map(str::to_owned);
-        let routing_state = routing_state.map(str::to_owned);
-        self.db
-            .reader()
-            .call(move |conn| {
-                let mut stmt = conn.prepare(
-                    "SELECT id FROM source_events
-                     WHERE (?1 IS NULL OR project_id=?1)
-                       AND (?2 IS NULL OR routed_task_id=?2)
-                       AND (?3 IS NULL OR routing_state=?3)
-                     ORDER BY received_at DESC, id DESC LIMIT ?4",
-                )?;
-                let ids = stmt
-                    .query_map(
-                        params![
-                            project_id,
-                            task_id,
-                            routing_state,
-                            limit.clamp(1, 500) as i64
-                        ],
-                        |row| row.get::<_, String>(0),
-                    )?
-                    .collect::<std::result::Result<Vec<_>, _>>()?;
-                ids.into_iter()
-                    .map(|id| read_event(conn, &id)?.context("source event missing"))
-                    .collect::<Result<Vec<_>>>()
-                    .map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        let rows = store::list_events(
+            &self.db,
+            project_id.map(str::to_owned),
+            task_id.map(str::to_owned),
+            routing_state.map(str::to_owned),
+            limit,
+        )
+        .await?;
+        rows.into_iter().map(record_from_row).collect()
     }
 
     /// Atomically claims a bounded routing batch.
     pub async fn claim_pending(&self, limit: usize) -> Result<Vec<SourceEventRecord>> {
-        self.db
-            .writer()
-            .call(move |conn| claim_pending(conn, limit).map_err(other))
-            .await
-            .map_err(flatten_err)
+        // A claim older than this is treated as abandoned by whoever took it.
+        let stale_before = (chrono::Utc::now() - chrono::Duration::minutes(5)).to_rfc3339();
+        let rows = store::claim_pending_events(&self.db, limit, stale_before, now_ts()).await?;
+        rows.into_iter().map(record_from_row).collect()
     }
 
     /// Counts source events that still require routing or retry.
     pub async fn routing_lag(&self) -> Result<u64> {
-        self.db
-            .reader()
-            .call(|conn| {
-                Ok(conn.query_row(
-                    "SELECT
-                       (SELECT COUNT(*) FROM source_events
-                        WHERE routing_state IN ('received','routing','failed') AND routing_attempts < 5)
-                       +
-                       (SELECT COUNT(*) FROM source_automation_routes
-                        WHERE status IN ('matched','resolving','rendered','creating','retrying','suspended'))",
-                    [],
-                    |row| row.get(0),
-                )?)
-            })
-            .await
-            .map_err(flatten_err)
+        store::routing_lag(&self.db).await
     }
 
     /// Completes a claimed routing attempt.
@@ -380,52 +392,43 @@ impl AsyncSourceRepository {
         task_id: Option<&str>,
         error_code: Option<&str>,
     ) -> Result<()> {
-        let id = id.to_owned();
-        let state = state.to_owned();
-        let task_id = task_id.map(str::to_owned);
-        let error_code = error_code.map(str::to_owned);
-        self.db
-            .writer()
-            .call(move |conn| {
-                complete_routing(conn, &id, &state, task_id.as_deref(), error_code.as_deref())
-                    .map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        if !matches!(state, "routed" | "ignored" | "needs_attention" | "failed") {
+            bail!("invalid terminal routing state: {state}");
+        }
+        // Only a failure earns another attempt, and it waits 30 seconds for it.
+        let next_attempt_at = (state == "failed").then(|| {
+            chrono::Utc::now()
+                .checked_add_signed(chrono::Duration::seconds(30))
+                .unwrap_or_else(chrono::Utc::now)
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string()
+        });
+        let closed = store::complete_routing(
+            &self.db,
+            id.to_owned(),
+            state.to_owned(),
+            task_id.map(str::to_owned),
+            error_code.map(str::to_owned),
+            next_attempt_at,
+            now_ts(),
+        )
+        .await?;
+        if !closed {
+            bail!("source event is not in routing state");
+        }
+        Ok(())
     }
 
     /// Transfers a matched reaction from the delivery claim to the independent
     /// durable automation route worker.
     pub async fn defer_to_automation(&self, id: &str, route_id: &str) -> Result<()> {
-        let id = id.to_owned();
-        let route_id = route_id.to_owned();
-        self.db
-            .writer()
-            .call(move |conn| {
-                let tx = conn.unchecked_transaction()?;
-                let changed = tx.execute(
-                    "UPDATE source_events SET routing_state='automation_pending',
-                     automation_route_id=?2,last_error_code=NULL,next_attempt_at=NULL,
-                     routing_claimed_at=NULL WHERE id=?1 AND routing_state='routing'",
-                    params![id, route_id],
-                )?;
-                if changed != 1 {
-                    return Err(other(anyhow::anyhow!(
-                        "source event is not in routing state"
-                    )));
-                }
-                tx.execute(
-                    "UPDATE source_routing_attempts SET result='automation_pending',
-                     automation_route_id=?2,completed_at=?3
-                     WHERE source_event_id=?1
-                       AND attempt_no=(SELECT routing_attempts FROM source_events WHERE id=?1)",
-                    params![id, route_id, now_ts()],
-                )?;
-                tx.commit()?;
-                Ok(())
-            })
-            .await
-            .map_err(flatten_err)
+        let deferred =
+            store::defer_to_automation(&self.db, id.to_owned(), route_id.to_owned(), now_ts())
+                .await?;
+        if !deferred {
+            bail!("source event is not in routing state");
+        }
+        Ok(())
     }
 
     /// Projects one terminal automation route outcome onto every provider
@@ -440,93 +443,79 @@ impl AsyncSourceRepository {
         if !matches!(state, "routed" | "ignored" | "needs_attention" | "failed") {
             bail!("invalid automation terminal state: {state}");
         }
-        let route_id = route_id.to_owned();
-        let state = state.to_owned();
-        let task_id = task_id.map(str::to_owned);
-        let error_code = error_code.map(str::to_owned);
-        self.db
-            .writer()
-            .call(move |conn| {
-                let tx = conn.unchecked_transaction()?;
-                let ids = {
-                    let mut stmt = tx.prepare(
-                        "SELECT id FROM source_events WHERE automation_route_id=?1",
-                    )?;
-                    stmt.query_map([&route_id], |row| row.get::<_, String>(0))?
-                        .collect::<std::result::Result<Vec<_>, _>>()?
-                };
-                let now = now_ts();
-                for id in ids {
-                    tx.execute(
-                        "UPDATE source_events SET routing_state=?2,
-                         routed_task_id=COALESCE(?3,routed_task_id),last_error_code=?4,
-                         next_attempt_at=NULL,routing_claimed_at=NULL,routed_at=?5
-                         WHERE id=?1",
-                        params![id, state, task_id, error_code, now],
-                    )?;
-                    tx.execute(
-                        "UPDATE source_routing_attempts SET result=?2,task_id=?3,error_code=?4,
-                         automation_route_id=?5,completed_at=COALESCE(completed_at,?6)
-                         WHERE source_event_id=?1 AND attempt_no=(
-                           SELECT MAX(attempt_no) FROM source_routing_attempts WHERE source_event_id=?1)",
-                        params![id, state, task_id, error_code, route_id, now],
-                    )?;
-                }
-                tx.commit()?;
-                Ok(())
-            })
-            .await
-            .map_err(flatten_err)
+        store::complete_automation_route(
+            &self.db,
+            route_id.to_owned(),
+            state.to_owned(),
+            task_id.map(str::to_owned),
+            error_code.map(str::to_owned),
+            now_ts(),
+        )
+        .await
     }
 
     /// Returns every delivery attached to a replayed route to the independent
     /// automation-pending projection without consuming a delivery retry.
     pub async fn requeue_automation_route(&self, route_id: &str) -> Result<()> {
-        let route_id = route_id.to_owned();
-        self.db
-            .writer()
-            .call(move |conn| {
-                conn.execute(
-                    "UPDATE source_events SET routing_state='automation_pending',
-                     routed_task_id=NULL,last_error_code=NULL,next_attempt_at=NULL,
-                     routing_claimed_at=NULL,routed_at=NULL
-                     WHERE automation_route_id=?1",
-                    [&route_id],
-                )?;
-                Ok(())
-            })
-            .await
-            .map_err(flatten_err)
+        store::requeue_automation_route(&self.db, route_id.to_owned()).await
     }
 
     /// Requeues a failed or attention-blocked event for administrator replay.
     pub async fn replay(&self, id: &str) -> Result<()> {
-        let id = id.to_owned();
-        self.db
-            .writer()
-            .call(move |conn| {
-                let changed = conn.execute(
-                    "UPDATE source_events SET routing_state='received', last_error_code=NULL,
-                     next_attempt_at=NULL, routing_attempts=0, routing_claimed_at=NULL
-                     WHERE id=?1 AND routing_state IN ('failed','needs_attention')",
-                    [&id],
-                )?;
-                if changed == 0 {
-                    return Err(other(anyhow::anyhow!("source event is not replayable")));
-                }
-                Ok(())
-            })
-            .await
-            .map_err(flatten_err)
+        if !store::replay_event(&self.db, id.to_owned()).await? {
+            bail!("source event is not replayable");
+        }
+        Ok(())
     }
 
     /// Creates or returns a null-safe correlation binding.
     pub async fn create_binding(&self, input: CreateSourceBinding) -> Result<SourceBinding> {
-        self.db
-            .writer()
-            .call(move |conn| create_binding(conn, input).map_err(other))
-            .await
-            .map_err(flatten_err)
+        if !matches!(
+            input.binding_type.as_str(),
+            "primary" | "related" | "notification_target" | "automation"
+        ) {
+            bail!("unsupported binding_type");
+        }
+        let base_key =
+            correlation_key(input.conversation_id.as_deref(), input.thread_id.as_deref());
+        // A Slack message may deliberately select multiple badge bindings. Primary and
+        // related correlations stay exclusive, while each reserved automation route gets
+        // its own idempotent binding identity for that same message.
+        let key = if input.binding_type == "automation" {
+            let event_digest = digest_hex(input.created_by_event_id.as_bytes());
+            format!("{base_key}:automation:{}", &event_digest[..24])
+        } else {
+            base_key
+        };
+        let digest = digest_hex(
+            format!(
+                "{}:{}:{}:{}",
+                input.provider, input.installation_id, key, input.binding_type
+            )
+            .as_bytes(),
+        );
+        let expected_task_id = input.task_id.clone();
+        let binding = store::create_binding(
+            &self.db,
+            store::NewSourceBinding {
+                id: format!("bind-{}", &digest[..24]),
+                project_id: input.project_id,
+                task_id: input.task_id,
+                provider: input.provider,
+                installation_id: input.installation_id,
+                conversation_id: input.conversation_id,
+                thread_id: input.thread_id,
+                correlation_key: key,
+                binding_type: input.binding_type,
+                created_by_event_id: input.created_by_event_id,
+            },
+            now_ts(),
+        )
+        .await?;
+        if binding.task_id != expected_task_id {
+            bail!("source correlation is already bound to another task");
+        }
+        Ok(binding_from_row(binding))
     }
 
     /// Finds bindings for exact provider conversation coordinates.
@@ -537,69 +526,61 @@ impl AsyncSourceRepository {
         conversation_id: Option<&str>,
         thread_id: Option<&str>,
     ) -> Result<Vec<SourceBinding>> {
-        let provider = provider.to_owned();
-        let installation_id = installation_id.to_owned();
-        let conversation_id = conversation_id.map(str::to_owned);
-        let thread_id = thread_id.map(str::to_owned);
-        self.db
-            .reader()
-            .call(move |conn| {
-                let mut stmt = conn.prepare(
-                    "SELECT id FROM source_bindings WHERE provider=?1 AND installation_id=?2
-                     AND conversation_id IS ?3 AND thread_id IS ?4
-                     ORDER BY created_at ASC, id ASC",
-                )?;
-                let ids = stmt
-                    .query_map(
-                        params![provider, installation_id, conversation_id, thread_id],
-                        |row| row.get::<_, String>(0),
-                    )?
-                    .collect::<std::result::Result<Vec<_>, _>>()?;
-                ids.into_iter()
-                    .map(|id| {
-                        read_binding(conn, &id)
-                            .map_err(other)?
-                            .context("binding missing")
-                    })
-                    .collect::<Result<Vec<_>>>()
-                    .map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        Ok(store::find_bindings(
+            &self.db,
+            provider.to_owned(),
+            installation_id.to_owned(),
+            conversation_id.map(str::to_owned),
+            thread_id.map(str::to_owned),
+        )
+        .await?
+        .into_iter()
+        .map(binding_from_row)
+        .collect())
     }
 
     /// Lists bindings for one task/process.
     pub async fn list_bindings(&self, task_id: &str) -> Result<Vec<SourceBinding>> {
-        let task_id = task_id.to_owned();
-        self.db
-            .reader()
-            .call(move |conn| {
-                let mut stmt = conn.prepare(
-                    "SELECT id FROM source_bindings WHERE task_id=?1 ORDER BY created_at DESC",
-                )?;
-                let ids = stmt
-                    .query_map([task_id], |row| row.get::<_, String>(0))?
-                    .collect::<std::result::Result<Vec<_>, _>>()?;
-                ids.into_iter()
-                    .map(|id| {
-                        read_binding(conn, &id)
-                            .map_err(other)?
-                            .context("binding missing")
-                    })
-                    .collect::<Result<Vec<_>>>()
-                    .map_err(other)
-            })
-            .await
-            .map_err(flatten_err)
+        Ok(store::list_bindings(&self.db, task_id.to_owned())
+            .await?
+            .into_iter()
+            .map(binding_from_row)
+            .collect())
     }
 
     /// Reserves a command audit row. Returns false when the same command already succeeded.
     pub async fn begin_command_action(&self, input: SourceCommandActionInput) -> Result<bool> {
-        self.db
-            .writer()
-            .call(move |conn| begin_command_action(conn, input).map_err(other))
-            .await
-            .map_err(flatten_err)
+        let digest = digest_hex(
+            format!(
+                "source-command:{}:{}",
+                input.source_event_id, input.idempotency_key
+            )
+            .as_bytes(),
+        );
+        let outcome = store::begin_command_action(
+            &self.db,
+            store::NewCommandAction {
+                id: format!("source-action-{}", &digest[..24]),
+                source_event_id: input.source_event_id,
+                actor: input.actor,
+                resolved_role: input.resolved_role,
+                target_type: input.target_type,
+                target_id: input.target_id,
+                action: input.action,
+                idempotency_key: input.idempotency_key,
+                request_hash: input.request_hash,
+                request_id: input.request_id,
+            },
+            now_ts(),
+        )
+        .await?;
+        match outcome {
+            store::CommandActionStart::Started | store::CommandActionStart::Restarted => Ok(true),
+            store::CommandActionStart::AlreadySucceeded => Ok(false),
+            store::CommandActionStart::RequestMismatch => {
+                bail!("source command idempotency key was reused with a different request")
+            }
+        }
     }
 
     /// Completes a previously reserved source command audit row.
@@ -611,35 +592,66 @@ impl AsyncSourceRepository {
         result: Option<&serde_json::Value>,
         error_code: Option<&str>,
     ) -> Result<()> {
-        let source_event_id = source_event_id.to_owned();
-        let idempotency_key = idempotency_key.to_owned();
-        let status = status.to_owned();
         let result_json = result.map(serde_json::to_string).transpose()?;
-        let error_code = error_code.map(str::to_owned);
-        self.db
-            .writer()
-            .call(move |conn| {
-                let changed = conn.execute(
-                    "UPDATE source_command_actions SET status=?3,result_json=?4,error_code=?5,
-                     completed_at=?6 WHERE source_event_id=?1 AND idempotency_key=?2",
-                    params![
-                        source_event_id,
-                        idempotency_key,
-                        status,
-                        result_json,
-                        error_code,
-                        now_ts()
-                    ],
-                )?;
-                if changed != 1 {
-                    return Err(other(anyhow::anyhow!(
-                        "source command audit reservation missing"
-                    )));
-                }
-                Ok(())
-            })
-            .await
-            .map_err(flatten_err)
+        let completed = store::complete_command_action(
+            &self.db,
+            source_event_id.to_owned(),
+            idempotency_key.to_owned(),
+            status.to_owned(),
+            result_json,
+            error_code.map(str::to_owned),
+            now_ts(),
+        )
+        .await?;
+        if !completed {
+            bail!("source command audit reservation missing");
+        }
+        Ok(())
+    }
+}
+
+/// Parses a stored row back into a record, including its normalized payload.
+///
+/// The parse lives here rather than in the row reader because
+/// `NormalizedSourceEvent` is this module's type; down in the store a
+/// `serde_json` failure had to be reported as a column-conversion failure to
+/// satisfy the row mapper's signature.
+fn record_from_row(row: store::SourceEventRow) -> Result<SourceEventRecord> {
+    let normalized = serde_json::from_str(&row.normalized_payload_json)
+        .with_context(|| format!("parse normalized payload of source event {}", row.id))?;
+    Ok(SourceEventRecord {
+        id: row.id,
+        project_id: row.project_id,
+        provider: row.provider,
+        installation_id: row.installation_id,
+        external_event_id: row.external_event_id,
+        event_type: row.event_type,
+        external_actor_id: row.external_actor_id,
+        conversation_id: row.conversation_id,
+        thread_id: row.thread_id,
+        occurred_at: row.occurred_at,
+        received_at: row.received_at,
+        normalized,
+        payload_hash: row.payload_hash,
+        routing_state: row.routing_state,
+        routing_attempts: row.routing_attempts,
+        routed_task_id: row.routed_task_id,
+        last_error_code: row.last_error_code,
+    })
+}
+
+fn binding_from_row(row: store::SourceBindingRow) -> SourceBinding {
+    SourceBinding {
+        id: row.id,
+        project_id: row.project_id,
+        task_id: row.task_id,
+        provider: row.provider,
+        installation_id: row.installation_id,
+        conversation_id: row.conversation_id,
+        thread_id: row.thread_id,
+        binding_type: row.binding_type,
+        created_by_event_id: row.created_by_event_id,
+        created_at: row.created_at,
     }
 }
 
@@ -656,7 +668,8 @@ fn validate_identifier(label: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
-fn ingest(conn: &Connection, input: IngestSourceEvent) -> Result<IngestResult> {
+/// The contract an incoming event must satisfy before it is worth storing.
+fn validate_ingest(input: &IngestSourceEvent) -> Result<()> {
     validate_identifier("project_id", &input.project_id)?;
     validate_identifier("provider", &input.event.provider)?;
     validate_identifier("installation_id", &input.event.installation_id)?;
@@ -673,54 +686,7 @@ fn ingest(conn: &Connection, input: IngestSourceEvent) -> Result<IngestResult> {
         (_, Some(_)) => bail!("source reaction metadata requires kind=reaction_added"),
         _ => {}
     }
-    let normalized_payload_json = serde_json::to_string(&input.event)?;
-    if normalized_payload_json.len() > MAX_NORMALIZED_PAYLOAD_BYTES {
-        bail!("normalized source payload exceeds 65536 bytes");
-    }
-    let id = stable_source_id(
-        &input.event.provider,
-        &input.event.installation_id,
-        &input.event.external_event_id,
-    );
-    let conversation_id = input
-        .event
-        .conversation
-        .as_ref()
-        .map(|value| value.conversation_id.clone());
-    let thread_id = input
-        .event
-        .conversation
-        .as_ref()
-        .and_then(|value| value.thread_id.clone());
-    let received_at = now_ts();
-    let inserted = conn.execute(
-        "INSERT OR IGNORE INTO source_events
-         (id,project_id,provider,installation_id,external_event_id,event_type,
-          external_actor_id,conversation_id,thread_id,occurred_at,received_at,
-          normalized_payload_json,raw_payload_ref,payload_hash,routing_state)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,'received')",
-        params![
-            id,
-            input.project_id,
-            input.event.provider,
-            input.event.installation_id,
-            input.event.external_event_id,
-            input.event.kind.as_str(),
-            input.event.actor.external_id,
-            conversation_id,
-            thread_id,
-            input.event.occurred_at,
-            received_at,
-            normalized_payload_json,
-            input.raw_payload_ref,
-            input.payload_hash,
-        ],
-    )? == 1;
-    let event = read_event(conn, &id)?.context("inserted source event missing")?;
-    if event.payload_hash != input.payload_hash {
-        bail!("external event id was reused with a different payload");
-    }
-    Ok(IngestResult { event, inserted })
+    Ok(())
 }
 
 fn validate_reaction(reaction: &SourceReactionRef) -> Result<()> {
@@ -756,246 +722,6 @@ fn validate_reaction(reaction: &SourceReactionRef) -> Result<()> {
     Ok(())
 }
 
-fn claim_pending(conn: &Connection, limit: usize) -> Result<Vec<SourceEventRecord>> {
-    let tx = conn.unchecked_transaction()?;
-    let stale_before = (chrono::Utc::now() - chrono::Duration::minutes(5)).to_rfc3339();
-    let ids = {
-        let mut stmt = tx.prepare(
-            "SELECT id FROM source_events
-             WHERE (routing_state IN ('received','failed')
-                    OR (routing_state='routing' AND routing_claimed_at <= ?2))
-               AND routing_attempts < 5
-               AND (next_attempt_at IS NULL OR next_attempt_at <= datetime('now'))
-             ORDER BY received_at ASC, id ASC LIMIT ?1",
-        )?;
-        stmt.query_map(params![limit.clamp(1, 100) as i64, stale_before], |row| {
-            row.get::<_, String>(0)
-        })?
-        .collect::<std::result::Result<Vec<_>, _>>()?
-    };
-    for id in &ids {
-        tx.execute(
-            "UPDATE source_events SET routing_state='routing', routing_attempts=routing_attempts+1,
-             last_error_code=NULL,routing_claimed_at=?2 WHERE id=?1",
-            params![id, now_ts()],
-        )?;
-        tx.execute(
-            "INSERT INTO source_routing_attempts(source_event_id,attempt_no,result,created_at)
-             SELECT id,routing_attempts,'routing',?2 FROM source_events WHERE id=?1",
-            params![id, now_ts()],
-        )?;
-    }
-    tx.commit()?;
-    ids.into_iter()
-        .map(|id| read_event(conn, &id)?.context("claimed source event missing"))
-        .collect()
-}
-
-fn complete_routing(
-    conn: &Connection,
-    id: &str,
-    state: &str,
-    task_id: Option<&str>,
-    error_code: Option<&str>,
-) -> Result<()> {
-    if !matches!(state, "routed" | "ignored" | "needs_attention" | "failed") {
-        bail!("invalid terminal routing state: {state}");
-    }
-    let tx = conn.unchecked_transaction()?;
-    let next_attempt_at = (state == "failed").then(|| {
-        chrono::Utc::now()
-            .checked_add_signed(chrono::Duration::seconds(30))
-            .unwrap_or_else(chrono::Utc::now)
-            .format("%Y-%m-%d %H:%M:%S")
-            .to_string()
-    });
-    let changed = tx.execute(
-        "UPDATE source_events SET routing_state=?2, routed_task_id=COALESCE(?3,routed_task_id),
-         last_error_code=?4, next_attempt_at=?5, routing_claimed_at=NULL,
-         routed_at=CASE WHEN ?2 IN ('routed','ignored','needs_attention') THEN ?6 ELSE routed_at END
-         WHERE id=?1 AND routing_state='routing'",
-        params![id, state, task_id, error_code, next_attempt_at, now_ts()],
-    )?;
-    if changed == 0 {
-        bail!("source event is not in routing state");
-    }
-    tx.execute(
-        "UPDATE source_routing_attempts SET result=?2,task_id=?3,error_code=?4,completed_at=?5
-         WHERE source_event_id=?1 AND attempt_no=(SELECT routing_attempts FROM source_events WHERE id=?1)",
-        params![id, state, task_id, error_code, now_ts()],
-    )?;
-    tx.commit()?;
-    Ok(())
-}
-
-fn create_binding(conn: &Connection, input: CreateSourceBinding) -> Result<SourceBinding> {
-    if !matches!(
-        input.binding_type.as_str(),
-        "primary" | "related" | "notification_target" | "automation"
-    ) {
-        bail!("unsupported binding_type");
-    }
-    let base_key = correlation_key(input.conversation_id.as_deref(), input.thread_id.as_deref());
-    // A Slack message may deliberately select multiple badge bindings. Primary and
-    // related correlations stay exclusive, while each reserved automation route gets
-    // its own idempotent binding identity for that same message.
-    let key = if input.binding_type == "automation" {
-        let event_digest = digest_hex(input.created_by_event_id.as_bytes());
-        format!("{base_key}:automation:{}", &event_digest[..24])
-    } else {
-        base_key
-    };
-    let digest = digest_hex(
-        format!(
-            "{}:{}:{}:{}",
-            input.provider, input.installation_id, key, input.binding_type
-        )
-        .as_bytes(),
-    );
-    let id = format!("bind-{}", &digest[..24]);
-    conn.execute(
-        "INSERT OR IGNORE INTO source_bindings
-         (id,project_id,task_id,provider,installation_id,conversation_id,thread_id,
-          correlation_key,binding_type,created_by_event_id,created_at)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
-        params![
-            id,
-            input.project_id,
-            input.task_id,
-            input.provider,
-            input.installation_id,
-            input.conversation_id,
-            input.thread_id,
-            key,
-            input.binding_type,
-            input.created_by_event_id,
-            now_ts(),
-        ],
-    )?;
-    let binding = read_binding(conn, &id)?.context("source binding missing")?;
-    if binding.task_id != input.task_id {
-        bail!("source correlation is already bound to another task");
-    }
-    Ok(binding)
-}
-
-fn begin_command_action(conn: &Connection, input: SourceCommandActionInput) -> Result<bool> {
-    let existing = conn
-        .query_row(
-            "SELECT request_hash,status FROM source_command_actions
-             WHERE source_event_id=?1 AND idempotency_key=?2",
-            params![input.source_event_id, input.idempotency_key],
-            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
-        )
-        .optional()?;
-    if let Some((request_hash, status)) = existing {
-        if request_hash != input.request_hash {
-            bail!("source command idempotency key was reused with a different request");
-        }
-        if status == "succeeded" {
-            return Ok(false);
-        }
-        conn.execute(
-            "UPDATE source_command_actions SET status='running',result_json=NULL,error_code=NULL,
-             completed_at=NULL WHERE source_event_id=?1 AND idempotency_key=?2",
-            params![input.source_event_id, input.idempotency_key],
-        )?;
-        return Ok(true);
-    }
-    let digest = digest_hex(
-        format!(
-            "source-command:{}:{}",
-            input.source_event_id, input.idempotency_key
-        )
-        .as_bytes(),
-    );
-    conn.execute(
-        "INSERT INTO source_command_actions
-         (id,source_event_id,actor,resolved_role,target_type,target_id,action,idempotency_key,
-          request_hash,status,created_at,request_id)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,'running',?10,?11)",
-        params![
-            format!("source-action-{}", &digest[..24]),
-            input.source_event_id,
-            input.actor,
-            input.resolved_role,
-            input.target_type,
-            input.target_id,
-            input.action,
-            input.idempotency_key,
-            input.request_hash,
-            now_ts(),
-            input.request_id,
-        ],
-    )?;
-    Ok(true)
-}
-
-fn read_event(conn: &Connection, id: &str) -> Result<Option<SourceEventRecord>> {
-    conn.query_row(
-        "SELECT id,project_id,provider,installation_id,external_event_id,event_type,
-         external_actor_id,conversation_id,thread_id,occurred_at,received_at,
-         normalized_payload_json,payload_hash,routing_state,routing_attempts,
-         routed_task_id,last_error_code FROM source_events WHERE id=?1",
-        [id],
-        |row| {
-            let raw: String = row.get(11)?;
-            let normalized = serde_json::from_str(&raw).map_err(|error| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    11,
-                    rusqlite::types::Type::Text,
-                    Box::new(error),
-                )
-            })?;
-            Ok(SourceEventRecord {
-                id: row.get(0)?,
-                project_id: row.get(1)?,
-                provider: row.get(2)?,
-                installation_id: row.get(3)?,
-                external_event_id: row.get(4)?,
-                event_type: row.get(5)?,
-                external_actor_id: row.get(6)?,
-                conversation_id: row.get(7)?,
-                thread_id: row.get(8)?,
-                occurred_at: row.get(9)?,
-                received_at: row.get(10)?,
-                normalized,
-                payload_hash: row.get(12)?,
-                routing_state: row.get(13)?,
-                routing_attempts: row.get(14)?,
-                routed_task_id: row.get(15)?,
-                last_error_code: row.get(16)?,
-            })
-        },
-    )
-    .optional()
-    .map_err(Into::into)
-}
-
-fn read_binding(conn: &Connection, id: &str) -> Result<Option<SourceBinding>> {
-    conn.query_row(
-        "SELECT id,project_id,task_id,provider,installation_id,conversation_id,thread_id,
-         binding_type,created_by_event_id,created_at FROM source_bindings WHERE id=?1",
-        [id],
-        |row| {
-            Ok(SourceBinding {
-                id: row.get(0)?,
-                project_id: row.get(1)?,
-                task_id: row.get(2)?,
-                provider: row.get(3)?,
-                installation_id: row.get(4)?,
-                conversation_id: row.get(5)?,
-                thread_id: row.get(6)?,
-                binding_type: row.get(7)?,
-                created_by_event_id: row.get(8)?,
-                created_at: row.get(9)?,
-            })
-        },
-    )
-    .optional()
-    .map_err(Into::into)
-}
-
 fn stable_source_id(provider: &str, installation_id: &str, external_event_id: &str) -> String {
     let digest = digest_hex(format!("{provider}:{installation_id}:{external_event_id}").as_bytes());
     format!("src-{}", &digest[..24])
@@ -1014,10 +740,6 @@ fn digest_hex(value: &[u8]) -> String {
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect()
-}
-
-fn other(error: anyhow::Error) -> tokio_rusqlite::Error {
-    tokio_rusqlite::Error::Other(error.into())
 }
 
 #[cfg(test)]

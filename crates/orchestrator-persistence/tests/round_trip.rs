@@ -858,3 +858,219 @@ fn creating_a_task_writes_rows_items_and_events_or_none_of_them() {
         "a stale command run survived the reset and could re-finalize the item"
     );
 }
+
+/// FR-130 B11: the source-ingestion statements moved out of `core::source`.
+/// Three of their guards decide whether an external event is delivered once,
+/// twice, or forever, and none of them was pinned by a test before this one —
+/// each was confirmed by mutating it and watching core's 96 `source::` tests
+/// stay green.
+#[tokio::test]
+async fn source_routing_guards_hold_the_line_they_are_there_for() {
+    use orchestrator_persistence::source_events as store;
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let db_path = temp.path().join("source.db");
+    PersistenceBootstrap::ensure_current(&db_path).expect("bootstrap schema");
+    // `source_events.routed_task_id` references `tasks(id)`, so a routing
+    // decision needs a real task to point at.
+    seed_task(&open_conn(&db_path).expect("open database"));
+    let db = AsyncDatabase::open(&db_path).await.expect("open async db");
+    let now = orchestrator_persistence::now_ts();
+
+    let event = |id: &str, hash: &str| store::NewSourceEvent {
+        id: id.to_string(),
+        project_id: "default".to_string(),
+        provider: "slack".to_string(),
+        installation_id: "T123".to_string(),
+        external_event_id: format!("ext-{id}"),
+        event_type: "message".to_string(),
+        external_actor_id: "U1".to_string(),
+        conversation_id: Some("C1".to_string()),
+        thread_id: None,
+        occurred_at: now.clone(),
+        received_at: now.clone(),
+        normalized_payload_json: r#"{"kind":"message"}"#.to_string(),
+        raw_payload_ref: None,
+        payload_hash: hash.to_string(),
+    };
+
+    // Ingest is idempotent on the derived identifier, and reports which call
+    // did the writing.
+    let (row, inserted) = store::ingest_event(&db, event("src-1", "hash-1"))
+        .await
+        .expect("ingest");
+    assert!(inserted, "a fresh event was not reported as inserted");
+    assert_eq!(row.routing_state, "received");
+    let (again, inserted_again) = store::ingest_event(&db, event("src-1", "hash-2"))
+        .await
+        .expect("ingest again");
+    assert!(!inserted_again, "a repeat ingest claimed to have inserted");
+    assert_eq!(
+        again.payload_hash, "hash-1",
+        "a repeat ingest overwrote the stored payload hash"
+    );
+
+    // Guard 1: `complete_routing` only closes an event that is actually being
+    // routed. Without it, a late worker could overwrite a routing decision
+    // another worker already committed.
+    let closed_before_claim = store::complete_routing(
+        &db,
+        "src-1".to_string(),
+        "routed".to_string(),
+        Some(TASK_ID.to_string()),
+        None,
+        None,
+        now.clone(),
+    )
+    .await
+    .expect("complete before claim");
+    assert!(
+        !closed_before_claim,
+        "an event was closed out while it was not being routed"
+    );
+
+    let claimed = store::claim_pending_events(&db, 10, now.clone(), now.clone())
+        .await
+        .expect("claim");
+    assert_eq!(claimed.len(), 1, "the pending event was not claimed");
+    assert_eq!(claimed[0].routing_state, "routing");
+    assert_eq!(
+        claimed[0].routing_attempts, 1,
+        "the attempt was not counted"
+    );
+
+    assert!(
+        store::complete_routing(
+            &db,
+            "src-1".to_string(),
+            "routed".to_string(),
+            Some(TASK_ID.to_string()),
+            None,
+            None,
+            now.clone(),
+        )
+        .await
+        .expect("complete after claim"),
+        "a claimed event could not be closed out"
+    );
+    // And not twice.
+    assert!(
+        !store::complete_routing(
+            &db,
+            "src-1".to_string(),
+            "failed".to_string(),
+            None,
+            Some("late".to_string()),
+            None,
+            now.clone(),
+        )
+        .await
+        .expect("complete twice"),
+        "a routed event was reopened by a second completion"
+    );
+
+    // The same guard on the automation hand-off, which is a separate statement
+    // with a separate copy of it: a delivery nobody is routing must not be
+    // handed to the automation worker, or two workers own the same delivery.
+    assert!(
+        !store::defer_to_automation(&db, "src-1".to_string(), "route-1".to_string(), now.clone(),)
+            .await
+            .expect("defer a routed event"),
+        "a routed event was handed to the automation worker"
+    );
+
+    // Guard 2: the attempt ceiling. An event that keeps failing must eventually
+    // stop being claimed, or a poison message is retried forever.
+    store::ingest_event(&db, event("src-2", "hash-2"))
+        .await
+        .expect("ingest src-2");
+    for attempt in 1..=store::MAX_ROUTING_ATTEMPTS {
+        let batch = store::claim_pending_events(&db, 10, now.clone(), now.clone())
+            .await
+            .expect("claim");
+        assert_eq!(
+            batch.len(),
+            1,
+            "attempt {attempt} of {} was not claimable",
+            store::MAX_ROUTING_ATTEMPTS
+        );
+        store::complete_routing(
+            &db,
+            "src-2".to_string(),
+            "failed".to_string(),
+            None,
+            Some("boom".to_string()),
+            // No backoff, so the only thing that can stop the next claim is the
+            // ceiling.
+            None,
+            now.clone(),
+        )
+        .await
+        .expect("fail it");
+    }
+    let exhausted = store::claim_pending_events(&db, 10, now.clone(), now.clone())
+        .await
+        .expect("claim past the ceiling");
+    assert!(
+        exhausted.is_empty(),
+        "an event was claimed for attempt {} past a ceiling of {}",
+        store::MAX_ROUTING_ATTEMPTS + 1,
+        store::MAX_ROUTING_ATTEMPTS
+    );
+
+    // Guard 3: a retry identity reused under a different request must be
+    // refused, not quietly restarted — restarting would run a command the
+    // caller never asked for under an approval it did get.
+    let action = |key: &str, hash: &str| store::NewCommandAction {
+        id: format!("act-{key}-{hash}"),
+        source_event_id: "src-1".to_string(),
+        actor: "U1".to_string(),
+        resolved_role: "operator".to_string(),
+        target_type: "attention_item".to_string(),
+        target_id: "attn-1".to_string(),
+        action: "attention.claim".to_string(),
+        idempotency_key: key.to_string(),
+        request_hash: hash.to_string(),
+        request_id: "req-1".to_string(),
+    };
+    assert_eq!(
+        store::begin_command_action(&db, action("k1", "h1"), now.clone())
+            .await
+            .expect("begin"),
+        store::CommandActionStart::Started
+    );
+    assert_eq!(
+        store::begin_command_action(&db, action("k1", "h2"), now.clone())
+            .await
+            .expect("begin with a different request"),
+        store::CommandActionStart::RequestMismatch,
+        "a retry key was accepted for a different request"
+    );
+    assert_eq!(
+        store::begin_command_action(&db, action("k1", "h1"), now.clone())
+            .await
+            .expect("begin again"),
+        store::CommandActionStart::Restarted,
+        "an unfinished attempt was not restartable"
+    );
+    assert!(
+        store::complete_command_action(
+            &db,
+            "src-1".to_string(),
+            "k1".to_string(),
+            "succeeded".to_string(),
+            None,
+            None,
+            now.clone(),
+        )
+        .await
+        .expect("complete the action")
+    );
+    assert_eq!(
+        store::begin_command_action(&db, action("k1", "h1"), now.clone())
+            .await
+            .expect("begin after success"),
+        store::CommandActionStart::AlreadySucceeded,
+        "a succeeded command was offered for a second run"
+    );
+}
