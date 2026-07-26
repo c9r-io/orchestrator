@@ -208,7 +208,7 @@
     "crates/orchestrator-persistence/src/db.rs": {
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 3,
-      "sql": 30,
+      "sql": 37,
       "category": "persistence-layer"
     },
     "crates/orchestrator-persistence/src/db_maintenance.rs": {
@@ -384,6 +384,6 @@
     "members": 14,
     "referencedFiles": 35,
     "rusqlite": 173,
-    "sql": 379
+    "sql": 386
   }
 }

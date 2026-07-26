@@ -218,34 +218,18 @@ fn backfill_default_scope_data(
     workflow_id: &str,
     workspace: &crate::config::ResolvedWorkspace,
 ) -> Result<()> {
-    let conn = crate::db::open_conn(db_path)?;
     let workspace_root = workspace.root_path.to_string_lossy().to_string();
     let qa_targets = serde_json::to_string(&workspace.qa_targets)?;
-    conn.execute(
-        "UPDATE tasks SET workspace_id = ?1 WHERE workspace_id = ''",
-        rusqlite::params![workspace_id],
+    crate::db::backfill_blank_default_scope(
+        db_path,
+        &crate::db::DefaultScopeBackfill {
+            workspace_id,
+            workflow_id,
+            workspace_root: &workspace_root,
+            qa_targets_json: &qa_targets,
+            ticket_dir: &workspace.ticket_dir,
+        },
     )?;
-    conn.execute(
-        "UPDATE tasks SET workflow_id = ?1 WHERE workflow_id = ''",
-        rusqlite::params![workflow_id],
-    )?;
-    conn.execute(
-        "UPDATE tasks SET workspace_root = ?1 WHERE workspace_root = ''",
-        rusqlite::params![workspace_root],
-    )?;
-    conn.execute(
-        "UPDATE tasks SET qa_targets_json = ?1 WHERE qa_targets_json = '' OR qa_targets_json = '[]'",
-        rusqlite::params![qa_targets],
-    )?;
-    conn.execute(
-        "UPDATE tasks SET ticket_dir = ?1 WHERE ticket_dir = ''",
-        rusqlite::params![workspace.ticket_dir],
-    )?;
-    conn.execute(
-        "UPDATE command_runs SET workspace_id = ?1 WHERE workspace_id = ''",
-        rusqlite::params![workspace_id],
-    )?;
-    drop(conn);
     Ok(())
 }
 
@@ -341,13 +325,8 @@ fn run_key_lifecycle_diagnostics(data_dir: &Path, db_path: &Path) {
         && let Ok(conn) = crate::db::open_conn(db_path)
     {
         for rec in &revoked_records {
-            let still_ref: bool = conn
-                    .query_row(
-                        "SELECT EXISTS(SELECT 1 FROM resources WHERE kind='SecretStore' AND instr(spec_json, ?1) > 0)",
-                        rusqlite::params![format!("\"key_id\":\"{}\"", rec.key_id)],
-                        |row| row.get(0),
-                    )
-                    .unwrap_or(false);
+            let still_ref = crate::db::secret_store_resources_reference_key(&conn, &rec.key_id)
+                .unwrap_or(false);
             if still_ref {
                 tracing::warn!(
                     key_id = %rec.key_id,

@@ -431,6 +431,101 @@ pub fn delete_project_resources(db_path: &Path, project: &str) -> Result<usize> 
     Ok(removed)
 }
 
+/// The values bootstrap fills into scope columns that predate the scoping
+/// migrations and were left blank by them.
+#[derive(Debug, Clone, Copy)]
+pub struct DefaultScopeBackfill<'a> {
+    /// Workspace the un-scoped rows belong to.
+    pub workspace_id: &'a str,
+    /// Workflow the un-scoped rows belong to.
+    pub workflow_id: &'a str,
+    /// Absolute path of that workspace's root, already rendered to a string.
+    pub workspace_root: &'a str,
+    /// The workspace's QA targets, already serialized to JSON.
+    pub qa_targets_json: &'a str,
+    /// The workspace's ticket directory, relative to its root.
+    pub ticket_dir: &'a str,
+}
+
+/// How many rows each statement of [`backfill_blank_default_scope`] claimed.
+///
+/// Returned per column rather than as one total because the six statements have
+/// independent predicates: a database can be blank in `workspace_root` and
+/// already correct in `ticket_dir`, and a caller (or a test) that sees only a
+/// sum cannot tell which.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ScopeBackfillCounts {
+    /// `tasks.workspace_id` rows filled.
+    pub tasks_workspace_id: usize,
+    /// `tasks.workflow_id` rows filled.
+    pub tasks_workflow_id: usize,
+    /// `tasks.workspace_root` rows filled.
+    pub tasks_workspace_root: usize,
+    /// `tasks.qa_targets_json` rows filled — blank or an empty JSON array.
+    pub tasks_qa_targets_json: usize,
+    /// `tasks.ticket_dir` rows filled.
+    pub tasks_ticket_dir: usize,
+    /// `command_runs.workspace_id` rows filled.
+    pub command_runs_workspace_id: usize,
+}
+
+/// Fills blank scope columns on `tasks` and `command_runs` with the default
+/// workspace's values.
+///
+/// Each statement only touches rows whose column is still empty, which is what
+/// makes the whole thing safe to run on every bootstrap. The six statements are
+/// deliberately *not* wrapped in one transaction: that is how this ran before it
+/// moved here, and each is independently idempotent, so a failure part-way
+/// through leaves a tree the next bootstrap finishes rather than a rollback the
+/// caller would have to detect.
+pub fn backfill_blank_default_scope(
+    db_path: &Path,
+    values: &DefaultScopeBackfill<'_>,
+) -> Result<ScopeBackfillCounts> {
+    let conn = open_conn(db_path)?;
+    Ok(ScopeBackfillCounts {
+        tasks_workspace_id: conn.execute(
+            "UPDATE tasks SET workspace_id = ?1 WHERE workspace_id = ''",
+            params![values.workspace_id],
+        )?,
+        tasks_workflow_id: conn.execute(
+            "UPDATE tasks SET workflow_id = ?1 WHERE workflow_id = ''",
+            params![values.workflow_id],
+        )?,
+        tasks_workspace_root: conn.execute(
+            "UPDATE tasks SET workspace_root = ?1 WHERE workspace_root = ''",
+            params![values.workspace_root],
+        )?,
+        tasks_qa_targets_json: conn.execute(
+            "UPDATE tasks SET qa_targets_json = ?1 WHERE qa_targets_json = '' OR qa_targets_json = '[]'",
+            params![values.qa_targets_json],
+        )?,
+        tasks_ticket_dir: conn.execute(
+            "UPDATE tasks SET ticket_dir = ?1 WHERE ticket_dir = ''",
+            params![values.ticket_dir],
+        )?,
+        command_runs_workspace_id: conn.execute(
+            "UPDATE command_runs SET workspace_id = ?1 WHERE workspace_id = ''",
+            params![values.workspace_id],
+        )?,
+    })
+}
+
+/// Answers whether any stored `SecretStore` resource still names this key.
+///
+/// The needle is built here rather than passed in because how a key id appears
+/// inside a persisted `spec_json` is this layer's encoding, not its caller's
+/// question. The caller's question is only "is this revoked key still in use".
+pub fn secret_store_resources_reference_key(conn: &Connection, key_id: &str) -> Result<bool> {
+    let needle = format!("\"key_id\":\"{key_id}\"");
+    let referenced: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM resources WHERE kind='SecretStore' AND instr(spec_json, ?1) > 0)",
+        params![needle],
+        |row| row.get(0),
+    )?;
+    Ok(referenced)
+}
+
 /// The queries a deletion guard needs to decide whether a workspace or workflow
 /// can be removed.
 ///
