@@ -257,4 +257,15 @@ below.
 | `ruby scripts/qa/bash32-compat.rb` | `PASS (97 files, 0 findings)` | see the scan-gap caveat above |
 | `ruby scripts/qa/ci-liveness.rb` | `PASS (14 jobs, 3 workflows)` | the other consumer of `workflow_model.rb` |
 | `bash scripts/qa/test-ci-liveness.sh` | `9 passed, 0 failed` | |
+| `bash scripts/qa-doc-lint.sh` | `PASS` | |
+| `ruby scripts/qa/doc-lifecycle.rb` | `PASS (409 documents, 406 active)` | |
+| `bash scripts/qa/test-markdown-link-integrity.sh` | `2 passed, 0 failed` | |
+| `bash scripts/qa/test-docs-publishing-integrity.sh` | `7 passed, 0 failed` | |
+| `cargo fmt --all --check` | clean | no Rust changed; run as the record that nothing regressed |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean | |
+| `cargo test --workspace` | all suites `ok`, 0 failed | |
 | `ruby scripts/lib/workflow_model.rb outcome-facts .` | 22 `coe`, 22 `ref`, 24 `step` | 0.33s for the whole checkout |
+
+The certifying run held `git rev-parse HEAD` constant and `git status --porcelain` empty at start
+and at end. Six other `cert-*.log` files sit in the same scratch directory from an earlier session;
+they are not evidence for this document and are not cited above.
