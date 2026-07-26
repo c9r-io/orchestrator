@@ -302,12 +302,12 @@ REPO7="$(new_repo case7)"
 cat > "$REPO7/subject.sh" <<'OUTER'
 #!/usr/bin/env bash
 set -euo pipefail
-# declare -A described_but_not_used
+# a comment mentioning ${name^^} is prose, not an expansion
 cat > /dev/null <<'INNER'
 declare -A inside_a_heredoc=()
 mapfile -t also_inside < /dev/null
 INNER
-echo done
+echo finished
 OUTER
 track "$REPO7"
 if run_gate "$REPO7" >/dev/null 2>&1; then
@@ -333,15 +333,17 @@ REPO8="$(new_repo case8)"
 cat > "$REPO8/broken.sh" <<'FIXTURE'
 #!/usr/bin/env bash
 set -euo pipefail
-if [ -z "$1" ; then
 items=()
 printf '%s' "${items[@]}"
-fi
+done
 FIXTURE
+if "$LEGACY_BASH" -n "$REPO8/broken.sh" 2>/dev/null; then
+  fail "the fixture for this case parses; it no longer tests what it names"
+fi
 track "$REPO8"
 if OUTPUT="$(run_gate "$REPO8" 2>&1)"; then
   fail "a hazard inside an unparseable script was not reported"
-elif grep -q "broken.sh:5" <<<"$OUTPUT"; then
+elif grep -q "broken.sh:4" <<<"$OUTPUT"; then
   pass "the hazard is still located inside a script that does not parse"
 else
   echo "$OUTPUT" >&2
