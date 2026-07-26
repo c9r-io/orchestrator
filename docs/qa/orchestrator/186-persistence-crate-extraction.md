@@ -283,9 +283,36 @@ contract rather than about `Ok`:
 | `queries::list_terminal_tasks_older_than` | Six tasks whose three exclusions each fail for a different reason — wrong status, too recent, both — plus `LIMIT`, plus a 365-day window selecting nothing. A query returning everything would satisfy an `Ok` check, and auto-cleanup would then delete running work. |
 | `events::step_event_rows` | Only the requested event types come back, a two-type list returns both, and an **empty** list returns nothing rather than everything — the filter is the caller's policy, so the query must carry none of its own. |
 
+| `db::backfill_blank_default_scope` | Per-column counts, and the already-scoped task keeps its workspace. Commenting out one `WHERE column = ''` reports `tasks_workspace_id: 2` against an expected `1` — every task in the database silently rewritten to the default workspace, which a "the blank row was filled" assertion would not see. |
+| `db::secret_store_resources_reference_key` | A key named only outside a `SecretStore`, and a key-id *prefix*, both answer no. Dropping `kind='SecretStore'` makes the first answer yes and a rotation never finishes. |
+| `control_action_audit::{reserve, complete, get, list}` | Which prior row a reservation found, not merely that it found one; a terminal envelope is not rewritten by a second completion; reads do not cross a project. Four mutations, one per guard. |
+| `task_repository::creation::{insert_task_with_items, reset_task_item}` | Item order is one-based and follows the given paths; the creation event lands; a duplicate task id is a no-op; a reset clears `last_error` and drops the stale command runs that would otherwise let compensation re-finalize the item. |
+| `event_retention::*` | No new assertions — the file arrived with 17 tests already pinned on exactly these statements. Verified they are the reason and not a coincidence: commenting out `AND tasks.status IN (…)` fails three of them, and dropping the archival delete fails three more. |
+| `source_events::*` | Five guards, each mutated and each caught. See below. |
+
 The two halves that stayed in core are tested without a database at all, which is what the splits
 bought: `config_load::build`'s deletion guards against a stub implementation of
 `db::DeletionGuardQueries`, and `events::step_events_from_rows` against struct literals.
+
+### Two things the mutations established that the assertions alone would not have
+
+**Five `source.rs` guards were pinned by nothing.** Each was mutated in place before the assertion
+was written, and core's 96 `source::` tests stayed green for all five: `complete_routing`'s
+`AND routing_state='routing'`, the identical guard in `defer_to_automation` (a separate statement
+with its own copy), the claim's `routing_attempts < 5`, `CommandActionStart::RequestMismatch`, and
+`INSERT OR IGNORE … == 1`. The first of these was itself a near miss — the initial mutation
+replaced the *first* textual occurrence of the guard, which is `defer_to_automation`'s, and passed;
+targeting `complete_routing` specifically is what made it fail. Two statements carrying the same
+guard need two mutations, not one.
+
+**Task creation's transaction has no reachable fixture.** The assertion for
+`insert_task_with_items` covers the rows, the ordering and the duplicate-id no-op, but *not*
+atomicity, and this is recorded in the test rather than left implied. `INSERT INTO tasks` is the
+first statement and the only one a well-formed call can make fail — no later table in that
+transaction carries a constraint a caller can violate. Both confirming mutations pass: reordering
+the events ahead of the task insert, and deleting the transaction outright. With the only failure
+at statement one, rollback has nothing to undo. A green assertion here is not evidence of
+atomicity, and the test says so.
 
 ## Checklist
 
@@ -298,4 +325,7 @@ bought: `config_load::build`'s deletion guards against a stub implementation of
 - [ ] The gate refuses to run on a dirty worktree (exit 2)
 - [ ] `cargo test --workspace` green
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings` clean
+- [ ] Every Phase B batch: `config/governance/schema-snapshot.sql` byte-identical, both ledgers
+      re-frozen in the batch's own commit, `phase_c_preserves_the_external_dependency_category`
+      passing and unmodified, and the batch revertible when named as a single commit
 - [ ] `ruby scripts/qa/core-boundary.rb` and `ruby scripts/qa/persistence-dependency.rb` pass

@@ -8,10 +8,11 @@
 [DD-142](../design_doc/orchestrator/142-core-boundary-freeze.md) 与
 [QA 180](../qa/orchestrator/180-core-boundary-freeze.md) 承载。
 
-**需求 2 的 Phase A 与 Phase C 已闭环，Phase B 进行中（6 / 18 文件）**，其设计与验证由
+**需求 2 的 Phase A 与 Phase C 已闭环，Phase B 进行中（14 / 18 文件已有书面处置：
+11 个已迁出或拆分、2 个保留并记录理由、1 个被阻塞；4 个未处置）**，其设计与验证由
 [DD-148](../design_doc/orchestrator/148-persistence-crate-extraction.md) 与
 [QA 186](../qa/orchestrator/186-persistence-crate-extraction.md) 承载。
-core 已从 200 处 `rusqlite` 引用 / 37 文件降至 **75 处 / 13 文件**，逐文件结论见下面的
+core 已从 200 处 `rusqlite` 引用 / 37 文件降至 **44 处 / 7 文件**，逐文件结论见下面的
 「逐文件处置表」。
 
 **2026-07-25 重写**：原需求 2（crate 提取）实际包含三件粒度、风险与前置条件都不同的事，
@@ -192,23 +193,50 @@ crate 清单。`scripts/qa/core-boundary.rb` 以**精确相等**比对，`--emit
 | `task_cleanup.rs` | ~~1~~ 0 | 290 | ✅ **已拆分**（B3）。保留查询 → `queries::list_terminal_tasks_older_than`；级联删除改用既有 async repository 方法（原为手写重复）；文件系统清理留在 core |
 | `config_load/build.rs` | ~~2~~ 0 | 918 | ✅ **已拆分**（B4）。删除守卫改吃 `db::DeletionGuardQueries` port；守卫逻辑现可无数据库单测 |
 | `events.rs` | ~~3~~ 0 | 700 | ✅ **已拆分**（B5）。行访问 → `events::{StepEventRow, step_event_rows}`；payload 解释留在 core；事件类型清单**上移**为 core 的 `STEP_EVENT_TYPES` 并作参数下传 |
-| `trigger_engine.rs` | 18 | 1130 | ⏳ 未处置。error-adapter 7 + sql-params 11。最大的一个，SQL 分散在多个 `writer().call` 闭包内 |
-| `action_audit.rs` | 9 | 742 | ⏳ 未处置。error-adapter 6 + row-mapping 2 + import 1。已有 `reserve`/`list` 等函数收着 SQL，形态接近可整体迁出 |
-| `service/bootstrap.rs` | 7 | 597 | ⏳ 未处置。**全部 7 处是 sql-params**，无 error 管道——这是纯 SQL 迁出，形态最干净 |
-| `source_automation.rs` | 7 | 2008 | ⏳ 未处置。error-construction 4 + error-adapter 2 + import 1 |
-| `source.rs` | 5 | 1337 | ⏳ 未处置。error-adapter 2 + error-construction 2 + import 1 |
-| `source_connection.rs` | 5 | 1923 | ⏳ 未处置。error-adapter 2 + row-mapping 2 + import 1 |
-| `handoff.rs` | 5 | 1288 | ⏳ 未处置。error-adapter 2 + error-construction 2 + import 1 |
-| `event_cleanup.rs` | 5 | 845 | ⏳ 未处置。error-construction 3 + sql-params 2 |
-| `task_ops.rs` | 4 | 1826 | ⏳ 未处置。connection-type 2 + import 2 |
-| `attention.rs` | 3 | 1454 | ⏳ 未处置。**仅 import 1 + `fn other` 2**——只动管道就能清零，正是上面拒绝的那笔交易。其 SQL 未搬走前，诚实的处置是"保留并记录理由" |
-| `process_metrics.rs` | 3 | 1953 | ⏳ 未处置。同 `attention.rs` |
-| `persistence/repository/config.rs` | 3 | 695 | ⏳ **被阻塞**。connection-type 2 + import 1。需 `crd` 先下沉，否则 `persistence → crd → persistence` 成环 |
+| `trigger_engine.rs` | 18 | 1130 | ⏳ **未处置**。error-adapter 7 + sql-params 11。SQL 分散在多个 `writer().call` 闭包内，形态同 `source.rs`（B11），可按同一模式迁出 |
+| `action_audit.rs` | ~~9~~ 0 | 742→442 | ✅ **已拆分**（B8）。表与 7 条语句 → `control_action_audit`；字段边界、canonical hash、生命周期 allowlist、幂等冲突规则留在 core。存储只报告 `Reservation::{Claimed, PriorByRetryIdentity, PriorByRequestId}`，不解释其含义 |
+| `service/bootstrap.rs` | ~~7~~ 0 | 597 | ✅ **已拆分**（B7）。6 条 scope backfill + SecretStore 引用探针 → `db`；渲染 workspace_root、序列化 qa_targets、`unwrap_or(false)` 留在 core |
+| `source_automation.rs` | 7 | 2008 | ⏳ **未处置**。error-construction 4 + error-adapter 2 + import 1 |
+| `source.rs` | ~~5~~ 0 | 1337→650 | ✅ **已拆分**（B11）。四张表 24 条语句 → `source_events`；校验、确定性 id 推导、30 秒退避、终态 allowlist 留在 core。**发现 5 处安全护栏此前无任何测试守护**，见下 |
+| `source_connection.rs` | 5 | 1923 | ⏳ **未处置**。error-adapter 2 + row-mapping 2 + import 1 |
+| `handoff.rs` | 5 | 1288 | ⏳ **未处置**。error-adapter 2 + error-construction 2 + import 1。比 `source.rs` 更纠缠：`generate_snapshot` 在同一个 writer 闭包内穿插读取、投影、**以及一个 `git` 子进程**（`workspace_state_digest`）。拆分的正确切法已确定（见 DD-148），但比前几批大 |
+| `event_cleanup.rs` | ~~5~~ 0 | 845→330 | ✅ **已拆分**（B10）。保留期语句 → `event_retention`；JSONL 归档的分组与写文件留在 core。这一批取消了「磁盘错误伪装成驱动类型转换错误」 |
+| `task_ops.rs` | ~~4~~ 0 | 1826 | ✅ **已拆分**（B9）。两条重复的建任务写路径合并为一个事务 → `task_repository::creation`；FR-094 诊断事件改为**构造**而非写入 |
+| `attention.rs` | 3 | 1454 | ⏸️ **保留并记录理由**。import 1 + `fn other` 2。其 SQL 全部在 `writer().call` 闭包内，与 `source.rs` 同形；要清零就得整体迁出，而**只动管道的那条路已被本 FR 拒绝**并移交 [FR-141](FR-141-persistence-connection-api-boundary.md)。今天没有搬 SQL，所以今天的诚实结论就是保留 |
+| `process_metrics.rs` | 3 | 1953 | ⏸️ **保留并记录理由**。同 `attention.rs`，理由同上，同样指向 FR-141 |
+| `persistence/repository/config.rs` | 3 | 695 | 🚧 **被阻塞**。connection-type 2 + import 1。它 `use crate::resource::export_manifest_resources` 与 `crate::secret_store_crypto`，二者都在 core。**解锁条件**：`crd`（资源/清单模型）先下沉到独立 crate 或 `orchestrator-config`，否则迁出会造成 `persistence → crd → persistence` 成环 |
 
-已处置 6 个文件、9 处引用。core 从 86 处 / 20 文件降至 **75 处 / 13 文件**。
+已处置 **11 / 18**，另有 3 个已写明处置（2 个保留、1 个被阻塞），共 **14 / 18**。
+core 从 86 处 / 20 文件降至 **44 处 / 7 文件**。
 
-`core/src/migration.rs` 的 1 处是 Phase A 的具名残余（三个无人引用的兼容包装），
-处置它是"下线死掉的公开 API"这一决策，仍归本阶段。
+Phase A 的具名残余 `core/src/migration.rs`（1 处）已在 B12 处置：三个兼容包装
+**全工作区零生产调用者**，作为「下线死掉的公开 API」删除。删除时立刻暴露了它掩盖的漂移
+——`crate::migration::run_pending` 返回裸计数，而真正的 API 返回
+`AppliedMigrationSummary`；六处断言因此补上 `.count()`。
+
+#### B11 的发现：5 处安全护栏此前无人守护
+
+`source.rs` 迁出后，对搬走的每条语句做变异确认，其中五条**在本次提交之前没有任何测试会失败**
+（每条都实测过：变异后 core 的 96 个 `source::` 测试全绿）：
+
+| 护栏 | 去掉它会发生什么 |
+|---|---|
+| `complete_routing` 的 `AND routing_state='routing'` | 迟到的 worker 覆盖另一个 worker 已提交的路由结论 |
+| `defer_to_automation` 上同一条护栏（**另一条语句里的另一份拷贝**） | 没人在路由的投递被交给 automation worker，两个 worker 同时拥有它 |
+| claim 的 `routing_attempts < 5` | 毒消息被无限重试 |
+| `CommandActionStart::RequestMismatch` | 重放键被换了请求后**静默重启**——在为另一个请求给出的批准下执行一条没人要求的命令 |
+| `INSERT OR IGNORE … == 1` | 重复投递自称是新插入，被路由两次 |
+
+现由 `source_routing_guards_hold_the_line_they_are_there_for` 逐条钉住。
+**这一批真正的产出不是搬走了 24 条语句，而是这五条护栏此前由零个测试承担。**
+
+#### 剩余工作（4 个文件）
+
+`trigger_engine.rs`（18）、`source_automation.rs`（7）、`source_connection.rs`（5）、
+`handoff.rs`（5）。形态已经清楚，B8/B11 建立的模式直接适用：持久化层拿到**异步**函数
+（吃 `&AsyncDatabase`，自己持有 `writer().call` 与错误适配器），core 保留校验、id 推导、
+状态机规则与解释。`handoff.rs` 额外需要把 `workspace_state_digest` 的 `git` 子进程
+移出 writer 闭包。
 
 ### ✅ Phase C：`error.rs` 的驱动耦合决策（2026-07-26 闭环）
 

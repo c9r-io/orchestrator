@@ -5,7 +5,7 @@ related_fr: FR-130
 
 # DD-148: Persistence Crate Extraction (FR-130 Phase A)
 
-**Status**: Implemented (FR-130 Phase A and Phase C; Phase B in progress, 6 of 18 files)
+**Status**: Implemented (FR-130 Phase A and Phase C; Phase B in progress, 14 of 18 files disposed)
 **Related**: DD-142 (core boundary freeze), DD-147 (persistence dependency chokepoint), QA 186, FR-047, FR-048
 
 ## Background
@@ -236,6 +236,99 @@ Two of them are worth separating from the rest, because they are not refactors: 
 counts rather than of code that touches the database. Counting them as Phase B progress without
 saying so would misreport nine converged references as nine moved statements.
 
+A second round took five more files and the Phase A residual, same discipline — one file, one
+commit, ledgers re-frozen in it:
+
+| File | Disposition |
+|---|---|
+| `service/bootstrap.rs` | Split. Six blank-scope backfill statements and the SecretStore key probe moved to `db`; rendering `workspace_root`, serializing `qa_targets`, and the `unwrap_or(false)` that keeps the probe advisory stayed. |
+| `action_audit.rs` | Split. The `control_action_audit` table and its seven statements moved; the field bounds, the canonical hash, the lifecycle allowlists and the idempotency-conflict rule stayed. |
+| `task_ops.rs` | Split. Two duplicated creation paths collapsed into one transaction in `task_repository::creation`; FR-094's diagnostic events became a *builder* rather than a writer. |
+| `event_cleanup.rs` | Split. Retention statements moved; JSONL grouping and file writing stayed. |
+| `source.rs` | Split. Four tables, 24 statements moved to `source_events`; validation, deterministic id derivation, the retry backoff and the state allowlists stayed. |
+| `migration.rs` (Phase A residual) | Retired. Three wrappers, zero production callers workspace-wide. |
+
+### Async at the boundary, not a closure API on `AsyncDatabase`
+
+`action_audit.rs` was the first file whose references were mostly `tokio_rusqlite::Error::Other`
+adapters inside `writer().call` closures, and it forced the question this FR had already answered
+once: the refused shortcut was to give `AsyncDatabase` closure methods taking `anyhow::Result` and
+delete six duplicated `fn other` helpers, converging ~39 references without moving one statement.
+
+The distinction that makes the moves here legitimate rather than the same trade under a new name
+is that the closure and its error adapter go **with the SQL**. `orchestrator_persistence::
+control_action_audit::reserve` takes `&AsyncDatabase`; the `writer().call` and the
+`Error::Other` mapping are inside it, next to the `INSERT` they exist to serve. Core does not
+name the driver because it no longer holds the statement, not because a generic helper hid the
+name. `AsyncDatabase` gained no methods. FR-141 still owns the API-boundary question.
+
+### The store names its case; the caller says what it means
+
+Three of these files had the same shape: a write, a conditional read, and a rule about what the
+read means. Splitting them at the statement boundary would have put the rule below the layer;
+splitting them at the operation boundary would have kept the statement above it. Both moves
+return a *named case* instead:
+
+- `Reservation::{Claimed, PriorByRetryIdentity, PriorByRequestId}` — `INSERT OR IGNORE` plus one
+  of two reads, atomic; the caller compares hashes and produces the two different diagnostics.
+- `CommandActionStart::{Started, Restarted, AlreadySucceeded, RequestMismatch}` — the read and
+  the write that follows it must be one operation on the writer, so the string comparison stays
+  below and only its meaning goes up.
+- `bool` from `complete_routing` and `defer_to_automation` — "was it still in a state you could
+  close", with the caller deciding that `false` is an error and what to call it.
+
+### What B11's mutations found
+
+Every batch mutates the statements it moved. `source.rs` is the one where that turned up
+something: five guards were moved, and all five were confirmed to be pinned by **no test at
+all** — each was mutated in place and core's 96 `source::` tests stayed green.
+
+| Guard | What its absence does |
+|---|---|
+| `complete_routing`'s `AND routing_state='routing'` | A late worker overwrites a routing decision another worker already committed. |
+| The same guard on `defer_to_automation` — a separate statement with its own copy | A delivery nobody is routing is handed to the automation worker, and two workers own it. |
+| `routing_attempts < 5` on the claim | A poison message is retried forever. |
+| `CommandActionStart::RequestMismatch` | A retry key reused under a different request is quietly *restarted* — running a command nobody asked for, under an approval given for another one. |
+| `INSERT OR IGNORE … == 1` | A duplicate delivery reports itself as newly inserted and is routed twice. |
+
+The batch's product is not that 24 statements moved. It is that five safety guards were carried
+by nothing, and are now carried by
+`source_routing_guards_hold_the_line_they_are_there_for`. Moving code is what made anyone look.
+
+### Two error shapes the moves removed
+
+Both were the same defect wearing different clothes: work that is not a database operation being
+performed inside a callback that can only return a driver error.
+
+- `event_cleanup.rs` wrote its JSONL archive inside the writer's closure, so `create_dir_all`,
+  `open` and `writeln!` failures were reported as `ToSqlConversionFailure` — a full disk
+  presented to the operator as a type-conversion error. The file writing is now in core, with
+  `anyhow` context naming the path.
+- `source.rs` and `handoff.rs` parse a stored JSON payload inside the row mapper, so a
+  `serde_json` failure had to become `FromSqlConversionFailure` with an invented column index.
+  `source.rs`'s payload now crosses the boundary as text and is parsed in core. `handoff.rs`
+  still has this shape; see the remaining work below.
+
+### What is left, and why each is left
+
+Four files are undisposed. None of them is blocked; all four are the same shape as `source.rs`
+and would follow the pattern above. They are named here so the remaining work is specified rather
+than "the rest of Phase B".
+
+| File | Refs | Lines | Shape |
+|---|---|---|---|
+| `trigger_engine.rs` | 18 | 1130 | error-adapter 7 + sql-params 11, spread across several `writer().call` closures. |
+| `source_automation.rs` | 7 | 2008 | error-construction 4 + error-adapter 2 + import 1. |
+| `source_connection.rs` | 5 | 1923 | error-adapter 2 + row-mapping 2 + import 1. |
+| `handoff.rs` | 5 | 1288 | error-adapter 2 + error-construction 2 + import 1. |
+
+`handoff.rs` is the one with a wrinkle worth recording now, because it is not visible from the
+reference count: `generate_snapshot` runs reads, the briefing projection, *and a `git`
+subprocess* (`workspace_state_digest`) inside one writer closure. The subprocess holds the
+SQLite writer for its duration. The split that fixes it is a read call for the snapshot inputs,
+projection and digest in core, then one find-or-insert call — which keeps the idempotency check
+atomic, which is the only part that needs to be.
+
 ### Ports where they fit, not where they were proposed
 
 FR-130 proposed a port-layer error type for Phase C. That was the wrong tool there — `error.rs`
@@ -315,14 +408,14 @@ here:
 
 ### Known limits
 
-- **Phase A converged 114 of its 115 references, not 115.** The one left is
-  `core/src/migration.rs`'s `use rusqlite::Connection`. That file is three wrappers over
-  `persistence::migration` kept "for compatibility" with nobody: no crate outside `core` names
-  `agent_orchestrator::migration`, and its only caller inside `core` is `action_audit.rs`'s test
-  module. Converging it means either retiring dead public API — a decision, not a move — or
-  adding a `run_pending_count` to the persistence crate that exists only to drive a count to
-  zero. The second is worse than the residual it removes. It belongs to Phase B's per-file
-  judgement.
+- **Phase A converged 114 of its 115 references, not 115** — resolved in Phase B (B12). The one
+  left was `core/src/migration.rs`'s `use rusqlite::Connection`, guarding three wrappers over
+  `persistence::migration` kept "for compatibility" with nobody. Phase B took the first of the
+  two options named here: retire the dead public API. Deleting the wrappers immediately exposed
+  what they had been hiding — `crate::migration::run_pending` returned a bare count while the
+  real API returns an `AppliedMigrationSummary`, so six assertions had to gain `.count()`. That
+  is the cost of a shim nothing is compatible with: it is a second name for the real API, free
+  to drift.
 - **The ledger counts the token `rusqlite`, not SQL statements.** `db_write.rs` is 1,441 lines
   of SQL and counted 1; `db.rs` is 1,104 lines and counted 1. Phase A's "115 references" was
   ~12,100 lines and Phase B's "83" is 17,963 — the smaller number is the larger phase. The count
