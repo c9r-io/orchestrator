@@ -82,6 +82,7 @@
 | FR-130 | Core Crate 拆分 Phase 3 — persistence 提取 | P1 | In Progress |
 | FR-133 | 依赖策略门禁 — 重复版本、许可证与来源约束 | P3 | Proposed |
 | FR-137 | governance job 聚合清单的完整性断言 | P2 | Proposed |
+| FR-138 | bash 3.2 兼容性扫描器的跨行词法状态与漏报面 | P2 | Proposed |
 
 ## 说明
 
@@ -93,6 +94,7 @@
 - 已闭环并删除的 FR，应由对应 `docs/design_doc/**` 与 `docs/qa/**` 继续承载设计和验证信息
 - FR-127 至 FR-133 源自 2026-07-25 的技术负债深挖，共同特征是**治理编写侧严格而执行侧未接线**：门禁、镜像、同步链路、依赖策略均存在"写了但不跑"或"从未被检查"的缺口。FR-127、FR-128、FR-129、FR-131、FR-132 与 FR-134 均已闭环——执行面已打开并改由执行事实校验，覆盖面改为发现式，既有门禁的维护摩擦已降低，镜像缺口已消除，文档发布链路已单一来源化，CI 每个 job 的存活性进入台账；FR-135 也已闭环（`boundary-coverage` 已首次转绿，`known-failing` 标注移除）；后续实施顺序为 FR-133（门禁挂到该执行面上）→ FR-130 的剩余部分（唯一的结构性重构，与其余各项无依赖）。FR-076 的需求 1（GUI CI 集成）同源，已在该 FR 内单独提升为 P1
 - FR-137 源自 FR-134 的闭环后审计：`governance` job 的门禁步骤改为 `continue-on-error: true` 后由末尾 `Governance result` 汇总，但那份 `OUTCOMES` 是手写枚举且无人守护——插入一个带 `id:`、`continue-on-error: true` 且恒失败、却不在 `OUTCOMES` 中的步骤，门禁仍报全绿。这是 FR-134 在别处消灭了六次的枚举式覆盖面，出现在它自己为诊断可见性所做的修复里。FR-136 闭环时该 job 增至 21 个 id，`OUTCOMES` 同步增至 21 条、差集仍为空——但"同步"靠的是作者记得，正是本 FR 要消除的东西，故属潜伏而非已发作
+- FR-138 源自 FR-135 的闭环后审计：`bash32-compat.rb` 的 `code_lines` 逐行重置引号状态，跨行单引号内的 `<< WORD` 形近物被当作 heredoc 开启符，其后整个文件退出扫描且无诊断。当前两处生效——`test-qa-gate-surface.sh` 第 900 行起 252 行（`perl -e` 里的 `<<EOF`）、`test-bash32-compat.sh` 第 369 行起 16 行（`ruby -e` 里的 `hosting << job_name`）。把四类危险构造追加到被吞区域，门禁仍报 `PASS, 0 finding`；同一段放进无逃逸的文件报 3 finding。两处尾部单独重扫为 0，故属潜伏。触发第二处的正是 case 9——那条"证明 CI 中存在跑本门禁的 macOS 宿主"的防空转断言，其 ruby 数组追加记号让门禁看不见自己最后 16 行。这是 FR-134 需求 9 在 Rust 侧刚以 `rust_lexer.rb` 消灭的逐行近似，七个提交后于 shell 侧重现。另含两处漏报：数组在被 source 的库中置空、在调用方展开不被发现（DD-146 只记录了同一条规则的过报方向），以及 `COMMAND_POSITION` 的候选集含非 bash 关键字的 `not` 而缺真正的取反记号 `!`，使 `if ! mapfile` 漏过
 - FR-136 已闭环删除；其收口决策（以 `agent_orchestrator.db` 而非 crate 层级划线：core／未来的 `orchestrator-persistence` 为持久化层，`orchestrator-scheduler` 与 `daemon` 禁止并冻结残量至 FR-130 偿清、`task_state.rs` 在被禁止的一侧，`orchestrator-security` 因位于 core 之下而书面豁免、`slack-gateway` 因自有 `gateway.db` 而不在范围内、`integration-tests` 冻结于 `[dev-dependencies]`）、core 之外全部 55 处引用的机器可读分类，以及**两条互不替代的**门禁条件（谁可以*声明*驱动，由 `[workspace] members` 发现并逐 section 解析 manifest 得出；谁可以*使用*，按文件冻结 SQL 语句数与驱动引用数并双向精确比较），现由 `docs/design_doc/orchestrator/147-persistence-dependency-chokepoint.md`、`docs/qa/orchestrator/185-persistence-dependency-chokepoint.md`、`config/governance/persistence-dependency-ledger.json`、`scripts/qa/{persistence-dependency.rb,test-persistence-dependency.sh}` 与 `.github/workflows/ci.yml` 承载。`core-boundary-ledger.json` 的 `rusqliteDependentCrates` 随之删除，规则只在一处表达。
 
   FR 原文的事实偏差：非 core 的"23 个文件 75 处引用"来自对 `src/` 的朴素 `grep`，把测试代码一并计入，与它所引用的 DD-142 口径（`RustSource.scannable_source` 剥离 `#[cfg(test)]`）相反——按同一口径 core 精确复现为 200/37，非 core 实为 **15 个文件 55 处**（scheduler 17 而非 37、security 6 而非 7、slack-gateway 10 而非 9，daemon 22 正确）；被点名为生产消费者的 `service/task.rs`(4) **一处生产引用都没有**，4 处全在第 462 行 `#[cfg(test)]` 之下；判定性用例 `task_state.rs` 是 8 处而非 9 处；`spawn.rs`(3) 实为两个不同文件。
