@@ -1,18 +1,17 @@
 use crate::config::LoopMode;
 use crate::config_load::build_execution_plan_for_project;
 use crate::config_load::{now_ts, read_active_config};
-use crate::db::open_conn;
 use crate::dto::{
     CreateRunStepPayload, CreateTaskPayload, IMPLICIT_TASK_ITEM_PATH, TaskSummary,
     UNASSIGNED_QA_FILE_PATH,
 };
 use crate::task_repository::{
-    DbEventRecord, SqliteTaskRepository, TaskQueryRepository, insert_event_row,
+    DbEventRecord, NewTaskRow, SqliteTaskRepository, TaskQueryRepository, insert_task_with_items,
+    reset_task_item,
 };
 use crate::ticket::{collect_target_files, collect_target_files_from_active_tickets};
 use anyhow::{Context, Result};
 use chrono::Utc;
-use rusqlite::params;
 use uuid::Uuid;
 
 /// Threshold above which a `QaDirectoryScan` materialization is upgraded
@@ -304,18 +303,16 @@ fn materialize_task_workspace(
     })
 }
 
-/// FR-094: persists `qa_directory_scan_triggered` (and, when oversize,
-/// `qa_directory_scan_oversize`) events for a freshly committed task.
+/// FR-094: builds the `qa_directory_scan_triggered` (and, when oversize,
+/// `qa_directory_scan_oversize`) events for a freshly created task.
 ///
-/// `conn` should be the same `Connection` used to insert the task and its
-/// items.  Both event rows are stand-alone INSERTs (no transaction needed
-/// on top of the caller's commit) because they are observability-only —
-/// losing them due to an unexpected error would not corrupt task state.
-fn emit_qa_directory_scan_events(
-    conn: &rusqlite::Connection,
+/// Returns the rows instead of writing them. The persistence layer commits them
+/// in the same transaction as the task and its items, so the diagnostics that
+/// explain how the item list was derived cannot outlive or precede it.
+fn qa_directory_scan_events(
     task_id: &str,
     diagnostic: &QaDirectoryScanDiagnostic,
-) -> Result<()> {
+) -> Result<Vec<DbEventRecord>> {
     let payload = serde_json::json!({
         "trigger_step_id": diagnostic.trigger_step_id,
         "trigger_capability": diagnostic.trigger_capability,
@@ -323,15 +320,12 @@ fn emit_qa_directory_scan_events(
         "qa_targets": diagnostic.qa_targets,
         "level": "info",
     });
-    insert_event_row(
-        conn,
-        &DbEventRecord {
-            task_id: task_id.to_string(),
-            task_item_id: None,
-            event_type: "qa_directory_scan_triggered".to_string(),
-            payload_json: serde_json::to_string(&payload)?,
-        },
-    )?;
+    let mut events = vec![DbEventRecord {
+        task_id: task_id.to_string(),
+        task_item_id: None,
+        event_type: "qa_directory_scan_triggered".to_string(),
+        payload_json: serde_json::to_string(&payload)?,
+    }];
 
     if diagnostic.materialized_count > QA_DIRECTORY_SCAN_OVERSIZE_THRESHOLD {
         let oversize_payload = serde_json::json!({
@@ -342,17 +336,14 @@ fn emit_qa_directory_scan_events(
             "qa_targets": diagnostic.qa_targets,
             "level": "warning",
         });
-        insert_event_row(
-            conn,
-            &DbEventRecord {
-                task_id: task_id.to_string(),
-                task_item_id: None,
-                event_type: "qa_directory_scan_oversize".to_string(),
-                payload_json: serde_json::to_string(&oversize_payload)?,
-            },
-        )?;
+        events.push(DbEventRecord {
+            task_id: task_id.to_string(),
+            task_item_id: None,
+            event_type: "qa_directory_scan_oversize".to_string(),
+            payload_json: serde_json::to_string(&oversize_payload)?,
+        });
     }
-    Ok(())
+    Ok(events)
 }
 
 /// Creates a task, its execution plan snapshot, and initial task items.
@@ -499,45 +490,38 @@ pub fn create_task_impl_with_id_outcome(
         .goal
         .unwrap_or_else(|| "Automated QA workflow with fix and resume".to_string());
 
-    let conn = open_conn(&state.db_path)?;
-    let tx = conn.unchecked_transaction()?;
-    tx.execute(
-        "INSERT INTO tasks (id, name, status, started_at, completed_at, goal, target_files_json, mode, project_id, workspace_id, workflow_id, workspace_root, qa_targets_json, ticket_dir, execution_plan_json, loop_mode, current_cycle, init_done, resume_token, created_at, updated_at, parent_task_id, spawn_reason, spawn_depth, step_filter_json, initial_vars_json, artifacts_dir) VALUES (?1, ?2, 'created', NULL, NULL, ?3, ?4, '', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 0, 0, NULL, ?13, ?13, ?14, ?15, 0, ?16, ?17, ?18)",
-        params![
-            task_id,
-            task_name,
+    // FR-094 observability: the diagnostic events go into the same commit as
+    // the task and its items, so the record of how the item list was derived
+    // cannot survive without the list or the other way round.
+    let events = match resolved_targets.qa_directory_scan_diagnostic {
+        Some(ref diagnostic) => qa_directory_scan_events(&task_id, diagnostic)?,
+        None => Vec::new(),
+    };
+    insert_task_with_items(
+        &state.db_path,
+        &NewTaskRow {
+            id: task_id.clone(),
+            name: task_name,
             goal,
-            serde_json::to_string(&resolved_targets.persisted_target_files)?,
+            target_files_json: serde_json::to_string(&resolved_targets.persisted_target_files)?,
             project_id,
             workspace_id,
             workflow_id,
-            workspace.root_path.to_string_lossy().to_string(),
-            serde_json::to_string(&workspace.qa_targets)?,
-            workspace.ticket_dir,
+            workspace_root: workspace.root_path.to_string_lossy().to_string(),
+            qa_targets_json: serde_json::to_string(&workspace.qa_targets)?,
+            ticket_dir: workspace.ticket_dir.clone(),
             execution_plan_json,
-            loop_mode,
+            loop_mode: loop_mode.to_string(),
             created_at,
-            payload.parent_task_id,
-            payload.spawn_reason,
+            parent_task_id: payload.parent_task_id,
+            spawn_reason: payload.spawn_reason,
             step_filter_json,
             initial_vars_json,
-            workspace.artifacts_dir.to_string_lossy().to_string(),
-        ],
+            artifacts_dir: workspace.artifacts_dir.to_string_lossy().to_string(),
+        },
+        &resolved_targets.task_item_paths,
+        &events,
     )?;
-
-    for (idx, path) in resolved_targets.task_item_paths.iter().enumerate() {
-        let item_id = Uuid::new_v4().to_string();
-        tx.execute(
-            "INSERT INTO task_items (id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 'pending', '[]', '[]', 0, 0, '', NULL, NULL, ?5, ?5)",
-            params![item_id, task_id, (idx as i64) + 1, path, created_at],
-        )?;
-    }
-    // FR-094 observability: emit diagnostic events inside the same
-    // transaction so the task and its diagnostics commit atomically.
-    if let Some(ref diagnostic) = resolved_targets.qa_directory_scan_diagnostic {
-        emit_qa_directory_scan_events(&tx, &task_id, diagnostic)?;
-    }
-    tx.commit()?;
     managed_workspace.disarm();
 
     let repo = SqliteTaskRepository::new(state.db_path.clone());
@@ -690,40 +674,39 @@ pub fn create_run_step_task(
     let goal = format!("Direct step execution: {}", payload.template);
     let workflow_id = format!("_ephemeral:{}", payload.template);
 
-    let conn = open_conn(&state.db_path)?;
-    let tx = conn.unchecked_transaction()?;
-    tx.execute(
-        "INSERT INTO tasks (id, name, status, started_at, completed_at, goal, target_files_json, mode, project_id, workspace_id, workflow_id, workspace_root, qa_targets_json, ticket_dir, execution_plan_json, loop_mode, current_cycle, init_done, resume_token, created_at, updated_at, parent_task_id, spawn_reason, spawn_depth, step_filter_json, initial_vars_json, artifacts_dir) VALUES (?1, ?2, 'created', NULL, NULL, ?3, ?4, '', ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'once', 0, 0, NULL, ?12, ?12, NULL, NULL, 0, '', ?13, ?14)",
-        params![
-            task_id,
-            task_name,
+    // FR-094 observability: same diagnostic surface as create_task_impl, and the
+    // same commit.
+    let events = match resolved_targets.qa_directory_scan_diagnostic {
+        Some(ref diagnostic) => qa_directory_scan_events(&task_id, diagnostic)?,
+        None => Vec::new(),
+    };
+    insert_task_with_items(
+        &state.db_path,
+        &NewTaskRow {
+            id: task_id.clone(),
+            name: task_name,
             goal,
-            serde_json::to_string(&resolved_targets.persisted_target_files)?,
+            target_files_json: serde_json::to_string(&resolved_targets.persisted_target_files)?,
             project_id,
             workspace_id,
             workflow_id,
-            workspace.root_path.to_string_lossy().to_string(),
-            serde_json::to_string(&workspace.qa_targets)?,
-            workspace.ticket_dir,
+            workspace_root: workspace.root_path.to_string_lossy().to_string(),
+            qa_targets_json: serde_json::to_string(&workspace.qa_targets)?,
+            ticket_dir: workspace.ticket_dir.clone(),
             execution_plan_json,
+            // The direct-step path has no loop, no parent and no step filter:
+            // the four columns the two creation paths ever differed in.
+            loop_mode: "once".to_string(),
             created_at,
+            parent_task_id: None,
+            spawn_reason: None,
+            step_filter_json: String::new(),
             initial_vars_json,
-            workspace.artifacts_dir.to_string_lossy().to_string(),
-        ],
+            artifacts_dir: workspace.artifacts_dir.to_string_lossy().to_string(),
+        },
+        &resolved_targets.task_item_paths,
+        &events,
     )?;
-
-    for (idx, path) in resolved_targets.task_item_paths.iter().enumerate() {
-        let item_id = Uuid::new_v4().to_string();
-        tx.execute(
-            "INSERT INTO task_items (id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 'pending', '[]', '[]', 0, 0, '', NULL, NULL, ?5, ?5)",
-            params![item_id, task_id, (idx as i64) + 1, path, created_at],
-        )?;
-    }
-    // FR-094 observability: same diagnostic surface as create_task_impl.
-    if let Some(ref diagnostic) = resolved_targets.qa_directory_scan_diagnostic {
-        emit_qa_directory_scan_events(&tx, &task_id, diagnostic)?;
-    }
-    tx.commit()?;
     managed_workspace.disarm();
 
     let repo = SqliteTaskRepository::new(state.db_path.clone());
@@ -761,53 +744,7 @@ pub fn reset_task_item_for_retry(
     state: &crate::state::InnerState,
     task_item_id: &str,
 ) -> Result<String> {
-    let conn = open_conn(&state.db_path)?;
-    let resolved_id = resolve_task_item_id(&conn, task_item_id)?;
-    let task_id: String = conn.query_row(
-        "SELECT task_id FROM task_items WHERE id = ?1",
-        params![resolved_id],
-        |row| row.get(0),
-    )?;
-    let tx = conn.unchecked_transaction()?;
-    tx.execute(
-        "UPDATE task_items SET status = 'pending', ticket_files_json = '[]', ticket_content_json = '[]', fix_required = 0, fixed = 0, last_error = '', started_at = NULL, completed_at = NULL, updated_at = ?2 WHERE id = ?1",
-        params![resolved_id, now_ts()],
-    )?;
-    // Clear old command runs so compensation doesn't re-finalize with stale results
-    tx.execute(
-        "DELETE FROM command_runs WHERE task_item_id = ?1",
-        params![resolved_id],
-    )?;
-    tx.commit()?;
-    Ok(task_id)
-}
-
-/// Resolve a task-item ID from an exact match or unique prefix.
-fn resolve_task_item_id(conn: &rusqlite::Connection, id_or_prefix: &str) -> Result<String> {
-    use rusqlite::OptionalExtension;
-    let exact: Option<String> = conn
-        .query_row(
-            "SELECT id FROM task_items WHERE id = ?1",
-            params![id_or_prefix],
-            |row| row.get(0),
-        )
-        .optional()?;
-    if let Some(id) = exact {
-        return Ok(id);
-    }
-    let pattern = format!("{id_or_prefix}%");
-    let mut stmt = conn.prepare("SELECT id FROM task_items WHERE id LIKE ?1")?;
-    let matches: Vec<String> = stmt
-        .query_map(params![pattern], |row| row.get(0))?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-    match matches.len() {
-        1 => Ok(matches
-            .into_iter()
-            .next()
-            .ok_or_else(|| anyhow::anyhow!("unexpected empty matches"))?),
-        0 => anyhow::bail!("task item not found: {id_or_prefix}"),
-        _ => anyhow::bail!("multiple task items match prefix '{id_or_prefix}': {matches:?}"),
-    }
+    reset_task_item(&state.db_path, task_item_id, &now_ts())
 }
 
 /// Service-layer wrapper around [`create_task_impl`] with error classification.
@@ -829,9 +766,13 @@ mod tests {
         LoopMode, ProjectConfig, ResolvedProject, SafetyConfig, StepBehavior, WorkflowConfig,
         WorkflowFinalizeConfig, WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig,
     };
+    use crate::db::open_conn;
     use crate::dto::CreateTaskPayload;
+    // Inside the test module on purpose: the boundary scanner strips `cfg(test)`
+    // blocks, and a file-scope import would count these fixtures as production.
     use crate::state::update_config_runtime;
     use crate::test_utils::TestState;
+    use rusqlite::params;
     use std::collections::HashMap;
 
     fn make_workflow(steps: Vec<WorkflowStepConfig>) -> WorkflowConfig {

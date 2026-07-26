@@ -5,6 +5,8 @@
 
 /// Command-run insert payload.
 pub mod command_run;
+/// Writing a new task, its items and its creation-time events as one commit.
+pub mod creation;
 mod items;
 /// Connection-level read queries over tasks, items, runs and events.
 ///
@@ -25,6 +27,7 @@ pub mod types;
 mod write_ops;
 
 pub use command_run::NewCommandRun;
+pub use creation::{NewTaskRow, insert_task_with_items, reset_task_item};
 pub use items::delete_task_and_collect_log_paths;
 pub use trait_def::{
     CommandRunRepository, EventRepository, TaskGraphRepository, TaskItemMutRepository,

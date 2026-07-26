@@ -692,3 +692,169 @@ async fn completing_an_envelope_is_guarded_and_reads_stay_inside_the_project() {
     assert_eq!(listed.len(), 1, "the list crossed a project boundary");
     assert_eq!(listed[0].request_id, "req-a");
 }
+
+/// FR-130 B9: the task-creation transaction moved out of `core::task_ops`. Its
+/// contribution is atomicity, so the assertion is on the thing atomicity buys:
+/// a failed insert must leave no task, no items and no events behind, not a
+/// partial task nobody can explain.
+#[test]
+fn creating_a_task_writes_rows_items_and_events_or_none_of_them() {
+    use orchestrator_persistence::task_repository::{
+        NewTaskRow, insert_task_with_items, reset_task_item,
+    };
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let db_path = temp.path().join("creation.db");
+    PersistenceBootstrap::ensure_current(&db_path).expect("bootstrap schema");
+    let now = orchestrator_persistence::now_ts();
+
+    let task = |id: &str| NewTaskRow {
+        id: id.to_string(),
+        name: "creation round trip".to_string(),
+        goal: "prove the commit is one commit".to_string(),
+        target_files_json: "[]".to_string(),
+        project_id: "default".to_string(),
+        workspace_id: WORKSPACE.to_string(),
+        workflow_id: "wf-creation".to_string(),
+        workspace_root: "/srv/creation".to_string(),
+        qa_targets_json: r#"["docs/qa"]"#.to_string(),
+        ticket_dir: "docs/ticket".to_string(),
+        execution_plan_json: "{}".to_string(),
+        loop_mode: "once".to_string(),
+        created_at: now.clone(),
+        parent_task_id: None,
+        spawn_reason: None,
+        step_filter_json: String::new(),
+        initial_vars_json: String::new(),
+        artifacts_dir: "/srv/creation/artifacts".to_string(),
+    };
+    let events = vec![orchestrator_persistence::task_repository::DbEventRecord {
+        task_id: "task-created".to_string(),
+        task_item_id: None,
+        event_type: "qa_directory_scan_triggered".to_string(),
+        payload_json: r#"{"level":"info"}"#.to_string(),
+    }];
+
+    let item_ids = insert_task_with_items(
+        &db_path,
+        &task("task-created"),
+        &["docs/qa/a.md".to_string(), "docs/qa/b.md".to_string()],
+        &events,
+    )
+    .expect("create task");
+    assert_eq!(item_ids.len(), 2, "one id per path was not returned");
+
+    let conn = open_conn(&db_path).expect("open database");
+    let order: Vec<(String, i64)> = conn
+        .prepare(
+            "SELECT qa_file_path, order_no FROM task_items WHERE task_id = ?1 ORDER BY order_no",
+        )
+        .expect("prepare")
+        .query_map(rusqlite::params!["task-created"], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
+        .expect("query")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect");
+    assert_eq!(
+        order,
+        vec![
+            ("docs/qa/a.md".to_string(), 1),
+            ("docs/qa/b.md".to_string(), 2)
+        ],
+        "task items did not keep the order they were given, one-based"
+    );
+    let event_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM events WHERE task_id = ?1",
+            rusqlite::params!["task-created"],
+            |row| row.get(0),
+        )
+        .expect("count events");
+    assert_eq!(event_count, 1, "the creation event was not committed");
+
+    // Now the rollback. Reusing a task id is the failure a crash-and-retry
+    // actually produces, and nothing the call would have written may survive it
+    // — not the items, and not the observability rows, which is the direction
+    // that goes wrong quietly: an event describing a task that does not exist.
+    //
+    // The limit worth naming, because it was measured rather than assumed:
+    // `tasks` is the first statement and the only one a well-formed call can
+    // make fail — no later table in this transaction carries a constraint the
+    // caller can violate. Two mutations confirm the consequence. Reordering the
+    // events ahead of the task insert still passes, and so does deleting the
+    // transaction outright: with the only possible failure at statement one,
+    // rollback has nothing to undo. So what this pins is the no-op on a
+    // duplicate id — the crash-and-retry case — and *not* the transaction. The
+    // transaction's own guarantee has no reachable fixture through this API.
+    let before_items: i64 = conn
+        .query_row("SELECT COUNT(*) FROM task_items", [], |row| row.get(0))
+        .expect("count items");
+    let failure = insert_task_with_items(
+        &db_path,
+        &task("task-created"),
+        &["docs/qa/c.md".to_string()],
+        &events,
+    )
+    .expect_err("a duplicate task id must not be accepted");
+    assert!(
+        failure.to_string().contains("UNIQUE constraint failed"),
+        "unexpected failure: {failure}"
+    );
+    let after_items: i64 = conn
+        .query_row("SELECT COUNT(*) FROM task_items", [], |row| row.get(0))
+        .expect("count items");
+    assert_eq!(
+        before_items, after_items,
+        "a failed creation left task items behind"
+    );
+    let events_after: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM events WHERE task_id = ?1",
+            rusqlite::params!["task-created"],
+            |row| row.get(0),
+        )
+        .expect("count events");
+    assert_eq!(
+        events_after, 1,
+        "a failed creation left an event describing a task it never wrote"
+    );
+
+    // `reset_task_item` resolves by unique prefix, clears the item's run
+    // history, and reports the task it belongs to.
+    let item_id = item_ids.first().expect("an item id").clone();
+    conn.execute(
+        "UPDATE task_items SET status = 'failed', last_error = 'boom' WHERE id = ?1",
+        rusqlite::params![item_id],
+    )
+    .expect("fail the item");
+    conn.execute(
+        "INSERT INTO command_runs (id, task_item_id, phase, command, cwd, stdout_path, stderr_path, started_at)
+         VALUES ('run-stale', ?1, 'qa', 'echo stale', '/tmp', '/tmp/o.log', '/tmp/e.log', ?2)",
+        rusqlite::params![item_id, now],
+    )
+    .expect("seed a stale run");
+
+    let owner = reset_task_item(&db_path, &item_id[..8], &now).expect("reset by prefix");
+    assert_eq!(owner, "task-created", "the reset named the wrong task");
+    let (status, last_error): (String, String) = conn
+        .query_row(
+            "SELECT status, last_error FROM task_items WHERE id = ?1",
+            rusqlite::params![item_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("read the reset item");
+    assert_eq!(status, "pending");
+    assert_eq!(last_error, "", "the previous error survived the reset");
+    let stale_runs: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM command_runs WHERE task_item_id = ?1",
+            rusqlite::params![item_id],
+            |row| row.get(0),
+        )
+        .expect("count runs");
+    assert_eq!(
+        stale_runs, 0,
+        "a stale command run survived the reset and could re-finalize the item"
+    );
+}
