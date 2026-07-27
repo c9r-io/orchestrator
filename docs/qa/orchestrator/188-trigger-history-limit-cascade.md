@@ -213,4 +213,39 @@ A run counts as closure evidence only when all hold; otherwise it is void and mu
 
 ## Recorded Runs
 
-Filled in at closure; see the FR-142 closure commit.
+Certified at `e73e701cdf3455b545b52aee6a26b6e8bfa42099`, macOS 25.5.0, 2026-07-27. `git rev-parse
+HEAD` was recorded before and after and matched; `git status --porcelain` was empty at both ends;
+each command was run as `bash -c '<cmd>' > log 2>&1` with `$?` captured directly, never through a
+pager.
+
+| Command | Exit | Final line |
+|---|---|---|
+| `cargo fmt --all --check` | 0 | (no output — the pass condition) |
+| `cargo clippy --workspace --all-targets -- -D warnings` | 0 | `Finished dev profile ... in 11.91s` |
+| `cargo test --workspace` | 0 | 39 test binaries, **2,723 passed, 0 failed** |
+| `ruby scripts/qa/persistence-dependency.rb` | 0 | `237 driver reference(s) and 515 SQL statement(s) across 43 file(s) outside core` |
+| `bash scripts/qa/test-persistence-dependency.sh` | 0 | `20 passed, 0 failed` |
+| `ruby scripts/qa/core-boundary.rb` | 0 | `rusqlite: 9 reference(s) across 3 file(s) in core` |
+| `ruby scripts/qa/coordination-governance.rb` | 0 | (emits the ledger) |
+| `bash scripts/qa/test-persistence-extraction.sh` | 0 | `11 passed, 0 failed, 0 skipped` |
+| `ruby scripts/qa/doc-lifecycle.rb` | 0 | `256 carry related_fr across 128 feature request(s)` |
+| `bash scripts/qa/test-doc-lifecycle.sh` | 0 | `12 passed, 0 failed` |
+| `bash scripts/qa-doc-lint.sh` | 0 | `[qa-doc-lint] PASS` |
+| `bash scripts/qa/test-markdown-link-integrity.sh` | 0 | `2 passed, 0 failed` |
+| `bash scripts/qa/test-docs-publishing-integrity.sh` | 0 | `7 passed, 0 failed` |
+| `bash scripts/qa/test-qa-gate-surface.sh` | 0 | `13 passed, 0 failed` |
+| `bash scripts/qa/test-qa-gate-surface.sh --fixture-test` | 0 | `34 passed, 0 failed` |
+| `ruby scripts/qa/bash32-compat.rb` | 0 | `PASS (97 shell file(s) scanned, 0 finding(s))` |
+| `bash scripts/qa/test-bash32-compat.sh` | 0 | `23 passed, 0 failed, 0 skipped` |
+| `ruby scripts/qa/ci-liveness.rb` | 0 | `14 job(s) recorded across 3 in-scope workflow(s); 0 known-failing` |
+| `bash scripts/qa/test-ci-liveness.sh` | 0 | `9 passed, 0 failed` |
+
+`cargo test --workspace`'s literal last line reports the final (empty) test binary, so the aggregate
+was taken across all `^test result:` lines instead: no line lacked ` 0 failed;` and no line read
+`FAILED`.
+
+Six `cert-*.log` files in the scratch directory predated this run (03:39–03:40, the FR-137 session)
+and were deleted and regenerated rather than cited. Every log above has an mtime at or after
+10:44:23.
+
+`git diff --stat` over `config/governance/schema-snapshot.sql` across the whole FR is empty.
