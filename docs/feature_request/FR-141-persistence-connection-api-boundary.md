@@ -104,6 +104,45 @@ failing**"。它把这笔账记在 FR-130 Phase B 名下，而 Phase B 已闭环
 
 ---
 
+## 实施进度（2026-07-27）
+
+**已完成并各自可回退**（提交见 `git log --grep FR-141`）：
+
+| 批次 | 内容 | 结果 |
+|---|---|---|
+| 门禁 | `scripts/qa/persistence-api-boundary.rb` + 11 条 fixture，注册进 `qa-gate-surface.json` 与 `governance` job | 三类事实各自冻结在 `config/governance/persistence-api-boundary-ledger.json` |
+| B1 | `orchestrator-security` 的 11 个索取连接的 `pub fn` → `SecretStoreSession` 不透明句柄 | 索取项 79 → 68；daemon 的 4 处 `open_conn` 消失；补上轮换可恢复性断言（变异实测会失败） |
+| B2 | daemon 的 22 处驱动引用 / 19 条 SQL 全部迁入持久化层 | 层外获取 76 → 52 |
+| B3 | scheduler 的 17 处 / 16 条全部迁入，含 DD-147 点名的 `task_state.rs`；其自身 `pub fn create_dynamic_task_items(&Connection)` 一并消失 | 层外获取 52 → 38 |
+| B4a | `attention.rs`(14/34)、`process_metrics.rs`(6/27) 整体下沉，另六个小调用点 | core 驱动引用 8 → 2；层外获取 38 → 9 |
+| B4b | `persistence/repository/config.rs` 的 16 条语句下沉为 `config_store`，事务由 `ConfigTx` 不透明句柄表达 | **core 驱动引用 = 0；层外连接获取 = 0** |
+| 附带 | 两个兄弟门禁中五条写死文件名的 fixture 已重定向并改为从台账取计数 | 本 FR 把它们的目标搬空了，它们此前是 abort 而非失败 |
+
+**核心目标已达成**：`config/governance/persistence-api-boundary-ledger.json` 的
+`totals.acquisitions` 为 **0**，`core-boundary-ledger.json` 的 `rusqlite.total` 为 **0**，
+DD-147 冻结的 daemon(22/19) 与 scheduler(17/16) 两笔残量均已清零。
+`schema-snapshot.sql` 全程逐字节未变；2726 个测试全绿；strict clippy 干净。
+
+**剩余（B5 与闭环产物）**：
+
+1. **可见性下沉**：6 个 `yields` 项（`writer`/`reader`/`flatten_err`/两个 `open_conn`/
+   `TaskRepositoryConn`，以及门禁发现的 `struct Migration` 的 `pub up: fn(&Connection)` 字段）
+   与 67 个 `demands` 项降为 `pub(crate)`。**阻塞面已实测**：层外仍有约 150 处 *测试* 代码
+   直接使用它们（`core/src/task_repository/tests/*` 81 处、scheduler 与 daemon 的
+   `cfg(test)` 模块、`crates/integration-tests/tests/trigger_fire.rs` 5 处）。这些测试测的是
+   已经搬走的语句，应随之迁入持久化 crate——与 B4a 对 `attention`/`process_metrics` 测试
+   所做的一致。这是一个独立批次的工作量，不是收尾。
+2. `crates/daemon` 与 `crates/orchestrator-scheduler` 的 `Cargo.toml` 删除
+   `rusqlite`/`tokio-rusqlite`（生产残量已为 0，仅 `cfg(test)` 仍在用，须先随第 1 项迁走）；
+   两个 `residualDeclaration` 翻转。
+3. DD-151、QA-189、CHANGELOG、`docs/feature_request/README.md` 闭环注记、
+   `doc-lifecycle-index.json` 重生成、删除本文件、§4.6 认证运行。
+
+在第 1 项完成之前，验收标准第 1 条只在**行为**上为真（层外拿不到连接，因为没有任何生产
+代码再去拿），在**类型**上尚未为真（它们仍是 `pub`）。这个区别必须写进 DD-151：一道断言
+"没有人这么做"的门禁，和一道断言"没有人能这么做"的编译器，不是同一件事。
+
+
 ## 背景
 
 `crates/orchestrator-persistence/src/async_database.rs` 的两个方法把驱动的连接类型放在
