@@ -92,7 +92,7 @@ new_case() {
   cp "$REPO_ROOT/$LEDGER" "$dir/$LEDGER"
   cp "$REPO_ROOT/$GATE" "$dir/$GATE"
   local lib
-  for lib in "${GATE_LIBS[@]}"; do
+  for lib in ${GATE_LIBS[@]+"${GATE_LIBS[@]}"}; do
     cp "$REPO_ROOT/$lib" "$dir/$lib"
   done
   echo "$dir"

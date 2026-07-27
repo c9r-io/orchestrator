@@ -788,7 +788,7 @@ ALL_CHECKS=(
 run_all_checks() {
   local root="$1"
   local check
-  for check in "${ALL_CHECKS[@]}"; do
+  for check in ${ALL_CHECKS[@]+"${ALL_CHECKS[@]}"}; do
     "$check" "$root" || return 1
   done
   return 0
@@ -906,7 +906,7 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
       fail "$name: $target accepted the injected defect ($why)"
       return
     fi
-    for other in "${ALL_CHECKS[@]}"; do
+    for other in ${ALL_CHECKS[@]+"${ALL_CHECKS[@]}"}; do
       [[ "$other" == "$target" ]] && continue
       if ! "$other" "$dir" >/dev/null 2>&1; then
         fail "$name: defect also tripped $other, so the fixture does not isolate $target"
@@ -1275,7 +1275,7 @@ FAKE
   # registered but has no fixture has never been observed rejecting anything.
   # Both look like enforcement from outside, and both are how these gates decay.
   DEFINED="$(grep -oE '^check_[a-z_]+\(\)' "$0" | sed 's/()$//' | LC_ALL=C sort -u)"
-  REGISTERED="$(printf '%s\n' "${ALL_CHECKS[@]}" | LC_ALL=C sort -u)"
+  REGISTERED="$(printf '%s\n' ${ALL_CHECKS[@]+"${ALL_CHECKS[@]}"} | LC_ALL=C sort -u)"
   if [[ "$DEFINED" == "$REGISTERED" ]]; then
     pass "meta: ALL_CHECKS names every check the file defines"
   else
@@ -1293,7 +1293,7 @@ FAKE
   # Verification now iterates ALL_CHECKS, and this holds the description table
   # to it so a check cannot be registered without a line a reader can see.
   UNDESCRIBED=""
-  for check in "${ALL_CHECKS[@]}"; do
+  for check in ${ALL_CHECKS[@]+"${ALL_CHECKS[@]}"}; do
     describe_check "$check" >/dev/null 2>&1 || UNDESCRIBED+="$check"$'\n'
   done
   if [[ -z "$UNDESCRIBED" ]]; then
@@ -1304,7 +1304,7 @@ FAKE
   fi
 
   UNTESTED="$(comm -23 <(printf '%s\n' "$REGISTERED") \
-                       <(printf '%s\n' "${TARGETED[@]}" | LC_ALL=C sort -u))"
+                       <(printf '%s\n' ${TARGETED[@]+"${TARGETED[@]}"} | LC_ALL=C sort -u))"
   if [[ -z "$UNTESTED" ]]; then
     pass "meta: every registered check is targeted by at least one negative fixture"
   else
@@ -1333,7 +1333,7 @@ fi
 echo "=== FR-127: QA gate enforcement surface ==="
 echo ""
 
-for check in "${ALL_CHECKS[@]}"; do
+for check in ${ALL_CHECKS[@]+"${ALL_CHECKS[@]}"}; do
   if ! description="$(describe_check "$check")"; then
     fail "$check is registered but has no description; add one beside the check"
     continue

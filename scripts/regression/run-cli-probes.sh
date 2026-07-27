@@ -59,7 +59,7 @@ AVAILABLE_SCENARIOS=(
 
 if [[ $LIST_ONLY -eq 1 ]]; then
   echo "Available scenario groups:"
-  for entry in "${AVAILABLE_SCENARIOS[@]}"; do
+  for entry in ${AVAILABLE_SCENARIOS[@]+"${AVAILABLE_SCENARIOS[@]}"}; do
     local_group="${entry%%:*}"
     local_script="${entry##*:}"
     echo "  $local_group  ($local_script)"
@@ -76,7 +76,7 @@ probe_info "  CLI Probe Regression Runner"
 probe_info "═══════════════════════════════════════════════"
 probe_info ""
 
-for entry in "${AVAILABLE_SCENARIOS[@]}"; do
+for entry in ${AVAILABLE_SCENARIOS[@]+"${AVAILABLE_SCENARIOS[@]}"}; do
   group="${entry%%:*}"
   script="${entry##*:}"
 

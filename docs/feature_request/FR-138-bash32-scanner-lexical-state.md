@@ -2,7 +2,17 @@
 
 ## 优先级: P2
 
-## 状态: Proposed
+## 状态: In Progress
+
+> **2026-07-27 治理复核修正.** 本文档的事实主张已按 `2b5738ad` 的实测重建，三处需修正，
+> 其中一处影响设计。修正内容就地标注为 “**复核**” 段落，原文保留以便对照。
+>
+> 1. 计数漂移：受追踪 shell 文件 95 → **98**；`test-qa-gate-surface.sh` 的逃逸起点
+>    900 → **993**、被吞行数 252 → **360**；需求 2 的范围 37 处 / 14 文件 →
+>    **43 处 / 16 文件**（本文档已预判 37 是下界，判断正确）。
+> 2. “当前是潜伏的” **已不成立**：被吞尾部现含一处真实 finding。
+> 3. 缺陷 A 在第二处逃逸的成因被误诊，且需求 1 的第一条按字面实现**无法**修复它。
+>    详见缺陷 A 下的复核段落。
 
 ## 背景
 
@@ -46,6 +56,58 @@ bash 3.2 compatibility: FAIL (95 shell file(s) scanned, 3 finding(s))
 ```
 
 **当前是潜伏的**：两处被吞尾部单独重扫均为 0 finding，没有真实危险构造被藏住。
+
+**复核（2026-07-27，`2b5738ad`）——上述表格与“潜伏”结论均已过期。**
+
+| | 本文档所写 | 实测 |
+|---|---|---|
+| 受追踪 shell 文件 | 95 | **98** |
+| `test-qa-gate-surface.sh` 逃逸起点 / 被吞行数 | 900 / 252 | **993 / 360** |
+| `test-bash32-compat.sh` 逃逸起点 / 被吞行数 | 369 / 16 | 369 / 16 ✓ |
+
+“没有真实危险构造被藏住”**已不成立**。`test-qa-gate-surface.sh` 第 1307 行裸展开
+`"${TARGETED[@]}"`，而 `TARGETED=()` 赋值在第 876 行——正是本门禁存在的那一类。缺陷 A 当前
+正在遮蔽一条对门禁自身政策的违反，而非仅留一个假想的洞。它今天不炸 CI，只因该脚本仅在
+ubuntu-only 的 `governance` job 中运行；在 macOS 的 `/bin/bash` 下它就是 FR-135 要消灭的
+那个失败。
+
+**复核——第二处逃逸的成因与本文档的诊断不同，且需求 1 第一条按字面实现无法修复它。**
+
+本文档把两处逃逸都归因于“跨行单引号区域不被识别”。按字面实现（把 `in_single` / `in_double`
+跨行保持）实测：修复了 `test-qa-gate-surface.sh`，`test-bash32-compat.sh:369` **仍被吞**。
+
+真实链条起于第 359 行：
+
+```
+MACOS_JOBS="$(ruby -ryaml -e '        # 这里先开的是双引号
+  ...
+  next unless "#{runners} #{matrix}".include?("macos")   # 第 366 行
+  ...
+  hosting << job_name                 # 第 369 行
+' "$REPO_ROOT/.github/workflows/ci.yml" ...)"
+```
+
+`$( )` 内部的引号上下文是重置的，所以第 359 行那个 `'` 确实开启了一个单引号区域——但两个
+布尔量的跟踪器看到的是“双引号内的 `'`”，判为普通字符。随后它在第 366 行彻底脱轨：第二个 `#`
+前面是空格且此时 `in_double` 已被翻成 false，于是整行剩余部分被当作注释丢弃，引号奇偶性就此
+错乱。到第 369 行它认为自己在顶层，把 `hosting << job_name` 读成 heredoc 开启符。
+
+因此**把 `$( )` 建模为嵌套引号上下文是必需的**，不是可选项：本文档验收标准中
+“`test-bash32-compat.sh` 的全部行进入扫描”一条，不建模 `$( )` 就无法达成。本文档判断
+“需求 1 第二条会抓到上述两处逃逸”是对的，但理由不对——在本文档所述的设计下，它是唯一能抓到
+第二处的东西。
+
+修正后的词法器实测（全部 98 个文件）：
+
+```
+被扫描行数 : 18275 → 18629  (+354)
+读完仍在 heredoc 中的文件 : 无
+未扫到 EOF 的文件 : check-linux-x86-rlimit.sh 52/58（合法的、结束于 EOF 的 heredoc）
+finding : 0 → 1   scripts/qa/test-qa-gate-surface.sh:1307 [empty-array-expansion]
+```
+
+**复核——环境约束。** macOS 系统 ruby 是 2.6，endless method（`def x = ...`）在其上是语法
+错误。实现须保持 2.6 兼容：`coverage-policy-fixtures` 的 macOS 腿是语义半边的唯一宿主。
 
 值得记下的是第二处的触发行的身份。`test-bash32-compat.sh` 的 case 9 解析 workflow，断言
 "CI 中确实存在跑本门禁的 macOS job，语义半边不会在所有宿主上被 skip"——这是整套设计里最
@@ -112,6 +174,8 @@ if ! mapfile -t xs < /dev/null; then :; fi → PASS（漏报）
 ### 1. 跨行词法状态，且未闭合即失败
 
 - `code_lines` 的引号状态须跨行保持，使跨行单引号 / 双引号区域内的文本不被当作代码解读。
+  **复核修正**：仅此不够。`$( )` 须建模为嵌套的引号上下文（其内部引号状态与外部无关），
+  否则 `test-bash32-compat.sh:369` 仍被吞——见缺陷 A 的复核段落。
 - **文件读完时若仍处于 heredoc 中，该文件须报为 finding 而非静默通过。** 这是本需求里最
   便宜也最重要的一条：上述两处逃逸都会被它抓到，而一个真正未闭合的 heredoc 本就是坏脚本，
   两种情况都值得失败。
@@ -133,6 +197,13 @@ if ! mapfile -t xs < /dev/null; then :; fi → PASS（漏报）
   替换，无语义变化。
 - **该 37 是下界**：它由当前带缺陷 A 的 `code_lines` 统计得出，两处被吞尾部未计入。因此
   需求 1 必须先落地，需求 2 的范围才是真实的。
+
+  **复核（2026-07-27）**：判断正确，真实范围为 **43 处 / 16 文件**。分布：
+  `check-async-lock-governance.sh`(10)、`test-qa-gate-surface.sh`(6)、
+  `test-docs-publishing-integrity.sh`(4)、`test-markdown-link-integrity.sh`(4)、
+  `test-skill-mirror-integrity.sh`(4)、`test-ci-environment-parity.sh`(3)，其余 10 个文件
+  各 1–2 处，含 `docs/qa/script/` 下三处。`test-qa-gate-surface.sh:1307` 在其中——即缺陷 A
+  一直遮蔽的那一条。
 
 若实现方选择保留推断并改为解析 `source` 图，须书面说明为何值得承担该复杂度，并给出
 "库被条件 source"与"数组名被间接引用"两种形态的处置。

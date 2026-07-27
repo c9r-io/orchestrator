@@ -37,7 +37,7 @@ join_by_pipe() {
   done
 }
 
-deny_regex="$(join_by_pipe "${deny_patterns[@]}")"
+deny_regex="$(join_by_pipe ${deny_patterns[@]+"${deny_patterns[@]}"})"
 
 collect_matches() {
   local path="$1"
@@ -58,13 +58,13 @@ filter_allowed() {
 }
 
 core_matches="$(collect_matches core/src)"
-core_violations="$(filter_allowed "$core_matches" "${allow_core_rwlock_files[@]}")"
+core_violations="$(filter_allowed "$core_matches" ${allow_core_rwlock_files[@]+"${allow_core_rwlock_files[@]}"})"
 
 daemon_matches="$(collect_matches crates/daemon/src)"
-daemon_violations="$(filter_allowed "$daemon_matches" "${allow_daemon_rwlock_files[@]}")"
+daemon_violations="$(filter_allowed "$daemon_matches" ${allow_daemon_rwlock_files[@]+"${allow_daemon_rwlock_files[@]}"})"
 
 scheduler_matches="$(collect_matches crates/orchestrator-scheduler/src)"
-scheduler_violations="$(filter_allowed "$scheduler_matches" "${allow_scheduler_rwlock_files[@]}")"
+scheduler_violations="$(filter_allowed "$scheduler_matches" ${allow_scheduler_rwlock_files[@]+"${allow_scheduler_rwlock_files[@]}"})"
 
 if [[ -n "$core_violations" || -n "$daemon_violations" || -n "$scheduler_violations" ]]; then
   echo "Async lock governance check failed."
@@ -85,7 +85,7 @@ if [[ -n "$core_violations" || -n "$daemon_violations" || -n "$scheduler_violati
     echo
   fi
   echo "Approved exceptions:"
-  printf '  %s\n' "${allow_core_rwlock_files[@]}" "${allow_daemon_rwlock_files[@]}" "${allow_scheduler_rwlock_files[@]}"
+  printf '  %s\n' ${allow_core_rwlock_files[@]+"${allow_core_rwlock_files[@]}"} ${allow_daemon_rwlock_files[@]+"${allow_daemon_rwlock_files[@]}"} ${allow_scheduler_rwlock_files[@]+"${allow_scheduler_rwlock_files[@]}"}
   echo
   echo "Use config snapshots, tokio::sync::{Mutex,RwLock}, atomics, or message passing instead."
   exit 1
@@ -93,4 +93,4 @@ fi
 
 echo "Async lock governance check passed."
 echo "Approved sync exceptions:"
-printf '  %s\n' "${allow_core_rwlock_files[@]}" "${allow_daemon_rwlock_files[@]}" "${allow_scheduler_rwlock_files[@]}"
+printf '  %s\n' ${allow_core_rwlock_files[@]+"${allow_core_rwlock_files[@]}"} ${allow_daemon_rwlock_files[@]+"${allow_daemon_rwlock_files[@]}"} ${allow_scheduler_rwlock_files[@]+"${allow_scheduler_rwlock_files[@]}"}

@@ -71,7 +71,7 @@ new_case() {
   cp "$REPO_ROOT/$GATE" "$dir/$GATE"
   cp "$REPO_ROOT/$COORD_GATE" "$dir/$COORD_GATE"
   local lib
-  for lib in "${GATE_LIBS[@]}"; do
+  for lib in ${GATE_LIBS[@]+"${GATE_LIBS[@]}"}; do
     cp "$REPO_ROOT/$lib" "$dir/$lib"
   done
   echo "$dir"

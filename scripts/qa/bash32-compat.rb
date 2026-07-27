@@ -31,6 +31,8 @@ require "open3"
 require "optparse"
 require "pathname"
 
+require_relative "../lib/shell_lexer"
+
 module Bash32Compat
   # The canonical rewrite. Enforcing one spelling is deliberate: the gate blanks
   # this exact string before looking for bare expansions, so a second spelling
@@ -43,101 +45,73 @@ module Bash32Compat
 
   Finding = Struct.new(:file, :line, :rule, :detail, :fix, keyword_init: true)
 
-  # A shell file's lines with comments and here-document bodies removed.
+  # A shell file's lines with comments, single-quoted regions and here-document
+  # bodies removed.
   #
-  # Both removals matter. A comment describing a hazard is not a hazard, and a
-  # here-document body is data to the enclosing script — this gate's own wrapper
-  # writes hazardous fixtures that way, and so do several of the QA wrappers.
-  # Comment detection tracks quoting rather than matching `#`, because `'#'` and
-  # `"...#..."` are ordinary characters and a bare regex reads them as comments.
+  # All three removals matter. A comment describing a hazard is not a hazard, a
+  # single-quoted region is inert to the shell, and a here-document body is data
+  # to the enclosing script — this gate's own wrapper writes hazardous fixtures
+  # that way, and so do several of the QA wrappers.
+  #
+  # The lexing lives in `scripts/lib/shell_lexer.rb` because it has to carry
+  # state across lines. Deciding per line is what produced FR-138: a `<< WORD`
+  # lookalike inside a region opened earlier read as a here-document, and the
+  # rest of the file left the scan with no diagnostic at all.
   def self.code_lines(text)
-    result = []
-    heredoc_terminator = nil
-
-    text.lines.each_with_index do |raw, index|
-      line = raw.chomp
-
-      if heredoc_terminator
-        heredoc_terminator = nil if line.strip == heredoc_terminator
-        next
-      end
-
-      code = strip_comment(line)
-      result << [index + 1, code]
-
-      opener = code[/<<-?\s*(?!<)(["']?)([A-Za-z_][A-Za-z0-9_]*)\1/, 2]
-      heredoc_terminator = opener if opener
-    end
-
-    result
+    ShellLexer.code_lines(text).first
   end
 
-  # Returns the line with any trailing unquoted comment removed.
-  def self.strip_comment(line)
-    in_single = false
-    in_double = false
-    index = 0
+  # A file that ends inside a here-document was never fully scanned. Whether the
+  # opener is a real unterminated body or a lookalike inside quoting the lexer
+  # got wrong, the honest report is the same: everything after this line was
+  # dropped. This is the backstop that does not depend on the lexer being right.
+  def self.unclosed_heredoc_finding(path, state)
+    return nil unless state.in_heredoc?
 
-    while index < line.length
-      char = line[index]
-
-      if char == "\\" && !in_single
-        index += 2
-        next
-      end
-
-      if char == "'" && !in_double
-        in_single = !in_single
-      elsif char == '"' && !in_single
-        in_double = !in_double
-      elsif char == "#" && !in_single && !in_double && (index.zero? || line[index - 1] =~ /\s/)
-        return line[0...index]
-      end
-
-      index += 1
-    end
-
-    line
+    Finding.new(
+      file: path,
+      line: state.heredoc_line,
+      rule: "unclosed-heredoc",
+      detail: "this file ends while still inside a here-document opened here with terminator " \
+              "`#{state.heredoc}`; every line after it was dropped from the scan, so the rest " \
+              "of the file is unchecked",
+      fix: "close the here-document with a line reading exactly `#{state.heredoc}`, or — if this " \
+           "is not a here-document at all — check what quoting the `<<` sits inside"
+    )
   end
 
-  # Array names that can hold zero elements at some point in the file.
+  # Every value expansion of an array that is not written in the canonical
+  # guarded form.
   #
-  # Two shapes produce one: an explicit empty literal, and capture of "$@" in a
-  # function that may be called with no arguments. `provider_isolation.sh` has
-  # the second and would be missed by a rule that only looked for `=()`.
-  def self.emptyable_arrays(lines)
-    names = {}
-
-    lines.each do |number, code|
-      code.scan(/(?<![\w$])([A-Za-z_][A-Za-z0-9_]*)=\(\s*\)/) do |(name)|
-        names[name] ||= number
-      end
-      code.scan(/(?<![\w$])([A-Za-z_][A-Za-z0-9_]*)=\("\$@"\)/) do |(name)|
-        names[name] ||= number
-      end
-    end
-
-    names
-  end
-
+  # This used to fire only for arrays the scan could see being emptied in the
+  # same file. That inference was wrong in both directions and only one of them
+  # was visible: it over-reported where an earlier guard had already proved the
+  # array non-empty (recorded in DD-146), and it silently missed arrays emptied
+  # in a `source`d library and expanded in the caller (FR-138 defect B). Both
+  # come from the same rule, so FR-138 removed the rule rather than extending it.
+  # Matching beats inferring here: there is no inference surface left to route
+  # around, and the guarded form costs nothing where it is not needed.
+  #
   # `${#a[@]}` and `${!a[@]}` were measured against bash 3.2 and are both fine on
   # an empty array; only the value expansions `${a[@]}` and `${a[*]}` are not.
   # Flagging the safe two would have sent `probe-runner-lib.sh` through a rewrite
   # that fixes nothing.
-  def self.empty_expansion_findings(path, lines, names)
+  def self.empty_expansion_findings(path, lines)
     findings = []
 
     lines.each do |number, code|
-      names.each_key do |name|
-        scrubbed = code.gsub(safe_form(name), "")
-        next unless scrubbed =~ /\$\{#{Regexp.escape(name)}\[[@*]\]\}/
+      # Blank the canonical form first, so its own inner `${a[@]}` does not read
+      # as a bare expansion.
+      scrubbed = code.gsub(/\$\{([A-Za-z_][A-Za-z0-9_]*)\[@\]\+"\$\{\1\[@\]\}"\}/, "")
 
+      scrubbed.scan(/\$\{([A-Za-z_][A-Za-z0-9_]*)\[[@*]\]\}/) do |(name)|
         findings << Finding.new(
           file: path,
           line: number,
           rule: "empty-array-expansion",
-          detail: "`#{name}` is assigned an empty value in this file; bash 3.2 reports " \
-                  "`#{name}[@]: unbound variable` when an empty array is expanded under `set -u`",
+          detail: "bash 3.2 reports `#{name}[@]: unbound variable` when an empty array is " \
+                  "expanded under `set -u`, and whether `#{name}` can be empty here is not a " \
+                  "question this scan answers",
           fix: "write #{safe_form(name)}"
         )
       end
@@ -152,7 +126,13 @@ module Bash32Compat
   # string that happens to contain it. Those are mentions, and the subject here
   # is invocation. Expansion rules do not use it, because an expansion is not a
   # command.
-  COMMAND_POSITION = /(?:\A|[;&|(){}]|\b(?:if|then|else|elif|do|while|until|not)\b)\s*/.freeze
+  #
+  # `!` is in the punctuation class because it is bash's negation token and a
+  # command still runs after it: `if ! mapfile -t xs < f` is an invocation. The
+  # set originally listed `not` instead, which is not a bash keyword at all — a
+  # candidate that could never match, reading to anyone who checked as though
+  # negation were covered.
+  COMMAND_POSITION = /(?:\A|[;&|(){}!]|\b(?:if|then|else|elif|do|while|until)\b)\s*/.freeze
 
   # Builtins and expansions that bash 3.2 does not have at all. Every entry was
   # executed against /bin/bash 3.2 and the recorded failure is what it produced.
@@ -217,10 +197,43 @@ module Bash32Compat
 
   def self.scan_file(repo_root, relative)
     text = File.read(repo_root.join(relative))
-    lines = code_lines(text)
-    names = emptyable_arrays(lines)
+    lines, state = ShellLexer.code_lines(text)
 
-    empty_expansion_findings(relative, lines, names) + builtin_findings(relative, lines)
+    findings = empty_expansion_findings(relative, lines) + builtin_findings(relative, lines)
+    unclosed = unclosed_heredoc_finding(relative, state)
+    unclosed ? findings + [unclosed] : findings
+  end
+
+  # Per-file line accounting: how many lines the scan read, how many it dropped
+  # as here-document bodies, and the last line number it reached.
+  #
+  # This exists because the FR-138 defect happened while the gate was green. "The
+  # gate passes" cannot be evidence that the gate reads the whole file, since a
+  # truncated scan is precisely the state it passed in. The census can be false
+  # where the exit code cannot.
+  #
+  # `heredoc` is counted by the lexer as it drops lines, never derived from
+  # `total - scanned`. Derived, the sum would be an identity — true of a lexer
+  # that stops at line one — and the check would certify an accounting it never
+  # performed. `last` is what actually catches truncation: a scan that stops
+  # early leaves it below `total`.
+  Census = Struct.new(:file, :total, :scanned, :heredoc, :last, keyword_init: true)
+
+  def self.census_file(repo_root, relative)
+    text = File.read(repo_root.join(relative))
+    lines, state = ShellLexer.code_lines(text)
+
+    Census.new(
+      file: relative,
+      total: text.lines.length,
+      scanned: lines.length,
+      heredoc: state.heredoc_lines,
+      last: lines.empty? ? 0 : lines.last.first
+    )
+  end
+
+  def self.census(repo_root)
+    shell_files(repo_root).map { |relative| census_file(repo_root, relative) }
   end
 
   # Coverage is whatever git tracks, so a new script is scanned the day it is
@@ -242,15 +255,25 @@ end
 if $PROGRAM_NAME == __FILE__
   repo_root = Pathname.new(File.expand_path("../..", __dir__))
   list_only = false
+  census_only = false
 
   OptionParser.new do |opts|
-    opts.banner = "usage: bash32-compat.rb [--list-files]"
+    opts.banner = "usage: bash32-compat.rb [--list-files] [--coverage-census]"
     opts.on("--list-files", "print the scanned set and exit") { list_only = true }
+    opts.on("--coverage-census", "print per-file line accounting and exit") { census_only = true }
     opts.on("--repo-root PATH", "scan a different checkout") { |value| repo_root = Pathname.new(value) }
   end.parse!(ARGV)
 
   if list_only
     puts Bash32Compat.shell_files(repo_root)
+    exit 0
+  end
+
+  if census_only
+    # `file total scanned heredoc last`, one record per line, in that order.
+    Bash32Compat.census(repo_root).each do |record|
+      puts "#{record.file} #{record.total} #{record.scanned} #{record.heredoc} #{record.last}"
+    end
     exit 0
   end
 

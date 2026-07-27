@@ -246,10 +246,10 @@ probe_create_task() {
   )
   if [[ -n "$extra_args" ]]; then
     read -ra extra <<< "$extra_args"
-    create_args+=("${extra[@]}")
+    create_args+=(${extra[@]+"${extra[@]}"})
   fi
 
-  "$PROBE_BINARY" "${create_args[@]}" 2>&1
+  "$PROBE_BINARY" ${create_args[@]+"${create_args[@]}"} 2>&1
 }
 
 probe_wait_task_done() {

@@ -167,7 +167,7 @@ production_workflow() {
   esac
 }
 EVIDENCE='[]'
-for name in "${CASES[@]}"; do
+for name in ${CASES[@]+"${CASES[@]}"}; do
   workflow="$(production_workflow "$name")"
   tools="$(create_and_wait "parity-${name}-tools")"
   tools_id="${tools%%|*}"

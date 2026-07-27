@@ -74,13 +74,13 @@ CI_VARS=(CI CONTINUOUS_INTEGRATION GITHUB_ACTIONS GITLAB_CI BUILDKITE CIRCLECI
 
 clear_ci_env() {
   local unsets=() name
-  for name in "${CI_VARS[@]}"; do unsets+=(-u "$name"); done
+  for name in ${CI_VARS[@]+"${CI_VARS[@]}"}; do unsets+=(-u "$name"); done
   env ${unsets[@]+"${unsets[@]}"} "$@"
 }
 
 set_ci_env() {
   local unsets=() name
-  for name in "${CI_VARS[@]}"; do unsets+=(-u "$name"); done
+  for name in ${CI_VARS[@]+"${CI_VARS[@]}"}; do unsets+=(-u "$name"); done
   env ${unsets[@]+"${unsets[@]}"} CI=1 GITHUB_ACTIONS=true "$@"
 }
 
@@ -236,7 +236,7 @@ JSON
 
   # Meta, as elsewhere: the registry has to name every check the file defines.
   DEFINED="$(grep -oE '^check_[a-z_]+\(\)' "${BASH_SOURCE[0]}" | sed 's/()$//' | LC_ALL=C sort -u)"
-  REGISTERED="$(printf '%s\n' "${ALL_CHECKS[@]}" | LC_ALL=C sort -u)"
+  REGISTERED="$(printf '%s\n' ${ALL_CHECKS[@]+"${ALL_CHECKS[@]}"} | LC_ALL=C sort -u)"
   if [[ "$DEFINED" == "$REGISTERED" ]]; then
     pass "meta: ALL_CHECKS names every check the file defines"
   else

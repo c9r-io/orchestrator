@@ -312,7 +312,7 @@ ALL_CHECKS=(check_source_inventory check_mirror_coverage check_mirror_shape
 
 run_all_checks() {
   local root="$1" check rc=0
-  for check in "${ALL_CHECKS[@]}"; do
+  for check in ${ALL_CHECKS[@]+"${ALL_CHECKS[@]}"}; do
     if "$check" "$root"; then
       pass "$check"
     else
@@ -374,7 +374,7 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
         return
       fi
     done
-    for check in "${ALL_CHECKS[@]}"; do
+    for check in ${ALL_CHECKS[@]+"${ALL_CHECKS[@]}"}; do
       printf '%s\n' $targets | grep -qxF "$check" && continue
       if ! "$check" "$dir" >/dev/null 2>&1; then
         fail "$name: defect also tripped $check, so it does not isolate [$targets]"
@@ -514,7 +514,7 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
   # ALL_CHECKS load-bearing: it names every check function this file defines, and
   # every check it names is proven by at least one fixture.
   defined="$(grep -oE '^check_[a-z_]+\(\)' "${BASH_SOURCE[0]}" | sed 's/()//' | LC_ALL=C sort)"
-  registered="$(printf '%s\n' "${ALL_CHECKS[@]}" | LC_ALL=C sort)"
+  registered="$(printf '%s\n' ${ALL_CHECKS[@]+"${ALL_CHECKS[@]}"} | LC_ALL=C sort)"
   if [[ "$defined" == "$registered" ]]; then
     pass "meta: ALL_CHECKS registers every check function defined in this script"
   else
@@ -523,7 +523,7 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
   fi
 
   untargeted=""
-  for check in "${ALL_CHECKS[@]}"; do
+  for check in ${ALL_CHECKS[@]+"${ALL_CHECKS[@]}"}; do
     printf '%s\n' $TARGETED | grep -qxF "$check" || untargeted="$untargeted $check"
   done
   if [[ -z "$untargeted" ]]; then

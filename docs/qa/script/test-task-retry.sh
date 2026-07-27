@@ -38,7 +38,7 @@ CREATE_ARGS=(
 )
 
 qa_info "Creating task..."
-TASK_OUTPUT="$($BINARY "${CREATE_ARGS[@]}" 2>&1)"
+TASK_OUTPUT="$($BINARY ${CREATE_ARGS[@]+"${CREATE_ARGS[@]}"} 2>&1)"
 TASK_ID="$(qa_extract_task_id "$TASK_OUTPUT")"
 if [[ -z "$TASK_ID" ]]; then
   qa_error "Failed to parse task id from: $TASK_OUTPUT"
