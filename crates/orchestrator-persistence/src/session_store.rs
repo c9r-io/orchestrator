@@ -115,7 +115,7 @@ pub struct NewSession<'a> {
 }
 
 /// Inserts a new interactive session row.
-pub fn insert_session(conn: &Connection, s: &NewSession<'_>) -> Result<()> {
+pub(crate) fn insert_session(conn: &Connection, s: &NewSession<'_>) -> Result<()> {
     let now = now_ts();
     conn.execute(
         "INSERT INTO agent_sessions (id, task_id, task_item_id, step_id, phase, agent_id, state, pid, pty_backend, cwd, command, input_fifo_path, stdout_path, stderr_path, transcript_path, output_json_path, writer_client_id, created_at, updated_at, ended_at, exit_code) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, NULL, ?17, ?17, NULL, NULL)",
@@ -143,7 +143,7 @@ pub fn insert_session(conn: &Connection, s: &NewSession<'_>) -> Result<()> {
 }
 
 /// Updates session state, exit code, and optional end time.
-pub fn update_session_state(
+pub(crate) fn update_session_state(
     conn: &Connection,
     session_id: &str,
     state: &str,
@@ -160,7 +160,7 @@ pub fn update_session_state(
 }
 
 /// Updates the PID associated with an existing session.
-pub fn update_session_pid(conn: &Connection, session_id: &str, pid: i64) -> Result<()> {
+pub(crate) fn update_session_pid(conn: &Connection, session_id: &str, pid: i64) -> Result<()> {
     conn.execute(
         "UPDATE agent_sessions SET pid = ?2, updated_at = ?3 WHERE id = ?1",
         params![session_id, pid, now_ts()],
@@ -212,7 +212,7 @@ pub struct WriterLease {
 }
 
 /// Lists sessions with optional task, agent and state filters.
-pub fn list_sessions(
+pub(crate) fn list_sessions(
     conn: &Connection,
     task_id: Option<&str>,
     agent_id: Option<&str>,
@@ -229,7 +229,7 @@ pub fn list_sessions(
 }
 
 /// Resolves a diagnostic PID to all matching persisted sessions.
-pub fn list_sessions_by_pid(conn: &Connection, pid: i64) -> Result<Vec<SessionRow>> {
+pub(crate) fn list_sessions_by_pid(conn: &Connection, pid: i64) -> Result<Vec<SessionRow>> {
     let mut stmt = conn.prepare(&format!(
         "SELECT {SESSION_COLUMNS} FROM agent_sessions WHERE pid=?1 ORDER BY created_at DESC"
     ))?;
@@ -292,7 +292,7 @@ pub fn process_identity_status(pid: i64, expected: Option<&str>) -> ProcessIdent
 }
 
 /// Stores a PID together with its creation fingerprint.
-pub fn update_session_process(
+pub(crate) fn update_session_process(
     conn: &Connection,
     session_id: &str,
     pid: i64,
@@ -306,7 +306,7 @@ pub fn update_session_process(
 }
 
 /// Atomically acquires an expired/free writer lease and returns its fencing token.
-pub fn acquire_writer_lease(
+pub(crate) fn acquire_writer_lease(
     conn: &Connection,
     session_id: &str,
     actor: &str,
@@ -344,7 +344,7 @@ pub fn acquire_writer_lease(
 }
 
 /// Extends the current writer lease when client and fencing token match.
-pub fn heartbeat_writer(
+pub(crate) fn heartbeat_writer(
     conn: &Connection,
     session_id: &str,
     client_id: &str,
@@ -364,7 +364,7 @@ pub fn heartbeat_writer(
 }
 
 /// Returns whether a writer token is current and unexpired.
-pub fn validate_writer(
+pub(crate) fn validate_writer(
     conn: &Connection,
     session_id: &str,
     client_id: &str,
@@ -380,7 +380,7 @@ pub fn validate_writer(
 }
 
 /// Releases an exact writer lease; stale tokens cannot release a newer owner.
-pub fn release_writer(
+pub(crate) fn release_writer(
     conn: &Connection,
     session_id: &str,
     client_id: &str,
@@ -405,7 +405,7 @@ pub fn release_writer(
 }
 
 /// Expires stale writer leases and returns the affected session IDs.
-pub fn expire_writer_leases(conn: &Connection) -> Result<Vec<String>> {
+pub(crate) fn expire_writer_leases(conn: &Connection) -> Result<Vec<String>> {
     let now = now_ts();
     let mut stmt = conn.prepare(
         "SELECT id FROM agent_sessions WHERE writer_client_id IS NOT NULL AND writer_lease_expires_at<=?1",
@@ -426,7 +426,7 @@ pub fn expire_writer_leases(conn: &Connection) -> Result<Vec<String>> {
 }
 
 /// Reconciles non-terminal persisted sessions with OS process identity and transport state.
-pub fn reconcile_sessions(conn: &Connection) -> Result<Vec<(String, String)>> {
+pub(crate) fn reconcile_sessions(conn: &Connection) -> Result<Vec<(String, String)>> {
     let rows = list_sessions(conn, None, None, None)?;
     let mut changes = Vec::new();
     for row in rows.into_iter().filter(|row| {
@@ -481,7 +481,7 @@ pub fn reconcile_sessions(conn: &Connection) -> Result<Vec<(String, String)>> {
 }
 
 /// Loads a session row by session identifier.
-pub fn load_session(conn: &Connection, session_id: &str) -> Result<Option<SessionRow>> {
+pub(crate) fn load_session(conn: &Connection, session_id: &str) -> Result<Option<SessionRow>> {
     conn.query_row(
         &format!("SELECT {SESSION_COLUMNS} FROM agent_sessions WHERE id = ?1"),
         params![session_id],
@@ -492,7 +492,7 @@ pub fn load_session(conn: &Connection, session_id: &str) -> Result<Option<Sessio
 }
 
 /// Loads the latest active or detached session for a task step.
-pub fn load_active_session_for_task_step(
+pub(crate) fn load_active_session_for_task_step(
     conn: &Connection,
     task_id: &str,
     step_id: &str,
@@ -513,7 +513,7 @@ pub fn load_active_session_for_task_step(
 }
 
 /// Lists all sessions for a task ordered from newest to oldest.
-pub fn list_task_sessions(conn: &Connection, task_id: &str) -> Result<Vec<SessionRow>> {
+pub(crate) fn list_task_sessions(conn: &Connection, task_id: &str) -> Result<Vec<SessionRow>> {
     let mut stmt = conn.prepare(&format!(
         "SELECT {SESSION_COLUMNS}
              FROM agent_sessions
@@ -527,7 +527,7 @@ pub fn list_task_sessions(conn: &Connection, task_id: &str) -> Result<Vec<Sessio
 }
 
 /// Attempts to acquire the writer lease for a session.
-pub fn acquire_writer(conn: &Connection, session_id: &str, client_id: &str) -> Result<bool> {
+pub(crate) fn acquire_writer(conn: &Connection, session_id: &str, client_id: &str) -> Result<bool> {
     let existing: Option<String> = conn
         .query_row(
             "SELECT writer_client_id FROM agent_sessions WHERE id = ?1",
@@ -554,7 +554,7 @@ pub fn acquire_writer(conn: &Connection, session_id: &str, client_id: &str) -> R
 }
 
 /// Attaches a read-only client to a session.
-pub fn attach_reader(conn: &Connection, session_id: &str, client_id: &str) -> Result<()> {
+pub(crate) fn attach_reader(conn: &Connection, session_id: &str, client_id: &str) -> Result<()> {
     let existing: i64 = conn.query_row(
         "SELECT COUNT(*) FROM session_attachments
          WHERE session_id=?1 AND client_id=?2 AND mode='reader' AND detached_at IS NULL",
@@ -580,7 +580,7 @@ pub fn attach_reader(conn: &Connection, session_id: &str, client_id: &str) -> Re
 }
 
 /// Deletes old terminal sessions and returns the number removed.
-pub fn cleanup_stale_sessions(conn: &Connection, max_age_hours: u64) -> Result<usize> {
+pub(crate) fn cleanup_stale_sessions(conn: &Connection, max_age_hours: u64) -> Result<usize> {
     let cutoff = chrono::Utc::now() - chrono::Duration::hours(max_age_hours as i64);
     let cutoff = cutoff.to_rfc3339();
     conn.execute(
@@ -599,7 +599,7 @@ pub fn cleanup_stale_sessions(conn: &Connection, max_age_hours: u64) -> Result<u
 }
 
 /// Releases a reader or writer attachment for a client.
-pub fn release_attachment(
+pub(crate) fn release_attachment(
     conn: &Connection,
     session_id: &str,
     client_id: &str,

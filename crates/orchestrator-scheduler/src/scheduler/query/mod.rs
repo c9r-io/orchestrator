@@ -94,7 +94,8 @@ pub(super) mod test_fixtures {
 
     /// Get the first task_item id for a given task.
     pub fn first_item_id(state: &agent_orchestrator::state::InnerState, task_id: &str) -> String {
-        let conn = agent_orchestrator::db::open_conn(&state.db_path).expect("open db");
+        let conn =
+            orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open db");
         conn.query_row(
             "SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1",
             rusqlite::params![task_id],

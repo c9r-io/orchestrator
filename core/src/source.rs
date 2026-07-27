@@ -795,7 +795,7 @@ mod tests {
         let temp = tempdir().expect("temp dir");
         let path = temp.path().join("source.db");
         init_schema(&path).expect("schema");
-        let conn = crate::db::open_conn(&path).expect("connection");
+        let conn = orchestrator_persistence::test_support::open_conn(&path).expect("connection");
         conn.execute(
             "INSERT INTO tasks
              (id,name,status,goal,target_files_json,mode,project_id,workspace_id,workflow_id,

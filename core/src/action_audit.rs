@@ -274,10 +274,11 @@ fn validate(input: &ActionAuditReservation) -> Result<()> {
 mod tests {
     use super::*;
     use crate::async_database::AsyncDatabase;
-    use crate::db::configure_conn;
+    use orchestrator_persistence::test_support::configure_conn;
     // Inside the test module on purpose: the boundary scanner strips `cfg(test)`
     // blocks, and a file-scope import would count this fixture as production use.
-    use crate::persistence::migration::{registered_migrations as all_migrations, run_pending};
+    use crate::persistence::migration::registered_migrations as all_migrations;
+    use orchestrator_persistence::test_support::run_pending;
     use rusqlite::Connection;
     use tempfile::tempdir;
 

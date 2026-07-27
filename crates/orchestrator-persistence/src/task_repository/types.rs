@@ -10,11 +10,11 @@ pub enum TaskRepositorySource {
 }
 
 /// Concrete database connection type used by repository adapters.
-pub type TaskRepositoryConn = Connection;
+pub(crate) type TaskRepositoryConn = Connection;
 
 impl TaskRepositorySource {
     /// Opens a new repository connection from the configured source.
-    pub fn connection(&self) -> Result<TaskRepositoryConn> {
+    pub(crate) fn connection(&self) -> Result<TaskRepositoryConn> {
         match self {
             TaskRepositorySource::Path(db_path) => open_conn(db_path),
         }

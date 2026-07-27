@@ -828,7 +828,8 @@ mod tests {
 
         // Point the task at a non-default project via direct SQL update
         {
-            let conn = agent_orchestrator::db::open_conn(&state.db_path).expect("open db");
+            let conn =
+                orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open db");
             conn.execute(
                 "UPDATE tasks SET project_id = ?1 WHERE id = ?2",
                 rusqlite::params!["custom-project", &task_id],

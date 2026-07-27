@@ -165,7 +165,7 @@ pub fn reset_task_item(db_path: &Path, id_or_prefix: &str, now: &str) -> Result<
 ///
 /// An exact match wins outright: a full id that happens to prefix a longer one
 /// must not be reported as ambiguous.
-pub fn resolve_task_item_id(conn: &Connection, id_or_prefix: &str) -> Result<String> {
+pub(crate) fn resolve_task_item_id(conn: &Connection, id_or_prefix: &str) -> Result<String> {
     use rusqlite::OptionalExtension;
     let exact: Option<String> = conn
         .query_row(

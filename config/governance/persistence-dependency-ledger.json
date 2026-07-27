@@ -33,16 +33,16 @@
   },
   "roles": {
     "core": {
-      "role": "persistence",
-      "reason": "the persistence layer today; orchestrator-persistence inherits this role at FR-130 Phase A"
+      "role": "forbidden",
+      "reason": "was the persistence layer until FR-130 Phase A moved the code into crates/orchestrator-persistence, which inherited the role; this entry went on saying core *is* the layer for four FRs after it stopped being true. FR-141 finished the move: no production file in core names the driver, and the declaration is under [dev-dependencies], where its users are cfg(test) modules asserting on rows core logic wrote through orchestrator-persistence test_support"
     },
     "crates/cli": {
       "role": "none",
       "reason": "no relationship to persistence; reaching for the driver here would be a new consumer, not a residual"
     },
     "crates/daemon": {
-      "role": "forbidden",
-      "reason": "sits above core and used to borrow its AsyncDatabase connection to run raw SQL in gRPC handlers. FR-141 paid that residual to zero: no production file here names the driver, and the declaration moved to [dev-dependencies], where its remaining users are cfg(test) modules exercising statements that now live in the persistence layer. It goes entirely when FR-141 B5 relocates those tests, at which point this becomes `none`"
+      "role": "none",
+      "reason": "sits above core and used to borrow its AsyncDatabase connection to run raw SQL in gRPC handlers. FR-141 B2 moved every statement into the layer and B5 moved the cfg(test) modules that were still reading the database onto orchestrator-persistence test_support, so this crate no longer names the driver in any section of its manifest. `none` rather than `forbidden`: forbidden permits a [dev-dependencies] declaration, and there is nothing left here to declare it for"
     },
     "crates/gui": {
       "role": "none",
@@ -91,11 +91,11 @@
   },
   "declarations": {
     "core": {
-      "dependencies": [
+      "dependencies": [],
+      "devDependencies": [
         "rusqlite",
         "tokio-rusqlite"
-      ],
-      "devDependencies": []
+      ]
     },
     "crates/cli": {
       "dependencies": [],
@@ -103,10 +103,7 @@
     },
     "crates/daemon": {
       "dependencies": [],
-      "devDependencies": [
-        "rusqlite",
-        "tokio-rusqlite"
-      ]
+      "devDependencies": []
     },
     "crates/gui": {
       "dependencies": [],

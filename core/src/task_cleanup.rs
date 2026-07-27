@@ -78,11 +78,12 @@ pub async fn cleanup_old_tasks(
 mod tests {
     use super::*;
     use crate::test_utils::TestState;
+    use orchestrator_persistence::test_support;
 
     async fn insert_task(db: &AsyncDatabase, task_id: &str, status: &str) {
         let id = task_id.to_owned();
         let st = status.to_owned();
-        db.writer()
+        test_support::writer(db)
             .call(move |conn| {
                 conn.execute(
                     "INSERT INTO tasks (id, name, status, goal, target_files_json, mode, \
@@ -100,7 +101,7 @@ mod tests {
 
     async fn age_task(db: &AsyncDatabase, task_id: &str, days: u32) {
         let id = task_id.to_owned();
-        db.writer()
+        test_support::writer(db)
             .call(move |conn| {
                 conn.execute(
                     &format!(
@@ -115,7 +116,7 @@ mod tests {
     }
 
     async fn count_tasks(db: &AsyncDatabase) -> u64 {
-        db.reader()
+        test_support::reader(db)
             .call(|conn| {
                 let c: i64 = conn.query_row("SELECT COUNT(*) FROM tasks", [], |r| r.get(0))?;
                 Ok(c as u64)
@@ -126,7 +127,7 @@ mod tests {
 
     async fn task_exists(db: &AsyncDatabase, task_id: &str) -> bool {
         let id = task_id.to_owned();
-        db.reader()
+        test_support::reader(db)
             .call(move |conn| {
                 let c: i64 = conn.query_row(
                     "SELECT COUNT(*) FROM tasks WHERE id = ?1",

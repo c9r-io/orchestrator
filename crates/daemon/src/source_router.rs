@@ -1588,6 +1588,7 @@ mod tests {
     };
     use agent_orchestrator::state::update_config_runtime;
     use agent_orchestrator::test_utils::TestState;
+    use orchestrator_persistence::test_support;
 
     fn source_trigger() -> TriggerConfig {
         TriggerConfig {
@@ -1731,9 +1732,7 @@ mod tests {
                 .len(),
             1
         );
-        let count = state
-            .async_database
-            .reader()
+        let count = test_support::reader(&state.async_database)
             .call(|conn| {
                 Ok(conn.query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get::<_, i64>(0))?)
             })
@@ -1808,9 +1807,7 @@ mod tests {
         );
         assert_eq!(routed.routing_attempts, 1);
         assert!(routed.routed_task_id.is_none());
-        let (tasks, bindings) = state
-            .async_database
-            .reader()
+        let (tasks, bindings) = test_support::reader(&state.async_database)
             .call(|conn| {
                 Ok((
                     conn.query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get::<_, i64>(0))?,
@@ -2051,9 +2048,7 @@ mod tests {
         assert_eq!(first.routing_state, "routed");
         assert_eq!(first.routed_task_id, second.routed_task_id);
         let task_id = first.routed_task_id.expect("automation task");
-        let (tasks, routes, automation_bindings, audits, goal, leaked) = state
-            .async_database
-            .reader()
+        let (tasks, routes, automation_bindings, audits, goal, leaked) = test_support::reader(&state.async_database)
             .call(move |conn| {
                 Ok((
                     conn.query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get::<_, i64>(0))?,
@@ -2083,9 +2078,7 @@ mod tests {
             .await
             .expect("root");
         reconcile_source_once(&state).await.expect("route root");
-        let before = state
-            .async_database
-            .reader()
+        let before = test_support::reader(&state.async_database)
             .call(|conn| {
                 Ok(conn.query_row(
                     "SELECT COUNT(*) FROM events WHERE event_type='source_context_added'",
@@ -2103,9 +2096,7 @@ mod tests {
         reconcile_source_once(&state)
             .await
             .expect("ignore reaction");
-        let after = state
-            .async_database
-            .reader()
+        let after = test_support::reader(&state.async_database)
             .call(|conn| {
                 Ok(conn.query_row(
                     "SELECT COUNT(*) FROM events WHERE event_type='source_context_added'",
@@ -2254,9 +2245,7 @@ mod tests {
             routed.last_error_code.as_deref(),
             Some("actor_not_authorized")
         );
-        let audit = state
-            .async_database
-            .reader()
+        let audit = test_support::reader(&state.async_database)
             .call(move |conn| {
                 Ok(conn.query_row(
                     "SELECT resolved_role,action,status,error_code FROM source_command_actions",

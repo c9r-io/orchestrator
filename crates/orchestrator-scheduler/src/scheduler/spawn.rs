@@ -194,8 +194,8 @@ fn truncate_goal(goal: &str, max_len: usize) -> &str {
 mod tests {
     use super::*;
     use agent_orchestrator::config::{SpawnInherit, SpawnMapping};
-    use agent_orchestrator::db::open_conn;
     use agent_orchestrator::test_utils::TestState;
+    use orchestrator_persistence::test_support::open_conn;
     use rusqlite::params;
 
     fn test_context<'a>(

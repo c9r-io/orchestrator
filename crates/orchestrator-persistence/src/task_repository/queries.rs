@@ -11,7 +11,7 @@ use super::types::{NewTaskGraphRun, NewTaskGraphSnapshot, TaskLogRunRow, TaskRun
 use rusqlite::Connection;
 
 /// Resolves a full task id or a unique id prefix to the full id.
-pub fn resolve_task_id(conn: &Connection, task_id_or_prefix: &str) -> Result<String> {
+pub(crate) fn resolve_task_id(conn: &Connection, task_id_or_prefix: &str) -> Result<String> {
     let mut stmt = conn.prepare("SELECT id FROM tasks WHERE id = ?1")?;
     let exact_match: Option<String> = stmt
         .query_row(params![task_id_or_prefix], |row| row.get(0))
@@ -36,7 +36,7 @@ pub fn resolve_task_id(conn: &Connection, task_id_or_prefix: &str) -> Result<Str
 }
 
 /// Loads the summary row for one task.
-pub fn load_task_summary(conn: &Connection, task_id: &str) -> Result<TaskSummary> {
+pub(crate) fn load_task_summary(conn: &Connection, task_id: &str) -> Result<TaskSummary> {
     let mut stmt = conn.prepare(
         "SELECT id, name, status, started_at, completed_at, goal, target_files_json, project_id, workspace_id, workflow_id, created_at, updated_at, parent_task_id, spawn_reason, spawn_depth FROM tasks WHERE id = ?1",
     )?;
@@ -74,7 +74,7 @@ pub fn load_task_summary(conn: &Connection, task_id: &str) -> Result<TaskSummary
 }
 
 /// Loads a task's items, command runs and events in one pass.
-pub fn load_task_detail_rows(conn: &Connection, task_id: &str) -> Result<TaskDetailRows> {
+pub(crate) fn load_task_detail_rows(conn: &Connection, task_id: &str) -> Result<TaskDetailRows> {
     let mut items_stmt = conn.prepare(
         "SELECT id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, updated_at FROM task_items WHERE task_id = ?1 ORDER BY order_no",
     )?;
@@ -162,7 +162,7 @@ pub fn load_task_detail_rows(conn: &Connection, task_id: &str) -> Result<TaskDet
 /// Unlike [`load_task_detail_rows`], this query intentionally does not apply the
 /// legacy 500-run/2000-event diagnostic caps. The optional event watermark pins
 /// subsequent cursor pages to the same source event set while a task is active.
-pub fn load_task_timeline_source(
+pub(crate) fn load_task_timeline_source(
     conn: &Connection,
     task_id: &str,
     max_event_id: Option<i64>,
@@ -273,7 +273,7 @@ pub fn load_task_timeline_source(
 }
 
 /// Returns `(total, resolved, failed)` item counts for a task.
-pub fn load_task_item_counts(conn: &Connection, task_id: &str) -> Result<(i64, i64, i64)> {
+pub(crate) fn load_task_item_counts(conn: &Connection, task_id: &str) -> Result<(i64, i64, i64)> {
     conn.query_row(
         "SELECT COUNT(*), SUM(CASE WHEN status IN ('qa_passed','fixed','verified','skipped','unresolved') THEN 1 ELSE 0 END), SUM(CASE WHEN status IN ('qa_failed','unresolved') THEN 1 ELSE 0 END) FROM task_items WHERE task_id = ?1",
         params![task_id],
@@ -296,7 +296,7 @@ pub fn load_task_item_counts(conn: &Connection, task_id: &str) -> Result<(i64, i
 /// after `LIMIT`. Both are `u32` from configuration, so there is no string to
 /// inject; the types are the guard, and that is why the signature takes `u32`
 /// rather than something more convenient.
-pub fn list_terminal_tasks_older_than(
+pub(crate) fn list_terminal_tasks_older_than(
     conn: &Connection,
     retention_days: u32,
     limit: u32,
@@ -315,7 +315,7 @@ pub fn list_terminal_tasks_older_than(
 }
 
 /// Lists every task id, newest first.
-pub fn list_task_ids_ordered_by_created_desc(conn: &Connection) -> Result<Vec<String>> {
+pub(crate) fn list_task_ids_ordered_by_created_desc(conn: &Connection) -> Result<Vec<String>> {
     let mut stmt = conn.prepare("SELECT id FROM tasks ORDER BY created_at DESC")?;
     let ids = stmt
         .query_map([], |row| row.get::<_, String>(0))?
@@ -325,7 +325,7 @@ pub fn list_task_ids_ordered_by_created_desc(conn: &Connection) -> Result<Vec<St
 
 /// Finds the most recently updated task that can be resumed, optionally
 /// counting `pending` tasks as resumable.
-pub fn find_latest_resumable_task_id(
+pub(crate) fn find_latest_resumable_task_id(
     conn: &Connection,
     include_pending: bool,
 ) -> Result<Option<String>> {
@@ -348,7 +348,7 @@ pub fn find_latest_resumable_task_id(
 }
 
 /// Loads the columns the scheduler needs to resume or continue a task.
-pub fn load_task_runtime_row(conn: &Connection, task_id: &str) -> Result<TaskRuntimeRow> {
+pub(crate) fn load_task_runtime_row(conn: &Connection, task_id: &str) -> Result<TaskRuntimeRow> {
     let row = conn.query_row(
         "SELECT workspace_id, workflow_id, workspace_root, ticket_dir, execution_plan_json, current_cycle, init_done, COALESCE(goal,''), COALESCE(project_id,''), pipeline_vars_json, COALESCE(spawn_depth,0), step_filter_json, initial_vars_json, COALESCE(artifacts_dir,'') FROM tasks WHERE id = ?1",
         params![task_id],
@@ -375,7 +375,7 @@ pub fn load_task_runtime_row(conn: &Connection, task_id: &str) -> Result<TaskRun
 }
 
 /// Returns the first item of a task in `order_no` order, if it has one.
-pub fn first_task_item_id(conn: &Connection, task_id: &str) -> Result<Option<String>> {
+pub(crate) fn first_task_item_id(conn: &Connection, task_id: &str) -> Result<Option<String>> {
     conn.query_row(
         "SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1",
         params![task_id],
@@ -386,7 +386,7 @@ pub fn first_task_item_id(conn: &Connection, task_id: &str) -> Result<Option<Str
 }
 
 /// Counts items still `unresolved` or `qa_failed` for a task.
-pub fn count_unresolved_items(conn: &Connection, task_id: &str) -> Result<i64> {
+pub(crate) fn count_unresolved_items(conn: &Connection, task_id: &str) -> Result<i64> {
     conn.query_row(
         "SELECT COUNT(*) FROM task_items WHERE task_id = ?1 AND status IN ('unresolved','qa_failed')",
         params![task_id],
@@ -397,7 +397,7 @@ pub fn count_unresolved_items(conn: &Connection, task_id: &str) -> Result<i64> {
 
 /// Counts items that are `pending` with no in-flight runs but at least one completed run.
 /// These are items whose subprocess finished after recovery but were never finalized (FR-038).
-pub fn count_stale_pending_items(conn: &Connection, task_id: &str) -> Result<i64> {
+pub(crate) fn count_stale_pending_items(conn: &Connection, task_id: &str) -> Result<i64> {
     conn.query_row(
         "SELECT COUNT(*) FROM task_items ti
          WHERE ti.task_id = ?1 AND ti.status = 'pending'
@@ -417,7 +417,10 @@ pub fn count_stale_pending_items(conn: &Connection, task_id: &str) -> Result<i64
 }
 
 /// Lists a task's items with the fields one execution cycle needs.
-pub fn list_task_items_for_cycle(conn: &Connection, task_id: &str) -> Result<Vec<TaskItemRow>> {
+pub(crate) fn list_task_items_for_cycle(
+    conn: &Connection,
+    task_id: &str,
+) -> Result<Vec<TaskItemRow>> {
     let mut stmt = conn.prepare(
         "SELECT id, qa_file_path, dynamic_vars_json, label, source, status
          FROM task_items
@@ -444,7 +447,7 @@ pub fn list_task_items_for_cycle(conn: &Connection, task_id: &str) -> Result<Vec
 }
 
 /// Returns a task's status, or `None` when the task does not exist.
-pub fn load_task_status(conn: &Connection, task_id: &str) -> Result<Option<String>> {
+pub(crate) fn load_task_status(conn: &Connection, task_id: &str) -> Result<Option<String>> {
     conn.query_row(
         "SELECT status FROM tasks WHERE id = ?1",
         params![task_id],
@@ -455,7 +458,7 @@ pub fn load_task_status(conn: &Connection, task_id: &str) -> Result<Option<Strin
 }
 
 /// Returns a task's name, or `None` when the task does not exist.
-pub fn load_task_name(conn: &Connection, task_id: &str) -> Result<Option<String>> {
+pub(crate) fn load_task_name(conn: &Connection, task_id: &str) -> Result<Option<String>> {
     conn.query_row(
         "SELECT name FROM tasks WHERE id = ?1",
         params![task_id],
@@ -467,7 +470,7 @@ pub fn load_task_name(conn: &Connection, task_id: &str) -> Result<Option<String>
 
 /// Lists the most recent command runs of a task with their log paths, newest
 /// first, capped at `limit`.
-pub fn list_task_log_runs(
+pub(crate) fn list_task_log_runs(
     conn: &Connection,
     task_id: &str,
     limit: usize,
@@ -495,7 +498,7 @@ pub fn list_task_log_runs(
 }
 
 /// Inserts one task-graph planning run.
-pub fn insert_task_graph_run(conn: &Connection, run: &NewTaskGraphRun) -> Result<()> {
+pub(crate) fn insert_task_graph_run(conn: &Connection, run: &NewTaskGraphRun) -> Result<()> {
     conn.execute(
         "INSERT INTO task_graph_runs (
             graph_run_id, task_id, cycle, mode, source, status, fallback_mode,
@@ -523,7 +526,7 @@ pub fn insert_task_graph_run(conn: &Connection, run: &NewTaskGraphRun) -> Result
 }
 
 /// Updates a task-graph run's status and bumps its `updated_at`.
-pub fn update_task_graph_run_status(
+pub(crate) fn update_task_graph_run_status(
     conn: &Connection,
     graph_run_id: &str,
     status: &str,
@@ -536,7 +539,7 @@ pub fn update_task_graph_run_status(
 }
 
 /// Inserts one task-graph snapshot belonging to a planning run.
-pub fn insert_task_graph_snapshot(
+pub(crate) fn insert_task_graph_snapshot(
     conn: &Connection,
     snapshot: &NewTaskGraphSnapshot,
 ) -> Result<()> {
@@ -560,7 +563,7 @@ pub fn insert_task_graph_snapshot(
 
 /// Loads every task-graph run of a task together with its snapshots, for the
 /// graph debug surface.
-pub fn load_task_graph_debug_bundles(
+pub(crate) fn load_task_graph_debug_bundles(
     conn: &Connection,
     task_id: &str,
 ) -> Result<Vec<TaskGraphDebugBundle>> {

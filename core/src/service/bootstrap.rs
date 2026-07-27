@@ -475,7 +475,8 @@ mod tests {
         std::fs::write(&qa_file, "# bootstrap backfill\n").expect("seed qa file");
         let created = create_task_impl(&state, CreateTaskPayload::default()).expect("create task");
 
-        let conn = crate::db::open_conn(&state.db_path).expect("open sqlite");
+        let conn =
+            orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open sqlite");
         conn.execute(
             "UPDATE tasks SET workspace_id = '', workflow_id = '', workspace_root = '', qa_targets_json = '[]', ticket_dir = '' WHERE id = ?1",
             rusqlite::params![created.id],

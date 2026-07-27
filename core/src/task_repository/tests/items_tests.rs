@@ -4,8 +4,8 @@ use super::super::trait_def::{CommandRunRepository, TaskItemMutRepository, TaskS
 use super::super::types::TaskRepositorySource;
 use super::fixtures::{get_item_id, seed_task};
 use crate::config_load::now_ts;
-use crate::db::open_conn;
 use crate::test_utils::TestState;
+use orchestrator_persistence::test_support::open_conn;
 use rusqlite::params;
 
 #[test]

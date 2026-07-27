@@ -12,6 +12,7 @@ use agent_orchestrator::trigger_engine::{
     TriggerEventPayload, broadcast_task_event, fire_trigger_canonical,
 };
 use orchestrator_integration_tests::TestHarness;
+use orchestrator_persistence::test_support;
 use serde_json::json;
 use std::time::Duration;
 use tokio::time::timeout;
@@ -42,9 +43,7 @@ async fn count_trigger_tasks(
     trigger_name: &str,
 ) -> usize {
     let pattern = format!("trigger-{trigger_name}");
-    state
-        .async_database
-        .reader()
+    test_support::reader(&state.async_database)
         .call(move |conn| {
             let count: usize = conn
                 .query_row(
@@ -67,9 +66,7 @@ async fn read_trigger_state(
 ) -> Option<(String, i64)> {
     let name = trigger_name.to_string();
     let proj = project.to_string();
-    state
-        .async_database
-        .reader()
+    test_support::reader(&state.async_database)
         .call(move |conn| {
             let row = conn
                 .query_row(
@@ -91,9 +88,7 @@ async fn read_task_goal(
     task_id: &str,
 ) -> Option<String> {
     let tid = task_id.to_string();
-    state
-        .async_database
-        .reader()
+    test_support::reader(&state.async_database)
         .call(move |conn| {
             Ok(conn
                 .query_row(
@@ -114,9 +109,7 @@ async fn read_task_status(
     task_id: &str,
 ) -> Option<String> {
     let tid = task_id.to_string();
-    state
-        .async_database
-        .reader()
+    test_support::reader(&state.async_database)
         .call(move |conn| {
             Ok(conn
                 .query_row(
@@ -638,9 +631,7 @@ async fn exclude_trigger_prevents_duplicate_via_broadcast() {
         // be fired a second time by the engine.
         let tasks: Vec<String> = {
             let pattern = "trigger-webhook-trigger".to_string();
-            state
-                .async_database
-                .reader()
+            test_support::reader(&state.async_database)
                 .call(move |conn| {
                     let mut stmt = conn
                         .prepare("SELECT id FROM tasks WHERE name = ?1")

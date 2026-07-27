@@ -9,8 +9,12 @@
       "demands": "a public item whose parameter position names a driver type; a function that demands a connection forces its callers to acquire one, which is how an exempt crate below the layer can push the driver upward past it",
       "holds": "production source outside the layer that calls something classified as yields; the scanned names are derived from the yields set rather than listed, so a name that stops yielding a connection stops being looked for and a new one is looked for the moment it appears"
     },
-    "notStatedHere": "who may declare the driver, and how much SQL each file holds. Both are DD-147's, in config/governance/persistence-dependency-ledger.json. A crate calling rusqlite::Connection::open directly must first declare the driver, and condition 1 fails on that."
+    "notStatedHere": "who may declare the driver, and how much SQL each file holds. Both are DD-147's, in config/governance/persistence-dependency-ledger.json. A crate calling rusqlite::Connection::open directly must first declare the driver, and condition 1 fails on that.",
+    "testOnlyDoor": "Some consumers of a connection are tests that cannot sink into the layer: core's own tests build their fixtures from TestState and create_task_impl, which sit above it, and orchestrator-persistence/tests/round_trip.rs is a separate crate by Rust's design. They reach a connection through src/test_support.rs, compiled only under the `test-support` feature. The feature is not a hole the gate declines to look at: what the module exposes is inventoried in testOnlyYields and testOnlyDemands, fact 3 still scans production source for those names, and feature_edge_errors fails if any crate enables the feature from [dependencies] rather than [dev-dependencies]. Under resolver 2 a dev-dependency's features are not unified into a normal build, so `cargo build` cannot reach the module — verified by compiling a production caller and reading the E0433."
   },
+  "testOnlyFeatures": [
+    "test-support"
+  ],
   "roles": {
     "core": {
       "role": "forbidden",
@@ -22,7 +26,7 @@
     },
     "crates/daemon": {
       "role": "forbidden",
-      "reason": "borrows AsyncDatabase connections in gRPC handlers and opens its own by path in server/secret.rs to satisfy orchestrator-security's API. FR-141 migrates both"
+      "reason": "held no driver in production since FR-141 B2 moved its gRPC handlers' SQL into the layer. Its cfg(test) modules read the database back to assert on what those handlers wrote, so it declares the driver and the test-support feature under [dev-dependencies] only"
     },
     "crates/gui": {
       "role": "forbidden",
@@ -30,7 +34,7 @@
     },
     "crates/integration-tests": {
       "role": "forbidden",
-      "reason": "declares the driver under [dev-dependencies] and asserts against the database directly in tests/trigger_fire.rs, which is legitimate for a test and outside this gate's production scan. Marked forbidden rather than exempt so a production source file added to it would be caught"
+      "reason": "declares the driver and the test-support feature under [dev-dependencies] and asserts against the database directly in tests/trigger_fire.rs, which is what makes it end-to-end evidence rather than a restatement of the layer's API. Marked forbidden rather than exempt so a production source file added to it would be caught"
     },
     "crates/orchestrator-client": {
       "role": "forbidden",
@@ -54,7 +58,7 @@
     },
     "crates/orchestrator-scheduler": {
       "role": "forbidden",
-      "reason": "borrows AsyncDatabase connections in scheduling logic and re-exports the capability through its own public API — scheduler/item_generate.rs::create_dynamic_task_items takes a &rusqlite::Connection. FR-141 migrates both"
+      "reason": "held no driver in production since FR-141 B3 moved its scheduling SQL into the layer, including create_dynamic_task_items, which had re-exported a &rusqlite::Connection through the scheduler's own public API. Its cfg(test) modules keep a [dev-dependencies] edge"
     },
     "crates/orchestrator-security": {
       "role": "exempt",
@@ -70,441 +74,175 @@
     }
   },
   "yields": {
-    "crates/orchestrator-persistence/src/async_database.rs::fn reader": {
+  },
+  "demands": {
+  },
+  "testOnlyYields": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn open_conn": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/async_database.rs::fn writer": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn reader": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/db.rs::fn open_conn": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/migration.rs::struct Migration": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/sqlite.rs::fn open_conn": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/task_repository/types.rs::type TaskRepositoryConn": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn writer": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     }
   },
-  "demands": {
-    "crates/orchestrator-persistence/src/async_database.rs::fn flatten_err": {
+  "testOnlyDemands": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn configure_conn": {
       "crate": "crates/orchestrator-persistence",
       "types": [
-        "Error"
-      ]
-    },
-    "crates/orchestrator-persistence/src/db.rs::fn configure_conn": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/db.rs::fn count_non_terminal_tasks_by_workflow": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/db.rs::fn count_non_terminal_tasks_by_workspace": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/db.rs::fn list_non_terminal_tasks_by_workflow": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/db.rs::fn list_non_terminal_tasks_by_workspace": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/db.rs::fn secret_store_resources_reference_key": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/events.rs::fn latest_step_spawn_payload": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/events.rs::fn step_event_rows": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/migration.rs::fn applied_versions": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/migration.rs::fn current_version": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/migration.rs::fn registered_migration_statuses": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/migration.rs::fn registered_status": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/migration.rs::fn run_pending": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/migration.rs::fn status": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/session_store.rs::fn acquire_writer": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/session_store.rs::fn acquire_writer_lease": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/session_store.rs::fn attach_reader": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/session_store.rs::fn cleanup_stale_sessions": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/session_store.rs::fn expire_writer_leases": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/session_store.rs::fn heartbeat_writer": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/session_store.rs::fn insert_session": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/session_store.rs::fn list_sessions": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/session_store.rs::fn list_sessions_by_pid": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/session_store.rs::fn list_task_sessions": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/session_store.rs::fn load_active_session_for_task_step": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/session_store.rs::fn load_session": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/session_store.rs::fn reconcile_sessions": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/session_store.rs::fn release_attachment": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/session_store.rs::fn release_writer": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/session_store.rs::fn update_session_pid": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/session_store.rs::fn update_session_process": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/session_store.rs::fn update_session_state": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/session_store.rs::fn validate_writer": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/sqlite.rs::fn configure_conn": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/task_repository/creation.rs::fn resolve_task_item_id": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/task_repository/items.rs::fn delete_task_and_collect_log_paths": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/task_repository/queries.rs::fn count_stale_pending_items": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/task_repository/queries.rs::fn count_unresolved_items": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/task_repository/queries.rs::fn find_latest_resumable_task_id": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/task_repository/queries.rs::fn first_task_item_id": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/task_repository/queries.rs::fn insert_task_graph_run": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-persistence/src/task_repository/queries.rs::fn insert_task_graph_snapshot": {
-      "crate": "crates/orchestrator-persistence",
-      "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/queries.rs::fn list_task_ids_ordered_by_created_desc": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn count_non_terminal_tasks_by_workflow": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/queries.rs::fn list_task_items_for_cycle": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn count_non_terminal_tasks_by_workspace": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/queries.rs::fn list_task_log_runs": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn insert_session": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/queries.rs::fn list_terminal_tasks_older_than": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn insert_task_graph_run": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/queries.rs::fn load_task_detail_rows": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn insert_task_graph_snapshot": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/queries.rs::fn load_task_graph_debug_bundles": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn list_non_terminal_tasks_by_workflow": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/queries.rs::fn load_task_item_counts": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn list_non_terminal_tasks_by_workspace": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/queries.rs::fn load_task_name": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn list_task_items_for_cycle": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/queries.rs::fn load_task_runtime_row": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn list_task_log_runs": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/queries.rs::fn load_task_status": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn list_terminal_tasks_older_than": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/queries.rs::fn load_task_summary": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn load_session": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/queries.rs::fn load_task_timeline_source": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn load_task_detail_rows": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/queries.rs::fn resolve_task_id": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn load_task_graph_debug_bundles": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/queries.rs::fn update_task_graph_run_status": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn load_task_summary": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/state.rs::fn pause_all_running_tasks_and_items": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn pause_all_running_tasks_and_items": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/state.rs::fn pause_restart_pending_tasks_and_items": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn pause_restart_pending_tasks_and_items": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/state.rs::fn prepare_task_for_start_batch": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn recover_orphaned_running_items": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/state.rs::fn recover_orphaned_running_items": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn recover_orphaned_running_items_for_task": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/state.rs::fn recover_orphaned_running_items_for_task": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn recover_stalled_running_items": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/state.rs::fn recover_stalled_running_items": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn reset_unresolved_items": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/state.rs::fn reset_unresolved_items": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn run_pending": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/state.rs::fn set_task_status": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn secret_store_resources_reference_key": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/state.rs::fn update_task_cycle_state": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn step_event_rows": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
       ]
     },
-    "crates/orchestrator-persistence/src/task_repository/write_ops.rs::fn insert_event": {
+    "crates/orchestrator-persistence/src/test_support.rs::fn update_task_graph_run_status": {
       "crate": "crates/orchestrator-persistence",
       "types": [
         "Connection"
@@ -514,8 +252,10 @@
   "holds": {
   },
   "totals": {
-    "yields": 6,
-    "demands": 67,
+    "yields": 0,
+    "demands": 0,
+    "testOnlyYields": 3,
+    "testOnlyDemands": 25,
     "holdingFiles": 0,
     "acquisitions": 0
   }

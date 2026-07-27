@@ -1,10 +1,9 @@
 use super::super::SqliteTaskRepository;
-use super::super::state;
 use super::super::trait_def::TaskStateRepository;
 use super::super::types::TaskRepositorySource;
 use super::fixtures::{get_item_id, seed_task};
-use crate::db::open_conn;
 use crate::test_utils::TestState;
+use orchestrator_persistence::test_support::open_conn;
 use rusqlite::params;
 
 #[test]
@@ -489,7 +488,8 @@ fn recover_orphaned_running_items_resets_items_and_task() {
     )
     .expect("mark item running");
 
-    let recovered = state::recover_orphaned_running_items(&conn).expect("recover should succeed");
+    let recovered = orchestrator_persistence::test_support::recover_orphaned_running_items(&conn)
+        .expect("recover should succeed");
     assert_eq!(recovered.len(), 1);
     assert_eq!(recovered[0].0, task_id);
     assert_eq!(recovered[0].1, vec![item_id.clone()]);
@@ -531,7 +531,8 @@ fn recover_orphaned_running_items_returns_empty_when_no_orphans() {
     let (state, _task_id) = seed_task(&mut fixture);
     let conn = open_conn(&state.db_path).expect("open sqlite");
 
-    let recovered = state::recover_orphaned_running_items(&conn).expect("recover should succeed");
+    let recovered = orchestrator_persistence::test_support::recover_orphaned_running_items(&conn)
+        .expect("recover should succeed");
     assert!(recovered.is_empty());
 }
 
@@ -549,7 +550,8 @@ fn recover_orphaned_running_items_does_not_affect_terminal_items() {
     )
     .expect("mark item qa_passed");
 
-    let recovered = state::recover_orphaned_running_items(&conn).expect("recover should succeed");
+    let recovered = orchestrator_persistence::test_support::recover_orphaned_running_items(&conn)
+        .expect("recover should succeed");
     assert!(recovered.is_empty());
 
     // Verify item is still qa_passed
@@ -601,7 +603,10 @@ fn recover_orphaned_running_items_for_task_only_affects_target_task() {
 
     // Recover only the first task
     let recovered =
-        state::recover_orphaned_running_items_for_task(&conn, &task_id).expect("recover");
+        orchestrator_persistence::test_support::recover_orphaned_running_items_for_task(
+            &conn, &task_id,
+        )
+        .expect("recover");
     assert_eq!(recovered, vec![item_id.clone()]);
 
     // First task item should be pending
@@ -647,8 +652,12 @@ fn recover_stalled_running_items_respects_threshold() {
 
     // Threshold of 3 hours → should NOT recover (item is only 2h old)
     let no_exclude = std::collections::HashSet::new();
-    let recovered =
-        state::recover_stalled_running_items(&conn, 3 * 3600, &no_exclude).expect("recover");
+    let recovered = orchestrator_persistence::test_support::recover_stalled_running_items(
+        &conn,
+        3 * 3600,
+        &no_exclude,
+    )
+    .expect("recover");
     assert!(
         recovered.is_empty(),
         "should not recover items within threshold"
@@ -665,8 +674,12 @@ fn recover_stalled_running_items_respects_threshold() {
     assert_eq!(status, "running");
 
     // Threshold of 1 hour → SHOULD recover (item is 2h old)
-    let recovered =
-        state::recover_stalled_running_items(&conn, 3600, &no_exclude).expect("recover");
+    let recovered = orchestrator_persistence::test_support::recover_stalled_running_items(
+        &conn,
+        3600,
+        &no_exclude,
+    )
+    .expect("recover");
     assert_eq!(recovered.len(), 1);
     assert_eq!(recovered[0].0, task_id);
 
@@ -703,7 +716,10 @@ fn recover_stalled_running_items_skips_excluded_tasks() {
 
     // Exclude this task (simulating an active worker)
     let exclude = std::collections::HashSet::from([task_id.clone()]);
-    let recovered = state::recover_stalled_running_items(&conn, 3600, &exclude).expect("recover");
+    let recovered = orchestrator_persistence::test_support::recover_stalled_running_items(
+        &conn, 3600, &exclude,
+    )
+    .expect("recover");
     assert!(
         recovered.is_empty(),
         "excluded task should not be recovered"
@@ -759,7 +775,8 @@ fn recover_orphaned_running_items_skips_paused_task_in_return() {
     )
     .expect("mark item running");
 
-    let recovered = state::recover_orphaned_running_items(&conn).expect("recover should succeed");
+    let recovered = orchestrator_persistence::test_support::recover_orphaned_running_items(&conn)
+        .expect("recover should succeed");
 
     // Return value should be EMPTY — paused task is not returned for worker notification
     assert!(
@@ -815,8 +832,8 @@ fn pause_all_running_tasks_and_items_pauses_tasks_and_resets_items() {
     )
     .expect("mark item running");
 
-    let count =
-        state::pause_all_running_tasks_and_items(&conn).expect("blanket pause should succeed");
+    let count = orchestrator_persistence::test_support::pause_all_running_tasks_and_items(&conn)
+        .expect("blanket pause should succeed");
     assert_eq!(count, 1, "should reset 1 running item");
 
     // Task should be paused
@@ -855,8 +872,8 @@ fn pause_all_running_does_not_affect_paused_tasks() {
     )
     .expect("mark task paused");
 
-    let count =
-        state::pause_all_running_tasks_and_items(&conn).expect("blanket pause should succeed");
+    let count = orchestrator_persistence::test_support::pause_all_running_tasks_and_items(&conn)
+        .expect("blanket pause should succeed");
     assert_eq!(count, 0, "should not reset any items");
 
     // Task should remain paused
@@ -896,7 +913,8 @@ fn reset_unresolved_items_resets_unresolved_to_pending() {
     )
     .expect("mark item unresolved");
 
-    state::reset_unresolved_items(&conn, &task_id).expect("reset should succeed");
+    orchestrator_persistence::test_support::reset_unresolved_items(&conn, &task_id)
+        .expect("reset should succeed");
 
     // Item should be reset to pending with all fields cleared
     let (status, fix_required, fixed, last_error, ticket_files, ticket_content): (
@@ -942,7 +960,8 @@ fn reset_unresolved_items_resets_cycle_counter_when_pending_items_exist() {
     )
     .expect("mark item unresolved");
 
-    state::reset_unresolved_items(&conn, &task_id).expect("reset should succeed");
+    orchestrator_persistence::test_support::reset_unresolved_items(&conn, &task_id)
+        .expect("reset should succeed");
 
     // Cycle counter should be reset because there are now pending items
     let (cycle, init_done): (i64, i64) = conn
@@ -971,7 +990,8 @@ fn reset_unresolved_items_no_op_when_no_unresolved() {
 
     // Items are already pending, so there are no unresolved items to reset,
     // but there ARE pending items, so the cycle counter should still be reset.
-    state::reset_unresolved_items(&conn, &task_id).expect("reset should succeed");
+    orchestrator_persistence::test_support::reset_unresolved_items(&conn, &task_id)
+        .expect("reset should succeed");
 
     let (cycle, init_done): (i64, i64) = conn
         .query_row(
@@ -1008,7 +1028,8 @@ fn reset_unresolved_items_skips_cycle_reset_when_no_pending() {
     )
     .expect("mark item qa_passed");
 
-    state::reset_unresolved_items(&conn, &task_id).expect("reset should succeed");
+    orchestrator_persistence::test_support::reset_unresolved_items(&conn, &task_id)
+        .expect("reset should succeed");
 
     // Cycle counter should NOT be reset because there are no pending items
     let (cycle, init_done): (i64, i64) = conn
@@ -1043,8 +1064,9 @@ fn pause_restart_pending_tasks_and_items_pauses_and_resets() {
     )
     .expect("mark item running");
 
-    let count = state::pause_restart_pending_tasks_and_items(&conn)
-        .expect("pause restart_pending should succeed");
+    let count =
+        orchestrator_persistence::test_support::pause_restart_pending_tasks_and_items(&conn)
+            .expect("pause restart_pending should succeed");
     assert_eq!(count, 1, "should reset 1 running item");
 
     // Task should now be paused
@@ -1088,7 +1110,9 @@ fn pause_restart_pending_does_not_affect_running_tasks() {
     )
     .expect("mark item running");
 
-    let count = state::pause_restart_pending_tasks_and_items(&conn).expect("pause should succeed");
+    let count =
+        orchestrator_persistence::test_support::pause_restart_pending_tasks_and_items(&conn)
+            .expect("pause should succeed");
     assert_eq!(count, 0, "should not reset items for running tasks");
 
     // Task should remain running
@@ -1119,7 +1143,9 @@ fn pause_restart_pending_returns_zero_when_no_restart_pending_tasks() {
     let conn = open_conn(&state.db_path).expect("open sqlite");
 
     // Default task is pending — no restart_pending tasks exist
-    let count = state::pause_restart_pending_tasks_and_items(&conn).expect("pause should succeed");
+    let count =
+        orchestrator_persistence::test_support::pause_restart_pending_tasks_and_items(&conn)
+            .expect("pause should succeed");
     assert_eq!(count, 0);
 }
 
@@ -1133,7 +1159,10 @@ fn recover_orphaned_running_items_for_task_returns_empty_when_no_running_items()
 
     // Items are pending by default — no running items
     let recovered =
-        state::recover_orphaned_running_items_for_task(&conn, &task_id).expect("recover");
+        orchestrator_persistence::test_support::recover_orphaned_running_items_for_task(
+            &conn, &task_id,
+        )
+        .expect("recover");
     assert!(recovered.is_empty());
 }
 
@@ -1157,7 +1186,10 @@ fn recover_orphaned_running_items_for_task_skips_non_running_task() {
     .expect("mark item running");
 
     let recovered =
-        state::recover_orphaned_running_items_for_task(&conn, &task_id).expect("recover");
+        orchestrator_persistence::test_support::recover_orphaned_running_items_for_task(
+            &conn, &task_id,
+        )
+        .expect("recover");
     // Items are still recovered (reset to pending)
     assert_eq!(recovered, vec![item_id.clone()]);
 

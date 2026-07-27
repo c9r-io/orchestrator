@@ -10,6 +10,7 @@ pub use orchestrator_persistence::repository::workflow_store::*;
 mod tests {
     use super::*;
     use crate::test_utils::TestState;
+    use orchestrator_persistence::test_support;
     use std::sync::Arc;
 
     const STORE: &str = "test-store";
@@ -67,9 +68,7 @@ mod tests {
     async fn set_updated_at(state: &Arc<crate::state::InnerState>, key: &str, offset: &str) {
         let k = key.to_string();
         let o = offset.to_string();
-        state
-            .async_database
-            .writer()
+        test_support::writer(&state.async_database)
             .call(move |conn| {
                 conn.execute(
                 "UPDATE workflow_store_entries SET updated_at = datetime('now', ?1) WHERE key = ?2",
@@ -132,7 +131,7 @@ mod tests {
         // Manually backdate old1 and old2
         for key in &["old1", "old2"] {
             let k = key.to_string();
-            state.async_database.writer().call(move |conn| {
+            test_support::writer(&state.async_database).call(move |conn| {
                 conn.execute(
                     "UPDATE workflow_store_entries SET updated_at = datetime('now', '-30 days') WHERE key = ?1",
                     rusqlite::params![k],

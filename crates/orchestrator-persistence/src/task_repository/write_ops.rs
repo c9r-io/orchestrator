@@ -28,7 +28,7 @@ pub(crate) fn extract_event_promoted_fields(
 ///
 /// Step / step_scope / cycle promoted columns are extracted from the
 /// payload JSON and stored alongside the row.
-pub fn insert_event(conn: &Connection, event: &DbEventRecord) -> Result<()> {
+pub(crate) fn insert_event(conn: &Connection, event: &DbEventRecord) -> Result<()> {
     let (step, step_scope, cycle) = extract_event_promoted_fields(&event.payload_json);
     let request_id = serde_json::from_str::<serde_json::Value>(&event.payload_json)
         .ok()

@@ -500,7 +500,8 @@ mod tests {
     }
 
     fn get_item_id(state: &InnerState, task_id: &str) -> String {
-        let conn = agent_orchestrator::db::open_conn(&state.db_path).expect("open sqlite");
+        let conn =
+            orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open sqlite");
         conn.query_row(
             "SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1",
             rusqlite::params![task_id],
@@ -621,7 +622,8 @@ mod tests {
     async fn large_timeline_meets_projection_budget() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
-        let conn = agent_orchestrator::db::open_conn(&state.db_path).expect("open sqlite");
+        let conn =
+            orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open sqlite");
         let tx = conn.unchecked_transaction().expect("timeline transaction");
         for index in 0..50_000_u64 {
             tx.execute(
@@ -664,7 +666,8 @@ mod tests {
         let (state, task_id) = seed_task(&mut fixture);
         let item_id = get_item_id(&state, &task_id);
 
-        let conn = agent_orchestrator::db::open_conn(&state.db_path).expect("open sqlite");
+        let conn =
+            orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open sqlite");
         conn.execute(
             "UPDATE task_items SET status = 'failed', fix_required = 1, fixed = 1, last_error = 'boom' WHERE id = ?1",
             rusqlite::params![item_id],

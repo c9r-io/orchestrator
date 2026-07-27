@@ -57,18 +57,18 @@ impl AsyncDatabase {
     }
 
     /// Returns the write-capable SQLite connection.
-    pub fn writer(&self) -> &tokio_rusqlite::Connection {
+    pub(crate) fn writer(&self) -> &tokio_rusqlite::Connection {
         &self.writer
     }
 
     /// Returns the read-only SQLite connection.
-    pub fn reader(&self) -> &tokio_rusqlite::Connection {
+    pub(crate) fn reader(&self) -> &tokio_rusqlite::Connection {
         &self.reader
     }
 }
 
 /// Flatten `tokio_rusqlite::Error` into `anyhow::Error`.
-pub fn flatten_err(err: tokio_rusqlite::Error) -> anyhow::Error {
+pub(crate) fn flatten_err(err: tokio_rusqlite::Error) -> anyhow::Error {
     match err {
         tokio_rusqlite::Error::ConnectionClosed => anyhow::anyhow!("db connection closed"),
         tokio_rusqlite::Error::Close((_, e)) => e.into(),

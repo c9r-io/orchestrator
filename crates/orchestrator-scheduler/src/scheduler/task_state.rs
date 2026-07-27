@@ -224,10 +224,10 @@ pub async fn mark_command_run_killed(state: &InnerState, run_id: &str) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_orchestrator::db::open_conn;
     use agent_orchestrator::dto::CreateTaskPayload;
     use agent_orchestrator::task_ops::create_task_impl;
     use agent_orchestrator::test_utils::TestState;
+    use orchestrator_persistence::test_support::open_conn;
 
     fn seed_task(fixture: &mut TestState) -> (std::sync::Arc<InnerState>, String) {
         let state = fixture.build();

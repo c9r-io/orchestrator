@@ -33,13 +33,14 @@ pub async fn qa_doctor_stats(db: &AsyncDatabase) -> Result<QaDoctorStats> {
 mod tests {
     use super::*;
     use crate::test_utils::TestState;
+    use orchestrator_persistence::test_support;
 
     /// Helper: insert a row into `task_execution_metrics`.
     async fn insert_metric(db: &AsyncDatabase, task_id: &str, status: &str, created_at: &str) {
         let tid = task_id.to_owned();
         let st = status.to_owned();
         let ca = created_at.to_owned();
-        db.writer()
+        test_support::writer(db)
             .call(move |conn| {
                 conn.execute(
                     "INSERT INTO task_execution_metrics \
@@ -106,9 +107,7 @@ mod tests {
         )
         .await;
         // Recent row — use datetime('now') via a direct insert
-        state
-            .async_database
-            .writer()
+        test_support::writer(&state.async_database)
             .call(|conn| {
                 conn.execute(
                     "INSERT INTO task_execution_metrics \

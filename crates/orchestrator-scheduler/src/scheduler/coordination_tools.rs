@@ -637,6 +637,7 @@ mod tests {
     use agent_orchestrator::dto::CreateTaskPayload;
     use agent_orchestrator::task_ops::create_task_impl;
     use agent_orchestrator::test_utils::TestState;
+    use orchestrator_persistence::test_support;
 
     #[test]
     fn allowed_tool_normalization_is_fail_closed() {
@@ -1096,9 +1097,7 @@ mod tests {
             .filter(|row| row.source == "dynamic")
             .count();
         assert_eq!(dynamic_count, 1);
-        let event_count: i64 = state
-            .async_database
-            .reader()
+        let event_count: i64 = test_support::reader(&state.async_database)
             .call({
                 let task_id = task.id.clone();
                 move |connection| {

@@ -18,5 +18,8 @@ anyhow = "1.0"
 serde_json = "1.0"
 
 [dev-dependencies]
+# FR-141: trigger_fire.rs asserts against the database directly, which is what
+# makes it end-to-end evidence rather than a restatement of the layer's API.
+orchestrator-persistence = { path = "../orchestrator-persistence", version = "0.3.1", features = ["test-support"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 tokio-rusqlite = "0.5"

@@ -144,12 +144,12 @@ pub fn insert_plugin_audit(db_path: &Path, record: &PluginAuditRecord) -> Result
 }
 
 /// Opens a SQLite connection using the orchestrator persistence defaults.
-pub fn open_conn(db_path: &Path) -> Result<Connection> {
+pub(crate) fn open_conn(db_path: &Path) -> Result<Connection> {
     crate::sqlite::open_conn(db_path)
 }
 
 /// Applies the standard busy timeout and pragma configuration to a connection.
-pub fn configure_conn(conn: &Connection) -> Result<()> {
+pub(crate) fn configure_conn(conn: &Connection) -> Result<()> {
     crate::sqlite::configure_conn(conn)
 }
 
@@ -160,7 +160,7 @@ pub fn init_schema(db_path: &Path) -> Result<()> {
 }
 
 /// Counts running or pending tasks for one project workspace pair.
-pub fn count_non_terminal_tasks_by_workspace(
+pub(crate) fn count_non_terminal_tasks_by_workspace(
     conn: &Connection,
     project_id: &str,
     workspace_id: &str,
@@ -177,7 +177,7 @@ pub fn count_non_terminal_tasks_by_workspace(
 }
 
 /// Counts running or pending tasks for one project workflow pair.
-pub fn count_non_terminal_tasks_by_workflow(
+pub(crate) fn count_non_terminal_tasks_by_workflow(
     conn: &Connection,
     project_id: &str,
     workflow_id: &str,
@@ -194,7 +194,7 @@ pub fn count_non_terminal_tasks_by_workflow(
 }
 
 /// Lists the oldest non-terminal tasks for one project workspace pair.
-pub fn list_non_terminal_tasks_by_workspace(
+pub(crate) fn list_non_terminal_tasks_by_workspace(
     conn: &Connection,
     project_id: &str,
     workspace_id: &str,
@@ -222,7 +222,7 @@ pub fn list_non_terminal_tasks_by_workspace(
 }
 
 /// Lists the oldest non-terminal tasks for one project workflow pair.
-pub fn list_non_terminal_tasks_by_workflow(
+pub(crate) fn list_non_terminal_tasks_by_workflow(
     conn: &Connection,
     project_id: &str,
     workflow_id: &str,
@@ -516,7 +516,10 @@ pub fn backfill_blank_default_scope(
 /// The needle is built here rather than passed in because how a key id appears
 /// inside a persisted `spec_json` is this layer's encoding, not its caller's
 /// question. The caller's question is only "is this revoked key still in use".
-pub fn secret_store_resources_reference_key(conn: &Connection, key_id: &str) -> Result<bool> {
+pub(crate) fn secret_store_resources_reference_key(
+    conn: &Connection,
+    key_id: &str,
+) -> Result<bool> {
     let needle = format!("\"key_id\":\"{key_id}\"");
     let referenced: bool = conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM resources WHERE kind='SecretStore' AND instr(spec_json, ?1) > 0)",

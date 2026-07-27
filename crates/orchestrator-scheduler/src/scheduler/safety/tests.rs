@@ -939,7 +939,8 @@ async fn test_execute_self_restart_step_build_fails() {
     }
 
     // Task status should NOT be restart_pending
-    let conn = agent_orchestrator::db::open_conn(&state.db_path).expect("open conn");
+    let conn =
+        orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open conn");
     let status: Option<String> = conn
         .query_row(
             "SELECT status FROM tasks WHERE id = ?1",
@@ -971,7 +972,8 @@ async fn test_execute_self_restart_step_success_returns_exit_restart() {
     write_executable(&binary_path, "#!/bin/sh\necho 'help output'\nexit 0\n");
 
     // Create the task in DB so set_task_status can find it
-    let conn = agent_orchestrator::db::open_conn(&state.db_path).expect("open conn");
+    let conn =
+        orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open conn");
     conn.execute(
         "INSERT INTO tasks (id, name, status, workspace_id, workflow_id, workspace_root, ticket_dir, target_files_json, execution_plan_json, goal, mode, qa_targets_json, created_at, updated_at) VALUES ('task-restart', 'test', 'running', 'ws', 'wf', ?1, '', '[]', '{}', 'test goal', 'auto', '[]', datetime('now'), datetime('now'))",
         rusqlite::params![workspace_root.to_str().unwrap()],
@@ -1018,7 +1020,8 @@ async fn test_verify_post_restart_binary_no_event_returns_true() {
     // When there's no self_restart_ready event, verification should pass (no-op)
     let mut fixture = TestState::new();
     let state = fixture.build();
-    let conn = agent_orchestrator::db::open_conn(&state.db_path).expect("open conn");
+    let conn =
+        orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open conn");
     conn.execute(
         "INSERT INTO tasks (id, name, status, workspace_id, workflow_id, workspace_root, ticket_dir, target_files_json, execution_plan_json, goal, mode, qa_targets_json, created_at, updated_at) VALUES ('t-verify', 'test', 'running', 'ws', 'wf', '/tmp', '', '[]', '{}', 'g', 'agent', '[]', datetime('now'), datetime('now'))",
         [],
@@ -1040,7 +1043,8 @@ async fn test_verify_post_restart_binary_with_matching_event() {
     // (once in this test, once inside verify_post_restart_binary).
     let mut fixture = TestState::new();
     let state = fixture.build();
-    let conn = agent_orchestrator::db::open_conn(&state.db_path).expect("open conn");
+    let conn =
+        orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open conn");
     conn.execute(
         "INSERT INTO tasks (id, name, status, workspace_id, workflow_id, workspace_root, ticket_dir, target_files_json, execution_plan_json, goal, mode, qa_targets_json, created_at, updated_at) VALUES ('t-match', 'test', 'running', 'ws', 'wf', '/tmp', '', '[]', '{}', 'g', 'agent', '[]', datetime('now'), datetime('now'))",
         [],
@@ -1083,7 +1087,8 @@ async fn test_verify_post_restart_binary_with_mismatch() {
     // Record a self_restart_ready event with a bogus SHA256 — should return false.
     let mut fixture = TestState::new();
     let state = fixture.build();
-    let conn = agent_orchestrator::db::open_conn(&state.db_path).expect("open conn");
+    let conn =
+        orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open conn");
     conn.execute(
         "INSERT INTO tasks (id, name, status, workspace_id, workflow_id, workspace_root, ticket_dir, target_files_json, execution_plan_json, goal, mode, qa_targets_json, created_at, updated_at) VALUES ('t-mismatch', 'test', 'running', 'ws', 'wf', '/tmp', '', '[]', '{}', 'g', 'agent', '[]', datetime('now'), datetime('now'))",
         [],
@@ -1221,7 +1226,8 @@ async fn test_execute_self_restart_step_binary_read_fails_uses_unknown() {
     write_executable(&binary_path, "#!/bin/sh\necho 'help'\nexit 0\n");
 
     // Create task in DB so set_task_status succeeds
-    let conn = agent_orchestrator::db::open_conn(&state.db_path).expect("open conn");
+    let conn =
+        orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open conn");
     conn.execute(
         "INSERT INTO tasks (id, name, status, workspace_id, workflow_id, workspace_root, ticket_dir, target_files_json, execution_plan_json, goal, mode, qa_targets_json, created_at, updated_at) VALUES ('task-sha-unknown', 'test', 'running', 'ws', 'wf', ?1, '', '[]', '{}', 'g', 'agent', '[]', datetime('now'), datetime('now'))",
         rusqlite::params![workspace_root.to_str().unwrap()],
@@ -1320,7 +1326,8 @@ async fn test_execute_self_test_step_manifest_validate_fails() {
 async fn test_verify_post_restart_binary_unknown_hash_skips() {
     let mut fixture = TestState::new();
     let state = fixture.build();
-    let conn = agent_orchestrator::db::open_conn(&state.db_path).expect("open conn");
+    let conn =
+        orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open conn");
     conn.execute(
         "INSERT INTO tasks (id, name, status, workspace_id, workflow_id, workspace_root, ticket_dir, target_files_json, execution_plan_json, goal, mode, qa_targets_json, created_at, updated_at) VALUES ('t-unknown', 'test', 'running', 'ws', 'wf', '/tmp', '', '[]', '{}', 'g', 'agent', '[]', datetime('now'), datetime('now'))",
         [],
@@ -1419,7 +1426,8 @@ async fn test_execute_self_restart_step_records_old_binary_sha256() {
     write_executable(&binary_path, "#!/bin/sh\necho 'help'\nexit 0\n");
 
     // Create task in DB so set_task_status succeeds
-    let conn = agent_orchestrator::db::open_conn(&state.db_path).expect("open conn");
+    let conn =
+        orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open conn");
     conn.execute(
         "INSERT INTO tasks (id, name, status, workspace_id, workflow_id, workspace_root, ticket_dir, target_files_json, execution_plan_json, goal, mode, qa_targets_json, created_at, updated_at) VALUES ('task-old-sha', 'test', 'running', 'ws', 'wf', ?1, '', '[]', '{}', 'g', 'agent', '[]', datetime('now'), datetime('now'))",
         rusqlite::params![workspace_root.to_str().unwrap()],
@@ -1478,7 +1486,8 @@ async fn test_verify_post_restart_binary_includes_old_sha256() {
     // then verify — binary_verification event should include old_binary_sha256.
     let mut fixture = TestState::new();
     let state = fixture.build();
-    let conn = agent_orchestrator::db::open_conn(&state.db_path).expect("open conn");
+    let conn =
+        orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open conn");
     conn.execute(
         "INSERT INTO tasks (id, name, status, workspace_id, workflow_id, workspace_root, ticket_dir, target_files_json, execution_plan_json, goal, mode, qa_targets_json, created_at, updated_at) VALUES ('t-old-chain', 'test', 'running', 'ws', 'wf', '/tmp', '', '[]', '{}', 'g', 'agent', '[]', datetime('now'), datetime('now'))",
         [],

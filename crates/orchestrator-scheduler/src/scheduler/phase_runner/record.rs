@@ -400,10 +400,10 @@ pub(crate) fn project_stream_events(
 mod tests {
     use super::{project_driver_events, project_stream_events};
     use agent_orchestrator::config::StepScope;
-    use agent_orchestrator::db::open_conn;
     use agent_orchestrator::driver::{DriverEvent, DriverOutcome, PermissionScope, SessionRef};
     use agent_orchestrator::output_validation::validate_phase_output;
     use agent_orchestrator::test_utils::TestState;
+    use orchestrator_persistence::test_support::open_conn;
     use rusqlite::params;
 
     // A compact stream-json run: the orchestrator MCP tool call + terminal result.

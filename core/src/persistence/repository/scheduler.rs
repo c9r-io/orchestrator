@@ -11,6 +11,7 @@ mod tests {
     use super::*;
     use crate::async_database::AsyncDatabase;
     use crate::test_utils::TestState;
+    use orchestrator_persistence::test_support;
 
     /// Helper: insert a task row with a given status and created_at.
     async fn insert_task_with_status(
@@ -22,7 +23,7 @@ mod tests {
         let id = task_id.to_owned();
         let st = status.to_owned();
         let ca = created_at.to_owned();
-        db.writer()
+        test_support::writer(db)
             .call(move |conn| {
                 conn.execute(
                     "INSERT INTO tasks (id, name, status, goal, target_files_json, mode, \

@@ -1,11 +1,11 @@
 use crate::config::OrchestratorConfig;
-#[cfg(test)]
-use crate::db::open_conn;
 use crate::dto::ConfigOverview;
 use crate::persistence::repository::{ConfigRepository, HealLogEntry, SqliteConfigRepository};
 use crate::resource::export_manifest_resources;
 use crate::secret_store_crypto::redact_secret_data_map;
 use anyhow::{Context, Result};
+#[cfg(test)]
+use orchestrator_persistence::test_support::open_conn;
 use std::path::Path;
 
 #[cfg(test)]

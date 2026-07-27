@@ -121,11 +121,12 @@ fn dir_size(path: &Path) -> Result<u64> {
 mod tests {
     use super::*;
     use crate::test_utils::TestState;
+    use orchestrator_persistence::test_support;
 
     async fn insert_task(db: &AsyncDatabase, task_id: &str, status: &str) {
         let id = task_id.to_owned();
         let st = status.to_owned();
-        db.writer()
+        test_support::writer(db)
             .call(move |conn| {
                 conn.execute(
                     "INSERT INTO tasks (id, name, status, goal, target_files_json, mode, \
@@ -143,7 +144,7 @@ mod tests {
 
     async fn age_task(db: &AsyncDatabase, task_id: &str) {
         let id = task_id.to_owned();
-        db.writer()
+        test_support::writer(db)
             .call(move |conn| {
                 conn.execute(
                     "UPDATE tasks SET updated_at = datetime('now', '-30 days') WHERE id = ?1",

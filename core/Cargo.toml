@@ -29,8 +29,6 @@ cron = "0.16"
 glob = "0.3"
 sha2 = "0.11"
 rand = "0.8"
-rusqlite = { version = "0.31", features = ["bundled"] }
-tokio-rusqlite = "0.5"
 async-trait = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -52,6 +50,15 @@ nix = { version = "0.31", default-features = false, features = ["user"] }
 test-harness = []
 
 [dev-dependencies]
+# FR-141: core holds no connection in production. What still names the driver
+# is cfg(test) code asserting on rows core wrote, reached through test_support.
+rusqlite = { version = "0.31", features = ["bundled"] }
+tokio-rusqlite = "0.5"
+# FR-141: core's own tests open the database to assert on the rows core logic
+# wrote. They build their fixtures from TestState and create_task_impl, which
+# sit above this layer, so they cannot move into it. The feature is enabled
+# here and nowhere else — a [dependencies] edge to it fails the API gate.
+orchestrator-persistence = { path = "../crates/orchestrator-persistence", version = "0.3.1", features = ["test-support"] }
 tempfile = "3.26.0"
 # Used only to capture emitted tracing events at the daemon's default `info`
 # filter, so the visibility FR-142 restored is asserted rather than assumed.

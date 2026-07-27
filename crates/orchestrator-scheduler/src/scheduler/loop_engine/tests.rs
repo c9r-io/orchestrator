@@ -9,11 +9,11 @@ use agent_orchestrator::config::{
     WorkflowConfig, WorkflowExecutionConfig, WorkflowExecutionMode, WorkflowFinalizeConfig,
     WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig,
 };
-use agent_orchestrator::db::open_conn;
 use agent_orchestrator::dto::CreateTaskPayload;
 use agent_orchestrator::dynamic_orchestration::{AdaptiveFallbackMode, AdaptivePlannerConfig};
 use agent_orchestrator::task_ops::create_task_impl;
 use agent_orchestrator::test_utils::TestState;
+use orchestrator_persistence::test_support::open_conn;
 use rusqlite::params;
 use std::collections::{HashMap, HashSet};
 
@@ -932,7 +932,8 @@ async fn emit_skipped_item_step_events_writes_event_rows() {
     .await
     .expect("emit skipped events");
 
-    let conn = agent_orchestrator::db::open_conn(&state.db_path).expect("open sqlite");
+    let conn =
+        orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open sqlite");
     let skipped_count: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM events WHERE task_id = ?1 AND event_type = 'step_skipped'",
@@ -1360,7 +1361,8 @@ async fn emit_skipped_item_step_events_empty_steps_emits_nothing() {
         .await
         .expect("should succeed");
 
-    let conn = agent_orchestrator::db::open_conn(&state.db_path).expect("open sqlite");
+    let conn =
+        orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open sqlite");
     let count: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM events WHERE task_id = 'task-1' AND event_type = 'step_skipped'",
@@ -1588,7 +1590,8 @@ async fn emit_skipped_item_step_events_empty_items_emits_nothing() {
         .await
         .expect("should succeed");
 
-    let conn = agent_orchestrator::db::open_conn(&state.db_path).expect("open sqlite");
+    let conn =
+        orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open sqlite");
     let count: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM events WHERE task_id = 'task-1'",

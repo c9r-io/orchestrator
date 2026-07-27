@@ -148,12 +148,13 @@ fn write_archive_files(archive_dir: &Path, rows: &[retention::ArchivableEvent]) 
 mod tests {
     use super::*;
     use crate::test_utils::TestState;
+    use orchestrator_persistence::test_support;
 
     /// Helper: insert a task row directly.
     async fn insert_task(db: &AsyncDatabase, task_id: &str, status: &str) {
         let id = task_id.to_owned();
         let st = status.to_owned();
-        db.writer()
+        test_support::writer(db)
             .call(move |conn| {
                 conn.execute(
                     "INSERT INTO tasks (id, name, status, goal, target_files_json, mode, \
@@ -174,7 +175,7 @@ mod tests {
         let tid = task_id.to_owned();
         let et = event_type.to_owned();
         let ca = created_at.to_owned();
-        db.writer()
+        test_support::writer(db)
             .call(move |conn| {
                 conn.execute(
                     "INSERT INTO events (task_id, event_type, payload_json, created_at) \
@@ -189,7 +190,7 @@ mod tests {
 
     /// Helper: count all events.
     async fn count_events(db: &AsyncDatabase) -> u64 {
-        db.reader()
+        test_support::reader(db)
             .call(|conn| {
                 let c: i64 = conn.query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0))?;
                 Ok(c as u64)

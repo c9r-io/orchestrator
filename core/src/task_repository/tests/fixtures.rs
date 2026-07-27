@@ -1,7 +1,7 @@
-use crate::db::open_conn;
 use crate::dto::CreateTaskPayload;
 use crate::task_ops::create_task_impl;
 use crate::test_utils::TestState;
+use orchestrator_persistence::test_support::open_conn;
 use rusqlite::params;
 
 pub fn seed_task(fixture: &mut TestState) -> (std::sync::Arc<crate::state::InnerState>, String) {

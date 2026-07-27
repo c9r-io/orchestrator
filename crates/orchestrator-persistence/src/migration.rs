@@ -87,7 +87,7 @@ fn ensure_schema_migrations_table(conn: &Connection) -> Result<()> {
 }
 
 /// Returns the highest applied schema version for the given database.
-pub fn current_version(conn: &Connection) -> Result<u32> {
+pub(crate) fn current_version(conn: &Connection) -> Result<u32> {
     ensure_schema_migrations_table(conn)?;
 
     let version: u32 = conn
@@ -305,7 +305,7 @@ pub fn registered_descriptors() -> Vec<MigrationDescriptor> {
 }
 
 /// Computes the database schema status against the provided migration set.
-pub fn status(conn: &Connection, migrations: &[Migration]) -> Result<SchemaStatus> {
+pub(crate) fn status(conn: &Connection, migrations: &[Migration]) -> Result<SchemaStatus> {
     let current_version = current_version(conn)?;
     let descriptors = descriptors(migrations);
     let pending = descriptors
@@ -326,13 +326,13 @@ pub fn status(conn: &Connection, migrations: &[Migration]) -> Result<SchemaStatu
 }
 
 /// Computes the database schema status against all registered migrations.
-pub fn registered_status(conn: &Connection) -> Result<SchemaStatus> {
+pub(crate) fn registered_status(conn: &Connection) -> Result<SchemaStatus> {
     let migrations = registered_migrations();
     status(conn, &migrations)
 }
 
 /// Returns every schema version already recorded in `schema_migrations`.
-pub fn applied_versions(conn: &Connection) -> Result<Vec<u32>> {
+pub(crate) fn applied_versions(conn: &Connection) -> Result<Vec<u32>> {
     ensure_schema_migrations_table(conn)?;
 
     let mut stmt = conn
@@ -358,7 +358,9 @@ pub struct RegisteredMigrationStatus {
 }
 
 /// Returns the applied status for every registered migration.
-pub fn registered_migration_statuses(conn: &Connection) -> Result<Vec<RegisteredMigrationStatus>> {
+pub(crate) fn registered_migration_statuses(
+    conn: &Connection,
+) -> Result<Vec<RegisteredMigrationStatus>> {
     let applied = applied_versions(conn)?.into_iter().collect::<HashSet<_>>();
     Ok(registered_descriptors()
         .into_iter()
@@ -371,7 +373,10 @@ pub fn registered_migration_statuses(conn: &Connection) -> Result<Vec<Registered
 }
 
 /// Applies every migration newer than the current schema version.
-pub fn run_pending(conn: &Connection, migrations: &[Migration]) -> Result<AppliedMigrationSummary> {
+pub(crate) fn run_pending(
+    conn: &Connection,
+    migrations: &[Migration],
+) -> Result<AppliedMigrationSummary> {
     let current = current_version(conn)?;
     let mut applied = Vec::new();
 

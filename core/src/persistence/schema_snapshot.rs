@@ -22,9 +22,10 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::persistence::migration::{Migration, registered_migrations, run_pending};
+    use crate::persistence::migration::{Migration, registered_migrations};
     use crate::persistence::schema::PersistenceBootstrap;
-    use crate::persistence::sqlite::open_conn;
+    use orchestrator_persistence::test_support::open_conn;
+    use orchestrator_persistence::test_support::run_pending;
     use rusqlite::Connection;
     use std::path::{Path, PathBuf};
 

@@ -42,7 +42,8 @@ mod async_wrapper_tests {
     }
 
     fn first_item_id(state: &crate::state::InnerState, task_id: &str) -> String {
-        let conn = crate::db::open_conn(&state.db_path).expect("open sqlite");
+        let conn =
+            orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open sqlite");
         conn.query_row(
             "SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1",
             rusqlite::params![task_id],
@@ -153,7 +154,8 @@ mod async_wrapper_tests {
             .await
             .expect("update task cycle state");
 
-        let conn = crate::db::open_conn(&state.db_path).expect("open sqlite");
+        let conn =
+            orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open sqlite");
         let task_row: (String, i64, i64) = conn
             .query_row(
                 "SELECT status, current_cycle, init_done FROM tasks WHERE id = ?1",

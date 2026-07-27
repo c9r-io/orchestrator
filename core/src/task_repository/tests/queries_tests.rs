@@ -4,10 +4,10 @@ use super::super::trait_def::{
 };
 use super::super::types::{NewTaskGraphRun, NewTaskGraphSnapshot, TaskRepositorySource};
 use super::fixtures::seed_task;
-use crate::db::open_conn;
 use crate::dto::CreateTaskPayload;
 use crate::task_ops::create_task_impl;
 use crate::test_utils::TestState;
+use orchestrator_persistence::test_support::open_conn;
 use rusqlite::{Connection, params};
 
 #[test]
@@ -565,7 +565,7 @@ fn graph_run_queries_insert_update_and_upsert_snapshots() {
     let (state, task_id) = seed_task(&mut fixture);
     let conn = open_conn(&state.db_path).expect("open sqlite");
 
-    super::super::queries::insert_task_graph_run(
+    orchestrator_persistence::test_support::insert_task_graph_run(
         &conn,
         &NewTaskGraphRun {
             graph_run_id: "graph-upsert".to_string(),
@@ -583,9 +583,13 @@ fn graph_run_queries_insert_update_and_upsert_snapshots() {
         },
     )
     .expect("insert graph run");
-    super::super::queries::update_task_graph_run_status(&conn, "graph-upsert", "completed")
-        .expect("update graph run");
-    super::super::queries::insert_task_graph_snapshot(
+    orchestrator_persistence::test_support::update_task_graph_run_status(
+        &conn,
+        "graph-upsert",
+        "completed",
+    )
+    .expect("update graph run");
+    orchestrator_persistence::test_support::insert_task_graph_snapshot(
         &conn,
         &NewTaskGraphSnapshot {
             graph_run_id: "graph-upsert".to_string(),
@@ -595,7 +599,7 @@ fn graph_run_queries_insert_update_and_upsert_snapshots() {
         },
     )
     .expect("insert graph snapshot");
-    super::super::queries::insert_task_graph_snapshot(
+    orchestrator_persistence::test_support::insert_task_graph_snapshot(
         &conn,
         &NewTaskGraphSnapshot {
             graph_run_id: "graph-upsert".to_string(),
@@ -605,7 +609,7 @@ fn graph_run_queries_insert_update_and_upsert_snapshots() {
         },
     )
     .expect("upsert graph snapshot");
-    super::super::queries::insert_task_graph_snapshot(
+    orchestrator_persistence::test_support::insert_task_graph_snapshot(
         &conn,
         &NewTaskGraphSnapshot {
             graph_run_id: "graph-upsert".to_string(),
@@ -1034,12 +1038,19 @@ fn list_task_items_for_cycle_preserves_dynamic_metadata() {
 fn query_helpers_error_on_missing_schema() {
     let conn = Connection::open_in_memory().expect("open in-memory sqlite");
 
-    assert!(super::super::queries::load_task_summary(&conn, "missing").is_err());
-    assert!(super::super::queries::load_task_detail_rows(&conn, "missing").is_err());
-    assert!(super::super::queries::list_task_items_for_cycle(&conn, "missing").is_err());
-    assert!(super::super::queries::list_task_log_runs(&conn, "missing", 5).is_err());
+    assert!(orchestrator_persistence::test_support::load_task_summary(&conn, "missing").is_err());
     assert!(
-        super::super::queries::insert_task_graph_run(
+        orchestrator_persistence::test_support::load_task_detail_rows(&conn, "missing").is_err()
+    );
+    assert!(
+        orchestrator_persistence::test_support::list_task_items_for_cycle(&conn, "missing")
+            .is_err()
+    );
+    assert!(
+        orchestrator_persistence::test_support::list_task_log_runs(&conn, "missing", 5).is_err()
+    );
+    assert!(
+        orchestrator_persistence::test_support::insert_task_graph_run(
             &conn,
             &NewTaskGraphRun {
                 graph_run_id: "graph-missing".to_string(),
@@ -1059,11 +1070,15 @@ fn query_helpers_error_on_missing_schema() {
         .is_err()
     );
     assert!(
-        super::super::queries::update_task_graph_run_status(&conn, "graph-missing", "completed",)
-            .is_err()
+        orchestrator_persistence::test_support::update_task_graph_run_status(
+            &conn,
+            "graph-missing",
+            "completed",
+        )
+        .is_err()
     );
     assert!(
-        super::super::queries::insert_task_graph_snapshot(
+        orchestrator_persistence::test_support::insert_task_graph_snapshot(
             &conn,
             &NewTaskGraphSnapshot {
                 graph_run_id: "graph-missing".to_string(),
@@ -1107,8 +1122,9 @@ fn load_task_graph_debug_bundles_errors_when_event_table_is_missing() {
     )
     .expect("create graph tables");
 
-    let err = super::super::queries::load_task_graph_debug_bundles(&conn, "missing")
-        .expect_err("missing events table should fail during legacy fallback");
+    let err =
+        orchestrator_persistence::test_support::load_task_graph_debug_bundles(&conn, "missing")
+            .expect_err("missing events table should fail during legacy fallback");
     assert!(err.to_string().contains("no such table"));
 }
 

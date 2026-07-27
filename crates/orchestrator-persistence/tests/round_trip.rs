@@ -25,12 +25,13 @@ use orchestrator_persistence::async_database::AsyncDatabase;
 use orchestrator_persistence::db;
 use orchestrator_persistence::db_write::DbWriteCoordinator;
 use orchestrator_persistence::schema::PersistenceBootstrap;
-use orchestrator_persistence::session_store::{self, NewSession};
-use orchestrator_persistence::sqlite::open_conn;
+use orchestrator_persistence::session_store::NewSession;
 use orchestrator_persistence::task_repository::{
     AsyncSqliteTaskRepository, SqliteTaskRepository, trait_def::TaskItemMutRepository,
     trait_def::TaskQueryRepository, types::TaskRepositorySource,
 };
+use orchestrator_persistence::test_support;
+use orchestrator_persistence::test_support::open_conn;
 
 const TASK_ID: &str = "task-round-trip";
 const ITEM_ID: &str = "item-round-trip";
@@ -134,10 +135,10 @@ async fn a_task_written_through_the_layer_reads_back_through_the_layer() {
         transcript_path: "/tmp/round-trip/transcript",
         output_json_path: None,
     };
-    session_store::insert_session(&conn, &session).expect("insert session");
+    test_support::insert_session(&conn, &session).expect("insert session");
 
     let reopened = open_conn(&db_path).expect("reopen connection");
-    let loaded = session_store::load_session(&reopened, "session-round-trip")
+    let loaded = test_support::load_session(&reopened, "session-round-trip")
         .expect("load session")
         .expect("the session was not persisted");
     assert_eq!(loaded.task_id, TASK_ID);
@@ -145,8 +146,9 @@ async fn a_task_written_through_the_layer_reads_back_through_the_layer() {
 
     // The admin facade sees the same database.
     let facade = open_conn(&db_path).expect("open a connection for the facade");
-    let non_terminal = db::count_non_terminal_tasks_by_workspace(&facade, "default", WORKSPACE)
-        .expect("count tasks");
+    let non_terminal =
+        test_support::count_non_terminal_tasks_by_workspace(&facade, "default", WORKSPACE)
+            .expect("count tasks");
     assert_eq!(
         non_terminal, 1,
         "the admin facade does not see the task the repository wrote"
@@ -211,8 +213,6 @@ async fn delete_project_resources_removes_one_project_and_leaves_the_others() {
 /// succeeded, and auto-cleanup would then delete running work.
 #[tokio::test]
 async fn the_retention_query_selects_only_old_terminal_tasks() {
-    use orchestrator_persistence::task_repository::queries;
-
     let temp = tempfile::tempdir().expect("temp dir");
     let db_path = temp.path().join("retention.db");
     PersistenceBootstrap::ensure_current(&db_path).expect("bootstrap");
@@ -241,7 +241,7 @@ async fn the_retention_query_selects_only_old_terminal_tasks() {
     }
 
     let mut selected =
-        queries::list_terminal_tasks_older_than(&conn, 7, 50).expect("retention query");
+        test_support::list_terminal_tasks_older_than(&conn, 7, 50).expect("retention query");
     selected.sort();
     assert_eq!(
         selected,
@@ -253,10 +253,10 @@ async fn the_retention_query_selects_only_old_terminal_tasks() {
         "the retention query selected the wrong set"
     );
 
-    let capped = queries::list_terminal_tasks_older_than(&conn, 7, 2).expect("capped query");
+    let capped = test_support::list_terminal_tasks_older_than(&conn, 7, 2).expect("capped query");
     assert_eq!(capped.len(), 2, "LIMIT was not applied");
 
-    let none = queries::list_terminal_tasks_older_than(&conn, 365, 50).expect("wide window");
+    let none = test_support::list_terminal_tasks_older_than(&conn, 365, 50).expect("wide window");
     assert!(
         none.is_empty(),
         "a 365-day retention window still selected tasks 30 days old"
@@ -269,7 +269,7 @@ async fn the_retention_query_selects_only_old_terminal_tasks() {
 /// its own.
 #[tokio::test]
 async fn step_event_rows_honour_the_event_type_list_they_are_given() {
-    use orchestrator_persistence::events::step_event_rows;
+    use orchestrator_persistence::test_support::step_event_rows;
 
     let temp = tempfile::tempdir().expect("temp dir");
     let db_path = temp.path().join("events.db");
@@ -323,7 +323,7 @@ async fn the_layer_fails_loudly_on_a_database_that_never_migrated() {
     );
     let conn = open_conn(&db_path).expect("open the unmigrated database");
     assert!(
-        db::count_non_terminal_tasks_by_workspace(&conn, "default", WORKSPACE).is_err(),
+        test_support::count_non_terminal_tasks_by_workspace(&conn, "default", WORKSPACE).is_err(),
         "counting tasks in an unmigrated database succeeded"
     );
 }
@@ -475,20 +475,20 @@ fn the_secret_store_probe_matches_the_key_and_only_inside_a_secret_store() {
     .expect("seed non-secret-store resource");
 
     assert!(
-        db::secret_store_resources_reference_key(&conn, "key-live").expect("probe"),
+        test_support::secret_store_resources_reference_key(&conn, "key-live").expect("probe"),
         "the key a SecretStore names was reported as unreferenced"
     );
     assert!(
-        !db::secret_store_resources_reference_key(&conn, "key-elsewhere").expect("probe"),
+        !test_support::secret_store_resources_reference_key(&conn, "key-elsewhere").expect("probe"),
         "a key named only outside a SecretStore was reported as referenced"
     );
     assert!(
-        !db::secret_store_resources_reference_key(&conn, "key-retired").expect("probe"),
+        !test_support::secret_store_resources_reference_key(&conn, "key-retired").expect("probe"),
         "a key no resource names was reported as referenced"
     );
     // Prefix, not a match: `instr` on the bare id would find this one.
     assert!(
-        !db::secret_store_resources_reference_key(&conn, "key-li").expect("probe"),
+        !test_support::secret_store_resources_reference_key(&conn, "key-li").expect("probe"),
         "a prefix of a referenced key id was reported as a reference"
     );
 }

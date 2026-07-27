@@ -1115,8 +1115,8 @@ mod history_cleanup_visibility_tests {
     async fn a_history_sweep_reports_itself_at_the_default_log_level() {
         let mut test_state = TestState::new();
         let state = test_state.build();
-        let conn =
-            orchestrator_persistence::sqlite::open_conn(&state.db_path).expect("open database");
+        let conn = orchestrator_persistence::test_support::open_conn(&state.db_path)
+            .expect("open database");
 
         // Three completed runs of one trigger. Keeping one leaves two beyond
         // retention: the older is deletable, the newer is pinned by a resume

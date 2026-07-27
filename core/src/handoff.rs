@@ -901,6 +901,7 @@ fn encode_hex(bytes: &[u8]) -> String {
 mod tests {
     use super::*;
     use crate::db::init_schema;
+    use orchestrator_persistence::test_support;
     // Inside the test module on purpose: the boundary scanner strips `cfg(test)`
     // blocks, and a file-scope import would count this fixture as production.
     use rusqlite::Connection;
@@ -971,9 +972,7 @@ mod tests {
             )
             .await
             .expect("plan");
-        repository
-            .db
-            .writer()
+        test_support::writer(&repository.db)
             .call(|conn| {
                 conn.execute(
                     "UPDATE tasks SET current_cycle=current_cycle+1, updated_at='2026-01-02' WHERE id='task-1'",
@@ -1003,9 +1002,7 @@ mod tests {
     #[tokio::test]
     async fn non_idempotent_boundary_requires_policy_and_confirmation() {
         let (_temp, repository) = repository().await;
-        repository
-            .db
-            .writer()
+        test_support::writer(&repository.db)
             .call(|conn| {
                 conn.execute(
                     "UPDATE tasks SET execution_plan_json=?1 WHERE id='task-1'",
@@ -1080,9 +1077,7 @@ mod tests {
             .success()
         );
         let workspace_root = workspace.to_string_lossy().into_owned();
-        repository
-            .db
-            .writer()
+        test_support::writer(&repository.db)
             .call(move |conn| {
                 conn.execute(
                     "UPDATE tasks SET workspace_root=?1 WHERE id='task-1'",

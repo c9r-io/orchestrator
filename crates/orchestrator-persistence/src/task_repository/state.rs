@@ -6,7 +6,7 @@ use rusqlite::Connection;
 
 /// Sets a task's status, recording the completion timestamp when the status is
 /// terminal.
-pub fn set_task_status(
+pub(crate) fn set_task_status(
     conn: &Connection,
     task_id: &str,
     status: &str,
@@ -42,7 +42,7 @@ pub fn set_task_status(
 
 /// Resets unresolved items back to pending and resets the cycle counter
 /// when there are items to re-process, so the scheduler starts fresh.
-pub fn reset_unresolved_items(conn: &Connection, task_id: &str) -> Result<()> {
+pub(crate) fn reset_unresolved_items(conn: &Connection, task_id: &str) -> Result<()> {
     let unresolved: i64 = conn.query_row(
         "SELECT COUNT(*) FROM task_items WHERE task_id=?1 AND status='unresolved'",
         params![task_id],
@@ -72,7 +72,7 @@ pub fn reset_unresolved_items(conn: &Connection, task_id: &str) -> Result<()> {
 
 /// Puts a task into the shape a fresh start batch expects: unresolved items
 /// back to pending, in-flight runs cleared, cycle counter reset.
-pub fn prepare_task_for_start_batch(conn: &Connection, task_id: &str) -> Result<()> {
+pub(crate) fn prepare_task_for_start_batch(conn: &Connection, task_id: &str) -> Result<()> {
     let tx = conn.unchecked_transaction()?;
     let status: Option<String> = tx
         .query_row(
@@ -119,7 +119,7 @@ pub fn prepare_task_for_start_batch(conn: &Connection, task_id: &str) -> Result<
 }
 
 /// Records the cycle counter and init flag reached by a task.
-pub fn update_task_cycle_state(
+pub(crate) fn update_task_cycle_state(
     conn: &Connection,
     task_id: &str,
     current_cycle: u32,
@@ -140,7 +140,9 @@ pub fn update_task_cycle_state(
 /// Recover all orphaned running items across all tasks.
 /// Resets running items to `pending` and their parent tasks to `restart_pending`.
 /// Returns `Vec<(task_id, Vec<item_id>)>` for audit.
-pub fn recover_orphaned_running_items(conn: &Connection) -> Result<Vec<(String, Vec<String>)>> {
+pub(crate) fn recover_orphaned_running_items(
+    conn: &Connection,
+) -> Result<Vec<(String, Vec<String>)>> {
     let tx = conn.unchecked_transaction()?;
     let now = now_ts();
 
@@ -199,7 +201,7 @@ pub fn recover_orphaned_running_items(conn: &Connection) -> Result<Vec<(String, 
 /// already removed its task from `state.running` before
 /// `shutdown_running_tasks` could pause it.
 /// Returns the number of items reset.
-pub fn pause_all_running_tasks_and_items(conn: &Connection) -> Result<usize> {
+pub(crate) fn pause_all_running_tasks_and_items(conn: &Connection) -> Result<usize> {
     let tx = conn.unchecked_transaction()?;
     let now = now_ts();
 
@@ -221,7 +223,7 @@ pub fn pause_all_running_tasks_and_items(conn: &Connection) -> Result<usize> {
 
 /// Pause only tasks in `restart_pending` status and reset their running items.
 /// Used before `exec()` to avoid disrupting unrelated tasks.
-pub fn pause_restart_pending_tasks_and_items(conn: &Connection) -> Result<usize> {
+pub(crate) fn pause_restart_pending_tasks_and_items(conn: &Connection) -> Result<usize> {
     let tx = conn.unchecked_transaction()?;
     let now = now_ts();
 
@@ -257,7 +259,7 @@ pub fn pause_restart_pending_tasks_and_items(conn: &Connection) -> Result<usize>
 
 /// Recover orphaned running items for a single task.
 /// Returns the list of recovered item IDs.
-pub fn recover_orphaned_running_items_for_task(
+pub(crate) fn recover_orphaned_running_items_for_task(
     conn: &Connection,
     task_id: &str,
 ) -> Result<Vec<String>> {
@@ -296,7 +298,7 @@ pub fn recover_orphaned_running_items_for_task(
 /// is responsible for managing them (they may simply be slow, not stalled).
 ///
 /// Returns `Vec<(task_id, Vec<item_id>)>` for audit (only non-excluded tasks).
-pub fn recover_stalled_running_items(
+pub(crate) fn recover_stalled_running_items(
     conn: &Connection,
     stall_threshold_secs: u64,
     exclude_task_ids: &std::collections::HashSet<String>,

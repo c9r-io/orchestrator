@@ -221,15 +221,31 @@ end
 # Walks from a crate root and returns { absolute path => exported-name filter },
 # where the filter is :all for a publicly reachable module, or an array of the
 # names a private module has re-exported out of it.
-def public_module_files(crate_root_file)
-  return {} unless crate_root_file.file?
+# A `#[cfg(feature = "…")]` sitting immediately before a `mod` declaration.
+# Read against the raw source rather than the masked copy: masking blanks the
+# inside of the string, and the feature's name is what decides the classification.
+# `mask_literals` replaces characters in place, so an offset means the same thing
+# in both.
+CFG_FEATURE = /\#\[\s*cfg\s*\(\s*feature\s*=\s*"([^"]+)"\s*\)\s*\]\s*\z/m
+
+# Returns [reachable, test_only] — the public module files of a crate, and the
+# subset of them reached only through a module gated on a test-only feature.
+#
+# The gated subtree is reported, not skipped. A gate that dropped it would
+# certify an exemption it cannot observe, which is the failure §4.4 names: the
+# module's findings are counted into their own bucket, and the condition that
+# makes the bucket harmless — that no crate enables the feature from
+# `[dependencies]` — is asserted separately in `feature_edge_errors`.
+def public_module_files(crate_root_file, test_only_features = [])
+  return [{}, {}] unless crate_root_file.file?
 
   reachable = {}
-  queue = [[crate_root_file, :all]]
+  test_only = {}
+  queue = [[crate_root_file, :all, false]]
   seen = {}
 
   until queue.empty?
-    file, filter = queue.shift
+    file, filter, gated = queue.shift
     key = file.to_s
     # A module reached both publicly and by re-export keeps the wider filter.
     if seen[key]
@@ -240,14 +256,21 @@ def public_module_files(crate_root_file)
       seen[key] = filter
     end
     reachable[file] = seen[key]
+    test_only[file] = true if gated
+    test_only.delete(file) unless gated || test_only[file].nil?
     next unless could_declare_modules?(file)
 
     masked = masked_source(file)
+    raw = raw_source(file)
     exported = reexports(masked)
 
     masked.scan(MOD_DECL) do |(visibility, name)|
+      offset = Regexp.last_match.begin(0)
       child = child_module_file(file, name)
       next unless child
+
+      feature = raw[0...offset][CFG_FEATURE, 1]
+      child_gated = gated || test_only_features.include?(feature)
 
       public_mod = !visibility.nil? && visibility.strip == "pub"
       child_filter =
@@ -258,11 +281,54 @@ def public_module_files(crate_root_file)
         elsif exported.key?(name) && !exported[name].empty?
           exported[name]
         end
-      queue << [child, child_filter] if child_filter
+      queue << [child, child_filter, child_gated] if child_filter
     end
   end
 
-  reachable
+  [reachable, test_only]
+end
+
+# Which dependency table each crate uses to enable a test-only feature.
+#
+# This is the condition that makes the gated door safe, and it is asserted
+# rather than assumed: under resolver 2 a feature enabled from
+# `[dev-dependencies]` is not unified into a normal build, so the module does
+# not exist in the shipped artifact. Enabled from `[dependencies]`, it does,
+# and the hole is a real one. Parsed per table rather than by searching the
+# file for the feature's name, because the name appears in both tables and
+# only the table it appears in decides.
+def feature_edge_errors(repo_root, members, test_only_features)
+  return [] if test_only_features.empty?
+
+  errors = []
+  members.each do |member|
+    manifest = repo_root.join(member, "Cargo.toml")
+    next unless manifest.file?
+
+    table = nil
+    File.readlines(manifest).each_with_index do |line, index|
+      stripped = line.strip
+      if stripped.start_with?("[")
+        table = stripped
+        next
+      end
+      next unless table
+      # A dev-dependency table is the sanctioned edge; a target-specific or
+      # build table is not, and neither is a plain [dependencies].
+      next if table.include?("dev-dependencies")
+      next unless table.include?("dependencies")
+
+      feature = test_only_features.find do |name|
+        line.include?("features") && line.include?("\"#{name}\"")
+      end
+      next unless feature
+
+      errors << "  #{member}/Cargo.toml:#{index + 1} enables the test-only feature " \
+        "#{feature.inspect} from #{table}, not [dev-dependencies]; the module it " \
+        "gates would then exist in a production build"
+    end
+  end
+  errors
 end
 
 # ---------------------------------------------------------------------------
@@ -392,11 +458,18 @@ end
 # Public fields of a struct or enum body, and the method signatures of a trait
 # body. A public field of driver type hands the connection out as surely as a
 # getter does.
+#
+# Bare `pub` only. The item-level test above already reads `pub(crate) fn` as
+# not crate-external, and a field is no different: `pub(crate) up` is reachable
+# from inside the crate and nowhere else. Matching `pub(…)` here reported
+# `struct Migration` as still yielding a connection after FR-141 B5a made its
+# `up` field crate-private — a false positive, which inflates the count without
+# ever hiding a leak, and inflating it is enough to make a closed door look open.
 def nested_public_signatures(kind, body)
   case kind
   when "struct", "union"
-    body.scan(/(?:^|,)\s*pub(?:\s*\([^)]*\))?\s+[A-Za-z_]\w*\s*:([^,]*)/).flatten +
-      body.scan(/(?:^|\()\s*pub(?:\s*\([^)]*\))?\s+([^,)]*)/).flatten
+    body.scan(/(?:^|,)\s*pub\s+[A-Za-z_]\w*\s*:([^,]*)/).flatten +
+      body.scan(/(?:^|\()\s*pub\s+([^,)]*)/).flatten
   when "trait"
     body.scan(/(?:^|\n)\s*(?:async\s+|unsafe\s+)*fn[ \t]+[A-Za-z_]\w*([^;{]*)/).flatten
   else
@@ -472,16 +545,23 @@ def reviewed_half(ledger_path)
   return { "decision" => {}, "roles" => {} } unless ledger_path.file?
 
   ledger = JSON.parse(File.read(ledger_path))
-  { "decision" => ledger["decision"] || {}, "roles" => ledger["roles"] || {} }
+  {
+    "decision" => ledger["decision"] || {},
+    "roles" => ledger["roles"] || {},
+    "testOnlyFeatures" => ledger["testOnlyFeatures"] || []
+  }
 end
 
 def snapshot(repo_root, ledger_path)
   reviewed = reviewed_half(ledger_path)
   roles = reviewed["roles"]
+  test_only_features = reviewed["testOnlyFeatures"]
   members = workspace_members(repo_root)
 
   yields = {}
   demands = {}
+  test_only_yields = {}
+  test_only_demands = {}
   yielding_names = []
 
   members.each do |member|
@@ -490,15 +570,21 @@ def snapshot(repo_root, ledger_path)
 
     crate_root = repo_root.join(member, "src", "lib.rs")
     crate_root = repo_root.join(member, "src", "main.rs") unless crate_root.file?
-    public_module_files(crate_root).each do |file, filter|
+    reachable, gated = public_module_files(crate_root, test_only_features)
+    reachable.each do |file, filter|
       public_api_findings(repo_root, file, filter).each do |finding|
         key = "#{finding.file}::#{finding.item}"
         entry = { "crate" => member, "types" => finding.types }
         if finding.position == "return"
-          yields[key] = entry
+          (gated[file] ? test_only_yields : yields)[key] = entry
+          # Fact 3 scans for the gated names too. The module is unreachable from
+          # a production build, so a production file naming one is either a
+          # compile error waiting to happen or the feature leaking through a
+          # `[dependencies]` edge — both worth reporting, and neither observable
+          # if the name were dropped from the search here.
           yielding_names << finding.item.split(" ").last unless connection_types(finding.types).empty?
         else
-          demands[key] = entry
+          (gated[file] ? test_only_demands : demands)[key] = entry
         end
       end
     end
@@ -538,13 +624,18 @@ def snapshot(repo_root, ledger_path)
     "schemaVersion" => 1,
     "scope" => SCOPE,
     "decision" => reviewed["decision"],
+    "testOnlyFeatures" => test_only_features,
     "roles" => roles,
     "yields" => yields.sort.to_h,
     "demands" => demands.sort.to_h,
+    "testOnlyYields" => test_only_yields.sort.to_h,
+    "testOnlyDemands" => test_only_demands.sort.to_h,
     "holds" => holds.sort.to_h,
     "totals" => {
       "yields" => yields.length,
       "demands" => demands.length,
+      "testOnlyYields" => test_only_yields.length,
+      "testOnlyDemands" => test_only_demands.length,
       "holdingFiles" => holds.length,
       "acquisitions" => holds.values.sum { |entry| entry["acquisitions"] }
     }
@@ -615,12 +706,31 @@ errors.concat(map_report("public items demanding a driver type", expected["deman
                          ->(entry) { "takes #{Array(entry["types"]).join("/")}" }))
 errors.concat(map_report("files acquiring a connection outside the layer", expected["holds"], actual["holds"],
                          ->(entry) { "#{entry["acquisitions"]} acquisition(s) via #{Array(entry["via"]).join("/")}" }))
+errors.concat(map_report("test-only public items yielding a driver type", expected["testOnlyYields"],
+                         actual["testOnlyYields"],
+                         ->(entry) { "returns #{Array(entry["types"]).join("/")}" }))
+errors.concat(map_report("test-only public items demanding a driver type", expected["testOnlyDemands"],
+                         actual["testOnlyDemands"],
+                         ->(entry) { "takes #{Array(entry["types"]).join("/")}" }))
+
+# `testOnlyFeatures` is a reviewed field like `decision` and `roles`: the gate
+# reads it rather than deriving it, so comparing it against itself would assert
+# nothing. What is asserted is the consequence — everything the listed features
+# gate is inventoried above, and the edge condition below.
+#
+# Not a ledger diff. A test-only feature reachable from [dependencies] is a
+# production hole however faithfully the ledger records what it exposes, so
+# this fails on the fact itself rather than on a disagreement about it.
+errors.concat(feature_edge_errors(repo_root, members, expected["testOnlyFeatures"] || []))
 
 if errors.empty?
   totals = actual["totals"]
   puts "Persistence API boundary: PASS"
   puts "  public API: #{totals["yields"]} item(s) yield a driver type, " \
     "#{totals["demands"]} demand one"
+  puts "  test-only door: #{totals["testOnlyYields"]} item(s) yield a driver type, " \
+    "#{totals["testOnlyDemands"]} demand one, behind " \
+    "#{(actual["testOnlyFeatures"] || []).join("/")} and reachable from [dev-dependencies] only"
   puts "  outside the layer: #{totals["acquisitions"]} connection acquisition(s) " \
     "across #{totals["holdingFiles"]} file(s)"
   exit 0

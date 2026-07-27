@@ -28,16 +28,16 @@ mod write_ops;
 
 pub use command_run::NewCommandRun;
 pub use creation::{NewTaskRow, insert_task_with_items, reset_task_item};
-pub use items::delete_task_and_collect_log_paths;
+pub(crate) use items::delete_task_and_collect_log_paths;
 pub use trait_def::{
     CommandRunRepository, EventRepository, TaskGraphRepository, TaskItemMutRepository,
     TaskItemQueryRepository, TaskQueryRepository, TaskRepository, TaskStateRepository,
 };
 pub use types::{
-    DbEventRecord, NewTaskGraphRun, NewTaskGraphSnapshot, TaskLogRunRow, TaskRepositoryConn,
-    TaskRepositorySource, TaskRuntimeRow,
+    DbEventRecord, NewTaskGraphRun, NewTaskGraphSnapshot, TaskLogRunRow, TaskRepositorySource,
+    TaskRuntimeRow,
 };
-pub use write_ops::{CompletedRunRecord, InflightRunRecord, insert_event as insert_event_row};
+pub use write_ops::{CompletedRunRecord, InflightRunRecord};
 
 use crate::async_database::{AsyncDatabase, flatten_err};
 use crate::dto::{CommandRunDto, EventDto, TaskGraphDebugBundle, TaskItemDto};

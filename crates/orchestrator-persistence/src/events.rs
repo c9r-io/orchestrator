@@ -35,7 +35,7 @@ pub struct StepEventRow {
 /// `None` covers both "no such row" and a read that failed, matching the
 /// behaviour of the call site this replaced: a missing log path is a normal
 /// answer for a task that has not started a step yet, not an error to surface.
-pub fn latest_step_spawn_payload(conn: &Connection, task_id: &str) -> Option<String> {
+pub(crate) fn latest_step_spawn_payload(conn: &Connection, task_id: &str) -> Option<String> {
     conn.query_row(
         "SELECT payload_json FROM events
          WHERE task_id = ?1 AND event_type IN ('step_spawned', 'step_started')
@@ -47,7 +47,7 @@ pub fn latest_step_spawn_payload(conn: &Connection, task_id: &str) -> Option<Str
 }
 
 /// Returns every row for a task whose `event_type` is in `event_types`, oldest first.
-pub fn step_event_rows(
+pub(crate) fn step_event_rows(
     conn: &Connection,
     task_id: &str,
     event_types: &[&str],

@@ -78,6 +78,12 @@ pub mod source_events;
 pub mod sqlite;
 /// Task-execution persistence: tasks, items, command runs and events.
 pub mod task_repository;
+
+/// Test-only access to the driver connection. Compiled only under the
+/// `test-support` feature, which every consumer enables from
+/// `[dev-dependencies]`.
+#[cfg(feature = "test-support")]
+pub mod test_support;
 /// The `trigger_state` table and the reads the trigger engine makes.
 pub mod trigger_state;
 

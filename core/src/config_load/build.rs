@@ -453,7 +453,8 @@ mod tests {
 
         let report = report.expect("expected self-heal report");
         assert_eq!(report.healed_version, seeded.version + 1);
-        let conn = crate::db::open_conn(&db_path).expect("open sqlite connection");
+        let conn = orchestrator_persistence::test_support::open_conn(&db_path)
+            .expect("open sqlite connection");
         let latest_author: String = conn
             .query_row(
                 "SELECT author FROM orchestrator_config_versions ORDER BY version DESC LIMIT 1",
@@ -525,7 +526,8 @@ mod tests {
             err.to_string().contains("work_dir not found"),
             "expected original error to be preserved, got: {err}"
         );
-        let conn = crate::db::open_conn(&db_path).expect("open sqlite connection");
+        let conn = orchestrator_persistence::test_support::open_conn(&db_path)
+            .expect("open sqlite connection");
         let version_count: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM orchestrator_config_versions",
@@ -658,7 +660,7 @@ mod tests {
     fn enforce_deletion_guards_allows_no_removals() {
         let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
         crate::db::init_schema(&db_path).expect("init schema");
-        let conn = crate::db::open_conn(&db_path).expect("open db");
+        let conn = orchestrator_persistence::test_support::open_conn(&db_path).expect("open db");
         let config = OrchestratorConfig::default();
         let result = enforce_deletion_guards(&conn, &config, &config);
         assert!(result.is_ok());
@@ -670,7 +672,7 @@ mod tests {
         use crate::config::WorkspaceConfig;
         let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
         crate::db::init_schema(&db_path).expect("init schema");
-        let conn = crate::db::open_conn(&db_path).expect("open db");
+        let conn = orchestrator_persistence::test_support::open_conn(&db_path).expect("open db");
         let mut previous_workspaces = HashMap::new();
         previous_workspaces.insert(
             "ws-to-remove".to_string(),
@@ -703,7 +705,7 @@ mod tests {
     fn enforce_deletion_guards_allows_removing_unused_workflow() {
         let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
         crate::db::init_schema(&db_path).expect("init schema");
-        let conn = crate::db::open_conn(&db_path).expect("open db");
+        let conn = orchestrator_persistence::test_support::open_conn(&db_path).expect("open db");
         let mut previous_workflows = HashMap::new();
         previous_workflows.insert("wf-to-remove".to_string(), make_workflow(vec![]));
         let mut previous = OrchestratorConfig::default();
@@ -738,7 +740,7 @@ mod tests {
     fn enforce_deletion_guards_blocks_same_project_non_terminal_workflow_tasks() {
         let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
         crate::db::init_schema(&db_path).expect("init schema");
-        let conn = crate::db::open_conn(&db_path).expect("open db");
+        let conn = orchestrator_persistence::test_support::open_conn(&db_path).expect("open db");
         insert_task_reference(
             &conn,
             "task-running",
@@ -770,7 +772,7 @@ mod tests {
     fn enforce_deletion_guards_ignores_terminal_workflow_tasks() {
         let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
         crate::db::init_schema(&db_path).expect("init schema");
-        let conn = crate::db::open_conn(&db_path).expect("open db");
+        let conn = orchestrator_persistence::test_support::open_conn(&db_path).expect("open db");
         insert_task_reference(
             &conn,
             "task-complete",
@@ -801,7 +803,7 @@ mod tests {
     fn enforce_deletion_guards_ignores_other_project_tasks_with_same_workflow_id() {
         let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
         crate::db::init_schema(&db_path).expect("init schema");
-        let conn = crate::db::open_conn(&db_path).expect("open db");
+        let conn = orchestrator_persistence::test_support::open_conn(&db_path).expect("open db");
         insert_task_reference(
             &conn,
             "task-other-project",

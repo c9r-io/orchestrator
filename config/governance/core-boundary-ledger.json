@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "scope": "non-test Rust source under core/src, excluding inline cfg(test) modules, files under a tests directory, and files named test*.rs",
   "coreSurface": {
-    "files": 129,
-    "pubMod": 50,
+    "files": 128,
+    "pubMod": 49,
     "publicItems": 610
   },
   "rusqlite": {

@@ -37,6 +37,10 @@ mod tests {
     use crate::dto::CreateTaskPayload;
     use crate::task_ops::create_task_impl;
     use crate::test_utils::TestState;
+    use orchestrator_persistence::test_support::{
+        count_non_terminal_tasks_by_workflow, count_non_terminal_tasks_by_workspace,
+        list_non_terminal_tasks_by_workflow, list_non_terminal_tasks_by_workspace, open_conn,
+    };
     use rusqlite::params;
 
     fn tmp_db_path() -> (std::path::PathBuf, std::path::PathBuf) {

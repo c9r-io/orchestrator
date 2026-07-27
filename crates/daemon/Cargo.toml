@@ -61,7 +61,10 @@ nix = { version = "0.31", default-features = false, features = ["signal", "proce
 dev-insecure = []
 
 [dev-dependencies]
-rusqlite = { version = "0.31", features = ["bundled"] }
-tokio-rusqlite = "0.5"
+# FR-141: the cfg(test) modules in source_router.rs read the database back to
+# assert on what the gRPC handlers wrote. They reach it through test_support,
+# which is why this crate no longer names the driver at all — not under
+# [dependencies], not under [dev-dependencies].
+orchestrator-persistence = { path = "../orchestrator-persistence", version = "0.3.1", features = ["test-support"] }
 tempfile = "3.10"
 agent-orchestrator = { path = "../../core", features = ["test-harness"] }

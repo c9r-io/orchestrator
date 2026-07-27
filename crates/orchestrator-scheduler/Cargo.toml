@@ -40,6 +40,10 @@ nix = { version = "0.31", default-features = false, features = ["user"] }
 test-harness = ["agent-orchestrator/test-harness"]
 
 [dev-dependencies]
+# FR-141: this crate's cfg(test) modules open the database to assert on what
+# the scheduler wrote. The production code holds no connection — the driver
+# below is a dev-dependency for the same reason.
+orchestrator-persistence = { path = "../orchestrator-persistence", version = "0.3.1", features = ["test-support"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 tokio-rusqlite = "0.5"
 agent-orchestrator = { path = "../../core", version = "0.3.1", features = ["test-harness"] }

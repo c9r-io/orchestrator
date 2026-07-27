@@ -766,8 +766,8 @@ mod tests {
         LoopMode, ProjectConfig, ResolvedProject, SafetyConfig, StepBehavior, WorkflowConfig,
         WorkflowFinalizeConfig, WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig,
     };
-    use crate::db::open_conn;
     use crate::dto::CreateTaskPayload;
+    use orchestrator_persistence::test_support::open_conn;
     // Inside the test module on purpose: the boundary scanner strips `cfg(test)`
     // blocks, and a file-scope import would count these fixtures as production.
     use crate::state::update_config_runtime;

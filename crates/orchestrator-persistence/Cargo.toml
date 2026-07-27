@@ -30,6 +30,15 @@ tracing = "0.1"
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
 
+[features]
+# Exposes src/test_support.rs, the only public path to a driver connection.
+# Consumers must enable it from [dev-dependencies] only; the API-boundary gate
+# fails if any crate enables it from [dependencies].
+test-support = []
+
 [dev-dependencies]
+# Self dev-dependency so tests/round_trip.rs — a separate crate, and therefore
+# outside this crate's privacy boundary — can reach test_support.
+orchestrator-persistence = { path = ".", features = ["test-support"] }
 tempfile = "3.26.0"
 tokio = { version = "1.51", features = ["macros", "rt-multi-thread"] }
