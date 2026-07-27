@@ -153,23 +153,34 @@ echo ""
 # which is exactly why it has to be blessed rather than absorbed.
 echo "Case 5: a removed rusqlite reference also fails, so the ledger cannot go stale"
 DIR="$(new_case rusqlite-removed)"
-# The target comes from the ledger too. This case stripped core/src/db.rs, which
-# FR-130 Phase A moved out; what stayed behind is a re-export shim whose only
-# rusqlite token sits inside `mod tests`, where the scanner does not count it.
-# Stripping it therefore changed nothing and the case reported a pass-shaped
-# failure. Any ledger entry is a file with at least one *production* reference,
-# which is the only property this case needs.
-REMOVAL_TARGET="$(ruby -rjson -e 'print JSON.parse(File.read(ARGV[0]))["rusqlite"]["files"].keys.min' "$REPO_ROOT/$LEDGER")"
-mkdir -p "$DIR/$(dirname "$REMOVAL_TARGET")"
-grep -v rusqlite "$REPO_ROOT/$REMOVAL_TARGET" > "$DIR/$REMOVAL_TARGET"
+# The stale state is constructed in the ledger rather than in the source, and it
+# has to be: FR-141 took core to zero rusqlite references, so there is no longer
+# any reference to strip. The earlier form read a target out of
+# `rusqlite.files` and deleted its tokens; with the map empty that read returns
+# nothing and the case wrote to a directory instead of failing. Claiming a file
+# the repository does not reference exercises the same branch — the ledger
+# over-claiming, `before.keys - after.keys` — and keeps working whatever the
+# residual is, including at zero, which is the state this whole gate was built
+# to reach.
+REMOVAL_TARGET="core/src/db.rs"
+ruby -rjson -e '
+path = ARGV[0]
+ledger = JSON.parse(File.read(path))
+target = ARGV[1]
+abort "the repository still references rusqlite in #{target}; pick a target it does not" if
+  ledger["rusqlite"]["files"].key?(target)
+ledger["rusqlite"]["files"][target] = 3
+ledger["rusqlite"]["total"] += 3
+File.write(path, JSON.pretty_generate(ledger) + "\n")
+' "$DIR/$LEDGER" "$REMOVAL_TARGET"
 set +e
 (cd "$DIR" && ruby "$GATE" > "$WORK/case5.out" 2> "$WORK/case5.err")
 STATUS=$?
 set -e
 if [[ "$STATUS" -ne 0 ]] && grep -q "\- $REMOVAL_TARGET no longer references rusqlite" "$WORK/case5.err"; then
-  pass "a decrease fails too, and the report says the ledger over-claims"
+  pass "a ledger that over-claims a reference fails, and the report says so"
 else
-  fail "removing a rusqlite reference did not fail the gate (exit $STATUS)"
+  fail "an over-claiming ledger did not fail the gate (exit $STATUS)"
   cat "$WORK/case5.err" >&2
 fi
 echo ""

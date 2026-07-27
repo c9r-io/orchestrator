@@ -318,7 +318,14 @@ echo ""
 # the direction an author writing a ratchet does not have in mind.
 echo "Case 8: a removed SQL statement also fails, so the ledger cannot go stale"
 DIR="$(new_case sql-removed)"
-TARGET="crates/orchestrator-scheduler/src/scheduler/task_state.rs"
+# The statement this case neutralises used to sit in
+# crates/orchestrator-scheduler/src/scheduler/task_state.rs. FR-141 B3 moved it
+# into the layer, and the fixture pointed at a path that no longer had it — the
+# case aborted with "no statement to neutralise" rather than failing loudly,
+# which is a fixture naming its target rather than deriving it. The assertion is
+# unchanged: exact equality holds in the decreasing direction too, whatever the
+# file's role. Only the address moved.
+TARGET="crates/orchestrator-persistence/src/scheduler_state.rs"
 BEFORE_SQL=$(grep -c '"SELECT\|"INSERT\|"UPDATE\|"DELETE' "$DIR/$TARGET" || true)
 ruby -e '
 path = ARGV[0]
@@ -333,7 +340,9 @@ if [[ "$BEFORE_SQL" -eq "$AFTER_SQL" ]]; then
   fail "the fixture did not remove a statement ($BEFORE_SQL -> $AFTER_SQL); the case is inert"
 else
   run_gate "$DIR" case8
-  if [[ "$STATUS" -ne 0 ]] && grep -q "~ $TARGET sql 8 -> 7" "$WORK/case8.err"; then
+  TARGET_SQL=$(ruby -rjson -e 'print JSON.parse(File.read(ARGV[0]))["references"][ARGV[1]]["sql"]' "$DIR/$LEDGER" "$TARGET")
+  if [[ "$STATUS" -ne 0 ]] &&
+    grep -q "~ $TARGET sql $TARGET_SQL -> $((TARGET_SQL - 1))" "$WORK/case8.err"; then
     pass "a decrease fails too, and the report names the file and the direction it moved"
   else
     fail "removing a SQL statement did not fail the gate (exit $STATUS)"
@@ -435,8 +444,13 @@ echo ""
 # count. A new file would trip reference_errors and the unclassified branch at
 # once, and the case could not say which assertion it exercised. Mutating a
 # ledgered file leaves exactly one diagnostic: `~ <file> sql N -> N+1`.
-PROBE_FILE="crates/daemon/src/server/attention.rs"
-PROBE_SQL_BEFORE=1
+# FR-141 moved every statement out of the forbidden crates, so the previous probe
+# — crates/daemon/src/server/attention.rs — left the ledger entirely and these
+# three cases mutated a file the gate reported as new rather than as changed.
+# The count is now read from the ledger rather than restated here, so the next
+# move relocates the probe without silently inverting what it proves.
+PROBE_FILE="crates/orchestrator-persistence/src/audit_links.rs"
+PROBE_SQL_BEFORE=$(ruby -rjson -e 'print JSON.parse(File.read(ARGV[0]))["references"][ARGV[1]]["sql"]' "$LEDGER" "$PROBE_FILE")
 
 # --- Case 12: PRAGMA is a SQL statement --------------------------------------
 # The verb FR-139 added. It matters because PRAGMA is how a crate configures the
@@ -600,11 +614,11 @@ target = ARGV[1]
 abort "the fixture target is not in the ledger" unless ledger["references"].key?(target)
 ledger["references"][target].delete("category")
 File.write(path, JSON.pretty_generate(ledger) + "\n")
-' "$DIR/$LEDGER" "crates/daemon/src/server/handoff.rs"
+' "$DIR/$LEDGER" "crates/orchestrator-persistence/src/audit_links.rs"
 run_gate "$DIR" case16
 if [[ "$STATUS" -ne 0 ]] &&
   grep -q "1 file(s) touch persistence with no reviewed category" "$WORK/case16.err" &&
-  grep -q "crates/daemon/src/server/handoff.rs" "$WORK/case16.err" &&
+  grep -q "crates/orchestrator-persistence/src/audit_links.rs" "$WORK/case16.err" &&
   ! grep -q "persistence touch points differ" "$WORK/case16.err"; then
   pass "a file whose category was dropped fails on the classification branch alone"
 else
