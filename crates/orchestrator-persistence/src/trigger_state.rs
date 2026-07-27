@@ -11,8 +11,8 @@
 //! duplicate task, not a corrupt one; the deterministic-identity fences that
 //! prevent duplicates live in the paths that create tasks, not here.
 
-use anyhow::Result;
-use rusqlite::{OptionalExtension, params, params_from_iter};
+use anyhow::{Context, Result};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::async_database::{AsyncDatabase, flatten_err};
 
@@ -188,30 +188,134 @@ pub async fn tasks_beyond_retention(
         .map_err(flatten_err)
 }
 
-/// Deletes the named task rows and reports how many went.
+/// A task the history limit selected but did not remove, and what still names it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkippedTask {
+    /// The task that stayed.
+    pub task_id: String,
+    /// `table.column` for every reference still holding a row, schema order.
+    pub blocked_by: Vec<String>,
+}
+
+/// What one history-limit sweep did.
 ///
-/// This is a bare `DELETE FROM tasks`, which is what it replaced. It does not
-/// clear the child rows that reference a task, and the schema does not cascade
-/// for all of them, so a task that has any is refused rather than deleted,
-/// which is why a trigger history limit has never applied to a task that
-/// actually ran. Recorded in DD-148's known limits.
-pub async fn delete_tasks(db: &AsyncDatabase, ids: Vec<String>) -> Result<usize> {
-    // Saved work, not a guard: SQLite accepts `IN ()` and matches nothing, so
-    // removing this early return changes no answer. Measured, not assumed.
+/// Deleted and skipped are reported separately because they are different
+/// facts, not two readings of one number: a sweep that deletes nothing because
+/// there was nothing to delete and a sweep that deletes nothing because every
+/// candidate is pinned are the same count and opposite situations.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct HistoryCleanupOutcome {
+    /// Tasks removed with their items, command runs and events.
+    pub deleted: usize,
+    /// Tasks left in place, each with the references that kept them.
+    pub skipped: Vec<SkippedTask>,
+    /// Log files the caller still has to unlink.
+    pub log_paths: Vec<String>,
+}
+
+/// The columns that reference `tasks(id)` and would refuse a delete.
+///
+/// Read from the schema rather than listed here. Ten tables reference
+/// `tasks(id)`; `task_graph_runs` and `task_graph_snapshots` declare
+/// `ON DELETE CASCADE` and so never refuse anything, and SQLite clears them
+/// itself. Of the eight that remain, the task cascade clears exactly one —
+/// `task_items`, together with the `command_runs` hanging off it and the
+/// `events` rows, which carry no foreign key at all — and that one name is the
+/// only literal below.
+///
+/// A table added later that references `tasks(id)` without a cascade appears
+/// in this list on its own. That is the point: a hand-written list of the
+/// seven would be correct today and silently short by one the next time
+/// somebody adds a table, which is the shape this repository keeps finding.
+fn blocking_references(conn: &Connection) -> Result<Vec<(String, String)>> {
+    let mut stmt = conn.prepare(
+        r#"SELECT m.name, f."from"
+             FROM sqlite_master m
+             JOIN pragma_foreign_key_list(m.name) f
+            WHERE m.type = 'table'
+              AND f."table" = 'tasks'
+              AND UPPER(COALESCE(f.on_delete, '')) <> 'CASCADE'
+              AND m.name <> 'task_items'
+            ORDER BY m.name, f."from""#,
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+}
+
+/// Which of `references` currently hold a row naming `task_id`.
+fn references_holding(
+    conn: &Connection,
+    references: &[(String, String)],
+    task_id: &str,
+) -> Result<Vec<String>> {
+    let mut holding = Vec::new();
+    for (table, column) in references {
+        // Both identifiers come from `sqlite_master` in this same database, not
+        // from a caller, and neither can be bound as a parameter.
+        let found = conn
+            .query_row(
+                &format!(r#"SELECT 1 FROM "{table}" WHERE "{column}" = ?1 LIMIT 1"#),
+                params![task_id],
+                |_| Ok(()),
+            )
+            .optional()?;
+        if found.is_some() {
+            holding.push(format!("{table}.{column}"));
+        }
+    }
+    Ok(holding)
+}
+
+/// Deletes the tasks a history limit selected, reporting what stayed and why.
+///
+/// Each task goes through `task_repository`'s cascade — the one
+/// `task_cleanup` uses — rather than through a second delete written here, so
+/// there is one statement sequence for removing a task and not two. The
+/// cascade runs in its own transaction per task, so a task refused partway
+/// leaves none of its rows removed and the sweep continues to the next.
+///
+/// A task still referenced by a table the cascade does not clear is skipped
+/// whole and named in the outcome, never stripped of its items and left
+/// standing. A failure that is *not* a child row propagates instead of being
+/// recorded as a skip: it is not a retention decision and must not read as one.
+pub async fn delete_tasks_within_history_limit(
+    db: &AsyncDatabase,
+    ids: Vec<String>,
+) -> Result<HistoryCleanupOutcome> {
     if ids.is_empty() {
-        return Ok(0);
+        return Ok(HistoryCleanupOutcome::default());
     }
     db.writer()
         .call(move |conn| {
-            (|| -> Result<usize> {
-                let placeholders = (1..=ids.len())
-                    .map(|index| format!("?{index}"))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                Ok(conn.execute(
-                    &format!("DELETE FROM tasks WHERE id IN ({placeholders})"),
-                    params_from_iter(ids.iter()),
-                )?)
+            (|| -> Result<HistoryCleanupOutcome> {
+                let references = blocking_references(conn)?;
+                let mut outcome = HistoryCleanupOutcome::default();
+                for task_id in &ids {
+                    match crate::task_repository::delete_task_and_collect_log_paths(conn, task_id) {
+                        Ok(log_paths) => {
+                            outcome.deleted += 1;
+                            outcome.log_paths.extend(log_paths);
+                        }
+                        Err(error) => {
+                            let blocked_by = references_holding(conn, &references, task_id)?;
+                            if blocked_by.is_empty() {
+                                return Err(error).with_context(|| {
+                                    format!(
+                                        "delete task {task_id} for history limit: \
+                                         nothing references it, so this is not a retention skip"
+                                    )
+                                });
+                            }
+                            outcome.skipped.push(SkippedTask {
+                                task_id: task_id.clone(),
+                                blocked_by,
+                            });
+                        }
+                    }
+                }
+                Ok(outcome)
             })()
             .map_err(other)
         })

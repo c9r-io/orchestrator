@@ -3200,16 +3200,22 @@ async fn trigger_history_retention_keeps_the_newest_and_selects_nothing_else() {
     // matches nothing — so this assertion holds with it removed, and says so
     // rather than reading as coverage of a fence.
     assert_eq!(
-        store::delete_tasks(&db, Vec::new())
+        store::delete_tasks_within_history_limit(&db, Vec::new())
             .await
             .expect("delete nothing"),
-        0
+        store::HistoryCleanupOutcome::default()
     );
-    assert_eq!(
-        store::delete_tasks(&db, vec!["done-0".to_string(), "done-1".to_string()])
-            .await
-            .expect("delete the excess"),
-        2
+    let removed = store::delete_tasks_within_history_limit(
+        &db,
+        vec!["done-0".to_string(), "done-1".to_string()],
+    )
+    .await
+    .expect("delete the excess");
+    assert_eq!(removed.deleted, 2);
+    assert!(
+        removed.skipped.is_empty(),
+        "childless tasks were reported as skipped: {:?}",
+        removed.skipped
     );
     let remaining: i64 = conn
         .query_row(
@@ -3221,31 +3227,266 @@ async fn trigger_history_retention_keeps_the_newest_and_selects_nothing_else() {
         .expect("count what is left");
     assert_eq!(remaining, 2, "the delete took rows it was not given");
 
-    // A task that has any child row referencing it is refused, not deleted:
-    // `tasks` cascades to some children and not to others, and this statement
-    // clears none of them itself. That is the behaviour this call inherited
-    // from `trigger_engine::cleanup_history`, and the reason a trigger history
-    // limit does not currently apply to tasks that ran — every real run has
-    // items. Pinned here so the next reader finds it as a known state rather
-    // than as a surprise; DD-148's known limits carry the detail.
+    // ── The defect FR-142 closed, kept as a fact rather than as a memory ──
+    //
+    // The statement this call used to make was a bare `DELETE FROM tasks`. It
+    // is refused for any task with a child row, and every task carries a
+    // `task_items` row from the moment it is created — before it runs, not
+    // because it ran — so a trigger history limit had never once deleted
+    // anything. The bare statement is asserted directly rather than through the
+    // API, because the API no longer makes it: what is pinned here is the
+    // reason the API had to change. DD-148's known limits and DD-150 carry it.
     seed_task(&conn);
-    let refused = store::delete_tasks(&db, vec![TASK_ID.to_string()]).await;
-    assert!(
-        refused.is_err(),
-        "a task with child rows was deleted; the cascade this test documents has changed"
+    let bare = conn.execute(
+        "DELETE FROM tasks WHERE id = ?1",
+        rusqlite::params![TASK_ID],
     );
     assert!(
-        format!("{:#}", refused.unwrap_err()).contains("FOREIGN KEY"),
-        "the delete failed for some reason other than the child rows"
+        bare.as_ref()
+            .is_err_and(|error| error.to_string().contains("FOREIGN KEY")),
+        "a bare DELETE took a task that has items, so the defect FR-142 closed can no longer \
+         be reproduced and this test no longer shows why the cascade is needed: {bare:?}"
     );
+
+    // The same task, through the API, now goes — with its item, its command run
+    // and its events — and hands back the log files its deletion orphaned.
+    let now = orchestrator_persistence::now_ts();
+    conn.execute(
+        "INSERT INTO command_runs (id, task_item_id, phase, command, cwd, stdout_path,
+             stderr_path, started_at)
+         VALUES ('run-history', ?1, 'exec', 'true', '/tmp', '/tmp/history-out.log',
+                 '/tmp/history-err.log', ?2)",
+        rusqlite::params![ITEM_ID, now],
+    )
+    .expect("seed a command run");
+    conn.execute(
+        "INSERT INTO events (task_id, event_type, payload_json, created_at)
+         VALUES (?1, 'trigger_fired', '{}', ?2)",
+        rusqlite::params![TASK_ID, now],
+    )
+    .expect("seed an event");
+
+    let swept = store::delete_tasks_within_history_limit(&db, vec![TASK_ID.to_string()])
+        .await
+        .expect("the cascade removes a task that ran");
+    assert_eq!(swept.deleted, 1, "the task that ran was not deleted");
+    assert!(swept.skipped.is_empty(), "a deletable task was skipped");
+    let mut paths = swept.log_paths.clone();
+    paths.sort();
+    assert_eq!(
+        paths,
+        vec![
+            "/tmp/history-err.log".to_string(),
+            "/tmp/history-out.log".to_string()
+        ],
+        "the sweep did not hand back the log files its deletion orphaned"
+    );
+    for (table, column) in [
+        ("tasks", "id"),
+        ("task_items", "task_id"),
+        ("events", "task_id"),
+    ] {
+        assert_eq!(
+            conn.query_row(
+                &format!("SELECT COUNT(*) FROM {table} WHERE {column} = ?1"),
+                rusqlite::params![TASK_ID],
+                |row| row.get::<_, i64>(0)
+            )
+            .expect("count what the cascade left"),
+            0,
+            "{table} still holds rows for the deleted task"
+        );
+    }
     assert_eq!(
         conn.query_row(
-            "SELECT COUNT(*) FROM tasks WHERE id=?1",
-            rusqlite::params![TASK_ID],
+            "SELECT COUNT(*) FROM command_runs WHERE id = 'run-history'",
+            [],
             |row| row.get::<_, i64>(0)
         )
-        .expect("count the refused task"),
-        1,
-        "the refused delete took the row anyway"
+        .expect("count command runs"),
+        0,
+        "the command run outlived the task item it hung off"
     );
+}
+
+/// A task the history limit may not remove is left exactly as it was.
+///
+/// This is the assertion the FR asked for by name. The failure it guards
+/// against is not "the task survived" — it is the task surviving *stripped*:
+/// the cascade deletes events and command runs first and hits the foreign key
+/// on `DELETE FROM tasks` last, so a sweep that did not roll back would leave a
+/// task row whose execution history had been silently emptied underneath it.
+/// That is worse than the defect FR-142 closed, because the original at least
+/// changed nothing. `unchecked_transaction` is expected to make this hold; it
+/// is asserted rather than assumed, because "it should already be correct" is
+/// exactly the judgement that keeps being wrong here.
+#[tokio::test]
+async fn a_task_the_history_limit_cannot_remove_is_left_whole_and_named() {
+    use orchestrator_persistence::trigger_state as store;
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let db_path = temp.path().join("history-skip.db");
+    PersistenceBootstrap::ensure_current(&db_path).expect("bootstrap schema");
+    let conn = open_conn(&db_path).expect("open database");
+    let db = AsyncDatabase::open(&db_path).await.expect("open async db");
+
+    let now = orchestrator_persistence::now_ts();
+    seed_task(&conn);
+    conn.execute(
+        "INSERT INTO command_runs (id, task_item_id, phase, command, cwd, stdout_path,
+             stderr_path, started_at)
+         VALUES ('run-pinned', ?1, 'exec', 'true', '/tmp', '/tmp/a.log', '/tmp/b.log', ?2)",
+        rusqlite::params![ITEM_ID, now],
+    )
+    .expect("seed a command run");
+    for kind in ["trigger_fired", "task_completed"] {
+        conn.execute(
+            "INSERT INTO events (task_id, event_type, payload_json, created_at)
+             VALUES (?1, ?2, '{}', ?3)",
+            rusqlite::params![TASK_ID, kind, now],
+        )
+        .expect("seed an event");
+    }
+    // The row that pins it: a resume plan is cross-session handoff state, one
+    // of the seven references the task cascade does not clear.
+    conn.execute(
+        "INSERT INTO resume_plans (id, project_id, task_id, boundary_id, mode,
+             expected_state_version, side_effect_class, replay_safe,
+             elevated_confirmation_required, consequence_json, status, expires_at,
+             created_by, created_at)
+         VALUES ('plan-pinned', 'default', ?1, 'b', 'resume', 'v1', 'none', 1, 0, '{}',
+                 'pending', ?2, 'operator', ?2)",
+        rusqlite::params![TASK_ID, now],
+    )
+    .expect("seed a resume plan");
+    // And a row that does *not* pin it, on a table that also references
+    // `tasks(id)` but cascades. It is here so that `blocked_by` has to exclude
+    // it: a discovery query that forgot to filter on `on_delete` would report
+    // three tables instead of one and send the next reader after a table that
+    // never refused anything.
+    conn.execute(
+        "INSERT INTO task_graph_runs (graph_run_id, task_id, created_at, updated_at)
+         VALUES ('graph-noise', ?1, ?2, ?2)",
+        rusqlite::params![TASK_ID, now],
+    )
+    .expect("seed a cascading graph run");
+
+    let outcome = store::delete_tasks_within_history_limit(&db, vec![TASK_ID.to_string()])
+        .await
+        .expect("a pinned task is a retention outcome, not an error");
+
+    // Reported, not swallowed, and reported by cause rather than as a count.
+    assert_eq!(outcome.deleted, 0);
+    assert_eq!(
+        outcome.skipped,
+        vec![store::SkippedTask {
+            task_id: TASK_ID.to_string(),
+            blocked_by: vec!["resume_plans.task_id".to_string()],
+        }],
+        "the skip did not name the table that caused it"
+    );
+    assert!(
+        outcome.log_paths.is_empty(),
+        "a task that was not deleted handed back log files to unlink"
+    );
+
+    // Left whole. Every count is the one it was seeded with.
+    for (label, sql, expected) in [
+        ("task", "SELECT COUNT(*) FROM tasks WHERE id = ?1", 1),
+        (
+            "items",
+            "SELECT COUNT(*) FROM task_items WHERE task_id = ?1",
+            1,
+        ),
+        (
+            "events",
+            "SELECT COUNT(*) FROM events WHERE task_id = ?1",
+            2,
+        ),
+        (
+            "command runs",
+            "SELECT COUNT(*) FROM command_runs WHERE task_item_id IN
+                 (SELECT id FROM task_items WHERE task_id = ?1)",
+            1,
+        ),
+    ] {
+        assert_eq!(
+            conn.query_row(sql, rusqlite::params![TASK_ID], |row| row.get::<_, i64>(0))
+                .expect("count what the refused sweep left"),
+            expected,
+            "the refused sweep changed the {label} of a task it did not delete"
+        );
+    }
+
+    // The other half of "no longer silent": a failure that is *not* a child row
+    // must surface as an error rather than be filed as a retention skip. The
+    // whole defect FR-142 closed was a real failure wearing a shape nobody
+    // looked at, so a skip list that quietly absorbs unrelated failures would
+    // rebuild it one level up. A missing task is the reachable instance —
+    // another writer can remove one between the retention query and the sweep.
+    let vanished =
+        store::delete_tasks_within_history_limit(&db, vec!["no-such-task".to_string()]).await;
+    let message = format!(
+        "{:#}",
+        vanished.expect_err("a missing task was absorbed as a skip")
+    );
+    assert!(
+        message.contains("not a retention skip"),
+        "the failure surfaced without saying it was not a retention decision: {message}"
+    );
+}
+
+/// The tables that cascade are not reported as blockers, and do not block.
+///
+/// FR-142 stated that the repository's two `ON DELETE CASCADE` declarations
+/// were not on the `tasks(id)` chain. Both are, and SQLite therefore removes
+/// `task_graph_runs` and `task_graph_snapshots` itself. A task that used a task
+/// graph is deletable, and asserting so keeps the correction from decaying back
+/// into the FR's version.
+#[tokio::test]
+async fn task_graph_rows_cascade_and_do_not_pin_a_task() {
+    use orchestrator_persistence::trigger_state as store;
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let db_path = temp.path().join("history-cascade.db");
+    PersistenceBootstrap::ensure_current(&db_path).expect("bootstrap schema");
+    let conn = open_conn(&db_path).expect("open database");
+    let db = AsyncDatabase::open(&db_path).await.expect("open async db");
+
+    let now = orchestrator_persistence::now_ts();
+    seed_task(&conn);
+    conn.execute(
+        "INSERT INTO task_graph_runs (graph_run_id, task_id, created_at, updated_at)
+         VALUES ('graph-run', ?1, ?2, ?2)",
+        rusqlite::params![TASK_ID, now],
+    )
+    .expect("seed a graph run");
+    conn.execute(
+        "INSERT INTO task_graph_snapshots (graph_run_id, task_id, snapshot_kind,
+             payload_json, created_at)
+         VALUES ('graph-run', ?1, 'materialized', '{}', ?2)",
+        rusqlite::params![TASK_ID, now],
+    )
+    .expect("seed a graph snapshot");
+
+    let outcome = store::delete_tasks_within_history_limit(&db, vec![TASK_ID.to_string()])
+        .await
+        .expect("cascading children do not refuse a delete");
+    assert_eq!(
+        outcome.deleted, 1,
+        "a task carrying only cascading children was treated as pinned: {:?}",
+        outcome.skipped
+    );
+    for table in ["task_graph_runs", "task_graph_snapshots"] {
+        assert_eq!(
+            conn.query_row(
+                &format!("SELECT COUNT(*) FROM {table} WHERE task_id = ?1"),
+                rusqlite::params![TASK_ID],
+                |row| row.get::<_, i64>(0)
+            )
+            .expect("count graph rows"),
+            0,
+            "{table} survived the task it cascades from"
+        );
+    }
 }

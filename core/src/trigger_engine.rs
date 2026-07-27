@@ -644,12 +644,17 @@ pub async fn fire_trigger_canonical_with_context(
         }
     }
 
-    // ── History limit cleanup (best-effort) ──────────────────────────
+    // ── History limit cleanup ────────────────────────────────────────
+    // Not best-effort silently: the enqueue failure above is an `error!`, and a
+    // retention mechanism that stops working is no quieter a fault than a task
+    // that never starts. This was a `debug!`, and the daemon's default filter is
+    // `info`, so the only symptom of a history limit that had never once applied
+    // was that the table did not shrink.
     if trigger.history_limit.is_some()
         && let Err(e) =
             cleanup_history(state, trigger_name, project, trigger.history_limit.as_ref()).await
     {
-        debug!(trigger = trigger_name, error = %e, "history cleanup failed");
+        error!(trigger = trigger_name, error = %e, "history cleanup failed");
     }
 
     Ok(task_id)
@@ -865,9 +870,43 @@ async fn cleanup_history(
         return Ok(());
     }
 
-    store::delete_tasks(&state.async_database, ids_to_delete)
+    let selected = ids_to_delete.len();
+    let outcome = store::delete_tasks_within_history_limit(&state.async_database, ids_to_delete)
         .await
         .context("delete excess trigger history tasks")?;
+
+    // The database returns the paths; unlinking them is this side's job, the
+    // same split `task_cleanup` uses.
+    for path in &outcome.log_paths {
+        let path = std::path::Path::new(path);
+        if path.is_file() {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    // Per task, naming the reference that kept it. A bare count of skips is a
+    // number with no next action; the table name is what tells whoever decides
+    // later whether delivery audit and resume plans may go with a task which
+    // ones actually occur.
+    for skipped in &outcome.skipped {
+        warn!(
+            trigger = trigger_name,
+            task_id = skipped.task_id.as_str(),
+            blocked_by = skipped.blocked_by.join(","),
+            "history limit skipped a task still referenced elsewhere"
+        );
+    }
+
+    // One line per sweep that did something, whether or not anything failed.
+    // A mechanism that claims to keep the most recent N should be able to say
+    // how many it actually keeps.
+    info!(
+        trigger = trigger_name,
+        selected,
+        deleted = outcome.deleted,
+        skipped = outcome.skipped.len(),
+        "trigger history cleanup"
+    );
 
     Ok(())
 }
