@@ -714,3 +714,86 @@ fn complete_execution_blocking(
     tx.commit()?;
     Ok(true)
 }
+
+/// Fields a resume child copies from the task it resumes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResumeSourceTask {
+    /// Task name.
+    pub name: String,
+    /// Task goal.
+    pub goal: String,
+    /// Project scope.
+    pub project_id: String,
+    /// Workspace scope.
+    pub workspace_id: String,
+    /// Workflow the task ran under.
+    pub workflow_id: String,
+    /// Target files, as stored JSON.
+    pub target_files_json: String,
+    /// Execution plan, as stored JSON.
+    pub execution_plan_json: String,
+}
+
+/// Reads the fields a resume child inherits from its source task.
+pub async fn read_resume_source_task(
+    db: &crate::async_database::AsyncDatabase,
+    task_id: String,
+) -> Result<ResumeSourceTask> {
+    db.reader()
+        .call(move |conn| {
+            Ok(conn.query_row(
+                "SELECT name, goal, project_id, workspace_id, workflow_id, target_files_json,
+                execution_plan_json FROM tasks WHERE id=?1",
+                [&task_id],
+                |row| {
+                    Ok(ResumeSourceTask {
+                        name: row.get(0)?,
+                        goal: row.get(1)?,
+                        project_id: row.get(2)?,
+                        workspace_id: row.get(3)?,
+                        workflow_id: row.get(4)?,
+                        target_files_json: row.get(5)?,
+                        execution_plan_json: row.get(6)?,
+                    })
+                },
+            )?)
+        })
+        .await
+        .map_err(crate::async_database::flatten_err)
+}
+
+/// Links a resume execution to the request that produced it.
+pub async fn link_resume_execution(
+    db: &crate::async_database::AsyncDatabase,
+    execution_id: String,
+    request_id: String,
+) -> Result<()> {
+    db.writer()
+        .call(move |conn| {
+            conn.execute(
+                "UPDATE resume_executions SET request_id=?2 WHERE id=?1",
+                params![execution_id, request_id],
+            )?;
+            Ok(())
+        })
+        .await
+        .map_err(crate::async_database::flatten_err)
+}
+
+/// Records the provider session a resume child should continue.
+pub async fn set_task_resume_token(
+    db: &crate::async_database::AsyncDatabase,
+    task_id: String,
+    resume_token: String,
+) -> Result<()> {
+    db.writer()
+        .call(move |conn| {
+            conn.execute(
+                "UPDATE tasks SET resume_token=?1 WHERE id=?2",
+                [resume_token, task_id],
+            )?;
+            Ok(())
+        })
+        .await
+        .map_err(crate::async_database::flatten_err)
+}

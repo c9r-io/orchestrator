@@ -762,3 +762,138 @@ impl AsyncSessionStore {
             .await
     }
 }
+
+// ─── Async facades ───────────────────────────────────────────────
+//
+// The statements above take a connection because they are also called from
+// inside larger transactions in this crate. The wrappers below are how callers
+// *outside* it reach them: FR-141 removed `AsyncDatabase::writer()` from the
+// public API, so a caller that used to open the closure itself now names the
+// operation instead. Each one is the closure that stood at the call site,
+// moved.
+
+use crate::async_database::flatten_err;
+
+fn other(error: anyhow::Error) -> tokio_rusqlite::Error {
+    tokio_rusqlite::Error::Other(error.into())
+}
+
+/// Lists sessions matching the optional task, agent and state filters.
+pub async fn list_sessions_async(
+    db: &AsyncDatabase,
+    task_id: Option<String>,
+    agent_id: Option<String>,
+    state: Option<String>,
+) -> Result<Vec<SessionRow>> {
+    db.reader()
+        .call(move |conn| {
+            list_sessions(
+                conn,
+                task_id.as_deref(),
+                agent_id.as_deref(),
+                state.as_deref(),
+            )
+            .map_err(other)
+        })
+        .await
+        .map_err(flatten_err)
+}
+
+/// Lists sessions whose recorded process id is `pid`.
+pub async fn list_sessions_by_pid_async(db: &AsyncDatabase, pid: i64) -> Result<Vec<SessionRow>> {
+    db.reader()
+        .call(move |conn| list_sessions_by_pid(conn, pid).map_err(other))
+        .await
+        .map_err(flatten_err)
+}
+
+/// Acquires or renews the writer lease for a session.
+pub async fn acquire_writer_lease_async(
+    db: &AsyncDatabase,
+    session_id: String,
+    actor: String,
+    client_id: String,
+    ttl_secs: u64,
+) -> Result<Option<WriterLease>> {
+    db.writer()
+        .call(move |conn| {
+            acquire_writer_lease(conn, &session_id, &actor, &client_id, ttl_secs).map_err(other)
+        })
+        .await
+        .map_err(flatten_err)
+}
+
+/// Extends the writer lease, returning the new expiry when the token is live.
+pub async fn heartbeat_writer_async(
+    db: &AsyncDatabase,
+    session_id: String,
+    client_id: String,
+    fencing_token: i64,
+    ttl_secs: u64,
+) -> Result<Option<String>> {
+    db.writer()
+        .call(move |conn| {
+            heartbeat_writer(conn, &session_id, &client_id, fencing_token, ttl_secs).map_err(other)
+        })
+        .await
+        .map_err(flatten_err)
+}
+
+/// Reports whether a client still holds a live writer lease.
+pub async fn validate_writer_async(
+    db: &AsyncDatabase,
+    session_id: String,
+    client_id: String,
+    fencing_token: i64,
+) -> Result<bool> {
+    db.reader()
+        .call(move |conn| {
+            validate_writer(conn, &session_id, &client_id, fencing_token).map_err(other)
+        })
+        .await
+        .map_err(flatten_err)
+}
+
+/// Releases the writer lease, returning whether it was held.
+pub async fn release_writer_async(
+    db: &AsyncDatabase,
+    session_id: String,
+    client_id: String,
+    fencing_token: i64,
+    reason: String,
+) -> Result<bool> {
+    db.writer()
+        .call(move |conn| {
+            release_writer(conn, &session_id, &client_id, fencing_token, &reason).map_err(other)
+        })
+        .await
+        .map_err(flatten_err)
+}
+
+/// Detaches a reader attachment, recording when and why.
+pub async fn detach_reader(
+    db: &AsyncDatabase,
+    session_id: String,
+    client_id: String,
+    detached_at: String,
+    reason: String,
+) -> Result<()> {
+    db.writer()
+        .call(move |conn| {
+            conn.execute(
+                "UPDATE session_attachments SET detached_at=?3,reason=?4 WHERE session_id=?1 AND client_id=?2 AND mode='reader' AND detached_at IS NULL",
+                params![session_id, client_id, detached_at, reason],
+            )?;
+            Ok(())
+        })
+        .await
+        .map_err(flatten_err)
+}
+
+/// Reconciles recorded session state against the processes still alive.
+pub async fn reconcile_sessions_async(db: &AsyncDatabase) -> Result<Vec<(String, String)>> {
+    db.writer()
+        .call(|conn| reconcile_sessions(conn).map_err(other))
+        .await
+        .map_err(flatten_err)
+}

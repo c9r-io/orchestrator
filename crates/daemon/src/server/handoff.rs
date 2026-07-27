@@ -78,22 +78,20 @@ fn plan_to_proto(plan: CoreResumePlan) -> ResumePlanResponse {
     }
 }
 
-fn task_project(server: &OrchestratorServer, task_id: &str) -> Result<String, Status> {
-    let conn = agent_orchestrator::db::open_conn(&server.state.db_path)
-        .map_err(|error| Status::internal(error.to_string()))?;
-    conn.query_row(
-        "SELECT project_id FROM tasks WHERE id=?1",
-        [task_id],
-        |row| row.get(0),
+async fn task_project(server: &OrchestratorServer, task_id: &str) -> Result<String, Status> {
+    agent_orchestrator::task_repository::queries::project_id_for_task(
+        &server.state.async_database,
+        task_id.to_string(),
     )
+    .await
     .map_err(|_| Status::not_found("task not found"))
 }
 
-fn runtime_policy(
+async fn runtime_policy(
     server: &OrchestratorServer,
     task_id: &str,
 ) -> Result<agent_orchestrator::crd::projection::RuntimePolicyProjection, Status> {
-    let project = task_project(server, task_id)?;
+    let project = task_project(server, task_id).await?;
     let config = agent_orchestrator::config_load::read_loaded_config(&server.state)
         .map_err(|error| Status::internal(error.to_string()))?;
     Ok(config.config.runtime_policy_for_project(&project))
@@ -103,7 +101,7 @@ pub(crate) async fn handoff_generate(
     server: &OrchestratorServer,
     mut request: Request<HandoffGenerateRequest>,
 ) -> Result<Response<HandoffSnapshotResponse>, Status> {
-    let project = task_project(server, &request.get_ref().task_id)?;
+    let project = task_project(server, &request.get_ref().task_id).await?;
     let context = request.get_ref().audit.clone();
     let task_id = request.get_ref().task_id.clone();
     let cursor = request.get_ref().source_event_cursor;
@@ -134,7 +132,7 @@ pub(crate) async fn handoff_generate(
     }
     let actor = trusted_actor(&request);
     let req = request.into_inner();
-    if !runtime_policy(server, &req.task_id)?.handoff_enabled {
+    if !runtime_policy(server, &req.task_id).await?.handoff_enabled {
         return Err(Status::permission_denied("handoff generation is disabled"));
     }
     let snapshot = match server
@@ -188,7 +186,7 @@ pub(crate) async fn resume_plan(
     server: &OrchestratorServer,
     mut request: Request<ResumePlanRequest>,
 ) -> Result<Response<ResumePlanResponse>, Status> {
-    let project = task_project(server, &request.get_ref().task_id)?;
+    let project = task_project(server, &request.get_ref().task_id).await?;
     let context = request.get_ref().audit.clone();
     let task_id = request.get_ref().task_id.clone();
     let boundary_id = request.get_ref().boundary_id.clone();
@@ -221,7 +219,10 @@ pub(crate) async fn resume_plan(
     }
     let actor = trusted_actor(&request);
     let req = request.into_inner();
-    if !runtime_policy(server, &req.task_id)?.mutating_resume_enabled {
+    if !runtime_policy(server, &req.task_id)
+        .await?
+        .mutating_resume_enabled
+    {
         return Err(Status::permission_denied("mutating resume is disabled"));
     }
     let mode = ResumeMode::parse(&req.mode).map_err(status)?;
@@ -257,7 +258,7 @@ pub(crate) async fn resume_execute(
         .await
         .map_err(status)?
         .ok_or_else(|| Status::not_found("resume plan not found"))?;
-    let project = task_project(server, &plan.task_id)?;
+    let project = task_project(server, &plan.task_id).await?;
     let context = request.get_ref().audit.clone();
     let plan_id = request.get_ref().plan_id.clone();
     let expected = request.get_ref().expected_state_version.clone();
@@ -294,7 +295,7 @@ pub(crate) async fn resume_execute(
     }
     let actor = trusted_actor(&request);
     let req = request.into_inner();
-    let policy = runtime_policy(server, &plan.task_id)?;
+    let policy = runtime_policy(server, &plan.task_id).await?;
     if !policy.mutating_resume_enabled {
         return Err(Status::permission_denied("mutating resume is disabled"));
     }
@@ -389,20 +390,13 @@ async fn link_resume_execution(
 ) -> Result<(), Status> {
     let execution_id = execution_id.to_string();
     let request_id = request_id.to_string();
-    server
-        .state
-        .async_database
-        .writer()
-        .call(move |conn| {
-            conn.execute(
-                "UPDATE resume_executions SET request_id=?2 WHERE id=?1",
-                rusqlite::params![execution_id, request_id],
-            )?;
-            Ok(())
-        })
-        .await
-        .map_err(agent_orchestrator::async_database::flatten_err)
-        .map_err(|error| Status::internal(error.to_string()))
+    agent_orchestrator::handoff_store::link_resume_execution(
+        &server.state.async_database,
+        execution_id,
+        request_id,
+    )
+    .await
+    .map_err(|error| Status::internal(error.to_string()))
 }
 
 async fn execute_plan(
@@ -440,25 +434,15 @@ async fn create_resume_child(
     server: &OrchestratorServer,
     plan: &CoreResumePlan,
 ) -> anyhow::Result<String> {
-    let conn = agent_orchestrator::db::open_conn(&server.state.db_path)?;
-    let source: (String, String, String, String, String, String, String) = conn.query_row(
-        "SELECT name, goal, project_id, workspace_id, workflow_id, target_files_json,
-                execution_plan_json FROM tasks WHERE id=?1",
-        [&plan.task_id],
-        |row| {
-            Ok((
-                row.get(0)?,
-                row.get(1)?,
-                row.get(2)?,
-                row.get(3)?,
-                row.get(4)?,
-                row.get(5)?,
-                row.get(6)?,
-            ))
-        },
-    )?;
-    let target_files: Vec<String> = serde_json::from_str(&source.5).unwrap_or_default();
-    let execution_plan: serde_json::Value = serde_json::from_str(&source.6).unwrap_or_default();
+    let source = agent_orchestrator::handoff_store::read_resume_source_task(
+        &server.state.async_database,
+        plan.task_id.clone(),
+    )
+    .await?;
+    let target_files: Vec<String> =
+        serde_json::from_str(&source.target_files_json).unwrap_or_default();
+    let execution_plan: serde_json::Value =
+        serde_json::from_str(&source.execution_plan_json).unwrap_or_default();
     let all_steps = execution_plan
         .get("steps")
         .and_then(serde_json::Value::as_array)
@@ -494,11 +478,11 @@ async fn create_resume_child(
     let child = orchestrator_scheduler::service::task::create_task(
         &server.state,
         agent_orchestrator::dto::CreateTaskPayload {
-            name: Some(format!("{} (resume)", source.0)),
-            goal: Some(source.1),
-            project_id: Some(source.2),
-            workspace_id: Some(source.3),
-            workflow_id: Some(source.4),
+            name: Some(format!("{} (resume)", source.name)),
+            goal: Some(source.goal),
+            project_id: Some(source.project_id),
+            workspace_id: Some(source.workspace_id),
+            workflow_id: Some(source.workflow_id),
             target_files: Some(target_files),
             parent_task_id: Some(plan.task_id.clone()),
             spawn_reason: Some(format!("resume_boundary:{}", plan.boundary.id)),
@@ -513,10 +497,12 @@ async fn create_resume_child(
             .command_run_id
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("provider command run is unavailable"))?;
-        conn.execute(
-            "UPDATE tasks SET resume_token=?1 WHERE id=?2",
-            [format!("command-run:{run_id}"), child.id.clone()],
-        )?;
+        agent_orchestrator::handoff_store::set_task_resume_token(
+            &server.state.async_database,
+            child.id.clone(),
+            format!("command-run:{run_id}"),
+        )
+        .await?;
     }
     orchestrator_scheduler::service::task::enqueue_task(&server.state, &child.id)
         .await

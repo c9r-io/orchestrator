@@ -50,7 +50,11 @@ pub mod crd;
 /// `&state::InnerState` and delegate to the `_by_path` forms below that layer.
 pub mod db;
 /// Database maintenance utilities: VACUUM and size reporting.
+/// Backlinks from an audited row to the request that produced it.
+pub use orchestrator_persistence::audit_links;
 pub use orchestrator_persistence::db_maintenance;
+/// The handoff and resume tables and the statements over them.
+pub use orchestrator_persistence::handoff_store;
 /// Serialized database write coordination for async callers (**async write layer**).
 ///
 /// Wraps `AsyncSqliteTaskRepository` behind a `DbWriteCoordinator` that
@@ -62,6 +66,8 @@ pub mod db_write;
 /// They are the row and read-model shapes the repositories produce, so they
 /// moved with the repositories (FR-130 Phase A) and are re-exported here.
 pub use orchestrator_persistence::dto;
+/// The `session_control_actions` table: idempotency envelopes for session control.
+pub use orchestrator_persistence::session_control_audit;
 pub mod dynamic_orchestration;
 /// Environment resolution utilities for command execution.
 pub use orchestrator_config::env_resolve;

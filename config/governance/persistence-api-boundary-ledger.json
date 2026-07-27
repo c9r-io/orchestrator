@@ -583,44 +583,6 @@
         "open_conn"
       ]
     },
-    "crates/daemon/src/main.rs": {
-      "crate": "crates/daemon",
-      "acquisitions": 1,
-      "via": [
-        "writer"
-      ]
-    },
-    "crates/daemon/src/server/attention.rs": {
-      "crate": "crates/daemon",
-      "acquisitions": 1,
-      "via": [
-        "writer"
-      ]
-    },
-    "crates/daemon/src/server/handoff.rs": {
-      "crate": "crates/daemon",
-      "acquisitions": 3,
-      "via": [
-        "open_conn",
-        "writer"
-      ]
-    },
-    "crates/daemon/src/server/session.rs": {
-      "crate": "crates/daemon",
-      "acquisitions": 18,
-      "via": [
-        "open_conn",
-        "reader",
-        "writer"
-      ]
-    },
-    "crates/daemon/src/server/source.rs": {
-      "crate": "crates/daemon",
-      "acquisitions": 1,
-      "via": [
-        "writer"
-      ]
-    },
     "crates/orchestrator-scheduler/src/scheduler/item_generate.rs": {
       "crate": "crates/orchestrator-scheduler",
       "acquisitions": 1,
@@ -669,7 +631,7 @@
   "totals": {
     "yields": 6,
     "demands": 68,
-    "holdingFiles": 20,
-    "acquisitions": 76
+    "holdingFiles": 15,
+    "acquisitions": 52
   }
 }

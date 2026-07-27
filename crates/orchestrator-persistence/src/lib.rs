@@ -24,6 +24,8 @@
 
 /// Writer/reader connection pair for async database I/O.
 pub mod async_database;
+/// Backlinks from an audited row to the request that produced it.
+pub mod audit_links;
 /// The `control_action_audit` table and the statements over it.
 pub mod control_action_audit;
 /// Admin facade: project queries, audit, metrics and reset.
@@ -48,6 +50,8 @@ pub mod migration_steps;
 pub mod repository;
 /// Persistence bootstrap entrypoints.
 pub mod schema;
+/// The `session_control_actions` table: idempotency envelopes for session control.
+pub mod session_control_audit;
 /// Agent session rows: creation, state transitions, reader/writer attachment.
 pub mod session_store;
 /// The source-automation route tables and the statements over them.

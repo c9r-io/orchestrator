@@ -454,20 +454,14 @@ async fn link_domain_action(
     let id = id.to_string();
     let key = key.to_string();
     let request_id = request_id.to_string();
-    server
-        .state
-        .async_database
-        .writer()
-        .call(move |conn| {
-            conn.execute(
-                "UPDATE attention_actions SET request_id=?3 WHERE attention_item_id=?1 AND idempotency_key=?2",
-                rusqlite::params![id, key, request_id],
-            )?;
-            Ok(())
-        })
-        .await
-        .map_err(agent_orchestrator::async_database::flatten_err)
-        .map_err(|error| Status::internal(error.to_string()))
+    agent_orchestrator::audit_links::link_attention_action(
+        &server.state.async_database,
+        id,
+        key,
+        request_id,
+    )
+    .await
+    .map_err(|error| Status::internal(error.to_string()))
 }
 
 pub(crate) async fn attention_follow(

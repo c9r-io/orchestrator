@@ -509,10 +509,9 @@ fn main() -> Result<()> {
                 loop {
                     tokio::select! {
                         _ = interval.tick() => {
-                            let result = session_state.async_database.writer().call(|conn| {
-                                agent_orchestrator::session_store::reconcile_sessions(conn)
-                                    .map_err(|error| tokio_rusqlite::Error::Other(error.into()))
-                            }).await;
+                            let result = agent_orchestrator::session_store::reconcile_sessions_async(
+                                &session_state.async_database,
+                            ).await;
                             match result {
                                 Ok(changes) if !changes.is_empty() => {
                                     info!(changes = changes.len(), "interactive session reconciliation updated state");

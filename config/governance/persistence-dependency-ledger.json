@@ -169,40 +169,16 @@
     }
   },
   "references": {
-    "crates/daemon/src/main.rs": {
-      "crate": "crates/daemon",
-      "rusqlite": 1,
-      "sql": 0,
-      "category": "driver-error-type"
-    },
-    "crates/daemon/src/server/attention.rs": {
-      "crate": "crates/daemon",
-      "rusqlite": 1,
-      "sql": 1,
-      "category": "borrowed-connection-raw-sql"
-    },
-    "crates/daemon/src/server/handoff.rs": {
-      "crate": "crates/daemon",
-      "rusqlite": 1,
-      "sql": 4,
-      "category": "borrowed-connection-raw-sql"
-    },
-    "crates/daemon/src/server/session.rs": {
-      "crate": "crates/daemon",
-      "rusqlite": 18,
-      "sql": 12,
-      "category": "borrowed-connection-raw-sql"
-    },
-    "crates/daemon/src/server/source.rs": {
-      "crate": "crates/daemon",
-      "rusqlite": 1,
-      "sql": 2,
-      "category": "borrowed-connection-raw-sql"
-    },
     "crates/orchestrator-persistence/src/async_database.rs": {
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 17,
       "sql": 0,
+      "category": "persistence-layer"
+    },
+    "crates/orchestrator-persistence/src/audit_links.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 1,
+      "sql": 3,
       "category": "persistence-layer"
     },
     "crates/orchestrator-persistence/src/control_action_audit.rs": {
@@ -238,7 +214,7 @@
     "crates/orchestrator-persistence/src/handoff_store.rs": {
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 9,
-      "sql": 18,
+      "sql": 21,
       "category": "persistence-layer"
     },
     "crates/orchestrator-persistence/src/migration.rs": {
@@ -283,10 +259,16 @@
       "sql": 1,
       "category": "persistence-layer"
     },
-    "crates/orchestrator-persistence/src/session_store.rs": {
+    "crates/orchestrator-persistence/src/session_control_audit.rs": {
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 3,
-      "sql": 29,
+      "sql": 10,
+      "category": "persistence-layer"
+    },
+    "crates/orchestrator-persistence/src/session_store.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 5,
+      "sql": 30,
       "category": "persistence-layer"
     },
     "crates/orchestrator-persistence/src/source_automation_routes.rs": {
@@ -334,7 +316,7 @@
     "crates/orchestrator-persistence/src/task_repository/queries.rs": {
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 4,
-      "sql": 27,
+      "sql": 28,
       "category": "persistence-layer"
     },
     "crates/orchestrator-persistence/src/task_repository/state.rs": {
@@ -436,8 +418,8 @@
   },
   "totals": {
     "members": 14,
-    "referencedFiles": 44,
-    "rusqlite": 239,
-    "sql": 515
+    "referencedFiles": 41,
+    "rusqlite": 223,
+    "sql": 514
   }
 }

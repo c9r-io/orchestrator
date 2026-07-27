@@ -661,3 +661,23 @@ fn load_task_graph_debug_bundles_from_events(
     rows.collect::<std::result::Result<Vec<_>, _>>()
         .map_err(Into::into)
 }
+
+/// Returns the project a task belongs to.
+///
+/// The daemon read this with its own synchronous connection, opened by path per
+/// call, purely because it needed one column and had no async facade for it.
+pub async fn project_id_for_task(
+    db: &crate::async_database::AsyncDatabase,
+    task_id: String,
+) -> anyhow::Result<String> {
+    db.reader()
+        .call(move |conn| {
+            Ok(conn.query_row(
+                "SELECT project_id FROM tasks WHERE id=?1",
+                [&task_id],
+                |record| record.get(0),
+            )?)
+        })
+        .await
+        .map_err(crate::async_database::flatten_err)
+}

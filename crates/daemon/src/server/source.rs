@@ -1417,22 +1417,17 @@ async fn link_source_row(
     id: &str,
     request_id: &str,
 ) -> Result<(), Status> {
-    let sql = match table {
-        "source_events" => "UPDATE source_events SET request_id=?2 WHERE id=?1",
-        "source_bindings" => "UPDATE source_bindings SET request_id=?2 WHERE id=?1",
+    let target = match table {
+        "source_events" => agent_orchestrator::audit_links::SourceAuditTable::Events,
+        "source_bindings" => agent_orchestrator::audit_links::SourceAuditTable::Bindings,
         _ => return Err(Status::internal("invalid source audit table")),
     };
-    let id = id.to_string();
-    let request_id = request_id.to_string();
-    server
-        .state
-        .async_database
-        .writer()
-        .call(move |conn| {
-            conn.execute(sql, rusqlite::params![id, request_id])?;
-            Ok(())
-        })
-        .await
-        .map_err(agent_orchestrator::async_database::flatten_err)
-        .map_err(|error| Status::internal(error.to_string()))
+    agent_orchestrator::audit_links::link_source_row(
+        &server.state.async_database,
+        target,
+        id.to_string(),
+        request_id.to_string(),
+    )
+    .await
+    .map_err(|error| Status::internal(error.to_string()))
 }

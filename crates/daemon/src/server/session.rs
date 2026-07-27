@@ -7,10 +7,10 @@ use std::time::Duration;
 use agent_orchestrator::config_ext::OrchestratorConfigExt;
 use agent_orchestrator::config_load::read_active_config;
 use agent_orchestrator::events::insert_event;
+use agent_orchestrator::session_control_audit;
 use agent_orchestrator::session_store::{self, SessionRow};
 use futures::Stream;
 use orchestrator_proto::*;
-use rusqlite::OptionalExtension;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use tonic::{Request, Response, Status};
@@ -113,22 +113,14 @@ pub(crate) async fn list(
     authorize(server, &request, "AgentSessionList").map_err(Status::from)?;
     ensure_read_enabled(server)?;
     let req = request.into_inner();
-    let rows = server
-        .state
-        .async_database
-        .reader()
-        .call(move |conn| {
-            session_store::list_sessions(
-                conn,
-                req.task_id.as_deref(),
-                req.agent_id.as_deref(),
-                req.state.as_deref(),
-            )
-            .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
-        })
-        .await
-        .map_err(agent_orchestrator::async_database::flatten_err)
-        .map_err(|e| Status::internal(e.to_string()))?;
+    let rows = session_store::list_sessions_async(
+        &server.state.async_database,
+        req.task_id,
+        req.agent_id,
+        req.state,
+    )
+    .await
+    .map_err(|e| Status::internal(e.to_string()))?;
     Ok(Response::new(AgentSessionListResponse {
         sessions: rows.into_iter().map(to_proto).collect(),
     }))
@@ -197,7 +189,7 @@ pub(crate) async fn attach(
     let context = request.get_ref().audit.clone();
     let session_id = request.get_ref().session_id.clone();
     let client_id = request.get_ref().client_id.clone();
-    let project = session_project(server, &row)?;
+    let project = session_project(server, &row).await?;
     let attempt = action_audit::begin(
         server,
         &mut request,
@@ -227,16 +219,14 @@ pub(crate) async fn attach(
     let id = req.session_id.clone();
     let client = req.client_id.clone();
     let actor2 = actor.clone();
-    let lease = match server
-        .state
-        .async_database
-        .writer()
-        .call(move |conn| {
-            session_store::acquire_writer_lease(conn, &id, &actor2, &client, LEASE_TTL_SECS)
-                .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
-        })
-        .await
-        .map_err(agent_orchestrator::async_database::flatten_err)
+    let lease = match session_store::acquire_writer_lease_async(
+        &server.state.async_database,
+        id,
+        actor2,
+        client,
+        LEASE_TTL_SECS,
+    )
+    .await
     {
         Ok(lease) => lease,
         Err(error) => {
@@ -295,7 +285,7 @@ pub(crate) async fn heartbeat(
 ) -> Result<Response<AgentSessionHeartbeatResponse>, Status> {
     ensure_control_enabled(server)?;
     let row = load(server, &request.get_ref().session_id).await?;
-    let project = session_project(server, &row)?;
+    let project = session_project(server, &row).await?;
     let context = request.get_ref().audit.clone();
     let session_id = request.get_ref().session_id.clone();
     let client_id = request.get_ref().client_id.clone();
@@ -324,16 +314,14 @@ pub(crate) async fn heartbeat(
     let req = request.into_inner();
     let id = req.session_id.clone();
     let client = req.client_id.clone();
-    let expires = match server
-        .state
-        .async_database
-        .writer()
-        .call(move |conn| {
-            session_store::heartbeat_writer(conn, &id, &client, req.fencing_token, LEASE_TTL_SECS)
-                .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
-        })
-        .await
-        .map_err(agent_orchestrator::async_database::flatten_err)
+    let expires = match session_store::heartbeat_writer_async(
+        &server.state.async_database,
+        id,
+        client,
+        req.fencing_token,
+        LEASE_TTL_SECS,
+    )
+    .await
     {
         Ok(Some(expires)) => expires,
         Ok(None) => {
@@ -381,9 +369,15 @@ pub(crate) async fn detach(
         let id = req.session_id;
         let client = req.client_id;
         let reason = req.reason;
-        server.state.async_database.writer().call(move|conn|{
-            conn.execute("UPDATE session_attachments SET detached_at=?3,reason=?4 WHERE session_id=?1 AND client_id=?2 AND mode='reader' AND detached_at IS NULL",rusqlite::params![id,client,agent_orchestrator::config_load::now_ts(),reason])?;Ok(())
-        }).await.map_err(agent_orchestrator::async_database::flatten_err).map_err(|e|Status::internal(e.to_string()))?;
+        session_store::detach_reader(
+            &server.state.async_database,
+            id,
+            client,
+            agent_orchestrator::config_load::now_ts(),
+            reason,
+        )
+        .await
+        .map_err(|e| Status::internal(e.to_string()))?;
         return Ok(Response::new(AgentSessionDetachResponse { detached: true }));
     }
     ensure_control_enabled(server)?;
@@ -392,7 +386,7 @@ pub(crate) async fn detach(
         .fencing_token
         .ok_or_else(|| Status::invalid_argument("fencing_token is required for writer detach"))?;
     let row = load(server, &request.get_ref().session_id).await?;
-    let project = session_project(server, &row)?;
+    let project = session_project(server, &row).await?;
     let context = request.get_ref().audit.clone();
     let session_id = request.get_ref().session_id.clone();
     let client_id = request.get_ref().client_id.clone();
@@ -427,16 +421,14 @@ pub(crate) async fn detach(
     let id = req.session_id.clone();
     let client = req.client_id.clone();
     let reason = req.reason.clone();
-    let detached = match server
-        .state
-        .async_database
-        .writer()
-        .call(move |conn| {
-            session_store::release_writer(conn, &id, &client, token, &reason)
-                .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
-        })
-        .await
-        .map_err(agent_orchestrator::async_database::flatten_err)
+    let detached = match session_store::release_writer_async(
+        &server.state.async_database,
+        id,
+        client,
+        token,
+        reason,
+    )
+    .await
     {
         Ok(detached) => detached,
         Err(error) => {
@@ -493,7 +485,7 @@ pub(crate) async fn send_input(
         return Err(Status::invalid_argument("idempotency_key is required"));
     }
     let row = load(server, &request.get_ref().session_id).await?;
-    let project = session_project(server, &row)?;
+    let project = session_project(server, &row).await?;
     let context = request.get_ref().audit.clone();
     let session_id = request.get_ref().session_id.clone();
     let client_id = request.get_ref().client_id.clone();
@@ -525,23 +517,13 @@ pub(crate) async fn send_input(
     if !attempt.should_execute {
         let replay_session_id = session_id.clone();
         let replay_key = key.clone();
-        let replay = server
-            .state
-            .async_database
-            .reader()
-            .call(move |conn| {
-                Ok(conn
-                    .query_row(
-                        "SELECT request_hash,result FROM session_control_actions
-                         WHERE session_id=?1 AND idempotency_key=?2",
-                        rusqlite::params![replay_session_id, replay_key],
-                        |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
-                    )
-                    .optional()?)
-            })
-            .await
-            .map_err(agent_orchestrator::async_database::flatten_err)
-            .map_err(|error| attempt.status(Status::internal(error.to_string())))?;
+        let replay = session_control_audit::read_prior_outcome(
+            &server.state.async_database,
+            replay_session_id,
+            replay_key,
+        )
+        .await
+        .map_err(|error| attempt.status(Status::internal(error.to_string())))?;
         return match replay {
             Some((stored_hash, result))
                 if stored_hash == replay_fingerprint && result == "accepted" =>
@@ -577,17 +559,10 @@ pub(crate) async fn send_input(
     let id = req.session_id.clone();
     let client = req.client_id.clone();
     let token = req.fencing_token;
-    let valid = server
-        .state
-        .async_database
-        .reader()
-        .call(move |conn| {
-            session_store::validate_writer(conn, &id, &client, token)
-                .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
-        })
-        .await
-        .map_err(agent_orchestrator::async_database::flatten_err)
-        .map_err(|e| attempt.status(Status::internal(e.to_string())))?;
+    let valid =
+        session_store::validate_writer_async(&server.state.async_database, id, client, token)
+            .await
+            .map_err(|e| attempt.status(Status::internal(e.to_string())))?;
     if !valid {
         return Err(attempt
             .failed(
@@ -604,14 +579,27 @@ pub(crate) async fn send_input(
     let request_hash = hex::encode(Sha256::digest(&req.input));
     let insert_hash = request_hash.clone();
     let audit_request_id = attempt.request_id.clone();
-    let mut owns_reservation=server.state.async_database.writer().call(move|conn|{
-        let n=conn.execute("INSERT OR IGNORE INTO session_control_actions(session_id,actor,client_id,action,idempotency_key,request_hash,result,fencing_token,created_at,request_id) VALUES(?1,?2,?3,'send_input',?4,?5,'reserved',?6,?7,?8)",rusqlite::params![sid,actor2,client2,key,insert_hash,token,agent_orchestrator::config_load::now_ts(),audit_request_id])?;Ok(n==1)
-    }).await.map_err(agent_orchestrator::async_database::flatten_err).map_err(|e|Status::internal(e.to_string()))?;
-    if !owns_reservation {
-        let sid = req.session_id.clone();
-        let key = req.idempotency_key.clone();
-        let (stored_hash,result)=server.state.async_database.reader().call(move|conn|Ok(conn.query_row("SELECT request_hash,result FROM session_control_actions WHERE session_id=?1 AND idempotency_key=?2",rusqlite::params![sid,key],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?))
-            .await.map_err(agent_orchestrator::async_database::flatten_err).map_err(|e|Status::internal(e.to_string()))?;
+    let reservation = session_control_audit::reserve_send_input(
+        &server.state.async_database,
+        session_control_audit::SendInputReservation {
+            session_id: sid,
+            actor: actor2,
+            client_id: client2,
+            idempotency_key: key,
+            request_hash: insert_hash,
+            fencing_token: token,
+            created_at: agent_orchestrator::config_load::now_ts(),
+            request_id: audit_request_id,
+        },
+    )
+    .await
+    .map_err(|e| Status::internal(e.to_string()))?;
+    let mut owns_reservation = matches!(reservation, session_control_audit::Reservation::Reserved);
+    if let session_control_audit::Reservation::Replayed {
+        request_hash: stored_hash,
+        result,
+    } = reservation
+    {
         if stored_hash != request_hash {
             return Err(Status::aborted(
                 "idempotency key was used for different input",
@@ -632,27 +620,15 @@ pub(crate) async fn send_input(
                 let sid = req.session_id.clone();
                 let key = req.idempotency_key.clone();
                 let request_id = attempt.request_id.clone();
-                owns_reservation = server
-                    .state
-                    .async_database
-                    .writer()
-                    .call(move |conn| {
-                        let changed = conn.execute(
-                            "UPDATE session_control_actions
-                         SET result='reserved',request_id=?3,created_at=?4
-                         WHERE session_id=?1 AND idempotency_key=?2 AND result='failed'",
-                            rusqlite::params![
-                                sid,
-                                key,
-                                request_id,
-                                agent_orchestrator::config_load::now_ts()
-                            ],
-                        )?;
-                        Ok(changed == 1)
-                    })
-                    .await
-                    .map_err(agent_orchestrator::async_database::flatten_err)
-                    .map_err(|error| Status::internal(error.to_string()))?;
+                owns_reservation = session_control_audit::reclaim_failed_reservation(
+                    &server.state.async_database,
+                    sid,
+                    key,
+                    request_id,
+                    agent_orchestrator::config_load::now_ts(),
+                )
+                .await
+                .map_err(|error| Status::internal(error.to_string()))?;
                 if !owns_reservation {
                     return Err(Status::aborted(
                         "matching input request was concurrently retried",
@@ -676,7 +652,9 @@ pub(crate) async fn send_input(
         "failed"
     }
     .to_owned();
-    server.state.async_database.writer().call(move|conn|{conn.execute("UPDATE session_control_actions SET result=?3 WHERE session_id=?1 AND idempotency_key=?2",rusqlite::params![sid,key,result])?;Ok(())}).await.map_err(agent_orchestrator::async_database::flatten_err).map_err(|e|Status::internal(e.to_string()))?;
+    session_control_audit::record_result(&server.state.async_database, sid, key, result)
+        .await
+        .map_err(|e| Status::internal(e.to_string()))?;
     if let Err(error) = write_result {
         return Err(attempt
             .failed(
@@ -708,7 +686,7 @@ pub(crate) async fn read(
     ensure_read_enabled(server)?;
     let req = request.into_inner();
     let row = load(server, &req.session_id).await?;
-    let project_id = session_project(server, &row)?;
+    let project_id = session_project(server, &row).await?;
     let reader_permit = server.session_read_limits.acquire(&req.session_id).await?;
     let path = if std::path::Path::new(&row.transcript_path).exists() {
         row.transcript_path.clone()
@@ -861,7 +839,7 @@ pub(crate) async fn close(
         ));
     }
     let row = load(server, &request.get_ref().session_id).await?;
-    let project = session_project(server, &row)?;
+    let project = session_project(server, &row).await?;
     let context = request.get_ref().audit.clone();
     let session_id = request.get_ref().session_id.clone();
     let reason = request.get_ref().reason.clone();
@@ -918,17 +896,25 @@ pub(crate) async fn close(
     let reason = req.reason.clone();
     let hash = request_hash.clone();
     let audit_request_id = attempt.request_id.clone();
-    let inserted = server.state.async_database.writer().call(move |conn| {
-        let count = conn.execute(
-            "INSERT OR IGNORE INTO session_control_actions(session_id,actor,action,idempotency_key,request_hash,result,reason,created_at,request_id) VALUES(?1,?2,'close',?3,?4,'reserved',?5,?6,?7)",
-            rusqlite::params![sid, actor2, key, hash, reason, agent_orchestrator::config_load::now_ts(),audit_request_id],
-        )?;
-        Ok(count == 1)
-    }).await.map_err(agent_orchestrator::async_database::flatten_err).map_err(|e| Status::internal(e.to_string()))?;
-    if !inserted {
-        let sid = req.session_id.clone();
-        let key = req.idempotency_key.clone();
-        let stored:String=server.state.async_database.reader().call(move|conn|Ok(conn.query_row("SELECT request_hash FROM session_control_actions WHERE session_id=?1 AND idempotency_key=?2",rusqlite::params![sid,key],|r|r.get(0))?)).await.map_err(agent_orchestrator::async_database::flatten_err).map_err(|e|Status::internal(e.to_string()))?;
+    let reservation = session_control_audit::reserve_close(
+        &server.state.async_database,
+        session_control_audit::CloseReservation {
+            session_id: sid,
+            actor: actor2,
+            idempotency_key: key,
+            request_hash: hash,
+            reason,
+            created_at: agent_orchestrator::config_load::now_ts(),
+            request_id: audit_request_id,
+        },
+    )
+    .await
+    .map_err(|e| Status::internal(e.to_string()))?;
+    if let session_control_audit::Reservation::Replayed {
+        request_hash: stored,
+        ..
+    } = reservation
+    {
         if stored != request_hash {
             return Err(attempt
                 .failed(
@@ -963,19 +949,7 @@ pub(crate) async fn close(
             .await;
         let sid = req.session_id.clone();
         let key = req.idempotency_key.clone();
-        let _ = server
-            .state
-            .async_database
-            .writer()
-            .call(move |conn| {
-                conn.execute(
-                    "UPDATE session_control_actions SET result='failed'
-                     WHERE session_id=?1 AND idempotency_key=?2",
-                    rusqlite::params![sid, key],
-                )?;
-                Ok(())
-            })
-            .await;
+        let _ = session_control_audit::record_failed(&server.state.async_database, sid, key).await;
         return Err(attempt
             .failed(
                 server,
@@ -985,7 +959,7 @@ pub(crate) async fn close(
     }
     let sid = req.session_id.clone();
     let key = req.idempotency_key.clone();
-    let _=server.state.async_database.writer().call(move|conn|{conn.execute("UPDATE session_control_actions SET result='accepted' WHERE session_id=?1 AND idempotency_key=?2",rusqlite::params![sid,key])?;Ok(())}).await;
+    let _ = session_control_audit::record_accepted(&server.state.async_database, sid, key).await;
     emit(
         server,
         &row,
@@ -1008,16 +982,8 @@ pub(crate) async fn resolve_pid(
     authorize(server, &request, "AgentSessionResolvePid").map_err(Status::from)?;
     let pid = request.into_inner().pid;
     ensure_read_enabled(server)?;
-    let rows = server
-        .state
-        .async_database
-        .reader()
-        .call(move |conn| {
-            session_store::list_sessions_by_pid(conn, pid)
-                .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
-        })
+    let rows = session_store::list_sessions_by_pid_async(&server.state.async_database, pid)
         .await
-        .map_err(agent_orchestrator::async_database::flatten_err)
         .map_err(|e| Status::internal(e.to_string()))?;
     Ok(Response::new(AgentSessionResolvePidResponse {
         sessions: rows.into_iter().map(to_proto).collect(),
@@ -1029,17 +995,13 @@ fn process_identity_matches(row: &SessionRow) -> bool {
         == session_store::ProcessIdentityStatus::VerifiedLive
 }
 
-fn session_project(server: &OrchestratorServer, row: &SessionRow) -> Result<String, Status> {
-    agent_orchestrator::db::open_conn(&server.state.db_path)
-        .and_then(|conn| {
-            conn.query_row(
-                "SELECT project_id FROM tasks WHERE id=?1",
-                [&row.task_id],
-                |record| record.get(0),
-            )
-            .map_err(Into::into)
-        })
-        .map_err(|error| Status::internal(error.to_string()))
+async fn session_project(server: &OrchestratorServer, row: &SessionRow) -> Result<String, Status> {
+    agent_orchestrator::task_repository::queries::project_id_for_task(
+        &server.state.async_database,
+        row.task_id.clone(),
+    )
+    .await
+    .map_err(|error| Status::internal(error.to_string()))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1066,35 +1028,22 @@ async fn record_session_action(
     let request_hash = hex::encode(Sha256::digest(
         format!("{action}:{client_id:?}:{fencing_token:?}:{reason:?}").as_bytes(),
     ));
-    server
-        .state
-        .async_database
-        .writer()
-        .call(move |conn| {
-            conn.execute(
-                "INSERT INTO session_control_actions
-                 (session_id,actor,client_id,action,idempotency_key,request_hash,result,reason,
-                  fencing_token,created_at,request_id)
-                 VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
-                rusqlite::params![
-                    session_id,
-                    actor,
-                    client_id,
-                    action,
-                    idempotency_key,
-                    request_hash,
-                    result,
-                    reason,
-                    fencing_token,
-                    agent_orchestrator::config_load::now_ts(),
-                    request_id,
-                ],
-            )?;
-            Ok(())
-        })
-        .await
-        .map_err(agent_orchestrator::async_database::flatten_err)
-        .map_err(|error| Status::internal(error.to_string()))
+    session_control_audit::insert_terminal(
+        &server.state.async_database,
+        session_id,
+        actor,
+        client_id,
+        action,
+        Some(idempotency_key),
+        request_hash,
+        result,
+        reason,
+        fencing_token,
+        agent_orchestrator::config_load::now_ts(),
+        request_id,
+    )
+    .await
+    .map_err(|error| Status::internal(error.to_string()))
 }
 
 async fn emit(
