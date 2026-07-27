@@ -223,8 +223,13 @@ eliminate.
   wrappers write their fixtures as here-document bodies and spell hazards in prose
   with a separator, and `test-bash32-lexer.sh` hit it during governance and says
   so at the line. Distinguishing mention from invocation here needs per-character
-  quote annotation rather than per-line text, which is more than the seven rules
-  are worth.
+  quote annotation rather than per-line text, which is more than the seven
+  construct rules are worth.
+- **`unclosed-heredoc` is an eighth rule, not an eighth class.** DD-146's count
+  of seven refers to bash 3.2 constructs and is unchanged; this one reports that
+  the scan of a file was incomplete, which is a fact about the scanner rather
+  than about bash. `test-bash32-compat.sh` still executes exactly seven classes
+  under the real interpreter.
 - **Single-quoted regions are treated as inert.** A hazard inside `bash -c
   '...'` or `eval '...'` is not reported. This was true before FR-138 as well —
   the old `COMMAND_POSITION` did not match after an opening quote either — but it
