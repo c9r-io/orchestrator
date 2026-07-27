@@ -269,6 +269,16 @@ jobs:
         continue-on-error: true
         run: ./scripts/qa/test-bash32-lexer.sh
 
+      - name: Governance execution cost and budget
+        id: cost
+        continue-on-error: true
+        run: ./scripts/qa/ci-cost.rb
+
+      - name: Governance execution cost negative fixtures
+        id: cost-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-ci-cost.sh
+
       - name: Legacy coordination decommission contracts
         id: decommission
         continue-on-error: true
@@ -335,6 +345,8 @@ jobs:
             persistence-extraction=${{ steps.persistence-extraction.outcome }}
             doc-lifecycle=${{ steps.doc-lifecycle.outcome }}
             bash32-lexer=${{ steps.bash32-lexer.outcome }}
+            cost=${{ steps.cost.outcome }}
+            cost-fixtures=${{ steps.cost-fixtures.outcome }}
             decommission=${{ steps.decommission.outcome }}
             codex-resume=${{ steps.codex-resume.outcome }}
             filesystem-trigger=${{ steps.filesystem-trigger.outcome }}

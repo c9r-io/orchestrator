@@ -26,7 +26,18 @@ module RustLexer
   # Masked: line comments, block comments (nested, as Rust allows), char
   # literals, byte/normal strings with escapes, and raw strings of any hash
   # depth. Everything else is passed through unchanged.
+  #
+  # Walked as an array of characters rather than by indexing the String. The
+  # algorithm below is unchanged; only the storage is. `String#[]` on a
+  # multibyte-capable string is not the O(1) operation it looks like, and this
+  # loop performs one per character over every tracked Rust file: measured on
+  # the largest of them (116 804 characters), a bare walk doing no work at all
+  # cost 892 ms through `String#[]` and 15 ms through `chars`. That difference,
+  # multiplied by the four governance gates that call this and by the fixture
+  # cases that re-run each of them, was the largest single item in the
+  # governance CI bill (FR-140, DD-153).
   def mask_literals(source)
+    source = source.chars
     out = source.dup
     length = source.length
     index = 0
@@ -40,7 +51,7 @@ module RustLexer
 
       # Line comment: to the newline, which stays.
       if char == "/" && source[index + 1] == "/"
-        stop = source.index("\n", index) || length
+        stop = index_of(source, "\n", index) || length
         blank.call(index, stop)
         index = stop
         next
@@ -72,9 +83,8 @@ module RustLexer
       raw = raw_string_start(source, index)
       if raw
         hashes, body_start = raw
-        terminator = "\"#{'#' * hashes}"
-        stop = source.index(terminator, body_start)
-        stop = stop ? stop + terminator.length : length
+        stop = index_of_terminator(source, hashes, body_start)
+        stop = stop ? stop + hashes + 1 : length
         blank.call(index, stop)
         index = stop
         next
@@ -110,7 +120,37 @@ module RustLexer
       index += 1
     end
 
-    out
+    out.join
+  end
+
+  # `Array#index` takes no start offset and `String#index` is not available once
+  # the source is an array of characters, so both searches the masker needs are
+  # spelled out here. Both are plain forward scans; neither is on a hot path
+  # that the character walk was not already paying for.
+  def index_of(source, char, from)
+    cursor = from
+    length = source.length
+    while cursor < length
+      return cursor if source[cursor] == char
+
+      cursor += 1
+    end
+    nil
+  end
+
+  # The end of a raw string body: a quote followed by exactly `hashes` hashes.
+  # Returns the offset of that quote, or nil when the file ends first.
+  def index_of_terminator(source, hashes, from)
+    cursor = from
+    length = source.length
+    while (cursor = index_of(source, "\"", cursor))
+      matched = 0
+      matched += 1 while matched < hashes && source[cursor + 1 + matched] == "#"
+      return cursor if matched == hashes
+
+      cursor += 1
+    end
+    nil
   end
 
   # `r`/`br` followed by zero or more `#` then a quote. Returns [hashes, offset

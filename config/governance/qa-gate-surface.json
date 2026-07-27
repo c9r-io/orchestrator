@@ -42,7 +42,9 @@
       "reason": "sourced by test-slack-live-certification.sh and certify-slack-managed-live.sh; both are classified above"
     }
   ],
-  "staleClaimExemptions": [],
+  "staleClaimExemptions": [
+
+  ],
   "commandSources": {
     "description": "What each CI job puts on PATH, so a ci-required gate's `command -v` preamble can be checked against the job that runs it. FR-134 found three ci-required gates exiting on `missing command: rg` before their first assertion, in two jobs that had been green-lit by a wiring check which only asked whether they were referenced.",
     "runnerBaseline": [
@@ -56,7 +58,7 @@
       "shasum",
       "stat"
     ],
-    "runnerBaselineReason": "Present on both ubuntu-latest and macos-latest runner images. This is the one input that cannot be derived from the repository, so it is declared \u2014 and deliberately minimal: anything a job could plausibly need to install is left out, which makes the check strict rather than permissive. ripgrep is absent from both images and is exactly what this list must not paper over.",
+    "runnerBaselineReason": "Present on both ubuntu-latest and macos-latest runner images. This is the one input that cannot be derived from the repository, so it is declared — and deliberately minimal: anything a job could plausibly need to install is left out, which makes the check strict rather than permissive. ripgrep is absent from both images and is exactly what this list must not paper over.",
     "packages": {
       "jq": [
         "jq"
@@ -78,7 +80,9 @@
       ]
     },
     "actions": {
-      "actions/checkout": [],
+      "actions/checkout": [
+
+      ],
       "actions/setup-node": [
         "node",
         "npm",
@@ -89,10 +93,18 @@
         "rustc",
         "rustup"
       ],
-      "Swatinem/rust-cache": [],
-      "taiki-e/install-action": [],
-      "actions/upload-artifact": [],
-      "./.github/actions/provider-stubs": []
+      "Swatinem/rust-cache": [
+
+      ],
+      "taiki-e/install-action": [
+
+      ],
+      "actions/upload-artifact": [
+
+      ],
+      "./.github/actions/provider-stubs": [
+
+      ]
     }
   },
   "workspaceScope": {
@@ -107,7 +119,7 @@
   },
   "providerStubs": {
     "action": "./.github/actions/provider-stubs",
-    "description": "Installs claude and codex stubs that exit 97. Required in every job that runs a ci-required gate whose provider isolation is anything other than no-provider, so that isolation is never the single barrier. FR-127 installed them inline in the governance job only, which left the coordination-strangler job \u2014 whose gate rests entirely on fixture pinning \u2014 with no second line at all.",
+    "description": "Installs claude and codex stubs that exit 97. Required in every job that runs a ci-required gate whose provider isolation is anything other than no-provider, so that isolation is never the single barrier. FR-127 installed them inline in the governance job only, which left the coordination-strangler job — whose gate rests entirely on fixture pinning — with no second line at all.",
     "exemptJobs": [
       {
         "job": "slack-certification-recorded",
@@ -167,7 +179,7 @@
         "mode": "no-provider"
       },
       "note": "Run with FR126_FAST=1 in CI. The repository-wide gates that the default mode re-runs (fmt, clippy, workspace tests, coordination strangler, coverage fixtures, qa-doc-lint) all execute as sibling jobs in the same workflow, so the certifying aggregate is the workflow, not this single invocation.",
-      "workspaceScopeReason": "The unexcluded `cargo test --workspace` sits behind `FR126_FAST != 1`, and ci.yml runs this gate with FR126_FAST=1, so CI never reaches it. It runs in the local release aggregate on macOS, where the Tauri frameworks are system libraries \u2014 and that is currently the only place orchestrator-gui is compiled at all, since the sibling test and clippy jobs exclude it and no job installs its dependencies. Excluding it here to match them would delete the crate's last coverage rather than align anything. FR-076 requirement 1 owns building it in CI."
+      "workspaceScopeReason": "The unexcluded `cargo test --workspace` sits behind `FR126_FAST != 1`, and ci.yml runs this gate with FR126_FAST=1, so CI never reaches it. It runs in the local release aggregate on macOS, where the Tauri frameworks are system libraries — and that is currently the only place orchestrator-gui is compiled at all, since the sibling test and clippy jobs exclude it and no job installs its dependencies. Excluding it here to match them would delete the crate's last coverage rather than align anything. FR-076 requirement 1 owns building it in CI."
     },
     {
       "path": "scripts/qa/test-agent-driver-production-parity.sh",
@@ -356,6 +368,26 @@
         "mode": "no-provider"
       },
       "note": "asserts the scanner's lexical state and its per-file line census. Hosted on the governance job rather than the fixtures job on purpose: nothing here depends on the host's bash version, only on the lexer, and the macOS leg's scarce minutes are better spent on the semantics test-bash32-compat.sh executes. Builds scratch git repositories under a temporary directory; starts no daemon and never writes the working tree."
+    },
+    {
+      "path": "scripts/qa/ci-cost.rb",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Offline: reads the cost ledger, ci.yml, this manifest and git. --refresh is the only path that talks to GitHub and it refuses to write unattended. On the governance job rather than a job of its own because a gate that exists to measure governance cost should not add a job to the bill (FR-140)."
+    },
+    {
+      "path": "scripts/qa/test-ci-cost.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Negative fixtures for the cost ledger and the budget. Builds scratch trees under TMPDIR; no daemon, no database, no provider, no network."
     },
     {
       "path": "scripts/qa/test-coverage-governance-mainpath.sh",
