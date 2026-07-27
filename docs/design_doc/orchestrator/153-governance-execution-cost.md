@@ -153,6 +153,16 @@ says: governance alone may not cost what the entire pipeline used to. At the
 moment it was set the pair measured 4798 s, so it binds immediately and by a
 wide margin.
 
+Two independent routes reached the same number, which is worth recording because
+only one of them was permitted. The arithmetic route — the smallest multiple of
+five minutes clearing the post-fix measurement with headroom of at least twice
+the measured run-to-run spread (±7%, so ≥15%) — gives 2317 × 1.15 = 2664 s,
+rounded up to 2700 s. That route was **not** used to set the ceiling, because it
+is derived from the current value; it is recorded as a check that the
+independently chosen line is achievable rather than aspirational. Measured at
+closure: **2317 s against 2700 s, 14% headroom** — the ceiling sits 16.5% above
+the measured total.
+
 **Review condition.** A new gate that does not fit is not grounds to raise this
 silently. Whoever adds it either makes room or raises the ceiling in
 `ci-step-cost.json` with a written reason and a new date. Revisit
@@ -210,6 +220,40 @@ The last two rows are the control: neither is a `mask_literals` consumer, and
 neither moved. A change that made everything faster would be a changed
 measurement rather than a fixed defect.
 
+### In CI, which is what the budget is enforced against
+
+Run `30275254232` (before) against run `30288601535` (after):
+
+| job | before | after |
+|---|---|---|
+| `governance` | 3286 s | **1938 s** |
+| `ci-environment-parity` | 1512 s | **379 s** |
+| combined | 4798 s | **2317 s** (−52%) |
+
+`ci-environment-parity` falls furthest because it runs the affected gates
+**twice** by construction, once with `CI` cleared and once with it set.
+
+Per step, which is the discriminator. Every step that moved more than noise is a
+`mask_literals` consumer, and every step that is not one did not move:
+
+| step | before | after | change |
+|---|---|---|---|
+| Persistence API capability boundary | 292 s | 35 s | **−88%** |
+| Persistence dependency chokepoint | 409 s | 55 s | **−87%** |
+| Governance ledger regeneration tooling | 261 s | 39 s | **−85%** |
+| Core crate boundary and schema snapshot | 610 s | 126 s | **−79%** |
+| Legacy coordination decommission contracts | 205 s | 139 s | −32% |
+| Agent driver execution migration contracts | 278 s | 271 s | −3% |
+| Persistence crate extraction contracts | 202 s | 197 s | −2% |
+| Filesystem trigger contracts | 337 s | 356 s | +6% |
+| Verify gate enforcement surface negative fixtures | 484 s | 525 s | +8% |
+| Agent driver production parity | 56 s | 62 s | +11% |
+
+This is FR-130's "ruler before measurement" discriminator applied to cost. A
+faster runner would have moved every row; only the consumers moved, and the
+non-consumers scatter either side of zero, which is what run-to-run variance
+looks like.
+
 ## Accepted costs
 
 - The ledger has to be refreshed by hand from a completed run. Automating it
@@ -244,5 +288,9 @@ measurement rather than a fixed defect.
 - **The lexer is faster, not asymptotically better.** It is still a linear scan
   in Ruby. A corpus an order of magnitude larger would need a different answer.
 - **The ±7% spread is measured over six runs on GitHub-hosted `ubuntu-latest`.**
-  It is a sample, not a guarantee, and the budget's 44% headroom at closure
-  covers considerably more than it.
+  It is a sample, not a guarantee. The budget's headroom at closure is 14%
+  (2317 s against 2700 s), which is twice the measured spread and not much more
+  — the next expensive gate is likely to be the one that forces the written
+  trade-off the review condition describes. That is the mechanism working, but
+  it means the ceiling is not comfortable, and it should not be read as though
+  it were.

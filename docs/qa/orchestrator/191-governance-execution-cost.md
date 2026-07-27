@@ -188,13 +188,33 @@ Taken during governance at `cc9631d9`, on macOS with system Ruby 2.6.
 | 26 hand-written adversarial constructs | **26/26 identical** |
 | 7000 random inputs (2000 slices of real sources, 5000 strings over the driving alphabet) | **0 differences** |
 
-**Cost attribution**, from real CI run `30275254232`:
+**Cost attribution**, from real CI runs `30275254232` (before) and
+`30288601535` (after):
 
-| | seconds |
-|---|---|
-| `governance` | 3286 (8 unattributed) |
-| `ci-environment-parity` | 1512 (5 unattributed) |
-| combined | **4798** against a 2700 s ceiling |
+| job | before | after |
+|---|---|---|
+| `governance` | 3286 s (8 unattributed) | **1938 s** (5 unattributed) |
+| `ci-environment-parity` | 1512 s (5 unattributed) | **379 s** (5 unattributed) |
+| combined | 4798 s | **2317 s** against the 2700 s ceiling, 14% headroom |
+
+Per step, which is the discriminator that separates a fixed defect from a faster
+runner — every step that moved beyond noise is a `mask_literals` consumer, and
+every step that is not one did not move:
+
+| step | before | after | change |
+|---|---|---|---|
+| Persistence API capability boundary | 292 s | 35 s | **−88%** |
+| Persistence dependency chokepoint | 409 s | 55 s | **−87%** |
+| Governance ledger regeneration tooling | 261 s | 39 s | **−85%** |
+| Core crate boundary and schema snapshot | 610 s | 126 s | **−79%** |
+| Agent driver execution migration contracts | 278 s | 271 s | −3% |
+| Persistence crate extraction contracts | 202 s | 197 s | −2% |
+| Filesystem trigger contracts | 337 s | 356 s | +6% |
+| Verify gate enforcement surface negative fixtures | 484 s | 525 s | +8% |
+| Agent driver production parity | 56 s | 62 s | +11% |
+
+Both new gates passed on their first CI execution: `cost=success`,
+`cost-fixtures=success` in run `30288601535`.
 
 **The correction that reshaped the FR** — where the time was, and was not:
 
