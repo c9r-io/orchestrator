@@ -77,7 +77,7 @@ Present the plan to the user for approval before proceeding.
 
 When backend work is needed:
 
-1. **Create FR for backend**: Generate an FR document under `docs/feature_request/` covering the API/data requirements derived from the brief. Link it back to the Design Brief.
+1. **Create FR for backend**: Generate an FR document under `docs/feature_request/` covering the API/data requirements derived from the brief. Link it back to the Design Brief. New FR documents follow the authoring contract in `fr-governance` SKILL Phase 0 — every count carries its method and revision, unverified claims are marked.
 2. **Implement frontend with mocks**: Build the UI against mock data or stub APIs so visual validation can proceed independently.
 3. **Track dependency**: Note in the brief's status that backend FR(s) are pending: `Status: In Progress (backend: FR-XXX pending)`
 4. **Reconnect**: Once backend FR is implemented (via `fr-governance`), replace mocks with real API calls.

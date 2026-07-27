@@ -5,7 +5,17 @@ description: Govern feature request (FR) documents through their full lifecycle 
 
 # FR Governance Workflow
 
-Execute feature request governance in four phases: Select, Plan, Implement, Verify & Close.
+Execute feature request governance through its phases: Author, Select, Plan, Implement, Verify & Close, and — on request — Post-closure audit.
+
+## Phase 0: Author (when creating a new FR)
+
+An FR is a funded hypothesis, not a specification. Phase 2 step 0 will rebuild every factual claim it makes; write claims so they can be rebuilt *selectively* rather than distrusted wholesale.
+
+1. **Every count carries its method and revision.** Write `200 references / 37 files (rust_source.rb scannable_source, at 2b5738ad)`, not `200 references across 37 files`. A number whose derivation is named can be re-derived alone; a bare number taints every other number in the document.
+2. **Mark what was not verified.** `single-method, unverified` is a valid and useful annotation — it routes the implementer's attention. The corrections record across FR-127–144 shows the expensive errors were not the marked-uncertain claims but the confidently bare ones. A precedent cited as transferable ("do it the way batch X did") must name the premise that makes it transfer; FR-141 B5 found the B4a precedent did not transfer because its premise — imports resolving inside the layer — did not hold.
+3. **Apply Phase 6's measurement discipline to every number you write.** The two rules there (second derivation, pinned revisions) exist because authoring-time numbers failed exactly those ways.
+
+FRs are also created by `ticket-fix` and `design-governance`; this contract applies wherever the document is authored.
 
 ## Phase 1: Select FR
 
@@ -81,6 +91,11 @@ When an assertion's subject is **whether something actually happens** — a comm
 1. **Text presence standing in for execution.** `grep -F "$script" "$job_block"` is satisfied by a commented-out step, by the script's name in a `name:` field, or by a mention in a heredoc. A `grep 'export PATH=...'` isolation check is satisfied by that line commented out. Both gates then certify an enforcement that does not run.
 2. **Enumeration standing in for coverage.** A hand-listed set of scanned files, a declared list of mirror roots, a non-recursive `ls dir/*.sh` — each guards exactly what was known when it was written. The next instance lands outside it silently. The tell: the list grows by one entry per audit round.
 3. **Counting or regex standing in for parsing.** Counting `{` and `}` per line to find a block's end breaks on a brace inside a string literal and silently swallows the rest of the file. Comparing whole-file totals ("as many `binary: fake-*` lines as `provider:` lines") does not establish the per-object association the contract claims.
+
+Two more shapes joined the list during the FR-136–144 series:
+
+4. **A text pattern standing in for a reachability property.** FR-144 counted the literal `done < <(jq` and found 17 feed sites; the property that mattered — *can this feed reach jq*, the transitive closure through same-file helper functions — gives 39 and inverts which gate is the epicentre. When the claim is about what *can happen*, a grep measures spelling. Compute the closure.
+5. **A check that can report PASS having read no input.** A loop fed by `< <(jq ...)` whose exit status nobody observes reads zero rows when jq fails, never runs its body, and returns success — `set -euo pipefail` does not reach inside a process substitution, and condition-position invocation disables `set -e` for the whole call tree beneath it. Zero iterations and N passing iterations are identical in the exit code. The reader of a feed must observe the feed's status, and whether empty input fails open or closed is a per-check decision, never the loop's default. (FR-144: the enforcement-surface gate printed `13 passed, 0 failed` over a manifest jq could not parse.)
 
 The rule: **a proxy may be an additional condition, never the only one.** Pair it with something that observes the fact itself — parse the workflow step rather than grep the block, run the gate behind a stub that fails loudly if the real binary is reached, derive the covered set from the repository rather than from a list, associate per object rather than per file total.
 
@@ -186,3 +201,14 @@ at once.
 3. Update status from `Proposed` to `In Progress`
 4. Update `docs/feature_request/README.md` table status to `In Progress`
 5. Summarize remaining work and failing QA scenarios to the user
+
+## Phase 6: Post-closure audit (on request)
+
+Closure certifies that the FR's acceptance criteria were met. It does not certify that they were the right criteria. The highest-yield findings in this repository's governance record — the unguarded `OUTCOMES` aggregation, the two extra doors the connection-boundary FR could not see, the history limit that had never once applied, the gate that printed PASS over input it could not read — all came from audits performed *after* closure, by re-deriving the closed FR's claims against the tree rather than re-reading its evidence.
+
+The audit is itself a measurement exercise, and this repository's audit trail records the auditor failing the same ways the authors did. Hence:
+
+1. **Re-derive every number by a second route before reporting it** — a different tool, or the same tool at a different unit. The recorded single-derivation failures: `grep -c` counts lines, not occurrences (74 migrations that were 37; 2 CASCADE clauses that were 3); `git log --reverse -1` returns the newest match, not the oldest; a text pattern is not a reachability property (17 jq feeds that were 39).
+2. **Pin both revisions before comparing two states.** "Passes locally, fails in CI" means nothing until both sides name their commit — the local tree may simply be newer than the run being compared against.
+3. **Attack the acceptance criteria, not the implementation.** The implementation was verified once already; the criteria were only ever self-certified by the effort that wrote them. Apply §4.4's question one level up: what state would satisfy every criterion while the goal is unmet?
+4. **A finding that generalizes goes into §4.4 or a new FR, not only into a DD's known limits.** Design records are write-once archives that no later FR's working set re-reads; skills are demonstrably in the working set — implementing agents cite §4.4 by name, unprompted. Knowledge parked only in a DD is parked where the next author will not find it.

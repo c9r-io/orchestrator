@@ -54,7 +54,7 @@ Resolve QA tickets end-to-end: read the ticket, classify the issue (false positi
    - Action:
      - Check `docs/feature_request/` for an existing open FR that covers this gap.
      - If an FR exists: link the ticket to it and note the gap in the FR doc.
-     - If no FR exists: create a new FR document under `docs/feature_request/` with the gap description, acceptance criteria derived from the ticket’s reproduction steps, and P2 priority as default.
+     - If no FR exists: create a new FR document under `docs/feature_request/` with the gap description, acceptance criteria derived from the ticket’s reproduction steps, and P2 priority as default. New FR documents follow the authoring contract in `fr-governance` SKILL Phase 0 — every count carries its method and revision, unverified claims are marked.
      - Update `docs/feature_request/README.md` index.
      - Update the relevant QA doc to note the gap as a known limitation (not a test error).
      - Do NOT attempt to fix the code — this is a design-level issue that needs FR governance.
