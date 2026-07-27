@@ -253,6 +253,12 @@
       "sql": 6,
       "category": "persistence-layer"
     },
+    "crates/orchestrator-persistence/src/scheduler_state.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 2,
+      "sql": 15,
+      "category": "persistence-layer"
+    },
     "crates/orchestrator-persistence/src/schema.rs": {
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 0,
@@ -343,42 +349,6 @@
       "sql": 8,
       "category": "persistence-layer"
     },
-    "crates/orchestrator-scheduler/src/scheduler/item_generate.rs": {
-      "crate": "crates/orchestrator-scheduler",
-      "rusqlite": 3,
-      "sql": 3,
-      "category": "borrowed-connection-raw-sql"
-    },
-    "crates/orchestrator-scheduler/src/scheduler/phase_runner/spawn.rs": {
-      "crate": "crates/orchestrator-scheduler",
-      "rusqlite": 1,
-      "sql": 0,
-      "category": "driver-error-type"
-    },
-    "crates/orchestrator-scheduler/src/scheduler/runtime.rs": {
-      "crate": "crates/orchestrator-scheduler",
-      "rusqlite": 1,
-      "sql": 1,
-      "category": "borrowed-connection-raw-sql"
-    },
-    "crates/orchestrator-scheduler/src/scheduler/safety/restart.rs": {
-      "crate": "crates/orchestrator-scheduler",
-      "rusqlite": 2,
-      "sql": 2,
-      "category": "borrowed-connection-raw-sql"
-    },
-    "crates/orchestrator-scheduler/src/scheduler/spawn.rs": {
-      "crate": "crates/orchestrator-scheduler",
-      "rusqlite": 2,
-      "sql": 2,
-      "category": "borrowed-connection-raw-sql"
-    },
-    "crates/orchestrator-scheduler/src/scheduler/task_state.rs": {
-      "crate": "crates/orchestrator-scheduler",
-      "rusqlite": 8,
-      "sql": 8,
-      "category": "borrowed-connection-raw-sql"
-    },
     "crates/orchestrator-security/src/lib.rs": {
       "crate": "crates/orchestrator-security",
       "rusqlite": 2,
@@ -418,8 +388,8 @@
   },
   "totals": {
     "members": 14,
-    "referencedFiles": 41,
-    "rusqlite": 223,
-    "sql": 514
+    "referencedFiles": 36,
+    "rusqlite": 208,
+    "sql": 513
   }
 }

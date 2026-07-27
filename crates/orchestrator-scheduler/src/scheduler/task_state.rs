@@ -14,45 +14,19 @@ async fn persist_task_execution_metric(
 ) -> Result<()> {
     let (total_items, _finished_items, failed_items) =
         state.task_repo.load_task_item_counts(task_id).await?;
-    let task_id_owned = task_id.to_owned();
-    let status_owned = status.to_owned();
-    state
-        .async_database
-        .writer()
-        .call(move |conn| {
-            let command_runs: i64 = conn.query_row(
-                "SELECT COUNT(*) FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = ?1)",
-                rusqlite::params![task_id_owned],
-                |row| row.get(0),
-            )?;
-            let metric = agent_orchestrator::db::TaskExecutionMetric {
-                task_id: task_id_owned.clone(),
-                status: status_owned,
-                current_cycle,
-                unresolved_items,
-                total_items,
-                failed_items,
-                command_runs,
-                created_at: now_ts(),
-            };
-            conn.execute(
-                "INSERT INTO task_execution_metrics (task_id, status, current_cycle, unresolved_items, total_items, failed_items, command_runs, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                rusqlite::params![
-                    metric.task_id,
-                    metric.status,
-                    metric.current_cycle as i64,
-                    metric.unresolved_items,
-                    metric.total_items,
-                    metric.failed_items,
-                    metric.command_runs,
-                    metric.created_at
-                ],
-            )?;
-            Ok(())
-        })
-        .await
-        .map_err(agent_orchestrator::async_database::flatten_err)
+    agent_orchestrator::scheduler_state::record_task_execution_metric(
+        &state.async_database,
+        agent_orchestrator::scheduler_state::TaskExecutionMetricInput {
+            task_id: task_id.to_owned(),
+            status: status.to_owned(),
+            current_cycle: current_cycle as i64,
+            unresolved_items,
+            total_items,
+            failed_items,
+            created_at: now_ts(),
+        },
+    )
+    .await
 }
 
 pub(crate) async fn record_task_execution_metric(
@@ -173,35 +147,14 @@ pub(crate) async fn is_task_paused_in_db(state: &InnerState, task_id: &str) -> R
 pub async fn set_item_blocked(state: &InnerState, task_id: &str, item_id: &str) -> Result<()> {
     let task_id = task_id.to_owned();
     let item_id = item_id.to_owned();
-    state
-        .async_database
-        .writer()
-        .call(move |conn| {
-            conn.execute(
-                "UPDATE task_items SET status = 'blocked' WHERE id = ?1 AND task_id = ?2",
-                rusqlite::params![item_id, task_id],
-            )?;
-            Ok(())
-        })
+    agent_orchestrator::scheduler_state::mark_item_blocked(&state.async_database, task_id, item_id)
         .await
-        .map_err(agent_orchestrator::async_database::flatten_err)
 }
 
 /// FR-035: Resets all blocked items back to unresolved for a task. Returns the count reset.
 pub async fn reset_blocked_items(state: &InnerState, task_id: &str) -> Result<u64> {
     let task_id = task_id.to_owned();
-    state
-        .async_database
-        .writer()
-        .call(move |conn| {
-            let count = conn.execute(
-                "UPDATE task_items SET status = 'unresolved' WHERE task_id = ?1 AND status = 'blocked'",
-                rusqlite::params![task_id],
-            )?;
-            Ok(count as u64)
-        })
-        .await
-        .map_err(agent_orchestrator::async_database::flatten_err)
+    agent_orchestrator::scheduler_state::reset_blocked_items(&state.async_database, task_id).await
 }
 
 /// FR-035: Queries recent cycle_started event timestamps from DB (newest first).
@@ -211,20 +164,12 @@ pub async fn query_recent_cycle_timestamps(
     limit: u32,
 ) -> Result<Vec<String>> {
     let task_id = task_id.to_owned();
-    state
-        .async_database
-        .reader()
-        .call(move |conn| {
-            let mut stmt = conn.prepare(
-                "SELECT created_at FROM events WHERE task_id = ?1 AND event_type = 'cycle_started' ORDER BY id DESC LIMIT ?2",
-            )?;
-            let rows = stmt
-                .query_map(rusqlite::params![task_id, limit], |row| row.get(0))?
-                .collect::<std::result::Result<Vec<String>, _>>()?;
-            Ok(rows)
-        })
-        .await
-        .map_err(agent_orchestrator::async_database::flatten_err)
+    agent_orchestrator::scheduler_state::recent_cycle_timestamps(
+        &state.async_database,
+        task_id,
+        limit,
+    )
+    .await
 }
 
 /// Detect whether this task is resuming from a self_restart.
@@ -233,26 +178,8 @@ pub async fn query_recent_cycle_timestamps(
 /// acknowledged by a subsequent `restart_resumed` event.
 pub async fn detect_restart_resume(state: &InnerState, task_id: &str) -> Result<bool> {
     let task_id = task_id.to_owned();
-    state
-        .async_database
-        .reader()
-        .call(move |conn| {
-            let has_unacked_restart: bool = conn
-                .query_row(
-                    "SELECT COUNT(*) > 0 FROM events
-                     WHERE task_id = ?1 AND event_type = 'self_restart_ready'
-                     AND id > COALESCE(
-                         (SELECT MAX(id) FROM events WHERE task_id = ?1 AND event_type = 'restart_resumed'),
-                         0
-                     )",
-                    rusqlite::params![task_id],
-                    |row| row.get(0),
-                )
-                .unwrap_or(false);
-            Ok(has_unacked_restart)
-        })
+    agent_orchestrator::scheduler_state::has_unacked_self_restart(&state.async_database, task_id)
         .await
-        .map_err(agent_orchestrator::async_database::flatten_err)
 }
 
 /// Query step IDs that already finished in a given cycle for this task.
@@ -265,28 +192,12 @@ pub async fn query_completed_steps_in_cycle(
     cycle: u32,
 ) -> Result<std::collections::HashSet<String>> {
     let task_id = task_id.to_owned();
-    state
-        .async_database
-        .reader()
-        .call(move |conn| {
-            let mut stmt = conn.prepare(
-                "SELECT DISTINCT json_extract(payload_json, '$.step')
-                 FROM events
-                 WHERE task_id = ?1
-                   AND event_type = 'step_finished'
-                   AND cycle = ?2
-                   AND json_extract(payload_json, '$.step') IS NOT NULL",
-            )?;
-            let rows = stmt
-                .query_map(rusqlite::params![task_id, cycle], |row| {
-                    row.get::<_, String>(0)
-                })?
-                .filter_map(|r| r.ok())
-                .collect();
-            Ok(rows)
-        })
-        .await
-        .map_err(agent_orchestrator::async_database::flatten_err)
+    agent_orchestrator::scheduler_state::completed_steps_in_cycle(
+        &state.async_database,
+        task_id,
+        cycle,
+    )
+    .await
 }
 
 /// FR-052: Counts recent heartbeat events for specified item IDs since cutoff.
@@ -306,18 +217,8 @@ pub async fn count_recent_heartbeats_for_items(
 pub async fn mark_command_run_killed(state: &InnerState, run_id: &str) -> Result<()> {
     let run_id = run_id.to_owned();
     let now = agent_orchestrator::config_load::now_ts();
-    state
-        .async_database
-        .writer()
-        .call(move |conn| {
-            conn.execute(
-                "UPDATE command_runs SET exit_code = -9, ended_at = ?2 WHERE id = ?1 AND exit_code = -1",
-                rusqlite::params![run_id, now],
-            )?;
-            Ok(())
-        })
+    agent_orchestrator::scheduler_state::mark_command_run_killed(&state.async_database, run_id, now)
         .await
-        .map_err(agent_orchestrator::async_database::flatten_err)
 }
 
 #[cfg(test)]

@@ -66,18 +66,11 @@ pub async fn spawn_task_runner(state: Arc<InnerState>, task_id: String) -> Resul
                     .await;
                     // Query project_id for scoped broadcast.
                     let tid_q = task_id.clone();
-                    let task_project = state
-                        .async_database
-                        .reader()
-                        .call(move |conn| {
-                            Ok(conn
-                                .query_row(
-                                    "SELECT project_id FROM tasks WHERE id = ?1",
-                                    rusqlite::params![tid_q],
-                                    |row| row.get::<_, String>(0),
-                                )
-                                .ok())
-                        })
+                    let task_project =
+                        agent_orchestrator::scheduler_state::project_id_for_task_opt(
+                            &state.async_database,
+                            tid_q,
+                        )
                         .await
                         .ok()
                         .flatten();

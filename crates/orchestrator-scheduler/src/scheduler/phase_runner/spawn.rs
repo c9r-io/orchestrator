@@ -222,19 +222,13 @@ pub(super) async fn spawn_phase_process(
     {
         let fingerprint = session_store::capture_process_fingerprint(pid);
         let sid_owned = sid.to_owned();
-        let _ = state
-            .async_database
-            .writer()
-            .call(move |conn| {
-                session_store::update_session_process(
-                    conn,
-                    &sid_owned,
-                    pid as i64,
-                    fingerprint.as_deref(),
-                )
-                .map_err(|err| tokio_rusqlite::Error::Other(err.into()))
-            })
-            .await;
+        let _ = session_store::update_session_process_async(
+            &state.async_database,
+            sid_owned,
+            pid as i64,
+            fingerprint,
+        )
+        .await;
     }
 
     if tty && session_id.is_some() {

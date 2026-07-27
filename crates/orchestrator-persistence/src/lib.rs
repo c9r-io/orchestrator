@@ -8,10 +8,13 @@
 //! DD-147 chose and this crate makes structural.
 //!
 //! Its only workspace edges are `orchestrator-config` and
-//! `orchestrator-collab`, both leaf data crates, and both reached from exactly
-//! two fields of two [`dto`] structs — `ConfigOverview::config` and
-//! `RunResult::output`. Nothing in the migration chain, the connection
-//! helpers or the repositories names them. That distinction is the point: the
+//! `orchestrator-collab`, both leaf data crates. They are reached from two
+//! fields of two [`dto`] structs — `ConfigOverview::config` and
+//! `RunResult::output` — and, since FR-141 B3, from
+//! [`scheduler_state::create_dynamic_task_items`], which takes
+//! `orchestrator_config::config::NewDynamicItem` rather than defining a second
+//! copy of a shape that already exists. Nothing in the migration chain or the
+//! connection helpers names them. That distinction is the point: the
 //! chain's output is frozen byte-for-byte in
 //! `config/governance/schema-snapshot.sql`, and an edge from the chain to a
 //! crate that can change domain types is an edge along which that schema can
@@ -48,6 +51,8 @@ pub mod migration;
 pub mod migration_steps;
 /// Domain-specific repository traits and their SQLite implementations.
 pub mod repository;
+/// The reads and writes the scheduler makes about task and item state.
+pub mod scheduler_state;
 /// Persistence bootstrap entrypoints.
 pub mod schema;
 /// The `session_control_actions` table: idempotency envelopes for session control.

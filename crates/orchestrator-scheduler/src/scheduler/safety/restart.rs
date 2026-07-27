@@ -1,5 +1,4 @@
 use super::snapshot::{RELEASE_BINARY_REL, sha256_hex, snapshot_binary};
-use agent_orchestrator::async_database::flatten_err;
 use agent_orchestrator::events::insert_event;
 use agent_orchestrator::state::InnerState;
 use anyhow::{Context, Result};
@@ -169,17 +168,14 @@ pub async fn execute_self_restart_step(
         "self_restart_phase",
         json!({"phase": "snapshot_binary"}),
     );
-    let current_cycle: u32 = agent_orchestrator::db::open_conn(&state.db_path)
-        .ok()
-        .and_then(|conn| {
-            conn.query_row(
-                "SELECT current_cycle FROM tasks WHERE id = ?1",
-                rusqlite::params![task_id],
-                |row| row.get::<_, i64>(0),
-            )
-            .ok()
-        })
-        .unwrap_or(0) as u32;
+    let current_cycle: u32 = agent_orchestrator::scheduler_state::current_cycle_for_task(
+        &state.async_database,
+        task_id.to_string(),
+    )
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or(0) as u32;
 
     if let Err(e) = snapshot_binary(workspace_root, task_id, current_cycle).await {
         error!(phase = "snapshot_binary", error = %e, "snapshot failed");
@@ -240,34 +236,32 @@ pub async fn execute_self_restart_step(
 /// Returns Ok(true) if verified, Ok(false) if mismatch, Err on read failure.
 pub async fn verify_post_restart_binary(state: &InnerState, task_id: &str) -> Result<bool> {
     // Read the self_restart_ready event from the DB
-    let task_id_owned = task_id.to_owned();
-    let sha256_pair: Option<(String, String)> = state
-        .async_database
-        .reader()
-        .call(move |conn| {
-            let result: Option<(String, String)> = conn.query_row(
-                "SELECT payload_json FROM events WHERE task_id = ?1 AND event_type = 'self_restart_ready' ORDER BY created_at DESC LIMIT 1",
-                rusqlite::params![task_id_owned],
-                |row| row.get::<_, String>(0),
-            ).ok().and_then(|json_str| {
-                serde_json::from_str::<serde_json::Value>(&json_str).ok()
-                    .and_then(|v| {
-                        // Support both old field name (binary_sha256) and new (new_binary_sha256)
-                        let new_sha = v.get("new_binary_sha256")
-                            .or_else(|| v.get("binary_sha256"))
-                            .and_then(|s| s.as_str())
-                            .map(|s| s.to_string())?;
-                        let old_sha = v.get("old_binary_sha256")
-                            .and_then(|s| s.as_str())
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|| "unknown".to_string());
-                        Some((new_sha, old_sha))
-                    })
-            });
-            Ok(result)
-        })
-        .await
-        .map_err(flatten_err)?;
+    // The payload comes back unparsed: which field names carry the binary
+    // hashes is this protocol's business, and it has already changed once.
+    let sha256_pair: Option<(String, String)> =
+        agent_orchestrator::scheduler_state::latest_self_restart_payload(
+            &state.async_database,
+            task_id.to_owned(),
+        )
+        .await?
+        .and_then(|json_str| {
+            serde_json::from_str::<serde_json::Value>(&json_str)
+                .ok()
+                .and_then(|v| {
+                    // Support both old field name (binary_sha256) and new (new_binary_sha256)
+                    let new_sha = v
+                        .get("new_binary_sha256")
+                        .or_else(|| v.get("binary_sha256"))
+                        .and_then(|s| s.as_str())
+                        .map(|s| s.to_string())?;
+                    let old_sha = v
+                        .get("old_binary_sha256")
+                        .and_then(|s| s.as_str())
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| "unknown".to_string());
+                    Some((new_sha, old_sha))
+                })
+        });
 
     let (expected, old_binary_sha256) = match sha256_pair {
         Some((s, old)) if s != "unknown" => (s, old),

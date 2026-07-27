@@ -66,6 +66,8 @@ pub mod db_write;
 /// They are the row and read-model shapes the repositories produce, so they
 /// moved with the repositories (FR-130 Phase A) and are re-exported here.
 pub use orchestrator_persistence::dto;
+/// The reads and writes the scheduler makes about task and item state.
+pub use orchestrator_persistence::scheduler_state;
 /// The `session_control_actions` table: idempotency envelopes for session control.
 pub use orchestrator_persistence::session_control_audit;
 pub mod dynamic_orchestration;

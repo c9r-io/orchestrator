@@ -26,7 +26,10 @@ pub struct SpawnContext<'a> {
 }
 
 /// Execute a single task spawn from a post-action.
-pub fn execute_spawn_task(ctx: &SpawnContext<'_>, action: &SpawnTaskAction) -> Result<String> {
+pub async fn execute_spawn_task(
+    ctx: &SpawnContext<'_>,
+    action: &SpawnTaskAction,
+) -> Result<String> {
     let goal = resolve_template(&action.goal, ctx.pipeline_vars);
 
     let workflow_id = action
@@ -57,11 +60,12 @@ pub fn execute_spawn_task(ctx: &SpawnContext<'_>, action: &SpawnTaskAction) -> R
 
     let summary = create_task_impl(ctx.state, payload)?;
 
-    let conn = agent_orchestrator::db::open_conn(&ctx.state.db_path)?;
-    conn.execute(
-        "UPDATE tasks SET spawn_depth = ?1 WHERE id = ?2",
-        rusqlite::params![ctx.parent_spawn_depth + 1, summary.id],
-    )?;
+    agent_orchestrator::scheduler_state::set_spawn_depth(
+        &ctx.state.async_database,
+        summary.id.clone(),
+        ctx.parent_spawn_depth + 1,
+    )
+    .await?;
 
     info!(
         parent = ctx.parent_task_id,
@@ -73,7 +77,7 @@ pub fn execute_spawn_task(ctx: &SpawnContext<'_>, action: &SpawnTaskAction) -> R
 }
 
 /// Execute batch task spawning from a JSON pipeline variable.
-pub fn execute_spawn_tasks(
+pub async fn execute_spawn_tasks(
     ctx: &SpawnContext<'_>,
     action: &SpawnTasksAction,
 ) -> Result<Vec<String>> {
@@ -137,11 +141,12 @@ pub fn execute_spawn_tasks(
 
         match create_task_impl(ctx.state, payload) {
             Ok(summary) => {
-                let conn = agent_orchestrator::db::open_conn(&ctx.state.db_path)?;
-                conn.execute(
-                    "UPDATE tasks SET spawn_depth = ?1 WHERE id = ?2",
-                    rusqlite::params![ctx.parent_spawn_depth + 1, summary.id],
-                )?;
+                agent_orchestrator::scheduler_state::set_spawn_depth(
+                    &ctx.state.async_database,
+                    summary.id.clone(),
+                    ctx.parent_spawn_depth + 1,
+                )
+                .await?;
                 info!(
                     parent = ctx.parent_task_id,
                     child = summary.id,
@@ -281,8 +286,8 @@ mod tests {
         assert_eq!(truncate_goal("a longer goal text", 10), "a longer g");
     }
 
-    #[test]
-    fn execute_spawn_task_creates_child_task_and_increments_depth() {
+    #[tokio::test]
+    async fn execute_spawn_task_creates_child_task_and_increments_depth() {
         let mut fixture = TestState::new();
         let state = fixture.build();
         seed_default_qa_file(&state, "spawn-single");
@@ -298,6 +303,7 @@ mod tests {
                 inherit: SpawnInherit::default(),
             },
         )
+        .await
         .expect("spawn single child task");
 
         let (name, goal, project_id, workspace_id, workflow_id, spawn_reason, spawn_depth) =
@@ -311,8 +317,8 @@ mod tests {
         assert_eq!(spawn_depth, 3);
     }
 
-    #[test]
-    fn execute_spawn_task_without_workspace_inheritance_uses_default_workspace() {
+    #[tokio::test]
+    async fn execute_spawn_task_without_workspace_inheritance_uses_default_workspace() {
         let mut fixture = TestState::new().with_workspace("secondary", "workspace/secondary");
         let state = fixture.build();
         seed_default_qa_file(&state, "spawn-no-inherit");
@@ -331,14 +337,15 @@ mod tests {
                 },
             },
         )
+        .await
         .expect("spawn child without workspace inheritance");
 
         let (_, _, _, workspace_id, _, _, _) = load_spawned_task(&state, &task_id);
         assert_eq!(workspace_id, "default");
     }
 
-    #[test]
-    fn execute_spawn_tasks_creates_batch_children_skips_missing_goal_and_honors_limit() {
+    #[tokio::test]
+    async fn execute_spawn_tasks_creates_batch_children_skips_missing_goal_and_honors_limit() {
         let mut fixture = TestState::new().with_workspace("secondary", "workspace/secondary");
         let state = fixture.build();
         seed_default_qa_file(&state, "spawn-batch");
@@ -375,6 +382,7 @@ mod tests {
                 queue: true,
             },
         )
+        .await
         .expect("spawn child tasks from pipeline var");
 
         assert_eq!(task_ids.len(), 1);
@@ -389,8 +397,8 @@ mod tests {
         assert_eq!(spawn_depth, 5);
     }
 
-    #[test]
-    fn execute_spawn_tasks_errors_when_source_variable_is_missing() {
+    #[tokio::test]
+    async fn execute_spawn_tasks_errors_when_source_variable_is_missing() {
         let mut fixture = TestState::new();
         let state = fixture.build();
         let pipeline_vars = HashMap::new();
@@ -411,6 +419,7 @@ mod tests {
                 queue: true,
             },
         )
+        .await
         .unwrap_err();
 
         assert!(

@@ -509,12 +509,6 @@
       "types": [
         "Connection"
       ]
-    },
-    "crates/orchestrator-scheduler/src/scheduler/item_generate.rs::fn create_dynamic_task_items": {
-      "crate": "crates/orchestrator-scheduler",
-      "types": [
-        "Connection"
-      ]
     }
   },
   "holds": {
@@ -582,56 +576,12 @@
       "via": [
         "open_conn"
       ]
-    },
-    "crates/orchestrator-scheduler/src/scheduler/item_generate.rs": {
-      "crate": "crates/orchestrator-scheduler",
-      "acquisitions": 1,
-      "via": [
-        "writer"
-      ]
-    },
-    "crates/orchestrator-scheduler/src/scheduler/phase_runner/spawn.rs": {
-      "crate": "crates/orchestrator-scheduler",
-      "acquisitions": 1,
-      "via": [
-        "writer"
-      ]
-    },
-    "crates/orchestrator-scheduler/src/scheduler/runtime.rs": {
-      "crate": "crates/orchestrator-scheduler",
-      "acquisitions": 1,
-      "via": [
-        "reader"
-      ]
-    },
-    "crates/orchestrator-scheduler/src/scheduler/safety/restart.rs": {
-      "crate": "crates/orchestrator-scheduler",
-      "acquisitions": 2,
-      "via": [
-        "open_conn",
-        "reader"
-      ]
-    },
-    "crates/orchestrator-scheduler/src/scheduler/spawn.rs": {
-      "crate": "crates/orchestrator-scheduler",
-      "acquisitions": 2,
-      "via": [
-        "open_conn"
-      ]
-    },
-    "crates/orchestrator-scheduler/src/scheduler/task_state.rs": {
-      "crate": "crates/orchestrator-scheduler",
-      "acquisitions": 7,
-      "via": [
-        "reader",
-        "writer"
-      ]
     }
   },
   "totals": {
     "yields": 6,
-    "demands": 68,
-    "holdingFiles": 15,
-    "acquisitions": 52
+    "demands": 67,
+    "holdingFiles": 9,
+    "acquisitions": 38
   }
 }

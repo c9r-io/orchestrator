@@ -169,7 +169,7 @@ pub(super) async fn apply_step_results(
                         parent_spawn_depth: task_ctx.spawn_depth,
                         pipeline_vars: &acc.pipeline_vars.vars,
                     };
-                    match execute_spawn_task(&spawn_ctx, spawn_action) {
+                    match execute_spawn_task(&spawn_ctx, spawn_action).await {
                         Ok(child_id) => {
                             insert_event(
                                 state,

@@ -897,3 +897,18 @@ pub async fn reconcile_sessions_async(db: &AsyncDatabase) -> Result<Vec<(String,
         .await
         .map_err(flatten_err)
 }
+
+/// Records the OS process backing a session.
+pub async fn update_session_process_async(
+    db: &AsyncDatabase,
+    session_id: String,
+    pid: i64,
+    fingerprint: Option<String>,
+) -> Result<()> {
+    db.writer()
+        .call(move |conn| {
+            update_session_process(conn, &session_id, pid, fingerprint.as_deref()).map_err(other)
+        })
+        .await
+        .map_err(flatten_err)
+}

@@ -4,10 +4,8 @@ use agent_orchestrator::json_extract::{
 };
 use agent_orchestrator::state::InnerState;
 use anyhow::{Context, Result};
-use rusqlite::params;
 use std::collections::HashMap;
 use tracing::{info, warn};
-use uuid::Uuid;
 
 /// Resolve the effective JSON content for a pipeline variable.
 ///
@@ -107,83 +105,21 @@ pub fn extract_dynamic_items(
     Ok(result)
 }
 
-/// Insert dynamic items into the database for a given task.
-pub fn create_dynamic_task_items(
-    conn: &rusqlite::Connection,
-    task_id: &str,
-    items: &[NewDynamicItem],
-    replace: bool,
-) -> Result<usize> {
-    let now = chrono::Utc::now().to_rfc3339();
-
-    if replace {
-        // Remove existing non-static items
-        conn.execute(
-            "DELETE FROM task_items WHERE task_id = ?1 AND source = 'dynamic'",
-            params![task_id],
-        )?;
-    }
-
-    // Get the current max order_no
-    let max_order: i64 = conn
-        .query_row(
-            "SELECT COALESCE(MAX(order_no), 0) FROM task_items WHERE task_id = ?1",
-            params![task_id],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-
-    let mut created = 0;
-    for (idx, item) in items.iter().enumerate() {
-        let id = Uuid::new_v4().to_string();
-        let order_no = max_order + (idx as i64) + 1;
-        let dynamic_vars_json = if item.vars.is_empty() {
-            None
-        } else {
-            Some(serde_json::to_string(&item.vars)?)
-        };
-
-        conn.execute(
-            "INSERT INTO task_items (id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, created_at, updated_at, dynamic_vars_json, label, source) VALUES (?1, ?2, ?3, ?4, 'pending', '[]', '[]', 0, 0, '', NULL, NULL, ?5, ?5, ?6, ?7, 'dynamic')",
-            params![
-                id,
-                task_id,
-                order_no,
-                item.item_id,
-                now,
-                dynamic_vars_json,
-                item.label,
-            ],
-        )?;
-        created += 1;
-    }
-
-    info!(
-        task_id = task_id,
-        count = created,
-        "created dynamic task items"
-    );
-    Ok(created)
-}
-
-/// Async wrapper for `create_dynamic_task_items` that uses the async database writer.
+/// Inserts dynamically generated items for a task through the persistence layer.
 pub async fn create_dynamic_task_items_async(
     state: &InnerState,
     task_id: &str,
     items: &[NewDynamicItem],
     replace: bool,
 ) -> Result<usize> {
-    let task_id = task_id.to_string();
-    let items = items.to_vec();
-    state
-        .async_database
-        .writer()
-        .call(move |conn| {
-            create_dynamic_task_items(conn, &task_id, &items, replace)
-                .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
-        })
-        .await
-        .map_err(|e| anyhow::anyhow!("async db error: {e}"))
+    agent_orchestrator::scheduler_state::create_dynamic_task_items(
+        &state.async_database,
+        task_id.to_string(),
+        items.to_vec(),
+        replace,
+        chrono::Utc::now().to_rfc3339(),
+    )
+    .await
 }
 
 #[cfg(test)]
