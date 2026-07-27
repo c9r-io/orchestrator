@@ -8,63 +8,67 @@
       "jobs": {
         "async-lock-governance": {
           "conclusion": "success",
-          "runId": "30206361027",
-          "headSha": "6ffaf84d93aa09278499a6d31c90ecd01fa316b3"
+          "runId": "30275254232",
+          "headSha": "4a2bdd202131be42c8452e19c9a5b35f8f63dd2c"
         },
         "fmt": {
           "conclusion": "success",
-          "runId": "30206361027",
-          "headSha": "6ffaf84d93aa09278499a6d31c90ecd01fa316b3"
+          "runId": "30275254232",
+          "headSha": "4a2bdd202131be42c8452e19c9a5b35f8f63dd2c"
         },
         "clippy": {
           "conclusion": "success",
-          "runId": "30206361027",
-          "headSha": "6ffaf84d93aa09278499a6d31c90ecd01fa316b3"
+          "runId": "30275254232",
+          "headSha": "4a2bdd202131be42c8452e19c9a5b35f8f63dd2c"
         },
         "test": {
           "conclusion": "success",
-          "runId": "30206361027",
-          "headSha": "6ffaf84d93aa09278499a6d31c90ecd01fa316b3"
+          "runId": "30275254232",
+          "headSha": "4a2bdd202131be42c8452e19c9a5b35f8f63dd2c"
         },
         "coordination-strangler": {
           "conclusion": "success",
-          "runId": "30206361027",
-          "headSha": "6ffaf84d93aa09278499a6d31c90ecd01fa316b3"
+          "runId": "30275254232",
+          "headSha": "4a2bdd202131be42c8452e19c9a5b35f8f63dd2c"
         },
         "governance": {
-          "conclusion": "success",
-          "runId": "30206361027",
-          "headSha": "6ffaf84d93aa09278499a6d31c90ecd01fa316b3"
+          "conclusion": "failure",
+          "runId": "30275254232",
+          "headSha": "4a2bdd202131be42c8452e19c9a5b35f8f63dd2c",
+          "knownFailing": {
+            "reference": "docs/design_doc/orchestrator/146-bash32-compatibility.md",
+            "reason": "Only the liveness step failed in run 30275254232. All 23 other gates in the job reported success — including bash32-lexer on its first CI execution and doc-lint, which had been red on the parent 7b97a338 — and every other job in the run was green, including both coverage-policy-fixtures legs. The cause is the recorded shape: this ledger described run 30206361027 at 6ffaf84d, and 91c8c973 then added the bash32-lexer step to ci.yml, so every record described a pipeline that no longer existed. This is the two-step convergence DD-146 records — the job cannot record its own recovery in one pass, because its liveness step runs inside itself. This refresh makes the record current against a run at 4a2bdd20, which is after that ci.yml change; the next run should show governance green and the following refresh drops this annotation."
+          }
         },
         "ci-environment-parity": {
           "conclusion": "success",
-          "runId": "30206361027",
-          "headSha": "6ffaf84d93aa09278499a6d31c90ecd01fa316b3"
+          "runId": "30275254232",
+          "headSha": "4a2bdd202131be42c8452e19c9a5b35f8f63dd2c"
         },
         "coverage-policy-fixtures": {
           "conclusion": "success",
-          "runId": "30206361027",
-          "headSha": "6ffaf84d93aa09278499a6d31c90ecd01fa316b3"
+          "runId": "30275254232",
+          "headSha": "4a2bdd202131be42c8452e19c9a5b35f8f63dd2c"
         },
         "slack-certification-recorded": {
           "conclusion": "success",
-          "runId": "30206361027",
-          "headSha": "6ffaf84d93aa09278499a6d31c90ecd01fa316b3"
+          "runId": "30275254232",
+          "headSha": "4a2bdd202131be42c8452e19c9a5b35f8f63dd2c"
         },
         "boundary-coverage": {
           "conclusion": "success",
-          "runId": "30206361027",
-          "headSha": "6ffaf84d93aa09278499a6d31c90ecd01fa316b3"
+          "runId": "30275254232",
+          "headSha": "4a2bdd202131be42c8452e19c9a5b35f8f63dd2c"
         },
         "miri": {
           "conclusion": "success",
-          "runId": "30206361027",
-          "headSha": "6ffaf84d93aa09278499a6d31c90ecd01fa316b3"
+          "runId": "30275254232",
+          "headSha": "4a2bdd202131be42c8452e19c9a5b35f8f63dd2c"
         },
         "cross-compile": {
           "conclusion": "success",
-          "runId": "30206361027",
-          "headSha": "6ffaf84d93aa09278499a6d31c90ecd01fa316b3"
+          "runId": "30275254232",
+          "headSha": "4a2bdd202131be42c8452e19c9a5b35f8f63dd2c"
         }
       }
     },
@@ -74,8 +78,8 @@
       "jobs": {
         "deploy": {
           "conclusion": "success",
-          "runId": "30157536507",
-          "headSha": "161dba197a4d29af16fdb9a25aee72d5e87df4f4"
+          "runId": "30257421858",
+          "headSha": "48b49bec8a1e67997a96779a7bb0cecc5c67e0e6"
         }
       }
     },
@@ -85,8 +89,8 @@
       "jobs": {
         "cargo-audit": {
           "conclusion": "success",
-          "runId": "30206361009",
-          "headSha": "6ffaf84d93aa09278499a6d31c90ecd01fa316b3"
+          "runId": "30275254165",
+          "headSha": "4a2bdd202131be42c8452e19c9a5b35f8f63dd2c"
         }
       }
     },
