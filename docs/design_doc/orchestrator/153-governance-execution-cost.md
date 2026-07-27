@@ -287,10 +287,18 @@ looks like.
   also be a replacement.
 - **The lexer is faster, not asymptotically better.** It is still a linear scan
   in Ruby. A corpus an order of magnitude larger would need a different answer.
-- **The ±7% spread is measured over six runs on GitHub-hosted `ubuntu-latest`.**
-  It is a sample, not a guarantee. The budget's headroom at closure is 14%
-  (2317 s against 2700 s), which is twice the measured spread and not much more
-  — the next expensive gate is likely to be the one that forces the written
-  trade-off the review condition describes. That is the mechanism working, but
-  it means the ceiling is not comfortable, and it should not be read as though
-  it were.
+- **The ±7% spread is measured over six runs on GitHub-hosted `ubuntu-latest`**,
+  all of them before the lexer rewrite and at drifting gate counts. It is a
+  sample, not a guarantee. The budget's headroom at closure is 14% (2317 s
+  against 2700 s), which is twice that spread and not much more — the next
+  expensive gate is likely to be the one that forces the written trade-off the
+  review condition describes. That is the mechanism working, but it means the
+  ceiling is not comfortable, and it should not be read as though it were.
+
+  The first post-fix repeat at an unchanged pipeline shape, run `30291298712`,
+  came in at 2348 s — 1.3% above the closure sample, leaving 13% headroom. Two
+  points are not a spread, so this neither confirms ±7% nor replaces it. It is
+  recorded because ±7% is the number the ceiling was reasoned from, and if the
+  post-fix regime is in fact this stable then the ceiling is roomier than the
+  paragraph above says. Which regime the figure describes should be settled by
+  accumulated samples, not by ±7% having been written down first.

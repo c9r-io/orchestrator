@@ -8,67 +8,63 @@
       "jobs": {
         "async-lock-governance": {
           "conclusion": "success",
-          "runId": "30288601535",
-          "headSha": "670564ed33f24b3a360a9355c539066fc6084ce1"
+          "runId": "30291298712",
+          "headSha": "aa8bad28112a473af0bdbf1ce1051347417923e9"
         },
         "fmt": {
           "conclusion": "success",
-          "runId": "30288601535",
-          "headSha": "670564ed33f24b3a360a9355c539066fc6084ce1"
+          "runId": "30291298712",
+          "headSha": "aa8bad28112a473af0bdbf1ce1051347417923e9"
         },
         "clippy": {
           "conclusion": "success",
-          "runId": "30288601535",
-          "headSha": "670564ed33f24b3a360a9355c539066fc6084ce1"
+          "runId": "30291298712",
+          "headSha": "aa8bad28112a473af0bdbf1ce1051347417923e9"
         },
         "test": {
           "conclusion": "success",
-          "runId": "30288601535",
-          "headSha": "670564ed33f24b3a360a9355c539066fc6084ce1"
+          "runId": "30291298712",
+          "headSha": "aa8bad28112a473af0bdbf1ce1051347417923e9"
         },
         "coordination-strangler": {
           "conclusion": "success",
-          "runId": "30288601535",
-          "headSha": "670564ed33f24b3a360a9355c539066fc6084ce1"
+          "runId": "30291298712",
+          "headSha": "aa8bad28112a473af0bdbf1ce1051347417923e9"
         },
         "governance": {
-          "conclusion": "failure",
-          "runId": "30288601535",
-          "headSha": "670564ed33f24b3a360a9355c539066fc6084ce1",
-          "knownFailing": {
-            "reference": "docs/design_doc/orchestrator/146-bash32-compatibility.md",
-            "reason": "Only the liveness step failed in run 30288601535. All 25 other gates in the job reported success, including cost and cost-fixtures on their first CI execution, and every other job in the run was green. The cause is the recorded shape for the fourth FR running: 670564ed added the two FR-140 steps to ci.yml, which made every record in this ledger stale, the liveness step reports its own staleness, and the job it runs inside goes red for that alone. It cannot record its own recovery in one pass. This refresh makes the record current against a run at 670564ed; the next run should show governance green and the refresh after it drops this annotation automatically."
-          }
+          "conclusion": "success",
+          "runId": "30291298712",
+          "headSha": "aa8bad28112a473af0bdbf1ce1051347417923e9"
         },
         "ci-environment-parity": {
           "conclusion": "success",
-          "runId": "30288601535",
-          "headSha": "670564ed33f24b3a360a9355c539066fc6084ce1"
+          "runId": "30291298712",
+          "headSha": "aa8bad28112a473af0bdbf1ce1051347417923e9"
         },
         "coverage-policy-fixtures": {
           "conclusion": "success",
-          "runId": "30288601535",
-          "headSha": "670564ed33f24b3a360a9355c539066fc6084ce1"
+          "runId": "30291298712",
+          "headSha": "aa8bad28112a473af0bdbf1ce1051347417923e9"
         },
         "slack-certification-recorded": {
           "conclusion": "success",
-          "runId": "30288601535",
-          "headSha": "670564ed33f24b3a360a9355c539066fc6084ce1"
+          "runId": "30291298712",
+          "headSha": "aa8bad28112a473af0bdbf1ce1051347417923e9"
         },
         "boundary-coverage": {
           "conclusion": "success",
-          "runId": "30288601535",
-          "headSha": "670564ed33f24b3a360a9355c539066fc6084ce1"
+          "runId": "30291298712",
+          "headSha": "aa8bad28112a473af0bdbf1ce1051347417923e9"
         },
         "miri": {
           "conclusion": "success",
-          "runId": "30288601535",
-          "headSha": "670564ed33f24b3a360a9355c539066fc6084ce1"
+          "runId": "30291298712",
+          "headSha": "aa8bad28112a473af0bdbf1ce1051347417923e9"
         },
         "cross-compile": {
           "conclusion": "success",
-          "runId": "30288601535",
-          "headSha": "670564ed33f24b3a360a9355c539066fc6084ce1"
+          "runId": "30291298712",
+          "headSha": "aa8bad28112a473af0bdbf1ce1051347417923e9"
         }
       }
     },
@@ -89,8 +85,8 @@
       "jobs": {
         "cargo-audit": {
           "conclusion": "success",
-          "runId": "30288601476",
-          "headSha": "670564ed33f24b3a360a9355c539066fc6084ce1"
+          "runId": "30291298798",
+          "headSha": "aa8bad28112a473af0bdbf1ce1051347417923e9"
         }
       }
     },
