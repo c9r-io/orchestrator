@@ -426,12 +426,13 @@ claimed" reaches neither copy, because both refuse it.
 ### Moving a statement is when someone finally reads it
 
 B16's `DELETE FROM tasks` is the fourth round's version of B11's five unguarded fences. Trigger
-history limits have never applied to a task that actually ran: the delete clears no child rows,
-`task_items` does not cascade, and every task a trigger creates has items. The error is caught and
-logged by the caller, so the only symptom is that the history never shrinks. It is recorded in
-Known limits below and pinned by an assertion in the round-trip test, and it is not fixed here —
-fixing it decides whether a history limit may delete a task's items, events and command runs,
-which is not a question a statement-moving batch should answer.
+history limits have never applied to any task: the delete clears no child rows, `task_items` does
+not cascade, and every task has items from the moment it is created. The error is caught by the
+caller and logged below the default filter, so there is no symptom at all — the history simply
+never shrinks. It is recorded in Known limits below and pinned by an assertion in the round-trip
+test, and it is not fixed here — fixing it decides whether a history limit may delete a task's
+items, events and command runs, which is not a question a statement-moving batch should answer.
+FR-142 answered it; see [DD-150](150-trigger-history-limit-cascade.md).
 
 ### `config.rs` was not blocked on `crd`
 
@@ -614,18 +615,19 @@ here:
 - The `schema_snapshot` test sits in `core` and exercises a crate below it. Deliberate and
   temporary, as above; it is the one place where the test and the code it tests are in different
   crates on purpose.
-- **Trigger history limits do not delete anything that ran.** `trigger_state::delete_tasks` is a
-  bare `DELETE FROM tasks`, moved unchanged from `trigger_engine::cleanup_history`. It clears no
-  child rows, and `task_items` references `tasks(id)` without `ON DELETE CASCADE`
-  (`migration_steps.rs:71`), while some other child tables do cascade. So the delete is refused
-  with `FOREIGN KEY constraint failed` for any task that has items — which is every task a trigger
-  fire creates. `cleanup_history` propagates the error and its caller logs it, so the trigger
-  keeps firing and the history simply never shrinks. Found in B16 by asking what each moved
-  statement would do if it were wrong; recorded rather than fixed, because the fix decides whether
-  a history limit may delete a task's items, events and command runs, and nobody has answered that
-  yet. `task_cleanup.rs` already deletes through the repository's cascade, which is probably where
-  this should route. Pinned by `trigger_history_retention_keeps_the_newest_and_selects_nothing_else`
-  so the behaviour is a known state rather than a surprise.
+- **Trigger history limits do not delete anything that ran.** ~~`trigger_state::delete_tasks` is a
+  bare `DELETE FROM tasks`~~ — **closed by FR-142; see [DD-150](150-trigger-history-limit-cascade.md).**
+  The finding was right and two of its details were not, which is worth keeping visible. It did not
+  fail only for tasks that *ran*: every task carries a `task_items` row from the moment it is
+  created, so the limit had never deleted anything at all, in any configuration. And the caller did
+  not usefully log the error — it was a `debug!` under a default filter of `info`, so there was no
+  symptom whatsoever, which is why this survived to be found by reading a moved statement rather
+  than by anyone noticing. The suggestion that `task_cleanup.rs`'s cascade "is probably where this
+  should route" was the right direction but rested on a wrong premise: that cascade clears one of
+  the eight references that can refuse a delete, so it carries the same defect for the other seven.
+  FR-142 routes through it anyway and skips-and-reports the rest. Pinned by
+  `trigger_history_retention_keeps_the_newest_and_selects_nothing_else`, now as raw SQL, so the
+  original statement's behaviour stays reproducible after the API stopped making it.
 - **The guard audit covers only the files that moved.** Recorded in full above. `attention.rs`,
   `process_metrics.rs` and `config.rs` had their reference shape judged, not their invariants, and
   the mechanism that read every other file's guards cannot reach them.

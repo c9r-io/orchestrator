@@ -336,7 +336,14 @@ spec:
 | `action.workspace` | 是 | 任务关联的工作区 |
 | `concurrencyPolicy` | 否 | `Allow`（默认）、`Forbid`（有活跃任务时跳过）、`Replace`（取消活跃任务后创建） |
 | `suspend` | 否 | 暂停触发器但不删除（默认：`false`） |
-| `historyLimit` | 否 | 每个触发器保留的已完成任务上限（默认：5） |
+| `historyLimit.successful` | 否 | 该触发器保留的已完成任务数。**无默认值**——不写 `historyLimit` 就永不清理 |
+| `historyLimit.failed` | 否 | 该触发器保留的失败任务数，与 `successful` 分别计数 |
+
+`historyLimit` 按名称与项目清理该触发器自己产生的任务，连同其 items、命令运行记录、事件与
+日志文件一并删除。若某个任务仍被 handoff、resume 或来源摄入记录引用，则该任务原样保留并在
+守护进程日志中上报（`history limit skipped a task still referenced elsewhere`，并注明是哪张
+表）；保留上限不会删除这些记录。每次清理还会输出一行 `trigger history cleanup`，记录本次
+选中、删除与跳过的数量。
 
 ### 事件触发
 

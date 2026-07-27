@@ -358,7 +358,7 @@
     "crates/orchestrator-persistence/src/trigger_state.rs": {
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 7,
-      "sql": 7,
+      "sql": 8,
       "category": "persistence-layer"
     },
     "crates/orchestrator-scheduler/src/scheduler/item_generate.rs": {
@@ -432,6 +432,6 @@
     "members": 14,
     "referencedFiles": 43,
     "rusqlite": 237,
-    "sql": 514
+    "sql": 515
   }
 }

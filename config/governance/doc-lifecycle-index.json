@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 409,
-    "active": 406,
+    "documents": 411,
+    "active": 408,
     "superseded": 3,
-    "withRelatedFr": 254
+    "withRelatedFr": 256
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -320,6 +320,12 @@
     },
     "docs/design_doc/orchestrator/15-task-trace.md": {
       "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/150-trigger-history-limit-cascade.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-142"
+      ]
     },
     "docs/design_doc/orchestrator/16-structured-logging.md": {
       "lifecycle": "active"
@@ -1507,6 +1513,12 @@
         "FR-137"
       ]
     },
+    "docs/qa/orchestrator/188-trigger-history-limit-cascade.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-142"
+      ]
+    },
     "docs/qa/orchestrator/19-scheduler-repository-refactor-regression.md": {
       "lifecycle": "active"
     },
@@ -2513,6 +2525,10 @@
     "FR-139": [
       "docs/design_doc/orchestrator/147-persistence-dependency-chokepoint.md",
       "docs/qa/orchestrator/185-persistence-dependency-chokepoint.md"
+    ],
+    "FR-142": [
+      "docs/design_doc/orchestrator/150-trigger-history-limit-cascade.md",
+      "docs/qa/orchestrator/188-trigger-history-limit-cascade.md"
     ]
   },
   "supersedes": {

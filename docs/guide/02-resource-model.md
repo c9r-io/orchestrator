@@ -336,7 +336,15 @@ spec:
 | `action.workspace` | Yes | Workspace for the created task |
 | `concurrencyPolicy` | No | `Allow` (default), `Forbid` (skip if active task), `Replace` (cancel active + create new) |
 | `suspend` | No | Pause the trigger without deleting (default: `false`) |
-| `historyLimit` | No | Max completed tasks to keep per trigger (default: 5) |
+| `historyLimit.successful` | No | Completed tasks to keep for this trigger. **No default** — omit `historyLimit` and nothing is ever pruned |
+| `historyLimit.failed` | No | Failed tasks to keep for this trigger, counted separately from `successful` |
+
+`historyLimit` prunes each trigger's own tasks by name and project, deleting the task with its
+items, command runs, events and log files. A task that is still referenced by handoff, resume or
+source-ingest records is left untouched and reported in the daemon log
+(`history limit skipped a task still referenced elsewhere`, naming the table); those records are
+not deleted by a retention limit. Every sweep also logs one `trigger history cleanup` line with
+how many tasks it selected, deleted and skipped.
 
 ### Event Trigger
 
