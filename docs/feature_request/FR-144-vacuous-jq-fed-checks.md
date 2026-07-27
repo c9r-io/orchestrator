@@ -30,25 +30,64 @@ check_provider_isolation() {
 写成字符串而不是清单要求的 `{"mode": "no-provider"}`。`jq` 报
 `Cannot index string with string "mode"` 并以 5 退出，`check_provider_isolation`
 读到零行返回成功。**真实门禁 `test-qa-gate-surface.sh` 对这份清单报告了 PASS**；只有
-`--fixture-test` 的三条负向 fixture（6、10、20）失败，因为它们检查的是"注入的缺陷会不会
-被拒绝"，而此时该检查已经什么都不检查了。
+`--fixture-test` 的负向 fixture 失败，因为它们检查的是"注入的缺陷会不会被拒绝"，而此时
+该检查已经什么都不检查了。
+
+> **复核（FR-144 治理，`cedbef41`）**：在 scratch clone 上完整复现，结论成立且更严重。
+> 真实门禁 `13 passed, 0 failed`（rc=0），fixture 套件 `6 failed, 28 passed`（rc=1）。
+> 失败的是 **5、6、10、11、12、20** 六条，不是原文写的三条。其中 fixture 20 属于
+> `check_provider_stub_coverage` 而非 `check_provider_isolation`——**两道 check 读同一个
+> 字段**，这决定了本 FR 的负向 fixture 不能套用 FR-127 的"隔离到单一 check"约定。
 
 换句话说：**一处清单笔误可以让一道门禁在自称通过的同时停止执行**，而这道门禁正是 FR-127
 以来所有"写了但不跑"治理的执行面本身。
 
 ### 范围
 
-同一形状在该门禁内有 **13 处** `done < <(jq ...)`，另有四道门禁共用它：
-
-```
-scripts/qa/test-qa-gate-surface.sh          13 处
-scripts/qa/test-markdown-link-integrity.sh
-scripts/qa/test-ci-environment-parity.sh
-scripts/qa/test-slack-live-certification.sh
-scripts/qa/test-docs-publishing-integrity.sh
-```
-
 这不是"某一条 jq 表达式写错了"，是**读输入的方式本身不观察失败**。
+
+> **复核（FR-144 治理，`cedbef41`）：原文低估 2.3 倍，且点错了最严重的那道门禁。**
+>
+> 原文数的是文本 `done < <(jq`，共 17 处。但缺陷不是文本性质的，是**供给端能不能走到
+> jq**。把同文件内的 shell 函数做传递闭包后：
+>
+> | 门禁 | 原文隐含 | 实测可达 jq 的供给点 |
+> |---|---|---|
+> | `test-docs-publishing-integrity.sh` | 1 | **22** |
+> | `test-qa-gate-surface.sh` | 13 | 13 |
+> | `test-ci-environment-parity.sh` | 1 | 2 |
+> | `test-markdown-link-integrity.sh` | 1 | 1 |
+> | `test-slack-live-certification.sh` | 1 | 1 |
+> | **合计** | **17** | **39** |
+>
+> `collection_langs`、`collection_names`、`declared_gaps`、`published_sorted`、
+> `authored_slugs`、`in_scope_gates` 都在函数体内跑 jq，都在喂循环。原文把
+> `test-qa-gate-surface.sh` 当作重灾区（13 处），**实际最严重的是
+> `test-docs-publishing-integrity.sh`（22 处）**，而原文把它列成只有一处。
+>
+> 这正是 SKILL 步骤 0 点名的 **category conflation**——数了一个文本模式，而不是一个可达性
+> 属性。它发生在这份专门治理"检查静默失效"的 FR 自己身上。
+
+### 范围补充：原文没写的第二条通道
+
+原文把缺陷归因于进程替换。**进程替换只是其中一条通道。**
+
+每个 check 都以 `"$check" "$root" || return 1` 调用，即**条件位置**。条件位置会对整棵调用
+树关闭 `set -e`。于是普通的命令替换同样静默：
+
+```
+A) 条件位置调用：  jq 报错 → declared='' → check 继续执行 → rc=0
+B) 裸调用（set -e 生效）：jq 报错 → 脚本以 5 退出
+```
+
+已实测。`check_surface_complete` 里写的是
+`declared="$(jq -r … | LC_ALL=C sort)"`——管道把状态换成了 `sort` 的；即使没有管道，条件
+位置也会吞掉它。五道门禁的 check 函数内约有 **10 处**这样的捕获点。
+
+**方向决定后果，这正是需求 2 成立的理由**：`check_surface_complete` 里 `declared` 变空会
+让磁盘上每个文件都显得未分类，于是**向失败一侧倒**——吵，但安全；`providerIsolation` 行集
+变空会让循环体一次都不执行，于是**向通过一侧倒**。同样的静默，相反的后果，而代码里没有
+任何东西区分这两者。
 
 ### 与既有治理的关系
 
@@ -88,12 +127,22 @@ scripts/qa/test-docs-publishing-integrity.sh
 
 ## 验收标准
 
-- [ ] 五道门禁不再有不观察 jq 退出码的 `done < <(jq ...)`
+> **复核（FR-144 治理）**：按实测范围改写。原文第一条只覆盖 17 处文本匹配，满足它的字面
+> 要求会留下 22 处函数包装的同型缺陷——那是治理表演，不是治理。
+
+- [ ] 五道门禁的 **39 处**可达 jq 的循环供给点全部经由观察退出码的读取入口
+- [ ] 同五道门禁 check 函数内的 **~10 处** jq 捕获点不再吞掉退出码
 - [ ] 负向 fixture：`providerIsolation` 写成字符串 → `test-qa-gate-surface.sh` **失败**
-      并点名（当前：PASS）
+      并点名清单路径与 jq 的诊断（当前：`13 passed, 0 failed`）
 - [ ] 负向 fixture：声明非空的检查在读到零行时失败
+- [ ] 负向 fixture：声明允许为空的检查在读到零行时**仍然通过**（否则上一条会被一个"一律
+      拒绝"的读取入口满足）
+- [ ] 未声明空值语义即为错误——没有默认值
+- [ ] 回归守卫：新增扫描器拒绝重新引入的不观察退出码的供给点，且**不被注释与 here-document
+      欺骗**
 - [ ] 既有 fixture 套件全绿，断言数不减少
-- [ ] 设计记录写明"零行"的两种含义为何必须由调用方声明而非默认
+- [ ] 设计记录写明"零行"的两种含义为何必须由调用方声明而非默认，以及条件位置为何关闭
+      `set -e`
 
 ## QA 计划
 
@@ -107,3 +156,12 @@ scripts/qa/test-docs-publishing-integrity.sh
 发现路径值得记下来：这个缺陷不是审计出来的，是 FR-140 往清单里加两条条目时手误写错了
 形状，而**真实门禁没有报错**、只有 fixture 套件报错，才把它暴露出来。一道门禁与它自己的
 负向 fixture 给出相反结论时，对的那个是 fixture。
+
+> **复核（FR-144 治理）**：这条附注本身应当再进一步。本 FR 由发现者当场写下，未经复核就
+> 把范围定在了他当时看见的那一个形状上（进程替换 + 直接 jq）。治理期的实测表明：真实范围
+> 是原文的 2.3 倍，最严重的门禁被列成了最轻的，而第二条通道（条件位置关闭 `set -e`）完全
+> 没有进入视野。
+>
+> 就是说：**记录缺陷的那份文档，本身犯了它所记录的那一类错误**——用一个廉价的代理（文本
+> 匹配 `done < <(jq`）代替了要测的事实（供给端能否走到 jq 而不被观察）。这不削弱 FR 的
+> 结论，但它说明"当场写下的复现"和"经过复核的范围"是两件事，前者不能替代后者。
