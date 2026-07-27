@@ -273,6 +273,53 @@ else
   scan | head -3 >&2
 fi
 
+# 11c. A loop fed by a function that reaches jq, in a file keeping no failure
+#      record. This is the 22-site shape in test-docs-publishing-integrity.sh,
+#      and the reason that file is allowed to keep it: the record answers for
+#      reads the call site cannot. A file without a record has no such answer.
+restore
+cat >> "$TARGET" <<'OUTER'
+
+read_the_policy() { gate_jq_rows allow-empty "$f" ".a[]"; }
+while read -r policy_row; do :; done < <(read_the_policy)
+OUTER
+if scan | grep -q "\[unrecorded-feed\]"; then
+  pass "a loop fed by a jq-reaching function, in a file with no failure record, is rejected"
+else
+  fail "an unrecorded feed from a jq-reaching function was not detected"
+fi
+
+# 11d. The same file once it keeps the record. Without this the rule above is
+#      satisfied by a scanner that rejects every function-fed loop, which would
+#      make the record pointless and force 22 hand conversions that the record
+#      exists to avoid.
+restore
+cat >> "$TARGET" <<'OUTER'
+
+gate_jq_begin
+read_the_policy() { gate_jq_rows allow-empty "$f" ".a[]"; }
+while read -r policy_row; do :; done < <(read_the_policy)
+echo "silent reads: $(gate_jq_failure_count)"
+OUTER
+if scan | grep -q "^jq status observed: PASS"; then
+  pass "the same feed is accepted once the file keeps and asserts on a failure record"
+else
+  fail "the failure record did not excuse a feed the call site cannot observe"
+  scan | head -3 >&2
+fi
+
+# 11e. A file that ends inside a here-document was never fully scanned, so the
+#      clean result would be an artefact of how much was read. FR-138 is this
+#      defect in the bash 3.2 scanner; the backstop is asserted here rather than
+#      inherited on trust.
+restore
+printf '\ncat <<UNTERMINATED\nstill inside the body at end of file\n' >> "$TARGET"
+if scan | grep -q "\[unclosed-heredoc\]"; then
+  pass "a file ending inside a here-document is reported rather than silently half-scanned"
+else
+  fail "an unterminated here-document was not reported"
+fi
+
 # 12. Coverage is derived, not listed. A gate registered as ci-required today is
 #     scanned today; the scanned set must follow the manifest rather than a
 #     roster somebody has to remember to grow.

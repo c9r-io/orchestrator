@@ -142,6 +142,17 @@ Read cases 7–11b.
 - Case 11b: a reader captured without testing its status is a finding, **and** a
   correctly written multi-line reader whose `||` sits past a backslash
   continuation is not.
+- Case 11c/11d: a loop fed by a jq-reaching function is a finding in a file that
+  keeps no failure record, **and** is accepted in one that keeps and asserts on
+  it.
+- Case 11e: a file ending inside a here-document is reported rather than
+  silently half-scanned.
+
+**All five rules the scanner defines are proven by a case here.** That is the
+FR-129 meta-assertion applied to this gate: a rule nobody has tried to trip is a
+rule nobody knows can fire. Two of the five had no fixture when this document
+was first written, and the gap was found by listing the rules against the cases
+rather than by reading the code.
 
 **Mutation targeted**: cases 9 and 10 are the ones that separate a parse from a
 `grep`, and they are not hypothetical — DD-154 and this document both quote the

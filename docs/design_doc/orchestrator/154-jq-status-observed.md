@@ -163,6 +163,12 @@ scanned set derived from `qa-gate-surface.json` rather than listed:
 | `unrecorded-feed` | `done < <(fn …)` reaching jq — the reader included — in a file that keeps no failure record |
 | `status-dropped-by-pipe` | `$(jq … \| …)` — unobservable however carefully the caller tests it |
 | `unchecked-reader` | `rows="$(gate_jq_rows …)"` whose status is never tested |
+| `unclosed-heredoc` | a file that ends inside a here-document, so the scan never reached the rest of it |
+
+The last is the backstop that does not depend on the other four being right: a
+clean result over a file the scanner only half-read is an artefact of how much
+was read. FR-138 is precisely that failure in the bash 3.2 scanner, and it is
+asserted here rather than inherited on trust.
 
 The last one exists because the fix invites its own defeat: copy a working call,
 drop the `|| return 1`, and the status the reader was written to surface is
