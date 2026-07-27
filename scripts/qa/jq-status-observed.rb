@@ -145,6 +145,45 @@ module JqStatusObserved
     text.include?("gate_jq_begin") && text.include?("gate_jq_failure_count")
   end
 
+  # A reader whose status nobody tests is the original defect with a new
+  # spelling: `rows="$(gate_jq_rows …)"` on its own discards exactly what the
+  # reader was written to surface, and `set -e` will not save it in condition
+  # position. This is the most likely next mistake — copying a call and dropping
+  # the `|| return 1` — so it is the one worth catching mechanically.
+  #
+  # The statement is followed to its end before judging. The substitution
+  # commonly spans lines (the jq query is written out), and the `||` may sit
+  # past a backslash continuation. Judging the opening line alone would flag
+  # every correctly-written multi-line call in this repository.
+  def unchecked_readers(relative, code)
+    findings = []
+    lines = code.map(&:last)
+
+    code.each_with_index do |(number, line), index|
+      next unless line =~ /=\s*"\$\(\s*#{READER}\b/
+      # Condition position already observes the status.
+      next if line =~ /^\s*(if|while|until|elif)\s/
+
+      cursor = index
+      cursor += 1 while cursor < lines.length - 1 && lines[cursor] !~ /\)"/
+      statement = lines[cursor].to_s
+      while statement.rstrip.end_with?("\\") && cursor < lines.length - 1
+        cursor += 1
+        statement = "#{statement} #{lines[cursor]}"
+      end
+
+      next if statement.include?("||") || statement.include?("&&")
+
+      findings << Finding.new(
+        file: relative, line: number, rule: "unchecked-reader",
+        detail: "the result of #{READER} is captured but its exit status is never tested",
+        fix: "append `|| return 1` (or `|| fail \"…\"`), or put the call in condition position"
+      )
+    end
+
+    findings
+  end
+
   def scan_file(repo_root, relative)
     text = repo_root.join(relative).read
     code, state = ShellLexer.code_lines(text)
@@ -162,17 +201,24 @@ module JqStatusObserved
     reaching = jq_reaching_functions(code)
     recorded = maintains_failure_record?(code)
 
+    findings.concat(unchecked_readers(relative, code))
+
     code.each do |number, line|
       if (match = line.match(/done\s*<\s*<\(\s*([^\s)]+)/))
         feed = match[1]
 
+        # Direct jq is unconditional: it is always convertible at the call site,
+        # so leaving it is a choice to be silent. Anything else that reaches jq
+        # — the shared reader included — is covered by the failure record when
+        # the file keeps one, which is the same allowance the policy accessors
+        # in test-docs-publishing-integrity.sh rely on.
         if feed == "jq"
           findings << Finding.new(
             file: relative, line: number, rule: "unobserved-feed",
             detail: "a loop is fed by jq through a process substitution, whose exit status nobody reads",
             fix: "rows=\"$(#{READER} <require-rows|allow-empty> \"$file\" '<query>')\" || return 1, then: done <<< \"$rows\""
           )
-        elsif reaching[feed] && !recorded
+        elsif (feed == READER || reaching[feed]) && !recorded
           findings << Finding.new(
             file: relative, line: number, rule: "unrecorded-feed",
             detail: "a loop is fed by #{feed}, which can reach jq, and this file keeps no failure record",

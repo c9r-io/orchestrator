@@ -130,7 +130,7 @@ claim made is the one that holds: the gate as a whole rejects the tree.
 
 **Steps**
 
-Read cases 7–11.
+Read cases 7–11b.
 
 **Expected result**
 
@@ -139,12 +139,22 @@ Read cases 7–11.
 - Case 9: **the same line inside a comment is not a finding.**
 - Case 10: **the same line inside a here-document body is not a finding.**
 - Case 11: `$(jq … | …)` is a finding.
+- Case 11b: a reader captured without testing its status is a finding, **and** a
+  correctly written multi-line reader whose `||` sits past a backslash
+  continuation is not.
 
 **Mutation targeted**: cases 9 and 10 are the ones that separate a parse from a
 `grep`, and they are not hypothetical — DD-154 and this document both quote the
 forbidden pattern, and so does the fixture script. A grep-based scanner passes
 case 8 and fails case 9, and the natural way to silence it would be to stop
 writing the rule down.
+
+Case 11b is paired for the same reason in the other direction. The rule it
+guards is the one the fix invites against itself — copy a call, drop the
+`|| return 1` — but almost every correct call in this repository spans lines
+with the `||` past a continuation. A rule judging the opening line alone passes
+the first half of 11b and fails the second, and a rule that flags correct code
+gets switched off long before it catches anything.
 
 *What the scanner would still pass on*: a double-quoted **message** containing
 the pattern is flagged, because `shell_lexer.rb` scans double-quoted regions as
@@ -205,6 +215,7 @@ regresses:
 |---|---|---|
 | `test-qa-gate-surface.sh` | 13 | 13 |
 | `test-qa-gate-surface.sh --fixture-test` | 34 | 34 |
+| `test-docs-publishing-integrity.sh --fixture-test` | 20 | 20 |
 | `test-docs-publishing-integrity.sh` | 7 | **8** |
 | `test-markdown-link-integrity.sh` | 2 | 2 |
 | `test-ci-environment-parity.sh` | 1 | 1 |

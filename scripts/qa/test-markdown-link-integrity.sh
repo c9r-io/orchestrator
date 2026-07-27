@@ -116,8 +116,12 @@ target_resolves() {
   return 1
 }
 
+# allow-empty: most files have no exemption at all, so zero rows is the normal
+# case. The status is still read — an unreadable policy would otherwise return
+# nothing here and every genuinely excused link would be reported as broken,
+# which fails closed but accuses the wrong file.
 exempt_targets_for() {
-  jq -r --arg file "$2" '.exemptions[] | select(.file == $file) | .target' "$1/$POLICY_REL"
+  gate_jq_rows allow-empty "$1/$POLICY_REL" --arg file "$2" '.exemptions[] | select(.file == $file) | .target'
 }
 
 # ── The checks ─────────────────────────────────────────────────────────────────
@@ -128,7 +132,7 @@ check_link_targets_resolve() {
   while IFS= read -r file; do
     [[ -z "$file" ]] && continue
     [[ -f "$root/$file" ]] || continue
-    exempt="$(exempt_targets_for "$root" "$file")"
+    exempt="$(exempt_targets_for "$root" "$file")" || return 1
     while IFS=$'\t' read -r line target; do
       [[ -z "$target" ]] && continue
       target_resolves "$(dirname "$root/$file")" "$target" && continue

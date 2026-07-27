@@ -246,6 +246,33 @@ else
   fail "jq piped inside a command substitution was not detected"
 fi
 
+# 11b. The reader called and then ignored. This is the shape the fix itself
+#      invites: copy a working call, drop the `|| return 1`, and the status the
+#      reader exists to surface is discarded again. Two cases, because the
+#      correctly-written form in this repository usually spans lines with the
+#      `||` past a backslash continuation — a rule that judged the opening line
+#      alone would flag every correct call and be turned off within a week.
+restore
+printf '\nsome_rows="$(gate_jq_rows allow-empty "$f" ".a[]")"\n' >> "$TARGET"
+if scan | grep -q "\[unchecked-reader\]"; then
+  pass "a reader whose status is never tested is rejected"
+else
+  fail "an untested reader capture was not detected"
+fi
+
+restore
+{
+  printf '\nsome_rows="$(gate_jq_rows allow-empty "$f" "\n'
+  printf '  .a[]")" \\\\\n'
+  printf '  || return 1\n'
+} >> "$TARGET"
+if scan | grep -q "^jq status observed: PASS"; then
+  pass "a multi-line reader whose status is tested past a continuation is not a finding"
+else
+  fail "the rule flagged a correctly-written multi-line reader"
+  scan | head -3 >&2
+fi
+
 # 12. Coverage is derived, not listed. A gate registered as ci-required today is
 #     scanned today; the scanned set must follow the manifest rather than a
 #     roster somebody has to remember to grow.

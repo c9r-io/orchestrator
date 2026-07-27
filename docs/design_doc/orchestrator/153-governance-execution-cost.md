@@ -267,15 +267,23 @@ looks like.
 
 ## Known limits
 
-- **A malformed `qa-gate-surface.json` can make checks in
-  `test-qa-gate-surface.sh` pass vacuously.** Found while implementing this FR:
+- ~~**A malformed `qa-gate-surface.json` can make checks in
+  `test-qa-gate-surface.sh` pass vacuously.**~~ **Fixed by FR-144; see
+  [DD-154](154-jq-status-observed.md).** Found while implementing this FR:
   writing `"providerIsolation": "no-provider"` where the manifest wants
-  `{"mode": "no-provider"}` makes `jq` exit 5 mid-pipeline, and because the
-  loops are fed by `done < <(jq …)` the exit status is never observed — the
-  check reads zero rows and returns success. The real gate reported PASS on that
-  manifest; three fixtures in `--fixture-test` caught it. Thirteen loops in that
-  gate and four other gates share the shape, which is more than a P3 cost FR
-  should rewrite, so it is filed as FR-144 rather than fixed here.
+  `{"mode": "no-provider"}` makes `jq` exit 5, and because the loops are fed by
+  `done < <(jq …)` the exit status is never observed — the check reads zero rows
+  and returns success, and the real gate reported PASS on that manifest.
+
+  Two numbers written here were wrong, and are corrected rather than left
+  standing. **Six** fixtures caught it, not three, and one of them belongs to a
+  second check that reads the same field. The shape was counted as "thirteen
+  loops in that gate and four other gates" — that is the text `done < <(jq`,
+  which is not the defect; counting whether the feed can *reach* jq gives **39**
+  across the same five gates, and the worst is `test-docs-publishing-integrity.sh`
+  with 22, listed here as though it were one of the four incidental ones.
+  Deferring it out of a P3 cost FR was still the right call; the estimate of what
+  was being deferred was not.
 - **The budget covers wall clock, not money.** Two jobs running concurrently for
   20 minutes each cost the same wall clock as one for 20 minutes and twice the
   runner minutes. FR-140 asked for a limit on duration and that is what this is.

@@ -154,14 +154,34 @@ document, which a per-call-site fix does not.
 
 ### `scripts/qa/jq-status-observed.rb`
 
-Three rules over every ci-required shell gate and the shared libraries, with the
+Four rules over every ci-required shell gate and the shared libraries, with the
 scanned set derived from `qa-gate-surface.json` rather than listed:
 
 | rule | what it rejects |
 |---|---|
 | `unobserved-feed` | `done < <(jq …)` — always convertible, so always a finding |
-| `unrecorded-feed` | `done < <(fn …)` reaching jq, in a file that keeps no failure record |
+| `unrecorded-feed` | `done < <(fn …)` reaching jq — the reader included — in a file that keeps no failure record |
 | `status-dropped-by-pipe` | `$(jq … \| …)` — unobservable however carefully the caller tests it |
+| `unchecked-reader` | `rows="$(gate_jq_rows …)"` whose status is never tested |
+
+The last one exists because the fix invites its own defeat: copy a working call,
+drop the `|| return 1`, and the status the reader was written to surface is
+discarded again. It is the most likely next mistake, so it is the one worth
+catching mechanically rather than by review.
+
+It judges the whole statement, not the opening line. Calls here routinely span
+lines — the jq query is written out — with the `||` past a backslash
+continuation, and a rule that read the first line alone would flag every
+correctly written call in the repository and be switched off within a week. Both
+directions are asserted: the untested single-line form is a finding, the tested
+multi-line form is not.
+
+Direct `jq` is unconditional because it is always convertible at the call site.
+Everything else that reaches jq, **including `gate_jq_rows` itself**, is excused
+when the file keeps a failure record — the same allowance the policy accessors
+in `test-docs-publishing-integrity.sh` depend on. Making the reader unconditional
+was tried first and flagged the fixture that deliberately exercises the record,
+which is the tell that the rule was drawn in the wrong place.
 
 It **parses** with `scripts/lib/shell_lexer.rb` rather than grepping. This is not
 fastidiousness: the documents describing this FR quote the forbidden pattern by
@@ -218,6 +238,19 @@ under test — is the reason the fixtures are shaped as they are.
   result fails the assertion rather than skipping it — they fail closed. If that
   stops being true the scope should widen, and the rule for widening it is the
   fail-open/fail-closed distinction above, not the file's directory.
+- **Fixture-construction `jq` is not covered, and does not need to be.** The
+  in-scope gates mutate manifests with `jq '…' file > tmp` when building negative
+  fixtures. A failure there leaves the tree unmutated, and `expect_fail` then
+  reports that the check accepted the injected defect — or, in
+  `test-qa-gate-surface.sh`, the `inject` guard hashes the file and reports that
+  the mutation did not apply. Both are loud. The rules deliberately do not fire
+  on them, because a rule that flags a shape already guarded elsewhere trains
+  people to add exemptions.
+- **Only jq is covered.** A gate that read JSON with `ruby -rjson` or `python3
+  -c` would be invisible to all four rules. That is FR-144's stated non-goal (no
+  second JSON processor), and it holds today — but it is an assumption about
+  what people write, not a property of the code, and the rules would need
+  extending rather than adjusting if it stopped being true.
 - **The record is per process, not per check.** It reports that *some* read
   failed during the run and names the file and query, not which check was
   examining nothing at the time. Attributing it per check would mean threading

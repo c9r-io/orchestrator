@@ -392,7 +392,10 @@ check_nav_complete() {
 
   local routes exempt
   routes="$(nav_routes "$root")"
-  exempt="$(jq -r '.navExemptions[].route' "$root/$POLICY_REL")"
+  # allow-empty: no navigation exemptions at all is the best state the list can
+  # be in. Reading it silently would let an unreadable policy shrink the
+  # exemption set to nothing and report every exempted route as unreachable.
+  exempt="$(gate_jq_rows allow-empty "$root/$POLICY_REL" '.navExemptions[].route')" || return 1
   while IFS= read -r route; do
     [[ -z "$route" ]] && continue
     printf '%s\n' "$exempt" | grep -qxF "$route" && continue
