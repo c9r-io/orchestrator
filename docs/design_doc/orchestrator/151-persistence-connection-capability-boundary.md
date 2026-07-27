@@ -272,10 +272,11 @@ reads.
   became `pub(crate)`. Fixed, and pinned by QA cases 15 and 16. It was found by
   disbelieving a count, not by review — worth recording because the same shape
   (two visibility tests in one gate, agreeing by accident) can recur.
-- **Inherited FR-138 defect.** `scripts/qa/bash32-compat.rb` silently swallows a
-  file's tail from line 900 onward when heredoc state is misread. FR-138 is open
-  and this FR does not fix it. `test-persistence-api-boundary.sh` is 436 lines,
-  so it is unaffected today; a future author extending it past that line inherits
-  the defect. Recorded per the DD-149 precedent rather than left implicit.
+- ~~**Inherited FR-138 defect.**~~ **Resolved by FR-138.** `scripts/qa/bash32-compat.rb`
+  silently swallowed a file's tail when here-document state was misread, and this
+  FR did not fix it; `test-persistence-api-boundary.sh` was unaffected only
+  because of its length. Quoting is now tracked across lines and a file ending
+  inside a here-document is a finding, so the length of a gate script no longer
+  determines whether it is scanned. See DD-152.
 - **The `governance` job's runtime.** FR-140 recorded it at 45 minutes; this FR
   adds five cases to an existing gate rather than a new job.

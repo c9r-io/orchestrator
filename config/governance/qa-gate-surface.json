@@ -348,6 +348,16 @@
       "note": "hosted on the fixtures job because its macOS leg is the only place in CI where /bin/bash is 3.2; BASH_COMPAT cannot restore those semantics, so the ubuntu leg reports its executed half as skipped. Writes fixtures under a temporary directory only."
     },
     {
+      "path": "scripts/qa/test-bash32-lexer.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "asserts the scanner's lexical state and its per-file line census. Hosted on the governance job rather than the fixtures job on purpose: nothing here depends on the host's bash version, only on the lexer, and the macOS leg's scarce minutes are better spent on the semantics test-bash32-compat.sh executes. Builds scratch git repositories under a temporary directory; starts no daemon and never writes the working tree."
+    },
+    {
       "path": "scripts/qa/test-coverage-governance-mainpath.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",

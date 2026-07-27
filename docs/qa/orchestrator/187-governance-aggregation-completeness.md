@@ -241,11 +241,14 @@ start and at end, `git rev-parse HEAD` matches across the run, nothing else is w
 repository, each script is invoked as `bash <script> > log 2>&1` with `$?` captured directly rather
 than through a pager, and each log ends with its own summary line.
 
-One condition specific to this document: **the bash 3.2 gate does not see the new fixtures.**
-FR-138 (open) reports that `bash32-compat.rb` ends its scan of `test-qa-gate-surface.sh` at line
-900, and fixtures 22-24 land after that. The compensating observation is running the gate under the
-real `/bin/bash` 3.2 that ships with macOS, which is an execution rather than a scan. Recorded
-below.
+One condition specific to this document: **the bash 3.2 gate did not see the new fixtures** at the
+time of this run. `bash32-compat.rb` ended its scan of `test-qa-gate-surface.sh` early and fixtures
+22-24 land after that point, so the compensating observation was running the gate under the real
+`/bin/bash` 3.2 that ships with macOS — an execution rather than a scan. Recorded below.
+
+**Resolved by FR-138**: quoting is now tracked across lines, the scan reaches end of file, and
+`scripts/qa/test-bash32-lexer.sh` asserts that per file. The run figures below are left as recorded
+— they are what was observed then, including the file count, which has since grown.
 
 ## Recorded Runs
 

@@ -186,11 +186,12 @@ from and what a person debugging one job will reach for.
   cross-job and cross-file confusions, but an expression built by string concatenation at run time
   is beyond it. GitHub does not offer a form that would let the reference be computed, so this is
   currently theoretical.
-- **The new fixtures sit in the region FR-138 reports as unscanned.** FR-138 (open) found that
-  `bash32-compat.rb` resets quote state per line, so a `<<`-shaped token inside a multi-line single
-  quoted string silently ends the scan — and it names `test-qa-gate-surface.sh` from line 900 as
-  one of the two live instances. Fixtures 22-24 and the behavioural block land after that point, so
-  the bash 3.2 gate does not see them. Not fixed here; it belongs to FR-138. Mitigated by running
-  the gate under the real `/bin/bash` 3.2 on macOS, which is an observation rather than a scan.
+- ~~**The new fixtures sit in the region FR-138 reports as unscanned.**~~ **Resolved by FR-138.**
+  `bash32-compat.rb` reset quote state per line, so a `<<`-shaped token inside a multi-line quoted
+  region silently ended the scan, and `test-qa-gate-surface.sh` was one of the two live instances —
+  fixtures 22-24 and the behavioural block landed after that point and the bash 3.2 gate did not
+  see them. Quoting is now tracked across lines, the scan reaches end of file, and
+  `scripts/qa/test-bash32-lexer.sh` asserts that per file rather than inferring it from a green
+  gate. The tail was not inert after all: it was hiding a bare `"${TARGETED[@]}"`. See DD-152.
 - **`disabled?` is not consulted.** A `continue-on-error` step behind `if: false` is still required
   to be aggregated. Erring strict, and the situation does not currently arise.

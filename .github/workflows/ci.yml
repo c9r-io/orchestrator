@@ -260,6 +260,15 @@ jobs:
         continue-on-error: true
         run: ./scripts/qa/test-doc-lifecycle.sh
 
+      # The bash 3.2 scanner's lexical half. Its sibling on the
+      # coverage-policy-fixtures job executes the constructs under a real 3.2;
+      # this one asserts the scanner reads whole files, which is host-independent
+      # and was silently false while that job was green.
+      - name: bash 3.2 scanner lexical state
+        id: bash32-lexer
+        continue-on-error: true
+        run: ./scripts/qa/test-bash32-lexer.sh
+
       - name: Legacy coordination decommission contracts
         id: decommission
         continue-on-error: true
@@ -325,6 +334,7 @@ jobs:
             persistence-api-boundary=${{ steps.persistence-api-boundary.outcome }}
             persistence-extraction=${{ steps.persistence-extraction.outcome }}
             doc-lifecycle=${{ steps.doc-lifecycle.outcome }}
+            bash32-lexer=${{ steps.bash32-lexer.outcome }}
             decommission=${{ steps.decommission.outcome }}
             codex-resume=${{ steps.codex-resume.outcome }}
             filesystem-trigger=${{ steps.filesystem-trigger.outcome }}

@@ -272,14 +272,25 @@ is position-independent.
   bash on macOS runners and are **not** covered. They are short and currently
   free of these constructs, checked by hand during FR-135, but nothing enforces
   that.
-- Emptiness is decided per file, flow-insensitively: an array assigned `=()`
-  anywhere makes every value expansion of that name a finding, even where an
-  earlier guard has already proved it non-empty.
-  `test-agent-driver-documentation-alignment.sh` is such a case and was rewritten
-  anyway, since the guarded form costs nothing.
-- The comment scanner tracks quoting per line. A quote opened on one line and
-  closed on the next is read as unbalanced, and a `#` after it may be treated as
-  a comment when it is not.
+- ~~Emptiness is decided per file, flow-insensitively~~ — **removed by FR-138.**
+  That rule inferred which arrays could be empty from `=()` assignments in the
+  same file, which over-reported where a guard had already proved the array
+  non-empty *and* silently missed arrays emptied in a `source`d library and
+  expanded in the caller. Both directions came from one rule, so FR-138 deleted
+  the inference: every value expansion not written in the guarded form is a
+  finding now, wherever the array came from. See DD-152.
+- ~~The comment scanner tracks quoting per line~~ — **corrected by FR-138**, and
+  the consequence recorded here was the smaller half. Per-line quoting also made
+  a `<< WORD` lookalike inside a cross-line quoted region read as a here-document
+  opener, at which point the rest of the file left the scan with no diagnostic.
+  Two files were escaping that way when FR-138 was filed, one of them this gate's
+  own wrapper. Quoting is now tracked across lines by `scripts/lib/shell_lexer.rb`,
+  including the reset that `$( )` performs, and a file that ends inside a
+  here-document is a finding in its own right. See DD-152.
+- Single-quoted regions are treated as inert, so a hazard inside `bash -c '...'`
+  or `eval '...'` is not reported. This was true before FR-138 as well — the
+  command-position rule did not match after an opening quote — but it is now a
+  deliberate consequence of blanking rather than an accident of pattern shape.
 - bash 3.2 has more incompatibilities than the seven classes here. These are the
   ones this repository has actually hit; a new one arrives unguarded until it is
   added.

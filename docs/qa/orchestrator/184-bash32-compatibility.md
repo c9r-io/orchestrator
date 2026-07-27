@@ -90,8 +90,11 @@ This is the acceptance criterion stated as an experiment. It needs a real bash
 
 ### Expected Result
 
-- Step 1 exits 0 with `bash 3.2 compatibility: PASS (95 shell file(s) scanned,
-  0 finding(s))`.
+- Step 1 exits 0 with `bash 3.2 compatibility: PASS (N shell file(s) scanned,
+  0 finding(s))`, where N is whatever steps 2 and 3 report. The count is not
+  pinned here on purpose: it was written as 95, and was 98 three FRs later while
+  every other expectation still held. A hardcoded total in a QA document is a
+  statement that goes stale on the next commit that adds a script.
 - Steps 2 and 3 agree. The scanned set includes `.claude/skills/**`, which is
   where three of the five bash-4-only constructs were found.
 - Step 4 confirms coverage is walked. A roster would guard only what existed
