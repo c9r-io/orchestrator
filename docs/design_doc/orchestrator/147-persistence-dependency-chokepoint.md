@@ -1,15 +1,15 @@
 ---
 lifecycle: active
-related_fr: FR-136, FR-139
+related_fr: FR-136, FR-139, FR-141
 ---
 
 # DD-147: The Persistence Dependency Chokepoint
 
 **Module**: Architecture / Governance
-**Status**: Implemented (FR-136), corrected (FR-139)
+**Status**: Implemented (FR-136), corrected (FR-139), residual paid (FR-141)
 **Related Plan**: FR-136, FR-139
 **Related QA**: `docs/qa/orchestrator/185-persistence-dependency-chokepoint.md`
-**Related**: DD-142 (core boundary freeze), DD-139 (QA gate enforcement surface), DD-145 (gate surface execution truth)
+**Related**: DD-151 (connection capability boundary — governs the capability condition 2 was written to observe the consequences of), DD-142 (core boundary freeze), DD-139 (QA gate enforcement surface), DD-145 (gate surface execution truth)
 **Created**: 2026-07-26
 **Last Updated**: 2026-07-26
 
@@ -97,8 +97,8 @@ of them are not. The line is therefore drawn at `agent_orchestrator.db`:
 | Crate | Role | Basis |
 |---|---|---|
 | `core`, later `orchestrator-persistence` | `persistence` | the layer itself |
-| `crates/orchestrator-scheduler` | `forbidden` | above core, borrows its connection to run raw SQL in scheduling logic |
-| `crates/daemon` | `forbidden` | above core, borrows its connection to run raw SQL in gRPC handlers |
+| `crates/orchestrator-scheduler` | `forbidden` | above core, borrowed its connection to run raw SQL in scheduling logic; FR-141 moved every statement into the layer, and the role now permits only the `[dev-dependencies]` declaration its `cfg(test)` modules use |
+| `crates/daemon` | `forbidden` → **`none`** | above core, borrowed its connection to run raw SQL in gRPC handlers; FR-141 moved every statement and then its tests, so this crate names the driver in no manifest section at all |
 | `crates/orchestrator-security` | `exempt` | below core; owns `secret_keys`, `secret_key_audit` and the encrypted `resources` rows |
 | `crates/slack-gateway` | `separate-database` | different database, no workspace edges |
 | `crates/integration-tests` | `test-only` | `[dev-dependencies]`; a test asserting against the database directly is legitimate |
@@ -160,10 +160,25 @@ zero, and the declaration itself then starts failing.
 
 FR-130 Phase A did **not** reach that point, and this paragraph used to say it
 would ("when FR-130 Phase A finishes, the flag comes off"). Phase A moved the
-layer; it did not migrate the callers above it. Scheduler and daemon still hold
-17 and 22 driver references, because they borrow a connection and write SQL in
-place — which is Phase B's work, not Phase A's. The trigger is the residual
+layer; it did not migrate the callers above it. Scheduler and daemon still held
+17 and 22 driver references, because they borrowed a connection and wrote SQL in
+place — which was Phase B's work, not Phase A's. The trigger is the residual
 reaching zero, not a phase completing.
+
+**FR-141 paid it.** Phase B closed without doing so, and the debt was booked to
+it; FR-141 was the only change that could clear it, because clearing it means
+closing the API that hands out the connection. Both residuals are zero, both
+flags are off, and the rule this paragraph states — "the declaration itself then
+starts failing" — was itself unimplemented until then: `persistence-dependency.rb`
+had a branch for a forbidden crate declaring the driver *without* the flag and
+none for the flag without the debt, so the paid-off state passed silently. It is
+now `stale_residual_errors`, with both halves of case 19 asserting it.
+
+Two roles changed with the payment. `crates/daemon` became `none`: `forbidden`
+permits a `[dev-dependencies]` declaration and there is nothing left there to
+declare one for. `core` became `forbidden`, corrected from `persistence` — core
+stopped being the layer at FR-130 Phase A and this ledger went on saying it *was*
+the layer for four FRs after that stopped being true. See DD-151.
 
 ### Requirement 1 stated as an assertion
 
@@ -186,7 +201,12 @@ assertion" is outside the production scan by construction:
 | `borrowed-connection-raw-sql` | 9 | takes core's `AsyncDatabase` connection and writes SQL in place |
 | `owned-connection` | 5 | opens its own `Connection` |
 | `driver-error-type` | 2 | names only `tokio_rusqlite::Error::Other` |
-| `transaction-boundary` | **0** | explicit caller-controlled transaction scope |
+| `transaction-boundary` | **0**, now 2 | explicit caller-controlled transaction scope |
+
+`transaction-boundary` was empty when this table was written and stayed empty
+until FR-141 moved `persistence/repository/config.rs`'s caller-controlled
+transaction below the boundary as `ConfigStore::write(|tx| …)`. A category with
+no members is a prediction; this one turned out to be right.
 
 `persistence-layer` is FR-130's, added when Phase A made `crates/orchestrator-persistence` a
 scanned member. Every other category describes a relationship *to* the layer; a fifth was

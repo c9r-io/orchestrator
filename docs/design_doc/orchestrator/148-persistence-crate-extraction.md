@@ -16,9 +16,9 @@ public items, and its highest-churn cluster was persistence. FR-047 and FR-048 e
 who may reach the driver. This is the extraction those three were prerequisites for.
 
 Phase A moved the modules whose boundaries were already clear. All three phases are now closed:
-each of Phase B's eighteen files has a written conclusion, and core is at 9 references across 3
-files, every one of them the driver connection type on the layer's own public API — FR-141's
-subject, not this FR's. FR-130's per-file disposition table records the conclusion for each of the
+each of Phase B's eighteen files has a written conclusion, and core was left at 9 references
+across 3 files, every one of them the driver connection type on the layer's own public API —
+FR-141's subject, not this FR's. FR-141 has since closed that API and taken core to **zero**. FR-130's per-file disposition table records the conclusion for each of the
 eighteen,
 including the reference shape and blocking reason for the twelve still open.
 
@@ -490,10 +490,15 @@ will never reach them**, because the mechanism is migration. Nothing in this des
 FR-130 should be read as evidence about them; they were judged on their reference shape, not on
 their invariants.
 
-All three are in FR-141's scope — the 165 call sites it migrates include theirs — so the audit has
-an owner and an occasion. Whoever takes FR-141 should treat those three as a guard audit as well
-as an API migration, because it will be the first time anyone reads their statements with a reason
-to ask what each one is holding shut.
+All three are in FR-141's scope, so the audit has an owner and an occasion. Whoever takes FR-141
+should treat those three as a guard audit as well as an API migration, because it will be the
+first time anyone reads their statements with a reason to ask what each one is holding shut.
+
+**FR-141 did, and all three have moved**: `attention.rs` and `process_metrics.rs` whole, and
+`config.rs`'s sixteen statements into `config_store` with the caller-controlled transaction
+expressed as `ConfigTx`. The "165 call sites" in the sentence above is FR-141's own figure and did
+not survive its governance period — the measured count outside the layer was 54, the rest being
+`cfg(test)` code and sites FR-130 Phase B had already moved. See DD-151.
 
 ### What is left, and why each is left
 
@@ -505,7 +510,8 @@ to ask what each one is holding shut.
 
 Nine references across three files, each named in `core-boundary-ledger.json` and frozen by exact
 equality in both directions. Each has the same successor, and that successor exists: FR-141, whose
-own non-goals require it to start only after Phase B closes.
+own non-goals require it to start only after Phase B closes. It has since closed, and this table
+is history: `core-boundary-ledger.json` now records **0 references across 0 files**.
 
 ### Ports where they fit, not where they were proposed
 
