@@ -310,3 +310,11 @@ looks like.
   post-fix regime is in fact this stable then the ceiling is roomier than the
   paragraph above says. Which regime the figure describes should be settled by
   accumulated samples, not by ±7% having been written down first.
+
+  Third sample, run `30301603134`: **2370 s, 12% headroom** — but the shape
+  changed, so it is not a repeat. FR-144 added two gates costing 0 s and 25 s
+  together, and the pair still landed within 1% of the previous sample once
+  those are subtracted. Two FRs have now spent headroom without the ceiling
+  binding, which is the mechanism working as intended rather than a warning;
+  the note above stands, and the figure to watch is the trend 14% → 13% → 12%,
+  not any single reading.
