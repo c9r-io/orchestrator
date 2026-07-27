@@ -4,14 +4,12 @@
   "coreSurface": {
     "files": 129,
     "pubMod": 50,
-    "publicItems": 658
+    "publicItems": 610
   },
   "rusqlite": {
-    "total": 8,
+    "total": 2,
     "files": {
-      "core/src/attention.rs": 3,
-      "core/src/persistence/repository/config.rs": 2,
-      "core/src/process_metrics.rs": 3
+      "core/src/persistence/repository/config.rs": 2
     }
   }
 }

@@ -16,42 +16,17 @@ pub struct QaDoctorStats {
 
 /// Query `task_execution_metrics` for the three FR-088 observability indicators.
 pub async fn qa_doctor_stats(db: &AsyncDatabase) -> Result<QaDoctorStats> {
-    let stats = db
-        .reader()
-        .call(|conn| {
-            let total: i64 =
-                conn.query_row("SELECT COUNT(*) FROM task_execution_metrics", [], |row| {
-                    row.get(0)
-                })?;
-
-            let last_24h: i64 = conn.query_row(
-                "SELECT COUNT(*) FROM task_execution_metrics \
-                 WHERE created_at >= datetime('now', '-24 hours')",
-                [],
-                |row| row.get(0),
-            )?;
-
-            let completed: i64 = conn.query_row(
-                "SELECT COUNT(*) FROM task_execution_metrics WHERE status = 'completed'",
-                [],
-                |row| row.get(0),
-            )?;
-
-            let rate = if total > 0 {
-                completed as f64 / total as f64
-            } else {
-                0.0
-            };
-
-            Ok(QaDoctorStats {
-                task_execution_metrics_total: total as u64,
-                task_execution_metrics_last_24h: last_24h as u64,
-                task_completion_rate: rate,
-            })
-        })
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    Ok(stats)
+    let (total, last_24h, completed) = crate::scheduler_state::qa_doctor_metric_counts(db).await?;
+    let rate = if total > 0 {
+        completed as f64 / total as f64
+    } else {
+        0.0
+    };
+    Ok(QaDoctorStats {
+        task_execution_metrics_total: total as u64,
+        task_execution_metrics_last_24h: last_24h as u64,
+        task_completion_rate: rate,
+    })
 }
 
 #[cfg(test)]

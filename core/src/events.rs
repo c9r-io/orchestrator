@@ -1,7 +1,6 @@
-use crate::db::open_conn;
 use crate::state::InnerState;
 use anyhow::Result;
-use orchestrator_persistence::events::{StepEventRow, latest_step_spawn_payload, step_event_rows};
+use orchestrator_persistence::events::StepEventRow;
 use serde_json::Value;
 use std::path::Path;
 use tracing::{debug, error, info, warn};
@@ -193,10 +192,9 @@ pub fn query_latest_step_log_paths(
     db_path: &Path,
     task_id: &str,
 ) -> Result<Option<(String, String, String)>> {
-    let conn = open_conn(db_path)?;
-    Ok(step_log_paths_from_payload(latest_step_spawn_payload(
-        &conn, task_id,
-    )))
+    Ok(step_log_paths_from_payload(
+        orchestrator_persistence::events::latest_step_spawn_payload_by_path(db_path, task_id)?,
+    ))
 }
 
 /// Interprets the latest spawn payload into `(phase, stdout, stderr)`.
@@ -223,12 +221,13 @@ fn step_log_paths_from_payload(payload: Option<String>) -> Option<(String, Strin
 
 /// Query all step-related events for a task, parsed into StepEvent structs.
 pub fn query_step_events(db_path: &Path, task_id: &str) -> Result<Vec<StepEvent>> {
-    let conn = open_conn(db_path)?;
-    Ok(step_events_from_rows(step_event_rows(
-        &conn,
-        task_id,
-        STEP_EVENT_TYPES,
-    )?))
+    Ok(step_events_from_rows(
+        orchestrator_persistence::events::step_event_rows_by_path(
+            db_path,
+            task_id,
+            STEP_EVENT_TYPES,
+        )?,
+    ))
 }
 
 /// Interprets raw `events` rows into [`StepEvent`]s.

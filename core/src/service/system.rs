@@ -193,11 +193,9 @@ pub fn db_status(state: &InnerState) -> Result<orchestrator_proto::DbStatusRespo
 pub fn db_migrations_list(
     state: &InnerState,
 ) -> Result<orchestrator_proto::DbMigrationsListResponse> {
-    let conn = crate::db::open_conn(&state.db_path)
+    let (status, registered) = migration::registered_status_by_path(&state.db_path)
         .map_err(|err| classify_system_error("system.db_migrations_list", err))?;
-    let status = migration::registered_status(&conn)
-        .map_err(|err| classify_system_error("system.db_migrations_list", err))?;
-    let migrations = migration::registered_migration_statuses(&conn)?
+    let migrations = registered
         .into_iter()
         .map(|migration| orchestrator_proto::DbMigration {
             version: migration.version,

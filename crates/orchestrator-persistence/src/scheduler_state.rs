@@ -335,3 +335,63 @@ pub async fn create_dynamic_task_items(
         .await
         .map_err(flatten_err)
 }
+
+/// The three `task_execution_metrics` counts the QA doctor reports.
+///
+/// Returned as `(total, last_24h, completed)`. The completion *rate* is
+/// computed by the caller: it is a presentation decision — what to report when
+/// the total is zero — and not a fact this table holds.
+pub async fn qa_doctor_metric_counts(db: &AsyncDatabase) -> Result<(i64, i64, i64)> {
+    db.reader()
+        .call(|conn| {
+            let total: i64 =
+                conn.query_row("SELECT COUNT(*) FROM task_execution_metrics", [], |row| {
+                    row.get(0)
+                })?;
+
+            let last_24h: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM task_execution_metrics \
+                 WHERE created_at >= datetime('now', '-24 hours')",
+                [],
+                |row| row.get(0),
+            )?;
+
+            let completed: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM task_execution_metrics WHERE status = 'completed'",
+                [],
+                |row| row.get(0),
+            )?;
+            Ok((total, last_24h, completed))
+        })
+        .await
+        .map_err(flatten_err)
+}
+
+/// Terminal task ids whose last update is older than `retention_days`.
+///
+/// Unlike [`crate::task_repository::queries::list_terminal_tasks_older_than`]
+/// this one is unlimited: log cleanup must see every eligible task or it leaves
+/// orphaned directories behind, while the retention sweep deliberately works in
+/// bounded batches. The two statements differ only in the LIMIT clause, and
+/// merging them would give one of the two callers the wrong behaviour silently.
+pub async fn terminal_task_ids_older_than(
+    db: &AsyncDatabase,
+    retention_days: u32,
+) -> Result<Vec<String>> {
+    db.reader()
+        .call(move |conn| {
+            let sql = format!(
+                "SELECT id FROM tasks \
+                 WHERE status IN ('completed','failed','cancelled') \
+                   AND updated_at < datetime('now', '-{retention_days} days')"
+            );
+            let mut stmt = conn.prepare(&sql)?;
+            let ids: Vec<String> = stmt
+                .query_map([], |row| row.get(0))?
+                .filter_map(|r| r.ok())
+                .collect();
+            Ok(ids)
+        })
+        .await
+        .map_err(flatten_err)
+}

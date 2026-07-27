@@ -912,3 +912,14 @@ pub async fn update_session_process_async(
         .await
         .map_err(flatten_err)
 }
+
+/// Reconciles session state through a connection this module opens.
+///
+/// Bootstrap runs this before any async runtime is guaranteed to exist —
+/// `init_state` builds its managed state synchronously — so the path form is
+/// what keeps the connection inside the layer without forcing that call site
+/// to become async.
+pub fn reconcile_sessions_by_path(db_path: &std::path::Path) -> Result<Vec<(String, String)>> {
+    let conn = crate::sqlite::open_conn(db_path)?;
+    reconcile_sessions(&conn)
+}

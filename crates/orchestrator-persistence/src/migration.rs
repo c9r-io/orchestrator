@@ -399,6 +399,22 @@ pub fn run_pending(conn: &Connection, migrations: &[Migration]) -> Result<Applie
     Ok(AppliedMigrationSummary { applied })
 }
 
+/// Registered-migration status read through a connection this module opens.
+///
+/// `core::service::system::db_migrations_list` is synchronous and opened a
+/// connection by path only so it could call [`registered_status`] and
+/// [`registered_migration_statuses`]. Both reads now happen behind one entry
+/// point, so the connection never leaves the layer.
+pub fn registered_status_by_path(
+    db_path: &std::path::Path,
+) -> Result<(SchemaStatus, Vec<RegisteredMigrationStatus>)> {
+    let conn = crate::sqlite::open_conn(db_path)?;
+    Ok((
+        registered_status(&conn)?,
+        registered_migration_statuses(&conn)?,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

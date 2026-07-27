@@ -39,6 +39,48 @@ impl PersistenceBootstrap {
     }
 }
 
+/// Whether the `secret_keys` table exists yet, and how many rows it holds.
+///
+/// Returns `None` when the table is absent, which during bootstrap means the
+/// migration chain has not reached it yet rather than that anything is wrong.
+pub fn secret_keys_row_count(db_path: &std::path::Path) -> anyhow::Result<Option<i64>> {
+    let conn = crate::sqlite::open_conn(db_path)?;
+    let table_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='secret_keys'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
+    if !table_exists {
+        return Ok(None);
+    }
+    Ok(Some(conn.query_row(
+        "SELECT COUNT(*) FROM secret_keys",
+        [],
+        |row| row.get(0),
+    )?))
+}
+
+/// Which of `key_ids` are still referenced by encrypted SecretStore rows.
+///
+/// One connection for the whole set rather than one per key: the caller is
+/// reporting on crash recovery, and a per-key connection would make the answer
+/// depend on how many keys were revoked.
+pub fn secret_store_keys_still_referenced(
+    db_path: &std::path::Path,
+    key_ids: &[String],
+) -> anyhow::Result<Vec<String>> {
+    let conn = crate::sqlite::open_conn(db_path)?;
+    let mut referenced = Vec::new();
+    for key_id in key_ids {
+        if crate::db::secret_store_resources_reference_key(&conn, key_id).unwrap_or(false) {
+            referenced.push(key_id.clone());
+        }
+    }
+    Ok(referenced)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

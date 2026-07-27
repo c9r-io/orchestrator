@@ -266,9 +266,9 @@ pub fn apply_manifests(
     validate_driver_raw_args(&merged_config, cli_project, state.unsafe_mode, &mut errors);
 
     if errors.is_empty() && !deleted_resources.is_empty() {
-        let conn = crate::db::open_conn(db_path)
+        let guards = crate::db::DeletionGuardConnection::open(db_path)
             .map_err(|err| classify_resource_error("resource.apply", err))?;
-        enforce_deletion_guards_for_removals(&conn, &deleted_resources)
+        enforce_deletion_guards_for_removals(&guards, &deleted_resources)
             .map_err(|err| classify_resource_error("resource.apply", err))?;
     }
 

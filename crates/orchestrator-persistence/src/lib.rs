@@ -27,6 +27,8 @@
 
 /// Writer/reader connection pair for async database I/O.
 pub mod async_database;
+/// The attention queue tables and the statements over them.
+pub mod attention_store;
 /// Backlinks from an audited row to the request that produced it.
 pub mod audit_links;
 /// The `control_action_audit` table and the statements over it.
@@ -49,6 +51,8 @@ pub mod handoff_store;
 pub mod migration;
 /// Individual migration step implementations.
 pub mod migration_steps;
+/// Process Console metrics: samples, rollups and the queries over them.
+pub mod process_metrics_store;
 /// Domain-specific repository traits and their SQLite implementations.
 pub mod repository;
 /// The reads and writes the scheduler makes about task and item state.

@@ -588,3 +588,53 @@ impl DeletionGuardQueries for Connection {
         list_non_terminal_tasks_by_workflow(self, project_id, workflow_id, limit)
     }
 }
+
+/// A connection opened for deletion-guard checks, owning it for the caller.
+///
+/// `enforce_deletion_guards_for_removals` takes a `&dyn DeletionGuardQueries`,
+/// and `Connection` implements it — which is why `core` opened one by path to
+/// call it. This owns that connection inside the layer instead.
+pub struct DeletionGuardConnection {
+    conn: Connection,
+}
+
+impl DeletionGuardConnection {
+    /// Opens a connection for deletion-guard checks.
+    pub fn open(db_path: &Path) -> Result<Self> {
+        Ok(Self {
+            conn: open_conn(db_path)?,
+        })
+    }
+}
+
+impl DeletionGuardQueries for DeletionGuardConnection {
+    fn non_terminal_tasks_in_workspace(&self, project_id: &str, workspace_id: &str) -> Result<i64> {
+        self.conn
+            .non_terminal_tasks_in_workspace(project_id, workspace_id)
+    }
+
+    fn sample_non_terminal_tasks_in_workspace(
+        &self,
+        project_id: &str,
+        workspace_id: &str,
+        limit: usize,
+    ) -> Result<Vec<TaskReference>> {
+        self.conn
+            .sample_non_terminal_tasks_in_workspace(project_id, workspace_id, limit)
+    }
+
+    fn non_terminal_tasks_in_workflow(&self, project_id: &str, workflow_id: &str) -> Result<i64> {
+        self.conn
+            .non_terminal_tasks_in_workflow(project_id, workflow_id)
+    }
+
+    fn sample_non_terminal_tasks_in_workflow(
+        &self,
+        project_id: &str,
+        workflow_id: &str,
+        limit: usize,
+    ) -> Result<Vec<TaskReference>> {
+        self.conn
+            .sample_non_terminal_tasks_in_workflow(project_id, workflow_id, limit)
+    }
+}

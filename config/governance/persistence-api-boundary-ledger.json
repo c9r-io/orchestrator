@@ -512,67 +512,9 @@
     }
   },
   "holds": {
-    "core/src/attention.rs": {
-      "crate": "core",
-      "acquisitions": 14,
-      "via": [
-        "reader",
-        "writer"
-      ]
-    },
-    "core/src/events.rs": {
-      "crate": "core",
-      "acquisitions": 2,
-      "via": [
-        "open_conn"
-      ]
-    },
-    "core/src/log_cleanup.rs": {
-      "crate": "core",
-      "acquisitions": 1,
-      "via": [
-        "reader"
-      ]
-    },
     "core/src/persistence/repository/config.rs": {
       "crate": "core",
       "acquisitions": 9,
-      "via": [
-        "open_conn"
-      ]
-    },
-    "core/src/process_metrics.rs": {
-      "crate": "core",
-      "acquisitions": 6,
-      "via": [
-        "reader",
-        "writer"
-      ]
-    },
-    "core/src/qa_doctor.rs": {
-      "crate": "core",
-      "acquisitions": 1,
-      "via": [
-        "reader"
-      ]
-    },
-    "core/src/service/bootstrap.rs": {
-      "crate": "core",
-      "acquisitions": 3,
-      "via": [
-        "open_conn"
-      ]
-    },
-    "core/src/service/resource/mod.rs": {
-      "crate": "core",
-      "acquisitions": 1,
-      "via": [
-        "open_conn"
-      ]
-    },
-    "core/src/service/system.rs": {
-      "crate": "core",
-      "acquisitions": 1,
       "via": [
         "open_conn"
       ]
@@ -581,7 +523,7 @@
   "totals": {
     "yields": 6,
     "demands": 67,
-    "holdingFiles": 9,
-    "acquisitions": 38
+    "holdingFiles": 1,
+    "acquisitions": 9
   }
 }

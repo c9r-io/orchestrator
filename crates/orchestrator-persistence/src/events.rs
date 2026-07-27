@@ -115,3 +115,23 @@ pub async fn step_event_rows_async(
         .await
         .map_err(crate::async_database::flatten_err)
 }
+
+/// The latest step-spawn payload for a task, read through a connection this
+/// module opens.
+pub fn latest_step_spawn_payload_by_path(
+    db_path: &std::path::Path,
+    task_id: &str,
+) -> anyhow::Result<Option<String>> {
+    let conn = crate::sqlite::open_conn(db_path)?;
+    Ok(latest_step_spawn_payload(&conn, task_id))
+}
+
+/// Step-event rows for a task, read through a connection this module opens.
+pub fn step_event_rows_by_path(
+    db_path: &std::path::Path,
+    task_id: &str,
+    event_types: &[&str],
+) -> anyhow::Result<Vec<StepEventRow>> {
+    let conn = crate::sqlite::open_conn(db_path)?;
+    step_event_rows(&conn, task_id, event_types)
+}

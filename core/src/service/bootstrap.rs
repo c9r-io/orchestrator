@@ -135,9 +135,7 @@ fn build_managed_state(
     let session_store = Arc::new(crate::session_store::AsyncSessionStore::new(
         async_database.clone(),
     ));
-    if let Ok(conn) = crate::db::open_conn(&db_path)
-        && let Err(error) = crate::session_store::reconcile_sessions(&conn)
-    {
+    if let Err(error) = crate::session_store::reconcile_sessions_by_path(&db_path) {
         tracing::warn!(%error, "failed to reconcile interactive sessions during bootstrap");
     }
     let task_repo = Arc::new(crate::task_repository::AsyncSqliteTaskRepository::new(
@@ -249,18 +247,9 @@ fn initialize_runtime(data_dir: &Path) -> Result<(std::path::PathBuf, std::path:
 }
 
 fn import_legacy_key_if_needed(data_dir: &Path, db_path: &Path) -> Result<()> {
-    let conn = crate::db::open_conn(db_path)?;
-    let table_exists: bool = conn
-        .query_row(
-            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='secret_keys'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(false);
-    if !table_exists {
+    let Some(count) = orchestrator_persistence::schema::secret_keys_row_count(db_path)? else {
         return Ok(());
-    }
-    let count: i64 = conn.query_row("SELECT COUNT(*) FROM secret_keys", [], |row| row.get(0))?;
+    };
     // The import and both audit rows share one session, as they shared one
     // connection before FR-141. They are one operation: a key adopted without
     // its two audit rows is a key with no recorded origin.
@@ -318,19 +307,23 @@ fn run_key_lifecycle_diagnostics(data_dir: &Path, db_path: &Path) {
         .iter()
         .filter(|r| r.state == crate::secret_key_lifecycle::KeyState::Revoked)
         .collect();
-    if !revoked_records.is_empty()
-        && let Ok(conn) = crate::db::open_conn(db_path)
-    {
-        for rec in &revoked_records {
-            let still_ref = crate::db::secret_store_resources_reference_key(&conn, &rec.key_id)
-                .unwrap_or(false);
-            if still_ref {
-                tracing::warn!(
-                    key_id = %rec.key_id,
-                    "crash recovery: revoked key still referenced by SecretStore data; \
-                     loaded as decrypt-only. Run `secret key rotate --resume` to complete migration"
-                );
-            }
+    if !revoked_records.is_empty() {
+        let revoked_ids: Vec<String> = revoked_records
+            .iter()
+            .map(|rec| rec.key_id.clone())
+            .collect();
+        let still_referenced =
+            orchestrator_persistence::schema::secret_store_keys_still_referenced(
+                db_path,
+                &revoked_ids,
+            )
+            .unwrap_or_default();
+        for key_id in still_referenced {
+            tracing::warn!(
+                key_id = %key_id,
+                "crash recovery: revoked key still referenced by SecretStore data; \
+                 loaded as decrypt-only. Run `secret key rotate --resume` to complete migration"
+            );
         }
     }
 

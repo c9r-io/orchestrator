@@ -37,23 +37,8 @@ pub async fn cleanup_old_logs(
     }
 
     // Find terminal tasks older than retention period.
-    let task_ids: Vec<String> = db
-        .reader()
-        .call(move |conn| {
-            let sql = format!(
-                "SELECT id FROM tasks \
-                 WHERE status IN ('completed','failed','cancelled') \
-                   AND updated_at < datetime('now', '-{retention_days} days')"
-            );
-            let mut stmt = conn.prepare(&sql)?;
-            let ids: Vec<String> = stmt
-                .query_map([], |row| row.get(0))?
-                .filter_map(|r| r.ok())
-                .collect();
-            Ok(ids)
-        })
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let task_ids: Vec<String> =
+        crate::scheduler_state::terminal_task_ids_older_than(db, retention_days).await?;
 
     let mut files_deleted: u64 = 0;
     let mut bytes_freed: u64 = 0;
