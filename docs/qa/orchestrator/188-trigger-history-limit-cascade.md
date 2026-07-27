@@ -9,7 +9,8 @@ self_referential_safe: true
 **Module**: Trigger engine / Persistence
 **Scope**: that `Trigger.historyLimit` actually deletes a task that ran; that a task it may not
 delete is left byte-for-byte intact and reported by cause; that a failure which is not a child row
-is not filed as a retention skip; and that the frozen schema is unchanged
+is not filed as a retention skip; that every sweep is audible at the daemon's default log filter;
+and that the frozen schema is unchanged
 **Scenarios**: 5
 **Priority**: High
 
@@ -35,6 +36,7 @@ Primary entry points:
 
 ```bash
 cargo test -p orchestrator-persistence --test round_trip     # 20 tests
+cargo test -p agent-orchestrator --lib history_cleanup_visibility
 ruby scripts/qa/persistence-dependency.rb                    # the ledger this change moves
 git diff --stat config/governance/schema-snapshot.sql        # must be empty
 ```
@@ -63,32 +65,16 @@ The assertion is on the rows, not on the return code. `DELETE` returning `Ok` is
 defect *never* produced — the value of asserting the database state is that it cannot be satisfied
 by a call that reports success without doing anything.
 
----
-
-## Scenario 2: The defect itself, still reproducible
-
-**Steps**
-
-Same test. Before the sweep it issues the original statement directly against the connection:
-
-```sql
-DELETE FROM tasks WHERE id = ?1
-```
-
-on a task that has one `task_items` row and nothing else.
-
-**Expected result**
-
-The statement fails with `FOREIGN KEY constraint failed`.
-
-This is the assertion DD-148 pinned, rewritten rather than removed as FR-142 required. It is now
-raw SQL because the API no longer makes that statement; what it pins is the reason the API had to
-change. If it ever stops failing, the test says so explicitly — the message states that the defect
-can no longer be reproduced and the test therefore no longer shows why the cascade is needed.
+The same test first issues the original statement directly against the connection —
+`DELETE FROM tasks WHERE id = ?1`, on a task holding one `task_items` row — and requires it to fail
+with `FOREIGN KEY constraint failed`. That is the assertion DD-148 pinned, rewritten rather than
+removed as FR-142 required. It is raw SQL because the API no longer makes that statement; what it
+pins is the reason the API had to change. If it ever stops failing, the message says so: the defect
+can no longer be reproduced, so the test no longer shows why the cascade is needed.
 
 ---
 
-## Scenario 3: A task that may not be deleted is left whole and named
+## Scenario 2: A task that may not be deleted is left whole and named
 
 **Steps**
 
@@ -113,7 +99,7 @@ foreign key on `DELETE FROM tasks`.
 
 ---
 
-## Scenario 4: A failure that is not a child row is not a retention skip
+## Scenario 3: A failure that is not a child row is not a retention skip
 
 **Steps**
 
@@ -127,6 +113,33 @@ A missing task is the reachable instance — another writer can remove one betwe
 query and the sweep. The assertion exists because the whole defect being closed was a real failure
 wearing a shape nobody looked at, and a skip list that quietly absorbs unrelated failures would
 rebuild it one level up.
+
+---
+
+## Scenario 4: The sweep reports itself at the daemon's default log level
+
+**Steps**
+
+```bash
+cargo test -p agent-orchestrator --lib history_cleanup_visibility
+```
+
+Three completed runs of one trigger, keeping one; of the two beyond retention the older is
+deletable and the newer is pinned by a `resume_plans` row, so a single sweep produces both a delete
+and a skip. `cleanup_history` runs under a `tracing` subscriber whose filter is
+`EnvFilter::new("info")` — the exact fallback `crates/daemon/src/main.rs` uses when neither
+`ORCHESTRATOR_LOG` nor `RUST_LOG` is set — and the emitted bytes are captured.
+
+**Expected result**
+
+The deletable task is gone from `tasks`, and the captured log contains `trigger history cleanup`
+with `deleted=1`, the line `history limit skipped a task still referenced elsewhere`, and the
+string `resume_plans.task_id`.
+
+This is the half a correctness assertion cannot reach. A sweep can compute the right answer and
+still be silent, and silence is what the FR existed to end: the original failure was logged at
+`debug!` under this same filter, so there was no symptom at all. Asserting the counts without
+asserting the output would leave the severity free to regress with every test still green.
 
 ---
 
@@ -161,23 +174,28 @@ verified byte-identical with `diff -q` before the next one.
 
 | Mutation | Assertion that failed | Observed |
 |---|---|---|
-| `items.rs`: replace `conn.unchecked_transaction()` with the bare connection and drop the commit | Scenario 3 | `the refused sweep changed the items of a task it did not delete: left 0, right 1` — the half-emptied task, exactly the state the transaction prevents |
-| `trigger_state.rs`: drop `AND UPPER(COALESCE(f.on_delete,'')) <> 'CASCADE'` | Scenario 3 | `blocked_by` became `["resume_plans.task_id", "task_graph_runs.task_id"]`, naming a table that never refused anything |
-| `trigger_state.rs`: replace `if blocked_by.is_empty()` with `if false`, filing every failure as a skip | Scenario 4 | `a missing task was absorbed as a skip: SkippedTask { task_id: "no-such-task", blocked_by: [] }` |
+| `items.rs`: replace `conn.unchecked_transaction()` with the bare connection and drop the commit | Scenario 2 | `the refused sweep changed the items of a task it did not delete: left 0, right 1` — the half-emptied task, exactly the state the transaction prevents |
+| `trigger_state.rs`: drop `AND UPPER(COALESCE(f.on_delete,'')) <> 'CASCADE'` | Scenario 2 | `blocked_by` became `["resume_plans.task_id", "task_graph_runs.task_id"]`, naming a table that never refused anything |
+| `trigger_state.rs`: replace `if blocked_by.is_empty()` with `if false`, filing every failure as a skip | Scenario 3 | `a missing task was absorbed as a skip: SkippedTask { task_id: "no-such-task", blocked_by: [] }` |
+
+| `trigger_engine.rs`: regress the skip `warn!` and the summary `info!` back to `debug!` | Scenario 4 | the captured log came back **empty** — the original defect, reproduced exactly |
 
 The third mutation **survived the first version of this suite**. Scenario 4 was written after it
-was observed to survive, not before. Recorded because the gap was in the tests, not in the code,
-and the audit that finds such a gap is worth more than the fixture it produces.
+was observed to survive, not before. So was scenario 4: the first version of this work asserted the
+counts and the rows and left the logging — the FR's entire reason for existing — with no condition
+on it at all. Both are recorded because the gap was in the tests, not in the code, and the audit
+that finds such a gap is worth more than the fixture it produces.
 
 ---
 
 ## Checklist
 
 - [ ] Scenario 1: a task with items, a command run and events is deleted, and the log paths come back
-- [ ] Scenario 2: a bare `DELETE FROM tasks` still fails with `FOREIGN KEY constraint failed`
-- [ ] Scenario 3: a task pinned by `resume_plans` is skipped, named, and left with every row intact
-- [ ] Scenario 3: a cascading `task_graph_runs` row is not reported as a blocker
-- [ ] Scenario 4: a missing task surfaces as an error, not as a skip
+- [ ] Scenario 1: a bare `DELETE FROM tasks` still fails with `FOREIGN KEY constraint failed`
+- [ ] Scenario 2: a task pinned by `resume_plans` is skipped, named, and left with every row intact
+- [ ] Scenario 2: a cascading `task_graph_runs` row is not reported as a blocker
+- [ ] Scenario 3: a missing task surfaces as an error, not as a skip
+- [ ] Scenario 4: a sweep prints its summary and its skip cause at an `info` filter
 - [ ] Scenario 5: `config/governance/schema-snapshot.sql` is unchanged
 - [ ] Scenario 5: the persistence ledger moves by exactly `trigger_state.rs sql 7 → 8`
 - [ ] `cargo test --workspace` passes

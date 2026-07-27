@@ -1050,3 +1050,144 @@ mod tests {
         assert_eq!(due[0].trigger_name, "past");
     }
 }
+
+/// The visibility half of FR-142, asserted at the daemon's default filter.
+///
+/// The defect this closed was not a wrong result — it was a real failure logged
+/// at `debug!` while `crates/daemon/src/main.rs` falls back to
+/// `EnvFilter::new("info")`, so nothing was ever printed and the only evidence
+/// was a table that did not shrink. Asserting the counts alone would leave that
+/// half unguarded: a sweep can be perfectly correct and still silent, which is
+/// the exact state this FR existed to end. So the events are captured through a
+/// subscriber filtered to `info`, the same threshold a default deployment uses.
+/// A severity that regresses below it fails here rather than in production.
+#[cfg(test)]
+mod history_cleanup_visibility_tests {
+    use super::*;
+    use crate::config::TriggerHistoryLimitConfig;
+    use crate::test_utils::TestState;
+    use std::io;
+    use std::sync::{Arc as StdArc, Mutex as StdMutex};
+
+    #[derive(Clone, Default)]
+    struct Captured(StdArc<StdMutex<Vec<u8>>>);
+
+    impl io::Write for Captured {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.0
+                .lock()
+                .expect("capture buffer")
+                .extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Captured {
+        type Writer = Self;
+        fn make_writer(&'a self) -> Self::Writer {
+            self.clone()
+        }
+    }
+
+    fn seed(conn: &rusqlite::Connection, id: &str, name: &str, created: &str) {
+        conn.execute(
+            "INSERT INTO tasks (id, name, status, goal, target_files_json, mode, workspace_id,
+                 workflow_id, project_id, workspace_root, qa_targets_json, ticket_dir,
+                 created_at, updated_at)
+             VALUES (?1, ?2, 'completed', 'g', '[]', 'qa', 'ws', 'wf', 'default', '/tmp', '[]',
+                     '/tmp', ?3, ?3)",
+            rusqlite::params![id, name, created],
+        )
+        .expect("seed a history task");
+        conn.execute(
+            "INSERT INTO task_items (id, task_id, order_no, qa_file_path, status,
+                 ticket_files_json, ticket_content_json, created_at, updated_at)
+             VALUES (?1, ?2, 0, 'q.md', 'qa_passed', '[]', '{}', ?3, ?3)",
+            rusqlite::params![format!("item-{id}"), id, created],
+        )
+        .expect("seed the item every task has");
+    }
+
+    #[tokio::test]
+    async fn a_history_sweep_reports_itself_at_the_default_log_level() {
+        let mut test_state = TestState::new();
+        let state = test_state.build();
+        let conn =
+            orchestrator_persistence::sqlite::open_conn(&state.db_path).expect("open database");
+
+        // Three completed runs of one trigger. Keeping one leaves two beyond
+        // retention: the older is deletable, the newer is pinned by a resume
+        // plan, so one sweep produces both a delete and a skip.
+        let name = trigger_task_name("nightly");
+        for (id, day) in [
+            ("hist-old", "01"),
+            ("hist-pinned", "02"),
+            ("hist-keep", "03"),
+        ] {
+            seed(&conn, id, &name, &format!("2026-01-{day}T00:00:00+00:00"));
+        }
+        conn.execute(
+            "INSERT INTO resume_plans (id, project_id, task_id, boundary_id, mode,
+                 expected_state_version, side_effect_class, replay_safe,
+                 elevated_confirmation_required, consequence_json, status, expires_at,
+                 created_by, created_at)
+             VALUES ('plan-vis', 'default', 'hist-pinned', 'b', 'resume', 'v1', 'none', 1, 0,
+                     '{}', 'pending', '2026-02-01T00:00:00+00:00', 'operator',
+                     '2026-01-02T00:00:00+00:00')",
+            [],
+        )
+        .expect("pin one of the two");
+
+        let captured = Captured::default();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(captured.clone())
+            .with_ansi(false)
+            // The fallback `crates/daemon/src/main.rs` uses when neither
+            // ORCHESTRATOR_LOG nor RUST_LOG is set.
+            .with_env_filter(tracing_subscriber::EnvFilter::new("info"))
+            .finish();
+
+        let limit = TriggerHistoryLimitConfig {
+            successful: Some(1),
+            failed: None,
+        };
+        let guard = tracing::subscriber::set_default(subscriber);
+        cleanup_history(&state, "nightly", "default", Some(&limit))
+            .await
+            .expect("the sweep is a retention outcome, not an error");
+        drop(guard);
+
+        let log = String::from_utf8(captured.0.lock().expect("capture buffer").clone())
+            .expect("captured log is utf-8");
+
+        // The sweep did the work.
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM tasks WHERE id = 'hist-old'",
+                [],
+                |row| row.get::<_, i64>(0)
+            )
+            .expect("count the deletable task"),
+            0,
+            "the deletable task survived the sweep"
+        );
+
+        // And said so, above the threshold a default deployment listens at.
+        assert!(
+            log.contains("trigger history cleanup") && log.contains("deleted=1"),
+            "a sweep that deleted a task printed nothing a default deployment would see; \
+             this is the defect FR-142 closed, returning. log:\n{log}"
+        );
+        assert!(
+            log.contains("history limit skipped a task still referenced elsewhere"),
+            "a skipped task was not reported at all. log:\n{log}"
+        );
+        assert!(
+            log.contains("resume_plans.task_id"),
+            "the skip was reported as a bare count with no cause to act on. log:\n{log}"
+        );
+    }
+}

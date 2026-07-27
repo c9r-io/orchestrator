@@ -53,3 +53,6 @@ test-harness = []
 
 [dev-dependencies]
 tempfile = "3.26.0"
+# Used only to capture emitted tracing events at the daemon's default `info`
+# filter, so the visibility FR-142 restored is asserted rather than assumed.
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
