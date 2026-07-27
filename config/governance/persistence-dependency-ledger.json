@@ -421,6 +421,12 @@
       "sql": 4,
       "category": "owned-connection"
     },
+    "crates/orchestrator-security/src/secret_store_session.rs": {
+      "crate": "crates/orchestrator-security",
+      "rusqlite": 2,
+      "sql": 0,
+      "category": "owned-connection"
+    },
     "crates/slack-gateway/src/store.rs": {
       "crate": "crates/slack-gateway",
       "rusqlite": 10,
@@ -430,8 +436,8 @@
   },
   "totals": {
     "members": 14,
-    "referencedFiles": 43,
-    "rusqlite": 237,
+    "referencedFiles": 44,
+    "rusqlite": 239,
     "sql": 515
   }
 }

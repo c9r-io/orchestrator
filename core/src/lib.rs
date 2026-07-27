@@ -125,6 +125,8 @@ pub use orchestrator_security::secret_key_audit;
 pub use orchestrator_security::secret_key_lifecycle;
 /// Secret-store encryption and decryption helpers.
 pub use orchestrator_security::secret_store_crypto;
+/// Opaque handle to the SecretStore tables; the way core and the daemon reach them since FR-141.
+pub use orchestrator_security::secret_store_session;
 /// Secure file and directory creation helpers.
 pub use orchestrator_security::secure_files;
 /// Agent selection algorithms and resolution helpers.

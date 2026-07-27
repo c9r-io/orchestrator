@@ -515,72 +515,6 @@
       "types": [
         "Connection"
       ]
-    },
-    "crates/orchestrator-security/src/secret_key_audit.rs::fn insert_key_audit_event": {
-      "crate": "crates/orchestrator-security",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-security/src/secret_key_audit.rs::fn query_key_audit_events": {
-      "crate": "crates/orchestrator-security",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-security/src/secret_key_audit.rs::fn query_key_audit_events_for_key": {
-      "crate": "crates/orchestrator-security",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-security/src/secret_key_lifecycle.rs::fn begin_rotation": {
-      "crate": "crates/orchestrator-security",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-security/src/secret_key_lifecycle.rs::fn bootstrap_key": {
-      "crate": "crates/orchestrator-security",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-security/src/secret_key_lifecycle.rs::fn complete_rotation": {
-      "crate": "crates/orchestrator-security",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-security/src/secret_key_lifecycle.rs::fn import_legacy_key_record": {
-      "crate": "crates/orchestrator-security",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-security/src/secret_key_lifecycle.rs::fn query_all_key_records": {
-      "crate": "crates/orchestrator-security",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-security/src/secret_key_lifecycle.rs::fn re_encrypt_all_secrets": {
-      "crate": "crates/orchestrator-security",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-security/src/secret_key_lifecycle.rs::fn resume_rotation": {
-      "crate": "crates/orchestrator-security",
-      "types": [
-        "Connection"
-      ]
-    },
-    "crates/orchestrator-security/src/secret_key_lifecycle.rs::fn revoke_key": {
-      "crate": "crates/orchestrator-security",
-      "types": [
-        "Connection"
-      ]
     }
   },
   "holds": {
@@ -630,7 +564,7 @@
     },
     "core/src/service/bootstrap.rs": {
       "crate": "core",
-      "acquisitions": 4,
+      "acquisitions": 3,
       "via": [
         "open_conn"
       ]
@@ -669,13 +603,6 @@
       "via": [
         "open_conn",
         "writer"
-      ]
-    },
-    "crates/daemon/src/server/secret.rs": {
-      "crate": "crates/daemon",
-      "acquisitions": 4,
-      "via": [
-        "open_conn"
       ]
     },
     "crates/daemon/src/server/session.rs": {
@@ -741,8 +668,8 @@
   },
   "totals": {
     "yields": 6,
-    "demands": 79,
-    "holdingFiles": 21,
-    "acquisitions": 81
+    "demands": 68,
+    "holdingFiles": 20,
+    "acquisitions": 76
   }
 }

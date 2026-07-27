@@ -121,29 +121,22 @@ fn sanitized_config_snapshot(config: &OrchestratorConfig) -> OrchestratorConfig 
     sanitized
 }
 
-fn emit_decrypt_failed_audit(
-    conn: &rusqlite::Connection,
-    project: &str,
-    name: &str,
-    error: &anyhow::Error,
-) {
-    // Best-effort: if the audit table doesn't exist yet, skip silently
-    let _ = crate::secret_key_audit::insert_key_audit_event(
-        conn,
-        &crate::secret_key_audit::KeyAuditEvent {
-            event_kind: crate::secret_key_audit::KeyAuditEventKind::DecryptFailed,
-            key_id: "unknown".to_string(),
-            key_fingerprint: "unknown".to_string(),
-            actor: "system:load_resources".to_string(),
-            detail_json: serde_json::json!({
-                "project": project,
-                "name": name,
-                "error": error.to_string(),
-            })
-            .to_string(),
-            created_at: now_ts(),
-        },
-    );
+// Takes the database path rather than the caller's connection. The caller is
+// mid-way through stepping a `SELECT` over `resources` when this fires, and
+// under WAL — `PRAGMA journal_mode = WAL`, set by the migration chain — a second
+// connection may write while that read is in progress. Best-effort either way:
+// during bootstrap the audit table may not exist yet, and losing the row is
+// preferable to failing the load it is reporting on.
+fn emit_decrypt_failed_audit(db_path: &Path, project: &str, name: &str, error: &anyhow::Error) {
+    let Ok(session) = crate::secret_store_session::SecretStoreSession::open(db_path) else {
+        return;
+    };
+    session.record_audit_event_best_effort(&crate::secret_store_session::decrypt_failed_event(
+        project,
+        name,
+        "system:load_resources",
+        error,
+    ));
 }
 
 pub(crate) fn persist_config_versioned(
@@ -400,7 +393,7 @@ fn load_all_resources(
             Err(e) => {
                 // Write DecryptFailed audit event (best-effort)
                 if kind == "SecretStore" {
-                    emit_decrypt_failed_audit(&conn, &project, &name, &e);
+                    emit_decrypt_failed_audit(db_path, &project, &name, &e);
                     let inner = e.to_string();
                     if inner.contains("secret key is unavailable")
                         || inner.contains("no decryption key")

@@ -1,6 +1,6 @@
-use agent_orchestrator::secret_key_audit;
 use agent_orchestrator::secret_key_lifecycle;
 use agent_orchestrator::secret_store_crypto::SecretEncryption;
+use agent_orchestrator::secret_store_session::SecretStoreSession;
 use orchestrator_proto::*;
 use tonic::{Request, Response, Status};
 
@@ -68,7 +68,7 @@ pub(crate) async fn secret_key_rotate(
     authorize(server, &request, "SecretKeyRotate").map_err(Status::from)?;
 
     let req = request.into_inner();
-    let conn = agent_orchestrator::db::open_conn(&server.state.db_path).map_err(|e| {
+    let session = SecretStoreSession::open(&server.state.db_path).map_err(|e| {
         map_core_error(agent_orchestrator::error::classify_secret_error(
             "secret.rotate",
             e,
@@ -76,8 +76,9 @@ pub(crate) async fn secret_key_rotate(
     })?;
 
     if req.resume {
-        let report =
-            secret_key_lifecycle::resume_rotation(&conn, &server.state.data_dir).map_err(|e| {
+        let report = session
+            .resume_rotation(&server.state.data_dir)
+            .map_err(|e| {
                 map_core_error(agent_orchestrator::error::classify_secret_error(
                     "secret.rotate",
                     e,
@@ -96,7 +97,8 @@ pub(crate) async fn secret_key_rotate(
     }
 
     // Begin new rotation
-    let (new_rec, old_rec) = secret_key_lifecycle::begin_rotation(&conn, &server.state.data_dir)
+    let (new_rec, old_rec) = session
+        .begin_rotation(&server.state.data_dir)
         .map_err(|e| {
             map_core_error(agent_orchestrator::error::classify_secret_error(
                 "secret.rotate",
@@ -129,21 +131,21 @@ pub(crate) async fn secret_key_rotate(
         ))
     })?;
 
-    let report = secret_key_lifecycle::re_encrypt_all_secrets(
-        &conn,
-        &SecretEncryption::from_key(old_handle),
-        &SecretEncryption::from_key(new_handle),
-    )
-    .map_err(|e| {
-        map_core_error(agent_orchestrator::error::classify_secret_error(
-            "secret.rotate",
-            e,
-        ))
-    })?;
+    let report = session
+        .re_encrypt_all_secrets(
+            &SecretEncryption::from_key(old_handle),
+            &SecretEncryption::from_key(new_handle),
+        )
+        .map_err(|e| {
+            map_core_error(agent_orchestrator::error::classify_secret_error(
+                "secret.rotate",
+                e,
+            ))
+        })?;
 
     // Complete rotation if no errors
     if report.errors.is_empty() {
-        secret_key_lifecycle::complete_rotation(&conn, &old_rec.key_id).map_err(|e| {
+        session.complete_rotation(&old_rec.key_id).map_err(|e| {
             map_core_error(agent_orchestrator::error::classify_secret_error(
                 "secret.rotate",
                 e,
@@ -176,20 +178,19 @@ pub(crate) async fn secret_key_bootstrap(
 ) -> Result<Response<SecretKeyBootstrapResponse>, Status> {
     authorize(server, &request, "SecretKeyBootstrap").map_err(Status::from)?;
 
-    let conn = agent_orchestrator::db::open_conn(&server.state.db_path).map_err(|e| {
+    let session = SecretStoreSession::open(&server.state.db_path).map_err(|e| {
         map_core_error(agent_orchestrator::error::classify_secret_error(
             "secret.bootstrap",
             e,
         ))
     })?;
 
-    let record =
-        secret_key_lifecycle::bootstrap_key(&conn, &server.state.data_dir).map_err(|e| {
-            map_core_error(agent_orchestrator::error::classify_secret_error(
-                "secret.bootstrap",
-                e,
-            ))
-        })?;
+    let record = session.bootstrap_key(&server.state.data_dir).map_err(|e| {
+        map_core_error(agent_orchestrator::error::classify_secret_error(
+            "secret.bootstrap",
+            e,
+        ))
+    })?;
 
     Ok(Response::new(SecretKeyBootstrapResponse {
         message: format!(
@@ -207,14 +208,14 @@ pub(crate) async fn secret_key_revoke(
     authorize(server, &request, "SecretKeyRevoke").map_err(Status::from)?;
 
     let req = request.into_inner();
-    let conn = agent_orchestrator::db::open_conn(&server.state.db_path).map_err(|e| {
+    let session = SecretStoreSession::open(&server.state.db_path).map_err(|e| {
         map_core_error(agent_orchestrator::error::classify_secret_error(
             "secret.revoke",
             e,
         ))
     })?;
 
-    secret_key_lifecycle::revoke_key(&conn, &req.key_id, req.force).map_err(|e| {
+    session.revoke_key(&req.key_id, req.force).map_err(|e| {
         map_core_error(agent_orchestrator::error::classify_secret_error(
             "secret.revoke",
             e,
@@ -233,7 +234,7 @@ pub(crate) async fn secret_key_history(
     authorize(server, &request, "SecretKeyHistory").map_err(Status::from)?;
 
     let req = request.into_inner();
-    let conn = agent_orchestrator::db::open_conn(&server.state.db_path).map_err(|e| {
+    let session = SecretStoreSession::open(&server.state.db_path).map_err(|e| {
         map_core_error(agent_orchestrator::error::classify_secret_error(
             "secret.history",
             e,
@@ -241,9 +242,9 @@ pub(crate) async fn secret_key_history(
     })?;
 
     let events = if let Some(key_id) = &req.key_id {
-        secret_key_audit::query_key_audit_events_for_key(&conn, key_id, req.limit as usize)
+        session.query_key_audit_events_for_key(key_id, req.limit as usize)
     } else {
-        secret_key_audit::query_key_audit_events(&conn, req.limit as usize)
+        session.query_key_audit_events(req.limit as usize)
     }
     .map_err(|e| {
         map_core_error(agent_orchestrator::error::classify_secret_error(

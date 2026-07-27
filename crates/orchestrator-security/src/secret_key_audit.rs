@@ -85,7 +85,7 @@ pub struct KeyAuditEvent {
 // ─── DB Operations ───────────────────────────────────────────────
 
 /// Inserts a SecretStore key audit event into the database.
-pub fn insert_key_audit_event(conn: &Connection, event: &KeyAuditEvent) -> Result<()> {
+pub(crate) fn insert_key_audit_event(conn: &Connection, event: &KeyAuditEvent) -> Result<()> {
     conn.execute(
         "INSERT INTO secret_key_audit (event_kind, key_id, key_fingerprint, actor, detail_json, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -103,7 +103,10 @@ pub fn insert_key_audit_event(conn: &Connection, event: &KeyAuditEvent) -> Resul
 }
 
 /// Returns the most recent SecretStore key audit events across all keys.
-pub fn query_key_audit_events(conn: &Connection, limit: usize) -> Result<Vec<KeyAuditEvent>> {
+pub(crate) fn query_key_audit_events(
+    conn: &Connection,
+    limit: usize,
+) -> Result<Vec<KeyAuditEvent>> {
     let mut stmt = conn.prepare(
         "SELECT event_kind, key_id, key_fingerprint, actor, detail_json, created_at
          FROM secret_key_audit ORDER BY created_at DESC, id DESC LIMIT ?1",
@@ -112,7 +115,7 @@ pub fn query_key_audit_events(conn: &Connection, limit: usize) -> Result<Vec<Key
 }
 
 /// Returns the most recent SecretStore key audit events for a single key.
-pub fn query_key_audit_events_for_key(
+pub(crate) fn query_key_audit_events_for_key(
     conn: &Connection,
     key_id: &str,
     limit: usize,

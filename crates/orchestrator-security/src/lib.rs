@@ -16,6 +16,8 @@ pub mod secret_key_audit;
 pub mod secret_key_lifecycle;
 /// SecretStore encryption/decryption helpers (AES-256-GCM-SIV envelope scheme).
 pub mod secret_store_crypto;
+/// Opaque, connection-owning handle to the SecretStore tables.
+pub mod secret_store_session;
 /// Secure file and directory creation helpers.
 pub mod secure_files;
 

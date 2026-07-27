@@ -287,7 +287,7 @@ fn load_key_file(path: &Path, key_id: &str) -> Result<Option<SecretKeyHandle>> {
 // ─── DB queries ──────────────────────────────────────────────────
 
 /// Queries every stored SecretStore key record ordered by creation time.
-pub fn query_all_key_records(conn: &Connection) -> Result<Vec<KeyRecord>> {
+pub(crate) fn query_all_key_records(conn: &Connection) -> Result<Vec<KeyRecord>> {
     let mut stmt = conn.prepare(
         "SELECT key_id, state, fingerprint, file_path, created_at, activated_at, rotated_out_at, retired_at, revoked_at
          FROM secret_keys ORDER BY created_at ASC",
@@ -352,7 +352,7 @@ fn generate_key_id() -> String {
 
 /// Begin key rotation: generate new key, set old active to decrypt_only.
 /// Returns (new_active_record, old_decrypt_only_record).
-pub fn begin_rotation(conn: &Connection, data_dir: &Path) -> Result<(KeyRecord, KeyRecord)> {
+pub(crate) fn begin_rotation(conn: &Connection, data_dir: &Path) -> Result<(KeyRecord, KeyRecord)> {
     let old_active = query_active_key_record(conn)?
         .ok_or_else(|| anyhow::anyhow!("no active key found; cannot begin rotation"))?;
 
@@ -472,7 +472,7 @@ pub struct ReEncryptionReport {
 
 /// Re-encrypt all SecretStore resources from old_encryption to new_encryption.
 /// Runs in a single transaction for atomicity.
-pub fn re_encrypt_all_secrets(
+pub(crate) fn re_encrypt_all_secrets(
     conn: &Connection,
     old_encryption: &SecretEncryption,
     new_encryption: &SecretEncryption,
@@ -563,7 +563,7 @@ fn re_encrypt_single(
 // ─── Complete Rotation ───────────────────────────────────────────
 
 /// Verify no data references old key, then retire it.
-pub fn complete_rotation(conn: &Connection, old_key_id: &str) -> Result<()> {
+pub(crate) fn complete_rotation(conn: &Connection, old_key_id: &str) -> Result<()> {
     let now = now_ts();
 
     // Check that old key is decrypt_only
@@ -619,7 +619,7 @@ pub fn complete_rotation(conn: &Connection, old_key_id: &str) -> Result<()> {
 
 /// Resume an incomplete rotation: find decrypt_only key and re-encrypt remaining data.
 /// Resume an incomplete rotation: find decrypt_only key and re-encrypt remaining data.
-pub fn resume_rotation(conn: &Connection, data_dir: &Path) -> Result<ReEncryptionReport> {
+pub(crate) fn resume_rotation(conn: &Connection, data_dir: &Path) -> Result<ReEncryptionReport> {
     let records = query_all_key_records(conn)?;
     let old_record = records
         .iter()
@@ -656,7 +656,7 @@ pub fn resume_rotation(conn: &Connection, data_dir: &Path) -> Result<ReEncryptio
 
 /// Creates a fresh active key when no active key exists (all keys terminal).
 /// This is the recovery path from an all-keys-revoked/retired state.
-pub fn bootstrap_key(conn: &Connection, data_dir: &Path) -> Result<KeyRecord> {
+pub(crate) fn bootstrap_key(conn: &Connection, data_dir: &Path) -> Result<KeyRecord> {
     if query_active_key_record(conn)?.is_some() {
         bail!(
             "an active key already exists; bootstrap is only for recovery when no active key is available"
@@ -725,7 +725,7 @@ pub fn bootstrap_key(conn: &Connection, data_dir: &Path) -> Result<KeyRecord> {
 // ─── Revoke ──────────────────────────────────────────────────────
 
 /// Revokes a key and optionally allows revoking the currently active key.
-pub fn revoke_key(conn: &Connection, key_id: &str, force: bool) -> Result<()> {
+pub(crate) fn revoke_key(conn: &Connection, key_id: &str, force: bool) -> Result<()> {
     let records = query_all_key_records(conn)?;
     let record = records
         .iter()
@@ -779,7 +779,10 @@ pub fn revoke_key(conn: &Connection, key_id: &str, force: bool) -> Result<()> {
 // ─── Migration helper: import legacy key ─────────────────────────
 
 /// Imports the legacy primary key file into the lifecycle table if present.
-pub fn import_legacy_key_record(conn: &Connection, data_dir: &Path) -> Result<Option<KeyRecord>> {
+pub(crate) fn import_legacy_key_record(
+    conn: &Connection,
+    data_dir: &Path,
+) -> Result<Option<KeyRecord>> {
     let legacy_path = crate::secret_store_crypto::secret_key_path(data_dir);
     if !legacy_path.exists() {
         return Ok(None);
