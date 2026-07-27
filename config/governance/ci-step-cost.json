@@ -13,6 +13,8 @@
     "reviewWhen": "A new gate that does not fit is not a reason to raise this silently. Whoever adds it either makes room or raises the ceiling in this file with a written reason and a new date. Revisit unconditionally if the runner class changes, since the number assumes GitHub-hosted ubuntu-latest."
   },
   "pendingMeasurement": {
+    "JSON reads observe their exit status": "Added by FR-144 and not yet run in CI. Offline scanner over 30 shell gates; measured at well under a second locally, but a local number is not what this ledger records. The next refresh replaces this with a measurement and drops the entry.",
+    "JSON read status negative fixtures": "Added by FR-144 and not yet run in CI. Thirteen cases, two of which clone the repository and one of which runs the full gate-surface gate, so this is expected to be the more expensive of the pair. Recorded as pending rather than estimated, because an estimate is the thing FR-140 forbids."
   },
   "measurement": {
     "runId": "30288601535",

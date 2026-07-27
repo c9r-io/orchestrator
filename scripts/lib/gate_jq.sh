@@ -138,8 +138,18 @@ gate_jq_rows() {
 
   local err rows status diagnostic
   err="${TMPDIR:-/tmp}/gate_jq.$$.$RANDOM.err"
-  rows="$(jq -r "$@" "$file" 2>"$err")"
-  status=$?
+  # `rows="$(jq …)"; status=$?` reads correctly only where `set -e` is already
+  # suppressed. Called somewhere it is live — a process substitution is the
+  # common case — the assignment itself trips ERR and the shell leaves before
+  # `status` is ever consulted, taking the failure record with it. Putting the
+  # assignment in condition position is what makes the next three lines run at
+  # all. This function was written with the naive form first, and the fixture
+  # for the failure record is what caught it.
+  if rows="$(jq -r "$@" "$file" 2>"$err")"; then
+    status=0
+  else
+    status=$?
+  fi
   diagnostic="$(cat "$err" 2>/dev/null)"
   rm -f "$err"
 

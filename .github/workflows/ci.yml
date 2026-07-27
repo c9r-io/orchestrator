@@ -279,6 +279,16 @@ jobs:
         continue-on-error: true
         run: ./scripts/qa/test-ci-cost.sh
 
+      - name: JSON reads observe their exit status
+        id: jq-status
+        continue-on-error: true
+        run: ./scripts/qa/jq-status-observed.rb
+
+      - name: JSON read status negative fixtures
+        id: jq-status-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-jq-status-observed.sh
+
       - name: Legacy coordination decommission contracts
         id: decommission
         continue-on-error: true
@@ -347,6 +357,8 @@ jobs:
             bash32-lexer=${{ steps.bash32-lexer.outcome }}
             cost=${{ steps.cost.outcome }}
             cost-fixtures=${{ steps.cost-fixtures.outcome }}
+            jq-status=${{ steps.jq-status.outcome }}
+            jq-status-fixtures=${{ steps.jq-status-fixtures.outcome }}
             decommission=${{ steps.decommission.outcome }}
             codex-resume=${{ steps.codex-resume.outcome }}
             filesystem-trigger=${{ steps.filesystem-trigger.outcome }}

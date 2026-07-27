@@ -42,9 +42,7 @@
       "reason": "sourced by test-slack-live-certification.sh and certify-slack-managed-live.sh; both are classified above"
     }
   ],
-  "staleClaimExemptions": [
-
-  ],
+  "staleClaimExemptions": [],
   "commandSources": {
     "description": "What each CI job puts on PATH, so a ci-required gate's `command -v` preamble can be checked against the job that runs it. FR-134 found three ci-required gates exiting on `missing command: rg` before their first assertion, in two jobs that had been green-lit by a wiring check which only asked whether they were referenced.",
     "runnerBaseline": [
@@ -80,9 +78,7 @@
       ]
     },
     "actions": {
-      "actions/checkout": [
-
-      ],
+      "actions/checkout": [],
       "actions/setup-node": [
         "node",
         "npm",
@@ -93,18 +89,10 @@
         "rustc",
         "rustup"
       ],
-      "Swatinem/rust-cache": [
-
-      ],
-      "taiki-e/install-action": [
-
-      ],
-      "actions/upload-artifact": [
-
-      ],
-      "./.github/actions/provider-stubs": [
-
-      ]
+      "Swatinem/rust-cache": [],
+      "taiki-e/install-action": [],
+      "actions/upload-artifact": [],
+      "./.github/actions/provider-stubs": []
     }
   },
   "workspaceScope": {
@@ -129,6 +117,17 @@
   },
   "scripts": [
     {
+      "path": "scripts/qa/bash32-compat.rb",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "coverage-policy-fixtures",
+      "invokedBy": "scripts/qa/test-bash32-compat.sh",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "scans every tracked shell file for constructs bash 3.2 rejects; case 1 of its wrapper runs it against the working tree, so the wrapper's CI step is what fails the build when a new hazard lands."
+    },
+    {
       "path": "scripts/qa/certify-codex-session-resume.sh",
       "enforcement": "manual-runbook",
       "reason": "consumes real provider credentials/quota (invokes the real codex CLI pinned at 0.144.5)",
@@ -145,6 +144,26 @@
       "note": "Only the read-only `status` subcommand runs in CI; it reads recorded evidence and loads no secrets. The live certification subcommands consume real Slack credentials and are human-invoked per docs/qa/orchestrator/173-slack-sandbox-continuous-certification.md."
     },
     {
+      "path": "scripts/qa/ci-cost.rb",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Offline: reads the cost ledger, ci.yml, this manifest and git. --refresh is the only path that talks to GitHub and it refuses to write unattended. On the governance job rather than a job of its own because a gate that exists to measure governance cost should not add a job to the bill (FR-140)."
+    },
+    {
+      "path": "scripts/qa/ci-liveness.rb",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "verification is offline: it reads the ledger, the workflows and git. Only --refresh contacts GitHub, and that mode refuses to run unattended."
+    },
+    {
       "path": "scripts/qa/coordination-governance.rb",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
@@ -153,6 +172,60 @@
       "providerIsolation": {
         "mode": "no-provider"
       }
+    },
+    {
+      "path": "scripts/qa/core-boundary.rb",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "invokedBy": "scripts/qa/test-core-boundary.sh",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "the core crate boundary ratchet; case 1 of its wrapper runs it against the working tree, so the wrapper's CI step is what fails the build when core grows."
+    },
+    {
+      "path": "scripts/qa/doc-lifecycle.rb",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "invokedBy": "scripts/qa/test-doc-lifecycle.sh",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "the DD/QA lifecycle metadata gate and reverse-index generator; case 1 of its wrapper runs it against the working tree, so the wrapper's CI step is what fails the build when a document arrives unclassified or the index goes stale."
+    },
+    {
+      "path": "scripts/qa/jq-status-observed.rb",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Offline: reads this manifest, git ls-files and the gates' own text. Forbids a gate reading JSON without observing jq's exit status, which is how a gate stops checking while reporting PASS (FR-144)."
+    },
+    {
+      "path": "scripts/qa/persistence-api-boundary.rb",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "invokedBy": "scripts/qa/test-persistence-api-boundary.sh",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "the FR-141 capability boundary: which public API hands out a SQLite connection, which demands one, and which files outside the layer acquire one. Case 1 of its wrapper runs it against the working tree, so the wrapper's CI step is what fails the build when the boundary moves."
+    },
+    {
+      "path": "scripts/qa/persistence-dependency.rb",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "invokedBy": "scripts/qa/test-persistence-dependency.sh",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "the FR-136 persistence chokepoint rule; case 1 of its wrapper runs it against the working tree, so the wrapper's CI step is what fails the build when a crate reaches for the SQLite driver or a frozen residual moves."
     },
     {
       "path": "scripts/qa/test-agent-driver-abstraction.sh",
@@ -204,6 +277,56 @@
       "owner": "docs/qa/orchestrator/143-attention-inbox.md"
     },
     {
+      "path": "scripts/qa/test-bash32-compat.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "coverage-policy-fixtures",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "hosted on the fixtures job because its macOS leg is the only place in CI where /bin/bash is 3.2; BASH_COMPAT cannot restore those semantics, so the ubuntu leg reports its executed half as skipped. Writes fixtures under a temporary directory only."
+    },
+    {
+      "path": "scripts/qa/test-bash32-lexer.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "asserts the scanner's lexical state and its per-file line census. Hosted on the governance job rather than the fixtures job on purpose: nothing here depends on the host's bash version, only on the lexer, and the macOS leg's scarce minutes are better spent on the semantics test-bash32-compat.sh executes. Builds scratch git repositories under a temporary directory; starts no daemon and never writes the working tree."
+    },
+    {
+      "path": "scripts/qa/test-ci-cost.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Negative fixtures for the cost ledger and the budget. Builds scratch trees under TMPDIR; no daemon, no database, no provider, no network."
+    },
+    {
+      "path": "scripts/qa/test-ci-environment-parity.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "ci-environment-parity",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "runs each in-scope gate twice, so it gets its own job rather than doubling the governance job's runtime. Scope excludes the cargo-bearing gates on cost; see the script header."
+    },
+    {
+      "path": "scripts/qa/test-ci-liveness.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "each case builds a throwaway git repository under $TMPDIR, because the freshness rule is a statement about history and needs its own history to manipulate. Nothing here contacts GitHub."
+    },
+    {
       "path": "scripts/qa/test-codex-session-resume.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
@@ -235,25 +358,14 @@
       }
     },
     {
-      "path": "scripts/qa/test-governance-ledger-tooling.sh",
+      "path": "scripts/qa/test-coordination-strangler.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
+      "job": "coordination-strangler",
       "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "builds throwaway git repositories from the tracked files so that `git show HEAD:` resolves to the state under test; never writes to the working tree."
-    },
-    {
-      "path": "scripts/qa/core-boundary.rb",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "invokedBy": "scripts/qa/test-core-boundary.sh",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "the core crate boundary ratchet; case 1 of its wrapper runs it against the working tree, so the wrapper's CI step is what fails the build when core grows."
+        "mode": "fixture-pinned",
+        "evidence": "fixtures/manifests/bundles/coordination-strangler-parity.yaml"
+      }
     },
     {
       "path": "scripts/qa/test-core-boundary.sh",
@@ -266,130 +378,6 @@
       "note": "mutates copies of core/src under a temporary directory; the only compilation is the workspace's own cargo test, and the working tree is never written."
     },
     {
-      "path": "scripts/qa/persistence-api-boundary.rb",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "invokedBy": "scripts/qa/test-persistence-api-boundary.sh",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "the FR-141 capability boundary: which public API hands out a SQLite connection, which demands one, and which files outside the layer acquire one. Case 1 of its wrapper runs it against the working tree, so the wrapper's CI step is what fails the build when the boundary moves."
-    },
-    {
-      "path": "scripts/qa/test-persistence-api-boundary.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "appends items to copies of the member sources under a temporary directory; nothing is compiled, no database is opened, and the working tree is never written."
-    },
-    {
-      "path": "scripts/qa/persistence-dependency.rb",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "invokedBy": "scripts/qa/test-persistence-dependency.sh",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "the FR-136 persistence chokepoint rule; case 1 of its wrapper runs it against the working tree, so the wrapper's CI step is what fails the build when a crate reaches for the SQLite driver or a frozen residual moves."
-    },
-    {
-      "path": "scripts/qa/test-persistence-dependency.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "mutates copies of the member manifests and sources under a temporary directory; nothing is compiled, no database is opened, and the working tree is never written."
-    },
-    {
-      "path": "scripts/qa/test-persistence-extraction.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "compiles a git-archive copy of the tracked tree under a temporary directory with core's dependency commented out, and runs cargo tests whose only databases are tempfile::tempdir() files. The working tree is read-only to it apart from that copy, and no daemon is started."
-    },
-    {
-      "path": "scripts/qa/doc-lifecycle.rb",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "invokedBy": "scripts/qa/test-doc-lifecycle.sh",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "the DD/QA lifecycle metadata gate and reverse-index generator; case 1 of its wrapper runs it against the working tree, so the wrapper's CI step is what fails the build when a document arrives unclassified or the index goes stale."
-    },
-    {
-      "path": "scripts/qa/test-doc-lifecycle.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "mutates copies of docs/design_doc, docs/qa and docs/security under a temporary directory; it starts no daemon, compiles nothing, and never writes the working tree, so no provider binary is reachable."
-    },
-    {
-      "path": "scripts/qa/bash32-compat.rb",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "coverage-policy-fixtures",
-      "invokedBy": "scripts/qa/test-bash32-compat.sh",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "scans every tracked shell file for constructs bash 3.2 rejects; case 1 of its wrapper runs it against the working tree, so the wrapper's CI step is what fails the build when a new hazard lands."
-    },
-    {
-      "path": "scripts/qa/test-bash32-compat.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "coverage-policy-fixtures",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "hosted on the fixtures job because its macOS leg is the only place in CI where /bin/bash is 3.2; BASH_COMPAT cannot restore those semantics, so the ubuntu leg reports its executed half as skipped. Writes fixtures under a temporary directory only."
-    },
-    {
-      "path": "scripts/qa/test-bash32-lexer.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "asserts the scanner's lexical state and its per-file line census. Hosted on the governance job rather than the fixtures job on purpose: nothing here depends on the host's bash version, only on the lexer, and the macOS leg's scarce minutes are better spent on the semantics test-bash32-compat.sh executes. Builds scratch git repositories under a temporary directory; starts no daemon and never writes the working tree."
-    },
-    {
-      "path": "scripts/qa/ci-cost.rb",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "Offline: reads the cost ledger, ci.yml, this manifest and git. --refresh is the only path that talks to GitHub and it refuses to write unattended. On the governance job rather than a job of its own because a gate that exists to measure governance cost should not add a job to the bill (FR-140)."
-    },
-    {
-      "path": "scripts/qa/test-ci-cost.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "Negative fixtures for the cost ledger and the budget. Builds scratch trees under TMPDIR; no daemon, no database, no provider, no network."
-    },
-    {
       "path": "scripts/qa/test-coverage-governance-mainpath.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
@@ -400,14 +388,14 @@
       "note": "runs scripts/coverage-governance.sh with cargo, node, npm, npx, rustc and rg shadowed by stubs under a temporary directory, so the shell main path the boundary-coverage job depends on is exercised without collecting coverage."
     },
     {
-      "path": "scripts/qa/test-coordination-strangler.sh",
+      "path": "scripts/qa/test-doc-lifecycle.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
-      "job": "coordination-strangler",
+      "job": "governance",
       "providerIsolation": {
-        "mode": "fixture-pinned",
-        "evidence": "fixtures/manifests/bundles/coordination-strangler-parity.yaml"
-      }
+        "mode": "no-provider"
+      },
+      "note": "mutates copies of docs/design_doc, docs/qa and docs/security under a temporary directory; it starts no daemon, compiles nothing, and never writes the working tree, so no provider binary is reachable."
     },
     {
       "path": "scripts/qa/test-docs-publishing-integrity.sh",
@@ -448,6 +436,16 @@
       "owner": "docs/qa/orchestrator/65-grpc-control-plane-protection.md"
     },
     {
+      "path": "scripts/qa/test-governance-ledger-tooling.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "builds throwaway git repositories from the tracked files so that `git show HEAD:` resolves to the state under test; never writes to the working tree."
+    },
+    {
       "path": "scripts/qa/test-handoff-safe-resume.sh",
       "enforcement": "manual-runbook",
       "reason": "starts an orchestratord instance with bound ports and mutates handoff and session state",
@@ -458,6 +456,16 @@
       "enforcement": "manual-runbook",
       "reason": "starts an orchestratord instance with bound ports and drives health policy transitions over time",
       "owner": "docs/qa/orchestrator/110b-agent-health-policy-advanced.md"
+    },
+    {
+      "path": "scripts/qa/test-jq-status-observed.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Negative fixtures for the reader and the scanner, including the end-to-end assertion that the real gate-surface gate rejects a manifest jq cannot parse. Scratch trees under TMPDIR; no daemon, no database, no provider, no network."
     },
     {
       "path": "scripts/qa/test-legacy-coordination-decommission.sh",
@@ -491,6 +499,36 @@
       "owner": "docs/qa/orchestrator/129-per-trigger-webhook-auth-cel-filter.md"
     },
     {
+      "path": "scripts/qa/test-persistence-api-boundary.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "appends items to copies of the member sources under a temporary directory; nothing is compiled, no database is opened, and the working tree is never written."
+    },
+    {
+      "path": "scripts/qa/test-persistence-dependency.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "mutates copies of the member manifests and sources under a temporary directory; nothing is compiled, no database is opened, and the working tree is never written."
+    },
+    {
+      "path": "scripts/qa/test-persistence-extraction.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "compiles a git-archive copy of the tracked tree under a temporary directory with core's dependency commented out, and runs cargo tests whose only databases are tempfile::tempdir() files. The working tree is read-only to it apart from that copy, and no daemon is started."
+    },
+    {
       "path": "scripts/qa/test-process-console-metrics.sh",
       "enforcement": "manual-runbook",
       "reason": "requires the Node/Playwright browser stack to drive the process console UI",
@@ -519,6 +557,15 @@
       "enforcement": "manual-runbook",
       "reason": "starts an orchestratord instance with bound ports and populates the timeline read model",
       "owner": "docs/qa/orchestrator/142-process-timeline-read-model.md"
+    },
+    {
+      "path": "scripts/qa/test-qa-gate-surface.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      }
     },
     {
       "path": "scripts/qa/test-self-bootstrap-cycle2-regression.sh",
@@ -619,15 +666,6 @@
       "owner": "docs/qa/orchestrator/156-source-task-template-skill-invocation.md"
     },
     {
-      "path": "scripts/qa/test-qa-gate-surface.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      }
-    },
-    {
       "path": "scripts/qa/test-webhook-trigger.sh",
       "enforcement": "manual-runbook",
       "reason": "starts an orchestratord instance and binds a webhook listener port",
@@ -638,36 +676,6 @@
       "enforcement": "manual-runbook",
       "reason": "builds a release binary and drives multi-layer composition scenarios against a live CLI",
       "owner": "docs/qa/orchestrator/51-primitive-composition.md"
-    },
-    {
-      "path": "scripts/qa/ci-liveness.rb",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "verification is offline: it reads the ledger, the workflows and git. Only --refresh contacts GitHub, and that mode refuses to run unattended."
-    },
-    {
-      "path": "scripts/qa/test-ci-environment-parity.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "ci-environment-parity",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "runs each in-scope gate twice, so it gets its own job rather than doubling the governance job's runtime. Scope excludes the cargo-bearing gates on cost; see the script header."
-    },
-    {
-      "path": "scripts/qa/test-ci-liveness.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "each case builds a throwaway git repository under $TMPDIR, because the freshness rule is a statement about history and needs its own history to manipulate. Nothing here contacts GitHub."
     }
   ]
 }
