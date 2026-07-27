@@ -280,6 +280,40 @@ def snapshot(repo_root, ledger_path)
 end
 
 # --- Condition 1: who may declare the driver ---------------------------------
+# A `residualDeclaration` outliving the residual it excused.
+#
+# DD-147 wrote the rule as prose — "the flag comes off when the residual reaches
+# zero, and the declaration itself then starts failing" — and nothing implemented
+# it. The `:residual_only` branch below fires when a forbidden crate declares the
+# driver *without* the flag; there was no branch for the flag without the debt.
+# FR-141 produced exactly that state: daemon and scheduler reached zero
+# production references while both manifests still declared the driver, both
+# reasons still read "22 driver references and 19 SQL statements to migrate", and
+# the gate passed.
+#
+# This is the failure mode FR-128 tightened `sourceBaseline` for — a decrease
+# passing silently while the ledger keeps asserting a debt the tree has paid —
+# and `ci-job-liveness.json` already implements it for `knownFailing`. The rule
+# existed in two places and the enforcement in one.
+#
+# `each_with_object` rather than `filter_map`: macOS ships Ruby 2.6 and
+# `filter_map` arrived in 2.7. Every Ruby gate here runs under whatever
+# `/usr/bin/ruby` a macOS runner provides, and nothing in this repository checks
+# that — the shell side has FR-135's bash 3.2 gate and the Ruby side has no
+# counterpart. Caught by running it locally, which is not a mechanism.
+def stale_residual_errors(snapshot)
+  snapshot["roles"].each_with_object([]) do |(member, entry), lines|
+    next unless entry["residualDeclaration"]
+
+    outstanding = snapshot["references"].values.count { |ref| ref["crate"] == member }
+    next unless outstanding.zero?
+
+    lines << "  #{member} carries residualDeclaration with no residual left to declare; " \
+      "the debt it excused is paid, so drop the flag, remove the production " \
+      "declaration, and rewrite the reason — which still describes the old count"
+  end
+end
+
 def declaration_errors(snapshot)
   errors = []
   snapshot["roles"].each do |member, entry|
@@ -435,6 +469,11 @@ end
 declaration_lines = declaration_errors(actual)
 unless declaration_lines.empty?
   errors << "crates naming the SQLite driver violate the reviewed chokepoint:\n#{declaration_lines.join("\n")}"
+end
+
+stale_residual_lines = stale_residual_errors(actual)
+unless stale_residual_lines.empty?
+  errors << "the ledger excuses a declaration whose debt is already paid:\n#{stale_residual_lines.join("\n")}"
 end
 
 # Additions and removals are different events and are judged differently.

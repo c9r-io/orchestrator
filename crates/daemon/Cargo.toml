@@ -39,8 +39,6 @@ serde_yaml = "0.9"
 serde_urlencoded = "0.7"
 tokio-stream = { version = "0.1", features = ["net"] }
 futures = "0.3"
-rusqlite = { version = "0.31", features = ["bundled"] }
-tokio-rusqlite = "0.5"
 http = "1"
 http-body = "1"
 pin-project-lite = "0.2"
@@ -63,5 +61,7 @@ nix = { version = "0.31", default-features = false, features = ["signal", "proce
 dev-insecure = []
 
 [dev-dependencies]
+rusqlite = { version = "0.31", features = ["bundled"] }
+tokio-rusqlite = "0.5"
 tempfile = "3.10"
 agent-orchestrator = { path = "../../core", features = ["test-harness"] }

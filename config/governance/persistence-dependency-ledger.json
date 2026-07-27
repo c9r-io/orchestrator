@@ -42,8 +42,7 @@
     },
     "crates/daemon": {
       "role": "forbidden",
-      "reason": "sits above core and borrows its AsyncDatabase connection to run raw SQL in gRPC handlers; 22 driver references and 19 SQL statements to migrate",
-      "residualDeclaration": true
+      "reason": "sits above core and used to borrow its AsyncDatabase connection to run raw SQL in gRPC handlers. FR-141 paid that residual to zero: no production file here names the driver, and the declaration moved to [dev-dependencies], where its remaining users are cfg(test) modules exercising statements that now live in the persistence layer. It goes entirely when FR-141 B5 relocates those tests, at which point this becomes `none`"
     },
     "crates/gui": {
       "role": "none",
@@ -75,8 +74,7 @@
     },
     "crates/orchestrator-scheduler": {
       "role": "forbidden",
-      "reason": "sits above core and borrows its AsyncDatabase connection to run raw SQL in scheduling logic; 17 driver references and 16 SQL statements to migrate",
-      "residualDeclaration": true
+      "reason": "sits above core and used to borrow its AsyncDatabase connection to run raw SQL in scheduling logic, task_state.rs included — the file DD-147 named as the decisive case. FR-141 paid that residual to zero: no production file here names the driver, and the declaration moved to [dev-dependencies], where its remaining users are cfg(test) modules exercising statements that now live in the persistence layer. It goes entirely when FR-141 B5 relocates those tests, at which point this becomes `none`"
     },
     "crates/orchestrator-security": {
       "role": "exempt",
@@ -104,11 +102,11 @@
       "devDependencies": []
     },
     "crates/daemon": {
-      "dependencies": [
+      "dependencies": [],
+      "devDependencies": [
         "rusqlite",
         "tokio-rusqlite"
-      ],
-      "devDependencies": []
+      ]
     },
     "crates/gui": {
       "dependencies": [],
@@ -145,11 +143,11 @@
       "devDependencies": []
     },
     "crates/orchestrator-scheduler": {
-      "dependencies": [
+      "dependencies": [],
+      "devDependencies": [
         "rusqlite",
         "tokio-rusqlite"
-      ],
-      "devDependencies": []
+      ]
     },
     "crates/orchestrator-security": {
       "dependencies": [

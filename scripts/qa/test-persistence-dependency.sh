@@ -705,5 +705,53 @@ else
 fi
 echo ""
 
+# --- Case 19: a residualDeclaration outliving its residual ---------------------
+# DD-147 wrote this rule as prose and nothing implemented it: "the flag comes off
+# when the residual reaches zero, and the declaration itself then starts
+# failing". The gate only ever checked the opposite — a forbidden crate declaring
+# the driver *without* the flag. FR-141 produced the missing state for real:
+# daemon and scheduler reached zero production references while both manifests
+# still declared the driver and both reasons still read "22 driver references and
+# 19 SQL statements to migrate", and the gate passed.
+#
+# The mutation restores that shape. `crates/cli` is role `none` with no
+# references at all, so setting the flag on it is a crate whose residual is zero
+# by construction — the property under test — without needing to empty a real
+# one. Both halves are asserted: the flag alone fails, and removing it passes, so
+# the case cannot be satisfied by the gate rejecting any edit to the roles table.
+echo "Case 19: a residual declaration whose debt is already paid fails"
+DIR="$(new_case stale-residual)"
+ruby -rjson -e '
+path = ARGV[0]
+ledger = JSON.parse(File.read(path))
+member = ARGV[1]
+role = ledger.fetch("roles").fetch(member)
+abort "the fixture crate has a residual already" if ledger["references"].any? { |_, r| r["crate"] == member }
+abort "the fixture crate already carries the flag" if role["residualDeclaration"]
+role["residualDeclaration"] = true
+File.write(path, JSON.pretty_generate(ledger) + "\n")
+' "$DIR/$LEDGER" "crates/cli"
+run_gate "$DIR" case19
+if [[ "$STATUS" -ne 0 ]] &&
+  grep -q "the ledger excuses a declaration whose debt is already paid" "$WORK/case19.err" &&
+  grep -q "crates/cli carries residualDeclaration with no residual left" "$WORK/case19.err"; then
+  pass "a residualDeclaration with no residual fails, naming the crate"
+else
+  fail "a stale residual declaration did not fail the gate (exit $STATUS)"
+  cat "$WORK/case19.err" >&2
+fi
+
+# The other half. Without it, "fails on any roles-table edit" and "detects a paid
+# residual" have the same green record.
+DIR="$(new_case stale-residual-cleared)"
+run_gate "$DIR" case19b
+if [[ "$STATUS" -eq 0 ]]; then
+  pass "the same ledger without the flag passes, so the check is about the flag and not the edit"
+else
+  fail "the unmutated ledger did not pass (exit $STATUS)"
+  cat "$WORK/case19b.err" >&2
+fi
+echo ""
+
 echo "FR-136 persistence dependency chokepoint: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]]
