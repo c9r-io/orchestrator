@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 415,
-    "active": 412,
+    "documents": 417,
+    "active": 414,
     "superseded": 3,
-    "withRelatedFr": 260
+    "withRelatedFr": 262
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -338,6 +338,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-138"
+      ]
+    },
+    "docs/design_doc/orchestrator/153-governance-execution-cost.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-140"
       ]
     },
     "docs/design_doc/orchestrator/16-structured-logging.md": {
@@ -1547,6 +1553,12 @@
         "FR-138"
       ]
     },
+    "docs/qa/orchestrator/191-governance-execution-cost.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-140"
+      ]
+    },
     "docs/qa/orchestrator/20-structured-output-worker-scheduler.md": {
       "lifecycle": "active"
     },
@@ -2554,6 +2566,10 @@
     "FR-139": [
       "docs/design_doc/orchestrator/147-persistence-dependency-chokepoint.md",
       "docs/qa/orchestrator/185-persistence-dependency-chokepoint.md"
+    ],
+    "FR-140": [
+      "docs/design_doc/orchestrator/153-governance-execution-cost.md",
+      "docs/qa/orchestrator/191-governance-execution-cost.md"
     ],
     "FR-141": [
       "docs/design_doc/orchestrator/147-persistence-dependency-chokepoint.md",
