@@ -168,8 +168,9 @@ positives, and the mention forms the rule was introduced to suppress
 
 ## The evidence that this is a fix, not a changed yardstick
 
-Three measurements over all 98 tracked shell files, differing only in which
-lexer and which emptiness rule is in play:
+Three measurements over the 98 tracked shell files as they stood before this FR
+added its own QA script, differing only in which lexer and which emptiness rule
+is in play:
 
 | | lines scanned | findings |
 |---|---|---|
@@ -202,6 +203,16 @@ eliminate.
 
 ## Known limits
 
+- **A builtin name in command position inside an ordinary double-quoted string
+  is a finding.** Double-quoted text is live code to the scanner — it has to be,
+  since `"${a[@]}"` is the canonical hazard — so `echo "if ! mapfile"` reports.
+  The class predates FR-138 (`"x; mapfile"` matched via the `;` in the existing
+  punctuation set); adding `!` widened it slightly. This is why both bash 3.2 QA
+  wrappers write their fixtures as here-document bodies and spell hazards in prose
+  with a separator, and `test-bash32-lexer.sh` hit it during governance and says
+  so at the line. Distinguishing mention from invocation here needs per-character
+  quote annotation rather than per-line text, which is more than the seven rules
+  are worth.
 - **Single-quoted regions are treated as inert.** A hazard inside `bash -c
   '...'` or `eval '...'` is not reported. This was true before FR-138 as well —
   the old `COMMAND_POSITION` did not match after an opening quote either — but it

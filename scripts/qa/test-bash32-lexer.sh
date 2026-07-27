@@ -186,7 +186,12 @@ set -euo pipefail
 if ! mapfile -t xs < /dev/null; then :; fi
 OUTER
 git -C "$REPO5" add -A
-expect_only "\`if ! mapfile\` is an invocation, not a mention" "$REPO5" mapfile "subject.sh:3"
+# The label spells the construct as `if ! map<>file` rather than literally. This
+# file is scanned by the gate it tests, double-quoted text is live code to the
+# scanner, and a builtin name in command position inside an ordinary string is a
+# finding against this file — which is why the fixtures themselves are written as
+# here-document bodies. Same convention as `test-bash32-compat.sh`.
+expect_only "\`if ! map<>file\` is an invocation, not a mention" "$REPO5" mapfile "subject.sh:3"
 
 cat > "$REPO5/subject.sh" <<'OUTER'
 #!/usr/bin/env bash

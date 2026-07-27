@@ -8,7 +8,7 @@ self_referential_safe: true
 
 **Module**: CI / Governance
 **Scope**: cross-line quoting in `scripts/lib/shell_lexer.rb`, the `unclosed-heredoc` backstop, the per-file coverage census, negation as a command position, and the removal of per-file emptiness inference
-**Scenarios**: 8
+**Scenarios**: 5
 **Priority**: High
 
 ## Background
@@ -35,7 +35,7 @@ provider is invoked. Safe to run against this repository.
 The defect this document covers occurred **while the gate was green**. Any
 scenario whose evidence is "the gate passes" is satisfied by exactly the state
 being tested for, so the coverage claim is asserted by per-file line accounting
-instead (scenario 8), and each negative fixture is asserted by *rule name and
+instead (scenario 5), and each negative fixture is asserted by *rule name and
 line*, never by exit code alone.
 
 Each fixture also asserts that no other rule fired on the same tree (the FR-127
@@ -44,12 +44,18 @@ the wrong reason and leaves the rule it names unverified.
 
 The mutation each fixture is aimed at is recorded below, because a fixture that
 also passes on the broken implementation is not evidence. Verified during
-governance: scenarios 1, 2, 4, 5 and 6 are all **accepted** by the pre-FR-138
-gate and rejected after, so each is live. Scenario 3 is the exception and says so.
+governance: fixtures 1a, 1b, 2, 3 and 4a are all **accepted** by the pre-FR-138
+gate and rejected after, so each is live. Fixture 1c is the exception and says so.
 
 ---
 
-## Scenario 1: A here-document lookalike inside a cross-line single-quoted region
+## Scenario 1: The scan reaches end of file past every shape that used to end it early
+
+Three fixtures, one claim. They are separate fixtures rather than one because they
+exercise different lexer state, and a single tree carrying all three would pass
+as soon as any one of them was caught.
+
+### 1a - A here-document lookalike inside a cross-line single-quoted region
 
 **Steps**
 
@@ -69,13 +75,13 @@ rule fires.
 accepts this tree.
 
 **Why the hazard is on the last line**: placed mid-file, a partial fix that
-recovers only part of the swallowed tail still reaches it and the scenario passes
+recovers only part of the swallowed tail still reaches it and the fixture passes
 without full recovery. The assertion has to sit where only reaching end of file
 gets to it.
 
 ---
 
-## Scenario 2: The same lookalike inside `$( ... ' ... ' )`
+### 1b - The same lookalike inside `$( ... ' ... ' )`
 
 **Steps**
 
@@ -92,13 +98,13 @@ no other rule fires.
 but does not model command substitution — that is, the fix FR-138 literally asked
 for. Quoting resets inside `$( )`, so the `'` after `-e` opens a single-quoted
 region; a flat tracker reads it as an ordinary character inside double quotes and
-never enters that state. **This scenario is separate from scenario 1 on purpose**:
+never enters that state. **This fixture is separate from 1a on purpose**:
 they exercise different state, and the shape here is the one that survives the
 obvious fix.
 
 ---
 
-## Scenario 3: An apostrophe inside a double-quoted string is not a quote opener
+### 1c - An apostrophe inside a double-quoted string is not a quote opener
 
 **Steps**
 
@@ -110,22 +116,22 @@ Read case 3. Its fixture is `echo "one file's worth of output"` followed by
 The gate rejects the tree, reports `[wait-n]` at `subject.sh:4`, and no other
 rule fires.
 
-**Mutation targeted** — and this scenario is the exception to the pattern above.
+**Mutation targeted** — and this fixture is the exception to the pattern above.
 Its target is **not** the original defect: the pre-FR-138 scanner had no
-cross-line state to corrupt, so it rejects this tree too, and this scenario does
+cross-line state to corrupt, so it rejects this tree too, and this fixture does
 not discriminate against it. It targets the mistake the *replacement* is most
 likely to make, and the one the first draft of `shell_lexer.rb` did make —
 treating `'` as an opener even inside `"`. Verified during governance by patching
 `shell_lexer.rb` to drop the `&& quote.nil?` guard: the mutated lexer **accepts**
-this fixture, while scenarios 1 and 2 still pass against it.
+this fixture, while fixtures 1a and 1b still pass against it.
 
 **Why the fixture has exactly one apostrophe**: give it a partner anywhere later
 in the file and the bogus single-quoted region closes, the hazard comes back into
-view, and the scenario passes against the very bug it exists to catch.
+view, and the fixture passes against the very bug it exists to catch.
 
 ---
 
-## Scenario 4: A file that ends inside a here-document is a finding
+## Scenario 2: A file that ends inside a here-document is a finding
 
 **Steps**
 
@@ -151,7 +157,7 @@ fixture carrying any hazard exits non-zero whichever rule caught it.
 
 ---
 
-## Scenario 5: Negation is a command position, and mentions still are not
+## Scenario 3: Negation is a command position, and mentions still are not
 
 **Steps**
 
@@ -174,7 +180,9 @@ commit `3b5f9eb4` introduced it to prevent.
 
 ---
 
-## Scenario 6: An array emptied in one file and expanded in another
+## Scenario 4: Emptiness is matched, not inferred — and the gate still accepts
+
+### 4a - An array emptied in one file and expanded in another
 
 **Steps**
 
@@ -189,13 +197,13 @@ and no other rule fires.
 **Mutation targeted**: per-file emptiness inference. FR-138 removed the inference
 rather than extending it across the source graph, so this passes by construction
 now — every unguarded value expansion is a finding regardless of where the array
-was emptied. The scenario stays because it is what pins this direction shut if
+was emptied. The fixture stays because it is what pins this direction shut if
 anyone reintroduces inference; without it, a future "optimisation" that only
 flags arrays emptied nearby would reopen the hole silently.
 
 ---
 
-## Scenario 7: The gate still has an accepting state
+### 4b - The gate still has an accepting state
 
 **Steps**
 
@@ -207,13 +215,13 @@ here-document body containing `mapfile`.
 
 The gate accepts the tree.
 
-**Why**: a gate that rejects everything passes scenarios 1–6 and is useless. This
+**Why**: a gate that rejects everything passes every fixture above and is useless. This
 also re-asserts that `${#a[@]}` stays exempt (measured safe under bash 3.2 in
 FR-135) and that here-document bodies are still treated as data.
 
 ---
 
-## Scenario 8: Every line of every tracked file is accounted for
+## Scenario 5: Every line of every tracked file is accounted for
 
 **Steps**
 
@@ -226,8 +234,10 @@ QA script asserts three things over it.
 
 **Expected result**
 
-1. The census covers every file `--list-files` reports — currently 98. Derived
-   from `git ls-files`, not from a roster.
+1. The census covers every file `--list-files` reports — 99 at closure, and
+   whatever `git ls-files '*.sh' | wc -l` says on any later run. Derived from git,
+   not from a roster, and deliberately not pinned here: QA 184 pinned `95` and it
+   was wrong three FRs later while every other expectation still held.
 2. For every file, `scanned + heredoc == total`.
 3. For `test-qa-gate-surface.sh` and `test-bash32-compat.sh`, `last == total`.
 
@@ -265,6 +275,24 @@ changed definition of "finding". The single finding exposed is
 `TARGETED=()` assigned at line 876 — so the swallowed tail was not empty, and
 FR-138's own "currently latent" assessment had expired by the time it was
 governed.
+
+## Checklist
+
+| # | Scenario | Result | Date | Tester |
+|---|----------|--------|------|--------|
+| 1 | The scan reaches end of file past every shape that used to end it early | ☑ PASS | 2026-07-27 | Claude |
+| 2 | A file that ends inside a here-document is a finding naming its terminator | ☑ PASS | 2026-07-27 | Claude |
+| 3 | Negation is a command position, and mentions still are not | ☑ PASS | 2026-07-27 | Claude |
+| 4 | Emptiness is matched not inferred, and the gate still accepts | ☑ PASS | 2026-07-27 | Claude |
+| 5 | Every line of every tracked file is accounted for | ☑ PASS | 2026-07-27 | Claude |
+
+## Certification Conditions
+
+A run counts as closure evidence only when `git status --porcelain` is empty at
+start and at end, `git rev-parse HEAD` matches across the run, nothing else is
+writing to the repository while it runs, and each script's final summary line is
+present in its log. Invoke as `bash script > log 2>&1` and read `$?` directly;
+piping into a pager reports the pager's status and masks a failed script.
 
 ## Related gates
 
