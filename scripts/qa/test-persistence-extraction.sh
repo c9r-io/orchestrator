@@ -260,6 +260,23 @@ fi
 DIR="$WORK/reintroduced-conversion"
 mkdir -p "$DIR"
 git archive HEAD | tar -x -C "$DIR"
+# The probe needs core to be able to *name* `rusqlite::Connection` before it can
+# ask whether the error converts. FR-141 moved core's driver declaration to
+# [dev-dependencies] — core holds no connection in production — and
+# `cargo check -p agent-orchestrator` builds without dev-dependencies, so the
+# probe below started failing on E0433 "cannot find rusqlite" instead of on the
+# conversion. Non-zero exit from the wrong branch: exactly the shape FR-143 was
+# filed for, and the reason this case matches the specific diagnostic rather
+# than merely a non-zero status. Restoring the declaration in the scratch copy
+# keeps the two questions apart — who may *declare* the driver is condition 1's,
+# in persistence-dependency.rb, and this case is only about the conversion.
+ruby -e '
+  path = ARGV[0]
+  text = File.read(path)
+  raise "no [dependencies] table in #{path}" unless text.include?("[dependencies]")
+  File.write(path, text.sub("[dependencies]\n",
+    %([dependencies]\nrusqlite = { version = "0.31", features = ["bundled"] }\n)))
+' "$DIR/core/Cargo.toml"
 # The doc comment is not decoration: core denies missing_docs, so without it the
 # probe stops the build on the lint and the case passes on an error that has
 # nothing to do with the conversion. The assertion below therefore matches the
