@@ -7,7 +7,7 @@ use crate::secret_store_crypto::{
     load_existing_secret_key, redact_secret_data_map, resolve_data_dir_from_db_path,
 };
 use anyhow::{Context, Result};
-use rusqlite::{OptionalExtension, Transaction, params};
+use orchestrator_persistence::config_store::{ConfigTx, HealLogRow, ResourceRow};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -83,8 +83,8 @@ impl SqliteConfigRepository {
         }
     }
 
-    fn open_conn(&self) -> Result<rusqlite::Connection> {
-        crate::db::open_conn(&self.db_path)
+    fn store(&self) -> orchestrator_persistence::config_store::ConfigStore {
+        orchestrator_persistence::config_store::ConfigStore::new(&self.db_path)
     }
 }
 
@@ -140,53 +140,34 @@ fn emit_decrypt_failed_audit(db_path: &Path, project: &str, name: &str, error: &
 }
 
 pub(crate) fn persist_config_versioned(
-    tx: &Transaction<'_>,
+    tx: &ConfigTx<'_>,
     yaml: &str,
     json_raw: &str,
     author: &str,
 ) -> Result<(i64, String)> {
-    let current_version: i64 = tx.query_row(
-        "SELECT COALESCE(MAX(version), 0) FROM orchestrator_config_versions",
-        [],
-        |row| row.get(0),
-    )?;
-    let next_version = current_version + 1;
-    let now = now_ts();
-    tx.execute(
-        "INSERT INTO orchestrator_config_versions (version, config_yaml, config_json, created_at, author)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![next_version, yaml, json_raw, now, author],
-    )?;
-    Ok((next_version, now))
+    tx.insert_config_version(yaml, json_raw, author)
 }
 
 pub(crate) fn persist_heal_log(
-    tx: &Transaction<'_>,
+    tx: &ConfigTx<'_>,
     version: i64,
     original_error: &str,
     changes: &[ConfigSelfHealChange],
 ) -> Result<()> {
-    let now = now_ts();
-    for change in changes {
-        tx.execute(
-            "INSERT INTO config_heal_log (version, original_error, workflow_id, step_id, rule, detail, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![
-                version,
-                original_error,
-                change.workflow_id,
-                change.step_id,
-                change.rule.as_label(),
-                change.detail,
-                now
-            ],
-        )?;
-    }
-    Ok(())
+    let rows: Vec<HealLogRow> = changes
+        .iter()
+        .map(|change| HealLogRow {
+            workflow_id: change.workflow_id.clone(),
+            step_id: change.step_id.clone(),
+            rule: change.rule.as_label().to_string(),
+            detail: change.detail.clone(),
+        })
+        .collect();
+    tx.insert_heal_log(version, original_error, &rows)
 }
 
 fn persist_resource(
-    tx: &Transaction<'_>,
+    tx: &ConfigTx<'_>,
     cr: &crate::crd::types::CustomResource,
     author: &str,
     secret_encryption: &SecretEncryption,
@@ -219,54 +200,24 @@ fn persist_resource(
         &cr.spec,
     )?;
     let metadata_json = serde_json::to_string(&cr.metadata)?;
-    let now = now_ts();
 
-    tx.execute(
-        "INSERT INTO resources (kind, project, name, api_version, spec_json, metadata_json, generation, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-         ON CONFLICT(kind, project, name) DO UPDATE SET
-           api_version=excluded.api_version,
-           spec_json=excluded.spec_json,
-           metadata_json=excluded.metadata_json,
-           generation=generation+1,
-           updated_at=excluded.updated_at",
-        params![
-            cr.kind,
-            project,
-            cr.metadata.name,
-            cr.api_version,
+    tx.upsert_resource(
+        &ResourceRow {
+            kind: cr.kind.clone(),
+            project: project.to_string(),
+            name: cr.metadata.name.clone(),
+            api_version: cr.api_version.clone(),
             spec_json,
             metadata_json,
-            cr.generation,
-            cr.created_at,
-            now
-        ],
-    )?;
-
-    let next_version: i64 = tx.query_row(
-        "SELECT COALESCE(MAX(version), 0) + 1 FROM resource_versions WHERE kind=?1 AND project=?2 AND name=?3",
-        params![cr.kind, project, cr.metadata.name],
-        |row| row.get(0),
-    )?;
-    tx.execute(
-        "INSERT INTO resource_versions (kind, project, name, spec_json, metadata_json, version, author, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        params![
-            cr.kind,
-            project,
-            cr.metadata.name,
-            spec_json,
-            metadata_json,
-            next_version,
-            author,
-            now
-        ],
-    )?;
-    Ok(())
+            generation: cr.generation,
+            created_at: cr.created_at.clone(),
+        },
+        author,
+    )
 }
 
 fn persist_all_resources(
-    tx: &Transaction<'_>,
+    tx: &ConfigTx<'_>,
     store: &crate::crd::store::ResourceStore,
     crds: &HashMap<String, crate::crd::types::CustomResourceDefinition>,
     author: &str,
@@ -275,40 +226,21 @@ fn persist_all_resources(
     for cr in store.resources().values() {
         persist_resource(tx, cr, author, secret_encryption)?;
     }
-    let now = now_ts();
     for (kind_name, crd) in crds {
         let spec_json = serde_json::to_string(crd)?;
-        tx.execute(
-            "INSERT INTO resources (kind, project, name, api_version, spec_json, metadata_json, generation, created_at, updated_at)
-             VALUES ('CustomResourceDefinition', ?1, ?2, 'orchestrator.dev/v2', ?3, '{}', 1, ?4, ?5)
-             ON CONFLICT(kind, project, name) DO UPDATE SET
-               spec_json=excluded.spec_json, generation=generation+1, updated_at=excluded.updated_at",
-            params![crate::crd::store::SYSTEM_PROJECT, kind_name, spec_json, now, now],
-        )?;
+        tx.upsert_crd(crate::crd::store::SYSTEM_PROJECT, kind_name, &spec_json)?;
     }
     Ok(())
 }
 
 fn delete_resource_row(
-    tx: &Transaction<'_>,
+    tx: &ConfigTx<'_>,
     kind: &str,
     project: &str,
     name: &str,
     author: &str,
 ) -> Result<bool> {
-    let deleted = tx.execute(
-        "DELETE FROM resources WHERE kind=?1 AND project=?2 AND name=?3",
-        params![kind, project, name],
-    )? > 0;
-    if deleted {
-        let now = now_ts();
-        tx.execute(
-            "INSERT INTO resource_versions (kind, project, name, spec_json, metadata_json, version, author, created_at)
-             VALUES (?1, ?2, ?3, '\"deleted\"', '{}', -1, ?4, ?5)",
-            params![kind, project, name, author, now],
-        )?;
-    }
-    Ok(deleted)
+    tx.delete_resource(kind, project, name, author)
 }
 
 fn load_all_resources(
@@ -329,40 +261,16 @@ fn load_all_resources(
         }
         Err(_) => load_existing_secret_key(&data_dir)?.map(SecretEncryption::from_key),
     };
-    let conn = crate::db::open_conn(db_path)?;
-    let table_exists: bool = conn
-        .query_row(
-            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='resources'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(false);
-    if !table_exists {
+    let Some(rows) =
+        orchestrator_persistence::config_store::ConfigStore::new(db_path).all_resource_rows()?
+    else {
         return Ok((crate::crd::store::ResourceStore::default(), HashMap::new()));
-    }
+    };
 
     let mut store = crate::crd::store::ResourceStore::default();
     let mut crds = HashMap::new();
-    let mut stmt = conn.prepare(
-        "SELECT kind, project, name, api_version, spec_json, metadata_json, generation, created_at, updated_at
-         FROM resources",
-    )?;
-    let rows = stmt.query_map([], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, String>(2)?,
-            row.get::<_, String>(3)?,
-            row.get::<_, String>(4)?,
-            row.get::<_, String>(5)?,
-            row.get::<_, i64>(6)?,
-            row.get::<_, String>(7)?,
-            row.get::<_, String>(8)?,
-        ))
-    })?;
-
     for row in rows {
-        let (
+        let orchestrator_persistence::config_store::StoredResourceRow {
             kind,
             project,
             name,
@@ -372,7 +280,7 @@ fn load_all_resources(
             generation,
             created_at,
             updated_at,
-        ) = row?;
+        } = row;
         if kind == "CustomResourceDefinition" {
             if let Ok(crd) =
                 serde_json::from_str::<crate::crd::types::CustomResourceDefinition>(&spec_json)
@@ -435,23 +343,7 @@ fn load_all_resources(
 }
 
 fn query_max_resource_version(db_path: &Path) -> Result<i64> {
-    let conn = crate::db::open_conn(db_path)?;
-    let table_exists: bool = conn
-        .query_row(
-            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='resource_versions'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(false);
-    if !table_exists {
-        return Ok(0);
-    }
-    let version: i64 = conn.query_row(
-        "SELECT COALESCE(MAX(version), 0) FROM resource_versions WHERE version > 0",
-        [],
-        |row| row.get(0),
-    )?;
-    Ok(version)
+    orchestrator_persistence::config_store::ConfigStore::new(db_path).max_resource_version()
 }
 
 fn load_config_from_resources_table(
@@ -531,52 +423,24 @@ impl ConfigRepository for SqliteConfigRepository {
         &self,
         current_config_version: i64,
     ) -> Result<Option<(i64, String, usize, String)>> {
-        let conn = self.open_conn()?;
-        let row: Option<(i64, String, String)> = conn
-            .query_row(
-                "SELECT version, original_error, created_at FROM config_heal_log ORDER BY id DESC LIMIT 1",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-            )
-            .optional()?;
-
-        let Some((version, original_error, created_at)) = row else {
-            return Ok(None);
-        };
-        if version != current_config_version {
-            return Ok(None);
-        }
-
-        let count: usize = conn.query_row(
-            "SELECT COUNT(*) FROM config_heal_log WHERE version = ?1",
-            params![version],
-            |row| row.get(0),
-        )?;
-        Ok(Some((version, original_error, count, created_at)))
+        self.store().latest_heal_summary(current_config_version)
     }
 
     fn query_heal_log_entries(&self, limit: usize) -> Result<Vec<HealLogEntry>> {
-        let conn = self.open_conn()?;
-        let mut stmt = conn.prepare(
-            "SELECT version, original_error, workflow_id, step_id, rule, detail, created_at
-             FROM config_heal_log ORDER BY id DESC LIMIT ?1",
-        )?;
-        let rows = stmt.query_map(params![limit], |row| {
-            Ok(HealLogEntry {
-                version: row.get(0)?,
-                original_error: row.get(1)?,
-                workflow_id: row.get(2)?,
-                step_id: row.get(3)?,
-                rule: row.get(4)?,
-                detail: row.get(5)?,
-                created_at: row.get(6)?,
+        Ok(self
+            .store()
+            .heal_log_entries(limit)?
+            .into_iter()
+            .map(|row| HealLogEntry {
+                version: row.version,
+                original_error: row.original_error,
+                workflow_id: row.workflow_id,
+                step_id: row.step_id,
+                rule: row.rule,
+                detail: row.detail,
+                created_at: row.created_at,
             })
-        })?;
-        let mut entries = Vec::new();
-        for row in rows {
-            entries.push(row?);
-        }
-        Ok(entries)
+            .collect())
     }
 
     fn persist_self_heal_snapshot(
@@ -586,12 +450,11 @@ impl ConfigRepository for SqliteConfigRepository {
         original_error: &str,
         changes: &[ConfigSelfHealChange],
     ) -> Result<(i64, String)> {
-        let conn = self.open_conn()?;
-        let tx = conn.unchecked_transaction()?;
-        let (version, created_at) = persist_config_versioned(&tx, yaml, json_raw, "self-heal")?;
-        persist_heal_log(&tx, version, original_error, changes)?;
-        tx.commit()?;
-        Ok((version, created_at))
+        self.store().write(|tx| {
+            let (version, created_at) = persist_config_versioned(tx, yaml, json_raw, "self-heal")?;
+            persist_heal_log(tx, version, original_error, changes)?;
+            Ok((version, created_at))
+        })
     }
 
     fn persist_raw_config(
@@ -604,17 +467,17 @@ impl ConfigRepository for SqliteConfigRepository {
         let data_dir = resolve_data_dir_from_db_path(&self.db_path)?;
         let secret_encryption =
             SecretEncryption::from_key(ensure_secret_key(&data_dir, &self.db_path)?);
-        let conn = self.open_conn()?;
-        let tx = conn.unchecked_transaction()?;
-        let (version, updated_at) = persist_config_versioned(&tx, yaml, json_raw, author)?;
-        persist_all_resources(
-            &tx,
-            &normalized.resource_store,
-            &normalized.custom_resource_definitions,
-            author,
-            &secret_encryption,
-        )?;
-        tx.commit()?;
+        let (version, updated_at) = self.store().write(|tx| {
+            let versioned = persist_config_versioned(tx, yaml, json_raw, author)?;
+            persist_all_resources(
+                tx,
+                &normalized.resource_store,
+                &normalized.custom_resource_definitions,
+                author,
+                &secret_encryption,
+            )?;
+            Ok(versioned)
+        })?;
         Ok(ConfigOverview {
             config: normalized,
             yaml: yaml.to_owned(),
@@ -653,31 +516,34 @@ impl ConfigRepository for SqliteConfigRepository {
             }
             Err(_) => SecretEncryption::from_key(ensure_secret_key(&data_dir, &self.db_path)?),
         };
-        let conn = self.open_conn()?;
-        let tx = conn.unchecked_transaction()?;
-        // `&*tx` rather than `&tx`: the guard takes the port, which is implemented
-        // for Connection, and Transaction derefs to it. The guard therefore still
-        // runs inside this transaction, which is the property that matters — a
-        // count taken outside it could be stale by the time the delete lands.
-        crate::config_load::enforce_deletion_guards_for_removals(&*tx, deleted_resources)?;
-        for deletion in deleted_resources {
-            let _ = delete_resource_row(
-                &tx,
-                &deletion.kind,
-                &deletion.project_id,
-                &deletion.name,
-                author,
+        let (version, updated_at) = self.store().write(|tx| {
+            // The guard runs inside this transaction, which is the property that
+            // matters — a count taken outside it could be stale by the time the
+            // delete lands. `deletion_guards()` is how the transaction hands out
+            // that port without handing out the connection it is implemented for.
+            crate::config_load::enforce_deletion_guards_for_removals(
+                tx.deletion_guards(),
+                deleted_resources,
             )?;
-        }
-        let (version, updated_at) = persist_config_versioned(&tx, yaml, json_raw, author)?;
-        persist_all_resources(
-            &tx,
-            &normalized.resource_store,
-            &normalized.custom_resource_definitions,
-            author,
-            &secret_encryption,
-        )?;
-        tx.commit()?;
+            for deletion in deleted_resources {
+                let _ = delete_resource_row(
+                    tx,
+                    &deletion.kind,
+                    &deletion.project_id,
+                    &deletion.name,
+                    author,
+                )?;
+            }
+            let versioned = persist_config_versioned(tx, yaml, json_raw, author)?;
+            persist_all_resources(
+                tx,
+                &normalized.resource_store,
+                &normalized.custom_resource_definitions,
+                author,
+                &secret_encryption,
+            )?;
+            Ok(versioned)
+        })?;
         Ok(ConfigOverview {
             config: normalized,
             yaml: yaml.to_owned(),

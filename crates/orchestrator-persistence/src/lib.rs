@@ -31,6 +31,8 @@ pub mod async_database;
 pub mod attention_store;
 /// Backlinks from an audited row to the request that produced it.
 pub mod audit_links;
+/// The configuration and resource tables and the statements over them.
+pub mod config_store;
 /// The `control_action_audit` table and the statements over it.
 pub mod control_action_audit;
 /// Admin facade: project queries, audit, metrics and reset.

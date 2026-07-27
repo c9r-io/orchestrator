@@ -7,9 +7,8 @@
     "publicItems": 610
   },
   "rusqlite": {
-    "total": 2,
+    "total": 0,
     "files": {
-      "core/src/persistence/repository/config.rs": 2
     }
   }
 }

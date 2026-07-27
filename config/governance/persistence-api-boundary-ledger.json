@@ -512,18 +512,11 @@
     }
   },
   "holds": {
-    "core/src/persistence/repository/config.rs": {
-      "crate": "core",
-      "acquisitions": 9,
-      "via": [
-        "open_conn"
-      ]
-    }
   },
   "totals": {
     "yields": 6,
     "demands": 67,
-    "holdingFiles": 1,
-    "acquisitions": 9
+    "holdingFiles": 0,
+    "acquisitions": 0
   }
 }
