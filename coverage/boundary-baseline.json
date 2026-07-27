@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "approvedAt": "2026-07-25",
+  "approvedAt": "2026-07-27",
   "platform": "macos-aarch64",
   "tooling": {
     "cargoLlvmCov": "0.8.5",
@@ -8,13 +8,22 @@
   },
   "policy": {
     "percentageTolerance": 0.05,
-    "strategy": "approved-baseline-non-regression"
+    "strategy": "approved-baseline-non-regression",
+    "reapproval": "Re-approved 2026-07-27 after FR-130 and FR-141 moved the persistence layer out of core. Every drifted component's uncovered count fell: core/domain -1880, daemon/session -65, daemon adapter -89, daemon/handoff -14, daemon/attention -1. The gate failed on daemon/attention alone, because percentage is the compared value and that file lost seven executable lines of which six were covered — well above its own 56% average — so the ratio fell while nothing that was tested stopped being tested. A one-sided percentage rule fails on composition changes that improve the tree, and lets the four components that improved keep a stale baseline indefinitely, because only the falling direction is checked."
   },
   "rust": {
     "components": {
       "core/domain": {
-        "lines": { "count": 79417, "covered": 66894, "percent": 84.23 },
-        "functions": { "count": 7070, "covered": 5700, "percent": 80.62 },
+        "lines": {
+          "count": 67750,
+          "covered": 57107,
+          "percent": 84.29
+        },
+        "functions": {
+          "count": 5896,
+          "covered": 4793,
+          "percent": 81.29
+        },
         "branches": {
           "status": "unsupported",
           "count": null,
@@ -23,8 +32,16 @@
         }
       },
       "daemon adapter": {
-        "lines": { "count": 16844, "covered": 4838, "percent": 28.72 },
-        "functions": { "count": 1518, "covered": 407, "percent": 26.81 },
+        "lines": {
+          "count": 16730,
+          "covered": 4813,
+          "percent": 28.77
+        },
+        "functions": {
+          "count": 1483,
+          "covered": 406,
+          "percent": 27.38
+        },
         "branches": {
           "status": "unsupported",
           "count": null,
@@ -33,8 +50,16 @@
         }
       },
       "CLI": {
-        "lines": { "count": 6038, "covered": 2143, "percent": 35.49 },
-        "functions": { "count": 305, "covered": 94, "percent": 30.82 },
+        "lines": {
+          "count": 6038,
+          "covered": 2143,
+          "percent": 35.49
+        },
+        "functions": {
+          "count": 305,
+          "covered": 94,
+          "percent": 30.82
+        },
         "branches": {
           "status": "unsupported",
           "count": null,
@@ -43,8 +68,16 @@
         }
       },
       "Tauri Rust": {
-        "lines": { "count": 4227, "covered": 398, "percent": 9.42 },
-        "functions": { "count": 634, "covered": 49, "percent": 7.73 },
+        "lines": {
+          "count": 4227,
+          "covered": 398,
+          "percent": 9.42
+        },
+        "functions": {
+          "count": 634,
+          "covered": 49,
+          "percent": 7.73
+        },
         "branches": {
           "status": "unsupported",
           "count": null,
@@ -55,8 +88,16 @@
     },
     "keyModules": {
       "daemon/attention": {
-        "lines": { "count": 631, "covered": 354, "percent": 56.1 },
-        "functions": { "count": 46, "covered": 24, "percent": 52.17 },
+        "lines": {
+          "count": 624,
+          "covered": 348,
+          "percent": 55.77
+        },
+        "functions": {
+          "count": 45,
+          "covered": 23,
+          "percent": 51.11
+        },
         "branches": {
           "status": "unsupported",
           "count": null,
@@ -65,8 +106,16 @@
         }
       },
       "daemon/handoff": {
-        "lines": { "count": 599, "covered": 225, "percent": 37.56 },
-        "functions": { "count": 46, "covered": 15, "percent": 32.61 },
+        "lines": {
+          "count": 586,
+          "covered": 226,
+          "percent": 38.57
+        },
+        "functions": {
+          "count": 44,
+          "covered": 16,
+          "percent": 36.36
+        },
         "branches": {
           "status": "unsupported",
           "count": null,
@@ -75,8 +124,16 @@
         }
       },
       "daemon/session": {
-        "lines": { "count": 1104, "covered": 168, "percent": 15.22 },
-        "functions": { "count": 93, "covered": 22, "percent": 23.66 },
+        "lines": {
+          "count": 1031,
+          "covered": 160,
+          "percent": 15.52
+        },
+        "functions": {
+          "count": 64,
+          "covered": 21,
+          "percent": 32.81
+        },
         "branches": {
           "status": "unsupported",
           "count": null,
@@ -85,8 +142,16 @@
         }
       },
       "daemon/source_connection": {
-        "lines": { "count": 2482, "covered": 303, "percent": 12.21 },
-        "functions": { "count": 158, "covered": 29, "percent": 18.35 },
+        "lines": {
+          "count": 2482,
+          "covered": 303,
+          "percent": 12.21
+        },
+        "functions": {
+          "count": 158,
+          "covered": 29,
+          "percent": 18.35
+        },
         "branches": {
           "status": "unsupported",
           "count": null,
@@ -95,8 +160,16 @@
         }
       },
       "daemon/action_audit": {
-        "lines": { "count": 386, "covered": 324, "percent": 83.94 },
-        "functions": { "count": 49, "covered": 39, "percent": 79.59 },
+        "lines": {
+          "count": 386,
+          "covered": 324,
+          "percent": 83.94
+        },
+        "functions": {
+          "count": 49,
+          "covered": 39,
+          "percent": 79.59
+        },
         "branches": {
           "status": "unsupported",
           "count": null,
@@ -105,8 +178,16 @@
         }
       },
       "cli/commands": {
-        "lines": { "count": 5113, "covered": 1727, "percent": 33.78 },
-        "functions": { "count": 223, "covered": 62, "percent": 27.8 },
+        "lines": {
+          "count": 5113,
+          "covered": 1727,
+          "percent": 33.78
+        },
+        "functions": {
+          "count": 223,
+          "covered": 62,
+          "percent": 27.8
+        },
         "branches": {
           "status": "unsupported",
           "count": null,
@@ -115,8 +196,16 @@
         }
       },
       "tauri/commands": {
-        "lines": { "count": 3375, "covered": 184, "percent": 5.45 },
-        "functions": { "count": 547, "covered": 19, "percent": 3.47 },
+        "lines": {
+          "count": 3375,
+          "covered": 184,
+          "percent": 5.45
+        },
+        "functions": {
+          "count": 547,
+          "covered": 19,
+          "percent": 3.47
+        },
         "branches": {
           "status": "unsupported",
           "count": null,
@@ -127,8 +216,16 @@
     }
   },
   "frontend": {
-    "lines": { "count": 1883, "covered": 1680, "percent": 89.21 },
-    "functions": { "count": 780, "covered": 596, "percent": 76.41 },
+    "lines": {
+      "count": 1883,
+      "covered": 1680,
+      "percent": 89.21
+    },
+    "functions": {
+      "count": 780,
+      "covered": 596,
+      "percent": 76.41
+    },
     "branches": {
       "status": "supported",
       "count": 1961,
