@@ -74,11 +74,17 @@ module RustSource
   # item_executor tests, one output_json_path in task_repository) inflating the
   # ratchets with test-only usage. Brace-matching every cfg(test) module makes
   # the implementation mean what the scope says.
-  def strip_test_modules(source)
+  # `masked` lets a caller that has already paid for RustLexer.mask_literals hand
+  # the result in rather than paying for it twice. FR-141's gate needs both the
+  # stripped source and a stripped *masked* copy of it, and masking is the whole
+  # cost of these scans: 13 seconds across the workspace, which that gate was
+  # spending four times over. Passing the masked source as both arguments strips
+  # the masked copy itself. Existing callers are unaffected.
+  def strip_test_modules(source, masked = nil)
     lines = source.lines
     # Braces are counted on a lexically masked copy — see RustLexer for why a
     # per-line regex is not enough — while the ranges index the real lines.
-    counted = RustLexer.mask_literals(source).lines
+    counted = (masked || RustLexer.mask_literals(source)).lines
     excluded = []
     index = 0
     while index < lines.length

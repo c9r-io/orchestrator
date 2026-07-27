@@ -243,6 +243,11 @@ jobs:
         continue-on-error: true
         run: ./scripts/qa/test-persistence-dependency.sh
 
+      - name: Persistence API capability boundary
+        id: persistence-api-boundary
+        continue-on-error: true
+        run: ./scripts/qa/test-persistence-api-boundary.sh
+
       - name: Persistence crate extraction contracts
         id: persistence-extraction
         continue-on-error: true
@@ -317,6 +322,7 @@ jobs:
             ledger-tooling=${{ steps.ledger-tooling.outcome }}
             core-boundary=${{ steps.core-boundary.outcome }}
             persistence-dependency=${{ steps.persistence-dependency.outcome }}
+            persistence-api-boundary=${{ steps.persistence-api-boundary.outcome }}
             persistence-extraction=${{ steps.persistence-extraction.outcome }}
             doc-lifecycle=${{ steps.doc-lifecycle.outcome }}
             decommission=${{ steps.decommission.outcome }}
