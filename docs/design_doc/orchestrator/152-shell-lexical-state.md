@@ -131,6 +131,18 @@ deliberate choices:
   it below `total`. Under the defect the two named files read 993/1353 and
   369/385.
 
+Measured, not argued: patching the lexer to stop after line 200 breaks the sum
+for **35** files when `heredoc` is counted and for **0** when it is derived,
+while `last == total` catches it either way. The derived spelling would have
+certified a scanner that dropped 35 files' tails.
+
+`last == total` is asserted for the two named files rather than for all of them,
+because a file legitimately ending with a here-document terminator has
+`last < total` — `check-linux-x86-rlimit.sh` does. The cost is that appending a
+here-document to the very end of either named file would fail this assertion
+spuriously. That is a loud failure with an obvious cause, and preferable to
+weakening the check to something both spellings satisfy.
+
 The census exists because the FR-138 defect happened *while the gate was green*.
 "The gate passes" cannot be evidence that the gate reads whole files, because a
 truncated scan is precisely the state it was passing in. Exit codes are satisfied

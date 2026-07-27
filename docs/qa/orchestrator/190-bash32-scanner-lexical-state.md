@@ -247,6 +247,18 @@ invariant would hold for a lexer that gave up at line one, and the check would
 certify an accounting it never performed. The first draft of the census made
 exactly that mistake and was corrected during governance.
 
+Measured rather than argued. Patching `shell_lexer.rb` to stop scanning after
+line 200 — the FR-138 defect's exact shape, applied to every file at once:
+
+| census `heredoc` | files failing `scanned + heredoc == total` | `last == total` catches it |
+|---|---|---|
+| counted by the lexer | **35** | yes |
+| derived as `total - scanned` | **0** | yes |
+
+Derived, the invariant certifies a scanner that dropped 35 files' tails. That is
+why both assertions are here: 2 is the one that would have been a proxy, and 3 is
+the one that observes truncation directly under either spelling.
+
 **On assertion 3 rather than `heredoc == 0`**: both named files are QA wrappers
 that write their fixtures from here-documents, so dropping lines is correct
 behaviour for them. The question is whether the scan came back out again. Under
