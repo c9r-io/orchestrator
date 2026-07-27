@@ -53,6 +53,9 @@ pub mod handoff_store;
 pub mod migration;
 /// Individual migration step implementations.
 pub mod migration_steps;
+
+#[cfg(test)]
+mod migration_chain_tests;
 /// Process Console metrics: samples, rollups and the queries over them.
 pub mod process_metrics_store;
 /// Domain-specific repository traits and their SQLite implementations.

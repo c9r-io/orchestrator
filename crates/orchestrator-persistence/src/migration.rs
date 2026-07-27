@@ -9,7 +9,12 @@ pub struct Migration {
     /// Stable migration identifier recorded in `schema_migrations`.
     pub name: &'static str,
     /// Migration function executed inside a transaction.
-    pub up: fn(&Connection) -> Result<()>,
+    ///
+    /// Crate-private since FR-141: a `fn(&Connection)` on a public field names
+    /// the driver connection in the layer's own public API, which is what this
+    /// struct was doing. The only readers were the partial-chain tests, and
+    /// they now live in `migration_chain_tests` inside this crate.
+    pub(crate) up: fn(&Connection) -> Result<()>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

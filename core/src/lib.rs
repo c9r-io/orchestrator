@@ -90,8 +90,6 @@ pub mod json_extract;
 /// TTL-based log file cleanup for terminated tasks.
 pub mod log_cleanup;
 pub mod metrics;
-/// Legacy migration entry points preserved for compatibility.
-pub mod migration;
 /// Logging and metrics bootstrap helpers for runtime observability.
 pub mod observability;
 /// Provider-neutral agent driver contracts and registry.
