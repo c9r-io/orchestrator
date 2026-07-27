@@ -34,6 +34,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 POLICY_REL="config/governance/markdown-links.json"
 
+# shellcheck source=../lib/gate_jq.sh
+. "$REPO_ROOT/scripts/lib/gate_jq.sh"
+
 for required in jq git awk; do
   command -v "$required" >/dev/null 2>&1 || {
     echo "missing required command: $required" >&2
@@ -140,7 +143,11 @@ check_link_targets_resolve() {
 # Check 2: an exemption outlives the link it excuses. Left standing, it silently
 # re-permits the same broken target when someone writes it again.
 check_no_stale_exemptions() {
-  local root="$1" file target reason rc=0
+  local root="$1" file target reason rc=0 exemption_rows
+  # allow-empty: no exemptions at all is the best state this list can be in, so
+  # zero rows must not be a failure. It must also not be indistinguishable from
+  # an unreadable policy, which is what the status check is for.
+  exemption_rows="$(gate_jq_rows allow-empty "$root/$POLICY_REL" '.exemptions[] | "\(.file)\t\(.target)\t\(.reason // "")"')" || return 1
   while IFS=$'\t' read -r file target reason; do
     [[ -z "$file" ]] && continue
     if [[ ! -f "$root/$file" ]]; then
@@ -160,7 +167,7 @@ check_no_stale_exemptions() {
       echo "    exemption for '$file' → '$target' has no substantive reason" >&2
       rc=1
     fi
-  done < <(jq -r '.exemptions[] | "\(.file)\t\(.target)\t\(.reason // "")"' "$root/$POLICY_REL")
+  done <<< "$exemption_rows"
   return $rc
 }
 

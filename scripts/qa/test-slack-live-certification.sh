@@ -4,6 +4,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# shellcheck source=../lib/gate_jq.sh
+. "$REPO_ROOT/scripts/lib/gate_jq.sh"
 # shellcheck source=scripts/qa/lib/slack-live-certification-lib.sh
 source "$SCRIPT_DIR/lib/slack-live-certification-lib.sh"
 
@@ -156,10 +159,14 @@ if jq -e '.. | strings | select(test("known-certification-secret|raw-private"))'
 fi
 pass "safe evidence schema excludes private state and registered secrets"
 
+# allow-empty: every stage already passing is the healthy case, so zero rows
+# here is success rather than an unread state file.
+PENDING_STAGES="$(gate_jq_rows allow-empty "$STATE_FILE" '.stages[] | select(.result != "pass") | .name')" \
+  || fail "could not read pending stages from the certification state file"
 while IFS= read -r pending_stage; do
   [[ -n "$pending_stage" ]] || continue
   slack_cert_state_stage_result state-run "$pending_stage" pass unit_verified
-done < <(jq -r '.stages[] | select(.result != "pass") | .name' "$STATE_FILE")
+done <<< "$PENDING_STAGES"
 PROMOTED="$QA_ROOT/promoted-latest.json"
 SLACK_CERT_STATE_HOME="$SLACK_CERT_STATE_HOME" \
   "$SCRIPT_DIR/certify-slack-managed-live.sh" promote \

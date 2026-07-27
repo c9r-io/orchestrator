@@ -44,26 +44,44 @@ FAIL=0
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 
+SCRIPT_LIB_DIR="$REPO_ROOT/scripts/lib"
+# shellcheck source=../lib/gate_jq.sh
+. "$SCRIPT_LIB_DIR/gate_jq.sh"
+
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+trap 'rm -rf "$WORK"; gate_jq_end' EXIT
+
+# Opened before any check runs, so a policy read that fails inside a nested
+# process substitution still leaves a record the gate can find.
+gate_jq_begin
 
 # ── Policy accessors, all reading from $root so fixtures run on a copy ──────────
 
-policy()          { jq -r "$2" "$1/$POLICY_REL"; }
+# Every one of these is read from inside nested process substitutions, three and
+# four loops deep, where a non-zero return has nowhere to go. They route through
+# gate_jq_rows so that a malformed policy is reported with its own diagnostic and
+# recorded in the process-wide failure log, which check_no_silent_reads asks
+# about at the end. Returning non-zero here is necessary but is not, on its own,
+# enough — that is the whole subject of FR-144.
+policy()          { gate_jq_rows require-rows "$1/$POLICY_REL" "$2"; }
 policy_site_root(){ policy "$1" '.siteRoot'; }
 policy_nav()      { policy "$1" '.navConfig'; }
 collection_names(){ policy "$1" '.collections[].name'; }
 
+# allow-empty: a field the collection does not set is legitimately absent, which
+# is what the `// ""` already says.
 collection_field() {
-  jq -r --arg name "$2" --arg field "$3" \
-    '.collections[] | select(.name == $name) | .[$field] // "" | tostring' "$1/$POLICY_REL"
+  gate_jq_rows allow-empty "$1/$POLICY_REL" --arg name "$2" --arg field "$3" \
+    '.collections[] | select(.name == $name) | .[$field] // "" | tostring'
 }
+# require-rows: a collection with no source locales publishes nothing, and every
+# loop below would silently iterate zero times.
 collection_langs() {
-  jq -r --arg name "$2" '.collections[] | select(.name == $name) | .sources | keys[]' "$1/$POLICY_REL"
+  gate_jq_rows require-rows "$1/$POLICY_REL" --arg name "$2" '.collections[] | select(.name == $name) | .sources | keys[]'
 }
 collection_source() {
-  jq -r --arg name "$2" --arg lang "$3" \
-    '.collections[] | select(.name == $name) | .sources[$lang]' "$1/$POLICY_REL"
+  gate_jq_rows require-rows "$1/$POLICY_REL" --arg name "$2" --arg lang "$3" \
+    '.collections[] | select(.name == $name) | .sources[$lang]'
 }
 
 site_dir() { echo "$(policy_site_root "$1")/$3/$2"; }
@@ -85,10 +103,12 @@ authored_slugs() {
 }
 
 # Declared gaps for a collection, as "slug<TAB>absentSource".
+#
+# allow-empty: a collection with no declared translation gaps is the healthy
+# case, and is true of most of them.
 declared_gaps() {
-  jq -r --arg name "$2" \
-    '.translationGaps[] | select(.collection == $name) | "\(.slug)\t\(.absentSource)"' \
-    "$1/$POLICY_REL"
+  gate_jq_rows allow-empty "$1/$POLICY_REL" --arg name "$2" \
+    '.translationGaps[] | select(.collection == $name) | "\(.slug)\t\(.absentSource)"'
 }
 
 # What a locale must publish: everything authored in it, plus every declared gap whose
@@ -194,7 +214,7 @@ check_policy_fresh() {
   done < <(collection_names "$root")
 
   local unreasoned
-  unreasoned="$(jq -r '.translationGaps[] | select((.reason // "") | length < 40) | "\(.collection)/\(.slug)"' "$root/$POLICY_REL")"
+  unreasoned="$(gate_jq_rows allow-empty "$root/$POLICY_REL" '.translationGaps[] | select((.reason // "") | length < 40) | "\(.collection)/\(.slug)"')" || return 1
   if [[ -n "$unreasoned" ]]; then
     echo "    translation gap(s) with no substantive reason:" >&2
     printf '      %s\n' $unreasoned >&2
@@ -215,7 +235,7 @@ check_policy_fresh() {
         echo "    navExemptions names '$route', which the publish set does not produce" >&2
         rc=1
       fi
-    done < <(jq -r '.navExemptions[].route' "$root/$POLICY_REL")
+    done <<< "$(gate_jq_rows allow-empty "$root/$POLICY_REL" '.navExemptions[].route')"
   fi
   rm -rf "$dest"
 
@@ -595,6 +615,23 @@ echo "gaps:        $(jq -r '.translationGaps | length' "$REPO_ROOT/$POLICY_REL")
 echo ""
 
 run_all_checks "$REPO_ROOT" || true
+
+# Asked once, about the whole run, and deliberately not a member of ALL_CHECKS:
+# it is a property of this execution rather than of a tree, and every check above
+# would have to be re-evaluated to answer it per fixture.
+#
+# This is the assertion the gate had no way to make. A policy read that failed
+# four loops deep inside a process substitution returned zero rows to a loop that
+# then iterated zero times and reported success — the check ran, examined
+# nothing, and passed. The count is the observable that distinguishes those two
+# states, which is what FR-144 asked for.
+SILENT_READS="$(gate_jq_failure_count)"
+if [[ "$SILENT_READS" -eq 0 ]]; then
+  pass "no JSON read failed silently during this run"
+else
+  fail "$SILENT_READS JSON read(s) failed during this run, so some check above examined nothing"
+  gate_jq_failures | sed 's/^/      /' >&2
+fi
 
 echo ""
 echo "=== docs publishing integrity: $PASS passed, $FAIL failed ==="

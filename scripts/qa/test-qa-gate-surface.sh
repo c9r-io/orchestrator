@@ -29,6 +29,8 @@ MANIFEST_MODEL="$REPO_ROOT/scripts/lib/manifest_model.rb"
 
 # shellcheck source=../lib/gate_preamble.sh
 . "$REPO_ROOT/scripts/lib/gate_preamble.sh"
+# shellcheck source=../lib/gate_jq.sh
+. "$REPO_ROOT/scripts/lib/gate_jq.sh"
 
 if [[ "${1:-}" != "" && "${1:-}" != "--fixture-test" ]]; then
   echo "usage: $0 [--fixture-test]" >&2
@@ -56,7 +58,13 @@ check_surface_complete() {
   local manifest="$root/$MANIFEST_REL"
   local disk declared missing_from_manifest missing_from_disk
   disk="$(cd "$root" && find scripts/qa -type f \( -name '*.sh' -o -name '*.rb' \) 2>/dev/null | LC_ALL=C sort)"
-  declared="$(jq -r '.scripts[].path, (.supportFiles // [])[].path' "$manifest" | LC_ALL=C sort)"
+  # Piping jq into sort would hand back sort's status, and this function runs in
+  # condition position where set -e is off, so a jq failure here used to leave
+  # $declared empty. That direction happens to fail closed — every file on disk
+  # then looks unclassified — but the diagnostic would blame the repository for
+  # a broken manifest, so it is read properly rather than left to luck.
+  declared="$(gate_jq_rows require-rows "$manifest" '.scripts[].path, (.supportFiles // [])[].path')" || return 1
+  declared="$(printf '%s\n' "$declared" | LC_ALL=C sort)"
 
   missing_from_manifest="$(comm -23 <(printf '%s\n' "$disk") <(printf '%s\n' "$declared"))"
   if [[ -n "$missing_from_manifest" ]]; then
@@ -88,25 +96,44 @@ check_surface_complete() {
 # supportFiles becomes an exemption list anyone can grow to silence check 1.
 check_support_files_declared() {
   local root="$1"
-  local manifest="$root/$MANIFEST_REL" rc=0 path role reason
+  local manifest="$root/$MANIFEST_REL" rc=0 path role reason rows status
+  # allow-empty: a repository with no support files is legitimate, which is what
+  # the `// []` in the query already says.
+  rows="$(gate_jq_rows allow-empty "$manifest" '(.supportFiles // [])[] | [.path, (.role // "null"), (.reason // "")] | @tsv')" || return 1
   while IFS=$'\t' read -r path role reason; do
     [[ -z "$path" ]] && continue
-    if ! jq -e --arg role "$role" '.supportFileRoles | has($role)' "$manifest" >/dev/null; then
+    # `jq -e` returns 1 for a false result and 5 for an error, and the two used
+    # to be conflated by `if !`: a malformed manifest was reported as "declares
+    # an unknown role", which sends the reader after the wrong file.
+    jq -e --arg role "$role" '.supportFileRoles | has($role)' "$manifest" >/dev/null 2>&1
+    status=$?
+    if [[ "$status" -eq 1 ]]; then
       echo "    $path: support file declares an unknown role: $role" >&2
+      rc=1
+    elif [[ "$status" -ne 0 ]]; then
+      echo "    $manifest: jq exited $status testing the role of $path" >&2
       rc=1
     fi
     if [[ -z "$reason" || "$reason" == "null" ]]; then
       echo "    $path: support file has no reason" >&2
       rc=1
     fi
-  done < <(jq -r '(.supportFiles // [])[] | [.path, (.role // "null"), (.reason // "")] | @tsv' "$manifest")
+  done <<< "$rows"
   return $rc
 }
 
 # Check 2: non-ci-required entries carry a reason and an owner document that exists.
 check_reason_and_owner() {
   local root="$1"
-  local manifest="$root/$MANIFEST_REL" rc=0 path owner
+  local manifest="$root/$MANIFEST_REL" rc=0 path owner rows
+  # allow-empty on both: a surface where every gate is ci-required would select
+  # nothing here, and that is the healthy end state rather than a defect. The
+  # second query selects violations, so zero rows is exactly what passing means.
+  rows="$(gate_jq_rows allow-empty "$manifest" '
+    .scripts[]
+    | select(.enforcement != "ci-required")
+    | [.path, (.owner // "null")]
+    | @tsv')" || return 1
   while IFS=$'\t' read -r path owner; do
     [[ -z "$path" ]] && continue
     if [[ -z "$owner" || "$owner" == "null" ]]; then
@@ -118,21 +145,18 @@ check_reason_and_owner() {
       echo "    $path: owner document does not exist: $owner" >&2
       rc=1
     fi
-  done < <(jq -r '
+  done <<< "$rows"
+
+  rows="$(gate_jq_rows allow-empty "$manifest" '
     .scripts[]
     | select(.enforcement != "ci-required")
-    | [.path, (.owner // "null")]
-    | @tsv' "$manifest")
-
+    | select((.reason // "") | length == 0)
+    | .path')" || return 1
   while read -r path; do
     [[ -z "$path" ]] && continue
     echo "    $path: non-ci-required entry has an empty or missing reason" >&2
     rc=1
-  done < <(jq -r '
-    .scripts[]
-    | select(.enforcement != "ci-required")
-    | select((.reason // "") | length == 0)
-    | .path' "$manifest")
+  done <<< "$rows"
 
   return $rc
 }
@@ -162,7 +186,16 @@ workflow_has_job() {
 check_wiring_truth() {
   local root="$1"
   local manifest="$root/$MANIFEST_REL" rc=0
-  local path workflow job invoked_by block
+  local path workflow job invoked_by block rows
+  # require-rows: this is the ci-required population itself. A surface with zero
+  # CI-enforced gates is not a state this repository can reach, so reading none
+  # means the query or the manifest is broken, not that the work is done. This
+  # is the check the FR-140 typo silenced.
+  rows="$(gate_jq_rows require-rows "$manifest" '
+    .scripts[]
+    | select(.enforcement == "ci-required")
+    | [.path, (.workflow // "null"), (.job // "null"), (.invokedBy // "null")]
+    | @tsv')" || return 1
   while IFS=$'\t' read -r path workflow job invoked_by; do
     [[ -z "$path" ]] && continue
     if [[ "$workflow" == "null" || "$job" == "null" ]]; then
@@ -206,11 +239,7 @@ check_wiring_truth() {
         rc=1
       fi
     fi
-  done < <(jq -r '
-    .scripts[]
-    | select(.enforcement == "ci-required")
-    | [.path, (.workflow // "null"), (.job // "null"), (.invokedBy // "null")]
-    | @tsv' "$manifest")
+  done <<< "$rows"
   return $rc
 }
 
@@ -298,7 +327,17 @@ path_shadow_covers_bundle() {
 check_provider_isolation() {
   local root="$1"
   local manifest="$root/$MANIFEST_REL" rc=0
-  local path mode evidence bundle
+  local path mode evidence bundle rows
+  # This is the query FR-140's typo broke. Writing `"providerIsolation":
+  # "no-provider"` instead of `{"mode": "no-provider"}` made jq exit 5 here, the
+  # loop read zero rows, and the check returned success — the gate printed
+  # "13 passed, 0 failed" while enforcing nothing. require-rows, because the
+  # ci-required population cannot be empty.
+  rows="$(gate_jq_rows require-rows "$manifest" '
+    .scripts[]
+    | select(.enforcement == "ci-required")
+    | [.path, (.providerIsolation.mode // "null"), (.providerIsolation.evidence // "null")]
+    | @tsv')" || return 1
   while IFS=$'\t' read -r path mode evidence; do
     [[ -z "$path" ]] && continue
     case "$mode" in
@@ -375,11 +414,7 @@ check_provider_isolation() {
         rc=1
         ;;
     esac
-  done < <(jq -r '
-    .scripts[]
-    | select(.enforcement == "ci-required")
-    | [.path, (.providerIsolation.mode // "null"), (.providerIsolation.evidence // "null")]
-    | @tsv' "$manifest")
+  done <<< "$rows"
   return $rc
 }
 
@@ -399,7 +434,12 @@ CI_CLAIM_PATTERN='release gate|由 CI|CI 门禁|\.github/workflows|GitHub Action
 scanned_markdown() {
   local root="$1"
   local exempt
-  exempt="$(jq -r '(.staleClaimExemptions // [])[].path' "$root/$MANIFEST_REL" | LC_ALL=C sort)"
+  # An unread exemption list would silently widen the scanned corpus rather than
+  # narrow it, so this one fails closed. It is read properly anyway: a caller
+  # cannot tell the difference between "no exemptions" and "could not read them"
+  # unless the reader says so.
+  exempt="$(gate_jq_rows allow-empty "$root/$MANIFEST_REL" '(.staleClaimExemptions // [])[].path')" || return 1
+  exempt="$(printf '%s\n' "$exempt" | LC_ALL=C sort)"
   comm -23 <(cd "$root" && git ls-files '*.md' 2>/dev/null | LC_ALL=C sort) \
            <(printf '%s\n' "$exempt")
 }
@@ -434,12 +474,15 @@ prose_only_corpus() {
 
 check_no_stale_claims() {
   local root="$1"
-  local manifest="$root/$MANIFEST_REL" rc=0 path base hits corpus
+  local manifest="$root/$MANIFEST_REL" rc=0 path base hits corpus rows
   corpus="$(prose_only_corpus "$root")"
   [[ -z "$corpus" ]] && {
     echo "    no tracked Markdown prose found; the scan would pass vacuously" >&2
     return 1
   }
+  # allow-empty: a surface where every gate became ci-required would select
+  # nothing, and that is the healthy end state rather than a broken read.
+  rows="$(gate_jq_rows allow-empty "$manifest" '.scripts[] | select(.enforcement != "ci-required") | .path')" || return 1
   while read -r path; do
     [[ -z "$path" ]] && continue
     base="$(basename "$path")"
@@ -449,7 +492,7 @@ check_no_stale_claims() {
       printf '      %s\n' "$hits" >&2
       rc=1
     fi
-  done < <(jq -r '.scripts[] | select(.enforcement != "ci-required") | .path' "$manifest")
+  done <<< "$rows"
   return $rc
 }
 
@@ -458,7 +501,12 @@ check_no_stale_claims() {
 # exemption for a file that no longer says anything is a licence nobody revoked.
 check_no_stale_claim_exemptions() {
   local root="$1"
-  local manifest="$root/$MANIFEST_REL" rc=0 path reason
+  local manifest="$root/$MANIFEST_REL" rc=0 path reason rows
+  # allow-empty, and this is the case that makes the declaration mandatory
+  # rather than defaulted: the exemption list is empty today, and an empty
+  # exemption list is the best possible state. require-rows here would demand
+  # that somebody keep an exemption alive to keep the gate quiet.
+  rows="$(gate_jq_rows allow-empty "$manifest" '(.staleClaimExemptions // [])[] | [.path, (.reason // "")] | @tsv')" || return 1
   while IFS=$'\t' read -r path reason; do
     [[ -z "$path" ]] && continue
     if ! (cd "$root" && git ls-files --error-unmatch "$path" >/dev/null 2>&1); then
@@ -475,7 +523,7 @@ check_no_stale_claim_exemptions() {
       echo "    stale claim exemption is no longer needed; $path contains no enforcement claim" >&2
       rc=1
     fi
-  done < <(jq -r '(.staleClaimExemptions // [])[] | [.path, (.reason // "")] | @tsv' "$manifest")
+  done <<< "$rows"
   return $rc
 }
 
@@ -488,26 +536,38 @@ script_required_commands() { gate_required_commands "$1"; }
 # its apt/brew installs and its actions provide, mapped through the manifest.
 # The mapping lives in the manifest because "the ripgrep package provides rg" is
 # a claim about Debian that a reviewer should be able to see and correct.
+#
+# Every jq read here is captured and tested before use. A `{ …; } | sort -u`
+# block hands back sort's status, so an unreadable manifest used to shrink the
+# provided-command set to nothing — which makes check 6 report that the job
+# provides none of the gate's dependencies. That fails closed, but it accuses
+# the workflow of a defect the manifest has.
 job_provided_commands() {
   local root="$1" workflow="$2" job="$3"
   local manifest="$root/$MANIFEST_REL"
-  {
-    jq -r '.commandSources.runnerBaseline[]' "$manifest"
-    while IFS=$'\t' read -r kind value; do
-      [[ -z "$kind" ]] && continue
-      case "$kind" in
-        apt|brew)
-          jq -r --arg p "$value" '.commandSources.packages[$p][]? // empty' "$manifest"
-          ;;
-        action)
-          jq -r --arg a "$value" '.commandSources.actions[$a][]? // empty' "$manifest"
-          ;;
-        action-tool)
-          echo "$value"
-          ;;
-      esac
-    done < <(ruby "$WORKFLOW_MODEL" installs "$root/$workflow" "$job" 2>/dev/null)
-  } | LC_ALL=C sort -u
+  local baseline installs provided kind value extra
+  baseline="$(gate_jq_rows require-rows "$manifest" '.commandSources.runnerBaseline[]')" || return 1
+  installs="$(ruby "$WORKFLOW_MODEL" installs "$root/$workflow" "$job" 2>/dev/null)"
+  provided="$baseline"
+  while IFS=$'\t' read -r kind value; do
+    [[ -z "$kind" ]] && continue
+    case "$kind" in
+      apt|brew)
+        extra="$(gate_jq_rows allow-empty "$manifest" --arg p "$value" '.commandSources.packages[$p][]? // empty')" || return 1
+        ;;
+      action)
+        extra="$(gate_jq_rows allow-empty "$manifest" --arg a "$value" '.commandSources.actions[$a][]? // empty')" || return 1
+        ;;
+      action-tool)
+        extra="$value"
+        ;;
+      *)
+        extra=""
+        ;;
+    esac
+    [[ -n "$extra" ]] && provided="$provided"$'\n'"$extra"
+  done <<< "$installs"
+  printf '%s\n' "$provided" | LC_ALL=C sort -u
 }
 
 # Check 6: a ci-required gate's dependencies must be satisfied by the job that
@@ -516,7 +576,12 @@ job_provided_commands() {
 # on every push.
 check_job_dependencies() {
   local root="$1"
-  local manifest="$root/$MANIFEST_REL" rc=0 path workflow job missing
+  local manifest="$root/$MANIFEST_REL" rc=0 path workflow job missing rows
+  rows="$(gate_jq_rows require-rows "$manifest" '
+    .scripts[]
+    | select(.enforcement == "ci-required")
+    | [.path, (.workflow // "null"), (.job // "null")]
+    | @tsv')" || return 1
   while IFS=$'\t' read -r path workflow job; do
     [[ -z "$path" ]] && continue
     [[ -f "$root/$path" ]] || continue
@@ -528,11 +593,7 @@ check_job_dependencies() {
       echo "      the gate exits on its own missing-command preamble, asserting nothing" >&2
       rc=1
     fi
-  done < <(jq -r '
-    .scripts[]
-    | select(.enforcement == "ci-required")
-    | [.path, (.workflow // "null"), (.job // "null")]
-    | @tsv' "$manifest")
+  done <<< "$rows"
   return $rc
 }
 
@@ -547,10 +608,22 @@ check_workspace_scope() {
   local root="$1"
   local manifest="$root/$MANIFEST_REL" rc=0 path declared exclude
   local -a excludes=()
+  local rows
+  # require-rows: an empty exclude list does not make this check pass, it makes
+  # it inert — the inner loop never runs and every workspace-wide gate goes
+  # unexamined. If the list ever legitimately empties, changing this one word is
+  # a reviewable diff; silently reading zero was not.
+  rows="$(gate_jq_rows require-rows "$manifest" '.workspaceScope.excludes[]')" || return 1
   while read -r exclude; do
     [[ -n "$exclude" ]] && excludes+=("$exclude")
-  done < <(jq -r '.workspaceScope.excludes[]' "$manifest")
+  done <<< "$rows"
 
+  local scope_rows
+  scope_rows="$(gate_jq_rows require-rows "$manifest" '
+    .scripts[]
+    | select(.enforcement == "ci-required")
+    | [.path, (.workspaceScopeReason // "null")]
+    | @tsv')" || return 1
   while IFS=$'\t' read -r path declared; do
     [[ -z "$path" ]] && continue
     [[ -f "$root/$path" ]] || continue
@@ -571,11 +644,7 @@ check_workspace_scope() {
     # silence that is to reword the message — which fixes nothing.
     done < <(sed -E 's/(^|[[:space:]])#.*$//; s/"[^"]*"//g' "$root/$path" \
       | grep -E 'cargo (test|clippy|build|check)[^|;&]*--workspace' || true)
-  done < <(jq -r '
-    .scripts[]
-    | select(.enforcement == "ci-required")
-    | [.path, (.workspaceScopeReason // "null")]
-    | @tsv' "$manifest")
+  done <<< "$scope_rows"
   return $rc
 }
 
@@ -589,7 +658,8 @@ check_workspace_scope() {
 # why costs more than it saves.
 check_diagnostics_preserved() {
   local root="$1"
-  local manifest="$root/$MANIFEST_REL" rc=0 path hits
+  local manifest="$root/$MANIFEST_REL" rc=0 path hits rows
+  rows="$(gate_jq_rows require-rows "$manifest" '.scripts[] | select(.enforcement == "ci-required") | .path')" || return 1
   while read -r path; do
     [[ -z "$path" ]] && continue
     [[ -f "$root/$path" ]] || continue
@@ -600,7 +670,7 @@ check_diagnostics_preserved() {
       printf '      %s\n' "$hits" >&2
       rc=1
     fi
-  done < <(jq -r '.scripts[] | select(.enforcement == "ci-required") | .path' "$manifest")
+  done <<< "$rows"
   return $rc
 }
 
@@ -622,7 +692,12 @@ check_diagnostics_preserved() {
 GIT_HISTORY_PATTERN='\bgit\b[^|;&]{0,80}\b(merge-base|cat-file|rev-list|describe)\b|git (diff|show|log)[^|;&]*(COMMIT|\^)'
 check_git_history_available() {
   local root="$1"
-  local manifest="$root/$MANIFEST_REL" rc=0 path workflow job depth
+  local manifest="$root/$MANIFEST_REL" rc=0 path workflow job depth rows
+  rows="$(gate_jq_rows require-rows "$manifest" '
+    .scripts[]
+    | select(.enforcement == "ci-required")
+    | [.path, (.workflow // "null"), (.job // "null")]
+    | @tsv')" || return 1
   while IFS=$'\t' read -r path workflow job; do
     [[ -z "$path" ]] && continue
     [[ -f "$root/$path" ]] || continue
@@ -635,11 +710,7 @@ check_git_history_available() {
       echo "      developer machine, so the gate is green locally and dead in CI" >&2
       rc=1
     fi
-  done < <(jq -r '
-    .scripts[]
-    | select(.enforcement == "ci-required")
-    | [.path, (.workflow // "null"), (.job // "null")]
-    | @tsv' "$manifest")
+  done <<< "$rows"
   return $rc
 }
 
@@ -651,13 +722,23 @@ check_git_history_available() {
 # defeated — had no second line at all.
 check_provider_stub_coverage() {
   local root="$1"
-  local manifest="$root/$MANIFEST_REL" rc=0 workflow job action exempt
-  action="$(jq -r '.providerStubs.action' "$manifest")"
+  local manifest="$root/$MANIFEST_REL" rc=0 workflow job action exempt rows
+  action="$(gate_jq_rows require-rows "$manifest" '.providerStubs.action')" || return 1
+  # allow-empty: a surface on which no ci-required gate can reach a provider is
+  # the state this check exists to drive towards, so zero rows is success rather
+  # than a broken read. A jq failure is still caught, by the status.
+  rows="$(gate_jq_rows allow-empty "$manifest" '
+    .scripts[]
+    | select(.enforcement == "ci-required")
+    | select((.providerIsolation.mode // "no-provider") != "no-provider")
+    | [(.workflow // "null"), (.job // "null")]
+    | @tsv')" || return 1
+  rows="$(printf '%s\n' "$rows" | LC_ALL=C sort -u)"
   while IFS=$'\t' read -r workflow job; do
     [[ -z "$workflow" ]] && continue
     [[ -f "$root/$workflow" ]] || continue
-    exempt="$(jq -r --arg j "$job" \
-      '[.providerStubs.exemptJobs[]? | select(.job == $j and ((.reason // "") | length > 0))] | length' "$manifest")"
+    exempt="$(gate_jq_rows require-rows "$manifest" --arg j "$job" \
+      '[.providerStubs.exemptJobs[]? | select(.job == $j and ((.reason // "") | length > 0))] | length')" || return 1
     [[ "$exempt" -gt 0 ]] && continue
     if ! grep -qxF "action	$action" \
       <<< "$(ruby "$WORKFLOW_MODEL" installs "$root/$workflow" "$job" 2>/dev/null)"; then
@@ -665,12 +746,7 @@ check_provider_stub_coverage() {
       echo "      add: uses: $action" >&2
       rc=1
     fi
-  done < <(jq -r '
-    .scripts[]
-    | select(.enforcement == "ci-required")
-    | select((.providerIsolation.mode // "no-provider") != "no-provider")
-    | [(.workflow // "null"), (.job // "null")]
-    | @tsv' "$manifest" | LC_ALL=C sort -u)
+  done <<< "$rows"
   return $rc
 }
 

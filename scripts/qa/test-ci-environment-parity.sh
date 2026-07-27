@@ -33,6 +33,8 @@ MANIFEST_REL="config/governance/qa-gate-surface.json"
 
 # shellcheck source=../lib/gate_preamble.sh
 . "$REPO_ROOT/scripts/lib/gate_preamble.sh"
+# shellcheck source=../lib/gate_jq.sh
+. "$REPO_ROOT/scripts/lib/gate_jq.sh"
 
 for required in jq ruby; do
   command -v "$required" >/dev/null 2>&1 || {
@@ -90,7 +92,12 @@ set_ci_env() {
 SELF_REL="scripts/qa/$(basename "${BASH_SOURCE[0]}")"
 
 in_scope_gates() {
-  local root="$1" path
+  local root="$1" path ci_required_rows
+  # require-rows: this function decides how much work the whole parity job does.
+  # An unreadable manifest used to yield an empty scope, and an empty scope is
+  # indistinguishable from "every gate agrees across environments" — the job
+  # goes green in seconds having compared nothing.
+  ci_required_rows="$(gate_jq_rows require-rows "$root/$MANIFEST_REL" '.scripts[] | select(.enforcement == "ci-required") | .path')" || return 1
   while read -r path; do
     [[ -z "$path" ]] && continue
     [[ -f "$root/$path" ]] || continue
@@ -106,7 +113,7 @@ in_scope_gates() {
     # execution this FR exists to remove.
     gate_requires "$root/$path" cargo && continue
     echo "$path"
-  done < <(jq -r '.scripts[] | select(.enforcement == "ci-required") | .path' "$root/$MANIFEST_REL")
+  done <<< "$ci_required_rows"
 }
 
 # Runs one gate in both worlds and reports whether they agree. Returns 0 when
@@ -134,11 +141,15 @@ compare_environments() {
 }
 
 check_environment_parity() {
-  local root="$1" rc=0 path
+  local root="$1" rc=0 path scope
+  # Captured rather than fed through a process substitution, so in_scope_gates
+  # failing to read the manifest is a failure here instead of an empty loop that
+  # reports parity across zero gates.
+  scope="$(in_scope_gates "$root")" || return 1
   while read -r path; do
     [[ -z "$path" ]] && continue
     compare_environments "$root" "$path" || rc=1
-  done < <(in_scope_gates "$root")
+  done <<< "$scope"
   return $rc
 }
 

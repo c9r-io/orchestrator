@@ -47,6 +47,58 @@
 # scripts/qa/bash32-compat.rb enforces it across `git ls-files '*.sh'`, which
 # includes this directory.
 
+# ── A failure record that survives a subshell ─────────────────────────────────
+#
+# Capture-and-test fixes the call sites it is applied to. It cannot fix a read
+# that happens *inside* a process substitution several loops deep, because the
+# subshell's status has nowhere to go — which is the original defect wearing a
+# different hat. test-docs-publishing-integrity.sh nests four deep and reads the
+# policy at every level.
+#
+# So a failed read also leaves a note in a file. A subshell cannot return a
+# status to its parent, but it can write, and the gate asks once at the end
+# whether any read failed. That covers reads nobody converted, including ones
+# written after this file, which is the property a per-call-site fix does not
+# have.
+#
+# gate_jq_begin must be called before the checks run; gate_jq_failure_count
+# reports how many reads failed anywhere in the process tree.
+
+gate_jq_begin() {
+  GATE_JQ_FAILURES="${TMPDIR:-/tmp}/gate_jq_failures.$$"
+  : > "$GATE_JQ_FAILURES"
+  export GATE_JQ_FAILURES
+}
+
+gate_jq_failure_count() {
+  if [ -n "${GATE_JQ_FAILURES:-}" ] && [ -f "$GATE_JQ_FAILURES" ]; then
+    # `wc -l` alone pads with spaces on macOS.
+    awk 'END { print NR + 0 }' "$GATE_JQ_FAILURES"
+  else
+    echo 0
+  fi
+}
+
+gate_jq_failures() {
+  if [ -n "${GATE_JQ_FAILURES:-}" ] && [ -f "$GATE_JQ_FAILURES" ]; then
+    cat "$GATE_JQ_FAILURES"
+  fi
+}
+
+gate_jq_end() {
+  if [ -n "${GATE_JQ_FAILURES:-}" ]; then
+    rm -f "$GATE_JQ_FAILURES"
+  fi
+}
+
+# Records a failed read, if a record was opened. Silent when it was not, so the
+# reader stays usable in a gate that has not adopted the flag.
+gate_jq_record_failure() {
+  if [ -n "${GATE_JQ_FAILURES:-}" ] && [ -f "$GATE_JQ_FAILURES" ]; then
+    echo "$1" >> "$GATE_JQ_FAILURES"
+  fi
+}
+
 # Runs jq and prints its rows, having observed the exit status.
 #
 # Usage: gate_jq_rows <require-rows|allow-empty> <file> <jq-args...>
@@ -96,6 +148,7 @@ gate_jq_rows() {
     if [ -n "$diagnostic" ]; then
       printf '      %s\n' "$diagnostic" >&2
     fi
+    gate_jq_record_failure "$file: jq exited $status (${diagnostic:-no diagnostic})"
     return 1
   fi
 
@@ -105,12 +158,14 @@ gate_jq_rows() {
   if [ -n "$diagnostic" ]; then
     echo "    $file: jq succeeded but wrote to stderr; treating that as a defect" >&2
     printf '      %s\n' "$diagnostic" >&2
+    gate_jq_record_failure "$file: jq wrote to stderr ($diagnostic)"
     return 1
   fi
 
   if [ "$emptiness" = "require-rows" ] && [ -z "$rows" ]; then
     echo "    $file: query was declared to require at least one row and read none" >&2
     echo "      query: $*" >&2
+    gate_jq_record_failure "$file: require-rows query read no rows: $*"
     return 1
   fi
 
