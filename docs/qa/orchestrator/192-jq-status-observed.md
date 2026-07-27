@@ -193,7 +193,10 @@ audit round.
 
 ## Recorded measurement
 
-Taken during governance at `905909ff`, macOS, system Ruby 2.6.
+Taken during governance at `905909ff`, macOS, system Ruby 2.6. Certified at
+`b61e7904` on a clean tree, pinned across the run, 22 of 22 green including
+`cargo test --workspace` and `cargo clippy -D warnings`; no code changed after
+that run, only this paragraph.
 
 **The defect, before and after** — same tree, same mutation:
 
