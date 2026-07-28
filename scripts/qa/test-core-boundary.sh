@@ -47,6 +47,9 @@ FAIL=0
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 
+# shellcheck source=../lib/gate_fixture.sh
+. "$REPO_ROOT/scripts/lib/gate_fixture.sh"
+
 digest() { ruby -rdigest -e 'print Digest::SHA256.file(ARGV[0]).hexdigest' "$1"; }
 
 # A case copies only what the gate scans: core/src, the member manifests and
@@ -163,7 +166,16 @@ DIR="$(new_case rusqlite-removed)"
 # residual is, including at zero, which is the state this whole gate was built
 # to reach.
 REMOVAL_TARGET="core/src/db.rs"
-ruby -rjson -e '
+# This case is the second of FR-143's nine, twice over. It first read its target
+# out of `rusqlite.files.keys.min`, which FR-141 B4 emptied, so the read returned
+# nothing and the case wrote to a directory. Before that it stripped tokens from
+# a `db.rs` that had become a re-export shell, mutated nothing, and reported that
+# the gate had failed to notice a removal — an accusation aimed at the gate for
+# the fixture's own defect.
+#
+# Both are now impossible: the target must be a regular file, and the ledger must
+# actually change. The abort keeps its words and becomes the diagnosis.
+if fixture_mutate "case 5" "$DIR/$LEDGER" ruby -rjson -e '
 path = ARGV[0]
 ledger = JSON.parse(File.read(path))
 target = ARGV[1]
@@ -172,16 +184,17 @@ abort "the repository still references rusqlite in #{target}; pick a target it d
 ledger["rusqlite"]["files"][target] = 3
 ledger["rusqlite"]["total"] += 3
 File.write(path, JSON.pretty_generate(ledger) + "\n")
-' "$DIR/$LEDGER" "$REMOVAL_TARGET"
-set +e
-(cd "$DIR" && ruby "$GATE" > "$WORK/case5.out" 2> "$WORK/case5.err")
-STATUS=$?
-set -e
-if [[ "$STATUS" -ne 0 ]] && grep -q "\- $REMOVAL_TARGET no longer references rusqlite" "$WORK/case5.err"; then
-  pass "a ledger that over-claims a reference fails, and the report says so"
-else
-  fail "an over-claiming ledger did not fail the gate (exit $STATUS)"
-  cat "$WORK/case5.err" >&2
+' "$DIR/$LEDGER" "$REMOVAL_TARGET"; then
+  set +e
+  (cd "$DIR" && ruby "$GATE" > "$WORK/case5.out" 2> "$WORK/case5.err")
+  STATUS=$?
+  set -e
+  if [[ "$STATUS" -ne 0 ]] && grep -q "\- $REMOVAL_TARGET no longer references rusqlite" "$WORK/case5.err"; then
+    pass "a ledger that over-claims a reference fails, and the report says so"
+  else
+    fail "an over-claiming ledger did not fail the gate (exit $STATUS)"
+    cat "$WORK/case5.err" >&2
+  fi
 fi
 echo ""
 
@@ -202,7 +215,12 @@ BOUNDARY_BEFORE_STATUS=$?
 COORD_BEFORE="$(cd "$DIR" && ruby "$COORD_GATE" --emit-baseline 2> "$WORK/case6-coord.err")"
 COORD_BEFORE_STATUS=$?
 set -e
-ruby -e '
+# This case asserts the baselines do NOT move, so an inert mutation passes it
+# vacuously — the strongest live instance of FR-143's second incident in this
+# repository. `core/src/prehook/mod.rs` is named here and nowhere else; the day
+# it moves, `File.readlines` raises, and before FR-143 that ended the run.
+# Proving the insertion landed is what makes the equality below mean anything.
+if fixture_mutate "case 6" "$PROBE" ruby -e '
 path = ARGV[0]
 lines = File.readlines(path)
 probe = <<~RUST
@@ -217,23 +235,24 @@ probe = <<~RUST
 RUST
 lines.insert(lines.length / 2, probe)
 File.write(path, lines.join)
-' "$PROBE"
-set +e
-BOUNDARY_AFTER="$(cd "$DIR" && ruby "$GATE" --emit-baseline 2>> "$WORK/case6-boundary.err")"
-BOUNDARY_AFTER_STATUS=$?
-COORD_AFTER="$(cd "$DIR" && ruby "$COORD_GATE" --emit-baseline 2>> "$WORK/case6-coord.err")"
-COORD_AFTER_STATUS=$?
-set -e
-if [[ "$BOUNDARY_BEFORE_STATUS" -ne 0 || "$COORD_BEFORE_STATUS" -ne 0 ||
-  "$BOUNDARY_AFTER_STATUS" -ne 0 || "$COORD_AFTER_STATUS" -ne 0 ]]; then
-  fail "a gate could not emit a baseline, so the scope comparison proves nothing"
-  cat "$WORK/case6-boundary.err" "$WORK/case6-coord.err" >&2
-elif [[ "$BOUNDARY_BEFORE" == "$BOUNDARY_AFTER" && "$COORD_BEFORE" == "$COORD_AFTER" ]]; then
-  pass "test-only rusqlite, captures and PipelineVariables lines are excluded by both gates"
-else
-  fail "a cfg(test) module changed an emitted baseline; the scan does not match its scope"
-  diff <(echo "$BOUNDARY_BEFORE") <(echo "$BOUNDARY_AFTER") >&2 || true
-  diff <(echo "$COORD_BEFORE") <(echo "$COORD_AFTER") >&2 || true
+' "$PROBE"; then
+  set +e
+  BOUNDARY_AFTER="$(cd "$DIR" && ruby "$GATE" --emit-baseline 2>> "$WORK/case6-boundary.err")"
+  BOUNDARY_AFTER_STATUS=$?
+  COORD_AFTER="$(cd "$DIR" && ruby "$COORD_GATE" --emit-baseline 2>> "$WORK/case6-coord.err")"
+  COORD_AFTER_STATUS=$?
+  set -e
+  if [[ "$BOUNDARY_BEFORE_STATUS" -ne 0 || "$COORD_BEFORE_STATUS" -ne 0 ||
+    "$BOUNDARY_AFTER_STATUS" -ne 0 || "$COORD_AFTER_STATUS" -ne 0 ]]; then
+    fail "a gate could not emit a baseline, so the scope comparison proves nothing"
+    cat "$WORK/case6-boundary.err" "$WORK/case6-coord.err" >&2
+  elif [[ "$BOUNDARY_BEFORE" == "$BOUNDARY_AFTER" && "$COORD_BEFORE" == "$COORD_AFTER" ]]; then
+    pass "test-only rusqlite, captures and PipelineVariables lines are excluded by both gates"
+  else
+    fail "a cfg(test) module changed an emitted baseline; the scan does not match its scope"
+    diff <(echo "$BOUNDARY_BEFORE") <(echo "$BOUNDARY_AFTER") >&2 || true
+    diff <(echo "$COORD_BEFORE") <(echo "$COORD_AFTER") >&2 || true
+  fi
 fi
 echo ""
 
@@ -390,7 +409,7 @@ set +e
 BOUNDARY_BEFORE="$(cd "$DIR" && ruby "$GATE" --emit-baseline 2> "$WORK/case10-b.err")"
 COORD_BEFORE="$(cd "$DIR" && ruby "$COORD_GATE" --emit-baseline 2> "$WORK/case10-c.err")"
 set -e
-ruby -e '
+if fixture_mutate "case 10" "$PROBE" ruby -e '
 path = ARGV[0]
 lines = File.readlines(path)
 # The unbalanced literals are the three shapes this repository actually
@@ -415,20 +434,21 @@ probe = <<~'"'"'RUST'"'"'
 RUST
 lines.insert(lines.length / 2, probe)
 File.write(path, lines.join)
-' "$PROBE"
-set +e
-BOUNDARY_AFTER="$(cd "$DIR" && ruby "$GATE" --emit-baseline 2>> "$WORK/case10-b.err")"
-COORD_AFTER="$(cd "$DIR" && ruby "$COORD_GATE" --emit-baseline 2>> "$WORK/case10-c.err")"
-set -e
-if [[ -z "$BOUNDARY_BEFORE" || -z "$COORD_BEFORE" || -z "$BOUNDARY_AFTER" || -z "$COORD_AFTER" ]]; then
-  fail "a gate could not emit a baseline, so the visibility comparison proves nothing"
-  cat "$WORK/case10-b.err" "$WORK/case10-c.err" >&2
-elif [[ "$BOUNDARY_BEFORE" != "$BOUNDARY_AFTER" && "$COORD_BEFORE" != "$COORD_AFTER" ]]; then
-  pass "production rusqlite, captures and PipelineVariables after an unbalanced literal reach both ledgers"
-else
-  fail "a brace inside a literal hid the production code after it from a ledger"
-  [[ "$BOUNDARY_BEFORE" == "$BOUNDARY_AFTER" ]] && echo "    core boundary baseline did not move" >&2
-  [[ "$COORD_BEFORE" == "$COORD_AFTER" ]] && echo "    coordination baseline did not move" >&2
+' "$PROBE"; then
+  set +e
+  BOUNDARY_AFTER="$(cd "$DIR" && ruby "$GATE" --emit-baseline 2>> "$WORK/case10-b.err")"
+  COORD_AFTER="$(cd "$DIR" && ruby "$COORD_GATE" --emit-baseline 2>> "$WORK/case10-c.err")"
+  set -e
+  if [[ -z "$BOUNDARY_BEFORE" || -z "$COORD_BEFORE" || -z "$BOUNDARY_AFTER" || -z "$COORD_AFTER" ]]; then
+    fail "a gate could not emit a baseline, so the visibility comparison proves nothing"
+    cat "$WORK/case10-b.err" "$WORK/case10-c.err" >&2
+  elif [[ "$BOUNDARY_BEFORE" != "$BOUNDARY_AFTER" && "$COORD_BEFORE" != "$COORD_AFTER" ]]; then
+    pass "production rusqlite, captures and PipelineVariables after an unbalanced literal reach both ledgers"
+  else
+    fail "a brace inside a literal hid the production code after it from a ledger"
+    [[ "$BOUNDARY_BEFORE" == "$BOUNDARY_AFTER" ]] && echo "    core boundary baseline did not move" >&2
+    [[ "$COORD_BEFORE" == "$COORD_AFTER" ]] && echo "    coordination baseline did not move" >&2
+  fi
 fi
 echo ""
 
@@ -446,7 +466,9 @@ set +e
 BOUNDARY_BEFORE="$(cd "$DIR" && ruby "$GATE" --emit-baseline 2> "$WORK/case11-b.err")"
 COORD_BEFORE="$(cd "$DIR" && ruby "$COORD_GATE" --emit-baseline 2> "$WORK/case11-c.err")"
 set -e
-ruby -e '
+# Case 11 also asserts the baselines do NOT move, so it is the second live
+# instance an inert mutation would pass silently.
+if fixture_mutate "case 11" "$PROBE" ruby -e '
 path = ARGV[0]
 lines = File.readlines(path)
 probe = <<~'"'"'RUST'"'"'
@@ -466,20 +488,21 @@ probe = <<~'"'"'RUST'"'"'
 RUST
 lines.insert(lines.length / 2, probe)
 File.write(path, lines.join)
-' "$PROBE"
-set +e
-BOUNDARY_AFTER="$(cd "$DIR" && ruby "$GATE" --emit-baseline 2>> "$WORK/case11-b.err")"
-COORD_AFTER="$(cd "$DIR" && ruby "$COORD_GATE" --emit-baseline 2>> "$WORK/case11-c.err")"
-set -e
-if [[ -z "$BOUNDARY_BEFORE" || -z "$COORD_BEFORE" || -z "$BOUNDARY_AFTER" || -z "$COORD_AFTER" ]]; then
-  fail "a gate could not emit a baseline, so the raw string comparison proves nothing"
-  cat "$WORK/case11-b.err" "$WORK/case11-c.err" >&2
-elif [[ "$BOUNDARY_BEFORE" == "$BOUNDARY_AFTER" && "$COORD_BEFORE" == "$COORD_AFTER" ]]; then
-  pass "a test module containing a multi-line raw string stays excluded from both ledgers"
-else
-  fail "a multi-line raw string ended a cfg(test) module early and leaked test code into a ledger"
-  diff <(echo "$BOUNDARY_BEFORE") <(echo "$BOUNDARY_AFTER") >&2 || true
-  diff <(echo "$COORD_BEFORE") <(echo "$COORD_AFTER") >&2 || true
+' "$PROBE"; then
+  set +e
+  BOUNDARY_AFTER="$(cd "$DIR" && ruby "$GATE" --emit-baseline 2>> "$WORK/case11-b.err")"
+  COORD_AFTER="$(cd "$DIR" && ruby "$COORD_GATE" --emit-baseline 2>> "$WORK/case11-c.err")"
+  set -e
+  if [[ -z "$BOUNDARY_BEFORE" || -z "$COORD_BEFORE" || -z "$BOUNDARY_AFTER" || -z "$COORD_AFTER" ]]; then
+    fail "a gate could not emit a baseline, so the raw string comparison proves nothing"
+    cat "$WORK/case11-b.err" "$WORK/case11-c.err" >&2
+  elif [[ "$BOUNDARY_BEFORE" == "$BOUNDARY_AFTER" && "$COORD_BEFORE" == "$COORD_AFTER" ]]; then
+    pass "a test module containing a multi-line raw string stays excluded from both ledgers"
+  else
+    fail "a multi-line raw string ended a cfg(test) module early and leaked test code into a ledger"
+    diff <(echo "$BOUNDARY_BEFORE") <(echo "$BOUNDARY_AFTER") >&2 || true
+    diff <(echo "$COORD_BEFORE") <(echo "$COORD_AFTER") >&2 || true
+  fi
 fi
 echo ""
 

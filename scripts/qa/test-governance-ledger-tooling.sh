@@ -43,6 +43,9 @@ FAIL=0
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 
+# shellcheck source=../lib/gate_fixture.sh
+. "$REPO_ROOT/scripts/lib/gate_fixture.sh"
+
 digest() { ruby -rdigest -e 'print Digest::SHA256.file(ARGV[0]).hexdigest' "$1"; }
 
 # A case runs in its own repository so that `git show HEAD:` — which the mismatch
@@ -118,36 +121,40 @@ fi
 
 DIR="$(new_case spec-change-drill)"
 TARGET="docs/workflow/command-rules.yaml"
-ruby -e '
+# "fixture anchor missing" was the message; the anchor is `maxTurns: 6` in a
+# workflow document this gate does not own. Change that number in the manifest
+# and the abort ended the run — cases 5 to 8 below never reported.
+if fixture_mutate "spec-change-drill" "$DIR/$TARGET" ruby -e '
 path = ARGV[0]
 source = File.read(path)
 abort "fixture anchor missing" unless source.include?("maxTurns: 6")
 File.write(path, source.sub("maxTurns: 6", "maxTurns: 9"))
-' "$DIR/$TARGET"
-set +e
-(cd "$DIR" && ruby "$GATE" >/dev/null 2>"$WORK/drill.err")
-DRILL_STATUS=$?
-set -e
-if [[ "$DRILL_STATUS" -ne 0 ]] &&
-  grep -q "command-rules.yaml#session-agent" "$WORK/drill.err" &&
-  grep -q "spec key(s): driver" "$WORK/drill.err"; then
-  # Cleared for the same reason as case 3: this exercises the recovery path,
-  # which the CI refusal is designed to block.
-  (cd "$DIR" && env -u CI -u CONTINUOUS_INTEGRATION -u GITHUB_ACTIONS -u GITLAB_CI \
-      -u BUILDKITE -u CIRCLECI -u TEAMCITY_VERSION -u BUILD_NUMBER \
-    ruby "$GATE" --emit-inventory --write >/dev/null 2>&1)
+' "$DIR/$TARGET"; then
   set +e
-  (cd "$DIR" && ruby "$GATE" >/dev/null 2>&1)
-  RECOVERED=$?
+  (cd "$DIR" && ruby "$GATE" >/dev/null 2>"$WORK/drill.err")
+  DRILL_STATUS=$?
   set -e
-  CHANGED="$(git -C "$DIR" diff --numstat -- "$LEDGER" | awk '{print $1"+"$2"-"}')"
-  if [[ "$RECOVERED" -eq 0 && "$CHANGED" == "1+1-" ]]; then
-    pass "a spec change names the agent and key 'driver', and regeneration restores green in one line"
+  if [[ "$DRILL_STATUS" -ne 0 ]] &&
+    grep -q "command-rules.yaml#session-agent" "$WORK/drill.err" &&
+    grep -q "spec key(s): driver" "$WORK/drill.err"; then
+    # Cleared for the same reason as case 3: this exercises the recovery path,
+    # which the CI refusal is designed to block.
+    (cd "$DIR" && env -u CI -u CONTINUOUS_INTEGRATION -u GITHUB_ACTIONS -u GITLAB_CI \
+        -u BUILDKITE -u CIRCLECI -u TEAMCITY_VERSION -u BUILD_NUMBER \
+      ruby "$GATE" --emit-inventory --write >/dev/null 2>&1)
+    set +e
+    (cd "$DIR" && ruby "$GATE" >/dev/null 2>&1)
+    RECOVERED=$?
+    set -e
+    CHANGED="$(git -C "$DIR" diff --numstat -- "$LEDGER" | awk '{print $1"+"$2"-"}')"
+    if [[ "$RECOVERED" -eq 0 && "$CHANGED" == "1+1-" ]]; then
+      pass "a spec change names the agent and key 'driver', and regeneration restores green in one line"
+    else
+      fail "regeneration did not restore green (exit $RECOVERED) or edited more than the changed entry ($CHANGED)"
+    fi
   else
-    fail "regeneration did not restore green (exit $RECOVERED) or edited more than the changed entry ($CHANGED)"
+    fail "a real spec change produced no per-agent diagnostic"
   fi
-else
-  fail "a real spec change produced no per-agent diagnostic"
 fi
 
 # ── 5. Tooling must not let an unreviewed change through ──
@@ -157,35 +164,41 @@ fi
 # over the whole entry, so a fingerprint-only update must still fail.
 
 DIR="$(new_case partial-ledger-update)"
-ruby -e '
+# Two mutations, and the second names an agent by name inside the ledger. Both
+# are proven: `.find { name == "session-agent" }` returns nil the day that agent
+# is renamed, and the NoMethodError that follows used to end the run here.
+if fixture_mutate "partial-ledger-update: the manifest" "$DIR/$TARGET" ruby -e '
 path = ARGV[0]
 source = File.read(path)
 abort "fixture anchor missing" unless source.include?("driver:\n    provider: claude")
 File.write(path, source.sub("provider: claude", "provider: shell"))
-' "$DIR/$TARGET"
-NEW_PRINT="$(cd "$DIR" && ruby "$GATE" --emit-inventory |
-  jq -r '.[] | select(.name == "session-agent") | .manifestFingerprint')"
-ruby -rjson -e '
+' "$DIR/$TARGET"; then
+  NEW_PRINT="$(cd "$DIR" && ruby "$GATE" --emit-inventory |
+    jq -r '.[] | select(.name == "session-agent") | .manifestFingerprint')"
+  if fixture_mutate "partial-ledger-update: the ledger" "$DIR/$LEDGER" ruby -rjson -e '
 ledger = JSON.parse(File.read(ARGV[0]))
 entry = ledger["retirement"]["shellRunnerExecutor"]["productionAgents"]
   .find { |agent| agent["name"] == "session-agent" }
+abort "no session-agent in the reviewed ledger; this fixture has no subject" if entry.nil?
 entry["manifestFingerprint"] = ARGV[1]
 File.write(ARGV[0], JSON.pretty_generate(ledger) + "\n")
-' "$DIR/$LEDGER" "$NEW_PRINT"
-LEDGER_PRINT="$(jq -r '.retirement.shellRunnerExecutor.productionAgents[]
-  | select(.name == "session-agent") | .manifestFingerprint' "$DIR/$LEDGER")"
-set +e
-(cd "$DIR" && ruby "$GATE" >/dev/null 2>"$WORK/partial.err")
-PARTIAL_STATUS=$?
-set -e
-# The precondition is what makes this assertion mean something: the ledger's
-# fingerprint is already the current one, so the inventory comparison can only
-# still fail on a field the reviewer did not update.
-if [[ "$LEDGER_PRINT" == "$NEW_PRINT" && "$PARTIAL_STATUS" -ne 0 ]] &&
-  grep -q "production Agent execution inventory differs" "$WORK/partial.err"; then
-  pass "a fingerprint-only ledger update still fails on the unreviewed classification change"
-else
-  fail "a fingerprint-only update let an unreviewed driver change through"
+' "$DIR/$LEDGER" "$NEW_PRINT"; then
+    LEDGER_PRINT="$(jq -r '.retirement.shellRunnerExecutor.productionAgents[]
+      | select(.name == "session-agent") | .manifestFingerprint' "$DIR/$LEDGER")"
+    set +e
+    (cd "$DIR" && ruby "$GATE" >/dev/null 2>"$WORK/partial.err")
+    PARTIAL_STATUS=$?
+    set -e
+    # The precondition is what makes this assertion mean something: the ledger's
+    # fingerprint is already the current one, so the inventory comparison can only
+    # still fail on a field the reviewer did not update.
+    if [[ "$LEDGER_PRINT" == "$NEW_PRINT" && "$PARTIAL_STATUS" -ne 0 ]] &&
+      grep -q "production Agent execution inventory differs" "$WORK/partial.err"; then
+      pass "a fingerprint-only ledger update still fails on the unreviewed classification change"
+    else
+      fail "a fingerprint-only update let an unreviewed driver change through"
+    fi
+  fi
 fi
 
 # ── 6. The baseline emitter agrees with the reviewed baseline ──
@@ -212,7 +225,11 @@ fi
 DIR="$(new_case scope-fidelity)"
 PROBE="core/src/prehook/mod.rs"
 BASELINE_BEFORE="$(cd "$DIR" && ruby "$GATE" --emit-baseline)"
-ruby -e '
+# The assertion below is that the baseline does NOT move, so a probe that was
+# never inserted passes it — the third such case in this repository, after
+# test-core-boundary.sh cases 6 and 11. Proving the insertion landed is what
+# makes the equality mean anything at all (FR-143).
+if fixture_mutate "scope-fidelity" "$DIR/$PROBE" ruby -e '
 path = ARGV[0]
 lines = File.readlines(path)
 probe = <<~RUST
@@ -226,30 +243,32 @@ probe = <<~RUST
 RUST
 lines.insert(lines.length / 2, probe)
 File.write(path, lines.join)
-' "$DIR/$PROBE"
-BASELINE_AFTER="$(cd "$DIR" && ruby "$GATE" --emit-baseline)"
-if [[ "$BASELINE_BEFORE" == "$BASELINE_AFTER" ]]; then
-  pass "a mid-file cfg(test) module named something other than 'tests' does not move the baseline"
-else
-  fail "test-module lines are counted as production source touches, contradicting sourceBaseline.scope"
+' "$DIR/$PROBE"; then
+  BASELINE_AFTER="$(cd "$DIR" && ruby "$GATE" --emit-baseline)"
+  if [[ "$BASELINE_BEFORE" == "$BASELINE_AFTER" ]]; then
+    pass "a mid-file cfg(test) module named something other than 'tests' does not move the baseline"
+  else
+    fail "test-module lines are counted as production source touches, contradicting sourceBaseline.scope"
+  fi
 fi
 
 # ── 8. The ratchets are exact, so a decrease cannot pass silently ──
 
 DIR="$(new_case ratchet-direction)"
-ruby -rjson -e '
+if fixture_mutate "ratchet-direction" "$DIR/$LEDGER" ruby -rjson -e '
 ledger = JSON.parse(File.read(ARGV[0]))
 ledger["sourceBaseline"]["capturesOrJsonPath"] += 1
 File.write(ARGV[0], JSON.pretty_generate(ledger) + "\n")
-' "$DIR/$LEDGER"
-set +e
-(cd "$DIR" && ruby "$GATE" >/dev/null 2>"$WORK/ratchet.err")
-RATCHET_STATUS=$?
-set -e
-if [[ "$RATCHET_STATUS" -ne 0 ]] && grep -q "decreased from" "$WORK/ratchet.err"; then
-  pass "a baseline above the real count fails, so stale slack cannot accumulate"
-else
-  fail "a baseline above the real count passed, leaving the ledger free to overstate debt"
+' "$DIR/$LEDGER"; then
+  set +e
+  (cd "$DIR" && ruby "$GATE" >/dev/null 2>"$WORK/ratchet.err")
+  RATCHET_STATUS=$?
+  set -e
+  if [[ "$RATCHET_STATUS" -ne 0 ]] && grep -q "decreased from" "$WORK/ratchet.err"; then
+    pass "a baseline above the real count fails, so stale slack cannot accumulate"
+  else
+    fail "a baseline above the real count passed, leaving the ledger free to overstate debt"
+  fi
 fi
 
 echo ""

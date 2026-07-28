@@ -74,6 +74,9 @@ SKIP=0
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 
+# shellcheck source=../lib/gate_fixture.sh
+. "$REPO_ROOT/scripts/lib/gate_fixture.sh"
+
 cd "$REPO_ROOT"
 
 # Three cases build their fixtures with `git archive HEAD`, so they test the
@@ -110,28 +113,28 @@ fi
 DIR="$WORK/commented-dependency"
 mkdir -p "$DIR"
 git archive HEAD | tar -x -C "$DIR"
-ruby -e '
+if fixture_mutate "case 1" "$DIR/core/Cargo.toml" ruby -e '
   path = ARGV[0]
   text = File.read(path)
   line = text.lines.find { |candidate| candidate.start_with?("orchestrator-persistence =") }
   abort "core/Cargo.toml does not declare orchestrator-persistence" if line.nil?
   File.write(path, text.sub(line, "# #{line}"))
-' "$DIR/core/Cargo.toml"
-
-if grep -q '^# orchestrator-persistence =' "$DIR/core/Cargo.toml"; then
-  set +e
-  (cd "$DIR" && CARGO_TARGET_DIR="$DIR/target" cargo check -p agent-orchestrator) \
-    >"$WORK/case1.log" 2>&1
-  CHECK_STATUS=$?
-  set -e
-  if [[ "$CHECK_STATUS" -ne 0 ]] && grep -q "orchestrator_persistence" "$WORK/case1.log"; then
-    pass "commenting out the dependency breaks core's build, naming the missing crate"
+' "$DIR/core/Cargo.toml"; then
+  if grep -q '^# orchestrator-persistence =' "$DIR/core/Cargo.toml"; then
+    set +e
+    (cd "$DIR" && CARGO_TARGET_DIR="$DIR/target" cargo check -p agent-orchestrator) \
+      >"$WORK/case1.log" 2>&1
+    CHECK_STATUS=$?
+    set -e
+    if [[ "$CHECK_STATUS" -ne 0 ]] && grep -q "orchestrator_persistence" "$WORK/case1.log"; then
+      pass "commenting out the dependency breaks core's build, naming the missing crate"
+    else
+      fail "core still built with the dependency commented out (exit $CHECK_STATUS)"
+      tail -20 "$WORK/case1.log" >&2
+    fi
   else
-    fail "core still built with the dependency commented out (exit $CHECK_STATUS)"
-    tail -20 "$WORK/case1.log" >&2
+    fail "the fixture did not comment out the dependency line"
   fi
-else
-  fail "the fixture did not comment out the dependency line"
 fi
 echo ""
 
@@ -162,25 +165,29 @@ fi
 DIR="$WORK/shortened-sweep"
 mkdir -p "$DIR"
 git archive HEAD | tar -x -C "$DIR"
-ruby -e '
+# The target is an exact source line, indentation included. That is the most
+# brittle enumerated target in this repository: a rustfmt run or a rename of
+# `total` moves it, and the abort then ended the run before cases 3 to 6
+# reported. Now it is one failed assertion that names the line it could not find.
+if fixture_mutate "case 2" "$DIR/core/src/persistence/schema_snapshot.rs" ruby -e '
   path = ARGV[0]
   text = File.read(path)
   target = "        for stop_after in 1..=total {"
   abort "the resume sweep loop is not where this fixture expects it" unless text.include?(target)
   File.write(path, text.sub(target, "        for stop_after in (1..=total).step_by(5) {"))
-' "$DIR/core/src/persistence/schema_snapshot.rs"
-
-set +e
-(cd "$DIR" && CARGO_TARGET_DIR="$DIR/target" cargo test -p agent-orchestrator \
-  schema_snapshot::tests::an_interrupted_chain_resumes_to_the_same_schema) \
-  >"$WORK/case2-mutant.log" 2>&1
-MUTANT_STATUS=$?
-set -e
-if [[ "$MUTANT_STATUS" -ne 0 ]] && grep -q "must be an interrupt point" "$WORK/case2-mutant.log"; then
-  pass "a sweep shortened with step_by fails on the extent assertion"
-else
-  fail "a sweep shortened with step_by still passed (exit $MUTANT_STATUS)"
-  tail -20 "$WORK/case2-mutant.log" >&2
+' "$DIR/core/src/persistence/schema_snapshot.rs"; then
+  set +e
+  (cd "$DIR" && CARGO_TARGET_DIR="$DIR/target" cargo test -p agent-orchestrator \
+    schema_snapshot::tests::an_interrupted_chain_resumes_to_the_same_schema) \
+    >"$WORK/case2-mutant.log" 2>&1
+  MUTANT_STATUS=$?
+  set -e
+  if [[ "$MUTANT_STATUS" -ne 0 ]] && grep -q "must be an interrupt point" "$WORK/case2-mutant.log"; then
+    pass "a sweep shortened with step_by fails on the extent assertion"
+  else
+    fail "a sweep shortened with step_by still passed (exit $MUTANT_STATUS)"
+    tail -20 "$WORK/case2-mutant.log" >&2
+  fi
 fi
 echo ""
 
@@ -270,18 +277,18 @@ git archive HEAD | tar -x -C "$DIR"
 # than merely a non-zero status. Restoring the declaration in the scratch copy
 # keeps the two questions apart — who may *declare* the driver is condition 1's,
 # in persistence-dependency.rb, and this case is only about the conversion.
-ruby -e '
+if fixture_mutate "case 5" "$DIR/core/Cargo.toml" ruby -e '
   path = ARGV[0]
   text = File.read(path)
   raise "no [dependencies] table in #{path}" unless text.include?("[dependencies]")
   File.write(path, text.sub("[dependencies]\n",
     %([dependencies]\nrusqlite = { version = "0.31", features = ["bundled"] }\n)))
-' "$DIR/core/Cargo.toml"
-# The doc comment is not decoration: core denies missing_docs, so without it the
-# probe stops the build on the lint and the case passes on an error that has
-# nothing to do with the conversion. The assertion below therefore matches the
-# specific diagnostic rather than merely a non-zero exit.
-cat >> "$DIR/core/src/error.rs" <<'PROBE'
+' "$DIR/core/Cargo.toml"; then
+  # The doc comment is not decoration: core denies missing_docs, so without it the
+  # probe stops the build on the lint and the case passes on an error that has
+  # nothing to do with the conversion. The assertion below therefore matches the
+  # specific diagnostic rather than merely a non-zero exit.
+  cat >> "$DIR/core/src/error.rs" <<'PROBE'
 
 /// FR-130 Phase C fixture: this must not compile.
 pub fn fr130_phase_c_probe(conn: &rusqlite::Connection) -> Result<i64> {
@@ -290,17 +297,18 @@ pub fn fr130_phase_c_probe(conn: &rusqlite::Connection) -> Result<i64> {
 }
 PROBE
 
-set +e
-(cd "$DIR" && CARGO_TARGET_DIR="$DIR/target" cargo check -p agent-orchestrator) \
-  >"$WORK/case5-probe.log" 2>&1
-PROBE_STATUS=$?
-set -e
-if [[ "$PROBE_STATUS" -ne 0 ]] &&
-  grep -q "couldn't convert the error to \`OrchestratorError\`" "$WORK/case5-probe.log"; then
-  pass "a ? on a rusqlite::Result no longer converts into OrchestratorError"
-else
-  fail "a rusqlite::Result still converts into OrchestratorError (exit $PROBE_STATUS)"
-  tail -20 "$WORK/case5-probe.log" >&2
+  set +e
+  (cd "$DIR" && CARGO_TARGET_DIR="$DIR/target" cargo check -p agent-orchestrator) \
+    >"$WORK/case5-probe.log" 2>&1
+  PROBE_STATUS=$?
+  set -e
+  if [[ "$PROBE_STATUS" -ne 0 ]] &&
+    grep -q "couldn't convert the error to \`OrchestratorError\`" "$WORK/case5-probe.log"; then
+    pass "a ? on a rusqlite::Result no longer converts into OrchestratorError"
+  else
+    fail "a rusqlite::Result still converts into OrchestratorError (exit $PROBE_STATUS)"
+    tail -20 "$WORK/case5-probe.log" >&2
+  fi
 fi
 echo ""
 

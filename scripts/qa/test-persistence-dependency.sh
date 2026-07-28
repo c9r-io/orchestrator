@@ -64,6 +64,9 @@ FAIL=0
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 
+# shellcheck source=../lib/gate_fixture.sh
+. "$REPO_ROOT/scripts/lib/gate_fixture.sh"
+
 digest() { ruby -rdigest -e 'print Digest::SHA256.file(ARGV[0]).hexdigest' "$1"; }
 
 # A case copies what the gate reads: the root manifest (its member list is the
@@ -143,19 +146,24 @@ echo ""
 # so this is not a residual being paid down but an edge being created.
 echo "Case 3: a crate with role 'none' declaring the driver fails"
 DIR="$(new_case none-declares)"
-ruby -e '
+# `sub!` returns nil when the anchor is gone, and the write then persists the
+# unchanged source: the gate passes, and the case reports that a role-'none'
+# crate was allowed to declare the driver. That accusation is aimed at the gate
+# for the fixture's own defect — FR-143's second incident exactly.
+if fixture_mutate "case 3" "$DIR/crates/cli/Cargo.toml" ruby -e '
 path = ARGV[0]
 source = File.read(path)
 source.sub!(/^\[dependencies\]$/, "[dependencies]\nrusqlite = { version = \"0.31\", features = [\"bundled\"] }")
 File.write(path, source)
-' "$DIR/crates/cli/Cargo.toml"
-run_gate "$DIR" case3
-if [[ "$STATUS" -ne 0 ]] &&
-  grep -q "crates/cli is none and must not name the SQLite driver" "$WORK/case3.err"; then
-  pass "a role-'none' crate declaring rusqlite fails, and the report names the crate and its role"
-else
-  fail "a role-'none' crate declaring rusqlite did not fail the gate (exit $STATUS)"
-  cat "$WORK/case3.err" >&2
+' "$DIR/crates/cli/Cargo.toml"; then
+  run_gate "$DIR" case3
+  if [[ "$STATUS" -ne 0 ]] &&
+    grep -q "crates/cli is none and must not name the SQLite driver" "$WORK/case3.err"; then
+    pass "a role-'none' crate declaring rusqlite fails, and the report names the crate and its role"
+  else
+    fail "a role-'none' crate declaring rusqlite did not fail the gate (exit $STATUS)"
+    cat "$WORK/case3.err" >&2
+  fi
 fi
 echo ""
 
@@ -167,21 +175,27 @@ echo ""
 # have exactly the same green record on the repository as the real rule.
 echo "Case 4: an exempt crate adding a driver declaration does NOT fail"
 DIR="$(new_case exempt-declares)"
-ruby -e '
+# This case already carried a hand-written landing check — the `grep -q
+# '^tokio-rusqlite'` below. It is kept: it asserts *what* landed, where
+# fixture_mutate asserts *that* something did. The two are different questions
+# and this case is the one that needs both, because a mutation landing in the
+# wrong section would still change the file.
+if fixture_mutate "case 4" "$DIR/crates/orchestrator-security/Cargo.toml" ruby -e '
 path = ARGV[0]
 source = File.read(path)
 source.sub!(/^(rusqlite = .*)$/, "\\1\ntokio-rusqlite = \"0.5\"")
 File.write(path, source)
-' "$DIR/crates/orchestrator-security/Cargo.toml"
-if ! grep -q '^tokio-rusqlite' "$DIR/crates/orchestrator-security/Cargo.toml"; then
-  fail "the fixture did not add a declaration, so the case proves nothing"
-else
-  run_gate "$DIR" case4
-  if [[ "$STATUS" -eq 0 ]]; then
-    pass "an exempt crate may add a driver declaration; the rule reads roles, not diffs"
+' "$DIR/crates/orchestrator-security/Cargo.toml"; then
+  if ! grep -q '^tokio-rusqlite' "$DIR/crates/orchestrator-security/Cargo.toml"; then
+    fail "the fixture did not add a declaration, so the case proves nothing"
   else
-    fail "the gate rejected a declaration its own ledger permits (exit $STATUS)"
-    cat "$WORK/case4.err" >&2
+    run_gate "$DIR" case4
+    if [[ "$STATUS" -eq 0 ]]; then
+      pass "an exempt crate may add a driver declaration; the rule reads roles, not diffs"
+    else
+      fail "the gate rejected a declaration its own ledger permits (exit $STATUS)"
+      cat "$WORK/case4.err" >&2
+    fi
   fi
 fi
 echo ""
@@ -193,7 +207,7 @@ echo ""
 # changes nothing textually that a whole-file match would notice.
 echo "Case 5: promoting the test-only crate's driver to a production dependency fails"
 DIR="$(new_case dev-to-prod)"
-ruby -e '
+if fixture_mutate "case 5" "$DIR/crates/integration-tests/Cargo.toml" ruby -e '
 path = ARGV[0]
 lines = File.readlines(path)
 moved = lines.reject { |line| line =~ /^rusqlite\s*=/ }
@@ -203,14 +217,15 @@ driver = lines.find { |line| line =~ /^rusqlite\s*=/ }
 abort "no rusqlite declaration in the fixture" if driver.nil?
 moved.insert(index + 1, driver)
 File.write(path, moved.join)
-' "$DIR/crates/integration-tests/Cargo.toml"
-run_gate "$DIR" case5
-if [[ "$STATUS" -ne 0 ]] &&
-  grep -q "crates/integration-tests is test-only and may name the driver only under" "$WORK/case5.err"; then
-  pass "a dev-dependency promoted to a production dependency fails, naming the section rule"
-else
-  fail "moving the driver out of [dev-dependencies] did not fail the gate (exit $STATUS)"
-  cat "$WORK/case5.err" >&2
+' "$DIR/crates/integration-tests/Cargo.toml"; then
+  run_gate "$DIR" case5
+  if [[ "$STATUS" -ne 0 ]] &&
+    grep -q "crates/integration-tests is test-only and may name the driver only under" "$WORK/case5.err"; then
+    pass "a dev-dependency promoted to a production dependency fails, naming the section rule"
+  else
+    fail "moving the driver out of [dev-dependencies] did not fail the gate (exit $STATUS)"
+    cat "$WORK/case5.err" >&2
+  fi
 fi
 echo ""
 
@@ -237,12 +252,17 @@ pub fn probe(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 RUST
-ruby -e '
+# The anchor is a specific member line in the workspace manifest — rename or
+# reorder `crates/slack-gateway` and `sub!` matches nothing, the write persists
+# the file unchanged, and the case reports that a member outside crates/ was not
+# discovered. The hand-written grep below caught that one; fixture_mutate is what
+# makes the catch general rather than a habit somebody remembered here.
+if fixture_mutate "case 6" "$DIR/Cargo.toml" ruby -e '
 path = ARGV[0]
 source = File.read(path)
 source.sub!(/^(\s*)"crates\/slack-gateway",$/, "\\1\"crates/slack-gateway\",\n\\1\"tools/probe\",")
 File.write(path, source)
-' "$DIR/Cargo.toml"
+' "$DIR/Cargo.toml"; then
 if ! grep -q 'tools/probe' "$DIR/Cargo.toml"; then
   fail "the fixture did not add the member, so the discovery case proves nothing"
 else
@@ -258,6 +278,7 @@ else
     fail "a new workspace member outside crates/ was not fully discovered (exit $STATUS)"
     cat "$WORK/case6.err" >&2
   fi
+fi
 fi
 echo ""
 
@@ -327,26 +348,30 @@ DIR="$(new_case sql-removed)"
 # file's role. Only the address moved.
 TARGET="crates/orchestrator-persistence/src/scheduler_state.rs"
 BEFORE_SQL=$(grep -c '"SELECT\|"INSERT\|"UPDATE\|"DELETE' "$DIR/$TARGET" || true)
-ruby -e '
+# This is FR-143's fourth incident, at the address it aborted from. The abort
+# keeps its words; what changed is that something catches them, so a statement
+# that moves again costs one assertion instead of the eleven cases below it.
+if fixture_mutate "case 8" "$DIR/$TARGET" ruby -e '
 path = ARGV[0]
 source = File.read(path)
 # Neutralise one statement without touching the rusqlite token beside it, so the
 # case moves the SQL count alone and the diagnostic is unambiguous.
 abort "no statement to neutralise" unless source.sub!(/"SELECT COUNT\(\*\) FROM command_runs[^"]*"/m, "\"fr136 neutralised\"")
 File.write(path, source)
-' "$DIR/$TARGET"
-AFTER_SQL=$(grep -c '"SELECT\|"INSERT\|"UPDATE\|"DELETE' "$DIR/$TARGET" || true)
-if [[ "$BEFORE_SQL" -eq "$AFTER_SQL" ]]; then
-  fail "the fixture did not remove a statement ($BEFORE_SQL -> $AFTER_SQL); the case is inert"
-else
-  run_gate "$DIR" case8
-  TARGET_SQL=$(ruby -rjson -e 'print JSON.parse(File.read(ARGV[0]))["references"][ARGV[1]]["sql"]' "$DIR/$LEDGER" "$TARGET")
-  if [[ "$STATUS" -ne 0 ]] &&
-    grep -q "~ $TARGET sql $TARGET_SQL -> $((TARGET_SQL - 1))" "$WORK/case8.err"; then
-    pass "a decrease fails too, and the report names the file and the direction it moved"
+' "$DIR/$TARGET"; then
+  AFTER_SQL=$(grep -c '"SELECT\|"INSERT\|"UPDATE\|"DELETE' "$DIR/$TARGET" || true)
+  if [[ "$BEFORE_SQL" -eq "$AFTER_SQL" ]]; then
+    fail "the fixture did not remove a statement ($BEFORE_SQL -> $AFTER_SQL); the case is inert"
   else
-    fail "removing a SQL statement did not fail the gate (exit $STATUS)"
-    cat "$WORK/case8.err" >&2
+    run_gate "$DIR" case8
+    TARGET_SQL=$(ruby -rjson -e 'print JSON.parse(File.read(ARGV[0]))["references"][ARGV[1]]["sql"]' "$DIR/$LEDGER" "$TARGET")
+    if [[ "$STATUS" -ne 0 ]] &&
+      grep -q "~ $TARGET sql $TARGET_SQL -> $((TARGET_SQL - 1))" "$WORK/case8.err"; then
+      pass "a decrease fails too, and the report names the file and the direction it moved"
+    else
+      fail "removing a SQL statement did not fail the gate (exit $STATUS)"
+      cat "$WORK/case8.err" >&2
+    fi
   fi
 fi
 echo ""
@@ -420,18 +445,19 @@ echo ""
 # apart silently: the ledger would go on describing a measurement nobody makes.
 echo "Case 11: a ledger whose scope prose does not match the scan fails"
 DIR="$(new_case scope-drift)"
-ruby -rjson -e '
+if fixture_mutate "case 11" "$DIR/$LEDGER" ruby -rjson -e '
 path = ARGV[0]
 ledger = JSON.parse(File.read(path))
 ledger["scope"] = "every workspace member, scanned somehow"
 File.write(path, JSON.pretty_generate(ledger) + "\n")
-' "$DIR/$LEDGER"
-run_gate "$DIR" case11
-if [[ "$STATUS" -ne 0 ]] && grep -q "ledger scope prose does not match" "$WORK/case11.err"; then
-  pass "a ledger describing a scan the gate does not implement fails"
-else
-  fail "a drifted scope prose did not fail the gate (exit $STATUS)"
-  cat "$WORK/case11.err" >&2
+' "$DIR/$LEDGER"; then
+  run_gate "$DIR" case11
+  if [[ "$STATUS" -ne 0 ]] && grep -q "ledger scope prose does not match" "$WORK/case11.err"; then
+    pass "a ledger describing a scan the gate does not implement fails"
+  else
+    fail "a drifted scope prose did not fail the gate (exit $STATUS)"
+    cat "$WORK/case11.err" >&2
+  fi
 fi
 echo ""
 
@@ -607,23 +633,27 @@ echo ""
 # unambiguously this branch's.
 echo "Case 16: a scanned file with no reviewed category fails"
 DIR="$(new_case no-category)"
-ruby -rjson -e '
+# FR-143's eighth incident: this case stripped the category from a daemon file
+# FR-141 had already moved out of the ledger, so the abort fired and the run
+# ended. The abort was added as the repair; catching it is the rest of it.
+if fixture_mutate "case 16" "$DIR/$LEDGER" ruby -rjson -e '
 path = ARGV[0]
 ledger = JSON.parse(File.read(path))
 target = ARGV[1]
 abort "the fixture target is not in the ledger" unless ledger["references"].key?(target)
 ledger["references"][target].delete("category")
 File.write(path, JSON.pretty_generate(ledger) + "\n")
-' "$DIR/$LEDGER" "crates/orchestrator-persistence/src/audit_links.rs"
-run_gate "$DIR" case16
-if [[ "$STATUS" -ne 0 ]] &&
-  grep -q "1 file(s) touch persistence with no reviewed category" "$WORK/case16.err" &&
-  grep -q "crates/orchestrator-persistence/src/audit_links.rs" "$WORK/case16.err" &&
-  ! grep -q "persistence touch points differ" "$WORK/case16.err"; then
-  pass "a file whose category was dropped fails on the classification branch alone"
-else
-  fail "a scanned file with no reviewed category did not fail as expected (exit $STATUS)"
-  cat "$WORK/case16.err" >&2
+' "$DIR/$LEDGER" "crates/orchestrator-persistence/src/audit_links.rs"; then
+  run_gate "$DIR" case16
+  if [[ "$STATUS" -ne 0 ]] &&
+    grep -q "1 file(s) touch persistence with no reviewed category" "$WORK/case16.err" &&
+    grep -q "crates/orchestrator-persistence/src/audit_links.rs" "$WORK/case16.err" &&
+    ! grep -q "persistence touch points differ" "$WORK/case16.err"; then
+    pass "a file whose category was dropped fails on the classification branch alone"
+  else
+    fail "a scanned file with no reviewed category did not fail as expected (exit $STATUS)"
+    cat "$WORK/case16.err" >&2
+  fi
 fi
 echo ""
 
@@ -636,22 +666,23 @@ echo ""
 # number nobody sees.
 echo "Case 17: the reviewed scan-root list is frozen in both directions"
 DIR="$(new_case scan-roots)"
-ruby -rjson -e '
+if fixture_mutate "case 17" "$DIR/$LEDGER" ruby -rjson -e '
 path = ARGV[0]
 ledger = JSON.parse(File.read(path))
 root = ARGV[1]
 abort "the fixture root is not in scanRoots" unless (ledger["scanRoots"] || []).include?(root)
 ledger["scanRoots"] -= [root]
 File.write(path, JSON.pretty_generate(ledger) + "\n")
-' "$DIR/$LEDGER" "crates/daemon/build.rs"
-run_gate "$DIR" case17
-if [[ "$STATUS" -ne 0 ]] &&
-  grep -q "the roots this gate reads differ from the reviewed ledger" "$WORK/case17.err" &&
-  grep -q "+ crates/daemon/build.rs is scanned and is not in the reviewed root list" "$WORK/case17.err"; then
-  pass "a scan root missing from the reviewed list fails, naming the root"
-else
-  fail "a drifted scan-root list did not fail the gate (exit $STATUS)"
-  cat "$WORK/case17.err" >&2
+' "$DIR/$LEDGER" "crates/daemon/build.rs"; then
+  run_gate "$DIR" case17
+  if [[ "$STATUS" -ne 0 ]] &&
+    grep -q "the roots this gate reads differ from the reviewed ledger" "$WORK/case17.err" &&
+    grep -q "+ crates/daemon/build.rs is scanned and is not in the reviewed root list" "$WORK/case17.err"; then
+    pass "a scan root missing from the reviewed list fails, naming the root"
+  else
+    fail "a drifted scan-root list did not fail the gate (exit $STATUS)"
+    cat "$WORK/case17.err" >&2
+  fi
 fi
 echo ""
 
@@ -687,20 +718,21 @@ if [[ ! -f "$DIR/crates/daemon/build.rs" ]]; then
   fail "the fixture has no build script to rename; new_case did not copy it"
 else
   mv "$DIR/crates/daemon/build.rs" "$DIR/crates/daemon/renamed_build.rs"
-  ruby -e '
+  if fixture_mutate "case 18b" "$DIR/crates/daemon/Cargo.toml" ruby -e '
     path = ARGV[0]
     text = File.read(path)
     abort "the fixture manifest has no [package] table" unless text.include?("[package]")
     File.write(path, text.sub("[package]\n", "[package]\nbuild = \"renamed_build.rs\"\n"))
-  ' "$DIR/crates/daemon/Cargo.toml"
-  run_gate "$DIR" case18b
-  if [[ "$STATUS" -ne 0 ]] &&
-    grep -q "+ crates/daemon/renamed_build.rs is scanned and is not in the reviewed root list" "$WORK/case18b.err" &&
-    grep -q "\- crates/daemon/build.rs is in the reviewed root list and is no longer scanned" "$WORK/case18b.err"; then
-    pass "a renamed build script is followed, and both ends of the move are named"
-  else
-    fail "a renamed build script was not followed (exit $STATUS)"
-    cat "$WORK/case18b.err" >&2
+  ' "$DIR/crates/daemon/Cargo.toml"; then
+    run_gate "$DIR" case18b
+    if [[ "$STATUS" -ne 0 ]] &&
+      grep -q "+ crates/daemon/renamed_build.rs is scanned and is not in the reviewed root list" "$WORK/case18b.err" &&
+      grep -q "\- crates/daemon/build.rs is in the reviewed root list and is no longer scanned" "$WORK/case18b.err"; then
+      pass "a renamed build script is followed, and both ends of the move are named"
+    else
+      fail "a renamed build script was not followed (exit $STATUS)"
+      cat "$WORK/case18b.err" >&2
+    fi
   fi
 fi
 echo ""
@@ -721,7 +753,11 @@ echo ""
 # the case cannot be satisfied by the gate rejecting any edit to the roles table.
 echo "Case 19: a residual declaration whose debt is already paid fails"
 DIR="$(new_case stale-residual)"
-ruby -rjson -e '
+# Two premises and a `fetch`, all naming crates/cli. `fetch` raises rather than
+# returning nil, which is the right choice — and before FR-143 that raise ended
+# the run at the last case in the file, where nothing after it would have shown
+# the loss.
+if fixture_mutate "case 19" "$DIR/$LEDGER" ruby -rjson -e '
 path = ARGV[0]
 ledger = JSON.parse(File.read(path))
 member = ARGV[1]
@@ -730,15 +766,16 @@ abort "the fixture crate has a residual already" if ledger["references"].any? { 
 abort "the fixture crate already carries the flag" if role["residualDeclaration"]
 role["residualDeclaration"] = true
 File.write(path, JSON.pretty_generate(ledger) + "\n")
-' "$DIR/$LEDGER" "crates/cli"
-run_gate "$DIR" case19
-if [[ "$STATUS" -ne 0 ]] &&
-  grep -q "the ledger excuses a declaration whose debt is already paid" "$WORK/case19.err" &&
-  grep -q "crates/cli carries residualDeclaration with no residual left" "$WORK/case19.err"; then
-  pass "a residualDeclaration with no residual fails, naming the crate"
-else
-  fail "a stale residual declaration did not fail the gate (exit $STATUS)"
-  cat "$WORK/case19.err" >&2
+' "$DIR/$LEDGER" "crates/cli"; then
+  run_gate "$DIR" case19
+  if [[ "$STATUS" -ne 0 ]] &&
+    grep -q "the ledger excuses a declaration whose debt is already paid" "$WORK/case19.err" &&
+    grep -q "crates/cli carries residualDeclaration with no residual left" "$WORK/case19.err"; then
+    pass "a residualDeclaration with no residual fails, naming the crate"
+  else
+    fail "a stale residual declaration did not fail the gate (exit $STATUS)"
+    cat "$WORK/case19.err" >&2
+  fi
 fi
 
 # The other half. Without it, "fails on any roles-table edit" and "detects a paid
