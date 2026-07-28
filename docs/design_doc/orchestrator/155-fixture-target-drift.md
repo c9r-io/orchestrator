@@ -216,6 +216,15 @@ set — 28 files at closure.
   `runnerBaseline`, deliberately — this file stays inside the baseline rather than
   relying on a check that cannot see it. The limit belongs to that gate and is
   recorded here because this FR is what found it.
+- **Inherited from `shell_lexer.rb`: double-quoted regions are scanned as code.**
+  DD-154 records this for `jq-status-observed.rb` and it applies here unchanged,
+  because both scanners share the lexer and the lexer is right — shell expands
+  inside double quotes, which is the distinction FR-138 exists to respect. A
+  *message* containing `ruby -e` inside double quotes would be a finding here as
+  it is there. There is no live instance today, and the workaround is the same:
+  reword the message. Recorded rather than discovered later, because a shared
+  function's known defect that a second caller inherits silently is a regression
+  even when nothing breaks on the day.
 - **The wrapper check is positional.** A statement is wrapped when it *begins*
   with a library call. A mutation buried mid-statement behind `&&` would not be
   seen. Every call site in this repository is written the first way, and a rule
