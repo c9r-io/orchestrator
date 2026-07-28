@@ -252,13 +252,47 @@ probe() {
   register "scripts/qa/$name"
 }
 
-# 7. Positive control. An empty surface is clean, so every finding below is
-#    evidence of detection rather than of a broken scanner.
-if [[ -z "$(scan | grep '\[')" ]]; then
-  pass "positive control: a surface with no gates produces no findings"
+# 7. Positive control — a surface with one clean gate, deliberately not an empty
+#    one. An empty surface used to be this control, and the closure self-check
+#    found that it made the control pass on a scanner that examined nothing:
+#    §4.4 shape 5, in the gate written directly after the FR about that shape.
+#    Case 7b is the assertion that closed it.
+probe test-clean.sh <<'SH'
+#!/usr/bin/env bash
+DIR="$(new_case control)"
+if fixture_mutate "case 1" "$DIR/config/ledger.json" ruby -e 'File.write(ARGV[0], "{}")' "$DIR/config/ledger.json"; then
+  run_gate "$DIR" c
+  if [[ "$STATUS" -ne 0 ]] && grep -q "the ledger is empty" "$WORK/c.err"; then
+    pass "case 1"
+  fi
+fi
+cat > "$DIR/notes.txt" <<'DOC'
+a here-document that closes
+DOC
+SH
+OUT="$(scan)"
+if [[ -z "$(grep '\[' <<< "$OUT")" ]]; then
+  pass "positive control: a correctly written gate produces no findings"
 else
-  fail "the scanner reported findings against an empty surface"
-  scan >&2
+  fail "the scanner reported findings against a correctly written gate"
+  echo "$OUT" >&2
+fi
+
+# 7b. And an empty scan is a failure, not a clean run. Zero gates scanned and
+#     twenty-eight gates scanned clean are the same exit code otherwise.
+EMPTY="$WORK/empty"
+mkdir -p "$EMPTY/scripts/qa" "$EMPTY/scripts/lib" "$EMPTY/config/governance"
+cp "$REPO_ROOT/$SCANNER" "$EMPTY/$SCANNER"
+cp "$REPO_ROOT/scripts/lib/shell_lexer.rb" "$EMPTY/scripts/lib/shell_lexer.rb"
+printf '{\n  "scripts": []\n}\n' > "$EMPTY/$SURFACE"
+EMPTY_OUT="$( (cd "$EMPTY" && ruby "$SCANNER" 2>&1) || true)"
+(cd "$EMPTY" && ruby "$SCANNER" >/dev/null 2>&1) && EMPTY_STATUS=0 || EMPTY_STATUS=$?
+if [[ "$EMPTY_STATUS" -ne 0 ]] && grep -q "yielded no ci-required shell gates" <<< "$EMPTY_OUT" &&
+  grep -q "examined nothing" <<< "$EMPTY_OUT"; then
+  pass "a manifest that yields no gates fails rather than reporting a clean scan of nothing"
+else
+  fail "the scanner reported PASS having examined nothing (exit $EMPTY_STATUS)"
+  echo "$EMPTY_OUT" >&2
 fi
 
 # 8. unproven-mutation, both directions in one probe: the unwrapped rewrite is a
@@ -425,10 +459,15 @@ DIR="$(new_case eps)"
 ruby -e 'File.write(ARGV[0], "x")' "$DIR/config/ledger.json"
 SH
 OUT="$(scan)"
-if grep -q "test-unclosed.sh:2: \[unclosed-heredoc\]" <<< "$OUT"; then
-  pass "a file ending inside a here-document is reported, rather than silently half-scanned"
+# Both directions. The counterpart is the control probe from case 7, which
+# contains a here-document that closes: without asserting that one is silent,
+# "reports every here-document" and "reports unterminated ones" have the same
+# green record here.
+if grep -q "test-unclosed.sh:2: \[unclosed-heredoc\]" <<< "$OUT" &&
+  ! grep -q "test-clean.sh.*unclosed-heredoc" <<< "$OUT"; then
+  pass "a file ending inside a here-document is reported; one that closes is not"
 else
-  fail "an unterminated here-document was not reported"
+  fail "unclosed-heredoc did not separate a terminated here-document from an unterminated one"
   echo "$OUT" >&2
 fi
 

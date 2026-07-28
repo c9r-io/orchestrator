@@ -238,6 +238,21 @@ if ARGV.include?("--list-files")
   exit 0
 end
 
+# An empty scanned set is a failure, not a clean run.
+#
+# Without this the gate reports `PASS (0 ci-required shell gates scanned)` over a
+# manifest that lost its entries — a check that passes having read no input,
+# which is §4.4 shape 5 and the whole subject of the FR immediately before this
+# one. There are 28 today and the count only grows; zero is not a state this
+# repository can legitimately be in. Found by the closure self-check, not by a
+# fixture, which is why the fixture below it now exists.
+if gates.empty?
+  warn "Fixture target drift: FAIL"
+  warn "  #{MANIFEST} yielded no ci-required shell gates, so this gate examined nothing."
+  warn "  A clean result over an empty scan is a property of the manifest, not of the fixtures."
+  exit 1
+end
+
 total = 0
 gates.each do |path|
   findings = findings_for(path, (ROOT + path).read)
