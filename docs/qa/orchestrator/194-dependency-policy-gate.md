@@ -247,6 +247,28 @@ reported a failure that is not there — the mirror of the omission §4.6.6 was
 written for. The manifest's `note` field is where that fact lives; read it
 before concluding anything from a gate's bare exit code.
 
+## What the sweep found that this FR did not cause
+
+Certified at `1272d6c9`: clean worktree at both ends, revision pinned across the
+run, gate set derived from the manifest — **46 of 47 green**, the one non-zero
+being `ci-liveness.rb`, which is DD-146's known first pass rather than a defect.
+
+An earlier sweep at the same revision reported **45 of 47**, and the extra
+failure was real but not in this FR's code: `scripts/qa-doc-lint.sh` said the
+CHANGELOG did not name `RunnerExecutorKind`, which it does, at line 74. Ten
+isolated re-runs passed. The cause is `printf '%s' "$UNRELEASED" | rg -q P`
+under `set -o pipefail`: `rg -q` exits on first match, the 90 KB section is past
+the pipe buffer, `printf` dies of EPIPE, and pipefail turns that into a failed
+assertion. Measured 10/400 under CPU load and 0/400 idle; a here-string is
+0/400 under the same load. The four sites were converted and re-measured.
+
+Recorded here rather than dropped, for two reasons. It is the second time this
+FR's own certification produced a result that looked like the thing being
+verified and was not — the first was the sweep voided by documents authored
+while it ran. And a certification that quietly discards its one red line is
+precisely the shape these gates exist to prevent. The systemic case is
+`FR-145`.
+
 ## Related gates
 
 - `scripts/qa/test-qa-gate-surface.sh` — asserts both new scripts are registered

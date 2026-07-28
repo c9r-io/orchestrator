@@ -61,6 +61,7 @@
 | FR-072 | 分发渠道扩展 — Docker 镜像与 Homebrew Tap | P1 | Closed |
 | FR-073 | 文档站点与 Landing Page — 外部可发现性 | P1 | Closed |
 | FR-076 | GUI 正式发布 — Tauri App 打包分发 | P3 | Deferred |
+| FR-145 | `producer \| consumer -q` 在 `pipefail` 下是按负载触发的假失败 | P2 | Proposed |
 | FR-077 | Workflow 模板库 — 常见 SDLC 自动化场景预设 | P1 | Closed |
 | FR-078 | Task Items 与 Event List CLI 命令 | P1 | Closed |
 | FR-079 | 数据生命周期治理 — 日志清理、DB 瘦身与自动化回收 | P1 | Closed |

@@ -133,13 +133,23 @@ fi
 pass "governance fixtures distinguish production admission from runtime compatibility"
 
 UNRELEASED="$(awk '/^## \[Unreleased\]/{flag=1;next} /^## \[/{flag=0} flag' CHANGELOG.md)"
-printf '%s' "$UNRELEASED" | rg -q '^### Removed[[:space:]]*$' ||
+# Here-strings, not `printf ... | rg -q`.
+#
+# `rg -q` exits on the first match. The [Unreleased] section is 90 KB, well past
+# the 64 KB pipe buffer, so `printf` is still writing when rg leaves; it then
+# dies of EPIPE and `set -o pipefail` hands that status to the `||`, and the
+# assertion reports a CHANGELOG defect that is not there. Measured during
+# FR-133: 10 spurious failures in 400 runs under CPU load, 0 in 400 idle, which
+# is why it had never been seen — and why it surfaced first inside a
+# certification sweep running 47 gates back to back. A here-string is written to
+# a temporary file, so there is no pipe and no writer left to signal.
+rg -q '^### Removed[[:space:]]*$' <<< "$UNRELEASED" ||
   fail "CHANGELOG [Unreleased] does not record the retirement under ### Removed"
-printf '%s' "$UNRELEASED" | rg -q 'RunnerExecutorKind' ||
+rg -q 'RunnerExecutorKind' <<< "$UNRELEASED" ||
   fail "CHANGELOG [Unreleased] does not name the removed runner selection seam"
-printf '%s' "$UNRELEASED" | rg -q 'legacy_runner_executor_removed' ||
+rg -q 'legacy_runner_executor_removed' <<< "$UNRELEASED" ||
   fail "CHANGELOG [Unreleased] does not record the breaking manifest rejection"
-printf '%s' "$UNRELEASED" | rg -q 'legacy_agent_command_deprecated' ||
+rg -q 'legacy_agent_command_deprecated' <<< "$UNRELEASED" ||
   fail "CHANGELOG [Unreleased] does not record the command-only compatibility window"
 pass "CHANGELOG records the retirement and its breaking manifest change"
 

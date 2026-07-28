@@ -256,6 +256,38 @@ does not consume it.
   moves, and the entry then has to be removed by hand. cargo-audit has no
   unmatched-ignore diagnostic to lean on the way cargo-deny does.
 
+## What the certification sweep found in someone else's gate
+
+The sweep is the reason this is written down. Running 41 derived gates back to
+back, `scripts/qa-doc-lint.sh` reported
+
+    FAIL: CHANGELOG [Unreleased] does not name the removed runner selection seam
+
+with `RunnerExecutorKind` sitting at CHANGELOG line 74, inside the `[Unreleased]`
+extent. Ten isolated re-runs passed. The assertion is
+
+    printf '%s' "$UNRELEASED" | rg -q 'RunnerExecutorKind' || fail "..."
+
+and `rg -q` exits on its first match. The section is **90047 bytes**, past the
+64 KB pipe buffer, so `printf` is still writing when rg leaves, dies of EPIPE,
+and `set -o pipefail` hands that status to the `||`. Measured: **10 spurious
+failures in 400 runs under CPU load, 0 in 400 idle**; with a here-string,
+**0 in 400 under the same load**. Four sites in that gate were converted and
+re-measured.
+
+It fails *closed* — a red that is not there — which is the harder direction to
+notice, because the response to a mysterious red is to re-run until green, and
+that trains everyone to ignore the gate.
+
+FR-133 did not introduce it: the pipe predates this FR and the section already
+exceeded the buffer. It did make it likelier, by adding ~4 KB of very long lines.
+The systemic case — **42 sites across 9 ci-required gates, all under
+`pipefail`**, of which most have provably bounded producers — is
+`docs/feature_request/FR-145-pipefail-short-circuit-flake.md`, with the
+measurement method rather than a blanket rewrite, because converting 42 sites
+without measuring which producers can exceed the buffer would turn one supported
+fix into an unmeasured sweep across nine unrelated gates.
+
 ## Measurement
 
 Derived at `1b5615e2` unless stated; `cargo 1.96.0`, `cargo-deny 0.20.2`
