@@ -271,6 +271,20 @@ because three of its cases build fixtures with `git archive HEAD`. That is also
 why its conversion could only be verified in the run *after* its commit, not
 before it.
 
+**The gate set must be derived, not listed.** This FR's own first certification
+sweep was a typed-out list of 30 invocations. It reported 29 green and left
+**eleven ci-required gates outside the list**, one of which — `qa-doc-lint` —
+CI then failed on, for a missing entry in `docs/qa/README.md`. §4.4 shape 2, in
+the procedure verifying the FR about §4.4 shape 2, and it fails in the direction
+that looks like success: an omitted gate produces no line in the log at all. The
+eleven were run separately at `88f9bb4e`, all green, clean tree, pinned. The
+condition is now §4.6.6 of the governance skill:
+
+```bash
+jq -r '.scripts[] | select(.enforcement == "ci-required") | .path' \
+  config/governance/qa-gate-surface.json
+```
+
 ## Related gates
 
 - `scripts/qa/test-qa-gate-surface.sh` — asserts the new scripts are registered

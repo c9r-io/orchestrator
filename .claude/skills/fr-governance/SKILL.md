@@ -129,6 +129,7 @@ A QA run only counts as closure evidence when all of these hold. If any fails, t
 3. **Pinned revision** — record `git rev-parse HEAD` before and after; they must match.
 4. **True exit code** — invoke as `bash script > log 2>&1` and capture `$?` directly. Piping into `tail`/`head` reports the pager's status, masking a failed script.
 5. **Complete output** — the script's final summary line must be present in the log. Its absence means the run terminated early regardless of the reported status.
+6. **Derived set** — the gates the run executes must be *derived* from the enforcement manifest, not typed out. A hand-listed sweep certifies exactly the gates its author remembered, and the ones it omits are invisible: the log is all green and says nothing about what it did not run. Measured during FR-143, whose certification listed 30 invocations, reported 29 green, and had **eleven ci-required gates outside the list** — one of which CI then failed on. That is §4.4 shape 2 applied to the verification procedure itself, and it fails in the direction that looks like success. Derive it: `jq -r '.scripts[] | select(.enforcement == "ci-required") | .path' config/governance/qa-gate-surface.json`, then diff what ran against it.
 
 ### 4.7 QA safety principles
 
