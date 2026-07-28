@@ -60,7 +60,8 @@ asked, would have covered the two gates that never drifted and none of the three
 that did.
 
 **Requirements 2 and 3 had no backlog.** Measured over the 27 ci-required shell
-gates: zero assertions report PASS on a bare exit code as the only condition, and
+gates at `0fb2c5ef` (28 once this FR registered its own fixture script): zero
+assertions report PASS on a bare exit code as the only condition, and
 zero expected diagnostics restate a ledger value as a literal `N -> M`. FR-141
 cleared the last of those. They needed regression guards, not repairs — which
 changes what their fixtures must prove, since a rule with no current violation is
@@ -175,7 +176,8 @@ than as *a diagnostic match*.
 Cost is recorded and is not the argument: headroom is 330s of 2700s (12%), and
 `test-persistence-extraction.sh` alone costs 200s because its cases run
 `cargo check` over `git archive` copies. A blanket before-run there would consume
-the remaining headroom by itself. The scanner is one Ruby pass over 27 files.
+the remaining headroom by itself. The scanner is one Ruby pass over the scanned
+set — 28 files at closure.
 
 ## Accepted costs
 
