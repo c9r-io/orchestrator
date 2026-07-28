@@ -282,22 +282,33 @@ fi
 cat > "$WORK/dynamic-runner.sh" <<'RUNNER'
 #!/usr/bin/env bash
 set -euo pipefail
+export VERDICT
 source "$1"
 RUNNER
 cat > "$WORK/dynamic-scenario.sh" <<'SCENARIO'
 #!/usr/bin/env bash
 # No `set` at all: this file inherits whatever the caller chose.
 if { printf 'MATCHME\n'; sleep 0.2; printf 'tail\n'; } | grep -q MATCHME; then
-  echo matched
+  echo matched > "$VERDICT"
 else
-  echo unmatched
+  echo unmatched > "$VERDICT"
 fi
 SCENARIO
-DYNAMIC="$(bash "$WORK/dynamic-runner.sh" "$WORK/dynamic-scenario.sh" 2>&1 || true)"
-if [[ "$DYNAMIC" == "unmatched" ]]; then
+# The verdict goes to a file, not to stdout. The first version of this case read
+# combined output and compared it for equality, which passed on macOS bash 3.2
+# and failed on the Linux runner, where bash prints
+# `printf: write error: Broken pipe` to stderr before the branch is taken. The
+# diagnostic is the mechanism working; reading it as part of the answer was the
+# assertion's mistake, and it is the fourth time in this FR that a proxy for a
+# fact turned out to be the wrong subject.
+rm -f "$WORK/verdict"
+VERDICT="$WORK/verdict" bash "$WORK/dynamic-runner.sh" "$WORK/dynamic-scenario.sh" >/dev/null 2>&1 || true
+if [[ ! -f "$WORK/verdict" ]]; then
+  fail "the dynamic-scope demonstration left no verdict, so nothing was asserted"
+elif [[ "$(cat "$WORK/verdict")" == "unmatched" ]]; then
   pass "a file that sets no options reports a present pattern as absent when sourced into a pipefail shell"
 else
-  fail "the dynamic-scope demonstration did not reproduce: got '$DYNAMIC'"
+  fail "the dynamic-scope demonstration did not reproduce: verdict was '$(cat "$WORK/verdict")'"
 fi
 
 # 10. A `|` inside a double-quoted pattern is not a pipe. Already in the probe;

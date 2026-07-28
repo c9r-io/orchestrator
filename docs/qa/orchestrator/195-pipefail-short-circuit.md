@@ -116,6 +116,16 @@ through 12 assert silence on:
 - `grep -F -- -q -quiet --silent` — `--` ends the option list
 - `[[ "$(… | grep -c .)" -eq 3 ]]` — `grep -c` counts, and therefore reads to EOF
 
+**Case 9b failed on its first CI run**, and the failure is worth recording
+because the mechanism had reproduced perfectly. The demonstration compared the
+scenario's combined output for equality with `unmatched`; on the Linux runner
+bash prints `printf: write error: Broken pipe` to stderr before taking the
+branch, and macOS bash 3.2 and 5.3.9 both do not. **The diagnostic was the
+mechanism working, and reading it as part of the answer was the assertion's
+mistake** — a proxy for the fact, one level below the proxy the FR is about. The
+verdict now goes to a file, so a diagnostic cannot contaminate it, and the suite
+is green under bash 3.2 and bash 5.3.9 as well as on both CI legs.
+
 **Case 12 is a false positive this gate produced on its first run over this
 repository**, three times. `-eq` is a short-flag cluster containing `q`, and the
 flag scan had run past the end of the command into the enclosing `[[ ]]`. It is
