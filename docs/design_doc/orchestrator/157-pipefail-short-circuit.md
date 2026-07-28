@@ -169,11 +169,19 @@ measurement lives in QA-195 as the observation that found the defect.
    consequence surface, and the two need different remedies: condition position
    wants a here-string, diagnostic position wants the pipeline out of `set -e`'s
    sight. Filed as FR-146.
-2. **`qa-doc-lint.sh` and `coverage-governance.sh` are executed by `ci.yml` and
-   absent from `qa-gate-surface.json`.** Every scanner that derives its scope
-   from that manifest — `jq-status-observed.rb`, `fixture-target-drift.rb` — is
-   blind to both. Adding them changes those scanners' governed sets, which is a
-   separate change with its own certification. Filed as FR-147.
+2. **Three scripts are executed by `ci.yml` and absent from
+   `qa-gate-surface.json`**: `scripts/qa-doc-lint.sh`,
+   `scripts/coverage-governance.sh` and `scripts/check-async-lock-governance.sh`.
+   Every scanner that derives its scope from that manifest —
+   `jq-status-observed.rb`, `fixture-target-drift.rb` — is blind to all three.
+   The third was found only by the certification sweep's reconciliation, which
+   derives the invocations from `workflow_model.rb run-commands` rather than
+   reading the workflow; the fact-check that produced this FR's finding G read
+   the workflow and found two. That is the argument for the derivation, made by
+   the same error one level up. Adding them changes those scanners' governed
+   sets, which is a separate change with its own certification. Filed as FR-147.
+   The FR-145 scanner is unaffected: its scope is `git ls-files '*.sh'`, so all
+   three are governed by it today.
 3. **`<<< "$(f)"` discards the producer's exit status**, where the pipeline
    under `pipefail` observed it. Checked site by site: in these 61, producer
    failure and "no match" already reached the same branch, so the conversion is

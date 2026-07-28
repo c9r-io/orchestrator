@@ -16,8 +16,12 @@
 |---|---|---|
 | `scripts/qa-doc-lint.sh` | `.github/workflows/ci.yml:222` | **否** |
 | `scripts/coverage-governance.sh` | `boundary-coverage` job | **否** |
+| `scripts/check-async-lock-governance.sh` | `.github/workflows/ci.yml:30` | **否** |
 
-两者都由 CI 执行，都不在 `qa-gate-surface.json` 的 `scripts[]` 里。于是：
+第三项是在 FR-145 的认证扫描里、用工作流模型做第二次推导时才出现的——手数只找到前两个。
+这本身就是本 FR 的论点：差集必须由 `workflow_model.rb run-commands` 派生，不能靠人看。
+
+三者都由 CI 执行，都不在 `qa-gate-surface.json` 的 `scripts[]` 里。于是：
 
 - `scripts/qa/jq-status-observed.rb`（范围＝manifest 中 ci-required 的 `.sh` ＋
   `scripts/lib`）看不见它们。
@@ -41,8 +45,9 @@ FR-145 那次假失败正是从这条调用链上报出来的。
 ### 1. 先测量差集，再决定补哪一边
 
 从 `scripts/lib/workflow_model.rb` 的 `run_commands` 派生出每个 workflow job 实际
-执行的 `./scripts/**.sh`，与 manifest 的 `scripts[].path` 求差集。**当前已知两项，
-但这个差集本身没有被任何东西测量过，所以"两项"是单一路径判断，未复核。**
+执行的 `./scripts/**.sh`，与 manifest 的 `scripts[].path` 求差集。**当前已测得三项**（`qa-doc-lint.sh`、`coverage-governance.sh`、
+`check-async-lock-governance.sh`，`993c5509`，方法即上述派生）；反向差集是七项，
+全部是 manifest 里带 `invokedBy` 的条目，由各自的 wrapper 执行，属预期。
 
 ### 2. 补进 manifest 会改变三道门禁的派生集合
 
