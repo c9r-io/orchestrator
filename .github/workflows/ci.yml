@@ -289,6 +289,16 @@ jobs:
         continue-on-error: true
         run: ./scripts/qa/test-jq-status-observed.sh
 
+      - name: Negative fixtures prove they applied a mutation
+        id: fixture-drift
+        continue-on-error: true
+        run: ./scripts/qa/fixture-target-drift.rb
+
+      - name: Fixture target drift negative fixtures
+        id: fixture-drift-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-fixture-target-drift.sh
+
       - name: Legacy coordination decommission contracts
         id: decommission
         continue-on-error: true
@@ -359,6 +369,8 @@ jobs:
             cost-fixtures=${{ steps.cost-fixtures.outcome }}
             jq-status=${{ steps.jq-status.outcome }}
             jq-status-fixtures=${{ steps.jq-status-fixtures.outcome }}
+            fixture-drift=${{ steps.fixture-drift.outcome }}
+            fixture-drift-fixtures=${{ steps.fixture-drift-fixtures.outcome }}
             decommission=${{ steps.decommission.outcome }}
             codex-resume=${{ steps.codex-resume.outcome }}
             filesystem-trigger=${{ steps.filesystem-trigger.outcome }}

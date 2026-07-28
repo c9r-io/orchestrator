@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 419,
-    "active": 416,
+    "documents": 421,
+    "active": 418,
     "superseded": 3,
-    "withRelatedFr": 264
+    "withRelatedFr": 266
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -350,6 +350,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-144"
+      ]
+    },
+    "docs/design_doc/orchestrator/155-fixture-target-drift.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-143"
       ]
     },
     "docs/design_doc/orchestrator/16-structured-logging.md": {
@@ -1571,6 +1577,12 @@
         "FR-144"
       ]
     },
+    "docs/qa/orchestrator/193-fixture-target-drift.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-143"
+      ]
+    },
     "docs/qa/orchestrator/20-structured-output-worker-scheduler.md": {
       "lifecycle": "active"
     },
@@ -2591,6 +2603,10 @@
     "FR-142": [
       "docs/design_doc/orchestrator/150-trigger-history-limit-cascade.md",
       "docs/qa/orchestrator/188-trigger-history-limit-cascade.md"
+    ],
+    "FR-143": [
+      "docs/design_doc/orchestrator/155-fixture-target-drift.md",
+      "docs/qa/orchestrator/193-fixture-target-drift.md"
     ],
     "FR-144": [
       "docs/design_doc/orchestrator/154-jq-status-observed.md",

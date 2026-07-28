@@ -42,7 +42,9 @@
       "reason": "sourced by test-slack-live-certification.sh and certify-slack-managed-live.sh; both are classified above"
     }
   ],
-  "staleClaimExemptions": [],
+  "staleClaimExemptions": [
+
+  ],
   "commandSources": {
     "description": "What each CI job puts on PATH, so a ci-required gate's `command -v` preamble can be checked against the job that runs it. FR-134 found three ci-required gates exiting on `missing command: rg` before their first assertion, in two jobs that had been green-lit by a wiring check which only asked whether they were referenced.",
     "runnerBaseline": [
@@ -78,7 +80,9 @@
       ]
     },
     "actions": {
-      "actions/checkout": [],
+      "actions/checkout": [
+
+      ],
       "actions/setup-node": [
         "node",
         "npm",
@@ -89,10 +93,18 @@
         "rustc",
         "rustup"
       ],
-      "Swatinem/rust-cache": [],
-      "taiki-e/install-action": [],
-      "actions/upload-artifact": [],
-      "./.github/actions/provider-stubs": []
+      "Swatinem/rust-cache": [
+
+      ],
+      "taiki-e/install-action": [
+
+      ],
+      "actions/upload-artifact": [
+
+      ],
+      "./.github/actions/provider-stubs": [
+
+      ]
     }
   },
   "workspaceScope": {
@@ -466,6 +478,26 @@
         "mode": "no-provider"
       },
       "note": "Negative fixtures for the reader and the scanner, including the end-to-end assertion that the real gate-surface gate rejects a manifest jq cannot parse. Scratch trees under TMPDIR; no daemon, no database, no provider, no network."
+    },
+    {
+      "path": "scripts/qa/fixture-target-drift.rb",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Offline: reads this manifest and the gates own text. Forbids a negative fixture that can report without proving it applied a mutation - an uncaught premise, an in-place rewrite whose landing nobody checks, a pass guarded by an exit code alone (FR-143)."
+    },
+    {
+      "path": "scripts/qa/test-fixture-target-drift.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Negative fixtures for scripts/lib/gate_fixture.sh and the scanner, including the replay of the recorded incident in which an inert mutation made a fixture report a defect the gate did not have. Scratch trees under TMPDIR; no daemon, no database, no provider, no network."
     },
     {
       "path": "scripts/qa/test-legacy-coordination-decommission.sh",
