@@ -312,6 +312,21 @@ jobs:
         continue-on-error: true
         run: ./scripts/qa/test-dependency-policy.sh
 
+      # `grep -q` leaves on the first match; under `set -o pipefail` a producer
+      # still writing when it leaves dies of EPIPE and that becomes the
+      # pipeline's answer. Scope is every tracked *.sh that enables pipefail —
+      # a property read from each file, not this manifest, because two scripts
+      # this workflow runs are not in it.
+      - name: No short-circuiting reader under pipefail
+        id: pipefail-short-circuit
+        continue-on-error: true
+        run: ./scripts/qa/pipefail-short-circuit.rb
+
+      - name: Pipefail short-circuit negative fixtures
+        id: pipefail-short-circuit-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-pipefail-short-circuit.sh
+
       - name: Legacy coordination decommission contracts
         id: decommission
         continue-on-error: true
@@ -386,6 +401,8 @@ jobs:
             fixture-drift-fixtures=${{ steps.fixture-drift-fixtures.outcome }}
             dependency-policy=${{ steps.dependency-policy.outcome }}
             dependency-policy-fixtures=${{ steps.dependency-policy-fixtures.outcome }}
+            pipefail-short-circuit=${{ steps.pipefail-short-circuit.outcome }}
+            pipefail-short-circuit-fixtures=${{ steps.pipefail-short-circuit-fixtures.outcome }}
             decommission=${{ steps.decommission.outcome }}
             codex-resume=${{ steps.codex-resume.outcome }}
             filesystem-trigger=${{ steps.filesystem-trigger.outcome }}

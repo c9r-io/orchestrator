@@ -13,6 +13,8 @@
     "reviewWhen": "A new gate that does not fit is not a reason to raise this silently. Whoever adds it either makes room or raises the ceiling in this file with a written reason and a new date. Revisit unconditionally if the runner class changes, since the number assumes GitHub-hosted ubuntu-latest."
   },
   "pendingMeasurement": {
+    "No short-circuiting reader under pipefail": "added by FR-145; a Ruby scan over 106 tracked shell files, no build and no network. Under a second locally, but this ledger takes numbers from a real run rather than from a laptop. Governance had 251s of headroom against the 2700s budget when this was added.",
+    "Pipefail short-circuit negative fixtures": "added by FR-145; 18 cases over scratch git checkouts under TMPDIR, one of which sleeps 0.2s twenty times to reproduce the mechanism deterministically. Same reason: the number comes from the first run that includes it."
   },
   "measurement": {
     "runId": "30370546800",
