@@ -11,6 +11,16 @@ check 至少有一条负向 fixture**。它们回答「这道检查存在吗」�
 
 **没有一条回答「那次尝试真的施加了变异吗」。**
 
+> **复核**：这两条断言不是一处而是**两处**，且都不在漂移发生的地方。FR-129 把它们建在
+> `test-skill-mirror-integrity.sh:517–532`；FR-134（`445fa9ed`）在
+> `test-qa-gate-surface.sh:1354–1388` **各自独立地**又建了一遍，那里还有第三条（`9fd60030`
+> 加的「每条注册 check 都有描述并被验证模式运行」）。两处都以 `ALL_CHECKS`——一份 **check
+> 函数**注册表——为键。
+>
+> **而本 FR 举证的三道门禁一道都没有注册表。** `test-core-boundary.sh`、
+> `test-persistence-dependency.sh`、`test-persistence-extraction.sh` 都是线性的 `Case N`
+> 脚本。见需求 4 的复核。
+
 一条负向 fixture 通常写成：找到某个具体文件里的某条具体语句，改掉它，断言门禁报错。
 **靶标是枚举出来的。** 当被治理的代码搬家——而搬家正是这些门禁存在的目的——靶标消失，
 fixture 不再测任何东西，且**多数情况下不会失败**。
@@ -25,7 +35,12 @@ fixture 不再测任何东西，且**多数情况下不会失败**。
 | 4 | `test-persistence-dependency.sh` case 8 | 中和 scheduler 里的 `SELECT COUNT(*) FROM command_runs`；B3 搬走了它 | 以 `no statement to neutralise` **中止** |
 | 5–7 | `test-persistence-dependency.sh` case 12/13/14 | 探测 `crates/daemon/src/server/attention.rs`，硬编码计数 1；B2 把它整个搬出台账 | 三条都变异了一个门禁**首次见到**的文件，于是**经由错误的分支**报告 |
 | 8 | `test-persistence-dependency.sh` case 16 | 剥掉一个已不在台账中的 daemon 文件的 category | 无效 |
-| 9 | `test-persistence-extraction.sh` case 5 | `git log --grep 'FR-130 A1'` 落空时走 `pass()` | **空 grep 计入通过数** |
+| 9 | `test-persistence-extraction.sh` case 6 | `git log --grep 'FR-130 A1'` 落空时走 `pass()` | **空 grep 计入通过数** |
+
+> **复核（治理期，基于 `9e250e7f`）**：九次实测全部经 git 历史逐条核对属实，证据分别在
+> `75dcf68c`（第 1、2 例）、`e6b5fd70`（第 3–8 例）、`ef6f439f`（第 9 例）三个提交中。
+> 「九次里只有第 1 次响亮失败」与三份 diff 一致。**第 9 例的位置原文写作 case 5，实为
+> case 6**（基线排序断言；case 5 是错误转换探针），已改正。
 
 九次里只有第 1 次响亮失败。其余八次要么中止、要么空转通过、要么经由错误的分支通过——
 **都是绿的**。
@@ -66,6 +81,18 @@ fixture 不再测任何东西，且**多数情况下不会失败**。
   fixture 文件确实不可解析，case 15 断言构建脚本此前不含驱动 token——**两条都是"如果我的
   前提已经不成立，那是失败而不是跳过"**。约定存在，只是没有被强制。
 
+> **复核**：这是四条需求里**唯一有大量待修存量**的一条，实测 **21 处**，分布在 7 道门禁：
+> `test-agent-driver-production-parity.sh` 4、`test-persistence-dependency.sh` 8、
+> `test-persistence-extraction.sh` 3、`test-doc-lifecycle.sh` 2、
+> `test-governance-ledger-tooling.sh` 2、`test-core-boundary.sh` 1、
+> `test-qa-gate-surface.sh` 1。每一处都是 fixture 的 `ruby -e` 体内的 `abort`/`raise`，
+> 前提不成立时杀掉整轮而不是记一次 fail。
+>
+> 另有一类需求原文没有单列、但同属需求 1 的语义：**原地改写一个临时树文件而不证明改写落
+> 地**，实测 **27 处，分布在 11 道门禁**——包括发明了落地证明（`inject`）的
+> `test-qa-gate-surface.sh` 自己，以及上周才写的 `test-jq-status-observed.sh`。第 2 例
+> 正是这一类。
+
 ### 2. 断言必须匹配门禁的**具体诊断**，而非仅匹配非零退出
 
 - 第 5–7 例是这条的直接理由：三条 fixture 都得到了非零退出，但来自
@@ -73,13 +100,30 @@ fixture 不再测任何东西，且**多数情况下不会失败**。
   `~ file … 1 → 0`（变更分支）。**只断言"失败了"无法区分这两者。**
 - 既有 fixture 大多已经 `grep -q` 具体诊断串；须把它变成**要求**而非习惯。
 
+> **复核**：「大多」实为**全部**。在 27 道 ci-required shell 门禁上实测，以「非零退出码作为
+> 唯一条件」报 `pass` 的断言有 **0 处**——每一条都已配了诊断匹配或第二个观测。所以本条不是
+> 待修存量，而是**一条尚不存在的回归护栏**。这与 §4.4 的原话是同一句话的机器形式：
+> 代理可以是附加条件，不可以是唯一条件。
+
 ### 3. 期望值必须从台账派生，不得在断言里重述
 
 - 第 5–7 例硬编码了计数 1；第 1 例硬编码了 `52 → 53`。台账里已经有这些数字。
 - FR-141 的重定向提交已经这样做了（"the expected count now comes from the ledger instead
   of being restated in the assertion"）——把它推广为规则。
 
+> **复核**：与需求 2 同状态。实测 ci-required shell 门禁的期望诊断串中，**0 处**仍写着字面
+> 的 `N -> M`——第 1 例与第 5–7 例都已被 `75dcf68c` 与 `e6b5fd70` 清掉。同样是护栏而非修复。
+
 ### 4. 第三条 meta 断言
+
+> **复核（本 FR 最重要的一处偏差）**：「在既有 meta 断言旁并列注册」这个实现方式，对本 FR
+> 自己的证据是错的。既有 meta 断言以 `ALL_CHECKS`（一份 check 函数注册表）为键，而
+> **举证的三道门禁一道都没有注册表**。照字面并列注册，新断言会落在两道**从未漂移过**的门禁
+> 里，而对三道**真的漂移了**的门禁一处都盖不到。
+>
+> 因此第三条 meta 断言必须是**一道扫描 fixture 脚本本身的门禁**，其覆盖面从
+> `qa-gate-surface.json` 发现（`jq-status-observed.rb` 的先例），而不是两份注册表里的第四个
+> 条目。这本身就是 §4.4 shape 2 又一次发生在写它的人手上。
 
 - 在既有 meta 断言旁新增一条：**每条负向 fixture 必须证明它施加了变异**。
   最直接的实现是要求每条 fixture 在同一棵树上同时报告两件事——未变异时该 check 通过，
@@ -97,14 +141,23 @@ fixture 不再测任何东西，且**多数情况下不会失败**。
 
 ## 验收标准
 
-- [ ] 第三条 meta 断言存在，与 FR-129 的两条并列注册
-- [ ] 负向 fixture：一条靶标已失效的 fixture → meta 断言失败并点名
-- [ ] 全仓既有 fixture 已复核：靶标存在性有断言、诊断有匹配、期望值从台账派生；
-      不满足的逐条修正或书面记录理由
-- [ ] `test-core-boundary.sh`、`test-persistence-dependency.sh`、
-      `test-persistence-extraction.sh` 三道门禁的 fixture 全绿且断言数不减少
+> **复核**：验收标准按上述四处复核改写如下。原第 1 条（「与 FR-129 的两条并列注册」）与第
+> 4 条（只点名三道门禁）都以未经核对的范围为前提，照原样验收会让本 FR 在它自己举证的缺陷
+> 上留下八道门禁。
+
+- [ ] 第三条 meta 断言存在，形态为**一道扫描 fixture 脚本的门禁**，覆盖面从
+      `qa-gate-surface.json` 发现而非枚举；已注册为 `ci-required` 并接入 `governance` job
+      （含 `id:`、`continue-on-error:` 与 `OUTCOMES` 行）
+- [ ] 该门禁定义的**每一条规则**都有一条能触发它的 fixture，且每条都配一条**不该触发**的
+      对照——只做前者会让「任何 fixture 改动都报错」与「检测靶标漂移」有同样的绿记录
+- [ ] 负向 fixture：复现第 2 例的形态（原地替换匹配不到任何东西），断言门禁报告
+      **变异未落地**，而非像 `9ca1ea75` 那样报告被测门禁漏掉了一次删除
+- [ ] 21 处 `abort`/`raise` 前提全部改为 `fail`；27 处原地改写全部经由落地证明
+- [ ] 受影响的 11 道门禁全绿且**通过数不减少**（基线在各自转换提交前现测，不引用旧提交
+      信息里的数字）
+- [ ] 需求 2 与需求 3 的护栏存在且可被触发（当前存量为 0，故必须由 fixture 证明它会响）
 - [ ] SKILL.md §4.4 已补记
-- [ ] 设计记录列出九次实测
+- [ ] 设计记录列出九次实测，并记下三处复核偏差
 - [ ] 全部既有门禁与 CI job 状态不因本 FR 变化
 
 ## QA 计划
@@ -115,6 +168,20 @@ fixture 不再测任何东西，且**多数情况下不会失败**。
   只做后者会让"任何 fixture 改动都报错"与"检测靶标漂移"有同样的绿记录。
 - **不要求跑真实门禁两遍**。若代价过高，可接受更轻的形态（例如要求 fixture 显式声明并断言
   其前提），但**必须书面说明为何更轻的形态足够**，且该说明本身要有一条能证伪它的 fixture。
+
+> **复核（本条已作决定）**：采用更轻的形态。理由不是代价而是九次实测本身——fixture 报告而
+> 未证明的四种方式各由一条规则封住：没变异→落地证明；前提消失→前提即失败；经由错误分支→
+> 诊断匹配 + 期望值不得重述。
+>
+> **残留一并写明**：**变异之前门禁就已经在失败**的情形，四条规则全都满足。诊断匹配收窄了它
+> ——一个无关的既有失败产生不出点名刚被变异对象的诊断——但没有封死。这正是
+> `test-core-boundary.sh` case 9 与 `test-persistence-dependency.sh` case 10 各自带一次
+> before-run 的原因，也是需求 2 的护栏写成「诊断匹配**或** before-run」而不是只写前者的原因。
+> 能证伪这条说明的 fixture 即针对此形。
+>
+> 代价数字一并记下，但它不是论据：预算余量 **330s / 2700s（12%）**，而
+> `test-persistence-extraction.sh` 一道就 200s（其 case 在 `git archive` 副本上跑
+> `cargo check`），全面 before-run 仅它一道就会吃光全部余量。
 - **不需要新的 CI job**。若新增门禁，往 `governance` job 的 `OUTCOMES` 加行——FR-137 已闭环,
   忘记加会让 `check_continue_on_error_aggregated` 失败，不再靠记性。
 
@@ -126,3 +193,7 @@ fixture 不再测任何东西，且**多数情况下不会失败**。
 
 shell 侧有 FR-135 建立的 bash 3.2 门禁；**Ruby 侧没有对应物**，而仓库有 30 余个 Ruby 门禁
 脚本。这不属于本 FR 的范围，记在这里是因为它是同一类空白，且下一次它不会被人眼拦下。
+
+> **复核**：「30 余个」实为 **16 个**被追踪的 `.rb` 文件，其中 15 个在 `scripts/` 下
+> （`git ls-files '*.rb'`）。约 2 倍高估。空白本身属实，范围判断不变——但一个没人复核过的
+> 数字出现在一份主题正是「没人复核过的靶标」的文档里，值得原样记下而不是悄悄改掉。
