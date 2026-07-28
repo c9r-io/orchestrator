@@ -1,0 +1,190 @@
+---
+lifecycle: active
+related_fr: FR-145
+---
+
+# DD-157: A Reader That Leaves Early, And A Defect Whose Direction The Data Chooses
+
+**Status**: Released
+
+## The mechanism
+
+`set -o pipefail` makes a pipeline's exit status "any stage that was non-zero".
+`grep -q` / `rg -q` leave on the first match. Where the producer still has more
+than a pipe buffer to write, it is killed by EPIPE, and that non-zero becomes
+the pipeline's answer — so **a successful match is reported to the caller as a
+failed one**.
+
+FR-145 was filed from one observation: during FR-133's certification sweep,
+`scripts/qa/test-agent-driver-documentation-alignment.sh` announced that
+`CHANGELOG`'s `[Unreleased]` section did not name `RunnerExecutorKind`. It does,
+at byte 59273 of a 90047-byte section. Ten isolated re-runs passed.
+
+## This shape was found three days earlier and recorded as fixed
+
+The most useful thing the fact-check turned up was not in the FR or in the code.
+It is in `CHANGELOG.md`'s `[Unreleased]` section, entered by **FR-134** on
+2026-07-26:
+
+> The surface gate could report a false failure under load (FR-134).
+> `producer | grep -q` with `set -o pipefail` is a race … **Every such pipeline
+> in the governance scripts is now a here-string**
+
+Same mechanism, same diagnostic — that run had
+`sed: couldn't write 80 items to stdout: Broken pipe` printed beside the
+accusation — same remedy.
+
+`DD-145` states it accurately: "Every such pipeline **in these files** is now a
+here-string." The CHANGELOG entry widened *these files* to *the governance
+scripts*, and that sentence was false the moment it was written: **61 sites
+remained**. Three days later one of them produced another false failure.
+
+This is a local repair recorded as a global one, and it is the mirror image of
+§4.4 shape 2. A hand-written list at least *looks* suspicious when it stops
+growing; an unscoped completion claim reads like a finished job and stops the
+next person from looking. `[Unreleased]` entries are live statements rather than
+history, so the entry has been corrected as part of this closure.
+
+## The direction is set by the branch, not by the defect
+
+FR-145 recorded this as a defect that fails **closed**: it produces a mystery
+red, people re-run until it is green, and the gate is thereby taught to be
+ignored.
+
+That holds only where the match feeds the **passing** branch. Where the match
+feeds the **failing** branch, the same code turns a real violation into a clean
+report. Measured on the same input in the inverted shape: **2 / 200** matches
+reported as "not found".
+
+This repository had five sites of the second kind, and three of them are leak
+assertions:
+
+| site | producer | what it asserts |
+|---|---|---|
+| `test-agent-driver-production-parity.sh:266` | `sqlite3 "$DB" .dump` | provider session material never reaches the database |
+| `test-coordination-collapse.sh:185` | `sqlite3 "$DB" '.dump'` | the per-run callback token never reaches the database |
+| `test-slack-reaction-task-routing.sh:257` | `sqlite3` snapshot columns | credentials never reach a route snapshot |
+
+All three were `! producer | grep -q SECRET`. A whole-database dump is the only
+producer here with no bound on its size, and it grows with every scenario added
+to the fixture. When the secret *is* in the dump, `rg` matches, `sqlite3` dies,
+`pipefail` hands the non-zero to `!`, and the gate prints `pass` at exactly the
+moment it must not.
+
+The other two were `cargo test --workspace 2>&1 | grep -q "^test result: FAILED"`
+in two manual gates, where a suite that printed `FAILED` early enough could be
+reported as `PASS: cargo test --workspace`.
+
+**The FR's author — the same effort that wrote this record — did not see the
+inverted shape**, because the one observed instance happened to be the harmless
+half. That is the finding worth carrying forward, and it is proposed as §4.4
+shape 9.
+
+## Why the rule is syntactic and has no exemption
+
+FR-145's acceptance criterion 1 asked for a per-site classification: convert to
+a here-string, **or** write down why the producer is bounded. Measured:
+
+| producer | match at | fires |
+|---|---|---|
+| 90 KB, 131 lines | byte 59273 | **8–13 / 400** idle, **10 / 400** loaded |
+| 1 MB, one line | byte 0 | **0 / 200** |
+
+Size does not decide it. Match position and line structure do, and the readers
+differ from each other — BSD `grep -q` measured **3 / 400** on the same input
+where `rg -q` measured **8 / 400**.
+
+And "this producer is bounded" is a claim about **today's data**, re-checked by
+nobody. The CHANGELOG took years to cross 64 KB. So the annotation the FR asked
+for is §4.4 shape 2 wearing a different hat, and criterion 1 was replaced.
+
+The rule is therefore syntactic, and has **no escape hatch**, because the
+alternative spelling
+
+```sh
+grep -q PATTERN <<< "$(producer)"
+```
+
+writes a temporary file, leaves no writer to signal, and is correct at every
+size, every match position and every implementation of grep. A rule whose remedy
+is always available does not need an exemption — and an exemption is how a rule
+gets quietly widened (§4.4 shape 8).
+
+## Scope is a property, not a manifest
+
+The governed set is **every tracked `*.sh` that enables `pipefail`**, read from
+each file. Deliberately wider than `config/governance/qa-gate-surface.json`:
+the hazard has nothing to do with whether a script is ci-required, and
+`scripts/qa-doc-lint.sh` and `scripts/coverage-governance.sh` are executed by
+`ci.yml` while absent from that manifest — so a manifest-derived scope would
+have missed the invoker of the run where this was first seen.
+
+61 executable sites across 20 files. Two independent derivations agree: this
+scanner (parsing) and a `grep` over tracked shell (text). Their six differences
+are the whole argument for parsing — four are **comment lines describing the
+pattern**, and two are files that do not enable `pipefail`.
+
+## The other four corrections to FR-145
+
+- **"0 / 400 idle"** → 8–13 / 400 idle. Load raises the rate by about a quarter;
+  it is not what makes it possible. The FR's explanation of why the defect had
+  never been seen was therefore wrong, and wrong in the direction that makes it
+  look rarer.
+- **"42 sites / 9 gates"** → 35 executable sites / 7 gates. 42 was produced by
+  `grep -c`, which counts lines including prose; four of the matched lines are
+  comments about the pattern, one of them written by FR-133 to explain the first
+  fix. §4.4 shape 1, committed by the FR about assertion strength.
+- **Ten of the twelve "suspect" sites were structurally immune**:
+  `scan() { (…) || true; }` returns 0 whatever the subshell did, SIGPIPE
+  included, so `pipefail` never saw the producer. They were rewritten anyway,
+  because a rule that exempts "immune by a `|| true` two functions away" is not
+  a rule anyone can check.
+- **The gate that reported the false failure** was
+  `test-agent-driver-documentation-alignment.sh`, not `qa-doc-lint.sh`, which is
+  its `invokedBy`.
+
+## The deterministic assertion
+
+A committed test that runs the buffer race 400 times and asserts "at least one
+failure" is a coin flip on someone else's runner — measured 0/200 here on a 1 MB
+producer. Case 16 of the fixtures removes the race instead of racing it:
+
+```sh
+{ printf 'MATCHME\n'; sleep 0.2; printf 'tail\n'; } | grep -q MATCHME
+```
+
+The producer is still writing **by construction** when the reader leaves.
+Measured **10/10** piped and **0/10** through a here-string, independent of pipe
+buffer, match position, grep implementation and machine load. The 400× field
+measurement lives in QA-195 as the observation that found the defect.
+
+## Known limits
+
+1. **`| head` is not covered.** Measured at 38 sites across 29 tracked shell
+   files under `pipefail`, of which eight are `producer | head -N >&2`
+   diagnostics inside a `fail` branch. Nobody reads that pipeline's status —
+   but `set -e` does, and it is 141. Measured: the script **exits mid-run and
+   its summary line never prints**, which §4.4 shape 7 already names as the
+   failure that reads exactly like a complete run. Same mechanism, different
+   consequence surface, and the two need different remedies: condition position
+   wants a here-string, diagnostic position wants the pipeline out of `set -e`'s
+   sight. Filed as FR-146.
+2. **`qa-doc-lint.sh` and `coverage-governance.sh` are executed by `ci.yml` and
+   absent from `qa-gate-surface.json`.** Every scanner that derives its scope
+   from that manifest — `jq-status-observed.rb`, `fixture-target-drift.rb` — is
+   blind to both. Adding them changes those scanners' governed sets, which is a
+   separate change with its own certification. Filed as FR-147.
+3. **`<<< "$(f)"` discards the producer's exit status**, where the pipeline
+   under `pipefail` observed it. Checked site by site: in these 61, producer
+   failure and "no match" already reached the same branch, so the conversion is
+   behaviour-preserving. Five sites got explicit status handling instead,
+   because there "could not read" and "found nothing" are different facts that
+   the pipeline reported identically — the two `cargo tree` probes in
+   `test-persistence-extraction.sh`, the two `cargo test`/`cargo clippy` probes,
+   and the three `sqlite3` dumps, whose empty result is now its own failure
+   (§4.4 shape 5).
+4. **Five of the nine manual-runbook gates were not executed.** They drive the
+   ambient daemon and the runtime database; CLAUDE.md forbids operating on it
+   and §4.7 forbids self-referential gates. Their evidence is `bash -n` over all
+   106 tracked shell files, `bash32-compat.rb`, and this scanner. Named in
+   QA-195 rather than folded into an aggregate.

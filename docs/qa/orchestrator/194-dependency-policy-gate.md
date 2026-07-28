@@ -259,8 +259,13 @@ CHANGELOG did not name `RunnerExecutorKind`, which it does, at line 74. Ten
 isolated re-runs passed. The cause is `printf '%s' "$UNRELEASED" | rg -q P`
 under `set -o pipefail`: `rg -q` exits on first match, the 90 KB section is past
 the pipe buffer, `printf` dies of EPIPE, and pipefail turns that into a failed
-assertion. Measured 10/400 under CPU load and 0/400 idle; a here-string is
-0/400 under the same load. The four sites were converted and re-measured.
+assertion. Measured 10/400 under CPU load and — recorded here as 0/400 idle,
+which **FR-145 later re-derived as 8-13/400 idle** on the same machine and the
+same input. Load raises the rate by about a quarter; it is not what makes the
+defect possible, and reading it as a load-only race made the shape look rarer
+than it is. A here-string is 0/400 under either condition. The four sites were
+converted and re-measured; the other 61 are FR-145, and QA-195 carries the
+corrected table.
 
 Recorded here rather than dropped, for two reasons. It is the second time this
 FR's own certification produced a result that looked like the thing being

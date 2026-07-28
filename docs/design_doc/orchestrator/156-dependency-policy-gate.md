@@ -271,19 +271,31 @@ extent. Ten isolated re-runs passed. The assertion is
 and `rg -q` exits on its first match. The section is **90047 bytes**, past the
 64 KB pipe buffer, so `printf` is still writing when rg leaves, dies of EPIPE,
 and `set -o pipefail` hands that status to the `||`. Measured: **10 spurious
-failures in 400 runs under CPU load, 0 in 400 idle**; with a here-string,
-**0 in 400 under the same load**. Four sites in that gate were converted and
-re-measured.
+failures in 400 runs under CPU load**, and recorded here as **0 in 400 idle**;
+with a here-string, **0 in 400 under the same load**. Four sites in that gate
+were converted and re-measured.
 
-It fails *closed* — a red that is not there — which is the harder direction to
-notice, because the response to a mysterious red is to re-run until green, and
-that trains everyone to ignore the gate.
+**Both of the paragraph's conclusions were wrong, and FR-145 corrected them.**
+The idle rate is **8-13 in 400** on the same machine and the same input, so
+CPU contention raises the rate by about a quarter rather than being what makes
+the defect possible. And it does not fail *closed*: that holds only where the
+match feeds the passing branch. Where the match feeds the **failing** branch —
+`! producer | grep -q SECRET`, which is how three of this repository's leak
+assertions were written — the same code reports a real violation as clean,
+measured 2 in 200. See DD-157.
+
+The failing-open half is why it matters that the reasoning below was recorded at
+all: the direction was inferred from the single instance that happened to be
+observed, and the instance that was observed was the harmless one.
 
 FR-133 did not introduce it: the pipe predates this FR and the section already
 exceeded the buffer. It did make it likelier, by adding ~4 KB of very long lines.
-The systemic case — **42 sites across 9 ci-required gates, all under
-`pipefail`**, of which most have provably bounded producers — is
-`docs/feature_request/FR-145-pipefail-short-circuit-flake.md`, with the
+The systemic case — recorded here as **42 sites across 9 ci-required gates**,
+which FR-145 re-derived as **35 executable sites across 7**, because `grep -c`
+counted four comment lines describing the pattern; the repository-wide figure is
+**61 sites across 20 files** — is `docs/design_doc/orchestrator/157-pipefail-short-circuit.md`
+and QA-195. "Most have provably bounded producers" did not survive either: what
+decides the trigger is match position and line structure, not size. With the
 measurement method rather than a blanket rewrite, because converting 42 sites
 without measuring which producers can exceed the buffer would turn one supported
 fix into an unmeasured sweep across nine unrelated gates.
