@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 421,
-    "active": 418,
+    "documents": 423,
+    "active": 420,
     "superseded": 3,
-    "withRelatedFr": 266
+    "withRelatedFr": 268
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -356,6 +356,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-143"
+      ]
+    },
+    "docs/design_doc/orchestrator/156-dependency-policy-gate.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-133"
       ]
     },
     "docs/design_doc/orchestrator/16-structured-logging.md": {
@@ -1583,6 +1589,12 @@
         "FR-143"
       ]
     },
+    "docs/qa/orchestrator/194-dependency-policy-gate.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-133"
+      ]
+    },
     "docs/qa/orchestrator/20-structured-output-worker-scheduler.md": {
       "lifecycle": "active"
     },
@@ -2566,6 +2578,10 @@
     "FR-132": [
       "docs/design_doc/orchestrator/144-doc-lifecycle-governance.md",
       "docs/qa/orchestrator/182-doc-lifecycle-governance.md"
+    ],
+    "FR-133": [
+      "docs/design_doc/orchestrator/156-dependency-policy-gate.md",
+      "docs/qa/orchestrator/194-dependency-policy-gate.md"
     ],
     "FR-134": [
       "docs/design_doc/orchestrator/145-gate-surface-execution-truth.md",

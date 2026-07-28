@@ -38,6 +38,16 @@ Find known vulnerabilities and deprecated Rust dependencies.
 - No unaddressed high-severity vulnerabilities, or there is explicit risk acceptance documentation
 - Automated scanning in CI (recommended)
 
+In this repository both are in place and worth naming, because "run `cargo audit`"
+is no longer the whole answer. `.github/workflows/security.yml` runs
+`cargo audit --deny unsound`, and the risk acceptances live in
+`.cargo/audit.toml`, each with a reason and the condition that retires it. A
+second job runs `cargo deny check bans licenses sources` against `deny.toml`,
+which covers what `cargo audit` does not: coexisting versions, licence policy
+and package origin. The two are deliberately partitioned — `cargo-deny` never
+runs `advisories`, because it does not report the unsound class at all. See
+`docs/design_doc/orchestrator/156-dependency-policy-gate.md`.
+
 ### Verification
 ```bash
 cd core 2>/dev/null || true

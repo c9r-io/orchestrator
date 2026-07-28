@@ -429,6 +429,23 @@ if fixture_mutate "16" "$CASE/$POLICY" \
 fi
 echo ""
 
+echo "-- 18. the sources check reads the real graph --"
+reset_tool_case
+# `sources` has zero findings today and would have zero findings if it were
+# evaluating nothing, which is the whole reason a guard needs a fixture. Emptying
+# the allowed-registry list makes crates.io itself unknown: if the check is live,
+# every package in the graph is rejected.
+if sub_line "18" "$POLICY" 'unknown-registry = "deny"' 'unknown-registry = "deny"
+allow-registry = []'; then
+  run_deny sources
+  if [[ "$DENY_STATUS" -ne 0 ]] && grep -q "source-not-allowed" <<<"$DENY_OUT"; then
+    pass "18. with no registry allowed, every package is a finding"
+  else
+    fail "18. exit $DENY_STATUS, and source-not-allowed did not appear"
+  fi
+fi
+echo ""
+
 echo "-- 17. the licence check reads the real graph --"
 reset_tool_case
 if sub "17" "$POLICY" '  "MPL-2.0",' ''; then
