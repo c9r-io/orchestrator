@@ -13,6 +13,8 @@
     "reviewWhen": "A new gate that does not fit is not a reason to raise this silently. Whoever adds it either makes room or raises the ceiling in this file with a written reason and a new date. Revisit unconditionally if the runner class changes, since the number assumes GitHub-hosted ubuntu-latest."
   },
   "pendingMeasurement": {
+    "Dependency policy still binds": "Added by FR-133 and not yet present in any recorded run. One Ruby pass over deny.toml, Cargo.lock, .cargo/audit.toml and security.yml; 0.2s locally, comparable to jq-status (0s at run 30328275268). Clears on the next --refresh --write.",
+    "Dependency policy negative fixtures": "Added by FR-133 and not yet present in any recorded run. Twenty-eight assertions over scratch trees under TMPDIR, no cargo and no daemon; the tool half runs in security.yml, not here. Comparable to fixture-drift-fixtures (3s at run 30328275268). Clears on the next --refresh --write."
   },
   "measurement": {
     "runId": "30328275268",
