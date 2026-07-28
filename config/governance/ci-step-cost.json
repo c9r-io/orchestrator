@@ -14,7 +14,7 @@
   },
   "pendingMeasurement": {
     "Negative fixtures prove they applied a mutation": "Added by FR-143 and not yet present in any recorded run. One Ruby pass over the ci-required shell gates, comparable to jq-status (0s at run 30301603134). Clears on the next --refresh --write.",
-    "Fixture target drift negative fixtures": "Added by FR-143 and not yet present in any recorded run. Seventeen assertions over scratch trees under TMPDIR, no cargo and no daemon; comparable to jq-status-fixtures (25s at run 30301603134). Clears on the next --refresh --write."
+    "Fixture target drift negative fixtures": "Added by FR-143 and not yet present in any recorded run. Eighteen assertions over scratch trees under TMPDIR, no cargo and no daemon; comparable to jq-status-fixtures (25s at run 30301603134). Clears on the next --refresh --write."
   },
   "measurement": {
     "runId": "30301603134",

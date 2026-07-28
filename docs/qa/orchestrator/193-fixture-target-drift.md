@@ -139,11 +139,16 @@ Read cases 4 to 6.
 
 **Steps**
 
-Read cases 7 to 15.
+Read cases 7 to 15, including 7b.
 
 **Expected result**
 
-- Case 7: a surface with no gates produces no findings.
+- Case 7: a correctly written gate produces no findings.
+- Case 7b: a manifest that yields **no** gates is a failure, not a clean run.
+  This was found by the closure self-check: the positive control used to be an
+  empty surface, which made it pass on a scanner that examined nothing — a
+  control that cannot tell "no findings" from "nothing looked at" is not a
+  control, and §4.4 shape 5 is the FR immediately before this one.
 - Case 8: an unwrapped in-place rewrite is a finding at its own line, and a
   wrapped one on the next line is not.
 - Case 9: `(cd "$DIR" && ruby "$GATE")` and `COUNT=$(ruby -rjson -e ... )` are
@@ -158,8 +163,8 @@ Read cases 7 to 15.
 - Case 12: an exit code alone is a finding; a diagnostic match is not, and
   neither is a recorded before-run.
 - Case 13: a literal `sql 8 -> 7` is a finding; `sql $N -> $((N - 1))` is not.
-- Case 14: a file ending inside a here-document is reported, not half-scanned in
-  silence.
+- Case 14: a file ending inside a here-document is reported, and one that
+  closes — in the control probe from case 7 — is not.
 - Case 15: a scratch tree named nothing like the others is still followed.
 
 **All five rules the scanner defines are proven by a case here**, and each is

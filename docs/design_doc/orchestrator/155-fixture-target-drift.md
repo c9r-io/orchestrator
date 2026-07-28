@@ -142,6 +142,17 @@ right: a clean result over a file the scanner half-read is an artefact of how mu
 was read. FR-138 is that failure in the bash 3.2 scanner, so it is asserted rather
 than inherited on trust.
 
+**An empty scanned set is a failure, not a clean run.** The same argument one
+level out: `PASS (0 ci-required shell gates scanned)` is a property of the
+manifest, not of the fixtures, and zero and twenty-eight-scanned-clean were the
+same exit code until the closure self-check asked what state would satisfy the
+criteria while the goal went unmet. That is §4.4 shape 5 — a check that reports
+PASS having read no input — in the gate written directly after the FR whose
+subject is that shape. The positive control moved with it: it *was* an empty
+surface, which is exactly what let it certify a scanner examining nothing. A
+control that cannot distinguish "no findings" from "nothing looked at" is not a
+control.
+
 ## Why not run every gate twice
 
 FR-143 permitted a lighter form given a written justification and a fixture that
