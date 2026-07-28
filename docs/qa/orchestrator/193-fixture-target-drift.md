@@ -199,7 +199,17 @@ audit round.
 
 ## Recorded measurement
 
-Taken during governance at `5062f3e5`, macOS, system Ruby 2.6.
+Taken during governance at `5062f3e5`, macOS, system Ruby 2.6. **Certified at
+`d17e27c4`** on a clean tree, pinned across the run, 29 of 30 green including
+`cargo test --workspace` and `cargo clippy -D warnings`; every gate's final
+summary line present in its log.
+
+The one non-zero is `ci-liveness.rb`, and it is the known first pass of DD-146's
+two-pass convergence rather than a defect: committing a `ci.yml` change stales
+all fourteen job records at once, and the liveness step runs inside the job it
+fails. It converges when a run at the new SHA lands and the ledger is refreshed.
+Recorded here rather than omitted, because a certification that quietly drops
+its one red line is the shape this whole FR is about.
 
 **Scope, measured rather than counted from the FR:**
 
