@@ -1,0 +1,34 @@
+# Advisory acceptances, read by `cargo audit` in .github/workflows/security.yml.
+#
+# The split with cargo-deny: cargo-deny owns the *shape* of the dependency graph
+# (bans, licenses, sources — see deny.toml); cargo audit owns the RustSec
+# advisory database, at full depth. Neither tool subsumes the other. Measured at
+# FR-133 against the same database: cargo-deny reported 17 unmaintained
+# advisories as errors and did not report RUSTSEC-2024-0429 at all, which
+# cargo audit does. Running both against advisories would double-report the 17
+# and still miss nothing extra, so only cargo audit does.
+#
+# `--deny unsound` is passed on the command line, which is what makes the entry
+# below an acceptance rather than a line nobody reads. The 17 unmaintained
+# advisories remain warnings: they are upstream-archived crates we cannot move
+# off while Tauri 2 ships gtk-rs 0.18, and denying them would produce an
+# 18-entry ignore file that *is* the policy.
+
+[advisories]
+ignore = [
+  # RUSTSEC-2024-0429 — glib 0.18.5, unsound.
+  #
+  # `VariantStrIter::impl_get` passes `&p` to a C function that writes through
+  # the pointer as an out-argument. Recent rustc disregards those writes when
+  # optimising, so `CStr::from_ptr` is handed NULL: undefined behaviour, in
+  # practice a crash. Affects >=0.15.0,<0.20.0; patched in >=0.20.0.
+  #
+  # Reachable only as orchestrator-gui -> tauri 2.11 -> gtk 0.18 -> glib 0.18.5.
+  # No action is available to us: glib 0.20 requires the gtk-rs generation
+  # Tauri 2 does not use. The daemon and CLI do not link it.
+  #
+  # Accepted 2026-07-28. Retire this entry when `cargo tree -i glib` reports
+  # 0.20 or later — at which point cargo audit stops reporting it and this
+  # comment is the only thing left to delete.
+  "RUSTSEC-2024-0429",
+]

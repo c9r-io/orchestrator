@@ -39,5 +39,38 @@ jobs:
         with:
           tool: cargo-audit
 
+      # `--deny unsound` is load-bearing, not decoration. Without it this step
+      # exits 0 over every informational advisory, which is how
+      # RUSTSEC-2024-0429 sat unread in the tree. Acceptances live in
+      # .cargo/audit.toml, each with a reason and the condition that retires it.
+      # scripts/qa/dependency-policy.rb asserts this flag is still here.
       - name: Audit dependencies
-        run: cargo audit
+        run: cargo audit --deny unsound
+
+  cargo-deny:
+    name: Dependency policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+
+      # Blocking, with no continue-on-error: a dependency policy that cannot
+      # fail the build is a document. The check list is exactly these three —
+      # `advisories` belongs to the cargo-audit job above, and listing it here
+      # (or writing `all`) would double-report the same database while still
+      # missing the unsound class cargo-deny does not surface. `--deny
+      # unmatched-skip` is the ratchet: an accepted duplicate that upstream
+      # resolves stops matching and fails until its deny.toml entry is deleted.
+      - name: Check dependency policy
+        run: cargo deny --workspace --all-features check --deny unmatched-skip bans licenses sources
