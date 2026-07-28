@@ -29,13 +29,18 @@ echo ""
 
 # ── Scenario 9: Compilation and tests ────────────────────────────────────────
 echo "--- Scenario 9: Compilation and tests ---"
-if cargo test --workspace 2>&1 | grep -q "^test result: FAILED"; then
+# Captured rather than piped, for the reason recorded in
+# test-per-trigger-webhook-auth.sh: piped into `grep -q`, a failing suite could
+# report as a passing one (FR-145).
+if CARGO_TEST_OUT="$(cargo test --workspace 2>&1)"; then CARGO_TEST_STATUS=0; else CARGO_TEST_STATUS=$?; fi
+if [[ "$CARGO_TEST_STATUS" -ne 0 ]] || grep -q "^test result: FAILED" <<< "$CARGO_TEST_OUT"; then
   fail "cargo test --workspace"
 else
   pass "cargo test --workspace"
 fi
 
-if cargo clippy --workspace --all-targets -- -D warnings 2>&1 | grep -q "^error"; then
+if CARGO_CLIPPY_OUT="$(cargo clippy --workspace --all-targets -- -D warnings 2>&1)"; then CARGO_CLIPPY_STATUS=0; else CARGO_CLIPPY_STATUS=$?; fi
+if [[ "$CARGO_CLIPPY_STATUS" -ne 0 ]] || grep -q "^error" <<< "$CARGO_CLIPPY_OUT"; then
   fail "cargo clippy"
 else
   pass "cargo clippy clean"
@@ -57,11 +62,12 @@ spec:
     workflow: default
     workspace: default
 YAML
-if "$ORCHESTRATOR" manifest validate -f "$WEBHOOK_MANIFEST" 2>&1 | grep -qi "valid\|ok\|success"; then
+VALIDATE_OUT="$("$ORCHESTRATOR" manifest validate -f "$WEBHOOK_MANIFEST" 2>&1 || true)"
+if grep -qi "valid\|ok\|success" <<< "$VALIDATE_OUT"; then
   pass "webhook source accepted in manifest validation"
 else
   # Validation may fail because workflow/workspace don't exist, but source should be accepted
-  if "$ORCHESTRATOR" manifest validate -f "$WEBHOOK_MANIFEST" 2>&1 | grep -q "event.source"; then
+  if grep -q "event.source" <<< "$VALIDATE_OUT"; then
     fail "webhook source rejected"
   else
     pass "webhook source accepted (other validation errors expected)"
@@ -76,7 +82,8 @@ echo "--- Scenario 6: Webhook server disabled with --webhook-bind none ---"
 DAEMON_PID=$!
 sleep 2
 
-if curl -s --connect-timeout 2 "http://127.0.0.1:${WEBHOOK_PORT}/health" 2>&1 | grep -q "ok"; then
+HEALTH_OUT="$(curl -s --connect-timeout 2 "http://127.0.0.1:${WEBHOOK_PORT}/health" 2>&1 || true)"
+if grep -q "ok" <<< "$HEALTH_OUT"; then
   fail "webhook server should NOT be running with --webhook-bind none"
 else
   pass "no webhook server with --webhook-bind none"

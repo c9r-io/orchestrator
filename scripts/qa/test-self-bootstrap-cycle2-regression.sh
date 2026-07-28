@@ -147,7 +147,8 @@ info "Running task $TASK_ID"
 $ORCH task start "$TASK_ID" >/dev/null
 
 for _ in {1..30}; do
-  if $ORCH task info "$TASK_ID" | grep -qiE 'status:[[:space:]]*(completed|failed)'; then
+  TASK_INFO="$($ORCH task info "$TASK_ID" || true)"
+  if grep -qiE 'status:[[:space:]]*(completed|failed)' <<< "$TASK_INFO"; then
     break
   fi
   sleep 1

@@ -182,8 +182,17 @@ else
   fail "run-scoped MCP config is missing or not mode 0600"
 fi
 CALLBACK_TOKEN="$(jq -r '.mcpServers.orch.env.ORCH_MCP_CALLBACK_TOKEN' "$MCP_CONFIG")"
-if [[ -n "$CALLBACK_TOKEN" ]] && ! sqlite3 "$DB" '.dump' | rg -q --fixed-strings "$CALLBACK_TOKEN" && \
-   ! rg -q --fixed-strings "$CALLBACK_TOKEN" "$QA_ROOT/daemon.log"; then
+# The dump is captured, not piped. `rg -q` leaves on the first match, and a whole
+# database dump has no bound on its size: under `set -o pipefail` sqlite3's EPIPE
+# would become the condition's status, and `!` would turn a *detected* leak into
+# "absent from database" (FR-145). An empty dump is its own failure, because a
+# condition that read nothing and one that read everything and found nothing
+# carry the same exit code.
+DB_DUMP="$(sqlite3 "$DB" '.dump')" || DB_DUMP=""
+if [[ -z "$DB_DUMP" ]]; then
+  fail "sqlite3 produced no dump of $DB, so the token-leak assertion examined nothing"
+elif [[ -n "$CALLBACK_TOKEN" ]] && ! rg -q --fixed-strings "$CALLBACK_TOKEN" <<< "$DB_DUMP" && \
+     ! rg -q --fixed-strings "$CALLBACK_TOKEN" "$QA_ROOT/daemon.log"; then
   pass "per-run callback token is absent from database and daemon logs"
 else
   fail "callback token leaked beyond the private MCP config"

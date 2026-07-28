@@ -111,7 +111,7 @@ probe_assert_output_contains() {
   local pattern="$2"
   local label="${3:-output should contain '$pattern'}"
 
-  if echo "$output" | grep -qF "$pattern"; then
+  if grep -qF "$pattern" <<< "$output"; then
     probe_info "  ✓ $label"
   else
     probe_error "  ✗ $label"
@@ -124,7 +124,7 @@ probe_assert_output_matches() {
   local regex="$2"
   local label="${3:-output should match '$regex'}"
 
-  if echo "$output" | grep -qE "$regex"; then
+  if grep -qE "$regex" <<< "$output"; then
     probe_info "  ✓ $label"
   else
     probe_error "  ✗ $label"
@@ -137,7 +137,7 @@ probe_assert_output_not_contains() {
   local pattern="$2"
   local label="${3:-output should NOT contain '$pattern'}"
 
-  if echo "$output" | grep -qF "$pattern"; then
+  if grep -qF "$pattern" <<< "$output"; then
     probe_error "  ✗ $label"
     _PROBE_CURRENT_ASSERTIONS_OK=0
   else
@@ -260,7 +260,7 @@ probe_wait_task_done() {
   while [[ $elapsed -lt $timeout ]]; do
     local info_output
     info_output="$("$PROBE_BINARY" task info "$task_id" 2>&1 || true)"
-    if echo "$info_output" | grep -qiE 'status:[[:space:]]*(completed|failed)'; then
+    if grep -qiE 'status:[[:space:]]*(completed|failed)' <<< "$info_output"; then
       return 0
     fi
     sleep 3

@@ -31,7 +31,7 @@ echo "═══ S2-a: Custom health_policy thresholds ═══"
 $ORCH apply -f fixtures/manifests/bundles/qa110-s2-fixture.yaml --project qa-hp-s2 >/dev/null 2>&1
 check_out=$($ORCH check --project qa-hp-s2 2>&1)
 
-if echo "$check_out" | grep -q 'health policy = custom (duration=1h, threshold=5, cap_success=0.3)'; then
+if grep -q 'health policy = custom (duration=1h, threshold=5, cap_success=0.3)' <<< "$check_out"; then
   pass "custom-fail agent displays custom thresholds"
 else
   fail "expected custom thresholds in check output"
@@ -45,7 +45,7 @@ echo "═══ S2-b: Disease DISABLED display ═══"
 $ORCH apply -f fixtures/manifests/bundles/qa110-s3-fixture.yaml --project qa-hp-s3 >/dev/null 2>&1
 check_out=$($ORCH check --project qa-hp-s3 2>&1)
 
-if echo "$check_out" | grep -q 'disease DISABLED'; then
+if grep -q 'disease DISABLED' <<< "$check_out"; then
   pass "nodisease-fail agent displays disease DISABLED"
 else
   fail "expected 'disease DISABLED' in check output"
@@ -59,7 +59,7 @@ echo "═══ S2-c: Default health_policy baseline ═══"
 $ORCH apply -f fixtures/manifests/bundles/qa110-s1-fixture.yaml --project qa-hp-s1 >/dev/null 2>&1
 check_out=$($ORCH check --project qa-hp-s1 2>&1)
 
-if echo "$check_out" | grep -q 'health policy = default (duration=5h, threshold=2, cap_success=0.5)'; then
+if grep -q 'health policy = default (duration=5h, threshold=2, cap_success=0.5)' <<< "$check_out"; then
   pass "default-agent-fail displays default policy"
 else
   fail "expected default policy in check output"

@@ -60,7 +60,7 @@ elif [ "$GRPC_SMOKE_MODE" = "reflection-disabled" ]; then
   if [ "$code" -eq 0 ]; then
     fail "reflection-disabled: expected list to fail"
   fi
-  if ! echo "$out" | grep -Fq "$GRPC_REFLECTION_ERROR_SUBSTR"; then
+  if ! grep -Fq "$GRPC_REFLECTION_ERROR_SUBSTR" <<< "$out"; then
     echo "$out" >&2
     fail "reflection-disabled: expected error to contain: $GRPC_REFLECTION_ERROR_SUBSTR"
   fi

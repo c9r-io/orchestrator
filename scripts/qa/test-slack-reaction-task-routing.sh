@@ -250,11 +250,17 @@ fi
 
 ROUTE_ID="$(jq -r '.id' "$QA_ROOT/route.json")"
 REQUEST_ID="$(jq -r '.request_id' "$QA_ROOT/route.json")"
+# Read once, then searched. Piped into `grep -q` this was the fail-open shape:
+# the reader leaves on the first match, sqlite3 dies of EPIPE, `pipefail` hands
+# that status to `!`, and a snapshot that *does* carry the token reports as
+# redacted (FR-145).
+ROUTE_SNAPSHOT="$(sqlite3 "$DB" "SELECT binding_snapshot_json,template_snapshot_json,credential_store,credential_key FROM source_automation_routes WHERE id='$ROUTE_ID';")"
 if [[ "$(sqlite3 "$DB" "SELECT COUNT(*) FROM source_automation_routes WHERE id='$ROUTE_ID' AND task_id='$TASK_ID' AND request_id='$REQUEST_ID' AND status='routed';")" -eq 1 ]] &&
   [[ "$(sqlite3 "$DB" "SELECT COUNT(*) FROM source_routing_attempts WHERE source_event_id='$SOURCE_ID' AND automation_route_id='$ROUTE_ID' AND task_id='$TASK_ID';")" -eq 1 ]] &&
   [[ "$(sqlite3 "$DB" "SELECT COUNT(*) FROM source_bindings WHERE task_id='$TASK_ID' AND binding_type='automation';")" -eq 1 ]] &&
   [[ "$(sqlite3 "$DB" "SELECT COUNT(*) FROM control_action_audit WHERE request_id='$REQUEST_ID' AND action='source.automation.create_task' AND status='succeeded' AND result_id='$TASK_ID';")" -eq 1 ]] &&
-  ! sqlite3 "$DB" "SELECT binding_snapshot_json,template_snapshot_json,credential_store,credential_key FROM source_automation_routes WHERE id='$ROUTE_ID';" | grep -q 'qa-source-routing-fake-token'; then
+  [[ -n "$ROUTE_SNAPSHOT" ]] &&
+  ! grep -q 'qa-source-routing-fake-token' <<< "$ROUTE_SNAPSHOT"; then
   pass "event, attempt, route, binding, audit, and task form one token-free provenance chain"
 else
   fail "durable provenance chain or credential redaction differs"

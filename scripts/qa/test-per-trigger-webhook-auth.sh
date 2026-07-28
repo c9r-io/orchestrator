@@ -29,13 +29,21 @@ echo ""
 
 # ── Scenario 8: Compilation and tests ────────────────────────────────────────
 echo "--- Scenario 8: Compilation and tests ---"
-if cargo test --workspace 2>&1 | grep -q "^test result: FAILED"; then
+# Captured rather than piped. `grep -q` leaves on the first match, so a suite
+# that printed `test result: FAILED` while cargo was still writing killed cargo
+# with EPIPE; `set -o pipefail` handed that status to the `if`, the condition
+# read false, and the gate reported `PASS: cargo test --workspace` over a failing
+# suite (FR-145). Capturing the status too, because that is the question being
+# asked and it is free once the output is in a variable.
+if CARGO_TEST_OUT="$(cargo test --workspace 2>&1)"; then CARGO_TEST_STATUS=0; else CARGO_TEST_STATUS=$?; fi
+if [[ "$CARGO_TEST_STATUS" -ne 0 ]] || grep -q "^test result: FAILED" <<< "$CARGO_TEST_OUT"; then
   fail "cargo test --workspace"
 else
   pass "cargo test --workspace"
 fi
 
-if cargo clippy --workspace --all-targets -- -D warnings 2>&1 | grep -q "^error"; then
+if CARGO_CLIPPY_OUT="$(cargo clippy --workspace --all-targets -- -D warnings 2>&1)"; then CARGO_CLIPPY_STATUS=0; else CARGO_CLIPPY_STATUS=$?; fi
+if [[ "$CARGO_CLIPPY_STATUS" -ne 0 ]] || grep -q "^error" <<< "$CARGO_CLIPPY_OUT"; then
   fail "cargo clippy"
 else
   pass "cargo clippy clean"
@@ -44,7 +52,8 @@ fi
 # ── Scenario 7: CEL filter unit tests ────────────────────────────────────────
 echo ""
 echo "--- Scenario 7: CEL filter unit tests ---"
-if cargo test --lib -p agent-orchestrator -- prehook::cel::tests 2>&1 | grep -q "^test result: ok"; then
+CEL_TEST_OUT="$(cargo test --lib -p agent-orchestrator -- prehook::cel::tests 2>&1 || true)"
+if grep -q "^test result: ok" <<< "$CEL_TEST_OUT"; then
   pass "CEL webhook filter unit tests (6 tests)"
 else
   fail "CEL webhook filter unit tests"

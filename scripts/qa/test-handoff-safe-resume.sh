@@ -172,8 +172,10 @@ else
   fail "non-idempotent replay was not denied"
 fi
 
-if sqlite3 "$DB" "SELECT COUNT(*) FROM events WHERE task_id='$TASK_ID' AND event_type='resume_executed';" | grep -q '^1$' && \
-   sqlite3 "$DB" "SELECT COUNT(*) FROM resume_executions WHERE plan_id='$PLAN_ID' AND status='succeeded';" | grep -q '^1$'; then
+RESUME_EVENTS="$(sqlite3 "$DB" "SELECT COUNT(*) FROM events WHERE task_id='$TASK_ID' AND event_type='resume_executed';")"
+RESUME_EXECUTIONS="$(sqlite3 "$DB" "SELECT COUNT(*) FROM resume_executions WHERE plan_id='$PLAN_ID' AND status='succeeded';")"
+if grep -q '^1$' <<< "$RESUME_EVENTS" && \
+   grep -q '^1$' <<< "$RESUME_EXECUTIONS"; then
   pass "successful state change records execution and audit event"
 else
   fail "resume execution audit evidence is missing"

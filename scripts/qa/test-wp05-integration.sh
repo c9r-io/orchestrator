@@ -151,7 +151,8 @@ create_and_run_task() {
   $ORCH task start "$task_id" >/dev/null 2>&1 || true
 
   for _ in {1..30}; do
-    if $ORCH task info "$task_id" | grep -qiE 'status:[[:space:]]*(completed|failed)'; then
+    TASK_INFO="$($ORCH task info "$task_id" || true)"
+    if grep -qiE 'status:[[:space:]]*(completed|failed)' <<< "$TASK_INFO"; then
       break
     fi
     sleep 1

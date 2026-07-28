@@ -189,7 +189,8 @@ else
   fail "successful step did not auto-resolve the item"
 fi
 
-if sqlite3 "$DB" "SELECT resolution_json FROM attention_items WHERE id='$ITEM_ID';" | grep -q condition_cleared; then
+RESOLUTION_JSON="$(sqlite3 "$DB" "SELECT resolution_json FROM attention_items WHERE id='$ITEM_ID';")"
+if grep -q condition_cleared <<< "$RESOLUTION_JSON"; then
   pass "auto-resolution stores an auditable reason"
 else
   fail "auto-resolution reason is missing"
