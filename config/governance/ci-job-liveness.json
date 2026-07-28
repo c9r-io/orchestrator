@@ -8,63 +8,67 @@
       "jobs": {
         "async-lock-governance": {
           "conclusion": "success",
-          "runId": "30376783418",
-          "headSha": "094a85e72f19216064d36d26758a2743604e64f7"
+          "runId": "30385987450",
+          "headSha": "27f571f5ca37d18f464747ea7c71c42af4b998d8"
         },
         "fmt": {
           "conclusion": "success",
-          "runId": "30376783418",
-          "headSha": "094a85e72f19216064d36d26758a2743604e64f7"
+          "runId": "30385987450",
+          "headSha": "27f571f5ca37d18f464747ea7c71c42af4b998d8"
         },
         "clippy": {
           "conclusion": "success",
-          "runId": "30376783418",
-          "headSha": "094a85e72f19216064d36d26758a2743604e64f7"
+          "runId": "30385987450",
+          "headSha": "27f571f5ca37d18f464747ea7c71c42af4b998d8"
         },
         "test": {
           "conclusion": "success",
-          "runId": "30376783418",
-          "headSha": "094a85e72f19216064d36d26758a2743604e64f7"
+          "runId": "30385987450",
+          "headSha": "27f571f5ca37d18f464747ea7c71c42af4b998d8"
         },
         "coordination-strangler": {
           "conclusion": "success",
-          "runId": "30376783418",
-          "headSha": "094a85e72f19216064d36d26758a2743604e64f7"
+          "runId": "30385987450",
+          "headSha": "27f571f5ca37d18f464747ea7c71c42af4b998d8"
         },
         "governance": {
-          "conclusion": "success",
-          "runId": "30376783418",
-          "headSha": "094a85e72f19216064d36d26758a2743604e64f7"
+          "conclusion": "failure",
+          "runId": "30385987450",
+          "headSha": "27f571f5ca37d18f464747ea7c71c42af4b998d8",
+          "knownFailing": {
+            "reference": "docs/design_doc/orchestrator/157-pipefail-short-circuit.md",
+            "reason": "One gate failed in run 30385987450 and it is this ledger's own: liveness=failure, with all 33 other outcomes green including the two steps FR-145 added (pipefail-short-circuit and pipefail-short-circuit-fixtures, the latter reporting 18 passed, 0 failed on its first CI execution). This is DD-146's two-pass shape for the seventh FR running - FR-145 added two steps to ci.yml, which staled every record here at once, the liveness step reports that staleness, and the job it runs inside goes red for that alone; it cannot record its own recovery in one pass. The local certification sweep at 27f571f5 agrees exactly: 43 of 44 derived invocations green, the one non-zero being ci-liveness.rb. This refresh makes the record current at 27f571f5; the next run should show governance green and the refresh after it drops this annotation without anyone deciding to, as happened for FR-140 at cedbef41, FR-144 at 9e250e7f, FR-143 at 0c738312 and FR-133 at f105ce66."
+          }
         },
         "ci-environment-parity": {
           "conclusion": "success",
-          "runId": "30376783418",
-          "headSha": "094a85e72f19216064d36d26758a2743604e64f7"
+          "runId": "30385987450",
+          "headSha": "27f571f5ca37d18f464747ea7c71c42af4b998d8"
         },
         "coverage-policy-fixtures": {
           "conclusion": "success",
-          "runId": "30376783418",
-          "headSha": "094a85e72f19216064d36d26758a2743604e64f7"
+          "runId": "30385987450",
+          "headSha": "27f571f5ca37d18f464747ea7c71c42af4b998d8"
         },
         "slack-certification-recorded": {
           "conclusion": "success",
-          "runId": "30376783418",
-          "headSha": "094a85e72f19216064d36d26758a2743604e64f7"
+          "runId": "30385987450",
+          "headSha": "27f571f5ca37d18f464747ea7c71c42af4b998d8"
         },
         "boundary-coverage": {
           "conclusion": "success",
-          "runId": "30376783418",
-          "headSha": "094a85e72f19216064d36d26758a2743604e64f7"
+          "runId": "30385987450",
+          "headSha": "27f571f5ca37d18f464747ea7c71c42af4b998d8"
         },
         "miri": {
           "conclusion": "success",
-          "runId": "30376783418",
-          "headSha": "094a85e72f19216064d36d26758a2743604e64f7"
+          "runId": "30385987450",
+          "headSha": "27f571f5ca37d18f464747ea7c71c42af4b998d8"
         },
         "cross-compile": {
           "conclusion": "success",
-          "runId": "30376783418",
-          "headSha": "094a85e72f19216064d36d26758a2743604e64f7"
+          "runId": "30385987450",
+          "headSha": "27f571f5ca37d18f464747ea7c71c42af4b998d8"
         }
       }
     },
@@ -85,13 +89,13 @@
       "jobs": {
         "cargo-audit": {
           "conclusion": "success",
-          "runId": "30376783299",
-          "headSha": "094a85e72f19216064d36d26758a2743604e64f7"
+          "runId": "30385988442",
+          "headSha": "27f571f5ca37d18f464747ea7c71c42af4b998d8"
         },
         "cargo-deny": {
           "conclusion": "success",
-          "runId": "30376783299",
-          "headSha": "094a85e72f19216064d36d26758a2743604e64f7"
+          "runId": "30385988442",
+          "headSha": "27f571f5ca37d18f464747ea7c71c42af4b998d8"
         }
       }
     },
