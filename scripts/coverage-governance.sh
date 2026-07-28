@@ -24,9 +24,22 @@ fi
 branch_status="unsupported"
 branch_args=()
 rust_channel="$(rustc --version)"
+
+# The help text is captured and then searched, rather than piped into `rg -q`.
+# `rg -q` leaves on the first match, and under `set -o pipefail` a producer still
+# writing when it leaves dies of EPIPE and hands that status to the caller — so
+# a help text that *does* advertise `--branch` can read as one that does not
+# (FR-145). A function keeps the probe lazy: the earlier conditions still
+# short-circuit it, so `cargo llvm-cov --help` runs exactly when it ran before.
+llvm_cov_supports_branch() {
+  local help
+  help="$(cargo llvm-cov --help 2>&1 || true)"
+  rg -q -- '--branch' <<< "$help"
+}
+
 if [[ "$BRANCH_MODE" != "unsupported" ]] \
   && [[ "$rust_channel" == *nightly* ]] \
-  && cargo llvm-cov --help 2>&1 | rg -q -- '--branch'; then
+  && llvm_cov_supports_branch; then
   branch_status="supported"
   branch_args=(--branch)
 elif [[ "$BRANCH_MODE" == "required" ]]; then

@@ -68,7 +68,7 @@ source_skills() {
   not_skills="$(policy_notskill "$root")"
   while IFS= read -r entry; do
     [[ -z "$entry" ]] && continue
-    printf '%s\n' "$not_skills" | grep -qxF "$entry" && continue
+    grep -qxF "$entry" <<< "$not_skills" && continue
     [[ -e "$root/$src/$entry/SKILL.md" ]] || continue
     printf '%s\n' "$entry"
   done <<< "$(source_entries "$root")"
@@ -94,7 +94,7 @@ check_source_inventory() {
 
   while IFS= read -r entry; do
     [[ -z "$entry" ]] && continue
-    printf '%s\n' "$not_skills" | grep -qxF "$entry" && continue
+    grep -qxF "$entry" <<< "$not_skills" && continue
     if [[ ! -e "$root/$src/$entry/SKILL.md" ]]; then
       echo "    $src/$entry has no SKILL.md and is not declared in notSkills" >&2
       rc=1
@@ -231,7 +231,7 @@ check_no_stale_claims() {
       echo "    exemption names skill '$skill', which no longer exists under $src" >&2
       rc=1
     fi
-    if ! printf '%s\n' "$roots" | grep -qxF "$mirror"; then
+    if ! grep -qxF "$mirror" <<< "$roots"; then
       echo "    exemption for '$skill' names mirrorRoot '$mirror', which is not declared" >&2
       rc=1
     fi
@@ -375,7 +375,7 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
       fi
     done
     for check in ${ALL_CHECKS[@]+"${ALL_CHECKS[@]}"}; do
-      printf '%s\n' $targets | grep -qxF "$check" && continue
+      grep -qxF "$check" <<< "$(printf '%s\n' $targets)" && continue
       if ! "$check" "$dir" >/dev/null 2>&1; then
         fail "$name: defect also tripped $check, so it does not isolate [$targets]"
         return
@@ -524,7 +524,7 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
 
   untargeted=""
   for check in ${ALL_CHECKS[@]+"${ALL_CHECKS[@]}"}; do
-    printf '%s\n' $TARGETED | grep -qxF "$check" || untargeted="$untargeted $check"
+    grep -qxF "$check" <<< "$(printf '%s\n' $TARGETED)" || untargeted="$untargeted $check"
   done
   if [[ -z "$untargeted" ]]; then
     pass "meta: every registered check is proven by at least one negative fixture"

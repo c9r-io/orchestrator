@@ -101,10 +101,19 @@ echo "Case 1: core links the extracted crate, and cannot build without it"
 # The proxy. Necessary — a crate core does not declare cannot be linked — and on
 # its own worth nothing, because a declared dependency no source names still
 # resolves here.
-if cargo tree -p agent-orchestrator --depth 1 2>/dev/null | grep -q "$MEMBER v"; then
-  pass "cargo tree reports the agent-orchestrator -> $MEMBER edge"
+# Captured, then searched. `grep -q` leaves on the first match, and under
+# `set -o pipefail` a producer still writing when it leaves dies of EPIPE and
+# hands that status to the `if` — so a tree that *does* name the edge can read as
+# one that does not (FR-145). Capturing also separates "cargo could not resolve"
+# from "the edge is absent", which the pipeline reported identically.
+if CORE_DEPS="$(cargo tree -p agent-orchestrator --depth 1 2>/dev/null)"; then
+  if grep -q "$MEMBER v" <<< "$CORE_DEPS"; then
+    pass "cargo tree reports the agent-orchestrator -> $MEMBER edge"
+  else
+    fail "cargo tree does not report the agent-orchestrator -> $MEMBER edge"
+  fi
 else
-  fail "cargo tree does not report the agent-orchestrator -> $MEMBER edge"
+  fail "cargo tree could not resolve agent-orchestrator, so the edge was never examined"
 fi
 
 # The observation. A copy of the tracked tree with the dependency line commented
@@ -230,11 +239,20 @@ echo "Case 4: the persistence layer does not depend on core"
 
 # Derived from cargo's own resolution rather than from reading manifests, so a
 # transitive path through a third member is caught as well as a direct one.
-if cargo tree -p "$MEMBER" 2>/dev/null | grep -q "agent-orchestrator v"; then
-  fail "$MEMBER reaches agent-orchestrator; the layer is not below core"
-  cargo tree -p "$MEMBER" 2>/dev/null | grep "agent-orchestrator v" >&2
+# Captured for the reason above, and here the direction matters more: a match is
+# the *failing* branch, so an EPIPE from `cargo tree` would send a real violation
+# down the `else` and report the layer as clean. That is the half of FR-145 the
+# FR itself did not see, and it is why this reads the resolution once and then
+# asks two questions of the text.
+if MEMBER_TREE="$(cargo tree -p "$MEMBER" 2>/dev/null)"; then
+  if grep -q "agent-orchestrator v" <<< "$MEMBER_TREE"; then
+    fail "$MEMBER reaches agent-orchestrator; the layer is not below core"
+    grep "agent-orchestrator v" <<< "$MEMBER_TREE" >&2
+  else
+    pass "$MEMBER's dependency tree does not reach agent-orchestrator"
+  fi
 else
-  pass "$MEMBER's dependency tree does not reach agent-orchestrator"
+  fail "cargo tree could not resolve $MEMBER, so the boundary was never examined"
 fi
 
 # And the same question asked of the extracted sources: a core path named there

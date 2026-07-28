@@ -51,7 +51,7 @@ fi
 echo "[qa-doc-lint] Checking task create commands require --project..."
 while IFS=: read -r file line _; do
   snippet="$(sed -n "${line},$((line + 4))p" "$file")"
-  if ! printf '%s\n' "$snippet" | rg -q -- '--project'; then
+  if ! rg -q -- '--project' <<< "$snippet"; then
     echo "[qa-doc-lint] task create missing --project near ${file}:${line}"
     fail=1
   fi
@@ -70,7 +70,7 @@ while IFS=: read -r file line match; do
   wf_id=$(printf '%s' "$match" | rg -o '\-\-workflow\s+(\S+)' -r '$1')
   # Skip placeholders (<...>), shell variables ($...), and quoted vars ("$...")
   [[ -z "$wf_id" || "$wf_id" == *'<'* || "$wf_id" == *'$'* || "$wf_id" == *'"'* ]] && continue
-  if ! printf '%s\n' "$fixture_workflows" | rg -qx "$wf_id"; then
+  if ! rg -qx "$wf_id" <<< "$fixture_workflows"; then
     echo "[qa-doc-lint] Unknown workflow ID '$wf_id' at ${file}:${line} (not in any fixture)"
     fail=1
   fi

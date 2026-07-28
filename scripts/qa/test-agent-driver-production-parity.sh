@@ -262,8 +262,20 @@ else
   fail "streaming-mark-done typed Claude diverged from the recorded legacy contract"
 fi
 
-if ! rg -a -q '00000000-0000-4000-8000-000000000126' "$QA_ROOT/data" &&
-   ! sqlite3 "$DB" .dump | rg -q '00000000-0000-4000-8000-000000000126'; then
+# The dump is captured rather than piped. `rg -q` leaves on the first match, and
+# a whole-database dump is the one producer in this repository with no bound on
+# its size: under `set -o pipefail` sqlite3's EPIPE becomes the condition's
+# status, `!` inverts it, and a detected leak reports as "stays out" — at exactly
+# the moment it must not (FR-145).
+#
+# An empty dump is its own failure, not a quiet pass. A condition that reads
+# nothing and a condition that read everything and found nothing are the same
+# exit code, and only one of them is evidence (§4.4 shape 5).
+DB_DUMP="$(sqlite3 "$DB" .dump)" || DB_DUMP=""
+if [[ -z "$DB_DUMP" ]]; then
+  fail "sqlite3 produced no dump of $DB, so the leak assertion examined nothing"
+elif ! rg -a -q '00000000-0000-4000-8000-000000000126' "$QA_ROOT/data" &&
+     ! rg -q '00000000-0000-4000-8000-000000000126' <<< "$DB_DUMP"; then
   pass "provider session material stays out of persisted database evidence"
 else
   fail "provider session material leaked into persisted database evidence"

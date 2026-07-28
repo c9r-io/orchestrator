@@ -191,17 +191,22 @@ cp "$REPO_ROOT/$SURFACE" "$CASE7/$SURFACE"
 TARGET="$CASE7/scripts/qa/test-doc-lifecycle.sh"
 cp "$TARGET" "$WORK/target.pristine"
 
-# Captured rather than piped into grep. `set -o pipefail` is on, and the scanner
-# exits non-zero exactly when it finds something, so `scan | grep -q` returns
-# failure on a successful match — the pipeline's status is the scanner's. That
-# is the same class of confusion this whole FR is about, met here in the test
-# for it.
+# The scanner exits non-zero exactly when it finds something, so `scan | grep -q`
+# would return failure on a successful match — the pipeline's status would be the
+# scanner's. `|| true` settles that half, and it is the same class of confusion
+# this whole FR is about, met here in the test for it.
+#
+# The callers below then read the output through a here-string rather than a
+# pipe, which settles the other half: `grep -q` leaves on the first match, and
+# under `set -o pipefail` a producer still writing when it leaves dies of EPIPE
+# and hands *that* status to the caller (FR-145). Neither half subsumes the
+# other, and `|| true` hides the second one rather than fixing it.
 scan() { (cd "$CASE7" && ruby "scripts/qa/jq-status-observed.rb" 2>&1) || true; }
 restore() { cp "$WORK/target.pristine" "$TARGET"; }
 
 # 7. Control: the tree as committed is clean. A scanner that flags nothing
 #    because it scans nothing would pass every case below.
-if scan | grep -q "^jq status observed: PASS"; then
+if grep -q "^jq status observed: PASS" <<< "$(scan)"; then
   pass "control: the repository as it stands has no unobserved read"
 else
   fail "control: the repository does not pass its own scanner"
@@ -211,7 +216,7 @@ fi
 # 8. The forbidden shape, reintroduced.
 restore
 printf '\nwhile read -r fixture_row; do :; done < <(jq -r ".a" fixture.json)\n' >> "$TARGET"
-if scan | grep -q "\[unobserved-feed\] a loop is fed by jq"; then
+if grep -q "\[unobserved-feed\] a loop is fed by jq" <<< "$(scan)"; then
   pass "a reintroduced process-substitution jq feed is rejected, naming the file and line"
 else
   fail "a reintroduced process-substitution jq feed was not detected"
@@ -222,7 +227,7 @@ fi
 #    design records for this very FR quote the pattern in prose.
 restore
 printf '\n# while read -r x; do :; done < <(jq -r ".a" fixture.json)\n' >> "$TARGET"
-if scan | grep -q "^jq status observed: PASS"; then
+if grep -q "^jq status observed: PASS" <<< "$(scan)"; then
   pass "the same line inside a comment is not a finding"
 else
   fail "the scanner flagged a commented-out occurrence, so it is a grep, not a parse"
@@ -238,7 +243,7 @@ cat > /dev/null <<'INNER'
 while read -r x; do :; done < <(jq -r ".a" fixture.json)
 INNER
 OUTER
-if scan | grep -q "^jq status observed: PASS"; then
+if grep -q "^jq status observed: PASS" <<< "$(scan)"; then
   pass "the same line inside a here-document body is not a finding"
 else
   fail "the scanner read a here-document body as code"
@@ -249,7 +254,7 @@ fi
 #     it — which is exactly what check_surface_complete did.
 restore
 printf '\ndeclared_paths="$(jq -r ".a[]" fixture.json | LC_ALL=C sort)"\n' >> "$TARGET"
-if scan | grep -q "\[status-dropped-by-pipe\]"; then
+if grep -q "\[status-dropped-by-pipe\]" <<< "$(scan)"; then
   pass "jq piped inside a command substitution is rejected"
 else
   fail "jq piped inside a command substitution was not detected"
@@ -263,7 +268,7 @@ fi
 #      alone would flag every correct call and be turned off within a week.
 restore
 printf '\nsome_rows="$(gate_jq_rows allow-empty "$f" ".a[]")"\n' >> "$TARGET"
-if scan | grep -q "\[unchecked-reader\]"; then
+if grep -q "\[unchecked-reader\]" <<< "$(scan)"; then
   pass "a reader whose status is never tested is rejected"
 else
   fail "an untested reader capture was not detected"
@@ -275,7 +280,7 @@ restore
   printf '  .a[]")" \\\\\n'
   printf '  || return 1\n'
 } >> "$TARGET"
-if scan | grep -q "^jq status observed: PASS"; then
+if grep -q "^jq status observed: PASS" <<< "$(scan)"; then
   pass "a multi-line reader whose status is tested past a continuation is not a finding"
 else
   fail "the rule flagged a correctly-written multi-line reader"
@@ -292,7 +297,7 @@ cat >> "$TARGET" <<'OUTER'
 read_the_policy() { gate_jq_rows allow-empty "$f" ".a[]"; }
 while read -r policy_row; do :; done < <(read_the_policy)
 OUTER
-if scan | grep -q "\[unrecorded-feed\]"; then
+if grep -q "\[unrecorded-feed\]" <<< "$(scan)"; then
   pass "a loop fed by a jq-reaching function, in a file with no failure record, is rejected"
 else
   fail "an unrecorded feed from a jq-reaching function was not detected"
@@ -310,7 +315,7 @@ read_the_policy() { gate_jq_rows allow-empty "$f" ".a[]"; }
 while read -r policy_row; do :; done < <(read_the_policy)
 echo "silent reads: $(gate_jq_failure_count)"
 OUTER
-if scan | grep -q "^jq status observed: PASS"; then
+if grep -q "^jq status observed: PASS" <<< "$(scan)"; then
   pass "the same feed is accepted once the file keeps and asserts on a failure record"
 else
   fail "the failure record did not excuse a feed the call site cannot observe"
@@ -323,7 +328,7 @@ fi
 #      inherited on trust.
 restore
 printf '\ncat <<UNTERMINATED\nstill inside the body at end of file\n' >> "$TARGET"
-if scan | grep -q "\[unclosed-heredoc\]"; then
+if grep -q "\[unclosed-heredoc\]" <<< "$(scan)"; then
   pass "a file ending inside a here-document is reported rather than silently half-scanned"
 else
   fail "an unterminated here-document was not reported"
@@ -349,9 +354,10 @@ if fixture_mutate "case 12" "$CASE7/$SURFACE" ruby -rjson -e '
   }
   File.write(path, JSON.pretty_generate(doc) + "\n")
 ' "$CASE7/$SURFACE"; then
-  scanned_after="$( (cd "$CASE7" && ruby scripts/qa/jq-status-observed.rb --list-files) | wc -l | tr -d ' ')"
+  scanned_list="$(cd "$CASE7" && ruby scripts/qa/jq-status-observed.rb --list-files)"
+  scanned_after="$(wc -l <<< "$scanned_list" | tr -d ' ')"
   if [[ "$scanned_after" -eq $((scanned_before + 1)) ]] \
-     && (cd "$CASE7" && ruby scripts/qa/jq-status-observed.rb --list-files) | grep -qxF "scripts/qa/test-freshly-registered.sh"; then
+     && grep -qxF "scripts/qa/test-freshly-registered.sh" <<< "$scanned_list"; then
     pass "a gate registered after this scanner was written is in scope without editing it"
   else
     fail "the scanned set did not follow the manifest ($scanned_before -> $scanned_after)"

@@ -498,9 +498,10 @@ probe test-freshly-registered.sh <<'SH'
 #!/usr/bin/env bash
 exit 0
 SH
-AFTER_FILES="$( (cd "$CASE" && ruby "$SCANNER" --list-files) | wc -l | tr -d ' ')"
+AFTER_LIST="$(cd "$CASE" && ruby "$SCANNER" --list-files)"
+AFTER_FILES="$(wc -l <<< "$AFTER_LIST" | tr -d ' ')"
 if [[ "$AFTER_FILES" -eq $((BEFORE_FILES + 1)) ]] &&
-  (cd "$CASE" && ruby "$SCANNER" --list-files) | grep -q "test-freshly-registered.sh"; then
+  grep -q "test-freshly-registered.sh" <<< "$AFTER_LIST"; then
   pass "registering a ci-required shell gate grows the scanned set by exactly one, with no edit to the scanner"
 else
   fail "the scanned set did not follow the manifest ($BEFORE_FILES -> $AFTER_FILES)"

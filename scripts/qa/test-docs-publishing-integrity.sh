@@ -122,7 +122,7 @@ expected_slugs() {
       [[ -z "$slug" || "$absent" != "$lang" ]] && continue
       while IFS= read -r other; do
         [[ -z "$other" || "$other" == "$lang" ]] && continue
-        if authored_slugs "$root" "$name" "$other" | grep -qxF "$slug"; then
+        if grep -qxF "$slug" <<< "$(authored_slugs "$root" "$name" "$other")"; then
           printf '%s\n' "$slug"
           break
         fi
@@ -200,13 +200,13 @@ check_policy_fresh() {
       [[ -z "$slug" ]] && continue
       local found=0 lang2
       while IFS= read -r lang2; do
-        authored_slugs "$root" "$name" "$lang2" | grep -qxF "$slug" && found=1
+        grep -qxF "$slug" <<< "$(authored_slugs "$root" "$name" "$lang2")" && found=1
       done < <(collection_langs "$root" "$name")
       if [[ "$found" -eq 0 ]]; then
         echo "    translationGaps names '$name/$slug', which is authored in no locale" >&2
         rc=1
       fi
-      if ! collection_langs "$root" "$name" | grep -qxF "$absent"; then
+      if ! grep -qxF "$absent" <<< "$(collection_langs "$root" "$name")"; then
         echo "    translationGaps entry '$name/$slug' names absentSource '$absent', which is not a declared locale" >&2
         rc=1
       fi
@@ -231,7 +231,7 @@ check_policy_fresh() {
     produced="$(published_sorted "$root" "$dest")"
     while IFS= read -r route; do
       [[ -z "$route" ]] && continue
-      if ! printf '%s\n' "$produced" | grep -qxF "$route"; then
+      if ! grep -qxF "$route" <<< "$produced"; then
         echo "    navExemptions names '$route', which the publish set does not produce" >&2
         rc=1
       fi
@@ -275,10 +275,10 @@ check_source_inventory() {
         local present_everywhere=1
         while IFS= read -r other; do
           [[ "$other" == "$lang" ]] && continue
-          authored_slugs "$root" "$name" "$other" | grep -qxF "$slug" || present_everywhere=0
+          grep -qxF "$slug" <<< "$(authored_slugs "$root" "$name" "$other")" || present_everywhere=0
         done < <(collection_langs "$root" "$name")
         [[ "$present_everywhere" -eq 1 ]] && continue
-        if ! declared_gaps "$root" "$name" | cut -f1 | grep -qxF "$slug"; then
+        if ! grep -qxF "$slug" <<< "$(declared_gaps "$root" "$name" | cut -f1)"; then
           echo "    $name/$slug exists in '$lang' only and is not a declared translation gap" >&2
           rc=1
         fi
@@ -372,7 +372,7 @@ check_nav_reachable() {
   produced="$(published_sorted "$root" "$dest")"
   while IFS= read -r route; do
     [[ -z "$route" ]] && continue
-    if ! printf '%s\n' "$produced" | grep -qxF "$route"; then
+    if ! grep -qxF "$route" <<< "$produced"; then
       echo "    $(policy_nav "$root") links '$route', which the publish set does not produce" >&2
       rc=1
     fi
@@ -398,8 +398,8 @@ check_nav_complete() {
   exempt="$(gate_jq_rows allow-empty "$root/$POLICY_REL" '.navExemptions[].route')" || return 1
   while IFS= read -r route; do
     [[ -z "$route" ]] && continue
-    printf '%s\n' "$exempt" | grep -qxF "$route" && continue
-    if ! printf '%s\n' "$routes" | grep -qxF "$route"; then
+    grep -qxF "$route" <<< "$exempt" && continue
+    if ! grep -qxF "$route" <<< "$routes"; then
       echo "    '$route' is published but nothing in $(policy_nav "$root") links it" >&2
       rc=1
     fi
@@ -480,7 +480,7 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
       fi
     done
     for check in ${ALL_CHECKS[@]+"${ALL_CHECKS[@]}"}; do
-      printf '%s\n' $targets | grep -qxF "$check" && continue
+      grep -qxF "$check" <<< "$(printf '%s\n' $targets)" && continue
       if ! "$check" "$dir" >/dev/null 2>&1; then
         fail "$name: defect also tripped $check, so it does not isolate [$targets]"
         return
@@ -594,7 +594,7 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
 
   untargeted=""
   for check in ${ALL_CHECKS[@]+"${ALL_CHECKS[@]}"}; do
-    printf '%s\n' $TARGETED | grep -qxF "$check" || untargeted="$untargeted $check"
+    grep -qxF "$check" <<< "$(printf '%s\n' $TARGETED)" || untargeted="$untargeted $check"
   done
   if [[ -z "$untargeted" ]]; then
     pass "meta: every registered check is proven by at least one negative fixture"

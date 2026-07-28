@@ -136,7 +136,7 @@ check_link_targets_resolve() {
     while IFS=$'\t' read -r line target; do
       [[ -z "$target" ]] && continue
       target_resolves "$(dirname "$root/$file")" "$target" && continue
-      printf '%s\n' "$exempt" | grep -qxF "$target" && continue
+      grep -qxF "$target" <<< "$exempt" && continue
       echo "    $file:$line links '$target', which does not resolve" >&2
       rc=1
     done < <(extract_links "$root/$file")
@@ -159,7 +159,7 @@ check_no_stale_exemptions() {
       rc=1
       continue
     fi
-    if ! extract_links "$root/$file" | cut -f2 | grep -qxF "$target"; then
+    if ! grep -qxF "$target" <<< "$(extract_links "$root/$file" | cut -f2)"; then
       echo "    exemption for '$file' names target '$target', which the file no longer links" >&2
       rc=1
     fi
@@ -263,7 +263,7 @@ MD
       fi
     done
     for check in ${ALL_CHECKS[@]+"${ALL_CHECKS[@]}"}; do
-      printf '%s\n' $targets | grep -qxF "$check" && continue
+      grep -qxF "$check" <<< "$(printf '%s\n' $targets)" && continue
       if ! "$check" "$dir" >/dev/null 2>&1; then
         fail "$name: defect also tripped $check, so it does not isolate [$targets]"
         return
@@ -337,7 +337,7 @@ MD
 
   untargeted=""
   for check in ${ALL_CHECKS[@]+"${ALL_CHECKS[@]}"}; do
-    printf '%s\n' $TARGETED | grep -qxF "$check" || untargeted="$untargeted $check"
+    grep -qxF "$check" <<< "$(printf '%s\n' $TARGETED)" || untargeted="$untargeted $check"
   done
   if [[ -z "$untargeted" ]]; then
     pass "meta: every registered check is proven by at least one negative fixture"
