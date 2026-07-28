@@ -36,8 +36,10 @@ accusation — same remedy.
 
 `DD-145` states it accurately: "Every such pipeline **in these files** is now a
 here-string." The CHANGELOG entry widened *these files* to *the governance
-scripts*, and that sentence was false the moment it was written: **61 sites
-remained**. Three days later one of them produced another false failure.
+scripts*, and that sentence was false the moment it was written: **63 sites
+remained** — 61 of them under a lexically visible `pipefail`, and two more that
+only the scope correction below made visible at all. Three days later one of the
+61 produced another false failure.
 
 This is a local repair recorded as a global one, and it is the mirror image of
 §4.4 shape 2. A hand-written list at least *looks* suspicious when it stops
@@ -184,6 +186,28 @@ The producer is still writing **by construction** when the reader leaves.
 Measured **10/10** piped and **0/10** through a here-string, independent of pipe
 buffer, match position, grep implementation and machine load. The 400× field
 measurement lives in QA-195 as the observation that found the defect.
+
+## Certification
+
+At `2b2e5cab`, on a clean worktree that was still clean at the end and a HEAD
+that had not moved, **44 of 44 derived invocations green**. The invocations come
+from `workflow_model.rb run-commands` over every job in `ci.yml`, not from a
+list: §4.6.6's derived *path* is not a derived *invocation*, and this repository
+has one gate — `certify-slack-managed-live.sh` — that exits 2 when run without
+the subcommand CI gives it. The reconciliation is printed rather than assumed:
+seven ci-required paths have no direct invocation, and all seven are the
+manifest's `invokedBy` entries; three invoked paths are absent from the manifest,
+and those three are FR-147.
+
+CI at the same revision: **17 of 17 jobs green**, plus the Security workflow.
+
+**The local sweep could not have caught the last defect this FR shipped**, and
+that is worth recording next to the green line. Fixture case 9b compared a
+sourced scenario's combined output for equality; on the Linux runner bash prints
+`printf: write error: Broken pipe` to stderr first, and macOS bash 3.2 and 5.3.9
+both do not. One shell on one platform is what a local sweep is, and CI is the
+observer that is not. The case now writes its verdict to a file and is green
+under all three shells.
 
 ## Known limits
 

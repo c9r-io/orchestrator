@@ -293,7 +293,7 @@ exceeded the buffer. It did make it likelier, by adding ~4 KB of very long lines
 The systemic case — recorded here as **42 sites across 9 ci-required gates**,
 which FR-145 re-derived as **35 executable sites across 7**, because `grep -c`
 counted four comment lines describing the pattern; the repository-wide figure is
-**61 sites across 20 files** — is `docs/design_doc/orchestrator/157-pipefail-short-circuit.md`
+**63 sites across 22 files** — is `docs/design_doc/orchestrator/157-pipefail-short-circuit.md`
 and QA-195. "Most have provably bounded producers" did not survive either: what
 decides the trigger is match position and line structure, not size. With the
 measurement method rather than a blanket rewrite, because converting 42 sites
