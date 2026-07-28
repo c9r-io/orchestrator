@@ -70,7 +70,16 @@ jobs:
       # `advisories` belongs to the cargo-audit job above, and listing it here
       # (or writing `all`) would double-report the same database while still
       # missing the unsound class cargo-deny does not surface. `--deny
-      # unmatched-skip` is the ratchet: an accepted duplicate that upstream
-      # resolves stops matching and fails until its deny.toml entry is deleted.
+      # unmatched-skip` is half the ratchet: an acceptance whose crate@version
+      # has left the graph fails until its deny.toml entry is deleted. The other
+      # half — an acceptance whose crate is still present but no longer
+      # duplicated — is skip-is-live in scripts/qa/dependency-policy.rb.
       - name: Check dependency policy
         run: cargo deny --workspace --all-features check --deny unmatched-skip bans licenses sources
+
+      # The half of the negative fixtures that needs the binary, so it runs
+      # where the binary is. "The flag is present in the YAML" and "the ratchet
+      # ratchets" are different claims, and only the second one is worth
+      # trusting; the first is checked in ci.yml, which has no cargo-deny.
+      - name: Dependency policy fixtures against the real tool
+        run: ./scripts/qa/test-dependency-policy.sh --tool-fixtures

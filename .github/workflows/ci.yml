@@ -299,6 +299,19 @@ jobs:
         continue-on-error: true
         run: ./scripts/qa/test-fixture-target-drift.sh
 
+      # The policy itself is enforced by cargo-deny in security.yml. This asks
+      # the other question — whether that invocation still carries the flags
+      # that make it bind — and needs no cargo-deny binary to do it.
+      - name: Dependency policy still binds
+        id: dependency-policy
+        continue-on-error: true
+        run: ./scripts/qa/dependency-policy.rb
+
+      - name: Dependency policy negative fixtures
+        id: dependency-policy-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-dependency-policy.sh
+
       - name: Legacy coordination decommission contracts
         id: decommission
         continue-on-error: true
@@ -371,6 +384,8 @@ jobs:
             jq-status-fixtures=${{ steps.jq-status-fixtures.outcome }}
             fixture-drift=${{ steps.fixture-drift.outcome }}
             fixture-drift-fixtures=${{ steps.fixture-drift-fixtures.outcome }}
+            dependency-policy=${{ steps.dependency-policy.outcome }}
+            dependency-policy-fixtures=${{ steps.dependency-policy-fixtures.outcome }}
             decommission=${{ steps.decommission.outcome }}
             codex-resume=${{ steps.codex-resume.outcome }}
             filesystem-trigger=${{ steps.filesystem-trigger.outcome }}

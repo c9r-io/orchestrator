@@ -500,6 +500,26 @@
       "note": "Negative fixtures for scripts/lib/gate_fixture.sh and the scanner, including the replay of the recorded incident in which an inert mutation made a fixture report a defect the gate did not have. Scratch trees under TMPDIR; no daemon, no database, no provider, no network."
     },
     {
+      "path": "scripts/qa/dependency-policy.rb",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Offline: reads deny.toml, Cargo.lock, .cargo/audit.toml and security.yml, and needs no cargo-deny binary. cargo deny proves the policy holds; this asserts the policy still binds - that the CI invocation keeps --deny unmatched-skip, that its check list stays partitioned from cargo audit's, that every accepted duplicate carries a reason and is still a duplicate (FR-133)."
+    },
+    {
+      "path": "scripts/qa/test-dependency-policy.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Negative fixtures for every rule of dependency-policy.rb, each paired with a control, since all of them are guards with zero violations today. The --tool-fixtures half runs the real cargo-deny and lives in security.yml's cargo-deny job, where the binary exists. Scratch trees under TMPDIR; no daemon, no database, no provider, no network."
+    },
+    {
       "path": "scripts/qa/test-legacy-coordination-decommission.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",

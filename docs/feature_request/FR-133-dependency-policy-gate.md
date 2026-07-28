@@ -139,9 +139,16 @@ digest 0.10 / 0.11       sha2 / rand / syn / thiserror / toml ×2 …
 >   `error[unmatched-skip]: skipped crate 'serde = =9.9.9' was not encountered` → `bans FAILED`
 > - `[licenses] unused-allowed-license = "deny"` → `unmatched license exception` → `licenses FAILED`
 >
-> 于是：一个被接受的重复项在上游**被解决**之后，构建会一直失败到它的条目被删掉为止。清单不能
-> 无声增长（新重复项直接报错），不能留着死条目（未匹配报错），也不需要第二本台账去漂移。
-> **与 `sourceBaseline` 同口径——精确而非单调**，只是机制换成了工具自带的诊断。
+> 但 `unmatched-skip` 比它听起来做得少，这一点是**实测出来的、不是假设的**：它问的是"这条 skip
+> 有没有匹配到图里的某个 crate"，而不是"那个 crate 是否仍然重复"。一个仍在 lock 里、但已不再
+> 重复的版本（图收敛到旧副本时就是这个形状）**能通过它**。这一半只能由
+> `dependency-policy.rb` 的 `skip-is-live` 从 `Cargo.lock` 直接推导来盖住，而且它不需要
+> cargo-deny 二进制，所以能跑在 governance job 里。
+>
+> 于是：清单不能无声增长（新重复项直接报错），也不能留着死条目——**但需要两个观察者，任何一个
+> 单独都不够**，`test-dependency-policy.sh` 的 case 15b 就是把这两半分开钉住的 fixture。
+> 口径与 `sourceBaseline` 相同——精确而非单调——只是机制换成了工具自带的诊断加一条派生检查，
+> 不需要第二本台账去漂移。
 
 ### 5. advisories 职责划分
 

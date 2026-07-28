@@ -13,18 +13,26 @@
 # (glib, unsound) at all, which cargo-audit does. So the split is one tool per
 # question: cargo-deny owns graph shape, cargo-audit owns the advisory database.
 #
-# Two ratchets, both enforced by the tool rather than by a baseline number in a
-# second file:
+# The ratchets are enforced by the tool rather than by a baseline number in a
+# second file — a length recorded elsewhere is two copies of one fact changing
+# in the same commit, which code review already sees.
 #
+#   * `unused-allowed-license = "deny"` — an `allow` entry or an exception that
+#     no longer applies fails the build.
 #   * `--deny unmatched-skip` on the CI invocation — a `skip` entry whose
-#     duplicate upstream has resolved stops matching, and the build fails until
-#     the entry is deleted. The list cannot keep dead entries.
-#   * `unused-allowed-license = "deny"` — the same for an `allow` entry or an
-#     exception that no longer applies.
+#     crate@version has left the graph fails the build.
+#
+# The second one does *less* than it sounds like, which was measured rather than
+# assumed: `unmatched-skip` asks whether the skip matched a crate, not whether
+# that crate is still duplicated. A version still in the lock but no longer
+# duplicated — the shape you get when the graph converges onto the older copy —
+# passes it. `skip-is-live` in scripts/qa/dependency-policy.rb covers that half,
+# from Cargo.lock, with no binary needed. Neither alone closes the list; the
+# pair does, and scripts/qa/test-dependency-policy.sh case 15b is the fixture
+# that holds them apart.
 #
 # A new duplicate is an error by construction, so the list cannot grow without
-# somebody writing a reason. That is the whole mechanism; there is no ledger to
-# drift.
+# somebody writing a reason. There is no ledger to drift.
 
 [graph]
 # No `targets` filter: the policy is evaluated over the graph Cargo.lock
