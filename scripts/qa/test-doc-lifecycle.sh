@@ -39,6 +39,9 @@ FAIL=0
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 
+# shellcheck source=../lib/gate_fixture.sh
+. "$REPO_ROOT/scripts/lib/gate_fixture.sh"
+
 digest() { ruby -rdigest -e 'print Digest::SHA256.file(ARGV[0]).hexdigest' "$1"; }
 
 # A case copies only what the gate scans: the two document roots, the index, the
@@ -60,9 +63,20 @@ new_case() {
 
 # Rewrites one frontmatter key in place, or appends it when absent. Used by the
 # negative cases so each mutation is a single, named edit.
+# Converted inside the helper rather than at its ten call sites, so a caller
+# added later inherits the proof without anybody remembering to ask for it. The
+# frontmatter fences the two aborts look for are a shape this gate does not own:
+# when one moves, the abort used to take the run down before the summary line
+# printed, and the ten cases downstream reported nothing at all (FR-143).
+#
+# The trade-off is recorded in DD-155: because the callers do not test the
+# return, a failure here prints twice — this diagnosis, and then the case's own
+# "the gate accepted it". The first names the file and the key and comes first,
+# which is what a reader needs. Threading a skip through ten call sites would
+# buy the tidier log at the cost of the coverage that made this the right place.
 set_field() {
   local file="$1" key="$2" value="$3"
-  ruby -e '
+  fixture_mutate "set_field $key on ${file##*/}" "$file" ruby -e '
     file, key, value = ARGV
     lines = File.readlines(file)
     abort "no frontmatter in #{file}" unless lines[0].chomp == "---"
@@ -122,19 +136,20 @@ fi
 # --- Case 3: a document with no frontmatter is rejected -----------------------
 echo "Case 3: a document whose frontmatter was removed fails, naming the file"
 DIR="$(new_case case3)"
-ruby -e '
+if fixture_mutate "case 3" "$DIR/$SAMPLE" ruby -e '
   file = ARGV[0]
   lines = File.readlines(file)
   closing = (1...lines.length).find { |i| lines[i].chomp == "---" }
   File.write(file, lines[(closing + 1)..-1].join.sub(/\A\n+/, ""))
-' "$DIR/$SAMPLE"
-if (cd "$DIR" && ruby "$GATE" > "$WORK/case3.out" 2> "$WORK/case3.err"); then
-  fail "a document with no frontmatter passed the gate"
-else
-  if grep -q "$SAMPLE" "$WORK/case3.err" && grep -q "no frontmatter block" "$WORK/case3.err"; then
-    pass "an unclassified document fails and the diagnostic names it"
+' "$DIR/$SAMPLE"; then
+  if (cd "$DIR" && ruby "$GATE" > "$WORK/case3.out" 2> "$WORK/case3.err"); then
+    fail "a document with no frontmatter passed the gate"
   else
-    fail "the gate failed but did not name the unclassified document"
+    if grep -q "$SAMPLE" "$WORK/case3.err" && grep -q "no frontmatter block" "$WORK/case3.err"; then
+      pass "an unclassified document fails and the diagnostic names it"
+    else
+      fail "the gate failed but did not name the unclassified document"
+    fi
   fi
 fi
 

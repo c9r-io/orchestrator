@@ -22,6 +22,9 @@ FAIL=0
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 
+# shellcheck source=../lib/gate_fixture.sh
+. "$REPO_ROOT/scripts/lib/gate_fixture.sh"
+
 cleanup() {
   if [[ -n "$DAEMON_PID" ]]; then
     kill "$DAEMON_PID" 2>/dev/null || true
@@ -49,7 +52,18 @@ if [[ "${FR126_ALLOW_DIRTY:-0}" != "1" && -n "$(git status --porcelain)" ]]; the
   exit 1
 fi
 
-ruby -ryaml -rjson -rdigest -e '
+# The four aborts below are premise checks: this block asserts that the mock
+# fixture is still bound to the production Agents it claims to mirror. Each one
+# names a production object by name, which is exactly the enumerated target
+# FR-143 is about — `docs/workflow/hello-world.yaml`, `echo-agent`, `streamer`.
+# When one of those moves, the abort fires, and until FR-143 that took the whole
+# run down with it: the assertion below never printed, no count moved, and the
+# summary line a reader stops at never appeared.
+#
+# Wrapped, the aborts keep their words and become the diagnosis. The pass they
+# guard is skipped rather than reported, which is the difference between a
+# fixture that says its premise is gone and one that says nothing at all.
+if fixture_premise "production fixture bindings" ruby -ryaml -rjson -rdigest -e '
   fixture_path, baseline_path = ARGV
   fixture = YAML.load_stream(File.read(fixture_path)).compact
   baseline = JSON.parse(File.read(baseline_path)).fetch("contracts")
@@ -87,8 +101,9 @@ ruby -ryaml -rjson -rdigest -e '
         production_streamer.dig("spec", "driver", field)
   end
   puts "production fixture bindings: ok"
-' "$FIXTURE" "$BASELINE"
-pass "mock-only fixture commands and drivers are bound to all four production migration objects"
+' "$FIXTURE" "$BASELINE"; then
+  pass "mock-only fixture commands and drivers are bound to all four production migration objects"
+fi
 
 SOURCE_COMMIT="$(jq -r '.sourceCommit' "$BASELINE")"
 if git cat-file -e "$SOURCE_COMMIT^{commit}" &&

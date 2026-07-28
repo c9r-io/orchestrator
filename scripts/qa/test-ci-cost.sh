@@ -48,6 +48,9 @@ FAIL=0
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 
+# shellcheck source=../lib/gate_fixture.sh
+. "$REPO_ROOT/scripts/lib/gate_fixture.sh"
+
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/fr140-ci-cost.XXXXXX")"
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
@@ -179,22 +182,27 @@ printf '#!/usr/bin/env bash\nexit 0\n' > "$d/scripts/qa/test-beta.sh"
 chmod 755 "$d/scripts/qa/test-beta.sh"
 cat >> "$d/.github/workflows/ci.yml" <<'YAML'
 YAML
-ruby -ryaml -e '
+# The step is inserted by loading and rewriting the workflow, so the insertion
+# depends on `jobs.governance.steps` still being where this reads it. A rename
+# there raises inside the block; unwrapped, that took the run down before this
+# case or any after it reported (FR-143).
+if fixture_mutate "unrecorded-step" "$d/.github/workflows/ci.yml" ruby -ryaml -e '
 doc = YAML.load_file(ARGV[0])
 doc["jobs"]["governance"]["steps"] << { "name" => "Beta gate", "id" => "beta", "run" => "./scripts/qa/test-beta.sh" }
 File.write(ARGV[0], doc.to_yaml)
-' "$d/.github/workflows/ci.yml"
-jq '.scripts += [{"path": "scripts/qa/test-beta.sh", "enforcement": "ci-required", "workflow": ".github/workflows/ci.yml", "job": "governance"}]' \
-  "$d/$SURFACE" > "$d/$SURFACE.tmp"
-mv "$d/$SURFACE.tmp" "$d/$SURFACE"
-if run_gate "$d"; then
-  fail "a ci-required gate whose step has no cost record was accepted"
-elif grep -q "step 'Beta gate' has no cost record" "$WORK/out.log" &&
-     grep -q "scripts/qa/test-beta.sh" "$WORK/out.log"; then
-  pass "an added gate with no cost record fails, naming both the step and the gate"
-else
-  fail "the gate failed but not because of the unrecorded step"
-  cat "$WORK/out.log" >&2
+' "$d/.github/workflows/ci.yml"; then
+  jq '.scripts += [{"path": "scripts/qa/test-beta.sh", "enforcement": "ci-required", "workflow": ".github/workflows/ci.yml", "job": "governance"}]' \
+    "$d/$SURFACE" > "$d/$SURFACE.tmp"
+  mv "$d/$SURFACE.tmp" "$d/$SURFACE"
+  if run_gate "$d"; then
+    fail "a ci-required gate whose step has no cost record was accepted"
+  elif grep -q "step 'Beta gate' has no cost record" "$WORK/out.log" &&
+       grep -q "scripts/qa/test-beta.sh" "$WORK/out.log"; then
+    pass "an added gate with no cost record fails, naming both the step and the gate"
+  else
+    fail "the gate failed but not because of the unrecorded step"
+    cat "$WORK/out.log" >&2
+  fi
 fi
 
 # 2. A record naming a step the workflow no longer defines. The other direction

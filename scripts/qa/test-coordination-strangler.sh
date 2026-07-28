@@ -18,6 +18,9 @@ FAIL=0
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 
+# shellcheck source=../lib/gate_fixture.sh
+. "$REPO_ROOT/scripts/lib/gate_fixture.sh"
+
 cleanup() {
   if [[ -n "$DAEMON_PID" ]]; then
     kill "$DAEMON_PID" 2>/dev/null || true
@@ -56,7 +59,12 @@ cargo test -p orchestrator-scheduler authenticated_host_executes_real_coordinati
 pass "typed coordination host and all real tool contracts pass offline"
 
 TOOL_FIXTURE="$QA_ROOT/coordination-tools-only.yaml"
-ruby -ryaml -e '
+# Derived from $FIXTURE by keeping only the `-tools` Workflows. The selection
+# names a suffix in a document this gate does not own: rename those workflows and
+# the filter keeps every one of them out, leaving an empty file that everything
+# downstream reads as "no contracts to check" — zero and N are the same exit
+# code. fixture_produce refuses an empty result for that reason (FR-143).
+if fixture_produce "coordination tool fixture" "$TOOL_FIXTURE" ruby -ryaml -e '
   source, output = ARGV
   documents = YAML.load_stream(File.read(source)).compact.select do |document|
     document["kind"] != "Workflow" ||
@@ -68,7 +76,15 @@ ruby -ryaml -e '
       file.write(YAML.dump(document).sub(/\A---\s*\n/, ""))
     end
   end
-' "$FIXTURE" "$TOOL_FIXTURE"
+' "$FIXTURE" "$TOOL_FIXTURE"; then
+  # Setup, not a case: every contract assertion below reads this file, so there
+  # is no scope to skip. It stops here rather than continuing over an empty
+  # fixture — but it stops by printing the summary line a reader stops at, which
+  # is the whole difference from the abort this replaced. A run that ended early
+  # in silence is indistinguishable from one that finished.
+  echo "coordination strangler QA: $PASS passed, $FAIL failed" >&2
+  exit 1
+fi
 
 export HOME="$QA_HOME"
 export ORCHESTRATORD_DATA_DIR="$QA_ROOT/data"

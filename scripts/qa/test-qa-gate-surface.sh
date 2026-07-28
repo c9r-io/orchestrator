@@ -31,6 +31,8 @@ MANIFEST_MODEL="$REPO_ROOT/scripts/lib/manifest_model.rb"
 . "$REPO_ROOT/scripts/lib/gate_preamble.sh"
 # shellcheck source=../lib/gate_jq.sh
 . "$REPO_ROOT/scripts/lib/gate_jq.sh"
+# shellcheck source=../lib/gate_fixture.sh
+. "$REPO_ROOT/scripts/lib/gate_fixture.sh"
 
 if [[ "${1:-}" != "" && "${1:-}" != "--fixture-test" ]]; then
   echo "usage: $0 [--fixture-test]" >&2
@@ -956,18 +958,17 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
   # was injected — it accuses the check of the fixture's own bug. That happened
   # here the moment ci.yml's steps gained `id:` lines and two pattern-based
   # fixtures stopped matching, so the guard is not hypothetical.
+  # The body moved to scripts/lib/gate_fixture.sh, where FR-143 generalised it
+  # for the nine other gates that needed it and had it nowhere. Kept as a name
+  # because thirty call sites below read `inject`, and because two copies of
+  # this logic in one repository is the drift the extraction exists to prevent.
+  #
+  # What the shared version adds: the target must be an existing regular file
+  # (a fixture in a sibling gate wrote to a directory once its target list went
+  # empty), and a mutation command that fails is reported with its own stderr
+  # rather than taking the run down.
   inject() {
-    local label="$1" file="$2"
-    shift 2
-    local before after
-    before="$(shasum "$file" | cut -d' ' -f1)"
-    "$@"
-    after="$(shasum "$file" | cut -d' ' -f1)"
-    if [[ "$before" == "$after" ]]; then
-      fail "$label: the mutation did not apply to ${file##*/}; the fixture proves nothing"
-      return 1
-    fi
-    return 0
+    fixture_mutate "$@"
   }
 
   expect_fail() {
@@ -1283,40 +1284,50 @@ BUNDLE
   # reverse: the loop finds an outcome that is neither success nor skipped and
   # fails the job, permanently and loudly. The rule survived the correction;
   # its stated reason did not, and this assertion is what pins down which.
+  #
+  # The extraction names a step by its display text. That is an enumerated
+  # target in a file this gate does not own: rename the step and the abort
+  # fires, and unwrapped it ended the whole fixture run — thirty-odd assertions
+  # that never reported, on a gate whose subject is enforcement that exists and
+  # does not execute. This function is the generalisation of inject() from a few
+  # hundred lines below, so this file being on the list was not an accident of
+  # scope (FR-143).
   AGGREGATE="$FIXTURE_ROOT/aggregate.sh"
-  ruby -r"$REPO_ROOT/scripts/lib/workflow_model" -e '
+  if fixture_produce "aggregate extraction" "$AGGREGATE" \
+    ruby -r"$REPO_ROOT/scripts/lib/workflow_model" -e '
     step = WorkflowModel.steps(ARGV[0], "governance")
       .find { |candidate| candidate["name"] == "Governance result" }
     abort("no aggregate step named Governance result") unless step && step["run"]
     File.write(ARGV[1], step["run"])
-  ' "$BASE/.github/workflows/ci.yml" "$AGGREGATE"
+  ' "$BASE/.github/workflows/ci.yml" "$AGGREGATE"; then
 
-  run_aggregate() {
-    OUTCOMES="$1" bash "$AGGREGATE" > "$FIXTURE_ROOT/aggregate.log" 2>&1
-  }
+    run_aggregate() {
+      OUTCOMES="$1" bash "$AGGREGATE" > "$FIXTURE_ROOT/aggregate.log" 2>&1
+    }
 
-  if run_aggregate "$(printf 'liveness=success\nsurface=skipped')"; then
-    pass "behavioural: the aggregate passes a run whose outcomes are all success or skipped"
-  else
-    fail "behavioural: the aggregate rejected a run in which every gate passed"
-    cat "$FIXTURE_ROOT/aggregate.log" >&2
-  fi
+    if run_aggregate "$(printf 'liveness=success\nsurface=skipped')"; then
+      pass "behavioural: the aggregate passes a run whose outcomes are all success or skipped"
+    else
+      fail "behavioural: the aggregate rejected a run in which every gate passed"
+      cat "$FIXTURE_ROOT/aggregate.log" >&2
+    fi
 
-  if run_aggregate "$(printf 'liveness=success\nsurface=failure')"; then
-    fail "behavioural: the aggregate passed a run in which a gate reported failure"
-    cat "$FIXTURE_ROOT/aggregate.log" >&2
-  elif grep -q '^surface  *failure$' "$FIXTURE_ROOT/aggregate.log"; then
-    pass "behavioural: one failed outcome fails the job, and the aggregate names which gate"
-  else
-    fail "behavioural: the aggregate failed the job without naming the gate that failed"
-    cat "$FIXTURE_ROOT/aggregate.log" >&2
-  fi
+    if run_aggregate "$(printf 'liveness=success\nsurface=failure')"; then
+      fail "behavioural: the aggregate passed a run in which a gate reported failure"
+      cat "$FIXTURE_ROOT/aggregate.log" >&2
+    elif grep -q '^surface  *failure$' "$FIXTURE_ROOT/aggregate.log"; then
+      pass "behavioural: one failed outcome fails the job, and the aggregate names which gate"
+    else
+      fail "behavioural: the aggregate failed the job without naming the gate that failed"
+      cat "$FIXTURE_ROOT/aggregate.log" >&2
+    fi
 
-  if run_aggregate "$(printf 'liveness=success\nfr137-ghost=')"; then
-    fail "behavioural: an outcome that resolved to nothing was counted as a pass"
-    cat "$FIXTURE_ROOT/aggregate.log" >&2
-  else
-    pass "behavioural: a dangling reference's empty outcome fails the job rather than passing quietly"
+    if run_aggregate "$(printf 'liveness=success\nfr137-ghost=')"; then
+      fail "behavioural: an outcome that resolved to nothing was counted as a pass"
+      cat "$FIXTURE_ROOT/aggregate.log" >&2
+    else
+      pass "behavioural: a dangling reference's empty outcome fails the job rather than passing quietly"
+    fi
   fi
 
   # ── Behavioural: the diagnostics rule is about output reaching the log ──

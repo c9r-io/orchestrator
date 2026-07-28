@@ -52,6 +52,9 @@ FAIL=0
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 
+# shellcheck source=../lib/gate_fixture.sh
+. "$REPO_ROOT/scripts/lib/gate_fixture.sh"
+
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/fr144-jq-status.XXXXXX")"
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
@@ -150,25 +153,31 @@ gate_jq_end
 #    both. The honest assertion is that the gate as a whole rejects the tree.
 CASE6="$WORK/case6"
 git clone -q "$REPO_ROOT" "$CASE6" 2>/dev/null
-ruby -rjson -e '
+# `.find { providerIsolation.is_a?(Hash) }` is an enumerated target wearing a
+# predicate: the day every entry declares its isolation some other way, the find
+# returns nil, the retype raises, and without the wrapper the raise takes the
+# run down before this case or any after it reports (FR-143).
+if fixture_mutate "case 6" "$CASE6/$SURFACE" ruby -rjson -e '
   path = ARGV[0]
   doc = JSON.parse(File.read(path))
   entry = doc["scripts"].find { |s| s["providerIsolation"].is_a?(Hash) }
+  abort "no entry declares providerIsolation as an object; the type error has nowhere to go" if entry.nil?
   entry["providerIsolation"] = "no-provider"
   File.write(path, JSON.pretty_generate(doc) + "\n")
-' "$CASE6/$SURFACE"
-# The clone is of HEAD; the gate and its library must be the working-tree ones,
-# or this case certifies the last commit rather than the change under test.
-cp "$REPO_ROOT/scripts/qa/test-qa-gate-surface.sh" "$CASE6/scripts/qa/"
-cp "$REPO_ROOT/scripts/lib/gate_jq.sh" "$CASE6/scripts/lib/"
-(cd "$CASE6" && bash scripts/qa/test-qa-gate-surface.sh) > "$WORK/case6.log" 2>&1 && gate_status=0 || gate_status=$?
-if [[ "$gate_status" -ne 0 ]] \
-   && grep -q "jq exited" "$WORK/case6.log" \
-   && grep -q "Cannot index string with string" "$WORK/case6.log"; then
-  pass "the real gate-surface gate rejects a manifest jq cannot parse, and says why"
-else
-  fail "the real gate accepted a manifest jq cannot parse (exit $gate_status)"
-  tail -5 "$WORK/case6.log" >&2
+' "$CASE6/$SURFACE"; then
+  # The clone is of HEAD; the gate and its library must be the working-tree ones,
+  # or this case certifies the last commit rather than the change under test.
+  cp "$REPO_ROOT/scripts/qa/test-qa-gate-surface.sh" "$CASE6/scripts/qa/"
+  cp "$REPO_ROOT/scripts/lib/gate_jq.sh" "$CASE6/scripts/lib/"
+  (cd "$CASE6" && bash scripts/qa/test-qa-gate-surface.sh) > "$WORK/case6.log" 2>&1 && gate_status=0 || gate_status=$?
+  if [[ "$gate_status" -ne 0 ]] \
+     && grep -q "jq exited" "$WORK/case6.log" \
+     && grep -q "Cannot index string with string" "$WORK/case6.log"; then
+    pass "the real gate-surface gate rejects a manifest jq cannot parse, and says why"
+  else
+    fail "the real gate accepted a manifest jq cannot parse (exit $gate_status)"
+    tail -5 "$WORK/case6.log" >&2
+  fi
 fi
 
 # ── The scanner ───────────────────────────────────────────────────────────────
@@ -327,7 +336,7 @@ restore
 scanned_before="$( (cd "$CASE7" && ruby scripts/qa/jq-status-observed.rb --list-files) | wc -l | tr -d ' ')"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$CASE7/scripts/qa/test-freshly-registered.sh"
 chmod +x "$CASE7/scripts/qa/test-freshly-registered.sh"
-ruby -rjson -e '
+if fixture_mutate "case 12" "$CASE7/$SURFACE" ruby -rjson -e '
   path = ARGV[0]
   doc = JSON.parse(File.read(path))
   doc["scripts"] << {
@@ -339,13 +348,14 @@ ruby -rjson -e '
     "note" => "fixture: registered after the scanner was written",
   }
   File.write(path, JSON.pretty_generate(doc) + "\n")
-' "$CASE7/$SURFACE"
-scanned_after="$( (cd "$CASE7" && ruby scripts/qa/jq-status-observed.rb --list-files) | wc -l | tr -d ' ')"
-if [[ "$scanned_after" -eq $((scanned_before + 1)) ]] \
-   && (cd "$CASE7" && ruby scripts/qa/jq-status-observed.rb --list-files) | grep -qxF "scripts/qa/test-freshly-registered.sh"; then
-  pass "a gate registered after this scanner was written is in scope without editing it"
-else
-  fail "the scanned set did not follow the manifest ($scanned_before -> $scanned_after)"
+' "$CASE7/$SURFACE"; then
+  scanned_after="$( (cd "$CASE7" && ruby scripts/qa/jq-status-observed.rb --list-files) | wc -l | tr -d ' ')"
+  if [[ "$scanned_after" -eq $((scanned_before + 1)) ]] \
+     && (cd "$CASE7" && ruby scripts/qa/jq-status-observed.rb --list-files) | grep -qxF "scripts/qa/test-freshly-registered.sh"; then
+    pass "a gate registered after this scanner was written is in scope without editing it"
+  else
+    fail "the scanned set did not follow the manifest ($scanned_before -> $scanned_after)"
+  fi
 fi
 
 echo ""
