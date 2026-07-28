@@ -318,3 +318,13 @@ looks like.
   binding, which is the mechanism working as intended rather than a warning;
   the note above stands, and the figure to watch is the trend 14% → 13% → 12%,
   not any single reading.
+
+  Fourth sample, run `30328275268`: **2407 s, 11% headroom**. The shape changed
+  again — FR-143 added two steps costing 0 s and 3 s together — and the pair
+  landed 1.6% above the previous sample once those are subtracted, still inside
+  ±7%. Three FRs have now each spent one or two points of headroom without the
+  ceiling binding. The trend is 14% → 13% → 12% → 11%, and it is monotonic: four
+  samples is enough to say that the drift has a direction even though no single
+  reading is alarming. On this slope the review condition fires in roughly two
+  more FRs of the same size, which is the point of writing the trend down rather
+  than the reading.
