@@ -67,7 +67,7 @@ cleared the last of those. They needed regression guards, not repairs — which
 changes what their fixtures must prove, since a rule with no current violation is
 a rule nobody has watched fire.
 
-**The backlog that existed was 21 + 27, across ten gates, not three.**
+**The backlog that existed was 21 + 28, across ten gates, not three.** 21 uncaught premise lines in 15 `ruby -e` blocks, and 28 in-place rewrites whose landing nobody proved — 49 sites, 43 findings, measured by the scanner at `0fb2c5ef`.
 
 ## The measurement corrections made while writing this
 
@@ -80,7 +80,10 @@ Recorded because Phase 6 rule 1 exists for exactly this, and both happened here.
    hand-listed variable names and found `test-coordination-strangler.sh:59`,
    which a roster of `DIR|d|BASE|PROBE` could not see. **The enumeration defect,
    in the tool built to measure the enumeration defect.** The site counts, 21 and
-   27, agreed across both routes throughout; only the gate count moved.
+   27, agreed across both routes throughout; then the in-place figure moved too,
+   to **28**, for the same reason and in the same direction — the hand-listed
+   prototype could not see `QA_ROOT`. 27 was the prototype's number and it
+   survived into three documents before this recount caught it.
 2. **`ruby` is not an in-place editor.** Requiring `-e` is what separates
    `ruby -e '...' "$DIR/f"` from `(cd "$DIR" && ruby "$GATE")`, which runs the
    gate under test. Without it the rule reported 96 findings where there are 43.

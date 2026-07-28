@@ -7,7 +7,7 @@ related_fr: FR-143
 
 **Module**: CI / Governance
 **Scope**: `scripts/lib/gate_fixture.sh`, the scanner
-`scripts/qa/fixture-target-drift.rb`, and the conversion of 48 premise and
+`scripts/qa/fixture-target-drift.rb`, and the conversion of 49 premise and
 mutation sites across the ten ci-required shell gates that build fixture trees
 **Scenarios**: 5
 **Priority**: Medium
