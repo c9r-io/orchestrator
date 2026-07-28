@@ -328,3 +328,28 @@ looks like.
   reading is alarming. On this slope the review condition fires in roughly two
   more FRs of the same size, which is the point of writing the trend down rather
   than the reading.
+
+  Fifth sample, run `30370546800`: **2449 s, 9% headroom**. FR-133 added two
+  steps costing 0 s and 13 s together, and the pair landed 1.2% above the
+  previous sample once those are subtracted — again inside ±7%, again with the
+  shape changed. The trend is 14% → 13% → 12% → 11% → **9%**, still monotonic
+  across five samples and now dropping two points in one FR rather than one.
+  **On this slope the review condition is one FR away, not two**, which is
+  earlier than the fourth sample projected. Nothing here is a defect: each FR
+  spent one or two points and the ceiling has never bound. But the projection
+  made a reading ago has already been overtaken once, so whoever adds the next
+  governance gate should expect to be the one who either makes room or raises
+  the ceiling with a written reason — and should re-derive the slope rather than
+  trust this sentence.
+
+  A measurement note, because it cost a false convergence. This sample is from
+  the **second attempt** of run `30370546800`. On the first attempt the
+  `coverage-policy-fixtures` macOS leg was cancelled — three dependabot CI runs
+  were competing for macOS runners — and `boundary-coverage` was skipped for the
+  unsatisfied `needs`. Refreshing against that attempt **dropped two steps'
+  records entirely**, because a matrix job takes its slowest leg and a cancelled
+  leg has no timings, and `ci-cost.rb` then failed on the ledger it had just
+  written. A run in which a job did not run is not a measurement of that job, and
+  the refresh has no way to tell the difference; the reader does. Re-run the
+  cancelled jobs and refresh against a run where every job has a real
+  conclusion.
