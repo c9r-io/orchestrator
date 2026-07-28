@@ -49,7 +49,7 @@ _rc_run_pause_resume() {
   local status_after_resume=""
   while [[ $_resume_wait -lt 30 ]]; do
     status_after_resume="$(probe_task_status "$task_id")"
-    if echo "$status_after_resume" | grep -qiE "running|completed"; then
+    if grep -qiE "running|completed" <<< "$status_after_resume"; then
       break
     fi
     sleep 2

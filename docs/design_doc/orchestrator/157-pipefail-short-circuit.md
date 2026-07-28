@@ -110,19 +110,46 @@ size, every match position and every implementation of grep. A rule whose remedy
 is always available does not need an exemption — and an exemption is how a rule
 gets quietly widened (§4.4 shape 8).
 
-## Scope is a property, not a manifest
+## Scope: every tracked shell file, and why the obvious exemption is wrong
 
-The governed set is **every tracked `*.sh` that enables `pipefail`**, read from
-each file. Deliberately wider than `config/governance/qa-gate-surface.json`:
-the hazard has nothing to do with whether a script is ci-required, and
-`scripts/qa-doc-lint.sh` and `scripts/coverage-governance.sh` are executed by
-`ci.yml` while absent from that manifest — so a manifest-derived scope would
-have missed the invoker of the run where this was first seen.
+The first version of this scanner governed **tracked `*.sh` that enable
+`pipefail`**, on the reasoning that without the option a dead producer is
+invisible and there is nothing to guard. FR-145's corrected text said the same
+thing, and named the two files it exempted.
 
-61 executable sites across 20 files. Two independent derivations agree: this
-scanner (parsing) and a `grep` over tracked shell (text). Their six differences
-are the whole argument for parsing — four are **comment lines describing the
-pattern**, and two are files that do not enable `pipefail`.
+That reasoning reads a **dynamic** property lexically, and the closure
+self-check's question — *name a broken state this would still pass on* — found
+the counterexample in the repository. `scripts/regression/run-cli-probes.sh`
+sets `-euo pipefail` and then
+
+```sh
+source "$scenario_script"
+```
+
+for every file under `scenarios/`. Those files set no options at all; their
+pipelines run under the runner's. Demonstrated by execution rather than
+argument: a scenario sourced that way reports a pattern that **is present** as
+absent. The two files FR-145 recorded as immune —
+`probe-low-output.sh:41` and `probe-runtime-control.sh:52` — were live sites,
+outside the governed set, for the whole of this FR until the self-check.
+
+And a scanner cannot prove the negative: the sourcing site is
+`source "$scenario_script"`, a variable. So the exemption goes, on the same
+argument as the per-site one — the remedy costs nothing and is correct
+everywhere, so there is no state worth exempting. **The governed set is the
+tracked set.**
+
+It is also deliberately wider than `config/governance/qa-gate-surface.json`:
+the hazard has nothing to do with whether a script is ci-required, and three
+scripts `ci.yml` executes are absent from that manifest, so a manifest-derived
+scope would have missed the invoker of the run where this was first seen.
+
+**63 executable sites across 22 files.** Two independent derivations agree on
+the 61 that sit under a lexical `pipefail`: this scanner (parsing) and a `grep`
+over tracked shell (text). Their six differences are the whole argument for
+parsing — four are **comment lines describing the pattern**, and two are the
+files above, which the text derivation and the first scanner both mistook for
+exempt.
 
 ## The other four corrections to FR-145
 
@@ -183,7 +210,7 @@ measurement lives in QA-195 as the observation that found the defect.
    The FR-145 scanner is unaffected: its scope is `git ls-files '*.sh'`, so all
    three are governed by it today.
 3. **`<<< "$(f)"` discards the producer's exit status**, where the pipeline
-   under `pipefail` observed it. Checked site by site: in these 61, producer
+   under `pipefail` observed it. Checked site by site: in these 63, producer
    failure and "no match" already reached the same branch, so the conversion is
    behaviour-preserving. Five sites got explicit status handling instead,
    because there "could not read" and "found nothing" are different facts that

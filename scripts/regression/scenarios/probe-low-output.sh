@@ -38,7 +38,7 @@ _lo_run_detect_low_output() {
     attempt=$((attempt + 1))
     # Capture a single watch frame snapshot via task info + events query
     watch_output="$("$PROBE_BINARY" task info "$task_id" 2>&1 || true)"
-    if echo "$watch_output" | grep -qE "completed|failed"; then
+    if grep -qE "completed|failed" <<< "$watch_output"; then
       break
     fi
   done

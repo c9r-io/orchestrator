@@ -45,13 +45,29 @@
 # remedy is always available does not need an exemption, and an exemption is how
 # a rule gets quietly widened (SKILL.md §4.4 shape 8).
 #
-# Scope is a property read from each file, not a list: every tracked `*.sh` that
-# enables `pipefail`. Deliberately broader than
-# `config/governance/qa-gate-surface.json`, because the hazard has nothing to do
-# with whether a script is ci-required — and because `scripts/qa-doc-lint.sh` and
-# `scripts/coverage-governance.sh` are executed by `ci.yml` while absent from that
-# manifest, so a manifest-derived scope would miss the invoker of the run where
-# this defect was first observed.
+# Scope is every tracked `*.sh`, with no exemption — not even for a file that
+# does not enable `pipefail` itself.
+#
+# The first version of this scanner did exempt those, and it was wrong, because
+# **shell options are dynamic, not lexical**. `scripts/regression/run-cli-probes.sh`
+# sets `-euo pipefail` and then `source`s each file under `scenarios/`; those
+# files enable nothing themselves and their pipelines run under the runner's
+# options anyway. Demonstrated: a scenario sourced into a pipefail runner reports
+# `NOT matched` on a pattern that is present. Two live sites were outside the
+# governed set for exactly that reason, and the FR that produced this scanner had
+# recorded both as immune.
+#
+# Proving "nothing sources this file" is not something a scanner can do — the
+# sourcing site is `source "$scenario_script"`, a variable. So the exemption goes,
+# the same way the per-site one did: the remedy costs nothing and is correct
+# everywhere, so there is no state worth exempting.
+#
+# It is also deliberately broader than `config/governance/qa-gate-surface.json`,
+# because the hazard has nothing to do with whether a script is ci-required — and
+# because `scripts/qa-doc-lint.sh`, `scripts/coverage-governance.sh` and
+# `scripts/check-async-lock-governance.sh` are executed by `ci.yml` while absent
+# from that manifest, so a manifest-derived scope would miss the invoker of the
+# run where this defect was first observed.
 #
 # Comments, single-quoted regions and here-document bodies come off via
 # `scripts/lib/shell_lexer.rb` before anything is matched, and the pipe split is
@@ -76,9 +92,6 @@ module PipefailShortCircuit
   # included because it costs nothing and is the same act.
   READERS = %w[grep rg egrep fgrep ggrep].freeze
 
-  # `set -euo pipefail`, `set -eo pipefail`, `set -o pipefail`. The option letter
-  # cluster may carry anything as long as it contains `o` and `pipefail` follows.
-  PIPEFAIL = /\bset\s+-[A-Za-z]*o\s+pipefail\b/.freeze
 
   module_function
 
@@ -91,20 +104,12 @@ module PipefailShortCircuit
     output.split("\0").reject(&:empty?).sort
   end
 
-  # The subset the rule applies to. Without `pipefail` the pipeline reports only
-  # the last stage's status, so a dead producer is invisible and there is nothing
-  # to guard. Two files in `scripts/regression/scenarios/` are in exactly that
-  # position today; they acquire the hazard the day someone adds the option, and
-  # this predicate notices on that day rather than needing to be told.
-  def pipefail?(lines)
-    lines.any? { |(_, code)| code =~ PIPEFAIL }
-  end
-
+  # The governed set is the tracked set. There is no `pipefail?` predicate here on
+  # purpose: whether the option is in force at a given pipeline is a property of
+  # the *running shell*, and this repository sources four files into shells that
+  # set it. See the header.
   def governed_files(repo_root)
-    shell_files(repo_root).select do |relative|
-      lines, = ShellLexer.code_lines(File.read(repo_root.join(relative)))
-      pipefail?(lines)
-    end
+    shell_files(repo_root)
   end
 
   # ── Pipe splitting ──────────────────────────────────────────────────────────
@@ -299,8 +304,6 @@ module PipefailShortCircuit
       )]
     end
 
-    return [] unless pipefail?(lines)
-
     findings = []
     state = Quoting.new
 
@@ -351,7 +354,7 @@ if $PROGRAM_NAME == __FILE__
 
   OptionParser.new do |opts|
     opts.banner = "usage: pipefail-short-circuit.rb [--list-files] [--repo-root PATH]"
-    opts.on("--list-files", "print the governed set (tracked *.sh enabling pipefail) and exit") do
+    opts.on("--list-files", "print the governed set (every tracked *.sh) and exit") do
       list_only = true
     end
     opts.on("--repo-root PATH", "scan a different checkout") { |value| repo_root = Pathname.new(value) }
@@ -363,14 +366,13 @@ if $PROGRAM_NAME == __FILE__
   end
 
   files, findings = PipefailShortCircuit.run(repo_root)
-  governed = PipefailShortCircuit.governed_files(repo_root)
 
   findings.each do |finding|
     warn "#{finding.file}:#{finding.line}: [#{finding.rule}] #{finding.detail}"
     warn "  fix: #{finding.fix}"
   end
 
-  summary = "#{files.length} tracked shell file(s), #{governed.length} under pipefail"
+  summary = "#{files.length} tracked shell file(s) scanned"
 
   if findings.empty?
     puts "pipefail short-circuit: PASS (#{summary}, 0 finding(s))"

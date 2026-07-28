@@ -6,8 +6,8 @@ related_fr: FR-145
 # Orchestrator - A Reader That Leaves Early Kills The Producer
 
 **Module**: CI / Governance / Shell gates
-**Scope**: `scripts/qa/pipefail-short-circuit.rb` with its fixtures, and the 61
-rewritten sites across 20 tracked shell files
+**Scope**: `scripts/qa/pipefail-short-circuit.rb` with its fixtures, and the 63
+rewritten sites across 22 tracked shell files
 **Scenarios**: 5
 **Priority**: Medium
 
@@ -35,12 +35,15 @@ fixtures are the only evidence it works. Every "must fire" case is paired with a
 "must not fire" one on the same probe: a rule that fires on correct input is
 switched off long before it catches anything.
 
-**Three of the silent cases are the FR's own errors, turned into assertions.**
+**Two of the silent cases are the FR's own errors, turned into assertions.**
 FR-145 counted 42 sites where there were 35, because `grep -c` counts lines
 including prose — four of the matched lines are comments *describing* the
-pattern, one of them written by FR-133 to explain the first fix — and it claimed
-every site sat under `pipefail` when two tracked files do not enable it. A
-scanner that repeats those errors reports findings on its own documentation.
+pattern, one of them written by FR-133 to explain the first fix. A scanner that
+repeats that error reports findings on its own documentation.
+
+**The FR's third claim was wrong in the other direction**, and cost this gate a
+rescope during the closure self-check: it said two tracked files without
+`set -o pipefail` were immune. They are sourced into a shell that sets it.
 
 **The mechanism is asserted deterministically, not statistically.** The
 probabilistic form measures 8–13 in 400 here and **0 in 200** on a 1 MB producer
@@ -60,19 +63,26 @@ ruby scripts/qa/pipefail-short-circuit.rb --list-files | wc -l
 
 **Expected result**
 
-- `pipefail short-circuit: PASS (106 tracked shell file(s), 92 under pipefail, 0 finding(s))`,
+- `pipefail short-circuit: PASS (106 tracked shell file(s) scanned, 0 finding(s))`,
   exit 0.
-- `--list-files` prints the governed subset — tracked `*.sh` that enable
-  `pipefail` — and the second number on the summary line equals its length.
+- `--list-files` prints the governed set — every tracked `*.sh` — and the number
+  on the summary line equals its length.
 
-*What this would still pass on*: a scanner that governs nothing. Separating
-**tracked** from **under pipefail** is what makes "0 findings" and "read
-nothing" different sentences, and case 14 of the fixture asserts it on a
-two-file scratch tree where both numbers are checkable by hand.
+*What this would still pass on*: a scanner that governs nothing. The count is
+what makes "0 findings" and "read nothing" different sentences, and case 14
+asserts it on a scratch tree where the number is derived from `git ls-files`
+rather than restated.
+
+**There is no exemption for a file that does not set `pipefail`.** That
+exemption existed in the first version of this gate and was wrong: shell options
+are dynamic. `scripts/regression/run-cli-probes.sh` sets `-euo pipefail` and
+sources every file under `scenarios/`, so two files FR-145 recorded as immune
+were live sites. Case 9b demonstrates it by execution; case 9 asserts the rule
+that follows.
 
 ---
 
-## Scenario 2: The rule fires five ways, and stays quiet on six
+## Scenario 2: The rule fires six ways, and stays quiet on five
 
 **Steps**
 
@@ -90,18 +100,18 @@ correct probe and assert the finding names **that line**:
 | 4 | `grep -qxF` | `q` in the middle of a cluster |
 | 5 | `cat f \| grep -q x` inside `"$( … )"` | a command substitution opens a fresh quoting context; the first version of this scanner read that `\|` as quoted and missed the stage |
 | 6 | a pipeline broken after the `\|` | the reader is the first word on its line and is still a downstream stage |
+| 9 | `set -euo pipefail` replaced with `set -eu`, the shape kept | the exemption this gate used to grant; shell options are dynamic, and case 9b shows a scenario sourced into a pipefail runner reporting a present pattern as absent |
 
 **The expected line is derived, never written down.** Each case locates its
 marker in the mutated probe and asserts on that line number. A fixture that
 restates a number stops working the moment the probe gains a line, and it stops
 working *by passing on the wrong finding* (§4.4 shape 7).
 
-**And it stays quiet on six shapes that only look like it.** Cases 7 through 12
-assert silence on:
+**And it stays quiet on five shapes that only look like it.** Cases 7, 8 and 10
+through 12 assert silence on:
 
 - the shape written in a **comment**
 - the shape written inside a **here-document body**
-- the same file with `pipefail` **removed**
 - `grep -q "a|b|c|d"` — the `|` is inside double quotes
 - `grep -F -- -q -quiet --silent` — `--` ends the option list
 - `[[ "$(… | grep -c .)" -eq 3 ]]` — `grep -c` counts, and therefore reads to EOF
@@ -234,7 +244,7 @@ passes" is not per-object evidence.
 | # | Scenario | Result | Date | Tester |
 |---|----------|--------|------|--------|
 | 1 | The tree is clean, and the scanner says what it governs | ☑ PASS | 2026-07-29 | Claude |
-| 2 | The rule fires five ways, and stays quiet on six | ☑ PASS | 2026-07-29 | Claude |
+| 2 | The rule fires six ways, and stays quiet on five | ☑ PASS | 2026-07-29 | Claude |
 | 3 | The mechanism, without a race | ☑ PASS | 2026-07-29 | Claude |
 | 4 | The governed set follows git, not a list | ☑ PASS | 2026-07-29 | Claude |
 | 5 | The rewritten gates still assert what they asserted | ☑ PASS | 2026-07-29 | Claude |

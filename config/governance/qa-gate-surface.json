@@ -247,7 +247,7 @@
       "providerIsolation": {
         "mode": "no-provider"
       },
-      "note": "Offline: reads git ls-files and the shell files' own text. Forbids, in any tracked *.sh that enables pipefail, a pipeline stage after the first whose command is grep/rg with -q, --quiet, --silent or -m. The reader leaves on the first match, the producer dies of EPIPE, and pipefail makes that the pipeline's answer - so a successful match reports as a failed one, or, where the match feeds the failing branch, a violation reports as clean (FR-145). Scope is a property read from each file rather than from this manifest, deliberately: the hazard has nothing to do with whether a script is ci-required, and qa-doc-lint.sh and coverage-governance.sh are run by ci.yml while absent from here."
+      "note": "Offline: reads git ls-files and the shell files' own text. Forbids, in any tracked *.sh, a pipeline stage after the first whose command is grep/rg with -q, --quiet, --silent or -m. No exemption for a file that does not enable pipefail itself: shell options are dynamic, and run-cli-probes.sh sources every scenario into a shell that sets it. The reader leaves on the first match, the producer dies of EPIPE, and pipefail makes that the pipeline's answer - so a successful match reports as a failed one, or, where the match feeds the failing branch, a violation reports as clean (FR-145). Scope is git ls-files rather than this manifest, deliberately: the hazard has nothing to do with whether a script is ci-required, and qa-doc-lint.sh, coverage-governance.sh and check-async-lock-governance.sh are run by ci.yml while absent from here."
     },
     {
       "path": "scripts/qa/test-agent-driver-abstraction.sh",

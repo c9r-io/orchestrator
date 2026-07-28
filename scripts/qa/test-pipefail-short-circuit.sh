@@ -9,13 +9,19 @@
 # input gets switched off long before it catches anything. So every "must fire"
 # case below is paired with a "must not fire" one on the same probe.
 #
-# Three of the silent cases exist because FR-145 itself got them wrong. It
-# counted 42 sites where there were 35, because `grep -c` counted four comment
-# lines *describing* the pattern — one of them the comment written to explain the
-# first fix — and it claimed every site sat under `pipefail` when two tracked
-# files do not enable it. A scanner that repeats those errors reports findings on
-# its own documentation and is switched off in a week. Cases 7, 8 and 9 are those
-# three errors, turned into assertions.
+# Two of the silent cases exist because FR-145 itself got them wrong: it counted
+# 42 sites where there were 35, because `grep -c` counted four comment lines
+# *describing* the pattern — one of them the comment written to explain the first
+# fix. A scanner that repeats that error reports findings on its own
+# documentation and is switched off in a week. Cases 7 and 8 are that error,
+# turned into assertions.
+#
+# The FR's third claim — that two tracked files without `set -o pipefail` were
+# immune — was wrong in the other direction, and case 9b is the demonstration
+# that settles it: shell options are dynamic, `run-cli-probes.sh` sources every
+# scenario into a shell that sets `pipefail`, and a scenario sourced that way
+# reports a present pattern as absent. So case 9 asserts that the rule *does*
+# fire there.
 #
 # Case 12 is a false positive this gate produced during development, kept because
 # it is the one a reader would not think to write: `[[ "$(… | grep -c .)" -eq 3 ]]`
@@ -253,14 +259,45 @@ if sub_line "hazard in a here-document body" \
   silent "the shape written inside a here-document body does not fire"
 fi
 
-# 9. Without pipefail the pipeline reports the reader's status only, so there is
-#    nothing to guard. Two tracked files are in exactly this position today.
+# 9. A file that does not enable pipefail is NOT exempt, because shell options
+#    are dynamic. This case asserted the opposite until the closure self-check
+#    asked what the rule would still pass on: `scripts/regression/run-cli-probes.sh`
+#    sets `-euo pipefail` and sources every file under `scenarios/`, and two of
+#    those files were reported as immune while running under the runner's
+#    options. Case 9b is that demonstration; this is the rule that follows from
+#    it.
 reset_case
-if sub_line "drop pipefail, add the shape" \
+if sub_line "drop pipefail, keep the shape" \
   'set -euo pipefail' \
   'set -eu
 cat data.txt | grep -q unguarded'; then
-  silent "the shape in a file that does not enable pipefail does not fire"
+  fires_on "the shape fires in a file that does not enable pipefail itself" \
+    short-circuit-under-pipefail '| grep -q unguarded'
+fi
+
+# 9b. The reason, executed rather than asserted. A scenario sourced into a
+#     pipefail runner reports a pattern that is present as absent — so "this file
+#     does not set pipefail" is not a statement about the shell its pipelines run
+#     in, and a scanner cannot prove nothing sources a file.
+cat > "$WORK/dynamic-runner.sh" <<'RUNNER'
+#!/usr/bin/env bash
+set -euo pipefail
+source "$1"
+RUNNER
+cat > "$WORK/dynamic-scenario.sh" <<'SCENARIO'
+#!/usr/bin/env bash
+# No `set` at all: this file inherits whatever the caller chose.
+if { printf 'MATCHME\n'; sleep 0.2; printf 'tail\n'; } | grep -q MATCHME; then
+  echo matched
+else
+  echo unmatched
+fi
+SCENARIO
+DYNAMIC="$(bash "$WORK/dynamic-runner.sh" "$WORK/dynamic-scenario.sh" 2>&1 || true)"
+if [[ "$DYNAMIC" == "unmatched" ]]; then
+  pass "a file that sets no options reports a present pattern as absent when sourced into a pipefail shell"
+else
+  fail "the dynamic-scope demonstration did not reproduce: got '$DYNAMIC'"
 fi
 
 # 10. A `|` inside a double-quoted pattern is not a pipe. Already in the probe;
@@ -315,20 +352,29 @@ else
   fail "the scanner could not list the governed set"
 fi
 
-# 14. A file without pipefail is tracked but not governed, and the summary says
-#     so. Without this, "0 findings" and "governs nothing" read alike.
+# 14. The summary names how many files were read, so "0 findings" and "read
+#     nothing" are different sentences. The count is derived from the scratch
+#     tree rather than restated: two files are added, so the number must be the
+#     probe plus those two.
 reset_case
 cat > "$CASE/plain.sh" <<'PLAIN'
 #!/usr/bin/env bash
 set -eu
-cat data.txt | grep -q ungoverned
+grep -q ungoverned <<< "$(cat data.txt)"
 PLAIN
+cat > "$CASE/another.sh" <<'ANOTHER'
+#!/usr/bin/env bash
+set -euo pipefail
+grep -q wanted <<< "$(cat data.txt)"
+ANOTHER
 git -C "$CASE" add -A >/dev/null
+tracked="$(git -C "$CASE" ls-files '*.sh' | wc -l | tr -d ' ')"
 run_gate
-if grep -q '^pipefail short-circuit: PASS (2 tracked shell file(s), 1 under pipefail' <<< "$GATE_OUT"; then
-  pass "the summary separates what is tracked from what is governed"
+if [[ "$GATE_STATUS" -eq 0 ]] &&
+   grep -q "^pipefail short-circuit: PASS ($tracked tracked shell file(s) scanned, 0 finding(s))" <<< "$GATE_OUT"; then
+  pass "the summary reports how many files it read, and the count follows git ($tracked)"
 else
-  fail "the summary does not report the governed subset: $(tail -1 <<< "$GATE_OUT")"
+  fail "the summary does not report the scanned count: $(tail -1 <<< "$GATE_OUT")"
 fi
 
 # 15. A file that ends inside a here-document was never fully read, so a clean
