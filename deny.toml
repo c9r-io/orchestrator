@@ -1,0 +1,181 @@
+# Dependency policy — what shape the dependency graph is allowed to have.
+#
+# `cargo audit` answers "is anything in here known-bad". This file answers the
+# question nothing asked before: how many versions of a crate may coexist, under
+# what licenses, from what registries. Enforced by the `cargo-deny` job in
+# .github/workflows/security.yml; the policy is described in
+# docs/design_doc/orchestrator/156-dependency-policy-gate.md.
+#
+# `advisories` is deliberately absent, from this file and from the CI
+# invocation. cargo-deny and cargo-audit read the same RustSec database and
+# neither subsumes the other — measured at FR-133, cargo-deny reported 17
+# unmaintained advisories as errors and did not report RUSTSEC-2024-0429
+# (glib, unsound) at all, which cargo-audit does. So the split is one tool per
+# question: cargo-deny owns graph shape, cargo-audit owns the advisory database.
+#
+# Two ratchets, both enforced by the tool rather than by a baseline number in a
+# second file:
+#
+#   * `--deny unmatched-skip` on the CI invocation — a `skip` entry whose
+#     duplicate upstream has resolved stops matching, and the build fails until
+#     the entry is deleted. The list cannot keep dead entries.
+#   * `unused-allowed-license = "deny"` — the same for an `allow` entry or an
+#     exception that no longer applies.
+#
+# A new duplicate is an error by construction, so the list cannot grow without
+# somebody writing a reason. That is the whole mechanism; there is no ledger to
+# drift.
+
+[graph]
+# No `targets` filter: the policy is evaluated over the graph Cargo.lock
+# actually describes, which spans every platform. Narrowing it to the two we
+# ship would hide the windows-* generations rather than decide about them.
+all-features = true
+
+[licenses]
+# Every one of the 653 external packages declares a license; there are no
+# unknowns to resolve. Nine expressions cover all of them, and
+# `unused-allowed-license = "deny"` means this list cannot grow speculatively —
+# an entry nothing uses fails the build.
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "BSD-3-Clause",
+  "ISC",
+  "Zlib",
+  # ICU. 18 crates, all under the Unicode licence rather than a dual MIT/Apache.
+  "Unicode-3.0",
+  # `notify`, our filesystem trigger backend — a public-domain dedication.
+  "CC0-1.0",
+  # `webpki-roots` / `webpki-root-certs`. A data licence for the Mozilla trust
+  # store, not a code licence.
+  "CDLA-Permissive-2.0",
+  # Weak, file-level copyleft, and we modify none of the five files it covers:
+  # cssparser, cssparser-macros, dtoa-short, option-ext, selectors. Four of the
+  # five arrive through Tauri's webview stack. Distributing them unmodified
+  # inside an MIT binary is what MPL-2.0 §3.3 permits.
+  "MPL-2.0",
+]
+
+exceptions = [
+  # The only dependency in the tree whose licence is not satisfiable from the
+  # list above. Five other crates carry `Apache-2.0 WITH LLVM-exception` and
+  # offer `OR MIT` alongside it; target-lexicon does not, so it needs naming.
+  # The exception is narrower than adding the expression to `allow`, which would
+  # silently cover the next crate to arrive with it.
+  { crate = "target-lexicon", allow = ["Apache-2.0 WITH LLVM-exception"] },
+]
+
+unused-allowed-license = "deny"
+
+[bans]
+multiple-versions = "deny"
+wildcards = "deny"
+# Path dependencies inside this workspace carry no version requirement, which
+# cargo-deny reads as a wildcard. They cannot resolve from a registry, so the
+# supply-chain question `wildcards` exists to ask does not apply to them. A
+# registry dependency written `foo = "*"` still fails.
+allow-wildcard-paths = true
+
+# ── Accepted duplicates ───────────────────────────────────────────────────────
+#
+# 48 crates resolve to more than one version; 70 extra copies are accepted here,
+# each naming the dependency that introduces it and the version being kept.
+#
+# There is deliberately no `skip-tree`. One `skip-tree = [{ crate = "tauri" }]`
+# would absorb 28 of these 48 in a single line — and would go on absorbing
+# duplicates that do not exist yet, silently, forever. A blanket is the other
+# failure mode of a hand-listed set: the list at least stops growing visibly.
+#
+# The shape of this list, measured rather than assumed: 28 of the 48 exist only
+# because `orchestrator-gui` is in the workspace. `cargo deny check bans
+# --exclude orchestrator-gui` reports 20, and ten of those twenty are the
+# windows-* import libraries for targets we do not build. The daemon and CLI
+# graph carries ten real ones: cpufeatures, crypto-common, getrandom, hashbrown,
+# phf, phf_shared, r-efi, syn, thiserror, thiserror-impl.
+#
+# Not one of these is unifiable by us. Only base64, rand, reqwest and sha2 are
+# declared by any workspace crate, and in all four cases the other version comes
+# from upstream. `rand` looks like the exception and is not: cron 0.16 ->
+# phf 0.11 -> phf_macros -> phf_generator 0.11.3 pins rand 0.8 independently of
+# our four declarations, so raising ours across nine API-breaking call sites
+# would remove zero duplicates.
+skip = [
+  { crate = "base64@0.21.7", reason = "Tauri 2's macOS bridge is a generation behind; every workspace crate declares ^0.22. Reached via swift-rs 1.0.7. Keeping base64 0.22.1." },
+  { crate = "bitflags@1.3.2", reason = "the gtk-rs 0.18 / webkit2gtk generation Tauri 2 pins never moved off bitflags 1. Reached via javascriptcore-rs 1.1.2, png 0.17.16, webkit2gtk 2.0.2, webkit2gtk-sys 2.0.2. Keeping bitflags 2.13.1." },
+  { crate = "block-buffer@0.10.4", reason = "follows digest; the RustCrypto 0.10 generation arrives through Tauri's sha2. Reached via digest 0.10.7. Keeping block-buffer 0.12.1." },
+  { crate = "cpufeatures@0.2.17", reason = "the RustCrypto 0.10 generation (aes, polyval) still uses cpufeatures 0.2. Reached via aes 0.8.4, polyval 0.6.2, sha2 0.10.9. Keeping cpufeatures 0.3.0." },
+  { crate = "crypto-common@0.1.7", reason = "the RustCrypto 0.10 generation (aead, cipher, digest) still uses crypto-common 0.1. Reached via aead 0.5.2, cipher 0.4.4, digest 0.10.7, universal-hash 0.5.1. Keeping crypto-common 0.2.2." },
+  { crate = "digest@0.10.7", reason = "Tauri's codegen and wry hash with the RustCrypto 0.10 generation; our crates are on 0.11. Reached via sha2 0.10.9. Keeping digest 0.11.3." },
+  { crate = "foldhash@0.2.0", reason = "one GUI-side crate is ahead of the hashbrown generation the rest of the graph uses. Reached via dom_query 0.27.0. Keeping foldhash 0.1.5." },
+  { crate = "getrandom@0.2.17", reason = "three generations coexist across rand 0.8, tempfile/tauri and uuid; the ecosystem is mid-transition. Reached via rand_core 0.6.4, redox_users 0.5.2, ring 0.17.14. Keeping getrandom 0.4.3." },
+  { crate = "getrandom@0.3.4", reason = "three generations coexist across rand 0.8, tempfile/tauri and uuid; the ecosystem is mid-transition. Reached via rand_core 0.9.5, tauri 2.11.5, tempfile 3.27.0. Keeping getrandom 0.4.3." },
+  { crate = "hashbrown@0.12.3", reason = "four generations arrive through indexmap 1, hashlink, petgraph and indexmap 2. Reached via indexmap 1.9.3. Keeping hashbrown 0.17.1." },
+  { crate = "hashbrown@0.14.5", reason = "four generations arrive through indexmap 1, hashlink, petgraph and indexmap 2. Reached via hashlink 0.9.1. Keeping hashbrown 0.17.1." },
+  { crate = "hashbrown@0.15.5", reason = "four generations arrive through indexmap 1, hashlink, petgraph and indexmap 2. Reached via petgraph 0.8.3. Keeping hashbrown 0.17.1." },
+  { crate = "heck@0.4.1", reason = "glib-macros 0.18 predates heck 0.5; it moves when gtk-rs does. Reached via glib-macros 0.18.5. Keeping heck 0.5.0." },
+  { crate = "indexmap@1.9.3", reason = "schemars 0.8, reached only through the GUI, still uses indexmap 1. Reached via schemars 0.8.22. Keeping indexmap 2.14.0." },
+  { crate = "jni@0.21.1", reason = "the Tauri 2 Android runtime pins jni 0.21; nothing we build for runs on Android. Reached via tao 0.35.3, tauri 2.11.5, tauri-runtime 2.11.3, tauri-runtime-wry 2.11.4, wry 0.55.1. Keeping jni 0.22.4." },
+  { crate = "jni-sys@0.3.1", reason = "follows jni. Reached via jni 0.21.1, ndk 0.9.0, ndk-sys 0.6.0+11769913. Keeping jni-sys 0.4.1." },
+  { crate = "phf@0.11.3", reason = "cron 0.16 and chrono-tz 0.10 each pin an older phf; both are leaf-level and neither exposes it. Reached via cron 0.16.0. Keeping phf 0.13.1." },
+  { crate = "phf@0.12.1", reason = "cron 0.16 and chrono-tz 0.10 each pin an older phf; both are leaf-level and neither exposes it. Reached via chrono-tz 0.10.4. Keeping phf 0.13.1." },
+  { crate = "phf_generator@0.11.3", reason = "follows phf_macros. Reached via phf_macros 0.11.3. Keeping phf_generator 0.13.1." },
+  { crate = "phf_macros@0.11.3", reason = "follows phf. Reached via phf 0.11.3. Keeping phf_macros 0.13.1." },
+  { crate = "phf_shared@0.11.3", reason = "follows phf. Reached via phf 0.11.3, phf_generator 0.11.3, phf_macros 0.11.3. Keeping phf_shared 0.13.1." },
+  { crate = "phf_shared@0.12.1", reason = "follows phf. Reached via phf 0.12.1. Keeping phf_shared 0.13.1." },
+  { crate = "png@0.17.16", reason = "Tauri's icon codegen path is on png 0.17; muda is on 0.18. Reached via ico 0.5.0, tauri-codegen 2.6.3. Keeping png 0.18.1." },
+  { crate = "proc-macro-crate@1.3.1", reason = "three generations arrive together through gtk3-macros, glib-macros and zbus. Reached via gtk3-macros 0.18.2, num_enum_derive 0.7.6. Keeping proc-macro-crate 3.5.0." },
+  { crate = "proc-macro-crate@2.0.2", reason = "three generations arrive together through gtk3-macros, glib-macros and zbus. Reached via glib-macros 0.18.5. Keeping proc-macro-crate 3.5.0." },
+  { crate = "r-efi@5.3.0", reason = "follows getrandom; a UEFI target crate that no target we build for compiles. Reached via getrandom 0.3.4. Keeping r-efi 6.0.0." },
+  { crate = "rand@0.9.5", reason = "tauri-plugin-notification is on rand 0.9; our four crates declare ^0.8, and cron -> phf_generator 0.11 pins 0.8 independently, so unifying ours removes nothing. Reached via tauri-plugin-notification 2.3.3. Keeping rand 0.8.7." },
+  { crate = "rand_chacha@0.9.0", reason = "follows rand. Reached via rand 0.9.5. Keeping rand_chacha 0.3.1." },
+  { crate = "rand_core@0.9.5", reason = "follows rand. Reached via rand 0.9.5, rand_chacha 0.9.0. Keeping rand_core 0.6.4." },
+  { crate = "reqwest@0.13.4", reason = "Tauri 2.11 bundles reqwest 0.13; our four crates declare ^0.12. Reached via tauri 2.11.5. Keeping reqwest 0.12.28." },
+  { crate = "serde_spanned@0.6.9", reason = "follows toml. Reached via toml 0.8.2, toml_edit 0.20.2. Keeping serde_spanned 1.1.1." },
+  { crate = "sha2@0.10.9", reason = "Tauri's codegen and wry hash with sha2 0.10; our seven crates declare ^0.11. Reached via tauri-codegen 2.6.3, wry 0.55.1. Keeping sha2 0.11.0." },
+  { crate = "syn@1.0.109", reason = "syn 2 is still the ecosystem default and is reached from 46 proc-macro crates; syn 1 arrives only through proc-macro-error, which is itself unmaintained (RUSTSEC-2024-0370). Reached via proc-macro-error 1.0.4. Keeping syn 3.0.3." },
+  { crate = "syn@2.0.119", reason = "syn 2 is still the ecosystem default and is reached from 46 proc-macro crates; syn 1 arrives only through proc-macro-error, which is itself unmaintained (RUSTSEC-2024-0370). Reached via asn1-rs-derive 0.6.0, asn1-rs-impl 0.2.0, async-recursion 1.1.1, cssparser-macros 0.6.1, darling_core 0.23.0, darling_macro 0.23.0, derive_more-impl 2.1.1, displaydoc 0.2.6, dlopen2_derive 0.4.3, enumflags2_derive 0.7.12, foreign-types-macros 0.2.3, futures-macro 0.3.33, glib-macros 0.18.5, gtk3-macros 0.18.2, jni-macros 0.22.4, jni-sys-macros 0.4.1, num_enum_derive 0.7.6, phf_macros 0.11.3, phf_macros 0.13.1, pin-project-internal 1.1.13, prettyplease 0.2.37, prost-build 0.14.4, prost-derive 0.14.4, schemars_derive 0.8.22, serde_derive_internals 0.29.1, serde_with_macros 3.21.0, serialize-to-javascript-impl 0.1.2, synstructure 0.13.2, tao-macros 0.1.3, tauri-codegen 2.6.3, tauri-macros 2.6.3, thiserror-impl 1.0.69, tokio-macros 2.7.1, tonic-build 0.14.6, tonic-prost-build 0.14.6, tracing-attributes 0.1.31, wasm-bindgen-macro-support 0.2.126, webview2-com-macros 0.8.1, windows-implement 0.60.2, windows-interface 0.59.3, yoke-derive 0.8.2, zbus_macros 5.18.0, zerofrom-derive 0.1.7, zerovec-derive 0.11.3, zvariant_derive 5.13.1, zvariant_utils 3.5.0. Keeping syn 3.0.3." },
+  { crate = "thiserror@1.0.69", reason = "thiserror 1 arrives through gtk-rs and cel-interpreter; nothing we declare asks for it. Reached via cairo-rs 0.18.5, cel-interpreter 0.10.0, gio 0.18.4, glib 0.18.5, jni 0.21.1, json-patch 3.0.1, ndk 0.9.0. Keeping thiserror 2.0.19." },
+  { crate = "thiserror-impl@1.0.69", reason = "follows thiserror. Reached via thiserror 1.0.69. Keeping thiserror-impl 2.0.19." },
+  { crate = "toml@0.8.2", reason = "three toml generations reach the build through system-deps, cargo_toml and tauri-utils. Reached via system-deps 6.2.2. Keeping toml 1.1.3+spec-1.1.0." },
+  { crate = "toml@0.9.12+spec-1.1.0", reason = "three toml generations reach the build through system-deps, cargo_toml and tauri-utils. Reached via cargo_toml 0.22.3. Keeping toml 1.1.3+spec-1.1.0." },
+  { crate = "toml_datetime@0.6.3", reason = "follows toml. Reached via proc-macro-crate 2.0.2, toml 0.8.2, toml_edit 0.19.15, toml_edit 0.20.2. Keeping toml_datetime 1.1.1+spec-1.1.0." },
+  { crate = "toml_datetime@0.7.5+spec-1.1.0", reason = "follows toml. Reached via toml 0.9.12+spec-1.1.0. Keeping toml_datetime 1.1.1+spec-1.1.0." },
+  { crate = "toml_edit@0.19.15", reason = "follows proc-macro-crate and toml. Reached via proc-macro-crate 1.3.1. Keeping toml_edit 0.25.13+spec-1.1.0." },
+  { crate = "toml_edit@0.20.2", reason = "follows proc-macro-crate and toml. Reached via proc-macro-crate 2.0.2, toml 0.8.2. Keeping toml_edit 0.25.13+spec-1.1.0." },
+  { crate = "wasm-streams@0.5.0", reason = "follows reqwest. Reached via reqwest 0.13.4. Keeping wasm-streams 0.4.2." },
+  { crate = "windows-core@0.61.2", reason = "the webview2 bindings Tauri 2 pins are a generation behind. Reached via tao 0.35.3, webview2-com 0.38.2, webview2-com-sys 0.38.2, windows 0.61.3, windows-collections 0.2.0, windows-future 0.2.1, windows-numerics 0.2.0, wry 0.55.1. Keeping windows-core 0.62.2." },
+  { crate = "windows-link@0.1.3", reason = "follows windows-core. Reached via windows 0.61.3, windows-core 0.61.2, windows-future 0.2.1, windows-numerics 0.2.0, windows-result 0.3.4, windows-strings 0.4.2, windows-threading 0.1.0. Keeping windows-link 0.2.1." },
+  { crate = "windows-result@0.3.4", reason = "follows windows-core. Reached via windows-core 0.61.2. Keeping windows-result 0.4.1." },
+  { crate = "windows-strings@0.4.2", reason = "follows windows-core. Reached via windows-core 0.61.2. Keeping windows-strings 0.5.1." },
+  { crate = "windows-sys@0.45.0", reason = "five generations coexist; none of them compiles on the Linux and macOS targets we build and ship. Reached via jni 0.21.1. Keeping windows-sys 0.61.2." },
+  { crate = "windows-sys@0.52.0", reason = "five generations coexist; none of them compiles on the Linux and macOS targets we build and ship. Reached via errno 0.3.14, ring 0.17.14, rustix 1.1.4, rustls-platform-verifier 0.7.0, tempfile 3.27.0, winapi-util 0.1.11. Keeping windows-sys 0.61.2." },
+  { crate = "windows-sys@0.59.0", reason = "five generations coexist; none of them compiles on the Linux and macOS targets we build and ship. Reached via dirs-sys 0.5.0, nu-ansi-term 0.50.3, window-vibrancy 0.6.0, winreg 0.55.0. Keeping windows-sys 0.61.2." },
+  { crate = "windows-sys@0.60.2", reason = "five generations coexist; none of them compiles on the Linux and macOS targets we build and ship. Reached via anstyle-query 1.1.5, anstyle-wincon 3.0.11, file-id 0.2.3, muda 0.19.3, notify 8.2.0, socket2 0.6.5, uds_windows 1.2.1. Keeping windows-sys 0.61.2." },
+  { crate = "windows-targets@0.42.2", reason = "follows windows-sys. Reached via windows-sys 0.45.0. Keeping windows-targets 0.53.5." },
+  { crate = "windows-targets@0.52.6", reason = "follows windows-sys. Reached via windows-sys 0.52.0, windows-sys 0.59.0. Keeping windows-targets 0.53.5." },
+  { crate = "windows_aarch64_gnullvm@0.42.2", reason = "follows windows-targets; an import library for a target we do not build. Reached via windows-targets 0.42.2. Keeping windows_aarch64_gnullvm 0.53.1." },
+  { crate = "windows_aarch64_gnullvm@0.52.6", reason = "follows windows-targets; an import library for a target we do not build. Reached via windows-targets 0.52.6. Keeping windows_aarch64_gnullvm 0.53.1." },
+  { crate = "windows_aarch64_msvc@0.42.2", reason = "follows windows-targets; an import library for a target we do not build. Reached via windows-targets 0.42.2. Keeping windows_aarch64_msvc 0.53.1." },
+  { crate = "windows_aarch64_msvc@0.52.6", reason = "follows windows-targets; an import library for a target we do not build. Reached via windows-targets 0.52.6. Keeping windows_aarch64_msvc 0.53.1." },
+  { crate = "windows_i686_gnu@0.42.2", reason = "follows windows-targets; an import library for a target we do not build. Reached via windows-targets 0.42.2. Keeping windows_i686_gnu 0.53.1." },
+  { crate = "windows_i686_gnu@0.52.6", reason = "follows windows-targets; an import library for a target we do not build. Reached via windows-targets 0.52.6. Keeping windows_i686_gnu 0.53.1." },
+  { crate = "windows_i686_gnullvm@0.52.6", reason = "follows windows-targets; an import library for a target we do not build. Reached via windows-targets 0.52.6. Keeping windows_i686_gnullvm 0.53.1." },
+  { crate = "windows_i686_msvc@0.42.2", reason = "follows windows-targets; an import library for a target we do not build. Reached via windows-targets 0.42.2. Keeping windows_i686_msvc 0.53.1." },
+  { crate = "windows_i686_msvc@0.52.6", reason = "follows windows-targets; an import library for a target we do not build. Reached via windows-targets 0.52.6. Keeping windows_i686_msvc 0.53.1." },
+  { crate = "windows_x86_64_gnu@0.42.2", reason = "follows windows-targets; an import library for a target we do not build. Reached via windows-targets 0.42.2. Keeping windows_x86_64_gnu 0.53.1." },
+  { crate = "windows_x86_64_gnu@0.52.6", reason = "follows windows-targets; an import library for a target we do not build. Reached via windows-targets 0.52.6. Keeping windows_x86_64_gnu 0.53.1." },
+  { crate = "windows_x86_64_gnullvm@0.42.2", reason = "follows windows-targets; an import library for a target we do not build. Reached via windows-targets 0.42.2. Keeping windows_x86_64_gnullvm 0.53.1." },
+  { crate = "windows_x86_64_gnullvm@0.52.6", reason = "follows windows-targets; an import library for a target we do not build. Reached via windows-targets 0.52.6. Keeping windows_x86_64_gnullvm 0.53.1." },
+  { crate = "windows_x86_64_msvc@0.42.2", reason = "follows windows-targets; an import library for a target we do not build. Reached via windows-targets 0.42.2. Keeping windows_x86_64_msvc 0.53.1." },
+  { crate = "windows_x86_64_msvc@0.52.6", reason = "follows windows-targets; an import library for a target we do not build. Reached via windows-targets 0.52.6. Keeping windows_x86_64_msvc 0.53.1." },
+  { crate = "winnow@0.5.40", reason = "follows the three toml generations. Reached via toml_edit 0.19.15, toml_edit 0.20.2. Keeping winnow 1.0.4." },
+  { crate = "winnow@0.7.15", reason = "follows the three toml generations. Reached via cron 0.16.0, toml 0.9.12+spec-1.1.0. Keeping winnow 1.0.4." },
+]
+
+[sources]
+# Zero findings today: every `source` line in Cargo.lock is crates.io. This is a
+# guard, not a repair, which makes its negative fixture the only evidence it
+# works — see scripts/qa/test-dependency-policy.sh.
+unknown-registry = "deny"
+unknown-git = "deny"
