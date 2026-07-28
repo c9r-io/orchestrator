@@ -64,7 +64,7 @@ TOOL_FIXTURE="$QA_ROOT/coordination-tools-only.yaml"
 # the filter keeps every one of them out, leaving an empty file that everything
 # downstream reads as "no contracts to check" — zero and N are the same exit
 # code. fixture_produce refuses an empty result for that reason (FR-143).
-if fixture_produce "coordination tool fixture" "$TOOL_FIXTURE" ruby -ryaml -e '
+if ! fixture_produce "coordination tool fixture" "$TOOL_FIXTURE" ruby -ryaml -e '
   source, output = ARGV
   documents = YAML.load_stream(File.read(source)).compact.select do |document|
     document["kind"] != "Workflow" ||
