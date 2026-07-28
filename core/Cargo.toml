@@ -20,7 +20,7 @@ orchestrator-runner = { path = "../crates/orchestrator-runner", version = "0.3.1
 anyhow = "1.0"
 arc-swap = "1.9"
 aes-gcm-siv = "0.11"
-base64 = "0.22"
+base64 = "0.23"
 cel-interpreter = "0.10.0"
 dirs = "6"
 chrono = { version = "0.4", features = ["serde"] }

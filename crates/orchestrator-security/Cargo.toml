@@ -13,7 +13,7 @@ rust-version.workspace = true
 orchestrator-config = { path = "../orchestrator-config", version = "0.3.1" }
 aes-gcm-siv = "0.11"
 anyhow = "1.0"
-base64 = "0.22"
+base64 = "0.23"
 chrono = { version = "0.4", features = ["serde"] }
 rand = "0.8"
 rusqlite = { version = "0.31", features = ["bundled"] }
