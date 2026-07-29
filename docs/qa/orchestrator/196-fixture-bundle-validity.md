@@ -10,7 +10,7 @@ related_fr: FR-148
 `config/governance/fixture-bundle-validity.json`, over the 93 tracked bundles
 under `fixtures/manifests/bundles/` (`git ls-files 'fixtures/manifests/bundles/*.yaml' | wc -l`,
 at `ef458f16`)
-**Scenarios**: 7
+**Scenarios**: 5
 **Priority**: Medium
 
 ## Background
@@ -41,7 +41,7 @@ the retirement checks (`core/src/config_load/validate/workflow_steps.rs:49-74`),
 so a bundle that merely omits its Agent fails with `no agent supports capability`
 — and an exit code cannot tell that apart from the retirement the fixture was
 written to demonstrate. Every declared entry therefore names the diagnostic it
-must fail by, and scenario 4 is the case that separates the two.
+must fail by, and scenario 3 is the case that separates the two.
 
 **The scope is derived, and a scope that derives nothing is a failure.** The
 corpus comes from `git ls-files`. A `git` that cannot run, a pathspec that
@@ -79,7 +79,14 @@ diagnostic it fails by. Runtime under 3s.
 
 ---
 
-## Scenario 2: A bundle that starts failing, and nobody declared it
+## Scenario 2: The ledger and the tree disagree, in both directions
+
+Two mutations, because the mismatch has two halves and only one of them is the
+shape people expect. A fixture the product stopped accepting is the originating
+ticket's shape; a declaration whose bundle the product now accepts is the half
+that looks like a working exemption and is not.
+
+### 2a — rejected, and in no declaration
 
 **Steps**
 
@@ -109,9 +116,7 @@ rejected by the product and appears in no declaration:
 This is the shape the originating ticket had: a fixture the product stopped
 accepting, with nothing looking.
 
----
-
-## Scenario 3: A declared entry the product now accepts
+### 2b — declared invalid, and accepted
 
 **Steps**
 
@@ -144,7 +149,7 @@ that does.
 
 ---
 
-## Scenario 4: Rejected, declared, and still wrong
+## Scenario 3: Rejected, declared, and still wrong
 
 **Steps**
 
@@ -175,31 +180,8 @@ missing agent, say — and the ledger would keep certifying it.
 
 ---
 
-## Scenario 5: The rot ratchet is exact in both directions
 
-**Steps**
-
-```bash
-for n in 18 20; do
-  python3 -c "
-p='config/governance/fixture-bundle-validity.json'
-s=open(p).read(); open(p,'w').write(s.replace('\"rotted_count\": 19', '\"rotted_count\": $n', 1))"
-  cargo test -p agent-orchestrator fixture_corpus_tests::every_tracked; echo "n=$n exit=$?"
-  git checkout -- config/governance/fixture-bundle-validity.json
-done
-```
-
-**Expected result**
-
-Both fail with `rot ratchet: rotted_count says <n> but 19 entries are declared
-rotted`. Equality, not a ceiling: retiring one rotted fixture has to move the
-number down, so the debt cannot be quietly carried forward. Compare FR-133's
-`deny.toml`, where 48 crates carry 70 individually written reasons for the same
-purpose.
-
----
-
-## Scenario 6: A retired construct appended to a live bundle
+## Scenario 4: A retired construct appended to a live bundle
 
 **Steps**
 
@@ -224,25 +206,54 @@ capability` fires first and the fixture would be asserting the wrong thing.
 
 ---
 
-## Scenario 7: The evaluator's own edge cases
+## Scenario 5: The evaluator's own rules, and the ratchet end to end
 
 **Steps**
 
 ```bash
 cargo test -p agent-orchestrator fixture_corpus_tests::evaluator
+for n in 18 20; do
+  python3 -c "
+p='config/governance/fixture-bundle-validity.json'
+s=open(p).read(); open(p,'w').write(s.replace('\"rotted_count\": 19', '\"rotted_count\": $n', 1))"
+  cargo test -p agent-orchestrator fixture_corpus_tests::every_tracked; echo "n=$n exit=$?"
+  git checkout -- config/governance/fixture-bundle-validity.json
+done
 ```
 
 **Expected result**
 
-10 tests pass, covering: a clean corpus; a stale declaration; a wrong diagnostic;
-a diagnostic matched from any position in the error list, not only the first (the
-merge walks a `HashMap`, and `cycle-overflow-test.yaml` was measured naming a
-different workflow on two consecutive runs); an undeclared rejection whose
-message carries the diagnostic; a declared path outside the corpus; the ratchet
-in both directions; a blank `reason`; a blank or empty `expect` — the dangerous
-half, since one blank string matches every error and would turn the entry into a
-blanket acceptance of any future rejection; and a duplicated path, which a map
-would otherwise swallow.
+The 10 evaluator tests pass, covering: a clean corpus; a stale declaration; a
+wrong diagnostic; a diagnostic matched from any position in the error list, not
+only the first (the merge walks a `HashMap`, and `cycle-overflow-test.yaml` was
+measured naming a different workflow on two consecutive runs); an undeclared
+rejection whose message carries the diagnostic; a declared path outside the
+corpus; the ratchet in both directions; a blank `reason`; a blank or empty
+`expect` — the dangerous half, since one blank string matches every error and
+would turn the entry into a blanket acceptance of any future rejection; and a
+duplicated path, which a map would otherwise swallow.
+
+Then both loop iterations fail with `rot ratchet: rotted_count says <n> but 19
+entries are declared rotted`. Equality, not a ceiling: retiring one rotted
+fixture has to move the number down, so the debt cannot be quietly carried
+forward. Compare FR-133's `deny.toml`, where 48 crates carry 70 individually
+written reasons for the same purpose.
+
+The unit test and the end-to-end run are both here on purpose — the unit test
+proves the rule, the loop proves the rule is wired to the real ledger.
+
+---
+
+## Checklist
+
+- [ ] Scenario 1 — the corpus and the ledger agree at `HEAD`, 62 accepted / 31 declared
+- [ ] Scenario 2a — an undeclared rejection fails, and the message carries the diagnostic
+- [ ] Scenario 2b — a declaration whose bundle now validates fails
+- [ ] Scenario 3 — a bundle rejected for a reason other than the declared one fails
+- [ ] Scenario 4 — an injected retired construct is named by `[legacy_coordination_removed]`
+- [ ] Scenario 5 — the 10 evaluator tests pass and the ratchet trips in both directions
+- [ ] `config/governance/fixture-bundle-validity.json` restored (`git status --porcelain` empty)
+- [ ] `cargo test --workspace --exclude orchestrator-gui` and strict Clippy green
 
 ---
 
@@ -256,7 +267,7 @@ queried the generic variable table. Nothing here would have seen it.
 
 **A bundle can be `environment` for a reason that stops being true.** Four
 entries depend on an ambient path or a base policy — if a developer happens to
-have `/tmp/test-ws` on disk, `test-workspace.yaml` validates and scenario 3's
+have `/tmp/test-ws` on disk, `test-workspace.yaml` validates and scenario 2b's
 rule fires. That is the correct direction (loud, not silent), but it is a
 locally-red-in-CI-green case worth recognising rather than re-running.
 
