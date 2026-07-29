@@ -74,7 +74,7 @@ behavior:
 5. 并排运行 legacy 与 tool 版本；比较 task/item 终态和事件证据，再删除旧 wiring。
 6. 记录仍然存在的跨 step 变量，不要自动把它们扩张为通用状态仓库。
 
-完整的新旧对照在 `fixtures/manifests/bundles/coordination-collapse-pilot.yaml`。运行：
+新的工具化 workflow 在 `fixtures/manifests/bundles/coordination-collapse-pilot.yaml`；它取代的那个 legacy workflow 作为对照留在旁边的 `coordination-legacy-baseline.yaml` —— 守护进程现在会拒绝它，而这条拒绝本身也被断言。两者一起验证：
 
 ```bash
 ./scripts/qa/test-coordination-collapse.sh

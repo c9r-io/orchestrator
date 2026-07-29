@@ -8,6 +8,10 @@ ORCHD="${ORCHD:-$REPO_ROOT/target/debug/orchestratord}"
 ORCH="${ORCH:-$REPO_ROOT/target/debug/orchestrator}"
 BIND_ADDR="${BIND_ADDR:-127.0.0.1:19318}"
 FIXTURE="$REPO_ROOT/fixtures/manifests/bundles/coordination-collapse-pilot.yaml"
+# The legacy half FR-118 measured against. Never applied as setup — `behavior.captures`
+# was removed by design (DD-137), so `apply` rejects it, and case 4 asserts exactly that.
+BASELINE="$REPO_ROOT/fixtures/manifests/bundles/coordination-legacy-baseline.yaml"
+PILOT_GOAL="FR-118 coordination parity"
 FAKE_CLAUDE="$REPO_ROOT/scripts/qa/fixtures/fake-claude-coordination.sh"
 QA_ROOT="$(mktemp -d)"
 QA_HOME="$(mktemp -d)"
@@ -17,6 +21,16 @@ FAIL=0
 
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
+
+# Setup that fails must still print the summary line. This gate spent four days ending at the
+# fixture apply with no summary at all, and a truncated run reads exactly like a complete one —
+# the shape SKILL.md §4.4 shape 7 names. `set -e` is what made it silent, so any setup step whose
+# failure ends the run goes through here instead of being allowed to kill the script.
+abort_with_summary() {
+  fail "$1"
+  echo "FR-118 QA: $PASS passed, $FAIL failed" >&2
+  exit 1
+}
 
 cleanup() {
   if [[ -n "$DAEMON_PID" ]]; then
@@ -60,7 +74,7 @@ else
   pass "tool pilot contains no CEL, capture, JSONPath, post-action, or pipeline-var wiring"
 fi
 
-LEGACY_BLOCK="$(awk '/BEGIN LEGACY COORDINATION/{active=1; next} /END LEGACY COORDINATION/{active=0} active' "$FIXTURE")"
+LEGACY_BLOCK="$(awk '/BEGIN LEGACY COORDINATION/{active=1; next} /END LEGACY COORDINATION/{active=0} active' "$BASELINE")"
 LEGACY_EFFECTIVE_LINES="$(rg -v '^\s*(#|$)' <<<"$LEGACY_BLOCK" | wc -l | tr -d ' ')"
 TOOL_EFFECTIVE_LINES="$(rg -v '^\s*(#|$)' <<<"$TOOL_BLOCK" | wc -l | tr -d ' ')"
 LEGACY_COORDINATION_LINES="$(rg -c 'prehook:|engine: cel|when:|captures:|var:|source:|json_path:|post_actions:|type: scan_tickets|on_success:|action: set_status|status:' <<<"$LEGACY_BLOCK")"
@@ -106,14 +120,37 @@ if ! "$ORCH" task list -o json >/dev/null 2>&1; then
 fi
 
 PROJECT="qa-coordination-collapse"
+APPLY_STATUS=0
 (
   cd "$QA_ROOT/workspace"
-  "$ORCH" apply --project "$PROJECT" -f "$FIXTURE" > "$QA_ROOT/apply.out"
-)
-if rg -q 'workflow/coordination-(legacy|tools)' "$QA_ROOT/apply.out"; then
-  pass "legacy and tool pilots apply in one isolated project"
+  "$ORCH" apply --project "$PROJECT" -f "$FIXTURE" > "$QA_ROOT/apply.out" 2>&1
+) || APPLY_STATUS=$?
+if [[ "$APPLY_STATUS" -ne 0 ]]; then
+  abort_with_summary "the pilot fixture did not apply (status=$APPLY_STATUS): $(head -1 "$QA_ROOT/apply.out")"
+fi
+if rg -q 'workflow/coordination-tools' "$QA_ROOT/apply.out"; then
+  pass "the tool pilot applies in one isolated project"
 else
   fail "pilot apply output is incomplete"
+fi
+
+# The retired baseline must still be rejected, and must be rejected *for the reason it was
+# retired*. Asserting only that the apply failed would not separate this from the neighbouring
+# diagnostic: capability validation runs before the captures check, so a baseline missing its
+# agent fails with "no agent supports capability" and a bare exit code cannot tell them apart.
+#
+# This is what keeps the baseline file honest. It is text this gate measures; if it ever became
+# appliable again, the measurement would be describing something the daemon accepts.
+BASELINE_STATUS=0
+(
+  cd "$QA_ROOT/workspace"
+  "$ORCH" apply --project "$PROJECT" -f "$BASELINE" > "$QA_ROOT/baseline-apply.out" 2>&1
+) || BASELINE_STATUS=$?
+if [[ "$BASELINE_STATUS" -ne 0 ]] &&
+   rg -q '\[legacy_coordination_removed\].*coordination-legacy' "$QA_ROOT/baseline-apply.out"; then
+  pass "the retired legacy baseline is still rejected, and names why"
+else
+  fail "the legacy baseline was not rejected with [legacy_coordination_removed] (status=$BASELINE_STATUS): $(head -1 "$QA_ROOT/baseline-apply.out")"
 fi
 
 create_and_wait() {
@@ -124,7 +161,7 @@ create_and_wait() {
     cd "$QA_ROOT/workspace"
     "$ORCH" task create --project "$PROJECT" --workspace coordination-pilot \
       --workflow "$workflow" --target-file docs/qa/pilot.md \
-      --goal "FR-118 coordination parity" --name "$name" --no-start | \
+      --goal "$PILOT_GOAL" --name "$name" --no-start | \
       rg -o '[0-9a-f-]{36}' | head -1
   )"
   "$ORCH" task start "$task_id" >/dev/null
@@ -137,21 +174,20 @@ create_and_wait() {
   printf '%s|%s\n' "$task_id" "$status"
 }
 
-LEGACY="$(create_and_wait coordination-legacy coordination-legacy)"
+# Only the tool pilot runs. The legacy pilot cannot: the daemon rejects the workflow, which is
+# the decommission working. The parity comparison retired with the mechanism it compared against
+# — what survives it is the reduction measurement above, which is a property of the two YAML
+# blocks and needs no runtime, and the rejection assertion, which is a property of the daemon.
 TOOLS="$(create_and_wait coordination-tools coordination-tools)"
-LEGACY_ID="${LEGACY%%|*}"
 TOOLS_ID="${TOOLS%%|*}"
-LEGACY_STATUS="${LEGACY##*|}"
 TOOLS_STATUS="${TOOLS##*|}"
 DB="$QA_ROOT/data/agent_orchestrator.db"
-LEGACY_ITEM_STATUS="$(sqlite3 "$DB" "SELECT status FROM task_items WHERE task_id='$LEGACY_ID' ORDER BY order_no LIMIT 1;")"
 TOOLS_ITEM_STATUS="$(sqlite3 "$DB" "SELECT status FROM task_items WHERE task_id='$TOOLS_ID' ORDER BY order_no LIMIT 1;")"
-if [[ "$LEGACY_STATUS" == "completed" && "$TOOLS_STATUS" == "completed" && \
-      "$LEGACY_ITEM_STATUS" == "qa_passed" && "$TOOLS_ITEM_STATUS" == "qa_passed" ]]; then
-  pass "legacy and tool pilots converge to completed/qa_passed"
+if [[ "$TOOLS_STATUS" == "completed" && "$TOOLS_ITEM_STATUS" == "qa_passed" ]]; then
+  pass "the tool pilot converges to completed/qa_passed"
 else
   sed -n '1,300p' "$QA_ROOT/daemon.log" >&2
-  fail "pilot parity diverged: legacy=$LEGACY_STATUS/$LEGACY_ITEM_STATUS tools=$TOOLS_STATUS/$TOOLS_ITEM_STATUS"
+  fail "tool pilot diverged: tools=$TOOLS_STATUS/$TOOLS_ITEM_STATUS"
 fi
 
 DRIVER_USE_COUNT="$(sqlite3 "$DB" "SELECT COUNT(*) FROM events WHERE task_id='$TOOLS_ID' AND event_type='driver_tool_use';")"
@@ -200,12 +236,24 @@ fi
 
 TASK_PIPELINE="$(sqlite3 "$DB" "SELECT COALESCE(pipeline_vars_json,'{}') FROM tasks WHERE id='$TOOLS_ID';")"
 ITEM_PIPELINE="$(sqlite3 "$DB" "SELECT COALESCE(dynamic_vars_json,'{}') FROM task_items WHERE task_id='$TOOLS_ID' ORDER BY order_no LIMIT 1;")"
-if jq -e 'length == 0' <<<"$TASK_PIPELINE" >/dev/null && \
-   jq -e 'keys | sort == ["goal","last_sandbox_denial_reason","last_sandbox_denied","sandbox_denied_count"]' \
-     <<<"$ITEM_PIPELINE" >/dev/null; then
-  pass "tool pilot retains only measured goal and sandbox safety channels"
+# This used to require the item's generic var map to hold exactly
+# ["goal","last_sandbox_denied","sandbox_denied_count","last_sandbox_denial_reason"]. The same
+# commit that retired `behavior.captures` (1b0937ca) moved those four into a typed carrier —
+# `PipelineVariables::normalize_preserved_channels` migrates them out of the generic map, and the
+# goal lives on `tasks.goal`. Measured after the change: both JSON columns are NULL and the run is
+# otherwise identical, so the invariant now holds in its strongest form — there is no generic
+# store to leak into.
+#
+# `-z` on the key lists would pass on a run where nothing happened, so it is paired with the goal:
+# a task carrying the intent this gate supplied is a task that actually ran. The expected goal is
+# the variable the task was created with, not a second copy of the string.
+TASK_GOAL="$(sqlite3 "$DB" "SELECT COALESCE(goal,'') FROM tasks WHERE id='$TOOLS_ID';")"
+TASK_VAR_KEYS="$(jq -r '(.vars // {}) | keys | join(",")' <<<"$TASK_PIPELINE")"
+ITEM_VAR_KEYS="$(jq -r '(.vars // {}) | keys | join(",")' <<<"$ITEM_PIPELINE")"
+if [[ "$TASK_GOAL" == "$PILOT_GOAL" && -z "$TASK_VAR_KEYS" && -z "$ITEM_VAR_KEYS" ]]; then
+  pass "user intent is carried on the typed channel and the generic var store holds nothing"
 else
-  fail "tool pilot has an unclassified residual channel: task=$TASK_PIPELINE item=$ITEM_PIPELINE"
+  fail "residual channel check: goal='$TASK_GOAL' task_vars=[$TASK_VAR_KEYS] item_vars=[$ITEM_VAR_KEYS]"
 fi
 
 jq -n \
@@ -214,7 +262,9 @@ jq -n \
   --argjson legacy_coordination_lines "$LEGACY_COORDINATION_LINES" \
   --argjson tool_coordination_lines "$TOOL_COORDINATION_LINES" \
   --argjson reduction_percent "$REDUCTION_PERCENT" \
-  '{legacy:{effective_yaml_lines:$legacy_effective_lines,coordination_lines:$legacy_coordination_lines},tool:{effective_yaml_lines:$tool_effective_lines,coordination_lines:$tool_coordination_lines},coordination_reduction_percent:$reduction_percent,residual_pipeline_var_flows:[{key:"goal",source:"task_create",consumer:"prompt_context",spilled:false},{key:"last_sandbox_denied",source:"runner_safety",consumer:"subsequent_step_safety_context",spilled:false},{key:"sandbox_denied_count",source:"runner_safety",consumer:"subsequent_step_safety_context",spilled:false},{key:"last_sandbox_denial_reason",source:"runner_safety",consumer:"subsequent_step_safety_context",spilled:false}]}' \
+  --arg task_var_keys "$TASK_VAR_KEYS" \
+  --arg item_var_keys "$ITEM_VAR_KEYS" \
+  '{legacy:{effective_yaml_lines:$legacy_effective_lines,coordination_lines:$legacy_coordination_lines},tool:{effective_yaml_lines:$tool_effective_lines,coordination_lines:$tool_coordination_lines},coordination_reduction_percent:$reduction_percent,residual_typed_channels:[{key:"goal",carrier:"tasks.goal + PreservedExecutionChannels",source:"task_create",consumer:"prompt_context"},{key:"last_sandbox_denied",carrier:"PreservedExecutionChannels",source:"runner_safety",consumer:"subsequent_step_safety_context"},{key:"sandbox_denied_count",carrier:"PreservedExecutionChannels",source:"runner_safety",consumer:"subsequent_step_safety_context"},{key:"last_sandbox_denial_reason",carrier:"PreservedExecutionChannels",source:"runner_safety",consumer:"subsequent_step_safety_context"}],generic_pipeline_var_keys:{task:$task_var_keys,item:$item_var_keys}}' \
   > "$QA_ROOT/coordination-collapse-metrics.json"
 
 if [[ "$FAIL" -ne 0 ]]; then

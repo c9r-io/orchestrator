@@ -1,0 +1,64 @@
+# FR-118's retired legacy-coordination baseline. NEVER APPLIED as setup.
+#
+# `behavior.captures` was removed by design on 2026-07-25 (DD-137,
+# `[legacy_coordination_removed]`), so `orchestrator apply -f` rejects this file. That is the
+# point: `scripts/qa/test-coordination-collapse.sh` reads it as *text* to compute the coordination
+# line reduction FR-118 claimed, and applies it exactly once to assert the rejection still names
+# the right diagnostic. If this file ever applies cleanly, the decommission has come undone.
+#
+# It was split out of `coordination-collapse-pilot.yaml` because `apply` is all-or-nothing over a
+# bundle: one rejected document took the tool pilot down with it, and nine assertions that have
+# nothing to do with legacy coordination stopped running for four days without a signal.
+#
+# The Agent travels with the Workflow deliberately. Capability validation runs *before* the
+# captures check, so a baseline applied without its agent fails with "no agent supports
+# capability" — a different diagnostic, and an assertion on it would pass for the wrong reason.
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: legacy-coordination-agent
+spec:
+  capabilities: [legacy_coordination]
+  command: >-
+    printf '%s\n' '{"confidence":1.0,"quality_score":1.0,"passed":true,"artifacts":[]}'
+---
+# BEGIN LEGACY COORDINATION
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: coordination-legacy
+spec:
+  steps:
+    - id: legacy_test
+      type: legacy_coordination
+      scope: item
+      required_capability: legacy_coordination
+      enabled: true
+      repeatable: false
+      behavior:
+        captures:
+          - var: legacy_test_passed
+            source: stdout
+            json_path: "$.passed"
+        post_actions:
+          - type: scan_tickets
+        on_success:
+          action: set_status
+          status: qa_passed
+    - id: legacy_finalize
+      type: legacy_coordination
+      scope: item
+      required_capability: legacy_coordination
+      enabled: true
+      repeatable: false
+      prehook:
+        engine: cel
+        when: "legacy_test_passed == true && active_ticket_count == 0"
+        reason: "Carry captured test state and ticket scan into finalization"
+      behavior:
+        on_success:
+          action: set_status
+          status: qa_passed
+  loop:
+    mode: once
+# END LEGACY COORDINATION

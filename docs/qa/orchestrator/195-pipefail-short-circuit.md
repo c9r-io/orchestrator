@@ -230,15 +230,19 @@ They became `<<< "$(printf '%s\n' $targets)"`, at
 | `test-slack-reaction-task-routing.sh` | 6 passed, 0 failed |
 | `test-coordination-collapse.sh` | aborts before reaching this FR's change — see below |
 
-`test-coordination-collapse.sh` ends at line 140 on
+`test-coordination-collapse.sh` ends on
 `Error: resource.apply: [legacy_coordination_removed] workflow 'coordination-legacy'
 step 'legacy_test' uses behavior.captures`, which `set -e` turns into an exit.
-The only line this FR changed in that file is 51 lines further down. A before-run
-at `596500e7` — the revision before the rewrite — reproduces the same abort, so
-this is pre-existing rot in a manual gate whose fixture the daemon has outgrown,
-not a regression from this change. **The before-run is what establishes that**;
-the line numbers alone would be the "already failing before the mutation"
-residue §4.4 shape 7 names.
+A before-run at `596500e7` — the revision before the rewrite — reproduces the same
+abort, so this is pre-existing rot in a manual gate whose fixture the daemon has
+outgrown, not a regression from this change. **The before-run is what establishes
+that**; line numbers alone would be the "already failing before the mutation"
+residue §4.4 shape 7 names — and this note originally gave the wrong one. It said
+line 140, `create_and_wait coordination-legacy`, matched from the workflow name in
+the error. The abort is at the **`orchestrator apply`**, well above it: `apply` is
+all-or-nothing over a bundle, so the tool pilot is never created either and three
+of twelve assertions run rather than eleven of twelve. Corrected when the ticket
+was fixed; the gate now reaches its summary line either way.
 
 The remaining five drive the ambient daemon and the runtime database. CLAUDE.md
 forbids operating on it and §4.7 forbids self-referential gates, so they were not

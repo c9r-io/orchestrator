@@ -1,6 +1,9 @@
-# FR-118 coordination-collapse parity pilot.
-# The legacy workflow pays the declarative coordination cost. The tool workflow
-# retains only governance and delegates in-fence coordination to typed tools.
+# FR-118 coordination-collapse pilot — the half that still applies.
+#
+# The tool workflow retains only governance and delegates in-fence coordination to typed tools.
+# The legacy half it was measured against lives in `coordination-legacy-baseline.yaml` and is
+# never applied as setup: `behavior.captures` was removed by design (DD-137), and `apply` is
+# all-or-nothing over a bundle, so leaving it here took the tool pilot down with it.
 apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
@@ -9,15 +12,6 @@ spec:
   root_path: "."
   qa_targets: [docs/qa]
   ticket_dir: docs/ticket
----
-apiVersion: orchestrator.dev/v2
-kind: Agent
-metadata:
-  name: legacy-coordination-agent
-spec:
-  capabilities: [legacy_coordination]
-  command: >-
-    printf '%s\n' '{"confidence":1.0,"quality_score":1.0,"passed":true,"artifacts":[]}'
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
@@ -46,47 +40,6 @@ spec:
   prompt: >-
     Run the workspace tests, inspect tickets, and mark the current item based on
     typed tool results. Do not communicate state through shell output variables.
----
-# BEGIN LEGACY COORDINATION
-apiVersion: orchestrator.dev/v2
-kind: Workflow
-metadata:
-  name: coordination-legacy
-spec:
-  steps:
-    - id: legacy_test
-      type: legacy_coordination
-      scope: item
-      required_capability: legacy_coordination
-      enabled: true
-      repeatable: false
-      behavior:
-        captures:
-          - var: legacy_test_passed
-            source: stdout
-            json_path: "$.passed"
-        post_actions:
-          - type: scan_tickets
-        on_success:
-          action: set_status
-          status: qa_passed
-    - id: legacy_finalize
-      type: legacy_coordination
-      scope: item
-      required_capability: legacy_coordination
-      enabled: true
-      repeatable: false
-      prehook:
-        engine: cel
-        when: "legacy_test_passed == true && active_ticket_count == 0"
-        reason: "Carry captured test state and ticket scan into finalization"
-      behavior:
-        on_success:
-          action: set_status
-          status: qa_passed
-  loop:
-    mode: once
-# END LEGACY COORDINATION
 ---
 # BEGIN TOOL COORDINATION
 apiVersion: orchestrator.dev/v2

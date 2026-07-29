@@ -69,7 +69,19 @@ Verify the transport shim forwards authenticated JSON-RPC without owning busines
 - Unknown or disallowed tools are not advertised and fail closed.
 - Tokens are absent from persistent state and logs.
 
-## Scenario 3: Legacy And Tool Pilot Parity
+## Scenario 3: The Collapse, And The Baseline It Was Measured Against
+
+> **The parity comparison retired with the mechanism it compared against.** `behavior.captures`
+> was removed by design on 2026-07-25 (`1b0937ca`, DD-137), so `coordination-legacy` can no longer
+> be applied at all — there is no legacy pilot to be at parity with. What survives is the
+> measurement, which is a property of two YAML blocks and needs no runtime, plus a new assertion
+> that the retired baseline is still rejected.
+>
+> Nobody noticed for four days. `apply` is all-or-nothing over a bundle, so the rejected workflow
+> took the *whole* fixture down with it and the gate ended at the apply with **no summary line** —
+> three of twelve assertions run, and a truncated run reads exactly like a complete one. This gate
+> is `manual-runbook`; no CI job watches it. The apply now routes its failure through
+> `abort_with_summary`, so the next fixture to rot says so instead of vanishing.
 
 ### Preconditions
 
@@ -78,18 +90,25 @@ Verify the transport shim forwards authenticated JSON-RPC without owning busines
 
 ### Goal
 
-Compare legacy declarative coordination with the typed-tool workflow.
+Measure the coordination cost the typed-tool workflow removed, and prove the baseline it was
+measured against stays retired.
 
 ### Steps
 
-1. Create one task with `coordination-legacy` and one with `coordination-tools` against the same QA target.
-2. Start both tasks and wait for terminal state.
-3. Compare task and item status.
-4. Count effective YAML and transitional coordination lines between the fixture markers.
+1. Apply `fixtures/manifests/bundles/coordination-collapse-pilot.yaml`; only `coordination-tools`
+   is in it now.
+2. Apply `fixtures/manifests/bundles/coordination-legacy-baseline.yaml` and read the diagnostic.
+3. Create a task with `coordination-tools`, start it, and wait for terminal state.
+4. Count effective YAML and transitional coordination lines between the markers in each file.
 
 ### Expected
 
-- Both tasks converge to `completed`; both items converge to `qa_passed`.
+- The tool task converges to `completed`; its item converges to `qa_passed`.
+- Applying the baseline **fails**, and the output names `[legacy_coordination_removed]` together
+  with `coordination-legacy`. The diagnostic is asserted, not the exit code: capability validation
+  runs before the captures check, so a baseline missing its agent fails with `no agent supports
+  capability`, and an exit-code assertion could not tell the two apart. Measured — stripping the
+  agent makes this assertion fail, as it must.
 - The tool block contains no CEL prehook, capture, JSONPath, post-action, or pipeline-variable wiring.
 - Effective lines change from 38 to 21; coordination lines change from 15 to 0, a 100% reduction.
 
@@ -112,8 +131,17 @@ Confirm auditable tool execution and enumerate all cross-step state that remains
 ### Expected
 
 - The three pilot calls (`run_tests`, `scan_tickets`, `mark_item`) each have use, result, start, and completion evidence.
-- Task-level pipeline variables are empty.
-- Item-level residual keys are exactly `goal`, `last_sandbox_denied`, `sandbox_denied_count`, and `last_sandbox_denial_reason`; none spill.
+- **The generic pipeline-variable store holds nothing**, at task and item level alike. The same
+  commit that retired `behavior.captures` moved the four residual channels out of it:
+  `PipelineVariables::normalize_preserved_channels` migrates `goal`, `last_sandbox_denied`,
+  `sandbox_denied_count` and `last_sandbox_denial_reason` into the typed
+  `PreservedExecutionChannels` carrier, and the goal also lives on `tasks.goal`. Measured on a
+  green run: both JSON columns are **NULL**, so the invariant now holds in its strongest form —
+  there is no generic store to leak into.
+- Because "the map is empty" would also be true of a run where nothing happened, it is paired with
+  `tasks.goal` matching the goal the task was created with. A task carrying that intent is a task
+  that actually ran, and the expected value is read from the variable the gate supplied rather
+  than written down a second time.
 
 ### Expected Data State
 
@@ -127,8 +155,12 @@ WHERE task_id='{tool_task_id}' AND event_type IN (
 GROUP BY event_type;
 -- Expected: 3 for each event type
 
-SELECT COALESCE(pipeline_vars_json, '{}') FROM tasks WHERE id='{tool_task_id}';
--- Expected: {}
+SELECT COALESCE(pipeline_vars_json, '<unset>') FROM tasks WHERE id='{tool_task_id}';
+SELECT COALESCE(dynamic_vars_json,  '<unset>') FROM task_items WHERE task_id='{tool_task_id}';
+-- Expected: <unset> for both; nothing writes the generic store after the capture runtime retired
+
+SELECT goal FROM tasks WHERE id='{tool_task_id}';
+-- Expected: the goal the task was created with, which is what makes the check above non-vacuous
 ```
 
 ## Scenario 5: Compatibility And Repository Regression
@@ -161,8 +193,8 @@ Ensure the additive tool path does not regress legacy shell/CEL or driver behavi
 |---|---|---|---|---|---|
 | 1 | Authenticated host and real tools | PASS | 2026-07-25 | Codex | Real pass/fail command execution and six primary tool contracts verified |
 | 2 | Shim, allowlist, and isolation | PASS | 2026-07-23 | Codex | Actual shim, 401, 0600 config, and token non-disclosure verified |
-| 3 | Pilot parity and line collapse | PASS | 2026-07-23 | Codex | completed/qa_passed parity; 100% coordination-line reduction |
-| 4 | Events and residual channels | PASS | 2026-07-23 | Codex | 12 tool events and exactly four classified residual keys |
+| 3 | Collapse measurement and baseline rejection | PASS | 2026-07-29 | Claude | tool pilot completed/qa_passed; 100% reduction; baseline rejected naming `[legacy_coordination_removed]`. The parity half retired on 2026-07-25 and this row had stood at 2026-07-23 since |
+| 4 | Events and residual channels | PASS | 2026-07-29 | Claude | 12 tool events; the generic var store is unset at both levels and `tasks.goal` carries the supplied intent |
 | 5 | Repository regression | PASS | 2026-07-23 | Codex | Closure gates recorded during FR governance |
 
 Production-wide migration supersedes the pilot-only completion claim; see

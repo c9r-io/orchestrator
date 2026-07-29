@@ -85,7 +85,7 @@ review. The reference stays daemon-private; do not capture or template a
 provider session ID. The current reference is task-scoped, so parallel
 item-scoped steps should remain fresh.
 
-The complete paired example is `fixtures/manifests/bundles/coordination-collapse-pilot.yaml`. Validate it with:
+The tool workflow is `fixtures/manifests/bundles/coordination-collapse-pilot.yaml`. The legacy workflow it replaced is kept beside it as `coordination-legacy-baseline.yaml` — the daemon rejects it now, and that rejection is itself asserted. Validate both with:
 
 ```bash
 ./scripts/qa/test-coordination-collapse.sh

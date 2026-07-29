@@ -62,7 +62,15 @@ No token, MCP config content, provider session reference, or unbounded stdout/st
 
 ## Pilot Migration And Measurement
 
-The paired workflows in `fixtures/manifests/bundles/coordination-collapse-pilot.yaml` prove behavioral parity:
+The paired workflows prove behavioral parity:
+
+> **Post-release note (2026-07-29).** The pair now spans two files. `behavior.captures` was removed
+> by design on 2026-07-25 (DD-137), so the legacy workflow can no longer be applied and was split
+> into `fixtures/manifests/bundles/coordination-legacy-baseline.yaml`, which is read as text for
+> the measurement below and applied only to assert that the rejection still names
+> `[legacy_coordination_removed]`. The runtime parity comparison retired with the mechanism it
+> compared against; the line measurement did not, because it is a property of the YAML.
+
 
 | Measure | Legacy workflow | Tool workflow |
 |---|---:|---:|
@@ -116,7 +124,8 @@ deterministic governance even after coordination consumers reach zero.
 - `crates/orchestrator-runner/src/bin/orch_mcp_tools.rs` — transport-only stdio shim.
 - `crates/orchestrator-runner/src/driver/{contracts,providers}.rs` — callback contract and private MCP configuration.
 - `crates/orchestrator-scheduler/src/scheduler/item_executor/apply.rs` — tool-effect folding.
-- `fixtures/manifests/bundles/coordination-collapse-pilot.yaml` — parity fixture.
+- `fixtures/manifests/bundles/coordination-collapse-pilot.yaml` — the half that still applies.
+- `fixtures/manifests/bundles/coordination-legacy-baseline.yaml` — the retired legacy baseline; never applied as setup.
 - `scripts/qa/test-coordination-collapse.sh` — reproducible closure gate.
 - `config/governance/coordination-collapse-ledger.json` — exact production inventory and exact-equality ratchet.
 - `scripts/qa/test-coordination-strangler.sh` — per-production-workflow parity and self-bootstrap gate.

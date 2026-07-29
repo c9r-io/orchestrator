@@ -5,6 +5,10 @@ kubectl-style fixtures for `orchestrator apply -f`.
 ## Layout
 
 - `bundles/*.yaml`: multi-document manifests for end-to-end QA scenarios.
+- Some bundles are **not** meant to apply cleanly. `coordination-legacy-baseline.yaml` is
+  read as text for a measurement and applied only to assert that the daemon still rejects it;
+  `crd-test-invalid.yaml`, `s4-invalid-cel.yaml` and `qa105-s1-capture-wrong-level.yaml` are
+  invalid on purpose. Each says so in its own header.
 
 ## Usage
 
