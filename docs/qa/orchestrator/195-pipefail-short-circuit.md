@@ -163,9 +163,17 @@ under any load, with any `grep`, independent of the pipe buffer.
 
 **Case 22 is the same idea for `head`, and it asserts the part that makes `head`
 worse.** The probe writes `reached=no`, runs `{ printf; sleep; printf } | head -1`,
-then writes `reached=yes`. Measured: **exit 141 and `reached=no`** — the run does
+then writes `reached=yes`. Measured: **non-zero and `reached=no`** — the run does
 not report the wrong answer, it *stops*, and the line after the pipeline never
 executes. That is §4.4 shape 7 reproduced on demand rather than described.
+
+**It first asserted `-eq 141` and failed on CI**, which is worth keeping. The
+status is **141 on bash 3.2.57 and 5.3.9 on macOS** and **1 on the Linux runner**,
+where the producer reports EPIPE rather than dying of SIGPIPE. Same defect, same
+consequence, different number — and the number was never the subject. Second time
+in this pair of FRs that a case asserted an incidental of the platform rather than
+the fact (case 9b read a shell diagnostic as part of its answer), and both were
+caught only by CI, because a local sweep is one shell on one operating system.
 
 The rate difference between the two families, ten runs per size:
 

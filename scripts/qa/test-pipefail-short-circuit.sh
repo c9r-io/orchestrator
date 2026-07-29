@@ -503,8 +503,14 @@ RUNNER
 rm -f "$WORK/head-verdict"
 VERDICT="$WORK/head-verdict" bash "$WORK/head-runner.sh" >/dev/null 2>&1 && HEAD_STATUS=0 || HEAD_STATUS=$?
 HEAD_REACHED="$(cat "$WORK/head-verdict" 2>/dev/null || echo 'reached=<none>')"
-if [[ "$HEAD_STATUS" -eq 141 && "$HEAD_REACHED" == "reached=no" ]]; then
-  pass "a diagnostic head ends the run at 141 and the line after it never executes"
+# The subject is the **truncation**, so that is what is asserted: a non-zero status and a line
+# after the pipeline that never executed. The exact code is a platform detail and asserting it
+# was a real failure here — this case first read `-eq 141`, which holds on bash 3.2.57 and 5.3.9
+# on macOS and is **1** on the Linux runner, where the producer reports EPIPE rather than dying
+# of SIGPIPE. Same defect, same consequence, different number. The observed status is printed
+# either way so the difference stays visible instead of being smoothed over.
+if [[ "$HEAD_STATUS" -ne 0 && "$HEAD_REACHED" == "reached=no" ]]; then
+  pass "a diagnostic head ends the run (status=$HEAD_STATUS) and the line after it never executes"
 else
   fail "the head truncation did not reproduce: status=$HEAD_STATUS $HEAD_REACHED"
 fi
