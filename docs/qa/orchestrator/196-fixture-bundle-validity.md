@@ -6,7 +6,7 @@ related_fr: FR-148
 # Orchestrator - Does The Product Still Accept What The Fixture Says?
 
 **Module**: CI / Governance / Manifest fixtures
-**Scope**: `core/src/fixture_corpus.rs` and
+**Scope**: `core/src/fixture_corpus_tests.rs` and
 `config/governance/fixture-bundle-validity.json`, over the 93 tracked bundles
 under `fixtures/manifests/bundles/` (`git ls-files 'fixtures/manifests/bundles/*.yaml' | wc -l`,
 at `ef458f16`)
@@ -67,7 +67,7 @@ removes it and makes the question "would a fresh daemon accept this standalone".
 **Steps**
 
 ```bash
-cargo test -p agent-orchestrator fixture_corpus::every_tracked_bundle_is_accepted_or_declared
+cargo test -p agent-orchestrator fixture_corpus_tests::every_tracked_bundle_is_accepted_or_declared
 ```
 
 **Expected result**
@@ -92,7 +92,7 @@ d['bundles'] = [b for b in d['bundles'] if 'stagger-test-scenario3' not in b['pa
 d['rotted_count'] = 18
 json.dump(d, open(p, 'w'), indent=2)
 PY
-cargo test -p agent-orchestrator fixture_corpus::every_tracked; echo "exit=$?"
+cargo test -p agent-orchestrator fixture_corpus_tests::every_tracked; echo "exit=$?"
 git checkout -- config/governance/fixture-bundle-validity.json
 ```
 
@@ -126,7 +126,7 @@ d['bundles'].append(collections.OrderedDict(
 d['rotted_count'] = 20
 json.dump(d, open(p, 'w'), indent=2)
 PY
-cargo test -p agent-orchestrator fixture_corpus::every_tracked; echo "exit=$?"
+cargo test -p agent-orchestrator fixture_corpus_tests::every_tracked; echo "exit=$?"
 git checkout -- config/governance/fixture-bundle-validity.json
 ```
 
@@ -158,7 +158,7 @@ for b in d['bundles']:
         b['expect'] = ["[legacy_json_path_removed] workflow 'qa107-parallel-guard' step 'process'"]
 json.dump(d, open(p, 'w'), indent=2)
 PY
-cargo test -p agent-orchestrator fixture_corpus::every_tracked; echo "exit=$?"
+cargo test -p agent-orchestrator fixture_corpus_tests::every_tracked; echo "exit=$?"
 git checkout -- config/governance/fixture-bundle-validity.json
 ```
 
@@ -184,7 +184,7 @@ for n in 18 20; do
   python3 -c "
 p='config/governance/fixture-bundle-validity.json'
 s=open(p).read(); open(p,'w').write(s.replace('\"rotted_count\": 19', '\"rotted_count\": $n', 1))"
-  cargo test -p agent-orchestrator fixture_corpus::every_tracked; echo "n=$n exit=$?"
+  cargo test -p agent-orchestrator fixture_corpus_tests::every_tracked; echo "n=$n exit=$?"
   git checkout -- config/governance/fixture-bundle-validity.json
 done
 ```
@@ -205,7 +205,7 @@ purpose.
 
 ```bash
 cargo test -p agent-orchestrator \
-  fixture_corpus::an_injected_retired_construct_is_rejected_by_its_own_diagnostic
+  fixture_corpus_tests::an_injected_retired_construct_is_rejected_by_its_own_diagnostic
 ```
 
 **Expected result**
@@ -229,7 +229,7 @@ capability` fires first and the fixture would be asserting the wrong thing.
 **Steps**
 
 ```bash
-cargo test -p agent-orchestrator fixture_corpus::evaluator
+cargo test -p agent-orchestrator fixture_corpus_tests::evaluator
 ```
 
 **Expected result**

@@ -64,8 +64,31 @@ mechanism**: `51-primitive-composition.md`, `83-generate-items-mixed-text-extrac
 cannot be the mechanism. `service::system::validate_manifests`
 (`core/src/service/system.rs:250`) is synchronous, public, and is exactly what
 `crates/daemon/src/server/system.rs:317-327` calls when the daemon receives
-`ManifestValidate`. The check runs against that, inside the existing `Rust test`
-CI job: **no new governance step, no share of the 9% budget headroom**.
+`ManifestValidate`. The check — `core/src/fixture_corpus_tests.rs`, a
+`#[cfg(test)]` module of the core crate — runs against that, inside the existing
+`Rust test` CI job: **no new governance step, no share of the 9% budget
+headroom**. It is deliberately not a `scripts/qa/*.sh` gate and so is deliberately
+absent from `config/governance/qa-gate-surface.json`, whose declared scope is
+"every `scripts/qa` gate". Anyone reading that absence as an FR-147-shaped hole
+should read this paragraph instead: a `cargo test` is enforced by the job that
+runs the workspace's tests, and adding a shell wrapper solely to appear in the
+manifest would buy a manifest row and a minute of CI for nothing.
+
+The file name is not incidental. `scripts/lib/rust_source.rb` excludes test
+sources from every ledger scan by **filename** — a path component `tests`, or a
+basename matching `/test.*\.rs\z/` — not by `cfg`. All fourteen pre-existing
+file-level `#[cfg(test)] mod x;` bodies in this workspace happen to be named
+`*test*.rs` and are excluded; the first version of this module was called
+`fixture_corpus.rs` and was not, so its four lines mentioning `behavior.captures`
+walked straight into the coordination ledger's `capturesOrJsonPath` ratchet and
+took `test-coordination-strangler.sh` (ci-required) from 53 to 57. Renaming it
+made the scanner classify it correctly rather than raising the baseline to
+accommodate test code, which would have diluted a ratchet whose whole subject is
+production consumers. **The trap remains**: the exclusion is a naming convention
+wearing the costume of a `cfg` predicate, and the next test-only module named
+without "test" in it will inflate four ledgers silently. That is §4.4's "a scope
+predicate is an assertion" in shared tooling, recorded here because measuring it
+cost a red gate.
 
 ### The verdict depends on the base, so the base is declared
 

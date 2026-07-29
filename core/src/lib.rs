@@ -180,7 +180,7 @@ pub mod test_utils;
 /// FR-148: every tracked fixture bundle is either accepted by the product or
 /// declared invalid with a reason and its expected diagnostic.
 #[cfg(test)]
-mod fixture_corpus;
+mod fixture_corpus_tests;
 
 /// Re-export of the public workflow loop guard configuration type.
 pub use config::WorkflowLoopGuardConfig;

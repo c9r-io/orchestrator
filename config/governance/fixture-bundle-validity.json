@@ -2,7 +2,7 @@
   "$comment": [
     "FR-148. Every bundle under fixtures/manifests/bundles/ that the product does NOT accept",
     "must appear here with the reason it must be rejected and the diagnostic it is rejected by.",
-    "Enforced by core/src/fixture_corpus.rs, which runs inside the existing `Rust test` CI job.",
+    "Enforced by core/src/fixture_corpus_tests.rs, which runs inside the existing `Rust test` CI job.",
     "",
     "Base: a fresh default project — one `default` workspace, no agents, no workflows",
     "(TestState::without_seeded_agents_and_workflows). validate_manifests merges a manifest",
