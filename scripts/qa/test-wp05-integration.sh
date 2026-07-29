@@ -143,7 +143,10 @@ create_and_run_task() {
     --target-file fixtures/wp05-qa/wp05-check.md \
     --goal "$goal" \
     --no-start 2>&1)"
-  task_id="$(echo "$create_output" | grep -oE '[0-9a-f-]{36}' | head -1)"
+  # FR-146: `| head -1` under pipefail kills grep and ends the gate with no summary line.
+  local ids
+  ids="$(grep -oE '[0-9a-f-]{36}' <<< "$create_output" || true)"
+  task_id="${ids%%$'\n'*}"
 
   [ -n "$task_id" ] || { fail "task creation returned no task id (output: $create_output)"; return 1; }
 

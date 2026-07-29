@@ -302,8 +302,11 @@ slack_cert_state_stage_result() {
 }
 
 slack_cert_next_stage() {
-  jq -r '.stages[] | select(.result == "pending" or .result == "waiting" or .result == "blocked") | .name' \
-    "$(slack_cert_state_file "$1")" | head -n 1
+  # FR-146: `| head -n 1` under pipefail kills jq and ends the caller with no summary line.
+  local stages
+  stages="$(jq -r '.stages[] | select(.result == "pending" or .result == "waiting" or .result == "blocked") | .name' \
+    "$(slack_cert_state_file "$1")")"
+  printf '%s' "${stages%%$'\n'*}"
 }
 
 slack_cert_inventory_add() {

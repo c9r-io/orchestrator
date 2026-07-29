@@ -73,7 +73,10 @@ USAGE
 
 qa_extract_task_id() {
   local create_output="$1"
-  echo "$create_output" | grep -oE '[0-9a-f-]{36}' | head -1
+  # FR-146: `| head -1` under pipefail kills grep and ends the caller with no summary line.
+  local ids
+  ids="$(grep -oE '[0-9a-f-]{36}' <<< "$create_output" || true)"
+  printf '%s' "${ids%%$'\n'*}"
 }
 
 qa_resolve_project() {

@@ -78,7 +78,9 @@ CREATE_OUTPUT="$(
     --goal "explain a deterministic QA assertion failure" \
     --no-start
 )"
-TASK_ID="$(printf '%s\n' "$CREATE_OUTPUT" | grep -oE '[0-9a-f-]{36}' | head -1)"
+# FR-146: `| head -1` under pipefail kills grep and ends the gate with no summary line.
+TASK_IDS="$(grep -oE '[0-9a-f-]{36}' <<< "$CREATE_OUTPUT" || true)"
+TASK_ID="${TASK_IDS%%$'\n'*}"
 if [[ -z "$TASK_ID" ]]; then
   echo "task creation returned no task id: $CREATE_OUTPUT" >&2
   exit 1

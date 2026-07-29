@@ -87,10 +87,14 @@ detect_network() {
     local ids
     ids="$(compose -f "$compose_file" --project-directory "$PROJECT_ROOT" ps -q 2>/dev/null || true)"
     local first_id
-    first_id="$(echo "$ids" | head -n 1 | tr -d '\r')"
+    # FR-146: `| head -n 1` leaves the producer writing into a closed pipe; under
+    # `set -o pipefail` that status ends the run. The first line comes off by expansion.
+    first_id="${ids%%$'\n'*}"; first_id="$(tr -d '\r' <<< "$first_id")"
     if [ -n "$first_id" ]; then
       local n
-      n="$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{printf "%s\n" $k}}{{end}}' "$first_id" 2>/dev/null | head -n 1 || true)"
+      local nets
+      nets="$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{printf "%s\n" $k}}{{end}}' "$first_id" 2>/dev/null || true)"
+      n="${nets%%$'\n'*}"
       if [ -n "$n" ]; then
         echo "$n"
         return 0

@@ -39,7 +39,10 @@ TASK_ID=$("$CLI" task create \
   -w full-qa -W full-qa \
   --project self-bootstrap \
   -g "对 docs/qa/ 下全部 QA 文档执行场景级回归测试，对失败项创建 ticket 并尝试修复，最终确保所有场景通过或明确记录未通过原因" \
-  2>&1 | grep -oE '[0-9a-f-]{36}' | head -1)
+  2>&1 | grep -oE '[0-9a-f-]{36}')
+# FR-146: grep reads to EOF; the first id is taken by expansion rather than by a reader that
+# would leave grep writing into a closed pipe and end this script with no diagnostic.
+TASK_ID="${TASK_ID%%$'\n'*}"
 
 if [ -z "$TASK_ID" ]; then
   echo "ERROR: Failed to create task"
@@ -84,7 +87,7 @@ while true; do
     echo ""
     echo "==> Task finished: $STATUS"
     echo "==> Final summary:"
-    "$CLI" task info "$TASK_ID" | head -8
+    "$CLI" task info "$TASK_ID" | sed -n '1,8p'
     echo ""
     echo "==> Trace:"
     "$CLI" task trace "$TASK_ID" 2>&1 | tail -20

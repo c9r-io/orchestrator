@@ -139,7 +139,10 @@ TASK_ID="$($ORCH task create \
   --workflow qa_cycle2_validation_deterministic \
   --target-file fixtures/bootstrap-qa/bootstrap-check.md \
   --goal "qa validate cycle2 regression deterministic" \
-  --no-start | grep -oE '[0-9a-f-]{36}' | head -1)"
+  --no-start | grep -oE '[0-9a-f-]{36}')"
+# FR-146: the pipeline above stops at grep, which reads to EOF; taking the first id with
+# `| head -1` would leave grep writing into a closed pipe and end the run with no summary.
+TASK_ID="${TASK_ID%%$'\n'*}"
 
 [ -n "$TASK_ID" ] || fail "task creation returned no task id"
 

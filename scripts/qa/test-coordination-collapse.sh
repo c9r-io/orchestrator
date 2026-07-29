@@ -162,8 +162,11 @@ create_and_wait() {
     "$ORCH" task create --project "$PROJECT" --workspace coordination-pilot \
       --workflow "$workflow" --target-file docs/qa/pilot.md \
       --goal "$PILOT_GOAL" --name "$name" --no-start | \
-      rg -o '[0-9a-f-]{36}' | head -1
+      rg -o '[0-9a-f-]{36}'
   )"
+  # FR-146: `rg -o` reads to EOF, so the first id is taken by expansion rather than by a
+  # `| head -1` that would kill rg and end the gate before its summary line.
+  task_id="${task_id%%$'\n'*}"
   "$ORCH" task start "$task_id" >/dev/null
   status="pending"
   for _ in {1..160}; do

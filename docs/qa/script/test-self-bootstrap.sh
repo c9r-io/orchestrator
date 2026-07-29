@@ -21,7 +21,10 @@ fail() { FAIL=$((FAIL+1)); red   "  FAIL: $1 — $2"; }
 skip() { SKIP=$((SKIP+1)); yellow "  SKIP: $1 — $2"; }
 
 extract_task_id() {
-  grep -oE '[0-9a-f-]{36}' | head -1
+  # FR-146: `| head -1` under pipefail kills grep and ends the caller with no summary line.
+  local ids
+  ids="$(grep -oE '[0-9a-f-]{36}' || true)"
+  printf '%s' "${ids%%$'\n'*}"
 }
 
 wait_task() {
@@ -224,7 +227,7 @@ S5_PROJECT="${QA_PROJECT}-s5"
 S5_DRYRUN=$($ORCH apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${S5_PROJECT}" --dry-run 2>&1) || true
 S5_APPLY=$($ORCH apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${S5_PROJECT}" 2>&1) || true
 
-echo "  Dry-run output: $(echo "$S5_DRYRUN" | head -5)"
+echo "  Dry-run output: $(sed -n '1,5p' <<< "$S5_DRYRUN")"
 
 # Check resources exist
 S5_WS=$($ORCH get workspaces --project "${S5_PROJECT}" 2>&1 | grep -c "self" || true)

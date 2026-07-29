@@ -113,7 +113,9 @@ CREATE_OUTPUT="$(
   "$ORCH" task create --project "$PROJECT" --workspace default --workflow timeline_failure \
     --target-file fixtures/qa/action-audit.md --goal "exercise canonical action audit" --no-start
 )"
-TASK_ID="$(printf '%s\n' "$CREATE_OUTPUT" | grep -oE '[0-9a-f-]{36}' | head -1)"
+# FR-146: `| head -1` under pipefail kills grep and ends the gate with no summary line.
+TASK_IDS="$(grep -oE '[0-9a-f-]{36}' <<< "$CREATE_OUTPUT" || true)"
+TASK_ID="${TASK_IDS%%$'\n'*}"
 [[ -n "$TASK_ID" ]] || { echo "task creation returned no task id" >&2; exit 1; }
 
 "$ORCH" task start "$TASK_ID" >/dev/null 2>&1 || true

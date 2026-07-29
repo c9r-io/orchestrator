@@ -227,7 +227,11 @@ probe_assert_trace_no_anomaly_severity() {
 
 probe_extract_task_id() {
   local create_output="$1"
-  echo "$create_output" | grep -oE '[0-9a-f-]{36}' | head -1
+  # FR-146: `| head -1` under pipefail kills grep. This library is sourced into
+  # run-cli-probes.sh, which sets `-euo pipefail`, so the option is in force here.
+  local ids
+  ids="$(grep -oE '[0-9a-f-]{36}' <<< "$create_output" || true)"
+  printf '%s' "${ids%%$'\n'*}"
 }
 
 probe_create_task() {
@@ -274,7 +278,9 @@ probe_task_status() {
   local task_id="$1"
   local info
   info="$("$PROBE_BINARY" task info "$task_id" 2>&1 || true)"
-  echo "$info" | sed -n 's/.*[Ss]tatus:[[:space:]]*\([^ ]*\).*/\1/p' | head -1
+  local statuses
+  statuses="$(sed -n 's/.*[Ss]tatus:[[:space:]]*\([^ ]*\).*/\1/p' <<< "$info")"
+  printf '%s' "${statuses%%$'\n'*}"
 }
 
 # ── Summary ──────────────────────────────────────────────────────────

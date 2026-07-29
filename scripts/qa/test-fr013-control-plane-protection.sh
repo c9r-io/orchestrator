@@ -97,7 +97,9 @@ TASK_CREATE_OUTPUT="$("$ORCH" task create \
   --name "watch-hold" \
   --goal "hold watch stream" \
   --no-start)"
-TASK_ID="$(printf '%s\n' "$TASK_CREATE_OUTPUT" | grep -oE '[0-9a-f-]{36}' | head -1)"
+# FR-146: `| head -1` under pipefail kills grep and ends the gate with no summary line.
+TASK_IDS="$(grep -oE '[0-9a-f-]{36}' <<< "$TASK_CREATE_OUTPUT" || true)"
+TASK_ID="${TASK_IDS%%$'\n'*}"
 
 if [[ -z "$TASK_ID" ]]; then
   echo "[fr013] failed to create task" >&2

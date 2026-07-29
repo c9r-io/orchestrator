@@ -68,7 +68,9 @@ if ! (
   exit 1
 fi
 
-THREAD_ID="$(jq -r 'select(.type == "thread.started") | .thread_id' "$FIRST_OUT" | head -n 1)"
+# FR-146: jq reads the file to EOF; `| head -n 1` would leave it writing into a closed pipe.
+THREAD_IDS="$(jq -r 'select(.type == "thread.started") | .thread_id' "$FIRST_OUT")"
+THREAD_ID="${THREAD_IDS%%$'\n'*}"
 FIRST_TEXT="$(jq -r 'select(.type == "item.completed" and .item.type == "agent_message") | .item.text' "$FIRST_OUT" | tail -n 1)"
 [[ -n "$THREAD_ID" && "$THREAD_ID" != "null" ]] || {
   echo "initial stream did not contain thread.started.thread_id" >&2
@@ -93,7 +95,8 @@ if ! (
   exit 1
 fi
 
-RESUME_THREAD_ID="$(jq -r 'select(.type == "thread.started") | .thread_id' "$RESUME_OUT" | head -n 1)"
+RESUME_THREAD_IDS="$(jq -r 'select(.type == "thread.started") | .thread_id' "$RESUME_OUT")"
+RESUME_THREAD_ID="${RESUME_THREAD_IDS%%$'\n'*}"
 RESUME_TEXT="$(jq -r 'select(.type == "item.completed" and .item.type == "agent_message") | .item.text' "$RESUME_OUT" | tail -n 1)"
 [[ "$RESUME_THREAD_ID" == "$THREAD_ID" ]] || {
   echo "resume returned a different thread id" >&2

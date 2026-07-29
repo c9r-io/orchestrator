@@ -75,7 +75,10 @@ create_task() {
       --target-file fixtures/qa/handoff.md --goal "deterministic handoff and resume QA" \
       --name "$name" --no-start
   )"
-  printf '%s\n' "$output" | grep -oE '[0-9a-f-]{36}' | head -1
+  # FR-146: `| head -1` under pipefail kills grep and ends the gate with no summary line.
+  local ids
+  ids="$(grep -oE '[0-9a-f-]{36}' <<< "$output" || true)"
+  printf '%s' "${ids%%$'\n'*}"
 }
 
 TASK_ID="$(create_task handoff_failure handoff-failure)"

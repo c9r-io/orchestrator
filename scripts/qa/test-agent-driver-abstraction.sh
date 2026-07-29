@@ -110,8 +110,10 @@ create_and_run() {
     cd "$QA_ROOT/workspace"
     "$ORCH" task create --project "$PROJECT" --workspace driver-workspace \
       --workflow "$workflow" --target-file target.md --goal "FR-116 shell equivalence" \
-      --name "$name" --no-start | rg -o '[0-9a-f-]{36}' | head -1
+      --name "$name" --no-start | rg -o '[0-9a-f-]{36}'
   )"
+  # FR-146: first id by expansion; `| head -1` would kill rg under pipefail.
+  task_id="${task_id%%$'\n'*}"
   "$ORCH" task start "$task_id" >/dev/null 2>&1 || true
   for _ in {1..80}; do
     status="$("$ORCH" task info "$task_id" -o json | jq -r '.task.status')"

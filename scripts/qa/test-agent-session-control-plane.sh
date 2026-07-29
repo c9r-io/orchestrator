@@ -217,7 +217,11 @@ CREATE_OUTPUT="$(
     --workflow session-control-mock --target-file fixtures/qa/session-control.md \
     --goal "hold an interactive FR-102 QA session" --no-start
 )"
-TASK_ID="$(printf '%s\n' "$CREATE_OUTPUT" | grep -oE '[0-9a-f-]{36}' | head -1)"
+# `grep -oE` reads to end of input; `| head -1` downstream of it leaves grep writing into a
+# closed pipe, and under `set -o pipefail` that status reaches `set -e` and ends the run with
+# no summary line (FR-146). The first id comes off the captured text by expansion.
+TASK_IDS="$(grep -oE '[0-9a-f-]{36}' <<< "$CREATE_OUTPUT" || true)"
+TASK_ID="${TASK_IDS%%$'\n'*}"
 [[ -n "$TASK_ID" ]] || { echo "task creation returned no task id" >&2; exit 1; }
 "$ORCH" task start "$TASK_ID" >/dev/null
 

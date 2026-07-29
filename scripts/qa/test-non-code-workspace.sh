@@ -170,7 +170,9 @@ else
   fail "Attention handoff was not projected"
 fi
 
-EPHEMERAL_ID="$(cd "$QA_ROOT/workspace" && "$ORCH" task create --project "$PROJECT" --workspace ephemeral-ops --workflow warehouse-reply --name ephemeral --goal cleanup --no-start | rg -o '[0-9a-f-]{36}' | head -1)"
+# FR-146: `| head -1` under pipefail kills rg and ends the gate with no summary line.
+EPHEMERAL_IDS="$(cd "$QA_ROOT/workspace" && "$ORCH" task create --project "$PROJECT" --workspace ephemeral-ops --workflow warehouse-reply --name ephemeral --goal cleanup --no-start | rg -o '[0-9a-f-]{36}')"
+EPHEMERAL_ID="${EPHEMERAL_IDS%%$'\n'*}"
 EPHEMERAL_HOME="$(sqlite3 "$DB" "SELECT workspace_root FROM tasks WHERE id='$EPHEMERAL_ID';")"
 MODE="$(stat -f '%Lp' "$EPHEMERAL_HOME" 2>/dev/null || stat -c '%a' "$EPHEMERAL_HOME")"
 "$ORCH" task start "$EPHEMERAL_ID" >/dev/null

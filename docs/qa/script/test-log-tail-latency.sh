@@ -56,7 +56,10 @@ TASK_ID="$("$BINARY" task create \
   --workspace "$QA_WORKSPACE" \
   --name "log-tail-latency-$(date +%s)" \
   --goal "tail latency baseline" \
-  --no-start | grep -oE '[0-9a-f-]{36}' | head -1)"
+  --no-start | grep -oE '[0-9a-f-]{36}')"
+# FR-146: grep reads to EOF; the first id is taken by expansion, not by a reader that
+# would leave grep writing into a closed pipe.
+TASK_ID="${TASK_ID%%$'\n'*}"
 if [[ -z "$TASK_ID" ]]; then
   qa_error "Failed to create task"
   exit 2

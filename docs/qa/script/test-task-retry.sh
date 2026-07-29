@@ -49,7 +49,10 @@ fi
 sleep 3
 
 TASK_STATUS="$($BINARY task info "$TASK_ID" 2>/dev/null | grep -oE 'Status: [a-z]+' | awk '{print $2}')"
-FAILED_ITEM="$($BINARY task info "$TASK_ID" -o json 2>/dev/null | jq -r '.items[] | select(.status == "qa_failed" or .status == "unresolved") | .id' 2>/dev/null | head -1 || true)"
+# FR-146: `| head -1` under pipefail kills jq; the first id comes off by expansion, and the
+# `|| true` that used to absorb head's SIGPIPE goes with it.
+FAILED_ITEMS="$($BINARY task info "$TASK_ID" -o json 2>/dev/null | jq -r '.items[] | select(.status == "qa_failed" or .status == "unresolved") | .id' 2>/dev/null || true)"
+FAILED_ITEM="${FAILED_ITEMS%%$'\n'*}"
 
 if [[ -z "$FAILED_ITEM" ]]; then
   qa_error "No unresolved item found for retry"
