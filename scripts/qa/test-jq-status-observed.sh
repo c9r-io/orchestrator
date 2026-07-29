@@ -210,7 +210,7 @@ if grep -q "^jq status observed: PASS" <<< "$(scan)"; then
   pass "control: the repository as it stands has no unobserved read"
 else
   fail "control: the repository does not pass its own scanner"
-  scan | head -5 >&2
+  scan | sed -n '1,5p' >&2
 fi
 
 # 8. The forbidden shape, reintroduced.
@@ -284,7 +284,7 @@ if grep -q "^jq status observed: PASS" <<< "$(scan)"; then
   pass "a multi-line reader whose status is tested past a continuation is not a finding"
 else
   fail "the rule flagged a correctly-written multi-line reader"
-  scan | head -3 >&2
+  scan | sed -n '1,3p' >&2
 fi
 
 # 11c. A loop fed by a function that reaches jq, in a file keeping no failure
@@ -319,7 +319,7 @@ if grep -q "^jq status observed: PASS" <<< "$(scan)"; then
   pass "the same feed is accepted once the file keeps and asserts on a failure record"
 else
   fail "the failure record did not excuse a feed the call site cannot observe"
-  scan | head -3 >&2
+  scan | sed -n '1,3p' >&2
 fi
 
 # 11e. A file that ends inside a here-document was never fully scanned, so the

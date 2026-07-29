@@ -148,13 +148,17 @@ fi
 create_and_wait() {
   local workflow="$1"
   local task_id status
-  task_id="$(
+  # See FR-146: `| head -1` under pipefail kills `rg` and ends the gate. `rg -o` already
+  # reads to EOF, so the first id comes off the captured text with no pipe at all.
+  local created_ids
+  created_ids="$(
     cd "$QA_ROOT/workspace"
     "$ORCH" task create --project "$PROJECT" --workspace strangler-parity \
       --workflow "$workflow" --target-file docs/qa/pilot.md \
       --goal "FR-124 independent parity" --name "$workflow" --no-start |
-      rg -o '[0-9a-f-]{36}' | head -1
+      rg -o '[0-9a-f-]{36}'
   )"
+  task_id="${created_ids%%$'\n'*}"
   "$ORCH" task start "$task_id" >/dev/null
   status="pending"
   for _ in {1..240}; do

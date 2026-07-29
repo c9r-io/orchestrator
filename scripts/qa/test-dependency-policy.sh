@@ -377,7 +377,7 @@ run_deny bans licenses sources
 if [[ "$DENY_STATUS" -eq 0 ]]; then
   pass "14. cargo deny check bans licenses sources exits 0 on the committed policy"
 else
-  fail "14. the committed policy does not pass: $(grep -E '^(error|bans|licenses|sources)' <<<"$DENY_OUT" | head -3 | tr '\n' ' ')"
+  fail "14. the committed policy does not pass: $(grep -E '^(error|bans|licenses|sources)' <<<"$DENY_OUT" | sed -n '1,3p' | tr '\n' ' ')"
 fi
 echo ""
 

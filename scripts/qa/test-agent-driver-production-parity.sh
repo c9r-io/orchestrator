@@ -189,13 +189,18 @@ fi
 create_and_wait() {
   local workflow="$1"
   local task_id status
-  task_id="$(
+  # `rg -o` reads to end of input, so nothing upstream is left writing; the first id is
+  # then taken by parameter expansion rather than by `| head -1`, which under
+  # `set -o pipefail` kills the producer and takes the whole gate with it (FR-146).
+  local created_ids
+  created_ids="$(
     cd "$QA_ROOT/workspace"
     "$ORCH" task create --project "$PROJECT" --workspace driver-migration-parity \
       --workflow "$workflow" --target-file docs/qa/pilot.md \
       --goal "FR-126 production migration parity" --name "$workflow" --no-start |
-      rg -o '[0-9a-f-]{36}' | head -1
+      rg -o '[0-9a-f-]{36}'
   )"
+  task_id="${created_ids%%$'\n'*}"
   "$ORCH" task start "$task_id" >/dev/null
   status="pending"
   for _ in {1..240}; do

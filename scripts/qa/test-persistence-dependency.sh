@@ -137,7 +137,10 @@ if cmp -s "$WORK/emitted.json" "$REPO_ROOT/$LEDGER"; then
   pass "the emitted candidate is byte-identical to the committed ledger"
 else
   fail "--emit-baseline differs from the ledger the gate compares against"
-  diff "$REPO_ROOT/$LEDGER" "$WORK/emitted.json" | head -20 >&2 || true
+# `sed -n` reads to end of input; `head` leaves early and kills the producer, and under
+# `set -o pipefail` that status reaches `set -e` and ends the run with no summary line
+# (FR-146). Measured: a 129 KB producer into `| head -1` dies 10 times out of 10.
+  diff "$REPO_ROOT/$LEDGER" "$WORK/emitted.json" | sed -n '1,20p' >&2
 fi
 echo ""
 

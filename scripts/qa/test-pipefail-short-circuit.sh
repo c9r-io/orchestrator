@@ -133,7 +133,12 @@ run_gate() {
 # the probe gains a line, and it stops working by passing on the wrong finding.
 fires_on() {
   local label="$1" rule="$2" marker="$3" line
-  line="$(grep -nF "$marker" "$CASE/$PROBE" | head -1 | cut -d: -f1)"
+  # `grep -n … | head -1` is itself the shape this gate forbids once FR-146 lands, and a
+  # harness exempt from its own rule is the FR-134 defect. `grep` reads to EOF here, and the
+  # first line comes off by expansion instead of through a short-circuiting reader.
+  local hits
+  hits="$(grep -nF "$marker" "$CASE/$PROBE" || true)"
+  line="${hits%%$'\n'*}"; line="${line%%:*}"
   if [[ -z "$line" ]]; then
     fail "$label: the marker '$marker' is not in the mutated probe, so nothing was asserted"
     return
