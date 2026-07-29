@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 425,
-    "active": 422,
+    "documents": 427,
+    "active": 424,
     "superseded": 3,
-    "withRelatedFr": 270
+    "withRelatedFr": 272
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -368,6 +368,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-145"
+      ]
+    },
+    "docs/design_doc/orchestrator/158-fixture-bundle-validity.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-148"
       ]
     },
     "docs/design_doc/orchestrator/16-structured-logging.md": {
@@ -1607,6 +1613,12 @@
         "FR-145"
       ]
     },
+    "docs/qa/orchestrator/196-fixture-bundle-validity.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-148"
+      ]
+    },
     "docs/qa/orchestrator/20-structured-output-worker-scheduler.md": {
       "lifecycle": "active"
     },
@@ -2643,6 +2655,10 @@
     "FR-145": [
       "docs/design_doc/orchestrator/157-pipefail-short-circuit.md",
       "docs/qa/orchestrator/195-pipefail-short-circuit.md"
+    ],
+    "FR-148": [
+      "docs/design_doc/orchestrator/158-fixture-bundle-validity.md",
+      "docs/qa/orchestrator/196-fixture-bundle-validity.md"
     ]
   },
   "supersedes": {
