@@ -33,6 +33,74 @@
   警报常亮然后被关掉——这个仓库已经反复记录过这种失效方式。
 - **不**处理门禁 shell 本体里的断言腐烂。见下方「本 FR 盖不住的那一半」。
 
+## 事实复核（`1b6628eb`，2026-07-30，治理 Phase 2 step 0）
+
+下面的「测量」小节写于 `8a3ee0d9`。逐条重建后，**第 1、2、3 条成立，第 4 条不成立**，
+而整份文档最重要的遗漏是：它把语料的腐烂规模说小了一个数量级。
+
+### 已确认成立
+
+- 93 个 bundle（`git ls-files 'fixtures/manifests/bundles/*.yaml' | wc -l`，`1b6628eb`）。
+- `manifest validate` 走 gRPC 需要守护进程（`crates/cli/src/commands/manifest.rs:13-21`）。
+- `validate_manifests`（`core/src/service/system.rs:250`）同步、公开，正是
+  `crates/daemon/src/server/system.rs:317-327` 调用的那一个。
+- 孤儿 49 / 被引用 44（`8a3ee0d9`，逐 basename `git grep -l -F` 重算，与原文一致）。
+  在 `1b6628eb` 读作 46/47，差额三个是 **本 FR 文档自己点名了它们**；本 FR 闭环删除后回到 49。
+- `scripts/qa-doc-lint.sh` 的通配消费属实，行号是 **64–66**（原文写 67）。
+
+### 不成立：「四个故意无效的 bundle」
+
+以空 base（见下）逐个调用 `validate_manifests`，`1b6628eb`：
+
+| 原文断言 | 实测 |
+|---|---|
+| `qa105-s1-capture-wrong-level.yaml` 无效 | **通过校验**。step 级的 `capture:` 是未知键，被静默忽略——产品根本不拒绝它，它不是无效 fixture |
+| `crd-test-invalid.yaml` 无效（理由：名字这么说） | 无效，但**理由不是它想测的那个**：单独校验命中 `no CustomResourceDefinition found for kind 'PromptLibrary'`，它设计上的「缺 `prompts` 必填字段」要先 apply `crd-test.yaml` 才够得着。它是**依赖型** fixture，不是自足的无效 fixture |
+| （未提及） | `coordination-strangler-parity.yaml` 是**第五个**故意无效的 bundle，而且是四个里唯一有活消费者主张这一点的：`scripts/qa/test-coordination-strangler.sh:126-133`（**ci-required**）断言它被拒且诊断为 `[legacy_(coordination\|json_path)_removed]` |
+
+### 遗漏：93 个里有 31 个当前无法通过校验
+
+不是 4 个，是 **31 个**（62 通过 / 31 失败，空 base，`1b6628eb`）。按病因：
+
+| 类 | 数量 | 说明 |
+|---|---|---|
+| **DD-137 已退役的构造** | **19** | `behavior.captures` 9 个（stagger×4、qa105-s3、qa105-s5、qa107-s1、s5-pipeline-var、coordination-legacy-baseline）；`generate_items` JSONPath post-action 10 个（qa83×5、wp05×3、cycle-overflow-test、generate-items-narrow-test） |
+| 片段 bundle（只给 Workflow，不给 Agent） | 5 | fr052×2、template-test、simple-prehook-test、s4-invalid-cel |
+| 环境/基线依赖 | 4 | crd-test、test-workspace、test-workspace-dryrun（work_dir 不存在）、non-code-workspace-fixture（需 `fileSharing.shareableRoots`） |
+| 依赖型 | 1 | crd-test-invalid（需先 apply crd-test） |
+| schema 腐烂 | 1 | prehook-test：`missing field \`when\`` |
+| 故意无效且有消费者主张 | 1 | coordination-strangler-parity |
+
+### 新发现：坏掉的门禁不止一道
+
+`scripts/qa/test-wp05-integration.sh:250,282,312` 对 **三个** bundle 执行整份
+`orchestrator apply -f`，而这三个都被 `[legacy_json_path_removed]` 拒绝。也就是说
+它和触发本 FR 的 `test-coordination-collapse.sh` 是**同一个病、同一个 commit
+（`1b0937ca`，DD-137，07-25）**，只是没人发现。它同样是 `manual-runbook`。
+
+`GenerateItems` / `SpawnTasks` post-action 在 `core/src/config_load/validate/workflow_steps.rs:63-74`
+被整类拒绝——所以这不是「fixture 写错了」，是**这些 fixture 测的功能已经不存在**。
+连带四份 QA 文档至今 `lifecycle: active` 却在描述被移除的机制：
+`docs/qa/orchestrator/51-primitive-composition.md`、`83-generate-items-mixed-text-extraction.md`、
+`84-generate-items-regression-narrowing.md`、`92-dynamic-items-cycle-overflow.md`。
+
+### 必须写进设计的：校验结果依赖 base，也依赖环境
+
+`validate_manifests` 把 bundle 合并进**当前 config** 再 `build_active_config_for_project`。
+所以「产品是否接受这个 fixture」不是 fixture 单独的属性。实测三种 base：
+
+| base | 通过/失败 | 假象 |
+|---|---|---|
+| `TestState::new()` 原样（含 `default` workspace + `echo` agent + `basic` workflow） | 60/33 | **5 个假失败**：bundle 引入 self-referential workspace 后，被拖下水的是**测试脚手架自己的 `basic` workflow**（`[SELF_REF_POLICY_VIOLATION] ... workflow 'basic'`），与 fixture 无关 |
+| 清空 agents+workflows（保留 `default` workspace） | 62/31 | self-ref 假失败消失；5 个片段 bundle 转为失败——这是**真实属性**（空守护进程确实不接受它们） |
+
+选后者，并把 base 写进设计记录。另：同一个 bundle 有多个错误时，`errors[0]` 取决于
+HashMap 迭代顺序（实测 `cycle-overflow-test.yaml` 两次跑出不同的 workflow 名），
+断言必须匹配**诊断子串**，不能依赖第一条错误。
+
+单个 `TestState` 复用给 93 次校验后总耗时 **1.77s**（每个 bundle 新建一个是 24.34s）——
+`validate_manifests` 只读 state，可以共享。
+
 ## 测量（全部在 `8a3ee0d9`）
 
 ### 1. CLI 不能作为机制——它是控制面调用
