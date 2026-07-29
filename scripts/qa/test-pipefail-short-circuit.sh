@@ -94,6 +94,10 @@ cat data.txt | grep -F -- -q literal-dash-q
 [[ "$(cat data.txt | grep -c .)" -eq 3 ]] || echo wrong-count
 rg --quiet other <<< "$rows" || echo missing-other
 grep -qxF "$entry" <<< "$(printf '%s\n' $list)" || echo not-listed
+sed -n '1,5p' <<< "$rows"
+cat data.txt | sed -n '1,5p'
+cat data.txt | awk 'NR<=5'
+head -5 data.txt
 
 cat <<'INNER'
 printf '%s' "$x" | grep -q inside-a-heredoc-body
@@ -445,6 +449,64 @@ if MECH="$(bash "$WORK/mechanism.sh")"; then
   fi
 else
   fail "the mechanism probe did not run"
+fi
+
+# 18. `head` always short-circuits — there is no flag that makes it read to the end —
+#     so it is flagged with no flag test at all. FR-146 measured it at 10/10 deaths on a
+#     129 KB producer where `grep -q` on 90 KB managed 8-13 in 400.
+reset_case
+if sub_line "head as a downstream stage" \
+  'head -5 data.txt' \
+  'cat data.txt | head -5'; then
+  fires_on "a downstream head fires with no flag needed" short-circuit-under-pipefail \
+    '| head -5'
+fi
+
+# 19. And inside a command substitution, where the assignment carries the status to `set -e`.
+reset_case
+if sub_line "head inside a substitution" \
+  'rows="$(cat data.txt)"' \
+  'rows="$(cat data.txt | head -1)"'; then
+  fires_on "a head inside \$( ) fires" short-circuit-under-pipefail '| head -1'
+fi
+
+# 20. The remedies must not fire. All three read to end of input, or use no pipe at all, and
+#     all three were measured against a 1.3 MB producer. Without this the rule would be
+#     unusable: every fix anyone applied would light it up again.
+reset_case
+if sub_line "more of the remedies" \
+  "cat data.txt | awk 'NR<=5'" \
+  "cat data.txt | awk 'NR<=5'
+cat data.txt | sed -n '2,7p'
+printf '%s' \"\${rows%%\$'\\n'*}\""; then
+  silent "sed -n, awk and first-line expansion are not short-circuits"
+fi
+
+# 21. `head` reading a *file* is the first stage of nothing. There is no producer upstream to
+#     kill, so it must stay silent — otherwise the rule would forbid the one spelling that is
+#     unambiguously safe.
+reset_case
+silent "head as the first stage, reading a file, does not fire"
+
+# 22. The mechanism for `head`, deterministically, and the part that makes it worse than the
+#     `-q` family: the run does not merely report wrongly, it *stops*. The probe records
+#     whether the line after the pipeline ever executed. Written to a file, for the reason
+#     case 9b was rewritten.
+cat > "$WORK/head-runner.sh" <<'RUNNER'
+#!/usr/bin/env bash
+set -euo pipefail
+export VERDICT
+printf 'reached=no\n' > "$VERDICT"
+{ printf 'line1\n'; sleep 0.2; printf 'line2\n'; } | head -1 >/dev/null
+printf 'reached=yes\n' > "$VERDICT"
+RUNNER
+rm -f "$WORK/head-verdict"
+VERDICT="$WORK/head-verdict" bash "$WORK/head-runner.sh" >/dev/null 2>&1 && HEAD_STATUS=0 || HEAD_STATUS=$?
+HEAD_REACHED="$(cat "$WORK/head-verdict" 2>/dev/null || echo 'reached=<none>')"
+if [[ "$HEAD_STATUS" -eq 141 && "$HEAD_REACHED" == "reached=no" ]]; then
+  pass "a diagnostic head ends the run at 141 and the line after it never executes"
+else
+  fail "the head truncation did not reproduce: status=$HEAD_STATUS $HEAD_REACHED"
 fi
 
 # 17. And the gate holds on the repository it governs. Case 1 proves the rule can

@@ -86,11 +86,26 @@ require_relative "../lib/shell_lexer"
 module PipefailShortCircuit
   Finding = Struct.new(:file, :line, :rule, :detail, :fix, keyword_init: true)
 
-  # Readers that can leave before end of input. Only the `-q` family here: `head`
-  # short-circuits too and measures 38 sites across 28 files, which is a second
-  # FR rather than a doubling of this one. `grep -m N` measures zero sites and is
-  # included because it costs nothing and is the same act.
-  READERS = %w[grep rg egrep fgrep ggrep].freeze
+  # Readers that can leave before end of input, in two families.
+  #
+  # `grep`/`rg` only short-circuit when told to: `-q`, `--quiet`, `--silent`, `-m N`. Without one
+  # of those they read to end of input and are harmless downstream of anything.
+  MATCH_READERS = %w[grep rg egrep fgrep ggrep].freeze
+  #
+  # `head` always short-circuits — there is no flag that makes it read to the end — so there is no
+  # flag test for it. FR-146 measured it at 37 sites across 29 files, and it fires far harder than
+  # the `-q` family: with `X="$(seq 1 N | head -1)"` under `set -euo pipefail`, 0/10 deaths at
+  # 3.9 KB, **6/10 at 24 KB, 10/10 at 129 KB and above**, where `grep -q` on a 90 KB producer
+  # managed 8-13 in 400. The consequence differs too. `-q` sites sit in conditions and invert an
+  # assertion; `head` sites are assignments and bare commands, whose status reaches `set -e` and
+  # ends the run **with no summary line** — the shape §4.4 shape 7 names, where a truncated run
+  # reads exactly like a complete one.
+  #
+  # The remedy is not a flag either: `sed -n '1,Np'` and `awk 'NR<=N'` read to end of input, and
+  # where the intent is "the first line of a captured result", `${out%%$'\n'*}` needs no pipe at
+  # all. All three were measured against a 1.3 MB producer.
+  ALWAYS_READERS = %w[head].freeze
+  READERS = (MATCH_READERS + ALWAYS_READERS).freeze
 
 
   module_function
@@ -279,7 +294,8 @@ module PipefailShortCircuit
 
   def reader_stage(segment)
     word = command_word(segment)
-    return nil unless READERS.include?(word)
+    return [word, nil] if ALWAYS_READERS.include?(word)
+    return nil unless MATCH_READERS.include?(word)
 
     flag = quiet_flag(segment.sub(/\A[\s(){]*/, ""))
     flag && [word, flag]
@@ -321,16 +337,21 @@ module PipefailShortCircuit
         next unless found
 
         reader, flag = found
+        named = flag ? "#{reader} #{flag}" : reader
         findings << Finding.new(
           file: relative, line: number, rule: "short-circuit-under-pipefail",
-          detail: "`#{reader} #{flag}` leaves on the first match while the producer upstream of " \
+          detail: "`#{named}` leaves before end of input while the producer upstream of " \
                   "it may still be writing; under `set -o pipefail` the producer's EPIPE becomes " \
-                  "the pipeline's status, so a successful match can report as a failed one — or, " \
-                  "where the match feeds the failing branch, a violation can report as clean",
-          fix: "#{reader} #{flag} PATTERN <<< \"$(producer)\" — a here-string writes a file, so " \
-               "there is no writer left to signal. Where the producer is a variable, " \
-               "`#{reader} #{flag} PATTERN <<< \"$var\"`; where a list is built by word splitting, " \
-               "keep it: <<< \"$(printf '%s\\n' $list)\""
+                  "the pipeline's status. In a condition that inverts the assertion; in an " \
+                  "assignment or a bare command it reaches `set -e` and ends the run with no " \
+                  "summary line",
+          fix: flag ?
+            "#{named} PATTERN <<< \"$(producer)\" — a here-string writes a file, so there is no " \
+            "writer left to signal. Where a list is built by word splitting, keep it: " \
+            "<<< \"$(printf '%s\\n' $list)\"" :
+            "`sed -n '1,Np'` or `awk 'NR<=N'` read to end of input; where the intent is the first " \
+            "line of a captured result, `out=\"$(producer)\"; first=\"${out%%$'\\n'*}\"` needs no " \
+            "pipe at all"
         )
       end
 
