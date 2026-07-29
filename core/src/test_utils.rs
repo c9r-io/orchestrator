@@ -295,6 +295,30 @@ impl TestState {
         self
     }
 
+    /// Drop the seeded `echo` agent and `basic` workflow, leaving only the
+    /// `default` workspace.
+    ///
+    /// This is the base the fixture-bundle corpus check validates against
+    /// (FR-148). `validate_manifests` merges a manifest into the *current*
+    /// config before building it, so validity is never a property of the file
+    /// alone. Against the full seed, five bundles are rejected for the
+    /// scaffolding's own `basic` workflow — a bundle that introduces a
+    /// self-referential workspace drags `basic` into
+    /// `[SELF_REF_POLICY_VIOLATION]` while saying nothing about the bundle.
+    /// Clearing both makes the question "would a fresh daemon accept this
+    /// bundle standalone", which is what a fixture has to satisfy.
+    #[allow(dead_code)] // test builder helper
+    pub fn without_seeded_agents_and_workflows(mut self) -> Self {
+        let project = self
+            .config
+            .projects
+            .get_mut(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project");
+        project.agents.clear();
+        project.workflows.clear();
+        self
+    }
+
     /// Build the test state, initializing the database and config.
     pub fn build(&mut self) -> Arc<InnerState> {
         if let Some(existing) = &self.state {
