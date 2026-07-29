@@ -63,6 +63,7 @@
 | FR-076 | GUI 正式发布 — Tauri App 打包分发 | P3 | Deferred |
 | FR-146 | `producer \| head -N` 在 `pipefail` 下让门禁中途终止 | P2 | Proposed |
 | FR-147 | 两个由 CI 执行的门禁不在执行面清单里 | P2 | Proposed |
+| FR-148 | 没有任何东西检查 fixture 是否还能被产品接受 | P2 | Proposed |
 | FR-077 | Workflow 模板库 — 常见 SDLC 自动化场景预设 | P1 | Closed |
 | FR-078 | Task Items 与 Event List CLI 命令 | P1 | Closed |
 | FR-079 | 数据生命周期治理 — 日志清理、DB 瘦身与自动化回收 | P1 | Closed |
