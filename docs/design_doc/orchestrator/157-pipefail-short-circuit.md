@@ -209,17 +209,83 @@ both do not. One shell on one platform is what a local sweep is, and CI is the
 observer that is not. The case now writes its verdict to a file and is green
 under all three shells.
 
+## The second family: `head`, which needs no flag
+
+FR-145 deferred `head` with a measurement obligation, and FR-146 discharged it. It is the same
+EPIPE, and almost nothing else about it is the same.
+
+**It needs no flag.** `grep` and `rg` short-circuit only when told to — `-q`, `--quiet`,
+`--silent`, `-m N` — and otherwise read to end of input. Every `head` short-circuits. So the
+scanner's `READERS` splits into `MATCH_READERS`, which get a flag test, and `ALWAYS_READERS`,
+which do not.
+
+**It fires roughly two orders of magnitude harder.** `X="$(seq 1 N | head -1)"` under
+`set -euo pipefail`, ten runs per row:
+
+| producer | died |
+|---|---|
+| ~6 B | 0 / 10 |
+| ~3.9 KB | 0 / 10 |
+| **~24 KB** | **6 / 10** |
+| ~129 KB | **10 / 10** |
+| ~1.3 MB | 10 / 10 |
+
+FR-145's `grep -q` managed **8–13 in 400** on a 90 KB producer. Same fuzzy, data-dependent
+boundary around the pipe buffer; a wholly different rate.
+
+**And it fails in a third direction, which is neither of FR-145's.** Measured:
+
+| position | status reaches | consequence |
+|---|---|---|
+| `X="$(p \| head -1)"` — assignment | `set -e` | **run ends, `X` never assigned, no summary line** |
+| `p \| head -N >&2` — bare | `set -e` | **run ends, no summary line** |
+| `if [ -n "$(p \| head -1)" ]` — value in a condition | discarded | survives, value correct |
+| `… \|\| true` | discarded | immune |
+
+FR-146 as filed had this partly inverted: it predicted condition position would invert an
+assertion "same as FR-145", and it has no row at all for **assignment**, which is the dominant
+idiom — ~18 of 37 sites, all `task create … | grep -oE UUID | head -1`. Those do not report the
+wrong answer. They stop the gate before it reaches its summary line, which is §4.4 shape 7's
+failure arriving through a completely ordinary-looking line of shell.
+
+That also means the remedy is not a here-string. A here-string is the right advice for a reader
+that was matching something; for a reader that was slicing, the fixes are:
+
+```sh
+out="$(producer)"; first="${out%%$'\n'*}"   # no pipe at all; bash 3.2 clean
+producer | sed -n '1,Np'                     # reads to EOF
+producer | awk 'NR<=N'                       # reads to EOF
+```
+
+All three measured against a 1.3 MB producer. The scanner's `fix:` text switches on the family
+for exactly this reason.
+
+**37 sites, not 38.** Two independent routes: `grep` over tracked shell gives 39, the lexer plus
+the quote-aware splitter gives 37. The two differences are
+`(get|post|put|delete|patch|head|options)` — a regex alternation inside a single-quoted string in
+`extract_surface.sh`. FR-146 also scoped its count to files that enable `pipefail`, which this
+FR's own closure had already made obsolete; widening the scope adds one and the lexer removes
+two, so **two independent errors nearly cancelled**. That is the argument for naming a method
+beside every number, made by the FR written about that trap.
+
+The same trap recurred a third time during the fix: after the rewrite, `grep` still reported
+matches in two files, and both were comments freshly written to explain the hazard. The scanner's
+own parser is the authority here, and it reports zero.
+
+**Two `|| true` workarounds died with the readers they were protecting.** Four sites carried
+`| head -N … || true`; the `|| true` was absorbing head's SIGPIPE, and it was equally absorbing a
+real `diff` or `jq` failure — FR-144's class, kept alive by a workaround for this one.
+
+**One site was the dynamic-scope case, live.** `scripts/regression/lib/probe-runner-lib.sh` sets
+no shell options; `run-cli-probes.sh` sets `-euo pipefail` and sources it. It is governed only
+because FR-145's closure removed the pipefail exemption, and it carried two sites.
+
 ## Known limits
 
-1. **`| head` is not covered.** Measured at 38 sites across 29 tracked shell
-   files under `pipefail`, of which eight are `producer | head -N >&2`
-   diagnostics inside a `fail` branch. Nobody reads that pipeline's status —
-   but `set -e` does, and it is 141. Measured: the script **exits mid-run and
-   its summary line never prints**, which §4.4 shape 7 already names as the
-   failure that reads exactly like a complete run. Same mechanism, different
-   consequence surface, and the two need different remedies: condition position
-   wants a here-string, diagnostic position wants the pipeline out of `set -e`'s
-   sight. Filed as FR-146.
+1. ~~`| head` is not covered.~~ **Closed by FR-146** — see "The second family"
+   above. The estimate recorded here (38 sites / 29 files, eight of them
+   diagnostics) was wrong in both the count and the consequence mapping; the
+   corrections are in that section.
 2. **Three scripts are executed by `ci.yml` and absent from
    `qa-gate-surface.json`**: `scripts/qa-doc-lint.sh`,
    `scripts/coverage-governance.sh` and `scripts/check-async-lock-governance.sh`.

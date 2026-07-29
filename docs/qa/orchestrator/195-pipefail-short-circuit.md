@@ -6,8 +6,9 @@ related_fr: FR-145
 # Orchestrator - A Reader That Leaves Early Kills The Producer
 
 **Module**: CI / Governance / Shell gates
-**Scope**: `scripts/qa/pipefail-short-circuit.rb` with its fixtures, and the 63
-rewritten sites across 22 tracked shell files
+**Scope**: `scripts/qa/pipefail-short-circuit.rb` with its fixtures, and the 100
+rewritten sites across 42 tracked shell files — 63 of the `-q` family (FR-145)
+and 37 of the `head` family (FR-146)
 **Scenarios**: 5
 **Priority**: Medium
 
@@ -101,6 +102,8 @@ correct probe and assert the finding names **that line**:
 | 5 | `cat f \| grep -q x` inside `"$( … )"` | a command substitution opens a fresh quoting context; the first version of this scanner read that `\|` as quoted and missed the stage |
 | 6 | a pipeline broken after the `\|` | the reader is the first word on its line and is still a downstream stage |
 | 9 | `set -euo pipefail` replaced with `set -eu`, the shape kept | the exemption this gate used to grant; shell options are dynamic, and case 9b shows a scenario sourced into a pipefail runner reporting a present pattern as absent |
+| 18 | `head -5 file` rewritten to `cat file \| head -5` | `head` needs **no flag** to short-circuit, so it is flagged with no flag test — the case a rule built only around `-q` would miss |
+| 19 | `head` moved inside `"$( … )"` | the assignment shape, which is ~18 of FR-146's 37 sites and does not invert an assertion — it ends the run |
 
 **The expected line is derived, never written down.** Each case locates its
 marker in the mutated probe and asserts on that line number. A fixture that
@@ -115,6 +118,11 @@ through 12 assert silence on:
 - `grep -q "a|b|c|d"` — the `|` is inside double quotes
 - `grep -F -- -q -quiet --silent` — `--` ends the option list
 - `[[ "$(… | grep -c .)" -eq 3 ]]` — `grep -c` counts, and therefore reads to EOF
+- `sed -n '1,5p'`, `awk 'NR<=5'` and `${rows%%$'\n'*}` (case 20) — **the remedies.** Without
+  this case the rule would be unusable: every fix anyone applied would light it up again
+- `head -5 data.txt` as the **first** stage (case 21) — no producer upstream to kill.
+  Forbidding the one unambiguously safe spelling of `head` would be worse than not having
+  the rule
 
 **Case 9b failed on its first CI run**, and the failure is worth recording
 because the mechanism had reproduced perfectly. The demonstration compared the
@@ -152,6 +160,21 @@ PASS: the here-string form reports the match every time (10/10)
 The producer emits the match, sleeps, then writes again, so it is still writing
 *by construction* when `grep -q` leaves. **10/10 and 0/10** on any machine,
 under any load, with any `grep`, independent of the pipe buffer.
+
+**Case 22 is the same idea for `head`, and it asserts the part that makes `head`
+worse.** The probe writes `reached=no`, runs `{ printf; sleep; printf } | head -1`,
+then writes `reached=yes`. Measured: **exit 141 and `reached=no`** — the run does
+not report the wrong answer, it *stops*, and the line after the pipeline never
+executes. That is §4.4 shape 7 reproduced on demand rather than described.
+
+The rate difference between the two families, ten runs per size:
+
+| producer | `head -1` dies | `grep -q` false result |
+|---|---|---|
+| ~3.9 KB | 0 / 10 | 0 |
+| ~24 KB | **6 / 10** | 0 |
+| ~90 KB | — | 8–13 / **400** |
+| ~129 KB | **10 / 10** | — |
 
 The field measurement that found the defect is recorded here rather than
 committed, because it is not reproducible enough to gate on. At `f105ce66`,
@@ -262,6 +285,7 @@ passes" is not per-object evidence.
 | 3 | The mechanism, without a race | ☑ PASS | 2026-07-29 | Claude |
 | 4 | The governed set follows git, not a list | ☑ PASS | 2026-07-29 | Claude |
 | 5 | The rewritten gates still assert what they asserted | ☑ PASS | 2026-07-29 | Claude |
+| — | FR-146: the `head` family, 37 sites, cases 18–22 | ☑ PASS | 2026-07-29 | Claude |
 
 ## Related gates
 
