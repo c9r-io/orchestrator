@@ -40,6 +40,11 @@
       "path": "scripts/qa/lib/slack-live-certification-lib.sh",
       "role": "library",
       "reason": "sourced by test-slack-live-certification.sh and certify-slack-managed-live.sh; both are classified above"
+    },
+    {
+      "path": "scripts/lib/qa_doc_workflow_ids.sh",
+      "role": "library",
+      "reason": "the workflow-ID cross-reference check and its lifecycle scope predicate; sourced by scripts/qa-doc-lint.sh and driven directly by test-qa-doc-lint-workflow-scope.sh, so it inherits the enforcement of both"
     }
   ],
   "staleClaimExemptions": [
@@ -418,6 +423,16 @@
         "mode": "no-provider"
       },
       "note": "mutates copies of docs/design_doc, docs/qa and docs/security under a temporary directory; it starts no daemon, compiles nothing, and never writes the working tree, so no provider binary is reachable."
+    },
+    {
+      "path": "scripts/qa/test-qa-doc-lint-workflow-scope.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "negative fixtures for the lifecycle scope predicate FR-149 gave the qa-doc-lint workflow-ID check. Case 1 runs the real lint to observe that the check executes; every other case drives scripts/lib/qa_doc_workflow_ids.sh inside a temporary copy of the three document roots and the fixture corpus. No daemon, no compile, no working-tree write, so no provider binary is reachable."
     },
     {
       "path": "scripts/qa/test-docs-publishing-integrity.sh",

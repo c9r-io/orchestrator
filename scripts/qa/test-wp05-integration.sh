@@ -6,13 +6,23 @@
 # Isolation: Each scenario uses --project wp05-<ID> for full project-level
 # isolation. No database resets. Idempotent and repeatable.
 #
+# FR-149: L1-C, L1-D and L2-A were removed. They drove `generate_items` and
+# `item_select`, which DD-137 (1b0937ca, 2026-07-25) retired, and their bundles
+# were rejected at `apply` — so this script died at L1-C under `set -e` and had
+# printed no summary line since that commit. What survives is what still exists:
+# Store x Spawning and Store x Invariants, both on self-contained `command:`
+# steps, so the gate needs no provider and no daemon.
+#
 # Usage:
 #   test-wp05-integration.sh [--layer N] [--scenario ID] [--verbose]
 #
-#   --layer 1|2       Run only scenarios in the specified layer
-#   --scenario L1A    Run a single scenario by ID (L1A, L1B, L1C, L1D, L2A)
+#   --layer 1         Run only scenarios in the specified layer (only 1 remains)
+#   --scenario L1A    Run a single scenario by ID (L1A, L1B)
 #   --verbose         Show full orchestrator output
 #   (no args)         Run all scenarios sequentially
+#
+# A selection that matches no scenario is a failure, not a silent exit 0
+# (§4.4 shape 5: zero iterations and N passing iterations must not look alike).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,6 +38,7 @@ RUN_SCENARIO=""
 PASS_COUNT=0
 FAIL_COUNT=0
 SKIP_COUNT=0
+SELECTED_COUNT=0
 
 # ── Argument parsing ──────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -122,14 +133,18 @@ assert_store_has_key() {
   fi
 }
 
+# Every `should_run` that says yes is counted. A `--layer`/`--scenario`
+# selection that matches nothing would otherwise reach the summary with
+# 0 pass / 0 fail and exit 0 — a green run that asserted nothing. The counter
+# is what SELECTED_COUNT below turns into a failure.
 should_run() {
   local scenario_id="$1" layer="$2"
   if [ -n "$RUN_SCENARIO" ]; then
-    [ "$RUN_SCENARIO" = "$scenario_id" ] && return 0 || return 1
+    [ "$RUN_SCENARIO" = "$scenario_id" ] || return 1
+  elif [ -n "$RUN_LAYER" ]; then
+    [ "$RUN_LAYER" = "$layer" ] || return 1
   fi
-  if [ -n "$RUN_LAYER" ]; then
-    [ "$RUN_LAYER" = "$layer" ] && return 0 || return 1
-  fi
+  SELECTED_COUNT=$((SELECTED_COUNT + 1))
   return 0
 }
 
@@ -243,96 +258,12 @@ if should_run L1B 1; then
   echo ""
 fi
 
-# ── L1-C: Dynamic Items + Selection (WP03 baseline) ──────────────────
-if should_run L1C 1; then
-  info "═══ L1-C: Dynamic Items + Selection (WP03) ═══"
-
-  run_orch apply -f fixtures/manifests/bundles/wp05-items-select.yaml --project wp05-L1C
-
-  TASK_ID="$(create_and_run_task wp05-L1C wp05-ws wp05-items-select "test items+select")"
-
-  TASK_STATUS="$(sqlite3 "$DB" "SELECT status FROM tasks WHERE id='${TASK_ID}';")"
-  info "  task status: $TASK_STATUS"
-
-  ITEM_COUNT="$(sqlite3 "$DB" "SELECT COUNT(*) FROM task_items WHERE task_id='${TASK_ID}';")"
-  info "  total items: $ITEM_COUNT"
-
-  DYN_COUNT="$(sqlite3 "$DB" "SELECT COUNT(*) FROM task_items WHERE task_id='${TASK_ID}' AND source='dynamic';")"
-  if [ "$DYN_COUNT" -ge 1 ]; then
-    pass "dynamic items generated ($DYN_COUNT)"
-  else
-    if [ "$ITEM_COUNT" -ge 3 ]; then
-      pass "items exist ($ITEM_COUNT total, dynamic source flag may differ)"
-    else
-      fail "expected >= 3 items, got $ITEM_COUNT"
-    fi
-  fi
-
-  assert_event_exists "$TASK_ID" items_generated "items_generated event"
-  assert_store_has_key wp05-L1C evolution winner_latest "item_select store_result"
-
-  info "L1-C done"
-  echo ""
-fi
-
-# ── L1-D: Dynamic Items + Invariants (WP03 x WP04) ───────────────────
-if should_run L1D 1; then
-  info "═══ L1-D: Dynamic Items + Invariants (WP03 x WP04) ═══"
-
-  run_orch apply -f fixtures/manifests/bundles/wp05-items-invariant.yaml --project wp05-L1D
-
-  TASK_ID="$(create_and_run_task wp05-L1D wp05-ws wp05-items-invariant "test items+invariant")"
-
-  TASK_STATUS="$(sqlite3 "$DB" "SELECT status FROM tasks WHERE id='${TASK_ID}';")"
-  info "  task status: $TASK_STATUS"
-
-  assert_event_exists "$TASK_ID" items_generated "items_generated event"
-
-  ITEM_COUNT="$(sqlite3 "$DB" "SELECT COUNT(*) FROM task_items WHERE task_id='${TASK_ID}';")"
-  if [ "$ITEM_COUNT" -ge 2 ]; then
-    pass "items generated for invariant test ($ITEM_COUNT)"
-  else
-    fail "expected >= 2 items, got $ITEM_COUNT"
-  fi
-
-  assert_event_exists "$TASK_ID" invariant_passed "invariant_passed event"
-
-  info "L1-D done"
-  echo ""
-fi
-
-# ═══════════════════════════════════════════════════════════════════════
-# Layer 2: Triple Composition
-# ═══════════════════════════════════════════════════════════════════════
-
-# ── L2-A: Store + Items + Selection + Spawn (WP01 x WP02 x WP03) ─────
-if should_run L2A 2; then
-  info "═══ L2-A: Store + Items + Selection + Spawn (WP01 x WP02 x WP03) ═══"
-
-  run_orch apply -f fixtures/manifests/bundles/wp05-store-items-select.yaml --project wp05-L2A
-
-  TASK_ID="$(create_and_run_task wp05-L2A wp05-ws wp05-store-items-select "test store+items+select+spawn")"
-
-  TASK_STATUS="$(sqlite3 "$DB" "SELECT status FROM tasks WHERE id='${TASK_ID}';")"
-  info "  task status: $TASK_STATUS"
-
-  assert_event_exists "$TASK_ID" items_generated "items_generated event"
-  assert_store_has_key wp05-L2A evolution winner_latest "item_select winner in store"
-  assert_store_has_key wp05-L2A journal run_latest "journal entry in store"
-  assert_child_task_exists "$TASK_ID"
-
-  CHILD_ID="$(get_child_task_id "$TASK_ID")"
-  if [ -n "$CHILD_ID" ]; then
-    PARENT_REF="$(sqlite3 "$DB" "SELECT parent_task_id FROM tasks WHERE id='${CHILD_ID}';")"
-    if [ "$PARENT_REF" = "$TASK_ID" ]; then
-      pass "child parent_task_id correct (3-primitive chain)"
-    else
-      fail "child parent_task_id: expected '$TASK_ID', got '$PARENT_REF'"
-    fi
-  fi
-
-  info "L2-A done"
-  echo ""
+# ── A selection that ran nothing is a failure ─────────────────────────
+# `--layer 2` and `--scenario L1C` were valid before FR-149 and are not now.
+# Without this, either one reaches the summary with 0 pass / 0 fail and exits
+# 0 — indistinguishable from a clean full run.
+if [ "$SELECTED_COUNT" -eq 0 ]; then
+  fail "no scenario matched the selection (--layer '${RUN_LAYER:-}' --scenario '${RUN_SCENARIO:-}'); known scenarios: L1A (layer 1), L1B (layer 1)"
 fi
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -342,6 +273,7 @@ echo ""
 info "═══════════════════════════════════════════"
 info "  WP05 Primitive Composition QA Summary"
 info "═══════════════════════════════════════════"
+info "  SELECTED: $SELECTED_COUNT"
 info "  PASS: $PASS_COUNT"
 info "  FAIL: $FAIL_COUNT"
 info "  SKIP: $SKIP_COUNT"

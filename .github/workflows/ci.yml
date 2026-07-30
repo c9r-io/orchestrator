@@ -221,6 +221,11 @@ jobs:
         continue-on-error: true
         run: ./scripts/qa-doc-lint.sh
 
+      - name: QA doc lint workflow-ID scope negative fixtures
+        id: doc-lint-scope
+        continue-on-error: true
+        run: ./scripts/qa/test-qa-doc-lint-workflow-scope.sh
+
       - name: Coordination governance inventory
         id: coordination
         continue-on-error: true
@@ -385,6 +390,7 @@ jobs:
             links=${{ steps.links.outcome }}
             links-fixtures=${{ steps.links-fixtures.outcome }}
             doc-lint=${{ steps.doc-lint.outcome }}
+            doc-lint-scope=${{ steps.doc-lint-scope.outcome }}
             coordination=${{ steps.coordination.outcome }}
             ledger-tooling=${{ steps.ledger-tooling.outcome }}
             core-boundary=${{ steps.core-boundary.outcome }}

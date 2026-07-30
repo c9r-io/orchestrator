@@ -11,6 +11,9 @@ fi
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+# shellcheck source=lib/qa_doc_workflow_ids.sh
+. "$ROOT_DIR/scripts/lib/qa_doc_workflow_ids.sh"
+
 fail=0
 
 # Existing orchestrator-specific guardrails.
@@ -61,20 +64,10 @@ done < <(
 )
 
 echo "[qa-doc-lint] Checking workflow ID cross-reference against fixtures..."
-# Extract --workflow <id> from orchestrator QA docs and verify each ID exists in fixture YAMLs.
-# Scoped to docs/qa/orchestrator/*.md only — scripts and self-bootstrap docs often embed inline
-# workflow definitions that aren't in fixture bundles.
-fixture_workflows=$(rg -A3 'kind: Workflow' fixtures/manifests/bundles/*.yaml 2>/dev/null \
-  | rg 'name:' | sed 's/.*name: //' | sort -u)
-while IFS=: read -r file line match; do
-  wf_id=$(printf '%s' "$match" | rg -o '\-\-workflow\s+(\S+)' -r '$1')
-  # Skip placeholders (<...>), shell variables ($...), and quoted vars ("$...")
-  [[ -z "$wf_id" || "$wf_id" == *'<'* || "$wf_id" == *'$'* || "$wf_id" == *'"'* ]] && continue
-  if ! rg -qx "$wf_id" <<< "$fixture_workflows"; then
-    echo "[qa-doc-lint] Unknown workflow ID '$wf_id' at ${file}:${line} (not in any fixture)"
-    fail=1
-  fi
-done < <(rg -n -- '--workflow\s+\S+' docs/qa/orchestrator -g '*.md' 2>/dev/null || true)
+# The check, its scope predicate and the reasoning behind both live in the shared
+# library, so that scripts/qa/test-qa-doc-lint-workflow-scope.sh can drive it
+# directly instead of inferring its behaviour from this script's exit code.
+qa_doc_workflow_ids_check "[qa-doc-lint]" || fail=1
 
 echo "[qa-doc-lint] Checking edit subcommand structure..."
 # Bare 'edit <resource>' without 'export' or 'open' subcommand is invalid.
