@@ -3,15 +3,15 @@
 # Tests that WP01-WP04 compose correctly when used together.
 # QA doc: docs/qa/orchestrator/51-primitive-composition.md
 #
-# Isolation: Each scenario uses --project wp05-<ID> for full project-level
-# isolation. No database resets. Idempotent and repeatable.
+# Isolation: a throwaway ORCHESTRATORD_DATA_DIR and a daemon this script starts
+# and reaps; each scenario additionally uses --project wp05-<ID>. The
+# developer's runtime root at ~/.orchestratord is never opened.
 #
 # FR-149: L1-C, L1-D and L2-A were removed. They drove `generate_items` and
 # `item_select`, which DD-137 (1b0937ca, 2026-07-25) retired, and their bundles
-# were rejected at `apply` — so this script died at L1-C under `set -e` and had
-# printed no summary line since that commit. What survives is what still exists:
-# Store x Spawning and Store x Invariants, both on self-contained `command:`
-# steps, so the gate needs no provider and no daemon.
+# were rejected at `apply`. What survives is what still exists: Store x Spawning
+# and Store x Invariants, both on self-contained `command:` steps, so no
+# provider is reachable.
 #
 # Usage:
 #   test-wp05-integration.sh [--layer N] [--scenario ID] [--verbose]
@@ -23,14 +23,45 @@
 #
 # A selection that matches no scenario is a failure, not a silent exit 0
 # (§4.4 shape 5: zero iterations and N passing iterations must not look alike).
+#
+# FR-149, second finding: this gate had not reached L1-A since 2026-03-26.
+# `1be4666d` split the CLI from the daemon, after which every `orchestrator`
+# invocation is a control-plane client call — and this script started no daemon,
+# so `ensure_db` died on `daemon socket not found` before the first scenario.
+# The three rotted bundles at the old :250/282/312 were real but were never the
+# reason it failed; nothing ever got that far. FR-148 and DD-158 recorded the
+# cause as DD-137 (07-25) by reading the source rather than running it, which
+# understated the outage by four months.
+#
+# Two more things were wrong with the harness and are fixed here:
+#   * `(cd core && cargo build --release)` builds the `agent-orchestrator`
+#     library package. The `orchestrator` binary comes from `crates/cli` and
+#     `orchestratord` from `crates/daemon`, so the gate was running whatever
+#     stale artifact happened to be in target/ — measured at eight days old.
+#   * `DB=data/agent_orchestrator.db` is a repository-local path the product
+#     stopped using. The runtime root is `ORCHESTRATORD_DATA_DIR`.
+#
+# Isolation follows test-agent-driver-production-parity.sh: a throwaway
+# ORCHESTRATORD_DATA_DIR and a daemon this script starts and reaps. The
+# developer's runtime database at ~/.orchestratord is never opened. No provider
+# is reachable either — both bundles drive self-contained `command:` steps.
+#
+# No `--bind`, deliberately. With a TCP bind the daemon serves TCP and the UDS
+# socket is never created, so the CLI — which reaches the isolated instance by
+# finding `$ORCHESTRATORD_DATA_DIR/orchestrator.sock` — has nothing to dial. The
+# parity gate passes `--bind` because it also supplies a control-plane config
+# and connects over TLS; this gate needs no network at all, so it stays on UDS.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO_ROOT"
 
-ORCH="./target/release/orchestrator"
-DB="data/agent_orchestrator.db"
+ORCH="$REPO_ROOT/target/debug/orchestrator"
+ORCHD="$REPO_ROOT/target/debug/orchestratord"
+QA_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/wp05-qa.XXXXXX")"
+DB="$QA_ROOT/data/agent_orchestrator.db"
+DAEMON_PID=""
 VERBOSE=false
 RUN_LAYER=""
 RUN_SCENARIO=""
@@ -39,6 +70,19 @@ PASS_COUNT=0
 FAIL_COUNT=0
 SKIP_COUNT=0
 SELECTED_COUNT=0
+
+cleanup() {
+  if [[ -n "$DAEMON_PID" ]]; then
+    kill "$DAEMON_PID" 2>/dev/null || true
+    wait "$DAEMON_PID" 2>/dev/null || true
+  fi
+  if [[ "$FAIL_COUNT" -gt 0 || "${KEEP_WP05_QA:-0}" == "1" ]]; then
+    echo "[wp05] retained at QA_ROOT=$QA_ROOT" >&2
+  else
+    rm -rf "$QA_ROOT"
+  fi
+}
+trap cleanup EXIT
 
 # ── Argument parsing ──────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -76,12 +120,6 @@ run_orch() {
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || { echo "FATAL: missing required command: $1" >&2; exit 1; }
-}
-
-ensure_db() {
-  if [ ! -f "$DB" ]; then
-    run_orch init
-  fi
 }
 
 assert_task_status() {
@@ -183,13 +221,62 @@ create_and_run_task() {
 require_cmd sqlite3
 require_cmd cargo
 
-info "Building release CLI"
-(cd core && cargo build --release >/dev/null 2>&1)
+# Both binaries, by package. Building `core` produces neither of them.
+info "Building orchestrator and orchestratord"
+cargo build -p orchestratord -p orchestrator-cli >/dev/null
 
-mkdir -p fixtures/wp05-qa
-printf '# WP05 QA target\n' > fixtures/wp05-qa/wp05-check.md
+[ -x "$ORCH" ] || { echo "FATAL: $ORCH was not produced by the build" >&2; exit 1; }
+[ -x "$ORCHD" ] || { echo "FATAL: $ORCHD was not produced by the build" >&2; exit 1; }
 
-ensure_db
+# The workspace the tasks run against, and the target file the fixtures name.
+# Under QA_ROOT, so the repository is never written.
+mkdir -p "$QA_ROOT/workspace/fixtures/wp05-qa" "$QA_ROOT/workspace/fixtures/ticket" "$QA_ROOT/data"
+printf '# WP05 QA target\n' > "$QA_ROOT/workspace/fixtures/wp05-qa/wp05-check.md"
+
+# ORCHESTRATORD_DATA_DIR alone is what selects the isolated socket: the client's
+# priority list takes an explicit control-plane config *before* the local socket
+# file, so exporting one — even a path that does not exist — routes the CLI down
+# the TLS branch and away from the daemon this script just started.
+export ORCHESTRATORD_DATA_DIR="$QA_ROOT/data"
+unset ORCHESTRATOR_SOCKET
+unset ORCHESTRATOR_CONTROL_PLANE_CONFIG
+
+# Assert the isolation is in effect rather than assuming the exports took. If
+# the daemon were to open the developer's runtime root instead, every assertion
+# below would still pass and the damage would be invisible from the outside.
+case "$ORCHESTRATORD_DATA_DIR" in
+  "$QA_ROOT"/*) ;;
+  *) echo "FATAL: data dir isolation is not in effect: $ORCHESTRATORD_DATA_DIR" >&2; exit 1 ;;
+esac
+
+info "Starting an isolated daemon over UDS (data dir: $ORCHESTRATORD_DATA_DIR)"
+(
+  cd "$QA_ROOT/workspace"
+  "$ORCHD" --foreground --workers 1 --webhook-bind none \
+    --uds-max-role admin > "$QA_ROOT/daemon.log" 2>&1 &
+  echo $! > "$QA_ROOT/daemon.pid"
+)
+DAEMON_PID="$(<"$QA_ROOT/daemon.pid")"
+for _ in {1..80}; do
+  "$ORCH" task list -o json >/dev/null 2>&1 && break
+  sleep 0.25
+done
+if ! "$ORCH" task list -o json >/dev/null 2>&1; then
+  # The client's error, not only the daemon's log. The daemon can be listening
+  # happily while the CLI is dialling somewhere else entirely, and the daemon
+  # log says nothing about that — which is exactly how this failed once.
+  echo "--- client error ---" >&2
+  "$ORCH" task list -o json >&2 2>&1 || true
+  echo "--- daemon log ---" >&2
+  sed -n '1,200p' "$QA_ROOT/daemon.log" >&2
+  echo "FATAL: the isolated daemon did not become ready" >&2
+  exit 1
+fi
+
+# The daemon writes the database on first use; a missing file here means the
+# isolation pointed somewhere unexpected, not that the run may continue.
+[ -f "$DB" ] || { echo "FATAL: no database at $DB after the daemon became ready" >&2; exit 1; }
+info "daemon ready (pid $DAEMON_PID)"
 
 # ═══════════════════════════════════════════════════════════════════════
 # Layer 1: Pairwise Composition
@@ -199,7 +286,7 @@ ensure_db
 if should_run L1A 1; then
   info "═══ L1-A: Store + Spawning (WP01 x WP02) ═══"
 
-  run_orch apply -f fixtures/manifests/bundles/wp05-store-spawn.yaml --project wp05-L1A
+  run_orch apply -f "$REPO_ROOT"/fixtures/manifests/bundles/wp05-store-spawn.yaml --project wp05-L1A
 
   TASK_ID="$(create_and_run_task wp05-L1A wp05-ws wp05-store-spawn-parent "test store+spawn")"
 
@@ -233,7 +320,7 @@ fi
 if should_run L1B 1; then
   info "═══ L1-B: Store + Invariants — violation (WP01 x WP04) ═══"
 
-  run_orch apply -f fixtures/manifests/bundles/wp05-store-invariant.yaml --project wp05-L1B
+  run_orch apply -f "$REPO_ROOT"/fixtures/manifests/bundles/wp05-store-invariant.yaml --project wp05-L1B
 
   # Test 1: invariant should fail (exit 1 vs expect_exit 0)
   TASK_ID="$(create_and_run_task wp05-L1B wp05-ws wp05-store-invariant-fail "test invariant fail")"
@@ -262,8 +349,13 @@ fi
 # `--layer 2` and `--scenario L1C` were valid before FR-149 and are not now.
 # Without this, either one reaches the summary with 0 pass / 0 fail and exits
 # 0 — indistinguishable from a clean full run.
+# `|| true`, because `fail` returns 1 and this is the last command of the `if`,
+# so under `set -e` the compound's status ends the script — skipping the very
+# summary line whose absence this check exists to make impossible. Caught by
+# running it: the first version exited 1 with no summary, which is
+# indistinguishable from the truncated runs §4.6 condition 5 is about.
 if [ "$SELECTED_COUNT" -eq 0 ]; then
-  fail "no scenario matched the selection (--layer '${RUN_LAYER:-}' --scenario '${RUN_SCENARIO:-}'); known scenarios: L1A (layer 1), L1B (layer 1)"
+  fail "no scenario matched the selection (--layer '${RUN_LAYER:-}' --scenario '${RUN_SCENARIO:-}'); known scenarios: L1A (layer 1), L1B (layer 1)" || true
 fi
 
 # ═══════════════════════════════════════════════════════════════════════
