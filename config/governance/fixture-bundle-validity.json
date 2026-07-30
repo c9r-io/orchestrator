@@ -15,9 +15,12 @@
     "spelled out per workflow — the list is an enumeration, not a wildcard.",
     "",
     "`rotted_count` is compared for equality, not as a ceiling: retiring rot has to move this",
-    "number down. Retiring the `rotted` set is FR-149's job — see docs/feature_request/."
+    "number down, and it did. FR-148 froze 19 rotted entries; FR-149 deleted all 19 bundles",
+    "and their entries, so the count is 0. It stays a declared number rather than being",
+    "dropped, because 0 is a claim — a bundle that rots tomorrow has to move it back up,",
+    "and a ceiling of 0 would read the same while accepting the first regression silently."
   ],
-  "rotted_count": 19,
+  "rotted_count": 0,
   "bundles": [
     {
       "path": "fixtures/manifests/bundles/coordination-legacy-baseline.yaml",
@@ -59,26 +62,22 @@
     {
       "path": "fixtures/manifests/bundles/crd-test-invalid.yaml",
       "status": "dependent",
-      "expect": ["no CustomResourceDefinition found for kind 'PromptLibrary'"],
+      "expect": [
+        "no CustomResourceDefinition found for kind 'PromptLibrary'"
+      ],
       "reason": "A PromptLibrary CR missing its required `prompts` field — but standalone it never reaches that check, because the CRD it violates is registered by crd-test.yaml. The schema violation it was written to demonstrate is only reachable after that bundle is applied.",
       "consumers": []
     },
     {
       "path": "fixtures/manifests/bundles/crd-test.yaml",
       "status": "environment",
-      "expect": ["workspace 'crd-test-ws' work_dir not found"],
-      "reason": "Declares a relative work_dir, which the product resolves against the process working directory. Contents are current; only the directory is absent.",
-      "consumers": ["docs/qa/orchestrator/40-custom-resource-definitions.md"]
-    },
-    {
-      "path": "fixtures/manifests/bundles/cycle-overflow-test.yaml",
-      "status": "rotted",
       "expect": [
-        "[legacy_json_path_removed] workflow 'fixed_with_dynamic_items' step 'qa_doc_gen'",
-        "[legacy_json_path_removed] workflow 'infinite_with_dynamic_items' step 'qa_doc_gen'"
+        "workspace 'crd-test-ws' work_dir not found"
       ],
-      "reason": "generate_items JSONPath post-action, retired wholesale by DD-137 (1b0937ca, 2026-07-25). The feature it exercises no longer exists, so this is not a fixture to repair — FR-149 retires it with QA 92.",
-      "consumers": ["docs/qa/orchestrator/92-dynamic-items-cycle-overflow.md"]
+      "reason": "Declares a relative work_dir, which the product resolves against the process working directory. Contents are current; only the directory is absent.",
+      "consumers": [
+        "docs/qa/orchestrator/40-custom-resource-definitions.md"
+      ]
     },
     {
       "path": "fixtures/manifests/bundles/fr052-backward-compat-test-v2.yaml",
@@ -99,16 +98,11 @@
       "consumers": []
     },
     {
-      "path": "fixtures/manifests/bundles/generate-items-narrow-test.yaml",
-      "status": "rotted",
-      "expect": ["[legacy_json_path_removed] workflow 'narrow-test' step 'qa_doc_gen'"],
-      "reason": "generate_items JSONPath post-action, retired by DD-137. FR-149 retires it with QA 84.",
-      "consumers": ["docs/qa/orchestrator/84-generate-items-regression-narrowing.md"]
-    },
-    {
       "path": "fixtures/manifests/bundles/non-code-workspace-fixture.yaml",
       "status": "environment",
-      "expect": ["[FILE_SHARING_PATH_OUTSIDE_CEILING] workspace 'warehouse-ops'"],
+      "expect": [
+        "[FILE_SHARING_PATH_OUTSIDE_CEILING] workspace 'warehouse-ops'"
+      ],
       "reason": "Valid only under a fileSharing.shareableRoots policy that covers its work_dir; test-non-code-workspace.sh installs one before applying it. Contents are current.",
       "consumers": [
         "scripts/qa/test-non-code-workspace.sh",
@@ -117,80 +111,12 @@
       ]
     },
     {
-      "path": "fixtures/manifests/bundles/prehook-test.yaml",
-      "status": "rotted",
-      "expect": ["missing field `when`"],
-      "reason": "Prehook schema drift: `when` became required and this bundle predates that. Fails at parse, so no resource in it is reachable. Orphaned — FR-149 deletes it.",
-      "consumers": []
-    },
-    {
-      "path": "fixtures/manifests/bundles/qa105-s3-correct-yaml.yaml",
-      "status": "rotted",
-      "expect": ["[legacy_coordination_removed] workflow 'test_s3_correct' step 'qa'"],
-      "reason": "behavior.captures, retired by DD-137. The fixture's premise — that this is the *correct* placement — was falsified when the construct was removed. Orphaned.",
-      "consumers": []
-    },
-    {
-      "path": "fixtures/manifests/bundles/qa105-s5-prehook-declared-capture.yaml",
-      "status": "rotted",
-      "expect": ["[legacy_coordination_removed] workflow 'test_s5_prehook_declared' step 'step_a'"],
-      "reason": "behavior.captures, retired by DD-137. Orphaned.",
-      "consumers": []
-    },
-    {
-      "path": "fixtures/manifests/bundles/qa107-s1-parallel.yaml",
-      "status": "rotted",
-      "expect": ["[legacy_coordination_removed] workflow 'qa107-parallel-guard' step 'process'"],
-      "reason": "behavior.captures, retired by DD-137. Orphaned.",
-      "consumers": []
-    },
-    {
-      "path": "fixtures/manifests/bundles/qa83-s1-mixed-text.yaml",
-      "status": "rotted",
-      "expect": ["[legacy_json_path_removed] workflow 's1-mixed-text' step 'qa_doc_gen'"],
-      "reason": "generate_items JSONPath post-action, retired by DD-137. One of five QA-83 scenarios covering extraction from non-pure-JSON agent output; FR-149 retires them with QA 83.",
-      "consumers": []
-    },
-    {
-      "path": "fixtures/manifests/bundles/qa83-s2-fenced-block.yaml",
-      "status": "rotted",
-      "expect": ["[legacy_json_path_removed] workflow 's2-fenced-block' step 'qa_doc_gen'"],
-      "reason": "generate_items JSONPath post-action, retired by DD-137. QA-83 scenario 2.",
-      "consumers": []
-    },
-    {
-      "path": "fixtures/manifests/bundles/qa83-s3-pure-json.yaml",
-      "status": "rotted",
-      "expect": ["[legacy_json_path_removed] workflow 's3-pure-json' step 'qa_doc_gen'"],
-      "reason": "generate_items JSONPath post-action, retired by DD-137. QA-83 scenario 3.",
-      "consumers": []
-    },
-    {
-      "path": "fixtures/manifests/bundles/qa83-s4-malformed-json.yaml",
-      "status": "rotted",
-      "expect": ["[legacy_json_path_removed] workflow 's4-malformed-json' step 'qa_doc_gen'"],
-      "reason": "generate_items JSONPath post-action, retired by DD-137. QA-83 scenario 4.",
-      "consumers": []
-    },
-    {
-      "path": "fixtures/manifests/bundles/qa83-s5-multi-json.yaml",
-      "status": "rotted",
-      "expect": ["[legacy_json_path_removed] workflow 's5-multi-json' step 'qa_doc_gen'"],
-      "reason": "generate_items JSONPath post-action, retired by DD-137. QA-83 scenario 5.",
-      "consumers": []
-    },
-    {
       "path": "fixtures/manifests/bundles/s4-invalid-cel.yaml",
       "status": "fragment",
-      "expect": ["no agent supports capability for step 'qa' used by workflow 's4_invalid_cel'"],
+      "expect": [
+        "no agent supports capability for step 'qa' used by workflow 's4_invalid_cel'"
+      ],
       "reason": "Written to demonstrate loop.guard enabled without a loop_guard step or agent — but standalone the capability check fires first and that diagnostic is never reached. Its intended failure only appears against a base config that supplies a `qa` agent. Orphaned.",
-      "consumers": []
-    },
-    {
-      "path": "fixtures/manifests/bundles/s5-pipeline-var.yaml",
-      "status": "rotted",
-      "expect": ["[legacy_coordination_removed] workflow 's5_pipeline_var' step 'qa'"],
-      "reason": "behavior.captures, retired by DD-137. Orphaned.",
       "consumers": []
     },
     {
@@ -203,85 +129,32 @@
       "consumers": []
     },
     {
-      "path": "fixtures/manifests/bundles/stagger-test-scenario1.yaml",
-      "status": "rotted",
-      "expect": ["[legacy_coordination_removed] workflow 'stagger-no-delay' step 'process'"],
-      "reason": "behavior.captures, retired by DD-137. One of four stagger scenarios; the stagger behaviour they cover is orthogonal to captures, so FR-149 decides between rewriting and deleting them. Orphaned.",
-      "consumers": []
-    },
-    {
-      "path": "fixtures/manifests/bundles/stagger-test-scenario2.yaml",
-      "status": "rotted",
-      "expect": ["[legacy_coordination_removed] workflow 'stagger-workflow-level' step 'process'"],
-      "reason": "behavior.captures, retired by DD-137. Stagger scenario 2. Orphaned.",
-      "consumers": []
-    },
-    {
-      "path": "fixtures/manifests/bundles/stagger-test-scenario3.yaml",
-      "status": "rotted",
-      "expect": ["[legacy_coordination_removed] workflow 'stagger-step-override' step 'process'"],
-      "reason": "behavior.captures, retired by DD-137. Stagger scenario 3. Orphaned.",
-      "consumers": []
-    },
-    {
-      "path": "fixtures/manifests/bundles/stagger-test-scenario4.yaml",
-      "status": "rotted",
-      "expect": [
-        "[legacy_coordination_removed] workflow 'stagger-sequential-ignored' step 'process'"
-      ],
-      "reason": "behavior.captures, retired by DD-137. Stagger scenario 4. Orphaned.",
-      "consumers": []
-    },
-    {
       "path": "fixtures/manifests/bundles/template-test.yaml",
       "status": "fragment",
-      "expect": ["no agent supports capability for step 'qa' used by workflow 'template_test'"],
+      "expect": [
+        "no agent supports capability for step 'qa' used by workflow 'template_test'"
+      ],
       "reason": "Ships a Workflow and StepTemplates but no Agent. Orphaned.",
       "consumers": []
     },
     {
       "path": "fixtures/manifests/bundles/test-workspace-dryrun.yaml",
       "status": "environment",
-      "expect": ["workspace 'test-workspace-dryrun' work_dir not found: /tmp/test-ws-dr"],
+      "expect": [
+        "workspace 'test-workspace-dryrun' work_dir not found: /tmp/test-ws-dr"
+      ],
       "reason": "Points at an absolute path a consuming procedure is expected to create first. Contents are current. Orphaned, so nothing creates it any more.",
       "consumers": []
     },
     {
       "path": "fixtures/manifests/bundles/test-workspace.yaml",
       "status": "environment",
-      "expect": ["workspace 'test-workspace' work_dir not found: /tmp/test-ws"],
+      "expect": [
+        "workspace 'test-workspace' work_dir not found: /tmp/test-ws"
+      ],
       "reason": "Points at an absolute path QA 01 creates before applying it. Contents are current.",
-      "consumers": ["docs/qa/orchestrator/01-cli-agent-orchestration.md"]
-    },
-    {
-      "path": "fixtures/manifests/bundles/wp05-items-invariant.yaml",
-      "status": "rotted",
-      "expect": ["[legacy_json_path_removed] workflow 'wp05-items-invariant' step 'plan'"],
-      "reason": "generate_items JSONPath post-action, retired by DD-137. test-wp05-integration.sh applies this bundle wholesale and has been unable to get past it since 2026-07-25 — the same break as test-coordination-collapse.sh, found by this check. FR-149 retires the gate and QA 51.",
       "consumers": [
-        "scripts/qa/test-wp05-integration.sh",
-        "docs/qa/orchestrator/51-primitive-composition.md"
-      ]
-    },
-    {
-      "path": "fixtures/manifests/bundles/wp05-items-select.yaml",
-      "status": "rotted",
-      "expect": ["[legacy_json_path_removed] workflow 'wp05-items-select' step 'plan'"],
-      "reason": "generate_items JSONPath post-action, retired by DD-137. Applied wholesale by test-wp05-integration.sh. FR-149 retires it.",
-      "consumers": [
-        "scripts/qa/test-wp05-integration.sh",
-        "docs/qa/orchestrator/51-primitive-composition.md",
-        "docs/qa/orchestrator/83-generate-items-mixed-text-extraction.md"
-      ]
-    },
-    {
-      "path": "fixtures/manifests/bundles/wp05-store-items-select.yaml",
-      "status": "rotted",
-      "expect": ["[legacy_json_path_removed] workflow 'wp05-store-items-select' step 'plan'"],
-      "reason": "generate_items JSONPath post-action (and behavior.captures in a later step), retired by DD-137. Applied wholesale by test-wp05-integration.sh. FR-149 retires it.",
-      "consumers": [
-        "scripts/qa/test-wp05-integration.sh",
-        "docs/qa/orchestrator/51-primitive-composition.md"
+        "docs/qa/orchestrator/01-cli-agent-orchestration.md"
       ]
     }
   ]

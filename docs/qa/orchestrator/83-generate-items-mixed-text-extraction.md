@@ -1,6 +1,17 @@
 ---
-lifecycle: active
+lifecycle: superseded
+superseded_by: docs/qa/orchestrator/175-legacy-coordination-decommission.md
+related_fr: FR-149
 ---
+
+> **Superseded (FR-149).** The `generate_items` JSONPath post-action this
+> document exercises was retired wholesale by DD-137 (`1b0937ca`, 2026-07-25);
+> the validator now rejects any workflow declaring it with
+> `[legacy_json_path_removed]`. The five `qa83-s*.yaml` fixture bundles written
+> for these scenarios, and the `wp05-items-select.yaml` bundle the scenarios
+> borrowed, were deleted at the same time. Nothing here is runnable. It is kept
+> as the record of what mixed-text extraction was once required to do; the
+> retirement itself is verified by the successor named above.
 
 # Orchestrator - generate_items Extraction from Non-Pure-JSON Agent Output
 

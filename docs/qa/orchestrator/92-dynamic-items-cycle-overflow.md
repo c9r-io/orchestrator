@@ -1,8 +1,19 @@
 ---
-lifecycle: active
+lifecycle: superseded
+superseded_by: docs/qa/orchestrator/175-legacy-coordination-decommission.md
 related_fr: FR-037
 self_referential_safe: true
 ---
+
+> **Superseded (FR-149).** `max_cycles` proactive enforcement is still live, but
+> every scenario here reaches it through the `generate_items` JSONPath
+> post-action, which DD-137 (`1b0937ca`, 2026-07-25) retired wholesale. The
+> fixture `cycle-overflow-test.yaml` — whose two workflows
+> `fixed_with_dynamic_items` and `infinite_with_dynamic_items` are named
+> throughout — was deleted at FR-149. Nothing here is runnable as written. The
+> retirement is verified by the successor named above; `max_cycles` itself is
+> covered by `docs/design_doc/orchestrator/49-dynamic-items-cycle-overflow.md`
+> and the loop-engine unit tests it names.
 
 # QA 92: Dynamic Items Cycle Overflow — max_cycles Proactive Enforcement
 

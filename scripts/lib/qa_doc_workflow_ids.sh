@@ -48,7 +48,9 @@
 # when every checked document is clean, 1 otherwise.
 qa_doc_workflow_ids_check() {
   local prefix="${1:-[qa-doc-lint]}"
-  local status=0
+  # `rc`, not `status`: this file is sourced, and `status` is a read-only
+  # special variable in zsh, where the function would die on its own first line.
+  local rc=0
 
   local superseded_docs="" lifecycle_index=""
   if lifecycle_index=$(ruby scripts/qa/doc-lifecycle.rb --emit-index 2>&1); then
@@ -60,13 +62,13 @@ qa_doc_workflow_ids_check() {
         ' 2>/dev/null); then
       echo "$prefix ERROR: the doc lifecycle index would not parse; every document will be checked" >&2
       superseded_docs=""
-      status=1
+      rc=1
     fi
   else
     echo "$prefix ERROR: doc-lifecycle.rb --emit-index failed; every document will be checked" >&2
     printf '%s\n' "$lifecycle_index" >&2
     superseded_docs=""
-    status=1
+    rc=1
   fi
 
   if [[ -n "$superseded_docs" ]]; then
@@ -94,9 +96,9 @@ qa_doc_workflow_ids_check() {
     [[ -z "$wf_id" || "$wf_id" == *'<'* || "$wf_id" == *'$'* || "$wf_id" == *'"'* ]] && continue
     if ! rg -qx "$wf_id" <<< "$fixture_workflows"; then
       echo "$prefix Unknown workflow ID '$wf_id' at ${file}:${line} (not in any fixture)"
-      status=1
+      rc=1
     fi
   done < <(rg -n -- '--workflow\s+\S+' docs/qa/orchestrator -g '*.md' 2>/dev/null || true)
 
-  return "$status"
+  return "$rc"
 }

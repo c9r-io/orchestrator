@@ -1,7 +1,18 @@
 ---
-lifecycle: active
+lifecycle: superseded
+superseded_by: docs/qa/orchestrator/175-legacy-coordination-decommission.md
+related_fr: FR-149
 self_referential_safe: false
 ---
+
+> **Superseded (FR-149).** The `generate_items` post-action whose regressions
+> this document narrows was retired wholesale by DD-137 (`1b0937ca`,
+> 2026-07-25), and its fixture `generate-items-narrow-test.yaml` was deleted
+> with it. The `--workflow narrow-test` invocation below names a workflow no
+> bundle defines any more — this is the one collision, out of 22 workflow IDs
+> that left the fixture corpus, that motivated scoping qa-doc-lint's workflow-ID
+> cross-reference to `lifecycle: active` documents. Nothing here is runnable;
+> the retirement is verified by the successor named above.
 
 # Orchestrator - Generate Items Regression Narrowing
 
