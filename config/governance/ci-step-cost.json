@@ -13,6 +13,7 @@
     "reviewWhen": "A new gate that does not fit is not a reason to raise this silently. Whoever adds it either makes room or raises the ceiling in this file with a written reason and a new date. Revisit unconditionally if the runner class changes, since the number assumes GitHub-hosted ubuntu-latest."
   },
   "pendingMeasurement": {
+    "QA doc lint workflow-ID scope negative fixtures": "Added by FR-149 and not yet present in any recorded run. Six cases; five copy docs/design_doc, docs/qa and docs/security plus the fixture corpus into $TMPDIR and drive scripts/lib/qa_doc_workflow_ids.sh, and case 1 runs the real qa-doc-lint.sh once to observe that the check executes. No cargo, no daemon, no provider. Measured locally at 25s against 16s for test-doc-lifecycle.sh, which is 5s in CI at run 30385987450 and does the same kind of work (12 cases over the same document roots) — so the CI figure should land near it, and the ratio is recorded rather than the local number extrapolated. Clears on the next --refresh --write."
   },
   "measurement": {
     "runId": "30385987450",

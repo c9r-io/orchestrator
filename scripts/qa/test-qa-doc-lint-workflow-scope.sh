@@ -91,12 +91,23 @@ run_check() {
   ( cd "$dir" && . "./$LIB" && qa_doc_workflow_ids_check "[scope]" ) >"$out" 2>&1
 }
 
+# These two derive a target; they never write. Both are shaped as assignments
+# because that is what separates reading a value out of a fixture tree from
+# rewriting one in place — `scripts/qa/fixture-target-drift.rb` draws exactly
+# that line, and it flagged the earlier subshell form of both.
+#
+# The ruby always exits 0 and prints nothing when it finds nothing, so a
+# non-zero status can only mean the derivation itself broke. Collapsing the two
+# into "empty string" is the shape that reports "no such document" when what
+# actually happened was a crash — the wrong diagnosis, on the fixture's own
+# premise.
+
 # The first active QA document under docs/qa/orchestrator that already carries a
 # `--workflow <id>` line, derived from the case repo. Two calls with different
 # skip counts give two distinct documents.
 pick_doc() {
-  local dir="$1" skip="${2:-0}"
-  ( cd "$dir" && ruby -e '
+  local dir="$1" skip="${2:-0}" out=""
+  out=$(cd "$dir" && ruby -e '
       skip = ARGV[0].to_i
       seen = 0
       Dir.glob("docs/qa/orchestrator/*.md").sort.each do |path|
@@ -107,19 +118,26 @@ pick_doc() {
         next unless body.include?("--workflow ")
         if seen == skip
           puts path
-          exit 0
+          break
         end
         seen += 1
       end
-      exit 1
-    ' "$skip" )
+    ' "$skip") || {
+    fail "pick_doc: the derivation itself failed in $dir; the fixture has no target"
+    return 2
+  }
+  [[ -n "$out" ]] || {
+    fail "pick_doc: no active QA document under docs/qa/orchestrator carries a --workflow line (skip=$skip)"
+    return 1
+  }
+  printf '%s\n' "$out"
 }
 
 # An existing active document to point `superseded_by` at. Derived, because a
 # named successor is one more thing that can move.
 pick_successor() {
-  local dir="$1" avoid="$2"
-  ( cd "$dir" && ruby -e '
+  local dir="$1" avoid="$2" out=""
+  out=$(cd "$dir" && ruby -e '
       avoid = ARGV[0]
       Dir.glob("docs/qa/orchestrator/*.md").sort.each do |path|
         next if path == avoid || File.basename(path) == "README.md"
@@ -127,10 +145,17 @@ pick_successor() {
         next unless body =~ /^---\n(.*?)\n---\n/m
         next unless Regexp.last_match(1).include?("lifecycle: active")
         puts path
-        exit 0
+        break
       end
-      exit 1
-    ' "$avoid" )
+    ' "$avoid") || {
+    fail "pick_successor: the derivation itself failed in $dir; the fixture has no successor"
+    return 2
+  }
+  [[ -n "$out" ]] || {
+    fail "pick_successor: no active QA document is available as a successor (avoiding $avoid)"
+    return 1
+  }
+  printf '%s\n' "$out"
 }
 
 add_bogus_workflow() {
