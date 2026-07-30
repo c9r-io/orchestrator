@@ -842,6 +842,146 @@ check_continue_on_error_aggregated() {
   return $rc
 }
 
+# Check 14: every scripts/** executable a workflow job runs is declared here.
+#
+# Checks 1 and 3 together look like they cover this and do not. Check 1 compares
+# the manifest against `find scripts/qa`, so a gate living in scripts/ rather
+# than scripts/qa/ is outside the discovered set entirely; check 3 asks whether
+# each *declared* entry is really executed, which is the opposite direction and
+# says nothing about a script nobody declared. FR-147 measured the hole: three
+# gates — qa-doc-lint.sh, coverage-governance.sh, check-async-lock-governance.sh
+# — had been running in ci.yml for months with no entry here, so every scanner
+# that derives its scope from this manifest (jq-status-observed.rb,
+# fixture-target-drift.rb) had never read them. The most pointed instance:
+# test-agent-driver-documentation-alignment.sh named qa-doc-lint.sh as its
+# `invokedBy`, so the callee was governed while the caller was not.
+#
+# Scope is every workflow, not ci.yml. Narrowing to ci.yml because that is where
+# the known gaps were is §4.4 shape 2 aimed at this check — it would guard the
+# one workflow its author had in mind and let the next instance land silently in
+# another. Two of the four workflows here already run governance gates.
+#
+# The undeclared set must be empty. A script that is not a gate is declared in
+# supportFiles with a role and a reason, per path and never as a directory or a
+# glob: a subtree exemption goes on absorbing files that do not exist yet and
+# never produces a line in any log.
+check_workflow_execution_declared() {
+  local root="$1"
+  local manifest="$root/$MANIFEST_REL" rc=0
+  local records declared path workflow job undeclared=""
+
+  # The executed set is derived from the workflow model, so the three things
+  # that are not execution stay out of it: a commented-out `run:`, an
+  # `if: false` step, and a script named inside a heredoc body. A grep over the
+  # workflow files would count all three and this check would certify a gate
+  # that never runs.
+  #
+  # The status is observed. Left in condition position the ruby call would run
+  # with `set -e` disabled for its whole call tree, and a model that died on a
+  # malformed workflow would hand back an empty set that reads exactly like
+  # "every executed script is declared".
+  if records="$(ruby "$WORKFLOW_MODEL" executed-scripts "$root" 2>&1)"; then
+    :
+  else
+    echo "    could not derive the executed set from the workflow model:" >&2
+    printf '      %s\n' "$records" >&2
+    return 1
+  fi
+
+  # Fail closed on an empty read. This population cannot be empty — the
+  # repository has four workflows and this very gate is one of the scripts they
+  # run — so reading nothing means the model or the checkout is broken, not that
+  # the work is done. Zero rows and N passing rows are indistinguishable in an
+  # exit code, which is how a sibling gate once printed "13 passed, 0 failed"
+  # over a manifest it could not parse.
+  if [[ -z "$records" ]]; then
+    echo "    the workflow model reported no executed scripts at all" >&2
+    echo "      the repository runs governance gates from .github/workflows, so an" >&2
+    echo "      empty set is a broken derivation, not a clean result" >&2
+    return 1
+  fi
+
+  declared="$(gate_jq_rows require-rows "$manifest" \
+    '.scripts[].path, (.supportFiles // [])[].path')" || return 1
+
+  while IFS=$'\t' read -r path workflow job; do
+    [[ -z "$path" ]] && continue
+    if ! grep -qxF "$path" <<< "$declared"; then
+      undeclared+="      $path (run by $workflow job '$job')"$'\n'
+      rc=1
+    fi
+  done <<< "$records"
+
+  if [[ -n "$undeclared" ]]; then
+    echo "    workflow job(s) execute script(s) absent from $MANIFEST_REL:" >&2
+    printf '%s' "$undeclared" >&2
+    echo "      declare each as a gate in scripts[], or as a non-gate in" >&2
+    echo "      supportFiles[] with a role and a reason" >&2
+  fi
+
+  # Being declared is not enough; the declaration has to be one that permits
+  # direct execution. Of the three supportFile roles, `fixture` and `library`
+  # both say the file is never invoked as a gate itself — a fixture is data or a
+  # fake binary a gate consumes, a library runs only inside its callers. Only
+  # `release-tooling` describes a file a workflow runs at top level. Without this
+  # condition the trigger rule below is bypassed by relabelling: declare a
+  # governance gate `library`, and it is declared, exempt, and never checked
+  # again. That is the cheaper mutation and the one worth blocking.
+  local support_rows support_path support_role
+  support_rows="$(gate_jq_rows require-rows "$manifest" \
+    '(.supportFiles // [])[] | [.path, .role] | @tsv')" || return 1
+  while IFS=$'\t' read -r support_path support_role; do
+    [[ -z "$support_path" ]] && continue
+    [[ "$support_role" == "release-tooling" ]] && continue
+    while IFS=$'\t' read -r path workflow job; do
+      [[ "$path" == "$support_path" ]] || continue
+      echo "    $support_path: declared supportFiles role '$support_role', but $workflow" >&2
+      echo "      job '$job' executes it directly. That role means the file is never" >&2
+      echo "      invoked as a gate itself; a script a workflow runs is either a gate" >&2
+      echo "      in scripts[] or release-tooling" >&2
+      rc=1
+    done <<< "$records"
+  done <<< "$support_rows"
+
+  # The exemption is conditional, and this is what makes it so. `release-tooling`
+  # says "this runs only to build or publish an artifact", and that claim is
+  # false the moment the script also runs on ordinary development activity — a
+  # branch push or a pull request. Without this, the role would be a permanent
+  # amnesty: move a governance gate into scripts/package-release.sh's entry and
+  # nothing would ever look at it again. Derived from each workflow's parsed
+  # trigger map rather than from a list of workflow names, because a list is the
+  # failure this check exists to avoid.
+  # Classify each workflow once. Asked per (entry, record) pair this spawned ruby
+  # four deep inside a nested loop, and the fixture mode runs this check some
+  # thirty times — the governance job has a recorded budget and FR-140 is explicit
+  # that a gate's cost is part of its design.
+  local dev_triggered="" candidate
+  while read -r candidate; do
+    [[ -z "$candidate" ]] && continue
+    if ruby "$WORKFLOW_MODEL" development-triggered "$root/$candidate" >/dev/null 2>&1; then
+      dev_triggered+="$candidate"$'\n'
+    fi
+  done <<< "$(cut -f2 <<< "$records" | LC_ALL=C sort -u)"
+
+  local exempt exempt_path
+  exempt="$(gate_jq_rows allow-empty "$manifest" \
+    '(.supportFiles // [])[] | select(.role == "release-tooling") | .path')" || return 1
+  while read -r exempt_path; do
+    [[ -z "$exempt_path" ]] && continue
+    while IFS=$'\t' read -r path workflow job; do
+      [[ "$path" == "$exempt_path" ]] || continue
+      if grep -qxF "$workflow" <<< "$dev_triggered"; then
+        echo "    $exempt_path: declared release-tooling, but $workflow job '$job' runs it" >&2
+        echo "      on branch pushes or pull requests, so it is enforcement on every" >&2
+        echo "      change; classify it in scripts[] instead" >&2
+        rc=1
+      fi
+    done <<< "$records"
+  done <<< "$exempt"
+
+  return $rc
+}
+
 # The registry. Both modes read it: verification runs every entry, and the
 # fixture mode asserts that it names every check_* the file defines and that
 # each one has at least one negative fixture. A check that exists but is not
@@ -861,6 +1001,7 @@ ALL_CHECKS=(
   check_provider_stub_coverage
   check_git_history_available
   check_continue_on_error_aggregated
+  check_workflow_execution_declared
 )
 
 run_all_checks() {
@@ -900,6 +1041,8 @@ describe_check() {
       echo "every ci-required gate that reads git history runs in a job that fetches it|a ci-required gate queries history its job did not fetch" ;;
     check_continue_on_error_aggregated)
       echo "every step whose failure a job swallows is aggregated by that job, and every outcome read names a step that exists|a job swallows a step's failure without aggregating it, or reads an outcome for a step it does not have" ;;
+    check_workflow_execution_declared)
+      echo "every script a workflow job executes is declared here, and no release-tooling exemption runs on a branch push or a pull request|a workflow job runs a script this manifest has never heard of, so every scanner deriving scope from it is blind to that script" ;;
     *) return 1 ;;
   esac
 }
@@ -923,9 +1066,29 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
   # "the fixture failed" and would let a defect fixture pass for the wrong
   # reason. .git is copied because check_no_stale_claims derives its corpus from
   # git ls-files rather than from a list.
+  # This list is itself the enumeration §4.4 shape 2 warns about, and it has
+  # already gone stale once: FR-147 classified three gates that live in scripts/
+  # rather than scripts/qa/, and only qa-doc-lint.sh was here. A path the fixture
+  # tree lacks makes check_workflow_execution_declared report it as undeclared in
+  # every case, which reads as "the check works" while every fixture below is
+  # actually failing for the fixture's own reason. Derived from the manifest
+  # instead of typed, so classifying a fourth script outside scripts/qa needs no
+  # edit here.
+  MANIFEST_OUTSIDE_QA="$(jq -r '
+    (.scripts[].path, (.supportFiles // [])[].path)
+    | select(startswith("scripts/") and (startswith("scripts/qa/") | not))
+    | select(endswith(".sh") or endswith(".rb"))' \
+    "$REPO_ROOT/$MANIFEST_REL" | LC_ALL=C sort -u)"
+  if [[ -z "$MANIFEST_OUTSIDE_QA" ]]; then
+    echo "the manifest named no scripts outside scripts/qa; the fixture tree would" >&2
+    echo "be built without the files check_workflow_execution_declared reads" >&2
+    exit 1
+  fi
+
+  # shellcheck disable=SC2086
   (cd "$REPO_ROOT" && tar cf - \
     config/governance/qa-gate-surface.json \
-    scripts/qa-doc-lint.sh \
+    $MANIFEST_OUTSIDE_QA \
     scripts/qa \
     scripts/lib \
     fixtures/manifests/bundles \
@@ -1268,6 +1431,109 @@ BUNDLE
     perl -0pi -e 's{^(      - name: Governance result$)}{      - name: FR-137 anonymous gate\n        continue-on-error: true\n        run: exit 1\n\n$1}m' \
       "$d/.github/workflows/ci.yml"; then
     expect_fail "fixture 24" "$d" check_continue_on_error_aggregated "a continue-on-error step with no id cannot be aggregated by anything"
+  fi
+
+  # ── FR-147: the manifest is complete with respect to what CI executes ──
+  #
+  # All three targets are derived from the manifest rather than named. The
+  # subject of this check is a set that is meant to grow, so a fixture that
+  # hardcodes a path only works until the next gate is classified — nine recorded
+  # times a fixture's named target moved and eight stayed green (§4.4 shape 7).
+  #
+  # These three call fixture_mutate under its own name rather than through
+  # inject(). fixture-target-drift.rb recognises the landing proof by the
+  # statement's leading word, and `inject` is a local alias it cannot see
+  # through: it reported all three of these as unproven mutations. The thirty
+  # older call sites are invisible to that rule for an unrelated reason — they
+  # rewrite with `perl -pi -e`, which its in-place pattern does not match — so
+  # the blind spot has never had a reason to show before now. Naming the shared
+  # function directly is both the honest form and the one the scanner can read.
+  # Recorded in DD-160 as a known limit of that gate.
+
+  # 25. A gate ci.yml still runs, with its manifest entry deleted. The FR asked
+  #     for exactly this. The entry has to be one outside scripts/qa, otherwise
+  #     check_surface_complete catches the deletion first on the disk compare and
+  #     the fixture proves nothing about this check — which is also the reason
+  #     the hole existed: scripts/qa is the only tree check 1 can see.
+  d="$(new_case f25)"
+  victim="$(jq -r '
+    [.scripts[] | select(.enforcement == "ci-required")
+      | select(.path | startswith("scripts/qa/") | not) | .path][0] // empty' \
+    "$d/$MANIFEST_REL")"
+  if [[ -z "$victim" ]]; then
+    fail "fixture 25: the manifest declares no ci-required gate outside scripts/qa, so the case that motivated this check cannot be built"
+  else
+    # `if fixture_mutate`, never `elif`: fixture-target-drift.rb recognises the
+    # landing proof only at the head of a statement, and an elif reads to it as
+    # an unwrapped in-place rewrite.
+    if fixture_mutate "fixture 25" "$d/$MANIFEST_REL" \
+      ruby -rjson -e '
+        path, victim = ARGV
+        data = JSON.parse(File.read(path))
+        data["scripts"].reject! { |entry| entry["path"] == victim }
+        File.write(path, JSON.pretty_generate(data) + "\n")
+      ' "$d/$MANIFEST_REL" "$victim"; then
+      expect_fail "fixture 25" "$d" check_workflow_execution_declared \
+        "a gate a workflow job still executes, with its manifest entry deleted, fails the completeness compare"
+    fi
+  fi
+
+  # 26. The relabelling bypass, and the mutation an author is least likely to
+  #     have in mind. Deleting a release-tooling entry is the obvious defect and
+  #     fixture 25 already covers that shape; the cheap way to silence this check
+  #     is to leave the path declared and change its role to one that carries no
+  #     trigger condition. `library` is a role the manifest defines, so
+  #     check_support_files_declared is satisfied and only the direct-execution
+  #     rule can object.
+  d="$(new_case f26)"
+  exempt_victim="$(jq -r '
+    [(.supportFiles // [])[] | select(.role == "release-tooling") | .path][0] // empty' \
+    "$d/$MANIFEST_REL")"
+  if [[ -z "$exempt_victim" ]]; then
+    fail "fixture 26: no release-tooling exemption exists to attack"
+  else
+    if fixture_mutate "fixture 26" "$d/$MANIFEST_REL" \
+      ruby -rjson -e '
+        path, victim = ARGV
+        data = JSON.parse(File.read(path))
+        data["supportFiles"].each { |entry| entry["role"] = "library" if entry["path"] == victim }
+        File.write(path, JSON.pretty_generate(data) + "\n")
+      ' "$d/$MANIFEST_REL" "$exempt_victim"; then
+      expect_fail "fixture 26" "$d" check_workflow_execution_declared \
+        "a directly executed script relabelled from release-tooling to library fails the role rule"
+    fi
+  fi
+
+  # 27. The exemption is conditional on the trigger, so trip the condition rather
+  #     than the declaration: add a ci.yml step that runs the release script. The
+  #     entry stays exactly as it is and stays valid on its own terms; what
+  #     changes is that the script now runs on every branch push and pull
+  #     request, which is what the role denies. An exemption nobody has tried to
+  #     trip is an exemption whose reach is a guess (§4.4 shape 8).
+  d="$(new_case f27)"
+  exempt_victim="$(jq -r '
+    [(.supportFiles // [])[] | select(.role == "release-tooling") | .path][0] // empty' \
+    "$d/$MANIFEST_REL")"
+  if [[ -z "$exempt_victim" ]]; then
+    fail "fixture 27: no release-tooling exemption exists to attack"
+  else
+    if fixture_mutate "fixture 27" "$d/.github/workflows/ci.yml" \
+      ruby -e '
+        path, victim = ARGV
+        text = File.read(path)
+        step = "      - name: FR-147 release script on the development path\n" \
+               "        run: ./#{victim} --dry-run\n\n"
+        # No raise when the anchor is gone. An abort here would end the run on
+        # set -e with the summary line unprinted, and a truncated run reads
+        # exactly like a complete one. Writing nothing leaves the digest
+        # unchanged, which is the state fixture_mutate turns into one named
+        # failed assertion.
+        text.sub!(/^      - name: Governance result$/) { "#{step}      - name: Governance result" }
+        File.write(path, text)
+      ' "$d/.github/workflows/ci.yml" "$exempt_victim"; then
+      expect_fail "fixture 27" "$d" check_workflow_execution_declared \
+        "a release-tooling script run by a branch-push workflow loses its exemption"
+    fi
   fi
 
   # ── Behavioural: the aggregated outcomes really decide the job ──

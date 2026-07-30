@@ -488,6 +488,14 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y ruby
 
+      # FR-147 classified coverage-governance.sh as ci-required/no-provider. On
+      # this job it runs as --fixture-test, which execs a node script and touches
+      # no Rust, so the claim is cheap to believe here — the stubs are installed
+      # anyway because "believable" is not "observed", and the sibling
+      # boundary-coverage job needs them for the full run.
+      - name: Install failing provider stubs
+        uses: ./.github/actions/provider-stubs
+
       - name: Verify baseline, unsupported branch, and path fixtures
         run: ./scripts/coverage-governance.sh --fixture-test
 
@@ -554,6 +562,17 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov@0.8.5
+
+      # coverage-governance.sh is declared no-provider, and this is the one
+      # ci-required gate whose no-provider claim check_provider_isolation cannot
+      # actually see: that branch greps the gate's own shell text for the fixture
+      # bundles it names, while this run is `cargo llvm-cov --workspace
+      # --all-targets --all-features` plus the npm and Playwright suites, whose
+      # bundles are named in Rust and TS. The stubs are what makes the
+      # declaration observable — a real claude/codex here exits 97 and says so,
+      # instead of quietly spending credentials behind a green check.
+      - name: Install failing provider stubs
+        uses: ./.github/actions/provider-stubs
 
       - name: Install Node.js
         uses: actions/setup-node@v6

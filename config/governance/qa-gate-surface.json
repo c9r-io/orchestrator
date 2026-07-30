@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Explicit enforcement surface for every scripts/qa gate. Verified by scripts/qa/test-qa-gate-surface.sh, which runs in the ci.yml governance job. A script on disk that is absent here fails the gate, and so does an entry whose script no longer exists.",
+  "description": "Explicit enforcement surface for every scripts/qa gate, plus every script outside scripts/qa that a GitHub Actions workflow job executes. Verified by scripts/qa/test-qa-gate-surface.sh, which runs in the ci.yml governance job. A script on disk under scripts/qa that is absent here fails the gate; so does an entry whose script no longer exists; and so does a script any workflow job runs that is declared neither as a gate in scripts[] nor as a non-gate in supportFiles[]. FR-147 added the third direction: the first two are satisfied by a manifest that has never heard of scripts/qa-doc-lint.sh, which ci.yml had been running for months while every scanner deriving its scope from this file read the gate that script invokes and skipped the script itself.",
   "enforcementKinds": {
     "ci-required": "Executed by a GitHub Actions workflow on every push/PR. Requires workflow, job, and providerIsolation. Must never be able to reach a real provider binary.",
     "manual-runbook": "Executed by a human following the owner QA document. Requires reason and owner.",
@@ -13,7 +13,8 @@
   },
   "supportFileRoles": {
     "fixture": "Input data or a fake executable consumed by a gate. Never invoked as a gate itself, so it has no enforcement of its own.",
-    "library": "Shared shell or ruby sourced by one or more gates. Runs only inside its callers, so it inherits their enforcement."
+    "library": "Shared shell or ruby sourced by one or more gates. Runs only inside its callers, so it inherits their enforcement.",
+    "release-tooling": "Executed directly by a release workflow to build or publish an artifact, not to assert a governance property. Has no enforcement of its own because it makes no claim. Only valid for a script whose every executing workflow is tag- or dispatch-triggered: check_workflow_execution_declared rejects the role the moment such a script appears in a job of a workflow that runs on a branch push or a pull request, so this is not a place to park a governance gate."
   },
   "supportFiles": [
     {
@@ -45,6 +46,21 @@
       "path": "scripts/lib/qa_doc_workflow_ids.sh",
       "role": "library",
       "reason": "the workflow-ID cross-reference check and its lifecycle scope predicate; sourced by scripts/qa-doc-lint.sh and driven directly by test-qa-doc-lint-workflow-scope.sh, so it inherits the enforcement of both"
+    },
+    {
+      "path": "scripts/package-release.sh",
+      "role": "release-tooling",
+      "reason": "builds the release archives in release.yml's build job. It asserts nothing about this repository's invariants, so there is no enforcement claim to make; a break shows up as a failed release, not as a governance gap."
+    },
+    {
+      "path": "scripts/package-skills.sh",
+      "role": "release-tooling",
+      "reason": "packages the .claude/skills bundle in release.yml's publish job. Skill mirror correctness is separately governed by test-skill-mirror-integrity.sh, which is ci-required; this script only archives what that gate already checked."
+    },
+    {
+      "path": "scripts/update-homebrew-formula.sh",
+      "role": "release-tooling",
+      "reason": "rewrites the Homebrew formula from a published tag in release.yml's homebrew job. It runs after the artifacts exist and reads their checksums; it makes no assertion a CI gate could enforce."
     }
   ],
   "staleClaimExemptions": [
@@ -763,6 +779,36 @@
       "enforcement": "manual-runbook",
       "reason": "builds a release binary and drives multi-layer composition scenarios against a live CLI",
       "owner": "docs/qa/orchestrator/51-primitive-composition.md"
+    },
+    {
+      "path": "scripts/qa-doc-lint.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Lints docs/qa, docs/security and docs/uiux, and invokes test-agent-driver-documentation-alignment.sh — which was already classified here, naming this script as its invokedBy. FR-147 added this entry: the invoked side was governed while the invoker was not, so every scanner deriving scope from this manifest read the callee and skipped the caller. Reads tracked Markdown and greps the working tree; starts no daemon, applies no manifest bundle, so no provider binary is reachable."
+    },
+    {
+      "path": "scripts/coverage-governance.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "boundary-coverage",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Generates and enforces the boundary coverage floor. Also runs in the coverage-policy-fixtures job as `--fixture-test`, which execs scripts/coverage/test-coverage-governance.mjs instead and touches no Rust. Unlike every other no-provider entry, the full run executes `cargo llvm-cov --workspace --all-targets --all-features`, `npm run test:coverage` and `npx playwright test`, so the bundles it could reach are named in Rust and TS rather than in this shell script — outside what check_provider_isolation's no-provider branch can see. FR-147 therefore added ./.github/actions/provider-stubs to both jobs: the declaration now has an executed backstop that exits 97 on a real claude/codex. Residual limit recorded in docs/design_doc/orchestrator/160-enforcement-manifest-completeness.md."
+    },
+    {
+      "path": "scripts/check-async-lock-governance.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "async-lock-governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Scans Rust sources for std sync primitives held across await points. Static analysis over tracked files: no daemon, no database, no manifest bundle, no network, so no provider binary is reachable."
     }
   ]
 }

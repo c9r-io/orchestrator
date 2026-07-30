@@ -139,6 +139,15 @@ The scope distinction is the point. `qa-gate-surface.json` classifies `scripts/q
 `boundary-coverage` had been red for six consecutive runs. A liveness rule scoped to the gates it
 already knew about would not have looked at it once.
 
+> **FR-147 correction.** The manifest no longer classifies only `scripts/qa/*`: it also declares
+> every script outside that tree which a workflow job executes, so `scripts/coverage-governance.sh`
+> is an entry whose `job` is `boundary-coverage`. The argument above survives, and the reason is
+> worth being exact about, because the near-miss is easy to read as a refutation: this manifest
+> classifies *scripts*, never *jobs*. `test`, `clippy`, `miri` and `cross-compile` run no
+> `scripts/**` gate at all and are still absent from it entirely, which is precisely why job
+> liveness has to discover its object list by parsing the workflows. A liveness rule derived from
+> this manifest would today see one more job than it did and still miss four.
+
 Four rules:
 
 1. every workflow file is recorded or excluded with a reason (`release.yml` is excluded: tag-only,

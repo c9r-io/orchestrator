@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 429,
-    "active": 423,
+    "documents": 431,
+    "active": 425,
     "superseded": 6,
-    "withRelatedFr": 276
+    "withRelatedFr": 278
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -384,6 +384,12 @@
     },
     "docs/design_doc/orchestrator/16-structured-logging.md": {
       "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/160-enforcement-manifest-completeness.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-147"
+      ]
     },
     "docs/design_doc/orchestrator/17-envstore-secretstore-agent-env.md": {
       "lifecycle": "active"
@@ -1631,6 +1637,12 @@
         "FR-149"
       ]
     },
+    "docs/qa/orchestrator/198-enforcement-manifest-completeness.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-147"
+      ]
+    },
     "docs/qa/orchestrator/20-structured-output-worker-scheduler.md": {
       "lifecycle": "active"
     },
@@ -2676,6 +2688,10 @@
     "FR-145": [
       "docs/design_doc/orchestrator/157-pipefail-short-circuit.md",
       "docs/qa/orchestrator/195-pipefail-short-circuit.md"
+    ],
+    "FR-147": [
+      "docs/design_doc/orchestrator/160-enforcement-manifest-completeness.md",
+      "docs/qa/orchestrator/198-enforcement-manifest-completeness.md"
     ],
     "FR-148": [
       "docs/design_doc/orchestrator/158-fixture-bundle-validity.md",

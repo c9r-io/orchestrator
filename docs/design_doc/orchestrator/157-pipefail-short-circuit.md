@@ -286,7 +286,24 @@ because FR-145's closure removed the pipefail exemption, and it carried two site
    above. The estimate recorded here (38 sites / 29 files, eight of them
    diagnostics) was wrong in both the count and the consequence mapping; the
    corrections are in that section.
-2. **Three scripts are executed by `ci.yml` and absent from
+2. ~~**Three scripts are executed by `ci.yml` and absent from
+   `qa-gate-surface.json`**~~ **Closed by FR-147** — all three are now declared,
+   and `check_workflow_execution_declared` keeps the difference set empty. Two
+   corrections to what is recorded below. The count is right *for `ci.yml`*, which
+   is the scope this entry states, but the derivation it argues for — "every
+   workflow job" — gives **six**: `scripts/package-release.sh`,
+   `scripts/package-skills.sh` and `scripts/update-homebrew-formula.sh` are
+   executed by `release.yml` and were equally absent. They are declared as
+   `release-tooling` support files, exempt only while every workflow that runs
+   them stays tag- or dispatch-triggered. And "adding them changes those scanners'
+   governed sets, which is a separate change with its own certification" was
+   measured false before anything was committed: both scanners pass on the widened
+   scope, their scanned sets growing by exactly three (36 → 39, 31 → 34), and
+   their own meta-gates pass 18/18 each. See
+   `docs/design_doc/orchestrator/160-enforcement-manifest-completeness.md`. The
+   original entry follows.
+
+   **Three scripts are executed by `ci.yml` and absent from
    `qa-gate-surface.json`**: `scripts/qa-doc-lint.sh`,
    `scripts/coverage-governance.sh` and `scripts/check-async-lock-governance.sh`.
    Every scanner that derives its scope from that manifest —

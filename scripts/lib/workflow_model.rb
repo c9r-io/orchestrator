@@ -235,6 +235,72 @@ module WorkflowModel
     found.uniq
   end
 
+  # Every `scripts/**` executable a workflow job really runs, for a whole
+  # checkout, as `path <TAB> workflow <TAB> job` records.
+  #
+  # This is the fact FR-147 needed and could not get: the enforcement manifest
+  # is a declaration, and until something derives what CI *executes* there is
+  # nothing to compare it against. Three shell gates had been running in ci.yml
+  # for months while absent from the manifest, so every scanner that derives its
+  # scope from that manifest — jq-status-observed.rb, fixture-target-drift.rb —
+  # had never once read them. A hand count is what missed them: the third was
+  # found only by a reconciliation that derived the invocations instead.
+  #
+  # Read off `run_commands`, so the same three things that are not execution
+  # elsewhere in this file are not execution here either: a commented-out `run:`,
+  # an `if: false` step, and a name inside a heredoc body.
+  #
+  # Bulk, one process for the whole checkout, for the reason `outcome_facts`
+  # gives: a process per job would put seconds into a gate that runs on every
+  # push. Facts, not a verdict — whether an undeclared path is a gap or a
+  # deliberate exemption is the manifest's business, and the caller's.
+  SCRIPT_TOKEN = %r{(?<![\w/.-])\.?/?(scripts/[\w./-]*\.(?:sh|rb))}.freeze
+
+  def executed_scripts(root)
+    records = []
+    workflows(root).each do |workflow|
+      relative = workflow.sub(%r{\A#{Regexp.escape(root)}/?}, "").sub(%r{\A\./}, "")
+      jobs(workflow).each do |name|
+        run_commands(workflow, name).scan(SCRIPT_TOKEN) do |match|
+          records << [match.first, relative, name]
+        end
+      end
+    end
+    records.uniq
+  end
+
+  # A workflow's triggers, as the bare event names. Psych parses GitHub's `on:`
+  # as the boolean true under YAML 1.1 — the caveat `load` already warns about —
+  # so the key is looked up both ways rather than assumed.
+  def triggers(path)
+    document = load(path)
+    map = document.key?(true) ? document[true] : document["on"]
+    case map
+    when Hash then map
+    when Array then map.to_h { |event| [event, nil] }
+    when String then { map => nil }
+    else {}
+    end
+  end
+
+  # Does this workflow run on ordinary development activity? A branch push or a
+  # pull request means "on every change"; a tag-filtered push or a manual
+  # dispatch does not. The distinction is what lets a release-only script be
+  # exempted from the enforcement surface without that exemption becoming a
+  # place to hide a governance gate: move the script into a job of a workflow
+  # that answers true here and the exemption stops applying.
+  def development_triggered?(path)
+    map = triggers(path)
+    return true if map.key?("pull_request") || map.key?("pull_request_target")
+
+    push = map["push"]
+    return false unless map.key?("push")
+    # `push:` with no filter is every branch and every tag.
+    return true if push.nil? || !push.is_a?(Hash)
+
+    push.key?("branches") || push.key?("branches-ignore")
+  end
+
   def walk_strings(node, &block)
     case node
     when Hash then node.each { |key, value| walk_strings(key, &block); walk_strings(value, &block) }
@@ -305,9 +371,14 @@ if $PROGRAM_NAME == __FILE__
     puts WorkflowModel.outcome_references(ARGV[0], ARGV[1])
   when "outcome-facts"
     WorkflowModel.outcome_facts(ARGV[0] || ".").each { |record| puts record.join("\t") }
+  when "executed-scripts"
+    WorkflowModel.executed_scripts(ARGV[0] || ".").each { |record| puts record.join("\t") }
+  when "development-triggered"
+    exit(WorkflowModel.development_triggered?(ARGV[0]) ? 0 : 1)
   else
     warn "usage: workflow_model.rb {jobs|run-commands|installs|runs-on|step-names|checkout-depth|" \
-         "executes|workflows|continue-on-error-steps|outcome-references|outcome-facts} ..."
+         "executes|workflows|continue-on-error-steps|outcome-references|outcome-facts|" \
+         "executed-scripts|development-triggered} ..."
     exit 2
   end
 end

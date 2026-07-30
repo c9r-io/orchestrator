@@ -7,7 +7,7 @@ self_referential_safe: true
 # Orchestrator - QA Gate Enforcement Surface
 
 **Module**: Governance / CI
-**Scope**: enforcement classification of every `scripts/qa` gate, wiring truth, provider isolation, and stale governance claims
+**Scope**: enforcement classification of every `scripts/qa` gate — and, since FR-147, of every script outside `scripts/qa` that a workflow job executes — wiring truth, provider isolation, and stale governance claims
 **Scenarios**: 5
 **Priority**: High
 

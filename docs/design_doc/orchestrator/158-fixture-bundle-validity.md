@@ -98,11 +98,23 @@ cannot be the mechanism. `service::system::validate_manifests`
 `#[cfg(test)]` module of the core crate — runs against that, inside the existing
 `Rust test` CI job: **no new governance step, no share of the 9% budget
 headroom**. It is deliberately not a `scripts/qa/*.sh` gate and so is deliberately
-absent from `config/governance/qa-gate-surface.json`, whose declared scope is
-"every `scripts/qa` gate". Anyone reading that absence as an FR-147-shaped hole
-should read this paragraph instead: a `cargo test` is enforced by the job that
-runs the workspace's tests, and adding a shell wrapper solely to appear in the
-manifest would buy a manifest row and a minute of CI for nothing.
+absent from `config/governance/qa-gate-surface.json`. Anyone reading that absence
+as an FR-147-shaped hole should read this paragraph instead: a `cargo test` is
+enforced by the job that runs the workspace's tests, and adding a shell wrapper
+solely to appear in the manifest would buy a manifest row and a minute of CI for
+nothing.
+
+> **FR-147 note.** This paragraph originally justified the absence by the
+> manifest's declared scope, "every `scripts/qa` gate". That premise no longer
+> holds — the manifest now also declares every script outside `scripts/qa` that a
+> workflow job executes, and `check_workflow_execution_declared` fails on one that
+> is missing. The conclusion is unaffected and in fact rests on firmer ground now
+> that the rule is stated in terms of execution: the new check's subject is a
+> `scripts/**.{sh,rb}` path appearing in a job's executable text, and a
+> `#[cfg(test)]` module of the core crate is not one. It is reached through
+> `cargo test`, which is the enforcement. Had the check been written to ask "what
+> does CI verify" rather than "what does a job execute", this module would have
+> been in scope and the wrapper would have been unavoidable.
 
 The file name is not incidental. `scripts/lib/rust_source.rb` excludes test
 sources from every ledger scan by **filename** — a path component `tests`, or a
