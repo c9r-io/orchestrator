@@ -163,7 +163,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/48-dynamic-items-selection.md` | 5 | WP03 dynamic items + selection: GenerateItems post-action, item_select builtin, min/max/threshold/weighted strategies |
 | orchestrator | `docs/qa/orchestrator/49-invariant-constraints.md` | 5 | WP04 invariant constraints: command checks, protected files, checkpoint filtering, on_violation actions |
 | orchestrator | `docs/qa/orchestrator/50-engine-wiring-store-invariant-itemselect.md` | 5 | WP01-WP04 engine wiring: store I/O, PostAction::StorePut, invariant checkpoints |
-| orchestrator | `docs/qa/orchestrator/51-primitive-composition.md` | 5 | WP05 primitive composition: Store+Spawning, Store+Items, Invariant+Selection pairwise/triple |
+| orchestrator | `docs/qa/orchestrator/51-primitive-composition.md` | 2 | WP05 primitive composition: Store+Spawning, Store+Invariants (FR-149 removed the three WP03 dynamic-items scenarios) |
 | orchestrator | `docs/qa/orchestrator/52-engine-wiring-dynamic-items-selection.md` | 2 | Split from doc 50: pending_generate_items consumption, item_select orchestration |
 | orchestrator | `docs/qa/orchestrator/53-client-server-architecture.md` | 5 | C/S architecture: daemon lifecycle, gRPC communication, embedded workers, service layer |
 | orchestrator | `docs/qa/orchestrator/54-step-execution-profiles.md` | 5 | Step-level ExecutionProfile: resource round-trip, validation, mixed host/sandbox routing, compatibility default |
@@ -199,8 +199,8 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/80-item-scoped-git-worktree-isolation.md` | 4 | Item-scoped git worktree isolation: config round-trip, vendored protoc, workspace regression, self-evolution manifest |
 | orchestrator | `docs/qa/orchestrator/81-self-evolution-db-schema-alignment.md` | - | FR-030: self-evolution DB schema alignment, monitoring queries |
 | orchestrator | `docs/qa/orchestrator/82-step-variable-expansion-completeness.md` | 5 | Variable expansion completeness: renderer helpers, runtime propagation, step-family coverage matrix, and unexpanded-placeholder anomaly guard |
-| orchestrator | `docs/qa/orchestrator/83-generate-items-mixed-text-extraction.md` | 5 | GenerateItems extraction from non-pure-JSON agent output: mixed text, malformed JSON, fenced code blocks |
-| orchestrator | `docs/qa/orchestrator/84-generate-items-regression-narrowing.md` | 3 | Generate items regression narrowing: self_restart survival, dynamic item filtering, qa_testing scope narrowing |
+| orchestrator | `docs/qa/orchestrator/83-generate-items-mixed-text-extraction.md` | 5 | **superseded** (FR-149) — GenerateItems extraction from non-pure-JSON agent output; the post-action was retired by DD-137 |
+| orchestrator | `docs/qa/orchestrator/84-generate-items-regression-narrowing.md` | 3 | **superseded** (FR-149) — generate_items regression narrowing; the post-action was retired by DD-137 |
 | orchestrator | `docs/qa/orchestrator/85-daemon-crash-resilience.md` | 5 | FR-032: worker auto-respawn, stale PID crash recovery, panic hook crash log, supervisor health monitoring, total_worker_restarts metric |
 | orchestrator | `docs/qa/orchestrator/86-orphaned-running-items-recovery.md` | 5 | FR-033: orphaned running items auto-recovery, startup recovery, stall detection, CLI task recover, audit events |
 | orchestrator | `docs/qa/orchestrator/87-self-referential-daemon-pid-guard.md` | 4 | FR-034: daemon PID kill guard for self-referential workspace safety |
@@ -211,7 +211,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/90b-unquoted-json-extraction-advanced.md` | 5 | FR-031: file path repair, e2e extraction, regression (split from doc 90) |
 | orchestrator | `docs/qa/orchestrator/91-daemon-crash-resilience.md` | 5 | FR-032: daemon crash resilience, worker survival, health monitoring |
 | orchestrator | `docs/qa/orchestrator/91b-daemon-crash-resilience-shutdown.md` | 2 | FR-032: graceful shutdown and full regression (split from doc 91) |
-| orchestrator | `docs/qa/orchestrator/92-dynamic-items-cycle-overflow.md` | 4 | FR-037: max_cycles proactive enforcement, dynamic items cycle overflow |
+| orchestrator | `docs/qa/orchestrator/92-dynamic-items-cycle-overflow.md` | 4 | **superseded** (FR-149) — FR-037 max_cycles enforcement, reached through the retired generate_items post-action |
 | orchestrator | `docs/qa/orchestrator/93-inflight-step-completion-race.md` | 5 | FR-038: daemon restart in-flight step completion race condition |
 | orchestrator | `docs/qa/orchestrator/94-trigger-resource-cron-event-driven.md` | 5 | FR-039: trigger resource cron & event-driven task creation |
 | orchestrator | `docs/qa/orchestrator/94b-trigger-resource-advanced.md` | 2 | FR-039: trigger suspend/resume and preflight check (split from doc 94) |

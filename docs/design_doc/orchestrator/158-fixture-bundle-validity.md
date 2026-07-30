@@ -27,17 +27,30 @@ intentionally invalid. Rebuilding every claim at `1b6628eb` moved the numbers by
 an order of magnitude, and moved two of them in the opposite direction from the
 one the FR assumed.
 
-**31 of 93 bundles are rejected, not 4.** Nineteen declare constructs DD-137
-retired: `behavior.captures` in nine, and `generate_items` JSONPath post-actions
-in ten. Five are Workflow-only fragments. Four depend on an ambient path or a
-base policy. One depends on another bundle. One is prehook schema drift. Two are
-intentional.
+**31 of 93 bundles are rejected, not 4.** Nineteen are `rotted`: eight fail on
+`[legacy_coordination_removed]`, ten on `[legacy_json_path_removed]`, and one on
+prehook schema drift (`missing field \`when\``). Five are Workflow-only
+fragments. Four depend on an ambient path or a base policy. One depends on
+another bundle. Two are intentional. 19 + 5 + 4 + 1 + 2 = 31.
+
+> **Corrected at FR-149.** This paragraph originally read "`behavior.captures`
+> in nine, and `generate_items` JSONPath post-actions in ten", and separately
+> "One is prehook schema drift" — which enumerated 32 against its own stated
+> total of 31, because `prehook-test.yaml` is inside the nineteen rather than
+> beside them. The 9 does not survive either derivation: counting **rejection
+> diagnostics** gives 8, and counting **files containing `captures:`** gives 10,
+> because `wp05-items-select.yaml` and `wp05-store-items-select.yaml` carry both
+> constructs and are rejected on whichever the `HashMap` merge reaches first.
+> The split above is by diagnostic, which is what the ledger's `expect` records.
+> The same "9 个" was repeated in the FR-148 closure note in
+> `docs/feature_request/README.md` and is corrected there too.
 
 **`scripts/qa/test-wp05-integration.sh` is broken the same way**, and had been
 since the same commit. It runs `orchestrator apply -f` wholesale on three of the
 rotted bundles (`scripts/qa/test-wp05-integration.sh:250,282,312`). One
 undiscovered instance is a bug; two is a class, which is the argument for a
-mechanism rather than a second repair.
+mechanism rather than a second repair. (FR-149 excised those three scenarios;
+L1-A and L1-B, which test live primitives, remain.)
 
 **Two of the FR's four "intentionally invalid" fixtures are not.**
 `qa105-s1-capture-wrong-level.yaml` is **accepted** — its step-level `capture:`
@@ -136,19 +149,24 @@ at by omission rather than by a `skip-tree`.
 `status` distinguishes five reasons a fixture may be rejected, and the point of
 the distinction is that only one of them is debt:
 
-| status | n | |
-|---|---|---|
-| `intentional` | 2 | rejection is the point, and a live gate asserts it |
-| `rotted` | 19 | declares a construct the product no longer accepts, and nobody wants it to |
-| `fragment` | 5 | contents current; not self-sufficient |
-| `environment` | 4 | contents current; needs an ambient path or base policy |
-| `dependent` | 1 | valid only after another bundle is applied |
+| status | n at FR-148 | n now | |
+|---|---|---|---|
+| `intentional` | 2 | 2 | rejection is the point, and a live gate asserts it |
+| `rotted` | 19 | **0** | declares a construct the product no longer accepts, and nobody wants it to |
+| `fragment` | 5 | 5 | contents current; not self-sufficient |
+| `environment` | 4 | 4 | contents current; needs an ambient path or base policy |
+| `dependent` | 1 | 1 | valid only after another bundle is applied |
 
 `rotted_count` is compared for **equality**, not as a ceiling. A ceiling lets the
 debt sit; equality means retiring one fixture has to move the number, so the
 ledger cannot drift out of step with the tree in either direction. This is
 FR-133's `deny.toml` shape — 48 crates with 70 individually written reasons —
 applied to fixtures.
+
+FR-149 is the demonstration: it deleted all 19 rotted bundles, and the equality
+check is what forced their ledger entries out in the same commit. The field
+stays declared at 0 rather than being dropped — 0 is a claim, and a bundle that
+rots tomorrow has to move it back up.
 
 ### Scope is derived, and a derivation that yields nothing fails
 
@@ -174,19 +192,30 @@ the generic variable table. No static comparison between a fixture and a
 validator can see that. FR-148 said so in its own text rather than leaving a
 reader to infer it, and this record repeats it for the same reason.
 
-**The 19 rotted entries are recorded debt.** They are frozen, not fixed. FR-149
-retires them together with `scripts/qa/test-wp05-integration.sh` and the four QA
-documents that still describe the removed mechanism.
+**The 19 rotted entries were recorded debt, and FR-149 paid it.** They were
+frozen, not fixed. FR-149 deleted all 19 bundles and their entries, excised the
+three `test-wp05-integration.sh` scenarios that applied them, and superseded QA
+83, 84 and 92. See `docs/design_doc/orchestrator/159-dd137-fixture-residue-retirement.md`.
 
-**Deleting a bundle moves something else.** `scripts/qa-doc-lint.sh:64-66`
+**Deleting a bundle moves something else.** `scripts/qa-doc-lint.sh`
 derives its set of known workflow IDs from `fixtures/manifests/bundles/*.yaml` by
 glob, and cross-references every `--workflow <id>` in `docs/qa/orchestrator`
-against it. Every one of the 93 bundles feeds that check even when nothing
-references it as a fixture, so removing one can turn a QA document's workflow ID
-into an "unknown" finding. FR-148 added and removed nothing
-(`git diff --stat 1b6628eb..HEAD -- fixtures/` is empty, and the derived ID set
-is identical across the range), so the coupling is untouched here — but FR-149
-deletes bundles and has to reconcile it.
+against it. Every bundle feeds that check even when nothing references it as a
+fixture, so removing one can turn a QA document's workflow ID into an "unknown"
+finding. FR-148 added and removed nothing
+(`git diff --stat 1b6628eb..HEAD -- fixtures/` was empty, and the derived ID set
+was identical across the range), so the coupling was untouched there. FR-149
+deleted 19 bundles, which removed 22 workflow IDs and collided with exactly one
+QA document reference; the check is now scoped to `lifecycle: active` documents
+and lives in `scripts/lib/qa_doc_workflow_ids.sh`.
+
+**This ledger's own negative fixtures named their targets, and FR-149 moved
+them.** Three of QA 196's five scenarios named a bundle file or restated
+`rotted_count: 19`; against the post-FR-149 tree two passed vacuously and the
+third failed through a branch it never claimed to test. The finding is not that
+those three were careless — it is that a fixture belonging to a gate whose
+subject is *a number meant to move* cannot restate the number. Recorded in §4.4
+shape 7 and repaired in QA 196.
 
 ## Provenance
 
