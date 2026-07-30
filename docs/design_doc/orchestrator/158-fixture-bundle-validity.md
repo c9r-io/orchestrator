@@ -45,12 +45,29 @@ another bundle. Two are intentional. 19 + 5 + 4 + 1 + 2 = 31.
 > The same "9 个" was repeated in the FR-148 closure note in
 > `docs/feature_request/README.md` and is corrected there too.
 
-**`scripts/qa/test-wp05-integration.sh` is broken the same way**, and had been
-since the same commit. It runs `orchestrator apply -f` wholesale on three of the
-rotted bundles (`scripts/qa/test-wp05-integration.sh:250,282,312`). One
+**`scripts/qa/test-wp05-integration.sh` is broken too**, and it runs
+`orchestrator apply -f` wholesale on three of the rotted bundles
+(`scripts/qa/test-wp05-integration.sh:250,282,312` at `ef458f16`). One
 undiscovered instance is a bug; two is a class, which is the argument for a
-mechanism rather than a second repair. (FR-149 excised those three scenarios;
-L1-A and L1-B, which test live primitives, remain.)
+mechanism rather than a second repair.
+
+> **Corrected at FR-149.** This paragraph originally continued "broken the same
+> way, and had been since the same commit". It is not the same way and it was
+> not the same commit. FR-149 *ran* the gate rather than reading it: it dies in
+> `ensure_db` on `orchestrator init` with `daemon socket not found`, before
+> L1-A, and never reaches the rotted bundles at all. The cause is `1be4666d`
+> (2026-03-26), the CLI/daemon split — four months earlier than recorded. The
+> three rotted bundles were really at those lines and really would have failed,
+> which is exactly what made the wrong cause plausible enough to write down
+> without executing anything. Two further harness faults were hidden behind it:
+> the build step built the `agent-orchestrator` library rather than the `cli`
+> and `daemon` packages that produce the binaries, so the gate ran a stale
+> artifact; and `DB` pointed at a repository-local path the product had stopped
+> using. FR-149 rewrote the harness and the gate now passes.
+>
+> The general lesson belongs with the FR's subject rather than beside it: **this
+> ledger's whole premise is that reading a fixture is not the same as running
+> the product against it, and the claim above was made by reading a gate.**
 
 **Two of the FR's four "intentionally invalid" fixtures are not.**
 `qa105-s1-capture-wrong-level.yaml` is **accepted** — its step-level `capture:`

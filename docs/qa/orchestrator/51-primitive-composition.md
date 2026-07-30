@@ -26,10 +26,20 @@ Scenarios 3 (L1-C), 4 (L1-D) and 5 (L2-A) drove **WP03 Dynamic Items +
 Selection** — the `generate_items` post-action and the `item_select` builtin.
 DD-137 (`1b0937ca`, 2026-07-25) retired both, and the validator now rejects a
 workflow that declares them with `[legacy_json_path_removed]`. Their three
-bundles were rejected at `apply`, and because `apply` is all-or-nothing and
-`run_orch` is a bare call under `set -e`, **this document's gate died at L1-C and
-printed no summary line from that commit until FR-149**. The scenarios were not
-failing; the script was not reaching them.
+bundles are rejected at `apply`, and `apply` is all-or-nothing over a bundle, so
+they could not have run.
+
+**They were not why the gate failed, though, and this document said they were.**
+FR-149 ran it instead of reading it: the script dies far earlier, in `ensure_db`
+on `orchestrator init` with `daemon socket not found`, before L1-A. `1be4666d`
+(2026-03-26) split the CLI from the daemon and this script started none, so it
+had not reached its first scenario in four months — four months longer than
+FR-148 and DD-158 recorded, and for a different reason. The rotted bundles were
+real and would have failed; that is what made the wrong story plausible enough
+that nobody ran the gate to check it.
+
+FR-149 rewrote the harness (isolated `ORCHESTRATORD_DATA_DIR`, a daemon the
+script starts and reaps, both binaries built by package) and it now passes.
 
 They are removed rather than rewritten: there is no typed replacement to point
 them at, because the primitive itself was retired, not re-implemented. The
