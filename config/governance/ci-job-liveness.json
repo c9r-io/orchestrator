@@ -8,63 +8,67 @@
       "jobs": {
         "async-lock-governance": {
           "conclusion": "success",
-          "runId": "30397187027",
-          "headSha": "2b2e5caba3161d8957aadea08f029b53c0fe06b4"
+          "runId": "30633068389",
+          "headSha": "71e3dfe5411524a8fcbe9e129b4e65d3bc029eb4"
         },
         "fmt": {
           "conclusion": "success",
-          "runId": "30397187027",
-          "headSha": "2b2e5caba3161d8957aadea08f029b53c0fe06b4"
+          "runId": "30633068389",
+          "headSha": "71e3dfe5411524a8fcbe9e129b4e65d3bc029eb4"
         },
         "clippy": {
           "conclusion": "success",
-          "runId": "30397187027",
-          "headSha": "2b2e5caba3161d8957aadea08f029b53c0fe06b4"
+          "runId": "30633068389",
+          "headSha": "71e3dfe5411524a8fcbe9e129b4e65d3bc029eb4"
         },
         "test": {
           "conclusion": "success",
-          "runId": "30397187027",
-          "headSha": "2b2e5caba3161d8957aadea08f029b53c0fe06b4"
+          "runId": "30633068389",
+          "headSha": "71e3dfe5411524a8fcbe9e129b4e65d3bc029eb4"
         },
         "coordination-strangler": {
           "conclusion": "success",
-          "runId": "30397187027",
-          "headSha": "2b2e5caba3161d8957aadea08f029b53c0fe06b4"
+          "runId": "30633068389",
+          "headSha": "71e3dfe5411524a8fcbe9e129b4e65d3bc029eb4"
         },
         "governance": {
-          "conclusion": "success",
-          "runId": "30397187027",
-          "headSha": "2b2e5caba3161d8957aadea08f029b53c0fe06b4"
+          "conclusion": "failure",
+          "runId": "30633068389",
+          "headSha": "71e3dfe5411524a8fcbe9e129b4e65d3bc029eb4",
+          "knownFailing": {
+            "reference": "docs/design_doc/orchestrator/146-bash32-compatibility.md",
+            "reason": "Run 30633068389 at 71e3dfe5 failed on core-boundary (and the gates that run it: parity, execution-migration) plus stale liveness records. Both causes are repaired in the commit carrying this annotation: the fmt-only commit 71e3dfe5 reflowed core/src/output_validation.rs so `pub fn structured_scores` newly starts a line and the per-line scan counts 611 where the ledger said 610 — the ledger is regenerated here — and the liveness records are refreshed against that run. Eighth two-pass convergence; the next run should be green and the following refresh drops this annotation."
+          }
         },
         "ci-environment-parity": {
           "conclusion": "success",
-          "runId": "30397187027",
-          "headSha": "2b2e5caba3161d8957aadea08f029b53c0fe06b4"
+          "runId": "30633068389",
+          "headSha": "71e3dfe5411524a8fcbe9e129b4e65d3bc029eb4"
         },
         "coverage-policy-fixtures": {
           "conclusion": "success",
-          "runId": "30397187027",
-          "headSha": "2b2e5caba3161d8957aadea08f029b53c0fe06b4"
+          "runId": "30633068389",
+          "headSha": "71e3dfe5411524a8fcbe9e129b4e65d3bc029eb4"
         },
         "slack-certification-recorded": {
           "conclusion": "success",
-          "runId": "30397187027",
-          "headSha": "2b2e5caba3161d8957aadea08f029b53c0fe06b4"
+          "runId": "30633068389",
+          "headSha": "71e3dfe5411524a8fcbe9e129b4e65d3bc029eb4"
         },
         "boundary-coverage": {
           "conclusion": "success",
-          "runId": "30397187027",
-          "headSha": "2b2e5caba3161d8957aadea08f029b53c0fe06b4"
+          "runId": "30633068389",
+          "headSha": "71e3dfe5411524a8fcbe9e129b4e65d3bc029eb4"
         },
         "miri": {
           "conclusion": "success",
-          "runId": "30397187027",
-          "headSha": "2b2e5caba3161d8957aadea08f029b53c0fe06b4"
+          "runId": "30633068389",
+          "headSha": "71e3dfe5411524a8fcbe9e129b4e65d3bc029eb4"
         },
         "cross-compile": {
           "conclusion": "success",
-          "runId": "30397187027",
-          "headSha": "2b2e5caba3161d8957aadea08f029b53c0fe06b4"
+          "runId": "30633068389",
+          "headSha": "71e3dfe5411524a8fcbe9e129b4e65d3bc029eb4"
         }
       }
     },
@@ -74,8 +78,8 @@
       "jobs": {
         "deploy": {
           "conclusion": "success",
-          "runId": "30257421858",
-          "headSha": "48b49bec8a1e67997a96779a7bb0cecc5c67e0e6"
+          "runId": "30424130404",
+          "headSha": "8a3ee0d9c5cfe7fe38d903fbe70e64c9ac9756e0"
         }
       }
     },
@@ -84,14 +88,18 @@
       "inScope": true,
       "jobs": {
         "cargo-audit": {
-          "conclusion": "success",
-          "runId": "30397187008",
-          "headSha": "2b2e5caba3161d8957aadea08f029b53c0fe06b4"
+          "conclusion": "failure",
+          "runId": "30633068334",
+          "headSha": "71e3dfe5411524a8fcbe9e129b4e65d3bc029eb4",
+          "knownFailing": {
+            "reference": "docs/design_doc/orchestrator/156-dependency-policy-gate.md",
+            "reason": "RUSTSEC-2026-0221 (published 2026-07-13, newly in the advisory database): event-listener 5.4.1 is unsound — !Send tags can cross thread boundaries via StackSlot. cargo audit --deny unsound blocks on it, which is FR-133's hardening doing exactly what it was built for; the failure is independent of any local change. The disposition is a decision, not a refresh: either an upgrade lands through the dependabot-governance flow, or a dated acceptance with a retirement condition is written into .cargo/audit.toml in the shape FR-133 established for RUSTSEC-2024-0429. This annotation comes off with whichever lands. It must not be read as the advisory being assessed harmless — that assessment has not been made."
+          }
         },
         "cargo-deny": {
           "conclusion": "success",
-          "runId": "30397187008",
-          "headSha": "2b2e5caba3161d8957aadea08f029b53c0fe06b4"
+          "runId": "30633068334",
+          "headSha": "71e3dfe5411524a8fcbe9e129b4e65d3bc029eb4"
         }
       }
     },
