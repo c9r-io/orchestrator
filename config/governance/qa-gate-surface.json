@@ -671,6 +671,16 @@
       }
     },
     {
+      "path": "scripts/qa/test-release-publish-surface.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Derives the publishable crate set from cargo metadata and asserts release.yml's publish loop matches it in dependency order; asserts one shipped-target set across the build matrix, install.sh and the Homebrew formula; runs install.sh under a stubbed uname with a sentinel curl to prove the unsupported-platform refusal is behavioral. Static file reads plus a network-free subprocess: no daemon, no database, no provider binary reachable."
+    },
+    {
       "path": "scripts/qa/test-self-bootstrap-cycle2-regression.sh",
       "enforcement": "manual-runbook",
       "reason": "builds a release binary and drives the self-bootstrap cycle against the shared data/agent_orchestrator.db working database",

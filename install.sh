@@ -6,6 +6,12 @@ REPO="${INSTALL_ORCHESTRATOR_REPO:-c9r-io/orchestrator}"
 BIN_DIR="${INSTALL_ORCHESTRATOR_BIN_DIR:-/usr/local/bin}"
 VERSION="${INSTALL_ORCHESTRATOR_VERSION:-latest}"
 
+# The exact set of target triples release.yml builds. A triple outside this set
+# has no artifact, so detection past this point would end in a bare curl 404.
+# scripts/qa/test-release-publish-surface.sh asserts this list, the release.yml
+# build matrix, and the Homebrew formula stay identical.
+SUPPORTED_TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu aarch64-apple-darwin"
+
 need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "missing required command: $1" >&2
@@ -124,6 +130,21 @@ need_cmd install
 os_suffix="$(detect_os)"
 arch_prefix="$(detect_arch)"
 target="${arch_prefix}-${os_suffix}"
+
+supported=0
+for candidate in $SUPPORTED_TARGETS; do
+  if [ "$candidate" = "$target" ]; then
+    supported=1
+    break
+  fi
+done
+if [ "$supported" -ne 1 ]; then
+  echo "unsupported platform: no prebuilt binaries for ${target}" >&2
+  echo "prebuilt targets: ${SUPPORTED_TARGETS}" >&2
+  echo "build from source instead: cargo install orchestrator-cli orchestratord" >&2
+  exit 1
+fi
+
 release_tag="$(resolve_version)"
 archive="orchestrator-${release_tag}-${target}.tar.gz"
 checksums="orchestrator-${release_tag}-sha256sums.txt"

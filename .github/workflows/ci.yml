@@ -206,6 +206,16 @@ jobs:
         continue-on-error: true
         run: ./scripts/qa/test-docs-publishing-integrity.sh --fixture-test
 
+      - name: Verify release publish surface
+        id: release-surface
+        continue-on-error: true
+        run: ./scripts/qa/test-release-publish-surface.sh
+
+      - name: Verify release publish surface negative fixtures
+        id: release-surface-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-release-publish-surface.sh --fixture-test
+
       - name: Verify markdown link integrity
         id: links
         continue-on-error: true
@@ -393,6 +403,8 @@ jobs:
             mirror-fixtures=${{ steps.mirror-fixtures.outcome }}
             publishing=${{ steps.publishing.outcome }}
             publishing-fixtures=${{ steps.publishing-fixtures.outcome }}
+            release-surface=${{ steps.release-surface.outcome }}
+            release-surface-fixtures=${{ steps.release-surface-fixtures.outcome }}
             links=${{ steps.links.outcome }}
             links-fixtures=${{ steps.links-fixtures.outcome }}
             doc-lint=${{ steps.doc-lint.outcome }}
@@ -656,6 +668,12 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
+          # musl is a portability proof, not a shipped target: it keeps
+          # glibc-only code from landing, while release.yml deliberately does
+          # not publish a musl artifact. The shipped set is asserted by
+          # scripts/qa/test-release-publish-surface.sh against release.yml,
+          # install.sh and the Homebrew formula; this entry is intentionally
+          # outside that set (FR-150 decision, recorded in the CHANGELOG).
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
           - target: aarch64-unknown-linux-gnu

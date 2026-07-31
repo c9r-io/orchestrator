@@ -143,17 +143,30 @@ jobs:
       - name: Generate formula
         run: scripts/update-homebrew-formula.sh "$RELEASE_TAG" > "${{ github.workspace }}/orchestrator.rb"
 
+      # Inline push instead of a third-party action: the previous
+      # dmnemec/copy_file_to_another_repo_action@main was the only non-tag-pinned
+      # action in the tree and it received TAP_GITHUB_TOKEN. `gh` + git are
+      # preinstalled on the runner and every command below is auditable in place.
       - name: Push to Homebrew tap
-        uses: dmnemec/copy_file_to_another_repo_action@main
+        shell: bash
         env:
-          API_TOKEN_GITHUB: ${{ secrets.TAP_GITHUB_TOKEN }}
-        with:
-          source_file: orchestrator.rb
-          destination_repo: c9r-io/homebrew-tap
-          destination_folder: Formula
-          user_email: github-actions[bot]@users.noreply.github.com
-          user_name: github-actions[bot]
-          commit_message: "orchestrator ${{ env.RELEASE_TAG }}"
+          GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh repo clone c9r-io/homebrew-tap tap -- --depth 1
+          mkdir -p tap/Formula
+          cp orchestrator.rb tap/Formula/orchestrator.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/orchestrator.rb
+          if git diff --cached --quiet; then
+            echo "formula unchanged — nothing to push"
+            exit 0
+          fi
+          git commit -m "orchestrator ${RELEASE_TAG}"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/c9r-io/homebrew-tap.git"
+          git push origin HEAD
 
   crates-io:
     name: Publish to crates.io
@@ -185,10 +198,12 @@ jobs:
             crates/orchestrator-collab \
             crates/orchestrator-security \
             crates/orchestrator-runner \
+            crates/orchestrator-persistence \
             core \
             crates/orchestrator-scheduler \
             crates/orchestrator-client \
             crates/cli \
+            crates/slack-gateway \
             crates/daemon; do
             echo "::group::Publishing ${crate}"
             cargo publish --manifest-path "${crate}/Cargo.toml" 2>&1 | tee /tmp/publish.log || {

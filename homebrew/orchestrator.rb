@@ -6,12 +6,16 @@ class Orchestrator < Formula
   desc "AI-native SDLC automation — agent orchestrator CLI and daemon"
   homepage "https://github.com/c9r-io/orchestrator"
   version "PLACEHOLDER_VERSION"
-  license "Apache-2.0"
+  license "MIT"
 
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/c9r-io/orchestrator/releases/download/vPLACEHOLDER_VERSION/orchestrator-vPLACEHOLDER_VERSION-aarch64-apple-darwin.tar.gz"
       sha256 "PLACEHOLDER_SHA256_MACOS_ARM64"
+    end
+    if Hardware::CPU.intel?
+      odie "Intel macOS is not supported: no prebuilt binaries are published. " \
+           "Build from source instead: cargo install orchestrator-cli orchestratord"
     end
   end
 
