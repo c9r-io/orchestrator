@@ -68,6 +68,19 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/fr130-extraction.XXXXXX")"
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
 
+# One build cache for the three cargo-building fixtures below, still under
+# $WORK and never the repository's own target directory. The fixture trees
+# stay separate — each case still mutates its own pristine copy — what they
+# share is compiled third-party artifacts. Safe because every mutation here
+# edits core (a leaf the deps never read): registry crates' fingerprints do
+# not include the fixture tree's path or core's contents, so the second and
+# third case reuse the dependency graph the first one paid for, while the
+# mutated crate itself always recompiles — its own fingerprint changed — and
+# each case's asserted diagnostic comes from that fresh compile. Measured
+# when this landed: the three cases built the ~200-crate graph three times
+# over, one cold build each, for one leaf diagnostic apiece.
+FIXTURE_TARGET_DIR="$WORK/shared-target"
+
 PASS=0
 FAIL=0
 SKIP=0
@@ -131,7 +144,7 @@ if fixture_mutate "case 1" "$DIR/core/Cargo.toml" ruby -e '
 ' "$DIR/core/Cargo.toml"; then
   if grep -q '^# orchestrator-persistence =' "$DIR/core/Cargo.toml"; then
     set +e
-    (cd "$DIR" && CARGO_TARGET_DIR="$DIR/target" cargo check -p agent-orchestrator) \
+    (cd "$DIR" && CARGO_TARGET_DIR="$FIXTURE_TARGET_DIR" cargo check -p agent-orchestrator) \
       >"$WORK/case1.log" 2>&1
     CHECK_STATUS=$?
     set -e
@@ -186,7 +199,7 @@ if fixture_mutate "case 2" "$DIR/core/src/persistence/schema_snapshot.rs" ruby -
   File.write(path, text.sub(target, "        for stop_after in (1..=total).step_by(5) {"))
 ' "$DIR/core/src/persistence/schema_snapshot.rs"; then
   set +e
-  (cd "$DIR" && CARGO_TARGET_DIR="$DIR/target" cargo test -p agent-orchestrator \
+  (cd "$DIR" && CARGO_TARGET_DIR="$FIXTURE_TARGET_DIR" cargo test -p agent-orchestrator \
     schema_snapshot::tests::an_interrupted_chain_resumes_to_the_same_schema) \
     >"$WORK/case2-mutant.log" 2>&1
   MUTANT_STATUS=$?
@@ -316,7 +329,7 @@ pub fn fr130_phase_c_probe(conn: &rusqlite::Connection) -> Result<i64> {
 PROBE
 
   set +e
-  (cd "$DIR" && CARGO_TARGET_DIR="$DIR/target" cargo check -p agent-orchestrator) \
+  (cd "$DIR" && CARGO_TARGET_DIR="$FIXTURE_TARGET_DIR" cargo check -p agent-orchestrator) \
     >"$WORK/case5-probe.log" 2>&1
   PROBE_STATUS=$?
   set -e
