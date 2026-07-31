@@ -8,63 +8,67 @@
       "jobs": {
         "async-lock-governance": {
           "conclusion": "success",
-          "runId": "30644196763",
-          "headSha": "65e2c00c10daeff269e0f668cf50dc0e4e8b795f"
+          "runId": "30651848385",
+          "headSha": "c425938ce583cca356d59fee4101493ea66274d2"
         },
         "fmt": {
           "conclusion": "success",
-          "runId": "30644196763",
-          "headSha": "65e2c00c10daeff269e0f668cf50dc0e4e8b795f"
+          "runId": "30651848385",
+          "headSha": "c425938ce583cca356d59fee4101493ea66274d2"
         },
         "clippy": {
           "conclusion": "success",
-          "runId": "30644196763",
-          "headSha": "65e2c00c10daeff269e0f668cf50dc0e4e8b795f"
+          "runId": "30651848385",
+          "headSha": "c425938ce583cca356d59fee4101493ea66274d2"
         },
         "test": {
           "conclusion": "success",
-          "runId": "30644196763",
-          "headSha": "65e2c00c10daeff269e0f668cf50dc0e4e8b795f"
+          "runId": "30651848385",
+          "headSha": "c425938ce583cca356d59fee4101493ea66274d2"
         },
         "coordination-strangler": {
           "conclusion": "success",
-          "runId": "30644196763",
-          "headSha": "65e2c00c10daeff269e0f668cf50dc0e4e8b795f"
+          "runId": "30651848385",
+          "headSha": "c425938ce583cca356d59fee4101493ea66274d2"
         },
         "governance": {
-          "conclusion": "success",
-          "runId": "30644196763",
-          "headSha": "65e2c00c10daeff269e0f668cf50dc0e4e8b795f"
+          "conclusion": "failure",
+          "runId": "30651848385",
+          "headSha": "c425938ce583cca356d59fee4101493ea66274d2",
+          "knownFailing": {
+            "reference": "docs/qa/orchestrator/199-release-pipeline-integrity.md",
+            "reason": "Run 30651848385 (c425938c, the FR-150 closure commit) failed exclusively on the liveness gate's own staleness rule: FR-150 edited ci.yml, which invalidated every record taken at 65e2c00c. All 36 other aggregated gates in the same run were green, including the first CI execution of the two new release-surface steps. This annotation retires automatically at the first refresh after a green governance run on this ledger."
+          }
         },
         "ci-environment-parity": {
           "conclusion": "success",
-          "runId": "30644196763",
-          "headSha": "65e2c00c10daeff269e0f668cf50dc0e4e8b795f"
+          "runId": "30651848385",
+          "headSha": "c425938ce583cca356d59fee4101493ea66274d2"
         },
         "coverage-policy-fixtures": {
           "conclusion": "success",
-          "runId": "30644196763",
-          "headSha": "65e2c00c10daeff269e0f668cf50dc0e4e8b795f"
+          "runId": "30651848385",
+          "headSha": "c425938ce583cca356d59fee4101493ea66274d2"
         },
         "slack-certification-recorded": {
           "conclusion": "success",
-          "runId": "30644196763",
-          "headSha": "65e2c00c10daeff269e0f668cf50dc0e4e8b795f"
+          "runId": "30651848385",
+          "headSha": "c425938ce583cca356d59fee4101493ea66274d2"
         },
         "boundary-coverage": {
           "conclusion": "success",
-          "runId": "30644196763",
-          "headSha": "65e2c00c10daeff269e0f668cf50dc0e4e8b795f"
+          "runId": "30651848385",
+          "headSha": "c425938ce583cca356d59fee4101493ea66274d2"
         },
         "miri": {
           "conclusion": "success",
-          "runId": "30644196763",
-          "headSha": "65e2c00c10daeff269e0f668cf50dc0e4e8b795f"
+          "runId": "30651848385",
+          "headSha": "c425938ce583cca356d59fee4101493ea66274d2"
         },
         "cross-compile": {
           "conclusion": "success",
-          "runId": "30644196763",
-          "headSha": "65e2c00c10daeff269e0f668cf50dc0e4e8b795f"
+          "runId": "30651848385",
+          "headSha": "c425938ce583cca356d59fee4101493ea66274d2"
         }
       }
     },
@@ -85,13 +89,13 @@
       "jobs": {
         "cargo-audit": {
           "conclusion": "success",
-          "runId": "30644196565",
-          "headSha": "65e2c00c10daeff269e0f668cf50dc0e4e8b795f"
+          "runId": "30651849170",
+          "headSha": "c425938ce583cca356d59fee4101493ea66274d2"
         },
         "cargo-deny": {
           "conclusion": "success",
-          "runId": "30644196565",
-          "headSha": "65e2c00c10daeff269e0f668cf50dc0e4e8b795f"
+          "runId": "30651849170",
+          "headSha": "c425938ce583cca356d59fee4101493ea66274d2"
         }
       }
     },
