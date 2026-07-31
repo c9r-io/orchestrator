@@ -54,11 +54,22 @@ echo ""
 # unexcluded form is not a duplicate of those jobs but a superset whose extra
 # member cannot build on Linux at all. It passed locally because macOS provides
 # those frameworks as system libraries. Building the GUI in CI is FR-076's.
+#
+# FR085_SKIP_WORKSPACE=1 defers these two commands to the sibling test and
+# clippy jobs of the same workflow, which run them with identical flags — the
+# FR-126 FAST-mode shape, where the certifying aggregate is the workflow. The
+# flag is set only by ci.yml's governance job; a local run still pays for the
+# full pair, and the behavioural fixture in test-qa-gate-surface.sh still
+# drives this path to prove a cargo failure's diagnosis reaches the log.
 echo "--- Scenario 1: Compilation and tests ---"
-run_cargo "cargo test --workspace" \
-  cargo test --workspace --exclude orchestrator-gui
-run_cargo "cargo clippy clean" \
-  cargo clippy --workspace --exclude orchestrator-gui --all-targets -- -D warnings
+if [[ "${FR085_SKIP_WORKSPACE:-0}" != "1" ]]; then
+  run_cargo "cargo test --workspace" \
+    cargo test --workspace --exclude orchestrator-gui
+  run_cargo "cargo clippy clean" \
+    cargo clippy --workspace --exclude orchestrator-gui --all-targets -- -D warnings
+else
+  pass "workspace test and clippy explicitly deferred to the sibling jobs that run them with identical flags"
+fi
 
 # ── Scenario 6: serde roundtrip ──────────────────────────────────────────────
 echo ""

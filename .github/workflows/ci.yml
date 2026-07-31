@@ -346,10 +346,14 @@ jobs:
         env:
           PROTOC: /usr/bin/protoc
 
+      # FR085_SKIP_WORKSPACE=1 defers the gate's workspace-wide test and clippy
+      # commands to the sibling test and clippy jobs of this workflow, which run
+      # them with identical flags (--exclude orchestrator-gui, -D warnings). The
+      # certifying aggregate is the workflow — the FR-126 FAST-mode shape.
       - name: Filesystem trigger contracts
         id: filesystem-trigger
         continue-on-error: true
-        run: ./scripts/qa/test-filesystem-trigger.sh
+        run: FR085_SKIP_WORKSPACE=1 ./scripts/qa/test-filesystem-trigger.sh
         env:
           PROTOC: /usr/bin/protoc
 

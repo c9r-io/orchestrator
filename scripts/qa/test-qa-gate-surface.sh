@@ -1268,7 +1268,7 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
   #    what actually happens during a flaky-test triage.
   d="$(new_case f8)"
   if inject "fixture 8" "$d/.github/workflows/ci.yml" \
-    perl -pi -e 's{^(\s*)run: \./scripts/qa/test-filesystem-trigger\.sh$}{$1# disabled: ./scripts/qa/test-filesystem-trigger.sh was flaky}' \
+    perl -pi -e 's{^(\s*)run: FR085_SKIP_WORKSPACE=1 \./scripts/qa/test-filesystem-trigger\.sh$}{$1# disabled: ./scripts/qa/test-filesystem-trigger.sh was flaky}' \
       "$d/.github/workflows/ci.yml"; then
     expect_fail "fixture 8" "$d" check_wiring_truth "a run: step commented out with an explanation is not wiring"
   fi
