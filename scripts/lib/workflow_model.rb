@@ -118,9 +118,14 @@ module WorkflowModel
 
   # Does `command` appear in the job as something that executes? Matched on word
   # boundaries against the executable text, so a substring of a longer path does
-  # not count.
+  # not count. The predicate over already-derived text is separate so the batch
+  # form below answers with the same code rather than a second implementation.
+  def executes_text?(text, command)
+    text.match?(/(?:^|[\s;&|(`"'])#{Regexp.escape(command)}(?:$|[\s;&|)`"'])/)
+  end
+
   def executes?(path, name, command)
-    run_commands(path, name).match?(/(?:^|[\s;&|(`"'])#{Regexp.escape(command)}(?:$|[\s;&|)`"'])/)
+    executes_text?(run_commands(path, name), command)
   end
 
   # What the job puts on PATH, as raw facts. Three sources, because a job can
@@ -359,6 +364,38 @@ if $PROGRAM_NAME == __FILE__
     puts WorkflowModel.checkout_depth(ARGV[0], ARGV[1])
   when "executes"
     exit(WorkflowModel.executes?(ARGV[0], ARGV[1], ARGV[2]) ? 0 : 1)
+  when "executes-batch"
+    # Many (workflow, job, command) questions, one process, one parse per file.
+    # The single form re-reads the workflow for every question; the surface
+    # gate's wiring check asks one question per ci-required gate, and its
+    # fixture mode repeats that per fixture tree — interpreter start-up alone
+    # was tens of seconds per run (FR-140: a gate's cost is part of its design).
+    # One answer line per input line, in order, so a shell caller can pair them
+    # back up with paste; the verdicts come from the same jobs/executes_text?
+    # code the single-question form uses.
+    jobs_memo = {}
+    text_memo = {}
+    STDIN.each_line do |line|
+      workflow, job, command = line.chomp.split("\t", 3)
+      begin
+        unless workflow.to_s != "" && File.file?(workflow)
+          puts "no-such-workflow"
+          next
+        end
+        names = (jobs_memo[workflow] ||= WorkflowModel.jobs(workflow))
+        unless names.include?(job)
+          puts "no-such-job"
+          next
+        end
+        text = (text_memo[[workflow, job]] ||= WorkflowModel.run_commands(workflow, job))
+        puts(WorkflowModel.executes_text?(text, command.to_s) ? "runs" : "not-run")
+      rescue StandardError
+        # The single-question form reports a malformed workflow as "job not
+        # found" (its jobs read fails first, with stderr discarded); answering
+        # the same keeps the two forms interchangeable.
+        puts "no-such-job"
+      end
+    end
   when "workflows"
     puts WorkflowModel.workflows(ARGV[0] || ".")
   when "continue-on-error-steps"

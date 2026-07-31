@@ -163,8 +163,8 @@ check_reason_and_owner() {
   return $rc
 }
 
-# Does the job execute this command? Answered from the workflow's step
-# structure, not from its text.
+# "Does the job execute this command?" is answered from the workflow's step
+# structure, not from its text, by the workflow model's executes predicate.
 #
 # FR-127 asked `grep -F "$path" "$job_block"`. FR-134 reproduced four things
 # that satisfies and none of which runs: a `run:` line commented out with an
@@ -173,22 +173,21 @@ check_reason_and_owner() {
 # the realistic one — "someone disabled the gate and left a note" is how this
 # degrades in practice — and the existing fixture tested a misdirected job
 # name instead, which routed around it.
-workflow_job_runs() {
-  local workflow_file="$1" job="$2" command="$3"
-  ruby "$WORKFLOW_MODEL" executes "$workflow_file" "$job" "$command" 2>/dev/null
-}
-
-workflow_has_job() {
-  local workflow_file="$1" job="$2"
-  grep -qxF "$job" <<< "$(ruby "$WORKFLOW_MODEL" jobs "$workflow_file" 2>/dev/null)"
-}
-
+#
 # Check 3: every ci-required entry is genuinely wired into the declared workflow job.
 # This is the durable form of "no gate may claim CI enforcement it does not have".
+#
+# All the model questions go out in one batch before the loop. Asked per entry,
+# the wiring check spawned two ruby processes per ci-required gate, and the
+# fixture mode runs this check once per fixture tree — interpreter start-up
+# alone was the single largest cost in the gate's recorded step (FR-140: a
+# gate's cost is part of its design). The batch emits one query line per
+# manifest row, blank rows included, so the answers pair back up with the rows
+# by line position and nothing can slip out of register.
 check_wiring_truth() {
   local root="$1"
   local manifest="$root/$MANIFEST_REL" rc=0
-  local path workflow job invoked_by block rows
+  local path workflow job invoked_by verdict rows queries results
   # require-rows: this is the ci-required population itself. A surface with zero
   # CI-enforced gates is not a state this repository can reach, so reading none
   # means the query or the manifest is broken, not that the work is done. This
@@ -198,7 +197,25 @@ check_wiring_truth() {
     | select(.enforcement == "ci-required")
     | [.path, (.workflow // "null"), (.job // "null"), (.invokedBy // "null")]
     | @tsv')" || return 1
+  # Exactly one executes-question exists per row: the gate itself when it is
+  # run directly, its invoker when it is not. Rows the loop below rejects
+  # before reading the verdict still send a (harmless) question, because the
+  # pairing is positional.
+  queries=""
   while IFS=$'\t' read -r path workflow job invoked_by; do
+    if [[ -z "$path" || "$workflow" == "null" ]]; then
+      queries+=$'\t\t\n'
+    elif [[ "$invoked_by" == "null" ]]; then
+      queries+="$root/$workflow"$'\t'"$job"$'\t'"./$path"$'\n'
+    else
+      queries+="$root/$workflow"$'\t'"$job"$'\t'"./$invoked_by"$'\n'
+    fi
+  done <<< "$rows"
+  results="$(printf '%s' "$queries" | ruby "$WORKFLOW_MODEL" executes-batch 2>/dev/null)" || {
+    echo "    the workflow model could not answer the wiring queries" >&2
+    return 1
+  }
+  while IFS=$'\t' read -r path workflow job invoked_by verdict; do
     [[ -z "$path" ]] && continue
     if [[ "$workflow" == "null" || "$job" == "null" ]]; then
       echo "    $path: ci-required entry must declare workflow and job" >&2
@@ -210,13 +227,13 @@ check_wiring_truth() {
       rc=1
       continue
     fi
-    if ! workflow_has_job "$root/$workflow" "$job"; then
+    if [[ "$verdict" == "no-such-job" || "$verdict" == "no-such-workflow" ]]; then
       echo "    $path: declared job '$job' not found in $workflow" >&2
       rc=1
       continue
     fi
     if [[ "$invoked_by" == "null" ]]; then
-      if ! workflow_job_runs "$root/$workflow" "$job" "./$path"; then
+      if [[ "$verdict" != "runs" ]]; then
         echo "    $path: job '$job' in $workflow does not execute it" >&2
         echo "      (a commented-out run:, an if: false step, a name: mention or a" >&2
         echo "       heredoc body all reference the script without running it)" >&2
@@ -228,7 +245,7 @@ check_wiring_truth() {
         rc=1
         continue
       fi
-      if ! workflow_job_runs "$root/$workflow" "$job" "./$invoked_by"; then
+      if [[ "$verdict" != "runs" ]]; then
         echo "    $path: job '$job' in $workflow does not execute its invoker $invoked_by" >&2
         rc=1
       fi
@@ -241,7 +258,7 @@ check_wiring_truth() {
         rc=1
       fi
     fi
-  done <<< "$rows"
+  done < <(paste <(printf '%s\n' "$rows") <(printf '%s\n' "$results"))
   return $rc
 }
 
@@ -476,19 +493,24 @@ prose_only_corpus() {
 
 check_no_stale_claims() {
   local root="$1"
-  local manifest="$root/$MANIFEST_REL" rc=0 path base hits corpus rows
+  local manifest="$root/$MANIFEST_REL" rc=0 path base hits corpus claims rows
   corpus="$(prose_only_corpus "$root")"
   [[ -z "$corpus" ]] && {
     echo "    no tracked Markdown prose found; the scan would pass vacuously" >&2
     return 1
   }
+  # A hit is a line that names the gate AND makes an enforcement claim. The two
+  # filters commute, so the expensive one — the claim pattern over the whole
+  # corpus — runs once here, and the loop probes the surviving lines per gate
+  # instead of pushing megabytes of prose through a pipeline per manifest entry.
+  claims="$(rg -P "$CI_CLAIM_PATTERN" <<< "$corpus" || true)"
   # allow-empty: a surface where every gate became ci-required would select
   # nothing, and that is the healthy end state rather than a broken read.
   rows="$(gate_jq_rows allow-empty "$manifest" '.scripts[] | select(.enforcement != "ci-required") | .path')" || return 1
   while read -r path; do
     [[ -z "$path" ]] && continue
     base="$(basename "$path")"
-    hits="$(printf '%s\n' "$corpus" | grep -F "$base" | rg -P "$CI_CLAIM_PATTERN" || true)"
+    hits="$(printf '%s\n' "$claims" | grep -F "$base" || true)"
     if [[ -n "$hits" ]]; then
       echo "    $path is not ci-required but is documented as CI-enforced:" >&2
       printf '      %s\n' "$hits" >&2
@@ -541,9 +563,10 @@ script_required_commands() { gate_required_commands "$1"; }
 #
 # Every jq read here is captured and tested before use. A `{ …; } | sort -u`
 # block hands back sort's status, so an unreadable manifest used to shrink the
-# provided-command set to nothing — which makes check 6 report that the job
-# provides none of the gate's dependencies. That fails closed, but it accuses
-# the workflow of a defect the manifest has.
+# provided-command set to nothing — which made check 6 report that the job
+# provides none of the gate's dependencies. That failed closed, but it accused
+# the workflow of a defect the manifest has; check 6 now observes this
+# function's status and fails on its own diagnostic instead.
 job_provided_commands() {
   local root="$1" workflow="$2" job="$3"
   local manifest="$root/$MANIFEST_REL"
@@ -579,23 +602,40 @@ job_provided_commands() {
 check_job_dependencies() {
   local root="$1"
   local manifest="$root/$MANIFEST_REL" rc=0 path workflow job missing rows
+  local provided_cache cache_file
+  # What a job provides is a property of the (workflow, job) pair, and most
+  # ci-required gates share one pair. Asked per gate this spawned ruby and a
+  # dozen manifest reads per entry, which the fixture mode then multiplied by
+  # its tree count (FR-140: a gate's cost is part of its design). Cached per
+  # pair for this call only — the cache lives and dies inside one tree, so no
+  # answer can leak between fixture trees. A pair whose derivation fails is
+  # still this check failing, exactly as the uncached form's `|| return 1`s
+  # inside job_provided_commands intended.
+  provided_cache="$(mktemp -d)"
   rows="$(gate_jq_rows require-rows "$manifest" '
     .scripts[]
     | select(.enforcement == "ci-required")
     | [.path, (.workflow // "null"), (.job // "null")]
-    | @tsv')" || return 1
+    | @tsv')" || { rm -rf "$provided_cache"; return 1; }
   while IFS=$'\t' read -r path workflow job; do
     [[ -z "$path" ]] && continue
     [[ -f "$root/$path" ]] || continue
     [[ -f "$root/$workflow" ]] || continue
-    missing="$(comm -23 <(script_required_commands "$root/$path") \
-                        <(job_provided_commands "$root" "$workflow" "$job"))"
+    cache_file="$provided_cache/$(printf '%s|%s' "$workflow" "$job" | tr -c 'A-Za-z0-9' '_')"
+    if [[ ! -f "$cache_file" ]]; then
+      if ! job_provided_commands "$root" "$workflow" "$job" > "$cache_file"; then
+        rm -rf "$provided_cache"
+        return 1
+      fi
+    fi
+    missing="$(comm -23 <(script_required_commands "$root/$path") "$cache_file")"
     if [[ -n "$missing" ]]; then
       echo "    $path: job '$job' in $workflow does not provide: $(printf '%s ' $missing)" >&2
       echo "      the gate exits on its own missing-command preamble, asserting nothing" >&2
       rc=1
     fi
   done <<< "$rows"
+  rm -rf "$provided_cache"
   return $rc
 }
 
@@ -695,17 +735,26 @@ GIT_HISTORY_PATTERN='\bgit\b[^|;&]{0,80}\b(merge-base|cat-file|rev-list|describe
 check_git_history_available() {
   local root="$1"
   local manifest="$root/$MANIFEST_REL" rc=0 path workflow job depth rows
+  local depth_cache cache_file
+  # A job's checkout depth is a property of the (workflow, job) pair; cached per
+  # pair for this call only, for the same reason and with the same scope as
+  # check 6's provided-command cache.
+  depth_cache="$(mktemp -d)"
   rows="$(gate_jq_rows require-rows "$manifest" '
     .scripts[]
     | select(.enforcement == "ci-required")
     | [.path, (.workflow // "null"), (.job // "null")]
-    | @tsv')" || return 1
+    | @tsv')" || { rm -rf "$depth_cache"; return 1; }
   while IFS=$'\t' read -r path workflow job; do
     [[ -z "$path" ]] && continue
     [[ -f "$root/$path" ]] || continue
     [[ -f "$root/$workflow" ]] || continue
     rg -qP "$GIT_HISTORY_PATTERN" <<< "$(sed -E 's/(^|[[:space:]])#.*$//' "$root/$path")" || continue
-    depth="$(ruby "$WORKFLOW_MODEL" checkout-depth "$root/$workflow" "$job" 2>/dev/null)"
+    cache_file="$depth_cache/$(printf '%s|%s' "$workflow" "$job" | tr -c 'A-Za-z0-9' '_')"
+    if [[ ! -f "$cache_file" ]]; then
+      ruby "$WORKFLOW_MODEL" checkout-depth "$root/$workflow" "$job" 2>/dev/null > "$cache_file" || true
+    fi
+    depth="$(<"$cache_file")"
     if [[ "$depth" != "0" ]]; then
       echo "    $path reads git history but job '$job' checks out with fetch-depth $depth" >&2
       echo "      every history query fails on a shallow clone, and passes on any" >&2
@@ -713,6 +762,7 @@ check_git_history_available() {
       rc=1
     fi
   done <<< "$rows"
+  rm -rf "$depth_cache"
   return $rc
 }
 
