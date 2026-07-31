@@ -109,7 +109,8 @@ allow-wildcard-paths = true
 # our four declarations, so raising ours across nine API-breaking call sites
 # would remove zero duplicates.
 skip = [
-  { crate = "base64@0.21.7", reason = "Tauri 2's macOS bridge is a generation behind; every workspace crate declares ^0.22. Reached via swift-rs 1.0.7. Keeping base64 0.22.1." },
+  { crate = "base64@0.21.7", reason = "Tauri 2's macOS bridge is a generation behind; the workspace crates now declare ^0.23. Reached via swift-rs 1.0.7. Keeping base64 0.23.0." },
+  { crate = "base64@0.22.1", reason = "two transitive holders have not moved: hyper-util 0.1 declares ^0.22 and is reached by every axum consumer, and rcgen 0.14 pins pem 3, which embeds base64 0.22. Both migrate on their own schedule, and unmatched-skip plus skip-is-live force this entry out the moment the last one does. Reached via hyper-util 0.1.20, pem 3.0.6. Keeping base64 0.23.0." },
   { crate = "bitflags@1.3.2", reason = "the gtk-rs 0.18 / webkit2gtk generation Tauri 2 pins never moved off bitflags 1. Reached via javascriptcore-rs 1.1.2, png 0.17.16, webkit2gtk 2.0.2, webkit2gtk-sys 2.0.2. Keeping bitflags 2.13.1." },
   { crate = "block-buffer@0.10.4", reason = "follows digest; the RustCrypto 0.10 generation arrives through Tauri's sha2. Reached via digest 0.10.7. Keeping block-buffer 0.12.1." },
   { crate = "cpufeatures@0.2.17", reason = "the RustCrypto 0.10 generation (aes, polyval) still uses cpufeatures 0.2. Reached via aes 0.8.4, polyval 0.6.2, sha2 0.10.9. Keeping cpufeatures 0.3.0." },
