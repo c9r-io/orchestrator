@@ -28,7 +28,7 @@ Primary release entry point:
 ./scripts/qa/test-agent-driver-execution-migration.sh
 ```
 
-`FR126_FAST=1` is for local iteration and is not release certification **on its own**: it skips the repository-wide gates (`cargo fmt`, strict Clippy, `cargo test --workspace`, the coordination strangler, coverage fixtures, and `qa-doc-lint.sh`) that this document's aggregate otherwise runs. The `governance` job in `.github/workflows/ci.yml` sets `FR126_FAST=1` deliberately, because every skipped gate executes there as a sibling job; in CI the certifying aggregate is the workflow rather than this script. See [DD-139](../../design_doc/orchestrator/139-qa-gate-enforcement-surface.md).
+`FR126_FAST=1` is for local iteration and is not release certification **on its own**: it skips the repository-wide gates (`cargo fmt`, strict Clippy, `cargo test --workspace`, the coordination strangler, coverage fixtures, and `qa-doc-lint.sh`) and the production parity harness (`test-agent-driver-production-parity.sh`) that this document's aggregate otherwise runs. The `governance` job in `.github/workflows/ci.yml` sets `FR126_FAST=1` deliberately, because every skipped repository-wide gate executes there as a sibling job and the parity harness as a sibling step of the same job; in CI the certifying aggregate is the workflow rather than this script. See [DD-139](../../design_doc/orchestrator/139-qa-gate-enforcement-surface.md).
 
 ---
 

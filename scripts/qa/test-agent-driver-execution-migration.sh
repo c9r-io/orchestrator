@@ -65,24 +65,26 @@ pass "legacy runner types and provider-session compatibility bridge are absent f
   > "$EVIDENCE_DIR/documentation-alignment.log"
 pass "EN/ZH guides, architecture, authoring skill, design records, and governance layers align with typed drivers"
 
+# One invocation per package, several filters each — after the `--`, because
+# cargo itself accepts a single TESTNAME and it is libtest that ORs a filter
+# list. The same nine tests run and the same single exit status certifies
+# them; the one-filter-per-invocation form paid a cargo start-up and
+# fingerprint pass per test in a step whose cost is recorded against the
+# FR-140 budget.
 cargo test -p orchestrator-config \
   shell_cli_factory_is_explicit_and_safe_by_default >/dev/null
-cargo test -p orchestrator-runner \
-  shell_driver_delivers_stdin_payload_and_closes_stdin >/dev/null
-cargo test -p orchestrator-runner \
+cargo test -p orchestrator-runner -- \
+  shell_driver_delivers_stdin_payload_and_closes_stdin \
   command_rules_are_only_supported_by_shell_driver >/dev/null
-cargo test -p agent-orchestrator \
-  apply_legacy_command_agent_warns_and_persists_shell_driver >/dev/null
-cargo test -p agent-orchestrator \
+cargo test -p agent-orchestrator -- \
+  apply_legacy_command_agent_warns_and_persists_shell_driver \
   validate_rejects_removed_streaming_executor >/dev/null
-cargo test -p orchestrator-scheduler \
-  tty_is_only_supported_by_typed_shell_cli_driver >/dev/null
-cargo test -p orchestrator-scheduler \
-  failed_driver_terminal_is_a_hard_validation_failure >/dev/null
+cargo test -p orchestrator-scheduler -- \
+  tty_is_only_supported_by_typed_shell_cli_driver \
+  failed_driver_terminal_is_a_hard_validation_failure \
+  execute_cycle_graph_persists_replay_and_skips_prehook_false_nodes >/dev/null
 cargo test -p orchestrator-integration-tests --test workflow_loop \
   workflow_failing_step >/dev/null
-cargo test -p orchestrator-scheduler \
-  execute_cycle_graph_persists_replay_and_skips_prehook_false_nodes >/dev/null
 pass "promotion, stdin, command-rules, streaming rejection, TTY, failure propagation, and engine-command boundaries pass"
 
 FR116_ALLOW_DIRTY=1 KEEP_FR116_QA="${KEEP_FR126_QA:-0}" \
@@ -90,11 +92,20 @@ FR116_ALLOW_DIRTY=1 KEEP_FR116_QA="${KEEP_FR126_QA:-0}" \
   > "$EVIDENCE_DIR/agent-driver-isolated.log"
 pass "isolated daemon proves promoted and explicit shell Agents converge through typed drivers"
 
-FR126_ALLOW_DIRTY="${FR126_ALLOW_DIRTY:-0}" \
-  KEEP_FR126_QA="${KEEP_FR126_QA:-0}" \
-  "$SCRIPT_DIR/test-agent-driver-production-parity.sh" \
-  > "$EVIDENCE_DIR/production-parity.log"
-pass "all four production migration contracts pass offline parity and rollback checks"
+# In FAST mode the parity run is deferred, not skipped: ci.yml's governance job
+# runs ./scripts/qa/test-agent-driver-production-parity.sh as its own step
+# (id: parity) in the same job, so the certifying aggregate still executes it —
+# the same shape as the repository-wide gates below. A full local run still
+# pays for it here and keeps its log in the evidence bundle.
+if [[ "${FR126_FAST:-0}" != "1" ]]; then
+  FR126_ALLOW_DIRTY="${FR126_ALLOW_DIRTY:-0}" \
+    KEEP_FR126_QA="${KEEP_FR126_QA:-0}" \
+    "$SCRIPT_DIR/test-agent-driver-production-parity.sh" \
+    > "$EVIDENCE_DIR/production-parity.log"
+  pass "all four production migration contracts pass offline parity and rollback checks"
+else
+  pass "offline parity and rollback checks explicitly deferred to the sibling step that runs them"
+fi
 
 if [[ "${FR126_FAST:-0}" != "1" ]]; then
   cargo fmt --all -- --check

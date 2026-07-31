@@ -121,8 +121,9 @@ No SQLite schema change is required. Provider `SessionRef` material remains priv
     `FR126_FAST=1`, because the repository-wide gates its default mode re-runs — `cargo fmt`,
     strict Clippy, `cargo test --workspace`, `test-coordination-strangler.sh`,
     `coverage-governance.sh --fixture-test`, and `qa-doc-lint.sh` — all execute as sibling
-    jobs in the same workflow. Outside CI, `FR126_FAST=1` remains non-certifying on its own:
-    a local run that skips those gates has not reproduced the aggregate.
+    jobs in the same workflow, and `test-agent-driver-production-parity.sh` executes as a
+    sibling step of the same job. Outside CI, `FR126_FAST=1` remains non-certifying on its
+    own: a local run that skips those gates has not reproduced the aggregate.
 11. Governance fixtures label production admission separately from runtime Apply compatibility and assert the warning/promotion contract.
 12. A deterministic documentation alignment script checks EN/ZH guides, architecture, authoring skill, operational showcases, released design status, fixture layering, and stable diagnostics; `qa-doc-lint` and the FR-126 aggregate both execute it.
 13. DD-102/DD-103 retain their historical first-cut detail behind explicit

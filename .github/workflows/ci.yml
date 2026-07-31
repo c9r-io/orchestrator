@@ -366,7 +366,9 @@ jobs:
 
       # FR126_FAST=1 skips the repository-wide gates (fmt, clippy, workspace tests,
       # coordination strangler, coverage fixtures, qa-doc-lint) that already run as
-      # sibling jobs in this workflow. The certifying aggregate is the workflow.
+      # sibling jobs in this workflow, and the production parity harness that runs
+      # as this job's own `parity` step above. The certifying aggregate is the
+      # workflow.
       - name: Agent driver execution migration contracts
         id: execution-migration
         continue-on-error: true
