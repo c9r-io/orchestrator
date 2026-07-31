@@ -228,7 +228,10 @@ Verify production admission and historical compatibility are distinct, while rem
   `driver_tool_use`, `driver_tool_result`, and `driver_terminal`.
 - The stale-documentation negative fixture is detected.
 - The compatibility commit interval is ordered and reachable.
-- The runner-removal source patch remains reverse-applicable.
+- The runner-removal source patch reverse-applies at the ledger's recorded
+  `reverseApplicableAt` anchor. (Not at `HEAD`: a rustfmt reflow inside the
+  patch's scope ended worktree applicability on 2026-07-31, which any later
+  legitimate edit would recreate — the ledger entry records when and why.)
 - `command_rules` remain supported only by `shell/cli`.
 
 ---

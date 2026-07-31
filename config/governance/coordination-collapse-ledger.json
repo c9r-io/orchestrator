@@ -242,7 +242,9 @@
         "closedByCommit": "c0d58e6e12349f3460e5c9e7be104a7f2c1548d6",
         "scope": "legacy runtime executor selection; command-only manifest ingress remains warning-and-promotion compatible",
         "legacyFixture": "command-only Agent apply promotes to shell/cli with a stable deprecation warning",
-        "rollbackEvidence": "reverse-apply check for c0d58e6e plus docs/qa/orchestrator/176-agent-driver-execution-migration.md"
+        "rollbackEvidence": "reverse-apply check for c0d58e6e against the reverseApplicableAt revision, plus docs/qa/orchestrator/176-agent-driver-execution-migration.md",
+        "reverseApplicableAt": "e3f2faffbbf5ba35a36c19042252adff3cd6d885",
+        "reverseApplicableAtReason": "2026-07-31: rustfmt reflow 71e3dfe5 touched crates/orchestrator-scheduler/src/scheduler/phase_runner/validate.rs inside the removal patch's scope, so the patch stopped reverse-applying to the moving worktree — a state any legitimate later edit to those paths recreates, and one a 3-way merge also cannot resolve. Retirement closed with FR-126; the rollback claim is a property of the evidence at closure, so the gate asserts it against this recorded ancestor (the last commit where the reverse-apply held) rather than against HEAD. Rolling back today would be a new change, not a mechanical revert, and this entry is the written record of when that became true."
       },
       "sharedSpawnSubstrate": "retained for driver and engine-owned command policy, sandbox, resource-limit, process-group, env, and redaction enforcement"
     }

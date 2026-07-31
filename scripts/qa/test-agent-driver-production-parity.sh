@@ -122,15 +122,30 @@ else
   fail "compatibility window commits are missing or unordered"
 fi
 
-if git diff "$CLOSE_COMMIT^" "$CLOSE_COMMIT" -- \
-    core/src/resource/runtime_policy.rs \
-    crates/orchestrator-config/src/config/runner.rs \
-    crates/orchestrator-runner/src \
-    crates/orchestrator-scheduler/src/scheduler/phase_runner |
-    git apply -R --check; then
-  pass "runner-removal source patch remains mechanically reverse-applicable"
+# Asserted against the recorded rollback anchor, not the moving worktree. The
+# worktree form decayed the first time a legitimate edit landed inside the
+# patch's scope — a rustfmt reflow (71e3dfe5) moved validate.rs's context lines
+# and a 3-way merge conflicts too, so "reverse-applies to HEAD" is a claim no
+# amount of governance can keep true. Retirement closed with FR-126; what the
+# evidence has to keep proving is that the recorded rollback point exists in
+# reachable history and the patch really reverse-applies to it. The anchor and
+# the date its worktree form stopped holding are written in the ledger beside
+# the window it belongs to.
+ROLLBACK_ANCHOR="$(jq -r '.retirement.shellRunnerExecutor.compatibilityWindow.reverseApplicableAt' "$LEDGER")"
+ROLLBACK_INDEX="$QA_ROOT/rollback-anchor.index"
+if [[ -n "$ROLLBACK_ANCHOR" && "$ROLLBACK_ANCHOR" != "null" ]] &&
+   git cat-file -e "$ROLLBACK_ANCHOR^{commit}" &&
+   git merge-base --is-ancestor "$ROLLBACK_ANCHOR" HEAD &&
+   GIT_INDEX_FILE="$ROLLBACK_INDEX" git read-tree "$ROLLBACK_ANCHOR" &&
+   git diff "$CLOSE_COMMIT^" "$CLOSE_COMMIT" -- \
+     core/src/resource/runtime_policy.rs \
+     crates/orchestrator-config/src/config/runner.rs \
+     crates/orchestrator-runner/src \
+     crates/orchestrator-scheduler/src/scheduler/phase_runner |
+     GIT_INDEX_FILE="$ROLLBACK_INDEX" git apply --cached -R --check; then
+  pass "runner-removal source patch reverse-applies at the recorded rollback anchor"
 else
-  fail "runner-removal source patch no longer has executable rollback evidence"
+  fail "runner-removal source patch no longer has executable rollback evidence at its recorded anchor"
 fi
 
 cargo build -p orchestratord -p orchestrator-cli >/dev/null
