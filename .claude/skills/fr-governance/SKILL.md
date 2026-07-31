@@ -129,8 +129,9 @@ Two habits that catch these before review does:
 
 1. Run `cargo test --workspace` — all unit/integration tests pass
 2. Run `cargo clippy --workspace --all-targets -- -D warnings` — no warnings
-3. Run automated QA script if created — all scenarios pass
-4. For scenarios that can't be automated, verify by code inspection or CLI spot-check
+3. Run `cargo fmt --all -- --check` — no diffs. This line exists because it was missing: ci.yml has enforced fmt as a blocking job since before this skill was written, two earlier certifications ran the check on their own initiative, and the three that followed this list as written did not — four Rust files of fmt drift then met CI on the first push. A certification protocol that omits a CI-enforced check certifies "CI unchanged" on an evidence surface that cannot see one of the jobs, which is the FR-141 boundary-coverage blind spot again. Capture the exit status directly (`cargo fmt --all -- --check > log 2>&1; echo $?`), never through a pipe — `| head` hands you the pager's status, which is the FR-145/FR-146 defect operating on the certifier.
+4. Run automated QA script if created — all scenarios pass
+5. For scenarios that can't be automated, verify by code inspection or CLI spot-check
 
 ### 4.6 Certification validity conditions
 

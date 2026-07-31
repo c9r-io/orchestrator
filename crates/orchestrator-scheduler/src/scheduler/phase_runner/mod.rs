@@ -283,6 +283,7 @@ async fn run_phase_with_timeout(
             agent_id,
             wait_result.exit_code,
             &wait_result.driver_events,
+            &setup.stdout_path,
             &setup.stderr_path,
             &setup.redaction_patterns,
         )

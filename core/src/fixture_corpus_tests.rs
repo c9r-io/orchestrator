@@ -150,7 +150,10 @@ fn evaluate(observed: &BTreeMap<String, Outcome>, ledger: &Ledger) -> Vec<String
             ));
         }
         if entry.reason.trim().is_empty() {
-            violations.push(format!("declaration for {} has an empty reason", entry.path));
+            violations.push(format!(
+                "declaration for {} has an empty reason",
+                entry.path
+            ));
         }
     }
 
@@ -389,11 +392,18 @@ mod evaluator {
         let observed = BTreeMap::from([("a.yaml".to_string(), Outcome::Valid)]);
         let ledger = ledger(
             0,
-            vec![declaration("a.yaml", Status::Environment, "work_dir not found")],
+            vec![declaration(
+                "a.yaml",
+                Status::Environment,
+                "work_dir not found",
+            )],
         );
         let violations = evaluate(&observed, &ledger);
         assert_eq!(violations.len(), 1, "{violations:?}");
-        assert!(violations[0].contains("stale declaration"), "{violations:?}");
+        assert!(
+            violations[0].contains("stale declaration"),
+            "{violations:?}"
+        );
     }
 
     #[test]
@@ -447,7 +457,9 @@ mod evaluator {
     fn an_undeclared_rejection_is_a_violation() {
         let observed = BTreeMap::from([(
             "a.yaml".to_string(),
-            Outcome::Invalid(vec!["[legacy_coordination_removed] workflow 'w'".to_string()]),
+            Outcome::Invalid(vec![
+                "[legacy_coordination_removed] workflow 'w'".to_string(),
+            ]),
         )]);
         let violations = evaluate(&observed, &ledger(0, vec![]));
         assert_eq!(violations.len(), 1, "{violations:?}");

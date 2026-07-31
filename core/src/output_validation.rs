@@ -79,6 +79,22 @@ fn is_test_phase(phase: &str) -> bool {
     phase == "test"
 }
 
+/// Extracts the `confidence` / `quality_score` contract from an agent's parsed terminal
+/// payload, defaulting both to `1.0` when the payload is absent or omits the field.
+///
+/// Shared with the driver fold in `orchestrator-scheduler`, which reaches the same contract
+/// through normalized events rather than a single stdout parse.
+pub fn structured_scores(parsed: Option<&Value>) -> (f32, f32) {
+    let score = |key: &str| {
+        parsed
+            .and_then(|v| v.get(key))
+            .and_then(Value::as_f64)
+            .map(|v| v as f32)
+            .unwrap_or(1.0)
+    };
+    (score("confidence"), score("quality_score"))
+}
+
 /// Validates one phase output payload and extracts structured diagnostics.
 pub fn validate_phase_output(
     phase: &str,
@@ -135,18 +151,7 @@ pub fn validate_phase_output(
     }
 
     let parsed = parsed_json.ok();
-    let confidence = parsed
-        .as_ref()
-        .and_then(|v| v.get("confidence"))
-        .and_then(|v| v.as_f64())
-        .map(|v| v as f32)
-        .unwrap_or(1.0);
-    let quality_score = parsed
-        .as_ref()
-        .and_then(|v| v.get("quality_score"))
-        .and_then(|v| v.as_f64())
-        .map(|v| v as f32)
-        .unwrap_or(1.0);
+    let (confidence, quality_score) = structured_scores(parsed.as_ref());
 
     let artifacts = match &parsed {
         Some(v) => {
