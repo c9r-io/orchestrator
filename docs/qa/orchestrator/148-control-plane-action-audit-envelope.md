@@ -226,6 +226,7 @@ Verify old optional clients remain usable in compatibility mode, enforcement rej
 - Switching back to compatibility disables enforcement without dropping migration 31.
 - Populated rows survive and every projection table has a `request_id` column.
 - Migration-31 identity/capability passes on schema 31, schema 32, and a future additive schema, and fails when catalog row 31 is missing.
+- The three positive legs are built from the run's own database: 31 and 32 are trimmed copies (`DELETE FROM schema_migrations WHERE version > N`), and the future-additive leg inserts `MAX(version) + 1` read off that same catalog. The version is **derived, never named** — the chain is a number that is meant to move, and a literal here collides with the real migration the moment the chain reaches it. It did: the leg was written as `33`, `m0033_source_automation_routes` later landed, and from then on the gate died on `UNIQUE constraint failed: schema_migrations.version` before printing its summary.
 
 ### Expected Data State
 
@@ -247,4 +248,4 @@ SELECT COUNT(*) FROM pragma_table_info('control_action_audit');
 | 2 | Duplicate and conflicting retry identity fail closed | PASS | 2026-07-14 | Codex | Script plus concurrent/hash unit coverage passed |
 | 3 | Stale, fencing, and authorization failures remain distinguishable | PASS | 2026-07-14 | Codex | Stale failure and read-only UDS denial produced distinct durable evidence |
 | 4 | Project-scoped query and redaction boundaries | PASS | 2026-07-14 | Codex | gRPC integration, CLI filters, cross-project not-found, and redaction checks passed |
-| 5 | Compatibility rollout and populated migration | PASS | 2026-07-15 | Codex | Enforced/compatibility model, populated v30 migration, and schema 31/32/future identity matrix passed |
+| 5 | Compatibility rollout and populated migration | PASS | 2026-07-31 | Claude | 7/7 script assertions passed after the future-additive leg was moved from a literal `33` to `MAX(version) + 1`; the gate also now prints its summary on every exit path, so a truncated run no longer reads like a complete one |

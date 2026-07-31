@@ -134,6 +134,15 @@ Verify the production source-routing path can target a non-code workspace.
 - Successful driver termination verifies the implicit item without QA finalize.
 - A low-confidence step creates Attention history for human review.
 
+> This last assertion is the only thing in the repository that observes the agent's
+> `{"confidence":…,"quality_score":…}` contract surviving execution end to end. The scores
+> travel separately from terminal truth: the driver's `Finished` event decides exit code and
+> success, while the contract is read from the driver's normalized text — or, for the
+> `shell/cli` driver, which emits no text at all, from the stdout artifact. A fold that
+> reports the terminal correctly and drops the contract defaults confidence to `1.0`, and
+> every downstream confidence policy then silently does nothing. That is exactly what
+> happened between `c0d58e6e` and 2026-07-31, and this assertion is what caught it.
+
 ---
 
 ## Scenario 5: Process Console Non-Code Presentation
@@ -168,5 +177,5 @@ Verify the Console exposes task semantics without leaking storage implementation
 | 1 | Schema and semantic gates | ✅ | 2026-07-22 | Codex | Rust targeted tests passed |
 | 2 | Ceiling, sandbox, and HOME | ✅ | 2026-07-22 | Codex | macOS strict sandbox and live pilot passed |
 | 3 | Implicit item and cleanup | ✅ | 2026-07-22 | Codex | Private HOME and cleanup passed |
-| 4 | Slack-to-Attention vertical flow | ✅ | 2026-07-22 | Codex | 7/7 controlled assertions passed |
+| 4 | Slack-to-Attention vertical flow | ✅ | 2026-07-31 | Claude | 7/7 again after the driver fold was repaired to read the score contract; had been 6/7 since `c0d58e6e`, the Attention assertion being the failing one |
 | 5 | Process Console UI | ✅ | 2026-07-22 | Codex | Vitest and Playwright passed |

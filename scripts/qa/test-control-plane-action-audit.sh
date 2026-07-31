@@ -10,9 +10,21 @@ BIND_ADDR="${BIND_ADDR:-127.0.0.1:19101}"
 PASS=0
 FAIL=0
 DAEMON_PID=""
+SUMMARY_PRINTED=0
 
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
+summary() {
+  SUMMARY_PRINTED=1
+  echo "Control-plane action audit QA: $PASS passed, $FAIL failed${1:-}"
+}
+# A premise that no longer holds is a failed assertion, never a bare abort (§4.4 shape 7):
+# without this the run ends before its summary line and reads exactly like a complete one.
+abort_with_summary() {
+  fail "$1"
+  summary >&2
+  exit 1
+}
 
 for command in jq sqlite3 mktemp rg; do
   command -v "$command" >/dev/null 2>&1 || {
@@ -39,6 +51,12 @@ stop_daemon() {
 
 cleanup() {
   stop_daemon
+  # `set -e` can end this run at any unguarded command — sqlite3, jq, the CLI. Those cannot
+  # route through abort_with_summary, so the trap is what guarantees that no exit path is
+  # silent about having stopped early.
+  if [[ "$SUMMARY_PRINTED" -eq 0 ]]; then
+    summary " (ABORTED before completion)" >&2
+  fi
   if [[ "${KEEP_QA:-0}" == "1" ]]; then
     echo "QA_ROOT=$QA_ROOT" >&2
     echo "QA_HOME=$QA_HOME" >&2
@@ -81,9 +99,8 @@ printf '# Canonical action audit deterministic target\n' > "$QA_ROOT/fixtures/qa
 )
 DAEMON_PID="$(cat "$QA_ROOT/daemon.pid")"
 if ! wait_for_daemon; then
-  echo "isolated TCP daemon failed to start" >&2
   sed 's/^/  /' "$QA_ROOT/daemon-tcp.log" >&2
-  exit 1
+  abort_with_summary "isolated TCP daemon failed to start"
 fi
 
 PROJECT="qa-action-audit"
@@ -116,7 +133,7 @@ CREATE_OUTPUT="$(
 # FR-146: `| head -1` under pipefail kills grep and ends the gate with no summary line.
 TASK_IDS="$(grep -oE '[0-9a-f-]{36}' <<< "$CREATE_OUTPUT" || true)"
 TASK_ID="${TASK_IDS%%$'\n'*}"
-[[ -n "$TASK_ID" ]] || { echo "task creation returned no task id" >&2; exit 1; }
+[[ -n "$TASK_ID" ]] || abort_with_summary "task creation returned no task id"
 
 "$ORCH" task start "$TASK_ID" >/dev/null 2>&1 || true
 for _ in {1..80}; do
@@ -133,7 +150,7 @@ for _ in {1..40}; do
 done
 ITEM_ID="$(jq -r '.items[0].id // empty' "$INBOX")"
 VERSION="$(jq -r '.items[0].version // empty' "$INBOX")"
-[[ -n "$ITEM_ID" && -n "$VERSION" ]] || { echo "attention item was not materialized" >&2; exit 1; }
+[[ -n "$ITEM_ID" && -n "$VERSION" ]] || abort_with_summary "attention item was not materialized"
 
 DB="$QA_ROOT/data/agent_orchestrator.db"
 "$ORCH" attention claim "$ITEM_ID" --expected-version "$VERSION" \
@@ -210,9 +227,8 @@ export ORCHESTRATOR_SOCKET="$ORCHESTRATORD_DATA_DIR/orchestrator.sock"
 )
 DAEMON_PID="$(cat "$QA_ROOT/daemon.pid")"
 if ! wait_for_daemon; then
-  echo "isolated read-only UDS daemon failed to start" >&2
   sed 's/^/  /' "$QA_ROOT/daemon-uds.log" >&2
-  exit 1
+  abort_with_summary "isolated read-only UDS daemon failed to start"
 fi
 
 set +e
@@ -247,8 +263,13 @@ for target in "$SCHEMA31_DB" "$SCHEMA32_DB" "$FUTURE_DB" "$MISSING31_DB"; do
   sqlite3 "$DB" ".backup '$target'"
 done
 sqlite3 "$SCHEMA31_DB" "DELETE FROM schema_migrations WHERE version > 31;"
+sqlite3 "$SCHEMA32_DB" "DELETE FROM schema_migrations WHERE version > 32;"
+# The "future additive" leg is derived from the catalog, never restated (§4.4 shape 7): the
+# chain is a number that is meant to move, and a literal version here collides with the real
+# migration the moment the chain reaches it — which is what 33 did once m0033 landed.
+FUTURE_VERSION="$(sqlite3 "$FUTURE_DB" "SELECT MAX(version) + 1 FROM schema_migrations;")"
 sqlite3 "$FUTURE_DB" \
-  "INSERT INTO schema_migrations(version,name,applied_at) VALUES(33,'m0033_future_additive_fixture',datetime('now'));"
+  "INSERT INTO schema_migrations(version,name,applied_at) VALUES($FUTURE_VERSION,'m$(printf '%04d' "$FUTURE_VERSION")_future_additive_fixture',datetime('now'));"
 sqlite3 "$MISSING31_DB" "DELETE FROM schema_migrations WHERE version=31;"
 if has_action_audit_migration "$SCHEMA31_DB" && \
    has_action_audit_migration "$SCHEMA32_DB" && \
@@ -260,5 +281,5 @@ else
 fi
 
 echo ""
-echo "Control-plane action audit QA: $PASS passed, $FAIL failed"
+summary
 [[ "$FAIL" -eq 0 ]]
