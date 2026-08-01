@@ -111,10 +111,13 @@ sees the diff.
 
 ### `deny.toml`, and why it has no blanket
 
-48 crates, **70** accepted extra copies, each naming the dependency that
-introduces it and the version being kept. The entries were generated from
-cargo-deny's own output rather than typed, so the "來源依賴" the FR asked for is
-derived rather than remembered.
+48 crates, **70** accepted extra copies at this FR's close (71 since the
+base64@0.22.1 acceptance; the header counts are gated against the skip list
+by `prose-counts-derived` since FR-153, so this document no longer needs to
+track them), each naming the dependency that introduces it and the version
+being kept. The entries were generated from cargo-deny's own output rather
+than typed, so the "來源依賴" the FR asked for is derived rather than
+remembered.
 
 There is deliberately **no `skip-tree`**. One `skip-tree = [{ crate = "tauri" }]`
 absorbs 28 of the 48 in a single line — and goes on absorbing duplicates *that
@@ -147,11 +150,17 @@ generation; writing 48 *different* sentences would have been fiction.
 
 - `cargo-deny` owns graph shape: `bans`, `licenses`, `sources`. Its CI
   invocation names exactly those three — never `advisories`, never `all`.
-- `cargo audit` owns the advisory database, and now runs `--deny unsound`.
+- `cargo audit` owns the advisory database, and now runs `--deny unsound`
+  (FR-153 later added `--deny unmaintained`; the acceptances live in
+  `.cargo/audit.toml`).
 
 RUSTSEC-2024-0429 goes into `.cargo/audit.toml` with its reason and the
 condition that retires it (`cargo tree -i glib` reporting 0.20). The 17
-unmaintained stay warnings: they are upstream-archived crates we cannot move off
+unmaintained stayed warnings at this FR's close, on the reasoning that denying
+them would produce an 18-entry ignore file that *is* the policy — FR-153
+(DD-164) later chose exactly that, for the ratchet it buys, and booked all 17
+with per-root retirement conditions. The paragraph below records the original
+reasoning: they are upstream-archived crates we cannot move off
 while Tauri 2 ships gtk-rs 0.18, and denying them would produce an 18-entry
 ignore file that *is* the policy.
 
@@ -179,7 +188,7 @@ still agree. Seven rules:
 | `every-acceptance-reasoned` | every skip has a non-empty `reason`; every licence exception has a comment |
 | `no-blanket` | `skip-tree` is absent or empty |
 | `skip-is-live` | every skip names a crate that is really duplicated in `Cargo.lock`, at the version written |
-| `audit-unsound-denied` | `cargo audit` runs `--deny unsound`, and every ignored id carries a reason |
+| `audit-unsound-denied` | `cargo audit` runs `--deny unsound` (and, since FR-153, `--deny unmaintained`), and every ignored id carries a reason |
 
 Everything is **parsed, never grepped** — the workflow through
 `scripts/lib/workflow_model.rb`, so a commented-out step is not a step; the TOML
@@ -220,7 +229,7 @@ reason turned out to be this.
 |---|---|---|---|
 | `cargo deny check bans licenses sources` | `security.yml` | `cargo-deny` | yes, no `continue-on-error` |
 | `test-dependency-policy.sh --tool-fixtures` | `security.yml` | `cargo-deny` | yes |
-| `cargo audit --deny unsound` | `security.yml` | `cargo-audit` | yes |
+| `cargo audit --deny unsound --deny unmaintained` (second flag since FR-153) | `security.yml` | `cargo-audit` | yes |
 | `dependency-policy.rb` | `ci.yml` | `governance` | via `OUTCOMES` |
 | `test-dependency-policy.sh` | `ci.yml` | `governance` | via `OUTCOMES` |
 

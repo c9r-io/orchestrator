@@ -40,7 +40,7 @@ Find known vulnerabilities and deprecated Rust dependencies.
 
 In this repository both are in place and worth naming, because "run `cargo audit`"
 is no longer the whole answer. `.github/workflows/security.yml` runs
-`cargo audit --deny unsound`, and the risk acceptances live in
+`cargo audit --deny unsound --deny unmaintained`, and the risk acceptances live in
 `.cargo/audit.toml`, each with a reason and the condition that retires it. A
 second job runs `cargo deny check bans licenses sources` against `deny.toml`,
 which covers what `cargo audit` does not: coexisting versions, licence policy

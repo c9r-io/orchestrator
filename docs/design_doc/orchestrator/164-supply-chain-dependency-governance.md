@@ -138,12 +138,30 @@ get default parallelism back.
 
 - Before: `Rust test` 259s — run 30684584564 at `7d3abb8f`, jobs capped
   at 4 on a 4-vCPU ubuntu runner.
-- After: pending — filled from the first main CI run that includes the
-  removal, in the FR-153 closure commit. Prediction to be checked against,
-  written before the measurement: ~0 delta, because the runner has 4 vCPUs
-  and the cap matched the hardware. The reason to remove the throttle was
+- After: `Rust test` 252s — run 30695310417 at `9122b3c1`, default
+  parallelism, same runner class.
+- Delta: −7s (−2.7%), inside run-to-run noise, matching the prediction
+  written before the measurement (~0, because the runner has 4 vCPUs and
+  the cap matched the hardware). The reason to remove the throttle was
   never CI seconds but that a local hardware compromise was shipping as
   project policy.
+
+## Closure evidence
+
+- Security run 30695310417-sibling (workflow `Security`, same push,
+  conclusion success): first CI execution of `cargo audit --deny unsound
+  --deny unmaintained` and of cargo-deny over the edited deny.toml.
+- Dependabot: the config push triggered five update runs, all success,
+  and produced PRs #84–#92 across `gui/` and the portal template within
+  minutes — grouped minor+patch (#84, `gui-minor-patch`) and individual
+  majors (react 19, vite 8, jsdom 30), plus #83 on the github-actions
+  ecosystem. `site/` produced no PR because its tree was already current,
+  which is the correct null result, not absence of coverage — the
+  `dependabot-npm-coverage` rule asserts the coverage itself.
+- Governance budget after refresh: 1639s against 2700s (39% headroom),
+  ledger refreshed from run 30695310417 with zero pendingMeasurement
+  entries remaining (the four FR-150/FR-151 steps got their first
+  numbers in the same refresh).
 
 ## Known limits
 

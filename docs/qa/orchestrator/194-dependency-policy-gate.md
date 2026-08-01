@@ -61,7 +61,7 @@ second one is worth trusting.
 
 ```bash
 cargo deny --workspace --all-features check --deny unmatched-skip bans licenses sources
-cargo audit --deny unsound
+cargo audit --deny unsound --deny unmaintained
 ruby scripts/qa/dependency-policy.rb
 ```
 
@@ -138,7 +138,8 @@ bash scripts/qa/test-dependency-policy.sh
   step is a finding.
 - Case 5, 5b, 5c: any of the four severities weakened to `warn`/`allow` is a
   finding.
-- Case 10: `cargo audit` without `--deny unsound` is a finding; 10b: an ignored
+- Case 10: `cargo audit` without `--deny unsound` is a finding (case 21, FR-153,
+  covers the dropped `--deny unmaintained` the same way); 10b: an ignored
   advisory with no reason above it is a finding; 10c: a missing
   `.cargo/audit.toml` is a finding, **not an empty pass**.
 
