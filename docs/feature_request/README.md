@@ -60,7 +60,7 @@
 | FR-071 | 开源合规基础设施 — LICENSE / CHANGELOG / CONTRIBUTING / v0.1.0 Release | P0 | Closed |
 | FR-072 | 分发渠道扩展 — Docker 镜像与 Homebrew Tap | P1 | Closed |
 | FR-073 | 文档站点与 Landing Page — 外部可发现性 | P1 | Closed |
-| FR-076 | GUI 正式发布 — Tauri App 打包分发 | P1（需求 1）/ P3（需求 2–4） | In Progress（需求 1 已落地，DD-165/QA-203；需求 2–4 Deferred） |
+| FR-076 | GUI 正式发布 — Tauri App 打包分发 | P1 | In Progress（需求 1–3 已落地，需求 4 签名+公证已验证，DD-165/166、QA-203/204；待下次发版验收 Release 资产后闭环） |
 | FR-077 | Workflow 模板库 — 常见 SDLC 自动化场景预设 | P1 | Closed |
 | FR-078 | Task Items 与 Event List CLI 命令 | P1 | Closed |
 | FR-079 | 数据生命周期治理 — 日志清理、DB 瘦身与自动化回收 | P1 | Closed |

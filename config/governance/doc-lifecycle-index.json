@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 441,
-    "active": 435,
+    "documents": 443,
+    "active": 437,
     "superseded": 6,
-    "withRelatedFr": 288
+    "withRelatedFr": 290
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -416,6 +416,12 @@
       ]
     },
     "docs/design_doc/orchestrator/165-gui-ci-integration.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-076"
+      ]
+    },
+    "docs/design_doc/orchestrator/166-gui-release-packaging.md": {
       "lifecycle": "active",
       "relatedFr": [
         "FR-076"
@@ -1706,6 +1712,12 @@
         "FR-076"
       ]
     },
+    "docs/qa/orchestrator/204-gui-release-packaging.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-076"
+      ]
+    },
     "docs/qa/orchestrator/21-runner-security-observability.md": {
       "lifecycle": "active"
     },
@@ -2476,7 +2488,9 @@
     ],
     "FR-076": [
       "docs/design_doc/orchestrator/165-gui-ci-integration.md",
-      "docs/qa/orchestrator/203-gui-ci-integration.md"
+      "docs/design_doc/orchestrator/166-gui-release-packaging.md",
+      "docs/qa/orchestrator/203-gui-ci-integration.md",
+      "docs/qa/orchestrator/204-gui-release-packaging.md"
     ],
     "FR-077": [
       "docs/design_doc/orchestrator/90-workflow-template-library.md",
