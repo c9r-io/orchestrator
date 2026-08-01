@@ -1,0 +1,6739 @@
+{
+  "commands": [
+    {
+      "about": "Agent lifecycle operations (cordon, drain, uncordon)",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "agent"
+    },
+    {
+      "about": "Mark an agent as unschedulable (no new work dispatched)",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "agent_name",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "AGENT_NAME"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "agent cordon"
+    },
+    {
+      "about": "Drain an agent: cordon + wait for in-flight work to complete",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "agent_name",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "AGENT_NAME"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "timeout",
+          "name": "timeout",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "TIMEOUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "agent drain"
+    },
+    {
+      "about": "List agents and their lifecycle state",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "agent list"
+    },
+    {
+      "about": "Observe and control interactive agent sessions",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "agent session"
+    },
+    {
+      "about": "Attach as a reader or explicitly acquire the writer lease",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "session_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "SESSION_ID"
+        },
+        {
+          "default": "reader",
+          "hidden": false,
+          "long": "mode",
+          "name": "mode",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "MODE"
+        },
+        {
+          "default": "cli",
+          "hidden": false,
+          "long": "client-id",
+          "name": "client_id",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "CLIENT_ID"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "agent session attach"
+    },
+    {
+      "about": "Close the backing session process",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "session_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "SESSION_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "reason",
+          "name": "reason",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "REASON"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "expected-version",
+          "name": "expected_version",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "EXPECTED_VERSION"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "idempotency-key",
+          "name": "idempotency_key",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "IDEMPOTENCY_KEY"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "agent session close"
+    },
+    {
+      "about": "Detach a reader or writer",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "session_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "SESSION_ID"
+        },
+        {
+          "default": "reader",
+          "hidden": false,
+          "long": "mode",
+          "name": "mode",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "MODE"
+        },
+        {
+          "default": "cli",
+          "hidden": false,
+          "long": "client-id",
+          "name": "client_id",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "CLIENT_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "fencing-token",
+          "name": "fencing_token",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "FENCING_TOKEN"
+        },
+        {
+          "default": "client detach",
+          "hidden": false,
+          "long": "reason",
+          "name": "reason",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "REASON"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "agent session detach"
+    },
+    {
+      "about": "Get one session",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "session_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "SESSION_ID"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "agent session get"
+    },
+    {
+      "about": "Renew a writer lease",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "session_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "SESSION_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "client-id",
+          "name": "client_id",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "CLIENT_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "fencing-token",
+          "name": "fencing_token",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "FENCING_TOKEN"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "agent session heartbeat"
+    },
+    {
+      "about": "List sessions",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "task",
+          "name": "task",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "TASK"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "agent",
+          "name": "agent",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "AGENT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "state",
+          "name": "state",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "STATE"
+        },
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "agent session list"
+    },
+    {
+      "about": "Follow or read transcript bytes from an offset",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "session_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "SESSION_ID"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "follow",
+          "name": "follow",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "FOLLOW"
+        },
+        {
+          "default": "0",
+          "hidden": false,
+          "long": "offset",
+          "name": "offset",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "OFFSET"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "chunks-json",
+          "name": "chunks_json",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "CHUNKS_JSON"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "agent session read"
+    },
+    {
+      "about": "Resolve a diagnostic PID to sessions",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "pid",
+          "name": "pid",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "PID"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "agent session resolve"
+    },
+    {
+      "about": "Send input with the current writer fencing token",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "session_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "SESSION_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "text",
+          "name": "text",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "client-id",
+          "name": "client_id",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "CLIENT_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "fencing-token",
+          "name": "fencing_token",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "FENCING_TOKEN"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "idempotency-key",
+          "name": "idempotency_key",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "IDEMPOTENCY_KEY"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "agent session send-input"
+    },
+    {
+      "about": "Mark a cordoned agent as schedulable again",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "agent_name",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "AGENT_NAME"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "agent uncordon"
+    },
+    {
+      "about": "Apply resource manifests",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "file",
+          "name": "file",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "f",
+          "value_name": "FILE"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "dry-run",
+          "name": "dry_run",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "DRY_RUN"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "prune",
+          "name": "prune",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "PRUNE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "apply"
+    },
+    {
+      "about": "Cross-task human attention queue",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "attention"
+    },
+    {
+      "about": "Execute an allowlisted action",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "action_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "ACTION_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "expected-version",
+          "name": "expected_version",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "EXPECTED_VERSION"
+        },
+        {
+          "default": "{}",
+          "hidden": false,
+          "long": "input",
+          "name": "input",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "INPUT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "idempotency-key",
+          "name": "idempotency_key",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "IDEMPOTENCY_KEY"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "attention action"
+    },
+    {
+      "about": "Claim an open attention item",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "expected-version",
+          "name": "expected_version",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "EXPECTED_VERSION"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "idempotency-key",
+          "name": "idempotency_key",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "IDEMPOTENCY_KEY"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "attention claim"
+    },
+    {
+      "about": "Follow monotonic attention queue changes",
+      "aliases": [],
+      "args": [
+        {
+          "default": "0",
+          "hidden": false,
+          "long": "after",
+          "name": "after",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "AFTER"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": "json",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "attention follow"
+    },
+    {
+      "about": "Get one attention item",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "ID"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "attention get"
+    },
+    {
+      "about": "List attention items with optional filters",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "state",
+          "name": "state",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "STATE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "kind",
+          "name": "kind",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "KIND"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "severity",
+          "name": "severity",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "SEVERITY"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "assignee",
+          "name": "assignee",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "ASSIGNEE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "task",
+          "name": "task",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "TASK"
+        },
+        {
+          "default": "100",
+          "hidden": false,
+          "long": "limit",
+          "name": "limit",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "LIMIT"
+        },
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "attention list"
+    },
+    {
+      "about": "Resolve an attention item",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "expected-version",
+          "name": "expected_version",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "EXPECTED_VERSION"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "reason",
+          "name": "reason",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "REASON"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "idempotency-key",
+          "name": "idempotency_key",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "IDEMPOTENCY_KEY"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "attention resolve"
+    },
+    {
+      "about": "Snooze an open or claimed item",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "expected-version",
+          "name": "expected_version",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "EXPECTED_VERSION"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "until",
+          "name": "until",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "UNTIL"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "idempotency-key",
+          "name": "idempotency_key",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "IDEMPOTENCY_KEY"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "attention snooze"
+    },
+    {
+      "about": "Query canonical control-plane action audit evidence",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "audit"
+    },
+    {
+      "about": "Get one action audit record by request ID",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "request_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "REQUEST_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "audit get"
+    },
+    {
+      "about": "List recent action audit records within one project",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "actor",
+          "name": "actor",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "ACTOR"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "target-type",
+          "name": "target_type",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "TARGET_TYPE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "target-id",
+          "name": "target_id",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "TARGET_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "action",
+          "name": "action",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "ACTION"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "status",
+          "name": "status",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "STATUS"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "from",
+          "name": "from",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "FROM"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "to",
+          "name": "to",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "TO"
+        },
+        {
+          "default": "100",
+          "hidden": false,
+          "long": "limit",
+          "name": "limit",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "LIMIT"
+        },
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "audit list"
+    },
+    {
+      "about": "Preflight check",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "workflow",
+          "name": "workflow",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "WORKFLOW"
+        },
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "check"
+    },
+    {
+      "about": "Daemon lifecycle operations (stop, status)",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "daemon"
+    },
+    {
+      "about": "Enable or disable maintenance mode (blocks new task creation)",
+      "aliases": [],
+      "args": [
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "enable",
+          "name": "enable",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "ENABLE"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "disable",
+          "name": "disable",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "DISABLE"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "daemon maintenance"
+    },
+    {
+      "about": "Show whether the daemon is running and its PID",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "daemon status"
+    },
+    {
+      "about": "Stop the running daemon by sending SIGTERM",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "daemon stop"
+    },
+    {
+      "about": "Database operations",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "db"
+    },
+    {
+      "about": "Clean up old log files from terminated tasks",
+      "aliases": [],
+      "args": [
+        {
+          "default": "30",
+          "hidden": false,
+          "long": "older-than",
+          "name": "older_than_days",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "OLDER_THAN_DAYS"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "db cleanup"
+    },
+    {
+      "about": "Database migration operations",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "db migrations"
+    },
+    {
+      "about": "List registered migrations and their applied state",
+      "aliases": [],
+      "args": [
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "db migrations list"
+    },
+    {
+      "about": "Show schema status for the local database",
+      "aliases": [],
+      "args": [
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "db status"
+    },
+    {
+      "about": "Run VACUUM to reclaim disk space",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "db vacuum"
+    },
+    {
+      "about": "System debug info",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "component",
+          "name": "component",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "COMPONENT"
+        }
+      ],
+      "bare_invocable": true,
+      "hidden": false,
+      "leaf": false,
+      "path": "debug"
+    },
+    {
+      "about": "Run a child process that idles for a fixed duration",
+      "aliases": [],
+      "args": [
+        {
+          "default": "60",
+          "hidden": false,
+          "long": "sleep-secs",
+          "name": "sleep_secs",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "SLEEP_SECS"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": true,
+      "leaf": true,
+      "path": "debug child-idle"
+    },
+    {
+      "about": "Run a local sandbox probe without contacting the daemon",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "debug sandbox-probe"
+    },
+    {
+      "about": "Allocate memory until the target size is reached",
+      "aliases": [],
+      "args": [
+        {
+          "default": "8",
+          "hidden": false,
+          "long": "chunk-mb",
+          "name": "chunk_mb",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "CHUNK_MB"
+        },
+        {
+          "default": "256",
+          "hidden": false,
+          "long": "total-mb",
+          "name": "total_mb",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "TOTAL_MB"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "debug sandbox-probe alloc-memory"
+    },
+    {
+      "about": "Burn CPU in a tight loop",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "debug sandbox-probe cpu-burn"
+    },
+    {
+      "about": "Resolve a hostname through DNS",
+      "aliases": [],
+      "args": [
+        {
+          "default": "example.com",
+          "hidden": false,
+          "long": "host",
+          "name": "host",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "HOST"
+        },
+        {
+          "default": "443",
+          "hidden": false,
+          "long": "port",
+          "name": "port",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "PORT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "debug sandbox-probe dns-resolve"
+    },
+    {
+      "about": "Attempt to open many files at once",
+      "aliases": [],
+      "args": [
+        {
+          "default": "256",
+          "hidden": false,
+          "long": "count",
+          "name": "count",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "COUNT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "debug sandbox-probe open-files"
+    },
+    {
+      "about": "Spawn many child processes",
+      "aliases": [],
+      "args": [
+        {
+          "default": "64",
+          "hidden": false,
+          "long": "count",
+          "name": "count",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "COUNT"
+        },
+        {
+          "default": "60",
+          "hidden": false,
+          "long": "sleep-secs",
+          "name": "sleep_secs",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "SLEEP_SECS"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "debug sandbox-probe spawn-children"
+    },
+    {
+      "about": "Open a TCP connection to a remote endpoint",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "host",
+          "name": "host",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "HOST"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "port",
+          "name": "port",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "PORT"
+        },
+        {
+          "default": "3",
+          "hidden": false,
+          "long": "timeout-secs",
+          "name": "timeout_secs",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "TIMEOUT_SECS"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "debug sandbox-probe tcp-connect"
+    },
+    {
+      "about": "Run a local TCP server for sandbox experiments",
+      "aliases": [],
+      "args": [
+        {
+          "default": "127.0.0.1",
+          "hidden": false,
+          "long": "bind",
+          "name": "bind",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "BIND"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "port",
+          "name": "port",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "PORT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "ready-file",
+          "name": "ready_file",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "READY_FILE"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": true,
+      "leaf": true,
+      "path": "debug sandbox-probe tcp-serve"
+    },
+    {
+      "about": "Write a file to a target path",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "path",
+          "name": "path",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "PATH"
+        },
+        {
+          "default": "probe",
+          "hidden": false,
+          "long": "contents",
+          "name": "contents",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "CONTENTS"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "debug sandbox-probe write-file"
+    },
+    {
+      "about": "Delete a resource",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "resource",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "RESOURCE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "name",
+          "positional": true,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "NAME"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "force",
+          "name": "force",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "f",
+          "value_name": "FORCE"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "force-references",
+          "name": "force_references",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "FORCE_REFERENCES"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "dry-run",
+          "name": "dry_run",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "DRY_RUN"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "delete"
+    },
+    {
+      "about": "Describe a resource",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "resource",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "RESOURCE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "name",
+          "positional": true,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "NAME"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "describe"
+    },
+    {
+      "about": "Event lifecycle operations (cleanup, stats)",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "event"
+    },
+    {
+      "about": "Clean up old events from terminated tasks",
+      "aliases": [],
+      "args": [
+        {
+          "default": "30",
+          "hidden": false,
+          "long": "older-than",
+          "name": "older_than_days",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "OLDER_THAN_DAYS"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "dry-run",
+          "name": "dry_run",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "DRY_RUN"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "archive",
+          "name": "archive",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "ARCHIVE"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "event cleanup"
+    },
+    {
+      "about": "List events for a task",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "task",
+          "name": "task",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "TASK"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "type",
+          "name": "event_type",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "EVENT_TYPE"
+        },
+        {
+          "default": "50",
+          "hidden": false,
+          "long": "limit",
+          "name": "limit",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "l",
+          "value_name": "LIMIT"
+        },
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "event list"
+    },
+    {
+      "about": "Show event table statistics",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "event stats"
+    },
+    {
+      "about": "Get resource(s)",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "resource",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "RESOURCE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "name",
+          "positional": true,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "NAME"
+        },
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "selector",
+          "name": "selector",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "l",
+          "value_name": "SELECTOR"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "get"
+    },
+    {
+      "about": "Show a guided reference for CLI commands with examples",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "command_filter",
+          "positional": true,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "COMMAND"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "category",
+          "name": "category",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "c",
+          "value_name": "CATEGORY"
+        },
+        {
+          "default": "markdown",
+          "hidden": false,
+          "long": "format",
+          "name": "format",
+          "positional": false,
+          "possible_values": [
+            "markdown",
+            "json"
+          ],
+          "required": false,
+          "short": "f",
+          "value_name": "FORMAT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "guide"
+    },
+    {
+      "about": "Generate and inspect immutable task handoffs",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "handoff"
+    },
+    {
+      "about": "Generate an immutable snapshot at the latest or selected event cursor",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "task_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "TASK_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "cursor",
+          "name": "cursor",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "CURSOR"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "handoff generate"
+    },
+    {
+      "about": "Get a previously generated snapshot",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "ID"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "handoff get"
+    },
+    {
+      "about": "Initialize orchestrator runtime",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "root",
+          "positional": true,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "ROOT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "init"
+    },
+    {
+      "about": "Manifest operations",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "manifest"
+    },
+    {
+      "about": "Export all resources as manifest documents",
+      "aliases": [],
+      "args": [
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "manifest export"
+    },
+    {
+      "about": "Validate a manifest file",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "file",
+          "name": "file",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "f",
+          "value_name": "FILE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "manifest validate"
+    },
+    {
+      "about": "Process Console operational metrics",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "metrics"
+    },
+    {
+      "about": "Query one project-scoped Process Console snapshot",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": "24h",
+          "hidden": false,
+          "long": "window",
+          "name": "window",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "WINDOW"
+        },
+        {
+          "default": "1h",
+          "hidden": false,
+          "long": "bucket",
+          "name": "bucket",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "BUCKET"
+        },
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "metrics process"
+    },
+    {
+      "about": "Delete optional metrics older than the retention threshold",
+      "aliases": [],
+      "args": [
+        {
+          "default": "0",
+          "hidden": false,
+          "long": "retention-days",
+          "name": "retention_days",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "RETENTION_DAYS"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "metrics prune"
+    },
+    {
+      "about": "Rebuild retained materialized rollups for one project",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "metrics rebuild"
+    },
+    {
+      "about": "QA observability tools",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "qa"
+    },
+    {
+      "about": "Show observability health metrics from task_execution_metrics",
+      "aliases": [],
+      "args": [
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "qa doctor"
+    },
+    {
+      "about": "Preview and execute safe logical resume operations",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "resume"
+    },
+    {
+      "about": "List logical boundaries and their side-effect classifications",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "task_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "TASK_ID"
+        },
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "resume boundaries"
+    },
+    {
+      "about": "Execute a previously reviewed plan with stale-state protection",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "plan_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "PLAN_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "expected-state-version",
+          "name": "expected_state_version",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "EXPECTED_STATE_VERSION"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "reason",
+          "name": "reason",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "REASON"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "idempotency-key",
+          "name": "idempotency_key",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "IDEMPOTENCY_KEY"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "elevated-confirmation",
+          "name": "elevated_confirmation",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "ELEVATED_CONFIRMATION"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "resume execute"
+    },
+    {
+      "about": "Persist an expiring consequence preview without changing task/workspace state",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "task_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "TASK_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "boundary",
+          "name": "boundary",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "BOUNDARY"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "mode",
+          "name": "mode",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "MODE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "attention-item",
+          "name": "attention_item",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "ATTENTION_ITEM"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "resume plan"
+    },
+    {
+      "about": "Execute workflow step(s) synchronously",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "workflow",
+          "name": "workflow",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "W",
+          "value_name": "WORKFLOW"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "step",
+          "name": "step",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "S",
+          "value_name": "STEP"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "set",
+          "name": "set",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "SET"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "workspace",
+          "name": "workspace",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "w",
+          "value_name": "WORKSPACE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "target-file",
+          "name": "target_file",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "t",
+          "value_name": "TARGET_FILE"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "detach",
+          "name": "detach",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "DETACH"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "template",
+          "name": "template",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "TEMPLATE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "agent-capability",
+          "name": "agent_capability",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "AGENT_CAPABILITY"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "profile",
+          "name": "profile",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "PROFILE"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "run"
+    },
+    {
+      "about": "Secret key management",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "secret"
+    },
+    {
+      "about": "Secret key operations",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "secret key"
+    },
+    {
+      "about": "Bootstrap a new key when all keys are in terminal state (emergency recovery)",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "secret key bootstrap"
+    },
+    {
+      "about": "Show key audit history",
+      "aliases": [],
+      "args": [
+        {
+          "default": "50",
+          "hidden": false,
+          "long": "limit",
+          "name": "limit",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "n",
+          "value_name": "LIMIT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "key-id",
+          "name": "key_id",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "KEY_ID"
+        },
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "secret key history"
+    },
+    {
+      "about": "List all keys",
+      "aliases": [],
+      "args": [
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "secret key list"
+    },
+    {
+      "about": "Revoke a key",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "key_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "KEY_ID"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "force",
+          "name": "force",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "FORCE"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "secret key revoke"
+    },
+    {
+      "about": "Rotate the active key",
+      "aliases": [],
+      "args": [
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "resume",
+          "name": "resume",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "RESUME"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "secret key rotate"
+    },
+    {
+      "about": "Show active key status",
+      "aliases": [],
+      "args": [
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "secret key status"
+    },
+    {
+      "about": "External source events and process bindings",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "source"
+    },
+    {
+      "about": "Inspect and control durable source automation routes",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "source automation"
+    },
+    {
+      "about": "Get one route and its bounded attempt history",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "route_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "ROUTE_ID"
+        },
+        {
+          "default": "50",
+          "hidden": false,
+          "long": "attempt-limit",
+          "name": "attempt_limit",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "ATTEMPT_LIMIT"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source automation get"
+    },
+    {
+      "about": "Deliberately ignore an actionable route and resolve its Attention item",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "route_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "ROUTE_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "expected-version",
+          "name": "expected_version",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "EXPECTED_VERSION"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "reason",
+          "name": "reason",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "REASON"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "idempotency-key",
+          "name": "idempotency_key",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "IDEMPOTENCY_KEY"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source automation ignore"
+    },
+    {
+      "about": "List routes with bounded keyset pagination",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "state",
+          "name": "state",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "STATE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "provider",
+          "name": "provider",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "PROVIDER"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "binding",
+          "name": "binding",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "BINDING"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "task",
+          "name": "task",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "TASK"
+        },
+        {
+          "default": "50",
+          "hidden": false,
+          "long": "page-size",
+          "name": "page_size",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "PAGE_SIZE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "page-token",
+          "name": "page_token",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "PAGE_TOKEN"
+        },
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source automation list"
+    },
+    {
+      "about": "Replay an actionable route from its durable checkpoint",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "route_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "ROUTE_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "expected-version",
+          "name": "expected_version",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "EXPECTED_VERSION"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "reason",
+          "name": "reason",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "REASON"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "idempotency-key",
+          "name": "idempotency_key",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "IDEMPOTENCY_KEY"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "adopt-current-config",
+          "name": "adopt_current_config",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "ADOPT_CURRENT_CONFIG"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source automation replay"
+    },
+    {
+      "about": "Simulate live matcher and renderer logic without side effects",
+      "aliases": [],
+      "args": [
+        {
+          "default": "default",
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": "slack",
+          "hidden": false,
+          "long": "provider",
+          "name": "provider",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "PROVIDER"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "installation",
+          "name": "installation",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "INSTALLATION"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "reaction",
+          "name": "reaction",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "REACTION"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "channel",
+          "name": "channel",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "CHANNEL"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "actor",
+          "name": "actor",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "ACTOR"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "message-url",
+          "name": "message_url",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "MESSAGE_URL"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "target-id",
+          "name": "target_id",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "TARGET_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "event-id",
+          "name": "event_id",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "EVENT_ID"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source automation simulate"
+    },
+    {
+      "about": "Report backlog, lease, retry, and failure-family health",
+      "aliases": [],
+      "args": [
+        {
+          "default": "default",
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source automation status"
+    },
+    {
+      "about": "Follow reconnectable route transitions",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": "0",
+          "hidden": false,
+          "long": "after",
+          "name": "after",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "AFTER"
+        },
+        {
+          "default": "json",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source automation watch"
+    },
+    {
+      "about": "Bind provider conversation coordinates to a task",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "task",
+          "name": "task",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "TASK"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "provider",
+          "name": "provider",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "PROVIDER"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "installation",
+          "name": "installation",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "INSTALLATION"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "conversation",
+          "name": "conversation",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "CONVERSATION"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "thread",
+          "name": "thread",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "THREAD"
+        },
+        {
+          "default": "primary",
+          "hidden": false,
+          "long": "binding-type",
+          "name": "binding_type",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "BINDING_TYPE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "source-event",
+          "name": "source_event",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "SOURCE_EVENT"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source bind"
+    },
+    {
+      "about": "Match and control governed source-to-task bindings",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "source binding"
+    },
+    {
+      "about": "Resume a binding after conflict validation",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "name",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "NAME"
+        },
+        {
+          "default": "default",
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source binding resume"
+    },
+    {
+      "about": "Simulate deterministic matching without side effects or provider API calls",
+      "aliases": [],
+      "args": [
+        {
+          "default": "default",
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": "slack",
+          "hidden": false,
+          "long": "provider",
+          "name": "provider",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "PROVIDER"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "installation",
+          "name": "installation",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "INSTALLATION"
+        },
+        {
+          "default": "reaction_added",
+          "hidden": false,
+          "long": "event-kind",
+          "name": "event_kind",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "EVENT_KIND"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "reaction",
+          "name": "reaction",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "REACTION"
+        },
+        {
+          "default": "message",
+          "hidden": false,
+          "long": "target-kind",
+          "name": "target_kind",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "TARGET_KIND"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "channel",
+          "name": "channel",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "CHANNEL"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "actor",
+          "name": "actor",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "ACTOR"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source binding simulate"
+    },
+    {
+      "about": "Suspend a binding immediately",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "name",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "NAME"
+        },
+        {
+          "default": "default",
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source binding suspend"
+    },
+    {
+      "about": "List source bindings for one task",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "task_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "TASK_ID"
+        },
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source bindings"
+    },
+    {
+      "about": "Manage provider connections and OAuth installation intents",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "source connection"
+    },
+    {
+      "about": "Cancel a pending OAuth intent",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "intent_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "INTENT_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "reason",
+          "name": "reason",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "REASON"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "idempotency-key",
+          "name": "idempotency_key",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "IDEMPOTENCY_KEY"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source connection cancel"
+    },
+    {
+      "about": "Show managed/manual provisioning capabilities",
+      "aliases": [],
+      "args": [
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source connection catalog"
+    },
+    {
+      "about": "Start the official Slack App OAuth flow",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": "Slack workspace",
+          "hidden": false,
+          "long": "label",
+          "name": "label",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "LABEL"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "reason",
+          "name": "reason",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "REASON"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "idempotency-key",
+          "name": "idempotency_key",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "IDEMPOTENCY_KEY"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "no-open",
+          "name": "no_open",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "NO_OPEN"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source connection connect"
+    },
+    {
+      "about": "Abandon a non-terminal dedicated App provisioning checkpoint",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "provisioning_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "PROVISIONING_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "reason",
+          "name": "reason",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "REASON"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "idempotency-key",
+          "name": "idempotency_key",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "IDEMPOTENCY_KEY"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source connection dedicated-abandon"
+    },
+    {
+      "about": "Permanently delete a disconnected workspace-owned Slack App",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "expected-version",
+          "name": "expected_version",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "EXPECTED_VERSION"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "config-token-stdin",
+          "name": "config_token_stdin",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "CONFIG_TOKEN_STDIN"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "app-id-confirmation",
+          "name": "app_id_confirmation",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "APP_ID_CONFIRMATION"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "reason",
+          "name": "reason",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "REASON"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "idempotency-key",
+          "name": "idempotency_key",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "IDEMPOTENCY_KEY"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source connection dedicated-delete"
+    },
+    {
+      "about": "Resume credential handoff or approve a reviewed dedicated App preview",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "provisioning_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "PROVISIONING_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "reason",
+          "name": "reason",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "REASON"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "idempotency-key",
+          "name": "idempotency_key",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "IDEMPOTENCY_KEY"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "no-open",
+          "name": "no_open",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "NO_OPEN"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source connection dedicated-resume"
+    },
+    {
+      "about": "Inspect a dedicated App provisioning checkpoint",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "provisioning_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "PROVISIONING_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source connection dedicated-status"
+    },
+    {
+      "about": "Review and apply the fixed manifest to an existing dedicated App",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "expected-version",
+          "name": "expected_version",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "EXPECTED_VERSION"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "config-token-stdin",
+          "name": "config_token_stdin",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "CONFIG_TOKEN_STDIN"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "approve",
+          "name": "approve",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "APPROVE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "reason",
+          "name": "reason",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "REASON"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "idempotency-key",
+          "name": "idempotency_key",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "IDEMPOTENCY_KEY"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "no-open",
+          "name": "no_open",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "NO_OPEN"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source connection dedicated-upgrade"
+    },
+    {
+      "about": "Disconnect and destroy managed credentials",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "expected-version",
+          "name": "expected_version",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "EXPECTED_VERSION"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "reason",
+          "name": "reason",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "REASON"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "idempotency-key",
+          "name": "idempotency_key",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "IDEMPOTENCY_KEY"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source connection disconnect"
+    },
+    {
+      "about": "Get one SourceConnection",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source connection get"
+    },
+    {
+      "about": "List safe SourceConnection projections",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "provider",
+          "name": "provider",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "PROVIDER"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "include-disconnected",
+          "name": "include_disconnected",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "INCLUDE_DISCONNECTED"
+        },
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source connection list"
+    },
+    {
+      "about": "Start a reviewed dedicated-to-official App migration",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "expected-version",
+          "name": "expected_version",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "EXPECTED_VERSION"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "reason",
+          "name": "reason",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "REASON"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "idempotency-key",
+          "name": "idempotency_key",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "IDEMPOTENCY_KEY"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "no-open",
+          "name": "no_open",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "NO_OPEN"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source connection migrate-to-shared"
+    },
+    {
+      "about": "Validate and provision a workspace-owned private Slack App",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": "Slack workspace",
+          "hidden": false,
+          "long": "label",
+          "name": "label",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "LABEL"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "config-token-stdin",
+          "name": "config_token_stdin",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "CONFIG_TOKEN_STDIN"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "approve",
+          "name": "approve",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "APPROVE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "reason",
+          "name": "reason",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "REASON"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "idempotency-key",
+          "name": "idempotency_key",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "IDEMPOTENCY_KEY"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "no-open",
+          "name": "no_open",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "NO_OPEN"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "target-connection",
+          "name": "target_connection",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "TARGET_CONNECTION"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source connection provision-dedicated"
+    },
+    {
+      "about": "Start OAuth again for an existing connection",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "expected-version",
+          "name": "expected_version",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "EXPECTED_VERSION"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "reason",
+          "name": "reason",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "REASON"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "idempotency-key",
+          "name": "idempotency_key",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "IDEMPOTENCY_KEY"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "no-open",
+          "name": "no_open",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "NO_OPEN"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source connection reauthorize"
+    },
+    {
+      "about": "Poll or resume one OAuth intent",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "intent_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "INTENT_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source connection status"
+    },
+    {
+      "about": "Transfer exclusive ownership to another daemon",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "expected-version",
+          "name": "expected_version",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "EXPECTED_VERSION"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "target-daemon-id",
+          "name": "target_daemon_id",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "TARGET_DAEMON_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "reason",
+          "name": "reason",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "REASON"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "idempotency-key",
+          "name": "idempotency_key",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "IDEMPOTENCY_KEY"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source connection transfer"
+    },
+    {
+      "about": "Follow monotonic SourceConnection changes",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": "0",
+          "hidden": false,
+          "long": "after",
+          "name": "after",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "AFTER"
+        },
+        {
+          "default": "json",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source connection watch"
+    },
+    {
+      "about": "Get one source event",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "ID"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source get"
+    },
+    {
+      "about": "Ingest one provider-neutral normalized event fixture",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "file",
+          "name": "file",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": "f",
+          "value_name": "FILE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "payload-hash",
+          "name": "payload_hash",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "PAYLOAD_HASH"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source ingest"
+    },
+    {
+      "about": "List recent source events",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "task",
+          "name": "task",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "TASK"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "state",
+          "name": "state",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "STATE"
+        },
+        {
+          "default": "100",
+          "hidden": false,
+          "long": "limit",
+          "name": "limit",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "LIMIT"
+        },
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source list"
+    },
+    {
+      "about": "Replay a failed or attention-blocked route",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "ID"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source replay"
+    },
+    {
+      "about": "Inspect one protected automation route and its Slack deep link",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "source_event_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "SOURCE_EVENT_ID"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source route"
+    },
+    {
+      "about": "Manage and preview governed source-to-task templates",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "source template"
+    },
+    {
+      "about": "Render a side-effect-free sample using the daemon's active configuration",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "name",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "NAME"
+        },
+        {
+          "default": "default",
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "provider",
+          "name": "provider",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "PROVIDER"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "installation",
+          "name": "installation",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "INSTALLATION"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "message-url",
+          "name": "message_url",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "MESSAGE_URL"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "event-id",
+          "name": "event_id",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "EVENT_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "reaction",
+          "name": "reaction",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "REACTION"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "target-id",
+          "name": "target_id",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "TARGET_ID"
+        },
+        {
+          "default": "yaml",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "source template preview"
+    },
+    {
+      "about": "Store operations",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "store"
+    },
+    {
+      "about": "Delete one workflow store entry",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "store",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "STORE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "key",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "KEY"
+        },
+        {
+          "default": "",
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "store delete"
+    },
+    {
+      "about": "Read one workflow store entry",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "store",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "STORE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "key",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "KEY"
+        },
+        {
+          "default": "",
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "store get"
+    },
+    {
+      "about": "List workflow store entries",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "store",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "STORE"
+        },
+        {
+          "default": "",
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": "100",
+          "hidden": false,
+          "long": "limit",
+          "name": "limit",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "l",
+          "value_name": "LIMIT"
+        },
+        {
+          "default": "0",
+          "hidden": false,
+          "long": "offset",
+          "name": "offset",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "OFFSET"
+        },
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "store list"
+    },
+    {
+      "about": "Prune workflow store entries according to retention rules",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "store",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "STORE"
+        },
+        {
+          "default": "",
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "store prune"
+    },
+    {
+      "about": "Write one workflow store entry",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "store",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "STORE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "key",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "KEY"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "value",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "VALUE"
+        },
+        {
+          "default": "",
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": "",
+          "hidden": false,
+          "long": "task-id",
+          "name": "task_id",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "t",
+          "value_name": "TASK_ID"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "store put"
+    },
+    {
+      "about": "Task operations",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "task"
+    },
+    {
+      "about": "Create a new task",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "name",
+          "name": "name",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "n",
+          "value_name": "NAME"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "goal",
+          "name": "goal",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "g",
+          "value_name": "GOAL"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "workspace",
+          "name": "workspace",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "w",
+          "value_name": "WORKSPACE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "workflow",
+          "name": "workflow",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "W",
+          "value_name": "WORKFLOW"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "target-file",
+          "name": "target_file",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "t",
+          "value_name": "TARGET_FILE"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "no-start",
+          "name": "no_start",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "NO_START"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "step",
+          "name": "step",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "S",
+          "value_name": "STEP"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "set",
+          "name": "set",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "SET"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "task create"
+    },
+    {
+      "about": "Delete one or more tasks",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "task_ids",
+          "positional": true,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "TASK_IDS"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "all",
+          "name": "all",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "ALL"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "status",
+          "name": "status",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "STATUS"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "force",
+          "name": "force",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "f",
+          "value_name": "FORCE"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "task delete"
+    },
+    {
+      "about": "Show detailed information for one task",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "task_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "TASK_ID"
+        },
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "task info"
+    },
+    {
+      "about": "List task items and their status",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "task_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "TASK_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "status",
+          "name": "status",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "s",
+          "value_name": "STATUS"
+        },
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "task items"
+    },
+    {
+      "about": "List tasks with optional filters",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "status",
+          "name": "status",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "s",
+          "value_name": "STATUS"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "verbose",
+          "name": "verbose",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "v",
+          "value_name": "VERBOSE"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "task list"
+    },
+    {
+      "about": "Show task logs",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "task_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "TASK_ID"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "follow",
+          "name": "follow",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "f",
+          "value_name": "FOLLOW"
+        },
+        {
+          "default": "100",
+          "hidden": false,
+          "long": "tail",
+          "name": "tail",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "n",
+          "value_name": "TAIL"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "timestamps",
+          "name": "timestamps",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "TIMESTAMPS"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "task logs"
+    },
+    {
+      "about": "Pause a running task",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "task_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "TASK_ID"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "task pause"
+    },
+    {
+      "about": "Recover orphaned running items for a task",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "task_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "TASK_ID"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "task recover"
+    },
+    {
+      "about": "Resume a paused task",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "task_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "TASK_ID"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "reset-blocked",
+          "name": "reset_blocked",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "RESET_BLOCKED"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "task resume"
+    },
+    {
+      "about": "Retry a failed task item",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "task_item_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "TASK_ITEM_ID"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "force",
+          "name": "force",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "f",
+          "value_name": "FORCE"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "task retry"
+    },
+    {
+      "about": "Start a task by id or resume the latest task",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "task_id",
+          "positional": true,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "TASK_ID"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "latest",
+          "name": "latest",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "l",
+          "value_name": "LATEST"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "task start"
+    },
+    {
+      "about": "Show the semantic process timeline for a task",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "task_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "TASK_ID"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "cursor",
+          "name": "cursor",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "CURSOR"
+        },
+        {
+          "default": "50",
+          "hidden": false,
+          "long": "limit",
+          "name": "limit",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "l",
+          "value_name": "LIMIT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "category",
+          "name": "categories",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "CATEGORIES"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "follow",
+          "name": "follow",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "f",
+          "value_name": "FOLLOW"
+        },
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "task timeline"
+    },
+    {
+      "about": "Render the structured task trace",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "task_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "TASK_ID"
+        },
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "verbose",
+          "name": "verbose",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "VERBOSE"
+        },
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        },
+        {
+          "default": "false",
+          "hidden": true,
+          "long": "json",
+          "name": "json",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "JSON"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "task trace"
+    },
+    {
+      "about": "Watch task status continuously",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "task_id",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "TASK_ID"
+        },
+        {
+          "default": "2",
+          "hidden": false,
+          "long": "interval",
+          "name": "interval",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "INTERVAL"
+        },
+        {
+          "default": "0",
+          "hidden": false,
+          "long": "timeout",
+          "name": "timeout",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "TIMEOUT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "task watch"
+    },
+    {
+      "about": "Built-in tools for CRD plugin scripts",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "tool"
+    },
+    {
+      "about": "Extract a value from JSON using a dot-separated path (reads stdin)",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": "path",
+          "name": "path",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "PATH"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "tool payload-extract"
+    },
+    {
+      "about": "Rotate a key in a SecretStore (requires running daemon)",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "store",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "STORE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "key",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "KEY"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "value",
+          "name": "value",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "VALUE"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "tool secret-rotate"
+    },
+    {
+      "about": "Verify an HMAC signature (exit 0 = valid, exit 1 = invalid)",
+      "aliases": [],
+      "args": [
+        {
+          "default": "sha256",
+          "hidden": false,
+          "long": "algo",
+          "name": "algo",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "ALGO"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "secret",
+          "name": "secret",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "SECRET"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "body",
+          "name": "body",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "BODY"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "signature",
+          "name": "signature",
+          "positional": false,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "SIGNATURE"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "tool webhook-verify-hmac"
+    },
+    {
+      "about": "Trigger lifecycle operations (suspend, resume, fire)",
+      "aliases": [],
+      "args": [],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": false,
+      "path": "trigger"
+    },
+    {
+      "about": "Manually fire a trigger once, creating a task",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "name",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "NAME"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "payload",
+          "name": "payload",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "PAYLOAD"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "trigger fire"
+    },
+    {
+      "about": "Resume a suspended trigger",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "name",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "NAME"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "trigger resume"
+    },
+    {
+      "about": "Suspend a trigger so it stops firing",
+      "aliases": [],
+      "args": [
+        {
+          "default": null,
+          "hidden": false,
+          "long": null,
+          "name": "name",
+          "positional": true,
+          "possible_values": [],
+          "required": true,
+          "short": null,
+          "value_name": "NAME"
+        },
+        {
+          "default": null,
+          "hidden": false,
+          "long": "project",
+          "name": "project",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": "p",
+          "value_name": "PROJECT"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "trigger suspend"
+    },
+    {
+      "about": "Show version",
+      "aliases": [],
+      "args": [
+        {
+          "default": "table",
+          "hidden": false,
+          "long": "output",
+          "name": "output",
+          "positional": false,
+          "possible_values": [
+            "table",
+            "json",
+            "yaml"
+          ],
+          "required": false,
+          "short": "o",
+          "value_name": "OUTPUT"
+        },
+        {
+          "default": "false",
+          "hidden": true,
+          "long": "json",
+          "name": "json",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "JSON"
+        }
+      ],
+      "bare_invocable": false,
+      "hidden": false,
+      "leaf": true,
+      "path": "version"
+    }
+  ],
+  "description": "Machine-readable clap command tree (FR-154). Generated — do not edit. Regenerate: ORCHESTRATOR_WRITE_CLI_SURFACE=1 cargo test -p orchestrator-cli cli_surface_json_is_fresh",
+  "version": 1
+}

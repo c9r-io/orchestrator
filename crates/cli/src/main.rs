@@ -14,6 +14,8 @@ mod commands;
 #[cfg(test)]
 mod grpc_adapter_tests;
 mod output;
+#[cfg(test)]
+mod surface;
 
 use anyhow::{Context, Result};
 use clap::Parser;
