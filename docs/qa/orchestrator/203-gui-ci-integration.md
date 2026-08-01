@@ -90,8 +90,13 @@ Expected result: both the `Rust clippy` and `Rust test` **job conclusions**
 are `failure` (per §4.4 shape 6 the evidence is the job conclusion, never a
 step conclusion), while the same run's `Rust fmt` concludes `success` — so
 the run reached the jobs and failed through the compile error, not through
-setup. Recorded evidence: pending — the run ID and branch head are pinned
-here by the verification pass that executes this scenario.
+setup. Recorded evidence: run `30698184730` (`workflow_dispatch`, branch
+head `fdc5c73a`, one `compile_error!` appended to `crates/gui/src/lib.rs`
+on top of `cf891c9c`): `Rust clippy` and `Rust test` concluded `failure`,
+`Rust fmt` concluded `success`. The positive control is run `30698178356`
+(`cf891c9c` on `main`, the same tree without the injected error), where
+both jobs concluded `success` — the pair establishes the jobs fail through
+the GUI compile error and only through it.
 
 ## Scenario 4: the exclusion that survives is still enforced where it must be
 

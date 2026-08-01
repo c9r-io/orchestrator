@@ -42,9 +42,9 @@ GUI crate (`crates/gui`) 已实现 Tauri 2.x + gRPC 架构（FR-063 至 FR-069�
 
 需求 1（验证方法与证据见 QA-203）：
 
-- [ ] GUI crate 随 workspace 在 CI 中编译通过（clippy 与 test job 双双绿，run ID 见 QA-203 场景 5 收敛记录）
+- [x] GUI crate 随 workspace 在 CI 中编译通过——run `30698178356`（cf891c9c）clippy 与 test job 双双 `success`，orchestrator-gui 首次在 Linux CI 构建
 - [x] `ci.yml` 的 clippy 与 test 两处均已移除 `--exclude orchestrator-gui`（QA-203 场景 1 从解析后的 workflow 派生断言）
-- [ ] 负向验证：GUI crate 的编译错误使 CI 失败——以 job conclusion 为证据（§4.4 shape 6），throwaway 分支 + `workflow_dispatch`，不触碰 main（QA-203 场景 3，run ID 待钉）
+- [x] 负向验证：GUI crate 的编译错误使 CI 失败——run `30698184730`（throwaway 分支 fdc5c73a，`workflow_dispatch`，未触碰 main）clippy 与 test job conclusion 双双 `failure` 而 fmt `success`（§4.4 shape 6：以 job conclusion 为证据；QA-203 场景 3 含正负对照）
 
 需求 2–4（Deferred）：
 

@@ -8,63 +8,67 @@
       "jobs": {
         "async-lock-governance": {
           "conclusion": "success",
-          "runId": "30696140048",
-          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
+          "runId": "30698178356",
+          "headSha": "cf891c9c3ff9f609be7a84e1bdbc44a633c68f22"
         },
         "fmt": {
           "conclusion": "success",
-          "runId": "30696140048",
-          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
+          "runId": "30698178356",
+          "headSha": "cf891c9c3ff9f609be7a84e1bdbc44a633c68f22"
         },
         "clippy": {
           "conclusion": "success",
-          "runId": "30696140048",
-          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
+          "runId": "30698178356",
+          "headSha": "cf891c9c3ff9f609be7a84e1bdbc44a633c68f22"
         },
         "test": {
           "conclusion": "success",
-          "runId": "30696140048",
-          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
+          "runId": "30698178356",
+          "headSha": "cf891c9c3ff9f609be7a84e1bdbc44a633c68f22"
         },
         "coordination-strangler": {
           "conclusion": "success",
-          "runId": "30696140048",
-          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
+          "runId": "30698178356",
+          "headSha": "cf891c9c3ff9f609be7a84e1bdbc44a633c68f22"
         },
         "governance": {
-          "conclusion": "success",
-          "runId": "30696140048",
-          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
+          "conclusion": "failure",
+          "runId": "30698178356",
+          "headSha": "cf891c9c3ff9f609be7a84e1bdbc44a633c68f22",
+          "knownFailing": {
+            "reference": "docs/qa/orchestrator/203-gui-ci-integration.md",
+            "reason": "Run 30698178356 (cf891c9c, the FR-076 requirement 1 implementation push) failed exclusively on the liveness gate's own staleness rule: FR-076 edited ci.yml (the clippy and test jobs gained the GUI prerequisites and dropped --exclude orchestrator-gui), which invalidated every record taken at 1041288909. All other aggregated gates in the same run were green, and the widened clippy and test jobs themselves concluded success — the first Linux build of orchestrator-gui in CI. This annotation retires automatically at the first refresh after a green governance run on this ledger."
+          }
         },
         "ci-environment-parity": {
           "conclusion": "success",
-          "runId": "30696140048",
-          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
+          "runId": "30698178356",
+          "headSha": "cf891c9c3ff9f609be7a84e1bdbc44a633c68f22"
         },
         "coverage-policy-fixtures": {
           "conclusion": "success",
-          "runId": "30696140048",
-          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
+          "runId": "30698178356",
+          "headSha": "cf891c9c3ff9f609be7a84e1bdbc44a633c68f22"
         },
         "slack-certification-recorded": {
           "conclusion": "success",
-          "runId": "30696140048",
-          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
+          "runId": "30698178356",
+          "headSha": "cf891c9c3ff9f609be7a84e1bdbc44a633c68f22"
         },
         "boundary-coverage": {
           "conclusion": "success",
-          "runId": "30696140048",
-          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
+          "runId": "30698178356",
+          "headSha": "cf891c9c3ff9f609be7a84e1bdbc44a633c68f22"
         },
         "miri": {
           "conclusion": "success",
-          "runId": "30696140048",
-          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
+          "runId": "30698178356",
+          "headSha": "cf891c9c3ff9f609be7a84e1bdbc44a633c68f22"
         },
         "cross-compile": {
           "conclusion": "success",
-          "runId": "30696140048",
-          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
+          "runId": "30698178356",
+          "headSha": "cf891c9c3ff9f609be7a84e1bdbc44a633c68f22"
         }
       }
     },
@@ -85,13 +89,13 @@
       "jobs": {
         "cargo-audit": {
           "conclusion": "success",
-          "runId": "30696140044",
-          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
+          "runId": "30698178318",
+          "headSha": "cf891c9c3ff9f609be7a84e1bdbc44a633c68f22"
         },
         "cargo-deny": {
           "conclusion": "success",
-          "runId": "30696140044",
-          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
+          "runId": "30698178318",
+          "headSha": "cf891c9c3ff9f609be7a84e1bdbc44a633c68f22"
         }
       }
     },
