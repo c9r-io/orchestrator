@@ -1,3 +1,14 @@
+# Dependency update coverage. One entry per dependency tree in the repository —
+# the set is derived, not remembered: scripts/qa/dependency-policy.rb
+# (dependabot-npm-coverage) walks the tree for package.json files and fails
+# when one of them has no npm entry here, so a future "cleanup" that drops a
+# tree turns CI red instead of going silent. That rule exists because it
+# happened: npm coverage was added at b16b9156 and removed hours later at
+# 3446b652 with no recorded reason, and nothing noticed for nine days (FR-153).
+#
+# npm majors arrive as individual PRs on purpose — every one of the July batch
+# was breaking and each needs its own verdict (see the dependabot-governance
+# skill). minor+patch are grouped per tree to keep the noise at one PR a week.
 version: 2
 updates:
   - package-ecosystem: cargo
@@ -15,3 +26,42 @@ updates:
     open-pull-requests-limit: 10
     commit-message:
       prefix: "ci"
+
+  - package-ecosystem: npm
+    directory: /gui
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    groups:
+      gui-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: /site
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    groups:
+      site-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: /.claude/skills/project-bootstrap/assets/template/portal
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    groups:
+      portal-template-minor-patch:
+        update-types:
+          - minor
+          - patch
