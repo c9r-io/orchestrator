@@ -443,6 +443,16 @@
       "note": "runs scripts/coverage-governance.sh with cargo, node, npm, npx, rustc and rg shadowed by stubs under a temporary directory, so the shell main path the boundary-coverage job depends on is exercised without collecting coverage."
     },
     {
+      "path": "scripts/qa/test-cli-doc-parity.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "FR-154: holds the three CLI documentation surfaces (EN/ZH 07-cli-reference.md, the built-in guide's GuideEntry set) to config/governance/cli-surface.json, the committed CommandFactory dump whose freshness a cargo test enforces in the test job. Ruby over four tracked files plus private copies under a temporary directory; no daemon, no compile, no working-tree write, so no provider binary is reachable."
+    },
+    {
       "path": "scripts/qa/test-doc-lifecycle.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",

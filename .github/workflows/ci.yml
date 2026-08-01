@@ -330,6 +330,16 @@ jobs:
         continue-on-error: true
         run: ./scripts/qa/test-doc-lifecycle.sh
 
+      - name: CLI three-surface documentation parity
+        id: cli-doc-parity
+        continue-on-error: true
+        run: ./scripts/qa/test-cli-doc-parity.sh
+
+      - name: CLI documentation parity fixtures
+        id: cli-doc-parity-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-cli-doc-parity.sh --fixture-test
+
       # The bash 3.2 scanner's lexical half. Its sibling on the
       # coverage-policy-fixtures job executes the constructs under a real 3.2;
       # this one asserts the scanner reads whole files, which is host-independent
@@ -476,6 +486,8 @@ jobs:
             persistence-api-boundary=${{ steps.persistence-api-boundary.outcome }}
             persistence-extraction=${{ steps.persistence-extraction.outcome }}
             doc-lifecycle=${{ steps.doc-lifecycle.outcome }}
+            cli-doc-parity=${{ steps.cli-doc-parity.outcome }}
+            cli-doc-parity-fixtures=${{ steps.cli-doc-parity-fixtures.outcome }}
             bash32-lexer=${{ steps.bash32-lexer.outcome }}
             cost=${{ steps.cost.outcome }}
             cost-fixtures=${{ steps.cost-fixtures.outcome }}

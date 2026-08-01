@@ -13,6 +13,8 @@
     "reviewWhen": "A new gate that does not fit is not a reason to raise this silently. Whoever adds it either makes room or raises the ceiling in this file with a written reason and a new date. Revisit unconditionally if the runner class changes, since the number assumes GitHub-hosted ubuntu-latest."
   },
   "pendingMeasurement": {
+    "CLI three-surface documentation parity": "FR-154 new gate; ruby over four files, expected a few seconds — refresh after the first real governance run",
+    "CLI documentation parity fixtures": "FR-154 new gate fixture mode; six in-memory mutations of private copies, expected a few seconds — refresh after the first real governance run"
   },
   "measurement": {
     "runId": "30698915576",
