@@ -78,7 +78,7 @@
 | FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
 | FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
 | FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
-| FR-154 | CLI 输出正确性与三文档面一致性 | P2 | Proposed |
+| FR-154 | CLI 输出正确性与三文档面一致性 | P2 | In Progress |
 | FR-155 | 文档与仓库现实对齐 — AGENTS.md、幻觉基础设施、台账再生 | P2 | Proposed |
 | FR-156 | pipelineVariables 退役收尾 | P2 | Proposed |
 | FR-157 | Source 域分解与测试补强 | P3 | Proposed |
