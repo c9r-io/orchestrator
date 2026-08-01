@@ -40,6 +40,7 @@ POLICY="deny.toml"
 WORKFLOW=".github/workflows/security.yml"
 AUDIT=".cargo/audit.toml"
 LOCK="Cargo.lock"
+DEPENDABOT=".github/dependabot.yml"
 SURFACE="config/governance/qa-gate-surface.json"
 
 TOOL_MODE=0
@@ -79,8 +80,15 @@ fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 
 CASE="$WORK/case"
 
-# A scratch checkout holding only the four artefacts the gate reads. Restored
+# A scratch checkout holding only the artefacts the gate reads. Restored
 # before every case, so no case can be satisfied by a previous one's mutation.
+#
+# The npm stubs are a hand-kept list where the rule they serve derives its set,
+# and that is deliberate: if a fourth tree appears in the repository, the real
+# dependabot.yml grows an entry, the scratch copy inherits it, case 1 fails
+# loudly on the missing stub, and this list gets the fourth line. Deriving the
+# stubs here would need a find-into-while feed, whose unobserved exit status is
+# §4.4 shape 5 — the fail-loud list is the safer of the two.
 reset_case() {
   rm -rf "$CASE"
   mkdir -p "$CASE/.github/workflows" "$CASE/.cargo"
@@ -88,6 +96,12 @@ reset_case() {
   cp "$REPO_ROOT/$LOCK" "$CASE/$LOCK"
   cp "$REPO_ROOT/$WORKFLOW" "$CASE/$WORKFLOW"
   cp "$REPO_ROOT/$AUDIT" "$CASE/$AUDIT"
+  cp "$REPO_ROOT/$DEPENDABOT" "$CASE/$DEPENDABOT"
+  local tree
+  for tree in gui site .claude/skills/project-bootstrap/assets/template/portal; do
+    mkdir -p "$CASE/$tree"
+    printf '{}\n' > "$CASE/$tree/package.json"
+  done
 }
 
 # The exit status is read through `if`, never from `$?` after an assignment:
@@ -340,6 +354,88 @@ for script in "$GATE" "scripts/qa/test-dependency-policy.sh"; do
     fail "12. $script is not registered ci-required in $SURFACE"
   fi
 done
+echo ""
+
+# Cases 19–21 continue past the tool-mode block's 14–18 so every case id in
+# this file names exactly one case.
+
+echo "-- 19. the prose counts are derived, not trusted --"
+reset_case
+if sub "19" "$POLICY" \
+    "# 48 crates resolve to more than one version; 71 extra copies are accepted here," \
+    "# 47 crates resolve to more than one version; 71 extra copies are accepted here,"; then
+  fires "19. a stale crate count in the header is a finding" "prose-counts-derived"
+fi
+reset_case
+# Rewording, not renumbering: the mutation the rule is least likely to catch is
+# the sentence disappearing, which a number comparison never sees.
+if sub "19b" "$POLICY" \
+    "resolve to more than one version; 71 extra copies" \
+    "resolve to more than one version; a number of extra copies"; then
+  fires "19b. rewording the counts away is a finding, not a skip" "prose-counts-derived"
+fi
+reset_case
+if sub "19c" "$POLICY" "654 external packages" "653 external packages"; then
+  fires "19c. a stale external-package count is a finding" "prose-counts-derived"
+fi
+reset_case
+if sub "19d" "$POLICY" \
+    "extra copies are accepted here," \
+    "extra copies are accepted here (each with a reason),"; then
+  silent "19d. prose beyond the anchored phrase may change freely"
+fi
+echo ""
+
+echo "-- 20. npm coverage is derived from the tree --"
+reset_case
+# The removal that happened (3446b652) was wholesale deletion; the removal a
+# reviewer misses is a commented-out entry. This is the latter.
+if fixture_mutate "20" "$CASE/$DEPENDABOT" \
+    ruby -e 'path = ARGV[0]
+             lines = File.readlines(path)
+             i = lines.index("    directory: /site\n") or abort "no /site npm entry to comment out"
+             start = i
+             start -= 1 until lines[start].start_with?("  - ")
+             stop = start + 1
+             stop += 1 until stop >= lines.length || lines[stop].start_with?("  - ")
+             (start...stop).each { |j| lines[j] = "# " + lines[j] }
+             File.write(path, lines.join)' \
+    "$CASE/$DEPENDABOT"; then
+  fires "20. a commented-out npm entry is a missing entry" "dependabot-npm-coverage"
+fi
+reset_case
+mkdir -p "$CASE/newtree"
+printf '{}\n' > "$CASE/newtree/package.json"
+fires "20b. a package.json outside the covered set is a finding" "dependabot-npm-coverage"
+reset_case
+rm -f "$CASE/gui/package.json"
+fires "20c. an npm entry whose tree is gone is a finding" "dependabot-npm-coverage"
+reset_case
+rm -f "$CASE/$DEPENDABOT"
+fires "20d. a missing dependabot.yml is a finding, not an empty pass" "dependabot-npm-coverage"
+reset_case
+if fixture_mutate "20e" "$CASE/$DEPENDABOT" \
+    ruby -e 'path = ARGV[0]
+             text = File.read(path)
+             File.write(path, text.sub("      interval: weekly\n    open-pull-requests-limit: 5", "      interval: daily\n    open-pull-requests-limit: 5"))' \
+    "$CASE/$DEPENDABOT"; then
+  silent "20e. the assertion is coverage, not cadence"
+fi
+echo ""
+
+echo "-- 21. the unmaintained ledger binds --"
+reset_case
+if sub "21" "$WORKFLOW" \
+    "cargo audit --deny unsound --deny unmaintained" \
+    "cargo audit --deny unsound"; then
+  fires "21. cargo audit without --deny unmaintained is a finding" "audit-unsound-denied"
+fi
+reset_case
+if sub "21b" "$WORKFLOW" \
+    "--deny unsound --deny unmaintained" \
+    "--deny unmaintained --deny unsound"; then
+  silent "21b. the same flags in another order are not a finding"
+fi
 echo ""
 
 echo "-- 13. the gate passes on this repository --"

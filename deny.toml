@@ -41,8 +41,10 @@
 all-features = true
 
 [licenses]
-# Every one of the 653 external packages declares a license; there are no
-# unknowns to resolve. Nine expressions cover all of them, and
+# Every one of the 654 external packages in the lock declares a license; there
+# are no unknowns to resolve. (654 = lock entries carrying a `source`, a count
+# prose-counts-derived keeps aligned; cargo-deny verifies the feature-resolved
+# subset of it.) Nine expressions cover all of them, and
 # `unused-allowed-license = "deny"` means this list cannot grow speculatively —
 # an entry nothing uses fails the build.
 allow = [
@@ -87,8 +89,20 @@ allow-wildcard-paths = true
 
 # ── Accepted duplicates ───────────────────────────────────────────────────────
 #
-# 48 crates resolve to more than one version; 70 extra copies are accepted here,
+# 48 crates resolve to more than one version; 71 extra copies are accepted here,
 # each naming the dependency that introduces it and the version being kept.
+# Both numbers are re-derived from this file's own skip list by
+# prose-counts-derived in scripts/qa/dependency-policy.rb. The previous
+# revision said 70, because base64@0.22.1 arrived after the sentence was
+# written — a stated count invites exactly that drift, so the count is now
+# gated rather than trusted (FR-153).
+#
+# The universe here is the feature-resolved graph, not Cargo.lock. The lock
+# also records optional dependencies nobody enables — serde_with's schemars
+# 0.9/1.2 and yasna's bit-vec 0.9.1 at the time of writing — so a raw lock
+# grep counts 50 multi-version crates where cargo-deny sees 48. Neither
+# number is wrong; they measure different universes, and this policy governs
+# the one that compiles (FR-153 design doc records the mechanism).
 #
 # There is deliberately no `skip-tree`. One `skip-tree = [{ crate = "tauri" }]`
 # would absorb 28 of these 48 in a single line — and would go on absorbing

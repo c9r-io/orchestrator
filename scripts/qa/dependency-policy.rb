@@ -36,9 +36,11 @@
 # case is caught here and nowhere else. It also needs no cargo-deny binary, so
 # it runs in the governance job, where there is none.
 
+require "find"
 require "optparse"
 require "pathname"
 require "shellwords"
+require "yaml"
 
 require_relative "../lib/workflow_model"
 
@@ -281,7 +283,19 @@ module DependencyPolicy
   WORKFLOW = ".github/workflows/security.yml"
   AUDIT = ".cargo/audit.toml"
   LOCK = "Cargo.lock"
+  DEPENDABOT = ".github/dependabot.yml"
   CHECKS = %w[bans licenses sources].freeze
+
+  # The two counts deny.toml's prose states about itself, as anchored phrases.
+  # A phrase that has been reworded out of existence is a failed assertion, not
+  # a skip: a gate that cannot find its subject must say so (§4.4 shape 7).
+  DUP_PHRASE = /(\d+) crates resolve to more than one version; (\d+) extra copies/
+  EXT_PHRASE = /(\d+) external packages/
+
+  # Directories never holding a dependency tree of ours: dependency installs,
+  # build output, VCS internals. Everything else is walked — the portal
+  # template under .claude/ is a real npm tree and stays in scope.
+  PRUNED_DIRS = %w[node_modules target .git dist].freeze
 
   Finding = Struct.new(:file, :rule, :detail, :fix, keyword_init: true)
 
@@ -612,12 +626,160 @@ module DependencyPolicy
     end
   end
 
+  # deny.toml states counts about itself — 48 crates / 71 copies from its own
+  # skip list, 654 external packages from the lock. FR-153 found the copy count
+  # one day stale (base64@0.22.1 landed after the sentence was written), so the
+  # prose is now compared against the artefacts it describes instead of being
+  # trusted. The derivations are the file's own tables: no graph resolution is
+  # needed, which is what lets this run without cargo.
+  def check_prose_counts(root, doc, findings)
+    return if doc.nil?
+
+    text = root.join(DENY).read
+    skips = (doc.tables.dig("bans", "skip") || []).select { |e| e.is_a?(Hash) }
+    copies = skips.length
+    crates = skips.map { |e| e["crate"].to_s.split("@", 2).first }.uniq.length
+
+    match = text.match(DUP_PHRASE)
+    if match.nil?
+      findings << Finding.new(
+        file: DENY, rule: "prose-counts-derived",
+        detail: "the header no longer states the duplicate counts (expected the phrase 'N crates resolve to more than one version; M extra copies')",
+        fix: "restore the sentence; a count this rule cannot find is a count it cannot keep honest"
+      )
+    elsif [match[1].to_i, match[2].to_i] != [crates, copies]
+      findings << Finding.new(
+        file: DENY, rule: "prose-counts-derived",
+        detail: "the header says #{match[1]} crates / #{match[2]} copies; the skip list derives #{crates} / #{copies}",
+        fix: "update the prose to the derived numbers — the skip list is the fact, the sentence is the copy"
+      )
+    end
+
+    lock, error = read_toml(root, LOCK)
+    if lock.nil?
+      findings << Finding.new(file: LOCK, rule: "prose-counts-derived", detail: error,
+                              fix: "the external-package count is derived from the lock")
+      return
+    end
+
+    external = (lock.arrays["package"] || []).count { |p| p.key?("source") }
+    match = text.match(EXT_PHRASE)
+    if match.nil?
+      findings << Finding.new(
+        file: DENY, rule: "prose-counts-derived",
+        detail: "the licenses note no longer states the external-package count (expected the phrase 'N external packages')",
+        fix: "restore the sentence; a count this rule cannot find is a count it cannot keep honest"
+      )
+    elsif match[1].to_i != external
+      findings << Finding.new(
+        file: DENY, rule: "prose-counts-derived",
+        detail: "the licenses note says #{match[1]} external packages; the lock records #{external} (entries carrying a `source`)",
+        fix: "update the prose to the derived number"
+      )
+    end
+  end
+
+  # Dependency-update coverage is a set that must equal another set: every
+  # package.json tree in the repository needs an npm entry in dependabot.yml,
+  # and every npm entry needs a tree. The required set is walked, never listed —
+  # npm coverage was removed wholesale at 3446b652 with nothing noticing for
+  # nine days, and a hand-kept list is how the next removal also goes silent
+  # (§4.4 shape 2, both halves: the stale list and the stale entry).
+  def check_dependabot_coverage(root, findings)
+    path = root.join(DEPENDABOT)
+    unless path.file?
+      findings << Finding.new(
+        file: DEPENDABOT, rule: "dependabot-npm-coverage",
+        detail: "#{DEPENDABOT} does not exist",
+        fix: "without it no ecosystem receives updates, which is a policy decision nobody recorded"
+      )
+      return
+    end
+
+    begin
+      config = YAML.safe_load(path.read, aliases: true)
+    rescue Psych::Exception => e
+      findings << Finding.new(
+        file: DEPENDABOT, rule: "dependabot-npm-coverage",
+        detail: "#{DEPENDABOT} could not be parsed: #{e.message}",
+        fix: "a config Dependabot cannot read updates nothing while looking like coverage"
+      )
+      return
+    end
+
+    updates = config.is_a?(Hash) ? config["updates"] : nil
+    unless updates.is_a?(Array) && !updates.empty?
+      findings << Finding.new(
+        file: DEPENDABOT, rule: "dependabot-npm-coverage",
+        detail: "#{DEPENDABOT} has no updates entries",
+        fix: "declare the ecosystems; an empty config is the 3446b652 state with extra steps"
+      )
+      return
+    end
+
+    ecosystems = updates.map { |u| u.is_a?(Hash) ? u["package-ecosystem"].to_s : "" }
+    %w[cargo github-actions].each do |ecosystem|
+      next if ecosystems.include?(ecosystem)
+
+      findings << Finding.new(
+        file: DEPENDABOT, rule: "dependabot-npm-coverage",
+        detail: "no #{ecosystem} entry in #{DEPENDABOT}",
+        fix: "the #{ecosystem} tree exists whether or not anything watches it"
+      )
+    end
+
+    declared = updates.select { |u| u.is_a?(Hash) && u["package-ecosystem"] == "npm" }
+                      .map { |u| u["directory"].to_s.delete_prefix("/").chomp("/") }
+    derived = npm_trees(root)
+
+    if derived.empty?
+      findings << Finding.new(
+        file: DEPENDABOT, rule: "empty-scan",
+        detail: "the tree walk found no package.json, so npm coverage examined nothing",
+        fix: "this repository has npm trees; a walk that finds none is a broken walk, not a covered repo"
+      )
+      return
+    end
+
+    (derived - declared).each do |tree|
+      findings << Finding.new(
+        file: DEPENDABOT, rule: "dependabot-npm-coverage",
+        detail: "#{tree}/package.json has no npm entry in #{DEPENDABOT}",
+        fix: "add the entry, or record why this tree is exempt — silence is how the last removal went"
+      )
+    end
+
+    (declared - derived).each do |dir|
+      findings << Finding.new(
+        file: DEPENDABOT, rule: "dependabot-npm-coverage",
+        detail: "the npm entry for /#{dir} points at no package.json",
+        fix: "delete the entry; it covers nothing and hides the next tree to take that path"
+      )
+    end
+  end
+
+  # Relative directories of every package.json outside pruned dirs, sorted.
+  def npm_trees(root)
+    trees = []
+    Find.find(root.to_s) do |path|
+      base = File.basename(path)
+      if File.directory?(path)
+        Find.prune if PRUNED_DIRS.include?(base)
+        next
+      end
+      trees << Pathname.new(path).dirname.relative_path_from(root).to_s if base == "package.json"
+    end
+    trees.sort
+  end
+
   def run(root)
     findings = []
     check_workflow(root, findings)
     doc = check_policy(root, findings)
     check_skips_live(root, doc, findings)
     check_audit(root, findings)
+    check_prose_counts(root, doc, findings)
+    check_dependabot_coverage(root, findings)
     [doc, findings]
   end
 end

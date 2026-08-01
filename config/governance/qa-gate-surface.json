@@ -560,7 +560,7 @@
       "providerIsolation": {
         "mode": "no-provider"
       },
-      "note": "Offline: reads deny.toml, Cargo.lock, .cargo/audit.toml and security.yml, and needs no cargo-deny binary. cargo deny proves the policy holds; this asserts the policy still binds - that the CI invocation keeps --deny unmatched-skip, that its check list stays partitioned from cargo audit's, that every accepted duplicate carries a reason and is still a duplicate (FR-133)."
+      "note": "Offline: reads deny.toml, Cargo.lock, .cargo/audit.toml, security.yml and .github/dependabot.yml, walks the tree for package.json, and needs no cargo-deny binary. cargo deny proves the policy holds; this asserts the policy still binds - that the CI invocation keeps --deny unmatched-skip, that cargo audit keeps --deny unsound --deny unmaintained, that its check list stays partitioned from cargo audit's, that every accepted duplicate carries a reason and is still a duplicate (FR-133), that deny.toml's stated counts match their derivations and every npm tree has a Dependabot entry (FR-153)."
     },
     {
       "path": "scripts/qa/test-dependency-policy.sh",
