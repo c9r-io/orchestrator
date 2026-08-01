@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Error-code glossary, derived and gated** (FR-152) — `docs/guide/error-codes.md` (+ ZH mirror, VitePress nav) documents all 16 bracketed machine error codes the product can print: meaning, trigger, remedy. The entry set is not hand-typed: `scripts/qa/test-error-code-glossary.sh` (ci-required via `qa-doc-lint`) derives it from non-test Rust source by three anchored rules — string-opening bracket literals, the seven `driver_error()` requirement codes a literal grep cannot see, and interpolated consts resolved to their declarations — and asserts set equality doc↔source in both directions plus ZH == EN, with reasoned staleness-checked exclusions. The `apply` output now appends a one-line hint naming `orchestrator guide error-codes` whenever a warning, error, or diagnostic carries a bracketed code, and `orchestrator guide` gains an `error-codes` entry. See [DD-163](docs/design_doc/orchestrator/163-first-run-path-modernization.md) and [QA 201](docs/qa/orchestrator/201-first-run-path-modernization.md)
+- **A shipped quickstart manifest** (FR-152) — `fixtures/manifests/bundles/quickstart.yaml` is the exact Workspace/Agent/Workflow the README Quick Start and `docs/guide/01-quickstart.md` (EN/ZH) walk through; the README previously applied a `manifest.yaml` that existed nowhere in the repository. Landing under `bundles/` puts it in the fixture corpus test's derived scope, and a second Rust test collects warnings the way the apply path does and asserts the first-run apply prints none
+- **A driverless-fixture ratchet** (FR-152) — `core/src/fixture_driverless_tests.rs` requires every `kind: Agent` document in the tracked yaml corpus to carry a typed driver or a per-document `# fixture-driverless-exempt: <reason>` comment naming the gate that asserts the legacy warning on it; exemptions fail on empty reasons and in reverse (driver present, comment still attached). The negative fixture comments out — not deletes — the driver block of a corpus-derived victim
+- **`INSTALL_ORCHESTRATOR_SKILLS_DIR`** (FR-152) — where install.sh puts the `orchestrator-guide` Claude Code skill; defaults to `$HOME/.claude/skills`, `none` skips the skills install entirely
+
+### Changed
+- **The Agent fixture corpus teaches typed drivers** (FR-152) — a document-aware migration added the minimal `shell/cli` driver to 118 fixture Agent documents across `fixtures/` and `crates/integration-tests`; 7 documents stay driverless by exemption because live gates assert the deprecation warning on them (production parity counts exactly 3). The five consuming gates were run before and after at pinned revisions with byte-identical PASS lines
+
+### Removed
+- **The 14 top-level `fixtures/*.yaml`** (FR-152) — 13 were referenced nowhere in the repository and 7 were byte-identical duplicates of same-named `fixtures/manifests/bundles/` files; CONTRIBUTING.md now points at the bundles copy
+
+### Compatibility And Migrations
+- **install.sh no longer unpacks skills into the current directory** (FR-152) — `curl | sh` used to write `.claude/skills/` into whatever directory it ran from, silently. Skills now land in `$HOME/.claude/skills` (announced before unpacking; override with `INSTALL_ORCHESTRATOR_SKILLS_DIR`, skip with `none`). If a previous install left a `.claude/skills/orchestrator-guide/` in a working directory, it is not migrated or removed — delete it manually
+
 ### Fixed
 - **`orchestratord` embedded a file `cargo package` never ships** (FR-151) — `include_str!("../../../../deploy/slack/dedicated-app-manifest.json")` climbed out of the crate root, compiled fine in the workspace, and failed the 0.4.0 publish loop's verify step as the last crate of twelve — the exact after-the-Release failure position FR-150 closed for missing crates. The manifest now lives at `crates/daemon/assets/dedicated-app-manifest.json` (the certification script and docs follow), and the publish-surface gate grew a fourth derived check: no publishable crate may include a file from outside its own root, with a synthetic-crate negative fixture. The `orchestratord` 0.4.0 published on crates.io carries this fix; the `v0.4.0` tag predates it by one commit, a discrepancy recorded in DD-162.
 
