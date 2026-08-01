@@ -54,6 +54,30 @@ jobs:
       - name: Install protobuf compiler
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
+      # orchestrator-gui compiles against webkit2gtk/gtk via pkg-config on
+      # Linux, and `tauri::generate_context!` reads `frontendDist:
+      # ../../gui/dist` at compile time — the same two prerequisites the
+      # boundary-coverage job satisfies (there via macOS system frameworks).
+      # Both are needed before any workspace-wide cargo command that no longer
+      # excludes the crate (FR-076 requirement 1).
+      - name: Install GUI system dependencies
+        run: sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev
+
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: gui/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: gui
+        run: npm ci
+
+      - name: Build the frontend bundle the Tauri crate compiles against
+        working-directory: gui
+        run: npm run build
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -63,7 +87,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run clippy
-        run: cargo clippy --workspace --exclude orchestrator-gui --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
         env:
           PROTOC: /usr/bin/protoc
 
@@ -77,6 +101,25 @@ jobs:
       - name: Install protobuf compiler
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
+      # Same GUI prerequisites as the clippy job; see the comment there.
+      - name: Install GUI system dependencies
+        run: sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev
+
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: gui/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: gui
+        run: npm ci
+
+      - name: Build the frontend bundle the Tauri crate compiles against
+        working-directory: gui
+        run: npm run build
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -84,7 +127,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run tests
-        run: cargo test --workspace --exclude orchestrator-gui
+        run: cargo test --workspace
         env:
           PROTOC: /usr/bin/protoc
 
@@ -369,9 +412,12 @@ jobs:
           PROTOC: /usr/bin/protoc
 
       # FR085_SKIP_WORKSPACE=1 defers the gate's workspace-wide test and clippy
-      # commands to the sibling test and clippy jobs of this workflow, which run
-      # them with identical flags (--exclude orchestrator-gui, -D warnings). The
-      # certifying aggregate is the workflow — the FR-126 FAST-mode shape.
+      # commands to the sibling test and clippy jobs of this workflow. Since
+      # FR-076 requirement 1 those jobs run a strict superset of the deferred
+      # pair: the same -D warnings, without --exclude orchestrator-gui (this
+      # job keeps the exclusion because it does not install the GUI's webkit
+      # and frontend prerequisites). The certifying aggregate is the workflow —
+      # the FR-126 FAST-mode shape.
       - name: Filesystem trigger contracts
         id: filesystem-trigger
         continue-on-error: true
@@ -732,6 +778,14 @@ jobs:
         shell: bash
         run: echo "path=$(which protoc)" >> "$GITHUB_OUTPUT"
 
+      # The GUI exclusion is deliberate here and only here (FR-076 requirement
+      # 1 removed it from the clippy and test jobs). On the foreign-target legs
+      # the gtk-rs sys crates cannot link: webkit2gtk/gtk dev packages exist
+      # for the build host, not for a cross --target. On the two host-target
+      # legs the crate would additionally need the npm-built gui/dist that
+      # `tauri::generate_context!` reads, which this job does not produce.
+      # Host-target GUI compilation is covered by the clippy/test jobs (Linux)
+      # and boundary-coverage (macOS).
       - name: Cargo check
         run: cargo check --workspace --exclude orchestrator-gui --target ${{ matrix.target }}
         env:

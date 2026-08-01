@@ -11,5 +11,5 @@ Closes #<!-- issue number -->
 ## Checklist
 
 - [ ] `cargo fmt --all -- --check` passes
-- [ ] `cargo clippy --workspace --exclude orchestrator-gui --all-targets -- -D warnings` passes
-- [ ] `cargo test --workspace --exclude orchestrator-gui` passes
+- [ ] `cargo clippy --workspace --all-targets -- -D warnings` passes (CI builds the GUI crate too; locally you may `--exclude orchestrator-gui` if you lack its webkit/frontend prerequisites)
+- [ ] `cargo test --workspace` passes

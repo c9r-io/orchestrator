@@ -50,10 +50,17 @@ PRs are welcome with the following guidance:
 # Build all crates
 cargo build --workspace
 
-# Run tests (excludes GUI crate which needs Tauri deps)
-cargo test --workspace --exclude orchestrator-gui
+# Run tests. The GUI crate compiles against gui/dist, so build the frontend
+# bundle once first (Linux additionally needs the webkit2gtk/gtk dev packages:
+# sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev).
+npm --prefix gui ci && npm --prefix gui run build
+cargo test --workspace
 
 # Lint
+cargo clippy --workspace --all-targets -- -D warnings
+
+# Without the GUI prerequisites, exclude the GUI crate instead
+cargo test --workspace --exclude orchestrator-gui
 cargo clippy --workspace --exclude orchestrator-gui --all-targets -- -D warnings
 
 # Format check

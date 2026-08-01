@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 439,
-    "active": 433,
+    "documents": 441,
+    "active": 435,
     "superseded": 6,
-    "withRelatedFr": 286
+    "withRelatedFr": 288
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -413,6 +413,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-153"
+      ]
+    },
+    "docs/design_doc/orchestrator/165-gui-ci-integration.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-076"
       ]
     },
     "docs/design_doc/orchestrator/17-envstore-secretstore-agent-env.md": {
@@ -1694,6 +1700,12 @@
         "FR-153"
       ]
     },
+    "docs/qa/orchestrator/203-gui-ci-integration.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-076"
+      ]
+    },
     "docs/qa/orchestrator/21-runner-security-observability.md": {
       "lifecycle": "active"
     },
@@ -2461,6 +2473,10 @@
     "FR-073": [
       "docs/design_doc/orchestrator/83-documentation-site.md",
       "docs/qa/orchestrator/125-documentation-site.md"
+    ],
+    "FR-076": [
+      "docs/design_doc/orchestrator/165-gui-ci-integration.md",
+      "docs/qa/orchestrator/203-gui-ci-integration.md"
     ],
     "FR-077": [
       "docs/design_doc/orchestrator/90-workflow-template-library.md",

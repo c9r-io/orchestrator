@@ -137,7 +137,7 @@
       "test",
       "clippy"
     ],
-    "reason": "No job in .github/workflows installs the Tauri and webkit system dependencies, so orchestrator-gui has never been built on Linux. The sibling test and clippy jobs exclude it; a ci-required gate that runs the workspace without that exclusion is not duplicating them, it is a superset whose extra part cannot pass. DD-139 recorded this as an accepted duplication cost, which was wrong. Building the GUI on Linux belongs to FR-076 requirement 1."
+    "reason": "FR-076 requirement 1: the sibling test and clippy jobs now install the webkit2gtk/gtk system dependencies, build gui/dist, and run the workspace without the exclusion, so orchestrator-gui is built and tested on Linux there. The exclusion list stays binding for ci-required gates because gates run in jobs (coordination-strangler, governance, ci-environment-parity) that do not install those prerequisites: a gate that widens to the full workspace in such a job is not duplicating the siblings, it is a superset whose extra member cannot build where the gate runs. A gate that legitimately runs GUI-inclusive commands declares workspaceScopeReason."
   },
   "providerStubs": {
     "action": "./.github/actions/provider-stubs",
@@ -307,7 +307,7 @@
         "mode": "no-provider"
       },
       "note": "Run with FR126_FAST=1 in CI. The repository-wide gates that the default mode re-runs (fmt, clippy, workspace tests, coordination strangler, coverage fixtures, qa-doc-lint) all execute as sibling jobs in the same workflow, so the certifying aggregate is the workflow, not this single invocation.",
-      "workspaceScopeReason": "The unexcluded `cargo test --workspace` sits behind `FR126_FAST != 1`, and ci.yml runs this gate with FR126_FAST=1, so CI never reaches it. It runs in the local release aggregate on macOS, where the Tauri frameworks are system libraries — and that is currently the only place orchestrator-gui is compiled at all, since the sibling test and clippy jobs exclude it and no job installs its dependencies. Excluding it here to match them would delete the crate's last coverage rather than align anything. FR-076 requirement 1 owns building it in CI."
+      "workspaceScopeReason": "The unexcluded `cargo test --workspace` sits behind `FR126_FAST != 1`, and ci.yml runs this gate with FR126_FAST=1, so CI never reaches it. It runs in the local release aggregate on macOS, where the Tauri frameworks are system libraries and gui/dist is built by the aggregate's own frontend step. Since FR-076 requirement 1 the sibling test and clippy jobs also build orchestrator-gui (on Linux), so this path is no longer the crate's only coverage — but excluding it here would still narrow the release aggregate for no gain."
     },
     {
       "path": "scripts/qa/test-agent-driver-production-parity.sh",

@@ -49,18 +49,20 @@ echo "=== QA 132: Filesystem Trigger ==="
 echo ""
 
 # ── Scenario 1: Compilation and tests ─────────────────────────────────────────
-# orchestrator-gui is excluded to match the sibling test and clippy jobs. No job
-# in .github/workflows installs the Tauri and webkit system dependencies, so the
-# unexcluded form is not a duplicate of those jobs but a superset whose extra
-# member cannot build on Linux at all. It passed locally because macOS provides
-# those frameworks as system libraries. Building the GUI in CI is FR-076's.
+# orchestrator-gui stays excluded here even though the sibling test and clippy
+# jobs stopped excluding it (FR-076 requirement 1): those jobs install the
+# webkit2gtk/gtk packages and build gui/dist before cargo runs, and the job
+# that runs this gate does not. The unexcluded form is therefore still a
+# superset whose extra member cannot build where this gate runs; GUI coverage
+# is owned by the siblings.
 #
 # FR085_SKIP_WORKSPACE=1 defers these two commands to the sibling test and
-# clippy jobs of the same workflow, which run them with identical flags — the
-# FR-126 FAST-mode shape, where the certifying aggregate is the workflow. The
-# flag is set only by ci.yml's governance job; a local run still pays for the
-# full pair, and the behavioural fixture in test-qa-gate-surface.sh still
-# drives this path to prove a cargo failure's diagnosis reaches the log.
+# clippy jobs of the same workflow, which run a strict superset of them (same
+# -D warnings, no GUI exclusion) — the FR-126 FAST-mode shape, where the
+# certifying aggregate is the workflow. The flag is set only by ci.yml's
+# governance job; a local run still pays for the full pair, and the
+# behavioural fixture in test-qa-gate-surface.sh still drives this path to
+# prove a cargo failure's diagnosis reaches the log.
 echo "--- Scenario 1: Compilation and tests ---"
 if [[ "${FR085_SKIP_WORKSPACE:-0}" != "1" ]]; then
   run_cargo "cargo test --workspace" \
@@ -68,7 +70,7 @@ if [[ "${FR085_SKIP_WORKSPACE:-0}" != "1" ]]; then
   run_cargo "cargo clippy clean" \
     cargo clippy --workspace --exclude orchestrator-gui --all-targets -- -D warnings
 else
-  pass "workspace test and clippy explicitly deferred to the sibling jobs that run them with identical flags"
+  pass "workspace test and clippy explicitly deferred to the sibling jobs that run a superset of them"
 fi
 
 # ── Scenario 6: serde roundtrip ──────────────────────────────────────────────
