@@ -375,7 +375,17 @@ if sub "19b" "$POLICY" \
   fires "19b. rewording the counts away is a finding, not a skip" "prose-counts-derived"
 fi
 reset_case
-if sub "19c" "$POLICY" "654 external packages" "653 external packages"; then
+# The victim number is derived from the live prose, never hardcoded: a
+# dependency change moves the real count (clap_complete's removal took it
+# 654 → 653 during FR-154) and a literal from-string then mutates nothing —
+# fixture target drift, caught by fixture_mutate's digest check.
+current_pkgs="$(sed -n 's/.*one of the \([0-9][0-9]*\) external packages.*/\1/p' "$CASE/$POLICY")"
+current_pkgs="${current_pkgs%%$'\n'*}"
+if [ -z "$current_pkgs" ]; then
+  fail "19c: cannot derive the external-package count from the policy prose"
+elif sub "19c" "$POLICY" \
+    "$current_pkgs external packages" \
+    "$((current_pkgs + 1)) external packages"; then
   fires "19c. a stale external-package count is a finding" "prose-counts-derived"
 fi
 reset_case

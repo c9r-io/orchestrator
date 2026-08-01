@@ -41,8 +41,8 @@
 all-features = true
 
 [licenses]
-# Every one of the 654 external packages in the lock declares a license; there
-# are no unknowns to resolve. (654 = lock entries carrying a `source`, a count
+# Every one of the 653 external packages in the lock declares a license; there
+# are no unknowns to resolve. (653 = lock entries carrying a `source`, a count
 # prose-counts-derived keeps aligned; cargo-deny verifies the feature-resolved
 # subset of it.) Nine expressions cover all of them, and
 # `unused-allowed-license = "deny"` means this list cannot grow speculatively —
