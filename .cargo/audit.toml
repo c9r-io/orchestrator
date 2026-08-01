@@ -5,14 +5,29 @@
 # advisory database, at full depth. Neither tool subsumes the other. Measured at
 # FR-133 against the same database: cargo-deny reported 17 unmaintained
 # advisories as errors and did not report RUSTSEC-2024-0429 at all, which
-# cargo audit does. Running both against advisories would double-report the 17
-# and still miss nothing extra, so only cargo audit does.
+# cargo audit does.
 #
-# `--deny unsound` is passed on the command line, which is what makes the entry
-# below an acceptance rather than a line nobody reads. The 17 unmaintained
-# advisories remain warnings: they are upstream-archived crates we cannot move
-# off while Tauri 2 ships gtk-rs 0.18, and denying them would produce an
-# 18-entry ignore file that *is* the policy.
+# `--deny unsound --deny unmaintained` is passed on the command line, which is
+# what makes every entry below an acceptance rather than a line nobody reads.
+# FR-133 declined to deny unmaintained, reasoning that an 18-entry ignore file
+# *is* the policy; FR-153 chose exactly that, for the ratchet it buys: the
+# eighteenth unmaintained advisory now fails CI until someone books it here
+# with a reason and a retirement condition. An unbooked debt was invisible;
+# a booked one is a red build.
+#
+# The 17 unmaintained acceptances fall on three distinct roots, and the split
+# matters because their retirement conditions differ:
+#
+#   11 × gtk-rs 0.18 — Tauri 2 pins the gtk-rs 0.18 generation for its Linux
+#        webview; the gtk-rs project archived the gtk3 bindings. Retires with
+#        FR-076 / Tauri moving off gtk-rs 0.18 (`cargo tree -i gtk` empty).
+#    5 × unic-*     — tauri-utils → urlpattern 0.3 pins the archived unic
+#        UCD crates. Tauri-rooted but not gtk-rs: outlives a gtk fix, retires
+#        when urlpattern (or tauri-utils) drops unic (`cargo tree -i
+#        unic-common` empty).
+#    1 × paste      — cel-interpreter 0.10, a *daemon/CLI* dependency. The
+#        only entry no Tauri migration will ever retire; watch cel-interpreter
+#        releases (`cargo tree -i paste` empty).
 
 [advisories]
 ignore = [
@@ -31,4 +46,73 @@ ignore = [
   # 0.20 or later — at which point cargo audit stops reporting it and this
   # comment is the only thing left to delete.
   "RUSTSEC-2024-0429",
+
+  # ── gtk-rs 0.18 generation, archived upstream. 11 entries. ─────────────────
+  #
+  # The gtk-rs project released 0.18 as the final gtk3-bindings generation and
+  # archived the repositories; every advisory below is that archival, one crate
+  # at a time. All reach the tree only as orchestrator-gui -> tauri 2.11 ->
+  # gtk/glib 0.18 (proc-macro-error one hop further, via glib-macros 0.18 —
+  # same generation, same retirement). The daemon and CLI link none of them.
+  #
+  # Accepted 2026-08-01 (FR-153). Retire all eleven together when Tauri moves
+  # off gtk-rs 0.18 (FR-076 requirement 1 territory) — the condition is
+  # `cargo tree -i gtk` reporting nothing.
+  # atk — gtk-rs 0.18 archival; retires with the block condition above.
+  "RUSTSEC-2024-0413",
+  # atk-sys — gtk-rs 0.18 archival; retires with the block condition above.
+  "RUSTSEC-2024-0416",
+  # gdk — gtk-rs 0.18 archival; retires with the block condition above.
+  "RUSTSEC-2024-0412",
+  # gdk-sys — gtk-rs 0.18 archival; retires with the block condition above.
+  "RUSTSEC-2024-0418",
+  # gdkwayland-sys — gtk-rs 0.18 archival; retires with the block condition above.
+  "RUSTSEC-2024-0411",
+  # gdkx11 — gtk-rs 0.18 archival; retires with the block condition above.
+  "RUSTSEC-2024-0417",
+  # gdkx11-sys — gtk-rs 0.18 archival; retires with the block condition above.
+  "RUSTSEC-2024-0414",
+  # gtk — gtk-rs 0.18 archival; retires with the block condition above.
+  "RUSTSEC-2024-0415",
+  # gtk-sys — gtk-rs 0.18 archival; retires with the block condition above.
+  "RUSTSEC-2024-0420",
+  # gtk3-macros — gtk-rs 0.18 archival; retires with the block condition above.
+  "RUSTSEC-2024-0419",
+  # proc-macro-error — archived; reached via glib-macros 0.18, same generation,
+  # same retirement condition as the gtk entries above.
+  "RUSTSEC-2024-0370",
+
+  # ── unic UCD crates, archived upstream. 5 entries. ─────────────────────────
+  #
+  # urlpattern 0.3 pins the unic-ucd family for Unicode identifier tables;
+  # unic has been archived for years. Reached as orchestrator-gui ->
+  # tauri-utils 2.9 -> urlpattern 0.3 — Tauri-rooted but *not* gtk-rs, so a
+  # gtk migration alone does not retire these.
+  #
+  # Accepted 2026-08-01 (FR-153). Retire when urlpattern or tauri-utils drops
+  # unic (upstream has an open issue tracking an ICU4X port) — the condition
+  # is `cargo tree -i unic-common` reporting nothing.
+  # unic-char-property — unic archival; retires with the block condition above.
+  "RUSTSEC-2025-0081",
+  # unic-char-range — unic archival; retires with the block condition above.
+  "RUSTSEC-2025-0075",
+  # unic-common — unic archival; retires with the block condition above.
+  "RUSTSEC-2025-0080",
+  # unic-ucd-ident — unic archival; retires with the block condition above.
+  "RUSTSEC-2025-0100",
+  # unic-ucd-version — unic archival; retires with the block condition above.
+  "RUSTSEC-2025-0098",
+
+  # ── paste, archived by its author. 1 entry. ────────────────────────────────
+  #
+  # Reached as agent-orchestrator (core) -> cel-interpreter 0.10 -> paste.
+  # The one unmaintained acceptance that lives in the daemon and CLI build,
+  # not the GUI: no Tauri migration retires it, and it ships in the binaries.
+  # paste is a build-time proc-macro (no runtime code), which bounds the
+  # exposure to compile time.
+  #
+  # Accepted 2026-08-01 (FR-153). Retire when cel-interpreter drops paste or
+  # a maintained fork replaces it — the condition is `cargo tree -i paste`
+  # reporting nothing.
+  "RUSTSEC-2024-0436",
 ]

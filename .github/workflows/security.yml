@@ -39,13 +39,15 @@ jobs:
         with:
           tool: cargo-audit
 
-      # `--deny unsound` is load-bearing, not decoration. Without it this step
-      # exits 0 over every informational advisory, which is how
-      # RUSTSEC-2024-0429 sat unread in the tree. Acceptances live in
-      # .cargo/audit.toml, each with a reason and the condition that retires it.
-      # scripts/qa/dependency-policy.rb asserts this flag is still here.
+      # Both `--deny` flags are load-bearing, not decoration. Without them this
+      # step exits 0 over every informational advisory, which is how
+      # RUSTSEC-2024-0429 sat unread in the tree and how 17 unmaintained
+      # advisories rode along as unbooked debt until FR-153. Acceptances live
+      # in .cargo/audit.toml, each with a reason and the condition that retires
+      # it; the eighteenth unmaintained advisory fails here until booked.
+      # scripts/qa/dependency-policy.rb asserts both flags are still here.
       - name: Audit dependencies
-        run: cargo audit --deny unsound
+        run: cargo audit --deny unsound --deny unmaintained
 
   cargo-deny:
     name: Dependency policy

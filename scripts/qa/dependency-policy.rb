@@ -434,6 +434,12 @@ module DependencyPolicy
         detail: "cargo audit runs without `--deny unsound`, so it exits 0 over unsoundness findings the way it did over RUSTSEC-2024-0429",
         fix: "restore `--deny unsound`; without it the acceptances in #{AUDIT} are decoration"
       )
+    elsif !flag?(audit_tokens, "--deny", "unmaintained")
+      findings << Finding.new(
+        file: WORKFLOW, rule: "audit-unsound-denied",
+        detail: "cargo audit runs without `--deny unmaintained`, so the eighteenth unmaintained advisory arrives as unbooked debt the way the first seventeen did before FR-153",
+        fix: "restore `--deny unmaintained`; the ledger in #{AUDIT} only binds while the flag makes an unbooked advisory red"
+      )
     end
   end
 
