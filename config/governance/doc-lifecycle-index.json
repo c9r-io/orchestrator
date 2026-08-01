@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 437,
-    "active": 431,
+    "documents": 439,
+    "active": 433,
     "superseded": 6,
-    "withRelatedFr": 284
+    "withRelatedFr": 286
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -407,6 +407,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-152"
+      ]
+    },
+    "docs/design_doc/orchestrator/164-supply-chain-dependency-governance.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-153"
       ]
     },
     "docs/design_doc/orchestrator/17-envstore-secretstore-agent-env.md": {
@@ -1682,6 +1688,12 @@
         "FR-152"
       ]
     },
+    "docs/qa/orchestrator/202-supply-chain-dependency-governance.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-153"
+      ]
+    },
     "docs/qa/orchestrator/21-runner-security-observability.md": {
       "lifecycle": "active"
     },
@@ -2750,6 +2762,10 @@
     "FR-152": [
       "docs/design_doc/orchestrator/163-first-run-path-modernization.md",
       "docs/qa/orchestrator/201-first-run-path-modernization.md"
+    ],
+    "FR-153": [
+      "docs/design_doc/orchestrator/164-supply-chain-dependency-governance.md",
+      "docs/qa/orchestrator/202-supply-chain-dependency-governance.md"
     ]
   },
   "supersedes": {
