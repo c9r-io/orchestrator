@@ -2,7 +2,7 @@
 
 ## 优先级: P1（需求 1）/ P3（需求 2–4）
 
-## 状态: In Progress（需求 1 已落地待验证闭环；需求 2–4 维持 Deferred）
+## 状态: In Progress（需求 1 已落地闭环；需求 2–3 已实现待发版验收；需求 4 签名就绪、公证待凭据）
 
 ## 背景
 
@@ -23,20 +23,23 @@ GUI crate (`crates/gui`) 已实现 Tauri 2.x + gRPC 架构（FR-063 至 FR-069�
 - [x] 恢复时无累积 lint/编译问题需修复（实测为零，见上）
 - [x] 从 `ci.yml` 的 clippy 与 test 两处删除 `--exclude orchestrator-gui`；cross-compile 处保留并注释理由
 
-### 2. 桌面应用打包（Deferred）
-- macOS: `.dmg` 安装包（Universal Binary: x86_64 + aarch64）
-- Linux: `.AppImage` 或 `.deb` 包
-- Windows: `.msi` 安装包（如支持）
-- 使用 Tauri 内置的 `tauri build` 命令
+### 2. 桌面应用打包（已实现 — 2026-08-01）
+- [x] macOS: `.dmg` 安装包（Universal Binary: x86_64 + aarch64,release job `--target universal-apple-darwin`）
+- [x] Linux: `.AppImage` 与 `.deb` 包（两者都出）
+- [ ] Windows: `.msi` 安装包——无 Windows runner job,workspace 也从未在 Windows 上验证,维持不做并记录
+- [x] 使用 Tauri 内置的 `tauri build` 命令（`@tauri-apps/cli` 为 gui/ devDependency;tauri.conf.json 版本改为继承 crate 版本,图标从 32×32 占位换成 1024px 源生成的完整集）
 
-### 3. Release Workflow 集成（Deferred）
-- 在 release workflow 中新增 GUI 构建 job
-- 产物上传到 GitHub Releases（与 CLI/daemon 二进制并列）
-- 独立的 asset 命名: `orchestrator-gui-{version}-{platform}.{ext}`
+### 3. Release Workflow 集成（已实现 — 2026-08-01）
+- [x] release.yml 新增 `gui-build` job（独立于 `build` 矩阵——publish-surface gate 从该矩阵的 `target:` 键派生 CLI shipped-target 集,GUI 不经 install.sh/Homebrew 分发,故矩阵键用 `label`）
+- [x] 产物上传到 GitHub Releases(publish job needs gui-build,files 通配含 dmg/AppImage/deb + sha256)
+- [x] asset 命名: `orchestrator-gui-{tag}-{platform}.{ext}`
+- 注:验收"Release 页面包含 GUI 安装包"需要下一次真实发版才能勾选——workflow_dispatch 假 tag 会真实发布 Release/homebrew/crates.io,故以临时分支的 proof workflow 验证构建步骤,run ID 见 QA-204
 
-### 4. 应用签名（macOS）（Deferred）
-- Apple Developer 签名以避免 Gatekeeper 阻止
-- 或提供 `xattr -d com.apple.quarantine` 的安装说明
+### 4. 应用签名（macOS）（签名已就绪;公证待凭据）
+- [x] Developer ID Application 证书（HH48FMK8YB,G2 Sub-CA,至 2031/08/02）从本机 CSR 签发;私钥/p12 在 `~/.orchestrator-signing/`(600),身份已入 login keychain
+- [x] CI 签名接线:`APPLE_CERTIFICATE`/`APPLE_CERTIFICATE_PASSWORD`/`APPLE_SIGNING_IDENTITY` 三个 repo secrets 已设置;release job 仅在凭据存在时启用签名(空值不触发 Tauri 的导入失败路径)
+- [ ] 公证(notarization):需 Apple ID app-specific password 或 App Store Connect API key——待用户提供后设置 `APPLE_ID`/`APPLE_PASSWORD`/`APPLE_TEAM_ID` secrets,workflow 已预留
+- [x] 未签名/未公证时的 `xattr -d com.apple.quarantine` 安装说明(CHANGELOG 与 QA-204)
 
 ## 验收标准
 

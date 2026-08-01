@@ -100,10 +100,153 @@ jobs:
             dist/orchestrator-${{ env.RELEASE_TAG }}-${{ matrix.target }}.tar.gz
             dist/orchestrator-${{ env.RELEASE_TAG }}-${{ matrix.target }}.tar.gz.sha256
 
+  # FR-076 requirements 2-3. Deliberately not part of the `build` matrix: the
+  # publish-surface gate derives the CLI/daemon shipped-target set from that
+  # matrix's `target:` keys and cross-checks it against install.sh and the
+  # Homebrew formula, and the GUI ships through neither of those channels. The
+  # matrix key here is `label`, never `target`, so the derived set stays what
+  # it claims to be.
+  gui-build:
+    name: Build GUI (${{ matrix.label }})
+    runs-on: ${{ matrix.runner }}
+    needs: slack-certification-status
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            label: universal-apple-darwin
+          - runner: ubuntu-latest
+            label: x86_64-unknown-linux-gnu
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install protobuf compiler (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Install protobuf compiler (macOS)
+        if: runner.os == 'macOS'
+        run: brew install protobuf
+
+      # The superset Tauri documents for AppImage/deb bundling, not only the
+      # compile-time pair the ci.yml clippy/test jobs install: appimagetool
+      # walks the runtime link graph, so bundling needs what compiling does not.
+      - name: Install GUI system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: >
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev
+          build-essential curl wget file libxdo-dev libssl-dev
+          libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: gui-${{ matrix.label }}
+
+      - name: Install frontend dependencies
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: gui/package-lock.json
+      - working-directory: gui
+        name: npm ci
+        run: npm ci
+
+      # Signing engages only when the credentials exist as repository secrets
+      # (FR-076 requirement 4). An empty APPLE_CERTIFICATE must not reach the
+      # Tauri CLI: it treats presence as intent and would fail the import
+      # rather than skip it. Without credentials the .dmg ships unsigned and
+      # the release notes carry the xattr recipe.
+      - name: Enable macOS signing when credentials exist
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE_SECRET: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD_SECRET: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY_SECRET: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID_SECRET: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD_SECRET: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID_SECRET: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$APPLE_CERTIFICATE_SECRET" ]]; then
+            {
+              echo "APPLE_CERTIFICATE=$APPLE_CERTIFICATE_SECRET"
+              echo "APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD_SECRET"
+              echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY_SECRET"
+            } >> "$GITHUB_ENV"
+            echo "code signing enabled"
+          else
+            echo "no signing certificate configured — the .dmg ships unsigned"
+          fi
+          if [[ -n "$APPLE_ID_SECRET" ]]; then
+            {
+              echo "APPLE_ID=$APPLE_ID_SECRET"
+              echo "APPLE_PASSWORD=$APPLE_PASSWORD_SECRET"
+              echo "APPLE_TEAM_ID=$APPLE_TEAM_ID_SECRET"
+            } >> "$GITHUB_ENV"
+            echo "notarization enabled"
+          else
+            echo "no notarization credentials configured — skipping notarization"
+          fi
+
+      - name: Build GUI bundles (macOS)
+        if: runner.os == 'macOS'
+        working-directory: crates/gui
+        run: ../../gui/node_modules/.bin/tauri build --target universal-apple-darwin --bundles dmg
+
+      - name: Build GUI bundles (Linux)
+        if: runner.os == 'Linux'
+        working-directory: crates/gui
+        run: ../../gui/node_modules/.bin/tauri build --bundles appimage,deb
+
+      - name: Stage GUI assets under the release naming scheme
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          case "${{ matrix.label }}" in
+            universal-apple-darwin)
+              bundle_dir="target/universal-apple-darwin/release/bundle"
+              dmg=$(find "$bundle_dir/dmg" -name '*.dmg' -print -quit)
+              [[ -n "$dmg" ]] || { echo "no .dmg produced under $bundle_dir" >&2; exit 1; }
+              cp "$dmg" "dist/orchestrator-gui-${RELEASE_TAG}-universal-apple-darwin.dmg"
+              ;;
+            x86_64-unknown-linux-gnu)
+              bundle_dir="target/release/bundle"
+              appimage=$(find "$bundle_dir/appimage" -name '*.AppImage' -print -quit)
+              deb=$(find "$bundle_dir/deb" -name '*.deb' -print -quit)
+              [[ -n "$appimage" && -n "$deb" ]] || { echo "missing .AppImage or .deb under $bundle_dir" >&2; exit 1; }
+              cp "$appimage" "dist/orchestrator-gui-${RELEASE_TAG}-x86_64-unknown-linux-gnu.AppImage"
+              cp "$deb" "dist/orchestrator-gui-${RELEASE_TAG}-x86_64-unknown-linux-gnu.deb"
+              ;;
+          esac
+          cd dist
+          for f in orchestrator-gui-*; do
+            shasum -a 256 "$f" > "$f.sha256"
+          done
+          ls -la
+
+      - name: Upload GUI assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-gui-${{ matrix.label }}
+          path: dist/orchestrator-gui-*
+
   publish:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
-    needs: build
+    needs:
+      - build
+      - gui-build
     steps:
       - name: Checkout
         uses: actions/checkout@v7
