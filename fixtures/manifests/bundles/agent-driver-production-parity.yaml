@@ -10,6 +10,7 @@ spec:
   qa_targets: [docs/qa]
   ticket_dir: docs/ticket
 ---
+# fixture-driverless-exempt: FR-138 legacy/typed parity matrix; test-agent-driver-production-parity.sh asserts exactly 3 [legacy_agent_command_deprecated] warnings
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
@@ -31,6 +32,7 @@ spec:
     provider: shell
     transport: cli
 ---
+# fixture-driverless-exempt: FR-138 legacy/typed parity matrix; test-agent-driver-production-parity.sh asserts exactly 3 [legacy_agent_command_deprecated] warnings
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
@@ -52,6 +54,7 @@ spec:
     provider: shell
     transport: cli
 ---
+# fixture-driverless-exempt: FR-138 legacy/typed parity matrix; test-agent-driver-production-parity.sh asserts exactly 3 [legacy_agent_command_deprecated] warnings
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:

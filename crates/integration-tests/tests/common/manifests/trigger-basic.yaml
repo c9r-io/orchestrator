@@ -13,6 +13,9 @@ kind: Agent
 metadata:
   name: echo
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa
   command: "echo '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"pass\",\"description\":\"ok\",\"severity\":\"info\"}]}]}'"

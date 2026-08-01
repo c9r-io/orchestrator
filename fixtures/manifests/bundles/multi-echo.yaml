@@ -13,6 +13,9 @@ kind: Agent
 metadata:
   name: mock_echo_alpha
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa
   command: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"alpha-qa\",\"description\":\"alpha qa for target-file\",\"severity\":\"info\"}]}]}'"
@@ -22,6 +25,9 @@ kind: Agent
 metadata:
   name: mock_echo_beta
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa
   command: "echo '{\"confidence\":0.89,\"quality_score\":0.85,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"beta-qa\",\"description\":\"beta qa for target-file\",\"severity\":\"info\"}]}]}'"

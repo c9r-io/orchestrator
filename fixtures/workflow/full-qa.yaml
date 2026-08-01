@@ -23,6 +23,9 @@ metadata:
   name: qa-tester
   description: "QA tester agent — executes QA scenarios and creates tickets"
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa_testing
   command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
@@ -36,6 +39,9 @@ metadata:
   name: qa-fixer
   description: "QA fixer agent — fixes tickets and aligns tests"
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - ticket_fix
     - align_tests
@@ -50,6 +56,9 @@ metadata:
   name: qa-reviewer
   description: "QA reviewer agent — doc governance"
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - doc_governance
     - loop_guard

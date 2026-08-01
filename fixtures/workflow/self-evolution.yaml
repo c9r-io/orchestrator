@@ -150,6 +150,9 @@ metadata:
   name: evo_architect
   description: "architect agent — generates competing candidate plans"
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - plan
     - evaluate
@@ -164,6 +167,9 @@ metadata:
   name: evo_coder
   description: "coder agent — implements and benchmarks candidates"
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - implement
     - qa_testing
@@ -180,6 +186,9 @@ metadata:
   name: evo_reviewer
   description: "reviewer agent — loop guard"
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - loop_guard
   command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json

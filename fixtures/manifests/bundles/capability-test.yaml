@@ -13,6 +13,9 @@ kind: Agent
 metadata:
   name: agent_qa_only
 spec:
+  driver:
+    provider: shell
+    transport: cli
   metadata:
     cost: 30
   capabilities:
@@ -24,6 +27,9 @@ kind: Agent
 metadata:
   name: agent_fix_only
 spec:
+  driver:
+    provider: shell
+    transport: cli
   metadata:
     cost: 50
   capabilities:

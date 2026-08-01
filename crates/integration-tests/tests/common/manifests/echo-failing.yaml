@@ -15,6 +15,9 @@ metadata:
   # deterministic candidate instead of racing a successful fallback Agent.
   name: echo
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa
   command: "sh -c 'exit 1'"

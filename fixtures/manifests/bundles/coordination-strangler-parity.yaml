@@ -10,6 +10,7 @@ spec:
   ticket_dir: docs/ticket
   self_referential: false
 ---
+# fixture-driverless-exempt: FR-124 legacy half of the coordination strangler parity matrix; test-coordination-strangler.sh replays it against the typed half
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
@@ -19,6 +20,7 @@ spec:
   command: >-
     printf '%s\n' '{"passed":true,"session":"legacy-private","total_score":91}'
 ---
+# fixture-driverless-exempt: FR-124 legacy half of the coordination strangler parity matrix; test-coordination-strangler.sh replays it against the typed half
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:

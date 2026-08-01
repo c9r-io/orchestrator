@@ -5,6 +5,9 @@ metadata:
   name: bench-codex-gpt54
   description: "Codex CLI + gpt-5.4"
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - plan
     - implement

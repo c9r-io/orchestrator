@@ -12,6 +12,9 @@ kind: Agent
 metadata:
   name: slack-dedicated-fixture
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities: [dedicated_implement, dedicated_docs]
   command: >-
     echo '{"confidence":1.0,"quality_score":1.0,"artifacts":[]}'

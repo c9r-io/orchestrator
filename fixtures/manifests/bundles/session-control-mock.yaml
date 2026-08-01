@@ -12,6 +12,9 @@ kind: Agent
 metadata:
   name: session-echo
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities: [session_echo]
   command: >-
     sh -c 'echo "$1"; while true; do if IFS= read -r line; then echo "mock:$line"; [ "$line" = quit ] && break; else sleep 0.05; fi; done' session "{prompt}"

@@ -13,6 +13,9 @@ kind: Agent
 metadata:
   name: verify_echo
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa
   command: "echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"

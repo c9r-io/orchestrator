@@ -9,6 +9,7 @@ spec:
   qa_targets: [docs/qa]
   ticket_dir: docs/ticket
 ---
+# fixture-driverless-exempt: FR-126 legacy promotion path; test-agent-driver-abstraction.sh asserts [legacy_agent_command_deprecated] on this document
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:

@@ -5,6 +5,9 @@ metadata:
   name: bench-gemini-pro
   description: "Gemini CLI + gemini-3.1-pro-preview"
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - plan
     - implement

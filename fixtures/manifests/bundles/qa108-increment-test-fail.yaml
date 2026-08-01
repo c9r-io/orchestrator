@@ -17,6 +17,9 @@ kind: Agent
 metadata:
   name: mock_qa_agent_fail
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa_testing
     - loop_guard

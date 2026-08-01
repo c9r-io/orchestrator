@@ -25,6 +25,9 @@ kind: Agent
 metadata:
   name: probe_fallback
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - plan
     - implement

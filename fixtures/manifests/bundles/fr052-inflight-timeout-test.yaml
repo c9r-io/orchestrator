@@ -15,6 +15,9 @@ kind: Agent
 metadata:
   name: mock_echo
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa
     - fix
@@ -26,6 +29,9 @@ kind: Agent
 metadata:
   name: mock_sleep
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa
   command: "sleep 30 && echo '{\"confidence\":0.93,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"slow-qa-pass\",\"description\":\"slow qa passed\",\"severity\":\"info\"}]}]}'"

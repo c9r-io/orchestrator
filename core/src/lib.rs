@@ -182,5 +182,10 @@ pub mod test_utils;
 #[cfg(test)]
 mod fixture_corpus_tests;
 
+/// FR-152: every tracked `kind: Agent` fixture document carries a typed
+/// driver or a per-document exemption comment naming its asserting gate.
+#[cfg(test)]
+mod fixture_driverless_tests;
+
 /// Re-export of the public workflow loop guard configuration type.
 pub use config::WorkflowLoopGuardConfig;

@@ -10,6 +10,32 @@ kubectl-style fixtures for `orchestrator apply -f`.
   `crd-test-invalid.yaml`, `s4-invalid-cel.yaml` and `qa105-s1-capture-wrong-level.yaml` are
   invalid on purpose. Each says so in its own header.
 
+## Agent Fixtures Carry Typed Drivers
+
+Every `kind: Agent` document in a tracked YAML file declares `spec.driver`
+(`provider: shell, transport: cli` for script agents). The driverless form is
+runtime-compatible but deprecated — apply emits
+`[legacy_agent_command_deprecated]` — and fixtures are what people copy, so
+the corpus must not teach it. `core/src/fixture_driverless_tests.rs` enforces
+this over `git ls-files '*.yaml'`; a new driverless Agent document fails the
+Rust test suite.
+
+The only exception is a document that a live gate *needs* driverless, because
+it asserts the legacy warning or the promotion behavior on that exact
+document. Such a document carries a machine-parseable comment inside its own
+chunk (right below the `---` separator):
+
+```yaml
+---
+# fixture-driverless-exempt: <which gate asserts what on this document>
+apiVersion: orchestrator.dev/v2
+kind: Agent
+```
+
+The reason must be non-empty, and the exemption is checked in both
+directions: a document that gains `driver:` while keeping the comment fails
+too, so stale exemptions cannot linger.
+
 ## Usage
 
 ```bash

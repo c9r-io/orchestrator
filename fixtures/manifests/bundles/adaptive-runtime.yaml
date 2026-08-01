@@ -13,6 +13,9 @@ kind: Agent
 metadata:
   name: adaptive_planner_success
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - adaptive_plan
   command: >-
@@ -24,6 +27,9 @@ kind: Agent
 metadata:
   name: adaptive_planner_invalid
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - adaptive_plan
   command: "printf '%s' 'not-json'"
@@ -33,6 +39,9 @@ kind: Agent
 metadata:
   name: adaptive_qa
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa
   command: >-
@@ -44,6 +53,9 @@ kind: Agent
 metadata:
   name: adaptive_fix
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - fix
   command: >-

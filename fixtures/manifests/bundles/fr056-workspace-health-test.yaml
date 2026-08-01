@@ -16,6 +16,9 @@ kind: Agent
 metadata:
   name: ws-default-agent
 spec:
+  driver:
+    provider: shell
+    transport: cli
   command: "echo '{\"confidence\":1.0}'"
   capabilities:
     - qa_testing
@@ -25,6 +28,9 @@ kind: Agent
 metadata:
   name: ws-override-agent
 spec:
+  driver:
+    provider: shell
+    transport: cli
   command: "echo '{\"confidence\":1.0}'"
   capabilities:
     - qa_testing

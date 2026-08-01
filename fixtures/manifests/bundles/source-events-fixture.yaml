@@ -12,6 +12,9 @@ kind: Agent
 metadata:
   name: source-fixture-agent
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities: [source_fixture]
   command: >-
     echo '{"confidence":0.95,"quality_score":0.95,"artifacts":[{"kind":"analysis","findings":[{"title":"source accepted","description":"provider-neutral source fixture processed","severity":"info"}]}]}'

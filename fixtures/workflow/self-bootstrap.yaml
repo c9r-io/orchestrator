@@ -209,6 +209,9 @@ metadata:
   name: architect
   description: "architect agent — planning and QA doc generation"
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - plan
     - qa_doc_gen
@@ -224,6 +227,9 @@ metadata:
   name: coder
   description: "coder agent — implementation, ticket fixing, and test alignment"
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - implement
     - ticket_fix
@@ -241,6 +247,9 @@ metadata:
   name: tester
   description: "tester agent — QA scenario execution and ticket creation"
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa_testing
   command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
@@ -255,6 +264,9 @@ metadata:
   name: reviewer
   description: "reviewer agent — doc governance and code review"
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - doc_governance
     - review

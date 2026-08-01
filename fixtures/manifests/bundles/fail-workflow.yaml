@@ -13,6 +13,9 @@ kind: Agent
 metadata:
   name: mock_fail
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa
   command: "echo '{\"confidence\":0.35,\"quality_score\":0.2,\"artifacts\":[{\"kind\":\"ticket\",\"severity\":\"high\",\"category\":\"regression\",\"content\":{\"title\":\"qa-failed\",\"qa_file\":\"target-file\"}}]}' && exit 1"
@@ -22,6 +25,9 @@ kind: Agent
 metadata:
   name: mock_healthy
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa
     - fix

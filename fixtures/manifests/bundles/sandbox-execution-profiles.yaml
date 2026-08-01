@@ -102,6 +102,9 @@ kind: Agent
 metadata:
   name: impl-agent
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - exec_profile_implement
   command: "echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"
@@ -111,6 +114,9 @@ kind: Agent
 metadata:
   name: qa-agent
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - exec_profile_qa_testing
   command: "echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"
@@ -120,6 +126,9 @@ kind: Agent
 metadata:
   name: sandbox-writer-root-deny
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - sandbox_write_root_deny
   command: "exec ./target/debug/orchestrator debug sandbox-probe write-file --path sandbox-denied.txt --contents blocked"
@@ -129,6 +138,9 @@ kind: Agent
 metadata:
   name: sandbox-writer-docs-allow
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - sandbox_write_docs_allow
   command: "exec ./target/debug/orchestrator debug sandbox-probe write-file --path docs/sandbox-allowed.txt --contents allowed"
@@ -138,6 +150,9 @@ kind: Agent
 metadata:
   name: fd-burner
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - sandbox_fd_probe
   command: "exec ./target/debug/orchestrator debug sandbox-probe open-files --count 256"
@@ -147,6 +162,9 @@ kind: Agent
 metadata:
   name: cpu-burner
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - sandbox_cpu_probe
   command: "exec ./target/debug/orchestrator debug sandbox-probe cpu-burn"
@@ -156,6 +174,9 @@ kind: Agent
 metadata:
   name: memory-burner
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - sandbox_memory_probe
   command: "exec ./target/debug/orchestrator debug sandbox-probe alloc-memory --chunk-mb 16 --total-mb 1024"
@@ -165,6 +186,9 @@ kind: Agent
 metadata:
   name: process-burner
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - sandbox_process_probe
   command: "exec ./target/debug/orchestrator debug sandbox-probe spawn-children --count 8 --sleep-secs 60"
@@ -174,6 +198,9 @@ kind: Agent
 metadata:
   name: net-probe
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - sandbox_network_probe
   command: "exec ./target/debug/orchestrator debug sandbox-probe dns-resolve --host example.com --port 443"
@@ -183,6 +210,9 @@ kind: Agent
 metadata:
   name: noop-agent
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - sandbox_allowlist_probe
   command: "echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"

@@ -5,6 +5,9 @@ metadata:
   name: bench-opencode-minimax
   description: "OpenCode + MiniMax-M2.7-highspeed"
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - plan
     - implement

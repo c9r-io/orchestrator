@@ -5,6 +5,9 @@ metadata:
   name: bench-claude-opus
   description: "Claude Code + Opus 4.6"
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - plan
     - implement

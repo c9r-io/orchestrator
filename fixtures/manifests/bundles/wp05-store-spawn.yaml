@@ -17,6 +17,9 @@ kind: Agent
 metadata:
   name: wp05_mock_agent
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - plan
     - implement

@@ -23,6 +23,9 @@ kind: Agent
 metadata:
   name: failing-agent-1
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa_testing
   command: "exit 1"
@@ -32,6 +35,9 @@ kind: Agent
 metadata:
   name: failing-agent-2
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa_testing
   command: "exit 1"
@@ -41,6 +47,9 @@ kind: Agent
 metadata:
   name: failing-agent-3
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa_testing
   command: "exit 1"
@@ -50,6 +59,9 @@ kind: Agent
 metadata:
   name: guard-agent
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - loop_guard
   command: "echo '{\"continue\":true}'"

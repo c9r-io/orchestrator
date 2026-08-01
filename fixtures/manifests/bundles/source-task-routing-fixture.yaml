@@ -12,6 +12,9 @@ kind: Agent
 metadata:
   name: source-routing-fixture
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities: [source_routing_fixture]
   command: >-
     echo '{"confidence":1.0,"quality_score":1.0,"artifacts":[]}'

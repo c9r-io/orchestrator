@@ -16,6 +16,9 @@ kind: Agent
 metadata:
   name: ws-override-fail
 spec:
+  driver:
+    provider: shell
+    transport: cli
   command: "echo 'authentication failed: simulated infra failure' >&2"
   capabilities:
     - qa_testing

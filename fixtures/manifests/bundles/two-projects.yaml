@@ -26,6 +26,9 @@ metadata:
   name: pa_agent
   project: project-a
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa
   command: "echo '{\"confidence\":0.86,\"quality_score\":0.82,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-project-a\",\"description\":\"qa project a\",\"severity\":\"info\"}]}]}'"
@@ -36,6 +39,9 @@ metadata:
   name: pb_agent
   project: project-b
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa
   command: "echo '{\"confidence\":0.85,\"quality_score\":0.8,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-project-b\",\"description\":\"qa project b\",\"severity\":\"info\"}]}]}'"

@@ -13,6 +13,9 @@ kind: Agent
 metadata:
   name: timeline_mock_fail
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa
   command: >-

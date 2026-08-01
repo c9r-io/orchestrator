@@ -71,7 +71,7 @@ orchestratord --foreground --workers 2
 
 # In another terminal
 orchestrator init
-orchestrator apply -f fixtures/capability-test.yaml
+orchestrator apply -f fixtures/manifests/bundles/capability-test.yaml
 orchestrator task create --goal "test run"
 orchestrator task list
 ```

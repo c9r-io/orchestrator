@@ -13,6 +13,9 @@ kind: Agent
 metadata:
   name: mock_echo
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa
     - loop_guard

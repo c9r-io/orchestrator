@@ -1,3 +1,4 @@
+# fixture-driverless-exempt: DD-137 retirement baseline; the whole bundle must stay rejectable ([legacy_coordination_removed], ledger status intentional) and is never applied
 # FR-118's retired legacy-coordination baseline. NEVER APPLIED as setup.
 #
 # `behavior.captures` was removed by design on 2026-07-25 (DD-137,

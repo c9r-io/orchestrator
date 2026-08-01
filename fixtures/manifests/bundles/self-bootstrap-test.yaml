@@ -14,6 +14,9 @@ kind: Agent
 metadata:
   name: mock_planner
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - plan
   command: "echo '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"plan-ok\",\"description\":\"implementation plan generated\",\"severity\":\"info\"}]}]}'"
@@ -23,6 +26,9 @@ kind: Agent
 metadata:
   name: mock_implementer
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - implement
   command: "echo '{\"confidence\":0.88,\"quality_score\":0.85,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"src/main.rs\"]}]}'"
@@ -32,6 +38,9 @@ kind: Agent
 metadata:
   name: mock_builder
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - build
     - test
@@ -43,6 +52,9 @@ kind: Agent
 metadata:
   name: mock_fixer
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - fix
   command: "echo '{\"confidence\":0.85,\"quality_score\":0.8,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"src/main.rs\"]}]}'"
@@ -52,6 +64,9 @@ kind: Agent
 metadata:
   name: mock_git
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - git_ops
   command: "echo '{\"confidence\":1.0,\"quality_score\":1.0,\"artifacts\":[]}'"
@@ -62,6 +77,9 @@ kind: Agent
 metadata:
   name: mock_sdlc
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa_doc_gen
     - qa_testing

@@ -33,6 +33,9 @@ kind: Agent
 metadata:
   name: process_console_mock_fail
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities: [qa]
   command: >-
     echo '{"confidence":0.2,"quality_score":0.1,"artifacts":[{"kind":"test","content":{"summary":"deterministic FR-103 assertion failure"}}]}' &&

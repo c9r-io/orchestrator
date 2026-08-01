@@ -19,6 +19,9 @@ kind: Agent
 metadata:
   name: mock_long_running
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa
   command: "sleep 120 && echo '{\"confidence\":0.93,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-pass\",\"description\":\"long-running qa passed\",\"severity\":\"info\"}]}]}'"
@@ -29,6 +32,9 @@ kind: Agent
 metadata:
   name: mock_echo
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa
     - fix

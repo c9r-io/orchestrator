@@ -29,6 +29,9 @@ kind: Agent
 metadata:
   name: source-template-fixture
 spec:
+  driver:
+    provider: shell
+    transport: cli
   capabilities: [source_template_fixture]
   command: >-
     echo '{"confidence":1.0,"quality_score":1.0,"artifacts":[]}'

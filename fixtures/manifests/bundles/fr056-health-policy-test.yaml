@@ -13,6 +13,9 @@ kind: Agent
 metadata:
   name: default-agent
 spec:
+  driver:
+    provider: shell
+    transport: cli
   command: "echo '{\"confidence\":1.0}'"
   capabilities:
     - qa_testing
@@ -22,6 +25,9 @@ kind: Agent
 metadata:
   name: default-agent-fail
 spec:
+  driver:
+    provider: shell
+    transport: cli
   command: "echo 'infra-fail' && exit -1"
   capabilities:
     - qa_testing
@@ -34,6 +40,9 @@ kind: Agent
 metadata:
   name: custom-agent
 spec:
+  driver:
+    provider: shell
+    transport: cli
   command: "echo '{\"confidence\":1.0}'"
   capabilities:
     - qa_testing
@@ -47,6 +56,9 @@ kind: Agent
 metadata:
   name: custom-agent-fail
 spec:
+  driver:
+    provider: shell
+    transport: cli
   command: "echo 'infra-fail' && exit -1"
   capabilities:
     - qa_testing
@@ -60,6 +72,9 @@ kind: Agent
 metadata:
   name: nodisease-agent
 spec:
+  driver:
+    provider: shell
+    transport: cli
   command: "echo '{\"confidence\":1.0}'"
   capabilities:
     - qa_testing
@@ -71,6 +86,9 @@ kind: Agent
 metadata:
   name: nodisease-agent-fail
 spec:
+  driver:
+    provider: shell
+    transport: cli
   command: "echo 'infra-fail' && exit -1"
   capabilities:
     - qa_testing
