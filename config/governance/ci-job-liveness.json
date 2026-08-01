@@ -8,67 +8,63 @@
       "jobs": {
         "async-lock-governance": {
           "conclusion": "success",
-          "runId": "30709873749",
-          "headSha": "dc6b6d81b0aa54e76bb3bdc03bb964802cccffe2"
+          "runId": "30710627294",
+          "headSha": "45fbf3c4812be08e69c8d4980e4aedffcf550fe1"
         },
         "fmt": {
           "conclusion": "success",
-          "runId": "30709873749",
-          "headSha": "dc6b6d81b0aa54e76bb3bdc03bb964802cccffe2"
+          "runId": "30710627294",
+          "headSha": "45fbf3c4812be08e69c8d4980e4aedffcf550fe1"
         },
         "clippy": {
           "conclusion": "success",
-          "runId": "30709873749",
-          "headSha": "dc6b6d81b0aa54e76bb3bdc03bb964802cccffe2"
+          "runId": "30710627294",
+          "headSha": "45fbf3c4812be08e69c8d4980e4aedffcf550fe1"
         },
         "test": {
           "conclusion": "success",
-          "runId": "30709873749",
-          "headSha": "dc6b6d81b0aa54e76bb3bdc03bb964802cccffe2"
+          "runId": "30710627294",
+          "headSha": "45fbf3c4812be08e69c8d4980e4aedffcf550fe1"
         },
         "coordination-strangler": {
           "conclusion": "success",
-          "runId": "30709873749",
-          "headSha": "dc6b6d81b0aa54e76bb3bdc03bb964802cccffe2"
+          "runId": "30710627294",
+          "headSha": "45fbf3c4812be08e69c8d4980e4aedffcf550fe1"
         },
         "governance": {
-          "conclusion": "failure",
-          "runId": "30709873749",
-          "headSha": "dc6b6d81b0aa54e76bb3bdc03bb964802cccffe2",
-          "knownFailing": {
-            "reference": "docs/qa/orchestrator/205-cli-output-doc-parity.md",
-            "reason": "Run 30709873749 (dc6b6d81, the FR-154 closure push) failed exclusively on the liveness gate's own staleness rule: FR-154 C8 edited ci.yml (the governance job gained the cli-doc-parity and cli-doc-parity-fixtures steps), which invalidated every record taken at f1f7ce77. All other aggregated gates in the same run were green — including both new cli-doc-parity steps, whose outcomes read success in the Governance result log. This annotation retires automatically at the first refresh after a green governance run on this ledger."
-          }
+          "conclusion": "success",
+          "runId": "30710627294",
+          "headSha": "45fbf3c4812be08e69c8d4980e4aedffcf550fe1"
         },
         "ci-environment-parity": {
           "conclusion": "success",
-          "runId": "30709873749",
-          "headSha": "dc6b6d81b0aa54e76bb3bdc03bb964802cccffe2"
+          "runId": "30710627294",
+          "headSha": "45fbf3c4812be08e69c8d4980e4aedffcf550fe1"
         },
         "coverage-policy-fixtures": {
           "conclusion": "success",
-          "runId": "30709873749",
-          "headSha": "dc6b6d81b0aa54e76bb3bdc03bb964802cccffe2"
+          "runId": "30710627294",
+          "headSha": "45fbf3c4812be08e69c8d4980e4aedffcf550fe1"
         },
         "slack-certification-recorded": {
           "conclusion": "success",
-          "runId": "30709873749",
-          "headSha": "dc6b6d81b0aa54e76bb3bdc03bb964802cccffe2"
+          "runId": "30710627294",
+          "headSha": "45fbf3c4812be08e69c8d4980e4aedffcf550fe1"
         },
         "boundary-coverage": {
           "conclusion": "success",
-          "runId": "30709873749",
-          "headSha": "dc6b6d81b0aa54e76bb3bdc03bb964802cccffe2"
+          "runId": "30710627294",
+          "headSha": "45fbf3c4812be08e69c8d4980e4aedffcf550fe1"
         },
         "miri": {
           "conclusion": "success",
-          "runId": "30709873749",
-          "headSha": "dc6b6d81b0aa54e76bb3bdc03bb964802cccffe2"
+          "runId": "30710627294",
+          "headSha": "45fbf3c4812be08e69c8d4980e4aedffcf550fe1"
         },
         "cross-compile": {
           "conclusion": "success",
-          "runId": "30709873749",
-          "headSha": "dc6b6d81b0aa54e76bb3bdc03bb964802cccffe2"
+          "runId": "30710627294",
+          "headSha": "45fbf3c4812be08e69c8d4980e4aedffcf550fe1"
         }
       }
     },
@@ -89,13 +85,13 @@
       "jobs": {
         "cargo-audit": {
           "conclusion": "success",
-          "runId": "30709873775",
-          "headSha": "dc6b6d81b0aa54e76bb3bdc03bb964802cccffe2"
+          "runId": "30710627264",
+          "headSha": "45fbf3c4812be08e69c8d4980e4aedffcf550fe1"
         },
         "cargo-deny": {
           "conclusion": "success",
-          "runId": "30709873775",
-          "headSha": "dc6b6d81b0aa54e76bb3bdc03bb964802cccffe2"
+          "runId": "30710627264",
+          "headSha": "45fbf3c4812be08e69c8d4980e4aedffcf550fe1"
         }
       }
     },
