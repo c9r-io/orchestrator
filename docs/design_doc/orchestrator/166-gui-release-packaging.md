@@ -5,8 +5,8 @@ related_fr: FR-076
 
 # GUI Release Packaging And Signing
 
-**Status**: Released (FR-076 requirements 2–4; the FR's final acceptance —
-GUI assets on a real Release page — lands with the next version tag)
+**Status**: Released (FR-076 requirements 2–4; final acceptance verified
+at v0.5.0 — GUI assets on the Release page, all platforms)
 **FR**: FR-076（GUI 正式发布 — 需求 2–4：打包、Release 集成、签名）
 **QA**: docs/qa/orchestrator/204-gui-release-packaging.md
 **Predecessor**: docs/design_doc/orchestrator/165-gui-ci-integration.md
@@ -82,16 +82,49 @@ by a 1024px source (SVG-rendered) and a regenerated `.icns`/`.ico`/PNG
 set; the Windows-store `Square*` outputs are not tracked because no
 Windows bundle exists.
 
+## What the v0.5.0 release proved, and what it caught
+
+The limit this record originally carried — "the publish-job wiring gets
+its behavioral proof on the next release" — was exact. At v0.5.0 (tag on
+`58166a9f`, run `30703915075`) both gui-build legs and the publish job
+concluded success, and the release page carried the three GUI `.sha256`
+files **without the binaries they describe**: the publish glob list
+(`dist/*.tar.gz`, `dist/*sha256*`) predated the GUI job and matched the
+checksums but not the `.dmg`/`.AppImage`/`.deb`. A green job and a
+checksum on the page are each proxies for "the artifact ships" (§4.4
+shapes 1 and 2 — two enumerations of one surface, never compared). The
+gap was closed by uploading the same run's artifacts (checksum-verified
+against the already-published `.sha256` files) and the enumeration is now
+compared mechanically: `check_gui_asset_globs` in
+`test-release-publish-surface.sh` derives the staged set from the staging
+step's cp destinations and requires a covering publish glob for each
+artifact and its checksum, with fixture 6 commenting out `dist/*.dmg` and
+the check reproducing the historical defect verbatim against the
+release.yml recorded at the v0.5.0 tag.
+
+The released assets themselves were behaviorally verified: the released
+dmg assesses `accepted, source=Notarized Developer ID` with a valid
+staple and a universal (x86_64+arm64) binary; the released `.deb`
+installs in a clean ubuntu:24.04 container and its binary runs under
+Xvfb; the released `.AppImage` runs the same way after the standard
+binfmt magic-byte workaround required under QEMU emulation (see QA-204
+scenario 3 notes).
+
 ## Known limits
 
 - **No Windows `.msi`**: no Windows runner job exists and the workspace
   has never compiled on Windows; the FR marks it "如支持" and this record
   marks it not attempted.
-- **The release page acceptance is unverified until the next real tag**:
-  the proof workflow validates the job's steps, not the
-  `publish`-job wiring (`needs: gui-build`, the `dist/*` glob). That wiring
-  is one derived hop (`workflow_model.rb`) and gets its behavioral proof
-  on the next release; the FR stays open until then.
+- **crates.io Trusted Publishing covers 5 of 12 crates**: at v0.5.0 the
+  OIDC token published proto, config, collab, security and runner, then
+  403'd on `orchestrator-persistence` ("token is not valid for crate"),
+  leaving 7 crates to a local-token publish from the exact tag commit —
+  the FR-151 bootstrap precedent, with clean provenance this time. Until
+  Trusted Publishing configurations are added on crates.io for the
+  remaining seven (persistence, agent-orchestrator, scheduler, client,
+  cli, slack-gateway, orchestratord — a crate-owner web-UI action), every
+  release's crates-io job fails at the same crate and the tail must be
+  published locally.
 - **Notarization rides an app-specific password**, which the account
   owner can revoke at any time; a revoked password fails the notarize
   step, not the signing. Rotation is a secret update, no code change.

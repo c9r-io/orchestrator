@@ -10,7 +10,7 @@ This document retains the original Console-specific migrations 27-32 boundary. D
 - Databases older than schema 26 must first be upgraded by an intermediate supported release.
 - Console migrations are additive and forward-only. A normal rollback keeps migrations 27-32 and their tables.
 - CLI, daemon, and GUI should be deployed from the same release. Additive gRPC fields and retained tables permit a short rolling mismatch, but mutations should wait until all clients are current.
-- Desktop packaging and distribution remain deferred to FR-076; this runbook covers the local daemon, CLI, and existing Tauri development/runtime surface.
+- Desktop packages ship with releases since v0.5.0 (FR-076): a signed, notarized universal macOS `.dmg` and Linux `.AppImage`/`.deb` as `orchestrator-gui-{tag}-{platform}.{ext}` on each GitHub Release. This runbook covers the local daemon, CLI, and the Tauri development/runtime surface.
 
 Required tools are `bash`, `cargo`, `git`, `jq`, `npm`, `rg`, `sqlite3`, and `tee`. Before starting, verify enough free space for the database backup, build products, and temporary QA fixtures:
 

@@ -271,8 +271,16 @@ jobs:
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           generate_release_notes: true
+          # The GUI binary globs exist because their absence shipped: v0.5.0's
+          # publish job attached the GUI .sha256 files (matched by *sha256*)
+          # while the .dmg/.AppImage/.deb they described matched nothing, and
+          # the release page carried three checksums for absent files until a
+          # manual upload from the same run's artifacts closed the gap.
           files: |
             dist/*.tar.gz
+            dist/*.dmg
+            dist/*.AppImage
+            dist/*.deb
             dist/*sha256*
 
   homebrew:

@@ -130,7 +130,7 @@ npm --prefix gui run build
 cargo run -p orchestrator-gui
 ```
 
-桌面安装包的正式分发仍由 FR-076 负责；以上流程适用于当前源码和已有 Tauri 运行面。
+桌面安装包自 v0.5.0 起随 Release 发布（FR-076 已闭环）：签名+公证的 macOS universal `.dmg` 与 Linux `.AppImage`/`.deb`，命名 `orchestrator-gui-{tag}-{platform}.{ext}`。以上流程适用于源码开发场景。
 
 ### 3.3 连接成功的标志
 

@@ -25,6 +25,22 @@ dispatch/branch-push only, artifact-upload only), the same
 never-touch-main shape as QA-203 scenario 3. Design record:
 `docs/design_doc/orchestrator/166-gui-release-packaging.md`.
 
+**v0.5.0 execution record** (tag on `58166a9f`, run `30703915075`): both
+gui-build legs and publish green; the release page initially carried the
+three GUI `.sha256` files **without their binaries** — the pre-GUI publish
+glob list matched checksums only. Closed by uploading the same run's
+checksum-verified artifacts (release now holds 14 assets) and guarded by
+`check_gui_asset_globs` + fixture 6 in the publish-surface gate, which
+reproduces the defect against the release.yml recorded at the tag. The
+released artifacts verify behaviorally: dmg `accepted, source=Notarized
+Developer ID`, staple valid, `x86_64 arm64`; in a clean ubuntu:24.04
+amd64 container under Xvfb the released `.AppImage` runs until killed
+(after the binfmt magic-byte workaround QEMU emulation requires) and the
+released `.deb` installs and its `/usr/bin/orchestrator-gui` likewise
+runs until killed. crates.io: Trusted Publishing covered 5 of 12 crates
+(403 at orchestrator-persistence); the remaining 7 published with the
+local token from the exact tag commit — DD-166 known limits.
+
 **Safety**: scenarios 1 and 5 are read-only derivations. Scenario 2 builds
 and signs locally (requires the keychain identity). Scenarios 3–4 are
 recorded one-time verifications on throwaway branches; re-running them is

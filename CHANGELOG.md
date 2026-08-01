@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **The v0.5.0 release page shipped three GUI checksums without their binaries** (FR-076 closure) — the publish job's glob list (`dist/*.tar.gz`, `dist/*sha256*`) predated the `gui-build` job: the `.sha256` files matched `*sha256*` while the `.dmg`/`.AppImage`/`.deb` they described matched nothing, so a green publish job attached checksums for absent files. Closed on the release itself by uploading the same run's checksum-verified artifacts; closed structurally by adding the binary globs and `check_gui_asset_globs` to `scripts/qa/test-release-publish-surface.sh`, which derives the staged artifact set from the gui-build staging step and requires a covering publish glob for each artifact and its checksum (fixture 6 comments out `dist/*.dmg`; the check also reproduces the defect verbatim against the release.yml recorded at the v0.5.0 tag). The staged set and the published set were two enumerations of one surface that nothing compared — §4.4 shape 2 in release tooling
+- **crates.io Trusted Publishing stopped at 5 of 12 crates** (FR-076 closure, recorded) — the v0.5.0 crates-io job published proto, config, collab, security and runner, then got `403: token not valid for crate orchestrator-persistence`; the remaining seven were published with the local token from the exact tag commit (the FR-151 bootstrap precedent). The per-crate Trusted Publishing configurations for the other seven are a crate-owner web-UI action, recorded in DD-166's known limits
+
 ## [0.5.0] - 2026-08-01
 
 ### Added

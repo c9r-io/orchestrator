@@ -20,7 +20,7 @@
 #
 #   11 × gtk-rs 0.18 — Tauri 2 pins the gtk-rs 0.18 generation for its Linux
 #        webview; the gtk-rs project archived the gtk3 bindings. Retires with
-#        FR-076 / Tauri moving off gtk-rs 0.18 (`cargo tree -i gtk` empty).
+#        Tauri moving off gtk-rs 0.18 (`cargo tree -i gtk` empty).
 #    5 × unic-*     — tauri-utils → urlpattern 0.3 pins the archived unic
 #        UCD crates. Tauri-rooted but not gtk-rs: outlives a gtk fix, retires
 #        when urlpattern (or tauri-utils) drops unic (`cargo tree -i
@@ -56,7 +56,7 @@ ignore = [
   # same generation, same retirement). The daemon and CLI link none of them.
   #
   # Accepted 2026-08-01 (FR-153). Retire all eleven together when Tauri moves
-  # off gtk-rs 0.18 (FR-076 requirement 1 territory) — the condition is
+  # off gtk-rs 0.18 (a future Tauri/webview upgrade) — the condition is
   # `cargo tree -i gtk` reporting nothing.
   # atk — gtk-rs 0.18 archival; retires with the block condition above.
   "RUSTSEC-2024-0413",

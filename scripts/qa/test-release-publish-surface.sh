@@ -471,6 +471,49 @@ check_skills_dir_override() {
   return "$rc"
 }
 
+# ── Check 7: every artifact the gui-build job stages ships through a publish glob
+#
+# v0.5.0 shipped the defect this check encodes: gui-build staged
+# .dmg/.AppImage/.deb plus their .sha256 files into dist/, the publish step's
+# files globs matched only *.tar.gz and *sha256*, and the release page carried
+# three checksums for binaries that were not there — until a manual upload
+# from the same run's artifacts closed the gap. The staged set and the
+# published set are two enumerations of one surface (§4.4 shape 2); this
+# derives the staged names from the staging step's cp destinations and
+# requires the publish globs to cover each of them, and their checksums.
+check_gui_asset_globs() {
+  local release_yml="$1" rc=0
+  local dests globs dest name glob matched
+  dests="$(grep -oE '"dist/orchestrator-gui-[^"]+"' "$release_yml" | tr -d '"' | LC_ALL=C sort -u)"
+  if [[ -z "$dests" ]]; then
+    echo "    no staged dist/orchestrator-gui-* destinations found in $release_yml" >&2
+    return 1
+  fi
+  globs="$(awk '/^[[:space:]]+files: \|/{f=1; next} f && $1 ~ /^dist\//{print $1; next} f{exit}' "$release_yml")"
+  if [[ -z "$globs" ]]; then
+    echo "    no files: | glob block found in the publish step of $release_yml" >&2
+    return 1
+  fi
+  while IFS= read -r dest; do
+    [[ -z "$dest" ]] && continue
+    # ${RELEASE_TAG} inside the destination is opaque to glob matching;
+    # substitute a representative tag.
+    for name in "${dest//\$\{RELEASE_TAG\}/v0.0.0}" "${dest//\$\{RELEASE_TAG\}/v0.0.0}.sha256"; do
+      matched=0
+      while IFS= read -r glob; do
+        [[ -z "$glob" ]] && continue
+        # shellcheck disable=SC2053
+        [[ "$name" == $glob ]] && matched=1
+      done <<< "$globs"
+      if [[ "$matched" -ne 1 ]]; then
+        echo "    staged artifact $name is matched by no publish glob; it will build and not ship" >&2
+        rc=1
+      fi
+    done
+  done <<< "$dests"
+  return "$rc"
+}
+
 # ── Real repository mode ──────────────────────────────────────────────────────
 if [[ "${1:-}" != "--fixture-test" ]]; then
   echo "=== FR-150: release publish/ship surface ==="
@@ -513,6 +556,12 @@ if [[ "${1:-}" != "--fixture-test" ]]; then
     fail "the skills directory override is broken"
   fi
 
+  if check_gui_asset_globs "$REPO_ROOT/.github/workflows/release.yml"; then
+    pass "every staged GUI artifact and its checksum is covered by a publish glob"
+  else
+    fail "a staged GUI artifact would build and not ship"
+  fi
+
   echo ""
   echo "$PASS passed, $FAIL failed"
   [[ "$FAIL" -eq 0 ]] || exit 1
@@ -543,6 +592,7 @@ check_publish_loop "$BASE/release.yml" >/dev/null 2>&1 || control_rc=1
 check_ship_surface "$BASE/release.yml" "$BASE/install.sh" "$BASE/orchestrator.rb" >/dev/null 2>&1 || control_rc=1
 check_install_refusal "$BASE/install.sh" >/dev/null 2>&1 || control_rc=1
 check_skills_install_confinement "$BASE/install.sh" "control" >/dev/null 2>&1 || control_rc=1
+check_gui_asset_globs "$BASE/release.yml" >/dev/null 2>&1 || control_rc=1
 if [[ "$control_rc" -eq 0 ]]; then
   pass "positive control: unmodified copies pass all checks"
 else
@@ -635,6 +685,24 @@ if fixture_mutate "fixture 5" "$F5/install.sh" \
     fail "fixture 5: rejected, but the diagnostic does not name the CWD pollution"
   else
     pass "fixture 5: CWD-relative skills default rejected, diagnostic names the pollution"
+  fi
+fi
+
+# Fixture 6: comment out (not delete — the mutation the implementation is
+# least likely to catch) the dist/*.dmg publish glob. This is the v0.5.0
+# defect restated: the artifact stages, nothing ships it.
+F6="$WORK/f6"; mkdir -p "$F6"; cp "$BASE/release.yml" "$F6/release.yml"
+if fixture_mutate "fixture 6" "$F6/release.yml" \
+    sh -c 'sed "s|^\( *\)dist/\*\.dmg$|\1# dist/*.dmg|" "$1" > "$1.tmp" && mv "$1.tmp" "$1"' _ "$F6/release.yml"; then
+  f6_out="$WORK/f6.log"
+  if check_gui_asset_globs "$F6/release.yml" > "$f6_out" 2>&1; then
+    fail "fixture 6: a staged .dmg with no publish glob was accepted"
+  elif ! grep -q "universal-apple-darwin.dmg is matched by no publish glob" "$f6_out"; then
+    fail "fixture 6: rejected, but the diagnostic does not name the unshipped artifact"
+  elif ! check_gui_asset_globs "$BASE/release.yml" >/dev/null 2>&1; then
+    fail "fixture 6: the unmodified copy fails the glob check; fixture result is void"
+  else
+    pass "fixture 6: staged-but-unshipped .dmg rejected, diagnostic names the artifact"
   fi
 fi
 
