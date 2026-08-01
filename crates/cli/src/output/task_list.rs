@@ -1,44 +1,15 @@
+use anyhow::Result;
 use orchestrator_proto::TaskSummary;
 
 use crate::OutputFormat;
 
-pub(super) fn print(tasks: &[TaskSummary], format: OutputFormat) {
-    match format {
-        OutputFormat::Json => {
-            let json: Vec<serde_json::Value> = tasks
-                .iter()
-                .map(|t| {
-                    serde_json::json!({
-                        "id": t.id,
-                        "name": t.name,
-                        "status": t.status,
-                        "goal": t.goal,
-                        "total_items": t.total_items,
-                        "finished_items": t.finished_items,
-                        "failed_items": t.failed_items,
-                    })
-                })
-                .collect();
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json).unwrap_or_default()
-            );
-        }
-        OutputFormat::Yaml => {
-            let yaml: Vec<serde_json::Value> = tasks
-                .iter()
-                .map(|t| {
-                    serde_json::json!({
-                        "id": t.id,
-                        "name": t.name,
-                        "status": t.status,
-                        "goal": t.goal,
-                    })
-                })
-                .collect();
-            println!("{}", serde_yaml::to_string(&yaml).unwrap_or_default());
-        }
-        OutputFormat::Table => {
+use super::{render, value};
+
+pub(super) fn print(tasks: &[TaskSummary], format: OutputFormat) -> Result<()> {
+    let projected = serde_json::Value::Array(tasks.iter().map(value::task_summary_value).collect());
+    match format.encoding() {
+        Some(encoding) => render::emit(&projected, encoding),
+        None => {
             println!(
                 "{:<38} {:<12} {:<10} {:<8} {:<8}",
                 "ID", "NAME", "STATUS", "FINISHED", "FAILED"
@@ -56,6 +27,7 @@ pub(super) fn print(tasks: &[TaskSummary], format: OutputFormat) {
                     id_display, name_display, t.status, t.finished_items, t.failed_items
                 );
             }
+            Ok(())
         }
     }
 }

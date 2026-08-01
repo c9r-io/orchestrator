@@ -47,14 +47,14 @@ pub(crate) async fn dispatch(
                 })
                 .await?
                 .into_inner();
-            output::print_attention_list(&response, format);
+            output::print_attention_list(&response, format)?;
         }
         AttentionCommands::Get { id, output: format } => {
             let item = client
                 .attention_get(AttentionGetRequest { id })
                 .await?
                 .into_inner();
-            output::print_attention_item(&item, format);
+            output::print_attention_item(&item, format)?;
         }
         AttentionCommands::Claim {
             id,
@@ -75,7 +75,7 @@ pub(crate) async fn dispatch(
                 })
                 .await?
                 .into_inner();
-            output::print_attention_item(&item, crate::OutputFormat::Yaml);
+            output::print_attention_item(&item, crate::OutputFormat::Yaml)?;
         }
         AttentionCommands::Snooze {
             id,
@@ -98,7 +98,7 @@ pub(crate) async fn dispatch(
                 })
                 .await?
                 .into_inner();
-            output::print_attention_item(&item, crate::OutputFormat::Yaml);
+            output::print_attention_item(&item, crate::OutputFormat::Yaml)?;
         }
         AttentionCommands::Resolve {
             id,
@@ -121,7 +121,7 @@ pub(crate) async fn dispatch(
                 })
                 .await?
                 .into_inner();
-            output::print_attention_item(&item, crate::OutputFormat::Yaml);
+            output::print_attention_item(&item, crate::OutputFormat::Yaml)?;
         }
         AttentionCommands::Action {
             id,
@@ -146,7 +146,7 @@ pub(crate) async fn dispatch(
                 })
                 .await?
                 .into_inner();
-            output::print_attention_item(&item, crate::OutputFormat::Yaml);
+            output::print_attention_item(&item, crate::OutputFormat::Yaml)?;
         }
         AttentionCommands::Follow {
             after,
@@ -168,7 +168,7 @@ pub(crate) async fn dispatch(
                 .await?
                 .into_inner();
             while let Some(delta) = stream.next().await {
-                output::print_attention_delta(&delta?, format);
+                output::print_attention_delta(&delta?, format)?;
             }
         }
     }

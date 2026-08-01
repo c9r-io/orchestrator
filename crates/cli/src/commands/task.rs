@@ -23,7 +23,7 @@ pub(crate) async fn dispatch(
                 })
                 .await?
                 .into_inner();
-            output::print_task_list(&resp.tasks, output);
+            output::print_task_list(&resp.tasks, output)?;
             Ok(())
         }
 
@@ -61,7 +61,7 @@ pub(crate) async fn dispatch(
                 .task_info(orchestrator_proto::TaskInfoRequest { task_id })
                 .await?
                 .into_inner();
-            output::print_task_detail(&resp, output);
+            output::print_task_detail(&resp, output)?;
             Ok(())
         }
 
@@ -83,7 +83,7 @@ pub(crate) async fn dispatch(
                         .is_none_or(|s| item.status.eq_ignore_ascii_case(s))
                 })
                 .collect();
-            output::print_task_items(&items, output);
+            output::print_task_items(&items, output)?;
             Ok(())
         }
 
@@ -361,7 +361,7 @@ pub(crate) async fn dispatch(
                 })
                 .await?
                 .into_inner();
-            output::print_timeline_response(&resp, format);
+            output::print_timeline_response(&resp, format)?;
 
             if !follow {
                 return Ok(());
@@ -380,7 +380,7 @@ pub(crate) async fn dispatch(
                 .into_inner();
 
             while let Some(delta) = stream.next().await {
-                output::print_timeline_delta(&delta?, format);
+                output::print_timeline_delta(&delta?, format)?;
             }
             Ok(())
         }

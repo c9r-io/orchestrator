@@ -1,8 +1,11 @@
+use anyhow::Result;
 use orchestrator_proto::{AttentionDelta, AttentionItem, AttentionListResponse};
 
 use crate::OutputFormat;
 
-fn value(item: &AttentionItem) -> serde_json::Value {
+use super::render;
+
+pub(crate) fn attention_item_value(item: &AttentionItem) -> serde_json::Value {
     serde_json::json!({
         "id": item.id,
         "project_id": item.project_id,
@@ -31,57 +34,56 @@ fn value(item: &AttentionItem) -> serde_json::Value {
     })
 }
 
-pub(crate) fn print_list(response: &AttentionListResponse, format: OutputFormat) {
-    if format == OutputFormat::Table {
-        if response.items.is_empty() {
-            println!("No attention items found.");
-            return;
-        }
-        println!(
-            "{:<22} {:<13} {:<12} {:<18} TITLE",
-            "ID", "SEVERITY", "STATE", "KIND"
-        );
-        for item in &response.items {
+pub(crate) fn print_list(response: &AttentionListResponse, format: OutputFormat) -> Result<()> {
+    let projected = serde_json::json!({
+        "items": response.items.iter().map(attention_item_value).collect::<Vec<_>>(),
+        "latest_change_id": response.latest_change_id,
+    });
+    match format.encoding() {
+        Some(encoding) => render::emit(&projected, encoding),
+        None => {
+            if response.items.is_empty() {
+                println!("No attention items found.");
+                return Ok(());
+            }
             println!(
-                "{:<22} {:<13} {:<12} {:<18} {}",
-                item.id, item.severity, item.state, item.kind, item.title
+                "{:<22} {:<13} {:<12} {:<18} TITLE",
+                "ID", "SEVERITY", "STATE", "KIND"
             );
-        }
-        println!("\n{} item(s)", response.items.len());
-        return;
-    }
-    let values = response.items.iter().map(value).collect::<Vec<_>>();
-    print_value(
-        &serde_json::json!({
-            "items": values,
-            "latest_change_id": response.latest_change_id,
-        }),
-        format,
-    );
-}
-
-pub(crate) fn print_item(item: &AttentionItem, format: OutputFormat) {
-    print_value(&value(item), format);
-}
-
-pub(crate) fn print_delta(delta: &AttentionDelta, format: OutputFormat) {
-    print_value(
-        &serde_json::json!({
-            "kind": delta.kind,
-            "change_id": delta.change_id,
-            "item": delta.item.as_ref().map(value),
-        }),
-        format,
-    );
-}
-
-fn print_value(value: &serde_json::Value, format: OutputFormat) {
-    match format {
-        OutputFormat::Json | OutputFormat::Table => {
-            println!("{}", serde_json::to_string(value).unwrap_or_default());
-        }
-        OutputFormat::Yaml => {
-            print!("{}", serde_yaml::to_string(value).unwrap_or_default());
+            for item in &response.items {
+                println!(
+                    "{:<22} {:<13} {:<12} {:<18} {}",
+                    item.id, item.severity, item.state, item.kind, item.title
+                );
+            }
+            println!("\n{} item(s)", response.items.len());
+            Ok(())
         }
     }
+}
+
+pub(crate) fn print_item(item: &AttentionItem, format: OutputFormat) -> Result<()> {
+    let projected = attention_item_value(item);
+    match format.encoding() {
+        Some(encoding) => render::emit(&projected, encoding),
+        None => {
+            print!("{}", render::kv_table(&projected));
+            Ok(())
+        }
+    }
+}
+
+pub(crate) fn print_delta(delta: &AttentionDelta, format: OutputFormat) -> Result<()> {
+    let projected = serde_json::json!({
+        "kind": delta.kind,
+        "change_id": delta.change_id,
+        "item": delta.item.as_ref().map(attention_item_value),
+    });
+    // Streaming deltas keep single-line JSON framing; `-o table` maps to the
+    // same until FR-154 C4 narrows follow to a stream-only format enum.
+    let encoding = match format.encoding() {
+        Some(render::Encoding::Yaml) => render::Encoding::Yaml,
+        _ => render::Encoding::JsonCompact,
+    };
+    render::emit(&projected, encoding)
 }

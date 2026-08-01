@@ -3,7 +3,7 @@ use orchestrator_proto::{
 };
 use serde_json::{Value, json};
 
-pub(super) fn task_detail_value(task: &TaskSummary, resp: &TaskInfoResponse) -> Value {
+pub(crate) fn task_detail_value(task: &TaskSummary, resp: &TaskInfoResponse) -> Value {
     // FR-054: Aggregate step-level progress from runs
     let mut phase_stats: std::collections::BTreeMap<&str, (u32, u32)> =
         std::collections::BTreeMap::new();
@@ -45,7 +45,7 @@ pub(super) fn task_detail_value(task: &TaskSummary, resp: &TaskInfoResponse) -> 
     })
 }
 
-pub(super) fn task_summary_value(task: &TaskSummary) -> Value {
+pub(crate) fn task_summary_value(task: &TaskSummary) -> Value {
     json!({
         "id": task.id,
         "name": task.name,
@@ -65,7 +65,7 @@ pub(super) fn task_summary_value(task: &TaskSummary) -> Value {
     })
 }
 
-pub(super) fn task_item_value(item: &TaskItem) -> Value {
+pub(crate) fn task_item_value(item: &TaskItem) -> Value {
     json!({
         "id": item.id,
         "task_id": item.task_id,
@@ -83,7 +83,7 @@ pub(super) fn task_item_value(item: &TaskItem) -> Value {
     })
 }
 
-pub(super) fn command_run_value(run: &CommandRun) -> Value {
+pub(crate) fn command_run_value(run: &CommandRun) -> Value {
     json!({
         "id": run.id,
         "task_item_id": run.task_item_id,
@@ -101,7 +101,7 @@ pub(super) fn command_run_value(run: &CommandRun) -> Value {
     })
 }
 
-pub(super) fn event_value(event: &Event) -> Value {
+pub(crate) fn event_value(event: &Event) -> Value {
     let payload = serde_json::from_str::<Value>(&event.payload_json)
         .unwrap_or_else(|_| Value::String(event.payload_json.clone()));
     json!({
@@ -114,7 +114,7 @@ pub(super) fn event_value(event: &Event) -> Value {
     })
 }
 
-pub(super) fn agent_status_value(a: &AgentStatus) -> Value {
+pub(crate) fn agent_status_value(a: &AgentStatus) -> Value {
     json!({
         "name": a.name,
         "enabled": a.enabled,
@@ -128,7 +128,7 @@ pub(super) fn agent_status_value(a: &AgentStatus) -> Value {
     })
 }
 
-pub(super) fn task_graph_debug_value(bundle: &TaskGraphDebugBundle) -> Value {
+pub(crate) fn task_graph_debug_value(bundle: &TaskGraphDebugBundle) -> Value {
     json!({
         "graph_run_id": bundle.graph_run_id,
         "cycle": bundle.cycle,

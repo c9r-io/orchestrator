@@ -1,10 +1,14 @@
+use anyhow::Result;
 use orchestrator_proto::{TaskTimelineResponse, TimelineDelta, TimelineEntry};
 
 use crate::OutputFormat;
 
-pub fn print_response(response: &TaskTimelineResponse, format: OutputFormat) {
-    match format {
-        OutputFormat::Table => {
+use super::render;
+
+pub fn print_response(response: &TaskTimelineResponse, format: OutputFormat) -> Result<()> {
+    match format.encoding() {
+        Some(encoding) => render::emit(&response_value(response), encoding),
+        None => {
             if response.entries.is_empty() {
                 println!("No timeline entries found.");
             } else {
@@ -19,15 +23,15 @@ pub fn print_response(response: &TaskTimelineResponse, format: OutputFormat) {
                     response.next_cursor.as_deref().unwrap_or_default()
                 );
             }
+            Ok(())
         }
-        OutputFormat::Json => print_serialized(&response_value(response), false),
-        OutputFormat::Yaml => print_serialized(&response_value(response), true),
     }
 }
 
-pub fn print_delta(delta: &TimelineDelta, format: OutputFormat) {
-    match format {
-        OutputFormat::Table => {
+pub fn print_delta(delta: &TimelineDelta, format: OutputFormat) -> Result<()> {
+    match format.encoding() {
+        Some(encoding) => render::emit(&delta_value(delta), encoding),
+        None => {
             if delta.kind == "reset_required" {
                 println!(
                     "Timeline changed too quickly; refresh required at event {}.",
@@ -36,9 +40,8 @@ pub fn print_delta(delta: &TimelineDelta, format: OutputFormat) {
             } else if let Some(entry) = &delta.entry {
                 print_table_entry(entry);
             }
+            Ok(())
         }
-        OutputFormat::Json => print_serialized(&delta_value(delta), false),
-        OutputFormat::Yaml => print_serialized(&delta_value(delta), true),
     }
 }
 
@@ -81,7 +84,7 @@ fn truncate(value: &str, width: usize) -> String {
         + "…"
 }
 
-fn response_value(response: &TaskTimelineResponse) -> serde_json::Value {
+pub(super) fn response_value(response: &TaskTimelineResponse) -> serde_json::Value {
     serde_json::json!({
         "entries": response.entries.iter().map(entry_value).collect::<Vec<_>>(),
         "next_cursor": response.next_cursor,
@@ -91,7 +94,7 @@ fn response_value(response: &TaskTimelineResponse) -> serde_json::Value {
     })
 }
 
-fn delta_value(delta: &TimelineDelta) -> serde_json::Value {
+pub(super) fn delta_value(delta: &TimelineDelta) -> serde_json::Value {
     serde_json::json!({
         "kind": delta.kind,
         "entry": delta.entry.as_ref().map(entry_value),
@@ -99,7 +102,7 @@ fn delta_value(delta: &TimelineDelta) -> serde_json::Value {
     })
 }
 
-fn entry_value(entry: &TimelineEntry) -> serde_json::Value {
+pub(super) fn entry_value(entry: &TimelineEntry) -> serde_json::Value {
     serde_json::json!({
         "id": entry.id,
         "task_id": entry.task_id,
@@ -129,17 +132,6 @@ fn entry_value(entry: &TimelineEntry) -> serde_json::Value {
         "raw_event_ids": entry.raw_event_ids,
         "projection_version": entry.projection_version,
     })
-}
-
-fn print_serialized(value: &serde_json::Value, yaml: bool) {
-    if yaml {
-        println!("{}", serde_yaml::to_string(value).unwrap_or_default());
-    } else {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(value).unwrap_or_default()
-        );
-    }
 }
 
 #[cfg(test)]

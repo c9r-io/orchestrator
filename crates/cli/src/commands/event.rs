@@ -40,7 +40,7 @@ pub(crate) async fn dispatch(
                 })
                 .await?
                 .into_inner();
-            output::print_event_list(&resp.events, output);
+            output::print_event_list(&resp.events, output)?;
             Ok(())
         }
         EventCommands::Stats => {

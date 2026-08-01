@@ -1,21 +1,25 @@
 mod attention;
+#[cfg(test)]
+mod format_parity;
+pub(crate) mod render;
 mod task_detail;
 mod task_list;
 mod timeline;
-mod value;
+pub(crate) mod value;
 
+use anyhow::Result;
 use orchestrator_proto::{Event, TaskInfoResponse, TaskItem, TaskSummary};
 
 use crate::OutputFormat;
 
 /// Render a list of task summaries in the requested output format.
-pub fn print_task_list(tasks: &[TaskSummary], format: OutputFormat) {
-    task_list::print(tasks, format);
+pub fn print_task_list(tasks: &[TaskSummary], format: OutputFormat) -> Result<()> {
+    task_list::print(tasks, format)
 }
 
 /// Render a task detail payload in the requested output format.
-pub fn print_task_detail(resp: &TaskInfoResponse, format: OutputFormat) {
-    task_detail::print(resp, format);
+pub fn print_task_detail(resp: &TaskInfoResponse, format: OutputFormat) -> Result<()> {
+    task_detail::print(resp, format)
 }
 
 pub(crate) use attention::{
@@ -27,45 +31,14 @@ pub use timeline::{
 };
 
 /// Render task items in the requested output format.
-pub fn print_task_items(items: &[TaskItem], format: OutputFormat) {
-    match format {
-        OutputFormat::Json => {
-            let arr: Vec<serde_json::Value> = items
-                .iter()
-                .map(|item| {
-                    serde_json::json!({
-                        "id": item.id,
-                        "label": item.qa_file_path,
-                        "status": item.status,
-                        "order_no": item.order_no,
-                        "fix_required": item.fix_required,
-                        "fixed": item.fixed,
-                        "last_error": item.last_error,
-                        "started_at": item.started_at,
-                        "completed_at": item.completed_at,
-                    })
-                })
-                .collect();
-            println!("{}", serde_json::to_string_pretty(&arr).unwrap_or_default());
-        }
-        OutputFormat::Yaml => {
-            let arr: Vec<serde_json::Value> = items
-                .iter()
-                .map(|item| {
-                    serde_json::json!({
-                        "id": item.id,
-                        "label": item.qa_file_path,
-                        "status": item.status,
-                        "order_no": item.order_no,
-                    })
-                })
-                .collect();
-            println!("{}", serde_yaml::to_string(&arr).unwrap_or_default());
-        }
-        OutputFormat::Table => {
+pub fn print_task_items(items: &[TaskItem], format: OutputFormat) -> Result<()> {
+    let projected = serde_json::Value::Array(items.iter().map(value::task_item_value).collect());
+    match format.encoding() {
+        Some(encoding) => render::emit(&projected, encoding),
+        None => {
             if items.is_empty() {
                 println!("No items found.");
-                return;
+                return Ok(());
             }
             println!(
                 "{:<8} {:<40} {:<12} {:<8}",
@@ -86,48 +59,20 @@ pub fn print_task_items(items: &[TaskItem], format: OutputFormat) {
                 );
             }
             println!("\n{} item(s)", items.len());
+            Ok(())
         }
     }
 }
 
 /// Render an event list in the requested output format.
-pub fn print_event_list(events: &[Event], format: OutputFormat) {
-    match format {
-        OutputFormat::Json => {
-            let arr: Vec<serde_json::Value> = events
-                .iter()
-                .map(|e| {
-                    let payload: serde_json::Value =
-                        serde_json::from_str(&e.payload_json).unwrap_or(serde_json::Value::Null);
-                    serde_json::json!({
-                        "id": e.id,
-                        "event_type": e.event_type,
-                        "task_item_id": e.task_item_id,
-                        "payload": payload,
-                        "created_at": e.created_at,
-                    })
-                })
-                .collect();
-            println!("{}", serde_json::to_string_pretty(&arr).unwrap_or_default());
-        }
-        OutputFormat::Yaml => {
-            let arr: Vec<serde_json::Value> = events
-                .iter()
-                .map(|e| {
-                    serde_json::json!({
-                        "id": e.id,
-                        "event_type": e.event_type,
-                        "payload_json": e.payload_json,
-                        "created_at": e.created_at,
-                    })
-                })
-                .collect();
-            println!("{}", serde_yaml::to_string(&arr).unwrap_or_default());
-        }
-        OutputFormat::Table => {
+pub fn print_event_list(events: &[Event], format: OutputFormat) -> Result<()> {
+    let projected = serde_json::Value::Array(events.iter().map(value::event_value).collect());
+    match format.encoding() {
+        Some(encoding) => render::emit(&projected, encoding),
+        None => {
             if events.is_empty() {
                 println!("No events found.");
-                return;
+                return Ok(());
             }
             println!("{:<8} {:<28} {:<60} CREATED", "ID", "TYPE", "PAYLOAD");
             for e in events {
@@ -142,6 +87,7 @@ pub fn print_event_list(events: &[Event], format: OutputFormat) {
                 );
             }
             println!("\n{} event(s)", events.len());
+            Ok(())
         }
     }
 }

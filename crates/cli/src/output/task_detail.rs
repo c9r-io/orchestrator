@@ -1,28 +1,20 @@
+use anyhow::Result;
 use orchestrator_proto::TaskInfoResponse;
 
 use crate::OutputFormat;
 
+use super::render;
 use super::value::task_detail_value;
 
-pub(super) fn print(resp: &TaskInfoResponse, format: OutputFormat) {
+pub(super) fn print(resp: &TaskInfoResponse, format: OutputFormat) -> Result<()> {
     let Some(ref task) = resp.task else {
         println!("No task data");
-        return;
+        return Ok(());
     };
 
-    match format {
-        OutputFormat::Json => {
-            let json = task_detail_value(task, resp);
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json).unwrap_or_default()
-            );
-        }
-        OutputFormat::Yaml => {
-            let json = task_detail_value(task, resp);
-            println!("{}", serde_yaml::to_string(&json).unwrap_or_default());
-        }
-        OutputFormat::Table => {
+    match format.encoding() {
+        Some(encoding) => render::emit(&task_detail_value(task, resp), encoding),
+        None => {
             println!("Task: {}", task.id);
             println!("  Name: {}", task.name);
             println!("  Status: {}", task.status);
@@ -125,6 +117,7 @@ pub(super) fn print(resp: &TaskInfoResponse, format: OutputFormat) {
                     );
                 }
             }
+            Ok(())
         }
     }
 }
