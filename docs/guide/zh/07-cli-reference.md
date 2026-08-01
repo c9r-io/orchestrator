@@ -297,7 +297,7 @@ orchestrator task watch <task_id> --interval 5
 
 # 执行追踪与异常检测
 orchestrator task trace <task_id>
-orchestrator task trace <task_id> --verbose --json
+orchestrator task trace <task_id> --verbose -o json
 ```
 
 | 标志 (logs) | 说明 |
@@ -314,7 +314,25 @@ orchestrator task trace <task_id> --verbose --json
 | 标志 (trace) | 说明 |
 |--------------|------|
 | `--verbose` | 详细追踪输出 |
-| `--json` | JSON 格式输出 |
+| `-o, --output` | 输出格式：table（默认）、json、yaml |
+
+### task timeline
+
+显示任务的语义化过程时间线 — 目标、执行、证据、失败与状态迁移，支持稳定分页。
+
+```bash
+orchestrator task timeline <task_id>                       # first timeline page
+orchestrator task timeline <task_id> --category failure --follow
+orchestrator task timeline <task_id> -o json
+```
+
+| 标志 | 说明 |
+|------|------|
+| `--cursor` | 从分页游标继续 |
+| `-l, --limit` | 每页条目数（默认：50） |
+| `--category` | 按条目类别筛选 |
+| `-f, --follow` | 跟踪新的时间线条目 |
+| `-o, --output` | 输出格式：table（默认）、json、yaml |
 
 ### task retry
 
@@ -340,6 +358,61 @@ orchestrator task delete --all --project my-project   # 删除指定项目的所
 | `--all` | 删除所有任务 |
 | `--status <STATUS>` | 按状态筛选（与 `--all` 配合使用） |
 | `--project <PROJECT>` | 按项目筛选（与 `--all` 配合使用） |
+
+## 注意力队列（Attention Queue）
+
+跨任务的人工注意力队列 — 只呈现需要人工决策的工作流状况，按严重度和归属排序。所有队列变更均经过认证、版本校验（`--expected-version`），并接受可安全重试的 `--idempotency-key`。
+
+```bash
+orchestrator attention list                                # active inbox
+orchestrator attention list --assignee me                  # items assigned to the current actor
+orchestrator attention list --state resolved -o json       # audit resolved decisions
+orchestrator attention get <id>                            # inspect one item
+orchestrator attention claim <id> --expected-version 1
+orchestrator attention snooze <id> --expected-version 2 --until 2026-07-13T09:00:00Z
+orchestrator attention resolve <id> --expected-version 2 --reason reviewed
+orchestrator attention action <id> resume_task --expected-version 1
+orchestrator attention follow --after 42                   # stream inbox deltas (NDJSON)
+```
+
+| 子命令 | 说明 |
+|--------|------|
+| `list` | 列出注意力条目，支持可选筛选（`--project`、`--state`、`--kind`、`--severity`、`--assignee`、`--task`、`--limit`） |
+| `get` | 显示脱敏后的状况、乐观版本号、任务上下文和安全的白名单动作 |
+| `claim` | 认领一个 open 状态的条目 |
+| `snooze` | 将 open 或 claimed 条目推迟到某个 RFC3339 截止时间（`--until`） |
+| `resolve` | 携带审计理由关闭条目（`--reason`） |
+| `action` | 仅预留并执行条目自身声明的动作，如 `retry_failed_item` 或 `resume_task`（`--input` 提供 JSON 动作输入） |
+| `follow` | 从持久化变更序列跟踪单调队列变化（`--after`）；流式输出为 `-o json`（默认，NDJSON）或 `-o yaml` |
+
+## 交接与恢复（Handoff & Resume）
+
+### handoff
+
+生成并检查不可变的任务交接快照，用于在代理或会话之间转移上下文。
+
+```bash
+orchestrator handoff generate <task_id>                    # snapshot at the latest event cursor
+orchestrator handoff generate <task_id> --cursor 42 -o json  # snapshot at a selected event cursor
+orchestrator handoff get <handoff_id>                      # retrieve one snapshot
+```
+
+### resume
+
+预览并执行安全的逻辑恢复操作。
+
+```bash
+orchestrator resume boundaries <task_id>                   # boundaries + side-effect classifications
+orchestrator resume plan <task_id> --boundary <boundary_id> --mode <mode>
+orchestrator resume execute <plan_id> --expected-state-version 3 \
+  --reason "reviewed preview" --idempotency-key resume-1
+```
+
+| 子命令 | 说明 |
+|--------|------|
+| `resume boundaries` | 列出任务的逻辑边界及其副作用分类 |
+| `resume plan` | 在不改变任务或工作区状态的前提下，持久化一个会过期的后果预览（`--attention-item` 可关联注意力条目） |
+| `resume execute` | 执行已审阅的计划，带过期状态保护；需要 `--expected-state-version`、`--reason` 和 `--idempotency-key`；提权计划需要 `--elevated-confirmation` |
 
 ## 清单
 
@@ -465,6 +538,35 @@ orchestrator agent drain <agent_name> --timeout 60
 | `-o, --output`（仅 list） | 输出格式：table（默认）、json、yaml |
 | `--timeout`（仅 drain） | 超时秒数；超时后强制 drain |
 
+### 代理会话（Agent Sessions）
+
+观察和控制交互式代理会话。写入控制是一种带围栏（fenced）的租约：写侧变更需要当前的 `--fencing-token`，输入携带可安全重试的 `--idempotency-key`。
+
+```bash
+orchestrator agent session list --state detached -o json   # list observable sessions
+orchestrator agent session get <session_id>                # lifecycle, process, and lease metadata
+orchestrator agent session attach <session_id> --mode writer --client-id terminal-a
+orchestrator agent session read <session_id> --offset 0 --chunks-json
+orchestrator agent session heartbeat <session_id> --client-id terminal-a --fencing-token 1
+orchestrator agent session send-input <session_id> --client-id terminal-a --fencing-token 1 \
+  --text hello --idempotency-key input-1
+orchestrator agent session detach <session_id> --mode writer --client-id terminal-a --fencing-token 1
+orchestrator agent session close <session_id> --reason done --expected-version 2 --idempotency-key close-1
+orchestrator agent session resolve --pid 1234 -o json      # diagnostic PID -> sessions (read-only)
+```
+
+| 子命令 | 说明 |
+|--------|------|
+| `list` | 按 `--task`、`--agent`、`--state` 筛选由守护进程权威管理的会话，不暴露传输路径或命令文本 |
+| `get` | 显示单个会话的公开生命周期、进程和写入租约元数据 |
+| `attach` | 以读者身份附加（`--mode reader`，默认，只读），或显式获取带围栏的写入租约（`--mode writer`，需要 operator 权限和已启用的会话控制策略） |
+| `read` | 从客户端自持的 `--offset` 跟踪或读取转录字节；`--chunks-json` 输出带 `next_offset` 的结构化分块，用于可安全重连的流式读取 |
+| `heartbeat` | 续期写入租约；只有当前未过期的客户端和 fencing token 才能延长 |
+| `send-input` | 使用当前写入方 fencing token 向存活会话发送有界输入 |
+| `detach` | 分离读者或写者；写者分离需要与当前 fencing token 完全一致 |
+| `close` | 关闭底层会话进程 — 以会话 ID 寻址、版本感知（`--expected-version`）、有审计（`--reason`），绝不凭 PID 单独授权 |
+| `resolve` | 将诊断用 PID 解析到会话；只读，绝不产生变更权限 |
+
 ## 守护进程生命周期
 
 ```bash
@@ -493,6 +595,27 @@ orchestrator event cleanup --archive          # 删除前归档为 JSONL
 | `-l, --limit` | 返回的最大事件数（默认：50） |
 | `-o, --output` | 输出格式：table（默认）、json、yaml |
 
+## 审计（Audit）
+
+查询规范的控制面板操作审计证据 — 项目作用域的变更记录，用于关联传输层授权、领域变更和事件证据，且不暴露请求体或密钥。
+
+```bash
+orchestrator audit list --project demo --status failed     # list failed mutations
+orchestrator audit list --project demo --target-type attention_item -o json
+orchestrator audit get req-123 --project demo              # one record by request ID
+```
+
+| 标志 (list) | 说明 |
+|-------------|------|
+| `-p, --project` | 项目作用域（必填） |
+| `--actor` | 按操作者身份筛选 |
+| `--target-type` / `--target-id` | 按变更目标筛选 |
+| `--action` | 按动作名筛选 |
+| `--status` | 按结果状态筛选 |
+| `--from` / `--to` | 时间范围边界 |
+| `-l, --limit` | 最大记录数（默认：100） |
+| `-o, --output` | 输出格式：table（默认）、json、yaml |
+
 ## 触发器生命周期
 
 ```bash
@@ -504,13 +627,156 @@ orchestrator trigger fire <name> --payload '{"key":"value"}'   # 携带 JSON pay
 
 所有触发器子命令均支持 `--project` 标志用于项目级操作。
 
+## 来源集成（Source Integration）
+
+外部来源事件（如 Slack）及其任务绑定、持久化自动化路由、受治理模板和提供方连接。
+
+### 来源事件（Source events）
+
+```bash
+orchestrator source list --state failed                    # list replay candidates
+orchestrator source list --project demo --limit 20 -o json
+orchestrator source get <source_event_id>                  # one normalized event
+orchestrator source ingest --project demo --file event.json  # ingest a normalized fixture
+orchestrator source replay <source_event_id>               # requeue one failed generic route
+orchestrator source route <source_event_id>                # protected route + Slack deep link
+```
+
+| 子命令 | 说明 |
+|--------|------|
+| `list` | 按 `--project`、`--task`、`--state`、`--limit` 筛选并列出最近的提供方中立来源事件，不暴露原始提供方载荷 |
+| `get` | 检查单个归一化事件的路由状态、来源出处和解析出的流程 |
+| `ingest` | 持久化插入一个已认证的归一化事件夹具，用于适配器开发和非 Slack 集成测试（需启用运行时来源摄入；`--payload-hash` 可选地固定载荷） |
+| `replay` | 仅限管理员的通用来源事件恢复；关联到徽章自动化路由的事件必须改用 `source automation replay` |
+| `route` | 检查为某来源事件解析出的受保护自动化路由，含其 Slack 深链接 |
+
+### 来源绑定（Source bindings）
+
+将可信的提供方会话坐标与 orchestrator 任务关联，并控制受治理的 source-to-task 绑定。
+
+```bash
+orchestrator source bindings <task_id>                     # bindings correlated with one task
+orchestrator source bind --project demo --task <task_id> --provider fixture \
+  --installation install-1 --conversation C1 --thread T1 --source-event <event_id>
+orchestrator source binding simulate --project demo --installation T1 \
+  --reaction agent-analyze --channel C1 --actor U1
+orchestrator source binding suspend badge-default --project demo
+orchestrator source binding resume badge-default --project demo
+```
+
+| 子命令 | 说明 |
+|--------|------|
+| `bindings` | 列出与单个任务关联的 primary、related 和 notification_target 绑定 |
+| `bind` | 创建可信绑定（`--binding-type primary|related|notification_target`，出处通过 `--source-event` 提供） |
+| `binding simulate` | 针对调用方提供的证据模拟确定性匹配 — 无副作用，不调用提供方 API |
+| `binding suspend` | 立即停止某绑定匹配新事件 |
+| `binding resume` | 经与当前活跃绑定的冲突校验后，重新启用已挂起的绑定 |
+
+### 来源自动化（Source automation）
+
+检查和控制持久化徽章自动化路由。运维输出不含 Slack 消息坐标、正文、凭据和永久链接。`replay` 与 `ignore` 是有审计的操作员控制，需要 `--reason`、`--expected-version` 和 `--idempotency-key`。
+
+```bash
+orchestrator source automation list --project demo --state needs_attention -o json
+orchestrator source automation list --page-size 20 --page-token <token>
+orchestrator source automation get <route_id> --attempt-limit 20
+orchestrator source automation status --project demo -o json
+orchestrator source automation watch --project demo --after 42
+orchestrator source automation simulate --project demo --installation T1 \
+  --reaction agent-analyze --channel C1 --actor U1 \
+  --message-url https://acme.slack.com/archives/C1/p123 --target-id C1:1.23
+orchestrator source automation replay <route_id> --expected-version 7 \
+  --reason "credential rotated" --idempotency-key replay-1
+orchestrator source automation ignore <route_id> --expected-version 8 \
+  --reason "obsolete request" --idempotency-key ignore-1
+```
+
+| 子命令 | 说明 |
+|--------|------|
+| `list` | 使用有界 keyset 分页列出安全的路由投影（`--page-size`、`--page-token`；筛选：`--project`、`--state`、`--provider`、`--binding`、`--task`） |
+| `get` | 显示单条路由的安全投影和有界的尝试历史（`--attempt-limit`） |
+| `status` | 报告积压、最旧时长、活跃租约、重试中路由、Attention 数量和低基数失败族 |
+| `watch` | 从持久化变更序列跟踪可重连的路由状态迁移（`--after`）；流式输出为 `-o json`（默认，NDJSON）或 `-o yaml` |
+| `simulate` | 用线上同款匹配器和渲染器处理调用方提供的安全证据 — 绝不读取凭据、调用 Slack、预留路由、创建 Attention 或创建任务 |
+| `replay` | 从持久化检查点重放一条可操作路由；除非显式指定 `--adopt-current-config`，否则保持固定的配置代际 |
+| `ignore` | 有意关闭一条路由而不创建任务，并解决其匹配的 Attention 条目 |
+
+### 来源模板（Source templates）
+
+```bash
+orchestrator source template preview badge-default --provider slack \
+  --installation T1 --message-url https://acme.slack.com/archives/C1/p123
+```
+
+`source template preview` 使用守护进程的活跃配置渲染一个无副作用的样例 — 绝不调用提供方或创建任务。可选证据覆盖：`--event-id`、`--reaction`、`--target-id`。
+
+### 来源连接（Source connections）
+
+管理提供方连接和 OAuth 安装意向。凡触及既有连接的变更均有审计（`--reason`、`--idempotency-key`）和版本校验（`--expected-version`）；会打开 OAuth 的命令接受 `--no-open`，改为打印 URL 而非启动浏览器。
+
+```bash
+orchestrator source connection catalog                     # managed/manual provisioning capabilities
+orchestrator source connection list -p demo
+orchestrator source connection list -p demo --include-disconnected -o json
+orchestrator source connection get <connection_id> -p demo
+orchestrator source connection watch -p demo --after 42    # stream connection changes (NDJSON)
+
+# Official Slack App OAuth
+orchestrator source connection connect -p demo --reason "onboard workspace" --idempotency-key connect-1
+orchestrator source connection status <intent_id> -p demo  # poll or resume an OAuth intent
+orchestrator source connection cancel <intent_id> -p demo --reason "abandoned flow" --idempotency-key cancel-1
+orchestrator source connection reauthorize <connection_id> -p demo --expected-version 2 \
+  --reason "scope update" --idempotency-key reauth-1
+
+# Dedicated (workspace-owned) Slack App
+orchestrator source connection provision-dedicated -p demo --config-token-stdin \
+  --reason "private app" --idempotency-key prov-1
+orchestrator source connection dedicated-status <provisioning_id> -p demo
+orchestrator source connection dedicated-resume <provisioning_id> -p demo \
+  --reason "approve preview" --idempotency-key resume-1
+orchestrator source connection dedicated-abandon <provisioning_id> -p demo \
+  --reason "wrong workspace" --idempotency-key abandon-1
+orchestrator source connection dedicated-upgrade <connection_id> -p demo --expected-version 3 \
+  --config-token-stdin --approve --reason "apply manifest fix" --idempotency-key upgrade-1
+orchestrator source connection migrate-to-shared <connection_id> -p demo --expected-version 3 \
+  --reason "move to official app" --idempotency-key migrate-1
+orchestrator source connection dedicated-delete <connection_id> -p demo --expected-version 5 \
+  --app-id-confirmation A0123 --reason "decommission" --idempotency-key delete-1
+
+# Connection lifecycle
+orchestrator source connection disconnect <connection_id> -p demo --expected-version 2 \
+  --reason "offboard workspace" --idempotency-key disc-1
+orchestrator source connection transfer <connection_id> -p demo --expected-version 2 \
+  --target-daemon-id <daemon_id> --reason "move to prod daemon" --idempotency-key transfer-1
+```
+
+| 子命令 | 说明 |
+|--------|------|
+| `catalog` | 报告守护进程对每个提供方支持哪些托管与手动供给模式 |
+| `list` | 列出不暴露凭据的安全连接投影；除非指定 `--include-disconnected`，否则隐藏已断开的连接 |
+| `get` | 检查单个连接的安全投影、生命周期状态和版本 |
+| `watch` | 跟踪单调的连接变更（`--after`）；流式输出为 `-o json`（默认，NDJSON）或 `-o yaml` |
+| `connect` | 启动官方 Slack App OAuth 流程（创建安装意向并打开授权 URL） |
+| `status` | 轮询或恢复单个待处理的 OAuth 意向 |
+| `cancel` | 取消未完成的 OAuth 意向 |
+| `reauthorize` | 为既有连接重新发起 OAuth（例如权限范围变更或凭据被吊销后） |
+| `provision-dedicated` | 用标准输入读取的配置令牌（`--config-token-stdin`）验证并供给工作区自有的私有 Slack App；先预览，再 `--approve` |
+| `dedicated-status` | 检查专用 App 供给检查点 |
+| `dedicated-resume` | 恢复凭据交接，或批准已审阅的专用 App 预览 |
+| `dedicated-abandon` | 放弃一个非终态的供给检查点 |
+| `dedicated-upgrade` | 审阅并将修正后的清单应用到既有专用 App（先预览，再带 `--approve` 重跑） |
+| `migrate-to-shared` | 启动已审阅的专用 App 到官方 App 的迁移 |
+| `dedicated-delete` | 永久删除已断开的专用 App；需以 `--app-id-confirmation` 提供 App ID 作为确认 |
+| `disconnect` | 断开连接并销毁其托管凭据 |
+| `transfer` | 将连接的独占所有权移交给另一个守护进程（`--target-daemon-id`） |
+
 ## 调试与系统
 
 ```bash
 orchestrator debug                   # 检查内部状态
 orchestrator debug --component config  # 显示活跃配置
 orchestrator version                 # 构建版本 + git 哈希
-orchestrator version --json          # JSON 格式版本输出
+orchestrator version -o json         # JSON 格式版本输出
 orchestrator check                   # 预检验证
 orchestrator check -o json           # 结构化检查输出
 orchestrator guide                   # 带示例的 CLI 引导参考
@@ -539,9 +805,26 @@ orchestrator qa doctor               # 来自 task_execution_metrics 的可观�
 orchestrator qa doctor -o json       # 结构化输出
 ```
 
+## 流程指标（Process Metrics）
+
+Process Console 运维指标。
+
+```bash
+orchestrator metrics process -p demo                       # snapshot over the default 24h window
+orchestrator metrics process -p demo --window 7d --bucket 1d -o json
+orchestrator metrics prune --retention-days 30             # delete optional metrics past retention
+orchestrator metrics rebuild -p demo                       # rebuild materialized rollups
+```
+
+| 子命令 | 说明 |
+|--------|------|
+| `process` | 查询单个项目作用域的 Process Console 快照，时间窗口 `--window`（默认：24h），分桶大小 `--bucket` 可配置（默认：1h） |
+| `prune` | 删除超过 `--retention-days` 保留阈值的可选指标 |
+| `rebuild` | 为单个项目重建保留的物化汇总 |
+
 ## 内置工具
 
-供 CRD 插件脚本使用的辅助工具（由触发器/终结插件调用）。
+供 CRD 插件脚本使用的辅助工具（由触发器/终结插件调用）：`tool webhook-verify-hmac`、`tool payload-extract` 和 `tool secret-rotate`。
 
 ```bash
 # 验证 HMAC 签名（退出码 0 = 有效，1 = 无效）
@@ -549,6 +832,7 @@ orchestrator tool webhook-verify-hmac --secret <secret> --body <body> --signatur
 
 # 使用点分路径从 JSON 中提取值（读取标准输入）
 echo '{"event":{"type":"push"}}' | orchestrator tool payload-extract --path event.type
+orchestrator tool payload-extract --path event.type < payload.json
 
 # 轮换 SecretStore 中的某个密钥（需要守护进程运行）
 orchestrator tool secret-rotate <store> <key> --value <new_value> [--project <id>]
@@ -556,13 +840,16 @@ orchestrator tool secret-rotate <store> <key> --value <new_value> [--project <id
 
 ## 输出格式
 
-大多数 `get` 和 `info` 命令支持 `-o` 输出格式：
+所有非流式命令均接受统一的 `-o, --output {table,json,yaml}` 标志：
 
-```bash
--o json    # JSON 输出
--o yaml    # YAML 输出
-# （默认）  # 表格输出
-```
+- 集合类命令（`list` 风格）默认 `table`。
+- 单对象读取和变更命令默认 `yaml`。
+
+流式命令（`attention follow`、`source automation watch`、`source connection watch`）接受 `-o {json,yaml}`，默认 `json`，以 NDJSON 形式输出（每行一个 JSON 对象）。
+
+两个有意保留的例外沿用自己的开关：`agent session read --chunks-json`（带重连偏移量的结构化分块输出）和 `guide --format {markdown,json}`。
+
+`--json` 仅在 `version` 和 `task trace` 上作为 `-o json` 的隐藏废弃别名保留一个发布周期 — 请改用 `-o json`。
 
 ## 守护进程（C/S 模式）
 
@@ -655,7 +942,21 @@ orchestrator task watch <id>
 orchestrator task trace <id> [--verbose]
 orchestrator task retry <item_id> [--force]
 orchestrator task recover <id>
+orchestrator task timeline <id> [--category <c>] [--follow] [-o json]
 orchestrator task delete <id> --force
+
+# 注意力队列
+orchestrator attention list [--state <s>] [--assignee me] [-o json]
+orchestrator attention get <id>
+orchestrator attention claim|snooze|resolve|action <id> --expected-version <v>
+orchestrator attention follow [--after <seq>]
+
+# 交接与恢复
+orchestrator handoff generate <task_id> [--cursor <n>]
+orchestrator handoff get <handoff_id>
+orchestrator resume boundaries <task_id>
+orchestrator resume plan <task_id> --boundary <b> --mode <m>
+orchestrator resume execute <plan_id> --expected-state-version <v> --reason <r> --idempotency-key <k>
 
 # 代理生命周期
 orchestrator agent list [--project <id>] [-o json|yaml]
@@ -663,8 +964,20 @@ orchestrator agent cordon <agent_name> [--project <id>]
 orchestrator agent uncordon <agent_name> [--project <id>]
 orchestrator agent drain <agent_name> [--project <id>] [--timeout <secs>]
 
+# 代理会话
+orchestrator agent session list|get|attach|read|heartbeat|send-input|detach|close|resolve
+
 # 触发器生命周期
 orchestrator trigger suspend|resume|fire <name> [--project <id>] [--payload <json>]
+
+# 来源集成
+orchestrator source list|get|ingest|replay|route|bind|bindings
+orchestrator source binding simulate|suspend|resume
+orchestrator source automation list|get|status|watch|simulate|replay|ignore
+orchestrator source template preview <name> --provider <p> --installation <i> --message-url <url>
+orchestrator source connection list|get|watch|catalog|connect|status|cancel|reauthorize
+orchestrator source connection provision-dedicated|dedicated-status|dedicated-resume|dedicated-abandon
+orchestrator source connection dedicated-upgrade|migrate-to-shared|dedicated-delete|disconnect|transfer
 
 # 项目清理
 orchestrator delete project/<id> --force
@@ -693,6 +1006,15 @@ orchestrator db cleanup [--older-than <days>]
 orchestrator event stats
 orchestrator event list --task <id> [-o json]
 orchestrator event cleanup [--older-than <days>] [--dry-run] [--archive]
+
+# 审计证据
+orchestrator audit list --project <id> [--actor <a>] [--status <s>]
+orchestrator audit get <request_id> --project <id>
+
+# 流程指标
+orchestrator metrics process --project <id> [--window <w>] [--bucket <b>]
+orchestrator metrics prune [--retention-days <n>]
+orchestrator metrics rebuild --project <id>
 
 # 守护进程生命周期
 orchestrator daemon status|stop

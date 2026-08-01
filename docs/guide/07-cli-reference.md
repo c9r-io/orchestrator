@@ -297,7 +297,7 @@ orchestrator task watch <task_id> --interval 5
 
 # Execution trace with anomaly detection
 orchestrator task trace <task_id>
-orchestrator task trace <task_id> --verbose --json
+orchestrator task trace <task_id> --verbose -o json
 ```
 
 | Flag (logs) | Description |
@@ -314,7 +314,25 @@ orchestrator task trace <task_id> --verbose --json
 | Flag (trace) | Description |
 |--------------|-------------|
 | `--verbose` | Verbose trace output |
-| `--json` | JSON output format |
+| `-o, --output` | Output format: table (default), json, yaml |
+
+### task timeline
+
+Show the semantic process timeline for a task — goal, execution, evidence, failure, and state transitions with stable pagination.
+
+```bash
+orchestrator task timeline <task_id>                       # first timeline page
+orchestrator task timeline <task_id> --category failure --follow
+orchestrator task timeline <task_id> -o json
+```
+
+| Flag | Description |
+|------|-------------|
+| `--cursor` | Resume from a pagination cursor |
+| `-l, --limit` | Entries per page (default: 50) |
+| `--category` | Filter by entry category |
+| `-f, --follow` | Follow new timeline entries |
+| `-o, --output` | Output format: table (default), json, yaml |
 
 ### task retry
 
@@ -340,6 +358,61 @@ orchestrator task delete --all --project my-project   # delete all in a project
 | `--all` | Delete all tasks |
 | `--status <STATUS>` | Filter by status (used with `--all`) |
 | `--project <PROJECT>` | Filter by project (used with `--all`) |
+
+## Attention Queue
+
+Cross-task human attention queue — only workflow conditions that need a human decision, ordered by severity and ownership. All queue mutations are authenticated, version-checked (`--expected-version`), and accept a retry-stable `--idempotency-key`.
+
+```bash
+orchestrator attention list                                # active inbox
+orchestrator attention list --assignee me                  # items assigned to the current actor
+orchestrator attention list --state resolved -o json       # audit resolved decisions
+orchestrator attention get <id>                            # inspect one item
+orchestrator attention claim <id> --expected-version 1
+orchestrator attention snooze <id> --expected-version 2 --until 2026-07-13T09:00:00Z
+orchestrator attention resolve <id> --expected-version 2 --reason reviewed
+orchestrator attention action <id> resume_task --expected-version 1
+orchestrator attention follow --after 42                   # stream inbox deltas (NDJSON)
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `list` | List attention items with optional filters (`--project`, `--state`, `--kind`, `--severity`, `--assignee`, `--task`, `--limit`) |
+| `get` | Show the redacted condition, optimistic version, task context, and safe allowlisted actions |
+| `claim` | Take ownership of an open item |
+| `snooze` | Defer an open or claimed item until an RFC3339 deadline (`--until`) |
+| `resolve` | Close an item with an audit reason (`--reason`) |
+| `action` | Reserve and execute only an action advertised by the item, such as `retry_failed_item` or `resume_task` (`--input` supplies JSON action input) |
+| `follow` | Follow monotonic queue changes from a durable change sequence (`--after`); streaming output is `-o json` (default, NDJSON) or `-o yaml` |
+
+## Handoff & Resume
+
+### handoff
+
+Generate and inspect immutable task handoff snapshots for transferring context between agents or sessions.
+
+```bash
+orchestrator handoff generate <task_id>                    # snapshot at the latest event cursor
+orchestrator handoff generate <task_id> --cursor 42 -o json  # snapshot at a selected event cursor
+orchestrator handoff get <handoff_id>                      # retrieve one snapshot
+```
+
+### resume
+
+Preview and execute safe logical resume operations.
+
+```bash
+orchestrator resume boundaries <task_id>                   # boundaries + side-effect classifications
+orchestrator resume plan <task_id> --boundary <boundary_id> --mode <mode>
+orchestrator resume execute <plan_id> --expected-state-version 3 \
+  --reason "reviewed preview" --idempotency-key resume-1
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `resume boundaries` | List a task's logical boundaries and their side-effect classifications |
+| `resume plan` | Persist an expiring consequence preview without changing task or workspace state (`--attention-item` links an attention item) |
+| `resume execute` | Execute a previously reviewed plan with stale-state protection; requires `--expected-state-version`, `--reason`, and `--idempotency-key`; elevated plans need `--elevated-confirmation` |
 
 ## Manifest
 
@@ -466,6 +539,35 @@ orchestrator agent drain <agent_name> --timeout 60
 | `-o, --output` (list only) | Output format: table (default), json, yaml |
 | `--timeout` (drain only) | Timeout in seconds; force-drain after this duration |
 
+### Agent Sessions
+
+Observe and control interactive agent sessions. Writer control is a fenced lease: writer mutations require the current `--fencing-token`, and inputs carry a retry-stable `--idempotency-key`.
+
+```bash
+orchestrator agent session list --state detached -o json   # list observable sessions
+orchestrator agent session get <session_id>                # lifecycle, process, and lease metadata
+orchestrator agent session attach <session_id> --mode writer --client-id terminal-a
+orchestrator agent session read <session_id> --offset 0 --chunks-json
+orchestrator agent session heartbeat <session_id> --client-id terminal-a --fencing-token 1
+orchestrator agent session send-input <session_id> --client-id terminal-a --fencing-token 1 \
+  --text hello --idempotency-key input-1
+orchestrator agent session detach <session_id> --mode writer --client-id terminal-a --fencing-token 1
+orchestrator agent session close <session_id> --reason done --expected-version 2 --idempotency-key close-1
+orchestrator agent session resolve --pid 1234 -o json      # diagnostic PID -> sessions (read-only)
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `list` | List daemon-authoritative sessions with `--task`, `--agent`, `--state` filters, without exposing transport paths or command text |
+| `get` | Show public lifecycle, process, and writer lease metadata for one session |
+| `attach` | Attach as a reader (`--mode reader`, default, read-only) or explicitly acquire the fenced writer lease (`--mode writer`, requires operator authority and an enabled session-control policy) |
+| `read` | Follow or read transcript bytes from a client-owned `--offset`; `--chunks-json` emits structured chunks with `next_offset` for reconnect-safe streaming |
+| `heartbeat` | Renew a writer lease; only the current unexpired client and fencing token can extend it |
+| `send-input` | Send bounded input to a live session with the current writer fencing token |
+| `detach` | Detach a reader or writer; writer detach requires the exact current fencing token |
+| `close` | Close the backing session process — session-ID addressed, version-aware (`--expected-version`), audited (`--reason`), never authorized by PID alone |
+| `resolve` | Resolve a diagnostic PID to sessions; read-only and never creates mutation authority |
+
 ## Daemon Lifecycle
 
 ```bash
@@ -494,6 +596,27 @@ orchestrator event cleanup --archive          # archive to JSONL before deleting
 | `-l, --limit` | Maximum events to return (default: 50) |
 | `-o, --output` | Output format: table (default), json, yaml |
 
+## Audit
+
+Query canonical control-plane action audit evidence — project-scoped mutation records that correlate transport authorization, domain mutation, and event evidence, without exposing request bodies or secrets.
+
+```bash
+orchestrator audit list --project demo --status failed     # list failed mutations
+orchestrator audit list --project demo --target-type attention_item -o json
+orchestrator audit get req-123 --project demo              # one record by request ID
+```
+
+| Flag (list) | Description |
+|-------------|-------------|
+| `-p, --project` | Project scope (required) |
+| `--actor` | Filter by acting identity |
+| `--target-type` / `--target-id` | Filter by mutation target |
+| `--action` | Filter by action name |
+| `--status` | Filter by outcome status |
+| `--from` / `--to` | Time range bounds |
+| `-l, --limit` | Maximum records (default: 100) |
+| `-o, --output` | Output format: table (default), json, yaml |
+
 ## Trigger Lifecycle
 
 ```bash
@@ -505,13 +628,156 @@ orchestrator trigger fire <name> --payload '{"key":"value"}'   # fire with JSON 
 
 All trigger subcommands accept the `--project` flag for project-scoped operation.
 
+## Source Integration
+
+External source events (e.g. Slack) and their task bindings, durable automation routes, governed templates, and provider connections.
+
+### Source events
+
+```bash
+orchestrator source list --state failed                    # list replay candidates
+orchestrator source list --project demo --limit 20 -o json
+orchestrator source get <source_event_id>                  # one normalized event
+orchestrator source ingest --project demo --file event.json  # ingest a normalized fixture
+orchestrator source replay <source_event_id>               # requeue one failed generic route
+orchestrator source route <source_event_id>                # protected route + Slack deep link
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `list` | List recent provider-neutral source events with `--project`, `--task`, `--state`, `--limit` filters, without exposing raw provider payloads |
+| `get` | Inspect one normalized event's routing state, provenance, and resolved process |
+| `ingest` | Durably insert an authenticated normalized event fixture for adapter development and non-Slack integration testing (requires runtime source ingestion; `--payload-hash` optionally pins the payload) |
+| `replay` | Admin-only recovery for generic source events; events linked to a badge automation route must use `source automation replay` instead |
+| `route` | Inspect the protected automation route resolved for a source event, including its Slack deep link |
+
+### Source bindings
+
+Correlate trusted provider conversation coordinates with orchestrator tasks, and control governed source-to-task bindings.
+
+```bash
+orchestrator source bindings <task_id>                     # bindings correlated with one task
+orchestrator source bind --project demo --task <task_id> --provider fixture \
+  --installation install-1 --conversation C1 --thread T1 --source-event <event_id>
+orchestrator source binding simulate --project demo --installation T1 \
+  --reaction agent-analyze --channel C1 --actor U1
+orchestrator source binding suspend badge-default --project demo
+orchestrator source binding resume badge-default --project demo
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `bindings` | List primary, related, and notification_target bindings for one task |
+| `bind` | Create a trusted binding (`--binding-type primary|related|notification_target`, provenance via `--source-event`) |
+| `binding simulate` | Simulate deterministic matching against caller-supplied evidence — no side effects, no provider API calls |
+| `binding suspend` | Stop a binding from matching new events, effective immediately |
+| `binding resume` | Re-enable a suspended binding after conflict validation against the active bindings |
+
+### Source automation
+
+Inspect and control durable badge automation routes. Operational output omits Slack message coordinates, bodies, credentials, and permalinks. `replay` and `ignore` are audited operator controls requiring `--reason`, `--expected-version`, and `--idempotency-key`.
+
+```bash
+orchestrator source automation list --project demo --state needs_attention -o json
+orchestrator source automation list --page-size 20 --page-token <token>
+orchestrator source automation get <route_id> --attempt-limit 20
+orchestrator source automation status --project demo -o json
+orchestrator source automation watch --project demo --after 42
+orchestrator source automation simulate --project demo --installation T1 \
+  --reaction agent-analyze --channel C1 --actor U1 \
+  --message-url https://acme.slack.com/archives/C1/p123 --target-id C1:1.23
+orchestrator source automation replay <route_id> --expected-version 7 \
+  --reason "credential rotated" --idempotency-key replay-1
+orchestrator source automation ignore <route_id> --expected-version 8 \
+  --reason "obsolete request" --idempotency-key ignore-1
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `list` | List safe route projections with bounded keyset pagination (`--page-size`, `--page-token`; filters: `--project`, `--state`, `--provider`, `--binding`, `--task`) |
+| `get` | Show one route's safe projection and bounded attempt history (`--attempt-limit`) |
+| `status` | Report backlog, oldest age, active leases, retrying routes, Attention count, and low-cardinality failure families |
+| `watch` | Follow reconnectable route transitions from a durable change sequence (`--after`); streaming output is `-o json` (default, NDJSON) or `-o yaml` |
+| `simulate` | Run the live matcher and renderer against caller-supplied safe evidence — never reads credentials, calls Slack, reserves a route, creates Attention, or creates a task |
+| `replay` | Replay an actionable route from its durable checkpoint; keeps the pinned generation unless `--adopt-current-config` is explicitly requested |
+| `ignore` | Deliberately close a route without task creation and resolve its matching Attention item |
+
+### Source templates
+
+```bash
+orchestrator source template preview badge-default --provider slack \
+  --installation T1 --message-url https://acme.slack.com/archives/C1/p123
+```
+
+`source template preview` renders a side-effect-free sample using the daemon's active configuration — it never calls the provider or creates a task. Optional evidence overrides: `--event-id`, `--reaction`, `--target-id`.
+
+### Source connections
+
+Manage provider connections and OAuth installation intents. Mutations are audited (`--reason`, `--idempotency-key`) and version-checked (`--expected-version`) where they touch an existing connection; OAuth-opening commands accept `--no-open` to print the URL instead of launching a browser.
+
+```bash
+orchestrator source connection catalog                     # managed/manual provisioning capabilities
+orchestrator source connection list -p demo
+orchestrator source connection list -p demo --include-disconnected -o json
+orchestrator source connection get <connection_id> -p demo
+orchestrator source connection watch -p demo --after 42    # stream connection changes (NDJSON)
+
+# Official Slack App OAuth
+orchestrator source connection connect -p demo --reason "onboard workspace" --idempotency-key connect-1
+orchestrator source connection status <intent_id> -p demo  # poll or resume an OAuth intent
+orchestrator source connection cancel <intent_id> -p demo --reason "abandoned flow" --idempotency-key cancel-1
+orchestrator source connection reauthorize <connection_id> -p demo --expected-version 2 \
+  --reason "scope update" --idempotency-key reauth-1
+
+# Dedicated (workspace-owned) Slack App
+orchestrator source connection provision-dedicated -p demo --config-token-stdin \
+  --reason "private app" --idempotency-key prov-1
+orchestrator source connection dedicated-status <provisioning_id> -p demo
+orchestrator source connection dedicated-resume <provisioning_id> -p demo \
+  --reason "approve preview" --idempotency-key resume-1
+orchestrator source connection dedicated-abandon <provisioning_id> -p demo \
+  --reason "wrong workspace" --idempotency-key abandon-1
+orchestrator source connection dedicated-upgrade <connection_id> -p demo --expected-version 3 \
+  --config-token-stdin --approve --reason "apply manifest fix" --idempotency-key upgrade-1
+orchestrator source connection migrate-to-shared <connection_id> -p demo --expected-version 3 \
+  --reason "move to official app" --idempotency-key migrate-1
+orchestrator source connection dedicated-delete <connection_id> -p demo --expected-version 5 \
+  --app-id-confirmation A0123 --reason "decommission" --idempotency-key delete-1
+
+# Connection lifecycle
+orchestrator source connection disconnect <connection_id> -p demo --expected-version 2 \
+  --reason "offboard workspace" --idempotency-key disc-1
+orchestrator source connection transfer <connection_id> -p demo --expected-version 2 \
+  --target-daemon-id <daemon_id> --reason "move to prod daemon" --idempotency-key transfer-1
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `catalog` | Report which managed and manual provisioning modes the daemon supports per provider |
+| `list` | List safe connection projections without exposing credentials; disconnected connections hidden unless `--include-disconnected` |
+| `get` | Inspect one connection's safe projection, lifecycle state, and version |
+| `watch` | Follow monotonic connection changes (`--after`); streaming output is `-o json` (default, NDJSON) or `-o yaml` |
+| `connect` | Start the official Slack App OAuth flow (creates an installation intent and opens the authorization URL) |
+| `status` | Poll or resume one pending OAuth intent |
+| `cancel` | Cancel an unfinished OAuth intent |
+| `reauthorize` | Start OAuth again for an existing connection (e.g. after a scope change or credential revocation) |
+| `provision-dedicated` | Validate and provision a workspace-owned private Slack App from a configuration token read on stdin (`--config-token-stdin`); preview first, then `--approve` |
+| `dedicated-status` | Inspect a dedicated App provisioning checkpoint |
+| `dedicated-resume` | Resume credential handoff or approve a reviewed dedicated App preview |
+| `dedicated-abandon` | Abandon a non-terminal provisioning checkpoint |
+| `dedicated-upgrade` | Review and apply the fixed manifest to an existing dedicated App (preview first, re-run with `--approve`) |
+| `migrate-to-shared` | Start a reviewed dedicated-to-official App migration |
+| `dedicated-delete` | Permanently delete a disconnected dedicated App; requires the App ID as `--app-id-confirmation` |
+| `disconnect` | Disconnect a connection and destroy its managed credentials |
+| `transfer` | Move exclusive connection ownership to another daemon (`--target-daemon-id`) |
+
 ## Debug & System
 
 ```bash
 orchestrator debug                   # inspect internal state
 orchestrator debug --component config  # show active config
 orchestrator version                 # build version + git hash
-orchestrator version --json          # JSON version output
+orchestrator version -o json         # JSON version output
 orchestrator check                   # preflight validation
 orchestrator check -o json           # structured check output
 orchestrator guide                   # guided CLI reference with examples
@@ -541,9 +807,26 @@ orchestrator qa doctor               # observability health metrics from task_ex
 orchestrator qa doctor -o json       # structured output
 ```
 
+## Process Metrics
+
+Process Console operational metrics.
+
+```bash
+orchestrator metrics process -p demo                       # snapshot over the default 24h window
+orchestrator metrics process -p demo --window 7d --bucket 1d -o json
+orchestrator metrics prune --retention-days 30             # delete optional metrics past retention
+orchestrator metrics rebuild -p demo                       # rebuild materialized rollups
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `process` | Query one project-scoped Process Console snapshot over a time `--window` (default: 24h) with a configurable `--bucket` size (default: 1h) |
+| `prune` | Delete optional metrics older than the `--retention-days` threshold |
+| `rebuild` | Rebuild retained materialized rollups for one project |
+
 ## Built-in Tools
 
-Helper utilities for CRD plugin scripts (invoked from trigger/finalize plugins).
+Helper utilities for CRD plugin scripts (invoked from trigger/finalize plugins): `tool webhook-verify-hmac`, `tool payload-extract`, and `tool secret-rotate`.
 
 ```bash
 # Verify an HMAC signature (exit 0 = valid, exit 1 = invalid)
@@ -551,6 +834,7 @@ orchestrator tool webhook-verify-hmac --secret <secret> --body <body> --signatur
 
 # Extract a value from JSON using a dot-separated path (reads stdin)
 echo '{"event":{"type":"push"}}' | orchestrator tool payload-extract --path event.type
+orchestrator tool payload-extract --path event.type < payload.json
 
 # Rotate a key in a SecretStore (requires a running daemon)
 orchestrator tool secret-rotate <store> <key> --value <new_value> [--project <id>]
@@ -558,13 +842,16 @@ orchestrator tool secret-rotate <store> <key> --value <new_value> [--project <id
 
 ## Output Formats
 
-Most `get` and `info` commands support `-o` for output format:
+Every non-streaming command takes a unified `-o, --output {table,json,yaml}` flag:
 
-```bash
--o json    # JSON output
--o yaml    # YAML output
-# (default) # table output
-```
+- Collection commands (`list`-style) default to `table`.
+- Single-object reads and mutations default to `yaml`.
+
+Streaming commands (`attention follow`, `source automation watch`, `source connection watch`) take `-o {json,yaml}` and default to `json`, emitted as NDJSON (one JSON object per line).
+
+Two deliberate exceptions keep their own switches: `agent session read --chunks-json` (structured chunk framing with reconnect offsets) and `guide --format {markdown,json}`.
+
+`--json` survives only as a hidden deprecated alias for `-o json` on `version` and `task trace`, for one release cycle — use `-o json` instead.
 
 ## Daemon (C/S Mode)
 
@@ -661,7 +948,21 @@ orchestrator task watch <id>
 orchestrator task trace <id> [--verbose]
 orchestrator task retry <item_id> [--force]
 orchestrator task recover <id>
+orchestrator task timeline <id> [--category <c>] [--follow] [-o json]
 orchestrator task delete <id> --force
+
+# Attention queue
+orchestrator attention list [--state <s>] [--assignee me] [-o json]
+orchestrator attention get <id>
+orchestrator attention claim|snooze|resolve|action <id> --expected-version <v>
+orchestrator attention follow [--after <seq>]
+
+# Handoff & resume
+orchestrator handoff generate <task_id> [--cursor <n>]
+orchestrator handoff get <handoff_id>
+orchestrator resume boundaries <task_id>
+orchestrator resume plan <task_id> --boundary <b> --mode <m>
+orchestrator resume execute <plan_id> --expected-state-version <v> --reason <r> --idempotency-key <k>
 
 # Agent lifecycle
 orchestrator agent list [--project <id>] [-o json|yaml]
@@ -669,8 +970,20 @@ orchestrator agent cordon <agent_name> [--project <id>]
 orchestrator agent uncordon <agent_name> [--project <id>]
 orchestrator agent drain <agent_name> [--project <id>] [--timeout <secs>]
 
+# Agent sessions
+orchestrator agent session list|get|attach|read|heartbeat|send-input|detach|close|resolve
+
 # Trigger lifecycle
 orchestrator trigger suspend|resume|fire <name> [--project <id>] [--payload <json>]
+
+# Source integration
+orchestrator source list|get|ingest|replay|route|bind|bindings
+orchestrator source binding simulate|suspend|resume
+orchestrator source automation list|get|status|watch|simulate|replay|ignore
+orchestrator source template preview <name> --provider <p> --installation <i> --message-url <url>
+orchestrator source connection list|get|watch|catalog|connect|status|cancel|reauthorize
+orchestrator source connection provision-dedicated|dedicated-status|dedicated-resume|dedicated-abandon
+orchestrator source connection dedicated-upgrade|migrate-to-shared|dedicated-delete|disconnect|transfer
 
 # Project cleanup
 orchestrator delete project/<id> --force
@@ -699,6 +1012,15 @@ orchestrator db cleanup [--older-than <days>]
 orchestrator event stats
 orchestrator event list --task <id> [-o json]
 orchestrator event cleanup [--older-than <days>] [--dry-run] [--archive]
+
+# Audit evidence
+orchestrator audit list --project <id> [--actor <a>] [--status <s>]
+orchestrator audit get <request_id> --project <id>
+
+# Process metrics
+orchestrator metrics process --project <id> [--window <w>] [--bucket <b>]
+orchestrator metrics prune [--retention-days <n>]
+orchestrator metrics rebuild --project <id>
 
 # Daemon lifecycle
 orchestrator daemon status|stop
