@@ -8,67 +8,63 @@
       "jobs": {
         "async-lock-governance": {
           "conclusion": "success",
-          "runId": "30695310417",
-          "headSha": "9122b3c1e946acbf56be0a6b1a8b2bc93705b794"
+          "runId": "30696140048",
+          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
         },
         "fmt": {
           "conclusion": "success",
-          "runId": "30695310417",
-          "headSha": "9122b3c1e946acbf56be0a6b1a8b2bc93705b794"
+          "runId": "30696140048",
+          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
         },
         "clippy": {
           "conclusion": "success",
-          "runId": "30695310417",
-          "headSha": "9122b3c1e946acbf56be0a6b1a8b2bc93705b794"
+          "runId": "30696140048",
+          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
         },
         "test": {
           "conclusion": "success",
-          "runId": "30695310417",
-          "headSha": "9122b3c1e946acbf56be0a6b1a8b2bc93705b794"
+          "runId": "30696140048",
+          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
         },
         "coordination-strangler": {
           "conclusion": "success",
-          "runId": "30695310417",
-          "headSha": "9122b3c1e946acbf56be0a6b1a8b2bc93705b794"
+          "runId": "30696140048",
+          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
         },
         "governance": {
-          "conclusion": "failure",
-          "runId": "30695310417",
-          "headSha": "9122b3c1e946acbf56be0a6b1a8b2bc93705b794",
-          "knownFailing": {
-            "reference": "docs/qa/orchestrator/202-supply-chain-dependency-governance.md",
-            "reason": "Run 30695310417 (9122b3c1, the FR-153 implementation push) failed exclusively on the liveness gate's own staleness rule: FR-153 edited ci.yml (setup-node and upload-artifact version convergence) and security.yml (--deny unmaintained), which invalidated every record taken at 1d46be3d. All other aggregated gates in the same run were green, including the first CI execution of the extended dependency-policy rules and the binding cargo-audit invocation. This annotation retires automatically at the first refresh after a green governance run on this ledger."
-          }
+          "conclusion": "success",
+          "runId": "30696140048",
+          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
         },
         "ci-environment-parity": {
           "conclusion": "success",
-          "runId": "30695310417",
-          "headSha": "9122b3c1e946acbf56be0a6b1a8b2bc93705b794"
+          "runId": "30696140048",
+          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
         },
         "coverage-policy-fixtures": {
           "conclusion": "success",
-          "runId": "30695310417",
-          "headSha": "9122b3c1e946acbf56be0a6b1a8b2bc93705b794"
+          "runId": "30696140048",
+          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
         },
         "slack-certification-recorded": {
           "conclusion": "success",
-          "runId": "30695310417",
-          "headSha": "9122b3c1e946acbf56be0a6b1a8b2bc93705b794"
+          "runId": "30696140048",
+          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
         },
         "boundary-coverage": {
           "conclusion": "success",
-          "runId": "30695310417",
-          "headSha": "9122b3c1e946acbf56be0a6b1a8b2bc93705b794"
+          "runId": "30696140048",
+          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
         },
         "miri": {
           "conclusion": "success",
-          "runId": "30695310417",
-          "headSha": "9122b3c1e946acbf56be0a6b1a8b2bc93705b794"
+          "runId": "30696140048",
+          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
         },
         "cross-compile": {
           "conclusion": "success",
-          "runId": "30695310417",
-          "headSha": "9122b3c1e946acbf56be0a6b1a8b2bc93705b794"
+          "runId": "30696140048",
+          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
         }
       }
     },
@@ -89,13 +85,13 @@
       "jobs": {
         "cargo-audit": {
           "conclusion": "success",
-          "runId": "30695310395",
-          "headSha": "9122b3c1e946acbf56be0a6b1a8b2bc93705b794"
+          "runId": "30696140044",
+          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
         },
         "cargo-deny": {
           "conclusion": "success",
-          "runId": "30695310395",
-          "headSha": "9122b3c1e946acbf56be0a6b1a8b2bc93705b794"
+          "runId": "30696140044",
+          "headSha": "1041288909ce8c282a5b18c518c7a8288e57b57c"
         }
       }
     },
