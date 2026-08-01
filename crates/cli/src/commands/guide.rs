@@ -35,6 +35,8 @@ pub enum GuideCategory {
     Observability,
     /// trigger *
     Trigger,
+    /// source connection *
+    SourceIntegration,
     /// manifest *
     WorkflowAuthoring,
     /// tool *
@@ -53,6 +55,7 @@ impl fmt::Display for GuideCategory {
             Self::Security => write!(f, "Security"),
             Self::Observability => write!(f, "Observability"),
             Self::Trigger => write!(f, "Trigger Management"),
+            Self::SourceIntegration => write!(f, "Source Integrations"),
             Self::WorkflowAuthoring => write!(f, "Workflow Authoring"),
             Self::BuiltinTools => write!(f, "Built-in Tools"),
         }
@@ -70,10 +73,11 @@ impl GuideCategory {
             Self::StoreOperations => 4,
             Self::WorkflowAuthoring => 5,
             Self::Trigger => 6,
-            Self::Observability => 7,
-            Self::Security => 8,
-            Self::SystemAdmin => 9,
-            Self::BuiltinTools => 10,
+            Self::SourceIntegration => 7,
+            Self::Observability => 8,
+            Self::Security => 9,
+            Self::SystemAdmin => 10,
+            Self::BuiltinTools => 11,
         }
     }
 
@@ -95,6 +99,7 @@ impl GuideCategory {
             Self::Security => "security",
             Self::Observability => "observability",
             Self::Trigger => "trigger",
+            Self::SourceIntegration => "integration",
             Self::WorkflowAuthoring => "authoring",
             Self::BuiltinTools => "tools",
         }
@@ -530,25 +535,46 @@ fn attention_entries() -> Vec<GuideEntry> {
             examples: &[("orchestrator attention get <id>", "Inspect one item")],
         },
         GuideEntry {
-            command: "attention claim|snooze|resolve",
-            alias: Some("attn"),
+            command: "attention claim",
+            alias: Some("attn claim"),
             category: GuideCategory::TaskLifecycle,
-            summary: "Manage attention ownership and lifecycle",
-            description: "Apply an authenticated, version-checked and idempotent queue mutation.",
+            summary: "Claim an open attention item",
+            description: "Take ownership of an open item through an authenticated, \
+                          version-checked and idempotent queue mutation.",
             examples: &[
                 (
                     "orchestrator attention claim <id> --expected-version 1",
                     "Claim an open item",
                 ),
                 (
-                    "orchestrator attention snooze <id> --expected-version 2 --until 2026-07-13T09:00:00Z",
-                    "Snooze until an RFC3339 deadline",
-                ),
-                (
-                    "orchestrator attention resolve <id> --expected-version 2 --reason reviewed",
-                    "Resolve with an audit reason",
+                    "orchestrator attention claim <id> --expected-version 1 --idempotency-key claim-1 -o json",
+                    "Claim with a retry-stable idempotency key",
                 ),
             ],
+        },
+        GuideEntry {
+            command: "attention snooze",
+            alias: Some("attn snooze"),
+            category: GuideCategory::TaskLifecycle,
+            summary: "Snooze an open or claimed item",
+            description: "Defer an item until an RFC3339 deadline through an authenticated, \
+                          version-checked and idempotent queue mutation.",
+            examples: &[(
+                "orchestrator attention snooze <id> --expected-version 2 --until 2026-07-13T09:00:00Z",
+                "Snooze until an RFC3339 deadline",
+            )],
+        },
+        GuideEntry {
+            command: "attention resolve",
+            alias: Some("attn resolve"),
+            category: GuideCategory::TaskLifecycle,
+            summary: "Resolve an attention item",
+            description: "Close an item with an audit reason through an authenticated, \
+                          version-checked and idempotent queue mutation.",
+            examples: &[(
+                "orchestrator attention resolve <id> --expected-version 2 --reason reviewed",
+                "Resolve with an audit reason",
+            )],
         },
         GuideEntry {
             command: "attention action",
@@ -578,21 +604,32 @@ fn attention_entries() -> Vec<GuideEntry> {
 fn source_entries() -> Vec<GuideEntry> {
     vec![
         GuideEntry {
-            command: "source list|get",
-            alias: Some("src"),
+            command: "source list",
+            alias: Some("src ls"),
             category: GuideCategory::Observability,
-            summary: "Inspect durable external source events",
-            description: "Query provider-neutral source events, routing state, provenance, and the resolved process without exposing raw provider payloads.",
+            summary: "List recent source events",
+            description: "Query provider-neutral source events with routing state, task, and project filters without exposing raw provider payloads.",
             examples: &[
                 (
                     "orchestrator source list --state failed",
                     "List replay candidates",
                 ),
                 (
-                    "orchestrator source get <source-event-id>",
-                    "Inspect one normalized event",
+                    "orchestrator source list --project demo --limit 20 -o json",
+                    "List the newest project events as JSON",
                 ),
             ],
+        },
+        GuideEntry {
+            command: "source get",
+            alias: Some("src get"),
+            category: GuideCategory::Observability,
+            summary: "Get one source event",
+            description: "Inspect one normalized event's routing state, provenance, and the resolved process without exposing raw provider payloads.",
+            examples: &[(
+                "orchestrator source get <source-event-id>",
+                "Inspect one normalized event",
+            )],
         },
         GuideEntry {
             command: "source ingest",
@@ -606,21 +643,26 @@ fn source_entries() -> Vec<GuideEntry> {
             )],
         },
         GuideEntry {
-            command: "source bindings|bind",
+            command: "source bindings",
             alias: Some("src bindings"),
             category: GuideCategory::TaskLifecycle,
-            summary: "Inspect or create external process bindings",
+            summary: "List source bindings for one task",
+            description: "Show the provider conversation coordinates correlated with an orchestrator task, including primary, related, and notification_target bindings.",
+            examples: &[(
+                "orchestrator source bindings <task-id>",
+                "List task provenance bindings",
+            )],
+        },
+        GuideEntry {
+            command: "source bind",
+            alias: Some("src bind"),
+            category: GuideCategory::TaskLifecycle,
+            summary: "Bind provider conversation coordinates to a task",
             description: "Correlate trusted provider conversation coordinates with an orchestrator task using primary, related, or notification_target bindings.",
-            examples: &[
-                (
-                    "orchestrator source bindings <task-id>",
-                    "List task provenance bindings",
-                ),
-                (
-                    "orchestrator source bind --project demo --task <task-id> --provider fixture --installation install-1 --conversation C1 --thread T1 --source-event <event-id>",
-                    "Create a trusted binding",
-                ),
-            ],
+            examples: &[(
+                "orchestrator source bind --project demo --task <task-id> --provider fixture --installation install-1 --conversation C1 --thread T1 --source-event <event-id>",
+                "Create a trusted binding",
+            )],
         },
         GuideEntry {
             command: "source replay",
@@ -634,25 +676,43 @@ fn source_entries() -> Vec<GuideEntry> {
             )],
         },
         GuideEntry {
-            command: "source automation list|get|watch",
-            alias: Some("src automation"),
+            command: "source automation list",
+            alias: None,
             category: GuideCategory::Observability,
-            summary: "Inspect durable badge automation routes",
-            description: "Query safe route projections and bounded attempt history, or resume a monotonic transition stream. Operational output omits Slack message coordinates, bodies, credentials, and permalinks.",
+            summary: "List badge automation routes",
+            description: "Query safe route projections with bounded keyset pagination. Operational output omits Slack message coordinates, bodies, credentials, and permalinks.",
             examples: &[
                 (
                     "orchestrator source automation list --project demo --state needs_attention -o json",
                     "List actionable routes",
                 ),
                 (
-                    "orchestrator source automation get <route-id> --attempt-limit 20",
-                    "Inspect one route and retry history",
-                ),
-                (
-                    "orchestrator source automation watch --project demo --after 42",
-                    "Reconnect to route transitions",
+                    "orchestrator source automation list --page-size 20 --page-token <token>",
+                    "Continue a paginated listing",
                 ),
             ],
+        },
+        GuideEntry {
+            command: "source automation get",
+            alias: None,
+            category: GuideCategory::Observability,
+            summary: "Inspect one badge automation route",
+            description: "Show one durable route's safe projection and bounded attempt history without exposing Slack message coordinates, bodies, credentials, or permalinks.",
+            examples: &[(
+                "orchestrator source automation get <route-id> --attempt-limit 20",
+                "Inspect one route and retry history",
+            )],
+        },
+        GuideEntry {
+            command: "source automation watch",
+            alias: None,
+            category: GuideCategory::Observability,
+            summary: "Follow badge automation route transitions",
+            description: "Resume a monotonic route transition stream from a durable change sequence for reconnect-safe clients.",
+            examples: &[(
+                "orchestrator source automation watch --project demo --after 42",
+                "Reconnect to route transitions",
+            )],
         },
         GuideEntry {
             command: "source automation simulate",
@@ -666,21 +726,32 @@ fn source_entries() -> Vec<GuideEntry> {
             )],
         },
         GuideEntry {
-            command: "source automation replay|ignore",
+            command: "source automation replay",
             alias: None,
             category: GuideCategory::SystemAdmin,
-            summary: "Resolve an actionable automation route",
-            description: "Audited operator controls require a reason, optimistic route version, and idempotency key. Replay keeps the pinned generation unless --adopt-current-config is explicitly requested; ignore resolves the matching Attention item.",
+            summary: "Replay an actionable automation route",
+            description: "Audited operator control requiring a reason, optimistic route version, and idempotency key. Replay resumes from the durable checkpoint and keeps the pinned generation unless --adopt-current-config is explicitly requested.",
             examples: &[
                 (
                     "orchestrator source automation replay <route-id> --expected-version 7 --reason 'credential rotated' --idempotency-key replay-20260717",
                     "Replay from the durable checkpoint",
                 ),
                 (
-                    "orchestrator source automation ignore <route-id> --expected-version 8 --reason 'obsolete request' --idempotency-key ignore-20260717",
-                    "Close a route without task creation",
+                    "orchestrator source automation replay <route-id> --expected-version 7 --reason 'config fixed' --idempotency-key replay-2 --adopt-current-config",
+                    "Replay against the current configuration",
                 ),
             ],
+        },
+        GuideEntry {
+            command: "source automation ignore",
+            alias: None,
+            category: GuideCategory::SystemAdmin,
+            summary: "Deliberately ignore an actionable automation route",
+            description: "Audited operator control requiring a reason, optimistic route version, and idempotency key. Ignore closes the route without task creation and resolves the matching Attention item.",
+            examples: &[(
+                "orchestrator source automation ignore <route-id> --expected-version 8 --reason 'obsolete request' --idempotency-key ignore-20260717",
+                "Close a route without task creation",
+            )],
         },
         GuideEntry {
             command: "source automation status",
@@ -691,6 +762,259 @@ fn source_entries() -> Vec<GuideEntry> {
             examples: &[(
                 "orchestrator source automation status --project demo -o json",
                 "Inspect route worker health",
+            )],
+        },
+        GuideEntry {
+            command: "source route",
+            alias: Some("src route"),
+            category: GuideCategory::Observability,
+            summary: "Inspect one protected automation route",
+            description: "Show the protected automation route resolved for a source event, including its Slack deep link.",
+            examples: &[(
+                "orchestrator source route <source-event-id>",
+                "Inspect the route for one source event",
+            )],
+        },
+        GuideEntry {
+            command: "source template preview",
+            alias: None,
+            category: GuideCategory::Trigger,
+            summary: "Preview a governed source-to-task template",
+            description: "Render a side-effect-free sample using the daemon's active configuration. Preview never calls the provider or creates a task.",
+            examples: &[(
+                "orchestrator source template preview badge-default --provider slack --installation T1 --message-url https://acme.slack.com/archives/C1/p123",
+                "Render a sample from a governed template",
+            )],
+        },
+        GuideEntry {
+            command: "source binding simulate",
+            alias: None,
+            category: GuideCategory::Trigger,
+            summary: "Simulate deterministic binding matching",
+            description: "Run governed source-to-task binding matching against caller-supplied evidence without side effects or provider API calls.",
+            examples: &[(
+                "orchestrator source binding simulate --project demo --installation T1 --reaction agent-analyze --channel C1 --actor U1",
+                "Preview which binding matches an event",
+            )],
+        },
+        GuideEntry {
+            command: "source binding suspend",
+            alias: None,
+            category: GuideCategory::Trigger,
+            summary: "Suspend a source binding immediately",
+            description: "Stop a governed source-to-task binding from matching new events. The mutation is project-scoped and takes effect immediately.",
+            examples: &[(
+                "orchestrator source binding suspend badge-default --project demo",
+                "Suspend a binding",
+            )],
+        },
+        GuideEntry {
+            command: "source binding resume",
+            alias: None,
+            category: GuideCategory::Trigger,
+            summary: "Resume a suspended source binding",
+            description: "Re-enable a suspended source-to-task binding after conflict validation against the currently active bindings.",
+            examples: &[(
+                "orchestrator source binding resume badge-default --project demo",
+                "Resume a binding",
+            )],
+        },
+    ]
+}
+
+fn source_connection_entries() -> Vec<GuideEntry> {
+    vec![
+        GuideEntry {
+            command: "source connection list",
+            alias: None,
+            category: GuideCategory::SourceIntegration,
+            summary: "List safe SourceConnection projections",
+            description: "Show provider connections for a project without exposing credentials. Disconnected connections are hidden unless requested.",
+            examples: &[
+                (
+                    "orchestrator source connection list -p demo",
+                    "List active connections",
+                ),
+                (
+                    "orchestrator source connection list -p demo --include-disconnected -o json",
+                    "Include disconnected connections as JSON",
+                ),
+            ],
+        },
+        GuideEntry {
+            command: "source connection get",
+            alias: None,
+            category: GuideCategory::SourceIntegration,
+            summary: "Get one SourceConnection",
+            description: "Inspect one connection's safe projection, lifecycle state, and version without exposing credentials.",
+            examples: &[(
+                "orchestrator source connection get <connection-id> -p demo",
+                "Inspect one connection",
+            )],
+        },
+        GuideEntry {
+            command: "source connection watch",
+            alias: None,
+            category: GuideCategory::SourceIntegration,
+            summary: "Follow monotonic SourceConnection changes",
+            description: "Stream connection change deltas from a durable change sequence for reconnect-safe clients.",
+            examples: &[(
+                "orchestrator source connection watch -p demo --after 42",
+                "Reconnect to connection changes",
+            )],
+        },
+        GuideEntry {
+            command: "source connection catalog",
+            alias: None,
+            category: GuideCategory::SourceIntegration,
+            summary: "Show provisioning capabilities",
+            description: "Report which managed and manual provisioning modes the daemon supports for each provider.",
+            examples: &[(
+                "orchestrator source connection catalog",
+                "Show managed/manual provisioning capabilities",
+            )],
+        },
+        GuideEntry {
+            command: "source connection connect",
+            alias: None,
+            category: GuideCategory::SourceIntegration,
+            summary: "Start the official Slack App OAuth flow",
+            description: "Create an OAuth installation intent and open the authorization URL. Use --no-open to print the URL instead of launching a browser.",
+            examples: &[(
+                "orchestrator source connection connect -p demo --reason 'onboard workspace' --idempotency-key connect-1",
+                "Start the OAuth flow",
+            )],
+        },
+        GuideEntry {
+            command: "source connection provision-dedicated",
+            alias: None,
+            category: GuideCategory::SourceIntegration,
+            summary: "Provision a workspace-owned private Slack App",
+            description: "Validate and provision a dedicated App from a Slack configuration token read on stdin. The audited mutation requires a reason and idempotency key.",
+            examples: &[(
+                "orchestrator source connection provision-dedicated -p demo --config-token-stdin --reason 'private app' --idempotency-key prov-1",
+                "Provision a dedicated App",
+            )],
+        },
+        GuideEntry {
+            command: "source connection dedicated-status",
+            alias: None,
+            category: GuideCategory::SourceIntegration,
+            summary: "Inspect a dedicated App provisioning checkpoint",
+            description: "Show the durable checkpoint state of an in-progress dedicated App provisioning.",
+            examples: &[(
+                "orchestrator source connection dedicated-status <provisioning-id> -p demo",
+                "Inspect a provisioning checkpoint",
+            )],
+        },
+        GuideEntry {
+            command: "source connection dedicated-resume",
+            alias: None,
+            category: GuideCategory::SourceIntegration,
+            summary: "Resume a dedicated App provisioning",
+            description: "Resume credential handoff or approve a reviewed dedicated App preview from its durable checkpoint.",
+            examples: &[(
+                "orchestrator source connection dedicated-resume <provisioning-id> -p demo --reason 'approve preview' --idempotency-key resume-1",
+                "Resume a provisioning checkpoint",
+            )],
+        },
+        GuideEntry {
+            command: "source connection dedicated-abandon",
+            alias: None,
+            category: GuideCategory::SourceIntegration,
+            summary: "Abandon a dedicated App provisioning",
+            description: "Abandon a non-terminal dedicated App provisioning checkpoint through an audited mutation.",
+            examples: &[(
+                "orchestrator source connection dedicated-abandon <provisioning-id> -p demo --reason 'wrong workspace' --idempotency-key abandon-1",
+                "Abandon a provisioning checkpoint",
+            )],
+        },
+        GuideEntry {
+            command: "source connection dedicated-upgrade",
+            alias: None,
+            category: GuideCategory::SourceIntegration,
+            summary: "Upgrade an existing dedicated App manifest",
+            description: "Review and apply the fixed manifest to an existing dedicated App. Preview first, then re-run with --approve to apply.",
+            examples: &[(
+                "orchestrator source connection dedicated-upgrade <connection-id> -p demo --expected-version 3 --config-token-stdin --approve --reason 'apply manifest fix' --idempotency-key upgrade-1",
+                "Apply the reviewed manifest upgrade",
+            )],
+        },
+        GuideEntry {
+            command: "source connection migrate-to-shared",
+            alias: None,
+            category: GuideCategory::SourceIntegration,
+            summary: "Migrate a dedicated App to the official App",
+            description: "Start a reviewed dedicated-to-official App migration through an audited, version-checked mutation.",
+            examples: &[(
+                "orchestrator source connection migrate-to-shared <connection-id> -p demo --expected-version 3 --reason 'move to official app' --idempotency-key migrate-1",
+                "Start a reviewed migration",
+            )],
+        },
+        GuideEntry {
+            command: "source connection dedicated-delete",
+            alias: None,
+            category: GuideCategory::SourceIntegration,
+            summary: "Delete a disconnected workspace-owned Slack App",
+            description: "Permanently delete a disconnected dedicated App. Requires the App ID as confirmation plus an audited reason and idempotency key.",
+            examples: &[(
+                "orchestrator source connection dedicated-delete <connection-id> -p demo --expected-version 5 --app-id-confirmation A0123 --reason 'decommission' --idempotency-key delete-1",
+                "Permanently delete a dedicated App",
+            )],
+        },
+        GuideEntry {
+            command: "source connection status",
+            alias: None,
+            category: GuideCategory::SourceIntegration,
+            summary: "Poll or resume one OAuth intent",
+            description: "Check the state of a pending OAuth installation intent and resume it when possible.",
+            examples: &[(
+                "orchestrator source connection status <intent-id> -p demo",
+                "Poll an OAuth intent",
+            )],
+        },
+        GuideEntry {
+            command: "source connection cancel",
+            alias: None,
+            category: GuideCategory::SourceIntegration,
+            summary: "Cancel a pending OAuth intent",
+            description: "Cancel an unfinished OAuth installation intent through an audited mutation.",
+            examples: &[(
+                "orchestrator source connection cancel <intent-id> -p demo --reason 'abandoned flow' --idempotency-key cancel-1",
+                "Cancel a pending intent",
+            )],
+        },
+        GuideEntry {
+            command: "source connection reauthorize",
+            alias: None,
+            category: GuideCategory::SourceIntegration,
+            summary: "Start OAuth again for an existing connection",
+            description: "Re-run the OAuth flow for an existing connection, for example after a scope change or credential revocation.",
+            examples: &[(
+                "orchestrator source connection reauthorize <connection-id> -p demo --expected-version 2 --reason 'scope update' --idempotency-key reauth-1",
+                "Reauthorize a connection",
+            )],
+        },
+        GuideEntry {
+            command: "source connection disconnect",
+            alias: None,
+            category: GuideCategory::SourceIntegration,
+            summary: "Disconnect and destroy managed credentials",
+            description: "Disconnect a connection and destroy its managed credentials through an audited, version-checked mutation.",
+            examples: &[(
+                "orchestrator source connection disconnect <connection-id> -p demo --expected-version 2 --reason 'offboard workspace' --idempotency-key disc-1",
+                "Disconnect a connection",
+            )],
+        },
+        GuideEntry {
+            command: "source connection transfer",
+            alias: None,
+            category: GuideCategory::SourceIntegration,
+            summary: "Transfer exclusive ownership to another daemon",
+            description: "Move exclusive connection ownership to a different daemon through an audited, version-checked mutation.",
+            examples: &[(
+                "orchestrator source connection transfer <connection-id> -p demo --expected-version 2 --target-daemon-id <daemon-id> --reason 'move to prod daemon' --idempotency-key transfer-1",
+                "Transfer connection ownership",
             )],
         },
     ]
@@ -724,6 +1048,133 @@ fn audit_entries() -> Vec<GuideEntry> {
             examples: &[(
                 "orchestrator audit get req-123 --project demo",
                 "Inspect one canonical request",
+            )],
+        },
+    ]
+}
+
+fn handoff_entries() -> Vec<GuideEntry> {
+    vec![
+        GuideEntry {
+            command: "handoff generate",
+            alias: None,
+            category: GuideCategory::TaskLifecycle,
+            summary: "Generate an immutable task handoff snapshot",
+            description: "Capture an immutable snapshot of a task at the latest or a selected \
+                          event cursor, for transferring context between agents or sessions.",
+            examples: &[
+                (
+                    "orchestrator handoff generate <task_id>",
+                    "Snapshot at the latest event cursor",
+                ),
+                (
+                    "orchestrator handoff generate <task_id> --cursor 42 -o json",
+                    "Snapshot at a selected event cursor",
+                ),
+            ],
+        },
+        GuideEntry {
+            command: "handoff get",
+            alias: None,
+            category: GuideCategory::TaskLifecycle,
+            summary: "Get a previously generated handoff snapshot",
+            description: "Retrieve an immutable handoff snapshot by ID.",
+            examples: &[(
+                "orchestrator handoff get <handoff_id>",
+                "Retrieve one snapshot",
+            )],
+        },
+    ]
+}
+
+fn resume_entries() -> Vec<GuideEntry> {
+    vec![
+        GuideEntry {
+            command: "resume boundaries",
+            alias: None,
+            category: GuideCategory::TaskLifecycle,
+            summary: "List logical resume boundaries",
+            description: "Show a task's logical boundaries and their side-effect \
+                          classifications, the starting point for a safe logical resume.",
+            examples: &[
+                (
+                    "orchestrator resume boundaries <task_id>",
+                    "List boundaries for a task",
+                ),
+                (
+                    "orchestrator resume boundaries <task_id> -o json",
+                    "List boundaries as JSON",
+                ),
+            ],
+        },
+        GuideEntry {
+            command: "resume plan",
+            alias: None,
+            category: GuideCategory::TaskLifecycle,
+            summary: "Persist an expiring resume consequence preview",
+            description: "Create an expiring consequence preview for resuming at a boundary \
+                          without changing task or workspace state.",
+            examples: &[(
+                "orchestrator resume plan <task_id> --boundary <boundary_id> --mode <mode>",
+                "Preview the consequences of a resume",
+            )],
+        },
+        GuideEntry {
+            command: "resume execute",
+            alias: None,
+            category: GuideCategory::TaskLifecycle,
+            summary: "Execute a reviewed resume plan",
+            description: "Execute a previously reviewed plan with stale-state protection. \
+                          Requires the expected state version, an audit reason, and an \
+                          idempotency key; elevated plans need --elevated-confirmation.",
+            examples: &[(
+                "orchestrator resume execute <plan_id> --expected-state-version 3 --reason 'reviewed preview' --idempotency-key resume-1",
+                "Execute a reviewed plan",
+            )],
+        },
+    ]
+}
+
+fn metrics_entries() -> Vec<GuideEntry> {
+    vec![
+        GuideEntry {
+            command: "metrics process",
+            alias: None,
+            category: GuideCategory::Observability,
+            summary: "Query one Process Console snapshot",
+            description: "Show a project-scoped Process Console metrics snapshot over a \
+                          time window with a configurable bucket size.",
+            examples: &[
+                (
+                    "orchestrator metrics process -p demo",
+                    "Snapshot over the default 24h window",
+                ),
+                (
+                    "orchestrator metrics process -p demo --window 7d --bucket 1d -o json",
+                    "Weekly snapshot with daily buckets",
+                ),
+            ],
+        },
+        GuideEntry {
+            command: "metrics prune",
+            alias: None,
+            category: GuideCategory::Observability,
+            summary: "Prune old optional metrics",
+            description: "Delete optional metrics older than the retention threshold.",
+            examples: &[(
+                "orchestrator metrics prune --retention-days 30",
+                "Prune metrics older than 30 days",
+            )],
+        },
+        GuideEntry {
+            command: "metrics rebuild",
+            alias: None,
+            category: GuideCategory::Observability,
+            summary: "Rebuild materialized metrics rollups",
+            description: "Rebuild retained materialized rollups for one project.",
+            examples: &[(
+                "orchestrator metrics rebuild -p demo",
+                "Rebuild rollups for a project",
             )],
         },
     ]
@@ -1414,29 +1865,34 @@ fn system_entries() -> Vec<GuideEntry> {
                 ),
             ],
         },
-        GuideEntry {
-            command: "error-codes",
-            alias: None,
-            category: GuideCategory::SystemAdmin,
-            summary: "Bracketed machine error codes reference",
-            description: "Errors and warnings carry bracketed machine codes such as \
-                          [legacy_agent_command_deprecated], [driver_config_invalid], and the \
-                          driver requirement family ([driver_multi_turn_required], ...). \
-                          docs/guide/error-codes.md is the glossary: each code's meaning, \
-                          trigger, and remedy. The glossary's entry set is compared against \
-                          the source-derived set in CI, so it cannot go stale.",
-            examples: &[
-                (
-                    "orchestrator guide error-codes",
-                    "Show where the error-code glossary lives",
-                ),
-                (
-                    "less docs/guide/error-codes.md",
-                    "Read the glossary in a repository checkout",
-                ),
-            ],
-        },
     ]
+}
+
+/// Guide topics that are not clap commands (reference material reachable via
+/// `orchestrator guide <topic>`).
+fn topic_entries() -> Vec<GuideEntry> {
+    vec![GuideEntry {
+        command: "error-codes",
+        alias: None,
+        category: GuideCategory::SystemAdmin,
+        summary: "Bracketed machine error codes reference",
+        description: "Errors and warnings carry bracketed machine codes such as \
+                      [legacy_agent_command_deprecated], [driver_config_invalid], and the \
+                      driver requirement family ([driver_multi_turn_required], ...). \
+                      docs/guide/error-codes.md is the glossary: each code's meaning, \
+                      trigger, and remedy. The glossary's entry set is compared against \
+                      the source-derived set in CI, so it cannot go stale.",
+        examples: &[
+            (
+                "orchestrator guide error-codes",
+                "Show where the error-code glossary lives",
+            ),
+            (
+                "less docs/guide/error-codes.md",
+                "Read the glossary in a repository checkout",
+            ),
+        ],
+    }]
 }
 
 fn tool_entries() -> Vec<GuideEntry> {
@@ -1483,14 +1939,22 @@ fn tool_entries() -> Vec<GuideEntry> {
 // Aggregation
 // ---------------------------------------------------------------------------
 
-/// Collect all guide entries from every domain.
-fn all_entries() -> Vec<GuideEntry> {
-    let mut entries = Vec::with_capacity(64);
+/// Collect the guide entries that mirror real clap commands.
+///
+/// The command set of this list is asserted equal to
+/// `crate::surface::visible_invocable_paths()` in tests, so it cannot drift
+/// from the clap tree.
+fn command_entries() -> Vec<GuideEntry> {
+    let mut entries = Vec::with_capacity(128);
     entries.extend(resource_entries());
     entries.extend(task_entries());
     entries.extend(attention_entries());
     entries.extend(source_entries());
+    entries.extend(source_connection_entries());
     entries.extend(audit_entries());
+    entries.extend(handoff_entries());
+    entries.extend(resume_entries());
+    entries.extend(metrics_entries());
     entries.extend(run_entries());
     entries.extend(agent_entries());
     entries.extend(store_entries());
@@ -1502,6 +1966,13 @@ fn all_entries() -> Vec<GuideEntry> {
     entries.extend(daemon_entries());
     entries.extend(system_entries());
     entries.extend(tool_entries());
+    entries
+}
+
+/// Collect all guide entries: real commands plus non-command topics.
+fn all_entries() -> Vec<GuideEntry> {
+    let mut entries = command_entries();
+    entries.extend(topic_entries());
     entries
 }
 
@@ -1627,46 +2098,6 @@ pub fn dispatch(
 }
 
 // ---------------------------------------------------------------------------
-// Compile-time exhaustiveness guard
-// ---------------------------------------------------------------------------
-
-/// Compile-time guard: every [`Commands`] variant must be accounted for.
-///
-/// When a new variant is added to `Commands`, this match becomes non-exhaustive
-/// and the build fails — pointing the developer to add guide entries.
-#[cfg(test)]
-fn _exhaustiveness_guard(cmd: crate::Commands) {
-    match cmd {
-        crate::Commands::Apply { .. } => {}
-        crate::Commands::Get { .. } => {}
-        crate::Commands::Describe { .. } => {}
-        crate::Commands::Delete { .. } => {}
-        crate::Commands::Task(_) => {}
-        crate::Commands::Store(_) => {}
-        crate::Commands::Debug { .. } => {}
-        crate::Commands::Check { .. } => {}
-        crate::Commands::Init { .. } => {}
-        crate::Commands::Secret(_) => {}
-        crate::Commands::Db(_) => {}
-        crate::Commands::Manifest(_) => {}
-        crate::Commands::Agent(_) => {}
-        crate::Commands::Event(_) => {}
-        crate::Commands::Attention(_) => {}
-        crate::Commands::Source(_) => {}
-        crate::Commands::Audit(_) => {}
-        crate::Commands::Metrics(_) => {}
-        crate::Commands::Handoff(_) | crate::Commands::Resume(_) => {}
-        crate::Commands::Trigger(_) => {}
-        crate::Commands::Qa(_) => {}
-        crate::Commands::Daemon(_) => {}
-        crate::Commands::Tool(_) => {}
-        crate::Commands::Version { .. } => {}
-        crate::Commands::Guide { .. } => {}
-        crate::Commands::Run { .. } => {}
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1689,8 +2120,49 @@ mod tests {
         assert!(cats.contains(&GuideCategory::Security));
         assert!(cats.contains(&GuideCategory::Observability));
         assert!(cats.contains(&GuideCategory::Trigger));
+        assert!(cats.contains(&GuideCategory::SourceIntegration));
         assert!(cats.contains(&GuideCategory::WorkflowAuthoring));
         assert!(cats.contains(&GuideCategory::BuiltinTools));
+    }
+
+    /// The guide's command set must equal the clap tree's visible invocable
+    /// paths — bidirectionally. On failure, both one-sided diffs are printed
+    /// so drift is diagnosable.
+    #[test]
+    fn guide_matches_clap_leaves() {
+        let guide: HashSet<String> = command_entries()
+            .iter()
+            .map(|e| e.command.to_string())
+            .collect();
+        let clap: HashSet<String> = crate::surface::visible_invocable_paths()
+            .into_iter()
+            .collect();
+
+        let mut missing_in_guide: Vec<&String> = clap.difference(&guide).collect();
+        let mut unknown_in_guide: Vec<&String> = guide.difference(&clap).collect();
+        missing_in_guide.sort();
+        unknown_in_guide.sort();
+
+        assert!(
+            missing_in_guide.is_empty() && unknown_in_guide.is_empty(),
+            "guide/clap drift:\n  missing in guide (add entries): {missing_in_guide:?}\n  \
+             unknown in guide (not a clap path): {unknown_in_guide:?}"
+        );
+    }
+
+    /// Topic pseudo-entries must never shadow a real command path.
+    #[test]
+    fn guide_topics_do_not_collide_with_commands() {
+        let clap: HashSet<String> = crate::surface::visible_invocable_paths()
+            .into_iter()
+            .collect();
+        for topic in topic_entries() {
+            assert!(
+                !clap.contains(topic.command),
+                "guide topic '{}' collides with a clap command path",
+                topic.command
+            );
+        }
     }
 
     #[test]
