@@ -1,9 +1,13 @@
 ---
-lifecycle: active
+lifecycle: superseded
 related_fr: FR-018
+superseded_by: docs/qa/orchestrator/205-cli-output-doc-parity.md
 ---
 
 # 用户指南编译验证对齐
+
+> **已被取代**：本文档的 grep 计数场景已由 FR-154 的 `test-cli-doc-parity.sh`（ci-required,
+> 由 clap 树派生全集）与 QA-205 的场景取代。
 
 **Scope**: 验证 FR-018 guide-alignment skill 的文档对齐能力，确认 `docs/guide/` EN/ZH 文档与 CLI `--help` 实际输出一致。
 

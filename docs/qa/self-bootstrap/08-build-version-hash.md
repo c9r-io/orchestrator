@@ -79,22 +79,23 @@ Verify that `version` subcommand formats output with Version/Git Hash/Build Time
 
 ---
 
-## Scenario 3: version --json Machine-Readable Output
+## Scenario 3: version -o json Machine-Readable Output
 
 ### Preconditions
 - Rust toolchain available
 
 ### Goal
-Verify that `version --json` produces valid JSON with version, git_hash, build_time keys.
+Verify that `version -o json` produces valid JSON with version, git_hash, build_time keys.
 
 ### Steps
 1. Code review — verify JSON serialization in version handler:
    ```bash
    rg -n "json|serde_json|version.*git_hash.*build_time" crates/cli/src/cli.rs | head -10
    ```
-2. Code review — verify `--json` flag on Version subcommand:
+2. Code review — verify the `-o` output flag on the Version subcommand
+   (`--json` survives one release cycle as a hidden deprecated alias, FR-154):
    ```bash
-   rg -n "json.*bool|json.*flag" crates/cli/src/cli.rs | head -5
+   rg -n -A3 "Version \{" crates/cli/src/cli.rs | head -8
    ```
 
 ### Expected
@@ -170,6 +171,6 @@ Verify that build.rs has proper fallback handling and rerun-if-changed triggers.
 |---|----------|--------|-----------|--------|-------|
 | 1 | --version Flag Shows Git Hash | PASS | 2026-03-28 | claude | `version = "0.1.0 (BUILD_GIT_HASH)"` in cli.rs; `git rev-parse --short HEAD` + `-dirty` suffix in build.rs |
 | 2 | version Subcommand Plain Text Output | PASS | 2026-03-28 | claude | Three lines: Version, Git Hash, Build Time; ISO 8601 UTC; preflight handler in main.rs before daemon init |
-| 3 | version --json Machine-Readable Output | PASS | 2026-03-28 | claude | Valid JSON with version, git_hash, build_time keys; --json flag on Version subcommand |
+| 3 | version -o json Machine-Readable Output | PASS | 2026-03-28 | claude | Valid JSON with version, git_hash, build_time keys; --json flag on Version subcommand |
 | 4 | Restart Event Payloads Include Build Info | PASS | 2026-03-28 | claude | build_git_hash + build_timestamp in self_restart_ready + 2× binary_verification (restart.rs:228-229,288,297); 6 unit tests pass |
 | 5 | build.rs Fallback and Rerun Triggers | PASS | 2026-03-28 | claude | 2× unwrap_or_else, 2× "unknown" fallback, 2× rerun-if-changed (.git/HEAD + src/); 425 lib tests pass |

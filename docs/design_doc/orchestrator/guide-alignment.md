@@ -1,9 +1,14 @@
 ---
-lifecycle: active
+lifecycle: superseded
 related_fr: FR-018
+superseded_by: docs/design_doc/orchestrator/167-cli-output-render-chokepoint.md
 ---
 
 # 用户指南编译验证对齐
+
+> **已被取代**：FR-154 以 `config/governance/cli-surface.json` + ci-required 门禁
+> `scripts/qa/test-cli-doc-parity.sh` + cargo 测试取代了本文档描述的手动编译比对流程；
+> `guide-alignment` 技能已重写为修复手册。见 DD-167。
 
 **Related FR**: `FR-018`
 **Related QA**: `docs/qa/orchestrator/guide-alignment.md`
