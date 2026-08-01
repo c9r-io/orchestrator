@@ -1,8 +1,19 @@
-[build]
-# Limit parallel jobs to reduce I/O pressure on USB external drive
-jobs = 4
-
-[profile.dev]
-# Disable incremental compilation — it creates massive amounts of small files
-# which are the worst-case workload for USB drives
-incremental = false
+# Intentionally empty of settings.
+#
+# This file once carried `[build] jobs = 4` and `[profile.dev] incremental =
+# false` — mitigations for one development machine that builds on a USB
+# external drive. Tracked, they also governed CI and every other checkout:
+# a local hardware compromise shipped as project policy (FR-153).
+#
+# If your hardware wants them, put them in your user-level config, which wins
+# nothing from this repository and constrains nobody else:
+#
+#   # ~/.cargo/config.toml
+#   [build]
+#   jobs = 4                 # cap parallel rustc invocations (I/O-bound disks)
+#
+#   [profile.dev]
+#   incremental = false      # incremental writes many small files, the
+#                            # worst-case workload for USB drives
+#
+# Or per-invocation: CARGO_BUILD_JOBS=4 and CARGO_INCREMENTAL=0.
