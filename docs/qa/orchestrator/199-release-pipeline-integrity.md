@@ -10,7 +10,7 @@ related_fr: FR-150
 `.github/workflows/release.yml`, `SUPPORTED_TARGETS` and the
 unsupported-platform refusal in `install.sh`, the intel/license stanzas in
 `homebrew/orchestrator.rb`, and the new ci-required gate
-`scripts/qa/test-release-publish-surface.sh` with its three negative fixtures
+`scripts/qa/test-release-publish-surface.sh` with its negative fixtures (three at FR-150; a fourth, packaged-source containment, added by FR-151 after the 0.4.0 publish loop failed on a crate-escaping `include_str!`)
 **Scenarios**: 5
 **Priority**: High
 
@@ -77,8 +77,8 @@ echo "rc=$?"
 tail -n 3 /tmp/qa199-s1.log
 ```
 
-Expected result: `rc=0`; the log ends with the summary line `3 passed, 0
-failed`, preceded by three PASS lines (publish loop vs cargo metadata,
+Expected result: `rc=0`; the log ends with the summary line `4 passed, 0
+failed` (`3 passed` before FR-151 added the containment check), preceded by PASS lines (publish loop vs cargo metadata,
 one shipped-target set, behavioral refusal). A missing summary line voids the
 run regardless of exit code.
 
@@ -92,7 +92,7 @@ echo "rc=$?"
 cat /tmp/qa199-s2.log
 ```
 
-Expected result: `rc=0` with summary `4 passed, 0 failed`: the positive
+Expected result: `rc=0` with summary `5 passed, 0 failed` (`4 passed` before FR-151 added fixture 4): the positive
 control, a commented-out `crates/orchestrator-persistence` rejected with a
 diagnostic naming that crate (isolated to the publish-loop check), an
 install.sh triple release.yml does not build rejected naming
@@ -157,8 +157,8 @@ end-to-end proof.
 
 ## Checklist
 
-- [ ] `test-release-publish-surface.sh` exits 0 with summary `3 passed, 0
-      failed`, and `--fixture-test` exits 0 with `4 passed, 0 failed`; both
+- [ ] `test-release-publish-surface.sh` exits 0 with summary `4 passed, 0
+      failed`, and `--fixture-test` exits 0 with `5 passed, 0 failed`; both
       summary lines are present in the captured logs
 - [ ] the publish loop's crate set equals `cargo metadata`'s publishable set
       in both directions, and every workspace dependency edge points backward

@@ -31,7 +31,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-for command in cargo jq; do
+for command in cargo jq ruby; do
   command -v "$command" >/dev/null 2>&1 || {
     echo "missing required command: $command" >&2
     exit 1
@@ -285,6 +285,49 @@ EOF
   return "$rc"
 }
 
+# ── Check 4: packaged sources are self-contained ──────────────────────────────
+#
+# cargo package ships only files under the crate root, so an include_str!/
+# include_bytes! whose path climbs out of the crate compiles fine in the
+# workspace and fails at publish verify time — after the GitHub Release and
+# the tap push have succeeded, which is exactly the half-published state this
+# gate exists to prevent. Found live during the 0.4.0 release: orchestratord
+# embedded the dedicated Slack app manifest from deploy/, four directories up,
+# and was the only crate of twelve to fail the loop. The check resolves every
+# literal include target against its file's directory and fails when the
+# result leaves the crate, naming file, line and path. concat!/env! forms are
+# out of scope (they anchor to CARGO_MANIFEST_DIR, which packages correctly).
+check_packaged_source_containment() {
+  local dirs_file="$1" root="$2"
+  ruby - "$root" "$dirs_file" <<'RUBY'
+root = File.expand_path(ARGV[0])
+bad = []
+scanned = 0
+File.readlines(ARGV[1]).each do |dir|
+  dir = dir.strip
+  next if dir.empty?
+  crate_root = File.expand_path(File.join(root, dir))
+  Dir.glob(File.join(crate_root, "**", "*.rs")).sort.each do |rs|
+    scanned += 1
+    src = File.read(rs)
+    src.scan(/include_(?:str|bytes)!\s*\(\s*"([^"]+)"/m) do |(path)|
+      next if path.start_with?("/")
+      target = File.expand_path(File.join(File.dirname(rs), path))
+      next if target.start_with?(crate_root + File::SEPARATOR)
+      line = src[0, src.index("\"#{path}\"") || 0].count("\n") + 1
+      bad << "#{rs.delete_prefix(root + "/")}:#{line}: include escapes crate root: #{path}"
+    end
+  end
+end
+if scanned.zero?
+  warn "    no Rust sources scanned under the publishable set — empty read fails closed"
+  exit 1
+end
+bad.each { |b| warn "    #{b}" }
+exit(bad.empty? ? 0 : 1)
+RUBY
+}
+
 # ── Real repository mode ──────────────────────────────────────────────────────
 if [[ "${1:-}" != "--fixture-test" ]]; then
   echo "=== FR-150: release publish/ship surface ==="
@@ -307,6 +350,12 @@ if [[ "${1:-}" != "--fixture-test" ]]; then
     pass "install.sh refuses an unsupported platform before touching the network"
   else
     fail "install.sh unsupported-platform refusal is broken"
+  fi
+
+  if check_packaged_source_containment "$PUBLISHABLE_DIRS" "$REPO_ROOT"; then
+    pass "no publishable crate embeds a file from outside its own root"
+  else
+    fail "a publishable crate includes a file cargo package will not ship"
   fi
 
   echo ""
@@ -392,6 +441,27 @@ if fixture_mutate "fixture 3" "$F3/orchestrator.rb" \
   else
     pass "fixture 3: formula/matrix divergence rejected, diagnostic names the triple"
   fi
+fi
+
+# Fixture 4: a synthetic crate whose lib.rs embeds a file from outside its
+# root — injection rather than deletion, the mutation the scanner is least
+# likely to be hand-tuned for, in a private tree so no governed file moves.
+F4="$WORK/f4"
+mkdir -p "$F4/root/fixcrate/src"
+printf 'outside\n' > "$F4/root/outside.txt"
+cat > "$F4/root/fixcrate/src/lib.rs" <<'EOF'
+pub const M: &str = include_str!("../../outside.txt");
+EOF
+printf 'fixcrate\n' > "$F4/dirs"
+f4_out="$WORK/f4.log"
+if check_packaged_source_containment "$F4/dirs" "$F4/root" > "$f4_out" 2>&1; then
+  fail "fixture 4: a crate-escaping include was accepted"
+elif ! grep -q "escapes crate root: ../../outside.txt" "$f4_out"; then
+  fail "fixture 4: rejected, but the diagnostic does not name the escaping path"
+elif ! check_packaged_source_containment "$PUBLISHABLE_DIRS" "$REPO_ROOT" >/dev/null 2>&1; then
+  fail "fixture 4: the real workspace fails the containment check; fixture result is void"
+else
+  pass "fixture 4: crate-escaping include rejected, diagnostic names the path"
 fi
 
 echo ""

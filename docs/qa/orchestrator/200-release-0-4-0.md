@@ -67,7 +67,7 @@ and does not re-run.
 2. `bash scripts/qa/test-release-publish-surface.sh --fixture-test; echo "exit=$?"`
 
 **Expected result**
-- Both exit 0 (`3 passed, 0 failed` and `4 passed, 0 failed`): the 0.4.0
+- Both exit 0 (`4 passed, 0 failed` and `5 passed, 0 failed`, including the FR-151 packaged-source containment check): the 0.4.0
   version bump and the release.yml idempotency-grep hardening changed neither
   the publish list's shape nor the shipped-target set, and the QA-199
   fixtures still fail on injected defects.

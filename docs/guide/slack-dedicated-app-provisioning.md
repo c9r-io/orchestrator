@@ -217,7 +217,7 @@ printf '%s' "$FRESH_SLACK_CONFIGURATION_TOKEN" | \
 也可以用 `--mode both` 在同一 private run inventory 中先做 shared、再做 dedicated。每个 OAuth、manifest receipt、cursor recovery、reauthorize 和 disconnect/delete 阶段都会以退出码 `20` 暂停；完成 provider 操作后用 run ID 记录 checkpoint 并 resume。`dedicated_disconnect_delete` 的 PASS 和最终 external cleanup 都要求再次提供同一 run ID 作为破坏性确认。
 
 1. 使用一个全新的非生产 workspace 和一个全新的 Configuration Token；
-2. 记录提交 SHA、`deploy/slack/dedicated-app-manifest.json` SHA-256 和测试日期；
+2. 记录提交 SHA、`crates/daemon/assets/dedicated-app-manifest.json` SHA-256 和测试日期；
 3. 在 GUI 完成 validate → diff → approve → OAuth；刷新一次 `oauth_pending` 页面；
 4. 只记录 App ID 的 digest，不记录完整 App ID、workspace/channel/user/message；
 5. 配置两个 echo-only badge binding，分别创建两个确定性任务；

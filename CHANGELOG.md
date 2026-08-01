@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **`orchestratord` embedded a file `cargo package` never ships** (FR-151) — `include_str!("../../../../deploy/slack/dedicated-app-manifest.json")` climbed out of the crate root, compiled fine in the workspace, and failed the 0.4.0 publish loop's verify step as the last crate of twelve — the exact after-the-Release failure position FR-150 closed for missing crates. The manifest now lives at `crates/daemon/assets/dedicated-app-manifest.json` (the certification script and docs follow), and the publish-surface gate grew a fourth derived check: no publishable crate may include a file from outside its own root, with a synthetic-crate negative fixture. The `orchestratord` 0.4.0 published on crates.io carries this fix; the `v0.4.0` tag predates it by one commit, a discrepancy recorded in DD-162.
+
 ## [0.4.0] - 2026-08-01
 
 ### Added

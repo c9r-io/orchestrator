@@ -41,7 +41,7 @@ In scope:
 
 - daemon migrations 36-37 and secret-free provisioning/lifecycle checkpoints;
 - Gateway schemas 3-4, one-time import capabilities, per-App encryption contexts, signed durable receipts, dedicated OAuth, exact event endpoints, and reviewed mode-migration fences;
-- fixed `deploy/slack/dedicated-app-manifest.json` authority;
+- fixed `crates/daemon/assets/dedicated-app-manifest.json` authority;
 - gRPC, CLI, Tauri, and `Sources → Connections` provisioning/recovery surfaces;
 - shared↔dedicated convergence through the existing unique Slack team installation;
 - fake Slack Manifest/OAuth/Event tests and controlled live certification.

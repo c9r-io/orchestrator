@@ -259,10 +259,9 @@ pub(crate) async fn dedicated_preview(
     }
     let provisioning_id = format!("dedicated-{}", Uuid::new_v4());
     let (oauth_callback_url, events_url) = dedicated_urls(gateway.origin(), &provisioning_id)?;
-    let mut manifest: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../../deploy/slack/dedicated-app-manifest.json"
-    ))
-    .map_err(internal)?;
+    let mut manifest: serde_json::Value =
+        serde_json::from_str(include_str!("../../assets/dedicated-app-manifest.json"))
+            .map_err(internal)?;
     render_manifest_endpoints(&mut manifest, &oauth_callback_url, &events_url).map_err(internal)?;
     let contract = reviewed_manifest_contract(&manifest).map_err(internal)?;
     server
@@ -1161,10 +1160,9 @@ pub(crate) async fn dedicated_upgrade_preview(
         .ok_or_else(|| Status::failed_precondition("Slack Gateway is not configured"))?;
     let (oauth_callback_url, events_url) =
         dedicated_urls(gateway.origin(), &identity.provisioning_id)?;
-    let mut target_manifest: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../../deploy/slack/dedicated-app-manifest.json"
-    ))
-    .map_err(internal)?;
+    let mut target_manifest: serde_json::Value =
+        serde_json::from_str(include_str!("../../assets/dedicated-app-manifest.json"))
+            .map_err(internal)?;
     render_manifest_endpoints(&mut target_manifest, &oauth_callback_url, &events_url)
         .map_err(internal)?;
     reviewed_manifest_contract(&target_manifest).map_err(internal)?;
