@@ -295,6 +295,55 @@ fn every_tracked_bundle_is_accepted_or_declared() {
     );
 }
 
+/// FR-152: the quickstart bundle applies without compatibility warnings.
+///
+/// README.md and docs/guide/01-quickstart.md walk a new user through this
+/// exact file, and a `[legacy_*]` warning on that first apply is the defect
+/// FR-152 exists to remove. Corpus validity above only proves the bundle is
+/// *accepted*; warnings are non-fatal and invisible to it. This collects them
+/// the way the apply path does — `collect_warnings` on each dispatched
+/// resource — rather than grepping the YAML for `driver:`, so the assertion
+/// holds against what the product would print, not how the fixture is spelled.
+#[test]
+fn quickstart_bundle_applies_without_warnings() {
+    let root = repo_root();
+    let path = "fixtures/manifests/bundles/quickstart.yaml";
+    let content = std::fs::read_to_string(root.join(path))
+        .unwrap_or_else(|error| panic!("cannot read {path}: {error}"));
+    let manifests = crate::resource::parse_manifests_from_yaml(&content)
+        .unwrap_or_else(|error| panic!("{path} does not parse: {error}"));
+    assert!(!manifests.is_empty(), "{path} parsed to zero documents");
+
+    let mut warnings = Vec::new();
+    let mut dispatched = 0usize;
+    for manifest in manifests {
+        let crate::crd::ParsedManifest::Builtin(resource) = manifest else {
+            continue;
+        };
+        let registered = crate::resource::dispatch_resource(*resource)
+            .unwrap_or_else(|error| panic!("{path} resource does not dispatch: {error}"));
+        dispatched += 1;
+        match &registered {
+            crate::resource::RegisteredResource::Workflow(wf) => {
+                warnings.extend(wf.collect_warnings());
+            }
+            crate::resource::RegisteredResource::Agent(agent) => {
+                warnings.extend(agent.collect_warnings());
+            }
+            _ => {}
+        }
+    }
+    assert_eq!(
+        dispatched, 3,
+        "{path} should hold exactly the Workspace, Agent and Workflow the guide teaches"
+    );
+    assert!(
+        warnings.is_empty(),
+        "applying {path} would print compatibility warnings:\n  {}",
+        warnings.join("\n  ")
+    );
+}
+
 /// The mutation is an *appended* Workflow rather than an edited step, because
 /// that is the shape the regression actually takes: someone adds a workflow to
 /// a bundle without knowing the construct is gone. Editing an existing step is

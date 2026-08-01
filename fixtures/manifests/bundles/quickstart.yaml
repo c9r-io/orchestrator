@@ -1,0 +1,43 @@
+# The manifest the README and docs/guide/01-quickstart.md walk through.
+# Apply with: orchestrator apply -f fixtures/manifests/bundles/quickstart.yaml
+#
+# Kept deliberately minimal: one Workspace, one typed shell/cli Agent, one
+# single-step Workflow. FR-152 requires a clean-environment quickstart run to
+# emit zero [legacy_*] warnings, so the Agent must carry an explicit driver.
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  work_dir: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: docs/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: echo_agent
+spec:
+  capabilities:
+    - qa
+  command: >-
+    echo '{"confidence":0.95,"quality_score":0.9,
+    "artifacts":[{"kind":"analysis","findings":[
+    {"title":"all-good","description":"no issues found","severity":"info"}
+    ]}]}'
+  driver:
+    provider: shell
+    transport: cli
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: simple_qa
+spec:
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  loop:
+    mode: once

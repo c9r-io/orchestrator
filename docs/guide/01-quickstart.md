@@ -41,12 +41,14 @@ The daemon owns the SQLite database, task queue, and worker pool. Keep it runnin
 
 This creates the SQLite schema at `~/.orchestratord/agent_orchestrator.db` (override with `ORCHESTRATORD_DATA_DIR`). It does **not** load any configuration; that comes next.
 
-## Step 4: Write a Manifest
+## Step 4: Read the Manifest
 
-Create a YAML file that defines a Workspace, an Agent, and a Workflow. Here is a minimal example:
+The quickstart manifest ships in this repository at
+[fixtures/manifests/bundles/quickstart.yaml](../../fixtures/manifests/bundles/quickstart.yaml).
+It defines a Workspace, an Agent, and a Workflow:
 
 ```yaml
-# my-first-workflow.yaml
+# fixtures/manifests/bundles/quickstart.yaml
 apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
@@ -69,6 +71,9 @@ spec:
     "artifacts":[{"kind":"analysis","findings":[
     {"title":"all-good","description":"no issues found","severity":"info"}
     ]}]}'
+  driver:
+    provider: shell
+    transport: cli
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow
@@ -83,10 +88,15 @@ spec:
     mode: once
 ```
 
+Every Agent declares a typed driver — here `shell/cli`, which executes
+`spec.command` as-is. Omitting `spec.driver` is a deprecated compatibility
+form that triggers a `[legacy_agent_command_deprecated]` warning at apply
+time; see [Agent Driver Model](agent-driver-model.md).
+
 ## Step 5: Apply the Manifest
 
 ```bash
-./target/release/orchestrator apply -f my-first-workflow.yaml
+./target/release/orchestrator apply -f fixtures/manifests/bundles/quickstart.yaml
 ```
 
 This loads all resources (Workspace, Agent, Workflow) into the database. You can verify:
@@ -101,19 +111,17 @@ This loads all resources (Workspace, Agent, Workflow) into the database. You can
 
 ```bash
 ./target/release/orchestrator task create \
-  --name "my-first-task" \
-  --goal "Verify QA docs pass" \
+  --goal "My first QA run" \
   --workflow simple_qa
 ```
 
-This creates a task, binds it to the `default` workspace and `simple_qa` workflow, and starts execution immediately.
+This creates a task, binds it to the `default` workspace and `simple_qa` workflow, and starts execution immediately. Add `--name "my-first-task"` to pick the task name yourself.
 
 To create without starting:
 
 ```bash
 ./target/release/orchestrator task create \
-  --name "my-first-task" \
-  --goal "Verify QA docs pass" \
+  --goal "My first QA run" \
   --workflow simple_qa \
   --no-start
 ```

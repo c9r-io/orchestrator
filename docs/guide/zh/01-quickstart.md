@@ -41,12 +41,14 @@ daemon 负责持有 SQLite、任务队列和 worker 池。保持它在一个终�
 
 这会在 `~/.orchestratord/agent_orchestrator.db` 创建 SQLite 表结构（可通过 `ORCHESTRATORD_DATA_DIR` 覆盖）。注意：此命令不会加载任何配置，配置在下一步完成。
 
-## 第四步：编写清单文件
+## 第四步：阅读清单文件
 
-创建一个 YAML 文件，定义 Workspace、Agent 和 Workflow。以下是一个最小示例：
+quickstart 清单随仓库一起提供：
+[fixtures/manifests/bundles/quickstart.yaml](../../../fixtures/manifests/bundles/quickstart.yaml)。
+它定义了 Workspace、Agent 和 Workflow：
 
 ```yaml
-# my-first-workflow.yaml
+# fixtures/manifests/bundles/quickstart.yaml
 apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
@@ -69,6 +71,9 @@ spec:
     "artifacts":[{"kind":"analysis","findings":[
     {"title":"all-good","description":"no issues found","severity":"info"}
     ]}]}'
+  driver:
+    provider: shell
+    transport: cli
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow
@@ -83,10 +88,15 @@ spec:
     mode: once
 ```
 
+每个 Agent 都要声明 typed driver——这里是 `shell/cli`，它按原样执行
+`spec.command`。省略 `spec.driver` 是已废弃的兼容写法，apply 时会触发
+`[legacy_agent_command_deprecated]` 警告；参见
+[Agent Driver Model](../agent-driver-model.md)。
+
 ## 第五步：应用清单
 
 ```bash
-./target/release/orchestrator apply -f my-first-workflow.yaml
+./target/release/orchestrator apply -f fixtures/manifests/bundles/quickstart.yaml
 ```
 
 这会将所有资源（Workspace、Agent、Workflow）加载到数据库中。你可以验证：
@@ -101,19 +111,17 @@ spec:
 
 ```bash
 ./target/release/orchestrator task create \
-  --name "my-first-task" \
-  --goal "Verify QA docs pass" \
+  --goal "My first QA run" \
   --workflow simple_qa
 ```
 
-这会创建一个任务，绑定到 `default` 工作区和 `simple_qa` 工作流，并立即开始执行。
+这会创建一个任务，绑定到 `default` 工作区和 `simple_qa` 工作流，并立即开始执行。想自己指定任务名可加 `--name "my-first-task"`。
 
 如果只创建不启动：
 
 ```bash
 ./target/release/orchestrator task create \
-  --name "my-first-task" \
-  --goal "Verify QA docs pass" \
+  --goal "My first QA run" \
   --workflow simple_qa \
   --no-start
 ```

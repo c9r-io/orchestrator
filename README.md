@@ -32,7 +32,7 @@ cargo install orchestrator-cli orchestratord
 
 ## Quick Start
 
-Run these commands directly, or let your AI coding agent handle it — the CLI is designed for both.
+Run these commands directly, or let your AI coding agent handle it — the CLI is designed for both. The manifest is [fixtures/manifests/bundles/quickstart.yaml](fixtures/manifests/bundles/quickstart.yaml), shipped in this repository; [docs/guide/01-quickstart.md](docs/guide/01-quickstart.md) walks through it line by line.
 
 ```bash
 # Start daemon
@@ -40,8 +40,8 @@ orchestratord --foreground --workers 2 &
 
 # Initialize and run
 orchestrator init
-orchestrator apply -f manifest.yaml
-orchestrator task create --goal "My first QA run"
+orchestrator apply -f fixtures/manifests/bundles/quickstart.yaml
+orchestrator task create --goal "My first QA run" --workflow simple_qa
 orchestrator task list
 orchestrator task logs <task_id>
 ```
