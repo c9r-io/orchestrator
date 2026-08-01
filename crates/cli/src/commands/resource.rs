@@ -77,6 +77,17 @@ pub(crate) async fn dispatch(
                     diagnostic.message
                 );
             }
+            if !resp.diagnostics.is_empty()
+                || resp
+                    .warnings
+                    .iter()
+                    .chain(resp.errors.iter())
+                    .any(|line| contains_bracketed_code(line))
+            {
+                eprintln!(
+                    "Hint: run 'orchestrator guide error-codes' or see docs/guide/error-codes.md for what each [code] means"
+                );
+            }
             if !resp.errors.is_empty() {
                 std::process::exit(1);
             }
@@ -164,5 +175,61 @@ pub(crate) async fn dispatch(
     }
 }
 
+/// True when a warning or error line carries a bracketed machine code like
+/// `[legacy_agent_command_deprecated]` — the shapes documented in
+/// docs/guide/error-codes.md. Hand-rolled scan; a regex dependency for one
+/// hint line would be over-engineering.
+fn contains_bracketed_code(line: &str) -> bool {
+    let bytes = line.as_bytes();
+    let mut index = 0;
+    while let Some(offset) = line[index..].find('[') {
+        let start = index + offset + 1;
+        let mut end = start;
+        while end < bytes.len()
+            && (bytes[end].is_ascii_lowercase()
+                || bytes[end].is_ascii_uppercase()
+                || bytes[end].is_ascii_digit()
+                || bytes[end] == b'_')
+        {
+            end += 1;
+        }
+        if end > start && end < bytes.len() && bytes[end] == b']' {
+            return true;
+        }
+        index = start;
+    }
+    false
+}
+
 #[allow(dead_code)]
 fn _assert_output_format_send(_format: OutputFormat) {}
+
+#[cfg(test)]
+mod tests {
+    use super::contains_bracketed_code;
+
+    #[test]
+    fn bracketed_codes_are_detected() {
+        assert!(contains_bracketed_code(
+            "[legacy_agent_command_deprecated] Agent 'echo' omits spec.driver"
+        ));
+        assert!(contains_bracketed_code(
+            "[FILE_SHARING_GLOBAL_SKILL_UNTRUSTED] global Skill directory is untrusted"
+        ));
+        assert!(contains_bracketed_code(
+            "workflow 'w' step 's': [driver_config_invalid] mid-line placement"
+        ));
+    }
+
+    #[test]
+    fn plain_prose_and_empty_brackets_are_not() {
+        assert!(!contains_bracketed_code(
+            "no agent supports capability 'qa'"
+        ));
+        assert!(!contains_bracketed_code("empty [] brackets"));
+        assert!(!contains_bracketed_code("unclosed [bracket at end"));
+        assert!(!contains_bracketed_code(
+            "[spaced words] are prose, not a code"
+        ));
+    }
+}

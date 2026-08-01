@@ -1414,6 +1414,28 @@ fn system_entries() -> Vec<GuideEntry> {
                 ),
             ],
         },
+        GuideEntry {
+            command: "error-codes",
+            alias: None,
+            category: GuideCategory::SystemAdmin,
+            summary: "Bracketed machine error codes reference",
+            description: "Errors and warnings carry bracketed machine codes such as \
+                          [legacy_agent_command_deprecated], [driver_config_invalid], and the \
+                          driver requirement family ([driver_multi_turn_required], ...). \
+                          docs/guide/error-codes.md is the glossary: each code's meaning, \
+                          trigger, and remedy. The glossary's entry set is compared against \
+                          the source-derived set in CI, so it cannot go stale.",
+            examples: &[
+                (
+                    "orchestrator guide error-codes",
+                    "Show where the error-code glossary lives",
+                ),
+                (
+                    "less docs/guide/error-codes.md",
+                    "Read the glossary in a repository checkout",
+                ),
+            ],
+        },
     ]
 }
 
