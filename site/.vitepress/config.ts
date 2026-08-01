@@ -52,6 +52,10 @@ export default defineConfig({
                   text: "Non-code Workspaces",
                   link: "/en/guide/non-code-workspace",
                 },
+                {
+                  text: "Error Codes",
+                  link: "/en/guide/error-codes",
+                },
               ],
             },
             {
@@ -194,6 +198,10 @@ export default defineConfig({
                 {
                   text: "非代码工作区",
                   link: "/zh/guide/non-code-workspace",
+                },
+                {
+                  text: "错误码",
+                  link: "/zh/guide/error-codes",
                 },
               ],
             },

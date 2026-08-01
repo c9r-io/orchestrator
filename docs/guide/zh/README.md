@@ -23,6 +23,7 @@
 | [05 - 高级特性](05-advanced-features.md) | CRD、持久化存储、任务派生、不变量约束 | 高级 |
 | [06 - 自引导](06-self-bootstrap.md) | 自修改工作流与生存机制 | 高级 |
 | [07 - CLI 参考](07-cli-reference.md) | 命令速查表 | 参考 |
+| [错误码](error-codes.md) | 方括号机器错误码：含义、触发、处置 | 参考 |
 | [08 - Agent Process Console](08-agent-process-console.md) | Attention、Timeline、Handoff、安全恢复、Session 接管与日常操作 | 入门到高级 |
 | [Slack Reaction Skill 自动化](../slack-reaction-skill-automation.md) | Slack app、SecretStore、双 badge 任务、诊断、升级与回滚 | 入门到运维 |
 | [每 Workspace 独立 Slack App](../slack-dedicated-app-provisioning.md) | Configuration Token、manifest 审批、credential 隔离、恢复与实测 | 高级到运维 |

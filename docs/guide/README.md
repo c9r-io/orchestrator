@@ -23,6 +23,7 @@ This guide helps you understand and use Agent Orchestrator as a **Harness Engine
 | [05 - Advanced Features](05-advanced-features.md) | CRDs, Persistent Store, Task Spawning, Invariants | Advanced |
 | [06 - Self-Bootstrap](06-self-bootstrap.md) | Self-modifying workflows and survival mechanisms | Advanced |
 | [07 - CLI Reference](07-cli-reference.md) | Command quick-reference for the C/S runtime | Reference |
+| [Error Codes](error-codes.md) | Bracketed machine error codes: meaning, trigger, remedy | Reference |
 | [Agent Process Console 用户指南（中文）](zh/08-agent-process-console.md) | Daily Attention triage, process recovery, session takeover, sources, and operations | Beginner to Advanced |
 | [Agent Process Console v1 Operations](agent-process-console-v1-operations.md) | Upgrade, rollout, stop-loss, rollback, and disaster restore | Operations |
 | [用 Slack Reaction 创建 Skill 任务](slack-reaction-skill-automation.md) | Slack app、SecretStore、双 badge 自动化、诊断、升级与回滚 | Beginner to Operations |

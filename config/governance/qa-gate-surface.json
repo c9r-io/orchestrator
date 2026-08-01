@@ -278,6 +278,17 @@
       "owner": "docs/qa/orchestrator/164-agent-driver-abstraction.md"
     },
     {
+      "path": "scripts/qa/test-error-code-glossary.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "invokedBy": "scripts/qa-doc-lint.sh",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Derives the bracketed error-code set from non-test Rust source by three anchored rules (string-opening bracket literals, driver_error() first arguments, interpolated consts resolved to their values) with reasoned staleness-checked exclusions, and asserts docs/guide/error-codes.md documents exactly that set in both directions, with the ZH mirror equal to EN (FR-152). Read-only: ruby over tracked sources plus two markdown files; no daemon, no network, no provider binary."
+    },
+    {
       "path": "scripts/qa/test-agent-driver-documentation-alignment.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
