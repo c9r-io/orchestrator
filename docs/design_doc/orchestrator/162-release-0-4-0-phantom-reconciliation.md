@@ -114,6 +114,22 @@ crates.io never saw 0.3.1, so 0.4.0 publishes directly with no back-fill.
   (skip on outage) is §4.4 shape 5.
 - The `sleep 30` between publishes (release.yml) remains, as recorded in
   DD-161 — it wastes time, not correctness.
+- **The Linux binaries floor at glibc 2.39** (built on ubuntu-24.04 runners).
+  Measured during the 0.4.0 verification: Debian bookworm (glibc 2.36)
+  refuses `orchestrator` with `GLIBC_2.39 not found`; Ubuntu 24.04 runs it.
+  Consistent with DD-161's musl decision (portability proof, not shipped);
+  users below the floor have the `cargo install` path.
+- **crates.io `orchestratord@0.4.0` is built from `92295c52`, one commit
+  after the `v0.4.0` tag** (`f82f1ae0`). The publish loop's verify step
+  exposed a defect the tag's tree carries: an `include_str!` escaping the
+  crate root, which `cargo package` cannot ship. The fix (the manifest moved
+  to `crates/daemon/assets/`, byte-identical content) landed as `92295c52`
+  and the crate was published from it; the tag, the GitHub Release binaries
+  and the tap formula stay on `f82f1ae0`, whose in-workspace build is
+  unaffected by the defect. Functionally identical; recorded rather than
+  hidden. The publish-surface gate's new check 4 (packaged-source
+  containment, with a synthetic-crate fixture) keeps the class from
+  recurring.
 
 ## Evidence
 
@@ -123,4 +139,34 @@ Gate green in both modes at authoring; fixture mode `3 passed, 0 failed`
 including the positive control; enforcement-surface gate `14 passed, 0
 failed` real / `37 passed, 0 failed` fixture after registration.
 
-The 0.4.0 release execution evidence is appended below at closure.
+### 0.4.0 release execution record (2026-08-01, closure evidence)
+
+- **Bootstrap first-publishes** (local, user token, dependency order):
+  `orchestrator-config`, `orchestrator-collab`, `orchestrator-persistence`,
+  `orchestrator-slack-gateway`, all `Published … v0.4.0 at registry
+  crates-io`, each confirmed via the crates.io API before proceeding.
+- **Tag trigger verification**: annotated `v0.4.0` on `f82f1ae0` (CI green),
+  pushed alone; release.yml run **30682942802** appeared within ~40 seconds —
+  the behavior the phantom never produced. No `workflow_dispatch` fallback
+  was needed.
+- **Run 30682942802**: three build targets, GitHub Release publish, and the
+  inline Homebrew tap push all succeeded. The crates.io job published 7
+  crates via OIDC, skipped the 4 bootstrapped ones through the hardened
+  `already exists|already uploaded` match (observed live in the log), and
+  failed on the twelfth — `orchestratord` — on the packaged-source
+  containment defect recorded in Known limits; fixed at `92295c52` (CI
+  green) and published locally from that commit.
+- **crates.io**: all 12 publishable crates individually confirmed at 0.4.0
+  via the API, not sampled.
+- **GitHub Release `v0.4.0`**: tarballs for aarch64-apple-darwin,
+  aarch64-unknown-linux-gnu, x86_64-unknown-linux-gnu, each with `.sha256`,
+  plus the combined sums file and the skills bundle.
+- **Homebrew**: `brew install c9r-io/tap/orchestrator` on Apple Silicon
+  macOS → `orchestrator 0.4.0 (f82f1ae)`.
+- **install.sh**: Apple Silicon macOS (Darwin arm64, this workstation) →
+  exit 0, `orchestrator 0.4.0 (f82f1ae)`; `docker run --platform linux/amd64
+  ubuntu:24.04` → exit 0, `orchestrator 0.4.0 (f82f1ae)`, glibc 2.39. The
+  bookworm probe that established the glibc floor is in Known limits.
+- **Liveness gate after the release**: `PASS: latest tag v0.4.0 has a
+  GitHub Release` — the real evidence path, `v0.3.1` exemption dormant,
+  exactly the QA 200 checklist's post-release expectation.
