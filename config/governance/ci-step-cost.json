@@ -14,7 +14,9 @@
   },
   "pendingMeasurement": {
     "Verify release publish surface": "added by FR-150 and not yet present in the measured run; expected cost is one cargo metadata --no-deps plus file reads and a network-free install.sh subprocess, a few seconds. Replace with a number at the next refresh.",
-    "Verify release publish surface negative fixtures": "added by FR-150 and not yet present in the measured run; three sed mutations over temp copies of three small files, a few seconds. Replace with a number at the next refresh."
+    "Verify release publish surface negative fixtures": "added by FR-150 and not yet present in the measured run; three sed mutations over temp copies of three small files, a few seconds. Replace with a number at the next refresh.",
+    "Verify release tag liveness": "added by FR-151 and not yet present in the measured run; three gh API reads (tag refs, release view, run list), a few seconds. Replace with a number at the next refresh.",
+    "Verify release tag liveness negative fixtures": "added by FR-151 and not yet present in the measured run; three self-invocations under a stubbed gh, no network, a few seconds. Replace with a number at the next refresh."
   },
   "measurement": {
     "runId": "30641766197",

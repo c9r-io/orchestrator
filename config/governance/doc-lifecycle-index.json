@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 433,
-    "active": 427,
+    "documents": 435,
+    "active": 429,
     "superseded": 6,
-    "withRelatedFr": 280
+    "withRelatedFr": 282
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -395,6 +395,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-150"
+      ]
+    },
+    "docs/design_doc/orchestrator/162-release-0-4-0-phantom-reconciliation.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-151"
       ]
     },
     "docs/design_doc/orchestrator/17-envstore-secretstore-agent-env.md": {
@@ -1658,6 +1664,12 @@
     "docs/qa/orchestrator/20-structured-output-worker-scheduler.md": {
       "lifecycle": "active"
     },
+    "docs/qa/orchestrator/200-release-0-4-0.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-151"
+      ]
+    },
     "docs/qa/orchestrator/21-runner-security-observability.md": {
       "lifecycle": "active"
     },
@@ -2718,6 +2730,10 @@
     "FR-150": [
       "docs/design_doc/orchestrator/161-release-pipeline-integrity.md",
       "docs/qa/orchestrator/199-release-pipeline-integrity.md"
+    ],
+    "FR-151": [
+      "docs/design_doc/orchestrator/162-release-0-4-0-phantom-reconciliation.md",
+      "docs/qa/orchestrator/200-release-0-4-0.md"
     ]
   },
   "supersedes": {

@@ -132,7 +132,12 @@ if rg -q 'def execution_document_accepted?' scripts/qa/coordination-governance.r
 fi
 pass "governance fixtures distinguish production admission from runtime compatibility"
 
-UNRELEASED="$(awk '/^## \[Unreleased\]/{flag=1;next} /^## \[/{flag=0} flag' CHANGELOG.md)"
+# The FR-126 retirement was recorded under [Unreleased] until the 0.4.0 cut
+# (FR-151) moved it, permanently, into the [0.4.0] section. The assertion's
+# subject is "the CHANGELOG records the retirement", so the extraction names
+# both the pre-release home and the release that shipped it — never "the
+# newest section", which would silently stop covering the facts at 0.5.0.
+RETIREMENT_SECTIONS="$(awk '/^## \[(Unreleased|0\.4\.0)\]/{flag=1;next} /^## \[/{flag=0} flag' CHANGELOG.md)"
 # Here-strings, not `printf ... | rg -q`.
 #
 # `rg -q` exits on the first match. The [Unreleased] section is 90 KB, well past
@@ -143,14 +148,14 @@ UNRELEASED="$(awk '/^## \[Unreleased\]/{flag=1;next} /^## \[/{flag=0} flag' CHAN
 # is why it had never been seen — and why it surfaced first inside a
 # certification sweep running 47 gates back to back. A here-string is written to
 # a temporary file, so there is no pipe and no writer left to signal.
-rg -q '^### Removed[[:space:]]*$' <<< "$UNRELEASED" ||
-  fail "CHANGELOG [Unreleased] does not record the retirement under ### Removed"
-rg -q 'RunnerExecutorKind' <<< "$UNRELEASED" ||
-  fail "CHANGELOG [Unreleased] does not name the removed runner selection seam"
-rg -q 'legacy_runner_executor_removed' <<< "$UNRELEASED" ||
-  fail "CHANGELOG [Unreleased] does not record the breaking manifest rejection"
-rg -q 'legacy_agent_command_deprecated' <<< "$UNRELEASED" ||
-  fail "CHANGELOG [Unreleased] does not record the command-only compatibility window"
+rg -q '^### Removed[[:space:]]*$' <<< "$RETIREMENT_SECTIONS" ||
+  fail "CHANGELOG [Unreleased]/[0.4.0] does not record the retirement under ### Removed"
+rg -q 'RunnerExecutorKind' <<< "$RETIREMENT_SECTIONS" ||
+  fail "CHANGELOG [Unreleased]/[0.4.0] does not name the removed runner selection seam"
+rg -q 'legacy_runner_executor_removed' <<< "$RETIREMENT_SECTIONS" ||
+  fail "CHANGELOG [Unreleased]/[0.4.0] does not record the breaking manifest rejection"
+rg -q 'legacy_agent_command_deprecated' <<< "$RETIREMENT_SECTIONS" ||
+  fail "CHANGELOG [Unreleased]/[0.4.0] does not record the command-only compatibility window"
 pass "CHANGELOG records the retirement and its breaking manifest change"
 
 rg -q 'legacy_runner_executor_removed' core/src crates --glob '*.rs' ||

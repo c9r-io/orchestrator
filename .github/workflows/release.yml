@@ -207,8 +207,10 @@ jobs:
             crates/daemon; do
             echo "::group::Publishing ${crate}"
             cargo publish --manifest-path "${crate}/Cargo.toml" 2>&1 | tee /tmp/publish.log || {
-              # Tolerate "already exists" for idempotent retries
-              if grep -q "already exists" /tmp/publish.log; then
+              # Tolerate the already-published case for idempotent retries.
+              # cargo's client-side pre-check says "already exists on crates.io index";
+              # the server-side rejection says "is already uploaded" — match both.
+              if grep -qE "already exists|already uploaded" /tmp/publish.log; then
                 echo "⚠ Already published — skipping"
               else
                 exit 1

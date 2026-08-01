@@ -6,9 +6,11 @@
 
 ## 背景
 
-`CHANGELOG.md` 的 `[Unreleased]` 块自 v0.3.1（2026-04-06）起累积了约 4 个月的已合并变更（at `9bcfaa96` 时约 130KB，涵盖 FR-126 至 FR-149 的全部工作；子代理扫描，单一方法），期间 0 次发版。
+`CHANGELOG.md` 的 `[Unreleased]` 块自 v0.3.1（2026-04-06）起累积了约 4 个月的已合并变更（at `56ba211e` 复核：`[Unreleased]` 块 116KB/138 行——原 130KB 系整个文件的大小；涵盖 FR-126 至 FR-149 的全部工作），期间 0 次发版。
 
-**2026-08-01 FR-150 治理中发现（已复核）：v0.3.1 本身是一次幻影发布。** tag `v0.3.1`（22eab222）存在于远端，CHANGELOG 记录 `[0.3.1] - 2026-04-06`，14 个 crate manifest 均为 0.3.1——但 `gh run list --workflow=release.yml` 显示 release 流水线最后一次运行是 v0.3.0（2026-04-04），GitHub Releases、crates.io（`agent-orchestrator`/`orchestrator-cli` 最新均为 0.3.0）与 Homebrew tap 全部停在 0.3.0。可能机制是 tag 在不触发 workflow 的上下文中被推送（如另一 workflow 内用 `GITHUB_TOKEN` 推 tag——GitHub 的防递归规则会吞掉触发）；确切原因由本 FR 查明。后果：
+**2026-08-01 FR-150 治理中发现（已复核）：v0.3.1 本身是一次幻影发布。** tag `v0.3.1`（22eab222）存在于远端，CHANGELOG 记录 `[0.3.1] - 2026-04-06`，14 个 crate manifest 均为 0.3.1——但 `gh run list --workflow=release.yml` 显示 release 流水线最后一次运行是 v0.3.0（2026-04-04），GitHub Releases、crates.io（`agent-orchestrator`/`orchestrator-cli` 最新均为 0.3.0）与 Homebrew tap 全部停在 0.3.0。
+
+**根因（2026-08-01 FR-151 治理核验；原假设已证伪）**：原假设"另一 workflow 内用 `GITHUB_TOKEN` 推 tag 触发防递归吞事件"不成立——v0.3.1 时点与现在的全部 4 个 workflow 均不推 tag，且 22eab222 推上 main 时正常触发了 CI/Docs/Security（该 actor 的 push 事件未被吞）。强证据指向 **GitHub 的单次 push 含 >3 个 tag 时不产生触发事件** 规则：远端存在 38 个 `checkpoint/*` tag（2026-03-22→04-05，全部早于 v0.3.1 数小时），说明执行过 `git push --tags`，v0.3.1 与一批 checkpoint tag 同 push 即命中抑制。旁证：v0.2.8 同为轻量 tag 单独推送正常触发。事件 API 仅保留 90 天，无法 100% 确证；修复不依赖确证——清理远端 checkpoint tag、发布规程固定为只推单个 tag、推后验证 run 已启动（`workflow_dispatch` 兜底）。后果：
 
 - 发布链路 4 个月未被执行，FR-150 列出的缺陷因此从未暴露；
 - 全部治理门禁、依赖修复、agent driver 迁移、协调坍缩成果均未到达任何已发布产物；
@@ -25,7 +27,7 @@
 ### 2. 版本决策与打 tag
 - 含 11 个 forward-only 迁移与多项 apply-time 拒绝语义变化，语义上不是 patch；建议 `0.4.0`；
 - 全部 14 个 crate 版本号统一 bump（当前 `0.3.1` 均匀一致，已复核 `Cargo.toml`）；
-- **幻影 v0.3.1 的清算**：查明 tag 未触发 workflow 的原因并修复触发路径（若根因是 `GITHUB_TOKEN` 推 tag，改用 PAT/deploy key 或手动 `workflow_dispatch`）；确认 0.4.0 的 tag 推送方式能真实触发 release.yml；在 CHANGELOG 的 `[0.3.1]` 节补注"该版本从未产出发布产物，其变更由 0.4.0 首次发布"；crates.io 从未见过 0.3.1，0.4.0 直接发布即可，无需补发。
+- **幻影 v0.3.1 的清算**：根因已查明（见背景；>3-tags push 抑制，强证据）；修复为清理远端 `checkpoint/*` tag + 只推单个 tag 的发布规程 + 推后验证 run 启动；确认 0.4.0 的 tag 推送方式能真实触发 release.yml；在 CHANGELOG 的 `[0.3.1]` 节补注"该版本从未产出发布产物，其变更由 0.4.0 首次发布"；crates.io 从未见过 0.3.1，0.4.0 直接发布即可，无需补发。
 
 ### 3. 全链路验证发布
 - GitHub Release 产物、crates.io 10+2 个 crate、Homebrew formula 占位符替换（`scripts/update-homebrew-formula.sh`）全部成功；

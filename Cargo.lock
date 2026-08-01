@@ -46,7 +46,7 @@ dependencies = [
 
 [[package]]
 name = "agent-orchestrator"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "aes-gcm-siv",
  "anyhow",
@@ -3222,7 +3222,7 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "orchestrator-cli"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "agent-orchestrator",
  "anyhow",
@@ -3251,7 +3251,7 @@ dependencies = [
 
 [[package]]
 name = "orchestrator-client"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "dirs",
@@ -3266,7 +3266,7 @@ dependencies = [
 
 [[package]]
 name = "orchestrator-collab"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "orchestrator-config",
@@ -3277,7 +3277,7 @@ dependencies = [
 
 [[package]]
 name = "orchestrator-config"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3294,7 +3294,7 @@ dependencies = [
 
 [[package]]
 name = "orchestrator-gui"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "libc",
@@ -3314,7 +3314,7 @@ dependencies = [
 
 [[package]]
 name = "orchestrator-integration-tests"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "agent-orchestrator",
  "anyhow",
@@ -3332,7 +3332,7 @@ dependencies = [
 
 [[package]]
 name = "orchestrator-persistence"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3354,7 +3354,7 @@ dependencies = [
 
 [[package]]
 name = "orchestrator-proto"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "prost",
  "protoc-bin-vendored",
@@ -3366,7 +3366,7 @@ dependencies = [
 
 [[package]]
 name = "orchestrator-runner"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3386,7 +3386,7 @@ dependencies = [
 
 [[package]]
 name = "orchestrator-scheduler"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "agent-orchestrator",
  "anyhow",
@@ -3419,7 +3419,7 @@ dependencies = [
 
 [[package]]
 name = "orchestrator-security"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "aes-gcm-siv",
  "anyhow",
@@ -3437,7 +3437,7 @@ dependencies = [
 
 [[package]]
 name = "orchestrator-slack-gateway"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "aes-gcm-siv",
  "anyhow",
@@ -3467,7 +3467,7 @@ dependencies = [
 
 [[package]]
 name = "orchestratord"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "agent-orchestrator",
  "anyhow",

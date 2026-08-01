@@ -73,6 +73,7 @@
       "bash",
       "curl",
       "date",
+      "gh",
       "git",
       "jq",
       "mktemp",
@@ -679,6 +680,16 @@
         "mode": "no-provider"
       },
       "note": "Derives the publishable crate set from cargo metadata and asserts release.yml's publish loop matches it in dependency order; asserts one shipped-target set across the build matrix, install.sh and the Homebrew formula; runs install.sh under a stubbed uname with a sentinel curl to prove the unsupported-platform refusal is behavioral. Static file reads plus a network-free subprocess: no daemon, no database, no provider binary reachable."
+    },
+    {
+      "path": "scripts/qa/test-release-tag-liveness.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "FR-151: the newest v* tag on the remote must have a GitHub Release or at least a release.yml run — the v0.3.1 phantom signature (tag with neither) fails, naming the tag. Reads the GitHub API via gh (GH_TOKEN in CI); API failure and an empty tag read fail closed. One closed historical exemption: v0.3.1 itself (DD-162). Fixture mode runs the gate under a stubbed gh: phantom signature and API outage must fail with named diagnostics, plus a healthy positive control. No daemon, no database, no provider binary."
     },
     {
       "path": "scripts/qa/test-self-bootstrap-cycle2-regression.sh",
