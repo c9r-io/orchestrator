@@ -125,7 +125,11 @@ pub(crate) async fn dispatch(
                     output,
                 )?;
             }
-            SourceBindingCommands::Suspend { name, project } => {
+            SourceBindingCommands::Suspend {
+                name,
+                project,
+                output,
+            } => {
                 let result = client
                     .source_task_binding_suspend(SourceTaskBindingMutationRequest {
                         name,
@@ -145,10 +149,14 @@ pub(crate) async fn dispatch(
                         "revision": result.revision,
                         "message": result.message,
                     }),
-                    OutputFormat::Yaml,
+                    output,
                 )?;
             }
-            SourceBindingCommands::Resume { name, project } => {
+            SourceBindingCommands::Resume {
+                name,
+                project,
+                output,
+            } => {
                 let result = client
                     .source_task_binding_resume(SourceTaskBindingMutationRequest {
                         name,
@@ -168,7 +176,7 @@ pub(crate) async fn dispatch(
                         "revision": result.revision,
                         "message": result.message,
                     }),
-                    OutputFormat::Yaml,
+                    output,
                 )?;
             }
         },
@@ -268,8 +276,8 @@ pub(crate) async fn dispatch(
                     .await?
                     .into_inner();
                 while let Some(delta) = stream.message().await? {
-                    print_value(
-                        serde_json::json!({
+                    crate::output::render::emit(
+                        &serde_json::json!({
                             "cursor": delta.cursor,
                             "route_version": delta.route_version,
                             "state": delta.state,
@@ -277,7 +285,7 @@ pub(crate) async fn dispatch(
                             "changed_at": delta.changed_at,
                             "route": delta.route.as_ref().map(automation_route_value),
                         }),
-                        output,
+                        output.encoding(),
                     )?;
                 }
             }
@@ -469,6 +477,7 @@ pub(crate) async fn dispatch(
             project,
             file,
             payload_hash,
+            output,
         } => {
             let normalized_json = super::common::read_input_or_file(&file)?;
             let payload_hash = payload_hash.unwrap_or_else(|| {
@@ -493,7 +502,7 @@ pub(crate) async fn dispatch(
                 .unwrap_or(serde_json::Value::Null);
             print_value(
                 serde_json::json!({"inserted": response.inserted, "event": event}),
-                OutputFormat::Yaml,
+                output,
             )?;
         }
         SourceCommands::Bindings { task_id, output } => {
@@ -512,6 +521,7 @@ pub(crate) async fn dispatch(
             thread,
             binding_type,
             source_event,
+            output,
         } => {
             let binding = client
                 .source_bind(SourceBindRequest {
@@ -527,7 +537,7 @@ pub(crate) async fn dispatch(
                 })
                 .await?
                 .into_inner();
-            print_value(binding_value(&binding), OutputFormat::Yaml)?;
+            print_value(binding_value(&binding), output)?;
         }
         SourceCommands::Replay { id } => {
             let response = client
@@ -600,7 +610,11 @@ async fn dispatch_connection(
                 .into_inner();
             print_value(connection_value(&connection), output)?;
         }
-        SourceConnectionCommands::Watch { project, after } => {
+        SourceConnectionCommands::Watch {
+            project,
+            after,
+            output,
+        } => {
             let mut stream = client
                 .source_connection_watch(SourceConnectionWatchRequest {
                     project_id: project,
@@ -610,8 +624,8 @@ async fn dispatch_connection(
                 .await?
                 .into_inner();
             while let Some(delta) = stream.message().await? {
-                print_value(
-                    serde_json::json!({
+                crate::output::render::emit(
+                    &serde_json::json!({
                         "cursor": delta.cursor,
                         "connection_version": delta.connection_version,
                         "state": delta.state,
@@ -620,7 +634,7 @@ async fn dispatch_connection(
                         "changed_at": delta.changed_at,
                         "connection": delta.connection.as_ref().map(connection_value),
                     }),
-                    OutputFormat::Json,
+                    output.encoding(),
                 )?;
             }
         }
@@ -649,6 +663,7 @@ async fn dispatch_connection(
             reason,
             idempotency_key,
             no_open,
+            output,
         } => {
             let intent = client
                 .source_connection_connect(SourceConnectionConnectRequest {
@@ -662,7 +677,7 @@ async fn dispatch_connection(
                 .await?
                 .into_inner();
             maybe_open_oauth(intent.authorize_url.as_deref(), no_open);
-            print_value(intent_value(&intent), OutputFormat::Yaml)?;
+            print_value(intent_value(&intent), output)?;
         }
         SourceConnectionCommands::ProvisionDedicated {
             project,
@@ -673,6 +688,7 @@ async fn dispatch_connection(
             idempotency_key,
             no_open,
             target_connection,
+            output,
         } => {
             let mut config_token = read_config_token_stdin(config_token_stdin)?;
             let preview = client
@@ -687,7 +703,7 @@ async fn dispatch_connection(
                 .await?
                 .into_inner();
             if !approve {
-                print_value(dedicated_value(&preview), OutputFormat::Yaml)?;
+                print_value(dedicated_value(&preview), output)?;
                 eprintln!(
                     "Review the manifest diff, then run `orchestrator source connection dedicated-resume {} --project {} ...` to approve before expiry.",
                     preview.id, project
@@ -703,7 +719,7 @@ async fn dispatch_connection(
                     .await?
                     .into_inner();
                 maybe_open_oauth(approved.authorize_url.as_deref(), no_open);
-                print_value(dedicated_value(&approved), OutputFormat::Yaml)?;
+                print_value(dedicated_value(&approved), output)?;
             }
         }
         SourceConnectionCommands::DedicatedStatus {
@@ -726,6 +742,7 @@ async fn dispatch_connection(
             reason,
             idempotency_key,
             no_open,
+            output,
         } => {
             let value = client
                 .source_connection_dedicated_approve(SourceConnectionDedicatedMutationRequest {
@@ -737,13 +754,14 @@ async fn dispatch_connection(
                 .await?
                 .into_inner();
             maybe_open_oauth(value.authorize_url.as_deref(), no_open);
-            print_value(dedicated_value(&value), OutputFormat::Yaml)?;
+            print_value(dedicated_value(&value), output)?;
         }
         SourceConnectionCommands::DedicatedAbandon {
             provisioning_id,
             project,
             reason,
             idempotency_key,
+            output,
         } => {
             let value = client
                 .source_connection_dedicated_abandon(SourceConnectionDedicatedMutationRequest {
@@ -754,7 +772,7 @@ async fn dispatch_connection(
                 })
                 .await?
                 .into_inner();
-            print_value(dedicated_value(&value), OutputFormat::Yaml)?;
+            print_value(dedicated_value(&value), output)?;
         }
         SourceConnectionCommands::DedicatedUpgrade {
             id,
@@ -765,6 +783,7 @@ async fn dispatch_connection(
             reason,
             idempotency_key,
             no_open,
+            output,
         } => {
             let mut config_token = read_config_token_stdin(config_token_stdin)?;
             let preview = client
@@ -781,7 +800,7 @@ async fn dispatch_connection(
                 .await?
                 .into_inner();
             if !approve {
-                print_value(dedicated_lifecycle_value(&preview), OutputFormat::Yaml)?;
+                print_value(dedicated_lifecycle_value(&preview), output)?;
                 eprintln!(
                     "Review the manifest diff, then rerun with --approve and a fresh Configuration Token before expiry."
                 );
@@ -800,7 +819,7 @@ async fn dispatch_connection(
                     .await?
                     .into_inner();
                 maybe_open_oauth(applied.authorize_url.as_deref(), no_open);
-                print_value(dedicated_lifecycle_value(&applied), OutputFormat::Yaml)?;
+                print_value(dedicated_lifecycle_value(&applied), output)?;
             }
         }
         SourceConnectionCommands::MigrateToShared {
@@ -810,6 +829,7 @@ async fn dispatch_connection(
             reason,
             idempotency_key,
             no_open,
+            output,
         } => {
             let intent = client
                 .source_connection_migrate_to_shared(SourceConnectionMutationRequest {
@@ -822,7 +842,7 @@ async fn dispatch_connection(
                 .await?
                 .into_inner();
             maybe_open_oauth(intent.authorize_url.as_deref(), no_open);
-            print_value(intent_value(&intent), OutputFormat::Yaml)?;
+            print_value(intent_value(&intent), output)?;
         }
         SourceConnectionCommands::DedicatedDelete {
             id,
@@ -832,6 +852,7 @@ async fn dispatch_connection(
             app_id_confirmation,
             reason,
             idempotency_key,
+            output,
         } => {
             let mut config_token = read_config_token_stdin(config_token_stdin)?;
             let connection = client
@@ -846,7 +867,7 @@ async fn dispatch_connection(
                 })
                 .await?
                 .into_inner();
-            print_value(connection_value(&connection), OutputFormat::Yaml)?;
+            print_value(connection_value(&connection), output)?;
         }
         SourceConnectionCommands::Status {
             intent_id,
@@ -867,6 +888,7 @@ async fn dispatch_connection(
             project,
             reason,
             idempotency_key,
+            output,
         } => {
             let intent = client
                 .source_connection_cancel(SourceConnectionIntentMutationRequest {
@@ -877,7 +899,7 @@ async fn dispatch_connection(
                 })
                 .await?
                 .into_inner();
-            print_value(intent_value(&intent), OutputFormat::Yaml)?;
+            print_value(intent_value(&intent), output)?;
         }
         SourceConnectionCommands::Reauthorize {
             id,
@@ -886,6 +908,7 @@ async fn dispatch_connection(
             reason,
             idempotency_key,
             no_open,
+            output,
         } => {
             let intent = client
                 .source_connection_reauthorize(SourceConnectionMutationRequest {
@@ -898,7 +921,7 @@ async fn dispatch_connection(
                 .await?
                 .into_inner();
             maybe_open_oauth(intent.authorize_url.as_deref(), no_open);
-            print_value(intent_value(&intent), OutputFormat::Yaml)?;
+            print_value(intent_value(&intent), output)?;
         }
         SourceConnectionCommands::Disconnect {
             id,
@@ -906,6 +929,7 @@ async fn dispatch_connection(
             expected_version,
             reason,
             idempotency_key,
+            output,
         } => {
             let connection = client
                 .source_connection_disconnect(SourceConnectionMutationRequest {
@@ -917,7 +941,7 @@ async fn dispatch_connection(
                 })
                 .await?
                 .into_inner();
-            print_value(connection_value(&connection), OutputFormat::Yaml)?;
+            print_value(connection_value(&connection), output)?;
         }
         SourceConnectionCommands::Transfer {
             id,
@@ -926,6 +950,7 @@ async fn dispatch_connection(
             target_daemon_id,
             reason,
             idempotency_key,
+            output,
         } => {
             let connection = client
                 .source_connection_transfer(SourceConnectionTransferRequest {
@@ -938,7 +963,7 @@ async fn dispatch_connection(
                 })
                 .await?
                 .into_inner();
-            print_value(connection_value(&connection), OutputFormat::Yaml)?;
+            print_value(connection_value(&connection), output)?;
         }
     }
     Ok(())

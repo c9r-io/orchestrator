@@ -32,6 +32,16 @@ impl crate::OutputFormat {
     }
 }
 
+impl crate::StreamFormat {
+    /// Streaming deltas frame JSON one document per line (NDJSON).
+    pub(crate) fn encoding(self) -> Encoding {
+        match self {
+            crate::StreamFormat::Json => Encoding::JsonCompact,
+            crate::StreamFormat::Yaml => Encoding::Yaml,
+        }
+    }
+}
+
 /// Serialize `value`. This is the only place in the crate allowed to call
 /// `serde_json::to_string*` / `serde_yaml::to_string` for output; failures
 /// propagate instead of degrading to an empty string.
@@ -178,9 +188,14 @@ mod tests {
             "commands/tool.rs", // manifest re-serialization for gRPC apply, not stdout
         ];
         const JSON_OUT_ALLOWED: &[&str] = &[
-            "output/render.rs",    // the chokepoint itself
-            "commands/guide.rs",   // `guide --format json`, a documented non -o mechanism
-            "commands/version.rs", // migrates to -o in FR-154 C4; remove then
+            "output/render.rs",  // the chokepoint itself
+            "commands/guide.rs", // `guide --format json`, a documented non -o mechanism
+        ];
+        // Per-encoding match arms belong to the chokepoint; anywhere else they
+        // are a reintroduced two-projection shape waiting to diverge.
+        const ENCODING_ARM_ALLOWED: &[&str] = &[
+            "output/render.rs",   // OutputFormat::encoding / StreamFormat::encoding
+            "commands/common.rs", // format-name stringification for server-side rendering
         ];
 
         let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
@@ -204,6 +219,14 @@ mod tests {
             if serialization_unwrapped_to_default(content) {
                 violations.push(format!(
                     "{rel}: serialization failure swallowed by unwrap_or_default"
+                ));
+            }
+            if (content.contains("OutputFormat::Json =>")
+                || content.contains("OutputFormat::Yaml =>"))
+                && !ENCODING_ARM_ALLOWED.contains(&rel)
+            {
+                violations.push(format!(
+                    "{rel}: per-encoding match arm outside the chokepoint"
                 ));
             }
         });

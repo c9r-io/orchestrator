@@ -220,8 +220,11 @@ pub enum Commands {
 
     /// Show version
     Version {
-        /// Emit JSON instead of human-readable text.
-        #[arg(long)]
+        /// Output format (table = human-readable text).
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+        /// Deprecated alias for `-o json`; will be removed next release cycle.
+        #[arg(long, hide = true, conflicts_with = "output")]
         json: bool,
     },
 
@@ -334,6 +337,9 @@ pub enum AttentionCommands {
         /// Optional retry-safe idempotency key.
         #[arg(long)]
         idempotency_key: Option<String>,
+        /// Output format for the updated item.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
     },
     /// Snooze an open or claimed item.
     Snooze {
@@ -348,6 +354,9 @@ pub enum AttentionCommands {
         /// Optional retry-safe idempotency key.
         #[arg(long)]
         idempotency_key: Option<String>,
+        /// Output format for the updated item.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
     },
     /// Resolve an attention item.
     Resolve {
@@ -362,6 +371,9 @@ pub enum AttentionCommands {
         /// Optional retry-safe idempotency key.
         #[arg(long)]
         idempotency_key: Option<String>,
+        /// Output format for the updated item.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
     },
     /// Execute an allowlisted action.
     Action {
@@ -378,6 +390,9 @@ pub enum AttentionCommands {
         /// Optional retry-safe idempotency key.
         #[arg(long)]
         idempotency_key: Option<String>,
+        /// Output format for the updated item.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
     },
     /// Follow monotonic attention queue changes.
     Follow {
@@ -389,7 +404,7 @@ pub enum AttentionCommands {
         project: Option<String>,
         /// Output encoding for each change.
         #[arg(short, long, default_value = "json")]
-        output: OutputFormat,
+        output: StreamFormat,
     },
 }
 
@@ -466,6 +481,9 @@ pub enum SourceCommands {
         /// Optional authenticated raw-payload digest.
         #[arg(long)]
         payload_hash: Option<String>,
+        /// Output format for the result.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
     },
     /// List source bindings for one task.
     Bindings {
@@ -501,6 +519,9 @@ pub enum SourceCommands {
         /// Source event that authorized/created the binding.
         #[arg(long)]
         source_event: String,
+        /// Output format for the result.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
     },
     /// Replay a failed or attention-blocked route.
     Replay {
@@ -547,6 +568,9 @@ pub enum SourceConnectionCommands {
         /// Resume after this change cursor.
         #[arg(long, default_value_t = 0)]
         after: i64,
+        /// Output encoding for each change.
+        #[arg(short, long, default_value = "json")]
+        output: StreamFormat,
     },
     /// Show managed/manual provisioning capabilities.
     Catalog {
@@ -571,6 +595,9 @@ pub enum SourceConnectionCommands {
         /// Print the OAuth URL without opening the system browser.
         #[arg(long)]
         no_open: bool,
+        /// Output format for the result.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
     },
     /// Validate and provision a workspace-owned private Slack App.
     #[command(name = "provision-dedicated")]
@@ -599,6 +626,9 @@ pub enum SourceConnectionCommands {
         /// Existing shared connection selected for a reviewed migration.
         #[arg(long)]
         target_connection: Option<String>,
+        /// Output format for the result.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
     },
     /// Inspect a dedicated App provisioning checkpoint.
     #[command(name = "dedicated-status")]
@@ -629,6 +659,9 @@ pub enum SourceConnectionCommands {
         /// Print the OAuth URL without opening the system browser.
         #[arg(long)]
         no_open: bool,
+        /// Output format for the result.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
     },
     /// Abandon a non-terminal dedicated App provisioning checkpoint.
     #[command(name = "dedicated-abandon")]
@@ -644,6 +677,9 @@ pub enum SourceConnectionCommands {
         /// Stable retry identity.
         #[arg(long)]
         idempotency_key: String,
+        /// Output format for the result.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
     },
     /// Review and apply the fixed manifest to an existing dedicated App.
     #[command(name = "dedicated-upgrade")]
@@ -671,6 +707,9 @@ pub enum SourceConnectionCommands {
         /// Print a required OAuth URL without opening the system browser.
         #[arg(long)]
         no_open: bool,
+        /// Output format for the result.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
     },
     /// Start a reviewed dedicated-to-official App migration.
     #[command(name = "migrate-to-shared")]
@@ -692,6 +731,9 @@ pub enum SourceConnectionCommands {
         /// Print the OAuth URL without opening the system browser.
         #[arg(long)]
         no_open: bool,
+        /// Output format for the result.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
     },
     /// Permanently delete a disconnected workspace-owned Slack App.
     #[command(name = "dedicated-delete")]
@@ -716,6 +758,9 @@ pub enum SourceConnectionCommands {
         /// Stable retry identity.
         #[arg(long)]
         idempotency_key: String,
+        /// Output format for the result.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
     },
     /// Poll or resume one OAuth intent.
     Status {
@@ -741,6 +786,9 @@ pub enum SourceConnectionCommands {
         /// Stable retry identity.
         #[arg(long)]
         idempotency_key: String,
+        /// Output format for the result.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
     },
     /// Start OAuth again for an existing connection.
     Reauthorize {
@@ -761,6 +809,9 @@ pub enum SourceConnectionCommands {
         /// Print the OAuth URL without opening the system browser.
         #[arg(long)]
         no_open: bool,
+        /// Output format for the result.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
     },
     /// Disconnect and destroy managed credentials.
     Disconnect {
@@ -778,6 +829,9 @@ pub enum SourceConnectionCommands {
         /// Stable retry identity.
         #[arg(long)]
         idempotency_key: String,
+        /// Output format for the result.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
     },
     /// Transfer exclusive ownership to another daemon.
     Transfer {
@@ -798,6 +852,9 @@ pub enum SourceConnectionCommands {
         /// Stable retry identity.
         #[arg(long)]
         idempotency_key: String,
+        /// Output format for the result.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
     },
 }
 
@@ -853,7 +910,7 @@ pub enum SourceAutomationCommands {
         after: i64,
         /// Output encoding for each transition.
         #[arg(short, long, default_value = "json")]
-        output: OutputFormat,
+        output: StreamFormat,
     },
     /// Simulate live matcher and renderer logic without side effects.
     Simulate {
@@ -976,6 +1033,9 @@ pub enum SourceBindingCommands {
         /// Project namespace.
         #[arg(short, long, default_value = "default")]
         project: String,
+        /// Output format for the result.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
     },
     /// Resume a binding after conflict validation.
     Resume {
@@ -984,6 +1044,9 @@ pub enum SourceBindingCommands {
         /// Project namespace.
         #[arg(short, long, default_value = "default")]
         project: String,
+        /// Output format for the result.
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
     },
 }
 
@@ -1269,7 +1332,32 @@ mod tests {
     fn version_subcommand_accepts_json_flag() {
         let cli = Cli::try_parse_from(["orchestrator", "version", "--json"])
             .expect("version --json should parse");
-        assert!(matches!(cli.command, Commands::Version { json: true }));
+        assert!(matches!(cli.command, Commands::Version { json: true, .. }));
+    }
+
+    #[test]
+    fn version_subcommand_accepts_output_flag() {
+        let cli = Cli::try_parse_from(["orchestrator", "version", "-o", "json"])
+            .expect("version -o json should parse");
+        assert!(matches!(
+            cli.command,
+            Commands::Version {
+                output: super::OutputFormat::Json,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn version_json_alias_conflicts_with_output() {
+        assert!(Cli::try_parse_from(["orchestrator", "version", "--json", "-o", "yaml"]).is_err());
+    }
+
+    #[test]
+    fn follow_rejects_table_output() {
+        assert!(
+            Cli::try_parse_from(["orchestrator", "attention", "follow", "-o", "table"]).is_err()
+        );
     }
 
     #[test]
@@ -1854,8 +1942,12 @@ pub enum TaskCommands {
         #[arg(long)]
         verbose: bool,
 
-        /// Emit JSON instead of terminal rendering.
-        #[arg(long)]
+        /// Output format (table = terminal timeline rendering).
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+
+        /// Deprecated alias for `-o json`; will be removed next release cycle.
+        #[arg(long, hide = true, conflicts_with = "output")]
         json: bool,
     },
 
@@ -2082,7 +2174,7 @@ pub enum AgentSessionCommands {
         /// Session identifier.
         session_id: String,
         /// Output encoding.
-        #[arg(short, long, default_value = "table")]
+        #[arg(short, long, default_value = "yaml")]
         output: OutputFormat,
     },
     /// Attach as a reader or explicitly acquire the writer lease.
@@ -2175,7 +2267,7 @@ pub enum AgentSessionCommands {
         #[arg(long)]
         pid: i64,
         /// Output encoding.
-        #[arg(short, long, default_value = "table")]
+        #[arg(short, long, default_value = "yaml")]
         output: OutputFormat,
     },
 }
@@ -2268,6 +2360,17 @@ pub enum OutputFormat {
     /// JSON output.
     Json,
     /// YAML output.
+    Yaml,
+}
+
+/// Output encodings for streaming (follow/watch) commands, one document per
+/// delta. Table is deliberately absent: a delta stream has no table rendering,
+/// and advertising one would silently degrade to JSON (the pre-FR-154 bug).
+#[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
+pub enum StreamFormat {
+    /// Single-line JSON per delta (NDJSON).
+    Json,
+    /// One YAML document per delta.
     Yaml,
 }
 

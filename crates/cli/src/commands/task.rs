@@ -295,6 +295,7 @@ pub(crate) async fn dispatch(
         TaskCommands::Trace {
             task_id,
             verbose,
+            output,
             json,
         } => {
             let resp = client
@@ -302,8 +303,14 @@ pub(crate) async fn dispatch(
                 .await?
                 .into_inner();
 
-            if json {
-                println!("{}", resp.trace_json);
+            let format = if json {
+                crate::OutputFormat::Json
+            } else {
+                output
+            };
+            if let Some(encoding) = format.encoding() {
+                let value: serde_json::Value = serde_json::from_str(&resp.trace_json)?;
+                output::render::emit(&value, encoding)?;
                 return Ok(());
             }
 

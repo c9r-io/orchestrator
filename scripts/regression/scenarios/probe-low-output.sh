@@ -48,7 +48,7 @@ _lo_run_detect_low_output() {
 
   # Verify trace detects low_output
   local trace_json
-  trace_json="$("$PROBE_BINARY" task trace "$task_id" --json 2>/dev/null || echo "{}")"
+  trace_json="$("$PROBE_BINARY" task trace "$task_id" -o json 2>/dev/null || echo "{}")"
   probe_assert_trace_anomaly "$trace_json" "low_output" "trace detects low_output"
 
   # Verify trace terminal output uses unified naming
@@ -91,7 +91,7 @@ _lo_run_active_output_clean() {
   wait "$runner_pid" 2>/dev/null || true
 
   local trace_json
-  trace_json="$("$PROBE_BINARY" task trace "$task_id" --json 2>/dev/null || echo "{}")"
+  trace_json="$("$PROBE_BINARY" task trace "$task_id" -o json 2>/dev/null || echo "{}")"
 
   # Active output task should NOT have low_output anomaly
   local low_output_count

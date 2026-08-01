@@ -73,17 +73,11 @@ pub(crate) fn print_item(item: &AttentionItem, format: OutputFormat) -> Result<(
     }
 }
 
-pub(crate) fn print_delta(delta: &AttentionDelta, format: OutputFormat) -> Result<()> {
+pub(crate) fn print_delta(delta: &AttentionDelta, format: crate::StreamFormat) -> Result<()> {
     let projected = serde_json::json!({
         "kind": delta.kind,
         "change_id": delta.change_id,
         "item": delta.item.as_ref().map(attention_item_value),
     });
-    // Streaming deltas keep single-line JSON framing; `-o table` maps to the
-    // same until FR-154 C4 narrows follow to a stream-only format enum.
-    let encoding = match format.encoding() {
-        Some(render::Encoding::Yaml) => render::Encoding::Yaml,
-        _ => render::Encoding::JsonCompact,
-    };
-    render::emit(&projected, encoding)
+    render::emit(&projected, format.encoding())
 }

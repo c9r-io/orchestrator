@@ -60,6 +60,7 @@ pub(crate) async fn dispatch(
             id,
             expected_version,
             idempotency_key: key,
+            output: format,
         } => {
             let key = idempotency_key(key);
             let item = client
@@ -75,13 +76,14 @@ pub(crate) async fn dispatch(
                 })
                 .await?
                 .into_inner();
-            output::print_attention_item(&item, crate::OutputFormat::Yaml)?;
+            output::print_attention_item(&item, format)?;
         }
         AttentionCommands::Snooze {
             id,
             expected_version,
             until,
             idempotency_key: key,
+            output: format,
         } => {
             let key = idempotency_key(key);
             let item = client
@@ -98,13 +100,14 @@ pub(crate) async fn dispatch(
                 })
                 .await?
                 .into_inner();
-            output::print_attention_item(&item, crate::OutputFormat::Yaml)?;
+            output::print_attention_item(&item, format)?;
         }
         AttentionCommands::Resolve {
             id,
             expected_version,
             reason,
             idempotency_key: key,
+            output: format,
         } => {
             let key = idempotency_key(key);
             let item = client
@@ -121,7 +124,7 @@ pub(crate) async fn dispatch(
                 })
                 .await?
                 .into_inner();
-            output::print_attention_item(&item, crate::OutputFormat::Yaml)?;
+            output::print_attention_item(&item, format)?;
         }
         AttentionCommands::Action {
             id,
@@ -129,6 +132,7 @@ pub(crate) async fn dispatch(
             expected_version,
             input,
             idempotency_key: key,
+            output: format,
         } => {
             let key = idempotency_key(key);
             let item = client
@@ -146,7 +150,7 @@ pub(crate) async fn dispatch(
                 })
                 .await?
                 .into_inner();
-            output::print_attention_item(&item, crate::OutputFormat::Yaml)?;
+            output::print_attention_item(&item, format)?;
         }
         AttentionCommands::Follow {
             after,

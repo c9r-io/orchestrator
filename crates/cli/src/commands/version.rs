@@ -16,18 +16,28 @@ fn local_version_info() -> VersionInfo<'static> {
     }
 }
 
-/// Print build metadata in text or JSON form without opening a daemon session.
-pub async fn run(_control_plane_config: Option<&str>, json: bool) -> Result<()> {
+/// Print build metadata without opening a daemon session. `json` is the
+/// deprecated `--json` alias for `-o json`, kept one release cycle.
+pub async fn run(
+    _control_plane_config: Option<&str>,
+    output: crate::OutputFormat,
+    json: bool,
+) -> Result<()> {
     let version = local_version_info();
-    if json {
-        println!("{}", serde_json::to_string_pretty(&version)?);
-        return Ok(());
+    let format = if json {
+        crate::OutputFormat::Json
+    } else {
+        output
+    };
+    match format.encoding() {
+        Some(encoding) => crate::output::render::emit(&serde_json::to_value(&version)?, encoding),
+        None => {
+            println!("Version:    {}", version.version);
+            println!("Git Hash:   {}", version.git_hash);
+            println!("Build Time: {}", version.build_time);
+            Ok(())
+        }
     }
-
-    println!("Version:    {}", version.version);
-    println!("Git Hash:   {}", version.git_hash);
-    println!("Build Time: {}", version.build_time);
-    Ok(())
 }
 
 #[cfg(test)]

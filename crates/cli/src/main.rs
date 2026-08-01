@@ -25,7 +25,7 @@ pub use cli::{
     HandoffCommands, ManifestCommands, MetricsCommands, OutputFormat, QaCommands, ResumeCommands,
     SandboxProbeCommands, SecretCommands, SecretKeyCommands, SourceAutomationCommands,
     SourceBindingCommands, SourceCommands, SourceConnectionCommands, SourceTemplateCommands,
-    StoreCommands, TaskCommands, ToolCommands, TriggerCommands,
+    StoreCommands, StreamFormat, TaskCommands, ToolCommands, TriggerCommands,
 };
 
 fn main() -> Result<()> {
@@ -58,8 +58,8 @@ async fn run(cli: Cli) -> Result<()> {
         ..
     } = cli;
     match command {
-        Commands::Version { json } => {
-            commands::version::run(control_plane_config.as_deref(), json).await
+        Commands::Version { output, json } => {
+            commands::version::run(control_plane_config.as_deref(), output, json).await
         }
         Commands::Debug {
             component: _,
