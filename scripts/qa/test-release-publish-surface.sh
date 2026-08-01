@@ -31,7 +31,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-for command in cargo jq ruby; do
+for command in cargo jq ruby shasum; do
   command -v "$command" >/dev/null 2>&1 || {
     echo "missing required command: $command" >&2
     exit 1
@@ -328,6 +328,149 @@ exit(bad.empty? ? 0 : 1)
 RUBY
 }
 
+# ── Checks 5/6: skills install is confined to an explicit target (FR-152) ─────
+#
+# install.sh used to unpack the skills tarball with `tar -xzf ... -C "."` —
+# curl | sh from $HOME meant an unannounced write of .claude/skills/ into
+# whatever directory the user happened to be in. These checks run the real
+# script end to end against a stubbed release (uname reports Apple Silicon, a
+# supported target; curl serves fixture artifacts from a local directory) and
+# observe the filesystem, not the script text: the CWD entry listing must be
+# identical before and after, and the skill must land in the announced target.
+
+# Builds a fake release the installer can complete against: binaries tarball,
+# matching sha256sums, skills tarball, and uname/curl stubs.
+setup_install_harness() {
+  local dir="$1" tag="$2" target="$3"
+  local artifacts="$dir/artifacts" pkg="orchestrator-${tag}-${target}"
+  mkdir -p "$artifacts" "$dir/stub" "$dir/build/$pkg"
+  printf '#!/bin/sh\necho fixture orchestrator\n' > "$dir/build/$pkg/orchestrator"
+  printf '#!/bin/sh\necho fixture orchestratord\n' > "$dir/build/$pkg/orchestratord"
+  chmod +x "$dir/build/$pkg/orchestrator" "$dir/build/$pkg/orchestratord"
+  tar -czf "$artifacts/${pkg}.tar.gz" -C "$dir/build" "$pkg"
+  (cd "$artifacts" && shasum -a 256 "${pkg}.tar.gz" > "orchestrator-${tag}-sha256sums.txt")
+  mkdir -p "$dir/build/.claude/skills/orchestrator-guide"
+  printf '# fixture skill\n' > "$dir/build/.claude/skills/orchestrator-guide/SKILL.md"
+  tar -czf "$artifacts/orchestrator-skills-${tag}.tar.gz" -C "$dir/build" ".claude"
+
+  cat > "$dir/stub/uname" <<'EOF'
+#!/bin/sh
+case "${1:-}" in
+  -m) echo arm64 ;;
+  *) echo Darwin ;;
+esac
+EOF
+  # Serves artifacts by URL basename; --head probes existence. A missing
+  # artifact fails with curl's own "file missing" status so the run cannot
+  # succeed vacuously against an empty directory.
+  cat > "$dir/stub/curl" <<EOF
+#!/bin/sh
+ARTIFACTS="$artifacts"
+EOF
+  cat >> "$dir/stub/curl" <<'EOF'
+out=""
+url=""
+head=0
+prev=""
+for arg in "$@"; do
+  [ "$prev" = "-o" ] && out="$arg"
+  case "$arg" in
+    --head) head=1 ;;
+    http://*|https://*) url="$arg" ;;
+  esac
+  prev="$arg"
+done
+base="${url##*/}"
+[ -f "$ARTIFACTS/$base" ] || exit 22
+[ "$head" -eq 1 ] && exit 0
+if [ -n "$out" ]; then cp "$ARTIFACTS/$base" "$out"; else cat "$ARTIFACTS/$base"; fi
+exit 0
+EOF
+  chmod +x "$dir/stub/uname" "$dir/stub/curl"
+}
+
+# Runs install.sh inside the harness. $4 optionally overrides the skills dir
+# (the literal string "unset" leaves the default in force).
+run_stubbed_install() {
+  local install_sh="$1" h="$2" out="$3" skills_dir="${4:-unset}"
+  local tag="v0.0.0-fixture"
+  if [[ "$skills_dir" == "unset" ]]; then
+    (cd "$h/cwd" && PATH="$h/stub:$PATH" HOME="$h/home" \
+      INSTALL_ORCHESTRATOR_VERSION="$tag" \
+      INSTALL_ORCHESTRATOR_BIN_DIR="$h/bin" \
+      sh "$install_sh" > "$out" 2>&1)
+  else
+    (cd "$h/cwd" && PATH="$h/stub:$PATH" HOME="$h/home" \
+      INSTALL_ORCHESTRATOR_VERSION="$tag" \
+      INSTALL_ORCHESTRATOR_BIN_DIR="$h/bin" \
+      INSTALL_ORCHESTRATOR_SKILLS_DIR="$skills_dir" \
+      sh "$install_sh" > "$out" 2>&1)
+  fi
+}
+
+# Check 5: default behavior — CWD untouched, skill lands in $HOME/.claude/skills,
+# and the target is announced in the output.
+check_skills_install_confinement() {
+  local install_sh="$1" label="$2"
+  local h="$WORK/harness-$label" rc=0 before after
+  setup_install_harness "$h" "v0.0.0-fixture" "aarch64-apple-darwin"
+  mkdir -p "$h/cwd" "$h/home" "$h/bin"
+  printf 'marker\n' > "$h/cwd/preexisting.txt"
+  before="$(ls -A "$h/cwd" | LC_ALL=C sort)"
+  if ! run_stubbed_install "$install_sh" "$h" "$h/run.log"; then
+    echo "    install.sh failed under the stubbed release:" >&2
+    sed 's/^/      /' "$h/run.log" >&2
+    return 1
+  fi
+  after="$(ls -A "$h/cwd" | LC_ALL=C sort)"
+  if [[ "$before" != "$after" ]]; then
+    echo "    install.sh polluted the CWD; entry listing drifted:" >&2
+    diff <(printf '%s\n' "$before") <(printf '%s\n' "$after") | sed 's/^/      /' >&2 || true
+    rc=1
+  fi
+  if [[ ! -f "$h/home/.claude/skills/orchestrator-guide/SKILL.md" ]]; then
+    echo "    the orchestrator-guide skill did not land in \$HOME/.claude/skills" >&2
+    rc=1
+  fi
+  if ! grep -q "installing orchestrator-guide skill to $h/home/.claude/skills" "$h/run.log"; then
+    echo "    the skills target directory was not announced in the output" >&2
+    rc=1
+  fi
+  return "$rc"
+}
+
+# Check 6: INSTALL_ORCHESTRATOR_SKILLS_DIR redirects the install, and the
+# value "none" skips it — in both cases the default location stays empty.
+check_skills_dir_override() {
+  local install_sh="$1"
+  local h="$WORK/harness-override" rc=0
+  setup_install_harness "$h" "v0.0.0-fixture" "aarch64-apple-darwin"
+  mkdir -p "$h/cwd" "$h/home" "$h/bin"
+  if ! run_stubbed_install "$install_sh" "$h" "$h/override.log" "$h/custom-skills"; then
+    echo "    install.sh failed with INSTALL_ORCHESTRATOR_SKILLS_DIR set:" >&2
+    sed 's/^/      /' "$h/override.log" >&2
+    return 1
+  fi
+  if [[ ! -f "$h/custom-skills/orchestrator-guide/SKILL.md" ]]; then
+    echo "    the skill did not land in the overridden skills directory" >&2
+    rc=1
+  fi
+  if [[ -e "$h/home/.claude" ]]; then
+    echo "    the default \$HOME/.claude was written despite the override" >&2
+    rc=1
+  fi
+  if ! run_stubbed_install "$install_sh" "$h" "$h/none.log" "none"; then
+    echo "    install.sh failed with INSTALL_ORCHESTRATOR_SKILLS_DIR=none:" >&2
+    sed 's/^/      /' "$h/none.log" >&2
+    return 1
+  fi
+  if [[ -e "$h/home/.claude" ]] || grep -q "orchestrator-guide skill" "$h/none.log"; then
+    echo "    INSTALL_ORCHESTRATOR_SKILLS_DIR=none did not skip the skills install" >&2
+    rc=1
+  fi
+  return "$rc"
+}
+
 # ── Real repository mode ──────────────────────────────────────────────────────
 if [[ "${1:-}" != "--fixture-test" ]]; then
   echo "=== FR-150: release publish/ship surface ==="
@@ -356,6 +499,18 @@ if [[ "${1:-}" != "--fixture-test" ]]; then
     pass "no publishable crate embeds a file from outside its own root"
   else
     fail "a publishable crate includes a file cargo package will not ship"
+  fi
+
+  if check_skills_install_confinement "$REPO_ROOT/install.sh" "real"; then
+    pass "skills install leaves the CWD untouched and announces its target"
+  else
+    fail "skills install writes outside its announced target"
+  fi
+
+  if check_skills_dir_override "$REPO_ROOT/install.sh"; then
+    pass "INSTALL_ORCHESTRATOR_SKILLS_DIR redirects the skills install; none skips it"
+  else
+    fail "the skills directory override is broken"
   fi
 
   echo ""
@@ -387,8 +542,9 @@ control_rc=0
 check_publish_loop "$BASE/release.yml" >/dev/null 2>&1 || control_rc=1
 check_ship_surface "$BASE/release.yml" "$BASE/install.sh" "$BASE/orchestrator.rb" >/dev/null 2>&1 || control_rc=1
 check_install_refusal "$BASE/install.sh" >/dev/null 2>&1 || control_rc=1
+check_skills_install_confinement "$BASE/install.sh" "control" >/dev/null 2>&1 || control_rc=1
 if [[ "$control_rc" -eq 0 ]]; then
-  pass "positive control: unmodified copies pass all three checks"
+  pass "positive control: unmodified copies pass all checks"
 else
   fail "positive control: unmodified copies do not pass; fixtures below are void"
 fi
@@ -462,6 +618,24 @@ elif ! check_packaged_source_containment "$PUBLISHABLE_DIRS" "$REPO_ROOT" >/dev/
   fail "fixture 4: the real workspace fails the containment check; fixture result is void"
 else
   pass "fixture 4: crate-escaping include rejected, diagnostic names the path"
+fi
+
+# Fixture 5: flip the skills default back to the working directory — the exact
+# historical defect (unpacking relative to wherever curl | sh happened to run),
+# injected as the one-token regression the confinement check is least likely
+# to be hand-tuned for: not the old tar -C "." line, but the default value
+# quietly becoming CWD-relative again.
+F5="$WORK/f5"; mkdir -p "$F5"; cp "$BASE/install.sh" "$F5/install.sh"
+if fixture_mutate "fixture 5" "$F5/install.sh" \
+    sh -c 'sed "s|:-\$HOME/.claude/skills}|:-.}|" "$1" > "$1.tmp" && mv "$1.tmp" "$1"' _ "$F5/install.sh"; then
+  f5_out="$WORK/f5.log"
+  if check_skills_install_confinement "$F5/install.sh" "f5" > "$f5_out" 2>&1; then
+    fail "fixture 5: a CWD-relative skills default was accepted"
+  elif ! grep -q "polluted the CWD" "$f5_out"; then
+    fail "fixture 5: rejected, but the diagnostic does not name the CWD pollution"
+  else
+    pass "fixture 5: CWD-relative skills default rejected, diagnostic names the pollution"
+  fi
 fi
 
 echo ""

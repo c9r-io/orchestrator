@@ -10,7 +10,7 @@ related_fr: FR-150
 `.github/workflows/release.yml`, `SUPPORTED_TARGETS` and the
 unsupported-platform refusal in `install.sh`, the intel/license stanzas in
 `homebrew/orchestrator.rb`, and the new ci-required gate
-`scripts/qa/test-release-publish-surface.sh` with its negative fixtures (three at FR-150; a fourth, packaged-source containment, added by FR-151 after the 0.4.0 publish loop failed on a crate-escaping `include_str!`)
+`scripts/qa/test-release-publish-surface.sh` with its negative fixtures (three at FR-150; a fourth, packaged-source containment, added by FR-151 after the 0.4.0 publish loop failed on a crate-escaping `include_str!`; a fifth, skills-install CWD confinement, added by FR-152 after install.sh was found unpacking the skills tarball into whatever directory `curl | sh` ran from)
 **Scenarios**: 5
 **Priority**: High
 
@@ -43,8 +43,9 @@ deliberately not shipped. Design record at closure:
 
 **Safety**: read-only against the working tree. The gate runs `cargo metadata`
 (no build), reads three files, and executes `install.sh` under a stubbed
-`uname` with a sentinel `curl` — no daemon, no database, no network, no
-provider binary. Scenario 4 is the exception and says so: it downloads one
+`uname` with a sentinel `curl` (and, since FR-152, end to end against a
+stubbed local release inside its own temp tree) — no daemon, no database, no
+network, no provider binary. Scenario 4 is the exception and says so: it downloads one
 checksum manifest from the public v0.3.0 GitHub Release — the last release
 that exists; v0.3.1's does not (see Background).
 
@@ -77,9 +78,11 @@ echo "rc=$?"
 tail -n 3 /tmp/qa199-s1.log
 ```
 
-Expected result: `rc=0`; the log ends with the summary line `4 passed, 0
-failed` (`3 passed` before FR-151 added the containment check), preceded by PASS lines (publish loop vs cargo metadata,
-one shipped-target set, behavioral refusal). A missing summary line voids the
+Expected result: `rc=0`; the log ends with the summary line `6 passed, 0
+failed` (`3 passed` before FR-151 added the containment check; `4` before
+FR-152 added the two skills-install checks), preceded by PASS lines (publish
+loop vs cargo metadata, one shipped-target set, behavioral refusal,
+skills-install confinement and override). A missing summary line voids the
 run regardless of exit code.
 
 ## Scenario 2: the negative fixtures reject injected defects for named reasons
@@ -92,12 +95,14 @@ echo "rc=$?"
 cat /tmp/qa199-s2.log
 ```
 
-Expected result: `rc=0` with summary `5 passed, 0 failed` (`4 passed` before FR-151 added fixture 4): the positive
+Expected result: `rc=0` with summary `6 passed, 0 failed` (`4 passed` before
+FR-151 added fixture 4; `5` before FR-152 added fixture 5): the positive
 control, a commented-out `crates/orchestrator-persistence` rejected with a
 diagnostic naming that crate (isolated to the publish-loop check), an
 install.sh triple release.yml does not build rejected naming
-`x86_64-apple-darwin`, and a commented-out formula url stanza rejected naming
-`aarch64-unknown-linux-gnu`.
+`x86_64-apple-darwin`, a commented-out formula url stanza rejected naming
+`aarch64-unknown-linux-gnu`, and a skills default mutated back to the CWD
+rejected with a diagnostic naming the pollution.
 
 ## Scenario 3: the gate is wired into CI in all three registration points
 
@@ -157,8 +162,8 @@ end-to-end proof.
 
 ## Checklist
 
-- [ ] `test-release-publish-surface.sh` exits 0 with summary `4 passed, 0
-      failed`, and `--fixture-test` exits 0 with `5 passed, 0 failed`; both
+- [ ] `test-release-publish-surface.sh` exits 0 with summary `6 passed, 0
+      failed`, and `--fixture-test` exits 0 with `6 passed, 0 failed`; both
       summary lines are present in the captured logs
 - [ ] the publish loop's crate set equals `cargo metadata`'s publishable set
       in both directions, and every workspace dependency edge points backward

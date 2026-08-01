@@ -5,6 +5,10 @@ set -eu
 REPO="${INSTALL_ORCHESTRATOR_REPO:-c9r-io/orchestrator}"
 BIN_DIR="${INSTALL_ORCHESTRATOR_BIN_DIR:-/usr/local/bin}"
 VERSION="${INSTALL_ORCHESTRATOR_VERSION:-latest}"
+# Where the orchestrator-guide Claude Code skill lands. Set to "none" to skip
+# installing skills entirely. Never the current working directory: curl | sh
+# runs from wherever the user happens to be.
+SKILLS_DIR="${INSTALL_ORCHESTRATOR_SKILLS_DIR:-$HOME/.claude/skills}"
 
 # The exact set of target triples release.yml builds. A triple outside this set
 # has no artifact, so detection past this point would end in a bare curl 404.
@@ -172,12 +176,23 @@ install_binary "${package_dir}/orchestratord" "${BIN_DIR}/orchestratord"
 
 log "installed orchestrator binaries to ${BIN_DIR}"
 
-# Install Claude Code skills (orchestrator-guide) if available
-skills_archive="orchestrator-skills-${release_tag}.tar.gz"
-skills_url="${base_url}/${skills_archive}"
-if curl -fsSL --head "$skills_url" >/dev/null 2>&1; then
-  curl -fsSL "$skills_url" -o "${tmp_dir}/${skills_archive}"
-  log "installing orchestrator skills"
-  tar -xzf "${tmp_dir}/${skills_archive}" -C "."
-  log "installed orchestrator-guide skill to .claude/skills/"
+# Install Claude Code skills (orchestrator-guide) if available. The tarball is
+# unpacked in the temp dir and copied to an explicit target, never the CWD.
+if [ "$SKILLS_DIR" != "none" ]; then
+  skills_archive="orchestrator-skills-${release_tag}.tar.gz"
+  skills_url="${base_url}/${skills_archive}"
+  if curl -fsSL --head "$skills_url" >/dev/null 2>&1; then
+    curl -fsSL "$skills_url" -o "${tmp_dir}/${skills_archive}"
+    log "installing orchestrator-guide skill to ${SKILLS_DIR}"
+    skills_stage="${tmp_dir}/skills-stage"
+    mkdir -p "$skills_stage"
+    tar -xzf "${tmp_dir}/${skills_archive}" -C "$skills_stage"
+    if [ ! -d "${skills_stage}/.claude/skills" ]; then
+      echo "unexpected skills archive layout: .claude/skills/ not found" >&2
+      exit 1
+    fi
+    mkdir -p "$SKILLS_DIR"
+    cp -R "${skills_stage}/.claude/skills/." "$SKILLS_DIR"
+    log "installed orchestrator-guide skill to ${SKILLS_DIR}"
+  fi
 fi
