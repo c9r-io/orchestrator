@@ -2,7 +2,7 @@ use anyhow::Result;
 use orchestrator_proto::OrchestratorServiceClient;
 use tonic::transport::Channel;
 
-use crate::{OutputFormat, StoreCommands};
+use crate::StoreCommands;
 
 pub(crate) async fn dispatch(
     client: &mut OrchestratorServiceClient<Channel>,
@@ -86,36 +86,23 @@ pub(crate) async fn dispatch(
                 .await?
                 .into_inner();
 
-            match output {
-                OutputFormat::Json => {
-                    let entries: Vec<serde_json::Value> = resp
-                        .entries
-                        .iter()
-                        .map(|e| {
-                            serde_json::json!({
-                                "key": e.key,
-                                "value": e.value_json,
-                                "updated_at": e.updated_at,
-                            })
+            let entries = serde_json::Value::Array(
+                resp.entries
+                    .iter()
+                    .map(|e| {
+                        serde_json::json!({
+                            "key": e.key,
+                            "value": e.value_json,
+                            "updated_at": e.updated_at,
                         })
-                        .collect();
-                    println!("{}", serde_json::to_string_pretty(&entries)?);
+                    })
+                    .collect(),
+            );
+            match output.encoding() {
+                Some(encoding) => {
+                    crate::output::render::emit(&entries, encoding)?;
                 }
-                OutputFormat::Yaml => {
-                    let entries: Vec<serde_json::Value> = resp
-                        .entries
-                        .iter()
-                        .map(|e| {
-                            serde_json::json!({
-                                "key": e.key,
-                                "value": e.value_json,
-                                "updated_at": e.updated_at,
-                            })
-                        })
-                        .collect();
-                    println!("{}", serde_yaml::to_string(&entries)?);
-                }
-                OutputFormat::Table => {
+                None => {
                     if resp.entries.is_empty() {
                         println!("no entries");
                     } else {

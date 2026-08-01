@@ -95,20 +95,13 @@ fn print_status(
     resp: &orchestrator_proto::SecretKeyStatusResponse,
     output: OutputFormat,
 ) -> Result<()> {
-    match output {
-        OutputFormat::Json => {
-            let active = resp.active_key.as_ref().map(key_record_to_json);
-            let all: Vec<_> = resp.all_keys.iter().map(key_record_to_json).collect();
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({
-                    "active_key": active,
-                    "all_keys": all,
-                }))?
-            );
-            Ok(())
-        }
-        OutputFormat::Table => {
+    let projected = json!({
+        "active_key": resp.active_key.as_ref().map(key_record_to_json),
+        "all_keys": resp.all_keys.iter().map(key_record_to_json).collect::<Vec<_>>(),
+    });
+    match output.encoding() {
+        Some(encoding) => crate::output::render::emit(&projected, encoding),
+        None => {
             if let Some(active) = &resp.active_key {
                 println!("Active Key:");
                 println!("  ID:          {}", active.key_id);
@@ -132,9 +125,6 @@ fn print_status(
             }
             Ok(())
         }
-        OutputFormat::Yaml => {
-            anyhow::bail!("secret key commands support only table or json output")
-        }
     }
 }
 
@@ -142,16 +132,10 @@ fn print_list(
     resp: &orchestrator_proto::SecretKeyListResponse,
     output: OutputFormat,
 ) -> Result<()> {
-    match output {
-        OutputFormat::Json => {
-            let keys: Vec<_> = resp.keys.iter().map(key_record_to_json).collect();
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({ "keys": keys }))?
-            );
-            Ok(())
-        }
-        OutputFormat::Table => {
+    let projected = json!({ "keys": resp.keys.iter().map(key_record_to_json).collect::<Vec<_>>() });
+    match output.encoding() {
+        Some(encoding) => crate::output::render::emit(&projected, encoding),
+        None => {
             println!(
                 "{:<24} {:<14} {:<18} {:<24}",
                 "KEY_ID", "STATE", "FINGERPRINT", "CREATED_AT"
@@ -164,9 +148,6 @@ fn print_list(
             }
             Ok(())
         }
-        OutputFormat::Yaml => {
-            anyhow::bail!("secret key commands support only table or json output")
-        }
     }
 }
 
@@ -174,29 +155,25 @@ fn print_history(
     resp: &orchestrator_proto::SecretKeyHistoryResponse,
     output: OutputFormat,
 ) -> Result<()> {
-    match output {
-        OutputFormat::Json => {
-            let events: Vec<_> = resp
-                .events
-                .iter()
-                .map(|e| {
-                    json!({
-                        "event_kind": e.event_kind,
-                        "key_id": e.key_id,
-                        "key_fingerprint": e.key_fingerprint,
-                        "actor": e.actor,
-                        "detail_json": e.detail_json,
-                        "created_at": e.created_at,
-                    })
+    let projected = json!({
+        "events": resp
+            .events
+            .iter()
+            .map(|e| {
+                json!({
+                    "event_kind": e.event_kind,
+                    "key_id": e.key_id,
+                    "key_fingerprint": e.key_fingerprint,
+                    "actor": e.actor,
+                    "detail_json": e.detail_json,
+                    "created_at": e.created_at,
                 })
-                .collect();
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({ "events": events }))?
-            );
-            Ok(())
-        }
-        OutputFormat::Table => {
+            })
+            .collect::<Vec<_>>(),
+    });
+    match output.encoding() {
+        Some(encoding) => crate::output::render::emit(&projected, encoding),
+        None => {
             println!(
                 "{:<22} {:<24} {:<18} {:<20}",
                 "EVENT", "KEY_ID", "ACTOR", "CREATED_AT"
@@ -209,13 +186,10 @@ fn print_history(
             }
             Ok(())
         }
-        OutputFormat::Yaml => {
-            anyhow::bail!("secret key commands support only table or json output")
-        }
     }
 }
 
-fn key_record_to_json(key: &orchestrator_proto::SecretKeyRecord) -> serde_json::Value {
+pub(crate) fn key_record_to_json(key: &orchestrator_proto::SecretKeyRecord) -> serde_json::Value {
     json!({
         "key_id": key.key_id,
         "state": key.state,

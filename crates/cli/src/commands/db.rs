@@ -44,25 +44,20 @@ pub(crate) async fn dispatch(
 }
 
 fn print_status(resp: &orchestrator_proto::DbStatusResponse, output: OutputFormat) -> Result<()> {
-    match output {
-        OutputFormat::Json => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({
-                    "db_path": resp.db_path,
-                    "current_version": resp.current_version,
-                    "target_version": resp.target_version,
-                    "pending_versions": resp.pending_versions,
-                    "pending_names": resp.pending_names,
-                    "is_current": resp.is_current,
-                    "db_size_bytes": resp.db_size_bytes,
-                    "logs_size_bytes": resp.logs_size_bytes,
-                    "archive_size_bytes": resp.archive_size_bytes,
-                }))?
-            );
-            Ok(())
-        }
-        OutputFormat::Table => {
+    let projected = json!({
+        "db_path": resp.db_path,
+        "current_version": resp.current_version,
+        "target_version": resp.target_version,
+        "pending_versions": resp.pending_versions,
+        "pending_names": resp.pending_names,
+        "is_current": resp.is_current,
+        "db_size_bytes": resp.db_size_bytes,
+        "logs_size_bytes": resp.logs_size_bytes,
+        "archive_size_bytes": resp.archive_size_bytes,
+    });
+    match output.encoding() {
+        Some(encoding) => crate::output::render::emit(&projected, encoding),
+        None => {
             println!("DB Path:          {}", resp.db_path);
             println!("Current Version:  {}", resp.current_version);
             println!("Target Version:   {}", resp.target_version);
@@ -92,7 +87,6 @@ fn print_status(resp: &orchestrator_proto::DbStatusResponse, output: OutputForma
             );
             Ok(())
         }
-        OutputFormat::Yaml => anyhow::bail!("db commands support only table or json output"),
     }
 }
 
@@ -100,24 +94,19 @@ fn print_migrations(
     resp: &orchestrator_proto::DbMigrationsListResponse,
     output: OutputFormat,
 ) -> Result<()> {
-    match output {
-        OutputFormat::Json => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({
-                    "db_path": resp.db_path,
-                    "current_version": resp.current_version,
-                    "target_version": resp.target_version,
-                    "migrations": resp.migrations.iter().map(|migration| json!({
-                        "version": migration.version,
-                        "name": migration.name,
-                        "applied": migration.applied,
-                    })).collect::<Vec<_>>(),
-                }))?
-            );
-            Ok(())
-        }
-        OutputFormat::Table => {
+    let projected = json!({
+        "db_path": resp.db_path,
+        "current_version": resp.current_version,
+        "target_version": resp.target_version,
+        "migrations": resp.migrations.iter().map(|migration| json!({
+            "version": migration.version,
+            "name": migration.name,
+            "applied": migration.applied,
+        })).collect::<Vec<_>>(),
+    });
+    match output.encoding() {
+        Some(encoding) => crate::output::render::emit(&projected, encoding),
+        None => {
             println!("DB Path:          {}", resp.db_path);
             println!("Current Version:  {}", resp.current_version);
             println!("Target Version:   {}", resp.target_version);
@@ -137,7 +126,6 @@ fn print_migrations(
             }
             Ok(())
         }
-        OutputFormat::Yaml => anyhow::bail!("db commands support only table or json output"),
     }
 }
 

@@ -980,7 +980,7 @@ fn oauth_authorize_url_allowed(value: &str) -> bool {
         && value.password().is_none()
 }
 
-fn connection_value(value: &orchestrator_proto::SourceConnection) -> serde_json::Value {
+pub(crate) fn connection_value(value: &orchestrator_proto::SourceConnection) -> serde_json::Value {
     serde_json::json!({
         "id": value.id,
         "project_id": value.project_id,
@@ -1013,7 +1013,9 @@ fn connection_value(value: &orchestrator_proto::SourceConnection) -> serde_json:
     })
 }
 
-fn dedicated_value(value: &SourceConnectionDedicatedProvisioningResponse) -> serde_json::Value {
+pub(crate) fn dedicated_value(
+    value: &SourceConnectionDedicatedProvisioningResponse,
+) -> serde_json::Value {
     serde_json::json!({
         "id": value.id,
         "project_id": value.project_id,
@@ -1036,7 +1038,7 @@ fn dedicated_value(value: &SourceConnectionDedicatedProvisioningResponse) -> ser
     })
 }
 
-fn dedicated_lifecycle_value(
+pub(crate) fn dedicated_lifecycle_value(
     value: &SourceConnectionDedicatedLifecycleResponse,
 ) -> serde_json::Value {
     serde_json::json!({
@@ -1079,7 +1081,9 @@ fn read_config_token_stdin(enabled: bool) -> Result<Zeroizing<String>> {
     Ok(Zeroizing::new(trimmed))
 }
 
-fn intent_value(value: &orchestrator_proto::SourceConnectionIntentResponse) -> serde_json::Value {
+pub(crate) fn intent_value(
+    value: &orchestrator_proto::SourceConnectionIntentResponse,
+) -> serde_json::Value {
     serde_json::json!({
         "id": value.id,
         "project_id": value.project_id,
@@ -1153,14 +1157,26 @@ fn print_bindings(bindings: &[SourceBinding], output: OutputFormat) -> Result<()
 }
 
 fn print_value(value: serde_json::Value, output: OutputFormat) -> Result<()> {
-    match output {
-        OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&value)?),
-        OutputFormat::Yaml | OutputFormat::Table => print!("{}", serde_yaml::to_string(&value)?),
+    match output.encoding() {
+        Some(encoding) => crate::output::render::emit(&value, encoding),
+        None => {
+            match &value {
+                serde_json::Value::Array(items) => {
+                    for (idx, item) in items.iter().enumerate() {
+                        if idx > 0 {
+                            println!();
+                        }
+                        print!("{}", crate::output::render::kv_table(item));
+                    }
+                }
+                other => print!("{}", crate::output::render::kv_table(other)),
+            }
+            Ok(())
+        }
     }
-    Ok(())
 }
 
-fn event_value(event: &SourceEvent) -> serde_json::Value {
+pub(crate) fn event_value(event: &SourceEvent) -> serde_json::Value {
     serde_json::json!({
         "id": event.id,
         "project_id": event.project_id,
@@ -1188,7 +1204,9 @@ fn event_value(event: &SourceEvent) -> serde_json::Value {
     })
 }
 
-fn automation_route_value(route: &orchestrator_proto::SourceAutomationRoute) -> serde_json::Value {
+pub(crate) fn automation_route_value(
+    route: &orchestrator_proto::SourceAutomationRoute,
+) -> serde_json::Value {
     serde_json::json!({
         "id": route.id,
         "project_id": route.project_id,
@@ -1219,7 +1237,7 @@ fn automation_route_value(route: &orchestrator_proto::SourceAutomationRoute) -> 
     })
 }
 
-fn binding_value(binding: &SourceBinding) -> serde_json::Value {
+pub(crate) fn binding_value(binding: &SourceBinding) -> serde_json::Value {
     serde_json::json!({
         "id": binding.id,
         "project_id": binding.project_id,

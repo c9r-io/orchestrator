@@ -73,7 +73,7 @@ fn payload_extract_cmd(path: &str) -> Result<()> {
             if let Some(s) = v.as_str() {
                 println!("{s}");
             } else {
-                println!("{}", serde_json::to_string(&v).unwrap_or_default());
+                crate::output::render::emit(v, crate::output::render::Encoding::JsonCompact)?;
             }
             Ok(())
         }

@@ -58,11 +58,10 @@ pub(crate) async fn dispatch(
 }
 
 fn print_records(records: &[ActionAuditRecord], output: OutputFormat) -> Result<()> {
-    let values = records.iter().map(record_value).collect::<Vec<_>>();
-    match output {
-        OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&values)?),
-        OutputFormat::Yaml => println!("{}", serde_yaml::to_string(&values)?),
-        OutputFormat::Table => {
+    let values = serde_json::Value::Array(records.iter().map(record_value).collect());
+    match output.encoding() {
+        Some(encoding) => return crate::output::render::emit(&values, encoding),
+        None => {
             if records.is_empty() {
                 println!("No action audit records found.");
                 return Ok(());
@@ -88,7 +87,7 @@ fn print_records(records: &[ActionAuditRecord], output: OutputFormat) -> Result<
     Ok(())
 }
 
-fn record_value(record: &ActionAuditRecord) -> serde_json::Value {
+pub(crate) fn record_value(record: &ActionAuditRecord) -> serde_json::Value {
     serde_json::json!({
         "request_id": record.request_id,
         "schema_version": record.schema_version,

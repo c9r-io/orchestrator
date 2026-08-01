@@ -1,6 +1,6 @@
-mod agent;
+pub(crate) mod agent;
 mod attention;
-mod audit;
+pub(crate) mod audit;
 mod common;
 /// Local daemon lifecycle commands (stop / status).
 pub mod daemon;
@@ -8,14 +8,14 @@ mod db;
 mod event;
 /// Self-describing CLI guide for AI agents and users.
 pub mod guide;
-mod handoff;
+pub(crate) mod handoff;
 mod manifest;
 mod metrics;
 mod qa;
 mod resource;
 mod run;
-mod secret;
-mod source;
+pub(crate) mod secret;
+pub(crate) mod source;
 mod store;
 mod task;
 mod trigger;

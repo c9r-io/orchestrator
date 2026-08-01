@@ -5,7 +5,7 @@ use orchestrator_proto::{
 };
 use tonic::transport::Channel;
 
-use crate::{MetricsCommands, OutputFormat};
+use crate::MetricsCommands;
 
 pub(crate) async fn dispatch(
     client: &mut OrchestratorServiceClient<Channel>,
@@ -27,10 +27,9 @@ pub(crate) async fn dispatch(
                 .await?
                 .into_inner();
             let value: serde_json::Value = serde_json::from_str(&response.metrics_json)?;
-            match output {
-                OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&value)?),
-                OutputFormat::Yaml => println!("{}", serde_yaml::to_string(&value)?),
-                OutputFormat::Table => print_table(&value)?,
+            match output.encoding() {
+                Some(encoding) => crate::output::render::emit(&value, encoding)?,
+                None => print_table(&value)?,
             }
             Ok(())
         }

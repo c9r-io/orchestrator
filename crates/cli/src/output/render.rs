@@ -163,4 +163,90 @@ mod tests {
             "nested object not compact JSON"
         );
     }
+
+    /// FR-154: the chokepoint property, asserted over the crate's source.
+    /// Output serialization must have exactly one home; a reintroduced
+    /// per-format projection or a swallowed serialization failure fails here.
+    /// This is a structural check deliberately PAIRED with the behavioral
+    /// parity tests in `output::format_parity` (§4.4: a proxy may be an
+    /// additional condition, never the only one).
+    #[test]
+    fn chokepoint_no_stray_serializers() {
+        // Named files, never subtrees (§4.4 shape 8), each with a reason.
+        const YAML_OUT_ALLOWED: &[&str] = &[
+            "output/render.rs", // the chokepoint itself
+            "commands/tool.rs", // manifest re-serialization for gRPC apply, not stdout
+        ];
+        const JSON_OUT_ALLOWED: &[&str] = &[
+            "output/render.rs",    // the chokepoint itself
+            "commands/guide.rs",   // `guide --format json`, a documented non -o mechanism
+            "commands/version.rs", // migrates to -o in FR-154 C4; remove then
+        ];
+
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut violations: Vec<String> = Vec::new();
+        let mut scanned = 0usize;
+        visit(&src, &mut |rel, content| {
+            scanned += 1;
+            if content.contains("serde_yaml::to_string") && !YAML_OUT_ALLOWED.contains(&rel) {
+                violations.push(format!(
+                    "{rel}: serde_yaml::to_string outside the chokepoint"
+                ));
+            }
+            if (content.contains("serde_json::to_string(")
+                || content.contains("serde_json::to_string_pretty("))
+                && !JSON_OUT_ALLOWED.contains(&rel)
+            {
+                violations.push(format!(
+                    "{rel}: serde_json::to_string* outside the chokepoint"
+                ));
+            }
+            if serialization_unwrapped_to_default(content) {
+                violations.push(format!(
+                    "{rel}: serialization failure swallowed by unwrap_or_default"
+                ));
+            }
+        });
+        assert!(
+            scanned > 10,
+            "source scan read only {scanned} files — scan is broken"
+        );
+        assert!(
+            violations.is_empty(),
+            "chokepoint violations:\n{}",
+            violations.join("\n")
+        );
+    }
+
+    fn visit(dir: &std::path::Path, f: &mut impl FnMut(&str, &str)) {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        for entry in std::fs::read_dir(dir).expect("read_dir") {
+            let path = entry.expect("dir entry").path();
+            if path.is_dir() {
+                visit(&path, f);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                let rel = path
+                    .strip_prefix(&root)
+                    .expect("under src")
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                let content = std::fs::read_to_string(&path).expect("read source file");
+                f(&rel, &content);
+            }
+        }
+    }
+
+    /// True when a `serde_json/yaml::to_string*` call and `unwrap_or_default`
+    /// occur in the same statement (no `;` between them).
+    fn serialization_unwrapped_to_default(content: &str) -> bool {
+        let flat = content.replace('\n', " ");
+        for (idx, _) in flat.match_indices("unwrap_or_default") {
+            let start = flat[..idx].rfind(';').map(|p| p + 1).unwrap_or(0);
+            let stmt = &flat[start..idx];
+            if stmt.contains("serde_json::to_string") || stmt.contains("serde_yaml::to_string") {
+                return true;
+            }
+        }
+        false
+    }
 }

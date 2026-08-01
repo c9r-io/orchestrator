@@ -18,7 +18,7 @@ pub(crate) async fn dispatch(
                 })
                 .await?
                 .into_inner();
-            print_agent_list(&resp.agents, output);
+            print_agent_list(&resp.agents, output)?;
             Ok(())
         }
         AgentCommands::Cordon {
@@ -89,7 +89,7 @@ async fn dispatch_session(
                 .await?
                 .into_inner()
                 .sessions;
-            print_sessions(&rows, output);
+            print_sessions(&rows, output)?;
             Ok(())
         }
         AgentSessionCommands::Get { session_id, output } => {
@@ -100,7 +100,7 @@ async fn dispatch_session(
                 .session
                 .into_iter()
                 .collect::<Vec<_>>();
-            print_sessions(&row, output);
+            print_sessions(&row, output)?;
             Ok(())
         }
         AgentSessionCommands::Attach {
@@ -277,13 +277,13 @@ async fn dispatch_session(
                 .await?
                 .into_inner()
                 .sessions;
-            print_sessions(&rows, output);
+            print_sessions(&rows, output)?;
             Ok(())
         }
     }
 }
 
-fn session_json(s: &orchestrator_proto::AgentSession) -> serde_json::Value {
+pub(crate) fn session_value(s: &orchestrator_proto::AgentSession) -> serde_json::Value {
     serde_json::json!({"session_id":s.session_id,"task_id":s.task_id,"task_item_id":s.task_item_id,"step_id":s.step_id,"phase":s.phase,"agent_id":s.agent_id,"state":s.state,"pid":s.pid,"writer_client_id":s.writer_client_id,"writer_actor":s.writer_actor,"writer_lease_expires_at":s.writer_lease_expires_at,"writer_fencing_token":s.writer_fencing_token,"state_version":s.state_version,"created_at":s.created_at,"updated_at":s.updated_at,"ended_at":s.ended_at,"exit_code":s.exit_code})
 }
 fn now_nonce() -> u128 {
@@ -292,22 +292,11 @@ fn now_nonce() -> u128 {
         .map(|d| d.as_nanos())
         .unwrap_or_default()
 }
-fn print_sessions(rows: &[orchestrator_proto::AgentSession], format: OutputFormat) {
-    match format {
-        OutputFormat::Json => println!(
-            "{}",
-            serde_json::to_string_pretty(&rows.iter().map(session_json).collect::<Vec<_>>())
-                .unwrap_or_default()
-        ),
-        OutputFormat::Yaml => {
-            for s in rows {
-                println!(
-                    "- session_id: {}\n  task_id: {}\n  agent_id: {}\n  state: {}\n  pid: {}",
-                    s.session_id, s.task_id, s.agent_id, s.state, s.pid
-                )
-            }
-        }
-        OutputFormat::Table => {
+fn print_sessions(rows: &[orchestrator_proto::AgentSession], format: OutputFormat) -> Result<()> {
+    let projected = serde_json::Value::Array(rows.iter().map(session_value).collect());
+    match format.encoding() {
+        Some(encoding) => crate::output::render::emit(&projected, encoding),
+        None => {
             println!(
                 "{:<38} {:<18} {:<16} {:<10} PID",
                 "SESSION", "TASK", "AGENT", "STATE"
@@ -318,54 +307,24 @@ fn print_sessions(rows: &[orchestrator_proto::AgentSession], format: OutputForma
                     s.session_id, s.task_id, s.agent_id, s.state, s.pid
                 )
             }
+            Ok(())
         }
     }
 }
 
-fn print_agent_list(agents: &[orchestrator_proto::AgentStatus], format: OutputFormat) {
-    match format {
-        OutputFormat::Json => {
-            let json_agents: Vec<serde_json::Value> = agents
-                .iter()
-                .map(|a| {
-                    serde_json::json!({
-                        "name": a.name,
-                        "enabled": a.enabled,
-                        "lifecycle_state": a.lifecycle_state,
-                        "in_flight_items": a.in_flight_items,
-                        "capabilities": a.capabilities,
-                        "drain_requested_at": a.drain_requested_at,
-                        "is_healthy": a.is_healthy,
-                        "diseased_until": a.diseased_until,
-                        "consecutive_errors": a.consecutive_errors,
-                    })
-                })
-                .collect();
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json_agents).unwrap_or_default()
-            );
-        }
-        OutputFormat::Yaml => {
-            for a in agents {
-                println!("- name: {}", a.name);
-                println!("  enabled: {}", a.enabled);
-                println!("  lifecycle_state: {}", a.lifecycle_state);
-                println!("  in_flight_items: {}", a.in_flight_items);
-                println!("  capabilities: {:?}", a.capabilities);
-                if let Some(ref dt) = a.drain_requested_at {
-                    println!("  drain_requested_at: {dt}");
-                }
-                println!("  is_healthy: {}", a.is_healthy);
-                if let Some(ref dt) = a.diseased_until {
-                    println!("  diseased_until: {dt}");
-                }
-                if a.consecutive_errors > 0 {
-                    println!("  consecutive_errors: {}", a.consecutive_errors);
-                }
-            }
-        }
-        OutputFormat::Table => {
+fn print_agent_list(
+    agents: &[orchestrator_proto::AgentStatus],
+    format: OutputFormat,
+) -> Result<()> {
+    let projected = serde_json::Value::Array(
+        agents
+            .iter()
+            .map(crate::output::value::agent_status_value)
+            .collect(),
+    );
+    match format.encoding() {
+        Some(encoding) => crate::output::render::emit(&projected, encoding),
+        None => {
             println!(
                 "{:<20} {:<8} {:<10} {:<10} {:<10} CAPABILITIES",
                 "NAME", "ENABLED", "STATE", "IN-FLIGHT", "HEALTH"
@@ -389,6 +348,7 @@ fn print_agent_list(agents: &[orchestrator_proto::AgentStatus], format: OutputFo
                     a.capabilities.join(", ")
                 );
             }
+            Ok(())
         }
     }
 }

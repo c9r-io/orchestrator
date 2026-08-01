@@ -54,9 +54,13 @@ fn comparator_detects_divergence() {
 
 mod fixtures {
     use orchestrator_proto::{
-        AttentionActionDescriptor, AttentionDelta, AttentionItem, AttentionListResponse,
-        CommandRun, Event, TaskInfoResponse, TaskItem, TaskSummary, TaskTimelineResponse,
-        TimelineActorRef, TimelineDelta, TimelineEntry, TimelineEvidenceRef,
+        ActionAuditRecord, AgentSession, AgentStatus, AttentionActionDescriptor, AttentionDelta,
+        AttentionItem, AttentionListResponse, CommandRun, Event, HandoffSnapshotResponse,
+        ResumeBoundary, SecretKeyRecord, SourceAutomationRoute, SourceBinding, SourceConnection,
+        SourceConnectionDedicatedLifecycleResponse, SourceConnectionDedicatedProvisioningResponse,
+        SourceConnectionIntentResponse, SourceConnectionManifestDiffEntry, SourceEvent,
+        TaskInfoResponse, TaskItem, TaskSummary, TaskTimelineResponse, TimelineActorRef,
+        TimelineDelta, TimelineEntry, TimelineEvidenceRef,
     };
 
     pub(super) fn task_summary() -> TaskSummary {
@@ -243,6 +247,278 @@ mod fixtures {
             notification: None,
         }
     }
+
+    pub(super) fn agent_session() -> AgentSession {
+        AgentSession {
+            session_id: "session-1".into(),
+            task_id: "task-1".into(),
+            task_item_id: Some("item-1".into()),
+            step_id: "step-1".into(),
+            phase: "execute: 执行".into(),
+            agent_id: "agent-1".into(),
+            state: "running".into(),
+            pid: 4242,
+            writer_client_id: Some("client-1".into()),
+            writer_actor: Some("operator: 陈瀚".into()),
+            writer_lease_expires_at: Some("2026-03-10T00:15:00Z".into()),
+            writer_fencing_token: 7,
+            state_version: 3,
+            created_at: "2026-03-10T00:00:00Z".into(),
+            updated_at: "2026-03-10T00:10:00Z".into(),
+            ended_at: Some("2026-03-10T00:20:00Z".into()),
+            exit_code: Some(1),
+        }
+    }
+
+    pub(super) fn agent_status() -> AgentStatus {
+        AgentStatus {
+            name: "agent: 执行者".into(),
+            enabled: true,
+            lifecycle_state: "draining".into(),
+            in_flight_items: 2,
+            capabilities: vec!["qa".into(), "note: 备注".into()],
+            drain_requested_at: Some("2026-03-10T00:07:00Z".into()),
+            is_healthy: false,
+            diseased_until: Some("2026-03-10T01:00:00Z".into()),
+            consecutive_errors: 3,
+        }
+    }
+
+    pub(super) fn handoff_snapshot() -> HandoffSnapshotResponse {
+        HandoffSnapshotResponse {
+            id: "handoff-1".into(),
+            task_id: "task-1".into(),
+            source_event_cursor: 42,
+            projection_version: 3,
+            briefing_json: "{\"summary\":\"context: 交接摘要\",\"open_items\":[\"item-1\"]}".into(),
+            content_hash: "sha256:abc".into(),
+            state_version: "sv-9".into(),
+            generated_by: "orchestratord".into(),
+            created_at: "2026-03-10T00:08:00Z".into(),
+        }
+    }
+
+    pub(super) fn resume_boundary() -> ResumeBoundary {
+        ResumeBoundary {
+            id: "boundary-1".into(),
+            task_id: "task-1".into(),
+            cycle: 2,
+            step_id: Some("step-1".into()),
+            task_item_id: Some("item-1".into()),
+            command_run_id: Some("run-1".into()),
+            provider_session_available: true,
+            checkpoint_id: Some("ckpt-1".into()),
+            side_effect_class: "idempotent".into(),
+            replay_safe: true,
+            reason: "boundary reason: 可恢复边界".into(),
+            state_version: "sv-9".into(),
+        }
+    }
+
+    pub(super) fn audit_record() -> ActionAuditRecord {
+        ActionAuditRecord {
+            request_id: "req-1".into(),
+            schema_version: 1,
+            project_id: "project-1".into(),
+            actor: Some("operator: 陈瀚".into()),
+            resolved_role: Some("operator".into()),
+            transport: "grpc".into(),
+            target_type: "task".into(),
+            target_id: "task-1".into(),
+            action: "pause".into(),
+            reason_code: "manual".into(),
+            operator_reason: Some("reason: 手动暂停".into()),
+            idempotency_key: Some("idem-1".into()),
+            expected_version: Some("5".into()),
+            fencing_token: Some(7),
+            request_hash: "sha256:def".into(),
+            status: "completed".into(),
+            error_code: Some("none".into()),
+            result_type: Some("task".into()),
+            result_id: Some("task-1".into()),
+            created_at: "2026-03-10T00:00:00Z".into(),
+            updated_at: "2026-03-10T00:01:00Z".into(),
+            completed_at: Some("2026-03-10T00:01:00Z".into()),
+        }
+    }
+
+    pub(super) fn secret_key_record() -> SecretKeyRecord {
+        SecretKeyRecord {
+            key_id: "key-1".into(),
+            state: "active: 使用中".into(),
+            fingerprint: "fp: sha256:abc".into(),
+            file_path: "/tmp/keys/key-1.pem".into(),
+            created_at: "2026-03-10T00:00:00Z".into(),
+            activated_at: Some("2026-03-10T00:01:00Z".into()),
+            rotated_out_at: Some("2026-03-11T00:00:00Z".into()),
+            retired_at: Some("2026-03-12T00:00:00Z".into()),
+            revoked_at: Some("2026-03-13T00:00:00Z".into()),
+        }
+    }
+
+    pub(super) fn source_connection() -> SourceConnection {
+        SourceConnection {
+            id: "conn-1".into(),
+            project_id: "project-1".into(),
+            provider: "slack".into(),
+            display_label: "workspace: 工作区".into(),
+            provisioning_mode: "dedicated".into(),
+            installation_id: "install-1".into(),
+            installation_id_digest: "digest-1".into(),
+            enterprise_id_digest: Some("ent-digest-1".into()),
+            owner_daemon_id: "daemon-1".into(),
+            generation: 2,
+            version: 5,
+            state: "connected".into(),
+            capabilities: vec!["events".into(), "note: 能力".into()],
+            scopes: vec!["chat:write".into()],
+            trigger_name: Some("slack-trigger".into()),
+            last_delivery_at: Some("2026-03-10T00:05:00Z".into()),
+            last_acked_cursor: 41,
+            delivery_lag: 1,
+            last_error_code: Some("none".into()),
+            created_at: "2026-03-10T00:00:00Z".into(),
+            updated_at: "2026-03-10T00:06:00Z".into(),
+            reauthorized_at: Some("2026-03-10T00:03:00Z".into()),
+            disconnected_at: Some("2026-03-10T00:04:00Z".into()),
+            app_ownership: "platform".into(),
+            app_id_digest: Some("app-digest-1".into()),
+            manifest_version: Some("mv-1".into()),
+            provision_state: Some("ready".into()),
+            provision_error_code: Some("none".into()),
+        }
+    }
+
+    pub(super) fn source_binding() -> SourceBinding {
+        SourceBinding {
+            id: "binding-1".into(),
+            project_id: "project-1".into(),
+            task_id: "task-1".into(),
+            provider: "slack".into(),
+            installation_id: "install-1".into(),
+            conversation_id: Some("channel: 频道".into()),
+            thread_id: Some("1710000000.000100".into()),
+            binding_type: "thread".into(),
+            created_by_event_id: "evt-1".into(),
+            created_at: "2026-03-10T00:02:00Z".into(),
+        }
+    }
+
+    pub(super) fn source_event() -> SourceEvent {
+        SourceEvent {
+            id: "evt-1".into(),
+            project_id: "project-1".into(),
+            provider: "slack".into(),
+            installation_id: "install-1".into(),
+            external_event_id: "Ev123".into(),
+            event_type: "message".into(),
+            external_actor_id: Some("U123".into()),
+            conversation_id: Some("C123".into()),
+            thread_id: Some("1710000000.000100".into()),
+            occurred_at: "2026-03-10T00:01:00Z".into(),
+            received_at: "2026-03-10T00:01:01Z".into(),
+            normalized_json: "{\"text\":\"message: 请修复\"}".into(),
+            payload_hash: "sha256:abc".into(),
+            routing_state: "routed".into(),
+            routing_attempts: 2,
+            routed_task_id: Some("task-1".into()),
+            last_error_code: Some("none".into()),
+            automation_route_id: Some("route-1".into()),
+            automation_status: Some("completed".into()),
+            automation_binding_name: Some("binding: 自动化".into()),
+            automation_template_name: Some("template-1".into()),
+            automation_template_hash: Some("sha256:tpl".into()),
+        }
+    }
+
+    pub(super) fn automation_route() -> SourceAutomationRoute {
+        SourceAutomationRoute {
+            id: "route-1".into(),
+            project_id: "project-1".into(),
+            source_event_id: "evt-1".into(),
+            provider: "slack".into(),
+            reaction: "eyes".into(),
+            binding_name: "binding: 自动化".into(),
+            binding_revision: "rev-1".into(),
+            template_name: "template-1".into(),
+            template_hash: "sha256:tpl".into(),
+            status: "failed".into(),
+            error_code: Some("timeout".into()),
+            task_id: Some("task-1".into()),
+            permalink: Some("https://example.com/p/1".into()),
+            request_id: "req-1".into(),
+            created_at: "2026-03-10T00:01:00Z".into(),
+            completed_at: Some("2026-03-10T00:02:00Z".into()),
+            error_category: Some("retryable: 可重试".into()),
+            generation: 2,
+            version: 5,
+            attempt_count: 3,
+            max_attempts: 5,
+            next_attempt_at: Some("2026-03-10T00:03:00Z".into()),
+            lease_expires_at: Some("2026-03-10T00:04:00Z".into()),
+            suspended_scope: Some("binding".into()),
+            last_attempt_at: Some("2026-03-10T00:02:00Z".into()),
+            updated_at: "2026-03-10T00:02:00Z".into(),
+        }
+    }
+
+    pub(super) fn intent_response() -> SourceConnectionIntentResponse {
+        SourceConnectionIntentResponse {
+            id: "intent-1".into(),
+            project_id: "project-1".into(),
+            provider: "slack".into(),
+            provisioning_mode: "managed".into(),
+            status: "pending: 等待授权".into(),
+            connection_id: Some("conn-1".into()),
+            error_code: Some("none".into()),
+            expires_at: "2026-03-10T01:00:00Z".into(),
+            authorize_url: Some("https://slack.com/oauth/v2/authorize?state=opaque".into()),
+            connection: Some(source_connection()),
+        }
+    }
+
+    pub(super) fn manifest_diff_entry() -> SourceConnectionManifestDiffEntry {
+        SourceConnectionManifestDiffEntry {
+            field: "oauth_config.scopes".into(),
+            change: "added: 新增".into(),
+            before: vec!["chat:write".into()],
+            after: vec!["chat:write".into(), "reactions:write".into()],
+            permission_expansion: true,
+        }
+    }
+
+    pub(super) fn dedicated_provisioning() -> SourceConnectionDedicatedProvisioningResponse {
+        SourceConnectionDedicatedProvisioningResponse {
+            id: "prov-1".into(),
+            project_id: "project-1".into(),
+            status: "previewed: 已预览".into(),
+            manifest_version: "mv-1".into(),
+            manifest_digest: "sha256:manifest".into(),
+            diff: vec![manifest_diff_entry()],
+            app_id_digest: Some("app-digest-1".into()),
+            oauth_intent_id: Some("intent-1".into()),
+            authorize_url: Some("https://slack.com/oauth/v2/authorize?state=opaque".into()),
+            error_code: Some("none".into()),
+            expires_at: "2026-03-10T01:00:00Z".into(),
+            target_connection_id: Some("conn-1".into()),
+        }
+    }
+
+    pub(super) fn dedicated_lifecycle() -> SourceConnectionDedicatedLifecycleResponse {
+        SourceConnectionDedicatedLifecycleResponse {
+            lifecycle_id: "lifecycle-1".into(),
+            connection_id: "conn-1".into(),
+            status: "upgrade_previewed: 升级预览".into(),
+            manifest_version: "mv-2".into(),
+            manifest_digest: "sha256:manifest2".into(),
+            diff: vec![manifest_diff_entry()],
+            permission_expansion: true,
+            expires_at: "2026-03-10T01:00:00Z".into(),
+            oauth_intent_id: Some("intent-1".into()),
+            authorize_url: Some("https://slack.com/oauth/v2/authorize?state=opaque".into()),
+            connection: Some(source_connection()),
+        }
+    }
 }
 
 #[test]
@@ -315,4 +591,110 @@ fn attention_delta_json_yaml_equivalent() {
         "item": delta.item.as_ref().map(super::attention::attention_item_value),
     });
     assert_parity("attention follow", &value);
+}
+
+#[test]
+fn agent_session_json_yaml_equivalent() {
+    let value = Value::Array(vec![crate::commands::agent::session_value(
+        &fixtures::agent_session(),
+    )]);
+    assert_parity("agent session list", &value);
+}
+
+#[test]
+fn agent_status_json_yaml_equivalent() {
+    let value = Value::Array(vec![super::value::agent_status_value(
+        &fixtures::agent_status(),
+    )]);
+    assert_parity("agent list", &value);
+}
+
+#[test]
+fn handoff_snapshot_json_yaml_equivalent() {
+    assert_parity(
+        "handoff get",
+        &crate::commands::handoff::snapshot_value(&fixtures::handoff_snapshot()),
+    );
+}
+
+#[test]
+fn resume_boundary_json_yaml_equivalent() {
+    let value = Value::Array(vec![crate::commands::handoff::boundary_value(
+        &fixtures::resume_boundary(),
+    )]);
+    assert_parity("resume boundaries", &value);
+}
+
+#[test]
+fn audit_record_json_yaml_equivalent() {
+    let value = Value::Array(vec![crate::commands::audit::record_value(
+        &fixtures::audit_record(),
+    )]);
+    assert_parity("audit list", &value);
+}
+
+#[test]
+fn secret_key_status_json_yaml_equivalent() {
+    let key = fixtures::secret_key_record();
+    let value = serde_json::json!({
+        "active_key": crate::commands::secret::key_record_to_json(&key),
+        "all_keys": [crate::commands::secret::key_record_to_json(&key)],
+    });
+    assert_parity("secret key status", &value);
+}
+
+#[test]
+fn source_connection_json_yaml_equivalent() {
+    let value = Value::Array(vec![crate::commands::source::connection_value(
+        &fixtures::source_connection(),
+    )]);
+    assert_parity("source connection list", &value);
+}
+
+#[test]
+fn source_binding_json_yaml_equivalent() {
+    let value = Value::Array(vec![crate::commands::source::binding_value(
+        &fixtures::source_binding(),
+    )]);
+    assert_parity("source binding list", &value);
+}
+
+#[test]
+fn source_event_json_yaml_equivalent() {
+    let value = Value::Array(vec![crate::commands::source::event_value(
+        &fixtures::source_event(),
+    )]);
+    assert_parity("source event list", &value);
+}
+
+#[test]
+fn source_automation_route_json_yaml_equivalent() {
+    let value = Value::Array(vec![crate::commands::source::automation_route_value(
+        &fixtures::automation_route(),
+    )]);
+    assert_parity("source automation list", &value);
+}
+
+#[test]
+fn source_intent_json_yaml_equivalent() {
+    assert_parity(
+        "source connection intent",
+        &crate::commands::source::intent_value(&fixtures::intent_response()),
+    );
+}
+
+#[test]
+fn source_dedicated_provisioning_json_yaml_equivalent() {
+    assert_parity(
+        "source connection dedicated preview",
+        &crate::commands::source::dedicated_value(&fixtures::dedicated_provisioning()),
+    );
+}
+
+#[test]
+fn source_dedicated_lifecycle_json_yaml_equivalent() {
+    assert_parity(
+        "source connection dedicated upgrade",
+        &crate::commands::source::dedicated_lifecycle_value(&fixtures::dedicated_lifecycle()),
+    );
 }

@@ -40,7 +40,7 @@ pub async fn dispatch_handoff(
             output,
         ),
     };
-    print_value(snapshot_value(&snapshot), format);
+    print_value(snapshot_value(&snapshot), format)?;
     Ok(())
 }
 
@@ -74,7 +74,7 @@ pub async fn dispatch_resume(
                         response.boundaries.iter().map(boundary_value).collect(),
                     ),
                     output,
-                );
+                )?;
             }
         }
         ResumeCommands::Plan {
@@ -111,7 +111,7 @@ pub async fn dispatch_resume(
                     "status": plan.status,
                 }),
                 output,
-            );
+            )?;
         }
         ResumeCommands::Execute {
             plan_id,
@@ -145,13 +145,13 @@ pub async fn dispatch_resume(
                     "child_task_id": execution.child_task_id,
                 }),
                 output,
-            );
+            )?;
         }
     }
     Ok(())
 }
 
-fn snapshot_value(snapshot: &HandoffSnapshotResponse) -> serde_json::Value {
+pub(crate) fn snapshot_value(snapshot: &HandoffSnapshotResponse) -> serde_json::Value {
     serde_json::json!({
         "id": snapshot.id,
         "task_id": snapshot.task_id,
@@ -165,7 +165,7 @@ fn snapshot_value(snapshot: &HandoffSnapshotResponse) -> serde_json::Value {
     })
 }
 
-fn boundary_value(boundary: &ResumeBoundary) -> serde_json::Value {
+pub(crate) fn boundary_value(boundary: &ResumeBoundary) -> serde_json::Value {
     serde_json::json!({
         "id": boundary.id,
         "task_id": boundary.task_id,
@@ -182,14 +182,22 @@ fn boundary_value(boundary: &ResumeBoundary) -> serde_json::Value {
     })
 }
 
-fn print_value(value: serde_json::Value, format: OutputFormat) {
-    match format {
-        OutputFormat::Json => println!(
-            "{}",
-            serde_json::to_string_pretty(&value).unwrap_or_default()
-        ),
-        OutputFormat::Yaml | OutputFormat::Table => {
-            print!("{}", serde_yaml::to_string(&value).unwrap_or_default())
+fn print_value(value: serde_json::Value, format: OutputFormat) -> Result<()> {
+    match format.encoding() {
+        Some(encoding) => crate::output::render::emit(&value, encoding),
+        None => {
+            match &value {
+                serde_json::Value::Array(items) => {
+                    for (idx, item) in items.iter().enumerate() {
+                        if idx > 0 {
+                            println!();
+                        }
+                        print!("{}", crate::output::render::kv_table(item));
+                    }
+                }
+                other => print!("{}", crate::output::render::kv_table(other)),
+            }
+            Ok(())
         }
     }
 }
