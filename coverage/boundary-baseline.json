@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "approvedAt": "2026-07-27",
+  "approvedAt": "2026-08-02",
   "platform": "macos-aarch64",
   "tooling": {
     "cargoLlvmCov": "0.8.5",
@@ -9,7 +9,7 @@
   "policy": {
     "percentageTolerance": 0.05,
     "strategy": "approved-baseline-non-regression",
-    "reapproval": "Re-approved 2026-07-27 after FR-130 and FR-141 moved the persistence layer out of core. Every drifted component's uncovered count fell: core/domain -1880, daemon/session -65, daemon adapter -89, daemon/handoff -14, daemon/attention -1. The gate failed on daemon/attention alone, because percentage is the compared value and that file lost seven executable lines of which six were covered — well above its own 56% average — so the ratio fell while nothing that was tested stopped being tested. A one-sided percentage rule fails on composition changes that improve the tree, and lets the four components that improved keep a stale baseline indefinitely, because only the falling direction is checked."
+    "reapproval": "Re-approved 2026-08-02 for FR-157, which raised daemon/source_connection from 12.21% to 85.51% by driving the OAuth, dedicated-provisioning, upgrade, deletion, disconnect and transfer state machines against an in-process Gateway stub. Three entries move and only three: daemon/source_connection, daemon/action_audit (the new boundary assertions exercise it, and its denominator grew by the FR-157 audit constant), and the daemon adapter component that contains both. The module's denominator fell 2482 -> 2443 because its 75 inline test lines moved into a tests/ directory the normalizer excludes; at the old denominator the same numerator is still 84.2%, so the rise is executed production code, not a shrunken denominator. core/domain, CLI, cli/commands, Tauri Rust, daemon/attention, daemon/handoff, daemon/session and tauri/commands are deliberately left at their 2026-07-27 values: CLI has drifted upward since (35.49% -> 52.86% on a denominator that grew 6038 -> 7373) but that movement belongs to the FRs that caused it, and this run is not their evidence. The one-sided rule means those entries keep passing while under-ratcheted, which is the same gap the 2026-07-27 note records."
   },
   "rust": {
     "components": {
@@ -33,14 +33,14 @@
       },
       "daemon adapter": {
         "lines": {
-          "count": 16730,
-          "covered": 4813,
-          "percent": 28.77
+          "count": 16713,
+          "covered": 6992,
+          "percent": 41.84
         },
         "functions": {
-          "count": 1483,
-          "covered": 406,
-          "percent": 27.38
+          "count": 1480,
+          "covered": 531,
+          "percent": 35.88
         },
         "branches": {
           "status": "unsupported",
@@ -143,14 +143,14 @@
       },
       "daemon/source_connection": {
         "lines": {
-          "count": 2482,
-          "covered": 303,
-          "percent": 12.21
+          "count": 2443,
+          "covered": 2089,
+          "percent": 85.51
         },
         "functions": {
-          "count": 158,
-          "covered": 29,
-          "percent": 18.35
+          "count": 155,
+          "covered": 111,
+          "percent": 71.61
         },
         "branches": {
           "status": "unsupported",
@@ -161,14 +161,14 @@
       },
       "daemon/action_audit": {
         "lines": {
-          "count": 386,
-          "covered": 324,
-          "percent": 83.94
+          "count": 408,
+          "covered": 382,
+          "percent": 93.63
         },
         "functions": {
           "count": 49,
-          "covered": 39,
-          "percent": 79.59
+          "covered": 41,
+          "percent": 83.67
         },
         "branches": {
           "status": "unsupported",
