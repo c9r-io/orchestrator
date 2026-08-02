@@ -224,6 +224,44 @@ Measured after: a full `cargo test --workspace` under a private `TMPDIR` reports
 2851 passed, 0 failed and leaves that directory empty. The test count is part of
 the evidence, because a run that never started also leaves it empty.
 
+## A coordinate that was counting the wrong thing
+
+The certification sweep turned this up, and it is the same shape as the
+`session_owned_dir` mistake above pointed the other way: a predicate with an open
+end, wrong in the direction nobody looks.
+
+`coordination-collapse-ledger.json`'s `capturesOrJsonPath` counts lines matching
+`/captures|json_path/`, as evidence for how much of the retired capture/JSONPath
+extraction surface remains. `output_json_path` — the session and step structured
+output spill path, a live feature with no relation to that surface — contains the
+substring, and an unanchored match counted it.
+
+This FR moved the number 53 → 55 purely by referencing that field twice more, and
+six ci-required gates went red: four embed the same check, and
+`test-core-boundary` case 9 plus four cases in `test-governance-ledger-tooling`
+refused to certify at all, with "a gate already failed with the shared scanner
+present, so its later failure proves nothing". Those gates detect the §4.4 shape
+7 residue directly — a fixture proves nothing about a gate that was already red
+before it ran — and they were right to.
+
+Measured with the scanner's own `scannable_source`: of the 55 lines it counted,
+**32 were `output_json_path`**, 9 were real `json_path`, 14 carried `captures`.
+More than half the coordinate was outside what its name claims. Every one of the
+32 is the struct field or a binding of it; none co-occurs with `CaptureDecl`,
+`extract_field` or a JSONPath expression.
+
+The matcher is now anchored with `(?<!output_)`, which takes the coordinate to
+**23** and the decommission ratchet's frozen ceiling from `<= 53` to `<= 23`.
+This is a tightening, not a loosening: everything removed was never in scope, and
+the ratchet now sits on the real number instead of 30 above it. Re-armed and
+checked — adding one genuine `json_path` line to a scanned production file takes
+it to 24 and fails with `source touch capturesOrJsonPath increased from 23 to
+24`, naming the coordinate rather than returning a bare exit code.
+
+Re-baselining at 55 would have been the documented workflow and would have left a
+number that means something other than its name, drifting again on the next
+session change.
+
 ## Known limits
 
 - `cleanup_stale_sessions` remains uninvoked in production.
@@ -235,20 +273,8 @@ the evidence, because a run that never started also leaves it empty.
   `std::env::temp_dir()` call sites across 13 files.
 - The reclamation gate is `manual-runbook`, not `ci-required`: it starts a daemon
   and signals process groups.
-- **`coordination-collapse-ledger.json`'s `capturesOrJsonPath` coordinate counts
-  `output_json_path`.** The scanner matches `/captures|json_path/` per line, and
-  `output_json_path` — the session's structured-output spill path, a live feature
-  with no relation to the retired JSONPath extraction the coordinate tracks —
-  contains that substring. This FR moved the number 53 → 55 purely by touching
-  `output_json_path` twice more in production code. Across tracked Rust sources
-  59 of 192 matching lines are `output_json_path`, so the coordinate overstates
-  the debt it claims to measure and will drift again for the same reason whenever
-  session code is touched. The baseline was regenerated per the documented
-  workflow rather than the matcher narrowed: anchoring it changes the meaning of
-  a reviewed ledger coordinate, which belongs to the coordination-collapse owner
-  and not to this FR. Recorded here so the next author of that ledger does not
-  have to rediscover it. An unanchored substring is a predicate with an open end,
-  and the question it never answers is what it includes that nobody named.
+- **`scripts/qa/ci-liveness.rb` is red for reasons unrelated to this work** (see
+  below). Everything else in the derived sweep is green.
 - **`scripts/qa/ci-liveness.rb` is red for reasons unrelated to this work.** Its
   job records were taken at `45fbf3c4`, before `.github/workflows/ci.yml` last
   changed at `ceccf4f5`; both predate this FR's branch point and nothing here

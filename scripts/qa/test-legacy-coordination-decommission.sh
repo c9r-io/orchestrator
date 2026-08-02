@@ -44,13 +44,17 @@ ruby scripts/qa/coordination-governance.rb \
 # started. The status is observed here instead, and the diagnostic names the
 # expectation that no longer holds -- an exit code cannot say which conjunct
 # failed, and this one has five.
+# The sourceTouches ceiling fell 53 -> 23 when the coordinate stopped counting
+# `output_json_path`, the session/step artifact path, which an unanchored
+# `json_path` had been matching -- 32 of the 55 it reported. The ratchet is
+# tighter, not looser: everything removed was outside what it claims to count.
 INVENTORY_OK=0
 jq -e '
   .productionConsumers.capturesOrJsonPath == [] and
   .productionConsumers.celCoordination == [] and
   .productionConsumers.pipelineVariables == [] and
   (.executionInventory.legacyCommandOnlyAgents | length) == 0 and
-  .sourceTouches.capturesOrJsonPath <= 53
+  .sourceTouches.capturesOrJsonPath <= 23
 ' "$INVENTORY" >/dev/null 2>&1 || INVENTORY_OK=$?
 if [[ "$INVENTORY_OK" -ne 0 ]]; then
   echo "consumer inventory no longer matches the frozen expectation:" >&2
@@ -61,7 +65,7 @@ if [[ "$INVENTORY_OK" -ne 0 ]]; then
     legacyCommandOnlyAgents: (.executionInventory.legacyCommandOnlyAgents | length),
     sourceTouchesCapturesOrJsonPath: .sourceTouches.capturesOrJsonPath
   }' "$INVENTORY" >&2
-  echo "expected all consumer lists empty, 0 legacy Agents, and capturesOrJsonPath <= 53" >&2
+  echo "expected all consumer lists empty, 0 legacy Agents, and capturesOrJsonPath <= 23" >&2
   exit 1
 fi
 pass "machine-readable inventory proves 0 capture/JSONPath, 0 coordination CEL, 0 generic variable, and 0 legacy Agent consumers"

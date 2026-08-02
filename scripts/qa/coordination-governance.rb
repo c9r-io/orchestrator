@@ -310,7 +310,14 @@ def source_counts(files)
   }
   files.each do |path|
     scannable_source(path).each_line do |line|
-      counts["capturesOrJsonPath"] += 1 if line.match?(/captures|json_path/)
+      # `output_json_path` is the session/step structured-output spill path — a
+      # live artifact location with no relation to the retired JSONPath
+      # extraction surface this coordinate exists to count. An unanchored
+      # `json_path` matched it anyway, and it was the majority of the number:
+      # 32 of 55 lines when FR-159 tripped the ratchet by referencing the field
+      # twice more. Anchoring drops the coordinate to 23 and makes the ratchet
+      # strictly tighter, because everything removed was never in scope.
+      counts["capturesOrJsonPath"] += 1 if line.match?(/captures|(?<!output_)json_path/)
       counts["pipelineVariables"] += 1 if line.include?("PipelineVariables")
       counts["celInterpreter"] += 1 if line.match?(/cel_interpreter|cel-interpreter/)
       counts["legacyRunnerSelection"] += 1 if line.match?(
