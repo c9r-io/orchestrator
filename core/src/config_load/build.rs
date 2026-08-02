@@ -217,8 +217,6 @@ pub(crate) fn task_step_from_workflow_step(
         prehook: normalized.prehook.clone(),
         tty: normalized.tty,
         template: normalized.template.clone(),
-        outputs: normalized.outputs.clone(),
-        pipe_to: normalized.pipe_to.clone(),
         command: normalized.command.clone(),
         chain_steps: normalized
             .chain_steps
@@ -232,9 +230,6 @@ pub(crate) fn task_step_from_workflow_step(
         timeout_secs: normalized.timeout_secs,
         stall_timeout_secs: normalized.stall_timeout_secs,
         item_select_config: normalized.item_select_config.clone(),
-        store_inputs: normalized.store_inputs.clone(),
-        store_outputs: normalized.store_outputs.clone(),
-        step_vars: normalized.step_vars.clone(),
     })
 }
 
@@ -559,8 +554,6 @@ mod tests {
         let mut step = make_command_step("build", "cargo build");
         step.repeatable = false;
         step.tty = true;
-        step.outputs = vec!["result".to_string()];
-        step.pipe_to = Some("next_step".to_string());
         step.cost_preference = Some(crate::config::CostPreference::Quality);
         step.scope = Some(crate::config::StepScope::Task);
         let workflow = make_workflow(vec![step]);
@@ -572,8 +565,6 @@ mod tests {
         assert_eq!(s.command.as_deref(), Some("cargo build"));
         assert!(!s.repeatable);
         assert!(s.tty);
-        assert_eq!(s.outputs, vec!["result"]);
-        assert_eq!(s.pipe_to.as_deref(), Some("next_step"));
         assert_eq!(
             s.cost_preference,
             Some(crate::config::CostPreference::Quality)

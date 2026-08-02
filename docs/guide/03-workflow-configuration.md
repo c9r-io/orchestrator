@@ -42,9 +42,12 @@ Each step is a unit of work in the workflow pipeline.
   cost_preference: balance          # (optional) "performance" | "quality" | "balance"
   prehook: {...}                    # (optional) conditional execution — see chapter 04
   behavior: {...}                   # (optional) on_failure, captures, post_actions
-  store_inputs: [...]               # (optional) read from workflow stores before execution
-  store_outputs: [...]              # (optional) write to workflow stores after execution
 ```
+
+> `store_inputs`, `store_outputs`, `step_vars` and the `store_put` post-action were removed.
+> A manifest carrying any of them is rejected with `[legacy_pipeline_variables_removed]`.
+> Steps read and write stores directly instead — see
+> [Persistent Store](05-advanced-features.md#persistent-store-wp01).
 
 ### Step Execution Modes
 
@@ -223,10 +226,6 @@ behavior:
   post_actions:
     - type: create_ticket          # create a failure ticket
     - type: scan_tickets           # scan ticket directory
-    - type: store_put              # write to workflow store (WP01)
-      store: context
-      key: finding
-      from_var: plan_output
     - type: spawn_task             # spawn a child task (WP02)
       goal: "verify-changes"
       workflow: verify_workflow

@@ -75,21 +75,24 @@ spec:
 
 Step integration:
 
-```yaml
-# Write after step
-behavior:
-  post_actions:
-    - type: store_put
-      store: context
-      key: result
-      from_var: plan_output
+`{project_id}` renders from the task context, so a step needs nothing injected:
 
-# Read before step
-store_inputs:
-  - store: context
-    key: result
-    as_var: inherited_data
+```yaml
+# Write from the step
+- id: plan
+  command: >-
+    orchestrator store put context result "$RESULT" --project {project_id}
+
+# Read from the step
+- id: implement
+  command: >-
+    INHERITED="$(orchestrator store get context result
+    --project {project_id} 2>/dev/null || true)"
 ```
+
+The declarative bindings (`store_inputs`, `store_outputs`, `step_vars`,
+`store_put`) were removed and are rejected with
+`[legacy_pipeline_variables_removed]`.
 
 ## Task Spawning (WP02)
 

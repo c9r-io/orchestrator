@@ -136,7 +136,7 @@ kind: WorkflowStore
 metadata:
   name: context
 spec:
-  backend: local           # "local" (SQLite) or "command" (shell command)
+  provider: local          # "local" (SQLite), "file", or a StoreBackendProvider name
   schema:
     type: object
     properties:
@@ -144,34 +144,41 @@ spec:
         type: string
   retention:
     max_entries: 1000
-    ttl_seconds: 86400      # optional: auto-expire after 24h
+    ttl_days: 30            # optional: prune entries older than this
 ```
+
+Declaring a `WorkflowStore` is optional — an undeclared store name is auto-provisioned with these
+defaults.
 
 ### Reading/Writing from Steps
 
-Steps interact with stores through `store_inputs`, `store_outputs`, and `post_actions`:
+Steps use the CLI directly. `{project_id}` renders from the task context, so a step needs nothing
+injected into it:
 
 ```yaml
 steps:
   - id: plan
     scope: task
     enabled: true
-    command: "echo '{\"confidence\":0.95}'"
-    behavior:
-      post_actions:
-        - type: store_put
-          store: context
-          key: plan_result
-          from_var: plan_output
+    command: >-
+      RESULT="$(echo '{"confidence":0.95}')" &&
+      orchestrator store put context plan_result "$RESULT" --project {project_id}
 
   - id: implement
     scope: task
     enabled: true
-    store_inputs:                # read from store before execution
-      - store: context
-        key: plan_result
-        as_var: inherited_plan
+    command: >-
+      INHERITED="$(orchestrator store get context plan_result
+      --project {project_id} 2>/dev/null || true)" &&
+      echo "planning said: $INHERITED"
 ```
+
+For an agent step, put the same command in the StepTemplate prompt and let the agent run it.
+
+> The declarative bindings this section used to describe — `store_inputs`, `store_outputs`,
+> `step_vars` and the `store_put` post-action — were removed. They carried values through a generic
+> pipeline-variable map that no longer exists as an authoring surface; a manifest using any of them
+> is rejected with `[legacy_pipeline_variables_removed]`.
 
 ### CLI Operations
 

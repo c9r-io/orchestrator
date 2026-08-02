@@ -225,8 +225,6 @@ fn workflow_step_spec_to_config(step: &WorkflowStepSpec) -> Result<WorkflowStepC
         prehook,
         tty: step.tty,
         template: step.template.clone(),
-        outputs: Vec::new(),
-        pipe_to: None,
         command: step.command.clone(),
         chain_steps: step
             .chain_steps

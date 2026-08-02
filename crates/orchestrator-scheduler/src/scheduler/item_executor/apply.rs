@@ -4,7 +4,6 @@ use agent_orchestrator::config::{
 };
 use agent_orchestrator::events::insert_event;
 use agent_orchestrator::state::InnerState;
-use agent_orchestrator::store::StoreOp;
 use agent_orchestrator::ticket::{
     create_ticket_for_qa_failure, scan_active_tickets_for_task_items,
 };
@@ -184,27 +183,13 @@ pub(super) async fn apply_step_results(
                     }
                 }
             }
-            PostAction::StorePut {
-                store,
-                key,
-                from_var,
-            } => {
-                if let Some(value) = acc.pipeline_vars.vars.get(from_var).cloned() {
-                    if let Err(e) =
-                        execute_store_put(state, task_ctx, task_id, store, key, &value).await
-                    {
-                        warn!(error = %e, store = %store, key = %key, "StorePut post-action failed");
-                    }
-                } else {
-                    warn!(from_var = %from_var, "StorePut: pipeline var not found");
-                }
-            }
+            // PostAction::StorePut and the store_outputs pass that followed this
+            // loop both read a value out of the generic pipeline-variable map
+            // and wrote it to a store. FR-156 retired both; apply rejects a
+            // manifest carrying either, so neither is reachable here.
             _ => {}
         }
     }
-
-    // Process store_outputs declarations
-    process_store_outputs(state, task_ctx, task_id, step, acc).await;
 
     // 6. Collect artifacts. Convergence signals are control-plane input and
     // must survive even when user-facing artifact collection is disabled.
@@ -444,65 +429,6 @@ fn parse_tool_result_payload(payload: &serde_json::Value) -> Option<serde_json::
         }
         serde_json::Value::Object(_) => Some(payload.clone()),
         _ => None,
-    }
-}
-
-/// Execute a single store put operation. Non-critical: logs on failure.
-async fn execute_store_put(
-    state: &Arc<InnerState>,
-    task_ctx: &TaskRuntimeContext,
-    task_id: &str,
-    store: &str,
-    key: &str,
-    value: &str,
-) -> Result<()> {
-    let cr = agent_orchestrator::config_load::read_loaded_config(state)?
-        .config
-        .custom_resources
-        .clone();
-    state
-        .store_manager
-        .execute(
-            &cr,
-            StoreOp::Put {
-                store_name: store.to_string(),
-                project_id: task_ctx.project_id.clone(),
-                key: key.to_string(),
-                value: value.to_string(),
-                task_id: task_id.to_string(),
-            },
-        )
-        .await?;
-    Ok(())
-}
-
-/// Process store_outputs declarations on a step, writing pipeline vars to stores.
-async fn process_store_outputs(
-    state: &Arc<InnerState>,
-    task_ctx: &TaskRuntimeContext,
-    task_id: &str,
-    step: &TaskExecutionStep,
-    acc: &StepExecutionAccumulator,
-) {
-    for output in &step.store_outputs {
-        if let Some(value) = acc.pipeline_vars.vars.get(&output.from_var) {
-            if let Err(e) =
-                execute_store_put(state, task_ctx, task_id, &output.store, &output.key, value).await
-            {
-                warn!(
-                    error = %e,
-                    store = %output.store,
-                    key = %output.key,
-                    "store_output write failed"
-                );
-            }
-        } else {
-            warn!(
-                from_var = %output.from_var,
-                store = %output.store,
-                "store_output: pipeline var not found"
-            );
-        }
     }
 }
 

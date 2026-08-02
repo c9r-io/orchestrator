@@ -111,69 +111,6 @@ fn check_steps_builtin(steps: &[WorkflowStepConfig], wf_id: &str, out: &mut Vec<
     }
 }
 
-pub(super) fn check_pipe_to_refs(
-    workflows: &std::collections::HashMap<String, agent_orchestrator::config::WorkflowConfig>,
-    workflow_filter: Option<&str>,
-    out: &mut Vec<CheckResult>,
-) {
-    for (wf_id, wf) in workflows {
-        if let Some(filter) = workflow_filter
-            && wf_id != filter
-        {
-            continue;
-        }
-        let step_ids: HashSet<&str> = collect_step_ids(&wf.steps);
-        check_steps_pipe_to(&wf.steps, wf_id, &step_ids, out);
-    }
-}
-
-fn collect_step_ids(steps: &[WorkflowStepConfig]) -> HashSet<&str> {
-    let mut ids = HashSet::new();
-    for step in steps {
-        ids.insert(step.id.as_str());
-        for child in &step.chain_steps {
-            ids.insert(child.id.as_str());
-        }
-    }
-    ids
-}
-
-fn check_steps_pipe_to(
-    steps: &[WorkflowStepConfig],
-    wf_id: &str,
-    step_ids: &HashSet<&str>,
-    out: &mut Vec<CheckResult>,
-) {
-    for step in steps {
-        if !step.enabled {
-            continue;
-        }
-        if let Some(ref target) = step.pipe_to {
-            let known = step_ids.contains(target.as_str());
-            out.push(CheckResult::simple(
-                "pipe_to_unknown",
-                Severity::Error,
-                known,
-                if known {
-                    format!(
-                        "workflow \"{wf_id}\" step \"{}\": pipe_to \"{target}\" exists",
-                        step.id
-                    )
-                } else {
-                    format!(
-                        "workflow \"{wf_id}\" step \"{}\": pipe_to \"{target}\" is not a step in this workflow",
-                        step.id
-                    )
-                },
-                None,
-            ));
-        }
-        if !step.chain_steps.is_empty() {
-            check_steps_pipe_to(&step.chain_steps, wf_id, step_ids, out);
-        }
-    }
-}
-
 pub(super) fn check_template_vars(
     step_templates: &std::collections::HashMap<
         String,

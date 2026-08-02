@@ -367,9 +367,12 @@ Values >4096 bytes spill to disk as `{<key>_path}`.
   cost_preference: balance          # (optional) performance | quality | balance
   prehook: {engine: cel, when: "...", reason: "..."}
   behavior: {on_failure: ..., captures: [...], post_actions: [...]}
-  store_inputs: [{store: X, key: Y, as_var: Z}]
-  store_outputs: [{store: X, key: Y, from_var: Z}]
 ```
+
+`store_inputs`, `store_outputs`, `step_vars` and the `store_put` post-action were
+removed; a manifest using any of them is rejected with
+`[legacy_pipeline_variables_removed]`. Read and write stores from the step's own
+command or prompt with `orchestrator store get|put ... --project {project_id}`.
 
 ## Known Step IDs
 
@@ -407,10 +410,6 @@ behavior:
   post_actions:
     - type: create_ticket
     - type: scan_tickets
-    - type: store_put         # WP01
-      store: context
-      key: finding
-      from_var: plan_output
     - type: spawn_task        # WP02
       goal: "verify"
       workflow: verify_wf

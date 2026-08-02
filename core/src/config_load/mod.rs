@@ -67,8 +67,6 @@ pub(crate) mod tests {
             prehook: None,
             tty: false,
             template: None,
-            outputs: vec![],
-            pipe_to: None,
             command: None,
             chain_steps: vec![],
             scope: None,

@@ -44,12 +44,6 @@ pub struct WorkflowStepConfig {
     /// Whether command execution should request a TTY.
     #[serde(default)]
     pub tty: bool,
-    /// Named outputs this step produces (for pipeline variable passing)
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub outputs: Vec<String>,
-    /// Pipe this step's output to the named step as input
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pipe_to: Option<String>,
     /// Build command for builtin build/test/lint steps
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,

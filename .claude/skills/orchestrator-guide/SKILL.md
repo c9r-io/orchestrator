@@ -242,13 +242,13 @@ Run `orchestrator guide "secret key"` for the full key lifecycle command referen
   behavior:
     on_failure: { action: continue }
     post_actions:
-      - type: store_put
-        store: context
-        key: result
-        from_var: plan_output
-  store_inputs: [{store: X, key: Y, as_var: Z}]
-  store_outputs: [{store: X, key: Y, from_var: Z}]
+      - type: create_ticket
 ```
+
+Steps read and write stores with the CLI —
+`orchestrator store get <store> <key> --project {project_id}`. The declarative
+bindings (`store_inputs`, `store_outputs`, `step_vars`, `store_put`) were removed
+and are rejected at apply with `[legacy_pipeline_variables_removed]`.
 
 Auto-inferred from `id`: builtin IDs → builtin mode; agent IDs → capability mode. See references for full lists.
 

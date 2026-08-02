@@ -1,12 +1,12 @@
-# Command Rules Template
+# Driver Session Continuity Template
 
 > **Harness Engineering template**: this showcase demonstrates one concrete capability slice of orchestrator as a control plane for agent-first software delivery.
 >
-> **Purpose**: Agent session reuse and isolation — share session context across steps via `command_rules`, while isolating QA with `step_vars`.
+> **Purpose**: Agent session reuse and isolation — a step opts into resuming the provider's session through `behavior.driverRequirements.sessionResume`, and a step that omits it starts fresh.
 
 ## Use Cases
 
-- AI agents (e.g. Claude Code) support session mode: first step creates a session, subsequent steps `--resume` to retain context
+- AI agents (e.g. Claude Code) support session mode: an earlier step establishes context, later steps resume it
 - Plan and implement steps need shared session context (plan output is prerequisite for implementation)
 - QA steps need a fresh session to avoid bias from prior context
 
@@ -48,81 +48,80 @@ create_session (new) → plan (resume) → implement (resume) → qa_testing (ne
 
 ### Step-by-Step Breakdown
 
-| Step | loop_session_id | command_rules | Command Used | Effect |
-|------|----------------|---------------|-------------|--------|
-| create_session | absent | no match → default | new session | Outputs `session_id`, captured to pipeline vars |
-| plan | `"ses-abc-123"` | rule[0] ✓ | resume session | Reuses session context |
-| implement | `"ses-abc-123"` | rule[0] ✓ | resume session | Continues from plan |
-| qa_testing | `""` (step_vars clears) | no match → default | new session | Independent analysis, no bias |
+| Step | `sessionResume` | Session Used | Effect |
+|------|----------------|--------------|--------|
+| create_session | omitted | new session | Establishes provider context |
+| plan | `true` | resumes it | Reuses session context |
+| implement | `true` | resumes it | Continues from plan |
+| qa_testing | omitted | new session | Independent analysis, no bias |
 
-After qa_testing, `loop_session_id` is restored to `"ses-abc-123"` (step_vars is a temporary overlay).
+Isolation is the default. A step is only continuous with an earlier one when it says so.
 
-### Key Mechanism 1: behavior.captures
+### Key Mechanism: `behavior.driverRequirements.sessionResume`
 
 ```yaml
-- id: create_session
+- id: plan
+  type: plan
+  required_capability: plan
+  template: plan
   behavior:
-    captures:
-      - var: loop_session_id     # pipeline variable name
-        source: stdout           # extract from stdout
-        json_path: "$.session_id"  # JSON path selector
-```
+    driverRequirements:
+      sessionResume: true       # resume the provider context
+      workspaceAccess: write
 
-The agent outputs `{"session_id":"ses-abc-123",...}`, and the capture automatically extracts the `session_id` field into the `loop_session_id` pipeline variable. All subsequent steps can access it.
-
-### Key Mechanism 2: command_rules
-
-```yaml
-kind: Agent
-spec:
-  command: echo 'new session'          # default: create new session
-  command_rules:
-    - when: "loop_session_id != \"\""  # CEL: session exists
-      command: echo 'resumed session'  # match: resume session
-```
-
-- Pipeline variables are injected as **top-level CEL names** (write `loop_session_id` directly, no `vars.` prefix)
-- Rules evaluated in order; first `true` wins. No match → default `command`
-- Matched rule index recorded in `command_runs.command_rule_index` for auditing
-
-### Key Mechanism 3: step_vars
-
-```yaml
 - id: qa_testing
-  step_vars:
-    loop_session_id: ""    # temporarily clear → force new session
+  type: qa_review
+  required_capability: qa_review
+  template: qa_review
+  behavior:
+    driverRequirements:
+      workspaceAccess: write    # no sessionResume → fresh session
 ```
 
-- Before execution, `step_vars` merge into a shallow copy of pipeline vars
-- After execution, original values are restored (`loop_session_id` returns to `"ses-abc-123"`)
-- Only affects the current step's input view; global pipeline state unchanged
+The provider's session identifier never leaves the daemon. It is not captured from stdout, not
+carried in a variable, and not written into any manifest — a step declares the *requirement* and the
+driver satisfies it. Apply rejects the workflow if the selected agent's driver cannot resume, with
+`[driver_session_resume_required]`, so an unsupported combination fails before the task runs rather
+than silently starting a new session.
+
+### Why not the legacy pattern
+
+This template used to capture the session id out of the agent's stdout with `behavior.captures`,
+switch commands on it with an agent-level `command_rules` CEL block, and clear it for one step with
+`step_vars`. All three of those routed a provider-internal identifier through manifest-visible
+coordination state:
+
+- `behavior.captures` was removed by the coordination collapse — `[legacy_coordination_removed]`
+- `step_vars` was removed with the rest of the pipeline-variable authoring surface —
+  `[legacy_pipeline_variables_removed]`
+- `command_rules` still exists on `Agent`, but it is no longer how session continuity is expressed
+
+The typed requirement replaces all of it, which is why isolation is now the default rather than
+something a step has to arrange by blanking a variable.
 
 ## Customization Guide
 
-### Real Agent (Claude Code Session)
+### Isolating an additional step
+
+Omit `sessionResume`. There is nothing to clear:
 
 ```yaml
-# Default: create new session
-command: claude -p "{prompt}" --session-id new --output-format stream-json
-
-command_rules:
-  # Has session → resume
-  - when: "loop_session_id != \"\""
-    command: claude -p "{prompt}" --resume {loop_session_id} --output-format stream-json
-```
-
-### More step_vars Isolation Scenarios
-
-```yaml
-# Security audit: independent session + extra audit directives
 - id: security_audit
-  step_vars:
-    loop_session_id: ""           # independent session
-    audit_mode: "strict"          # inject audit config
+  type: qa_review
+  required_capability: qa_review
+  behavior:
+    driverRequirements:
+      workspaceAccess: write
 ```
+
+### Passing configuration to a step
+
+Put it in the step's own `StepTemplate` prompt, or read it from a store inside the step's command
+with `orchestrator store get <store> <key> --project {project_id}`.
 
 ## Further Reading
 
 - [Plan & Execute Template](plan-execute.md) — StepTemplate and variable propagation basics
 - [Self-Bootstrap Execution](self-bootstrap-execution-template.md) — Production multi-step workflow
-- [CEL Prehooks](../guide/04-cel-prehooks.md) — CEL expression syntax reference
+- [Coordination Tools](../guide/coordination-tools.md) — the typed replacements for legacy coordination
+- [Error Codes](../guide/error-codes.md) — `legacy_coordination_removed`, `legacy_pipeline_variables_removed`

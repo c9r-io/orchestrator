@@ -456,8 +456,6 @@ mod tests {
             prehook: None,
             tty: false,
             template: None,
-            outputs: vec![],
-            pipe_to: None,
             command: Some("echo ok".to_string()),
             chain_steps: vec![],
             scope: Some(StepScope::Task),

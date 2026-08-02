@@ -198,7 +198,6 @@ pub fn run_checks(
     capability::check_prompt_delivery(agents, &mut checks);
     capability::check_capability_templates(agents, &mut checks);
     workflow::check_builtin_names(workflows, workflow_filter, &mut checks);
-    workflow::check_pipe_to_refs(workflows, workflow_filter, &mut checks);
     workflow::check_template_vars(step_templates, workflows, workflow_filter, &mut checks);
     workflow::check_empty_workflows(workflows, workflow_filter, &mut checks);
     safety::check_self_referential_policy(workspaces, workflows, workflow_filter, &mut checks);
@@ -394,8 +393,6 @@ mod tests {
                         prehook: None,
                         tty: false,
                         template: None,
-                        outputs: vec![],
-                        pipe_to: None,
                         command: None,
                         chain_steps: vec![],
                         scope: None,
@@ -422,8 +419,6 @@ mod tests {
                         prehook: None,
                         tty: false,
                         template: None,
-                        outputs: vec![],
-                        pipe_to: None,
                         command: None,
                         chain_steps: vec![],
                         scope: None,
@@ -450,8 +445,6 @@ mod tests {
                         prehook: None,
                         tty: false,
                         template: None,
-                        outputs: vec![],
-                        pipe_to: None,
                         command: None,
                         chain_steps: vec![],
                         scope: None,
@@ -591,8 +584,6 @@ mod tests {
                 prehook: None,
                 tty: false,
                 template: None,
-                outputs: vec![],
-                pipe_to: None,
                 command: None,
                 chain_steps: vec![],
                 scope: None,
@@ -658,8 +649,6 @@ mod tests {
                 prehook: None,
                 tty: false,
                 template: None,
-                outputs: vec![],
-                pipe_to: None,
                 command: None,
                 chain_steps: vec![],
                 scope: None,
@@ -705,8 +694,6 @@ mod tests {
                 prehook: None,
                 tty: false,
                 template: None,
-                outputs: vec![],
-                pipe_to: None,
                 command: None,
                 chain_steps: vec![],
                 scope: None,
@@ -774,8 +761,6 @@ mod tests {
             prehook: None,
             tty: false,
             template: None,
-            outputs: vec![],
-            pipe_to: None,
             command: Some("echo ok".into()),
             chain_steps: vec![],
             scope: None,
@@ -803,26 +788,6 @@ mod tests {
             .iter()
             .any(|c| c.rule == "capability_no_agent" && !c.passed);
         assert!(!found, "command step should not require agent capability");
-    }
-
-    #[test]
-    fn pipe_to_unknown() {
-        let mut cfg = base_config();
-        default_project_mut(&mut cfg)
-            .workflows
-            .get_mut("test-wf")
-            .expect("test-wf should exist")
-            .steps[0]
-            .pipe_to = Some("ghost".into());
-
-        let tmp = tempfile::tempdir().expect("create temp dir");
-        make_temp_ws(tmp.path());
-        let report = run_checks(&cfg, tmp.path(), None, None);
-        let found = report
-            .checks
-            .iter()
-            .any(|c| c.rule == "pipe_to_unknown" && !c.passed);
-        assert!(found, "expected pipe_to_unknown error");
     }
 
     #[test]
@@ -903,8 +868,6 @@ mod tests {
                     prehook: None,
                     tty: false,
                     template: None,
-                    outputs: vec![],
-                    pipe_to: None,
                     command: None,
                     chain_steps: vec![],
                     scope: None,
@@ -965,8 +928,6 @@ mod tests {
                 prehook: None,
                 tty: false,
                 template: None,
-                outputs: vec![],
-                pipe_to: None,
                 command: None,
                 chain_steps: vec![WorkflowStepConfig {
                     id: "child".into(),
@@ -981,8 +942,6 @@ mod tests {
                     prehook: None,
                     tty: false,
                     template: None,
-                    outputs: vec![],
-                    pipe_to: None,
                     command: None,
                     chain_steps: vec![],
                     scope: None,

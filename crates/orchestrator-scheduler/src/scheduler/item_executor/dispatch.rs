@@ -1,17 +1,13 @@
-use agent_orchestrator::config::{
-    ExecutionMode, PipelineVariables, StoreInputConfig, TaskExecutionStep, TaskRuntimeContext,
-};
+use agent_orchestrator::config::{ExecutionMode, TaskExecutionStep, TaskRuntimeContext};
 use agent_orchestrator::events::insert_event;
 use agent_orchestrator::prehook::evaluate_step_prehook;
 use agent_orchestrator::state::InnerState;
-use agent_orchestrator::store::{StoreOp, StoreOpResult};
 use anyhow::Result;
 use serde_json::{Value, json};
 use std::collections::HashSet;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use tracing::warn;
 
 use super::super::RunningTask;
 use super::accumulator::StepExecutionAccumulator;
@@ -238,41 +234,10 @@ enum StepExecutionOutcome {
     EarlyReturn,
 }
 
-/// Creates a shallow copy of pipeline vars with step_vars overlay applied.
-/// Returns (effective_pipeline, originals) where originals maps each overridden
-/// key to its previous value (or None if the key didn't exist).
-fn apply_step_vars_overlay(
-    pipeline: &PipelineVariables,
-    step_vars: &Option<std::collections::HashMap<String, String>>,
-) -> (PipelineVariables, Vec<(String, Option<String>)>) {
-    let Some(sv) = step_vars else {
-        return (pipeline.clone(), Vec::new());
-    };
-    let mut overlay = pipeline.clone();
-    let mut originals = Vec::with_capacity(sv.len());
-    for (k, v) in sv {
-        let original = overlay.vars.insert(k.clone(), v.clone());
-        originals.push((k.clone(), original));
-    }
-    (overlay, originals)
-}
-
-/// Restores pipeline vars to their pre-overlay state for step_vars keys.
-fn restore_step_vars_overlay(
-    pipeline: &mut PipelineVariables,
-    originals: Vec<(String, Option<String>)>,
-) {
-    for (key, original_value) in originals {
-        match original_value {
-            Some(v) => {
-                pipeline.vars.insert(key, v);
-            }
-            None => {
-                pipeline.vars.remove(&key);
-            }
-        }
-    }
-}
+// apply_step_vars_overlay / restore_step_vars_overlay lived here until FR-156.
+// They were the only readers of WorkflowStepConfig::step_vars, which apply now
+// rejects; their three PipelineVariables signatures are the whole of that FR's
+// reachable source-ratchet reduction.
 
 fn build_step_event_payload(
     step: &TaskExecutionStep,
@@ -413,10 +378,6 @@ fn execute_step<'a>(
             )
             .await?;
             return Ok(StepExecutionOutcome::Completed { success: true });
-        }
-
-        if !step.store_inputs.is_empty() {
-            resolve_store_inputs(state, &task_ctx.project_id, &step.store_inputs, acc).await?;
         }
 
         if acc.step_ran.is_empty() {
@@ -573,10 +534,9 @@ async fn execute_agent_step(
 
         // ExecutionMode::Agent or ExecutionMode::Builtin for generic builtins
         _ => {
-            // Apply step_vars overlay: create a temporary view of pipeline vars
-            // with step-scoped overrides. Save originals for post-execution restore.
-            let (effective_pipeline, step_vars_originals) =
-                apply_step_vars_overlay(&acc.pipeline_vars, &step.step_vars);
+            // No step_vars overlay: FR-156 retired the field, and apply rejects
+            // any manifest that still carries it.
+            let effective_pipeline = acc.pipeline_vars.clone();
 
             let exec_result = execute_builtin_step(
                 state,
@@ -623,10 +583,6 @@ async fn execute_agent_step(
             };
             acc.pipeline_vars = new_pipeline;
 
-            // Restore original values for step_vars keys so the overlay
-            // doesn't leak into subsequent steps' global pipeline state.
-            restore_step_vars_overlay(&mut acc.pipeline_vars, step_vars_originals);
-
             if let Some(ref output) = result.output
                 && !output.stdout.is_empty()
             {
@@ -647,173 +603,5 @@ async fn execute_agent_step(
 
             Ok(AgentStepOutcome::Result(result))
         }
-    }
-}
-
-// ── Store input resolution ───────────────────────────────────────────
-
-/// Resolve store_inputs: read values from workflow stores and inject into pipeline vars.
-async fn resolve_store_inputs(
-    state: &Arc<InnerState>,
-    project_id: &str,
-    inputs: &[StoreInputConfig],
-    acc: &mut StepExecutionAccumulator,
-) -> Result<()> {
-    let cr = agent_orchestrator::config_load::read_loaded_config(state)?
-        .config
-        .custom_resources
-        .clone();
-
-    for input in inputs {
-        let result = state
-            .store_manager
-            .execute(
-                &cr,
-                StoreOp::Get {
-                    store_name: input.store.clone(),
-                    project_id: project_id.to_string(),
-                    key: input.key.clone(),
-                },
-            )
-            .await;
-
-        match result {
-            Ok(StoreOpResult::Value(Some(val))) => {
-                let val_str = match &val {
-                    serde_json::Value::String(s) => s.clone(),
-                    other => other.to_string(),
-                };
-                acc.pipeline_vars.vars.insert(input.as_var.clone(), val_str);
-            }
-            Ok(StoreOpResult::Value(None)) => {
-                if input.required {
-                    anyhow::bail!(
-                        "store_input: required key '{}' not found in store '{}'",
-                        input.key,
-                        input.store
-                    );
-                }
-            }
-            Ok(_) => {
-                warn!(
-                    store = %input.store,
-                    key = %input.key,
-                    "store_input: unexpected result type"
-                );
-            }
-            Err(e) => {
-                if input.required {
-                    anyhow::bail!(
-                        "store_input: failed to read key '{}' from store '{}': {}",
-                        input.key,
-                        input.store,
-                        e
-                    );
-                }
-                warn!(
-                    error = %e,
-                    store = %input.store,
-                    key = %input.key,
-                    "store_input: read failed (non-required)"
-                );
-            }
-        }
-    }
-
-    Ok(())
-}
-
-#[cfg(test)]
-mod step_vars_tests {
-    use super::*;
-
-    #[test]
-    fn overlay_none_returns_clone() {
-        let mut pv = PipelineVariables::default();
-        pv.vars.insert("x".to_string(), "1".to_string());
-        let (effective, originals) = apply_step_vars_overlay(&pv, &None);
-        assert_eq!(effective.vars.get("x").unwrap(), "1");
-        assert!(originals.is_empty());
-    }
-
-    #[test]
-    fn overlay_adds_new_key() {
-        let pv = PipelineVariables::default();
-        let sv = Some(
-            [("session_id".to_string(), "ABC".to_string())]
-                .into_iter()
-                .collect(),
-        );
-        let (effective, originals) = apply_step_vars_overlay(&pv, &sv);
-        assert_eq!(effective.vars.get("session_id").unwrap(), "ABC");
-        assert_eq!(originals.len(), 1);
-        assert_eq!(originals[0].1, None);
-    }
-
-    #[test]
-    fn overlay_overrides_existing_key() {
-        let mut pv = PipelineVariables::default();
-        pv.vars
-            .insert("loop_session_id".to_string(), "ORIGINAL".to_string());
-        let sv = Some(
-            [("loop_session_id".to_string(), String::new())]
-                .into_iter()
-                .collect(),
-        );
-        let (effective, originals) = apply_step_vars_overlay(&pv, &sv);
-        assert_eq!(effective.vars.get("loop_session_id").unwrap(), "");
-        assert_eq!(originals[0].1, Some("ORIGINAL".to_string()));
-    }
-
-    #[test]
-    fn restore_removes_new_keys() {
-        let mut pv = PipelineVariables::default();
-        pv.vars.insert("new_key".to_string(), "value".to_string());
-        let originals = vec![("new_key".to_string(), None)];
-        restore_step_vars_overlay(&mut pv, originals);
-        assert!(!pv.vars.contains_key("new_key"));
-    }
-
-    #[test]
-    fn restore_reverts_overridden_keys() {
-        let mut pv = PipelineVariables::default();
-        pv.vars.insert("loop_session_id".to_string(), String::new());
-        let originals = vec![("loop_session_id".to_string(), Some("ORIGINAL".to_string()))];
-        restore_step_vars_overlay(&mut pv, originals);
-        assert_eq!(pv.vars.get("loop_session_id").unwrap(), "ORIGINAL");
-    }
-
-    #[test]
-    fn full_overlay_restore_roundtrip() {
-        let mut pv = PipelineVariables::default();
-        pv.vars
-            .insert("loop_session_id".to_string(), "ABC-123".to_string());
-        pv.vars.insert("other".to_string(), "keep".to_string());
-
-        let sv = Some(
-            [
-                ("loop_session_id".to_string(), String::new()),
-                ("temp_var".to_string(), "temp".to_string()),
-            ]
-            .into_iter()
-            .collect(),
-        );
-
-        let (effective, originals) = apply_step_vars_overlay(&pv, &sv);
-        assert_eq!(effective.vars.get("loop_session_id").unwrap(), "");
-        assert_eq!(effective.vars.get("temp_var").unwrap(), "temp");
-        assert_eq!(effective.vars.get("other").unwrap(), "keep");
-
-        let mut new_pipeline = effective;
-        new_pipeline
-            .vars
-            .insert("captured_output".to_string(), "result".to_string());
-
-        restore_step_vars_overlay(&mut new_pipeline, originals);
-
-        assert_eq!(new_pipeline.vars.get("loop_session_id").unwrap(), "ABC-123");
-        assert!(!new_pipeline.vars.contains_key("temp_var"));
-        assert_eq!(new_pipeline.vars.get("captured_output").unwrap(), "result");
-        assert_eq!(new_pipeline.vars.get("other").unwrap(), "keep");
     }
 }

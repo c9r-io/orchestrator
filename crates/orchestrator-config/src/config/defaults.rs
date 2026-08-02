@@ -23,8 +23,6 @@ fn step_config(
         prehook: None,
         tty,
         template: None,
-        outputs: Vec::new(),
-        pipe_to: None,
         command: None,
         chain_steps: vec![],
         scope: None,
@@ -338,8 +336,6 @@ mod tests {
         assert!(s.cost_preference.is_none());
         assert!(s.prehook.is_none());
         assert!(!s.tty);
-        assert!(s.outputs.is_empty());
-        assert!(s.pipe_to.is_none());
         assert!(s.command.is_none());
         assert!(s.chain_steps.is_empty());
         assert!(s.scope.is_none());

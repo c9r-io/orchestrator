@@ -6,8 +6,8 @@ use std::time::Instant;
 use super::{
     AgentConfig, CONVENTIONS, CostPreference, ExecutionMode, ExecutionProfileConfig,
     InvariantConfig, ItemIsolationConfig, ItemSelectConfig, OrchestratorConfig, PipelineVariables,
-    SafetyConfig, StepBehavior, StepPrehookConfig, StepScope, StoreInputConfig, StoreOutputConfig,
-    WorkflowConfig, WorkflowExecutionConfig, WorkflowFinalizeConfig, WorkflowLoopConfig,
+    SafetyConfig, StepBehavior, StepPrehookConfig, StepScope, WorkflowConfig,
+    WorkflowExecutionConfig, WorkflowFinalizeConfig, WorkflowLoopConfig,
     is_known_builtin_step_name,
 };
 
@@ -50,12 +50,6 @@ pub struct TaskExecutionStep {
     /// Requests a TTY when the step launches a command.
     #[serde(default)]
     pub tty: bool,
-    /// Named outputs this step produces (for pipeline variable passing)
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub outputs: Vec<String>,
-    /// Pipe this step's output to the named step as input
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pipe_to: Option<String>,
     /// Build command for builtin build/test/lint steps
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
@@ -83,16 +77,10 @@ pub struct TaskExecutionStep {
     /// WP03: Configuration for item_select builtin step
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item_select_config: Option<ItemSelectConfig>,
-    /// Store inputs: read values from workflow stores before step execution
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub store_inputs: Vec<StoreInputConfig>,
-    /// Store outputs: write pipeline vars to workflow stores after step execution
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub store_outputs: Vec<StoreOutputConfig>,
-    /// Step-scoped variable overrides applied as a temporary overlay on pipeline
-    /// variables during this step's execution. Does not modify global pipeline state.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub step_vars: Option<std::collections::HashMap<String, String>>,
+    // store_inputs, store_outputs and step_vars were removed from the runtime
+    // plan by FR-156. Apply rejects a manifest carrying any of them, so they
+    // could only ever arrive empty. Serde ignores unknown keys, so execution
+    // plans persisted before the removal still deserialize.
 }
 
 impl TaskExecutionStep {
@@ -557,8 +545,6 @@ mod tests {
             cost_preference: None,
             prehook: None,
             tty: false,
-            outputs: vec![],
-            pipe_to: None,
             command: None,
             chain_steps: vec![],
             scope: None,
@@ -568,9 +554,6 @@ mod tests {
             timeout_secs: None,
             stall_timeout_secs: None,
             item_select_config: None,
-            store_inputs: vec![],
-            store_outputs: vec![],
-            step_vars: None,
         }
     }
 
@@ -588,8 +571,6 @@ mod tests {
             cost_preference: None,
             prehook: None,
             tty: false,
-            outputs: vec![],
-            pipe_to: None,
             command: None,
             chain_steps: vec![],
             scope: Some(StepScope::Task), // explicit override
@@ -599,9 +580,6 @@ mod tests {
             timeout_secs: None,
             stall_timeout_secs: None,
             item_select_config: None,
-            store_inputs: vec![],
-            store_outputs: vec![],
-            step_vars: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -620,8 +598,6 @@ mod tests {
             cost_preference: None,
             prehook: None,
             tty: false,
-            outputs: vec![],
-            pipe_to: None,
             command: None,
             chain_steps: vec![],
             scope: None,
@@ -631,9 +607,6 @@ mod tests {
             timeout_secs: None,
             stall_timeout_secs: None,
             item_select_config: None,
-            store_inputs: vec![],
-            store_outputs: vec![],
-            step_vars: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -652,8 +625,6 @@ mod tests {
             cost_preference: None,
             prehook: None,
             tty: false,
-            outputs: vec![],
-            pipe_to: None,
             command: None,
             chain_steps: vec![],
             scope: None,
@@ -663,9 +634,6 @@ mod tests {
             timeout_secs: None,
             stall_timeout_secs: None,
             item_select_config: None,
-            store_inputs: vec![],
-            store_outputs: vec![],
-            step_vars: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -690,8 +658,6 @@ mod tests {
             cost_preference: None,
             prehook: None,
             tty: false,
-            outputs: vec![],
-            pipe_to: None,
             command: None,
             chain_steps: vec![],
             scope: None,
@@ -701,9 +667,6 @@ mod tests {
             timeout_secs: None,
             stall_timeout_secs: None,
             item_select_config: None,
-            store_inputs: vec![],
-            store_outputs: vec![],
-            step_vars: None,
         };
         assert_eq!(
             step.resolved_scope(),
@@ -733,8 +696,6 @@ mod tests {
             cost_preference: None,
             prehook: None,
             tty: false,
-            outputs: vec![],
-            pipe_to: None,
             command: None,
             chain_steps: vec![],
             scope: None,
@@ -744,9 +705,6 @@ mod tests {
             timeout_secs: None,
             stall_timeout_secs: None,
             item_select_config: None,
-            store_inputs: vec![],
-            store_outputs: vec![],
-            step_vars: None,
         };
         // `qa` is itself a known Item-scoped id, so the convention default
         // already wins without needing the fallback.
@@ -769,8 +727,6 @@ mod tests {
                     cost_preference: None,
                     prehook: None,
                     tty: false,
-                    outputs: vec![],
-                    pipe_to: None,
                     command: None,
                     chain_steps: vec![],
                     scope: None,
@@ -780,9 +736,6 @@ mod tests {
                     timeout_secs: None,
                     stall_timeout_secs: None,
                     item_select_config: None,
-                    store_inputs: vec![],
-                    store_outputs: vec![],
-                    step_vars: None,
                 },
                 TaskExecutionStep {
                     id: "qa".to_string(),
@@ -796,8 +749,6 @@ mod tests {
                     cost_preference: None,
                     prehook: None,
                     tty: false,
-                    outputs: vec![],
-                    pipe_to: None,
                     command: None,
                     chain_steps: vec![],
                     scope: None,
@@ -807,9 +758,6 @@ mod tests {
                     timeout_secs: None,
                     stall_timeout_secs: None,
                     item_select_config: None,
-                    store_inputs: vec![],
-                    store_outputs: vec![],
-                    step_vars: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig::default(),

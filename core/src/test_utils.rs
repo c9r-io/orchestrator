@@ -97,8 +97,6 @@ fn create_minimal_test_config(temp_root: &Path) -> OrchestratorConfig {
                                     prehook: None,
                                     tty: false,
                                     template: None,
-                                    outputs: Vec::new(),
-                                    pipe_to: None,
                                     command: None,
                                     chain_steps: vec![],
                                     scope: None,

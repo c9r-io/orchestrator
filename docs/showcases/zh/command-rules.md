@@ -1,12 +1,12 @@
-# Command Rules 模板
+# Driver Session 连续性模板
 
 > **Harness Engineering 模板**：这个 showcase 展示 orchestrator 作为 agent-first 软件交付控制面的一个能力切片，把 agent、workflow、policy 和反馈闭环固化为可复用的工程资产。
 >
-> **模板用途**：Agent Session 复用与隔离 — 通过 command_rules 和 step_vars 实现跨步骤 session 共享，同时让 QA 步骤独立分析。
+> **模板用途**：Agent Session 复用与隔离 —— 步骤通过 `behavior.driverRequirements.sessionResume` 显式声明续接 provider session；不声明的步骤自动开新 session。
 
 ## 适用场景
 
-- AI Agent（如 Claude Code）支持 session 模式：首步创建 session，后续步骤 `--resume` 续接上下文
+- AI Agent（如 Claude Code）支持 session 模式：先行步骤建立上下文，后续步骤续接
 - 计划和实现步骤需要共享 session 上下文（plan 的输出是 implement 的输入前提）
 - QA 步骤需要独立 session，避免先入为主的偏差
 
@@ -43,86 +43,81 @@ orchestrator task logs <task_id>
 ## 工作流步骤
 
 ```
-create_session (new) → plan (resume) → implement (resume) → qa_testing (new, isolated)
+create_session（新建）→ plan（续接）→ implement（续接）→ qa_testing（新建，隔离）
 ```
 
-### 步骤详解
+### 逐步拆解
 
-| 步骤 | loop_session_id | command_rules 匹配 | 使用的 command | 效果 |
-|------|----------------|-------------------|--------------|------|
-| create_session | 不存在 | 无匹配 → 默认 | 新建 session | 输出含 `session_id`，capture 到 pipeline vars |
-| plan | `"ses-abc-123"` | rule[0] ✓ | resume session | 复用 session 上下文 |
-| implement | `"ses-abc-123"` | rule[0] ✓ | resume session | 在 plan 基础上继续 |
-| qa_testing | `""` (step_vars 清空) | 无匹配 → 默认 | 新建 session | 独立分析，无先入为主偏差 |
+| 步骤 | `sessionResume` | 使用的 session | 效果 |
+|------|----------------|---------------|------|
+| create_session | 未声明 | 新 session | 建立 provider 上下文 |
+| plan | `true` | 续接 | 复用 session 上下文 |
+| implement | `true` | 续接 | 在 plan 基础上继续 |
+| qa_testing | 未声明 | 新 session | 独立分析，无偏差 |
 
-QA 步骤结束后，`loop_session_id` 恢复为 `"ses-abc-123"`（step_vars 只是临时覆盖）。
+隔离是默认行为。只有明确声明的步骤才与先前步骤连续。
 
-### 核心机制 1：behavior.captures
+### 核心机制：`behavior.driverRequirements.sessionResume`
 
 ```yaml
-- id: create_session
+- id: plan
+  type: plan
+  required_capability: plan
+  template: plan
   behavior:
-    captures:
-      - var: loop_session_id     # 写入 pipeline 变量名
-        source: stdout           # 从 stdout 提取
-        json_path: "$.session_id"  # JSON path 定位
-```
+    driverRequirements:
+      sessionResume: true       # 续接 provider 上下文
+      workspaceAccess: write
 
-Agent 输出 `{"session_id":"ses-abc-123",...}`，capture 自动提取 `session_id` 字段并写入 `loop_session_id` pipeline 变量。后续所有步骤都能访问这个变量。
-
-### 核心机制 2：command_rules
-
-```yaml
-kind: Agent
-spec:
-  command: echo 'new session'          # 默认：创建新 session
-  command_rules:
-    - when: "loop_session_id != \"\""  # CEL 条件：session 存在
-      command: echo 'resumed session'  # 匹配时：复用 session
-```
-
-- Pipeline variables 以**顶级名称**注入 CEL（直接写 `loop_session_id`，不需要 `vars.` 前缀）
-- 按序评估，首个 true 生效；全不匹配则用默认 `command`
-- 匹配的 rule index 记录在 `command_runs.command_rule_index` 用于审计
-
-### 核心机制 3：step_vars
-
-```yaml
 - id: qa_testing
-  step_vars:
-    loop_session_id: ""    # 临时清空 → 强制新 session
+  type: qa_review
+  required_capability: qa_review
+  template: qa_review
+  behavior:
+    driverRequirements:
+      workspaceAccess: write    # 未声明 sessionResume → 新 session
 ```
 
-- 步骤执行前将 `step_vars` 合并到 pipeline vars 的浅拷贝
-- 步骤执行后恢复原始值（`loop_session_id` 回到 `"ses-abc-123"`）
-- 只影响当前步骤的输入视图，不影响全局 pipeline 状态
+Provider 的 session 标识符始终不离开 daemon：不从 stdout 捕获、不经变量传递、不出现在任何
+manifest 中——步骤声明的是**需求**，由 driver 去满足。若所选 agent 的 driver 不支持续接，apply
+会以 `[driver_session_resume_required]` 拒绝该 workflow，使不兼容组合在任务运行前暴露，而不是
+悄悄开一个新 session。
+
+### 为什么不再用旧写法
+
+本模板此前用 `behavior.captures` 从 agent 的 stdout 中捕获 session id，用 Agent 级的
+`command_rules` CEL 块据此切换命令，再用 `step_vars` 为某一步清空它。三者都把一个 provider
+内部标识符送进了 manifest 可见的协调状态：
+
+- `behavior.captures` 已随协调机制坍缩移除 —— `[legacy_coordination_removed]`
+- `step_vars` 已随 pipeline 变量授权面一并移除 —— `[legacy_pipeline_variables_removed]`
+- `command_rules` 在 `Agent` 上仍然存在，但已不是表达 session 连续性的方式
+
+typed 需求取代了全部三者，这也是为什么隔离现在是默认行为，而不再需要靠清空一个变量来安排。
 
 ## 自定义指南
 
-### 替换为真实 Agent（Claude Code Session）
+### 隔离更多步骤
+
+不声明 `sessionResume` 即可，没有任何东西需要清空：
 
 ```yaml
-# 默认：创建新 session
-command: claude -p "{prompt}" --session-id new --output-format stream-json
-
-command_rules:
-  # 有 session → 复用
-  - when: "loop_session_id != \"\""
-    command: claude -p "{prompt}" --resume {loop_session_id} --output-format stream-json
-```
-
-### 更多 step_vars 隔离场景
-
-```yaml
-# 安全审计步骤：独立 session + 额外安全指令
 - id: security_audit
-  step_vars:
-    loop_session_id: ""           # 独立 session
-    audit_mode: "strict"          # 注入审计配置
+  type: qa_review
+  required_capability: qa_review
+  behavior:
+    driverRequirements:
+      workspaceAccess: write
 ```
+
+### 向步骤传递配置
+
+写进该步骤自己的 `StepTemplate` prompt，或在步骤命令中用
+`orchestrator store get <store> <key> --project {project_id}` 从 store 读取。
 
 ## 进阶参考
 
 - [Plan & Execute 模板](plan-execute.md) — StepTemplate 和变量传递基础
 - [Self-Bootstrap Execution](self-bootstrap-execution-template.md) — 生产级多步骤 workflow
-- [CEL Prehooks](../../guide/zh/04-cel-prehooks.md) — CEL 表达式语法参考
+- [Coordination Tools](../../guide/zh/coordination-tools.md) — 旧协调机制的 typed 替代
+- [错误码](../../guide/zh/error-codes.md) — `legacy_coordination_removed`、`legacy_pipeline_variables_removed`

@@ -43,9 +43,11 @@ spec:
   cost_preference: balance          # （可选）"performance" | "quality" | "balance"
   prehook: {...}                    # （可选）条件执行 —— 参见第 04 章
   behavior: {...}                   # （可选）on_failure、captures、post_actions
-  store_inputs: [...]               # （可选）执行前从工作流存储读取
-  store_outputs: [...]              # （可选）执行后写入工作流存储
 ```
+
+> `store_inputs`、`store_outputs`、`step_vars` 与 `store_put` 后置动作已移除。
+> 携带其中任意一项的 manifest 会被 `[legacy_pipeline_variables_removed]` 拒绝。
+> 步骤改为直接读写 store —— 参见[持久化存储](05-advanced-features.md#持久化存储wp01)。
 
 ### 步骤执行模式
 
@@ -229,10 +231,6 @@ behavior:
   post_actions:
     - type: create_ticket          # 创建失败工单
     - type: scan_tickets           # 扫描工单目录
-    - type: store_put              # 写入工作流存储（WP01）
-      store: context
-      key: finding
-      from_var: plan_output
     - type: spawn_task             # 派生子任务（WP02）
       goal: "verify-changes"
       workflow: verify_workflow

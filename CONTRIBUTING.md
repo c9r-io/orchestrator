@@ -102,8 +102,13 @@ ruby scripts/qa/coordination-governance.rb --emit-inventory # print the candidat
 ruby scripts/qa/coordination-governance.rb --emit-inventory --write   # apply it locally
 ```
 
-`--emit-baseline` does the same for the four source-touch ratchets, which are compared exactly.
-`--write` refuses to run under `CI`.
+`--emit-baseline` does the same for the four source-touch ratchets, which are compared exactly, and
+`--emit-consumers` for the production consumer counts in `consumerInventory`. All three accept
+`--write`, which refuses to run under `CI`.
+
+`--emit-consumers` regenerates only the counts. The rest of each entry — `state`, `scope`,
+`retainedCarrier`, the code-level blockers — is a reviewed judgement about what the count *means*,
+and a tool that rewrote it would be deciding rather than measuring.
 
 **Commit the ledger update in the same commit as the change that caused it.** This is a constraint,
 not a convention: the mismatch report derives the previous spec from `git show HEAD:<file>`, so

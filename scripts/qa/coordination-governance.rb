@@ -31,6 +31,7 @@ options = {
   test_fixtures: false,
   emit_inventory: false,
   emit_baseline: false,
+  emit_consumers: false,
   write: false
 }
 OptionParser.new do |parser|
@@ -40,6 +41,7 @@ OptionParser.new do |parser|
   parser.on("--test-fixtures") { options[:test_fixtures] = true }
   parser.on("--emit-inventory") { options[:emit_inventory] = true }
   parser.on("--emit-baseline") { options[:emit_baseline] = true }
+  parser.on("--emit-consumers") { options[:emit_consumers] = true }
   parser.on("--write") { options[:write] = true }
 end.parse!
 
@@ -422,7 +424,84 @@ end
 
 actual_agents = production_agent_inventory(agents)
 
-if options[:emit_inventory] || options[:emit_baseline]
+# Consumer inventories are computed here, above the emit block, because
+# --emit-consumers regenerates the counts the gate compares against and so has
+# to see them before the comparison turns a stale count into an error.
+capture_consumers = documents.flat_map do |document|
+  document["touches"].map do |touch|
+    next unless touch["kind"] == "capture" ||
+      (touch["kind"] == "post_action" && touch.key?("json_path"))
+    {"file" => document["file"], "workflow" => document["name"], "touch" => touch}
+  end.compact
+end
+# The step-level constructs that write an author-chosen value into the generic
+# pipeline-variable map. All are rejected at apply with
+# [legacy_pipeline_variables_removed] (FR-156), and this list must stay equal to
+# what that rejection covers — a kind counted here but not rejected would let
+# the ledger claim a surface is closed while it is only unread.
+#
+# `capture` was on this list and is not any more: behavior.captures belongs to
+# the capturesOrJsonPath coordinate, which already carries it, and counting it
+# in both meant one construct showing up as two consumers.
+#
+# `outputs` and `pipe_to` are gone for a different reason: they were never
+# wired. Neither is a field of WorkflowStepSpec, and every conversion path set
+# the WorkflowStepConfig fields to empty unconditionally, so no manifest could
+# populate them and nothing read them. Counting them as "production consumers"
+# counted something that could not have one. FR-156 deleted the fields; an
+# author who writes `outputs:` now gets the ordinary unknown-field warning.
+pipeline_consumer_kinds = %w[
+  step_vars
+  store_inputs
+  store_outputs
+].freeze
+pipeline_consumers = documents.flat_map do |document|
+  document["touches"].map do |touch|
+    # The store_put post-action is the sixth. It reads a pipeline variable by
+    # name and writes it to a store, and no coordinate counted it: capture
+    # consumers take a post_action only when it carries json_path, and this list
+    # matches on kind, which for every post-action is "post_action".
+    is_store_put = touch["kind"] == "post_action" && touch["name"] == "store_put"
+    next unless pipeline_consumer_kinds.include?(touch["kind"]) || is_store_put
+    {"file" => document["file"], "workflow" => document["name"], "touch" => touch}
+  end.compact
+end
+governance_cel_names = %w[
+  active_ticket_count
+  api_publishable
+  is_last_cycle
+  mark_done
+  qa_file_path
+  self_referential_safe
+  self_referential_safe_scenarios
+  endsWith
+  size
+  startsWith
+  tools_called
+  true
+  false
+  in
+].freeze
+cel_coordination_consumers = documents.flat_map do |document|
+  document["touches"].map do |touch|
+    next unless %w[prehook convergence].include?(touch["kind"])
+    expression = touch["expression"].to_s.gsub(
+      /"(?:\\.|[^"])*"|'(?:\\.|[^'])*'/,
+      " "
+    )
+    identifiers = expression.scan(/[A-Za-z_][A-Za-z0-9_]*/).uniq
+    unexpected = identifiers - governance_cel_names
+    next if unexpected.empty?
+    {
+      "file" => document["file"],
+      "workflow" => document["name"],
+      "touch" => touch,
+      "coordinationIdentifiers" => unexpected.sort
+    }
+  end.compact
+end
+
+if options[:emit_inventory] || options[:emit_baseline] || options[:emit_consumers]
   unless errors.empty?
     warn "refusing to emit a candidate from a repository that does not parse:"
     errors.each { |error| warn "  - #{error}" }
@@ -436,6 +515,27 @@ if options[:emit_inventory] || options[:emit_baseline]
     source_counts(rust_source_files(repo_root)).each { |name, count| baseline[name] = count }
     candidate["sourceBaseline"] = baseline
   end
+  if options[:emit_consumers]
+    # Only the counts are regenerated. Everything else in a consumerInventory
+    # entry -- state, scope, retainedCarrier, the code-level blockers -- is a
+    # reviewed judgement about what the count means, and a tool that rewrote it
+    # would be deciding rather than measuring. FR-156 added this because its own
+    # acceptance criterion asked for a count "produced by the regeneration tool"
+    # and no such emitter existed: --emit-inventory covers production Agents
+    # only, so the number the gate compares was the one number in the ledger a
+    # human had to type.
+    inventory = (ledger["consumerInventory"] || {}).dup
+    {
+      "capturesOrJsonPath" => capture_consumers,
+      "pipelineVariables" => pipeline_consumers,
+      "celCoordination" => cel_coordination_consumers
+    }.each do |channel, consumers|
+      entry = (inventory[channel] || {}).dup
+      entry["productionConsumerCount"] = consumers.length
+      inventory[channel] = entry
+    end
+    candidate["consumerInventory"] = inventory
+  end
 
   if options[:write]
     # A regenerated candidate is a proposal for a human to review in a diff. In
@@ -448,6 +548,7 @@ if options[:emit_inventory] || options[:emit_baseline]
     updated = ledger
     updated["retirement"]["shellRunnerExecutor"]["productionAgents"] = candidate["productionAgents"] if candidate.key?("productionAgents")
     updated["sourceBaseline"] = candidate["sourceBaseline"] if candidate.key?("sourceBaseline")
+    updated["consumerInventory"] = candidate["consumerInventory"] if candidate.key?("consumerInventory")
     File.write(ledger_path, ledger_json(updated))
     warn "wrote #{options[:ledger]}; review the diff and commit it with the change that caused it"
     exit 0
@@ -461,7 +562,7 @@ if options[:emit_inventory] || options[:emit_baseline]
 end
 
 if options[:write]
-  warn "--write requires --emit-inventory and/or --emit-baseline"
+  warn "--write requires --emit-inventory, --emit-baseline and/or --emit-consumers"
   exit 2
 end
 
@@ -536,61 +637,6 @@ retirement = ledger["retirement"] || {}
   errors << "retirement policy #{stage} is missing" unless retirement.key?(stage)
 end
 
-capture_consumers = documents.flat_map do |document|
-  document["touches"].map do |touch|
-    next unless touch["kind"] == "capture" ||
-      (touch["kind"] == "post_action" && touch.key?("json_path"))
-    {"file" => document["file"], "workflow" => document["name"], "touch" => touch}
-  end.compact
-end
-pipeline_consumer_kinds = %w[
-  capture
-  step_vars
-  store_inputs
-  store_outputs
-  outputs
-  pipe_to
-].freeze
-pipeline_consumers = documents.flat_map do |document|
-  document["touches"].map do |touch|
-    next unless pipeline_consumer_kinds.include?(touch["kind"])
-    {"file" => document["file"], "workflow" => document["name"], "touch" => touch}
-  end.compact
-end
-governance_cel_names = %w[
-  active_ticket_count
-  api_publishable
-  is_last_cycle
-  mark_done
-  qa_file_path
-  self_referential_safe
-  self_referential_safe_scenarios
-  endsWith
-  size
-  startsWith
-  tools_called
-  true
-  false
-  in
-].freeze
-cel_coordination_consumers = documents.flat_map do |document|
-  document["touches"].map do |touch|
-    next unless %w[prehook convergence].include?(touch["kind"])
-    expression = touch["expression"].to_s.gsub(
-      /"(?:\\.|[^"])*"|'(?:\\.|[^'])*'/,
-      " "
-    )
-    identifiers = expression.scan(/[A-Za-z_][A-Za-z0-9_]*/).uniq
-    unexpected = identifiers - governance_cel_names
-    next if unexpected.empty?
-    {
-      "file" => document["file"],
-      "workflow" => document["name"],
-      "touch" => touch,
-      "coordinationIdentifiers" => unexpected.sort
-    }
-  end.compact
-end
 legacy_command_agents = agents.select { |agent| agent["legacyCommandOnly"] }
 driver_ids = %w[shell/cli claude/cli codex/cli]
 driver_ids |= agents.map { |agent| agent["driverId"] }.compact

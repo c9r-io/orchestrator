@@ -413,8 +413,6 @@ fn make_step(
         prehook: None,
         tty: false,
         template: None,
-        outputs: vec![],
-        pipe_to: None,
         command: None,
         chain_steps: vec![],
         scope: None,
@@ -427,9 +425,6 @@ fn make_step(
         timeout_secs: None,
         stall_timeout_secs: None,
         item_select_config: None,
-        store_inputs: vec![],
-        store_outputs: vec![],
-        step_vars: None,
     }
 }
 

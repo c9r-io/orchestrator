@@ -212,6 +212,47 @@ else
   fail "--emit-baseline diverges from the reviewed sourceBaseline"
 fi
 
+# ── 6b. The consumer emitter agrees with the reviewed counts ──
+#
+# FR-156 added --emit-consumers because its own acceptance criterion asked for a
+# consumer count "produced by the regeneration tool" and no such emitter
+# existed. Equality alone is weak here -- an emitter that echoed the ledger back
+# would satisfy it -- so the second case below moves a count and requires the
+# emitter to disagree with the file.
+
+DIR="$(new_case emit-consumers)"
+if diff -q \
+  <(ruby "$DIR/$GATE" --emit-consumers) \
+  <(jq '.consumerInventory' "$DIR/$LEDGER") >/dev/null; then
+  pass "--emit-consumers reproduces the reviewed consumerInventory"
+else
+  fail "--emit-consumers diverges from the reviewed consumerInventory"
+fi
+
+# The emitter must measure the repository, not restate the ledger. Corrupting
+# the stored count has to leave the emitted candidate unmoved: if the two track
+# each other, the emitter is a copy and regenerating from it would launder any
+# number a human typed.
+DIR="$(new_case emit-consumers-independence)"
+EMITTED_BEFORE="$(cd "$DIR" && ruby "$GATE" --emit-consumers |
+  jq -r '.pipelineVariables.productionConsumerCount')"
+if fixture_mutate "emit-consumers-independence" "$DIR/$LEDGER" ruby -rjson -e '
+ledger = JSON.parse(File.read(ARGV[0]))
+ledger["consumerInventory"]["pipelineVariables"]["productionConsumerCount"] = 7
+File.write(ARGV[0], JSON.pretty_generate(ledger) + "\n")
+' "$DIR/$LEDGER"; then
+  EMITTED_AFTER="$(cd "$DIR" && ruby "$GATE" --emit-consumers |
+    jq -r '.pipelineVariables.productionConsumerCount')"
+  STORED_AFTER="$(jq -r '.consumerInventory.pipelineVariables.productionConsumerCount' \
+    "$DIR/$LEDGER")"
+  if [[ "$EMITTED_BEFORE" == "$EMITTED_AFTER" && "$STORED_AFTER" == "7" &&
+        "$EMITTED_AFTER" != "7" ]]; then
+    pass "--emit-consumers derives the count from the tree, not from the ledger it rewrites"
+  else
+    fail "--emit-consumers echoed the stored count ($EMITTED_BEFORE -> $EMITTED_AFTER, stored $STORED_AFTER)"
+  fi
+fi
+
 # ── 7. The scanner means what sourceBaseline.scope says ──
 #
 # The scope claims inline cfg(test) modules are excluded. Before FR-128 only a

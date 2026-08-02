@@ -29,7 +29,7 @@
   "sourceBaseline": {
     "scope": "non-test Rust source under core/src and crates/*/src, excluding inline cfg(test) modules, plus member Cargo.toml manifests",
     "capturesOrJsonPath": 53,
-    "pipelineVariables": 30,
+    "pipelineVariables": 29,
     "celInterpreter": 9,
     "legacyRunnerSelection": 0
   },

@@ -136,7 +136,7 @@ kind: WorkflowStore
 metadata:
   name: context
 spec:
-  backend: local           # "local"（SQLite）或 "command"（shell 命令）
+  provider: local          # "local"（SQLite）、"file"，或某个 StoreBackendProvider 名称
   schema:
     type: object
     properties:
@@ -144,34 +144,38 @@ spec:
         type: string
   retention:
     max_entries: 1000
-    ttl_seconds: 86400      # 可选：24 小时后自动过期
+    ttl_days: 30            # 可选：清理早于该天数的条目
 ```
+
+声明 `WorkflowStore` 是可选的——未声明的 store 名称会以上述默认值自动置备。
 
 ### 从步骤读写
 
-步骤通过 `store_inputs`、`store_outputs` 和 `post_actions` 与存储交互：
+步骤直接使用 CLI。`{project_id}` 由任务上下文渲染，因此无需向步骤注入任何值：
 
 ```yaml
 steps:
   - id: plan
     scope: task
     enabled: true
-    command: "echo '{\"confidence\":0.95}'"
-    behavior:
-      post_actions:
-        - type: store_put
-          store: context
-          key: plan_result
-          from_var: plan_output
+    command: >-
+      RESULT="$(echo '{"confidence":0.95}')" &&
+      orchestrator store put context plan_result "$RESULT" --project {project_id}
 
   - id: implement
     scope: task
     enabled: true
-    store_inputs:                # 执行前从存储读取
-      - store: context
-        key: plan_result
-        as_var: inherited_plan
+    command: >-
+      INHERITED="$(orchestrator store get context plan_result
+      --project {project_id} 2>/dev/null || true)" &&
+      echo "planning said: $INHERITED"
 ```
+
+对于 agent step，把同一条命令写进 StepTemplate 的 prompt，让 agent 自己执行。
+
+> 本节此前描述的声明式绑定——`store_inputs`、`store_outputs`、`step_vars` 与 `store_put`
+> 后置动作——已被移除。它们通过一张通用 pipeline 变量表传值，而该表已不再是授权面；
+> 使用其中任意一项的 manifest 会被 `[legacy_pipeline_variables_removed]` 拒绝。
 
 ### CLI 操作
 

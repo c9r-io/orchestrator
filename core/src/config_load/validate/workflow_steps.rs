@@ -103,12 +103,12 @@ fn reject_retired_authoring(step: &WorkflowStepConfig, workflow_id: &str) -> Res
 
 /// Reject the retired step-level pipeline-variable authoring surface (FR-156).
 ///
-/// All four of these route an author-chosen value through
-/// `PipelineVariables.vars`, the generic map the coordination collapse retired:
-/// `store_inputs` reads a store into it, `store_outputs` and the `store_put`
-/// post-action write a variable out of it, and `step_vars` overlays it for one
-/// step. Steps address project-scoped state directly now — the CLI, or a typed
-/// daemon tool — so none of them has a live consumer.
+/// Each of these routes an author-chosen value through `PipelineVariables.vars`,
+/// the generic map the coordination collapse retired: `store_inputs` reads a
+/// store into it, `store_outputs` and the `store_put` post-action write a
+/// variable out of it, and `step_vars` overlays it for one step. Steps address
+/// project-scoped state directly now — the CLI, or a typed daemon tool — so
+/// none has a live consumer.
 ///
 /// The spec types stay deserializable on purpose (DD-137): a removed field that
 /// still parses can be answered with a stable retirement diagnostic naming it,
@@ -116,7 +116,12 @@ fn reject_retired_authoring(step: &WorkflowStepConfig, workflow_id: &str) -> Res
 ///
 /// One arm per field rather than one combined predicate, so the diagnostic
 /// always names the field the author actually wrote. A single message covering
-/// all four would be satisfied by a validator that detected the wrong one.
+/// all of them would be satisfied by a validator that detected the wrong one.
+///
+/// This set must stay equal to `pipeline_consumer_kinds` in
+/// `scripts/qa/coordination-governance.rb`. A kind that gate counts but this
+/// function does not reject would let the ledger record a surface as closed
+/// while it is merely unread.
 fn reject_pipeline_variable_authoring(step: &WorkflowStepConfig, workflow_id: &str) -> Result<()> {
     let retired = if !step.store_inputs.is_empty() {
         Some(

@@ -610,8 +610,6 @@ pub fn create_run_step_task(
         cost_preference: None,
         prehook: None,
         tty: false,
-        outputs: Vec::new(),
-        pipe_to: None,
         command: None,
         chain_steps: Vec::new(),
         scope: None,
@@ -621,9 +619,6 @@ pub fn create_run_step_task(
         timeout_secs: None,
         stall_timeout_secs: None,
         item_select_config: None,
-        store_inputs: Vec::new(),
-        store_outputs: Vec::new(),
-        step_vars: None,
     };
 
     let execution_plan = TaskExecutionPlan {
@@ -820,8 +815,6 @@ mod tests {
             cost_preference: None,
             prehook: None,
             tty: false,
-            outputs: Vec::new(),
-            pipe_to: None,
             command: None,
             chain_steps: vec![],
             scope: None,

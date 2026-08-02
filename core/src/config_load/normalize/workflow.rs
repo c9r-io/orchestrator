@@ -64,8 +64,6 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
                 prehook: None,
                 tty: false,
                 template: None,
-                outputs: Vec::new(),
-                pipe_to: None,
                 command: None,
                 chain_steps: vec![],
                 scope: None,
