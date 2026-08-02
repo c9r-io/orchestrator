@@ -173,6 +173,12 @@ steps:
 
 对于 agent step，把同一条命令写进 StepTemplate 的 prompt，让 agent 自己执行。
 
+> **步骤必须能找到你的 daemon。** runner 会把环境变量裁剪到
+> `RuntimePolicy.runner.env_allowlist`，其默认值为 `PATH, HOME, USER, LANG, TERM`。当 daemon 运行在
+> 同一 `HOME` 下的默认数据目录时这已足够。若不是——自定义了 `ORCHESTRATORD_DATA_DIR`，或使用了显式的
+> control-plane 配置——需要把这些变量加入 allowlist，否则步骤内的 CLI 会报
+> `daemon socket not found`，而 `|| true` 兜底会把它悄悄变成一个空值。
+
 > 本节此前描述的声明式绑定——`store_inputs`、`store_outputs`、`step_vars` 与 `store_put`
 > 后置动作——已被移除。它们通过一张通用 pipeline 变量表传值，而该表已不再是授权面；
 > 使用其中任意一项的 manifest 会被 `[legacy_pipeline_variables_removed]` 拒绝。

@@ -1,9 +1,14 @@
 ---
-lifecycle: active
+lifecycle: superseded
 self_referential_safe: true
+superseded_by: docs/design_doc/orchestrator/169-pipeline-variable-surface-retirement.md
 ---
 
 # QA-100b: Agent Command Rules + Step Vars (Advanced)
+
+> **Superseded by [DD-169](../../design_doc/orchestrator/169-pipeline-variable-surface-retirement.md).** The
+> `step_vars` manifest-parsing scenarios describe a construct FR-156 rejects at
+> apply. The `command_rules` scenarios still hold.
 
 Continuation of [QA-100](100-agent-command-rules-step-vars.md). Covers DB migration, YAML manifest parsing for `command_rules`, and `step_vars` in workflow YAML.
 

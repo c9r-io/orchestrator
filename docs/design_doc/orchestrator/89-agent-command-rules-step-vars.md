@@ -1,9 +1,17 @@
 ---
-lifecycle: active
+lifecycle: superseded
 related_fr: FR-084
+superseded_by: docs/design_doc/orchestrator/169-pipeline-variable-surface-retirement.md
 ---
 
 # Design Doc 89: Agent Command Rules + Step Vars
+
+> **Superseded by [DD-169](169-pipeline-variable-surface-retirement.md).** FR-156 removed `step_vars`; a
+> manifest using it is rejected with `[legacy_pipeline_variables_removed]`. Agent
+> `command_rules` still exists, but session continuity is expressed through
+> `behavior.driverRequirements.sessionResume` rather than a CEL switch on a
+> captured session id — and `behavior.captures`, which supplied that id, was
+> removed earlier by DD-137. This document records the FR-084 design as built.
 
 ## Origin
 

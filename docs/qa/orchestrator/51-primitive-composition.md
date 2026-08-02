@@ -1,9 +1,17 @@
 ---
-lifecycle: active
+lifecycle: superseded
+superseded_by: docs/design_doc/orchestrator/169-pipeline-variable-surface-retirement.md
 self_referential_safe: false
 ---
 
 # Orchestrator - Primitive Composition (WP05)
+
+> **Superseded by [DD-169](../../design_doc/orchestrator/169-pipeline-variable-surface-retirement.md).** The
+> store half of this composition used a `store_put` post-action and a
+> `store_inputs` binding, both removed by FR-156, so
+> `fixtures/manifests/bundles/wp05-store-spawn.yaml` is now rejected at apply and
+> is declared in `config/governance/fixture-bundle-validity.json`. The spawning
+> half is unaffected.
 
 **Module**: orchestrator
 **Scope**: WP01/WP02/WP04 pairwise composition — Store, Spawning, Invariants

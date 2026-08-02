@@ -1,10 +1,15 @@
 ---
-lifecycle: active
+lifecycle: superseded
 related_fr: FR-084
 self_referential_safe: true
+superseded_by: docs/design_doc/orchestrator/169-pipeline-variable-surface-retirement.md
 ---
 
 # QA-100: Agent Command Rules + Step Vars
+
+> **Superseded by [DD-169](../../design_doc/orchestrator/169-pipeline-variable-surface-retirement.md).** The
+> `step_vars` scenarios below no longer describe a construct the product accepts:
+> FR-156 rejects it at apply. The `command_rules` scenarios still hold.
 
 Validates FR-084: agent `command_rules` (CEL conditional command selection), step `step_vars` (temporary pipeline variable overlay), and `command_rule_index` audit column.
 

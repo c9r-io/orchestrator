@@ -175,6 +175,13 @@ steps:
 
 For an agent step, put the same command in the StepTemplate prompt and let the agent run it.
 
+> **The step has to be able to find your daemon.** The runner clears the environment down to
+> `RuntimePolicy.runner.env_allowlist`, which defaults to `PATH, HOME, USER, LANG, TERM`. That is
+> enough when the daemon runs on the default data directory under the same `HOME`. If yours does
+> not — a custom `ORCHESTRATORD_DATA_DIR`, or an explicit control-plane config — add those variables
+> to the allowlist, or the CLI inside the step reports `daemon socket not found` and a
+> `|| true` fallback silently turns that into an empty value.
+
 > The declarative bindings this section used to describe — `store_inputs`, `store_outputs`,
 > `step_vars` and the `store_put` post-action — were removed. They carried values through a generic
 > pipeline-variable map that no longer exists as an authoring surface; a manifest using any of them

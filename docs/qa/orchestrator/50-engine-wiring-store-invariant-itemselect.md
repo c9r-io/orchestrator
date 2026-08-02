@@ -1,8 +1,16 @@
 ---
-lifecycle: active
+lifecycle: superseded
+superseded_by: docs/design_doc/orchestrator/169-pipeline-variable-surface-retirement.md
 ---
 
 # Orchestrator - Engine Wiring: Store I/O, Invariants, Item Select (WP01-WP04 Integration)
+
+> **Superseded by [DD-169](../../design_doc/orchestrator/169-pipeline-variable-surface-retirement.md).**
+> `store_inputs`, `store_outputs` and the `store_put` post-action were removed by
+> FR-156 and are rejected at apply. Steps read and write stores with
+> `orchestrator store get|put ... --project {project_id}`; current assertions are in
+> [QA-207](207-pipeline-variable-surface-retirement.md). The invariant and
+> item_select scenarios here are unaffected by that removal.
 
 **Module**: orchestrator
 **Scope**: store_inputs/store_outputs pipeline wiring, PostAction::StorePut, invariant checkpoints in loop_engine, item_select orchestration, pending_generate_items consumption
