@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "capturedAtRevision": "1cf6f3ccc3530dfd3b061cd7729b09c4fe20bc6e",
+  "note": "Pre-migration contract of the two production store_inputs consumers. Recorded by scripts/qa/test-pipeline-variable-retirement.sh --capture-baseline before FR-156 removed the binding. Replayed per object by the same script in verify mode.",
+  "objects": {
+    "promotion#gather_updates": {
+      "branchesDistinguishable": false,
+      "branchesDistinguishableNote": "Derived by comparing the two recordings below, not asserted. False means the old path produced identical output whether or not promotion/last_published_sha was set: both {last_published_sha} occurrences in the command substitute, so the guard [ \"$LAST_SHA\" != \"{last_published_sha}\" ] compares the value to itself and the scoped-log branch is unreachable. Verify mode requires the migrated step to distinguish them.",
+      "store-key-present": {
+        "terminal": "completed",
+        "exit_code": 0,
+        "stdout": "=== Recent changes (no prior promotion recorded) ===\n<sha-short> third commit\n<sha-short> second commit\n<sha-short> first commit"
+      },
+      "store-key-absent": {
+        "terminal": "completed",
+        "exit_code": 0,
+        "stdout": "=== Recent changes (no prior promotion recorded) ===\n<sha-short> third commit\n<sha-short> second commit\n<sha-short> first commit"
+      }
+    },
+    "self-evolution#evo_apply_winner": {
+      "terminal": "completed",
+      "exit_code": 0,
+      "stdout": "winner-data:{\"eliminated_ids\":[\"item-3\"],\"winner_id\":\"item-7\",\"winner_vars\":{\"score\":\"0.91\"}}"
+    }
+  }
+}

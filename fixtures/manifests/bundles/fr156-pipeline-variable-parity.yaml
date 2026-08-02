@@ -1,0 +1,287 @@
+# FR-156: per-object migration parity fixture.
+#
+# Each of the two production `store_inputs` consumers is reproduced here as an
+# isolated Workflow so its observable contract can be recorded before the
+# removal and replayed after it, per object rather than as one aggregate pass
+# (fr-governance §4.3).
+#
+# `-legacy` workflows hold the pre-migration shape and are rollback evidence:
+# after FR-156 they are rejected at apply with
+# [legacy_pipeline_variables_removed]. `-migrated` workflows hold the
+# post-migration shape and must stay applicable. The whole file is therefore
+# rejected on merge; test-pipeline-variable-retirement.sh splits it.
+---
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: fr156-ws
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: docs/ticket
+  self_referential: false
+---
+# No WorkflowStore documents: StoreManager::resolve_store_config auto-provisions
+# an undeclared store with defaults, and neither promotion.yaml nor
+# self-evolution.yaml declares one. Declaring them here would make the fixture
+# exercise a shape production does not use.
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: fr156_shell_agent
+spec:
+  driver:
+    provider: shell
+    transport: cli
+  capabilities:
+    - plan
+    - implement
+    - loop_guard
+  command: "echo '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[]}'"
+---
+# Object A, pre-migration: promotion.yaml#gather_updates.
+# The store value reaches the command through the generic pipeline-variable map
+# via template substitution of {last_published_sha}.
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: fr156-gather-updates-legacy
+spec:
+  steps:
+    - id: gather_updates
+      type: plan
+      scope: task
+      enabled: true
+      repeatable: false
+      tty: false
+      command: >-
+        cd {workspace_root} &&
+        LAST_SHA="{last_published_sha}" &&
+        if [ -n "$LAST_SHA" ] && [ "$LAST_SHA" != "{last_published_sha}" ]; then
+          echo "=== Changes since last promotion (${LAST_SHA:0:8}) ===" &&
+          git log --oneline --no-merges ${LAST_SHA}..HEAD 2>/dev/null || git log --oneline --no-merges -20;
+        else
+          echo "=== Recent changes (no prior promotion recorded) ===" &&
+          git log --oneline --no-merges -20;
+        fi
+      store_inputs:
+        - store: promotion
+          key: last_published_sha
+          as_var: last_published_sha
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: fixed
+    max_cycles: 1
+    enabled: true
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none
+---
+# Object A, post-migration: the step reads the store itself.
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: fr156-gather-updates-migrated
+spec:
+  steps:
+    - id: gather_updates
+      type: plan
+      scope: task
+      enabled: true
+      repeatable: false
+      tty: false
+      command: >-
+        cd {workspace_root} &&
+        LAST_SHA="$(orchestrator store get promotion last_published_sha --project {project_id} 2>/dev/null || true)" &&
+        if [ -n "$LAST_SHA" ]; then
+          echo "=== Changes since last promotion (${LAST_SHA:0:8}) ===" &&
+          git log --oneline --no-merges ${LAST_SHA}..HEAD 2>/dev/null || git log --oneline --no-merges -20;
+        else
+          echo "=== Recent changes (no prior promotion recorded) ===" &&
+          git log --oneline --no-merges -20;
+        fi
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: fixed
+    max_cycles: 1
+    enabled: true
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none
+---
+# Object B, pre-migration: self-evolution.yaml#evo_apply_winner.
+# The real step is an agent whose prompt template receives {prev_winner}. The
+# contract under test is which bytes the binding delivers to the step, so the
+# probe emits the substituted value verbatim rather than modelling the agent.
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: fr156-apply-winner-legacy
+spec:
+  steps:
+    - id: evo_apply_winner
+      type: implement
+      scope: task
+      enabled: true
+      repeatable: false
+      tty: false
+      command: >-
+        printf 'winner-data:%s\n' "{prev_winner}"
+      store_inputs:
+        - store: evolution
+          key: winner_latest
+          as_var: prev_winner
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: fixed
+    max_cycles: 1
+    enabled: true
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none
+---
+# Object B, post-migration: the step retrieves the same bytes itself, which is
+# what the migrated prompt instructs the agent to do.
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: fr156-apply-winner-migrated
+spec:
+  steps:
+    - id: evo_apply_winner
+      type: implement
+      scope: task
+      enabled: true
+      repeatable: false
+      tty: false
+      command: >-
+        printf 'winner-data:%s\n'
+        "$(orchestrator store get evolution winner_latest --project {project_id} 2>/dev/null || true)"
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: fixed
+    max_cycles: 1
+    enabled: true
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none
+---
+# Negative fixtures for the other three retired kinds. Each isolates one kind so
+# the diagnostic names that field and nothing else.
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: fr156-store-outputs-legacy
+spec:
+  steps:
+    - id: plan
+      type: plan
+      scope: task
+      enabled: true
+      repeatable: false
+      command: "echo '{\"confidence\":0.95}'"
+      store_outputs:
+        - store: promotion
+          key: recorded_sha
+          from_var: last_published_sha
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: fixed
+    max_cycles: 1
+    enabled: true
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: fr156-step-vars-legacy
+spec:
+  steps:
+    - id: plan
+      type: plan
+      scope: task
+      enabled: true
+      repeatable: false
+      command: "echo '{\"confidence\":0.95}'"
+      step_vars:
+        review_depth: "deep"
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: fixed
+    max_cycles: 1
+    enabled: true
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: fr156-store-put-legacy
+spec:
+  steps:
+    - id: plan
+      type: plan
+      scope: task
+      enabled: true
+      repeatable: false
+      command: "echo '{\"confidence\":0.95}'"
+      behavior:
+        post_actions:
+          - type: store_put
+            store: promotion
+            key: recorded_sha
+            from_var: last_published_sha
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: fixed
+    max_cycles: 1
+    enabled: true
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none
