@@ -235,3 +235,22 @@ the evidence, because a run that never started also leaves it empty.
   `std::env::temp_dir()` call sites across 13 files.
 - The reclamation gate is `manual-runbook`, not `ci-required`: it starts a daemon
   and signals process groups.
+- **`coordination-collapse-ledger.json`'s `capturesOrJsonPath` coordinate counts
+  `output_json_path`.** The scanner matches `/captures|json_path/` per line, and
+  `output_json_path` — the session's structured-output spill path, a live feature
+  with no relation to the retired JSONPath extraction the coordinate tracks —
+  contains that substring. This FR moved the number 53 → 55 purely by touching
+  `output_json_path` twice more in production code. Across tracked Rust sources
+  59 of 192 matching lines are `output_json_path`, so the coordinate overstates
+  the debt it claims to measure and will drift again for the same reason whenever
+  session code is touched. The baseline was regenerated per the documented
+  workflow rather than the matcher narrowed: anchoring it changes the meaning of
+  a reviewed ledger coordinate, which belongs to the coordination-collapse owner
+  and not to this FR. Recorded here so the next author of that ledger does not
+  have to rediscover it. An unanchored substring is a predicate with an open end,
+  and the question it never answers is what it includes that nobody named.
+- **`scripts/qa/ci-liveness.rb` is red for reasons unrelated to this work.** Its
+  job records were taken at `45fbf3c4`, before `.github/workflows/ci.yml` last
+  changed at `ceccf4f5`; both predate this FR's branch point and nothing here
+  touched the workflow. Refreshing it requires a real CI run, so it is left
+  failing rather than papered over.
