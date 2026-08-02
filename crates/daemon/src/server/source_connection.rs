@@ -23,6 +23,9 @@ use zeroize::Zeroizing;
 use super::OrchestratorServer;
 use super::action_audit::{self, ActionDescriptor};
 
+#[cfg(test)]
+mod tests;
+
 pub(crate) type SourceConnectionWatchStream =
     Pin<Box<dyn Stream<Item = Result<SourceConnectionDelta, Status>> + Send>>;
 
@@ -2567,81 +2570,5 @@ fn local_terminal_intent_status<'a>(gateway_status: &'a str, error_code: Option<
         "expired"
     } else {
         "failed"
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{local_terminal_intent_status, semantic_manifest_diff, validate_config_token};
-
-    #[test]
-    fn gateway_expiry_is_projected_as_a_local_expired_intent() {
-        assert_eq!(
-            local_terminal_intent_status("failed", Some("oauth_intent_expired")),
-            "expired"
-        );
-        assert_eq!(local_terminal_intent_status("expired", None), "expired");
-        assert_eq!(local_terminal_intent_status("cancelled", None), "cancelled");
-        assert_eq!(
-            local_terminal_intent_status("failed", Some("provider_denied")),
-            "failed"
-        );
-    }
-
-    #[test]
-    fn semantic_upgrade_diff_is_stable_and_flags_only_expansion() {
-        let current = serde_json::json!({
-            "oauth_config": {
-                "scopes": {"bot": ["reactions:read"]},
-                "redirect_urls": ["https://gateway.example/old/callback"]
-            },
-            "settings": {
-                "event_subscriptions": {
-                    "request_url": "https://gateway.example/old/events",
-                    "bot_events": ["reaction_added"]
-                },
-                "token_rotation_enabled": false
-            }
-        });
-        let target = serde_json::json!({
-            "oauth_config": {
-                "scopes": {"bot": ["chat:write", "reactions:read", "reactions:read"]},
-                "redirect_urls": ["https://gateway.example/new/callback"]
-            },
-            "settings": {
-                "event_subscriptions": {
-                    "request_url": "https://gateway.example/new/events",
-                    "bot_events": ["reaction_added"]
-                },
-                "token_rotation_enabled": true
-            }
-        });
-
-        let diff = semantic_manifest_diff(&current, &target).expect("semantic diff");
-        assert_eq!(diff.len(), 5);
-        assert_eq!(diff[0].field, "oauth.scopes.bot");
-        assert_eq!(diff[0].change, "add");
-        assert!(diff[0].permission_expansion);
-        assert_eq!(diff[0].after, vec!["chat:write", "reactions:read"]);
-        assert_eq!(diff[1].change, "unchanged");
-        assert!(!diff[1].permission_expansion);
-        assert_eq!(diff[2].before, vec!["https://gateway.example"]);
-        assert_eq!(diff[2].after, vec!["https://gateway.example"]);
-        assert_eq!(diff[4].change, "change");
-        assert!(!diff[4].permission_expansion);
-    }
-
-    #[test]
-    fn configuration_tokens_are_bounded_without_echoing_the_value() {
-        assert!(validate_config_token("xoxe.fixture").is_ok());
-        assert_eq!(
-            validate_config_token("")
-                .expect_err("empty token rejected")
-                .message(),
-            "Configuration Token must contain 1-8192 characters"
-        );
-        let marker = "secret-marker".repeat(700);
-        let error = validate_config_token(&marker).expect_err("oversized token rejected");
-        assert!(!error.message().contains("secret-marker"));
     }
 }
