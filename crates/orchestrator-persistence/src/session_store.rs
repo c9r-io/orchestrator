@@ -266,6 +266,52 @@ pub fn capture_process_fingerprint(pid: u32) -> Option<String> {
     }
 }
 
+/// Reads the parent PID of a running process, or `None` if it cannot be read.
+///
+/// Mirrors [`capture_process_fingerprint`]'s platform split for the same reason:
+/// `/proc` on Linux, `ps` elsewhere.
+pub fn process_parent_pid(pid: u32) -> Option<u32> {
+    #[cfg(target_os = "linux")]
+    {
+        let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+        let close = stat.rfind(')')?;
+        // Fields after comm begin at state; ppid is the one that follows it.
+        let fields: Vec<&str> = stat[close + 2..].split_whitespace().collect();
+        fields.get(1)?.parse().ok()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let output = std::process::Command::new("ps")
+            .args(["-o", "ppid=", "-p", &pid.to_string()])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        String::from_utf8_lossy(&output.stdout).trim().parse().ok()
+    }
+}
+
+/// Determines whether a live session process still belongs to this daemon.
+///
+/// A session is spawned as a direct child of the daemon, so while the daemon
+/// lives its sessions have it as their parent. When the daemon dies its sessions
+/// are reparented to `init` and there is no longer anything that can drive
+/// them: their stdout capture was wired to file descriptors of a process that no
+/// longer exists, and no future daemon adopts them.
+///
+/// This is the discriminator the FR's primary scenario actually needs. "The
+/// transport has disappeared" does not fire there: the input FIFO is a file
+/// under `logs/sessions/<id>/`, and it outlives the daemon perfectly well, so an
+/// orphan produced by `SIGKILL`ing the daemon looks exactly like a session
+/// waiting politely for its next writer. Parentage is what separates them.
+pub fn process_is_owned_by(pid: i64, owner_pid: u32) -> bool {
+    if pid <= 0 || pid > i32::MAX as i64 {
+        return false;
+    }
+    process_parent_pid(pid as u32).is_some_and(|parent| parent == owner_pid)
+}
+
 /// Determines whether a PID currently refers to a live process without granting authority.
 pub fn process_exists(pid: u32) -> bool {
     if pid == 0 || pid > i32::MAX as u32 {
@@ -288,6 +334,146 @@ pub fn process_identity_status(pid: i64, expected: Option<&str>) -> ProcessIdent
         Some(actual) if actual == expected => ProcessIdentityStatus::VerifiedLive,
         Some(_) => ProcessIdentityStatus::Mismatch,
         None => ProcessIdentityStatus::Unsupported,
+    }
+}
+
+/// Determines whether a PID leads its own process group.
+///
+/// `kill(-pid, …)` addresses the *group* whose id equals `pid`. Sessions are
+/// spawned with `process_group(0)`, so for them pid and pgid coincide and the
+/// negated form reaches the whole subtree. That equality is an assumption, not a
+/// guarantee: a fingerprint proves the PID is the same process it always was, it
+/// says nothing about group membership. If a recorded PID is not its own leader,
+/// the negated signal lands on somebody else's group entirely — so this is
+/// checked separately rather than inferred from identity.
+pub fn is_process_group_leader(pid: i64) -> bool {
+    if pid <= 0 || pid > i32::MAX as i64 {
+        return false;
+    }
+    // SAFETY: getpgid is a POSIX query with no side effects; a negative return
+    // reports an error and simply fails the comparison.
+    let pgid = unsafe { libc::getpgid(pid as libc::pid_t) };
+    pgid == pid as libc::pid_t
+}
+
+/// Why a process-group reclamation was refused.
+///
+/// Every variant means no signal was sent. The cost asymmetry is deliberate: a
+/// missed reclamation leaks one process, whereas signalling the wrong group can
+/// kill unrelated work, so anything short of positive proof refuses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReclaimRefusal {
+    /// The PID no longer refers to a running process; nothing to reclaim.
+    ProcessGone,
+    /// The PID is live but is a different incarnation — the PID was reused.
+    IdentityMismatch,
+    /// The PID is live but this platform cannot produce a trustworthy fingerprint.
+    IdentityUnsupported,
+    /// The PID is live and verified but does not lead its own process group.
+    NotGroupLeader,
+}
+
+impl ReclaimRefusal {
+    /// Stable identifier for logs, events and QA assertions.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ProcessGone => "process_gone",
+            Self::IdentityMismatch => "identity_mismatch",
+            Self::IdentityUnsupported => "identity_unsupported",
+            Self::NotGroupLeader => "not_group_leader",
+        }
+    }
+}
+
+/// How forcefully to reclaim a process group.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReclaimSignal {
+    /// A single `SIGKILL`, for an orphan whose transport has already gone.
+    Immediate,
+    /// `SIGTERM`, a grace period, then `SIGKILL` for whatever survives.
+    Graceful,
+}
+
+/// What a successful reclamation actually sent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReclaimSignalsSent {
+    /// A `SIGTERM` was delivered to the group.
+    pub sigterm: bool,
+    /// A `SIGKILL` was delivered to the group.
+    pub sigkill: bool,
+    /// The group was gone before any `SIGKILL` became necessary.
+    pub exited_on_sigterm: bool,
+}
+
+const RECLAIM_GRACE: std::time::Duration = std::time::Duration::from_millis(1500);
+const RECLAIM_POLL: std::time::Duration = std::time::Duration::from_millis(50);
+
+/// Signals the process group led by `pid`, refusing unless it is provably safe.
+///
+/// Three preconditions, all of which must hold before any signal is sent:
+///
+/// 1. `process_identity_status` says `VerifiedLive`. This is re-evaluated here
+///    rather than inherited from an earlier reconciliation pass — between the
+///    pass and the signal the process can exit and its PID be reused, and the
+///    whole point of the fingerprint is defeated by checking it early and acting
+///    late.
+/// 2. The PID leads its own process group. See [`is_process_group_leader`].
+/// 3. The caller opted in (the `session_reclaim_enabled` policy, enforced above
+///    this layer, which has no access to configuration).
+///
+/// The signal goes to `-pid`, the whole group, not to `pid`. A session may have
+/// spawned children; killing only the leader leaves them running and reparented,
+/// which is how the orphans in FR-159 came to have dead leaders and live
+/// descendants in the first place.
+pub fn reclaim_process_group(
+    pid: i64,
+    expected_fingerprint: Option<&str>,
+    signal: ReclaimSignal,
+) -> std::result::Result<ReclaimSignalsSent, ReclaimRefusal> {
+    match process_identity_status(pid, expected_fingerprint) {
+        ProcessIdentityStatus::VerifiedLive => {}
+        ProcessIdentityStatus::Dead => return Err(ReclaimRefusal::ProcessGone),
+        ProcessIdentityStatus::Mismatch => return Err(ReclaimRefusal::IdentityMismatch),
+        ProcessIdentityStatus::Unsupported => return Err(ReclaimRefusal::IdentityUnsupported),
+    }
+    if !is_process_group_leader(pid) {
+        return Err(ReclaimRefusal::NotGroupLeader);
+    }
+
+    let group = -(pid as i32);
+    match signal {
+        ReclaimSignal::Immediate => {
+            // SAFETY: kill(-pid, …) signals a process group. The preconditions
+            // above establish that this group is the session's own.
+            unsafe { libc::kill(group, libc::SIGKILL) };
+            Ok(ReclaimSignalsSent {
+                sigterm: false,
+                sigkill: true,
+                exited_on_sigterm: false,
+            })
+        }
+        ReclaimSignal::Graceful => {
+            // SAFETY: as above.
+            unsafe { libc::kill(group, libc::SIGTERM) };
+            let deadline = std::time::Instant::now() + RECLAIM_GRACE;
+            while std::time::Instant::now() < deadline {
+                if !process_exists(pid as u32) {
+                    return Ok(ReclaimSignalsSent {
+                        sigterm: true,
+                        sigkill: false,
+                        exited_on_sigterm: true,
+                    });
+                }
+                std::thread::sleep(RECLAIM_POLL);
+            }
+            // SAFETY: as above.
+            unsafe { libc::kill(group, libc::SIGKILL) };
+            Ok(ReclaimSignalsSent {
+                sigterm: true,
+                sigkill: true,
+                exited_on_sigterm: false,
+            })
+        }
     }
 }
 
@@ -425,14 +611,85 @@ pub(crate) fn expire_writer_leases(conn: &Connection) -> Result<Vec<String>> {
     Ok(ids)
 }
 
+/// A session reconciliation found running while its transport had disappeared.
+///
+/// Carrying the evidence rather than just the id keeps the decision auditable:
+/// whoever acts on this can say which PID it signalled and on what grounds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReclaimCandidate {
+    /// Session identifier.
+    pub session_id: String,
+    /// Owning task, so the reclamation can be recorded on the task's timeline.
+    pub task_id: String,
+    /// Recorded PID of the session's process-group leader.
+    pub pid: i64,
+    /// Fingerprint the reclamation must re-verify before signalling.
+    pub process_fingerprint: Option<String>,
+    /// This session's own directory, when it can be derived unambiguously.
+    pub session_dir: Option<std::path::PathBuf>,
+}
+
+/// Outcome of one reconciliation pass.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ReconcileOutcome {
+    /// `(session_id, new_state)` for every session whose state moved.
+    pub changes: Vec<(String, String)>,
+    /// Sessions that are running with no transport, i.e. orphans to reclaim.
+    pub reclaim_candidates: Vec<ReclaimCandidate>,
+}
+
+/// Derives the directory that belongs to this session and nothing else.
+///
+/// Returns `None` unless all of the following hold, because the consequence of
+/// getting it wrong is deleting somebody else's data:
+///
+/// * every recorded path (`input_fifo_path`, `transcript_path`, `stdout_path`,
+///   `stderr_path`) sits directly in one and the same parent directory;
+/// * that directory is named for this session id;
+/// * its own parent is named `sessions`.
+///
+/// The layout this recognises is the one `phase_runner::spawn` creates:
+/// `<logs>/sessions/<session_id>/{input.fifo,transcript.log,…}`. A row whose
+/// paths have been rewritten, point outside the session tree, or disagree with
+/// each other yields `None` and the directory is left alone. Refusing to guess
+/// is the whole design: the FR's own instruction is that reclamation must never
+/// walk up to `data/` or the temp root, because that would take sibling
+/// sessions and the database with it.
+fn session_owned_dir(row: &SessionRow) -> Option<std::path::PathBuf> {
+    let parent = std::path::Path::new(&row.input_fifo_path).parent()?;
+    for other in [&row.transcript_path, &row.stdout_path, &row.stderr_path] {
+        if std::path::Path::new(other).parent() != Some(parent) {
+            return None;
+        }
+    }
+    if parent.file_name()?.to_str()? != row.id {
+        return None;
+    }
+    if parent.parent()?.file_name()?.to_str()? != "sessions" {
+        return None;
+    }
+    Some(parent.to_path_buf())
+}
+
 /// Reconciles non-terminal persisted sessions with OS process identity and transport state.
-pub(crate) fn reconcile_sessions(conn: &Connection) -> Result<Vec<(String, String)>> {
+///
+/// `owner_pid` is the PID of the daemon that owns live sessions — normally
+/// `std::process::id()`. It is what distinguishes a session this daemon is
+/// running from one a previous daemon left behind; see [`process_is_owned_by`].
+///
+/// Rows already in `failed` are re-examined for reclamation even though their
+/// state cannot move. Without that, a single missed reclamation is permanent: the
+/// first pass marks an orphan `failed`, and every later pass filters it out
+/// before looking at it. Anything that interrupts the pass between the state
+/// change and the signal — a daemon restart, the policy being off at the time —
+/// would otherwise strand the process forever.
+pub(crate) fn reconcile_sessions(conn: &Connection, owner_pid: u32) -> Result<ReconcileOutcome> {
     let rows = list_sessions(conn, None, None, None)?;
-    let mut changes = Vec::new();
+    let mut outcome = ReconcileOutcome::default();
     for row in rows.into_iter().filter(|row| {
         matches!(
             row.state.as_str(),
-            "opening" | "active" | "detached" | "draining"
+            "opening" | "active" | "detached" | "draining" | "failed"
         )
     }) {
         let identity = process_identity_status(row.pid, row.process_fingerprint.as_deref());
@@ -444,8 +701,15 @@ pub(crate) fn reconcile_sessions(conn: &Connection) -> Result<Vec<(String, Strin
             .as_deref()
             .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
             .is_some_and(|expires| expires > chrono::Utc::now());
+
+        // A live process this daemon did not spawn is unreachable: nothing can
+        // send it input or read what it writes. Whether its FIFO happens to
+        // still exist on disk says nothing about that.
+        let orphaned = identity == ProcessIdentityStatus::VerifiedLive
+            && !process_is_owned_by(row.pid, owner_pid);
+
         let target = match identity {
-            ProcessIdentityStatus::VerifiedLive if transport_exists => {
+            ProcessIdentityStatus::VerifiedLive if transport_exists && !orphaned => {
                 if row.state == "draining" {
                     "draining"
                 } else if row.writer_client_id.is_some() && lease_is_current {
@@ -460,6 +724,17 @@ pub(crate) fn reconcile_sessions(conn: &Connection) -> Result<Vec<(String, Strin
             | ProcessIdentityStatus::Mismatch
             | ProcessIdentityStatus::Unsupported => "failed",
         };
+
+        if identity == ProcessIdentityStatus::VerifiedLive && (orphaned || !transport_exists) {
+            outcome.reclaim_candidates.push(ReclaimCandidate {
+                session_id: row.id.clone(),
+                task_id: row.task_id.clone(),
+                pid: row.pid,
+                process_fingerprint: row.process_fingerprint.clone(),
+                session_dir: session_owned_dir(&row),
+            });
+        }
+
         if target != row.state {
             update_session_state(
                 conn,
@@ -468,16 +743,16 @@ pub(crate) fn reconcile_sessions(conn: &Connection) -> Result<Vec<(String, Strin
                 row.exit_code,
                 matches!(target, "closed" | "failed"),
             )?;
-            changes.push((row.id, target.to_owned()));
+            outcome.changes.push((row.id, target.to_owned()));
         }
     }
     let expired = expire_writer_leases(conn)?;
-    changes.extend(
+    outcome.changes.extend(
         expired
             .into_iter()
             .map(|id| (id, "lease_expired".to_owned())),
     );
-    Ok(changes)
+    Ok(outcome)
 }
 
 /// Loads a session row by session identifier.
@@ -579,23 +854,97 @@ pub(crate) fn attach_reader(conn: &Connection, session_id: &str, client_id: &str
     Ok(())
 }
 
-/// Deletes old terminal sessions and returns the number removed.
-pub(crate) fn cleanup_stale_sessions(conn: &Connection, max_age_hours: u64) -> Result<usize> {
+/// A stale-session candidate whose process is still running, so its record was
+/// preserved rather than deleted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RetainedLiveSession {
+    /// Session identifier whose record was kept.
+    pub session_id: String,
+    /// Recorded PID that answered the liveness probe.
+    pub pid: i64,
+    /// Terminal state the record carried when the sweep found it.
+    pub state: String,
+    /// Whether the live process is the same incarnation the record describes.
+    ///
+    /// `Mismatch` means the PID was reused by something unrelated: the record
+    /// is genuinely stale and only the conservative deletion rule keeps it.
+    /// Carried for diagnostics; it does not affect whether the row survives.
+    pub identity: ProcessIdentityStatus,
+}
+
+/// Outcome of a stale-session sweep.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct StaleSessionSweep {
+    /// Session records removed.
+    pub deleted: usize,
+    /// Candidates preserved because their recorded process is still alive.
+    pub live_retained: Vec<RetainedLiveSession>,
+}
+
+/// Deletes old terminal sessions, preserving any whose process is still alive.
+///
+/// The age and terminal-state filter alone is not a safe deletion predicate.
+/// `reconcile_sessions` marks a session `failed` when its process is verified
+/// live but its transport has gone, so a running orphan acquires exactly the
+/// state this sweep deletes — and deleting it destroys the only record that the
+/// process exists, after the system has already declined to reclaim it. Giving
+/// up on reclamation is a bug; erasing the evidence afterwards is what makes it
+/// unrecoverable (FR-159).
+///
+/// A candidate whose PID answers a liveness probe is therefore retained and
+/// reported. The probe is deliberately `process_exists` rather than a
+/// fingerprint match: a reused PID keeps a record that could have been dropped,
+/// which costs one stale row, while trusting a fingerprint that is merely
+/// `Unsupported` would delete the record of a live process, which is the defect
+/// itself. This errs toward keeping evidence.
+pub(crate) fn cleanup_stale_sessions(
+    conn: &Connection,
+    max_age_hours: u64,
+) -> Result<StaleSessionSweep> {
     let cutoff = chrono::Utc::now() - chrono::Duration::hours(max_age_hours as i64);
     let cutoff = cutoff.to_rfc3339();
-    conn.execute(
-        "DELETE FROM session_control_actions WHERE session_id IN (SELECT id FROM agent_sessions WHERE state IN ('exited','closed','failed') AND updated_at < ?1)",
-        [&cutoff],
+
+    let mut stmt = conn.prepare(
+        "SELECT id, pid, state, process_fingerprint FROM agent_sessions
+         WHERE state IN ('exited','closed','failed') AND updated_at < ?1",
     )?;
-    conn.execute(
-        "DELETE FROM session_attachments WHERE session_id IN (SELECT id FROM agent_sessions WHERE state IN ('exited','closed','failed') AND updated_at < ?1)",
-        [&cutoff],
-    )?;
-    let deleted = conn.execute(
-        "DELETE FROM agent_sessions WHERE state IN ('exited', 'closed', 'failed') AND updated_at < ?1",
-        [&cutoff],
-    )?;
-    Ok(deleted)
+    let candidates = stmt
+        .query_map([&cutoff], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<String>>(3)?,
+            ))
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    drop(stmt);
+
+    let mut sweep = StaleSessionSweep::default();
+    for (session_id, pid, state, fingerprint) in candidates {
+        if pid > 0 && process_exists(pid as u32) {
+            sweep.live_retained.push(RetainedLiveSession {
+                session_id,
+                pid,
+                state,
+                identity: process_identity_status(pid, fingerprint.as_deref()),
+            });
+            continue;
+        }
+        conn.execute(
+            "DELETE FROM session_control_actions WHERE session_id = ?1",
+            params![session_id],
+        )?;
+        conn.execute(
+            "DELETE FROM session_attachments WHERE session_id = ?1",
+            params![session_id],
+        )?;
+        sweep.deleted += conn.execute(
+            "DELETE FROM agent_sessions WHERE id = ?1",
+            params![session_id],
+        )?;
+    }
+    Ok(sweep)
 }
 
 /// Releases a reader or writer attachment for a client.
@@ -746,7 +1095,7 @@ impl AsyncSessionStore {
     }
 
     /// Deletes stale terminal sessions and returns the number removed.
-    pub async fn cleanup_stale_sessions(&self, max_age_hours: u64) -> Result<usize> {
+    pub async fn cleanup_stale_sessions(&self, max_age_hours: u64) -> Result<StaleSessionSweep> {
         self.repository.cleanup_stale_sessions(max_age_hours).await
     }
 
@@ -891,9 +1240,15 @@ pub async fn detach_reader(
 }
 
 /// Reconciles recorded session state against the processes still alive.
-pub async fn reconcile_sessions_async(db: &AsyncDatabase) -> Result<Vec<(String, String)>> {
+///
+/// `owner_pid` identifies the daemon that owns live sessions; see
+/// [`reconcile_sessions`].
+pub async fn reconcile_sessions_async(
+    db: &AsyncDatabase,
+    owner_pid: u32,
+) -> Result<ReconcileOutcome> {
     db.writer()
-        .call(|conn| reconcile_sessions(conn).map_err(other))
+        .call(move |conn| reconcile_sessions(conn, owner_pid).map_err(other))
         .await
         .map_err(flatten_err)
 }
@@ -919,9 +1274,43 @@ pub async fn update_session_process_async(
 /// `init_state` builds its managed state synchronously — so the path form is
 /// what keeps the connection inside the layer without forcing that call site
 /// to become async.
-pub fn reconcile_sessions_by_path(db_path: &std::path::Path) -> Result<Vec<(String, String)>> {
+pub fn reconcile_sessions_by_path(
+    db_path: &std::path::Path,
+    owner_pid: u32,
+) -> Result<ReconcileOutcome> {
     let conn = crate::sqlite::open_conn(db_path)?;
-    reconcile_sessions(&conn)
+    reconcile_sessions(&conn, owner_pid)
+}
+
+/// Lists every non-terminal session whose process is still running.
+///
+/// Used by the shutdown drain, which wants all live sessions rather than only
+/// the orphaned ones: on the way down, a session this daemon still owns is
+/// exactly the session that is about to *become* an orphan.
+///
+/// Reported without regard to ownership or transport, because the reclamation
+/// primitive re-verifies identity and group leadership before it signals
+/// anything — the filtering that matters happens there, next to the kill.
+pub fn live_sessions_by_path(db_path: &std::path::Path) -> Result<Vec<ReclaimCandidate>> {
+    let conn = crate::sqlite::open_conn(db_path)?;
+    let rows = list_sessions(&conn, None, None, None)?;
+    Ok(rows
+        .into_iter()
+        .filter(|row| {
+            matches!(
+                row.state.as_str(),
+                "opening" | "active" | "detached" | "draining" | "failed"
+            ) && row.pid > 0
+                && process_exists(row.pid as u32)
+        })
+        .map(|row| ReclaimCandidate {
+            session_id: row.id.clone(),
+            task_id: row.task_id.clone(),
+            pid: row.pid,
+            process_fingerprint: row.process_fingerprint.clone(),
+            session_dir: session_owned_dir(&row),
+        })
+        .collect())
 }
 
 #[cfg(test)]
@@ -938,6 +1327,277 @@ mod tests {
         let db_path = dir.path().join("sessions.db");
         init_schema(&db_path).expect("init schema");
         (dir, db_path)
+    }
+
+    /// Spawns a process group leader with a child, mirroring a real session.
+    ///
+    /// The shell puts itself in its own process group and starts a background
+    /// `sleep`, so the group has a leader and a descendant. That distinction is
+    /// what separates a group signal from a leader-only one; a fixture with a
+    /// single process cannot tell them apart.
+    fn spawn_group_with_child() -> (std::process::Child, u32) {
+        use std::io::Read;
+        use std::os::unix::process::CommandExt;
+        let mut child = std::process::Command::new("sh")
+            .arg("-c")
+            // setsid may be unavailable; fall back to running in this group and
+            // let the leadership assertion below decide what the test can claim.
+            .arg("sleep 60 & echo $! ; wait")
+            .stdout(std::process::Stdio::piped())
+            .process_group(0)
+            .spawn()
+            .expect("spawn session-like group");
+        let mut out = child.stdout.take().expect("capture stdout");
+        let mut buf = String::new();
+        // Read just the grandchild PID line.
+        let mut byte = [0u8; 1];
+        while out.read(&mut byte).unwrap_or(0) == 1 {
+            if byte[0] == b'\n' {
+                break;
+            }
+            buf.push(byte[0] as char);
+        }
+        let grandchild: u32 = buf.trim().parse().expect("grandchild pid");
+        (child, grandchild)
+    }
+
+    /// A verified, group-leading PID is reclaimed together with its children.
+    ///
+    /// The grandchild assertion is the point. Signalling only the leader leaves
+    /// the descendant alive and reparented, which looks identical in the leader's
+    /// exit status — so a test that only checked the leader would pass on the
+    /// defect this exists to prevent.
+    #[test]
+    fn reclaim_kills_the_whole_group_not_just_the_leader() {
+        let (mut leader, grandchild) = spawn_group_with_child();
+        let pid = leader.id() as i64;
+        assert!(
+            is_process_group_leader(pid),
+            "fixture must lead its own group or it cannot exercise group reclamation"
+        );
+        let fingerprint = capture_process_fingerprint(pid as u32);
+        assert!(process_exists(grandchild), "grandchild must start alive");
+
+        let sent = reclaim_process_group(pid, fingerprint.as_deref(), ReclaimSignal::Immediate)
+            .expect("a verified group leader must be reclaimable");
+        assert!(sent.sigkill);
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while process_exists(grandchild) && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        assert!(
+            !process_exists(grandchild),
+            "the session's child must die with the group; if it survives, only the \
+             leader was signalled and a new orphan has just been created"
+        );
+        let _ = leader.wait();
+    }
+
+    /// A fingerprint that does not match must produce no signal at all.
+    ///
+    /// The process must still be alive afterwards: asserting only that the call
+    /// returned an error would pass just as well on an implementation that
+    /// signalled first and reported second.
+    #[test]
+    fn reclaim_refuses_and_sends_nothing_when_the_fingerprint_mismatches() {
+        let (mut leader, grandchild) = spawn_group_with_child();
+        let pid = leader.id() as i64;
+
+        let refusal = reclaim_process_group(
+            pid,
+            Some("not-the-real-fingerprint"),
+            ReclaimSignal::Immediate,
+        )
+        .expect_err("a mismatched fingerprint must refuse");
+        assert_eq!(refusal, ReclaimRefusal::IdentityMismatch);
+
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        assert!(
+            process_exists(pid as u32),
+            "a refused reclamation must leave the process running: this is the \
+             PID-reuse guard, and killing first would defeat it"
+        );
+        assert!(
+            process_exists(grandchild),
+            "nor may its children be signalled"
+        );
+
+        let _ = leader.kill();
+        let _ = leader.wait();
+        // SAFETY: cleaning up the fixture's own descendant.
+        unsafe { libc::kill(grandchild as i32, libc::SIGKILL) };
+    }
+
+    /// A PID that does not lead its own group must be refused.
+    ///
+    /// Without this, `kill(-pid, …)` would address whichever group happens to
+    /// carry that number. The fixture is a process deliberately left in the test
+    /// runner's group, so it is live and fingerprint-verifiable — every other
+    /// precondition passes and only leadership fails.
+    #[test]
+    fn reclaim_refuses_a_pid_that_does_not_lead_its_group() {
+        let mut child = std::process::Command::new("sleep")
+            .arg("60")
+            .spawn()
+            .expect("spawn non-leader");
+        let pid = child.id() as i64;
+        assert!(
+            !is_process_group_leader(pid),
+            "fixture must NOT lead its group, otherwise this asserts nothing"
+        );
+        let fingerprint = capture_process_fingerprint(pid as u32);
+
+        let refusal = reclaim_process_group(pid, fingerprint.as_deref(), ReclaimSignal::Immediate)
+            .expect_err("a non-leader must be refused");
+        assert_eq!(refusal, ReclaimRefusal::NotGroupLeader);
+        assert!(
+            process_exists(pid as u32),
+            "the refused process must survive"
+        );
+
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    /// Directory reclamation must refuse anything it cannot prove it owns.
+    ///
+    /// Each case relaxes exactly one of the three conditions and nothing else,
+    /// so a rule that stopped checking that one condition is the only thing that
+    /// can turn it green. The accepted case is included so the test cannot pass
+    /// by refusing everything — a `session_owned_dir` that always returned
+    /// `None` would be perfectly safe and perfectly useless, and the FR's
+    /// requirement is that the session's own directory does get removed.
+    #[test]
+    fn session_owned_dir_refuses_every_path_it_cannot_prove_it_owns() {
+        let row_with = |fifo: &str, transcript: &str, stdout: &str, stderr: &str, id: &str| {
+            let base = make_session(id, "task-1", "qa", "active");
+            let mut row = SessionRow {
+                id: base.id.to_string(),
+                task_id: base.task_id.to_string(),
+                task_item_id: None,
+                step_id: base.step_id.to_string(),
+                phase: base.phase.to_string(),
+                agent_id: base.agent_id.to_string(),
+                state: base.state.to_string(),
+                pid: 1,
+                pty_backend: base.pty_backend.to_string(),
+                cwd: base.cwd.to_string(),
+                command: base.command.to_string(),
+                input_fifo_path: fifo.to_string(),
+                stdout_path: stdout.to_string(),
+                stderr_path: stderr.to_string(),
+                transcript_path: transcript.to_string(),
+                output_json_path: None,
+                writer_client_id: None,
+                writer_actor: None,
+                writer_lease_expires_at: None,
+                writer_last_heartbeat_at: None,
+                writer_fencing_token: 0,
+                state_version: 1,
+                process_fingerprint: None,
+                created_at: String::new(),
+                updated_at: String::new(),
+                ended_at: None,
+                exit_code: None,
+            };
+            row.id = id.to_string();
+            row
+        };
+
+        // Accepted: the layout phase_runner::spawn actually creates.
+        let good = row_with(
+            "/data/logs/sessions/sess-1/input.fifo",
+            "/data/logs/sessions/sess-1/transcript.log",
+            "/data/logs/sessions/sess-1/stdout.log",
+            "/data/logs/sessions/sess-1/stderr.log",
+            "sess-1",
+        );
+        assert_eq!(
+            session_owned_dir(&good),
+            Some(std::path::PathBuf::from("/data/logs/sessions/sess-1")),
+            "the session's own directory must be derivable, or nothing is ever cleaned"
+        );
+
+        // Refused: transcript lives somewhere else, so the parent is not agreed.
+        let split = row_with(
+            "/data/logs/sessions/sess-1/input.fifo",
+            "/data/logs/transcript.log",
+            "/data/logs/sessions/sess-1/stdout.log",
+            "/data/logs/sessions/sess-1/stderr.log",
+            "sess-1",
+        );
+        assert_eq!(
+            session_owned_dir(&split),
+            None,
+            "paths that disagree on their parent must not authorise a deletion"
+        );
+
+        // Refused: directory is not named for this session.
+        let misnamed = row_with(
+            "/data/logs/sessions/other/input.fifo",
+            "/data/logs/sessions/other/transcript.log",
+            "/data/logs/sessions/other/stdout.log",
+            "/data/logs/sessions/other/stderr.log",
+            "sess-1",
+        );
+        assert_eq!(
+            session_owned_dir(&misnamed),
+            None,
+            "a directory named for a different session is somebody else's data"
+        );
+
+        // Refused: not under a `sessions` root — this is the shape that would
+        // walk up into the data directory.
+        let outside = row_with(
+            "/data/sess-1/input.fifo",
+            "/data/sess-1/transcript.log",
+            "/data/sess-1/stdout.log",
+            "/data/sess-1/stderr.log",
+            "sess-1",
+        );
+        assert_eq!(
+            session_owned_dir(&outside),
+            None,
+            "a path outside the sessions tree must never be removed"
+        );
+    }
+
+    /// A live process this daemon did not spawn is an orphan.
+    #[test]
+    fn process_ownership_distinguishes_our_children_from_strangers() {
+        let mut child = std::process::Command::new("sleep")
+            .arg("30")
+            .spawn()
+            .expect("spawn child");
+        let pid = child.id() as i64;
+
+        assert!(
+            process_is_owned_by(pid, std::process::id()),
+            "a process we just spawned must read as ours"
+        );
+        assert!(
+            !process_is_owned_by(pid, std::process::id().wrapping_add(1)),
+            "the same process must read as an orphan against a different owner, \
+             which is the daemon-restart case"
+        );
+
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    /// A dead PID is reported as such rather than signalled blindly.
+    #[test]
+    fn reclaim_refuses_a_process_that_has_already_exited() {
+        let mut child = std::process::Command::new("true")
+            .spawn()
+            .expect("spawn short-lived");
+        let pid = child.id() as i64;
+        child.wait().expect("reap");
+
+        let refusal = reclaim_process_group(pid, Some("whatever"), ReclaimSignal::Immediate)
+            .expect_err("a dead PID must be refused");
+        assert_eq!(refusal, ReclaimRefusal::ProcessGone);
     }
 
     fn make_session<'a>(
@@ -1081,13 +1741,83 @@ mod tests {
         insert_session(&conn, &make_session("new-exited", "task-1", "qa", "exited"))
             .expect("insert new exited");
 
-        let deleted = cleanup_stale_sessions(&conn, 72).expect("cleanup");
-        assert_eq!(deleted, 1);
+        let sweep = cleanup_stale_sessions(&conn, 72).expect("cleanup");
+        assert_eq!(sweep.deleted, 1);
+        assert!(
+            sweep.live_retained.is_empty(),
+            "fixture PIDs are not running, so nothing should be retained for liveness"
+        );
 
         // Verify correct session was deleted
         assert!(load_session(&conn, "old-exited").expect("load").is_none());
         assert!(load_session(&conn, "old-active").expect("load").is_some());
         assert!(load_session(&conn, "new-exited").expect("load").is_some());
+    }
+
+    /// A terminal record whose process is still running must survive the sweep.
+    ///
+    /// This is the amnesia path in FR-159: `reconcile_sessions` marks a live
+    /// orphan `failed`, and a sweep keyed on state and age then erases the only
+    /// record that the process exists. The two rows here are identical in state,
+    /// age and shape, and differ only in whether their PID answers — so the
+    /// assertion cannot be satisfied by a sweep that simply deleted less, or by
+    /// one that deleted nothing at all.
+    #[test]
+    fn cleanup_stale_sessions_retains_records_of_live_processes() {
+        let (_dir, db_path) = make_db();
+        let conn = open_conn(&db_path).expect("open conn");
+
+        // A real process that outlives the sweep.
+        let mut live = std::process::Command::new("sleep")
+            .arg("30")
+            .spawn()
+            .expect("spawn live process");
+        let live_pid = live.id() as i64;
+
+        // A PID that is definitely not running: spawn and reap it first.
+        let mut dead = std::process::Command::new("true")
+            .spawn()
+            .expect("spawn short-lived process");
+        let dead_pid = dead.id() as i64;
+        dead.wait().expect("reap short-lived process");
+
+        let old_ts = (chrono::Utc::now() - chrono::Duration::hours(100)).to_rfc3339();
+        for (id, pid) in [("live-failed", live_pid), ("dead-failed", dead_pid)] {
+            insert_session(&conn, &make_session(id, "task-1", "qa", "failed"))
+                .expect("insert failed session");
+            conn.execute(
+                "UPDATE agent_sessions SET updated_at = ?2, pid = ?3 WHERE id = ?1",
+                params![id, old_ts, pid],
+            )
+            .expect("backdate and set pid");
+        }
+
+        let sweep = cleanup_stale_sessions(&conn, 72).expect("cleanup");
+
+        assert_eq!(
+            sweep.deleted, 1,
+            "only the record whose process is gone may be deleted"
+        );
+        assert!(
+            load_session(&conn, "live-failed").expect("load").is_some(),
+            "a live process must keep its record: erasing it is what makes an \
+             unreclaimed orphan untrackable"
+        );
+        assert!(
+            load_session(&conn, "dead-failed").expect("load").is_none(),
+            "a genuinely dead session must still be swept, or the sweep does nothing"
+        );
+
+        let retained = sweep
+            .live_retained
+            .iter()
+            .find(|entry| entry.session_id == "live-failed")
+            .expect("the retained live session must be reported, not silently kept");
+        assert_eq!(retained.pid, live_pid);
+        assert_eq!(retained.state, "failed");
+
+        let _ = live.kill();
+        let _ = live.wait();
     }
 
     #[test]
@@ -1337,9 +2067,21 @@ mod tests {
         )
         .expect("seed dead session");
 
-        let changes = reconcile_sessions(&conn).expect("reconcile sessions");
-        assert!(changes.contains(&("sess-mismatch".into(), "failed".into())));
-        assert!(changes.contains(&("sess-dead".into(), "closed".into())));
+        let outcome = reconcile_sessions(&conn, std::process::id()).expect("reconcile sessions");
+        assert!(
+            outcome
+                .changes
+                .contains(&("sess-mismatch".into(), "failed".into()))
+        );
+        assert!(
+            outcome
+                .changes
+                .contains(&("sess-dead".into(), "closed".into()))
+        );
+        assert!(
+            outcome.reclaim_candidates.is_empty(),
+            "neither a reused PID nor a dead one may be proposed for reclamation"
+        );
         assert_eq!(
             load_session(&conn, "sess-mismatch").unwrap().unwrap().state,
             "failed"
@@ -1436,11 +2178,11 @@ mod tests {
         )
         .expect("backdate session");
 
-        let deleted = store
+        let sweep = store
             .cleanup_stale_sessions(72)
             .await
             .expect("cleanup stale sessions");
-        assert_eq!(deleted, 1);
+        assert_eq!(sweep.deleted, 1);
         assert!(
             store
                 .load_session("sess-async")

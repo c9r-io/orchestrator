@@ -269,6 +269,7 @@ mod tests {
             elevated_resume_enabled: false,
             session_read_enabled: true,
             session_control_enabled: false,
+            session_reclaim_enabled: true,
             source_ingest_enabled: false,
             action_audit_mode: crate::cli_types::ACTION_AUDIT_MODE_COMPATIBILITY.to_string(),
         };

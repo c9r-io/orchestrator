@@ -260,6 +260,15 @@ pub struct RuntimePolicySpec {
     /// Whether writer lease, input and close mutations are enabled.
     #[serde(default)]
     pub session_control_enabled: bool,
+    /// Whether reconciliation reclaims orphaned session process groups.
+    ///
+    /// Deliberately its own switch rather than a facet of
+    /// `session_control_enabled`, which defaults to `false`: hanging
+    /// reclamation off that flag would mean the default configuration never
+    /// reclaims anything, and the leak this exists to close would stay open in
+    /// every deployment that had not opted into session mutation (FR-159).
+    #[serde(default = "default_true")]
+    pub session_reclaim_enabled: bool,
     /// Whether external source adapters may durably ingest new events.
     #[serde(default)]
     pub source_ingest_enabled: bool,

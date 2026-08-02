@@ -511,12 +511,19 @@ fn main() -> Result<()> {
                         _ = interval.tick() => {
                             let result = agent_orchestrator::session_store::reconcile_sessions_async(
                                 &session_state.async_database,
+                                std::process::id(),
                             ).await;
                             match result {
-                                Ok(changes) if !changes.is_empty() => {
-                                    info!(changes = changes.len(), "interactive session reconciliation updated state");
+                                Ok(outcome) => {
+                                    if !outcome.changes.is_empty() {
+                                        info!(changes = outcome.changes.len(), "interactive session reconciliation updated state");
+                                    }
+                                    reclaim_orphaned_sessions(
+                                        &session_state,
+                                        &outcome.reclaim_candidates,
+                                        agent_orchestrator::session_store::ReclaimSignal::Immediate,
+                                    ).await;
                                 }
-                                Ok(_) => {}
                                 Err(error) => error!(%error, "interactive session reconciliation failed"),
                             }
                         }
@@ -1067,6 +1074,48 @@ fn main() -> Result<()> {
             .await;
         }
 
+        // Drain interactive sessions.
+        //
+        // `shutdown_running_tasks` above cannot reach them: a tty child is never
+        // stored in `runtime.child`, because the tty branch of
+        // `phase_runner::spawn` returns before the assignment. Every kill path
+        // in the scheduler goes through that field, so this is not a further
+        // layer of defence over an existing one — it is the only graceful
+        // reclamation an interactive session has ever had (FR-159).
+        //
+        // Best-effort by construction: under `SIGKILL` this never runs, which is
+        // why the periodic reconciliation is the real backstop. `Graceful` here
+        // rather than the reconciler's `Immediate` because these sessions are
+        // still healthy and may flush on `SIGTERM` — every group in the recorded
+        // triage exited on `SIGTERM` without needing `SIGKILL`.
+        {
+            let sessions = agent_orchestrator::session_store::live_sessions_by_path(
+                &inner.db_path,
+            );
+            match sessions {
+                Ok(candidates) if !candidates.is_empty() => {
+                    emit_daemon_event(&inner, "session_drain_started", serde_json::json!({
+                        "sessions": candidates.len(),
+                    }))
+                    .await;
+                    reclaim_orphaned_sessions(
+                        &inner,
+                        &candidates,
+                        agent_orchestrator::session_store::ReclaimSignal::Graceful,
+                    )
+                    .await;
+                    emit_daemon_event(&inner, "session_drain_completed", serde_json::json!({
+                        "sessions": candidates.len(),
+                    }))
+                    .await;
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    error!(%error, "failed to enumerate interactive sessions for shutdown drain");
+                }
+            }
+        }
+
         // Wait for supervisor (and all workers) to finish
         match tokio::time::timeout(std::time::Duration::from_secs(30), supervisor_handle).await {
             Ok(Ok(())) => {
@@ -1501,6 +1550,118 @@ async fn worker_supervisor(
         if let Err(e) = handle.await {
             error!(worker = worker_idx + 1, error = %e, "worker panicked during shutdown");
         }
+    }
+}
+
+/// Reads the effective `session_reclaim_enabled` policy.
+///
+/// Fails closed: if the active configuration cannot be read at all, no signal is
+/// sent. A daemon that cannot tell whether it is permitted to kill processes
+/// must not kill any.
+fn session_reclaim_enabled(state: &InnerState) -> bool {
+    use agent_orchestrator::config_ext::OrchestratorConfigExt;
+    agent_orchestrator::config_load::read_active_config(state)
+        .map(|active| {
+            active
+                .config
+                .global_runtime_policy()
+                .session_reclaim_enabled
+        })
+        .unwrap_or(false)
+}
+
+/// Reclaims the process groups of sessions reconciliation found orphaned.
+///
+/// The kill lives here rather than in `reconcile_sessions` for two reasons: this
+/// is the layer that can read policy and reach the event sink, and the identity
+/// re-check that `reclaim_process_group` performs is only meaningful if it runs
+/// adjacent to the signal rather than inside an earlier database pass.
+///
+/// Every outcome is recorded — reclaimed and refused alike. A refusal is the
+/// interesting case: it is the daemon declining to signal a PID it cannot prove
+/// is the right one, and it needs to be visible rather than silent, both so an
+/// operator can see a PID-reuse near miss and so QA can assert that a mismatched
+/// fingerprint produced no signal.
+async fn reclaim_orphaned_sessions(
+    state: &InnerState,
+    candidates: &[agent_orchestrator::session_store::ReclaimCandidate],
+    signal: agent_orchestrator::session_store::ReclaimSignal,
+) {
+    use agent_orchestrator::session_store::reclaim_process_group;
+
+    if candidates.is_empty() {
+        return;
+    }
+    if !session_reclaim_enabled(state) {
+        info!(
+            candidates = candidates.len(),
+            "session reclamation is disabled by runtime policy; leaving orphaned processes alone"
+        );
+        return;
+    }
+
+    for candidate in candidates {
+        let result = reclaim_process_group(
+            candidate.pid,
+            candidate.process_fingerprint.as_deref(),
+            signal,
+        );
+        let payload = match &result {
+            Ok(sent) => {
+                // The directory goes only after a signal was actually sent, so
+                // a refusal never destroys the evidence of what it refused.
+                let removed_dir = candidate.session_dir.as_ref().map(|dir| {
+                    let removed = std::fs::remove_dir_all(dir).is_ok();
+                    serde_json::json!({ "path": dir.to_string_lossy(), "removed": removed })
+                });
+                info!(
+                    session_id = %candidate.session_id,
+                    pid = candidate.pid,
+                    sigterm = sent.sigterm,
+                    sigkill = sent.sigkill,
+                    "reclaimed orphaned interactive session process group"
+                );
+                serde_json::json!({
+                    "session_id": candidate.session_id,
+                    "pid": candidate.pid,
+                    "process_fingerprint": candidate.process_fingerprint,
+                    "outcome": "reclaimed",
+                    "sigterm": sent.sigterm,
+                    "sigkill": sent.sigkill,
+                    "exited_on_sigterm": sent.exited_on_sigterm,
+                    "session_dir": removed_dir,
+                })
+            }
+            Err(refusal) => {
+                info!(
+                    session_id = %candidate.session_id,
+                    pid = candidate.pid,
+                    reason = refusal.as_str(),
+                    "refused to reclaim interactive session process group"
+                );
+                serde_json::json!({
+                    "session_id": candidate.session_id,
+                    "pid": candidate.pid,
+                    "process_fingerprint": candidate.process_fingerprint,
+                    "outcome": "refused",
+                    "reason": refusal.as_str(),
+                })
+            }
+        };
+        let _ = insert_event(
+            state,
+            &candidate.task_id,
+            None,
+            "session_process_reclaimed",
+            payload.clone(),
+        )
+        .await;
+        state.emit_event(
+            &candidate.task_id,
+            None,
+            "session_process_reclaimed",
+            payload,
+        );
     }
 }
 

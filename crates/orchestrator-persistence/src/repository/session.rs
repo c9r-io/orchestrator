@@ -34,7 +34,10 @@ pub trait SessionRepository: Send + Sync {
     /// Attaches a read-only client to a session.
     async fn attach_reader(&self, session_id: &str, client_id: &str) -> Result<()>;
     /// Cleans up sessions considered stale according to the given age threshold.
-    async fn cleanup_stale_sessions(&self, max_age_hours: u64) -> Result<usize>;
+    async fn cleanup_stale_sessions(
+        &self,
+        max_age_hours: u64,
+    ) -> Result<session_store::StaleSessionSweep>;
     /// Releases a writer or reader attachment from a session.
     async fn release_attachment(
         &self,
@@ -185,7 +188,10 @@ impl SessionRepository for SqliteSessionRepository {
             .map_err(flatten_err)
     }
 
-    async fn cleanup_stale_sessions(&self, max_age_hours: u64) -> Result<usize> {
+    async fn cleanup_stale_sessions(
+        &self,
+        max_age_hours: u64,
+    ) -> Result<session_store::StaleSessionSweep> {
         self.async_db
             .writer()
             .call(move |conn| {

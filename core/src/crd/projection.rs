@@ -149,6 +149,9 @@ pub struct RuntimePolicyProjection {
     #[serde(default)]
     /// Whether interactive session mutations are enabled.
     pub session_control_enabled: bool,
+    #[serde(default = "default_handoff_enabled")]
+    /// Whether reconciliation reclaims orphaned session process groups.
+    pub session_reclaim_enabled: bool,
     #[serde(default)]
     /// Whether external adapters may ingest source events.
     pub source_ingest_enabled: bool,
@@ -169,6 +172,7 @@ impl Default for RuntimePolicyProjection {
             elevated_resume_enabled: false,
             session_read_enabled: true,
             session_control_enabled: false,
+            session_reclaim_enabled: true,
             source_ingest_enabled: false,
             action_audit_mode: default_action_audit_mode(),
         }
@@ -210,6 +214,7 @@ impl CrdProjectable for RuntimePolicyProjection {
             elevated_resume_enabled: rp_spec.elevated_resume_enabled,
             session_read_enabled: rp_spec.session_read_enabled,
             session_control_enabled: rp_spec.session_control_enabled,
+            session_reclaim_enabled: rp_spec.session_reclaim_enabled,
             source_ingest_enabled: rp_spec.source_ingest_enabled,
             action_audit_mode: rp_spec.action_audit_mode,
         })
@@ -228,6 +233,7 @@ impl CrdProjectable for RuntimePolicyProjection {
             elevated_resume_enabled: self.elevated_resume_enabled,
             session_read_enabled: self.session_read_enabled,
             session_control_enabled: self.session_control_enabled,
+            session_reclaim_enabled: self.session_reclaim_enabled,
             source_ingest_enabled: self.source_ingest_enabled,
             action_audit_mode: self.action_audit_mode.clone(),
         };
@@ -515,6 +521,7 @@ mod tests {
             elevated_resume_enabled: false,
             session_read_enabled: true,
             session_control_enabled: false,
+            session_reclaim_enabled: true,
             source_ingest_enabled: false,
             action_audit_mode: crate::cli_types::ACTION_AUDIT_MODE_ENFORCED.to_string(),
         };

@@ -145,6 +145,7 @@ fn runtime_policy_crd() -> CustomResourceDefinition {
                 "handoff_enabled": { "type": "boolean", "default": true },
                 "session_read_enabled": { "type": "boolean", "default": true },
                 "session_control_enabled": { "type": "boolean", "default": false },
+                "session_reclaim_enabled": { "type": "boolean", "default": true },
                 "mutating_resume_enabled": { "type": "boolean", "default": false },
                 "elevated_resume_enabled": { "type": "boolean", "default": false }
                 ,"action_audit_mode": { "type": "string", "enum": [crate::cli_types::ACTION_AUDIT_MODE_COMPATIBILITY, crate::cli_types::ACTION_AUDIT_MODE_ENFORCED], "default": crate::cli_types::ACTION_AUDIT_MODE_COMPATIBILITY }

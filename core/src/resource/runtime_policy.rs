@@ -76,6 +76,7 @@ impl Resource for RuntimePolicyResource {
             elevated_resume_enabled: self.spec.elevated_resume_enabled,
             session_read_enabled: self.spec.session_read_enabled,
             session_control_enabled: self.spec.session_control_enabled,
+            session_reclaim_enabled: self.spec.session_reclaim_enabled,
             source_ingest_enabled: self.spec.source_ingest_enabled,
             action_audit_mode: self.spec.action_audit_mode.clone(),
         };
@@ -120,6 +121,7 @@ impl Resource for RuntimePolicyResource {
                 elevated_resume_enabled: rp.elevated_resume_enabled,
                 session_read_enabled: rp.session_read_enabled,
                 session_control_enabled: rp.session_control_enabled,
+                session_reclaim_enabled: rp.session_reclaim_enabled,
                 source_ingest_enabled: rp.source_ingest_enabled,
                 action_audit_mode: rp.action_audit_mode,
             },

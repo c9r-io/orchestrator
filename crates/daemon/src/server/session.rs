@@ -936,10 +936,7 @@ pub(crate) async fn close(
         .update_session_state(&row.id, "draining", None, false)
         .await
         .map_err(|e| attempt.status(Status::internal(e.to_string())))?;
-    let signal_result = nix::sys::signal::kill(
-        nix::unistd::Pid::from_raw(row.pid as i32),
-        nix::sys::signal::Signal::SIGTERM,
-    );
+    let (signal_result, signalled_group) = terminate_session_process(row.pid);
     if let Err(error) = signal_result {
         let original_state = row.state.clone();
         let _ = server
@@ -964,7 +961,12 @@ pub(crate) async fn close(
         server,
         &row,
         "session_close_requested",
-        json!({"actor":actor,"reason":req.reason,"request_id":attempt.request_id}),
+        json!({
+            "actor": actor,
+            "reason": req.reason,
+            "request_id": attempt.request_id,
+            "signalled_process_group": signalled_group,
+        }),
     )
     .await;
     attempt
@@ -973,6 +975,35 @@ pub(crate) async fn close(
     Ok(attempt.response(AgentSessionCloseResponse {
         session: Some(to_proto(load(server, &row.id).await?)),
     }))
+}
+
+/// Sends `SIGTERM` to a session, preferring its whole process group.
+///
+/// Returns the signal result and whether the group form was used.
+///
+/// Sessions are spawned with `process_group(0)` precisely so that a group signal
+/// can take a session and everything it spawned in one go, and the close path
+/// was the one place not using it: signalling only the leader leaves any child
+/// the session started running and reparented, which is how orphans with dead
+/// leaders and live descendants are made (FR-159).
+///
+/// The group form is used only when the PID provably leads its own group. When
+/// it does not — a recorded PID that has been reused, or a platform that cannot
+/// answer — this falls back to the single-process signal, which is exactly the
+/// previous behaviour. Negating a PID that is not a group leader would deliver
+/// the signal to an unrelated group, so the fallback is the safe direction: it
+/// can under-reach, never over-reach.
+fn terminate_session_process(pid: i64) -> (nix::Result<()>, bool) {
+    let target = if session_store::is_process_group_leader(pid) {
+        (-(pid as i32), true)
+    } else {
+        (pid as i32, false)
+    };
+    let result = nix::sys::signal::kill(
+        nix::unistd::Pid::from_raw(target.0),
+        nix::sys::signal::Signal::SIGTERM,
+    );
+    (result, target.1)
 }
 
 pub(crate) async fn resolve_pid(

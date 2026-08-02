@@ -72,6 +72,7 @@ mod tests {
     fn policy(project: &str, control: bool, read: bool) -> CustomResource {
         let projection = RuntimePolicyProjection {
             session_control_enabled: control,
+            session_reclaim_enabled: true,
             session_read_enabled: read,
             ..RuntimePolicyProjection::default()
         };
