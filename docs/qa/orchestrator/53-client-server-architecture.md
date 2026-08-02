@@ -44,7 +44,7 @@ orchestrator (CLI)  ──gRPC/UDS──>  orchestratord (daemon)
 
 | Component | Path |
 |-----------|------|
-| Proto definition | `proto/orchestrator.proto` |
+| Proto definition | `crates/proto/orchestrator.proto` |
 | Proto codegen | `crates/proto/src/lib.rs` |
 | Daemon binary | `crates/daemon/src/main.rs` |
 | Daemon gRPC server | `crates/daemon/src/server.rs` |

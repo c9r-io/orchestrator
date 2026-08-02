@@ -54,7 +54,7 @@ CLI 在打印 apply 结果后、错误处理前输出 `Warning: ...` 到 stderr�
 
 ## 受影响文件
 
-- `proto/orchestrator.proto` — ApplyResponse 新增 warnings
+- `crates/proto/orchestrator.proto` — ApplyResponse 新增 warnings
 - `crates/orchestrator-config/src/cli_types.rs` — WorkflowStepSpec 新增 extra
 - `core/src/config_load/validate/workflow_steps.rs` — collect_step_warnings()
 - `core/src/resource/workflow.rs` — WorkflowResource::collect_warnings()

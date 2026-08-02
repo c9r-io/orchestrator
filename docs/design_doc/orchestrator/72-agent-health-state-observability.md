@@ -39,7 +39,7 @@ related_fr: FR-062
 
 | 文件 | 变更 |
 |------|------|
-| `proto/orchestrator.proto` | `AgentStatus` 添加 3 个字段 |
+| `crates/proto/orchestrator.proto` | `AgentStatus` 添加 3 个字段 |
 | `core/src/health.rs` | 新增 `agent_health_summary()` |
 | `crates/daemon/src/server/agent.rs` | `agent_list` 读取 `agent_health` map |
 | `crates/daemon/src/server/task.rs` | `task_info` agent states 读取 health |

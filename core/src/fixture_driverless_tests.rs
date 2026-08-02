@@ -13,8 +13,7 @@
 //! * **Scope is derived, never listed** — `git ls-files '*.yaml' '*.yml'`
 //!   over the whole repository, so bundles, benchmarks, workflow fixtures and
 //!   the integration-test manifests are all in scope the day they land. An
-//!   empty result fails; a subtree exclusion must still match something or it
-//!   fails as stale (§4.4 shape 8: a blanket that outlives its reason).
+//!   empty result fails.
 //! * **The evaluator is pure** so the negative tests below drive it with
 //!   mutated corpora instead of touching the repository.
 //! * **Exemptions can go stale in both directions**: a document that gained
@@ -23,15 +22,6 @@
 //!   longer has.
 
 use std::path::{Path, PathBuf};
-
-/// Subtrees deliberately outside this gate, each with the reason and a
-/// staleness assertion: the moment the subtree stops matching any tracked
-/// file, the exclusion itself is reported so it cannot silently outlive its
-/// premise.
-const EXCLUDED_PREFIXES: &[(&str, &str)] = &[(
-    "test-yaml-warnings/",
-    "scheduled for deletion by FR-155; churning files on death row breaks the FR-155 diff",
-)];
 
 const EXEMPT_MARK: &str = "# fixture-driverless-exempt:";
 
@@ -104,16 +94,8 @@ fn agent_doc(path: &str, chunk: &str) -> Option<AgentDoc> {
 
 /// Compares what the corpus contains against what the convention allows.
 /// Returns every violation rather than the first.
-fn evaluate(docs: &[AgentDoc], excluded_prefix_hits: &[(&str, usize)]) -> Vec<String> {
+fn evaluate(docs: &[AgentDoc]) -> Vec<String> {
     let mut violations = Vec::new();
-    for (prefix, hits) in excluded_prefix_hits {
-        if *hits == 0 {
-            violations.push(format!(
-                "stale exclusion: no tracked yaml file starts with '{prefix}' — the excluded \
-                 subtree is gone, delete the exclusion"
-            ));
-        }
-    }
     for doc in docs {
         match (doc.has_driver, doc.exempt_reason.as_deref()) {
             (false, None) => violations.push(format!(
@@ -173,21 +155,10 @@ fn tracked_yaml(root: &Path) -> Vec<String> {
     paths
 }
 
-/// Reads the real corpus into (docs, exclusion hit counts).
-fn observe(root: &Path) -> (Vec<AgentDoc>, Vec<(&'static str, usize)>) {
-    let mut hits: Vec<(&'static str, usize)> = EXCLUDED_PREFIXES
-        .iter()
-        .map(|(prefix, _)| (*prefix, 0usize))
-        .collect();
+/// Reads every Agent document from the real tracked YAML corpus.
+fn observe(root: &Path) -> Vec<AgentDoc> {
     let mut docs = Vec::new();
     for path in tracked_yaml(root) {
-        if let Some(hit) = hits
-            .iter_mut()
-            .find(|(prefix, _)| path.starts_with(*prefix))
-        {
-            hit.1 += 1;
-            continue;
-        }
         let content = std::fs::read_to_string(root.join(&path))
             .unwrap_or_else(|error| panic!("cannot read {path}: {error}"));
         for chunk in split_documents(&content) {
@@ -196,19 +167,19 @@ fn observe(root: &Path) -> (Vec<AgentDoc>, Vec<(&'static str, usize)>) {
             }
         }
     }
-    (docs, hits)
+    docs
 }
 
 /// The gate: every Agent document in the tracked corpus is typed or exempt.
 #[test]
 fn every_agent_fixture_is_typed_or_exempt() {
     let root = repo_root();
-    let (docs, hits) = observe(&root);
+    let docs = observe(&root);
     assert!(
         !docs.is_empty(),
         "no kind: Agent documents found in the tracked corpus — the scan is reading nothing"
     );
-    let violations = evaluate(&docs, &hits);
+    let violations = evaluate(&docs);
     assert!(
         violations.is_empty(),
         "{} of {} Agent documents violate the driver convention:\n  {}",
@@ -226,7 +197,7 @@ fn every_agent_fixture_is_typed_or_exempt() {
 #[test]
 fn a_commented_out_driver_block_is_a_violation() {
     let root = repo_root();
-    let (docs, _) = observe(&root);
+    let docs = observe(&root);
     let victim = docs
         .iter()
         .find(|doc| doc.has_driver && doc.exempt_reason.is_none())
@@ -260,7 +231,7 @@ fn a_commented_out_driver_block_is_a_violation() {
         victim.name, victim.path
     );
 
-    let violations = evaluate(&mutated_docs, &[]);
+    let violations = evaluate(&mutated_docs);
     assert!(
         violations
             .iter()
@@ -303,7 +274,7 @@ fn an_empty_exemption_reason_is_a_violation() {
         has_driver: false,
         exempt_reason: Some(String::new()),
     };
-    let violations = evaluate(&[doc], &[]);
+    let violations = evaluate(&[doc]);
     assert!(
         violations.iter().any(|v| v.contains("empty reason")),
         "an empty exemption reason was accepted: {violations:?}"
@@ -320,38 +291,20 @@ fn a_typed_document_with_an_exempt_comment_is_a_violation() {
         has_driver: true,
         exempt_reason: Some("some historical reason".to_string()),
     };
-    let violations = evaluate(&[doc], &[]);
+    let violations = evaluate(&[doc]);
     assert!(
         violations.iter().any(|v| v.contains("stale exemption")),
         "a typed document with an exempt comment was accepted: {violations:?}"
     );
 }
 
-/// An exclusion whose subtree no longer matches any tracked file is itself a
-/// violation — the blanket must not outlive its reason (§4.4 shape 8).
+/// The exempt documents in the real corpus must each carry a non-empty reason
+/// naming their asserting gate. This is the positive control for the negative
+/// tests above: if it fails, their PASS results are void.
 #[test]
-fn an_exclusion_matching_nothing_is_a_violation() {
-    let violations = evaluate(&[], &[("gone-subtree/", 0)]);
-    assert!(
-        violations.iter().any(|v| v.contains("stale exclusion")),
-        "an exclusion matching zero files was accepted: {violations:?}"
-    );
-}
-
-/// The real exclusions must currently match tracked files, and the exempt
-/// documents in the real corpus must each carry a non-empty reason naming
-/// their asserting gate. This is the positive control for the negative tests
-/// above: if it fails, their PASS results are void.
-#[test]
-fn real_exclusions_and_exemptions_are_live() {
+fn real_exemptions_are_live() {
     let root = repo_root();
-    let (docs, hits) = observe(&root);
-    for (prefix, count) in &hits {
-        assert!(
-            *count > 0,
-            "exclusion '{prefix}' matches no tracked yaml file; delete it"
-        );
-    }
+    let docs = observe(&root);
     for doc in docs.iter().filter(|d| d.exempt_reason.is_some()) {
         assert!(
             !doc.has_driver,

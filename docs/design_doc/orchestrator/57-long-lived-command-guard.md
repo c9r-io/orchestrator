@@ -23,7 +23,7 @@ non-zero value, the watch loop exits with code 0 after the specified duration,
 printing a final status snapshot.
 
 **Files:**
-- `proto/orchestrator.proto` — `timeout_secs` field on `TaskWatchRequest`
+- `crates/proto/orchestrator.proto` — `timeout_secs` field on `TaskWatchRequest`
 - `crates/cli/src/cli.rs` — `--timeout` arg (default 0 = no timeout)
 - `crates/cli/src/commands/task.rs` — client-side deadline on stream reads
 - `crates/daemon/src/server/task.rs` — server-side deadline on watch loop

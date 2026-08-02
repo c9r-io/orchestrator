@@ -101,7 +101,7 @@ safety:
 | `core/src/anomaly.rs` | `DegenerateLoop` variant |
 | `core/src/scheduler/trace/anomaly.rs` | `detect_degenerate_loop()` |
 | `core/src/scheduler/trace/builder.rs` | Wire detector |
-| `proto/orchestrator.proto` | `reset_blocked` in `TaskResumeRequest` |
+| `crates/proto/orchestrator.proto` | `reset_blocked` in `TaskResumeRequest` |
 | `crates/cli/src/cli.rs` | `--reset-blocked` flag |
 | `crates/cli/src/commands/task.rs` | Pass flag in gRPC call |
 | `crates/daemon/src/server/task.rs` | Handle `reset_blocked` on resume |

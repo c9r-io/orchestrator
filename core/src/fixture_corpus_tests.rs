@@ -20,6 +20,7 @@
 //!   exit code cannot tell that apart from the retirement it was supposed to
 //!   demonstrate.
 
+use crate::resource::Resource;
 use crate::service::system::validate_manifests;
 use crate::test_utils::TestState;
 use serde::Deserialize;
@@ -340,6 +341,129 @@ fn quickstart_bundle_applies_without_warnings() {
     assert!(
         warnings.is_empty(),
         "applying {path} would print compatibility warnings:\n  {}",
+        warnings.join("\n  ")
+    );
+}
+
+/// Extracts complete YAML fences from a Markdown document. A dangling fence
+/// is a hard failure because accepting a truncated onboarding example would
+/// make the behavior check vacuous.
+fn fenced_yaml_blocks(markdown: &str) -> Vec<String> {
+    let mut blocks = Vec::new();
+    let mut current: Option<Vec<&str>> = None;
+    for line in markdown.lines() {
+        match (line.trim(), current.as_mut()) {
+            ("```yaml", None) => current = Some(Vec::new()),
+            ("```", Some(_)) => {
+                let block = current.take().expect("matched open YAML fence").join("\n");
+                assert!(
+                    !block.trim().is_empty(),
+                    "AGENTS.md contains an empty YAML fence"
+                );
+                blocks.push(block);
+            }
+            (_, Some(lines)) => lines.push(line),
+            _ => {}
+        }
+    }
+    assert!(
+        current.is_none(),
+        "AGENTS.md contains an unclosed YAML fence"
+    );
+    blocks
+}
+
+/// FR-155: the repository's primary agent onboarding document must teach a
+/// manifest that the product can validate and apply without compatibility
+/// warnings. This intentionally drives typed parsing, dispatch, validation,
+/// warning collection, and apply rather than treating a text grep as proof.
+#[test]
+fn agents_md_manifests_apply_without_legacy_warnings() {
+    let root = repo_root();
+    let path = "AGENTS.md";
+    let content = std::fs::read_to_string(root.join(path))
+        .unwrap_or_else(|error| panic!("cannot read {path}: {error}"));
+    assert!(
+        !content.contains("root_path"),
+        "{path} must teach canonical Workspace spec.work_dir, not the compatibility alias"
+    );
+
+    let blocks = fenced_yaml_blocks(&content);
+    assert!(
+        !blocks.is_empty(),
+        "{path} contains no complete YAML manifest fence"
+    );
+
+    let mut config = crate::config::OrchestratorConfig::default();
+    let mut agent_count = 0usize;
+    let mut warnings = Vec::new();
+    let mut applied = 0usize;
+    for (index, block) in blocks.iter().enumerate() {
+        let manifests = crate::resource::parse_manifests_from_yaml(block).unwrap_or_else(|error| {
+            panic!("{path} YAML fence {} does not parse: {error}", index + 1)
+        });
+        assert!(
+            !manifests.is_empty(),
+            "{path} YAML fence {} parsed to zero documents",
+            index + 1
+        );
+        for manifest in manifests {
+            let crate::crd::ParsedManifest::Builtin(resource) = manifest else {
+                panic!(
+                    "{path} YAML fence {} contains an unregistered custom resource",
+                    index + 1
+                );
+            };
+            let registered =
+                crate::resource::dispatch_resource(*resource).unwrap_or_else(|error| {
+                    panic!(
+                        "{path} YAML fence {} resource does not dispatch: {error}",
+                        index + 1
+                    )
+                });
+            registered.validate().unwrap_or_else(|error| {
+                panic!(
+                    "{path} YAML fence {} resource is invalid: {error}",
+                    index + 1
+                )
+            });
+            match &registered {
+                crate::resource::RegisteredResource::Workflow(workflow) => {
+                    warnings.extend(workflow.collect_warnings());
+                }
+                crate::resource::RegisteredResource::Agent(agent) => {
+                    agent_count += 1;
+                    assert!(
+                        agent.spec.driver.is_some(),
+                        "Agent '{}' in {path} YAML fence {} has no typed driver",
+                        agent.metadata.name,
+                        index + 1
+                    );
+                    warnings.extend(agent.collect_warnings());
+                }
+                _ => {}
+            }
+            registered.apply(&mut config).unwrap_or_else(|error| {
+                panic!(
+                    "{path} YAML fence {} resource does not apply: {error}",
+                    index + 1
+                )
+            });
+            applied += 1;
+        }
+    }
+
+    assert!(
+        agent_count > 0,
+        "{path} contains no Agent resource to teach"
+    );
+    assert!(
+        applied >= agent_count,
+        "{path} applied no complete resource set"
+    );
+    assert!(
+        warnings.iter().all(|warning| !warning.contains("[legacy_")),
+        "applying {path} examples would print legacy warnings:\n  {}",
         warnings.join("\n  ")
     );
 }

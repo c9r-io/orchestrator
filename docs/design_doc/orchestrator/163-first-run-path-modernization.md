@@ -55,14 +55,14 @@ carries the new machine-parseable per-document comment:
 ```
 
 `core/src/fixture_driverless_tests.rs` enforces the ratchet: scope derived
-from `git ls-files '*.yaml' '*.yml'` (empty scan fails; the
-`test-yaml-warnings/` exclusion fails as stale the day FR-155 deletes the
-directory), pure evaluator, violations for driverless-without-exemption,
-empty exemption reasons, and — in the reverse direction — a typed document
-still carrying the exempt comment. The negative fixture comments out (never
-deletes) the driver block of a victim derived from the real corpus, and
-asserts the premise ("the mutation removed the driver") before asserting the
-verdict, per §4.4 shape 7.
+from `git ls-files '*.yaml' '*.yml'` (an empty scan fails), pure evaluator,
+violations for driverless-without-exemption, empty exemption reasons, and —
+in the reverse direction — a typed document still carrying the exempt
+comment. FR-155 later removed the temporary `test-yaml-warnings/` exclusion
+together with that orphan corpus, so the gate now has no subtree exclusions.
+The negative fixture comments out (never deletes) the driver block of a victim
+derived from the real corpus, and asserts the premise ("the mutation removed
+the driver") before asserting the verdict, per §4.4 shape 7.
 
 Migration parity evidence (§4.3): the five consuming gates were run before
 and after the migration commit at pinned revisions (`6ca3822f` baseline,

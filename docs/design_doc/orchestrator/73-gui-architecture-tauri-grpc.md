@@ -285,7 +285,7 @@ gui/
 |------|----------|
 | `crates/cli/src/client.rs` | gRPC 连接发现、ControlPlaneConfig、TLS 配置 |
 | `crates/proto/src/lib.rs` | 48 个 RPC 的 Rust 类型定义 |
-| `proto/orchestrator.proto` | RPC 接口完整定义 |
+| `crates/proto/orchestrator.proto` | RPC 接口完整定义 |
 | `crates/daemon/src/control_plane.rs` | 理解 mTLS 验证逻辑（daemon 侧） |
 | `crates/daemon/src/protection.rs` | 理解限流策略（GUI 作为新 subject） |
 | `docs/design-system.md` | Liquid Glass 设计 token |

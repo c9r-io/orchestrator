@@ -262,6 +262,6 @@ L2/L3 页面左上角始终有"← 返回"按钮，点击回到上一层。
 | 文件 | 用途 |
 |------|------|
 | `docs/design-system.md` | Liquid Glass 设计 token（颜色、阴影、模糊、圆角） |
-| `proto/orchestrator.proto` | RPC 接口定义（确定数据字段） |
+| `crates/proto/orchestrator.proto` | RPC 接口定义（确定数据字段） |
 | `crates/cli/src/commands/task.rs` | TaskList/Info 输出字段参考 |
 | `crates/cli/src/output/task_detail.rs` | 任务详情字段结构参考 |

@@ -21,7 +21,7 @@
 > 它通过 gRPC 调用 daemon 的 `Echo` RPC，daemon 原样返回消息，CLI 打印结果。
 >
 > 本轮任务目标：
-> 1. 在 `proto/orchestrator.proto` 中新增 `Echo` RPC、`EchoRequest`（含 `message` 字段）、`EchoResponse`（含 `reply` 字段）。
+> 1. 在 `crates/proto/orchestrator.proto` 中新增 `Echo` RPC、`EchoRequest`（含 `message` 字段）、`EchoResponse`（含 `reply` 字段）。
 > 2. 在 `crates/daemon/src/server/system.rs` 中实现 `Echo` handler，原样返回 `request.message`。
 > 3. 在 `crates/cli/src/commands/` 中新增 `echo.rs` 子命令，调用 daemon 的 `Echo` RPC 并打印结果。
 > 4. 在 CLI 的 `mod.rs` 或主命令注册点中注册 `echo` 子命令。
@@ -39,7 +39,7 @@
 
 1. 一份实现计划（由 `plan` 步骤生成）。
 2. 必要的 QA 文档更新（由 `qa_doc_gen` 判断是否需要）。
-3. 代码改动（预期涉及 `proto/orchestrator.proto`、`crates/daemon/src/server/system.rs`、`crates/cli/src/commands/`）。
+3. 代码改动（预期涉及 `crates/proto/orchestrator.proto`、`crates/daemon/src/server/system.rs`、`crates/cli/src/commands/`）。
 4. 新增单元测试。
 5. 自举回归验证结果。
 
@@ -97,7 +97,7 @@ ps aux | grep orchestratord | grep -v grep
 
 ```bash
 # 确认 Echo RPC 不存在
-grep -n "Echo" proto/orchestrator.proto
+grep -n "Echo" crates/proto/orchestrator.proto
 # 预期：无匹配
 
 # 确认 echo 子命令不存在
@@ -134,7 +134,7 @@ orchestrator task create \
   -n "echo-command-test" \
   -w self -W self-bootstrap \
   --project self-bootstrap \
-  -g "课题：Echo CLI 子命令。在 proto/orchestrator.proto 中新增 Echo RPC（EchoRequest 含 message 字段，EchoResponse 含 reply 字段）。在 crates/daemon/src/server/system.rs 中实现 Echo handler，原样返回 request.message，需经过 authorize 检查（ReadOnly 角色）。在 crates/cli/src/commands/ 中新增 echo.rs 子命令，调用 daemon Echo RPC 并打印结果。在 CLI 主命令注册点注册 echo 子命令。补充单元测试。不修改任何现有 RPC 或命令的行为，不引入新依赖。"
+  -g "课题：Echo CLI 子命令。在 crates/proto/orchestrator.proto 中新增 Echo RPC（EchoRequest 含 message 字段，EchoResponse 含 reply 字段）。在 crates/daemon/src/server/system.rs 中实现 Echo handler，原样返回 request.message，需经过 authorize 检查（ReadOnly 角色）。在 crates/cli/src/commands/ 中新增 echo.rs 子命令，调用 daemon Echo RPC 并打印结果。在 CLI 主命令注册点注册 echo 子命令。补充单元测试。不修改任何现有 RPC 或命令的行为，不引入新依赖。"
 ```
 
 记录返回的 `<task_id>`。
@@ -189,7 +189,7 @@ git diff --stat
 
 | 文件 | 预期变化 |
 |------|---------|
-| `proto/orchestrator.proto` | 新增 `rpc Echo`、`message EchoRequest`、`message EchoResponse` |
+| `crates/proto/orchestrator.proto` | 新增 `rpc Echo`、`message EchoRequest`、`message EchoResponse` |
 | `crates/daemon/src/server/system.rs` | 新增 `echo` handler，调用 `authorize`，返回 `EchoResponse { reply: req.message }` |
 | `crates/daemon/src/server/mod.rs` | 路由注册（如需手动注册） |
 | `crates/cli/src/commands/echo.rs` | 新增 `echo` 子命令，clap derive，调用 gRPC Echo |
@@ -241,7 +241,7 @@ Cycle 1 的 `self_restart` 会用含新 RPC 的代码重建 daemon binary。需�
 当以下条件同时成立，可判定本轮测试通过：
 
 1. orchestrator 完整跑完 2 个 cycle 的 `self-bootstrap` 流程，在 `loop_guard` 正常收口。
-2. `proto/orchestrator.proto` 中存在 `Echo` RPC 定义。
+2. `crates/proto/orchestrator.proto` 中存在 `Echo` RPC 定义。
 3. `crates/daemon/src/server/system.rs` 中存在 `echo` handler 且调用了 `authorize`。
 4. `crates/cli/src/commands/` 中存在 `echo` 子命令。
 5. `cargo test --workspace --lib` 通过。

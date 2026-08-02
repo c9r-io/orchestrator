@@ -46,7 +46,7 @@ self_referential_safe: true
 **步骤**:
 1. **Code review** — 确认 proto 定义包含新字段：
    ```bash
-   rg -n "is_healthy|diseased_until|consecutive_errors" proto/orchestrator.proto
+   rg -n "is_healthy|diseased_until|consecutive_errors" crates/proto/orchestrator.proto
    ```
 
 **预期**:

@@ -1,13 +1,13 @@
 # Agent Orchestrator Architecture
 
-This document describes the architecture of Agent Orchestrator as a **local-first Harness Engineering control plane**. The system is designed to operationalize agent-first software delivery by turning shell-native coding agents into governed execution units with workflows, triggers, policies, persistence, and observability. The runtime is composed of a core library crate (`agent-orchestrator`), a daemon binary (`orchestratord`), and a CLI client binary (`orchestrator`).
+This document describes the architecture of Agent Orchestrator as a **local-first Harness Engineering control plane**. The system is designed to operationalize agent-first software delivery by turning shell-native coding agents into governed execution units with workflows, triggers, policies, persistence, and observability. The Cargo workspace contains the `agent-orchestrator` core facade, specialized scheduler, runner, security, configuration, collaboration, client, and persistence libraries, plus four binaries: `orchestratord`, `orchestrator`, `orchestrator-gui`, and the optional `orchestrator-slack-gateway`.
 
 ## 1. Project Overview
 
 **Goal:** To provide a deterministic, reproducible, and observable control plane where humans specify intent and constraints while agents execute software delivery work (QA, coding, testing, review, repair) inside a governed local workspace.
 
 **Key Features:**
-- **CLI-First:** All interactions are driven by a command-line interface.
+- **CLI-First:** The CLI is the primary operator interface; the Tauri desktop client and gRPC API expose the same daemon-owned state.
 - **Local Execution:** Runs directly on the host machine, managing local processes.
 - **Stateful Orchestration:** Persists task state, logs, and events to a local SQLite database.
 - **Agent Driver Abstraction:** Treats AI agents (or scripts) as interchangeable execution units selected by capability and backed by a typed shell, Claude CLI, or Codex CLI provider adapter.
@@ -20,7 +20,7 @@ The project structure is organized as follows:
 ```
 /
 ├── Cargo.toml            # Workspace root (members: core, crates/*)
-├── core/                 # Core Rust library (models, persistence, service layer)
+├── core/                 # Core Rust facade (models, services, cross-crate ports)
 │   ├── src/
 │   │   ├── service/      # Pure business logic layer (task, resource, store, system)
 │   │   ├── scheduler_port.rs  # TaskEnqueuer trait — cross-crate enqueue dispatch
@@ -30,6 +30,7 @@ The project structure is organized as follows:
 │   ├── orchestrator-client/  # Shared gRPC client types and connection logic
 │   ├── orchestrator-collab/  # Collaboration primitives (artifacts, execution context, DAG)
 │   ├── orchestrator-config/  # Configuration models and loading
+│   ├── orchestrator-persistence/ # SQLite migrations and repository implementations
 │   ├── orchestrator-runner/  # Sandboxed command execution engine
 │   ├── orchestrator-scheduler/ # Scheduler engine (task loop, phases, guards, traces)
 │   ├── orchestrator-security/  # Encryption, key lifecycle, audit logging
@@ -50,6 +51,7 @@ The project structure is organized as follows:
 │   ├── gui/              # Tauri desktop application
 │   ├── slack-gateway/    # Optional public Slack OAuth/events/delivery boundary
 │   └── integration-tests/ # Integration test suite
+├── gui/                  # React/TypeScript/Vite Web frontend embedded by Tauri
 ├── ~/.orchestratord/     # Default runtime data directory (override via ORCHESTRATORD_DATA_DIR)
 │   ├── agent_orchestrator.db  # SQLite database
 │   ├── orchestrator.sock # Daemon Unix socket (C/S mode)
@@ -111,6 +113,7 @@ crates/
   orchestrator-client/     # Shared gRPC client types and connection logic
   orchestrator-collab/     # Collaboration primitives (artifacts, execution context, DAG)
   orchestrator-config/     # Configuration models and loading
+  orchestrator-persistence/ # SQLite migrations and repository implementations
   orchestrator-runner/     # Sandboxed command execution engine
   orchestrator-scheduler/  # Scheduler engine (task loop, phases, guards, traces)
   orchestrator-security/   # Encryption, key lifecycle, audit logging
@@ -122,6 +125,7 @@ crates/
   integration-tests/       # Integration test suite
 core/
   src/service/             # Pure business logic layer (task, resource, store, system)
+gui/                       # React/TypeScript/Vite Web frontend embedded by crates/gui
 ```
 
 ### 3.2 Core Components
@@ -132,7 +136,7 @@ core/
     *   Displays output (tables, JSON, YAML).
 
 2.  **Orchestrator Engine** (`core/` + `crates/orchestrator-scheduler/`):
-    *   **Core** (`core/`): Models, persistence, service layer, `scheduler_port.rs` (cross-crate enqueue dispatch via `TaskEnqueuer` trait).
+    *   **Core** (`core/`): Models, service layer, compatibility facades, and `scheduler_port.rs` (cross-crate enqueue dispatch via `TaskEnqueuer` trait).
     *   **Scheduler** (`crates/orchestrator-scheduler/`): Task loop execution, enqueue/claim, phase runner, loop guards, traces, checkpoints.
     *   **Task Management**: Creates, starts, pauses, and resumes tasks.
     *   **Cycle Loop**: Manages the iterative execution of workflows.
@@ -142,7 +146,7 @@ core/
     *   **Source Event Boundary**: Provider adapters authenticate and normalize external deliveries, then persist them before acknowledgement. The daemon router correlates provider conversations through `source_bindings` and invokes canonical Trigger or allowlisted Attention services; adapters never mutate task state directly.
     *   **Managed Slack Boundary**: An optional independent `orchestrator-slack-gateway` owns official and per-workspace App credentials, OAuth callbacks, raw-body request verification, encrypted installation tokens, durable normalized queues, and the bounded permalink proxy. Local daemons use outbound HTTPS only and retain an encrypted installation-scoped pairing. For dedicated Apps, the daemon alone uses a short-lived Configuration Token with a fixed manifest, while Gateway import is one-time, connection-scoped, encrypted, and receipt-bound. SourceConnection ownership, Trigger association, badge policy, and task mutation remain daemon authority. See [Managed Slack Connection And Shared OAuth](design_doc/orchestrator/125-managed-slack-connection-shared-oauth.md) and [Dedicated Slack App Auto Provisioning](design_doc/orchestrator/126-dedicated-slack-app-auto-provisioning.md).
 
-3.  **Data Layer (`core/src/db.rs`)**:
+3.  **Data Layer (`crates/orchestrator-persistence/`, exposed through `core/src/persistence/`)**:
     *   **SQLite**: Stores persistent state including:
         *   `tasks`: Task metadata and status.
         *   `task_items`: Individual items (files) being processed.
@@ -151,7 +155,7 @@ core/
         *   `source_events`: Provider-neutral external deliveries and routing state.
         *   `source_bindings`: External conversation/artifact to task correlation.
         *   `source_routing_attempts` and `source_command_actions`: Replay and command audit evidence.
-        *   `source_connections`, `source_connection_intents`, and `source_connection_changes`: Safe managed/manual connection lifecycle, resumable OAuth intent projection, monotonic watch changes, encrypted internal pairing envelope, generation/version fence, and delivery cursor (migration 35).
+        *   `source_connections`, `source_connection_intents`, and `source_connection_changes`: Safe managed/manual connection lifecycle, resumable OAuth intent projection, monotonic watch changes, encrypted internal pairing envelope, generation/version fence, and delivery cursor. The registered migration chain currently contains 37 migrations.
         *   `control_action_audit`: Canonical bounded mutation envelope joined to transport, domain, and event evidence by `request_id`.
         *   `process_metric_observations` and `process_metric_rollups`: Optional privacy-safe Process Console samples and rebuildable fixed-window aggregates.
         *   `process_metric_projector_state`: Non-authoritative projector cursor, lag, failure category, and freshness.
@@ -243,28 +247,32 @@ Pure business logic embedded by the daemon and exposed through the gRPC server:
 
 ## 5. Deployment Model
 
-The Agent Orchestrator is distributed as a Cargo workspace with a core library and three binaries:
+The Agent Orchestrator is distributed as a Cargo workspace with a core facade, specialized libraries, and four binaries:
 
 | Crate | Type | Purpose |
 |-------|------|---------|
-| `core` (`agent-orchestrator`) | Library | Core engine — models, persistence, service layer, state management |
+| `core` (`agent-orchestrator`) | Library | Core facade — models, service layer, state management, and cross-crate ports |
 | `crates/orchestrator-client` | Library | Shared gRPC client — dual-transport (UDS/TLS) connection logic |
 | `crates/orchestrator-collab` | Library | Collaboration primitives — artifacts, execution context, DAG planning |
 | `crates/orchestrator-config` | Library | Configuration models and loading |
+| `crates/orchestrator-persistence` | Library | SQLite migration chain and repository implementations |
 | `crates/orchestrator-runner` | Library | Sandboxed command execution — spawn, capture, network/security policy |
 | `crates/orchestrator-scheduler` | Library | Scheduler engine — task loop, phase runner, guards, traces |
 | `crates/orchestrator-security` | Library | Encryption (AES-256-GCM-SIV), key lifecycle, audit logging |
+| `crates/proto` | Library | Canonical protobuf definition and tonic/prost-generated API types |
+| `crates/integration-tests` | Library | Shared full-stack integration-test harness |
 | `crates/daemon` (`orchestratord`) | Binary | Daemon — gRPC server + embedded workers |
 | `crates/cli` (`orchestrator`) | Binary | CLI client — lightweight gRPC client |
 | `crates/gui` (`orchestrator-gui`) | Binary | Tauri desktop application |
+| `crates/slack-gateway` (`orchestrator-slack-gateway`) | Binary | Optional managed Slack OAuth, event delivery, and bounded proxy boundary |
 
-- **C/S mode**: Daemon (`orchestratord`) runs persistently, CLI client (`orchestrator`) connects via Unix Domain Socket (`data/orchestrator.sock`) or TCP (`--bind`).
-- Both binaries require `sqlite3` and standard shell utilities (`bash`, `grep`, etc.) if used by agents.
+- **C/S mode**: Daemon (`orchestratord`) runs persistently; CLI and GUI clients connect via the default Unix Domain Socket at `~/.orchestratord/orchestrator.sock` (or `${ORCHESTRATORD_DATA_DIR}/orchestrator.sock`) or secure TCP (`--bind`).
+- Agent commands may require external shell utilities according to their own declared command and execution policy.
 
 ## 6. Observability
 
 - **Structured Logs**: All significant actions are recorded in the `events` table in SQLite.
-- **Execution Logs**: Detailed stdout/stderr from every agent command is stored in `data/logs/{task_id}/`.
+- **Execution Logs**: Detailed stdout/stderr from every agent command is stored under `~/.orchestratord/logs/{task_id}/` by default, rooted at `ORCHESTRATORD_DATA_DIR` when overridden.
 - **Process Operations**: Versioned project-scoped metrics derive authoritative outcomes from durable state and expose only allowlisted local observations through gRPC/CLI and System → Operations. Metric failure never gates execution.
 - **Debug Command**: The CLI provides a `debug` command to inspect internal state and configuration.
 

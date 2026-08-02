@@ -54,7 +54,7 @@ related_fr: FR-026
 | `crates/daemon/src/main.rs` | 后台清理任务 spawn |
 | `crates/daemon/src/server/system.rs` | gRPC handler |
 | `crates/cli/src/commands/event.rs` | CLI dispatch |
-| `proto/orchestrator.proto` | EventCleanup/EventStats 消息定义 |
+| `crates/proto/orchestrator.proto` | EventCleanup/EventStats 消息定义 |
 
 ## 风险缓解
 
