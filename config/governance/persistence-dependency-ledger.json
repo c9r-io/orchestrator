@@ -287,7 +287,7 @@
     "crates/orchestrator-persistence/src/session_store.rs": {
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 5,
-      "sql": 30,
+      "sql": 31,
       "category": "persistence-layer"
     },
     "crates/orchestrator-persistence/src/source_automation_routes.rs": {
@@ -403,6 +403,6 @@
     "members": 14,
     "referencedFiles": 39,
     "rusqlite": 215,
-    "sql": 596
+    "sql": 597
   }
 }

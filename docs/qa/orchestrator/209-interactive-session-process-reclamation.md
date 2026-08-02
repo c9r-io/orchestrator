@@ -9,7 +9,7 @@ self_referential_safe: true
 **Module**: Orchestrator Daemon / Session Store / Scheduler Spawn / QA Harness
 **Scope**: OS-level reclamation of unreachable session process groups, stale-record
 retention, session stdin transport, temp-directory reclamation
-**Scenarios**: 6
+**Scenarios**: 5
 **Priority**: High
 
 ## Background
@@ -29,7 +29,7 @@ assertions honest, and the temp-directory leaks found alongside it.
 
 ## Automated script
 
-`scripts/qa/test-session-process-reclamation.sh` covers scenarios 1–5. It starts
+`scripts/qa/test-session-process-reclamation.sh` covers scenarios 1–4. It starts
 its own daemon over UDS with a private data directory, never touches
 `~/.orchestratord`, and sweeps its own fixture leftovers at startup.
 
@@ -93,39 +93,32 @@ implemented.
   pass equally on an implementation that signalled first and reported second, so
   the assertion is on the process, not the return value.
 
-## Scenario 4 — Graceful shutdown drains a healthy session
+## Scenario 4 — Graceful shutdown drains a healthy session, leaving nothing behind
 
 Requirement 4. The session here has an intact transport, so the periodic path
 would never touch it; if it dies, the shutdown drain reclaimed it.
+
+Scenarios 2 and 3 exist to prove processes *survive*, so they are still alive by
+design and are reclaimed at the end of this scenario before the final count.
+Anything left after that was leaked rather than spared.
 
 ### Steps
 
 1. Start a mock session and confirm it is running.
 2. Stop the daemon with `SIGTERM`; poll until the PID file is released.
 3. Wait up to 15s for the session process to exit.
+4. Kill the process groups spared by scenarios 2 and 3.
+5. Count `ppid == 1` processes whose command line carries the mock marker.
 
 ### Expected result
 
-- The session's process group is gone. `SIGTERM` alone suffices — every group in
-  the 2026-08-03 triage exited without needing `SIGKILL`.
+- The drained session's process group is gone. `SIGTERM` alone suffices — every
+  group in the 2026-08-03 triage exited without needing `SIGKILL`.
+- The final count is zero, and it **fails closed on an empty process table**: a
+  `ps` that returned nothing and a machine running nothing are the same zero
+  rows, and every count derived from them reads as clean.
 
-## Scenario 5 — Nothing beyond the deliberately spared fixtures is left running
-
-Scenarios 2 and 3 exist to prove processes *survive*, so they are alive by
-design and are reclaimed before this count.
-
-### Steps
-
-1. Kill the process groups spared by scenarios 2 and 3.
-2. Count `ppid == 1` processes whose command line carries the mock marker.
-
-### Expected result
-
-- Zero. The count **fails closed on an empty process table**: a `ps` that
-  returned nothing and a machine running nothing are the same zero rows, and
-  every count derived from them reads as clean.
-
-## Scenario 6 — The QA harness does not accumulate orphans across interrupted runs
+## Scenario 5 — The QA harness does not accumulate orphans across interrupted runs
 
 Requirement 6, verified by hand. `test-agent-session-control-plane.sh` now records
 every real session PID as it appears, reclaims by process group, and sweeps the
@@ -152,6 +145,19 @@ vacuous zero.
 | 3 | clean run, 6 passed | 0 |
 
 Recorded 2026-08-03: exactly these values.
+
+## Checklist
+
+| # | Scenario | Status | Test Date | Tester | Notes |
+|---|----------|--------|-----------|--------|-------|
+| 1 | Unreachable session process reclaimed, recorded, directory removed | PASS | 2026-08-03 | Claude | Process gone within two cycles; `session_process_reclaimed` with `outcome=reclaimed`; `logs/sessions/<id>/` removed; database untouched |
+| 2 | Reclamation disabled leaves the process alone | PASS | 2026-08-03 | Claude | Survives >25s (two 10s cycles); row still moves to `failed`, so only the signal is gated |
+| 3 | Mismatched fingerprint signals nothing | PASS | 2026-08-03 | Claude | Process still running; assertion is on the process, not the return value |
+| 4 | Graceful shutdown drains a healthy session, nothing left behind | PASS | 2026-08-03 | Claude | Drained on `SIGTERM` alone; final orphan count 0, fails closed on an empty `ps` |
+| 5 | QA harness does not accumulate across interrupted runs | PASS | 2026-08-03 | Claude | SIGKILL rounds gave 1, then 1 (not 2), then 0 after a clean run |
+
+Gate output 2026-08-03: `Session process reclamation QA: 13 passed, 0 failed`,
+exit 0, and again on an immediate second run with nothing to sweep.
 
 ## Unit coverage
 

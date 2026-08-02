@@ -1097,6 +1097,119 @@ async fn emit(
 mod tests {
     use super::*;
 
+    /// Spawns a process-group leader with a child of its own, the shape a real
+    /// session has when the agent it runs starts something.
+    #[cfg(unix)]
+    fn spawn_session_like_group() -> (std::process::Child, u32) {
+        use std::io::Read;
+        use std::os::unix::process::CommandExt;
+
+        let mut child = std::process::Command::new("sh")
+            .arg("-c")
+            .arg("sleep 60 & echo $! ; wait")
+            .stdout(std::process::Stdio::piped())
+            .process_group(0)
+            .spawn()
+            .expect("spawn session-like group");
+        let mut out = child.stdout.take().expect("capture stdout");
+        let mut buf = String::new();
+        let mut byte = [0u8; 1];
+        while out.read(&mut byte).unwrap_or(0) == 1 {
+            if byte[0] == b'\n' {
+                break;
+            }
+            buf.push(byte[0] as char);
+        }
+        let grandchild: u32 = buf.trim().parse().expect("grandchild pid");
+        (child, grandchild)
+    }
+
+    #[cfg(unix)]
+    fn wait_for_exit(pid: u32) -> bool {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while session_store::process_exists(pid) && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        !session_store::process_exists(pid)
+    }
+
+    /// Closing a session must not leave its children running.
+    ///
+    /// The assertion is on the **grandchild**, not the session leader. A
+    /// leader-only signal produces an identical exit for the leader, so a test
+    /// that watched only the leader would pass on exactly the defect this
+    /// change fixes — the close path used to signal `row.pid` alone, which is
+    /// how a dead leader comes to have live descendants (FR-159).
+    #[cfg(unix)]
+    #[test]
+    fn closing_a_session_terminates_its_children_too() {
+        let (mut leader, grandchild) = spawn_session_like_group();
+        let pid = leader.id() as i64;
+        assert!(
+            session_store::is_process_group_leader(pid),
+            "fixture must lead its own group or it cannot exercise group signalling"
+        );
+        assert!(
+            session_store::process_exists(grandchild),
+            "the child must start alive"
+        );
+
+        let (result, signalled_group) = terminate_session_process(pid);
+        assert!(result.is_ok(), "SIGTERM to the group should succeed");
+        assert!(
+            signalled_group,
+            "a group leader must be signalled as a group, not as a single process"
+        );
+
+        assert!(
+            wait_for_exit(grandchild),
+            "the session's child must die with the group; if it survives, close \
+             signalled only the leader and has just created an orphan"
+        );
+        let _ = leader.kill();
+        let _ = leader.wait();
+    }
+
+    /// A PID that does not lead its own group falls back to the single-process
+    /// signal rather than negating into an unrelated group.
+    ///
+    /// The fallback is the safe direction: it can under-reach, never
+    /// over-reach. `kill(-pid, …)` on a non-leader would deliver SIGTERM to
+    /// whichever group happens to carry that number.
+    #[cfg(unix)]
+    #[test]
+    fn closing_a_non_leader_signals_only_that_process() {
+        let mut child = std::process::Command::new("sleep")
+            .arg("60")
+            .spawn()
+            .expect("spawn non-leader");
+        let pid = child.id() as i64;
+        assert!(
+            !session_store::is_process_group_leader(pid),
+            "fixture must NOT lead its group, otherwise this asserts nothing"
+        );
+
+        let (result, signalled_group) = terminate_session_process(pid);
+        assert!(result.is_ok(), "SIGTERM to the process should succeed");
+        assert!(
+            !signalled_group,
+            "a non-leader must not be signalled as a group"
+        );
+
+        // Reap and assert on the termination signal rather than on liveness.
+        // An unreaped child is a zombie, and `kill(pid, 0)` succeeds for a
+        // zombie, so a liveness probe here reports a process that has already
+        // died as still running. The exit status says which signal arrived,
+        // which is the stronger claim anyway.
+        use std::os::unix::process::ExitStatusExt;
+        let status = child.wait().expect("reap non-leader");
+        assert_eq!(
+            status.signal(),
+            Some(nix::sys::signal::Signal::SIGTERM as i32),
+            "the process itself must still receive SIGTERM when the group form is skipped"
+        );
+    }
+
     #[tokio::test]
     async fn per_session_reader_limit_releases_on_stream_drop() {
         let limits = SessionReadLimits::default();
