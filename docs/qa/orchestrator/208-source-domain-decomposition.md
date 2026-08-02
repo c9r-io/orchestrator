@@ -9,7 +9,7 @@ self_referential_safe: true
 **Module**: Orchestrator Daemon / gRPC Surface / Coverage Governance
 **Scope**: SourceConnection handler behaviour against a Gateway stub, module size
 ceiling, key-module coverage measurement, action-audit vocabulary consolidation
-**Scenarios**: 6
+**Scenarios**: 5
 **Priority**: High
 
 ## Background
@@ -24,9 +24,9 @@ daemon, opens the runtime database, or writes outside `target/`. The behavioural
 scenarios run in-process against `TestState` (a `tempfile` directory) and an
 axum stub bound to `127.0.0.1:0`; the structural scenarios read files.
 
-## Scenario 1: The handler suite passes and actually reaches the Gateway
+## Scenario 1: The handler suite passes, reaches the Gateway, and fails when the state machine breaks
 
-**Steps**
+**Steps — part A, the positive run**
 
 ```bash
 cargo test -p orchestratord source_connection
@@ -48,13 +48,9 @@ Every test file that drives a mutating handler asserts on a recorded stub call.
 A handler that silently skipped a Gateway request would still return `Ok`; these
 assertions are what distinguish the two.
 
-## Scenario 2: The suite fails when the state machine is broken
-
-The negative fixture comments a line out rather than deleting it — deletion is
-the mutation the author had in mind, and the assertion must survive the one they
-did not.
-
-**Steps**
+**Steps — part B, the negative fixture.** It comments a line out rather than
+deleting it: deletion is the mutation the author had in mind, and the assertion
+must survive the one they did not.
 
 ```bash
 cp crates/daemon/src/server/source_connection/oauth.rs /tmp/oauth.bak
@@ -88,9 +84,9 @@ failures. The `assert!(old in s)` is not decoration: if the fence has moved, the
 run must fail on that assertion rather than proceed to a green result that means
 nothing.
 
-Restore the file and re-run scenario 1 to confirm the tree is clean again.
+Restore the file and re-run part A to confirm the tree is clean again.
 
-## Scenario 3: The module size ceiling is derived, not listed
+## Scenario 2: The module size ceiling is derived, not listed
 
 **Steps**
 
@@ -119,7 +115,7 @@ mv crates/daemon/src/server/source_connection /tmp/sc-moved 2>/dev/null \
 The build will not compile with the module moved, which is itself the failure —
 the point is that the scan cannot report success over an empty set.
 
-## Scenario 4: The key-module coverage prefix measures the split module
+## Scenario 3: The key-module coverage prefix measures the split module
 
 This is the check that would have failed silently. The split moved the
 implementation into a directory; the normalizer matched a prefix ending in `.rs`,
@@ -174,7 +170,7 @@ other, which is why the table asserts the diagnostic rather than the status.
 Capture the exit status directly as shown. Piping into `head` or `tail` reports
 the pager's status, not the script's.
 
-## Scenario 5: The coverage number reproduces, by more than one route
+## Scenario 4: The coverage number reproduces, by more than one route
 
 **Steps**
 
@@ -245,7 +241,7 @@ executed production code rather than a shrunken denominator. Run this check
 whenever the baseline is re-approved — it is the one direction in which a
 coverage rise can be manufactured.
 
-## Scenario 6: The action-audit vocabulary has one definition site per term
+## Scenario 5: The action-audit vocabulary has one definition site per term
 
 **Steps**
 
@@ -353,3 +349,40 @@ definitions over zero files. Assert the diagnostic, not only the exit code.
 test code by the same derivation the gate uses everywhere else. Recorded because
 "the gate did not fire" and "the gate is broken" look identical until you check
 which line you actually changed.
+
+## Checklist
+
+| # | Scenario | Status | Test Date | Tester | Notes |
+|---|----------|--------|-----------|--------|-------|
+| 1 | Handler suite passes, reaches the Gateway, fails when broken | PASS | 2026-08-02 | Claude | 60 passed; commenting out `reconcile_intent`'s owner fence gives exit 101 and fails `a_completed_intent_owned_by_another_daemon_is_refused` by name |
+| 2 | Module size ceiling, derived from the directory | PASS | 2026-08-02 | Claude | 7 production files, largest 631 lines; the decomposition assertion rejects a single trimmed file |
+| 3 | Key-module coverage prefix measures the split module | PASS | 2026-08-02 | Claude | Fixtures PASS; 3 mutations exit 1 with distinct numbers — 65, 5, 97.14 |
+| 4 | Coverage reproduces by more than one route | PASS | 2026-08-02 | Claude | 2089/2443 = 85.51% by two routes, 86.90% by LCOV; denominator 98.4% of the approved 2482 |
+| 5 | One definition site per vocabulary term | PASS | 2026-08-02 | Claude | Structural + 2 behavioural assertions; 3 mutations exit 101 with distinct diagnostics; `grep -rno` yields exactly 4 lines |
+
+Full suite: `cargo test -p orchestratord source_connection` → 60 passed, 0 failed.
+
+## Rollback Evidence
+
+The split is reverse-applicable, but not on its own — measured rather than
+assumed, in a throwaway worktree at `ee82ef52`:
+
+```bash
+git worktree add /tmp/rb HEAD && cd /tmp/rb
+git revert --no-commit d94499ea            # exit 1
+git diff --name-only --diff-filter=U       # the two coverage files
+git revert --abort; git reset --hard HEAD
+git revert --no-commit 3fe21af5 d94499ea   # exit 0, 16 paths, single file restored
+```
+
+Reverting the split alone conflicts on
+`scripts/coverage/coverage-governance.mjs` and its fixture test, because the
+later hardening commit rewrote the same lines. Reverting the hardening and the
+split together applies with no conflicts across 16 paths and restores the
+2647-line single-file form. Anyone rolling this back needs both commits, in that
+order.
+
+The behavioural suite is independent of the split: it was written and committed
+against the monolith at `e1488770` and passed unchanged after the move. That is
+what makes DD-170's multiset proof a claim about the code rather than about the
+tests.
