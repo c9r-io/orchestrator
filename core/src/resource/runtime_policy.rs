@@ -50,7 +50,8 @@ impl Resource for RuntimePolicyResource {
         }
         if !matches!(
             self.spec.action_audit_mode.as_str(),
-            "compatibility" | "enforced"
+            crate::cli_types::ACTION_AUDIT_MODE_COMPATIBILITY
+                | crate::cli_types::ACTION_AUDIT_MODE_ENFORCED
         ) {
             return Err(anyhow!(
                 "action_audit_mode must be compatibility or enforced"

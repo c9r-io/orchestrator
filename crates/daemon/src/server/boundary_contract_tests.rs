@@ -398,3 +398,142 @@ async fn action_audit_rpc_matrix_covers_success_invalid_denied_and_idempotency_c
     assert_eq!(conflict.code(), Code::AlreadyExists);
     assert!(conflict.metadata().get("x-request-id").is_some());
 }
+
+/// FR-157 requirement 4 collapsed 20 `"legacy_client"` literals across seven handler
+/// files into one constant. Substituting a constant for a literal is exactly the kind
+/// of change that compiles, passes every count-based check, and silently alters what
+/// reaches the audit table — so this asserts the recorded value against the literal
+/// string the wire contract has always carried, not against the constant.
+#[tokio::test]
+async fn a_context_free_mutation_is_still_audited_under_the_legacy_client_reason_code() {
+    let fixture = BoundaryFixture::new(None);
+    let mut request = Request::new(());
+    let attempt = action_audit::begin(
+        &fixture.server,
+        &mut request,
+        "AttentionClaim",
+        None,
+        ActionDescriptor {
+            project_id: "default",
+            target_type: "attention_item",
+            target_id: "attention-legacy",
+            action: "attention.claim",
+            expected_version: None,
+            fencing_token: None,
+            canonical_request: json!({}),
+            fallback_reason_code: action_audit::FALLBACK_REASON_LEGACY_CLIENT,
+            fallback_operator_reason: None,
+            fallback_idempotency_key: None,
+            renewable_exemption: false,
+        },
+    )
+    .await
+    .expect("compatibility mode admits a mutation that carries no audit context");
+    assert!(attempt.should_execute);
+
+    let record = audit_rpc::get(
+        &fixture.server,
+        Request::new(ActionAuditGetRequest {
+            project_id: "default".into(),
+            request_id: attempt.request_id.clone(),
+        }),
+    )
+    .await
+    .expect("the attempt reached the audit table")
+    .into_inner();
+
+    assert_eq!(record.reason_code, "legacy_client");
+    assert_eq!(record.action, "attention.claim");
+    assert_eq!(record.target_id, "attention-legacy");
+    // Compatibility mode also synthesises the idempotency key the client omitted.
+    assert_eq!(
+        record.idempotency_key.as_deref(),
+        Some(format!("legacy:{}", attempt.request_id).as_str())
+    );
+}
+
+/// The other half of the same contract, driven through a real `RuntimePolicy`: under
+/// `enforced` the identical call is refused. A constant that drifted away from
+/// `"legacy_client"` would stop matching the check in `resolve_context`, and this
+/// mutation would be quietly admitted instead of rejected.
+#[tokio::test]
+async fn enforced_mode_refuses_a_mutation_that_falls_back_to_legacy_client() {
+    let fixture = BoundaryFixture::new(None);
+    let manifest = concat!(
+        "apiVersion: orchestrator.dev/v2\n",
+        "kind: RuntimePolicy\n",
+        "metadata:\n",
+        "  name: default\n",
+        "spec:\n",
+        "  action_audit_mode: enforced\n",
+        "  runner:\n",
+        "    shell: /bin/bash\n",
+        "    shell_arg: -lc\n",
+        "    policy: allowlist\n",
+        "    executor: shell\n",
+        "    allowed_shells: [/bin/bash, /bin/sh, sh]\n",
+        "    allowed_shell_args: [-lc, -c]\n",
+        "  resume:\n",
+        "    auto: false\n",
+    );
+    let applied = agent_orchestrator::service::resource::apply_manifests(
+        &fixture.server.state,
+        manifest,
+        false,
+        Some("default"),
+        false,
+    )
+    .expect("apply the enforced RuntimePolicy");
+    assert!(applied.errors.is_empty(), "{:?}", applied.errors);
+
+    let descriptor = |reason_code| ActionDescriptor {
+        project_id: "default",
+        target_type: "attention_item",
+        target_id: "attention-enforced",
+        action: "attention.claim",
+        expected_version: None,
+        fencing_token: None,
+        canonical_request: json!({}),
+        fallback_reason_code: reason_code,
+        fallback_operator_reason: None,
+        fallback_idempotency_key: Some("enforced-key"),
+        renewable_exemption: false,
+    };
+
+    // A context whose reason code is blank is what falls back to `legacy_client`;
+    // omitting the context entirely is refused one check earlier, for a different
+    // reason, and would not exercise this branch at all.
+    let blank = ActionAuditContext {
+        reason_code: String::new(),
+        operator_reason: None,
+        idempotency_key: Some("enforced-key".into()),
+    };
+    let mut request = Request::new(());
+    // `ActionAttempt` has no `Debug`, so the error is taken explicitly.
+    let refused = action_audit::begin(
+        &fixture.server,
+        &mut request,
+        "AttentionClaim",
+        Some(&blank),
+        descriptor(action_audit::FALLBACK_REASON_LEGACY_CLIENT),
+    )
+    .await
+    .err()
+    .expect("enforced mode requires an explicit reason code");
+    assert_eq!(refused.code(), Code::InvalidArgument);
+    assert!(refused.message().contains("reason_code is required"));
+
+    // An explicit reason code is admitted under the same policy, so the rejection is
+    // about this code specifically rather than enforced mode refusing everything.
+    let mut allowed_request = Request::new(());
+    let allowed = action_audit::begin(
+        &fixture.server,
+        &mut allowed_request,
+        "AttentionClaim",
+        Some(&blank),
+        descriptor("operator_action"),
+    )
+    .await
+    .expect("an explicit reason code is admitted under enforced mode");
+    assert!(allowed.should_execute);
+}

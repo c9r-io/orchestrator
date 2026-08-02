@@ -184,7 +184,7 @@ fn default_handoff_enabled() -> bool {
 }
 
 fn default_action_audit_mode() -> String {
-    "compatibility".to_string()
+    crate::cli_types::ACTION_AUDIT_MODE_COMPATIBILITY.to_string()
 }
 
 impl CrdProjectable for RuntimePolicyProjection {
@@ -516,7 +516,7 @@ mod tests {
             session_read_enabled: true,
             session_control_enabled: false,
             source_ingest_enabled: false,
-            action_audit_mode: "enforced".to_string(),
+            action_audit_mode: crate::cli_types::ACTION_AUDIT_MODE_ENFORCED.to_string(),
         };
         let spec = config.to_cr_spec();
         let back = RuntimePolicyProjection::from_cr_spec(&spec).expect("should deserialize");
@@ -528,7 +528,10 @@ mod tests {
         assert!(back.session_read_enabled);
         assert!(!back.session_control_enabled);
         assert!(!back.source_ingest_enabled);
-        assert_eq!(back.action_audit_mode, "enforced");
+        assert_eq!(
+            back.action_audit_mode,
+            crate::cli_types::ACTION_AUDIT_MODE_ENFORCED
+        );
         assert!(RuntimePolicyProjection::default().attention_inbox_enabled);
     }
 

@@ -147,7 +147,7 @@ fn runtime_policy_crd() -> CustomResourceDefinition {
                 "session_control_enabled": { "type": "boolean", "default": false },
                 "mutating_resume_enabled": { "type": "boolean", "default": false },
                 "elevated_resume_enabled": { "type": "boolean", "default": false }
-                ,"action_audit_mode": { "type": "string", "enum": ["compatibility", "enforced"], "default": "compatibility" }
+                ,"action_audit_mode": { "type": "string", "enum": [crate::cli_types::ACTION_AUDIT_MODE_COMPATIBILITY, crate::cli_types::ACTION_AUDIT_MODE_ENFORCED], "default": crate::cli_types::ACTION_AUDIT_MODE_COMPATIBILITY }
             }
         }))],
         hooks: CrdHooks::default(),

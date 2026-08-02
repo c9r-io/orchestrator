@@ -75,6 +75,12 @@ impl ActionAttempt {
     }
 }
 
+/// Reason code recorded when a client supplied no action-audit context and the
+/// project runs in compatibility mode. Every handler's `fallback_reason_code`
+/// resolves here, and `resolve_context` refuses it under `enforced` — the two must
+/// name the same string, which is why it is a constant rather than a literal.
+pub(crate) const FALLBACK_REASON_LEGACY_CLIENT: &str = "legacy_client";
+
 pub(crate) async fn begin<T>(
     server: &OrchestratorServer,
     request: &mut Request<T>,
@@ -97,14 +103,21 @@ pub(crate) async fn begin<T>(
                 .runtime_policy_for_project(descriptor.project_id)
                 .action_audit_mode
         })
-        .unwrap_or_else(|_| "compatibility".to_string());
+        .unwrap_or_else(|_| {
+            agent_orchestrator::cli_types::ACTION_AUDIT_MODE_COMPATIBILITY.to_string()
+        });
     if let Err(error) = authorize(server, request, rpc) {
-        let resolved = resolve_context(&request_id, context, &descriptor, "compatibility")
-            .unwrap_or_else(|_| ResolvedContext {
-                reason_code: "authorization_attempt".to_string(),
-                operator_reason: None,
-                idempotency_key: None,
-            });
+        let resolved = resolve_context(
+            &request_id,
+            context,
+            &descriptor,
+            agent_orchestrator::cli_types::ACTION_AUDIT_MODE_COMPATIBILITY,
+        )
+        .unwrap_or_else(|_| ResolvedContext {
+            reason_code: "authorization_attempt".to_string(),
+            operator_reason: None,
+            idempotency_key: None,
+        });
         let repository = AsyncActionAuditRepository::new(server.state.async_database.clone());
         let _ = repository
             .deny(
@@ -180,14 +193,16 @@ fn resolve_context(
     descriptor: &ActionDescriptor<'_>,
     mode: &str,
 ) -> Result<ResolvedContext, Status> {
-    if mode == "enforced" && context.is_none() {
+    if mode == agent_orchestrator::cli_types::ACTION_AUDIT_MODE_ENFORCED && context.is_none() {
         return Err(Status::invalid_argument("action audit context is required"));
     }
     let reason_code = context
         .map(|value| value.reason_code.trim())
         .filter(|value| !value.is_empty())
         .unwrap_or(descriptor.fallback_reason_code);
-    if mode == "enforced" && reason_code == "legacy_client" {
+    if mode == agent_orchestrator::cli_types::ACTION_AUDIT_MODE_ENFORCED
+        && reason_code == FALLBACK_REASON_LEGACY_CLIENT
+    {
         return Err(Status::invalid_argument("reason_code is required"));
     }
     if reason_code.is_empty() || reason_code.len() > 64 {
@@ -219,10 +234,14 @@ fn resolve_context(
     let idempotency_key = contextual_key
         .or_else(|| descriptor.fallback_idempotency_key.map(str::to_owned))
         .or_else(|| {
-            (mode == "compatibility" && !descriptor.renewable_exemption)
+            (mode == agent_orchestrator::cli_types::ACTION_AUDIT_MODE_COMPATIBILITY
+                && !descriptor.renewable_exemption)
                 .then(|| format!("legacy:{request_id}"))
         });
-    if mode == "enforced" && !descriptor.renewable_exemption && idempotency_key.is_none() {
+    if mode == agent_orchestrator::cli_types::ACTION_AUDIT_MODE_ENFORCED
+        && !descriptor.renewable_exemption
+        && idempotency_key.is_none()
+    {
         return Err(Status::invalid_argument("idempotency_key is required"));
     }
     Ok(ResolvedContext {
@@ -402,15 +421,25 @@ mod tests {
             operator_reason: None,
             idempotency_key: None,
         };
-        let error = resolve_context("req-1", Some(&context), &descriptor(false), "enforced")
-            .expect_err("missing key");
+        let error = resolve_context(
+            "req-1",
+            Some(&context),
+            &descriptor(false),
+            agent_orchestrator::cli_types::ACTION_AUDIT_MODE_ENFORCED,
+        )
+        .expect_err("missing key");
         assert_eq!(error.code(), Code::InvalidArgument);
     }
 
     #[test]
     fn enforced_mode_rejects_missing_action_context() {
-        let error = resolve_context("req-1", None, &descriptor(false), "enforced")
-            .expect_err("missing action context");
+        let error = resolve_context(
+            "req-1",
+            None,
+            &descriptor(false),
+            agent_orchestrator::cli_types::ACTION_AUDIT_MODE_ENFORCED,
+        )
+        .expect_err("missing action context");
         assert_eq!(error.code(), Code::InvalidArgument);
     }
 
@@ -421,8 +450,13 @@ mod tests {
             operator_reason: None,
             idempotency_key: None,
         };
-        let resolved = resolve_context("req-1", Some(&context), &descriptor(true), "enforced")
-            .expect("renewable exemption");
+        let resolved = resolve_context(
+            "req-1",
+            Some(&context),
+            &descriptor(true),
+            agent_orchestrator::cli_types::ACTION_AUDIT_MODE_ENFORCED,
+        )
+        .expect("renewable exemption");
         assert!(resolved.idempotency_key.is_none());
     }
 

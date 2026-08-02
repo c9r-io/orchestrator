@@ -71,7 +71,7 @@ where
             canonical_request: serde_json::json!({
                 "project_id":project_id,"trigger_name":trigger_name,"suspend":suspend
             }),
-            fallback_reason_code: "legacy_client",
+            fallback_reason_code: super::action_audit::FALLBACK_REASON_LEGACY_CLIENT,
             fallback_operator_reason: None,
             fallback_idempotency_key: None,
             renewable_exemption: false,

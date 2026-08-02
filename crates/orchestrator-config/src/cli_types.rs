@@ -1173,8 +1173,14 @@ fn default_true() -> bool {
     true
 }
 
+/// Action audit mode that synthesises a fallback context when a client sends none.
+pub const ACTION_AUDIT_MODE_COMPATIBILITY: &str = "compatibility";
+
+/// Action audit mode that rejects any governed mutation lacking an explicit context.
+pub const ACTION_AUDIT_MODE_ENFORCED: &str = "enforced";
+
 fn default_action_audit_mode() -> String {
-    "compatibility".to_string()
+    ACTION_AUDIT_MODE_COMPATIBILITY.to_string()
 }
 
 /// Workflow prehook specification for conditional execution.
@@ -1595,6 +1601,185 @@ spec:
             );
         } else {
             panic!("Expected Trigger spec");
+        }
+    }
+}
+
+/// FR-157 requirement 4: the action-audit vocabulary must have exactly one definition
+/// site per term, and no production line may spell one of the terms out.
+///
+/// Both the scope and the exemptions are derived rather than listed. A hand-written set
+/// of directories guards only what its author remembered, and the next file lands
+/// outside it silently — so this walks every Rust source in the workspace and keeps the
+/// ones that actually participate in action auditing, meaning they name
+/// `action_audit_mode` or `fallback_reason_code`. A file that starts using the
+/// vocabulary is picked up the moment it does; one that merely contains the word
+/// "compatibility" in an unrelated payload names neither and is never considered.
+///
+/// Test code is exempt on purpose: the assertion that pins the recorded reason code to
+/// the literal `"legacy_client"` is what makes the constant safe to move, and it has to
+/// spell the literal to do its job. "Test code" is derived three ways — a `tests/`
+/// directory, a module a parent declares under `#[cfg(test)]`, and everything after a
+/// file's own first inline `#[cfg(test)]`.
+#[cfg(test)]
+mod action_audit_vocabulary {
+    use std::path::{Path, PathBuf};
+
+    /// Kept apart from the term list so a mutation to either is visible on its own.
+    const MARKERS: [&str; 2] = ["action_audit_mode", "fallback_reason_code"];
+    const TERMS: [&str; 3] = ["\"compatibility\"", "\"enforced\"", "\"legacy_client\""];
+
+    fn workspace_root() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("workspace root")
+    }
+
+    fn rust_sources(directory: &Path, found: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(directory) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            if path.is_dir() {
+                if name == "target" || name == "node_modules" || name.starts_with('.') {
+                    continue;
+                }
+                rust_sources(&path, found);
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                found.push(path);
+            }
+        }
+    }
+
+    /// True when a parent module declares this file's module behind `#[cfg(test)]`,
+    /// which is how a whole-file test module such as `boundary_contract_tests.rs` is
+    /// wired up without living under a `tests/` directory.
+    fn declared_as_test_module(path: &Path) -> bool {
+        let Some(stem) = path
+            .file_stem()
+            .map(|value| value.to_string_lossy().to_string())
+        else {
+            return false;
+        };
+        let Some(directory) = path.parent() else {
+            return false;
+        };
+        let declaration = format!("mod {stem};");
+        let mut parents = vec![directory.join("mod.rs"), directory.join("lib.rs")];
+        if let Some(name) = directory.file_name()
+            && let Some(grandparent) = directory.parent()
+        {
+            parents.push(grandparent.join(format!("{}.rs", name.to_string_lossy())));
+        }
+        parents.iter().any(|parent| {
+            std::fs::read_to_string(parent).is_ok_and(|contents| {
+                contents.lines().collect::<Vec<_>>().windows(2).any(|pair| {
+                    pair[0].trim().starts_with("#[cfg(test)]")
+                        && pair[1].trim().ends_with(&declaration)
+                })
+            })
+        })
+    }
+
+    /// The production prefix of a file: everything before its first inline
+    /// `#[cfg(test)]`, with comment lines dropped.
+    fn production_lines(contents: &str) -> Vec<(usize, &str)> {
+        contents
+            .lines()
+            .enumerate()
+            .take_while(|(_, line)| line.trim_start() != "#[cfg(test)]")
+            .filter(|(_, line)| !line.trim_start().starts_with("//"))
+            .collect()
+    }
+
+    /// A line that defines one of the terms, e.g. `pub const X: &str = "enforced";`.
+    fn is_definition(line: &str) -> bool {
+        let trimmed = line.trim_start();
+        (trimmed.starts_with("pub const ")
+            || trimmed.starts_with("pub(crate) const ")
+            || trimmed.starts_with("const "))
+            && trimmed.contains(": &str =")
+    }
+
+    #[test]
+    fn each_term_has_exactly_one_definition_and_no_other_production_occurrence() {
+        let root = workspace_root();
+        let mut sources = Vec::new();
+        rust_sources(&root, &mut sources);
+        assert!(
+            sources.len() > 100,
+            "the workspace scan found only {} Rust sources under {}; the scan is broken, \
+             not the code",
+            sources.len(),
+            root.display()
+        );
+
+        let mut participating = 0usize;
+        let mut definitions: Vec<(String, String)> = Vec::new();
+        let mut strays: Vec<String> = Vec::new();
+
+        for path in &sources {
+            if path.components().any(|part| part.as_os_str() == "tests")
+                || declared_as_test_module(path)
+            {
+                continue;
+            }
+            let Ok(contents) = std::fs::read_to_string(path) else {
+                continue;
+            };
+            if !MARKERS.iter().any(|marker| contents.contains(marker)) {
+                continue;
+            }
+            participating += 1;
+            let relative = path
+                .strip_prefix(&root)
+                .unwrap_or(path)
+                .display()
+                .to_string();
+            for (index, line) in production_lines(&contents) {
+                for term in TERMS {
+                    // `matches` counts occurrences, not lines: two on one line is two.
+                    for _ in line.matches(term) {
+                        if is_definition(line) {
+                            definitions.push((term.to_string(), relative.clone()));
+                        } else {
+                            strays.push(format!("{relative}:{} {}", index + 1, line.trim()));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Without this, a scan whose derivation stopped matching anything would report
+        // success having examined nothing at all.
+        assert!(
+            participating >= 8,
+            "only {participating} production files participate in action auditing; \
+             the derivation is broken"
+        );
+        assert!(
+            strays.is_empty(),
+            "action-audit vocabulary is spelled out in production instead of referenced:\n  {}",
+            strays.join("\n  ")
+        );
+        for term in TERMS {
+            let sites: Vec<&String> = definitions
+                .iter()
+                .filter(|(found, _)| found == term)
+                .map(|(_, path)| path)
+                .collect();
+            assert_eq!(
+                sites.len(),
+                1,
+                "{term} must have exactly one definition site, found {sites:?}"
+            );
         }
     }
 }

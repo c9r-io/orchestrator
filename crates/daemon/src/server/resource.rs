@@ -107,7 +107,7 @@ pub(crate) async fn apply(
                         "expected_revision": expected_revision,
                         "require_absent": require_absent,
                     }),
-                    fallback_reason_code: "legacy_client",
+                    fallback_reason_code: super::action_audit::FALLBACK_REASON_LEGACY_CLIENT,
                     fallback_operator_reason: None,
                     fallback_idempotency_key: None,
                     renewable_exemption: false,
@@ -487,7 +487,7 @@ pub(crate) async fn delete(
                     fallback_reason_code: if force_references {
                         "operator_force_reference_cleanup"
                     } else {
-                        "legacy_client"
+                        super::action_audit::FALLBACK_REASON_LEGACY_CLIENT
                     },
                     fallback_operator_reason: None,
                     fallback_idempotency_key: None,
