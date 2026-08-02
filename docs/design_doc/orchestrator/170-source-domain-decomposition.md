@@ -145,12 +145,21 @@ silently. The gate would not have failed. It would have reported a *higher*
 percentage over a near-empty denominator — the coverage-governance analogue of
 `fr-governance` §4.4 shape 2, landing on the instrument rather than on the code.
 
-The prefix now omits the suffix, so it reaches the directory, the pre-split file,
-or both. The fixture guards the measured set rather than the spelling: it holds a
-submodule, the single-file form, and a 100-line test source under `tests/`, and
-asserts the module comes to 12/15 lines. Restoring the `.rs` suffix fails it
-(exit 1, `expected: 15`); dropping the `/tests/` exclusion fails it too
-(exit 1, `expected: 80`). Both mutations were run, not reasoned about.
+The first repair was to drop the suffix, and the closure self-check found that
+this is exact in one direction only: a bare
+`crates/daemon/src/server/source_connection` also matches any sibling whose name
+merely *begins* with it, so a future `source_connections.rs` would join the
+module and dilute its percentage without anyone choosing that. The key module
+therefore names the file and the directory separately — the only form exact in
+both directions.
+
+The fixture guards the measured set rather than the spelling. It holds a
+submodule, the single-file form, a 100-line test source under `tests/`, and a
+50-line near-miss sibling that belongs to the daemon component but not to the key
+module, and asserts the module comes to 12/15 lines. Three mutations trip it,
+each with its own number: the over-reaching suffixless prefix reports 65 lines,
+the original `.rs`-only prefix reports 5, and dropping the `/tests/` exclusion
+moves the component to 97.14%. All three were run, not reasoned about.
 
 ### Where the test sources live, and why
 
@@ -243,9 +252,18 @@ actually falls back to `legacy_client`.
 ### The gate derives its scope and its exemptions
 
 It walks every Rust source in the workspace and keeps the files that name
-`action_audit_mode` or `fallback_reason_code`. A file that starts using the
-vocabulary is picked up the moment it does; one that merely contains the word
-"compatibility" in an unrelated payload names neither and is never considered.
+`action_audit_mode`, `fallback_reason_code` or `reason_code`. A file that starts
+using the vocabulary is picked up the moment it does; one that merely contains
+the word "compatibility" in an unrelated payload names none of the three and is
+never considered.
+
+The third marker is there because of the same self-check. The first version used
+only the two exact field names — 19 files, sufficient for today's tree and blind
+to a new production file writing a reason code through a differently named field.
+`reason_code` widens the considered set to 52 and the gate still passes, so the
+narrower predicate was a fact about the tree's current shape rather than about
+what the gate checks. A scope predicate is an assertion and deserves the same
+attack as an assertion.
 Occurrences are counted with `matches`, not lines, so two on one line count two.
 
 Test code is exempt on purpose — the assertion pinning the recorded reason code

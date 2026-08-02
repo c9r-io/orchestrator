@@ -130,17 +130,26 @@ which reaches a file and nothing beneath a directory of the same name.
 ```bash
 node scripts/coverage/test-coverage-governance.mjs; echo "exit=$?"
 
-# Negative fixture 1: restore the .rs-suffixed prefix.
 cp scripts/coverage/coverage-governance.mjs /tmp/cg.bak
-python3 -c "p='scripts/coverage/coverage-governance.mjs';s=open(p).read();open(p,'w').write(s.replace('source_connection\"],','source_connection.rs\"],'))"
+BARE='"daemon/source_connection": ["crates/daemon/src/server/source_connection"],'
+DOTRS='"daemon/source_connection": ["crates/daemon/src/server/source_connection.rs"],'
+
+# Fixture 1: the over-reaching suffixless prefix.
+perl -0pi -e 's/"daemon\/source_connection": \[\n[^\]]*\],/'"$BARE"'/' scripts/coverage/coverage-governance.mjs
 node scripts/coverage/test-coverage-governance.mjs > /tmp/m1.log 2>&1; echo "exit=$?"
-grep -m1 'expected' /tmp/m1.log
+grep -m1 'actual:' /tmp/m1.log
 cp /tmp/cg.bak scripts/coverage/coverage-governance.mjs
 
-# Negative fixture 2: drop the /tests/ exclusion.
-python3 -c "p='scripts/coverage/coverage-governance.mjs';s=open(p).read();open(p,'w').write(s.replace('sourcePath.includes(\"/tests/\") ||','false ||'))"
+# Fixture 2: the original .rs-only prefix.
+perl -0pi -e 's/"daemon\/source_connection": \[\n[^\]]*\],/'"$DOTRS"'/' scripts/coverage/coverage-governance.mjs
 node scripts/coverage/test-coverage-governance.mjs > /tmp/m2.log 2>&1; echo "exit=$?"
-grep -m1 'expected' /tmp/m2.log
+grep -m1 'actual:' /tmp/m2.log
+cp /tmp/cg.bak scripts/coverage/coverage-governance.mjs
+
+# Fixture 3: drop the /tests/ exclusion.
+perl -pi -e 's/sourcePath\.includes\("\/tests\/"\) \|\|/false ||/' scripts/coverage/coverage-governance.mjs
+node scripts/coverage/test-coverage-governance.mjs > /tmp/m3.log 2>&1; echo "exit=$?"
+grep -m1 'actual:' /tmp/m3.log
 cp /tmp/cg.bak scripts/coverage/coverage-governance.mjs
 
 node scripts/coverage/test-coverage-governance.mjs; echo "exit=$?"
@@ -148,12 +157,19 @@ node scripts/coverage/test-coverage-governance.mjs; echo "exit=$?"
 
 **Expected result**
 
-Unmutated: `coverage governance fixtures: PASS`, `exit=0`.
-Fixture 1: `exit=1`, `expected: 15` — the module's line count collapses when the
-prefix stops reaching the directory.
-Fixture 2: `exit=1`, `expected: 80` — the percentage moves when a 100-line test
-source is counted.
+Unmutated: `coverage governance fixtures: PASS`, `exit=0`. Each fixture exits `1`
+with its own number, which is what distinguishes them from one another:
+
+| Mutation | `actual:` | Meaning |
+|---|---|---|
+| suffixless prefix | `65` | it swallowed the near-miss sibling `source_connections.rs` |
+| `.rs`-only prefix | `5` | it saw only the pre-split file, none of the directory |
+| no `/tests/` rule | `97.14` | the component counted a 100-line test source |
+
 Restored: `PASS`, `exit=0`.
+
+An exit code alone cannot distinguish the branch a gate failed through from any
+other, which is why the table asserts the diagnostic rather than the status.
 
 Capture the exit status directly as shown. Piping into `head` or `tail` reports
 the pager's status, not the script's.
@@ -256,14 +272,20 @@ crates/orchestrator-scheduler/src/scheduler/coordination_tools.rs:1019:"compatib
 ```
 
 The first three are the constant definitions. The fourth is a task summary that
-happens to be the same word; its file names neither `action_audit_mode` nor
-`fallback_reason_code`, so the derived scan never considers it. It is excluded by
-derivation, not by an allowlist — confirm that rather than taking it on trust:
+happens to be the same word; its file names none of `action_audit_mode`,
+`fallback_reason_code` or `reason_code`, so the derived scan never considers it.
+It is excluded by derivation, not by an allowlist — confirm that rather than
+taking it on trust:
 
 ```bash
-grep -c 'action_audit_mode\|fallback_reason_code' \
+grep -c 'action_audit_mode\|fallback_reason_code\|reason_code' \
   crates/orchestrator-scheduler/src/scheduler/coordination_tools.rs   # → 0
 ```
+
+The marker set is deliberately wider than the two exact field names. Scoping to
+those alone covers today's tree and goes blind on a new production file writing a
+reason code through a differently named field; `reason_code` widens the
+considered set from 19 files to 52, and the gate still passes.
 
 **The structural check alone is not sufficient** and must never be run without
 the behavioural one. Replacing a literal with a constant compiles, satisfies
