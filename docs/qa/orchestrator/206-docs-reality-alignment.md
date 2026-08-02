@@ -167,8 +167,8 @@ git diff --check
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Executable AGENTS and derived architecture | ☐ | | | |
-| 2 | Skill paths and inventory | ☐ | | | |
-| 3 | FR history and tracked tickets | ☐ | | | |
-| 4 | Proto/YAML retirement parity | ☐ | | | |
-| 5 | Documentation enforcement and lifecycle | ☐ | | | |
+| 1 | Executable AGENTS and derived architecture | ✅ | 2026-08-02 | Codex | Rust behavior passed; reality gate 5/5 and fixtures 11/11 |
+| 2 | Skill paths and inventory | ✅ | 2026-08-02 | Codex | 29 skills, 9 checks, 28 fixture assertions |
+| 3 | FR history and tracked tickets | ✅ | 2026-08-02 | Codex | Registry check and 12 ledger assertions passed; ticket probe is tracked |
+| 4 | Proto/YAML retirement parity | ✅ | 2026-08-02 | Codex | Canonical proto, driverless corpus, and warning tests passed |
+| 5 | Documentation enforcement and lifecycle | ✅ | 2026-08-02 | Codex | QA lint, gate-surface, lifecycle, and whitespace checks passed |
