@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 445,
-    "active": 437,
+    "documents": 447,
+    "active": 439,
     "superseded": 8,
-    "withRelatedFr": 292
+    "withRelatedFr": 294
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -431,6 +431,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-154"
+      ]
+    },
+    "docs/design_doc/orchestrator/168-docs-reality-alignment.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-155"
       ]
     },
     "docs/design_doc/orchestrator/17-envstore-secretstore-agent-env.md": {
@@ -1731,6 +1737,12 @@
         "FR-154"
       ]
     },
+    "docs/qa/orchestrator/206-docs-reality-alignment.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-155"
+      ]
+    },
     "docs/qa/orchestrator/21-runner-security-observability.md": {
       "lifecycle": "active"
     },
@@ -2814,6 +2826,10 @@
     "FR-154": [
       "docs/design_doc/orchestrator/167-cli-output-render-chokepoint.md",
       "docs/qa/orchestrator/205-cli-output-doc-parity.md"
+    ],
+    "FR-155": [
+      "docs/design_doc/orchestrator/168-docs-reality-alignment.md",
+      "docs/qa/orchestrator/206-docs-reality-alignment.md"
     ]
   },
   "supersedes": {

@@ -62,11 +62,13 @@ cargo check -p agent-orchestrator --target i686-unknown-linux-gnu
 
 ## Config And Data
 
-When run from repo root, runtime paths are:
+By default, runtime state is rooted at `~/.orchestratord/`:
 
-- DB: `data/agent_orchestrator.db`
-- Logs: `data/logs/`
-- Daemon socket: `data/orchestrator.sock` (C/S mode)
-- Daemon PID: `data/daemon.pid` (C/S mode)
+- DB: `~/.orchestratord/agent_orchestrator.db`
+- Logs: `~/.orchestratord/logs/`
+- Daemon socket: `~/.orchestratord/orchestrator.sock` (C/S mode)
+- Daemon PID: `~/.orchestratord/daemon.pid` (C/S mode)
+
+Set `ORCHESTRATORD_DATA_DIR` to relocate this runtime root.
 
 Use `orchestrator apply -f <path>` to initialize config in SQLite.

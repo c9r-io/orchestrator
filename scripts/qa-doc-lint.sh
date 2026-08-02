@@ -37,6 +37,11 @@ if ! ./scripts/qa/test-error-code-glossary.sh --fixture-test; then
   fail=1
 fi
 
+echo "[qa-doc-lint] Checking docs/repository reality alignment..."
+if ! ./scripts/qa/test-docs-reality-alignment.sh --fixture-test; then
+  fail=1
+fi
+
 echo "[qa-doc-lint] Checking legacy sqlite/global-fixture reset patterns..."
 LEGACY_RESET_PATTERN="rm -f data/agent_orchestrator\\.db|find fixtures/ticket -name '\\*\\.md' ! -name 'README\\.md' -delete"
 if rg -n "$LEGACY_RESET_PATTERN" docs/qa -g '*.md' >/tmp/qa_doc_lint_legacy_reset.txt 2>/dev/null; then

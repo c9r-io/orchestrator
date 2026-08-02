@@ -163,6 +163,10 @@ gui/                       # React/TypeScript/Vite Web frontend embedded by crat
         *   **Config**: YAML manifests for defining Resources.
         *   **Logs**: Raw stdout/stderr capture from agent processes.
 
+4.  **Operator UI Surfaces**:
+    *   **Web frontend** (`gui/`): React, TypeScript, and Vite application code, including unit and Playwright tests.
+    *   **Desktop shell** (`crates/gui/`): Tauri commands, lifecycle, and the gRPC client boundary that embeds the built Web frontend.
+
 ### 3.3 Orchestrator Core Internals
 
 The `core/` service implements the control-plane logic for a Harness Engineering runtime responsible for managing the AI-native development lifecycle.
