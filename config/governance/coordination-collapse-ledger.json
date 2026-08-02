@@ -45,16 +45,22 @@
       }
     },
     "pipelineVariables": {
-      "state": "deprecated-blocked",
-      "productionConsumerCount": 2,
-      "preservedCarrier": "PreservedExecutionChannels",
-      "blockers": [
+      "state": "removed",
+      "productionConsumerCount": 0,
+      "scope": "step-level pipeline-variable authoring in production Workflow manifests: store_inputs, store_outputs, step_vars, and store_put post-actions. Rejected at apply with [legacy_pipeline_variables_removed].",
+      "retainedCarrier": {
+        "type": "PipelineVariables",
+        "reason": "Sole holder of PreservedExecutionChannels and ExecutionSignals: PreservedExecutionChannels has three references repo-wide, all inside crates/orchestrator-config/src/config/pipeline.rs, so it is reachable only through PipelineVariables.preserved. The generic vars map remains the substrate for public initial/item variable bindings and template compatibility.",
+        "boundary": "docs/design_doc/orchestrator/169-pipeline-variable-surface-retirement.md",
+        "precedent": "celInterpreter, retained at a non-zero sourceBaseline for deterministic governance gates"
+      },
+      "codeLevelBlockers": [
         "public immutable initial and item variable bindings",
-        "step-local store_inputs bindings in promotion and self-evolution",
         "command-rules and public CEL compatibility variables",
         "generic output and template compatibility"
       ],
-      "next": "govern a follow-up FR after store and public manifest compatibility migration"
+      "codeLevelBlockersNote": "Rust-level surfaces, not consumers of the manifest surface above. Recorded under the same key as productionConsumerCount, they read as arrears against it; they are not, and driving that count to zero clears none of them. The fourth entry DD-137 listed here, step-local store_inputs bindings in promotion and self-evolution, was the manifest consumer rather than a code-level blocker and is the one FR-156 removed.",
+      "closedBy": "FR-156"
     },
     "celCoordination": {
       "state": "zero-production-coordination-consumers",
@@ -339,17 +345,6 @@
       "evidence": "docs/qa/orchestrator/174-coordination-strangler-completion.md",
       "approvedTouches": [
         {
-          "step": "gather_updates",
-          "kind": "store_inputs",
-          "bindings": [
-            {
-              "store": "promotion",
-              "key": "last_published_sha",
-              "as_var": "last_published_sha"
-            }
-          ]
-        },
-        {
           "step": "publish",
           "kind": "prehook",
           "engine": "cel",
@@ -451,17 +446,6 @@
       "status": "migrated",
       "evidence": "docs/qa/orchestrator/174-coordination-strangler-completion.md",
       "approvedTouches": [
-        {
-          "step": "evo_apply_winner",
-          "kind": "store_inputs",
-          "bindings": [
-            {
-              "store": "evolution",
-              "key": "winner_latest",
-              "as_var": "prev_winner"
-            }
-          ]
-        },
         {
           "step": "select_best",
           "kind": "builtin",

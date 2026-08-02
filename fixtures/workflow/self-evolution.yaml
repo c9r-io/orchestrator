@@ -117,8 +117,9 @@ spec:
   prompt: >-
     You are working on the Agent Orchestrator project at {source_tree}.
 
-    The evolutionary selection has chosen a winner.
-    Winner data: {prev_winner}
+    The evolutionary selection has chosen a winner. Read it yourself with:
+    `orchestrator store get evolution winner_latest --project {project_id}`
+    That prints the selection JSON — winner_id, eliminated_ids, winner_vars.
 
     Your job:
     1. Ensure the winning approach's code is cleanly applied
@@ -272,10 +273,6 @@ spec:
       enabled: true
       repeatable: false
       tty: false
-      store_inputs:
-        - store: evolution
-          key: winner_latest
-          as_var: prev_winner
 
     - id: evo_align_tests
       type: align_tests

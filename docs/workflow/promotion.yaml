@@ -240,10 +240,17 @@ spec:
       enabled: true
       repeatable: false
       tty: false
+      # The step reads the store itself rather than through a `store_inputs`
+      # binding, which FR-156 retired. The previous form also carried a defect
+      # the migration removes: the guard was
+      # `[ "$LAST_SHA" != "{last_published_sha}" ]`, and template substitution
+      # is global, so both occurrences became the same value and the condition
+      # was false whether or not the key was set. The scoped-log branch below
+      # had never run. See fixtures/qa/fr156-pipeline-variable-baseline.json.
       command: >-
         cd {workspace_root} &&
-        LAST_SHA="{last_published_sha}" &&
-        if [ -n "$LAST_SHA" ] && [ "$LAST_SHA" != "{last_published_sha}" ]; then
+        LAST_SHA="$(orchestrator store get promotion last_published_sha --project {project_id} 2>/dev/null || true)" &&
+        if [ -n "$LAST_SHA" ]; then
           echo "=== Changes since last promotion (${LAST_SHA:0:8}) ===" &&
           git log --oneline --no-merges ${LAST_SHA}..HEAD 2>/dev/null || git log --oneline --no-merges -20;
           echo "" &&
@@ -259,10 +266,6 @@ spec:
         echo "" &&
         echo "=== Current HEAD ===" &&
         git rev-parse HEAD
-      store_inputs:
-        - store: promotion
-          key: last_published_sha
-          as_var: last_published_sha
 
     - id: analyze_highlights
       type: evaluate
@@ -346,8 +349,8 @@ spec:
       command: >-
         cd {workspace_root} &&
         HEAD_SHA=$(git rev-parse HEAD) &&
-        orchestrator store put promotion last_published_sha "${HEAD_SHA}" --project promotion &&
-        orchestrator store put promotion "published_$(date +%Y%m%d)" "task:{task_id}" --project promotion &&
+        orchestrator store put promotion last_published_sha "${HEAD_SHA}" --project {project_id} &&
+        orchestrator store put promotion "published_$(date +%Y%m%d)" "task:{task_id}" --project {project_id} &&
         echo "Tracked: published at SHA ${HEAD_SHA}" &&
         echo "Drafts available at: docs/promotion/drafts/" &&
         ls -la docs/promotion/drafts/ 2>/dev/null || echo "(no drafts directory)"
