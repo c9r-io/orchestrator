@@ -121,6 +121,26 @@
               "percent": 0
             }
           }
+        },
+        {
+          "filename": "/Users/qa/orchestrator/crates/daemon/src/server/source_connections.rs",
+          "summary": {
+            "lines": {
+              "count": 50,
+              "covered": 50,
+              "percent": 100
+            },
+            "functions": {
+              "count": 20,
+              "covered": 20,
+              "percent": 100
+            },
+            "branches": {
+              "count": 10,
+              "covered": 10,
+              "percent": 100
+            }
+          }
         }
       ]
     }

@@ -1612,8 +1612,8 @@ spec:
 /// of directories guards only what its author remembered, and the next file lands
 /// outside it silently — so this walks every Rust source in the workspace and keeps the
 /// ones that actually participate in action auditing, meaning they name
-/// `action_audit_mode` or `fallback_reason_code`. A file that starts using the
-/// vocabulary is picked up the moment it does; one that merely contains the word
+/// `action_audit_mode`, `fallback_reason_code` or `reason_code`. A file that starts
+/// using the vocabulary is picked up the moment it does; one that merely contains the word
 /// "compatibility" in an unrelated payload names neither and is never considered.
 ///
 /// Test code is exempt on purpose: the assertion that pins the recorded reason code to
@@ -1626,7 +1626,15 @@ mod action_audit_vocabulary {
     use std::path::{Path, PathBuf};
 
     /// Kept apart from the term list so a mutation to either is visible on its own.
-    const MARKERS: [&str; 2] = ["action_audit_mode", "fallback_reason_code"];
+    ///
+    /// `reason_code` is deliberately the broadest of the three. Narrowing the scope to
+    /// the two exact field names would have been enough for today's tree and would go
+    /// blind on a new production file that writes a reason code through a differently
+    /// named field — a scope predicate is an assertion, and this one is attacked the
+    /// same way the assertions are. It widens the considered set from 19 files to 52
+    /// and still leaves the scheduler's unrelated `{"summary":"compatibility"}` out,
+    /// because that file names none of the three.
+    const MARKERS: [&str; 3] = ["action_audit_mode", "fallback_reason_code", "reason_code"];
     const TERMS: [&str; 3] = ["\"compatibility\"", "\"enforced\"", "\"legacy_client\""];
 
     fn workspace_root() -> PathBuf {
@@ -1760,7 +1768,7 @@ mod action_audit_vocabulary {
         // Without this, a scan whose derivation stopped matching anything would report
         // success having examined nothing at all.
         assert!(
-            participating >= 8,
+            participating >= 20,
             "only {participating} production files participate in action auditing; \
              the derivation is broken"
         );

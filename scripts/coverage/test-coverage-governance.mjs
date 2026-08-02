@@ -30,17 +30,22 @@ assert.equal(
   "crates/cli/src/main.rs",
 );
 assert.equal(supported.branchStatus, "supported");
-assert.equal(supported.components["daemon adapter"].lines.percent, 80);
+// 70/75. The near-miss sibling described below belongs to the daemon component; it
+// is only the key module it must stay out of.
+assert.equal(supported.components["daemon adapter"].lines.percent, 93.33);
 assert.equal(supported.keyModules["daemon/attention"].branches.percent, 50);
 
 // FR-157 split `source_connection.rs` into a directory. The key-module prefix has to
 // reach both forms, and it must not reach the test sources beneath them.
 //
 // The fixture holds `source_connection/oauth.rs` (10 lines, 8 covered),
-// `source_connection.rs` (5 lines, 4 covered) and `source_connection/tests/mod.rs`
-// (100 lines, all covered). A prefix ending in `.rs` would see only the second, and
-// counting the test file would take the module to 112/115. Both mistakes change the
-// number below, so this asserts the measured set rather than the spelling of a path.
+// `source_connection.rs` (5 lines, 4 covered), `source_connection/tests/mod.rs`
+// (100 lines, all covered) and `source_connections.rs` (50 lines, all covered) — a
+// sibling whose name merely begins with the module's. A prefix ending in `.rs` sees
+// only the second; counting the test file takes the module to 112/115; and a bare
+// suffixless prefix swallows the near-miss sibling and reports 62/65 = 95.38%. All three
+// mistakes change the numbers below, so this asserts the measured set rather than
+// the spelling of a path.
 assert.equal(supported.keyModules["daemon/source_connection"].lines.count, 15);
 assert.equal(supported.keyModules["daemon/source_connection"].lines.covered, 12);
 assert.equal(supported.keyModules["daemon/source_connection"].lines.percent, 80);
