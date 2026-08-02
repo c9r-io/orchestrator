@@ -6,7 +6,7 @@
 
 
 <!-- BEGIN GENERATED FR REGISTRY -->
-> 由 `scripts/lib/fr_registry.rb` 从完整 `HEAD` 祖先历史生成：140 个历史编号 / 145 条历史路径，另有 13 条无 FR 文件历史的审阅例外；5 个编号存在多路径碰撞。浅克隆拒绝生成。
+> 由 `scripts/lib/fr_registry.rb` 从完整 `HEAD` 祖先历史生成：141 个历史编号 / 146 条历史路径，另有 13 条无 FR 文件历史的审阅例外；5 个编号存在多路径碰撞。浅克隆拒绝生成。
 
 | ID | 标题 | 优先级 | 状态 | 来源 / 碰撞 |
 |----|------|--------|------|-------------|
@@ -163,6 +163,7 @@
 | FR-156 | pipelineVariables 清单授权面退役 | P2 | Closed | git history |
 | FR-157 | Source 域分解与测试补强 | P3 | Proposed | git history |
 | FR-158 | 治理体系自省 — 门禁的门禁、成本与新鲜度 | P3 | Proposed | git history |
+| FR-159 | 交互会话进程回收 — 孤儿泄漏与 OS 层回收缺口 | P1 | Proposed | git history |
 <!-- END GENERATED FR REGISTRY -->
 
 ## 说明
@@ -367,3 +368,4 @@
 - FR-126 已经第四轮严格审计补证后重新闭环删除；mark-done showcase 已对齐 `claude/cli` typed-driver 当前事件与 artifact，全部 `docs/showcases/**/*.md` 进入退役语义扫描，EN/ZH 指南下游链接与正向语义由确定性门禁验证。设计与验证证据由 `docs/design_doc/orchestrator/138-agent-driver-execution-migration.md`、`docs/design_doc/orchestrator/guide-alignment.md`、`docs/qa/orchestrator/176-agent-driver-execution-migration.md` 与 `docs/qa/orchestrator/guide-alignment.md` 承载。
 - FR-133 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/156-dependency-policy-gate.md` 与 `docs/qa/orchestrator/194-dependency-policy-gate.md` 承载（`deny.toml` 把依赖图的形状变成一项决定：48 个多版本 crate、70 条带理由的接受项，不使用 `skip-tree`；九条许可证表达式覆盖全部 653 个外部包，`target-lexicon` 一条例外；`sources` 当前干净，作为护栏交付。`cargo-deny` 与 `cargo audit` 按"一个问题一个工具"划分——实测两者互不包含，`cargo audit` 报告的 RUSTSEC-2024-0429（glib unsound）`cargo deny` 完全不报，故 `cargo audit --deny unsound` 改为阻断，接受项进入 `.cargo/audit.toml`。另新增 `scripts/qa/dependency-policy.rb`：`cargo deny` 证明策略成立，它证明策略仍然绑定）
 - FR-076 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/165-gui-ci-integration.md`、`docs/design_doc/orchestrator/166-gui-release-packaging.md` 与 `docs/qa/orchestrator/203-gui-ci-integration.md`、`docs/qa/orchestrator/204-gui-release-packaging.md` 承载（需求 1：clippy/test job 就地拓宽纳入 GUI crate，负向验证以 throwaway 分支 dispatch 证明编译错误使 CI 失败；需求 2–3：release.yml gui-build job 产出 universal .dmg 与 .AppImage/.deb，v0.5.0 实测上架——并当场抓到 publish 通配缺 GUI 二进制的缺陷，`check_gui_asset_globs` + fixture 6 已把 staged↔published 两份枚举机械比对；需求 4：Developer ID 证书本机 CSR 签发，CI 签名+公证+钉票在 runner 上实测 `accepted, source=Notarized Developer ID`；Windows .msi 记录为不做）
+- FR-159 与 FR-150~158 的审计批次不同源：它来自 2026-08-02 对开发机运行态的一次直接观测（`ps` 实测 28 个存活 19 天的 fixture 会话进程与 6 个 `ppid=1` 仍在 LISTEN 的 orchestratord），而非文档/门禁面的静态审计。它是运行时资源泄漏而非结构债，因此优先级高于同期待办的 FR-157/158；四层缺口中最值得注意的是 `cleanup_stale_sessions` 会删除被协调器标成 `failed` 的**活体**记录——系统先放弃回收，再销毁证据
