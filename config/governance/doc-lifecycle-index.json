@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 449,
-    "active": 436,
+    "documents": 451,
+    "active": 438,
     "superseded": 13,
-    "withRelatedFr": 296
+    "withRelatedFr": 298
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -447,6 +447,12 @@
     },
     "docs/design_doc/orchestrator/17-envstore-secretstore-agent-env.md": {
       "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/170-source-domain-decomposition.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-157"
+      ]
     },
     "docs/design_doc/orchestrator/18-prompt-delivery-abstraction.md": {
       "lifecycle": "active"
@@ -1758,6 +1764,12 @@
         "FR-156"
       ]
     },
+    "docs/qa/orchestrator/208-source-domain-decomposition.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-157"
+      ]
+    },
     "docs/qa/orchestrator/21-runner-security-observability.md": {
       "lifecycle": "active"
     },
@@ -2851,6 +2863,10 @@
     "FR-156": [
       "docs/design_doc/orchestrator/169-pipeline-variable-surface-retirement.md",
       "docs/qa/orchestrator/207-pipeline-variable-surface-retirement.md"
+    ],
+    "FR-157": [
+      "docs/design_doc/orchestrator/170-source-domain-decomposition.md",
+      "docs/qa/orchestrator/208-source-domain-decomposition.md"
     ]
   },
   "supersedes": {
