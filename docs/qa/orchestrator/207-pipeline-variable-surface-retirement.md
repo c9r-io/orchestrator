@@ -9,7 +9,7 @@ self_referential_safe: true
 **Module**: Orchestrator Config / Scheduler / Workflow Governance
 **Scope**: manifest pipeline-variable rejection, per-object migration parity,
 retained-carrier ledger convergence, store round-trip
-**Scenarios**: 6
+**Scenarios**: 5
 **Priority**: High
 
 ## Background
@@ -24,13 +24,14 @@ The automated gate is `scripts/qa/test-pipeline-variable-retirement.sh`,
 port 19327 with its own `ORCHESTRATORD_DATA_DIR` and `HOME` under `mktemp`, and
 never touches the developer's daemon, database or config.
 
-## Scenario 1: Every retired construct is rejected, and the diagnostic names it
+## Scenario 1: Every retired construct is rejected, at any nesting depth
 
 **Steps**
 
 1. `cargo build -p orchestratord -p orchestrator-cli`
 2. `bash scripts/qa/test-pipeline-variable-retirement.sh`
 3. Read the four `is rejected and the diagnostic names its field` lines.
+4. `cargo test -p agent-orchestrator retirement_tests`
 
 **Expected result**
 
@@ -45,29 +46,20 @@ distinguish which branch a validator failed through. One workflow per construct,
 so a validator that detected the wrong field would fail rather than be absorbed
 by a shared assertion.
 
-## Scenario 2: A retired construct nested in `chain_steps` is rejected too
-
-**Steps**
-
-1. `cargo test -p agent-orchestrator retirement_tests`
-
-**Expected result**
-
-`a_retired_field_nested_in_chain_steps_is_rejected_too` passes. The parent step
-authors nothing; only its chain child carries `store_inputs`.
-
-This is the case the recursion exists for. `validate_workflow_steps` walked
-`spec.steps` only, while chain children are dispatched through the same
-`execute_step` path — so before FR-156 a retired field one level down ran
-exactly as it always had and the workflow validated clean. The same hole applied
-to `legacy_coordination_removed` and `legacy_json_path_removed`, which now
-recurse with it.
+`retirement_tests` covers the nesting: in
+`a_retired_field_nested_in_chain_steps_is_rejected_too` the parent step authors
+nothing and only its chain child carries `store_inputs`. That is the case the
+recursion exists for — `validate_workflow_steps` walked `spec.steps` only, while
+chain children are dispatched through the same `execute_step` path, so before
+FR-156 a retired field one level down ran exactly as it always had and the
+workflow validated clean. The same hole applied to `legacy_coordination_removed`
+and `legacy_json_path_removed`, which now recurse with it.
 
 `an_empty_step_vars_map_is_not_a_retired_construct` is the paired negative:
 `step_vars: {}` deserializes to `Some(empty)`, and rejecting on `Some` alone
 would fail a manifest that authors nothing.
 
-## Scenario 3: Per-object migration parity against a recorded baseline
+## Scenario 2: Per-object migration parity against a recorded baseline
 
 **Steps**
 
@@ -94,7 +86,7 @@ recordings and writes `branchesDistinguishable`; verify mode reads that field.
 Had the old path worked, the check would have tightened to equality on its own
 rather than requiring an edit.
 
-## Scenario 4: The end-to-end behaviour the migrated step exists for
+## Scenario 3: The end-to-end behaviour the migrated step exists for
 
 **Steps**
 
@@ -112,7 +104,7 @@ Both branches are asserted. A check on the populated branch alone would let the
 fallback break silently, and the pre-migration recording shows the fallback was
 the only branch that ever ran.
 
-## Scenario 5: `store put` and `store get` are inverses
+## Scenario 4: `store put` and `store get` are inverses
 
 **Steps**
 
@@ -131,7 +123,7 @@ A shell step interpolates this output straight into a command, so a quoted
 literal is a silent failure rather than an error. That is why the assertion is
 on the exact bytes and not on "the read succeeded".
 
-## Scenario 6: The ledger says what the tree says
+## Scenario 5: The ledger says what the tree says
 
 **Steps**
 
@@ -156,6 +148,18 @@ plain equality check and fail this one.
 occurrences to one, and two new doc comments name the type in prose. The ratchet
 counts textual occurrences including comments — it measures spelling, not
 reachability. Read a movement in it accordingly.
+
+## Checklist
+
+| # | Scenario | Status | Test Date | Tester | Notes |
+|---|----------|--------|-----------|--------|-------|
+| 1 | Every retired construct rejected, at any nesting depth | ✅ | 2026-08-02 | Claude | 4 rejection cases asserting exact diagnostic text; `retirement_tests` 7/7 including the chain child and the empty-`step_vars` negative |
+| 2 | Per-object migration parity vs recorded baseline | ✅ | 2026-08-02 | Claude | Baseline captured at `1cf6f3cc` before removal; 3 per-object comparisons |
+| 3 | End-to-end: both branches of the migrated step | ✅ | 2026-08-02 | Claude | Key present → exactly 2 commits; key absent → fallback, 3 commits |
+| 4 | `store put`/`store get` are inverses | ✅ | 2026-08-02 | Claude | 3 service tests: bare scalar, explicit JSON string, JSON object |
+| 5 | Ledger matches the tree | ✅ | 2026-08-02 | Claude | Gate PASS; `--emit-consumers` and `--emit-baseline` both diff-clean; ledger tooling 14/14 |
+
+Full gate: `pipeline variable retirement QA: 13 passed, 0 failed`.
 
 ## Rollback Evidence
 

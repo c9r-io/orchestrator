@@ -365,8 +365,15 @@ else
   B_OBSERVED_META="$(jq -c '{terminal, exit_code}' <<<"$OBJECT_B")"
   # `fromjson` fails loudly on a prefix that is not the marker plus JSON, so a
   # step that emitted nothing cannot reach the equality below.
+  # No pipe: a `jq | sed | jq` inside a command substitution reports the last
+  # stage's status, so a first-stage failure reads as an empty payload rather
+  # than an error. This gate exists to catch that shape elsewhere; it was in
+  # here too, and scripts/qa/jq-status-observed.rb found it.
   payload() {
-    jq -r '.stdout' <<<"$1" | sed 's/^winner-data://' | jq -S -c .
+    local raw stripped
+    raw="$(jq -r '.stdout' <<<"$1")" || return 1
+    stripped="${raw#winner-data:}"
+    jq -S -c . <<<"$stripped"
   }
   if B_EXPECTED_PAYLOAD="$(payload "$B_EXPECTED")" &&
      B_OBSERVED_PAYLOAD="$(payload "$OBJECT_B")" &&
@@ -401,11 +408,17 @@ fi
 # two assert the behaviour directly, so a baseline recorded over an already
 # broken step cannot certify itself.
 
-if [[ "$(jq -r '.stdout' <<<"$OBJECT_B" | sed 's/^winner-data://' |
-        jq -r '.winner_id' 2>/dev/null)" == "item-7" ]]; then
+B_STDOUT="$(jq -r '.stdout' <<<"$OBJECT_B")"
+B_PAYLOAD="${B_STDOUT#winner-data:}"
+# `|| true` would swallow jq's status, which is the substance of the rule
+# scripts/qa/jq-status-observed.rb enforces even where its regex reads `||` as a
+# pipe. The `&&` observes it: a payload jq cannot parse fails the case rather
+# than arriving as an empty string that happens not to equal item-7.
+if B_WINNER="$(jq -r '.winner_id' <<<"$B_PAYLOAD" 2>/dev/null)" &&
+   [[ "$B_WINNER" == "item-7" ]]; then
   pass "the migrated winner step still receives the stored winner payload"
 else
-  jq -r '.stdout' <<<"$OBJECT_B" >&2
+  echo "$B_STDOUT" >&2
   fail "the migrated winner step did not receive the stored winner payload"
 fi
 

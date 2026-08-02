@@ -33,20 +33,38 @@ ruby scripts/qa/coordination-governance.rb \
   --require-complete \
   --output "$INVENTORY" >/dev/null
 
+# The counts here are exact, and every one of them has moved at least once.
+# The legacy Agent count was 4 when FR-125 froze this ratchet; FR-126 drove it to
+# 0 and FR-127 found the stale assertion while wiring this gate into CI, because
+# until then nothing executed it. The generic-variable count was 2 until FR-156
+# retired the manifest authoring surface and drove it to 0.
+#
+# `jq -e` under `set -e` was how both of those were reported: a bare non-zero
+# exit, no output at all, and a log indistinguishable from a run that never
+# started. The status is observed here instead, and the diagnostic names the
+# expectation that no longer holds -- an exit code cannot say which conjunct
+# failed, and this one has five.
+INVENTORY_OK=0
 jq -e '
   .productionConsumers.capturesOrJsonPath == [] and
   .productionConsumers.celCoordination == [] and
-  (.productionConsumers.pipelineVariables | length) == 2 and
+  .productionConsumers.pipelineVariables == [] and
   (.executionInventory.legacyCommandOnlyAgents | length) == 0 and
   .sourceTouches.capturesOrJsonPath <= 53
-' "$INVENTORY" >/dev/null
-# The legacy Agent count was 4 when FR-125 froze this ratchet. FR-126 migrated
-# every command-only Agent to an explicit driver and drove it to 0, which
-# falsified the older assertion; FR-127 found it while wiring this gate into CI,
-# because until then nothing executed it. The ratchet only tightens: a
-# reintroduced command-only Agent must fail here and in
-# test-agent-driver-execution-migration.sh, which asserts the same emptiness.
-pass "machine-readable inventory proves 0 capture/JSONPath, 0 coordination CEL, 2 generic variable, and 0 legacy Agent consumers"
+' "$INVENTORY" >/dev/null 2>&1 || INVENTORY_OK=$?
+if [[ "$INVENTORY_OK" -ne 0 ]]; then
+  echo "consumer inventory no longer matches the frozen expectation:" >&2
+  jq -c '{
+    capturesOrJsonPath: (.productionConsumers.capturesOrJsonPath | length),
+    celCoordination: (.productionConsumers.celCoordination | length),
+    pipelineVariables: (.productionConsumers.pipelineVariables | length),
+    legacyCommandOnlyAgents: (.executionInventory.legacyCommandOnlyAgents | length),
+    sourceTouchesCapturesOrJsonPath: .sourceTouches.capturesOrJsonPath
+  }' "$INVENTORY" >&2
+  echo "expected all consumer lists empty, 0 legacy Agents, and capturesOrJsonPath <= 53" >&2
+  exit 1
+fi
+pass "machine-readable inventory proves 0 capture/JSONPath, 0 coordination CEL, 0 generic variable, and 0 legacy Agent consumers"
 
 if rg -n \
   'apply_captures|pending_generate_items|extract_json_array' \

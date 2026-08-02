@@ -133,8 +133,17 @@ Its boundary, which is the constraint this document exists to fix in place:
   into `vars`, is a new coordination channel and needs its own governance, not
   an incremental addition here. The whole point of naming a retained carrier is
   that "it already exists" stops being an argument for putting things in it.
-- The generic map has no *manifest* authoring surface at all now. Every
-  remaining writer is scheduler-owned code.
+- The generic map has no *manifest* authoring surface at all now. Enumerated
+  rather than asserted — every non-test writer into `vars` after this FR:
+  `spill.rs` (oversized value spill), `dispatch_builtin.rs` (`prev_stdout_path`,
+  `prev_stderr_path`, `diff_path`), `isolation.rs` (workspace path),
+  `segment.rs::promote_winner_vars` (from the `item_select` builtin's typed
+  `SelectionResult`, whose keys come from `ExecutionSignals.metrics` and so from
+  the `record_metric` tool at runtime, not from a manifest), and `dispatch.rs`
+  for `item.dynamic_vars_json`. That last one is the "public immutable initial
+  and item variable bindings" code-level blocker — item data, not a step
+  construct. No manifest step field remains, which is what makes
+  `productionConsumerCount: 0` mean something rather than merely being true.
 
 ## Migration And Its Evidence
 
