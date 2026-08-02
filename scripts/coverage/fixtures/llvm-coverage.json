@@ -5,25 +5,121 @@
         {
           "filename": "/Users/qa/orchestrator/crates/daemon/src/server/attention.rs",
           "summary": {
-            "lines": { "count": 10, "covered": 8, "percent": 80 },
-            "functions": { "count": 4, "covered": 3, "percent": 75 },
-            "branches": { "count": 6, "covered": 3, "percent": 50 }
+            "lines": {
+              "count": 10,
+              "covered": 8,
+              "percent": 80
+            },
+            "functions": {
+              "count": 4,
+              "covered": 3,
+              "percent": 75
+            },
+            "branches": {
+              "count": 6,
+              "covered": 3,
+              "percent": 50
+            }
+          }
+        },
+        {
+          "filename": "/Users/qa/orchestrator/crates/daemon/src/server/source_connection/oauth.rs",
+          "summary": {
+            "lines": {
+              "count": 10,
+              "covered": 8,
+              "percent": 80.0
+            },
+            "functions": {
+              "count": 4,
+              "covered": 3,
+              "percent": 75.0
+            },
+            "branches": {
+              "count": 6,
+              "covered": 3,
+              "percent": 50.0
+            }
+          }
+        },
+        {
+          "filename": "/Users/qa/orchestrator/crates/daemon/src/server/source_connection.rs",
+          "summary": {
+            "lines": {
+              "count": 5,
+              "covered": 4,
+              "percent": 80.0
+            },
+            "functions": {
+              "count": 2,
+              "covered": 1,
+              "percent": 50.0
+            },
+            "branches": {
+              "count": 2,
+              "covered": 1,
+              "percent": 50.0
+            }
+          }
+        },
+        {
+          "filename": "/Users/qa/orchestrator/crates/daemon/src/server/source_connection/tests/mod.rs",
+          "summary": {
+            "lines": {
+              "count": 100,
+              "covered": 100,
+              "percent": 100.0
+            },
+            "functions": {
+              "count": 40,
+              "covered": 40,
+              "percent": 100.0
+            },
+            "branches": {
+              "count": 20,
+              "covered": 20,
+              "percent": 100.0
+            }
           }
         },
         {
           "filename": "/Users/qa/orchestrator/crates/cli/src/main.rs",
           "summary": {
-            "lines": { "count": 5, "covered": 5, "percent": 100 },
-            "functions": { "count": 2, "covered": 2, "percent": 100 },
-            "branches": { "count": 2, "covered": 2, "percent": 100 }
+            "lines": {
+              "count": 5,
+              "covered": 5,
+              "percent": 100
+            },
+            "functions": {
+              "count": 2,
+              "covered": 2,
+              "percent": 100
+            },
+            "branches": {
+              "count": 2,
+              "covered": 2,
+              "percent": 100
+            }
           }
         },
         {
           "filename": "/Users/qa/orchestrator/target/generated.rs",
           "summary": {
-            "lines": { "count": 100, "covered": 0, "percent": 0 },
-            "functions": { "count": 100, "covered": 0, "percent": 0 },
-            "branches": { "count": 100, "covered": 0, "percent": 0 }
+            "lines": {
+              "count": 100,
+              "covered": 0,
+              "percent": 0
+            },
+            "functions": {
+              "count": 100,
+              "covered": 0,
+              "percent": 0
+            },
+            "branches": {
+              "count": 100,
+              "covered": 0,
+              "percent": 0
+            }
           }
         }
       ]

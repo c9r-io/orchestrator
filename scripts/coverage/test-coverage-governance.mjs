@@ -33,6 +33,18 @@ assert.equal(supported.branchStatus, "supported");
 assert.equal(supported.components["daemon adapter"].lines.percent, 80);
 assert.equal(supported.keyModules["daemon/attention"].branches.percent, 50);
 
+// FR-157 split `source_connection.rs` into a directory. The key-module prefix has to
+// reach both forms, and it must not reach the test sources beneath them.
+//
+// The fixture holds `source_connection/oauth.rs` (10 lines, 8 covered),
+// `source_connection.rs` (5 lines, 4 covered) and `source_connection/tests/mod.rs`
+// (100 lines, all covered). A prefix ending in `.rs` would see only the second, and
+// counting the test file would take the module to 112/115. Both mistakes change the
+// number below, so this asserts the measured set rather than the spelling of a path.
+assert.equal(supported.keyModules["daemon/source_connection"].lines.count, 15);
+assert.equal(supported.keyModules["daemon/source_connection"].lines.covered, 12);
+assert.equal(supported.keyModules["daemon/source_connection"].lines.percent, 80);
+
 const unsupported = summarizeRust(rust, "/Users/qa/orchestrator", "unsupported");
 assert.equal(unsupported.branchStatus, "unsupported");
 assert.equal(unsupported.workspace.branches.status, "unsupported");

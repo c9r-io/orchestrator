@@ -3,11 +3,11 @@
 use orchestrator_proto::*;
 use tonic::{Code, Request};
 
-use super::super::{
-    catalog, dedicated_urls, get, list, local_terminal_intent_status, manifest_diff,
-    safe_url_origin, semantic_manifest_diff, validate_config_token, validate_id, validate_label,
-    validate_mutation, watch,
+use super::super::projection::{
+    dedicated_urls, local_terminal_intent_status, manifest_diff, safe_url_origin,
+    semantic_manifest_diff, validate_config_token, validate_id, validate_label, validate_mutation,
 };
+use super::super::{catalog, get, list, watch};
 use super::Fixture;
 use agent_orchestrator::source_connection::SourceConnectionMode;
 use serde_json::json;

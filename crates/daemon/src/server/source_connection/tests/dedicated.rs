@@ -6,9 +6,10 @@ use sha2::{Digest, Sha256};
 use tonic::{Code, Request};
 use zeroize::Zeroizing;
 
+use super::super::projection::dedicated_urls;
 use super::super::{
     DEDICATED_MANIFEST_VERSION, DedicatedSession, dedicated_abandon, dedicated_approve,
-    dedicated_get, dedicated_preview, dedicated_urls,
+    dedicated_get, dedicated_preview,
 };
 use super::{ENROLLMENT_KEY, Fixture, rfc3339_in};
 use agent_orchestrator::source_connection::StoreDedicatedProvisioning;

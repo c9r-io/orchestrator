@@ -15,6 +15,7 @@
 mod dedicated;
 mod intent;
 mod lifecycle;
+mod module_shape;
 mod projection;
 
 use std::collections::HashMap;

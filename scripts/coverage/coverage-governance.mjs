@@ -118,7 +118,12 @@ const KEY_MODULES = {
   "daemon/attention": ["crates/daemon/src/server/attention.rs"],
   "daemon/handoff": ["crates/daemon/src/server/handoff.rs"],
   "daemon/session": ["crates/daemon/src/server/session.rs"],
-  "daemon/source_connection": ["crates/daemon/src/server/source_connection.rs"],
+  // No `.rs` suffix on purpose. `matchingBucket` compares with `startsWith`, so a
+  // prefix ending in `.rs` matches the single file and nothing beneath a directory
+  // of the same name. FR-157 split this module into `source_connection/`; with the
+  // old prefix every submodule would have dropped out of the key module silently,
+  // shrinking the denominator and raising the percentage by measuring less.
+  "daemon/source_connection": ["crates/daemon/src/server/source_connection"],
   "daemon/action_audit": ["crates/daemon/src/server/action_audit.rs"],
   "cli/commands": ["crates/cli/src/commands/"],
   "tauri/commands": ["crates/gui/src/commands/"],
