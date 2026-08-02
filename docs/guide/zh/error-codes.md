@@ -52,6 +52,28 @@ orchestrator 以方括号形式打印的机器可读错误码，如
 - **处置**：用 typed daemon tools 替换该后置动作。参见
   [Coordination Tools](../coordination-tools.md)。
 
+## `legacy_pipeline_variables_removed`
+
+- **含义**：Workflow step 通过四种已退役的 step 级构件之一书写 pipeline
+  变量——`store_inputs`、`store_outputs`、`step_vars`，或 `store_put` 后置
+  动作。四者都把作者选定的值送入协调机制坍缩已退役的通用 pipeline 变量表
+  （DD-169）。
+- **触发**：对此类 Workflow 执行 `orchestrator apply` 或 `manifest validate`，
+  包括该构件位于 `chain_steps` 内的情形。manifest 被拒绝，诊断会点名你用的
+  是四者中的哪一个。
+- **处置**：让 step 自行访问 store，无需任何绑定：
+
+  ```yaml
+  command: >-
+    LAST_SHA="$(orchestrator store get promotion last_published_sha
+    --project {project_id} 2>/dev/null || true)" && ...
+  ```
+
+  `{project_id}` 由任务上下文渲染，因此无需向 step 预先注入任何值。对于
+  agent step，把同一条命令写进 prompt 让 agent 自己执行。对于 `step_vars`，
+  直接把值写进该 step 自己的 command 或 prompt。参见
+  [Coordination Tools](../coordination-tools.md)。
+
 ## `legacy_runner_executor_removed`
 
 - **含义**：manifest 设置了 `runner.executor: streaming`，一种已移除的执行

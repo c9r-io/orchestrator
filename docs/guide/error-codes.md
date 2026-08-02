@@ -57,6 +57,29 @@ pointer to this page.
 - **Action**: replace the post-action with typed daemon tools. See
   [Coordination Tools](coordination-tools.md).
 
+## `legacy_pipeline_variables_removed`
+
+- **Meaning**: a Workflow step authors a pipeline variable through one of the
+  four retired step-level constructs — `store_inputs`, `store_outputs`,
+  `step_vars`, or a `store_put` post-action. All four routed an author-chosen
+  value through the generic pipeline-variable map retired by the coordination
+  collapse (DD-169).
+- **Trigger**: `orchestrator apply` or `manifest validate` on such a Workflow,
+  including when the construct sits inside `chain_steps`. The manifest is
+  rejected and the diagnostic names which of the four you used.
+- **Action**: have the step address the store itself, which needs no binding:
+
+  ```yaml
+  command: >-
+    LAST_SHA="$(orchestrator store get promotion last_published_sha
+    --project {project_id} 2>/dev/null || true)" && ...
+  ```
+
+  `{project_id}` renders from the task context, so nothing has to be
+  pre-substituted into the step. For an agent step, put the same command in the
+  prompt and let the agent run it. For `step_vars`, write the value directly into
+  the step's own command or prompt. See [Coordination Tools](coordination-tools.md).
+
 ## `legacy_runner_executor_removed`
 
 - **Meaning**: the manifest sets `runner.executor: streaming`, a removed

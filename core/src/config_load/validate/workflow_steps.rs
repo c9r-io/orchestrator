@@ -54,25 +54,7 @@ pub(super) fn validate_workflow_steps<A: AgentLookup>(
         if !is_self_contained {
             validate_driver_candidates(step, workflow_id, key, agents)?;
         }
-        if !step.behavior.captures.is_empty() {
-            anyhow::bail!(
-                "[legacy_coordination_removed] workflow '{}' step '{}' uses behavior.captures; use typed driver/tool results",
-                workflow_id,
-                step.id
-            );
-        }
-        if step.behavior.post_actions.iter().any(|action| {
-            matches!(
-                action,
-                PostAction::SpawnTasks(_) | PostAction::GenerateItems(_)
-            )
-        }) {
-            anyhow::bail!(
-                "[legacy_json_path_removed] workflow '{}' step '{}' uses a JSONPath-backed post-action; use typed daemon tools",
-                workflow_id,
-                step.id
-            );
-        }
+        reject_retired_authoring(step, workflow_id)?;
         if let Some(prehook) = step.prehook.as_ref() {
             crate::prehook::validate_step_prehook(prehook, workflow_id, key)?;
         }
@@ -81,6 +63,93 @@ pub(super) fn validate_workflow_steps<A: AgentLookup>(
         anyhow::bail!("workflow '{workflow_id}' has no enabled steps");
     }
     Ok(enabled_count)
+}
+
+/// Reject every retired step-level authoring construct, at any nesting depth.
+///
+/// The recursion is the point. `chain_steps` children are dispatched through
+/// the same `execute_step` path as top-level steps, so a retired field one
+/// level down runs exactly as it always did — while a validator that walks only
+/// `spec.steps` reports the workflow clean. That is a guard covering the shapes
+/// its author had in mind and silently missing the next one, and it applied to
+/// the two pre-existing checks here as much as to the FR-156 one they now sit
+/// beside.
+fn reject_retired_authoring(step: &WorkflowStepConfig, workflow_id: &str) -> Result<()> {
+    if !step.behavior.captures.is_empty() {
+        anyhow::bail!(
+            "[legacy_coordination_removed] workflow '{}' step '{}' uses behavior.captures; use typed driver/tool results",
+            workflow_id,
+            step.id
+        );
+    }
+    if step.behavior.post_actions.iter().any(|action| {
+        matches!(
+            action,
+            PostAction::SpawnTasks(_) | PostAction::GenerateItems(_)
+        )
+    }) {
+        anyhow::bail!(
+            "[legacy_json_path_removed] workflow '{}' step '{}' uses a JSONPath-backed post-action; use typed daemon tools",
+            workflow_id,
+            step.id
+        );
+    }
+    reject_pipeline_variable_authoring(step, workflow_id)?;
+    for child in &step.chain_steps {
+        reject_retired_authoring(child, workflow_id)?;
+    }
+    Ok(())
+}
+
+/// Reject the retired step-level pipeline-variable authoring surface (FR-156).
+///
+/// All four of these route an author-chosen value through
+/// `PipelineVariables.vars`, the generic map the coordination collapse retired:
+/// `store_inputs` reads a store into it, `store_outputs` and the `store_put`
+/// post-action write a variable out of it, and `step_vars` overlays it for one
+/// step. Steps address project-scoped state directly now — the CLI, or a typed
+/// daemon tool — so none of them has a live consumer.
+///
+/// The spec types stay deserializable on purpose (DD-137): a removed field that
+/// still parses can be answered with a stable retirement diagnostic naming it,
+/// where a deleted field would surface as an opaque unknown-key error.
+///
+/// One arm per field rather than one combined predicate, so the diagnostic
+/// always names the field the author actually wrote. A single message covering
+/// all four would be satisfied by a validator that detected the wrong one.
+fn reject_pipeline_variable_authoring(step: &WorkflowStepConfig, workflow_id: &str) -> Result<()> {
+    let retired = if !step.store_inputs.is_empty() {
+        Some(
+            "store_inputs; read the store from the step instead, e.g. `orchestrator store get <store> <key> --project {project_id}`",
+        )
+    } else if !step.store_outputs.is_empty() {
+        Some(
+            "store_outputs; write from the step instead, e.g. `orchestrator store put <store> <key> <value> --project {project_id}`",
+        )
+    } else if step.step_vars.as_ref().is_some_and(|vars| !vars.is_empty()) {
+        Some("step_vars; put the value in the step's own command or prompt")
+    } else if step
+        .behavior
+        .post_actions
+        .iter()
+        .any(|action| matches!(action, PostAction::StorePut { .. }))
+    {
+        Some(
+            "a store_put post-action; write from the step instead, e.g. `orchestrator store put <store> <key> <value> --project {project_id}`",
+        )
+    } else {
+        None
+    };
+
+    if let Some(retired) = retired {
+        anyhow::bail!(
+            "[legacy_pipeline_variables_removed] workflow '{}' step '{}' uses {}",
+            workflow_id,
+            step.id,
+            retired
+        );
+    }
+    Ok(())
 }
 
 fn validate_driver_candidates<A: AgentLookup>(
@@ -394,6 +463,110 @@ pub fn collect_step_warnings(steps: &[WorkflowStepSpec], workflow_id: &str) -> V
     }
 
     warnings
+}
+
+#[cfg(test)]
+mod retirement_tests {
+    use super::*;
+    use crate::config::{StoreInputConfig, StoreOutputConfig};
+    use crate::config_load::tests::make_step;
+    use std::collections::HashMap;
+
+    fn reject(step: WorkflowStepConfig) -> String {
+        reject_retired_authoring(&step, "wf")
+            .expect_err("retired construct must be rejected")
+            .to_string()
+    }
+
+    fn with_store_inputs() -> WorkflowStepConfig {
+        let mut step = make_step("plan", true);
+        step.store_inputs = vec![StoreInputConfig {
+            store: "promotion".to_string(),
+            key: "last_published_sha".to_string(),
+            as_var: "last_published_sha".to_string(),
+            required: false,
+        }];
+        step
+    }
+
+    #[test]
+    fn store_inputs_is_rejected_and_the_diagnostic_names_it() {
+        let error = reject(with_store_inputs());
+        assert!(
+            error.contains("[legacy_pipeline_variables_removed]"),
+            "{error}"
+        );
+        assert!(error.contains("step 'plan' uses store_inputs"), "{error}");
+    }
+
+    #[test]
+    fn store_outputs_is_rejected_and_the_diagnostic_names_it() {
+        let mut step = make_step("plan", true);
+        step.store_outputs = vec![StoreOutputConfig {
+            store: "promotion".to_string(),
+            key: "recorded".to_string(),
+            from_var: "sha".to_string(),
+        }];
+        let error = reject(step);
+        assert!(error.contains("step 'plan' uses store_outputs"), "{error}");
+    }
+
+    #[test]
+    fn step_vars_is_rejected_and_the_diagnostic_names_it() {
+        let mut step = make_step("plan", true);
+        step.step_vars = Some(HashMap::from([("depth".to_string(), "deep".to_string())]));
+        let error = reject(step);
+        assert!(error.contains("step 'plan' uses step_vars"), "{error}");
+    }
+
+    #[test]
+    fn store_put_post_action_is_rejected_and_the_diagnostic_names_it() {
+        let mut step = make_step("plan", true);
+        step.behavior.post_actions = vec![PostAction::StorePut {
+            store: "promotion".to_string(),
+            key: "recorded".to_string(),
+            from_var: "sha".to_string(),
+        }];
+        let error = reject(step);
+        assert!(
+            error.contains("step 'plan' uses a store_put post-action"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_retired_field_nested_in_chain_steps_is_rejected_too() {
+        // The parent is clean, so a validator walking only spec.steps reports
+        // this workflow valid -- while execute_step dispatches chain children
+        // through the same path and runs the binding. This is the case the
+        // recursion exists for.
+        let mut parent = make_step("chain", true);
+        parent.chain_steps = vec![with_store_inputs()];
+
+        let error = reject(parent);
+        assert!(
+            error.contains("[legacy_pipeline_variables_removed]"),
+            "{error}"
+        );
+        assert!(error.contains("step 'plan' uses store_inputs"), "{error}");
+    }
+
+    #[test]
+    fn an_empty_step_vars_map_is_not_a_retired_construct() {
+        // `step_vars: {}` deserializes to Some(empty), not None. Rejecting on
+        // Some alone would fail a manifest that authors nothing, which is the
+        // false-positive half of this check.
+        let mut step = make_step("plan", true);
+        step.step_vars = Some(HashMap::new());
+        assert!(reject_retired_authoring(&step, "wf").is_ok());
+    }
+
+    #[test]
+    fn a_step_authoring_none_of_them_is_accepted() {
+        let mut parent = make_step("chain", true);
+        parent.chain_steps = vec![make_step("child", true)];
+        assert!(reject_retired_authoring(&parent, "wf").is_ok());
+    }
 }
 
 #[cfg(test)]
