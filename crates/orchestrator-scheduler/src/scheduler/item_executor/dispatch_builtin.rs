@@ -287,6 +287,7 @@ pub(crate) async fn execute_builtin_step(
             phase.to_string(),
             workspace_root.clone(),
             task_ctx.workspace_id.clone(),
+            task_ctx.project_id.clone(),
         );
         let rendered_command = ctx.render_template_with_pipeline(command, Some(pipeline_vars));
 

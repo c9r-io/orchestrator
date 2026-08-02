@@ -550,11 +550,37 @@ mod cases {
             "item-1",
             std::path::Path::new("."),
             "ws-1",
+            "proj-1",
             None,
         );
         assert_eq!(
             rendered,
             "/qa-testing docs/qa/orchestrator/00-command-contract.md"
+        );
+    }
+
+    #[test]
+    fn render_step_template_prompt_substitutes_project_id_without_pipeline_state() {
+        // The prompt path builds an AgentContext only when it has a reason to.
+        // {project_id} has to be one of those reasons: the migrated
+        // self-evolution prompt carries no pipeline state at all, and without
+        // this the placeholder would reach the agent unsubstituted (FR-156).
+        let rendered = render_step_template_prompt(
+            "orchestrator store get evolution winner_latest --project {project_id}",
+            "docs/qa/pilot.md",
+            "implement",
+            1,
+            &[],
+            "task-1",
+            "item-1",
+            std::path::Path::new("."),
+            "ws-1",
+            "self-evolution",
+            None,
+        );
+        assert_eq!(
+            rendered,
+            "orchestrator store get evolution winner_latest --project self-evolution"
         );
     }
 

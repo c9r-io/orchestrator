@@ -40,6 +40,13 @@ pub struct AgentContext {
     pub workspace_root: PathBuf,
     /// Workspace identifier from configuration.
     pub workspace_id: String,
+    /// Project scope the task runs under.
+    ///
+    /// A context value like `task_id`, not a pipeline variable: it never enters
+    /// `PipelineVariables.vars`. Steps need it to address project-scoped
+    /// resources — `orchestrator store get <store> <key> --project {project_id}`
+    /// — which is what replaced the retired `store_inputs` binding (FR-156).
+    pub project_id: String,
     /// Historical phase executions accumulated so far.
     pub execution_history: Vec<PhaseRecord>,
     /// Outputs produced by upstream phases.
@@ -59,6 +66,7 @@ impl AgentContext {
         phase: String,
         workspace_root: PathBuf,
         workspace_id: String,
+        project_id: String,
     ) -> Self {
         Self {
             task_id,
@@ -67,6 +75,7 @@ impl AgentContext {
             phase,
             workspace_root,
             workspace_id,
+            project_id,
             execution_history: Vec::new(),
             upstream_outputs: Vec::new(),
             artifacts: ArtifactRegistry::default(),
@@ -106,6 +115,7 @@ impl AgentContext {
         result = result.replace("{phase}", &self.phase);
         result = result.replace("{workspace_root}", &self.workspace_root.to_string_lossy());
         result = result.replace("{source_tree}", &self.workspace_root.to_string_lossy());
+        result = result.replace("{project_id}", &self.project_id);
 
         if let Some(pipeline) = pipeline {
             result = result.replace("{goal}", &escape_for_bash_dquote(&pipeline.preserved.goal));
@@ -223,6 +233,7 @@ mod tests {
             "qa".to_string(),
             PathBuf::from("/workspace"),
             "ws1".to_string(),
+            "proj1".to_string(),
         );
 
         let result = ctx.render_template("Task: {task_id}, Item: {item_id}, Cycle: {cycle}");
@@ -238,6 +249,7 @@ mod tests {
             "qa".to_string(),
             PathBuf::from("/ws"),
             "ws1".to_string(),
+            "proj1".to_string(),
         );
         let r = ctx.to_ref();
         assert_eq!(r.task_id, "t1");
@@ -255,6 +267,7 @@ mod tests {
             "qa".to_string(),
             PathBuf::from("/ws"),
             "ws1".to_string(),
+            "proj1".to_string(),
         );
 
         let output = AgentOutput::new(
@@ -275,6 +288,63 @@ mod tests {
     }
 
     #[test]
+    fn project_id_renders_from_context_without_any_pipeline_state() {
+        let ctx = AgentContext::new(
+            "t1".to_string(),
+            "i1".to_string(),
+            1,
+            "qa".to_string(),
+            PathBuf::from("/workspace"),
+            "ws1".to_string(),
+            "promotion".to_string(),
+        );
+
+        // `None` for the pipeline is the whole point: {project_id} has to
+        // resolve for a step that carries no pipeline state at all, because
+        // FR-156 retired the binding that used to carry values into steps.
+        let rendered = ctx.render_template_with_pipeline(
+            "orchestrator store get promotion last_published_sha --project {project_id}",
+            None,
+        );
+
+        assert_eq!(
+            rendered,
+            "orchestrator store get promotion last_published_sha --project promotion"
+        );
+    }
+
+    #[test]
+    fn project_id_is_a_context_value_and_never_enters_the_generic_map() {
+        let ctx = AgentContext::new(
+            "t1".to_string(),
+            "i1".to_string(),
+            1,
+            "qa".to_string(),
+            PathBuf::from("/workspace"),
+            "ws1".to_string(),
+            "promotion".to_string(),
+        );
+        let mut pipeline = orchestrator_config::config::PipelineVariables::default();
+
+        let rendered = ctx.render_template_with_pipeline("p={project_id}", Some(&pipeline));
+
+        assert_eq!(rendered, "p=promotion");
+        assert!(!pipeline.vars.contains_key("project_id"));
+
+        // And a generic var of the same name cannot shadow it: the context
+        // substitution runs first, so there is nothing left for the map to
+        // rewrite. Without this the retired channel would still be able to
+        // redirect a store read (FR-156).
+        pipeline
+            .vars
+            .insert("project_id".to_string(), "attacker".to_string());
+        assert_eq!(
+            ctx.render_template_with_pipeline("p={project_id}", Some(&pipeline)),
+            "p=promotion"
+        );
+    }
+
+    #[test]
     fn test_agent_context_render_source_tree_alias() {
         let ctx = AgentContext::new(
             "t1".to_string(),
@@ -283,6 +353,7 @@ mod tests {
             "qa".to_string(),
             PathBuf::from("/workspace"),
             "ws1".to_string(),
+            "proj1".to_string(),
         );
         let result = ctx.render_template("root={source_tree}");
         assert_eq!(result, "root=/workspace");
@@ -297,6 +368,7 @@ mod tests {
             "plan".to_string(),
             PathBuf::from("/workspace"),
             "ws1".to_string(),
+            "proj1".to_string(),
         );
 
         let mut pipeline = orchestrator_config::config::PipelineVariables::default();
@@ -323,6 +395,7 @@ mod tests {
             "plan".to_string(),
             PathBuf::from("/workspace"),
             "ws1".to_string(),
+            "proj1".to_string(),
         );
         let mut pipeline = orchestrator_config::config::PipelineVariables::default();
         pipeline.preserved.goal = "Ship `safe`".to_string();

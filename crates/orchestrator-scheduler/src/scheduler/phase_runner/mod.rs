@@ -42,6 +42,7 @@ fn render_step_template_prompt(
     item_id: &str,
     workspace_root: &std::path::Path,
     workspace_id: &str,
+    project_id: &str,
     pipeline_vars: Option<&agent_orchestrator::config::PipelineVariables>,
 ) -> String {
     let mut rendered = prompt
@@ -52,6 +53,7 @@ fn render_step_template_prompt(
     if pipeline_vars.is_some()
         || rendered.contains("{source_tree}")
         || rendered.contains("{workspace_root}")
+        || rendered.contains("{project_id}")
     {
         let ctx = agent_orchestrator::collab::AgentContext::new(
             task_id.to_string(),
@@ -60,6 +62,7 @@ fn render_step_template_prompt(
             phase.to_string(),
             workspace_root.to_path_buf(),
             workspace_id.to_string(),
+            project_id.to_string(),
         );
         rendered = ctx.render_template_with_pipeline(&rendered, pipeline_vars);
     }
@@ -705,6 +708,7 @@ pub async fn run_phase_with_selected_agent(
             item_id,
             workspace_root,
             workspace_id,
+            project_id,
             pipeline_vars,
         )
     });
@@ -731,6 +735,7 @@ pub async fn run_phase_with_selected_agent(
     if pipeline_vars.is_some()
         || command.contains("{source_tree}")
         || command.contains("{workspace_root}")
+        || command.contains("{project_id}")
     {
         let ctx = agent_orchestrator::collab::AgentContext::new(
             task_id.to_string(),
@@ -739,6 +744,7 @@ pub async fn run_phase_with_selected_agent(
             phase.to_string(),
             workspace_root.to_path_buf(),
             workspace_id.to_string(),
+            project_id.to_string(),
         );
         command = ctx.render_template_with_pipeline(&command, pipeline_vars);
     }
