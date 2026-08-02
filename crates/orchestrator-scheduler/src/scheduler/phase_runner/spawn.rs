@@ -61,11 +61,7 @@ pub(super) async fn spawn_phase_process(
             shell_escape(step_id),
             setup.command
         );
-        let wrapped = format!(
-            "{} < {}",
-            inner,
-            shell_escape(&input_fifo.to_string_lossy())
-        );
+        let wrapped = wrap_session_stdin(&inner, &input_fifo.to_string_lossy());
         session_id = Some(sid.clone());
         state
             .session_store
@@ -326,6 +322,27 @@ pub(super) async fn spawn_phase_process(
     })
 }
 
+/// Binds an interactive session's stdin to its input FIFO.
+///
+/// The redirect is `0<>` (read-write), not `<` (read-only), so the session
+/// process itself holds a writer on the FIFO for its whole life and stdin never
+/// reaches EOF.
+///
+/// Under a read-only `<`, the FIFO returns EOF the moment the last writer
+/// closes — and `write_fifo_atomically` opens, writes and closes on *every*
+/// `send-input`. A session that blocks on `read` therefore exits after the first
+/// message it is ever sent, and a session that loops on EOF instead spins at
+/// whatever rate its loop allows. The mock fixture's `sleep 0.05` poll was a
+/// workaround for exactly this, and it cost ~315 minutes of CPU per orphaned
+/// process (FR-159).
+///
+/// Both the premature exit and the spin are properties of this redirect rather
+/// than of any particular agent command, which is why the fix lives here and not
+/// in each command template.
+fn wrap_session_stdin(inner: &str, input_fifo_path: &str) -> String {
+    format!("{} 0<> {}", inner, shell_escape(input_fifo_path))
+}
+
 fn provider_sessions() -> &'static tokio::sync::Mutex<std::collections::HashMap<String, SessionRef>>
 {
     static SESSIONS: OnceLock<tokio::sync::Mutex<std::collections::HashMap<String, SessionRef>>> =
@@ -378,6 +395,185 @@ fn tempfile_placeholder() -> Result<std::fs::File> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The shell reader used by both redirect tests: signal readiness, then
+    /// append every line received to the sink.
+    ///
+    /// The readiness touch happens after the shell has applied its redirect, so
+    /// the driver can wait for a reader that genuinely has the FIFO open.
+    #[cfg(unix)]
+    fn reader_program(sink: &Path, ready: &Path) -> String {
+        format!(
+            ": > {ready_path}; while IFS= read -r line; do printf '%s\\n' \"$line\" >> {sink_path}; done",
+            ready_path = shell_escape(&ready.to_string_lossy()),
+            sink_path = shell_escape(&sink.to_string_lossy())
+        )
+    }
+
+    /// Drives a shell reader through repeated writer open/close cycles and
+    /// reports how many of the messages it actually received, plus whether it
+    /// was still alive at the end.
+    ///
+    /// Deliberately mirrors `write_fifo_atomically`: each message is a separate
+    /// open, write and close, because that is what every `send-input` does and
+    /// it is precisely the pattern that makes the redirect choice observable.
+    #[cfg(unix)]
+    fn drive_fifo_reader(
+        command: &str,
+        fifo: &Path,
+        sink: &Path,
+        ready: &Path,
+        messages: &[&str],
+    ) -> (usize, bool) {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+
+        let mut child = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(command)
+            .spawn()
+            .expect("spawn shell reader");
+
+        // The reader touches `ready` only after its redirect has been applied,
+        // so this waits for the FIFO to actually have an open reader rather than
+        // guessing at a startup delay. Racing this would drop the first message
+        // on ENXIO and make the test flaky in the direction that looks like the
+        // defect it is guarding against.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !ready.exists() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(ready.exists(), "shell reader never signalled readiness");
+
+        for message in messages {
+            // Retry briefly: a live reader can be mid-loop between reads. ENXIO
+            // that persists past this window means the reader is gone, which is
+            // itself an outcome under test, so give up and record nothing.
+            let send_deadline = std::time::Instant::now() + std::time::Duration::from_millis(500);
+            loop {
+                let mut options = std::fs::OpenOptions::new();
+                options.write(true).custom_flags(libc::O_NONBLOCK);
+                match options.open(fifo) {
+                    Ok(mut handle) => {
+                        let _ = handle.write_all(format!("{message}\n").as_bytes());
+                        break;
+                    }
+                    Err(_) if std::time::Instant::now() < send_deadline => {
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                    Err(_) => break,
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(120));
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let alive = child.try_wait().expect("poll shell reader").is_none();
+        let received = std::fs::read_to_string(sink)
+            .unwrap_or_default()
+            .lines()
+            .filter(|line| !line.is_empty())
+            .count();
+        let _ = child.kill();
+        let _ = child.wait();
+        (received, alive)
+    }
+
+    /// A session must survive every `send-input`, not just the first.
+    ///
+    /// This is the behavioral half of the `0<>` redirect. A text assertion that
+    /// the command string contains `0<>` would pass just as happily on a
+    /// redirect that silently kills the session, because what is under test is
+    /// whether the process is still there to read the second message — and a
+    /// grep cannot see that.
+    #[cfg(unix)]
+    #[test]
+    fn session_stdin_survives_repeated_writer_open_close_cycles() {
+        let dir = tempfile::Builder::new()
+            .prefix("session-stdin-")
+            .tempdir()
+            .expect("temp dir");
+        let fifo = dir.path().join("input.fifo");
+        let sink = dir.path().join("received.txt");
+        assert!(
+            std::process::Command::new("mkfifo")
+                .arg(&fifo)
+                .status()
+                .expect("run mkfifo")
+                .success()
+        );
+
+        let ready = dir.path().join("ready");
+        let inner = reader_program(&sink, &ready);
+        let wrapped = wrap_session_stdin(&inner, &fifo.to_string_lossy());
+        std::fs::write(&sink, "").expect("seed sink");
+
+        let (received, alive) = drive_fifo_reader(
+            &wrapped,
+            &fifo,
+            &sink,
+            &ready,
+            &["first", "second", "third"],
+        );
+
+        assert_eq!(
+            received, 3,
+            "session must receive every message across separate writer open/close cycles"
+        );
+        assert!(
+            alive,
+            "session must still be running after its writers have come and gone"
+        );
+    }
+
+    /// The negative fixture for the test above: the redirect this replaced.
+    ///
+    /// Without it, `session_stdin_survives_repeated_writer_open_close_cycles`
+    /// proves nothing — it would pass on any redirect that happens to work,
+    /// including one that never had the defect. This pins the defect itself:
+    /// under a read-only `<`, the reader takes the first message and exits.
+    ///
+    /// It asserts the *diagnostic* (how many messages got through), not merely
+    /// that something went wrong, so a failure names which way it broke.
+    #[cfg(unix)]
+    #[test]
+    fn read_only_redirect_loses_the_session_after_the_first_message() {
+        let dir = tempfile::Builder::new()
+            .prefix("session-stdin-ro-")
+            .tempdir()
+            .expect("temp dir");
+        let fifo = dir.path().join("input.fifo");
+        let sink = dir.path().join("received.txt");
+        assert!(
+            std::process::Command::new("mkfifo")
+                .arg(&fifo)
+                .status()
+                .expect("run mkfifo")
+                .success()
+        );
+
+        let ready = dir.path().join("ready");
+        let inner = reader_program(&sink, &ready);
+        let read_only = format!("{} < {}", inner, shell_escape(&fifo.to_string_lossy()));
+        std::fs::write(&sink, "").expect("seed sink");
+
+        let (received, alive) = drive_fifo_reader(
+            &read_only,
+            &fifo,
+            &sink,
+            &ready,
+            &["first", "second", "third"],
+        );
+
+        assert_eq!(
+            received, 1,
+            "the read-only redirect should deliver exactly the first message before EOF"
+        );
+        assert!(
+            !alive,
+            "the read-only redirect should leave the session dead, which is the defect 0<> fixes"
+        );
+    }
 
     #[tokio::test]
     async fn provider_session_attachment_is_step_opt_in() {
