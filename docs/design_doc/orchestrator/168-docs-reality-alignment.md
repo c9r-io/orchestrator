@@ -70,7 +70,11 @@ file.
 `scripts/qa-doc-lint.sh`, derives the migration sequence from Rust, scans the
 whole non-FR Markdown surface for the retired proto path, and verifies ticket,
 onboarding, and retired-YAML facts. Five isolated mutations prove each check
-can fail.
+can fail. The closure sweep's independently derived fixture-target gate rejected
+the first version: two in-place Ruby edits did not prove they landed, and an
+uncaught `abort` could truncate the suite before its summary. Both mutations now
+use `fixture_mutate`; source-derivation errors return normally to the owning
+check.
 
 ### Skills: existence plus exact scope
 

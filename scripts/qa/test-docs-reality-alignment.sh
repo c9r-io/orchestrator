@@ -16,15 +16,27 @@ FAIL=0
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 
+# shellcheck source=../lib/gate_fixture.sh
+. "$REPO_ROOT/scripts/lib/gate_fixture.sh"
+
 migration_count() {
   ruby -e '
     source = File.read(File.join(ARGV[0], "crates/orchestrator-persistence/src/migration.rs"))
     body = source[/pub fn registered_migrations\(\).*?(?=\/\/\/ Converts migration definitions)/m]
-    abort "registered_migrations() body not found" unless body
+    unless body
+      warn "registered_migrations() body not found"
+      exit 1
+    end
     versions = body.scan(/\bversion:\s*(\d+)/).flatten.map(&:to_i)
-    abort "registered_migrations() contains no versions" if versions.empty?
+    if versions.empty?
+      warn "registered_migrations() contains no versions"
+      exit 1
+    end
     expected = (1..versions.length).to_a
-    abort "migration versions are not contiguous 1..#{versions.length}: #{versions.inspect}" unless versions == expected
+    unless versions == expected
+      warn "migration versions are not contiguous 1..#{versions.length}: #{versions.inspect}"
+      exit 1
+    end
     print versions.length
   ' "$1"
 }
@@ -180,12 +192,16 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
   fi
 
   d="$(new_case onboarding)"
-  ruby -e 'path=ARGV[0]; text=File.read(path); abort "anchor" unless text.include?("work_dir:"); File.write(path, text.sub("work_dir:", "root_path:"))' "$d/AGENTS.md"
-  expect_fail "fixture onboarding" "$d" check_onboarding_contract
+  if fixture_mutate "fixture onboarding" "$d/AGENTS.md" \
+    ruby -e 'path=ARGV[0]; text=File.read(path); abort "anchor" unless text.include?("work_dir:"); File.write(path, text.sub("work_dir:", "root_path:"))' "$d/AGENTS.md"; then
+    expect_fail "fixture onboarding" "$d" check_onboarding_contract
+  fi
 
   d="$(new_case architecture)"
-  ruby -e 'path=ARGV[0]; text=File.read(path); abort "anchor" unless text.include?("version: 37"); File.write(path, text.sub("version: 37", "version: 38"))' "$d/crates/orchestrator-persistence/src/migration.rs"
-  expect_fail "fixture migration drift" "$d" check_architecture_contract
+  if fixture_mutate "fixture migration drift" "$d/crates/orchestrator-persistence/src/migration.rs" \
+    ruby -e 'path=ARGV[0]; text=File.read(path); abort "anchor" unless text.include?("version: 37"); File.write(path, text.sub("version: 37", "version: 38"))' "$d/crates/orchestrator-persistence/src/migration.rs"; then
+    expect_fail "fixture migration drift" "$d" check_architecture_contract
+  fi
 
   d="$(new_case proto)"
   mkdir -p "$d/proto"
