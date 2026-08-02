@@ -22,6 +22,39 @@ spec:
   ticket_dir: docs/ticket
   self_referential: false
 ---
+# The migrated steps call `orchestrator` as a subprocess, and the runner clears
+# the environment down to its allowlist -- PATH, HOME, USER, LANG, TERM by
+# default. That default is enough only when the daemon is on the default data
+# directory under the same HOME. This gate is deliberately isolated on both, so
+# without the two extra entries the CLI inside a step cannot discover the daemon
+# it belongs to, `|| true` swallows the error, and every migrated read returns
+# empty -- the test would be measuring its own isolation rather than the
+# migration. Measured: with the default allowlist the step gets
+# "daemon socket not found ... and no control-plane config was discovered".
+#
+# This is a real operational constraint of CLI-based store access and not a
+# fixture quirk; DD-169 records it and the guide says so where it shows the
+# pattern.
+apiVersion: orchestrator.dev/v2
+kind: RuntimePolicy
+metadata:
+  name: default
+spec:
+  runner:
+    shell: /bin/bash
+    shell_arg: -lc
+    policy: allowlist
+    env_allowlist:
+      - PATH
+      - HOME
+      - USER
+      - LANG
+      - TERM
+      - ORCHESTRATORD_DATA_DIR
+      - ORCHESTRATOR_CONTROL_PLANE_CONFIG
+  resume:
+    auto: false
+---
 # No WorkflowStore documents: StoreManager::resolve_store_config auto-provisions
 # an undeclared store with defaults, and neither promotion.yaml nor
 # self-evolution.yaml declares one. Declaring them here would make the fixture

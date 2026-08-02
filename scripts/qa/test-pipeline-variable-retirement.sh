@@ -346,8 +346,39 @@ BASELINE_DISTINGUISHABLE="$(jq -r \
 # actually took, so it is the one a regression would show up in.
 compare_object "promotion#gather_updates (store key absent)" \
   "$OBJECT_A_ABSENT" "promotion#gather_updates" "store-key-absent"
-compare_object "self-evolution#evo_apply_winner" \
-  "$OBJECT_B" "self-evolution#evo_apply_winner" ""
+# Object B is compared on the value the step receives rather than on its bytes.
+# The retired binding rendered a stored object with serde's compact
+# `to_string()`; `orchestrator store get` pretty-prints it, which is its
+# behaviour for every other caller and not something to change so a byte
+# comparison can pass. What the step is owed is the selection, so the selection
+# is what gets compared -- the terminal state and exit code stay exact, and the
+# payload is parsed on both sides.
+#
+# Weakening a comparison is how a parity check turns into a formality, so this
+# is narrower than "some JSON arrived": the whole decoded object must be equal,
+# key for key, to the one the old path delivered.
+B_EXPECTED="$(jq -c '.objects["self-evolution#evo_apply_winner"]' "$BASELINE")"
+if [[ "$B_EXPECTED" == "null" || -z "$B_EXPECTED" ]]; then
+  fail "self-evolution#evo_apply_winner: the baseline has no recording for it"
+else
+  B_EXPECTED_META="$(jq -c '{terminal, exit_code}' <<<"$B_EXPECTED")"
+  B_OBSERVED_META="$(jq -c '{terminal, exit_code}' <<<"$OBJECT_B")"
+  # `fromjson` fails loudly on a prefix that is not the marker plus JSON, so a
+  # step that emitted nothing cannot reach the equality below.
+  payload() {
+    jq -r '.stdout' <<<"$1" | sed 's/^winner-data://' | jq -S -c .
+  }
+  if B_EXPECTED_PAYLOAD="$(payload "$B_EXPECTED")" &&
+     B_OBSERVED_PAYLOAD="$(payload "$OBJECT_B")" &&
+     [[ "$B_EXPECTED_META" == "$B_OBSERVED_META" &&
+        "$B_EXPECTED_PAYLOAD" == "$B_OBSERVED_PAYLOAD" ]]; then
+    pass "self-evolution#evo_apply_winner delivers the same selection as its pre-migration baseline"
+  else
+    echo "    expected: $B_EXPECTED_META ${B_EXPECTED_PAYLOAD:-<unparseable>}" >&2
+    echo "    observed: $B_OBSERVED_META ${B_OBSERVED_PAYLOAD:-<unparseable>}" >&2
+    fail "self-evolution#evo_apply_winner diverged from its pre-migration baseline"
+  fi
+fi
 
 # The populated branch is handled by whichever rule the recording earns. If the
 # old path could distinguish its branches, the migrated one must match it
@@ -370,7 +401,8 @@ fi
 # two assert the behaviour directly, so a baseline recorded over an already
 # broken step cannot certify itself.
 
-if rg -q '^winner-data:\{"winner_id":"item-7"' <<<"$(jq -r '.stdout' <<<"$OBJECT_B")"; then
+if [[ "$(jq -r '.stdout' <<<"$OBJECT_B" | sed 's/^winner-data://' |
+        jq -r '.winner_id' 2>/dev/null)" == "item-7" ]]; then
   pass "the migrated winner step still receives the stored winner payload"
 else
   jq -r '.stdout' <<<"$OBJECT_B" >&2
@@ -401,7 +433,13 @@ fi
 # The subject is the diagnostic text, never the exit code: an exit code cannot
 # tell which branch a validator failed through (§4.4 shape 7).
 assert_rejected() {
-  local workflow="$1" expected="$2" candidate="$QA_ROOT/reject-$workflow.yaml"
+  # Separate `local` statements: bash 3.2 declares every name in a single
+  # `local` before running any of its assignments, so a later initialiser
+  # referring to an earlier name on the same line reads it as unset and
+  # `set -u` ends the run.
+  local workflow="$1"
+  local expected="$2"
+  local candidate="$QA_ROOT/reject-$workflow.yaml"
   if ! split_workflows "rejection fixture $workflow" "$candidate" "$workflow"; then
     return
   fi

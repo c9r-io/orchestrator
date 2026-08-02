@@ -162,6 +162,14 @@ jobs:
         env:
           PROTOC: /usr/bin/protoc
 
+      # The pipeline-variable retirement shares this job because it shares its
+      # subject: the last coordination coordinate, its per-object migration
+      # baseline, and the four apply-time rejections that replaced it (FR-156).
+      - name: Verify pipeline-variable retirement and per-object migration parity
+        run: ./scripts/qa/test-pipeline-variable-retirement.sh
+        env:
+          PROTOC: /usr/bin/protoc
+
   governance:
     name: QA gate enforcement surface
     runs-on: ubuntu-latest

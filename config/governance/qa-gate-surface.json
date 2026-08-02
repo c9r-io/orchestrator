@@ -63,9 +63,7 @@
       "reason": "rewrites the Homebrew formula from a published tag in release.yml's homebrew job. It runs after the artifacts exist and reads their checksums; it makes no assertion a CI gate could enforce."
     }
   ],
-  "staleClaimExemptions": [
-
-  ],
+  "staleClaimExemptions": [],
   "commandSources": {
     "description": "What each CI job puts on PATH, so a ci-required gate's `command -v` preamble can be checked against the job that runs it. FR-134 found three ci-required gates exiting on `missing command: rg` before their first assertion, in two jobs that had been green-lit by a wiring check which only asked whether they were referenced.",
     "runnerBaseline": [
@@ -102,9 +100,7 @@
       ]
     },
     "actions": {
-      "actions/checkout": [
-
-      ],
+      "actions/checkout": [],
       "actions/setup-node": [
         "node",
         "npm",
@@ -115,18 +111,10 @@
         "rustc",
         "rustup"
       ],
-      "Swatinem/rust-cache": [
-
-      ],
-      "taiki-e/install-action": [
-
-      ],
-      "actions/upload-artifact": [
-
-      ],
-      "./.github/actions/provider-stubs": [
-
-      ]
+      "Swatinem/rust-cache": [],
+      "taiki-e/install-action": [],
+      "actions/upload-artifact": [],
+      "./.github/actions/provider-stubs": []
     }
   },
   "workspaceScope": {
@@ -150,6 +138,36 @@
     ]
   },
   "scripts": [
+    {
+      "path": "scripts/check-async-lock-governance.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "async-lock-governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Scans Rust sources for std sync primitives held across await points. Static analysis over tracked files: no daemon, no database, no manifest bundle, no network, so no provider binary is reachable."
+    },
+    {
+      "path": "scripts/coverage-governance.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "boundary-coverage",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Generates and enforces the boundary coverage floor. Also runs in the coverage-policy-fixtures job as `--fixture-test`, which execs scripts/coverage/test-coverage-governance.mjs instead and touches no Rust. Unlike every other no-provider entry, the full run executes `cargo llvm-cov --workspace --all-targets --all-features`, `npm run test:coverage` and `npx playwright test`, so the bundles it could reach are named in Rust and TS rather than in this shell script — outside what check_provider_isolation's no-provider branch can see. FR-147 therefore added ./.github/actions/provider-stubs to both jobs: the declaration now has an executed backstop that exits 97 on a real claude/codex. Residual limit recorded in docs/design_doc/orchestrator/160-enforcement-manifest-completeness.md."
+    },
+    {
+      "path": "scripts/qa-doc-lint.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Lints docs/qa, docs/security and docs/uiux, and invokes test-agent-driver-documentation-alignment.sh — which was already classified here, naming this script as its invokedBy. FR-147 added this entry: the invoked side was governed while the invoker was not, so every scanner deriving scope from this manifest read the callee and skipped the caller. Reads tracked Markdown and greps the working tree; starts no daemon, applies no manifest bundle, so no provider binary is reachable."
+    },
     {
       "path": "scripts/qa/bash32-compat.rb",
       "enforcement": "ci-required",
@@ -219,6 +237,16 @@
       "note": "the core crate boundary ratchet; case 1 of its wrapper runs it against the working tree, so the wrapper's CI step is what fails the build when core grows."
     },
     {
+      "path": "scripts/qa/dependency-policy.rb",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Offline: reads deny.toml, Cargo.lock, .cargo/audit.toml, security.yml and .github/dependabot.yml, walks the tree for package.json, and needs no cargo-deny binary. cargo deny proves the policy holds; this asserts the policy still binds - that the CI invocation keeps --deny unmatched-skip, that cargo audit keeps --deny unsound --deny unmaintained, that its check list stays partitioned from cargo audit's, that every accepted duplicate carries a reason and is still a duplicate (FR-133), that deny.toml's stated counts match their derivations and every npm tree has a Dependabot entry (FR-153)."
+    },
+    {
       "path": "scripts/qa/doc-lifecycle.rb",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
@@ -228,6 +256,16 @@
         "mode": "no-provider"
       },
       "note": "the DD/QA lifecycle metadata gate and reverse-index generator; case 1 of its wrapper runs it against the working tree, so the wrapper's CI step is what fails the build when a document arrives unclassified or the index goes stale."
+    },
+    {
+      "path": "scripts/qa/fixture-target-drift.rb",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Offline: reads this manifest and the gates own text. Forbids a negative fixture that can report without proving it applied a mutation - an uncaught premise, an in-place rewrite whose landing nobody checks, a pass guarded by an exit code alone (FR-143)."
     },
     {
       "path": "scripts/qa/jq-status-observed.rb",
@@ -276,28 +314,6 @@
       "enforcement": "manual-runbook",
       "reason": "starts an orchestratord instance with bound ports and applies the agent-driver fixture bundle, whose codex agent is not pinned to a fake binary",
       "owner": "docs/qa/orchestrator/164-agent-driver-abstraction.md"
-    },
-    {
-      "path": "scripts/qa/test-error-code-glossary.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "invokedBy": "scripts/qa-doc-lint.sh",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "Derives the bracketed error-code set from non-test Rust source by three anchored rules (string-opening bracket literals, driver_error() first arguments, interpolated consts resolved to their values) with reasoned staleness-checked exclusions, and asserts docs/guide/error-codes.md documents exactly that set in both directions, with the ZH mirror equal to EN (FR-152). Read-only: ruby over tracked sources plus two markdown files; no daemon, no network, no provider binary."
-    },
-    {
-      "path": "scripts/qa/test-docs-reality-alignment.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "invokedBy": "scripts/qa-doc-lint.sh",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "FR-155 source-derived onboarding and AGENTS path existence, independently identified root-Web/desktop-shell architecture, canonical proto, tracked-ticket, and retired-YAML checks plus seven isolated negative fixtures, registered-check target completeness, and a synthetic uncovered-check probe. It reads tracked files and temporary copies only; no daemon, database, network, or provider binary."
     },
     {
       "path": "scripts/qa/test-agent-driver-documentation-alignment.sh",
@@ -393,6 +409,16 @@
       "note": "each case builds a throwaway git repository under $TMPDIR, because the freshness rule is a statement about history and needs its own history to manipulate. Nothing here contacts GitHub."
     },
     {
+      "path": "scripts/qa/test-cli-doc-parity.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "FR-154: holds the three CLI documentation surfaces (EN/ZH 07-cli-reference.md, the built-in guide's GuideEntry set) to config/governance/cli-surface.json, the committed CommandFactory dump whose freshness a cargo test enforces in the test job. Ruby over four tracked files plus private copies under a temporary directory; no daemon, no compile, no working-tree write, so no provider binary is reachable."
+    },
+    {
       "path": "scripts/qa/test-codex-session-resume.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
@@ -454,14 +480,14 @@
       "note": "runs scripts/coverage-governance.sh with cargo, node, npm, npx, rustc and rg shadowed by stubs under a temporary directory, so the shell main path the boundary-coverage job depends on is exercised without collecting coverage."
     },
     {
-      "path": "scripts/qa/test-cli-doc-parity.sh",
+      "path": "scripts/qa/test-dependency-policy.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
       "providerIsolation": {
         "mode": "no-provider"
       },
-      "note": "FR-154: holds the three CLI documentation surfaces (EN/ZH 07-cli-reference.md, the built-in guide's GuideEntry set) to config/governance/cli-surface.json, the committed CommandFactory dump whose freshness a cargo test enforces in the test job. Ruby over four tracked files plus private copies under a temporary directory; no daemon, no compile, no working-tree write, so no provider binary is reachable."
+      "note": "Negative fixtures for every rule of dependency-policy.rb, each paired with a control, since all of them are guards with zero violations today. The --tool-fixtures half runs the real cargo-deny and lives in security.yml's cargo-deny job, where the binary exists. Scratch trees under TMPDIR; no daemon, no database, no provider, no network."
     },
     {
       "path": "scripts/qa/test-doc-lifecycle.sh",
@@ -474,16 +500,6 @@
       "note": "mutates copies of docs/design_doc, docs/qa and docs/security under a temporary directory; it starts no daemon, compiles nothing, and never writes the working tree, so no provider binary is reachable."
     },
     {
-      "path": "scripts/qa/test-qa-doc-lint-workflow-scope.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "negative fixtures for the lifecycle scope predicate FR-149 gave the qa-doc-lint workflow-ID check. Case 1 runs the real lint to observe that the check executes; every other case drives scripts/lib/qa_doc_workflow_ids.sh inside a temporary copy of the three document roots and the fixture corpus. No daemon, no compile, no working-tree write, so no provider binary is reachable."
-    },
-    {
       "path": "scripts/qa/test-docs-publishing-integrity.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
@@ -492,6 +508,28 @@
         "mode": "no-provider"
       },
       "note": "Reads docs/guide, docs/showcases and site/.vitepress/config.ts, and runs scripts/sync-docs.mjs into a $TMPDIR destination so the working tree is never written. It starts no daemon and applies no manifest bundle, so no provider binary is reachable. It also runs in the docs.yml deploy job before the site build. Contract in config/governance/docs-publishing.json."
+    },
+    {
+      "path": "scripts/qa/test-docs-reality-alignment.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "invokedBy": "scripts/qa-doc-lint.sh",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "FR-155 source-derived onboarding and AGENTS path existence, independently identified root-Web/desktop-shell architecture, canonical proto, tracked-ticket, and retired-YAML checks plus seven isolated negative fixtures, registered-check target completeness, and a synthetic uncovered-check probe. It reads tracked files and temporary copies only; no daemon, database, network, or provider binary."
+    },
+    {
+      "path": "scripts/qa/test-error-code-glossary.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "invokedBy": "scripts/qa-doc-lint.sh",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Derives the bracketed error-code set from non-test Rust source by three anchored rules (string-opening bracket literals, driver_error() first arguments, interpolated consts resolved to their values) with reasoned staleness-checked exclusions, and asserts docs/guide/error-codes.md documents exactly that set in both directions, with the ZH mirror equal to EN (FR-152). Read-only: ruby over tracked sources plus two markdown files; no daemon, no network, no provider binary."
     },
     {
       "path": "scripts/qa/test-expert-resources-governed-editing.sh",
@@ -508,6 +546,16 @@
         "mode": "no-provider"
       },
       "note": "Scenarios 1-2 re-run cargo test --workspace and strict clippy, duplicating the sibling test and clippy jobs; the remaining scenarios are static structure assertions over crates/daemon/src/fs_watcher.rs. The duplication is accepted because the governance job already builds the workspace and shares the Rust cache."
+    },
+    {
+      "path": "scripts/qa/test-fixture-target-drift.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Negative fixtures for scripts/lib/gate_fixture.sh and the scanner, including the replay of the recorded incident in which an inert mutation made a fixture report a defect the gate did not have. Scratch trees under TMPDIR; no daemon, no database, no provider, no network."
     },
     {
       "path": "scripts/qa/test-fr001-sandbox-matrix.sh",
@@ -552,46 +600,6 @@
         "mode": "no-provider"
       },
       "note": "Negative fixtures for the reader and the scanner, including the end-to-end assertion that the real gate-surface gate rejects a manifest jq cannot parse. Scratch trees under TMPDIR; no daemon, no database, no provider, no network."
-    },
-    {
-      "path": "scripts/qa/fixture-target-drift.rb",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "Offline: reads this manifest and the gates own text. Forbids a negative fixture that can report without proving it applied a mutation - an uncaught premise, an in-place rewrite whose landing nobody checks, a pass guarded by an exit code alone (FR-143)."
-    },
-    {
-      "path": "scripts/qa/test-fixture-target-drift.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "Negative fixtures for scripts/lib/gate_fixture.sh and the scanner, including the replay of the recorded incident in which an inert mutation made a fixture report a defect the gate did not have. Scratch trees under TMPDIR; no daemon, no database, no provider, no network."
-    },
-    {
-      "path": "scripts/qa/dependency-policy.rb",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "Offline: reads deny.toml, Cargo.lock, .cargo/audit.toml, security.yml and .github/dependabot.yml, walks the tree for package.json, and needs no cargo-deny binary. cargo deny proves the policy holds; this asserts the policy still binds - that the CI invocation keeps --deny unmatched-skip, that cargo audit keeps --deny unsound --deny unmaintained, that its check list stays partitioned from cargo audit's, that every accepted duplicate carries a reason and is still a duplicate (FR-133), that deny.toml's stated counts match their derivations and every npm tree has a Dependabot entry (FR-153)."
-    },
-    {
-      "path": "scripts/qa/test-dependency-policy.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "Negative fixtures for every rule of dependency-policy.rb, each paired with a control, since all of them are guards with zero violations today. The --tool-fixtures half runs the real cargo-deny and lives in security.yml's cargo-deny job, where the binary exists. Scratch trees under TMPDIR; no daemon, no database, no provider, no network."
     },
     {
       "path": "scripts/qa/test-legacy-coordination-decommission.sh",
@@ -665,6 +673,16 @@
       "note": "Negative fixtures for pipefail-short-circuit.rb, each paired with a control, since the rule is a guard with zero violations. Case 16 asserts the mechanism deterministically - a producer that sleeps after emitting the match is still writing by construction when the reader leaves, so it reproduces on any machine, where the buffer race measured 8-13 in 400. Scratch git checkouts under TMPDIR; no daemon, no database, no provider, no network."
     },
     {
+      "path": "scripts/qa/test-pipeline-variable-retirement.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "coordination-strangler",
+      "providerIsolation": {
+        "mode": "fixture-pinned",
+        "evidence": "fixtures/manifests/bundles/fr156-pipeline-variable-parity.yaml"
+      }
+    },
+    {
       "path": "scripts/qa/test-process-console-metrics.sh",
       "enforcement": "manual-runbook",
       "reason": "requires the Node/Playwright browser stack to drive the process console UI",
@@ -693,6 +711,16 @@
       "enforcement": "manual-runbook",
       "reason": "starts an orchestratord instance with bound ports and populates the timeline read model",
       "owner": "docs/qa/orchestrator/142-process-timeline-read-model.md"
+    },
+    {
+      "path": "scripts/qa/test-qa-doc-lint-workflow-scope.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "negative fixtures for the lifecycle scope predicate FR-149 gave the qa-doc-lint workflow-ID check. Case 1 runs the real lint to observe that the check executes; every other case drives scripts/lib/qa_doc_workflow_ids.sh inside a temporary copy of the three document roots and the fixture corpus. No daemon, no compile, no working-tree write, so no provider binary is reachable."
     },
     {
       "path": "scripts/qa/test-qa-gate-surface.sh",
@@ -832,36 +860,6 @@
       "enforcement": "manual-runbook",
       "reason": "builds a release binary and drives multi-layer composition scenarios against a live CLI",
       "owner": "docs/qa/orchestrator/51-primitive-composition.md"
-    },
-    {
-      "path": "scripts/qa-doc-lint.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "Lints docs/qa, docs/security and docs/uiux, and invokes test-agent-driver-documentation-alignment.sh — which was already classified here, naming this script as its invokedBy. FR-147 added this entry: the invoked side was governed while the invoker was not, so every scanner deriving scope from this manifest read the callee and skipped the caller. Reads tracked Markdown and greps the working tree; starts no daemon, applies no manifest bundle, so no provider binary is reachable."
-    },
-    {
-      "path": "scripts/coverage-governance.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "boundary-coverage",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "Generates and enforces the boundary coverage floor. Also runs in the coverage-policy-fixtures job as `--fixture-test`, which execs scripts/coverage/test-coverage-governance.mjs instead and touches no Rust. Unlike every other no-provider entry, the full run executes `cargo llvm-cov --workspace --all-targets --all-features`, `npm run test:coverage` and `npx playwright test`, so the bundles it could reach are named in Rust and TS rather than in this shell script — outside what check_provider_isolation's no-provider branch can see. FR-147 therefore added ./.github/actions/provider-stubs to both jobs: the declaration now has an executed backstop that exits 97 on a real claude/codex. Residual limit recorded in docs/design_doc/orchestrator/160-enforcement-manifest-completeness.md."
-    },
-    {
-      "path": "scripts/check-async-lock-governance.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "async-lock-governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "Scans Rust sources for std sync primitives held across await points. Static analysis over tracked files: no daemon, no database, no manifest bundle, no network, so no provider binary is reachable."
     }
   ]
 }
