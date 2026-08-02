@@ -159,6 +159,38 @@ Recorded 2026-08-03: exactly these values.
 Gate output 2026-08-03: `Session process reclamation QA: 13 passed, 0 failed`,
 exit 0, and again on an immediate second run with nothing to sweep.
 
+## Certification run
+
+Recorded 2026-08-03 at `3d8afb2c`, worktree clean and revision identical before
+and after.
+
+| Check | Result |
+|---|---|
+| `cargo test --workspace` | 2859 passed, 0 failed |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+| `cargo fmt --all -- --check` | clean (exit status captured directly, not through a pipe) |
+| `scripts/qa/test-session-process-reclamation.sh` | 13 passed, 0 failed |
+| `scripts/qa/test-agent-session-control-plane.sh` | 6 passed, 0 failed |
+| Derived ci-required sweep | **51 passed, 1 failed, 0 missing of 52** |
+
+The gate list was derived, not typed:
+
+```bash
+jq -r '.scripts[] | select(.enforcement == "ci-required") | .path' \
+  config/governance/qa-gate-surface.json
+```
+
+`certify-slack-managed-live.sh` is invoked as `status`, its read-only subcommand,
+per the manifest note — run bare it prints usage and exits 2, which would raise a
+failure that is not there.
+
+The single failure is `scripts/qa/ci-liveness.rb`, and it is **not caused by this
+work**. Its job records were taken at `45fbf3c4`; `.github/workflows/ci.yml` last
+changed at `ceccf4f5`; `45fbf3c4` is an ancestor of `ceccf4f5`, and `ceccf4f5` is
+an ancestor of this FR's base `ae42b87b`. The failing condition therefore already
+held before the first FR-159 commit, and no commit here touches `ci.yml` or the
+liveness record. Refreshing it requires a real CI run.
+
 ## Unit coverage
 
 `cargo test -p orchestrator-persistence --lib session_store`
