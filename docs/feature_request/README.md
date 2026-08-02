@@ -4,84 +4,166 @@
 
 ## 当前条目
 
-| ID | 标题 | 优先级 | 状态 |
-|----|------|--------|------|
-| FR-002 | Daemon 控制面认证、鉴权与传输安全 | P0 | Closed |
-| FR-005 | Daemon 生命周期治理与运行态指标补完 | P1 | Closed |
-| FR-011 | validate/scheduler/runner 职责拆分与验证逻辑去重 | P1 | Closed |
-| FR-043 | loop_guard 收敛条件表达式 | P1 | Closed |
-| FR-017 | Agent Drain 与 Enabled 开关 | P1 | Implemented |
-| FR-018 | 用户指南编译验证对齐 | P1 | Implemented |
-| FR-019 | 修复 libc 类型编译错误 | P0 | Implemented |
-| FR-020 | 自动化 protoc 依赖安装 | P0 | Implemented |
-| FR-021 | 审计并减少 expect() 调用 | P1 | Implemented |
-| FR-023 | 增加集成测试覆盖 | P2 | Closed |
-| FR-024 | 审计 unsafe 块 | P2 | Closed |
-| FR-026 | 事件表归档与 TTL 清理策略 | P1 | Closed |
-| FR-027 | Worker 轮询优化 — Notify 唤醒机制 | P1 | Implemented |
-| FR-030 | Self-Evolution 数据库 Schema 对齐验证 | P1 | Closed |
-| FR-031 | generate_items 对 LLM 非标准 JSON 输出的容错解析 | P1 | Closed |
-| FR-032 | Daemon 进程崩溃韧性与 Worker 存活保障 | P1 | Closed |
-| FR-033 | Daemon 重启后孤立 Running Items 自动恢复 | P1 | Closed |
-| FR-034 | QA Testing 自引用安全防护 | P1 | Closed |
-| FR-035 | 退化循环检测与熔断机制 | P1 | Closed |
-| FR-036 | Plan Output Context Overflow 缓解 | P1 | Closed |
-| FR-037 | Dynamic Items 触发的循环溢出 — max_cycles 约束失效 | P1 | Closed |
-| FR-038 | Daemon 重启时在途步骤竞态 — task_completed 提前发出与动态 Item 状态丢失 | P1 | Closed |
-| FR-039 | Trigger 资源 — Cron 与事件驱动的任务自动创建 | P1 | Closed |
-| FR-040 | QA Agent 子进程绕过 Daemon PID Guard 杀死 Daemon | P1 | Closed |
-| FR-041 | Self-Restart 后 Socket 连接断裂导致后续步骤不可达 | P1 | Closed |
-| FR-042 | follow_task_logs 流式回调重构 — gRPC TaskFollow 空流修复 | P1 | Closed |
-| FR-044 | Sandbox 写入拒绝检测与 writable_paths 完善 | P1 | Closed |
-| FR-045 | QA Agent 长生命周期命令防护 | P1 | Closed |
-| FR-046 | Agent 子进程 Daemon PID Guard 穿透防护 | P1 | Closed |
-| FR-047 | Core Crate 拆分 Phase 1 — orchestrator-config 提取 | P2 | Closed |
-| FR-048 | Core Crate 拆分 Phase 2 — orchestrator-scheduler 提取 | P2 | Closed |
-| FR-049 | Prehook CEL 表达式接入 Pipeline Variables | P1 | Closed |
-| FR-050 | CLI UDS 连接回退鲁棒性 | P2 | Closed |
-| FR-051 | Workflow YAML 步骤定义未知字段警告 | P1 | Closed |
-| FR-053 | Full-QA Workflow 大规模 Item 分发中断 — max_cycles_enforced 过早触发 | P0 | Closed |
-| FR-054 | Item 进度增量更新 — finalize_items 延迟导致 Progress 长时间为零 | P1 | Closed |
-| FR-055 | Parallel Spawn Stagger Delay — 并行 Agent 启动间隔延迟 | P1 | Closed |
-| FR-056 | Agent Health Policy 可配置化 — Disease 策略按 Agent/Workspace 设定 | P1 | Closed |
-| FR-057 | orchestratord 真正 Daemon 化 | P1 | Closed |
-| FR-058 | QA 自引用测试覆盖率恢复 — 场景级安全分级治理 | P1 | Closed |
-| FR-060 | 减少 QA 场景中的不安全操作 | P1 | Closed |
-| FR-061 | Daemon 日志环境变量覆盖 | P2 | Closed |
-| FR-062 | Agent Health 状态可观测性 | P2 | Closed |
-| FR-063 | GUI 架构设计 — Tauri + gRPC 安全客户端 | P1 | Closed |
-| FR-064 | GUI 用户界面设计 — 许愿池 + 进度观察 | P1 | Closed |
-| FR-065 | Agent 间通信接口草案 — Mailbox + Session Control Plane | P1 | Closed |
-| FR-066 | GUI 实时状态推送与许愿池数据隔离 | P0 | Closed |
-| FR-067 | GUI CLI 功能对齐 — 补全缺失 RPC 覆盖 | P1 | Closed |
-| FR-068 | GUI 连接韧性与系统通知 | P1 | Closed |
-| FR-069 | GUI 体验打磨 — 主题切换 / 动画 / i18n / 响应式 / 构建分发 | P2 | Closed |
-| FR-070 | evo_apply_winner 可观测性增强 — 候选选择与代码应用决策日志 | P1 | Closed |
-| FR-071 | 开源合规基础设施 — LICENSE / CHANGELOG / CONTRIBUTING / v0.1.0 Release | P0 | Closed |
-| FR-072 | 分发渠道扩展 — Docker 镜像与 Homebrew Tap | P1 | Closed |
-| FR-073 | 文档站点与 Landing Page — 外部可发现性 | P1 | Closed |
-| FR-077 | Workflow 模板库 — 常见 SDLC 自动化场景预设 | P1 | Closed |
-| FR-078 | Task Items 与 Event List CLI 命令 | P1 | Closed |
-| FR-079 | 数据生命周期治理 — 日志清理、DB 瘦身与自动化回收 | P1 | Closed |
-| FR-080 | Webhook Trigger 基础设施 — HTTP 事件入口与通用事件源扩展 | P0 | Closed |
-| FR-081 | Per-Trigger Webhook 认证与 CEL Payload 过滤 | P1 | Closed |
-| FR-082 | 集成 Manifest 包 — Slack / GitHub / Line 预制配置 | P2 | Closed |
-| FR-083 | CRD 插件系统 — Webhook 拦截器与自动化生命周期 | P3 | Closed |
-| FR-084 | Agent 条件命令规则 + Session 复用 | P1 | Closed |
-| FR-085 | Filesystem Trigger — 文件系统变更原生触发器 | P1 | Closed |
-| FR-086 | CLI Command to Simulate Agent Selection Logic | P3 | Closed |
-| FR-087 | Agent Health Policy CLI 测试夹具 — 自定义策略 QA 可验证性 | P2 | Closed |
-| FR-088 | QA Doctor CLI — 可观测性指标暴露 | P2 | Closed |
-| FR-089 | SecretStore 加密密钥紧急恢复机制 | P2 | Closed |
-| FR-090 | 轻量化单步执行 — `orchestrator run` 命令 | P1 | Closed |
-| FR-091 | Linux Sandbox Filesystem Isolation Backend | P3 | Closed |
-| FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed |
-| FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed |
-| FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed |
-| FR-155 | 文档与仓库现实对齐 — AGENTS.md、幻觉基础设施、台账再生 | P2 | Proposed |
-| FR-156 | pipelineVariables 退役收尾 | P2 | Proposed |
-| FR-157 | Source 域分解与测试补强 | P3 | Proposed |
-| FR-158 | 治理体系自省 — 门禁的门禁、成本与新鲜度 | P3 | Proposed |
+
+<!-- BEGIN GENERATED FR REGISTRY -->
+> 由 `scripts/lib/fr_registry.rb` 从完整 `HEAD` 祖先历史生成：140 个历史编号 / 145 条历史路径，另有 13 条无 FR 文件历史的审阅例外；5 个编号存在多路径碰撞。浅克隆拒绝生成。
+
+| ID | 标题 | 优先级 | 状态 | 来源 / 碰撞 |
+|----|------|--------|------|-------------|
+| FR-001 | Step 执行隔离与按需 Sandbox | P0 | Closed | git history |
+| FR-002 | Daemon 控制面认证、鉴权与传输安全 | P0 | Closed | git history |
+| FR-003 | Self-Referential Safety 约束语义收敛 | P1 | Closed | git history |
+| FR-004 | DAG / 动态编排主路径化与可观测化 | P1 | Closed | git history |
+| FR-005 | Daemon 生命周期治理与运行态指标补完 | P1 | Closed | git history |
+| FR-006 | 彻底消除全局设定与实现纯粹的 Project-Only 架构 | — | Closed | collision (2): FR-006-project-scoped-isolation.md; FR-006-sandbox-network-allowlist-backend.md |
+| FR-009 | 数据库迁移治理与持久化边界收敛 | — | Closed | git history |
+| FR-010 | 控制面安全基线收紧与强制 mTLS | P0 | Closed | git history |
+| FR-011 | validate/scheduler/runner 职责拆分与验证逻辑去重 | P1 | Closed | git history |
+| FR-012 | SecretStore 密钥轮换、吊销与审计链 | P0 | Closed | git history |
+| FR-013 | gRPC 控制面速率限制与 DoS 防护 | P0 | Closed | git history |
+| FR-014 | 关键路径 `expect()` 清退与错误语义收敛 | P1 | Closed | git history |
+| FR-015 | 高频 `clone()` 优化与共享所有权治理 | P2 | Closed | git history |
+| FR-016 | 异步上下文锁模型收敛到 `tokio::sync::RwLock` | P1 | Closed | git history |
+| FR-017 | Agent Drain 与 Enabled 开关 | P1 | Closed | git history |
+| FR-018 | 用户指南编译验证对齐 | P1 | Closed | git history |
+| FR-019 | 修复 libc 类型编译错误 | P0 | Closed | git history |
+| FR-020 | 自动化 protoc 依赖安装 | P0 | Closed | git history |
+| FR-021 | 审计并减少 expect() 调用 | P1 | Closed | git history |
+| FR-022 | 补充公共 API 文档注释 | P1 | Closed | git history |
+| FR-023 | 增加集成测试覆盖 | P2 | Closed | git history |
+| FR-024 | 审计 unsafe 块 | P2 | Closed | git history |
+| FR-026 | 事件表归档与 TTL 清理策略 | P1 | Closed | legacy exception: Pre-registry README entry has no FR document path in the complete HEAD ancestry. |
+| FR-027 | Worker 轮询优化 — Notify 唤醒机制 | P1 | Closed | legacy exception: Pre-registry README entry has no FR document path in the complete HEAD ancestry. |
+| FR-029 | Item-Scoped Git 工作目录隔离 | P0 | Closed | git history |
+| FR-030 | Self-Evolution 数据库 Schema 对齐验证 | P1 | Closed | git history |
+| FR-031 | generate_items 对 LLM 非标准 JSON 输出的容错解析 | — | Closed | git history |
+| FR-032 | Daemon 进程崩溃韧性与 Worker 存活保障 | — | Closed | git history |
+| FR-033 | Daemon 重启后孤立 Running Items 自动恢复 | — | Closed | git history |
+| FR-034 | QA Testing 自引用安全防护 | — | Closed | git history |
+| FR-035 | 退化循环检测与熔断机制 | — | Closed | git history |
+| FR-036 | Plan Output 上下文溢出缓解 | — | Closed | git history |
+| FR-037 | Dynamic Items 触发的循环溢出 — max_cycles 约束失效 | P1 | Closed | git history |
+| FR-038 | Daemon 重启时在途步骤竞态 — task_completed 提前发出与动态 Item 状态丢失 | — | Closed | git history |
+| FR-039 | Trigger 资源 — Cron 与事件驱动的任务自动创建 | — | Closed | git history |
+| FR-040 | QA Agent 子进程绕过 Daemon PID Guard 杀死 Daemon | P1 | Closed | git history |
+| FR-041 | Self-Restart 后 Socket 连接断裂导致后续步骤不可达 | P1 | Closed | git history |
+| FR-042 | follow_task_logs 流式回调重构 — gRPC TaskFollow 端点从空流变为真实日志流 | P1 | Closed | git history |
+| FR-043 | loop_guard 收敛条件表达式 | P1 | Closed | git history |
+| FR-044 | Sandbox 写入拒绝检测与 writable_paths 完善 | P1 | Closed | git history |
+| FR-045 | QA Agent 长生命周期命令防护 | P1 | Closed | git history |
+| FR-046 | Agent 子进程 Daemon PID Guard 穿透防护 | P1 | Closed | legacy exception: Pre-registry README entry has no FR document path in the complete HEAD ancestry. |
+| FR-047 | Core Crate 拆分 Phase 1 — orchestrator-config 提取 | — | Closed | git history |
+| FR-048 | Core Crate 拆分 Phase 2 — orchestrator-scheduler 提取 | — | Closed | git history |
+| FR-049 | Prehook CEL 表达式接入 Pipeline Variables | P1 | Closed | git history |
+| FR-050 | CLI UDS 连接回退鲁棒性 | P2 | Closed | git history |
+| FR-051 | Workflow YAML 步骤定义未知字段警告 | — | Closed | git history |
+| FR-052 | Inflight Wait Heartbeat-Aware Timeout | P1 | Closed | git history |
+| FR-053 | Full-QA Workflow 大规模 Item 分发中断 — max_cycles_enforced 过早触发 | P0 | Closed | git history |
+| FR-054 | Item 进度增量更新 — finalize_items 延迟导致 Progress 长时间为零 | P1 | Closed | git history |
+| FR-055 | Parallel Spawn Stagger Delay | — | Closed | git history |
+| FR-056 | Agent Health Policy 可配置化 | — | Closed | git history |
+| FR-057 | orchestratord 真正 Daemon 化 | P1 | Closed | legacy exception: Pre-registry README entry has no FR document path in the complete HEAD ancestry. |
+| FR-058 | QA 自引用测试覆盖率恢复 — 场景级安全分级治理 | P1 | Closed | git history |
+| FR-060 | 减少 QA 场景中的不安全操作 | — | Closed | git history |
+| FR-061 | Daemon 日志环境变量覆盖 | P2 | Closed | git history |
+| FR-062 | Agent Health 状态可观测性 | P2 | Closed | git history |
+| FR-063 | GUI 架构设计 — Tauri + gRPC 安全客户端 | P1 | Closed | legacy exception: Pre-registry README entry has no FR document path in the complete HEAD ancestry. |
+| FR-064 | GUI 用户界面设计 — 许愿池 + 进度观察 | P1 | Closed | legacy exception: Pre-registry README entry has no FR document path in the complete HEAD ancestry. |
+| FR-065 | Agent 间通信接口草案 — Mailbox + Session Control Plane | — | Closed | git history |
+| FR-066 | GUI 实时状态推送与许愿池数据隔离 | P0 | Closed | legacy exception: Pre-registry README entry has no FR document path in the complete HEAD ancestry. |
+| FR-067 | GUI CLI 功能对齐 — 补全缺失 RPC 覆盖 | — | Closed | git history |
+| FR-068 | GUI 连接韧性与系统通知 | — | Closed | git history |
+| FR-069 | GUI 体验打磨 — 主题切换 / 动画 / i18n / 响应式 / 构建分发 | — | Closed | git history |
+| FR-070 | evo_apply_winner 可观测性增强 — 候选选择与代码应用决策日志 | P1 | Closed | legacy exception: Pre-registry README entry has no FR document path in the complete HEAD ancestry. |
+| FR-071 | 开源合规基础设施 | P0 | Closed | git history |
+| FR-072 | 分发渠道扩展 — Docker 镜像与 Homebrew | P1 | Closed | git history |
+| FR-073 | 文档站点与 Landing Page | P1 | Closed | git history |
+| FR-074 | 可观测性导出 — Prometheus Metrics 端点 | P2 | Closed | git history |
+| FR-075 | VS Code 扩展 — Manifest Schema Validation & Autocomplete | P2 | Closed | git history |
+| FR-076 | GUI 正式发布 — Tauri App 打包分发 | P1 | Closed | git history |
+| FR-077 | Linux Sandbox Filesystem Isolation Backend | P3 | Closed | collision (2): FR-077-linux-sandbox-filesystem-isolation.md; FR-077-workflow-template-library.md |
+| FR-078 | Task Items 与 Event List CLI 命令 | P1 | Closed | git history |
+| FR-079 | 数据生命周期治理 — 日志清理、DB 瘦身与自动化回收 | P1 | Closed | git history |
+| FR-080 | Webhook Trigger 基础设施 — HTTP 事件入口与通用事件源扩展 | P0 | Closed | git history |
+| FR-081 | Per-Trigger Webhook 认证与 CEL Payload 过滤 | P1 | Closed | git history |
+| FR-082 | 集成 Manifest 包 — Slack / GitHub / Line 预制配置 | P2 | Closed | git history |
+| FR-083 | CRD 插件系统 — Webhook 拦截器与自动化生命周期 | P3 | Closed | git history |
+| FR-084 | Daemon Configuration Hot Reload | P2 | Closed | git history |
+| FR-085 | Filesystem Trigger — 文件系统变更原生触发器 | P1 | Closed | collision (2): FR-085-filesystem-trigger.md; FR-085-long-running-agent-test-fixture.md |
+| FR-086 | CLI Command to Simulate Agent Selection Logic | P3 | Closed | git history |
+| FR-087 | Agent Health Policy CLI 测试夹具 — 自定义策略 QA 可验证性 | — | Closed | git history |
+| FR-088 | QA Doctor CLI — 可观测性指标暴露 | — | Closed | git history |
+| FR-089 | SecretStore 加密密钥紧急恢复机制 | — | Closed | git history |
+| FR-090 | 轻量化单步执行 — orchestrator run 命令 | P1 | Closed | legacy exception: Pre-registry README entry has no FR document path in the complete HEAD ancestry. |
+| FR-091 | Linux Sandbox Filesystem Isolation Backend | P3 | Closed | legacy exception: Pre-registry README entry has no FR document path in the complete HEAD ancestry. |
+| FR-092 | Pipeline 变量 Spill 路径可配置 | P1 | Closed | legacy exception: Pre-registry README entry has no FR document path in the complete HEAD ancestry. |
+| FR-093 | 沙箱可配置读取路径白名单 | P2 | Closed | legacy exception: Pre-registry README entry has no FR document path in the complete HEAD ancestry. |
+| FR-094 | 自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复 | P1 | Closed | legacy exception: Pre-registry README entry has no FR document path in the complete HEAD ancestry. |
+| FR-095 | Process Timeline Read Model | P0 | Closed | git history |
+| FR-096 | Attention Inbox | P0 | Closed | git history |
+| FR-097 | Handoff Briefing and Safe Resume | P1 | Closed | git history |
+| FR-098 | Agent Session Control Plane | P1 | Closed | git history |
+| FR-099 | Source Events and Slack Process Binding | P1 | Closed | git history |
+| FR-100 | Agent Process Console UI | P1 | Closed | git history |
+| FR-101 | Canonical Control-Plane Action Audit Envelope | P0 | Closed | git history |
+| FR-102 | Agent Session Control Plane Hardening And Acceptance | P1 | Closed | git history |
+| FR-103 | Process Console Recovery, Attention Notifications, And Live E2E | P1 | Closed | git history |
+| FR-104 | Process Console Operational Metrics And Local Dashboard | P1 | Closed | git history |
+| FR-105 | Session RuntimePolicy Authority And Deterministic Control Gates | P0 | Closed | git history |
+| FR-106 | Agent Process Console Release Acceptance And Rollback Runbook | P1 | Closed | git history |
+| FR-107 | Slack Reaction Source Event Contract | P1 | Closed | git history |
+| FR-108 | Source Task Template And Skill Invocation Resource | P1 | Closed | git history |
+| FR-109 | Source Task Binding And Badge Matching Resource | P1 | Closed | git history |
+| FR-110 | Slack Permalink Resolution And Canonical Task Routing | P0 | Closed | git history |
+| FR-111 | Source Automation Reliability, Policy, And Operations | P1 | Closed | git history |
+| FR-112 | Process Console Source Automation UI | P1 | Closed | git history |
+| FR-113 | Slack Reaction Skill Automation Release Acceptance | P1 | Closed | git history |
+| FR-114 | Managed Slack Connection 与官方 App OAuth 快速路径 | P0 | Closed | git history |
+| FR-115 | 每 Workspace 独立 Slack App 自动 Provisioning | P0 | Closed | git history |
+| FR-116 | A: Codex Driver 会话续接语义验证（Follow-up） | P3 | Closed | collision (2): FR-116-A-codex-session-resume-verification.md; FR-116-agent-driver-abstraction.md |
+| FR-117 | A: 全局 Skill 目录属主/权限位校验（Follow-up） | P2 | Closed | collision (2): FR-117-A-global-skill-directory-ownership-check.md; FR-117-non-code-workspace-and-global-file-sharing.md |
+| FR-118 | 协调塌缩 — 用 orchestrator-owned MCP 工具替换过渡态 CEL 层 | P1 | Closed | git history |
+| FR-119 | Expert Resources 可达列表与受治理编辑闭环 | P1 | Closed | git history |
+| FR-120 | Handoff 恢复审查对话框焦点生命周期 | P2 | Closed | git history |
+| FR-121 | Attention Mutation 错误反馈与权威状态对账 | P1 | Closed | git history |
+| FR-122 | CLI、Daemon 与 Tauri 边界层覆盖率治理 | P1 | Closed | git history |
+| FR-123 | 受控 Slack Sandbox 持续认证与证据保鲜 | P1 | Closed | git history |
+| FR-124 | 协调坍缩 Strangler 迁移收尾与遗留路径退役治理 | P1 | Closed | git history |
+| FR-125 | 遗留协调机器分级退役（Deprecate → Remove） | P2 | Closed | git history |
+| FR-126 | Agent 执行路径迁移 — Showcase 链接闭环与文档门禁补强 | P1 | Closed | git history |
+| FR-127 | 治理门禁执行面补完 — QA 门禁 CI 接线与脚本执行面分类 | P0 | Closed | git history |
+| FR-128 | 治理台账再生与审阅工具 — 消除手工 SHA256 维护摩擦 | P1 | Closed | git history |
+| FR-129 | Skill 单一来源与镜像完整性 — 修复损坏的 `.agents` 镜像 | P1 | Closed | git history |
+| FR-130 | Core Crate 拆分 Phase 3 — persistence 提取 | P1 | Closed | git history |
+| FR-131 | 文档发布链路单一来源与链接完整性门禁 | P2 | Closed | git history |
+| FR-132 | QA/DD 文档生命周期治理 — 退役标注与索引可导航性 | P2 | Closed | git history |
+| FR-133 | 依赖策略门禁 — 重复版本、许可证与来源约束 | P3 | Closed | git history |
+| FR-134 | 门禁执行事实校验 — 消除 FR-127 中"文本存在性即执行"的代理 | P1 | Closed | git history |
+| FR-135 | 边界层覆盖率 job 恢复 — bash 3.2 空数组与产物路径 | P1 | Closed | git history |
+| FR-136 | 持久化依赖收口决策 — 新 crate 是收口点还是又一个共享依赖 | P1 | Closed | git history |
+| FR-137 | governance job 聚合清单的完整性断言 | P2 | Closed | git history |
+| FR-138 | bash 3.2 兼容性扫描器的跨行词法状态与漏报面 | P2 | Closed | git history |
+| FR-139 | 持久化收口门禁的扫描面与断言有效性 | P2 | Closed | git history |
+| FR-140 | 治理执行成本 — 使其可见、可归因、可预算 | P3 | Closed | git history |
+| FR-141 | 持久化层不再交出驱动连接 — 连接能力的 API 边界 | P1 | Closed | git history |
+| FR-142 | 触发历史上限从未生效 — 级联删除的决策与修复 | P1 | Closed | git history |
+| FR-143 | 变异 fixture 的靶标漂移 — 第三条 meta 断言 | P2 | Closed | git history |
+| FR-144 | jq 供给的门禁循环在输入畸形时静默变为空转 | P2 | Closed | git history |
+| FR-145 | `producer \| consumer -q` 在 `pipefail` 下是一个假失败——也是一个假通过 | P2 | Closed | git history |
+| FR-146 | `producer \| head -N` 在 `pipefail` 下会让门禁中途终止，而截断的运行读起来和完整的一模一样 | P2 | Closed | git history |
+| FR-147 | 两个由 CI 执行的 shell 门禁不在执行面清单里，因此每一道派生扫描器都看不见它们 | P2 | Closed | git history |
+| FR-148 | 没有任何东西检查 fixture 是否还能被产品接受 | P2 | Closed | git history |
+| FR-149 | DD-137 移除了两个构造，19 个 fixture、一道门禁和四份 QA 文档还在描述它们 | P2 | Closed | git history |
+| FR-150 | 发布链路完整性修复 | P0 | Closed | git history |
+| FR-151 | 0.4.0 版本发布与 Unreleased 清算 | P0 | Closed | git history |
+| FR-152 | 首跑路径现代化 — quickstart、fixture 与错误码可读性 | P1 | Closed | git history |
+| FR-153 | 供应链与依赖面治理 | P1 | Closed | git history |
+| FR-154 | CLI 输出正确性与三文档面一致性 | P2 | Closed | git history |
+| FR-155 | 文档与仓库现实对齐 — AGENTS.md、幻觉基础设施、台账再生 | P2 | Proposed | git history |
+| FR-156 | pipelineVariables 退役收尾 | P2 | Proposed | git history |
+| FR-157 | Source 域分解与测试补强 | P3 | Proposed | git history |
+| FR-158 | 治理体系自省 — 门禁的门禁、成本与新鲜度 | P3 | Proposed | git history |
+<!-- END GENERATED FR REGISTRY -->
 
 ## 说明
 

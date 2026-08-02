@@ -30,7 +30,7 @@ Examples:
 2. Development team reviews tickets to understand issues
 3. Developers fix the issues based on ticket details
 4. Re-run QA tests to verify fixes
-5. Archive or delete resolved tickets
+5. After verification, delete the resolved ticket; git history preserves its evidence
 
 ## Ticket Lifecycle
 
@@ -38,7 +38,10 @@ Examples:
 [FAILED] → [IN_PROGRESS] → [FIXED] → [VERIFIED] → [CLOSED]
 ```
 
-Update ticket status by editing the **Status** field in the ticket file.
+Update ticket status by editing the **Status** field in the ticket file. Active
+ticket Markdown files are intentionally tracked so another agent or checkout can
+resume the failure investigation. Use `git status` after ticket creation to prove
+the ticket is not ignored.
 
 ## Related Directories
 
@@ -46,4 +49,6 @@ Update ticket status by editing the **Status** field in the ticket file.
  
 Notes:
 - Tickets are the input for the `ticket-fix` skill.
-- If you want to keep history, prefer archiving resolved tickets under `docs/ticket/closed/` (optional convention).
+- A ticket is deleted only after its original QA scenario passes. The deletion and
+  the fixing commit retain the audit trail; there is no separate `closed/` archive
+  command or automatic move.

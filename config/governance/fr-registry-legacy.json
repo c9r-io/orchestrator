@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "entries": [
+    {"id":"FR-026","title":"事件表归档与 TTL 清理策略","priority":"P1","status":"Closed","reason":"Pre-registry README entry has no FR document path in the complete HEAD ancestry."},
+    {"id":"FR-027","title":"Worker 轮询优化 — Notify 唤醒机制","priority":"P1","status":"Closed","reason":"Pre-registry README entry has no FR document path in the complete HEAD ancestry."},
+    {"id":"FR-046","title":"Agent 子进程 Daemon PID Guard 穿透防护","priority":"P1","status":"Closed","reason":"Pre-registry README entry has no FR document path in the complete HEAD ancestry."},
+    {"id":"FR-057","title":"orchestratord 真正 Daemon 化","priority":"P1","status":"Closed","reason":"Pre-registry README entry has no FR document path in the complete HEAD ancestry."},
+    {"id":"FR-063","title":"GUI 架构设计 — Tauri + gRPC 安全客户端","priority":"P1","status":"Closed","reason":"Pre-registry README entry has no FR document path in the complete HEAD ancestry."},
+    {"id":"FR-064","title":"GUI 用户界面设计 — 许愿池 + 进度观察","priority":"P1","status":"Closed","reason":"Pre-registry README entry has no FR document path in the complete HEAD ancestry."},
+    {"id":"FR-066","title":"GUI 实时状态推送与许愿池数据隔离","priority":"P0","status":"Closed","reason":"Pre-registry README entry has no FR document path in the complete HEAD ancestry."},
+    {"id":"FR-070","title":"evo_apply_winner 可观测性增强 — 候选选择与代码应用决策日志","priority":"P1","status":"Closed","reason":"Pre-registry README entry has no FR document path in the complete HEAD ancestry."},
+    {"id":"FR-090","title":"轻量化单步执行 — orchestrator run 命令","priority":"P1","status":"Closed","reason":"Pre-registry README entry has no FR document path in the complete HEAD ancestry."},
+    {"id":"FR-091","title":"Linux Sandbox Filesystem Isolation Backend","priority":"P3","status":"Closed","reason":"Pre-registry README entry has no FR document path in the complete HEAD ancestry."},
+    {"id":"FR-092","title":"Pipeline 变量 Spill 路径可配置","priority":"P1","status":"Closed","reason":"Pre-registry README entry has no FR document path in the complete HEAD ancestry."},
+    {"id":"FR-093","title":"沙箱可配置读取路径白名单","priority":"P2","status":"Closed","reason":"Pre-registry README entry has no FR document path in the complete HEAD ancestry."},
+    {"id":"FR-094","title":"自定义 Step ID 的显式 Scope 跨 Round-Trip 漂移修复","priority":"P1","status":"Closed","reason":"Pre-registry README entry has no FR document path in the complete HEAD ancestry."}
+  ]
+}

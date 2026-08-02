@@ -271,6 +271,107 @@ File.write(ARGV[0], JSON.pretty_generate(ledger) + "\n")
   fi
 fi
 
+# ── 9. FR registry exactly matches the complete repository history ───────────
+
+FR_REGISTRY="scripts/lib/fr_registry.rb"
+if ruby "$REPO_ROOT/$FR_REGISTRY" check "$REPO_ROOT" >/dev/null 2>"$WORK/fr-registry.err"; then
+  pass "FR registry matches the complete HEAD ancestry"
+else
+  fail "FR registry differs from history"
+  cat "$WORK/fr-registry.err" >&2
+fi
+
+# ── 10. History fixture proves collisions, drift, and shallow failure ─────────
+
+FR_CASE="$WORK/fr-history"
+mkdir -p "$FR_CASE/scripts/lib" "$FR_CASE/config/governance" "$FR_CASE/docs/feature_request"
+cp "$REPO_ROOT/$FR_REGISTRY" "$FR_CASE/$FR_REGISTRY"
+cat > "$FR_CASE/config/governance/fr-registry-legacy.json" <<'JSON'
+{
+  "version": 1,
+  "entries": [
+    {"id":"FR-003","title":"Legacy fixture","priority":"P2","status":"Closed","reason":"Synthetic reviewed entry with deliberately absent file history."}
+  ]
+}
+JSON
+cat > "$FR_CASE/docs/feature_request/README.md" <<'MARKDOWN'
+# Feature Requests
+
+## 当前条目
+
+placeholder
+
+## 说明
+
+fixture
+MARKDOWN
+git -C "$FR_CASE" init -q
+git -C "$FR_CASE" config user.email qa@local
+git -C "$FR_CASE" config user.name qa
+
+cat > "$FR_CASE/docs/feature_request/FR-001-alpha.md" <<'MARKDOWN'
+# FR-001: First historical shape
+
+**Priority**: P1
+**Status**: Proposed
+MARKDOWN
+cat > "$FR_CASE/docs/feature_request/fr_001_beta.md" <<'MARKDOWN'
+# FR-001: Colliding historical shape
+
+**Priority**: P0
+**Status**: Proposed
+MARKDOWN
+git -C "$FR_CASE" add -A
+git -C "$FR_CASE" commit -qm "historical collision"
+rm "$FR_CASE/docs/feature_request/FR-001-alpha.md" "$FR_CASE/docs/feature_request/fr_001_beta.md"
+git -C "$FR_CASE" add -A
+git -C "$FR_CASE" commit -qm "close historical collision"
+cat > "$FR_CASE/docs/feature_request/FR-002-current.md" <<'MARKDOWN'
+# FR-002: Current request
+
+**Priority**: P2
+**Status**: In Progress
+MARKDOWN
+git -C "$FR_CASE" add -A
+git -C "$FR_CASE" commit -qm "current request"
+
+env -u CI -u CONTINUOUS_INTEGRATION -u GITHUB_ACTIONS -u GITLAB_CI \
+    -u BUILDKITE -u CIRCLECI \
+  ruby "$FR_CASE/$FR_REGISTRY" write "$FR_CASE"
+if ruby "$FR_CASE/$FR_REGISTRY" check "$FR_CASE" &&
+  grep -q 'FR-001.*collision (2)' "$FR_CASE/docs/feature_request/README.md" &&
+  grep -q 'FR-002.*In Progress.*git history' "$FR_CASE/docs/feature_request/README.md" &&
+  grep -q 'FR-003.*legacy exception' "$FR_CASE/docs/feature_request/README.md"; then
+  pass "history fixture renders closed collisions, current state, and exact legacy exceptions"
+else
+  fail "history fixture did not render all three provenance classes"
+fi
+
+cat > "$FR_CASE/docs/feature_request/FR-004-unregistered.md" <<'MARKDOWN'
+# FR-004: Newly discovered history
+
+**Priority**: P3
+**Status**: Proposed
+MARKDOWN
+git -C "$FR_CASE" add -A
+git -C "$FR_CASE" commit -qm "new history without registry regeneration"
+if ruby "$FR_CASE/$FR_REGISTRY" check "$FR_CASE" >/dev/null 2>&1; then
+  fail "a new committed FR path survived without registry regeneration"
+else
+  pass "a new committed FR path fails the stale generated registry"
+fi
+
+SHALLOW_CASE="$WORK/fr-history-shallow"
+git clone -q --depth=1 "file://$FR_CASE" "$SHALLOW_CASE"
+if ruby "$SHALLOW_CASE/$FR_REGISTRY" check "$SHALLOW_CASE" >/dev/null 2>"$WORK/fr-shallow.err"; then
+  fail "a shallow repository was accepted as complete FR history"
+elif grep -q "repository is shallow" "$WORK/fr-shallow.err"; then
+  pass "a shallow repository fails closed before comparing an incomplete registry"
+else
+  fail "shallow history failed for the wrong reason"
+  cat "$WORK/fr-shallow.err" >&2
+fi
+
 echo ""
 echo "FR-128 governance ledger tooling: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]] || exit 1
