@@ -22,7 +22,7 @@
 
 3. **协调器只改数据库，从不动 OS**。`crates/orchestrator-persistence/src/session_store.rs:429` 的 `reconcile_sessions`（由 `crates/daemon/src/main.rs:512` 每 10 秒调用）对"进程活着但 transport 已消失"的会话，只把状态改成 `failed`；对"活着且 transport 尚存"的改成 `detached`。全过程零 `kill`。判定所需的身份校验其实**已经实现**——`session_store.rs:280` 的 `process_identity_status` 已用 `process_fingerprint` 排除 PID 复用——只是结论没有被用于回收。
 
-4. **保洁程序会删掉活体的档案**。`session_store.rs:583` 的 `cleanup_stale_sessions` 删除 `state IN ('exited','closed','failed')` 且超龄的行。而第 3 点刚把一个**仍在运行**的孤儿标成 `failed`——于是系统主动抹掉了自己对该活体的唯一记录，此后再无追踪依据。这是本 FR 中最尖锐的一处：不是忘了回收，是先放弃回收再销毁证据。
+4. **保洁程序会删掉活体的档案**（机制属实，但**当前不可达**——2026-08-03 实施期核实）。全仓库检索 `cleanup_stale_sessions` 只得到三处定义（`session_store.rs:583` 的实现、`repository/session.rs` 的 trait 与实现、`AsyncSessionStore` 的门面）与两处测试，**零个生产调用点**。原稿称本条为"本 FR 中最尖锐的一处"，代码层面确实如此，但它描述的是一处**潜伏**缺陷而非正在发生的泄漏：这个扫除从未在生产路径上跑过。修复仍然值得做（这是公开 API，迟早会被接上），但不应把它算作已观测泄漏的成因之一。`session_store.rs:583` 的 `cleanup_stale_sessions` 删除 `state IN ('exited','closed','failed')` 且超龄的行。而第 3 点刚把一个**仍在运行**的孤儿标成 `failed`——于是系统主动抹掉了自己对该活体的唯一记录，此后再无追踪依据。这是本 FR 中最尖锐的一处：不是忘了回收，是先放弃回收再销毁证据。
 
 触发条件在 QA 路径上是常态而非例外。`scripts/qa/test-agent-session-control-plane.sh:63` 的回收依赖 `trap cleanup EXIT`，脚本被 SIGKILL 或 CI 超时强杀时 trap 根本不执行——6 个 `ppid=1` 的 daemon 就是 trap 未执行的直接证据。
 
@@ -110,8 +110,17 @@
 
 ## 验收标准
 
-- [ ] 负向验证：启动一个 interactive session 后对 daemon 发 `SIGKILL`，重启 daemon，在两个协调周期内该会话进程被回收且发出回收事件
+- [x] ~~负向验证：启动一个 interactive session 后对 daemon 发 `SIGKILL`，重启 daemon，在两个协调周期内该会话进程被回收且发出回收事件~~ **本条与 DD-112 冲突，已撤销**（2026-08-03 实施期核实，见下）
+- [ ] 回收判据改为**transport 消失**（FR 需求 1 自己写的规则）：会话进程存活但其 FIFO 已不存在时，在两个协调周期内被回收并发出 `session_process_reclaimed` 事件
 - [ ] **该断言的反证 fixture**：同一场景下置 `session_reclaim_enabled: false`，会话进程在两个协调周期后**仍然存活**。没有这一条，上一条在「本机当前恰好没有孤儿」时是恒真的（见下方环境注记）
+
+#### 撤销第一条判据的理由（2026-08-03）
+
+实施「daemon 死后其会话即孤儿」的判据（按 ppid 是否为当前 daemon 判断）会**删掉一个既有且有意为之的特性**。DD-112 §54 明确规定重启协调把「进程存活 + transport 存在」收敛到 `active`/`detached`/`draining`，§35 把「daemon 运行时拆除后仍保持 orchestrator 所属子进程存活」列为设计属性；QA 149 场景 5 断言重启后会话保持 `detached` 且**可再附着**。这不是疏漏：FIFO 是磁盘上的具名管道，输出捕获也是文件，所以新 daemon 确实能继续驱动这个会话。
+
+实测证据：按 ppid 判据实施后，`test-agent-session-control-plane.sh` 的重启场景以 `session is not attachable` 失败——协调器把那个本该 `detached` 的会话标成 `failed` 并把它杀了。
+
+**本 FR 原稿的第一条验收判据与 DD-112 的重启契约直接矛盾**，且原稿未察觉。保留的是 FR 需求 1 自己写的规则（transport 消失），它恰好覆盖了真实观测到的泄漏：那 28 个 mock 会话的临时目录已被 `rm -rf`，FIFO 随之消失。代价是「daemon 被 SIGKILL 且数据目录完好」这一残余情形仍不由协调器回收——那正是 DD-112 有意保留的可恢复会话，由需求 4（关停排空）与需求 6（QA 脚本回收）覆盖其余入口。
 - [ ] 负向验证：构造 `process_fingerprint` 不匹配的记录（模拟 PID 复用），协调器不发送任何信号，且不将该 PID 记为已回收；同一 PID 换成匹配的 fingerprint 后被回收（证明该拒绝不是恒拒）
 - [ ] 负向验证：记录的 pid 不是自身进程组组长时，回收被拒绝并留下点名该原因的诊断（`getpgid(pid) != pid`）
 - [ ] 会话派生的孙进程随会话一同消失（进程组回收生效，而非仅组长退出）；反证：单 PID kill 的变体会留下该孙进程

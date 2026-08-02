@@ -11,9 +11,83 @@ PASS=0
 FAIL=0
 DAEMON_PID=""
 SESSION_PROCESS_PID=""
+# Every real session PID this run has caused to exist. `SESSION_PROCESS_PID`
+# above is not that: it is assigned once, to a synthetic `sleep`, to fake a
+# session row for the restart scenario, and it has never held the PID of a
+# session the daemon actually spawned (FR-159).
+RECORDED_SESSION_PIDS=""
+# Distinctive substring of the mock fixture's command line, used to recognise
+# this fixture's leftovers without matching anything else on the machine.
+MOCK_MARKER='echo "mock:$line"'
 
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
+
+# Snapshots the process table once, and fails the run if it comes back empty.
+#
+# A `ps` that produced nothing and a machine with nothing running are the same
+# zero rows, and every count derived from them reads as clean. On any live
+# machine this output is never empty, so emptiness means the probe failed and
+# the counts below would be fiction (skill 4.4 shape 5).
+process_table() {
+  local table
+  table="$(ps -eo pid=,ppid=,command= 2>/dev/null || true)"
+  if [[ -z "$table" ]]; then
+    echo "process table probe returned no rows; orphan counts would be meaningless" >&2
+    exit 1
+  fi
+  printf '%s\n' "$table"
+}
+
+# Counts orphaned (ppid 1) mock session processes.
+count_orphaned_mocks() {
+  process_table | awk -v marker="$MOCK_MARKER" '$2 == 1 && index($0, marker) > 0' | wc -l | tr -d ' '
+}
+
+# Records a session PID so it can be reclaimed regardless of how the run ends.
+record_session_pid() {
+  local pid="$1"
+  [[ -n "$pid" && "$pid" != "null" && "$pid" != "0" ]] || return 0
+  RECORDED_SESSION_PIDS="$RECORDED_SESSION_PIDS $pid"
+}
+
+# Reclaims every session PID this run recorded, by process group.
+#
+# The group form matters for the same reason it does in the daemon: the mock is
+# a `sh` that may have descendants, and signalling only the leader leaves them
+# running and reparented. `kill -- -PID` addresses the group; sessions are
+# spawned as their own group leaders precisely so this works.
+reclaim_recorded_sessions() {
+  local pid
+  for pid in $RECORDED_SESSION_PIDS; do
+    kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+  done
+  for pid in $RECORDED_SESSION_PIDS; do
+    local waited=0
+    while kill -0 "$pid" 2>/dev/null && (( waited < 20 )); do
+      sleep 0.1
+      waited=$((waited + 1))
+    done
+    kill -KILL -- "-$pid" 2>/dev/null || true
+  done
+}
+
+# Reclaims mock leftovers from previous runs before this one starts.
+#
+# Restricted to `ppid == 1`: an orphan has no owner by definition, whereas a
+# mock process still parented to a live daemon belongs to a concurrent run and
+# killing it would break that run instead of this one.
+reclaim_previous_run_residue() {
+  local pid before
+  before="$(count_orphaned_mocks)"
+  while read -r pid; do
+    [[ -n "$pid" ]] || continue
+    kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+  done < <(process_table | awk -v marker="$MOCK_MARKER" '$2 == 1 && index($0, marker) > 0 { print $1 }')
+  if [[ "$before" != "0" ]]; then
+    echo "  reclaimed $before orphaned mock session process(es) left by an earlier run" >&2
+  fi
+}
 
 for command in jq sqlite3 mktemp rg ps; do
   command -v "$command" >/dev/null 2>&1 || {
@@ -42,13 +116,39 @@ DB="$QA_ROOT/data/agent_orchestrator.db"
 stop_daemon() {
   if [[ -n "$DAEMON_PID" ]]; then
     kill "$DAEMON_PID" 2>/dev/null || true
-    wait "$DAEMON_PID" 2>/dev/null || true
+    # `wait` cannot be used here. The daemon is started inside a subshell, so it
+    # is that subshell's child and not this one's, and `wait` on a non-child
+    # returns immediately — it has never actually waited. Both daemons in this
+    # script share one ORCHESTRATORD_DATA_DIR and therefore one PID file, so
+    # starting the next one before this one has released it makes the instance
+    # guard refuse to start with "another orchestratord is already running".
+    # Poll the process instead.
+    local waited=0
+    while kill -0 "$DAEMON_PID" 2>/dev/null && (( waited < 100 )); do
+      sleep 0.1
+      waited=$((waited + 1))
+    done
+    if kill -0 "$DAEMON_PID" 2>/dev/null; then
+      kill -KILL "$DAEMON_PID" 2>/dev/null || true
+      sleep 0.2
+    fi
+    # The PID file is removed during shutdown; wait for it so the next start
+    # observes a released directory rather than racing its cleanup.
+    waited=0
+    while [[ -f "$ORCHESTRATORD_DATA_DIR/daemon.pid" ]] && (( waited < 50 )); do
+      sleep 0.1
+      waited=$((waited + 1))
+    done
     DAEMON_PID=""
   fi
 }
 
 cleanup() {
   stop_daemon
+  # Reclaim the sessions this run created. The trap is kept, but it is no
+  # longer the only line of defence: the PIDs are recorded as they appear, and
+  # the next run's startup sweep collects whatever a SIGKILL'd trap missed.
+  reclaim_recorded_sessions
   if [[ -n "$SESSION_PROCESS_PID" ]]; then
     kill "$SESSION_PROCESS_PID" 2>/dev/null || true
     wait "$SESSION_PROCESS_PID" 2>/dev/null || true
@@ -61,6 +161,9 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+
+# Collect anything a previous run left behind before adding to it.
+reclaim_previous_run_residue
 
 wait_for_daemon() {
   for _ in {1..80}; do
@@ -234,6 +337,7 @@ done
 SESSION_ID="$(jq -r '.[0].session_id // empty' "$SESSION_JSON")"
 [[ -n "$SESSION_ID" ]] || { echo "TTY session was not materialized" >&2; exit 1; }
 ORIGINAL_PID="$(jq -r '.[0].pid' "$SESSION_JSON")"
+record_session_pid "$ORIGINAL_PID"
 ORIGINAL_FINGERPRINT="$(sqlite3 "$DB" "SELECT process_fingerprint FROM agent_sessions WHERE id='$SESSION_ID';")"
 
 "$ORCH" agent session get "$SESSION_ID" -o json > "$QA_ROOT/public-session.json"
@@ -496,6 +600,18 @@ if [[ "$INVALID_POLICY_REJECTED" -eq 1 && "$DISABLED_ATTACH_DENIED" -eq 1 && \
   pass "global policy authority, hot reload, RBAC, restart, audit, and secret boundaries hold"
 else
   fail "feature flag, RBAC, restart, audit, or secret-boundary check failed"
+fi
+
+# Reclaim before the leak assertion, so what is measured is the state this run
+# actually leaves behind rather than the state mid-run.
+stop_daemon
+reclaim_recorded_sessions
+
+REMAINING_ORPHANS="$(count_orphaned_mocks)"
+if [[ "$REMAINING_ORPHANS" == "0" ]]; then
+  pass "no orphaned mock session processes remain after the run"
+else
+  fail "$REMAINING_ORPHANS orphaned mock session process(es) survived the run"
 fi
 
 echo ""

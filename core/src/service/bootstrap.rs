@@ -135,12 +135,7 @@ fn build_managed_state(
     let session_store = Arc::new(crate::session_store::AsyncSessionStore::new(
         async_database.clone(),
     ));
-    // Every live session recorded here predates this process, so none of them
-    // can be owned by it — bootstrap reconciliation is where a previous
-    // daemon's orphans are first identified.
-    if let Err(error) =
-        crate::session_store::reconcile_sessions_by_path(&db_path, std::process::id())
-    {
+    if let Err(error) = crate::session_store::reconcile_sessions_by_path(&db_path) {
         tracing::warn!(%error, "failed to reconcile interactive sessions during bootstrap");
     }
     let task_repo = Arc::new(crate::task_repository::AsyncSqliteTaskRepository::new(

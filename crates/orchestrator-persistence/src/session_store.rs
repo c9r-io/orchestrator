@@ -292,26 +292,6 @@ pub fn process_parent_pid(pid: u32) -> Option<u32> {
     }
 }
 
-/// Determines whether a live session process still belongs to this daemon.
-///
-/// A session is spawned as a direct child of the daemon, so while the daemon
-/// lives its sessions have it as their parent. When the daemon dies its sessions
-/// are reparented to `init` and there is no longer anything that can drive
-/// them: their stdout capture was wired to file descriptors of a process that no
-/// longer exists, and no future daemon adopts them.
-///
-/// This is the discriminator the FR's primary scenario actually needs. "The
-/// transport has disappeared" does not fire there: the input FIFO is a file
-/// under `logs/sessions/<id>/`, and it outlives the daemon perfectly well, so an
-/// orphan produced by `SIGKILL`ing the daemon looks exactly like a session
-/// waiting politely for its next writer. Parentage is what separates them.
-pub fn process_is_owned_by(pid: i64, owner_pid: u32) -> bool {
-    if pid <= 0 || pid > i32::MAX as i64 {
-        return false;
-    }
-    process_parent_pid(pid as u32).is_some_and(|parent| parent == owner_pid)
-}
-
 /// Determines whether a PID currently refers to a live process without granting authority.
 pub fn process_exists(pid: u32) -> bool {
     if pid == 0 || pid > i32::MAX as u32 {
@@ -673,9 +653,21 @@ fn session_owned_dir(row: &SessionRow) -> Option<std::path::PathBuf> {
 
 /// Reconciles non-terminal persisted sessions with OS process identity and transport state.
 ///
-/// `owner_pid` is the PID of the daemon that owns live sessions — normally
-/// `std::process::id()`. It is what distinguishes a session this daemon is
-/// running from one a previous daemon left behind; see [`process_is_owned_by`].
+/// A session is proposed for reclamation when its process is verified live and
+/// its transport has disappeared: nothing can send it input, so it can never be
+/// resumed, and it will run until the machine reboots.
+///
+/// Deliberately *not* keyed on whether the process is still a child of this
+/// daemon, even though that would be the sharper signal for an orphan. DD-112
+/// §54 makes "verified live process plus transport" converge to `detached` by
+/// design, and §35 records keeping an orchestrator-owned child alive across
+/// daemon teardown as an intended property — a session that survives a restart
+/// with its data directory intact is resumable, because the FIFO is a file on
+/// disk and the output capture is a file too. Reclaiming on parentage would
+/// delete that feature. FR-159's first acceptance criterion asks for exactly
+/// that and is in conflict with DD-112; the transport rule, which the FR itself
+/// specifies, is the one that matches the leak actually observed — those temp
+/// directories had been removed, so the FIFO was gone.
 ///
 /// Rows already in `failed` are re-examined for reclamation even though their
 /// state cannot move. Without that, a single missed reclamation is permanent: the
@@ -683,7 +675,7 @@ fn session_owned_dir(row: &SessionRow) -> Option<std::path::PathBuf> {
 /// before looking at it. Anything that interrupts the pass between the state
 /// change and the signal — a daemon restart, the policy being off at the time —
 /// would otherwise strand the process forever.
-pub(crate) fn reconcile_sessions(conn: &Connection, owner_pid: u32) -> Result<ReconcileOutcome> {
+pub(crate) fn reconcile_sessions(conn: &Connection) -> Result<ReconcileOutcome> {
     let rows = list_sessions(conn, None, None, None)?;
     let mut outcome = ReconcileOutcome::default();
     for row in rows.into_iter().filter(|row| {
@@ -702,14 +694,8 @@ pub(crate) fn reconcile_sessions(conn: &Connection, owner_pid: u32) -> Result<Re
             .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
             .is_some_and(|expires| expires > chrono::Utc::now());
 
-        // A live process this daemon did not spawn is unreachable: nothing can
-        // send it input or read what it writes. Whether its FIFO happens to
-        // still exist on disk says nothing about that.
-        let orphaned = identity == ProcessIdentityStatus::VerifiedLive
-            && !process_is_owned_by(row.pid, owner_pid);
-
         let target = match identity {
-            ProcessIdentityStatus::VerifiedLive if transport_exists && !orphaned => {
+            ProcessIdentityStatus::VerifiedLive if transport_exists => {
                 if row.state == "draining" {
                     "draining"
                 } else if row.writer_client_id.is_some() && lease_is_current {
@@ -725,7 +711,7 @@ pub(crate) fn reconcile_sessions(conn: &Connection, owner_pid: u32) -> Result<Re
             | ProcessIdentityStatus::Unsupported => "failed",
         };
 
-        if identity == ProcessIdentityStatus::VerifiedLive && (orphaned || !transport_exists) {
+        if identity == ProcessIdentityStatus::VerifiedLive && !transport_exists {
             outcome.reclaim_candidates.push(ReclaimCandidate {
                 session_id: row.id.clone(),
                 task_id: row.task_id.clone(),
@@ -1241,14 +1227,9 @@ pub async fn detach_reader(
 
 /// Reconciles recorded session state against the processes still alive.
 ///
-/// `owner_pid` identifies the daemon that owns live sessions; see
-/// [`reconcile_sessions`].
-pub async fn reconcile_sessions_async(
-    db: &AsyncDatabase,
-    owner_pid: u32,
-) -> Result<ReconcileOutcome> {
+pub async fn reconcile_sessions_async(db: &AsyncDatabase) -> Result<ReconcileOutcome> {
     db.writer()
-        .call(move |conn| reconcile_sessions(conn, owner_pid).map_err(other))
+        .call(|conn| reconcile_sessions(conn).map_err(other))
         .await
         .map_err(flatten_err)
 }
@@ -1274,12 +1255,9 @@ pub async fn update_session_process_async(
 /// `init_state` builds its managed state synchronously — so the path form is
 /// what keeps the connection inside the layer without forcing that call site
 /// to become async.
-pub fn reconcile_sessions_by_path(
-    db_path: &std::path::Path,
-    owner_pid: u32,
-) -> Result<ReconcileOutcome> {
+pub fn reconcile_sessions_by_path(db_path: &std::path::Path) -> Result<ReconcileOutcome> {
     let conn = crate::sqlite::open_conn(db_path)?;
-    reconcile_sessions(&conn, owner_pid)
+    reconcile_sessions(&conn)
 }
 
 /// Lists every non-terminal session whose process is still running.
@@ -1561,29 +1539,6 @@ mod tests {
             None,
             "a path outside the sessions tree must never be removed"
         );
-    }
-
-    /// A live process this daemon did not spawn is an orphan.
-    #[test]
-    fn process_ownership_distinguishes_our_children_from_strangers() {
-        let mut child = std::process::Command::new("sleep")
-            .arg("30")
-            .spawn()
-            .expect("spawn child");
-        let pid = child.id() as i64;
-
-        assert!(
-            process_is_owned_by(pid, std::process::id()),
-            "a process we just spawned must read as ours"
-        );
-        assert!(
-            !process_is_owned_by(pid, std::process::id().wrapping_add(1)),
-            "the same process must read as an orphan against a different owner, \
-             which is the daemon-restart case"
-        );
-
-        let _ = child.kill();
-        let _ = child.wait();
     }
 
     /// A dead PID is reported as such rather than signalled blindly.
@@ -2067,7 +2022,7 @@ mod tests {
         )
         .expect("seed dead session");
 
-        let outcome = reconcile_sessions(&conn, std::process::id()).expect("reconcile sessions");
+        let outcome = reconcile_sessions(&conn).expect("reconcile sessions");
         assert!(
             outcome
                 .changes

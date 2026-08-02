@@ -511,7 +511,6 @@ fn main() -> Result<()> {
                         _ = interval.tick() => {
                             let result = agent_orchestrator::session_store::reconcile_sessions_async(
                                 &session_state.async_database,
-                                std::process::id(),
                             ).await;
                             match result {
                                 Ok(outcome) => {
