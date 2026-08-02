@@ -299,3 +299,9 @@ drain (scenario 4) and the QA harness sweep (scenario 6).
 - The temp-directory sites that clean up via a trailing `remove_dir_all` rather
   than an owned guard still leak when their test panics. The six that accumulated
   measurably are repaired; the panic path is not swept.
+- A test process killed with `SIGKILL` leaks whatever it had open, because `Drop`
+  runs on unwind but not on a kill. No owned guard can close this. Verify the
+  repair on an **uninterrupted** run: `cargo test -p agent-orchestrator --lib`
+  against the shared `$TMPDIR` moves the `agent-orchestrator-test-*` count by 0
+  across 1660 tests, where it previously moved by 38 every run. Ten directories
+  observed after the repair all came from runs cancelled by a command timeout.

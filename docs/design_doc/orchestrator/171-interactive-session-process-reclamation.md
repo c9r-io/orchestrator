@@ -271,6 +271,16 @@ session change.
   an owned guard still leak on a panicking test. The six that accumulated
   measurably are repaired; the panic path is not swept, and the surface is 78
   `std::env::temp_dir()` call sites across 13 files.
+- **A hard-killed test process still leaks, and no owned guard can prevent it.**
+  `Drop` runs on unwind but not on `SIGKILL`, so a `cargo test` cancelled by a CI
+  timeout or an impatient operator leaves whatever it had open. Observed during
+  this work rather than reasoned about: ten `agent-orchestrator-test-*`
+  directories appeared after the repair landed, all of them from runs killed by a
+  command timeout. The distinction that matters is between systematic and
+  incidental — a clean, uninterrupted `cargo test -p agent-orchestrator --lib`
+  against the *shared* `$TMPDIR` moves the count by exactly 0 across 1660 tests,
+  where before it moved by 38 every time. What remains is bounded by how often a
+  run is killed, not by how often it succeeds.
 - The reclamation gate is `manual-runbook`, not `ci-required`: it starts a daemon
   and signals process groups.
 - **`scripts/qa/ci-liveness.rb` is red for reasons unrelated to this work** (see
