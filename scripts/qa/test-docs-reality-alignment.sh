@@ -139,7 +139,7 @@ ALL_CHECKS=(check_onboarding_contract check_architecture_contract check_proto_ca
 
 run_checks() {
   local root="$1" check rc=0
-  for check in "${ALL_CHECKS[@]}"; do
+  for check in ${ALL_CHECKS[@]+"${ALL_CHECKS[@]}"}; do
     if "$check" "$root"; then
       pass "$check"
     else
@@ -171,7 +171,7 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
 
   expect_fail() {
     local name="$1" dir="$2" target="$3" check
-    for check in "${ALL_CHECKS[@]}"; do
+    for check in ${ALL_CHECKS[@]+"${ALL_CHECKS[@]}"}; do
       if [[ "$check" == "$target" ]]; then
         if "$check" "$dir" >/dev/null 2>&1; then
           fail "$name: $target accepted the injected defect"
