@@ -341,7 +341,7 @@ mod tests {
 
     #[test]
     fn tail_lines_zero_limit_returns_empty() {
-        let dir = test_dir("zero");
+        let (_dir_guard, dir) = test_dir("zero");
         let path = dir.join("log.txt");
         std::fs::write(&path, "line1\nline2\n").expect("write test log");
         let result = tail_lines(&path, 0).expect("tail zero lines");
@@ -351,7 +351,7 @@ mod tests {
 
     #[test]
     fn tail_lines_empty_file_returns_empty() {
-        let dir = test_dir("empty");
+        let (_dir_guard, dir) = test_dir("empty");
         let path = dir.join("log.txt");
         std::fs::write(&path, "").expect("write empty log");
         let result = tail_lines(&path, 10).expect("tail empty log");
@@ -361,7 +361,7 @@ mod tests {
 
     #[test]
     fn tail_lines_returns_last_n_lines() {
-        let dir = test_dir("lastn");
+        let (_dir_guard, dir) = test_dir("lastn");
         let path = dir.join("log.txt");
         // Use trailing newline so each "line" is terminated
         let content = (1..=20)
@@ -381,7 +381,7 @@ mod tests {
 
     #[test]
     fn tail_lines_returns_all_when_limit_exceeds_file() {
-        let dir = test_dir("exceed");
+        let (_dir_guard, dir) = test_dir("exceed");
         let path = dir.join("log.txt");
         std::fs::write(&path, "line1\nline2\nline3").expect("write small log");
 
@@ -400,7 +400,7 @@ mod tests {
 
     #[test]
     fn tail_lines_large_file() {
-        let dir = test_dir("large");
+        let (_dir_guard, dir) = test_dir("large");
         let path = dir.join("big.txt");
         let mut f = std::fs::File::create(&path).expect("create large log");
         for i in 0..500 {
@@ -422,7 +422,7 @@ mod tests {
         let item_id = first_item_id(&state, &task_id);
 
         // Create actual log files on disk
-        let dir = test_dir("stream-logs");
+        let (_dir_guard, dir) = test_dir("stream-logs");
         let stdout_path = dir.join("stream_stdout.log");
         let stderr_path = dir.join("stream_stderr.log");
         std::fs::write(&stdout_path, "line 1\nline 2\nline 3\n").expect("write stdout");
@@ -477,7 +477,7 @@ mod tests {
         let (state, task_id) = seed_task(&mut fixture);
         let item_id = first_item_id(&state, &task_id);
 
-        let dir = test_dir("stream-invalid-active");
+        let (_dir_guard, dir) = test_dir("stream-invalid-active");
         let stdout_path = dir.join("stdout.log");
         let stderr_path = dir.join("stderr.log");
         std::fs::write(&stdout_path, "token=redacted\nvisible line\n").expect("write stdout");
@@ -534,7 +534,7 @@ mod tests {
         let (state, task_id) = seed_task(&mut fixture);
         let item_id = first_item_id(&state, &task_id);
 
-        let dir = test_dir("stream-stderr");
+        let (_dir_guard, dir) = test_dir("stream-stderr");
         let stdout_path = dir.join("out.log");
         let stderr_path = dir.join("err.log");
         std::fs::write(&stdout_path, "stdout content\n").expect("write stdout");
@@ -586,7 +586,7 @@ mod tests {
         let (state, task_id) = seed_task(&mut fixture);
         let item_id = first_item_id(&state, &task_id);
 
-        let dir = test_dir("stream-ts");
+        let (_dir_guard, dir) = test_dir("stream-ts");
         let stdout_path = dir.join("ts_out.log");
         let stderr_path = dir.join("ts_err.log");
         std::fs::write(&stdout_path, "data\n").expect("write stdout");
@@ -641,7 +641,7 @@ mod tests {
         let (state, task_id) = seed_task(&mut fixture);
         let item_id = first_item_id(&state, &task_id);
 
-        let dir = test_dir("stream-tail");
+        let (_dir_guard, dir) = test_dir("stream-tail");
 
         // Insert 3 command runs with distinct log files
         for i in 0..3 {
@@ -769,7 +769,7 @@ mod tests {
             (next, ())
         });
 
-        let dir = test_dir("stream-secret-store");
+        let (_dir_guard, dir) = test_dir("stream-secret-store");
         let stdout_path = dir.join("secret_out.log");
         let stderr_path = dir.join("secret_err.log");
         std::fs::write(&stdout_path, "key=super-secret-value output\n").expect("write stdout");
@@ -857,7 +857,7 @@ mod tests {
             (next, ())
         });
 
-        let dir = test_dir("stream-nondefault-secret");
+        let (_dir_guard, dir) = test_dir("stream-nondefault-secret");
         let stdout_path = dir.join("nd_out.log");
         let stderr_path = dir.join("nd_err.log");
         std::fs::write(&stdout_path, "password=non-default-secret-42 output\n")
@@ -914,7 +914,7 @@ mod tests {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
         let item_id = first_item_id(&state, &task_id);
-        let dir = test_dir("partial-logs");
+        let (_dir_guard, dir) = test_dir("partial-logs");
 
         let stdout_path = dir.join("stdout.log");
         let stderr_path = dir.join("stderr.log");
@@ -999,7 +999,7 @@ mod tests {
 
     #[tokio::test]
     async fn follow_one_stream_uses_callback_for_stdout() {
-        let dir = test_dir("follow-cb-stdout");
+        let (_dir_guard, dir) = test_dir("follow-cb-stdout");
         let path = dir.join("stdout.log");
         std::fs::write(&path, "hello world\nsecond line\n").expect("write test log");
 
@@ -1028,7 +1028,7 @@ mod tests {
 
     #[tokio::test]
     async fn follow_one_stream_uses_callback_for_stderr() {
-        let dir = test_dir("follow-cb-stderr");
+        let (_dir_guard, dir) = test_dir("follow-cb-stderr");
         let path = dir.join("stderr.log");
         std::fs::write(&path, "error: something broke\n").expect("write test log");
 
@@ -1055,7 +1055,7 @@ mod tests {
 
     #[tokio::test]
     async fn follow_one_stream_callback_incremental_read() {
-        let dir = test_dir("follow-cb-incr");
+        let (_dir_guard, dir) = test_dir("follow-cb-incr");
         let path = dir.join("incr.log");
         std::fs::write(&path, "first chunk\n").expect("write initial");
 

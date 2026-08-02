@@ -216,7 +216,7 @@ mod tests {
         let (state, task_id) = seed_task(&mut fixture);
         let item_id = first_item_id(&state, &task_id);
 
-        let dir = test_dir("details-run");
+        let (_dir_guard, dir) = test_dir("details-run");
         let stdout_path = dir.join("stdout.log");
         let stderr_path = dir.join("stderr.log");
         std::fs::write(&stdout_path, "output").expect("write stdout");
@@ -268,7 +268,7 @@ mod tests {
         let item_id = first_item_id(&state, &task_id);
 
         // Create log files on disk
-        let dir = test_dir("delete-logs");
+        let (_dir_guard, dir) = test_dir("delete-logs");
         let stdout_path = dir.join("delete_stdout.log");
         let stderr_path = dir.join("delete_stderr.log");
         std::fs::write(&stdout_path, "stdout data").expect("write stdout");

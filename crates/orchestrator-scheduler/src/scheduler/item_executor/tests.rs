@@ -9,11 +9,20 @@ use agent_orchestrator::config::{
 };
 use std::collections::HashMap;
 
-fn temp_dir(name: &str) -> std::path::PathBuf {
-    let dir =
-        std::env::temp_dir().join(format!("item-exec-test-{}-{}", name, uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&dir).expect("create item executor temp dir");
-    dir
+/// Returns a self-deleting temp directory guard and its path.
+///
+/// Cleanup used to be a `std::fs::remove_dir_all` at the end of each test, and
+/// ten of the eleven call sites remembered it. The eleventh (`slv-pathkey`) did
+/// not, and it is the only one of the eleven that accumulated: 267 directories
+/// (FR-159). A guard that cannot be forgotten replaces eleven chances to
+/// forget — and unlike the trailing call, it also survives a panicking test.
+fn temp_dir(name: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+    let guard = tempfile::Builder::new()
+        .prefix(&format!("item-exec-test-{name}-"))
+        .tempdir()
+        .expect("create item executor temp dir");
+    let path = guard.path().to_path_buf();
+    (guard, path)
 }
 
 fn empty_pipeline() -> PipelineVariables {
@@ -164,7 +173,7 @@ fn execution_hard_failure_ignores_non_validation_failures() {
 
 #[test]
 fn spill_large_var_small_value_inserts_inline() {
-    let dir = temp_dir("slv-small");
+    let (_dir_guard, dir) = temp_dir("slv-small");
     let mut pipeline = empty_pipeline();
     let value = "hello world".to_string();
 
@@ -183,12 +192,11 @@ fn spill_large_var_small_value_inserts_inline() {
         std::fs::read_to_string(p).expect("read stdout spill file"),
         "hello world"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
 fn spill_large_var_exactly_at_limit_inserts_inline() {
-    let dir = temp_dir("slv-exact");
+    let (_dir_guard, dir) = temp_dir("slv-exact");
     let mut pipeline = empty_pipeline();
     let value = "x".repeat(PIPELINE_VAR_INLINE_LIMIT);
 
@@ -201,12 +209,11 @@ fn spill_large_var_exactly_at_limit_inserts_inline() {
         std::fs::read_to_string(p).expect("read out spill file"),
         value
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
 fn spill_large_var_one_byte_over_limit_spills_to_file() {
-    let dir = temp_dir("slv-over");
+    let (_dir_guard, dir) = temp_dir("slv-over");
     let mut pipeline = empty_pipeline();
     let value = "x".repeat(PIPELINE_VAR_INLINE_LIMIT + 1);
 
@@ -232,13 +239,11 @@ fn spill_large_var_one_byte_over_limit_spills_to_file() {
     // File should contain the full original value
     let on_disk = std::fs::read_to_string(spill_path).expect("read spilled big value");
     assert_eq!(on_disk, value);
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
 fn spill_large_var_large_value_sets_correct_path_key() {
-    let dir = temp_dir("slv-pathkey");
+    let (_dir_guard, dir) = temp_dir("slv-pathkey");
     let mut pipeline = empty_pipeline();
     let value = "y".repeat(PIPELINE_VAR_INLINE_LIMIT + 100);
 
@@ -254,7 +259,7 @@ fn spill_large_var_large_value_sets_correct_path_key() {
 
 #[test]
 fn spill_large_var_multibyte_boundary() {
-    let dir = temp_dir("slv-mb");
+    let (_dir_guard, dir) = temp_dir("slv-mb");
     let mut pipeline = empty_pipeline();
     // Build a string that puts a multi-byte char right at the 4096 boundary.
     // Chinese chars are 3 bytes each. Fill up to just before the limit, then
@@ -275,37 +280,31 @@ fn spill_large_var_multibyte_boundary() {
     let path_str = pipeline.vars.get("mb_path").expect("mb_path should be set");
     let on_disk = std::fs::read_to_string(path_str).expect("read multibyte spill file");
     assert_eq!(on_disk, value);
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 // ── spill_to_file tests ──────────────────────────────────────────
 
 #[test]
 fn spill_to_file_small_value_returns_none() {
-    let dir = temp_dir("stf-small");
+    let (_dir_guard, dir) = temp_dir("stf-small");
     let value = "short string";
 
     let result = spill_to_file(&dir, "task1", "key", value);
     assert!(result.is_none());
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
 fn spill_to_file_exactly_at_limit_returns_none() {
-    let dir = temp_dir("stf-exact");
+    let (_dir_guard, dir) = temp_dir("stf-exact");
     let value = "z".repeat(PIPELINE_VAR_INLINE_LIMIT);
 
     let result = spill_to_file(&dir, "task1", "key", &value);
     assert!(result.is_none());
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
 fn spill_to_file_one_byte_over_returns_some() {
-    let dir = temp_dir("stf-over");
+    let (_dir_guard, dir) = temp_dir("stf-over");
     let value = "z".repeat(PIPELINE_VAR_INLINE_LIMIT + 1);
 
     let result = spill_to_file(&dir, "task1", "key", &value);
@@ -319,13 +318,11 @@ fn spill_to_file_one_byte_over_returns_some() {
     // Verify file on disk
     let on_disk = std::fs::read_to_string(&path_str).expect("read spilled file");
     assert_eq!(on_disk, value);
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
 fn spill_to_file_large_value_truncated_format() {
-    let dir = temp_dir("stf-fmt");
+    let (_dir_guard, dir) = temp_dir("stf-fmt");
     let value = "A".repeat(PIPELINE_VAR_INLINE_LIMIT + 500);
 
     let (truncated, path_str) =
@@ -338,13 +335,11 @@ fn spill_to_file_large_value_truncated_format() {
     // The truncated prefix should be exactly PIPELINE_VAR_INLINE_LIMIT bytes of 'A'
     let prefix = &truncated[..PIPELINE_VAR_INLINE_LIMIT];
     assert!(prefix.chars().all(|c| c == 'A'));
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
 fn spill_to_file_multibyte_at_boundary() {
-    let dir = temp_dir("stf-mb");
+    let (_dir_guard, dir) = temp_dir("stf-mb");
     // Create a value where a 3-byte UTF-8 char straddles the 4096 boundary.
     // 4095 ASCII bytes + "你好" (6 bytes) = 4101 total, exceeding the limit.
     // The char "你" starts at byte 4095 and ends at 4097, straddling the boundary.
@@ -369,13 +364,11 @@ fn spill_to_file_multibyte_at_boundary() {
     // Full content on disk should be intact
     let on_disk = std::fs::read_to_string(&_path_str).expect("read spilled multibyte file");
     assert_eq!(on_disk, value);
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
 fn spill_to_file_multibyte_fully_within_limit() {
-    let dir = temp_dir("stf-mb2");
+    let (_dir_guard, dir) = temp_dir("stf-mb2");
     // 4094 ASCII bytes + "你" (3 bytes) = 4097, just over the limit.
     // But the char boundary at 4094+3=4097 > 4096, so safe_end backs down to 4094.
     let mut value = "c".repeat(PIPELINE_VAR_INLINE_LIMIT - 2);
@@ -390,8 +383,6 @@ fn spill_to_file_multibyte_fully_within_limit() {
     // 4094 bytes of 'c', then "你" starts at 4094 and needs bytes 4094..4097
     // which exceeds the 4096 limit, so safe_end = 4094
     assert_eq!(prefix.len(), PIPELINE_VAR_INLINE_LIMIT - 2);
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 // ── Layer-2 dispatch guard tests ─────────────────────────────────

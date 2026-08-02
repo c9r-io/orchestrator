@@ -61,11 +61,18 @@ pub(super) mod test_fixtures {
     use agent_orchestrator::task_ops::create_task_impl;
     use agent_orchestrator::test_utils::TestState;
 
-    pub fn test_dir(name: &str) -> std::path::PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("query-test-{}-{}", name, uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&dir).expect("create query test dir");
-        dir
+    /// Returns a self-deleting temp directory for a query test.
+    ///
+    /// The returned guard owns the cleanup and must stay bound for the test's
+    /// duration; `.path()` gives the directory. Returning a bare `PathBuf`
+    /// leaked one directory per call per run (FR-159).
+    pub fn test_dir(name: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+        let guard = tempfile::Builder::new()
+            .prefix(&format!("query-test-{name}-"))
+            .tempdir()
+            .expect("create query test dir");
+        let path = guard.path().to_path_buf();
+        (guard, path)
     }
 
     /// Create a TestState, seed a QA file, create a task, return (state, task_id).

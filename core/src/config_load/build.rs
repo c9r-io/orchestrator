@@ -649,19 +649,26 @@ mod tests {
 
     #[test]
     fn enforce_deletion_guards_allows_no_removals() {
-        let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
+        let _guard_dir = tempfile::Builder::new()
+            .prefix("test-guard-")
+            .tempdir()
+            .expect("create test-guard temp dir");
+        let db_path = _guard_dir.path().join("guard.db");
         crate::db::init_schema(&db_path).expect("init schema");
         let conn = orchestrator_persistence::test_support::open_conn(&db_path).expect("open db");
         let config = OrchestratorConfig::default();
         let result = enforce_deletion_guards(&conn, &config, &config);
         assert!(result.is_ok());
-        std::fs::remove_file(&db_path).ok();
     }
 
     #[test]
     fn enforce_deletion_guards_allows_removing_unused_workspace() {
         use crate::config::WorkspaceConfig;
-        let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
+        let _guard_dir = tempfile::Builder::new()
+            .prefix("test-guard-")
+            .tempdir()
+            .expect("create test-guard temp dir");
+        let db_path = _guard_dir.path().join("guard.db");
         crate::db::init_schema(&db_path).expect("init schema");
         let conn = orchestrator_persistence::test_support::open_conn(&db_path).expect("open db");
         let mut previous_workspaces = HashMap::new();
@@ -689,12 +696,15 @@ mod tests {
             result.is_ok(),
             "removing unused workspace should be allowed"
         );
-        std::fs::remove_file(&db_path).ok();
     }
 
     #[test]
     fn enforce_deletion_guards_allows_removing_unused_workflow() {
-        let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
+        let _guard_dir = tempfile::Builder::new()
+            .prefix("test-guard-")
+            .tempdir()
+            .expect("create test-guard temp dir");
+        let db_path = _guard_dir.path().join("guard.db");
         crate::db::init_schema(&db_path).expect("init schema");
         let conn = orchestrator_persistence::test_support::open_conn(&db_path).expect("open db");
         let mut previous_workflows = HashMap::new();
@@ -708,7 +718,6 @@ mod tests {
         let candidate = OrchestratorConfig::default();
         let result = enforce_deletion_guards(&conn, &previous, &candidate);
         assert!(result.is_ok(), "removing unused workflow should be allowed");
-        std::fs::remove_file(&db_path).ok();
     }
 
     fn insert_task_reference(
@@ -729,7 +738,11 @@ mod tests {
 
     #[test]
     fn enforce_deletion_guards_blocks_same_project_non_terminal_workflow_tasks() {
-        let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
+        let _guard_dir = tempfile::Builder::new()
+            .prefix("test-guard-")
+            .tempdir()
+            .expect("create test-guard temp dir");
+        let db_path = _guard_dir.path().join("guard.db");
         crate::db::init_schema(&db_path).expect("init schema");
         let conn = orchestrator_persistence::test_support::open_conn(&db_path).expect("open db");
         insert_task_reference(
@@ -756,12 +769,15 @@ mod tests {
         assert!(message.contains("workflow/wf-to-remove"));
         assert!(message.contains("project default"));
         assert!(message.contains("task-running status=running"));
-        std::fs::remove_file(&db_path).ok();
     }
 
     #[test]
     fn enforce_deletion_guards_ignores_terminal_workflow_tasks() {
-        let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
+        let _guard_dir = tempfile::Builder::new()
+            .prefix("test-guard-")
+            .tempdir()
+            .expect("create test-guard temp dir");
+        let db_path = _guard_dir.path().join("guard.db");
         crate::db::init_schema(&db_path).expect("init schema");
         let conn = orchestrator_persistence::test_support::open_conn(&db_path).expect("open db");
         insert_task_reference(
@@ -787,12 +803,15 @@ mod tests {
             result.is_ok(),
             "terminal task should not block workflow deletion"
         );
-        std::fs::remove_file(&db_path).ok();
     }
 
     #[test]
     fn enforce_deletion_guards_ignores_other_project_tasks_with_same_workflow_id() {
-        let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
+        let _guard_dir = tempfile::Builder::new()
+            .prefix("test-guard-")
+            .tempdir()
+            .expect("create test-guard temp dir");
+        let db_path = _guard_dir.path().join("guard.db");
         crate::db::init_schema(&db_path).expect("init schema");
         let conn = orchestrator_persistence::test_support::open_conn(&db_path).expect("open db");
         insert_task_reference(
@@ -818,7 +837,6 @@ mod tests {
             result.is_ok(),
             "same workflow id in another project should not block"
         );
-        std::fs::remove_file(&db_path).ok();
     }
     /// The deletion guard's logic, exercised with no database at all.
     ///

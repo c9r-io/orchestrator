@@ -43,10 +43,19 @@ mod tests {
     };
     use rusqlite::params;
 
-    fn tmp_db_path() -> (std::path::PathBuf, std::path::PathBuf) {
-        let dir = std::env::temp_dir().join(format!("db-test-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&dir).expect("create tmp dir");
-        let db_path = dir.join("test.db");
+    /// Returns a self-deleting temp directory and a database path inside it.
+    ///
+    /// The first element owns the cleanup and must stay bound for as long as
+    /// `db_path` is used. It was a bare `PathBuf` until FR-159, which leaked
+    /// 10 directories per run (2859 accumulated). The FR's own inventory could
+    /// not see them: it enumerated directories holding `agent_orchestrator.db`,
+    /// and this one holds `test.db`.
+    fn tmp_db_path() -> (tempfile::TempDir, std::path::PathBuf) {
+        let dir = tempfile::Builder::new()
+            .prefix("db-test-")
+            .tempdir()
+            .expect("create tmp dir");
+        let db_path = dir.path().join("test.db");
         (dir, db_path)
     }
 

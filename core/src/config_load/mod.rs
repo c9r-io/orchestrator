@@ -181,11 +181,17 @@ pub(crate) mod tests {
         super::normalize_config(config)
     }
 
-    pub fn make_test_db() -> (std::path::PathBuf, std::path::PathBuf) {
-        let temp_dir =
-            std::env::temp_dir().join(format!("config-load-test-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&temp_dir).expect("create config-load temp dir");
-        let db_path = temp_dir.join("agent_orchestrator.db");
+    /// Creates an initialized test database inside a self-deleting temp directory.
+    ///
+    /// The first element carries the cleanup: it must stay bound for as long as
+    /// `db_path` is used. Returning a bare `PathBuf` here leaked one directory
+    /// per call site per run (FR-159) because nothing owned the deletion.
+    pub fn make_test_db() -> (tempfile::TempDir, std::path::PathBuf) {
+        let temp_dir = tempfile::Builder::new()
+            .prefix("config-load-test-")
+            .tempdir()
+            .expect("create config-load temp dir");
+        let db_path = temp_dir.path().join("agent_orchestrator.db");
         crate::db::init_schema(&db_path).expect("initialize test schema");
         (temp_dir, db_path)
     }

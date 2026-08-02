@@ -36,8 +36,21 @@ mod tests {
         (step, step_scope, cycle)
     }
 
-    /// Helper: build a TestState, seed a QA file, create a task, return (state, task_id, first task_item_id).
-    fn setup_task() -> (std::sync::Arc<crate::state::InnerState>, String, String) {
+    /// Helper: build a TestState, seed a QA file, create a task, return
+    /// (state, task_id, first task_item_id, fixture guard).
+    ///
+    /// The fourth element is the fixture itself and it carries the temp-dir
+    /// cleanup — callers must bind it for the duration of the test. This used
+    /// to be `std::mem::forget(fixture)` so the directory would outlive the
+    /// helper, which leaked one directory per test per run (FR-159: 38 of them,
+    /// 10843 accumulated). Returning the guard keeps the directory alive for
+    /// exactly as long as it is needed and no longer.
+    fn setup_task() -> (
+        std::sync::Arc<crate::state::InnerState>,
+        String,
+        String,
+        TestState,
+    ) {
         let mut fixture = TestState::new();
         let state = fixture.build();
 
@@ -70,17 +83,14 @@ mod tests {
             )
             .expect("fetch first task_item_id");
 
-        // Leak fixture so the temp dir survives for the test
-        std::mem::forget(fixture);
-
-        (state, task_id, item_id)
+        (state, task_id, item_id, fixture)
     }
 
     // ── insert_event ──
 
     #[tokio::test]
     async fn insert_event_stores_row() {
-        let (state, task_id, _item_id) = setup_task();
+        let (state, task_id, _item_id, _fixture) = setup_task();
 
         state
             .db_writer
@@ -103,7 +113,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_event_with_task_item_id() {
-        let (state, task_id, item_id) = setup_task();
+        let (state, task_id, item_id, _fixture) = setup_task();
 
         state
             .db_writer
@@ -127,7 +137,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_task_status_completed_sets_completed_at() {
-        let (state, task_id, _) = setup_task();
+        let (state, task_id, _, _fixture) = setup_task();
 
         state
             .db_writer
@@ -150,7 +160,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_task_status_running_clears_completed_at() {
-        let (state, task_id, _) = setup_task();
+        let (state, task_id, _, _fixture) = setup_task();
 
         state
             .db_writer
@@ -182,7 +192,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_task_status_pending_clears_completed_at() {
-        let (state, task_id, _) = setup_task();
+        let (state, task_id, _, _fixture) = setup_task();
 
         state
             .db_writer
@@ -213,7 +223,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_task_status_other_preserves_completed_at() {
-        let (state, task_id, _) = setup_task();
+        let (state, task_id, _, _fixture) = setup_task();
 
         state
             .db_writer
@@ -247,7 +257,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_task_cycle_state_sets_fields() {
-        let (state, task_id, _) = setup_task();
+        let (state, task_id, _, _fixture) = setup_task();
 
         state
             .db_writer
@@ -270,7 +280,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_task_cycle_state_init_done_false() {
-        let (state, task_id, _) = setup_task();
+        let (state, task_id, _, _fixture) = setup_task();
 
         state
             .db_writer
@@ -294,7 +304,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_task_item_status_changes_status() {
-        let (state, _task_id, item_id) = setup_task();
+        let (state, _task_id, item_id, _fixture) = setup_task();
 
         state
             .db_writer
@@ -316,7 +326,7 @@ mod tests {
 
     #[tokio::test]
     async fn mark_task_item_running_sets_started_at() {
-        let (state, _task_id, item_id) = setup_task();
+        let (state, _task_id, item_id, _fixture) = setup_task();
 
         state
             .db_writer
@@ -340,7 +350,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_task_item_terminal_status_sets_completed_at() {
-        let (state, _task_id, item_id) = setup_task();
+        let (state, _task_id, item_id, _fixture) = setup_task();
 
         state
             .db_writer
@@ -366,7 +376,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_task_item_tickets_sets_json() {
-        let (state, _task_id, item_id) = setup_task();
+        let (state, _task_id, item_id, _fixture) = setup_task();
 
         let files_json = r#"["ticket1.md","ticket2.md"]"#;
         let content_json = r#"[{"title":"bug"}]"#;
@@ -422,7 +432,7 @@ mod tests {
 
     #[tokio::test]
     async fn persist_phase_result_without_event() {
-        let (state, _task_id, item_id) = setup_task();
+        let (state, _task_id, item_id, _fixture) = setup_task();
         let run = make_command_run(&item_id);
         let run_id = run.id.clone();
 
@@ -446,7 +456,7 @@ mod tests {
 
     #[tokio::test]
     async fn persist_phase_result_with_single_event() {
-        let (state, task_id, item_id) = setup_task();
+        let (state, task_id, item_id, _fixture) = setup_task();
         let run = make_command_run(&item_id);
         let run_id = run.id.clone();
 
@@ -488,7 +498,7 @@ mod tests {
 
     #[tokio::test]
     async fn persist_phase_result_with_multiple_events() {
-        let (state, task_id, item_id) = setup_task();
+        let (state, task_id, item_id, _fixture) = setup_task();
         let run = make_command_run(&item_id);
         let run_id = run.id.clone();
 
@@ -536,7 +546,7 @@ mod tests {
 
     #[tokio::test]
     async fn persist_phase_result_with_empty_events() {
-        let (state, _task_id, item_id) = setup_task();
+        let (state, _task_id, item_id, _fixture) = setup_task();
         let run = make_command_run(&item_id);
         let run_id = run.id.clone();
 
@@ -561,7 +571,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_command_run_stores_fields() {
-        let (state, _task_id, item_id) = setup_task();
+        let (state, _task_id, item_id, _fixture) = setup_task();
         let run = make_command_run(&item_id);
         let run_id = run.id.clone();
 
@@ -638,7 +648,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_event_stores_promoted_fields() {
-        let (state, task_id, _item_id) = setup_task();
+        let (state, task_id, _item_id, _fixture) = setup_task();
 
         state
             .db_writer
@@ -669,7 +679,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_command_run_updates_fields() {
-        let (state, _task_id, item_id) = setup_task();
+        let (state, _task_id, item_id, _fixture) = setup_task();
         let mut run = make_command_run(&item_id);
         let run_id = run.id.clone();
 
@@ -719,7 +729,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_command_run_with_events_updates_and_inserts() {
-        let (state, task_id, item_id) = setup_task();
+        let (state, task_id, item_id, _fixture) = setup_task();
         let mut run = make_command_run(&item_id);
         let run_id = run.id.clone();
 
@@ -773,7 +783,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_command_run_with_events_empty_events() {
-        let (state, _task_id, item_id) = setup_task();
+        let (state, _task_id, item_id, _fixture) = setup_task();
         let mut run = make_command_run(&item_id);
         let run_id = run.id.clone();
 
@@ -805,7 +815,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_command_run_pid_sets_pid() {
-        let (state, _task_id, item_id) = setup_task();
+        let (state, _task_id, item_id, _fixture) = setup_task();
         let run = make_command_run(&item_id);
         let run_id = run.id.clone();
 
@@ -836,7 +846,7 @@ mod tests {
 
     #[tokio::test]
     async fn find_active_child_pids_empty() {
-        let (state, task_id, _item_id) = setup_task();
+        let (state, task_id, _item_id, _fixture) = setup_task();
 
         let pids = state
             .db_writer
@@ -848,7 +858,7 @@ mod tests {
 
     #[tokio::test]
     async fn find_active_child_pids_returns_active_pids() {
-        let (state, task_id, item_id) = setup_task();
+        let (state, task_id, item_id, _fixture) = setup_task();
         let run = make_command_run(&item_id);
         let run_id = run.id.clone();
 
@@ -877,7 +887,7 @@ mod tests {
 
     #[tokio::test]
     async fn find_active_child_pids_ignores_completed_runs() {
-        let (state, task_id, item_id) = setup_task();
+        let (state, task_id, item_id, _fixture) = setup_task();
         let run = make_command_run(&item_id);
         let run_id = run.id.clone();
 
@@ -908,7 +918,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_task_pipeline_vars_stores_json() {
-        let (state, task_id, _item_id) = setup_task();
+        let (state, task_id, _item_id, _fixture) = setup_task();
 
         state
             .db_writer
@@ -931,7 +941,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_task_status_paused_clears_completed_at() {
-        let (state, task_id, _item_id) = setup_task();
+        let (state, task_id, _item_id, _fixture) = setup_task();
 
         // First set to completed
         state
@@ -961,7 +971,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_task_status_interrupted_clears_completed_at() {
-        let (state, task_id, _item_id) = setup_task();
+        let (state, task_id, _item_id, _fixture) = setup_task();
 
         state
             .db_writer
@@ -991,7 +1001,7 @@ mod tests {
 
     #[tokio::test]
     async fn mark_task_item_running_preserves_started_at_on_second_call() {
-        let (state, _task_id, item_id) = setup_task();
+        let (state, _task_id, item_id, _fixture) = setup_task();
 
         state
             .db_writer
@@ -1035,7 +1045,7 @@ mod tests {
 
     #[tokio::test]
     async fn find_inflight_command_runs_empty() {
-        let (state, task_id, _item_id) = setup_task();
+        let (state, task_id, _item_id, _fixture) = setup_task();
         let runs = state
             .db_writer
             .find_inflight_command_runs_for_task(&task_id)
@@ -1046,7 +1056,7 @@ mod tests {
 
     #[tokio::test]
     async fn find_inflight_command_runs_returns_active() {
-        let (state, task_id, item_id) = setup_task();
+        let (state, task_id, item_id, _fixture) = setup_task();
         let mut run = make_command_run(&item_id);
         run.exit_code = -1;
         run.ended_at = String::new();
@@ -1078,7 +1088,7 @@ mod tests {
 
     #[tokio::test]
     async fn find_inflight_ignores_completed_runs() {
-        let (state, task_id, item_id) = setup_task();
+        let (state, task_id, item_id, _fixture) = setup_task();
         let run = make_command_run(&item_id); // exit_code=0, ended_at set
 
         state
@@ -1099,7 +1109,7 @@ mod tests {
 
     #[tokio::test]
     async fn find_completed_runs_for_pending_items_empty_when_no_pending() {
-        let (state, task_id, _item_id) = setup_task();
+        let (state, task_id, _item_id, _fixture) = setup_task();
         let runs = state
             .db_writer
             .find_completed_runs_for_pending_items(&task_id)
@@ -1110,7 +1120,7 @@ mod tests {
 
     #[tokio::test]
     async fn find_completed_runs_for_pending_items_returns_matching() {
-        let (state, task_id, item_id) = setup_task();
+        let (state, task_id, item_id, _fixture) = setup_task();
         // Item starts as 'pending' by default
         let mut run = make_command_run(&item_id);
         run.phase = "qa_testing".to_string();
@@ -1137,7 +1147,7 @@ mod tests {
 
     #[tokio::test]
     async fn find_completed_runs_excludes_non_pending_items() {
-        let (state, task_id, item_id) = setup_task();
+        let (state, task_id, item_id, _fixture) = setup_task();
         // Set item to qa_passed (non-pending)
         state
             .db_writer
@@ -1164,7 +1174,7 @@ mod tests {
 
     #[tokio::test]
     async fn count_stale_pending_items_zero_with_no_runs() {
-        let (state, task_id, _item_id) = setup_task();
+        let (state, task_id, _item_id, _fixture) = setup_task();
         let count = state
             .db_writer
             .count_stale_pending_items(&task_id)
@@ -1175,7 +1185,7 @@ mod tests {
 
     #[tokio::test]
     async fn count_stale_pending_items_counts_stale() {
-        let (state, task_id, item_id) = setup_task();
+        let (state, task_id, item_id, _fixture) = setup_task();
         // Item is pending; insert a completed run
         let run = make_command_run(&item_id);
         state
@@ -1194,7 +1204,7 @@ mod tests {
 
     #[tokio::test]
     async fn count_stale_pending_items_ignores_inflight() {
-        let (state, task_id, item_id) = setup_task();
+        let (state, task_id, item_id, _fixture) = setup_task();
         // Item is pending; insert an in-flight run (exit_code=-1, no ended_at)
         let mut run = make_command_run(&item_id);
         run.exit_code = -1;
