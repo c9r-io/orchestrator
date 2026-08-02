@@ -1,50 +1,45 @@
 ---
 name: deploy-gh-k8s
-description: End-to-end deployment workflow for this repo that gates on the latest GitHub Actions run, deploys with deploy/upgrade.sh to Kubernetes, monitors kubectl resources, troubleshoots failures (logs, code, IaC), and performs health checks. Use when the user asks to deploy/release/go-live, says "进行部署", "发布", "上线", or requests a Kubernetes deployment/check.
+description: Gate and execute a Kubernetes deployment only when the target repository actually carries the project-bootstrap deployment contract. Use for deploy, release, go-live, or Kubernetes rollout requests.
 ---
 
 # Deploy GH K8s
 
-## Overview
+Deploy only after proving that the target repository owns a Kubernetes deployment contract.
 
-Execute a safe, gated deployment: verify the latest GitHub Actions workflow run is successful, then deploy to Kubernetes with `deploy/upgrade.sh`, monitor cluster resources, troubleshoot failures, and finish with health checks.
+## Applicability Gate
 
-This skill assumes the project follows the `project-bootstrap` conventions:
-- `deploy/deploy.sh` applies base manifests.
-- `deploy/upgrade.sh` restarts deployments and waits for rollout.
-- `k8s/base/` contains the baseline resources.
+From the target repository root, require all of these before using Kubernetes:
+
+```bash
+test -x deploy/upgrade.sh
+test -d k8s/base
+kubectl config current-context
+```
+
+`deploy/upgrade.sh` and `k8s/base/` are outputs of the `project-bootstrap` template; they are not present in the Agent Orchestrator repository. When either path is absent, report the Kubernetes portion as not applicable. Do not invent manifests, copy hidden template assets into the repository, or treat a successful Rust build as a deployment.
 
 ## Workflow
 
-1. Identify the latest GitHub Actions workflow run.
-- Use `gh run list -L 1` in the repo.
-- If a specific branch/PR is mentioned, filter to that branch or PR.
+1. Resolve the branch and inspect the latest relevant GitHub Actions run with `gh run list` and `gh run view`.
+2. Stop before deployment when required CI is not successful. Diagnose and fix only when the user also authorized implementation.
+3. Confirm the current Kubernetes context, namespace, and intended release revision with the user-visible evidence.
+4. Run the repository-owned upgrade script:
 
-2. If the latest run failed, inspect and fix.
-- Use `gh run view <run_id> --json ...` and `gh run view <run_id> --log`.
-- Summarize the failure, implement fixes (code or IaC), and report back.
-- Ask the user to review and re-submit (do not deploy yet).
+   ```bash
+   ./deploy/upgrade.sh
+   ```
 
-3. If the latest run succeeded, deploy to Kubernetes.
-- Run `deploy/upgrade.sh` from repo root.
-- Monitor resources during rollout:
-  - `kubectl get pods -A`
-  - `kubectl get deploy -A`
-  - `kubectl get sts -A`
-  - `kubectl get events -A --sort-by=.lastTimestamp`
+5. Monitor rollout state with `kubectl get`, `kubectl rollout status`, events, and bounded log tails.
+6. Run the repository-owned readiness or health checks and report the exact deployed revision.
 
-4. If deployment errors appear, troubleshoot.
-- Identify failing resources and pull logs:
-  - `kubectl describe <resource> <name> -n <ns>`
-  - `kubectl logs <pod> -n <ns> --tail=200`
-- Fix issues in code or IaC as needed, then report back.
-- Ask the user to review and re-submit (do not claim success).
+## Agent Orchestrator Repository
 
-5. If deployment succeeds, run health checks.
-- Use repo-appropriate health checks (service endpoints, readiness probes, or scripted checks if present).
-- Report completion and any follow-up observations.
+This repository ships local binaries and an optional Slack gateway but no `deploy/` or `k8s/` tree. For a release-readiness request here, use `project-readiness`; for daemon operations, use `ops`. Deployment requires a separately supplied target or deployment contract.
 
-## Notes
+## Guardrails
 
-- Prefer actionable, minimal output in user updates: status, key failure snippet, and next required action.
-- Do not attempt external CI providers; only report their URLs if encountered.
+- Never switch Kubernetes context or namespace implicitly.
+- Never deploy after failed or pending required CI.
+- Prefer bounded logs and exact resource names.
+- A failed rollout is a failure, even if some pods are healthy.

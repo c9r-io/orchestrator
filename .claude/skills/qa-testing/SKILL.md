@@ -13,15 +13,14 @@ Execute scenario-based QA testing driven by `docs/qa/**/*.md` documents.
 
 1. **Rebuild CLI** (REQUIRED - ensures latest code):
    ```bash
-   cd core && cargo build --release
+   cargo build --release -p orchestrator-cli -p orchestratord
    ```
 
 2. **Initialize orchestrator if needed** — only when the database does not exist yet:
    ```bash
-   # DANGER: NEVER run `rm -f data/agent_orchestrator.db` during an active workflow run.
-   # Doing so destroys all in-flight task state.
-   # Only initialize when no database exists at all.
-   test -f data/agent_orchestrator.db || orchestrator init
+   # `orchestrator init` is only for a genuinely absent runtime database.
+   # The default runtime root is ~/.orchestratord; ORCHESTRATORD_DATA_DIR overrides it.
+   orchestrator daemon status
    ```
 
 3. **For QA scenario isolation** — use project-scoped reset instead of destroying shared state:
@@ -78,7 +77,7 @@ Notes:
 
 1. Discover QA docs:
    - `rg --files docs/qa | rg '\.md$'`
-2. Exclude index/meta docs (`docs/qa/README.md`, `docs/qa/_*.md`, manifest-like files).
+2. Exclude `docs/qa/README.md`, manifest-like files, and meta docs whose basename begins with an underscore.
 3. If user request is vague, present concise options and ask which doc/module to execute.
 4. Only start execution after the target doc(s) are explicit.
 
@@ -101,11 +100,10 @@ Examples:
 
 ## Logs / Troubleshooting
 
-For orchestrator CLI, check logs in `data/logs/` directory:
+For Orchestrator, prefer the daemon and task log APIs over filesystem assumptions:
 
 ```bash
-ls -la data/logs/
-# or check specific task logs
+orchestrator debug --component daemon
 orchestrator task logs <task-id>
 ```
 
@@ -242,10 +240,10 @@ orchestrator delete project/<project> --force
 orchestrator apply -f fixtures/manifests/bundles/<relevant>.yaml --project <project>
 
 # DO NOT delete docs/ticket/*.md — preserve prior batch tickets
-# DO NOT run `rm -f data/agent_orchestrator.db` — this destroys all state including bootstrap
+# DO NOT delete the runtime database — this destroys all state including bootstrap
 ```
 
-**CRITICAL**: Never use `rm -f data/agent_orchestrator.db` for QA environment resets. Use `delete project/<project> --force` + `apply --project` to isolate each QA batch into its own project scope without affecting other projects.
+**CRITICAL**: Never delete the runtime database for QA environment resets. Use `delete project/<project> --force` + `apply --project` to isolate each QA batch into its own project scope without affecting other projects.
 
 ### 4. `init` vs `delete project/` vs `apply --project`
 
@@ -290,7 +288,7 @@ For **full runtime re-initialization** (only when DB is missing or schema needs 
 orchestrator init
 ```
 
-**CRITICAL**: Do NOT use `rm -f data/agent_orchestrator.db` during routine QA. This destroys all in-flight task state, bootstrap config, and event history.
+**CRITICAL**: Do NOT delete the runtime database during routine QA. This destroys all in-flight task state, bootstrap config, and event history.
 
 ## Troubleshooting Configuration Issues
 
@@ -310,7 +308,7 @@ orchestrator init
 orchestrator init /path/to/project
 ```
 
-**CRITICAL**: Do NOT use `rm -f data/agent_orchestrator.db` for QA resets. This destroys all state including bootstrap config, in-flight tasks, and event history. Use `delete project/<project> --force` for per-project isolation.
+**CRITICAL**: Do NOT delete the runtime database for QA resets. This destroys all state including bootstrap config, in-flight tasks, and event history. Use `delete project/<project> --force` for per-project isolation.
 
 After `init`, the runtime is still effectively empty until you `apply -f <fixture>`.
 
@@ -347,8 +345,8 @@ After `init`, the runtime is still effectively empty until you `apply -f <fixtur
 4. **Project-specific entry points**:
    - Not all projects use Docker — check `orchestrator` CLI for available commands
    - Look for `scripts/*.sh` files in the project root
-   - Check `package.json` scripts for test commands
+   - Check `gui/package.json` scripts for frontend test commands
 
 ## Optional Reference Cookbook
 
-If the repository includes `qa-testing/references/api-testing-cookbook.md`, use it as the first reference for repeatable API/gRPC/webhook recipes and known pitfalls.
+If needed, use `.claude/skills/qa-testing/references/api-testing-cookbook.md` as the first reference for repeatable API/gRPC/webhook recipes and known pitfalls.

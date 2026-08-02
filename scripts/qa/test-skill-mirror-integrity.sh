@@ -4,8 +4,8 @@
 #
 # `.claude/skills` is the authoritative skill source. Other runtimes see the same
 # skills through symlink mirrors declared in config/governance/skill-mirrors.json.
-# This script proves the mirrors are complete, correctly shaped, and — the part no
-# structural check can substitute for — actually readable.
+# This script proves the mirrors are complete, correctly shaped, actually readable,
+# documented in the generated registry, and free of unscoped filesystem claims.
 #
 # The defect that motivated it: `.agents/skills/fr-governance/SKILL.md` was a symlink
 # to a *directory*. Every entry existed, every symlink resolved, and the FR governance
@@ -21,8 +21,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 POLICY_REL="config/governance/skill-mirrors.json"
+PATH_SCOPE_REL="config/governance/skill-path-scopes.json"
+SKILL_HELPER_REL="scripts/lib/skill_docs.rb"
 
-for required in jq git; do
+for required in jq git ruby; do
   command -v "$required" >/dev/null 2>&1 || {
     echo "missing required command: $required" >&2
     exit 1
@@ -82,7 +84,7 @@ mirror_entries() {
   (cd "$root/$mirror" && find . -mindepth 1 -maxdepth 1 | sed 's|^\./||' | LC_ALL=C sort)
 }
 
-# ── The five checks ────────────────────────────────────────────────────────────
+# ── Integrity checks ───────────────────────────────────────────────────────────
 
 # Check 1: every source entry is either a skill (declares SKILL.md) or is declared
 # notSkills. A helper directory that quietly appears next to real skills, or a skill
@@ -306,9 +308,40 @@ check_mirror_roots_discovered() {
   return $rc
 }
 
+# Checks 8 and 9 depend on readable authoritative source files. When a negative
+# fixture deliberately turns SKILL.md into a directory, the dedicated readability
+# check owns that defect and these derived checks defer so fixture isolation stays
+# meaningful.
+source_skill_docs_readable() {
+  local root="$1" src skill
+  src="$(policy_source "$root")"
+  while IFS= read -r skill; do
+    [[ -z "$skill" ]] && continue
+    [[ -f "$root/$src/$skill/SKILL.md" ]] || return 1
+  done <<< "$(source_skills "$root")"
+}
+
+# Check 8: paths taught by SKILL.md must resolve in the repository or skill,
+# or have one exact, live template/output/companion declaration. The Ruby helper
+# parses inline code and shell fences and checks declarations in both directions.
+check_skill_path_scopes() {
+  local root="$1"
+  source_skill_docs_readable "$root" || return 0
+  ruby "$root/$SKILL_HELPER_REL" check-paths "$root"
+}
+
+# Check 9: SKILLS.md is generated from the authoritative frontmatter set, so a
+# new, renamed, or removed skill changes the required registry automatically.
+check_skills_registry() {
+  local root="$1"
+  source_skill_docs_readable "$root" || return 0
+  ruby "$root/$SKILL_HELPER_REL" check-registry "$root"
+}
+
 ALL_CHECKS=(check_source_inventory check_mirror_coverage check_mirror_shape
             check_skill_md_readable check_no_stale_claims check_no_content_copies
-            check_mirror_roots_discovered)
+            check_mirror_roots_discovered check_skill_path_scopes
+            check_skills_registry)
 
 run_all_checks() {
   local root="$1" check rc=0
@@ -333,16 +366,12 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
   cleanup_fixtures() { chmod -R u+w "$FIXTURE_ROOT" 2>/dev/null || true; rm -rf "$FIXTURE_ROOT"; }
   trap cleanup_fixtures EXIT
 
-  # Only the governed inputs are copied, so no fixture can reach the working tree.
-  # tar, not cp -R: the mirrors are symlinks and must arrive as symlinks, or every
-  # fixture below would be testing a tree that does not resemble the repository.
+  # Copy tracked inputs from the index so path targets and the generated registry
+  # are present, while ignored build output never enters the fixture. tar preserves
+  # mirror symlinks; fixtures cannot reach the working tree.
   BASE="$FIXTURE_ROOT/base"
   mkdir -p "$BASE"
-  (cd "$REPO_ROOT" && tar cf - \
-    "$POLICY_REL" \
-    .claude/skills \
-    .agents/skills \
-    .cursor/skills) | (cd "$BASE" && tar xf -)
+  (cd "$REPO_ROOT" && git ls-files | tar cf - -T -) | (cd "$BASE" && tar xf -)
 
   # check_no_content_copies asks git which SKILL.md files are tracked, so the fixture
   # tree has to be a repository. Throwaway, under $TMPDIR, never pushed or committed —
@@ -386,7 +415,7 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
 
   # Positive control: the copy must be clean before any defect means anything.
   if run_all_checks "$BASE" > "$FIXTURE_ROOT/base.log" 2>&1; then
-    pass "positive control: unmodified repository passes all five checks"
+    pass "positive control: unmodified repository passes all registered checks"
   else
     fail "positive control: unmodified repository does not pass"
     cat "$FIXTURE_ROOT/base.log" >&2
@@ -404,9 +433,9 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
   # 1. A new skill that nobody mirrored and nobody exempted.
   d="$(new_case f1)"
   mkdir -p "$d/.claude/skills/tmp-unmirrored"
-  printf -- '---\nname: tmp-unmirrored\n---\nbody\n' > "$d/.claude/skills/tmp-unmirrored/SKILL.md"
-  expect_fail "fixture 1" "$d" "check_mirror_coverage" \
-    "a new skill mirrored nowhere and exempted nowhere fails coverage"
+  printf -- '---\nname: tmp-unmirrored\ndescription: Synthetic coverage fixture.\n---\nbody\n' > "$d/.claude/skills/tmp-unmirrored/SKILL.md"
+  expect_fail "fixture 1" "$d" "check_mirror_coverage check_skills_registry" \
+    "a new skill mirrored nowhere and absent from the generated registry fails both derived inventories"
 
   # 2. A mirror that became a real directory holding a real copy — the drift the
   #    single-source rule exists to prevent. Readable, and still wrong.
@@ -507,6 +536,33 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
   else
     fail "fixture 9b: the root was declared but discovery still rejected it"
   fi
+
+  # 10. A path-like inline code span that resolves nowhere must not survive.
+  d="$(new_case f10)"
+  printf '\nSynthetic missing input: `docs/no-such-skill-input.md`.\n' >> "$d/.claude/skills/ops/SKILL.md"
+  expect_fail "fixture 10" "$d" "check_skill_path_scopes" \
+    "a parsed repository path with no target and no exact scope declaration is rejected"
+
+  # 11. Declarations are checked in reverse so an exception cannot outlive the
+  # reference that justified it.
+  d="$(new_case f11)"
+  jq '.declarations += [{"skill":"ops","path":"docs/never-referenced.md","scope":"repo","target":"docs","reason":"synthetic stale declaration with an existing target"}]' \
+    "$BASE/$PATH_SCOPE_REL" > "$d/$PATH_SCOPE_REL"
+  expect_fail "fixture 11" "$d" "check_skill_path_scopes" \
+    "an exact declaration with no parsed reference is stale"
+
+  # 12. A subtree wildcard is not an exact decision, even if its target exists.
+  d="$(new_case f12)"
+  jq '.declarations += [{"skill":"ops","path":"docs/*","scope":"output","target":"docs","reason":"synthetic blanket declaration that must be rejected"}]' \
+    "$BASE/$PATH_SCOPE_REL" > "$d/$PATH_SCOPE_REL"
+  expect_fail "fixture 12" "$d" "check_skill_path_scopes" \
+    "a wildcard declaration cannot authorize a subtree"
+
+  # 13. Manual registry prose cannot drift from authoritative frontmatter.
+  d="$(new_case f13)"
+  printf '\nmanual drift\n' >> "$d/SKILLS.md"
+  expect_fail "fixture 13" "$d" "check_skills_registry" \
+    "a manual SKILLS.md edit fails exact generated comparison"
 
   # FR-134's lesson applied to this script itself: a check that is deleted from
   # ALL_CHECKS stops running in verification mode, and nothing above would notice —

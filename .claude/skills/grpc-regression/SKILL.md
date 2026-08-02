@@ -1,55 +1,33 @@
 ---
 name: grpc-regression
-description: Run grpcurl checks from inside the Docker Compose network (useful when host-to-container ports are blocked).
+description: Run gRPC regression checks through the target repository's real transport; use the Orchestrator CLI for its UDS daemon and Docker-network grpcurl helpers only when Compose is actually present.
 ---
 
-# gRPC Regression Skill (grpcurl inside Docker network)
+# gRPC Regression
 
-When host -> container gRPC access is blocked or flaky, run `grpcurl` from an ephemeral Docker container on the same Docker Compose network.
+Choose the transport from the repository, not from the skill name.
 
-## Quick Start
+## Agent Orchestrator Repository
 
-```bash
-# Smoke checks (customize via env vars)
-.claude/skills/tools/grpc-smoke.sh
-```
-
-## One-off grpcurl (via Docker network)
+The daemon uses `~/.orchestratord/orchestrator.sock` by default, overridable by `ORCHESTRATORD_DATA_DIR` or `ORCHESTRATOR_SOCKET`. Exercise RPC behavior through the `orchestrator` CLI unless the daemon was explicitly bound to TCP. Start with:
 
 ```bash
-# Example: list services (works only if server reflection is enabled)
-.claude/skills/tools/grpcurl-docker.sh -plaintext my-grpc:50051 list
-
-# Example: call a method using a mounted proto
-.claude/skills/tools/grpcurl-docker.sh \
-  -import-path /proto -proto my.proto \
-  -d '{"hello":"world"}' \
-  my-grpc:50051 my.pkg.Service/MyMethod
+orchestrator daemon status
+orchestrator debug --component daemon
+orchestrator check
 ```
 
-## Hardened gRPC Recipe (mTLS + API key + no reflection)
+Use `crates/proto/orchestrator.proto` as the canonical service definition. For a specific RPC, prefer the matching CLI command and assert both success and its expected error category.
 
-Use this pattern when reflection is disabled and service auth is enabled:
+## Docker Network Branch
 
-```bash
-.claude/skills/tools/grpcurl-docker.sh \
-  -cacert /certs/ca.crt -cert /certs/client.crt -key /certs/client.key \
-  -H "x-api-key: ${GRPC_API_KEY:-dev-grpc-api-key}" \
-  -import-path /proto -proto my.proto \
-  -d '{"identity_token":"dummy","tenant_id":"dummy","service_id":"dummy"}' \
-  my-grpc:50051 my.pkg.Service/MyMethod
-```
+The shared helpers `.claude/skills/tools/grpc-smoke.sh` and `.claude/skills/tools/grpcurl-docker.sh` are for a target that actually has a Compose network. Confirm its compose file and network before use; `docker/docker-compose.yml` is a generated-project convention, not a file in this repository.
 
-Recommended negative/positive regression checks:
+Recommended checks when that branch applies:
 
-1. Missing API key should fail with auth error.
-2. API key present should pass gateway auth (business validation may still fail).
-3. Wrong client cert should fail TLS handshake.
+1. Missing credentials fail with the expected authentication status.
+2. Valid credentials cross the transport boundary.
+3. Wrong client certificates fail the TLS handshake.
+4. Reflection-disabled services are called with the target's mounted canonical proto.
 
-## Environment Variables
-
-- `GRPC_NETWORK`: Docker network name. If unset, auto-detect from running Compose containers (fallback: require explicit `GRPC_NETWORK`).
-- `GRPC_COMPOSE_FILE`: Compose file path used for auto-detect (defaults to `docker/docker-compose.yml` if present).
-- `GRPC_IMAGE`: grpcurl image (default: `fullstorydev/grpcurl`)
-- `GRPC_MOUNT_PROTO`: Host path to mount to `/proto:ro` (optional). Relative paths are resolved from repo root.
-- `GRPC_API_KEY`: Optional API key value for secured endpoints.
+Never start containers or pull a grpcurl image merely to test the local UDS daemon.

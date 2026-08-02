@@ -40,7 +40,7 @@ If the build fails, report the error to the user and stop — do NOT proceed wit
 
 #### 2.2 Restart the daemon
 
-**IMPORTANT**: Check `.claude/CLAUDE.md` for a daemon-pid-guard section first. If
+**IMPORTANT**: Check `CLAUDE.md` for daemon lifecycle constraints first. If
 `orchestratord` is managing this session (i.e., this skill was triggered BY the
 orchestrator), you MUST NOT kill the daemon. In that case, skip the restart and reuse the
 running daemon.
@@ -48,8 +48,9 @@ running daemon.
 If it is safe to restart:
 
 ```bash
-# Stop old daemon if running
-kill $(cat data/daemon.pid 2>/dev/null) 2>/dev/null; sleep 2
+# Inspect and gracefully stop the old daemon
+orchestrator daemon status
+orchestrator daemon stop
 
 # Start fresh daemon
 nohup ./target/release/orchestratord --foreground --workers 2 > /tmp/orchestratord.log 2>&1 &
@@ -63,12 +64,12 @@ If the daemon fails to start, check `/tmp/orchestratord.log` and report the erro
 
 #### 2.3 Set up CLI environment
 
-The CLI uses Unix Domain Socket (UDS) to connect to the daemon. If the CLI fails to
-connect (e.g., "failed to connect to https://..."), set the `ORCHESTRATOR_SOCKET` env var
-to force UDS transport:
+The CLI auto-discovers the default Unix Domain Socket under `~/.orchestratord/`.
+If the daemon uses an explicit data directory, set `ORCHESTRATOR_SOCKET` to that
+directory's socket:
 
 ```bash
-export ORCHESTRATOR_SOCKET=data/orchestrator.sock
+export ORCHESTRATOR_SOCKET="${ORCHESTRATORD_DATA_DIR}/orchestrator.sock"
 ```
 
 Prefix all subsequent `orchestrator` commands with this env var, or export it once.

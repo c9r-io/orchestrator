@@ -1,57 +1,54 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Find project root: try git root first, fallback to relative path
 if git rev-parse --show-toplevel >/dev/null 2>&1; then
-  ROOT="$(git rev-parse --show-toplevel)"
+  READINESS_ROOT="$(git rev-parse --show-toplevel)"
 else
-  ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+  READINESS_ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 fi
-cd "$ROOT"
+cd "$READINESS_ROOT"
 
-COMPOSE_FILE="${COMPOSE_FILE:-docker/docker-compose.yml}"
-LOG_TAIL="${LOG_TAIL:-200}"
-
-say() { printf "%s\n" "$*"; }
-die() { printf "ERROR: %s\n" "$*" >&2; exit 1; }
-
-compose() {
-  local compose_dir="$(dirname "$COMPOSE_FILE")"
-  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-    docker compose -f "$COMPOSE_FILE" --project-directory "$compose_dir" "$@"
-  else
-    docker-compose -f "$COMPOSE_FILE" "$@"
-  fi
+say() { printf '%s\n' "$*"; }
+run() {
+  say "==> $*"
+  "$@"
 }
 
-say "== repo =="
-git status --porcelain || true
+say "== revision =="
+git rev-parse HEAD
+git status --short
 
-if [ ! -f "$COMPOSE_FILE" ]; then
-  die "compose file not found: $COMPOSE_FILE"
+if [[ -f Cargo.toml && -d crates && -f gui/package.json ]]; then
+  say "== Agent Orchestrator repository =="
+  run cargo fmt --all -- --check
+  run cargo test --workspace
+  run cargo clippy --workspace --all-targets -- -D warnings
+
+  say "== GUI =="
+  (
+    cd gui
+    run npm test
+    run npm run build
+  )
+
+  say "== governance =="
+  run scripts/qa-doc-lint.sh
+  say "OK: Agent Orchestrator local readiness checks completed"
+  exit 0
 fi
 
-if [ "${RESET_FIRST:-}" = "true" ] && [ -x "./scripts/reset-docker.sh" ]; then
-  say "== reset =="
-  ./scripts/reset-docker.sh
+say "== generic repository discovery =="
+found=0
+for build_file in Cargo.toml package.json Makefile; do
+  if [[ -e "$build_file" ]]; then
+    say "found: $build_file"
+    found=$((found + 1))
+  fi
+done
+if [[ "$found" -eq 0 ]]; then
+  say "ERROR: no supported build entrypoint discovered" >&2
+  exit 1
 fi
 
-say "== compose up =="
-compose up -d --build
-
-say "== compose ps =="
-compose ps
-
-say "== compose logs (tail) =="
-compose logs --tail "$LOG_TAIL" || true
-
-# Basic heuristic: surface obvious errors in recent logs (non-fatal, but useful signal).
-say "== log scan (ERROR|FATAL|panic) =="
-if compose logs --tail "$LOG_TAIL" 2>/dev/null | rg -n "(ERROR|FATAL|panic)" -S; then
-  say "WARN: matched error keywords in logs (review above)."
-else
-  say "OK: no obvious error keywords in last $LOG_TAIL log lines."
-fi
-
-say "OK: local compose checks completed."
-
+say "No repository-specific readiness recipe is declared; run commands from the discovered build files."
+say "Docker and Kubernetes checks are not applicable unless their assets exist in this target."

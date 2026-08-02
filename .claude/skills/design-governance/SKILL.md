@@ -64,7 +64,7 @@ Present the plan to the user for approval before proceeding.
 
 ### 3A: Frontend-Only Path
 
-1. Identify the target directory (`portal/`, `site/gui/`, or as specified in the brief)
+1. Identify the target directory (`gui/`, `site/`, or as specified in the brief)
 2. Implement screen by screen, following the brief's layout and component specs
 3. Apply design system tokens — use CSS variables from `docs/design-system.md`, not hardcoded values
 4. Implement all documented states: normal, empty, loading, error

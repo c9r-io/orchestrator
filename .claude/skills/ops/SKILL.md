@@ -1,164 +1,44 @@
 ---
 name: ops
-description: Run tests, check logs, and troubleshoot services in Docker Compose and Kubernetes environments. Use when debugging local dev env issues, inspecting container/pod logs, restarting services, checking health, or triaging deployment rollouts.
+description: Run tests, inspect daemon and task state, collect logs, and troubleshoot the current repository; use Docker Compose or Kubernetes only when the target repo actually declares those environments.
 ---
 
-# Operations Skill
+# Operations
 
-Troubleshoot projects that follow `project-bootstrap` conventions:
-- Local: Docker Compose at `docker/docker-compose.yml`
-- Reset: `./scripts/reset-docker.sh`
-- K8s: `k8s/base/` and deploy scripts under `deploy/`
+Discover the runtime contract before acting. In this repository the default operational surface is a host-running `orchestratord` daemon, not Docker Compose or Kubernetes.
 
-This skill should still work on other repos by discovering the correct compose file, namespace, and deployments.
+## Agent Orchestrator Triage
 
-## Quick Triage
+1. Inspect repository and daemon state:
 
-1. Identify whether the failure is:
-   - local (Docker Compose) or
-   - cluster (Kubernetes)
-2. Collect the smallest evidence set:
-   - service status
-   - recent logs
-   - health endpoint (if any)
-3. Apply the minimal fix:
-   - restart one service
-   - reset environment (only when state is likely dirty)
-   - rollback/roll forward rollout
+   ```bash
+   git status --short
+   orchestrator daemon status
+   orchestrator debug --component daemon
+   ```
 
-## Running Tests (Project-Specific)
+2. Inspect task state and bounded logs:
 
-Prefer existing project scripts.
+   ```bash
+   orchestrator task list
+   orchestrator task logs <task-id> -n 200
+   ```
 
-Common examples:
+3. The default runtime root is `~/.orchestratord/`; respect `ORCHESTRATORD_DATA_DIR` when it is set. Prefer CLI queries over reading SQLite or killing a PID directly.
+4. For source failures, run the narrowest relevant test first, then broaden to `cargo test --workspace`.
+5. For Web UI failures, use scripts from `gui/package.json`, normally `npm test` or `npm run test:e2e` from `gui/`.
+6. Use `orchestrator daemon stop` for a graceful stop. Restart only when the user asked for a state-changing operational action.
 
-```bash
-# Rust backend (if core/ exists)
-cd core && cargo test
+## Optional Container or Cluster Branch
 
-# TypeScript frontend (if portal/ exists)
-cd portal && npm test
+Use Docker Compose only when a compose file exists in the target repository. Use Kubernetes only when a manifest or kustomization tree exists and the user has placed that cluster in scope. When neither exists, mark those checks not applicable instead of substituting assets from `project-bootstrap`.
 
-# Playwright E2E (if configured)
-cd portal && npx playwright test
-```
+For an applicable generated project, the conventional files are `docker/docker-compose.yml`, `scripts/reset-docker.sh`, and `k8s/base/`. Confirm each exact path before running it.
 
-## Docker Compose (Local)
+## Evidence and Guardrails
 
-### Status
-
-```bash
-docker compose -f docker/docker-compose.yml ps
-```
-
-### Logs
-
-```bash
-# all services
-docker compose -f docker/docker-compose.yml logs --tail 200
-
-# follow
-docker compose -f docker/docker-compose.yml logs -f
-
-# single service (replace <svc>)
-docker compose -f docker/docker-compose.yml logs -f <svc>
-```
-
-### Restart
-
-```bash
-docker compose -f docker/docker-compose.yml restart <svc>
-```
-
-### Reset (Use Sparingly)
-
-If data/state is likely dirty (flaky tests, schema changes, unknown env drift):
-
-```bash
-./scripts/reset-docker.sh
-```
-
-## Kubernetes (Cluster)
-
-### Status
-
-```bash
-kubectl get pods -A
-kubectl get deploy -A
-kubectl get events -A --sort-by=.lastTimestamp | tail -50
-```
-
-### Logs
-
-```bash
-# by pod
-kubectl logs -n <ns> <pod> --tail=200
-
-# by deployment
-kubectl logs -n <ns> deployment/<deploy> --tail=200
-kubectl logs -n <ns> deployment/<deploy> -f
-
-# all pods of a deployment (by label)
-kubectl logs -n <ns> -l app.kubernetes.io/name=<app> -f
-```
-
-### Multi-container Scenarios
-
-```bash
-# Specific container in multi-container pod
-kubectl logs -n <ns> deployment/<deploy> -c <container> -f
-
-# All containers
-kubectl logs -n <ns> deployment/<deploy> --all-containers -f
-```
-
-### Rollout Debug
-
-```bash
-kubectl rollout status -n <ns> deployment/<deploy> --timeout=300s
-kubectl describe -n <ns> deployment/<deploy>
-kubectl describe -n <ns> pod/<pod>
-```
-
-### Rollout Restart
-
-```bash
-kubectl rollout restart -n <ns> deployment/<deploy>
-```
-
-## Health Checks
-
-If the project exposes health endpoints, verify them after restarts/rollouts.
-
-```bash
-curl -sSf http://localhost:8080/health
-```
-
-Replace URL/port based on the project's compose/k8s configuration.
-
-## Troubleshooting Patterns
-
-```bash
-# Docker: filter error logs
-docker logs <container> 2>&1 | grep -E "(ERROR|WARN|panic)"
-
-# Docker: check cache connectivity (if Redis)
-docker exec <redis-container> redis-cli ping
-
-# K8s: check resource usage
-kubectl top pods -n <ns>
-
-# K8s: recent events sorted by time
-kubectl get events -n <ns> --sort-by='.lastTimestamp' | tail -20
-```
-
-## Quick Reference
-
-| Task | Docker | Kubernetes |
-|------|--------|------------|
-| Follow logs | `docker logs -f <container>` | `kubectl logs -f deploy/<deploy> -n <ns>` |
-| Last 100 lines | `docker logs --tail 100 <container>` | `kubectl logs --tail=100 deploy/<deploy> -n <ns>` |
-| Since 10 min | `docker logs --since 10m <container>` | `kubectl logs --since=10m deploy/<deploy> -n <ns>` |
-| Restart | `docker compose restart <svc>` | `kubectl rollout restart deploy/<deploy> -n <ns>` |
-| Shell access | `docker exec -it <container> /bin/sh` | `kubectl exec -it deploy/<deploy> -n <ns> -- /bin/sh` |
-
+- Collect status, the smallest relevant log tail, and a health or CLI check.
+- Never delete the daemon database or runtime directory during routine triage.
+- Never send an unscoped signal from a stale PID file.
+- Do not restart every service when one bounded component is failing.
+- Report the failing command, exit code, and relevant evidence rather than claiming recovery from process existence alone.

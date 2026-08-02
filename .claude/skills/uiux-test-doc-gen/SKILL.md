@@ -16,13 +16,13 @@ Generate/complete `docs/uiux/**` so it evolves from a generic checklist into a s
 ## Inputs
 
 - Project design system: `docs/design-system.md`
-- Frontend code (if present): `portal/`, `frontend/`, `web/`, `ui/`, etc.
+- Frontend code: `gui/` in this repository; discover the actual frontend root in other targets.
 - If available: a confirmed plan or the current diff (new routes, forms, components)
 
 ## Outputs
 
 - Update/add `docs/uiux/**` docs (only what applies to the current project)
-- Generate/update `docs/uiux/_surface/*` (inputs like UI routes)
+- Generate/update `docs/uiux/_surface/` (inputs like UI routes)
 - Update `docs/uiux/README.md` index (keep it lightweight; do not hardcode totals)
 
 ## Workflow
@@ -48,10 +48,10 @@ Generate/complete `docs/uiux/**` so it evolves from a generic checklist into a s
      - animation duration and reduced motion
 
 4. **Align and extend by module (prefer few, high-signal, reproducible scenarios)**
-   - Visual consistency: `docs/uiux/01-03-*.md`
-   - Interaction experience: `docs/uiux/04-06-*.md`
+   - Visual consistency: UI/UX docs 01–03
+   - Interaction experience: UI/UX docs 04–06
    - Accessibility: `docs/uiux/07-accessibility.md`
-   - Forms/lists/dialogs: `docs/uiux/08-10-*.md`
+   - Forms/lists/dialogs: UI/UX docs 08–10
    - For each scenario:
      - Replace `{placeholder}` with real routes/selectors/component names where possible (keep a small number of placeholders for tester-supplied values)
      - Provide runnable verification methods (DevTools console snippets, computed CSS checks, a11y tree checks)
@@ -89,4 +89,3 @@ Generate/complete `docs/uiux/**` so it evolves from a generic checklist into a s
 - UI/UX baseline entry: `docs/uiux/README.md`
 - Writing style guide: `.claude/skills/uiux-test-doc-gen/references/uiux-doc-style.md`
 - UI surface extraction script: `.claude/skills/uiux-test-doc-gen/scripts/extract_surface.sh`
-

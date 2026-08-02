@@ -1,116 +1,55 @@
 ---
 name: e2e-testing
-description: Run and author Playwright E2E tests for the project (frontend-only or full-stack). Use when the user asks to add E2E tests, run Playwright tests, validate critical user journeys, or stabilize flaky E2E tests.
+description: Run and author the repository's Playwright E2E tests, validate critical user journeys, and stabilize flaky browser behavior using the actual GUI and service contract.
 ---
 
 # E2E Testing (Playwright)
 
-Run and write Playwright E2E tests with a stable, low-flake strategy.
+Use the existing Playwright configuration and a small set of stable, behavior-focused journeys.
 
-This skill assumes `project-bootstrap` style repos when applicable:
-- Frontend in `portal/`
-- Full-stack environment via Docker Compose in `docker/docker-compose.yml`
-- Clean reset script at `./scripts/reset-docker.sh`
+## Repository Layout
 
-## Test Strategy
+- Frontend package: `gui/package.json`
+- Playwright config: `gui/playwright.config.ts`
+- Browser tests: `gui/tests/e2e/`
+- Default test server: the Vite server declared by the Playwright config
+- Native host: `crates/gui/`; use Tauri-specific tests only when native commands are in scope
 
-| Type | Directory | Target | Requirements | Purpose |
-|------|-----------|--------|--------------|---------|
-| Frontend isolation | `portal/tests/e2e/` | dev server (e.g. localhost:5173) | Vite dev only | UI rendering, component behavior |
-| Full-stack integration | `portal/tests/e2e-integration/` | Docker services (e.g. localhost:3000) | Docker + all services | Login, API calls, data flow |
+Do not assume Docker Compose, Kubernetes, or a legacy portal tree. If a different target repository owns those surfaces, discover and verify them there first.
 
-Prefer a small number of stable E2E tests covering critical journeys:
-- Login/auth (if applicable)
-- One core create/update flow
-- One permissions/visibility check (if applicable)
-
-Split tests if the project supports it:
-- Frontend-only E2E: runs against a dev server, no Docker required.
-- Full-stack E2E: runs against Docker Compose services; always reset state before running.
-
-## Discover Existing Setup
-
-From repo root, look for Playwright config and scripts:
-- `portal/package.json` scripts like `test:e2e`, `test:e2e:full`, `test:e2e:full:reset`
-- `playwright.config.*` or `portal/playwright.config.*`
-- existing test directories under `portal/tests/`
-
-Prefer existing scripts/config. Only introduce new structure if none exists.
-
-## Running Tests
-
-### Frontend-only (if supported)
+## Run Existing Tests
 
 ```bash
-cd portal
-npx playwright test
+cd gui
+npm run test:e2e
 ```
 
-### Full-stack (recommended when verifying integration behavior)
+Use the package's `test:all` script when unit, coverage, E2E, and build evidence are all required. Install browsers or packages only with user approval when the environment is missing them.
 
-Always reset state first to avoid flaky failures from dirty data:
+## Authoring Tests
 
-```bash
-./scripts/reset-docker.sh
-cd portal
-npx playwright test
-```
+- Prefer `getByRole`, `getByLabel`, and accessible names over CSS structure.
+- Avoid sleeps; wait for visible state, URLs, responses, or emitted events.
+- Keep each scenario narrow and deterministic.
+- Use the existing mock and transport boundaries. If a daemon is required, apply a deterministic fixture from `fixtures/manifests/bundles/` and isolate it by project.
+- Capture a trace or screenshot for failures when the config supports it.
 
-If the project already has a combined script (recommended), use it (example):
-
-```bash
-cd portal
-npm run test:e2e:full:reset    # Reset env + run tests (recommended)
-npm run test:e2e:full          # Run only (requires services)
-npm run test:e2e:full -- --ui  # With Playwright UI mode
-npm run test:e2e:full -- --headed  # See browser during run
-```
-
-## Writing Tests
-
-Guidelines:
-- Prefer role/label based selectors: `getByRole`, `getByLabel`, `getByText`.
-- Avoid timing sleeps; wait for conditions and URLs.
-- Keep each test scenario narrow and deterministic.
-
-Skeleton:
+Example:
 
 ```ts
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
-test("scenario: critical flow", async ({ page }) => {
+test("critical control remains reachable", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: /create/i }).click();
-  await page.getByLabel(/name/i).fill("example");
-  await page.getByRole("button", { name: /save/i }).click();
-  await expect(page.getByText(/created/i)).toBeVisible();
+  await expect(page.getByRole("main")).toBeVisible();
 });
 ```
 
-### API Test Pattern
+## Flake Triage
 
-```ts
-import { test, expect } from "@playwright/test";
+1. Re-run the single failing spec with the same revision and server state.
+2. Inspect the retained trace and browser console.
+3. Replace timing assumptions and shared state with explicit conditions and setup.
+4. Re-run the single spec, then `npm run test:e2e`, then the relevant build/tests.
 
-test("Health endpoint accessible", async ({ request }) => {
-  const response = await request.get("http://localhost:8080/health");
-  expect(response.ok()).toBeTruthy();
-});
-```
-
-## Troubleshooting Flakes
-
-Checklist:
-- Confirm environment is clean: run `./scripts/reset-docker.sh`.
-- Confirm services are healthy: `docker compose -f docker/docker-compose.yml ps` and logs.
-- Replace brittle selectors with role/label queries.
-- Reduce shared state across tests; make setup explicit per test or in Playwright `globalSetup`.
-
-## Reports
-
-```bash
-cd portal
-npx playwright show-report playwright-report       # Frontend tests
-npx playwright show-report playwright-report-full  # Full-stack tests (if separated)
-```
-
+Never weaken an assertion or add retries without identifying the nondeterministic boundary.

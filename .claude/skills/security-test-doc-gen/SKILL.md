@@ -17,7 +17,7 @@ Generate/complete `docs/security/**` so it evolves from a generic template into 
 
 ## Inputs
 
-- Current repo code and configuration (`core/`, `portal/`, `docker/`, `k8s/`, `deploy/`, `.github/`, etc.)
+- Current repo code and configuration (`core/`, `crates/`, `gui/`, `.github/`, and any deployment assets that actually exist)
 - If available: a confirmed plan mode output (to cover new security scenarios introduced by new features)
 
 ## Outputs
@@ -39,7 +39,7 @@ Generate/complete `docs/security/**` so it evolves from a generic template into 
      - Optional overrides:
        - `CORE_DIRS=core,auth9-core` (backend candidates, comma-separated)
        - `PORTAL_DIRS=portal,auth9-portal` (frontend candidates, comma-separated)
-     - If output is empty: the project may not have `core/`/`portal/` yet or routes are generated elsewhere; fall back to manual search.
+     - If output is empty: routes may be generated or live outside the extractor's defaults; fall back to manual searches across `core/`, `crates/`, and `gui/`.
    - HTTP API:
      - Search for router definitions (framework-specific) and `/api/` paths
      - If OpenAPI/Swagger exists, use it as the endpoint inventory source
@@ -48,7 +48,7 @@ Generate/complete `docs/security/**` so it evolves from a generic template into 
    - Authentication:
      - Search for `Authorization`, `Bearer`, `jwt`, `oidc`, `session`, `cookie`
    - Authorization model:
-     - Search for `rbac`, `permission`, `role`, `tenant`, `org`, `workspace`
+     - Search for `rbac`, `permission`, `role`, `tenant`, `org`, and Workspace authorization concepts.
    - Outbound calls:
      - Search for HTTP client usage and URL fields (SSRF scenarios)
    - File handling:
@@ -104,4 +104,3 @@ Generate/complete `docs/security/**` so it evolves from a generic template into 
 - ASVS profile template: `.claude/skills/security-test-doc-gen/references/asvs-5.0-profile-template.md`
 - Input inventory template: `.claude/skills/security-test-doc-gen/references/input-inventory-template.md`
 - Input-validation high bar checklist: `.claude/skills/security-test-doc-gen/references/asvs-5.0-input-validation-checklist.md`
-

@@ -7,7 +7,7 @@ description: Run unit tests and measure test coverage for backend/frontend proje
 
 Run tests and measure coverage in a project-agnostic way, preferring existing project commands and conventions.
 
-This skill aligns with `project-bootstrap` conventions (common layout: `core/`, `portal/`, `scripts/`, `docker/`, `docs/qa/`, `docs/ticket/`), but should work with other layouts by discovering commands.
+In this repository, measure the Rust workspace from the root and the React/Vite frontend under `gui/`. For other targets, discover their commands and exclusions first.
 
 ## Workflow
 
@@ -22,9 +22,9 @@ This skill aligns with `project-bootstrap` conventions (common layout: `core/`, 
 From repo root, look for:
 - Backend:
   - Rust: `core/Cargo.toml`
-  - Makefile targets: `Makefile`, `core/Makefile`
+  - Workspace commands: root `Cargo.toml` and package manifests under `crates/`
 - Frontend:
-  - `portal/package.json`
+  - `gui/package.json`
 
 Prefer running existing scripts over inventing new ones.
 
@@ -33,8 +33,7 @@ Prefer running existing scripts over inventing new ones.
 ### Unit Tests
 
 ```bash
-cd core
-cargo test
+cargo test --workspace
 ```
 
 ### Coverage
@@ -42,7 +41,6 @@ cargo test
 Prefer `cargo llvm-cov` if the project uses it (or has Makefile wrappers). Typical options:
 
 ```bash
-cd core
 cargo llvm-cov
 cargo llvm-cov --html
 ```
@@ -52,7 +50,6 @@ cargo llvm-cov --html
 If a Makefile defines coverage targets, use those instead:
 
 ```bash
-cd core
 make coverage
 make coverage-html
 ```
@@ -71,26 +68,26 @@ Notes:
 
 - Treat coverage as a signal: prioritize service/business logic and error branches.
 
-## Frontend (TypeScript, if `portal/` exists)
+## Frontend (TypeScript, under `gui/`)
 
 Run the project's test command (examples):
 
 ```bash
-cd portal
+cd gui
 npm test
 ```
 
 If Vitest is used:
 
 ```bash
-cd portal
+cd gui
 npx vitest --run
 ```
 
 Coverage (examples):
 
 ```bash
-cd portal
+cd gui
 npm test -- --coverage
 ```
 

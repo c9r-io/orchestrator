@@ -1,0 +1,257 @@
+{
+  "version": 1,
+  "declarations": [
+    {
+      "skill": "deploy-gh-k8s",
+      "path": "deploy/upgrade.sh",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/deploy/upgrade.sh",
+      "reason": "Generated-project deployment entrypoint; absent from this control-plane repository."
+    },
+    {
+      "skill": "deploy-gh-k8s",
+      "path": "k8s/base",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/k8s/base",
+      "reason": "Generated-project Kubernetes base; the skill checks applicability before use."
+    },
+    {
+      "skill": "deploy-gh-k8s",
+      "path": "k8s",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/k8s",
+      "reason": "Generated-project Kubernetes tree; the skill explicitly marks it absent here."
+    },
+    {
+      "skill": "grpc-regression",
+      "path": "docker/docker-compose.yml",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/docker/docker-compose.yml",
+      "reason": "Optional generated-project transport branch, not the local UDS daemon path."
+    },
+    {
+      "skill": "ops",
+      "path": "docker/docker-compose.yml",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/docker/docker-compose.yml",
+      "reason": "Optional generated-project Compose branch gated on exact target discovery."
+    },
+    {
+      "skill": "ops",
+      "path": "scripts/reset-docker.sh",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/scripts/reset-docker.sh",
+      "reason": "Optional generated-project reset entrypoint, never assumed for this repository."
+    },
+    {
+      "skill": "ops",
+      "path": "k8s/base",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/k8s/base",
+      "reason": "Optional generated-project Kubernetes branch gated on target discovery."
+    },
+    {
+      "skill": "performance-testing",
+      "path": "docker/docker-compose.yml",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/docker/docker-compose.yml",
+      "reason": "Generated-project example mentioned only as a non-default optional surface."
+    },
+    {
+      "skill": "project-bootstrap",
+      "path": "portal",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/portal",
+      "reason": "Top-level directory emitted by the project-bootstrap template."
+    },
+    {
+      "skill": "project-bootstrap",
+      "path": "docker",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/docker",
+      "reason": "Top-level directory emitted by the project-bootstrap template."
+    },
+    {
+      "skill": "project-bootstrap",
+      "path": "docker-compose.yml",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/docker/docker-compose.yml",
+      "reason": "Compose file emitted below the generated project's docker directory."
+    },
+    {
+      "skill": "project-bootstrap",
+      "path": "k8s",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/k8s",
+      "reason": "Top-level directory emitted by the project-bootstrap template."
+    },
+    {
+      "skill": "project-bootstrap",
+      "path": ".github/workflows/cd.yml",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/.github/workflows/cd.yml",
+      "reason": "Continuous-delivery workflow emitted by the project-bootstrap template."
+    },
+    {
+      "skill": "project-bootstrap",
+      "path": "scripts/reset-docker.sh",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/scripts/reset-docker.sh",
+      "reason": "Reset script emitted by the project-bootstrap template."
+    },
+    {
+      "skill": "project-bootstrap",
+      "path": "deploy/deploy.sh",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/deploy/deploy.sh",
+      "reason": "Initial deployment script emitted by the project-bootstrap template."
+    },
+    {
+      "skill": "project-bootstrap",
+      "path": "deploy/upgrade.sh",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/deploy/upgrade.sh",
+      "reason": "Upgrade script emitted by the project-bootstrap template."
+    },
+    {
+      "skill": "project-bootstrap",
+      "path": "deploy/cleanup.sh",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/deploy/cleanup.sh",
+      "reason": "Cleanup script emitted by the project-bootstrap template."
+    },
+    {
+      "skill": "project-readiness",
+      "path": "docker/docker-compose.yml",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/docker/docker-compose.yml",
+      "reason": "Optional generated-project readiness surface, absent from this repository."
+    },
+    {
+      "skill": "project-readiness",
+      "path": "scripts/reset-docker.sh",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/scripts/reset-docker.sh",
+      "reason": "Optional generated-project reset surface, never run by the local helper here."
+    },
+    {
+      "skill": "project-readiness",
+      "path": "k8s/base",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/k8s/base",
+      "reason": "Optional generated-project Kubernetes surface, reported not applicable here."
+    },
+    {
+      "skill": "reset-local-env",
+      "path": "scripts/reset-docker.sh",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/scripts/reset-docker.sh",
+      "reason": "Destructive reset script exists only in generated projects and is applicability-gated."
+    },
+    {
+      "skill": "reset-local-env",
+      "path": "docker/docker-compose.yml",
+      "scope": "template",
+      "target": ".claude/skills/project-bootstrap/assets/template/docker/docker-compose.yml",
+      "reason": "Compose state boundary exists only in generated projects and is applicability-gated."
+    },
+    {
+      "skill": "design-brief-gen",
+      "path": "docs/design_brief",
+      "scope": "output",
+      "target": "docs",
+      "reason": "Design-brief output root is created on first use."
+    },
+    {
+      "skill": "design-brief-gen",
+      "path": "docs/design_brief/{module}/{NN}-{descriptive-name}.md",
+      "scope": "output",
+      "target": "docs",
+      "reason": "Parameterized design-brief document is a future generated output."
+    },
+    {
+      "skill": "design-brief-gen",
+      "path": "docs/design_brief/README.md",
+      "scope": "output",
+      "target": "docs",
+      "reason": "Design-brief index is generated with the first brief."
+    },
+    {
+      "skill": "design-governance",
+      "path": "docs/design_brief",
+      "scope": "output",
+      "target": "docs",
+      "reason": "Governance consumes the design-brief output root when briefs exist."
+    },
+    {
+      "skill": "design-governance",
+      "path": "docs/design_brief/_validation/{brief-name}",
+      "scope": "output",
+      "target": "docs",
+      "reason": "Per-brief visual validation evidence is created during governance."
+    },
+    {
+      "skill": "design-governance",
+      "path": "docs/design_brief/README.md",
+      "scope": "output",
+      "target": "docs",
+      "reason": "Design-brief index exists only after the first governed brief."
+    },
+    {
+      "skill": "qa-doc-gen",
+      "path": "docs/qa/tenant",
+      "scope": "output",
+      "target": "docs/qa",
+      "reason": "Example module directory represents a future QA document output."
+    },
+    {
+      "skill": "qa-doc-gen",
+      "path": "docs/guide/x.md",
+      "scope": "output",
+      "target": "docs/guide",
+      "reason": "Example English guide path represents a future feature document."
+    },
+    {
+      "skill": "qa-doc-gen",
+      "path": "docs/guide/zh/x.md",
+      "scope": "output",
+      "target": "docs/guide/zh",
+      "reason": "Example Chinese guide path represents a future mirrored document."
+    },
+    {
+      "skill": "qa-doc-governance",
+      "path": "docs/qa/_manifest.yaml",
+      "scope": "output",
+      "target": "docs/qa",
+      "reason": "Optional governance manifest is created only when that workflow adopts it."
+    },
+    {
+      "skill": "security-test-doc-gen",
+      "path": "docs/security/_surface/asvs_profile.md",
+      "scope": "output",
+      "target": "docs/security/_surface",
+      "reason": "ASVS profile is a generated security documentation output."
+    },
+    {
+      "skill": "security-test-doc-gen",
+      "path": "docs/security/_surface/input_inventory.md",
+      "scope": "output",
+      "target": "docs/security/_surface",
+      "reason": "Input inventory is a generated security documentation output."
+    },
+    {
+      "skill": "integration-authoring",
+      "path": "../orchestrator-integrations",
+      "scope": "companion",
+      "repository": "orchestrator-integrations",
+      "reason": "Optional sibling repository that owns integration packages."
+    },
+    {
+      "skill": "integration-authoring",
+      "path": "../orchestrator-integrations/<platform>/trigger-<event>.yaml",
+      "scope": "companion",
+      "repository": "orchestrator-integrations",
+      "reason": "Parameterized manifest path inside the explicitly named companion repository."
+    }
+  ]
+}

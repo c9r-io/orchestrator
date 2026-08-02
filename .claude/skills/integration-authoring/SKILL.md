@@ -98,10 +98,9 @@ Each integration README MUST include:
 After creating/updating manifests:
 
 ```bash
-# Validate syntax (from the main orchestrator project)
-for f in ../orchestrator-integrations/<platform>/*.yaml; do
-  orchestrator manifest validate -f "$f" 2>&1 || true
-done
+# Validate one exact package manifest from the main orchestrator project.
+orchestrator manifest validate \
+  -f ../orchestrator-integrations/<platform>/trigger-<event>.yaml
 ```
 
 Note: Triggers may fail validation if referenced workflows don't exist — that's expected. The important thing is no YAML parse errors or unknown field errors.
