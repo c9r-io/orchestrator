@@ -110,7 +110,7 @@ See `docs/workflow/` for production-ready manifest templates: `hello-world.yaml`
 - Runtime data: `~/.orchestratord/` by default, overridable with `ORCHESTRATORD_DATA_DIR`
 - Architecture decisions: `docs/architecture.md` and `docs/design_doc/orchestrator/`
 - Feature, QA, and ticket lifecycle: `docs/feature_request/`, `docs/qa/orchestrator/`, and tracked active files in `docs/ticket/`
-- Governance entrypoint: `scripts/qa-doc-lint.sh`; CI-required gate metadata: `config/governance/quality-gates.json`
+- Governance entrypoint: `scripts/qa-doc-lint.sh`; CI-required gate metadata: `config/governance/qa-gate-surface.json`
 
 ---
 

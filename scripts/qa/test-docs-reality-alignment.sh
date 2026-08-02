@@ -41,8 +41,28 @@ migration_count() {
   ' "$1"
 }
 
+agents_missing_repo_paths() {
+  ruby -e '
+    root = File.expand_path(ARGV[0])
+    text = File.read(File.join(root, "AGENTS.md"))
+    inline = text.scan(/`([^`\n]+)`/).flatten
+    links = text.scan(/\]\(([^)\s]+)\)/).flatten.map { |value| value.sub(/#.*\z/, "") }
+    candidates = (inline + links).uniq.select do |value|
+      next false if value.start_with?("~/", "/") || value.match?(/\A[a-z]+:\/\//i)
+      value.match?(%r{\A(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]*/?\z})
+    end
+    missing = candidates.reject do |value|
+      absolute = File.expand_path(value, root)
+      inside = absolute == root || absolute.start_with?(root + File::SEPARATOR)
+      inside && File.exist?(absolute)
+    end
+    puts missing.sort
+    exit(missing.empty? ? 0 : 1)
+  ' "$1"
+}
+
 check_onboarding_contract() {
-  local root="$1" rc=0
+  local root="$1" rc=0 missing_paths
   if rg -n 'root_path' "$root/AGENTS.md" >/dev/null; then
     echo "    AGENTS.md still teaches the root_path compatibility alias" >&2
     rc=1
@@ -57,6 +77,13 @@ check_onboarding_contract() {
     echo "    the behavioral Rust parse/validate/apply test for AGENTS.md is missing" >&2
     rc=1
   fi
+  if ! missing_paths="$(agents_missing_repo_paths "$root")"; then
+    echo "    AGENTS.md names repository paths that do not exist:" >&2
+    while IFS= read -r path; do
+      [[ -n "$path" ]] && echo "      $path" >&2
+    done <<< "$missing_paths"
+    rc=1
+  fi
   return "$rc"
 }
 
@@ -66,12 +93,20 @@ check_architecture_contract() {
     echo "    registered migration chain is not a contiguous source-derived sequence" >&2
     return 1
   fi
-  for required in 'crates/orchestrator-persistence' 'gui/' 'crates/gui/' 'crates/slack-gateway' 'four binaries'; do
+  for required in 'crates/orchestrator-persistence' 'crates/slack-gateway' 'four binaries'; do
     if ! rg -qF "$required" "$root/docs/architecture.md"; then
       echo "    docs/architecture.md is missing: $required" >&2
       rc=1
     fi
   done
+  if ! rg -qF '**Web frontend** (`gui/`)' "$root/docs/architecture.md"; then
+    echo "    docs/architecture.md does not identify root gui/ as the Web frontend" >&2
+    rc=1
+  fi
+  if ! rg -qF '**Desktop shell** (`crates/gui/`)' "$root/docs/architecture.md"; then
+    echo "    docs/architecture.md does not identify crates/gui/ as the desktop shell" >&2
+    rc=1
+  fi
   if ! rg -qF "contains $count migrations" "$root/docs/architecture.md"; then
     echo "    docs/architecture.md does not report source-derived migration count $count" >&2
     rc=1
@@ -161,6 +196,7 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
   (cd "$REPO_ROOT" && git ls-files | tar cf - -T -) | (cd "$BASE" && tar xf -)
   git -C "$BASE" init -q
   git -C "$BASE" add -A
+  TARGETED_CHECKS=()
 
   new_case() {
     local dir="$FIXTURE_ROOT/$1"
@@ -171,6 +207,7 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
 
   expect_fail() {
     local name="$1" dir="$2" target="$3" check
+    TARGETED_CHECKS+=("$target")
     for check in ${ALL_CHECKS[@]+"${ALL_CHECKS[@]}"}; do
       if [[ "$check" == "$target" ]]; then
         if "$check" "$dir" >/dev/null 2>&1; then
@@ -185,6 +222,31 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
     pass "$name: isolated to $target"
   }
 
+  check_fixture_target_coverage() {
+    local check target found rc=0
+    for check in ${ALL_CHECKS[@]+"${ALL_CHECKS[@]}"}; do
+      found=0
+      for target in ${TARGETED_CHECKS[@]+"${TARGETED_CHECKS[@]}"}; do
+        [[ "$target" == "$check" ]] && found=1
+      done
+      if [[ "$found" -eq 0 ]]; then
+        echo "    registered check has no negative fixture: $check" >&2
+        rc=1
+      fi
+    done
+    for target in ${TARGETED_CHECKS[@]+"${TARGETED_CHECKS[@]}"}; do
+      found=0
+      for check in ${ALL_CHECKS[@]+"${ALL_CHECKS[@]}"}; do
+        [[ "$target" == "$check" ]] && found=1
+      done
+      if [[ "$found" -eq 0 ]]; then
+        echo "    negative fixture targets an unregistered check: $target" >&2
+        rc=1
+      fi
+    done
+    return "$rc"
+  }
+
   if run_checks "$BASE" >/dev/null 2>&1; then
     pass "positive control: copied repository passes every reality check"
   else
@@ -197,10 +259,22 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
     expect_fail "fixture onboarding" "$d" check_onboarding_contract
   fi
 
+  d="$(new_case onboarding-path)"
+  if fixture_mutate "fixture onboarding path" "$d/AGENTS.md" \
+    ruby -e 'path=ARGV[0]; text=File.read(path); from="config/governance/qa-gate-surface.json"; abort "anchor" unless text.include?(from); File.write(path, text.sub(from, "config/governance/quality-gates.json"))' "$d/AGENTS.md"; then
+    expect_fail "fixture onboarding path" "$d" check_onboarding_contract
+  fi
+
   d="$(new_case architecture)"
   if fixture_mutate "fixture migration drift" "$d/crates/orchestrator-persistence/src/migration.rs" \
     ruby -e 'path=ARGV[0]; text=File.read(path); abort "anchor" unless text.include?("version: 37"); File.write(path, text.sub("version: 37", "version: 38"))' "$d/crates/orchestrator-persistence/src/migration.rs"; then
     expect_fail "fixture migration drift" "$d" check_architecture_contract
+  fi
+
+  d="$(new_case architecture-gui-collapse)"
+  if fixture_mutate "fixture GUI collapse" "$d/docs/architecture.md" \
+    ruby -e 'path=ARGV[0]; text=File.read(path); from="**Web frontend** (`gui/`)"; abort "anchor" unless text.include?(from); File.write(path, text.sub(from, "**Web frontend** (`crates/gui/`)"))' "$d/docs/architecture.md"; then
+    expect_fail "fixture GUI collapse" "$d" check_architecture_contract
   fi
 
   d="$(new_case proto)"
@@ -216,6 +290,21 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
   mkdir -p "$d/test-yaml-warnings"
   printf 'kind: Agent\n' > "$d/test-yaml-warnings/stale.yaml"
   expect_fail "fixture retired YAML" "$d" check_retired_yaml_residue
+
+  ALL_CHECKS+=(check_uncovered_fixture_probe)
+  if check_fixture_target_coverage >/dev/null 2>&1; then
+    fail "meta fixture: an uncovered registered check passed target completeness"
+  else
+    pass "meta fixture: a registered check with no negative target is rejected"
+  fi
+  last_check_index=$((${#ALL_CHECKS[@]} - 1))
+  unset "ALL_CHECKS[$last_check_index]"
+
+  if check_fixture_target_coverage; then
+    pass "meta: every registered check is targeted by at least one negative fixture"
+  else
+    fail "meta: registered checks and negative fixture targets differ"
+  fi
 
   echo "=== fixtures: $PASS passed, $FAIL failed ==="
   [[ "$FAIL" -eq 0 ]] || exit 1

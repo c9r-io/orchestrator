@@ -48,9 +48,12 @@ bash scripts/qa/test-docs-reality-alignment.sh --fixture-test
   YAML fences in `AGENTS.md`; at least one typed Agent is observed and no
   `[legacy_*]` warning is produced.
 - Reality verification prints 5 passed, 0 failed.
-- Fixture mode prints 11 passed, 0 failed; mutations of `work_dir`, migration
-  version continuity, root proto, ticket ignore state, and retired YAML are
-  each isolated to their owning check.
+- Fixture mode prints 15 passed, 0 failed; mutations of `work_dir`, an AGENTS
+  code-span path, migration version continuity, root-Web collapse into
+  `crates/gui/`, root proto, ticket ignore state, and retired YAML are each
+  isolated to their owning check. A meta assertion proves every registered
+  check has at least one negative target, and a synthetic uncovered check proves
+  that meta assertion can fail.
 
 ## Scenario 2: Skill paths and generated inventory are exact
 
@@ -167,7 +170,7 @@ git diff --check
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Executable AGENTS and derived architecture | ✅ | 2026-08-02 | Codex | Rust behavior passed; reality gate 5/5 and fixtures 11/11 |
+| 1 | Executable AGENTS and derived architecture | ✅ | 2026-08-02 | Codex | Post-closure audit remediation: reality gate 5/5 and fixtures 15/15 |
 | 2 | Skill paths and inventory | ✅ | 2026-08-02 | Codex | 29 skills, 9 checks, 28 fixture assertions |
 | 3 | FR history and tracked tickets | ✅ | 2026-08-02 | Codex | Registry check and 12 ledger assertions passed; ticket probe is tracked |
 | 4 | Proto/YAML retirement parity | ✅ | 2026-08-02 | Codex | Canonical proto, driverless corpus, and warning tests passed |

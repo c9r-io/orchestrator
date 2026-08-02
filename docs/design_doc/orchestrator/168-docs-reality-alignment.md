@@ -55,6 +55,10 @@ unrecorded defect: the example omitted the required step `type` and could not
 parse at all. `fixture_corpus_tests::agents_md_manifests_apply_without_legacy_warnings`
 extracts every YAML fence, parses and dispatches each resource, validates it,
 applies it to a real `OrchestratorConfig`, and rejects any `[legacy_*]` warning.
+The docs reality gate separately extracts path-shaped inline code and Markdown
+destinations from `AGENTS.md`; every repository-relative candidate must exist,
+so an onboarding path cannot evade ordinary Markdown link checking by living in
+a code span.
 
 ### Architecture and canonical ownership
 
@@ -69,13 +73,24 @@ file.
 `scripts/qa/test-docs-reality-alignment.sh`, invoked by the ci-required
 `scripts/qa-doc-lint.sh`, derives the migration sequence from Rust, scans the
 whole non-FR Markdown surface for the retired proto path, and verifies ticket,
-onboarding, and retired-YAML facts. Five isolated mutations prove each check
-can fail. The closure sweep's independently derived fixture-target gate rejected
+onboarding, and retired-YAML facts. The Web and desktop checks bind the exact
+semantic labels `gui/` and `crates/gui/`, so the shorter path cannot be satisfied
+as a substring of the longer one. Seven isolated mutations include a nonexistent
+AGENTS governance path and a Web-frontend collapse into the desktop crate; a
+runtime meta assertion requires every registered check to appear in the negative
+target set, and a synthetic registered check with no target proves the meta
+assertion rejects its own motivating defect. The closure sweep's independently derived fixture-target gate rejected
 the first version: two in-place Ruby edits did not prove they landed, and an
 uncaught `abort` could truncate the suite before its summary. Both mutations now
 use `fixture_mutate`; source-derivation errors return normally to the owning
 check. The bash 3.2 scanner then rejected both unguarded `ALL_CHECKS[@]`
 expansions under `set -u`; they use the repository's guarded expansion form.
+
+The post-closure acceptance audit found the two additions above. The original
+rewrite had introduced `config/governance/quality-gates.json`, a path with no
+history, while the real enforcement manifest is `qa-gate-surface.json`; and the
+literal `gui/` probe was satisfied by `crates/gui/`. Both broken states now have
+isolated mutations rather than relying on the corrected prose as evidence.
 
 ### Skills: existence plus exact scope
 

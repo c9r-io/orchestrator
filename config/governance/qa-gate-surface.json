@@ -297,7 +297,7 @@
       "providerIsolation": {
         "mode": "no-provider"
       },
-      "note": "FR-155 source-derived onboarding, architecture, canonical proto, tracked-ticket, and retired-YAML checks plus isolated negative fixtures. It reads tracked files and temporary copies only; no daemon, database, network, or provider binary."
+      "note": "FR-155 source-derived onboarding and AGENTS path existence, independently identified root-Web/desktop-shell architecture, canonical proto, tracked-ticket, and retired-YAML checks plus seven isolated negative fixtures, registered-check target completeness, and a synthetic uncovered-check probe. It reads tracked files and temporary copies only; no daemon, database, network, or provider binary."
     },
     {
       "path": "scripts/qa/test-agent-driver-documentation-alignment.sh",
