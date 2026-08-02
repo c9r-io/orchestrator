@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 451,
-    "active": 438,
+    "documents": 453,
+    "active": 440,
     "superseded": 13,
-    "withRelatedFr": 298
+    "withRelatedFr": 300
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -452,6 +452,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-157"
+      ]
+    },
+    "docs/design_doc/orchestrator/171-interactive-session-process-reclamation.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-159"
       ]
     },
     "docs/design_doc/orchestrator/18-prompt-delivery-abstraction.md": {
@@ -1770,6 +1776,12 @@
         "FR-157"
       ]
     },
+    "docs/qa/orchestrator/209-interactive-session-process-reclamation.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-159"
+      ]
+    },
     "docs/qa/orchestrator/21-runner-security-observability.md": {
       "lifecycle": "active"
     },
@@ -2867,6 +2879,10 @@
     "FR-157": [
       "docs/design_doc/orchestrator/170-source-domain-decomposition.md",
       "docs/qa/orchestrator/208-source-domain-decomposition.md"
+    ],
+    "FR-159": [
+      "docs/design_doc/orchestrator/171-interactive-session-process-reclamation.md",
+      "docs/qa/orchestrator/209-interactive-session-process-reclamation.md"
     ]
   },
   "supersedes": {

@@ -758,6 +758,12 @@
       "owner": "docs/qa/self-bootstrap/04-cycle2-validation-and-runtime-timestamps.md"
     },
     {
+      "path": "scripts/qa/test-session-process-reclamation.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance, spawns real session processes and signals process groups",
+      "owner": "docs/qa/orchestrator/209-interactive-session-process-reclamation.md"
+    },
+    {
       "path": "scripts/qa/test-skill-mirror-integrity.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",

@@ -82,6 +82,7 @@ Console 启动后会显示当前角色。最终权限始终由 daemon 判断。
 | `elevated_resume_enabled` | 是否允许经额外确认重放非幂等边界 |
 | `session_read_enabled` | 是否允许读取 Session；由 `_system` 策略全局决定 |
 | `session_control_enabled` | 是否允许 writer control；由 `_system` 策略全局决定 |
+| `session_reclaim_enabled` | 是否回收已不可达的 Session 进程组（默认 `true`）。协调器发现某个 Session 进程仍存活、但其输入 FIFO 已消失时，该进程再也无法被驱动，本开关决定是否对其进程组发信号并删除该 Session 自己的目录。置为 `false` 时协调仍会把状态改为 `failed`，只是不发信号——进程会一直存活到机器重启为止。这是独立开关而**不是** `session_control_enabled` 的一部分：后者默认为 `false`，若挂在它下面，默认部署将永不回收 |
 | `source_ingest_enabled` | 是否接受新的外部 Source 事件 |
 | `action_audit_mode` | 动作审计处于 `compatibility` 或 `enforced` |
 

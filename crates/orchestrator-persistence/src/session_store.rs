@@ -623,10 +623,17 @@ pub struct ReconcileOutcome {
 /// Returns `None` unless all of the following hold, because the consequence of
 /// getting it wrong is deleting somebody else's data:
 ///
-/// * every recorded path (`input_fifo_path`, `transcript_path`, `stdout_path`,
-///   `stderr_path`) sits directly in one and the same parent directory;
+/// * `input_fifo_path`, `transcript_path` and, when present, `output_json_path`
+///   sit directly in one and the same parent directory;
 /// * that directory is named for this session id;
 /// * its own parent is named `sessions`.
+///
+/// `stdout_path` and `stderr_path` are deliberately not in that list: they are
+/// the step's run logs and live elsewhere entirely, so requiring them to agree
+/// makes the rule reject every real session and quietly clean nothing. That is
+/// the over-reaching half of the same mistake as guessing too widely, and only
+/// running the gate caught it — the stricter derivation looked safer and was
+/// simply wrong.
 ///
 /// The layout this recognises is the one `phase_runner::spawn` creates:
 /// `<logs>/sessions/<session_id>/{input.fifo,transcript.log,…}`. A row whose
@@ -637,10 +644,13 @@ pub struct ReconcileOutcome {
 /// sessions and the database with it.
 fn session_owned_dir(row: &SessionRow) -> Option<std::path::PathBuf> {
     let parent = std::path::Path::new(&row.input_fifo_path).parent()?;
-    for other in [&row.transcript_path, &row.stdout_path, &row.stderr_path] {
-        if std::path::Path::new(other).parent() != Some(parent) {
-            return None;
-        }
+    if std::path::Path::new(&row.transcript_path).parent() != Some(parent) {
+        return None;
+    }
+    if let Some(output_json) = row.output_json_path.as_deref()
+        && std::path::Path::new(output_json).parent() != Some(parent)
+    {
+        return None;
     }
     if parent.file_name()?.to_str()? != row.id {
         return None;
@@ -1483,12 +1493,15 @@ mod tests {
             row
         };
 
-        // Accepted: the layout phase_runner::spawn actually creates.
+        // Accepted: the layout phase_runner::spawn actually creates. stdout and
+        // stderr are the step's run logs and sit outside the session directory,
+        // which is exactly the case an over-strict rule rejects -- and it
+        // rejected every real session until the gate was run.
         let good = row_with(
             "/data/logs/sessions/sess-1/input.fifo",
             "/data/logs/sessions/sess-1/transcript.log",
-            "/data/logs/sessions/sess-1/stdout.log",
-            "/data/logs/sessions/sess-1/stderr.log",
+            "/data/logs/runs/run-7/stdout.log",
+            "/data/logs/runs/run-7/stderr.log",
             "sess-1",
         );
         assert_eq!(
@@ -1501,8 +1514,8 @@ mod tests {
         let split = row_with(
             "/data/logs/sessions/sess-1/input.fifo",
             "/data/logs/transcript.log",
-            "/data/logs/sessions/sess-1/stdout.log",
-            "/data/logs/sessions/sess-1/stderr.log",
+            "/data/logs/runs/run-7/stdout.log",
+            "/data/logs/runs/run-7/stderr.log",
             "sess-1",
         );
         assert_eq!(
@@ -1515,8 +1528,8 @@ mod tests {
         let misnamed = row_with(
             "/data/logs/sessions/other/input.fifo",
             "/data/logs/sessions/other/transcript.log",
-            "/data/logs/sessions/other/stdout.log",
-            "/data/logs/sessions/other/stderr.log",
+            "/data/logs/runs/run-7/stdout.log",
+            "/data/logs/runs/run-7/stderr.log",
             "sess-1",
         );
         assert_eq!(
@@ -1530,14 +1543,45 @@ mod tests {
         let outside = row_with(
             "/data/sess-1/input.fifo",
             "/data/sess-1/transcript.log",
-            "/data/sess-1/stdout.log",
-            "/data/sess-1/stderr.log",
+            "/data/logs/runs/run-7/stdout.log",
+            "/data/logs/runs/run-7/stderr.log",
             "sess-1",
         );
         assert_eq!(
             session_owned_dir(&outside),
             None,
             "a path outside the sessions tree must never be removed"
+        );
+
+        // Refused: output.json is recorded somewhere else, so the session's
+        // artefacts do not all live in the directory about to be deleted.
+        let mut stray_output = row_with(
+            "/data/logs/sessions/sess-1/input.fifo",
+            "/data/logs/sessions/sess-1/transcript.log",
+            "/data/logs/runs/run-7/stdout.log",
+            "/data/logs/runs/run-7/stderr.log",
+            "sess-1",
+        );
+        stray_output.output_json_path = Some("/data/elsewhere/output.json".to_string());
+        assert_eq!(
+            session_owned_dir(&stray_output),
+            None,
+            "a session whose output spill sits outside the directory is not owned by it"
+        );
+
+        // Accepted: output.json in its usual place still resolves.
+        let mut with_output = row_with(
+            "/data/logs/sessions/sess-1/input.fifo",
+            "/data/logs/sessions/sess-1/transcript.log",
+            "/data/logs/runs/run-7/stdout.log",
+            "/data/logs/runs/run-7/stderr.log",
+            "sess-1",
+        );
+        with_output.output_json_path = Some("/data/logs/sessions/sess-1/output.json".to_string());
+        assert_eq!(
+            session_owned_dir(&with_output),
+            Some(std::path::PathBuf::from("/data/logs/sessions/sess-1")),
+            "the real layout records output.json inside the session directory"
         );
     }
 

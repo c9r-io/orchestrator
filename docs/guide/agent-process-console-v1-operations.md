@@ -86,7 +86,7 @@ orchestrator apply --project _system -f runtime-policy.yaml
 Use this order, verifying each domain before enabling the next:
 
 1. Enable `attention_inbox_enabled` and `handoff_enabled`; keep mutating recovery off. Verify Attention reads, timeline evidence, and handoff generation.
-2. Keep `_system.session_read_enabled=true` and `_system.session_control_enabled=false`. Verify Session list/get/read and transcript redaction.
+2. Keep `_system.session_read_enabled=true` and `_system.session_control_enabled=false`. Verify Session list/get/read and transcript redaction. Leave `session_reclaim_enabled` at its default of `true`: it governs whether the coordinator reclaims a session process that is still alive after its input FIFO has gone — a session in that state can never be driven again and will run until the machine reboots. It is a separate switch from `session_control_enabled` precisely so that reclamation is on before writer control is, rather than inheriting a flag that defaults to off. Setting it to `false` still moves the row to `failed`; only the signal is withheld.
 3. Verify process metrics with `orchestrator metrics process --project {project} --window 24h --bucket 1h -o json`. Metrics collection defaults may remain enabled because payload content is excluded.
 4. Enable `source_ingest_enabled` only for validated projects/providers. Verify signature/replay handling and source binding before accepting production events.
 5. Start `action_audit_mode=compatibility`, update every mutating client to send the canonical action context, inspect `orchestrator audit list --project {project} -o json`, then switch to `enforced`.
