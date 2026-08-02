@@ -160,7 +160,7 @@
 | FR-153 | 供应链与依赖面治理 | P1 | Closed | git history |
 | FR-154 | CLI 输出正确性与三文档面一致性 | P2 | Closed | git history |
 | FR-155 | 文档与仓库现实对齐 — AGENTS.md、幻觉基础设施、台账再生 | P2 | Closed | git history |
-| FR-156 | pipelineVariables 退役收尾 | P2 | Proposed | git history |
+| FR-156 | pipelineVariables 清单授权面退役 | P2 | In Progress | git history |
 | FR-157 | Source 域分解与测试补强 | P3 | Proposed | git history |
 | FR-158 | 治理体系自省 — 门禁的门禁、成本与新鲜度 | P3 | Proposed | git history |
 <!-- END GENERATED FR REGISTRY -->
