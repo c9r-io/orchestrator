@@ -6,7 +6,7 @@ set -euo pipefail
 # of them are invoked from ci-required gates. This gate refuses to run on a dirty
 # worktree, so it reads the tree through the shared predicate that excludes that
 # one file — otherwise it fails for the recorder's reason rather than its own.
-. "20 20 12 61 79 80 81 33 98 100 204 250 395 398 399 400 701git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
