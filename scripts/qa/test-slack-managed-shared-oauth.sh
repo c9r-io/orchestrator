@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+# FR-158: record this run in config/governance/manual-gate-freshness.json.
+# Sourced before the gate's own trap so gate_runlog_arm can compose with it.
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LOG_ROOT="$(mktemp -d)"
@@ -17,6 +21,7 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+gate_runlog_arm "scripts/qa/test-slack-managed-shared-oauth.sh"
 
 for command in bash cargo git jq mktemp npm rg tee; do
   command -v "$command" >/dev/null 2>&1 || {
@@ -27,7 +32,7 @@ for command in bash cargo git jq mktemp npm rg tee; do
 done
 
 cd "$REPO_ROOT"
-if [[ "${FR114_ALLOW_DIRTY:-0}" != "1" && -n "$(git status --porcelain)" ]]; then
+if [[ "${FR114_ALLOW_DIRTY:-0}" != "1" && -n "$(gate_runlog_worktree_status "$REPO_ROOT")" ]]; then
   echo "FR-114 managed Slack QA requires a clean worktree" >&2
   git status --short >&2
   FAILED=1

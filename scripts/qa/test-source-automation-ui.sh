@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+# FR-158: record this run in config/governance/manual-gate-freshness.json.
+# Sourced before the gate's own trap so gate_runlog_arm can compose with it.
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ORCHD="${ORCHD:-$REPO_ROOT/target/debug/orchestratord}"
@@ -30,6 +34,7 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+gate_runlog_arm "scripts/qa/test-source-automation-ui.sh"
 
 for command in cargo jq mktemp npm rg; do
   command -v "$command" >/dev/null 2>&1 || { echo "missing required command: $command" >&2; exit 1; }

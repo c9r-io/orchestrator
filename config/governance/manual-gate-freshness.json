@@ -1,0 +1,147 @@
+{
+  "version": 1,
+  "description": "Last recorded execution of every manual-runbook gate. The set is the manifest set: scripts/qa/manual-gate-freshness.rb fails if this file and config/governance/qa-gate-surface.json disagree about which gates are manual-runbook, so a newly classified gate cannot be omitted here and a retired one cannot linger. Written by scripts/lib/gate_runlog.sh, which each gate arms after installing its own EXIT trap. lastRun is null until a run records one; the report lists null and over-age entries alike and never fails the build. A run that could not be recorded leaves null, so an unrecorded run reads as not-run rather than as fresh.",
+  "staleAfterDays": 90,
+  "gates": {
+    "scripts/qa/certify-codex-session-resume.sh": {
+      "owner": "docs/qa/orchestrator/166-codex-session-resume-conformance.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-agent-driver-abstraction.sh": {
+      "owner": "docs/qa/orchestrator/164-agent-driver-abstraction.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-agent-session-control-plane.sh": {
+      "owner": "docs/qa/orchestrator/149-agent-session-control-plane-hardening.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-attention-inbox.sh": {
+      "owner": "docs/qa/orchestrator/143-attention-inbox.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-control-plane-action-audit.sh": {
+      "owner": "docs/qa/orchestrator/153-process-console-release-acceptance.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-coordination-collapse.sh": {
+      "owner": "docs/qa/orchestrator/168-coordination-collapse-mcp-tools.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-expert-resources-governed-editing.sh": {
+      "owner": "docs/qa/orchestrator/169-expert-resources-governed-editing.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-fr001-sandbox-matrix.sh": {
+      "owner": "docs/qa/orchestrator/57-sandbox-resource-limits-extended.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-fr013-control-plane-protection.sh": {
+      "owner": "docs/qa/orchestrator/65-grpc-control-plane-protection.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-handoff-safe-resume.sh": {
+      "owner": "docs/qa/orchestrator/144-handoff-and-safe-resume.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-health-policy-check.sh": {
+      "owner": "docs/qa/orchestrator/110b-agent-health-policy-advanced.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-non-code-workspace.sh": {
+      "owner": "docs/qa/orchestrator/165-non-code-workspace-and-global-file-sharing.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-per-trigger-webhook-auth.sh": {
+      "owner": "docs/qa/orchestrator/129-per-trigger-webhook-auth-cel-filter.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-process-console-metrics.sh": {
+      "owner": "docs/qa/orchestrator/151-process-console-operational-metrics.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-process-console-release.sh": {
+      "owner": "docs/qa/orchestrator/153-process-console-release-acceptance.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-process-console-ui.sh": {
+      "owner": "docs/qa/orchestrator/154-process-console-functional-ui-regression.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-process-console-vertical-flow.sh": {
+      "owner": "docs/qa/orchestrator/150-process-console-recovery-notifications-e2e.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-process-timeline.sh": {
+      "owner": "docs/qa/orchestrator/142-process-timeline-read-model.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-self-bootstrap-cycle2-regression.sh": {
+      "owner": "docs/qa/self-bootstrap/04-cycle2-validation-and-runtime-timestamps.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-session-process-reclamation.sh": {
+      "owner": "docs/qa/orchestrator/209-interactive-session-process-reclamation.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-slack-dedicated-app-provisioning.sh": {
+      "owner": "docs/qa/orchestrator/163-dedicated-slack-app-auto-provisioning.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-slack-managed-live-smoke.sh": {
+      "owner": "docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-slack-managed-shared-oauth.sh": {
+      "owner": "docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-slack-reaction-source.sh": {
+      "owner": "docs/qa/orchestrator/155-slack-reaction-source-event-contract.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-slack-reaction-task-routing.sh": {
+      "owner": "docs/qa/orchestrator/158-slack-permalink-canonical-task-routing.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-slack-skill-automation-release.sh": {
+      "owner": "docs/qa/orchestrator/161-slack-reaction-skill-automation-release.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-slack-skill-automation-vertical.sh": {
+      "owner": "docs/qa/orchestrator/161-slack-reaction-skill-automation-release.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-source-automation-operations.sh": {
+      "owner": "docs/qa/orchestrator/159-source-automation-reliability-operations.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-source-automation-ui.sh": {
+      "owner": "docs/qa/orchestrator/160-process-console-source-automation-ui.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-source-events-slack.sh": {
+      "owner": "docs/qa/orchestrator/155-slack-reaction-source-event-contract.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-source-task-binding.sh": {
+      "owner": "docs/qa/orchestrator/157-source-task-binding-badge-matching.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-source-task-template.sh": {
+      "owner": "docs/qa/orchestrator/156-source-task-template-skill-invocation.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-webhook-trigger.sh": {
+      "owner": "docs/qa/orchestrator/128-webhook-trigger-infrastructure.md",
+      "lastRun": null
+    },
+    "scripts/qa/test-wp05-integration.sh": {
+      "owner": "docs/qa/orchestrator/51-primitive-composition.md",
+      "lastRun": null
+    },
+    "scripts/watchdog.sh": {
+      "owner": "docs/qa/self-bootstrap/02-survival-enforcement-watchdog.md",
+      "lastRun": null
+    }
+  }
+}

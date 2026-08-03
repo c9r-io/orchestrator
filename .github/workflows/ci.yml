@@ -338,6 +338,16 @@ jobs:
         continue-on-error: true
         run: ./scripts/qa/test-doc-lifecycle.sh
 
+      # Prints how long ago each of the 35 human-run gates was last executed.
+      # The staleness half is a report and never fails; what can fail is this
+      # manifest and the freshness ledger disagreeing about which gates are
+      # manual-runbook, because a gate missing from the ledger is missing from
+      # every report and that reads exactly like a gate that is fresh.
+      - name: Manual-runbook gate freshness
+        id: manual-gate-freshness
+        continue-on-error: true
+        run: ruby ./scripts/qa/manual-gate-freshness.rb
+
       - name: CLI three-surface documentation parity
         id: cli-doc-parity
         continue-on-error: true
@@ -494,6 +504,7 @@ jobs:
             persistence-api-boundary=${{ steps.persistence-api-boundary.outcome }}
             persistence-extraction=${{ steps.persistence-extraction.outcome }}
             doc-lifecycle=${{ steps.doc-lifecycle.outcome }}
+            manual-gate-freshness=${{ steps.manual-gate-freshness.outcome }}
             cli-doc-parity=${{ steps.cli-doc-parity.outcome }}
             cli-doc-parity-fixtures=${{ steps.cli-doc-parity-fixtures.outcome }}
             bash32-lexer=${{ steps.bash32-lexer.outcome }}

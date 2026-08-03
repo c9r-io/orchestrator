@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+# FR-158: record this run in config/governance/manual-gate-freshness.json.
+# Sourced before the gate's own trap so gate_runlog_arm can compose with it.
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+
 fail() {
   printf 'FR-114 live smoke: FAIL (%s)\n' "$1" >&2
   exit 1
@@ -73,6 +77,7 @@ cleanup() {
   find "$PRIVATE_ROOT" -depth -type d -empty -delete 2>/dev/null || true
 }
 trap cleanup EXIT
+gate_runlog_arm "scripts/qa/test-slack-managed-live-smoke.sh"
 
 post_message() {
   local label="$1"

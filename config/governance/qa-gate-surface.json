@@ -66,6 +66,11 @@
       "reason": "rewrites the Homebrew formula from a published tag in release.yml's homebrew job. It runs after the artifacts exist and reads their checksums; it makes no assertion a CI gate could enforce."
     },
     {
+      "path": "scripts/lib/gate_runlog.sh",
+      "role": "library",
+      "reason": "records a manual-runbook gate's run into config/governance/manual-gate-freshness.json. Sourced by all 35 of them and by nothing else; it composes with each gate's existing EXIT trap rather than replacing it, because 30 of the 35 clean up a daemon or a temp directory there."
+    },
+    {
       "path": "scripts/lib/rust_source.rb",
       "role": "library",
       "reason": "the Rust scan four ledgers count with: file discovery, cfg(test) stripping, and the masked/unmasked source the ratchets read. Sourced by core-boundary.rb, coordination-governance.rb, persistence-dependency.rb and persistence-api-boundary.rb, all ci-required, and each of those gates asserts it cannot run without this file."
@@ -415,6 +420,16 @@
         "mode": "no-provider"
       },
       "note": "Offline: reads this manifest, git ls-files and the gates' own text. Forbids a gate reading JSON without observing jq's exit status, which is how a gate stops checking while reporting PASS (FR-144)."
+    },
+    {
+      "path": "scripts/qa/manual-gate-freshness.rb",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "reason": "reads two committed JSON files and prints a table; no daemon, no compile, no working-tree write, so no provider binary is reachable. What it enforces is that this manifest and the freshness ledger agree about which gates are manual-runbook — staleness itself is reported and never fails, because a gate that goes red when a human has not run a runbook lately is one more thing to feed, which is the growth FR-158 exists to bound."
     },
     {
       "path": "scripts/qa/persistence-api-boundary.rb",

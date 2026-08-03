@@ -53,6 +53,10 @@
 # and connects over TLS; this gate needs no network at all, so it stays on UDS.
 set -euo pipefail
 
+# FR-158: record this run in config/governance/manual-gate-freshness.json.
+# Sourced before the gate's own trap so gate_runlog_arm can compose with it.
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO_ROOT"
@@ -83,6 +87,7 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+gate_runlog_arm "scripts/qa/test-wp05-integration.sh"
 
 # ── Argument parsing ──────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do

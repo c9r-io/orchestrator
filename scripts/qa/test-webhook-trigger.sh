@@ -6,6 +6,10 @@
 
 set -euo pipefail
 
+# FR-158: record this run in config/governance/manual-gate-freshness.json.
+# Sourced before the gate's own trap so gate_runlog_arm can compose with it.
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+
 PASS=0
 FAIL=0
 ORCHESTRATORD="./target/release/orchestratord"
@@ -23,6 +27,7 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+gate_runlog_arm "scripts/qa/test-webhook-trigger.sh"
 
 echo "=== QA 128: Webhook Trigger Infrastructure ==="
 echo ""

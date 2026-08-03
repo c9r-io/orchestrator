@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+# FR-158: record this run in config/governance/manual-gate-freshness.json.
+# Sourced before the gate's own trap so gate_runlog_arm can compose with it.
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+
 EXPECTED_VERSION="${CODEX_RESUME_EXPECTED_VERSION:-0.144.5}"
 SOURCE_CODEX_HOME="${CODEX_RESUME_SOURCE_HOME:-${CODEX_HOME:-$HOME/.codex}}"
 FIRST_ANCHOR="ORCH_RESUME_ANCHOR_ALPHA"
@@ -20,6 +24,7 @@ cleanup() {
   find "$QA_ROOT" -depth -delete 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
+gate_runlog_arm "scripts/qa/certify-codex-session-resume.sh"
 
 for command in codex jq mktemp; do
   command -v "$command" >/dev/null 2>&1 || {

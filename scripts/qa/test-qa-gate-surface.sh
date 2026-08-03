@@ -903,6 +903,71 @@ check_continue_on_error_aggregated() {
   return $rc
 }
 
+# Check 15: every manual-runbook gate records its own runs.
+#
+# 35 gates are executed by a person and nothing observed when that last happened.
+# ci-job-liveness.json tracks workflow jobs and cannot see them, which is how
+# test-coordination-collapse.sh stayed broken from 07-25 and
+# test-wp05-integration.sh from 2026-03-26 — four months — both found by reading
+# rather than by any signal.
+#
+# The required set is derived from the manifest, never listed: the next gate
+# classified manual-runbook is covered the moment it is classified, and a list
+# here would guard exactly the 35 that existed today.
+#
+# Both conditions are structural, and neither is sufficient alone:
+#
+#   - the gate sources scripts/lib/gate_runlog.sh, and
+#   - it calls gate_runlog_arm with its own manifest path.
+#
+# Matching its own path matters. Copying a block from a neighbouring gate is how
+# these files get written, and an armed gate recording under the neighbour's name
+# leaves both entries lying — one fresh that nobody ran, one stale that someone
+# did. That is worse than no record, because it reads as a working ledger.
+#
+# What this cannot see is whether the arming actually fires: text presence is
+# §4.4 shape 1, satisfied by a commented-out call. The behavioural half is
+# fixture 29, which runs a gate with its own EXIT trap under the real library and
+# asserts the record, the cleanup and the exit status together. Neither half is
+# the check; both together are.
+check_manual_gates_record_runs() {
+  local root="$1"
+  local manifest="$root/$MANIFEST_REL"
+  local rc=0 gates path
+
+  gates="$(gate_jq_rows require-rows "$manifest" \
+    '.scripts[] | select(.enforcement == "manual-runbook") | .path')" || return 1
+
+  # "Declared but absent from disk" belongs to check 1 and is deliberately not
+  # repeated here: two checks reporting one defect is what stops a negative
+  # fixture from isolating either of them, and fixture 2 caught exactly that.
+  while read -r path; do
+    [[ -z "$path" ]] && continue
+    [[ -f "$root/$path" ]] || continue
+
+    # Anchored at the start of a line, so a commented-out call does not satisfy
+    # it. Written with grep -F first, which fixture 29 failed against on the
+    # first attempt: `# gate_runlog_arm "..."` contains the literal string, and
+    # the check certified an arming that cannot run — §4.4 shape 1 in the code
+    # written to enforce §4.4.
+    if ! grep -qE '^[[:space:]]*\.[[:space:]].*scripts/lib/gate_runlog\.sh' "$root/$path"; then
+      echo "    $path: manual-runbook gate does not source scripts/lib/gate_runlog.sh" >&2
+      echo "      its runs are invisible, so the freshness ledger cannot tell" >&2
+      echo "      'nobody has run this in a year' from 'someone ran it this morning'" >&2
+      rc=1
+    fi
+    if ! grep -qE "^[[:space:]]*gate_runlog_arm \"${path//./\\.}\"[[:space:]]*$" "$root/$path"; then
+      echo "    $path: no active gate_runlog_arm call naming its own path" >&2
+      echo "      either the call is absent, commented out, or names another gate;" >&2
+      echo "      a gate armed under another gate's path records into that gate's" >&2
+      echo "      entry, leaving one fresh that nobody ran and one stale that someone did" >&2
+      rc=1
+    fi
+  done <<< "$gates"
+
+  return $rc
+}
+
 # Check 14: every scripts/** executable a workflow job runs is declared here.
 #
 # Checks 1 and 3 together look like they cover this and do not. Check 1 compares
@@ -1099,6 +1164,7 @@ ALL_CHECKS=(
   check_git_history_available
   check_continue_on_error_aggregated
   check_workflow_execution_declared
+  check_manual_gates_record_runs
 )
 
 run_all_checks() {
@@ -1113,7 +1179,9 @@ run_all_checks() {
 describe_check() {
   case "$1" in
     check_surface_complete)
-      echo "every scripts/qa file at any depth is classified and every classified path exists on disk|manifest and scripts/qa disagree" ;;
+      echo "every scripts file at any depth is classified and every classified path exists on disk|manifest and scripts disagree" ;;
+    check_manual_gates_record_runs)
+      echo "every manual-runbook gate sources the runlog library and arms it with its own path|a manual-runbook gate's executions are invisible to the freshness ledger" ;;
     check_support_files_declared)
       echo "every support file declares a known role and a reason|a support file has an unknown role or no reason" ;;
     check_reason_and_owner)
@@ -1710,6 +1778,113 @@ BUNDLE
       fi
     fi
   fi
+
+  # 29. Arming is text, and text presence is §4.4 shape 1 — a commented-out call
+  #     satisfies it. The mutation comments the call out rather than deleting it,
+  #     because deletion is the case the author had in mind and commenting is
+  #     what someone actually does while debugging a gate at 2am.
+  d="$(new_case f29)"
+  manual_victim="$(jq -r '
+    [.scripts[] | select(.enforcement == "manual-runbook") | .path][0] // empty' \
+    "$d/$MANIFEST_REL")"
+  if [[ -z "$manual_victim" ]]; then
+    fail "fixture 29: no manual-runbook gate exists to attack"
+  else
+    if fixture_mutate "fixture 29" "$d/$manual_victim" \
+      ruby -e '
+        path = ARGV[0]
+        text = File.read(path)
+        text.sub!(/^(gate_runlog_arm ".*"$)/) { "# #{Regexp.last_match(1)}" }
+        File.write(path, text)
+      ' "$d/$manual_victim"; then
+      expect_fail "fixture 29" "$d" check_manual_gates_record_runs \
+        "a manual-runbook gate whose arming is commented out is invisible to the freshness ledger"
+    fi
+  fi
+
+  # 30. The likelier defect than either deletion or commenting: a gate armed
+  #     under a neighbour's path, which is what copying a header block produces.
+  #     Every structural condition still holds — the library is sourced, the
+  #     function is called, the argument is a real manual-runbook gate — and the
+  #     ledger is actively wrong in two entries rather than merely silent.
+  d="$(new_case f30)"
+  other_manual="$(jq -r --arg v "$manual_victim" '
+    [.scripts[] | select(.enforcement == "manual-runbook")
+      | select(.path != $v) | .path][0] // empty' "$d/$MANIFEST_REL")"
+  if [[ -z "$manual_victim" || -z "$other_manual" ]]; then
+    fail "fixture 30: fewer than two manual-runbook gates exist, so the mix-up cannot be built"
+  else
+    if fixture_mutate "fixture 30" "$d/$manual_victim" \
+      ruby -e '
+        path, impostor = ARGV
+        text = File.read(path)
+        text.sub!(/^gate_runlog_arm ".*"$/) { %(gate_runlog_arm "#{impostor}") }
+        File.write(path, text)
+      ' "$d/$manual_victim" "$other_manual"; then
+      expect_fail "fixture 30" "$d" check_manual_gates_record_runs \
+        "a gate armed under another gate's path fails, because both ledger entries would then lie"
+    fi
+  fi
+
+  # ── Behavioural: arming a gate that already cleans up records the run,
+  #    keeps the cleanup, and preserves the exit status ──
+  #
+  # check_manual_gates_record_runs reads text and cannot see whether any of this
+  # happens. The risk it cannot cover is specific and was measured before the
+  # library was written: 30 of the 35 gates run `trap cleanup EXIT`, and a second
+  # bare `trap ... EXIT` discards the first silently — which in these scripts is
+  # a leaked daemon on a bound port or a leaked data directory. So run a gate
+  # shaped like the real ones, under the real library, and assert all three
+  # facts at once. Any one of them alone would pass on a broken composition:
+  # the record alone is satisfied by clobbering the cleanup, the cleanup alone by
+  # never arming, and the exit status alone by doing neither.
+  echo ""
+  echo "Behavioural: freshness recording composes with an existing EXIT trap"
+  behave="$FIXTURE_ROOT/runlog"
+  mkdir -p "$behave/scripts/lib" "$behave/scripts/qa" "$behave/config/governance"
+  cp "$REPO_ROOT/scripts/lib/gate_runlog.sh" "$behave/scripts/lib/"
+  (cd "$behave" && git init -q . &&
+    git -c user.email=qa@local -c user.name=qa commit -q --allow-empty -m base) >/dev/null 2>&1
+  cat > "$behave/config/governance/manual-gate-freshness.json" <<'JSON'
+{
+  "version": 1,
+  "staleAfterDays": 90,
+  "gates": { "scripts/qa/probe.sh": { "owner": "docs/x.md", "lastRun": null } }
+}
+JSON
+  # The probe fails on purpose. A gate that exits 0 cannot distinguish "the
+  # status was recorded" from "zero was recorded because zero is the default".
+  cat > "$behave/scripts/qa/probe.sh" <<'PROBE'
+#!/usr/bin/env bash
+set -euo pipefail
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+. "$REPO_ROOT/scripts/lib/gate_runlog.sh"
+cleanup() { echo ran > "$REPO_ROOT/cleanup.marker"; }
+trap cleanup EXIT
+gate_runlog_arm "scripts/qa/probe.sh"
+exit 7
+PROBE
+  chmod +x "$behave/scripts/qa/probe.sh"
+  # The probe exits 7 by design, so `set -e` would end the whole run here and
+  # the summary line would never print — a truncated run reads exactly like a
+  # complete one (§4.4 shape 7). Disabled around the call for the same reason
+  # run_gate does it, and the status is read straight from $? rather than
+  # through a pipe.
+  set +e
+  (cd "$behave" && bash scripts/qa/probe.sh) >/dev/null 2>&1
+  behave_status=$?
+  set -e
+  behave_recorded="$(ruby -rjson -e '
+    data = JSON.parse(File.read(ARGV[0]))
+    entry = data["gates"]["scripts/qa/probe.sh"]["lastRun"]
+    print entry ? entry["exitStatus"] : "none"
+  ' "$behave/config/governance/manual-gate-freshness.json" 2>/dev/null)"
+  if [[ "$behave_status" -eq 7 && "$behave_recorded" == "7" && -f "$behave/cleanup.marker" ]]; then
+    pass "arming records the true exit status, runs the gate's own cleanup, and leaves the gate's status unchanged"
+  else
+    fail "freshness arming broke the gate's contract (exit $behave_status, recorded '$behave_recorded', cleanup marker $([[ -f "$behave/cleanup.marker" ]] && echo present || echo MISSING))"
+  fi
+  echo ""
 
   # ── Behavioural: the aggregated outcomes really decide the job ──
   #

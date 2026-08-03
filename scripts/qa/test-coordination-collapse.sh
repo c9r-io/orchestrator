@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+# FR-158: record this run in config/governance/manual-gate-freshness.json.
+# Sourced before the gate's own trap so gate_runlog_arm can compose with it.
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ORCHD="${ORCHD:-$REPO_ROOT/target/debug/orchestratord}"
@@ -44,6 +48,7 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+gate_runlog_arm "scripts/qa/test-coordination-collapse.sh"
 
 for command in cargo jq mktemp rg sqlite3 awk; do
   command -v "$command" >/dev/null 2>&1 || {
@@ -53,7 +58,7 @@ for command in cargo jq mktemp rg sqlite3 awk; do
 done
 
 cd "$REPO_ROOT"
-if [[ "${FR118_ALLOW_DIRTY:-0}" != "1" && -n "$(git status --porcelain)" ]]; then
+if [[ "${FR118_ALLOW_DIRTY:-0}" != "1" && -n "$(gate_runlog_worktree_status "$REPO_ROOT")" ]]; then
   echo "FR-118 QA requires a clean worktree (or FR118_ALLOW_DIRTY=1)" >&2
   git status --short >&2
   exit 1

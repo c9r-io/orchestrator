@@ -13,6 +13,7 @@
     "reviewWhen": "A new gate that does not fit is not a reason to raise this silently. Whoever adds it either makes room or raises the ceiling in this file with a written reason and a new date. Revisit unconditionally if the runner class changes, since the number assumes GitHub-hosted ubuntu-latest."
   },
   "pendingMeasurement": {
+    "Manual-runbook gate freshness": "Added by FR-158 to the governance job. A duration is a sample from a real run and no run has included this step yet. It reads two committed JSON files and prints 35 lines — 53ms locally, one ruby process and no I/O beyond those two files — so it is expected to disappear into the step overhead, and FR-158's own expansion budget is the reason it was kept that cheap. A local number is not a CI number and is not recorded as one. Replaced automatically by the next `ci-cost.rb --refresh --write` against a run that includes it.",
     "Verify pipeline-variable retirement and per-object migration parity": "Added by FR-156 to the coordination-strangler job. A duration is a sample from a real run, and no run has included this step yet. Locally the gate takes roughly 30s (isolated daemon on 19327, six task executions, four manifest validations), which is the order to expect, but a local number is not a CI number and is not recorded as one. Replaced automatically by the next `ci-cost.rb --refresh --write` against a run that includes it."
   },
   "measurement": {

@@ -5,6 +5,10 @@
 
 set -euo pipefail
 
+# FR-158: record this run in config/governance/manual-gate-freshness.json.
+# Sourced before the gate's own trap so gate_runlog_arm can compose with it.
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+
 PASS=0
 FAIL=0
 ORCHESTRATORD="./target/release/orchestratord"
@@ -23,6 +27,7 @@ cleanup() {
   rm -f /tmp/qa-wh-081.yaml
 }
 trap cleanup EXIT
+gate_runlog_arm "scripts/qa/test-per-trigger-webhook-auth.sh"
 
 echo "=== QA 129: Per-Trigger Webhook Auth & CEL Filter ==="
 echo ""

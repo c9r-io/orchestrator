@@ -2,6 +2,11 @@
 
 set -euo pipefail
 
+# FR-158: record this run in config/governance/manual-gate-freshness.json.
+# Sourced before the gate's own trap so gate_runlog_arm can compose with it.
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+gate_runlog_arm "scripts/qa/test-fr001-sandbox-matrix.sh"
+
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "FR-001 sandbox matrix requires macOS sandbox-exec" >&2
   exit 1

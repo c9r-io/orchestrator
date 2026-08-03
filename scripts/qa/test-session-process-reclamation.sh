@@ -18,6 +18,10 @@
 
 set -euo pipefail
 
+# FR-158: record this run in config/governance/manual-gate-freshness.json.
+# Sourced before the gate's own trap so gate_runlog_arm can compose with it.
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ORCHD="${ORCHD:-$REPO_ROOT/target/debug/orchestratord}"
@@ -101,6 +105,7 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+gate_runlog_arm "scripts/qa/test-session-process-reclamation.sh"
 
 export HOME="$QA_HOME"
 export ORCHESTRATORD_DATA_DIR="$QA_ROOT/data"
