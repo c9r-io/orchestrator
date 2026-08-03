@@ -259,7 +259,13 @@ module WorkflowModel
   # gives: a process per job would put seconds into a gate that runs on every
   # push. Facts, not a verdict — whether an undeclared path is a gap or a
   # deliberate exemption is the manifest's business, and the caller's.
-  SCRIPT_TOKEN = %r{(?<![\w/.-])\.?/?(scripts/[\w./-]*\.(?:sh|rb))}.freeze
+  # `.mjs` is here because omitting it was the same enumeration defect one level
+  # down. FR-147 derived the executed set instead of listing it, and then listed
+  # the extensions: `scripts/sync-docs.mjs` is run by docs.yml on every push to
+  # main and by test-docs-publishing-integrity.sh inside the ci.yml governance
+  # job, and check 14 could not see it in either place because the token stopped
+  # at .sh and .rb. A derived set with a hand-written alphabet is still a list.
+  SCRIPT_TOKEN = %r{(?<![\w/.-])\.?/?(scripts/[\w./-]*\.(?:sh|rb|mjs))}.freeze
 
   def executed_scripts(root)
     records = []

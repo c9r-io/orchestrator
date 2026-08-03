@@ -72,6 +72,10 @@ At task start, when the workspace has `self_referential: true`, `validate_self_r
 
 Environment variables: `BINARY_PATH`, `STABLE_PATH`, `WATCHDOG_POLL_INTERVAL`, `WATCHDOG_MAX_FAILURES`, `WATCHDOG_HEALTH_TIMEOUT`
 
+The subject of the health check is the **binary on disk**, not a running process. `--help` starts a fresh short-lived invocation, so a daemon that is wedged, deadlocked or serving errors passes every poll, and the non-goal recorded above — that the watchdog does not restart the orchestrator process — is what remains after a restore: the file is repaired and whatever is already running keeps running the old image. This layer repairs a broken build artifact; it is not a supervisor, and it is the weakest of the four. `docs/architecture.md` §7 described it as monitoring the live system and restarting the service until FR-158 corrected it.
+
+Nothing in CI or in any workflow starts it. It is classified `manual-runbook` in `config/governance/qa-gate-surface.json`, owned by [QA self-bootstrap/02](../../qa/self-bootstrap/02-survival-enforcement-watchdog.md), so that its execution freshness is tracked with the other human-run gates rather than being invisible.
+
 ## Alternatives And Tradeoffs
 
 - Option A: Run full `cargo build --release` in self-test step

@@ -55,11 +55,22 @@ fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 # exemption. Files that genuinely are not gates are declared in supportFiles
 # with a role and a reason, because "the glob does not reach it" is not a
 # statement anyone can review.
+#
+# The root is `scripts`, not `scripts/qa`. FR-158 measured the difference: 28 of
+# 122 tracked scripts sat outside the scanned root, and they included every
+# shared library the ci-required gates source — scripts/lib/rust_source.rb,
+# workflow_model.rb, gate_jq.sh and nine more. The gates were governed and the
+# engine they run on was not, which is the arrangement this manifest exists to
+# make impossible. Check 14 covers what a workflow *runs*; nothing covered what
+# a gate *sources*, and a library is where a defect reaches every caller at once.
+#
+# `.mjs` joins .sh and .rb for the reason WorkflowModel::SCRIPT_TOKEN now carries
+# it: the extension list was doing the same work as a hand-written file list.
 check_surface_complete() {
   local root="$1"
   local manifest="$root/$MANIFEST_REL"
   local disk declared missing_from_manifest missing_from_disk
-  disk="$(cd "$root" && find scripts/qa -type f \( -name '*.sh' -o -name '*.rb' \) 2>/dev/null | LC_ALL=C sort)"
+  disk="$(cd "$root" && find scripts -type f \( -name '*.sh' -o -name '*.rb' -o -name '*.mjs' \) 2>/dev/null | LC_ALL=C sort)"
   # Piping jq into sort would hand back sort's status, and this function runs in
   # condition position where set -e is off, so a jq failure here used to leave
   # $declared empty. That direction happens to fail closed — every file on disk
@@ -970,28 +981,64 @@ check_workflow_execution_declared() {
   fi
 
   # Being declared is not enough; the declaration has to be one that permits
-  # direct execution. Of the three supportFile roles, `fixture` and `library`
-  # both say the file is never invoked as a gate itself — a fixture is data or a
-  # fake binary a gate consumes, a library runs only inside its callers. Only
-  # `release-tooling` describes a file a workflow runs at top level. Without this
-  # condition the trigger rule below is bypassed by relabelling: declare a
-  # governance gate `library`, and it is declared, exempt, and never checked
-  # again. That is the cheaper mutation and the one worth blocking.
+  # direct execution. Of the supportFile roles, `fixture`, `library`,
+  # `developer-tool` and `spike` all say the file is not invoked as a gate by a
+  # workflow — a fixture is data or a fake binary a gate consumes, a library runs
+  # only inside its callers, and the last two are not run by CI at all. Only
+  # `release-tooling` and `generator` describe a file a workflow runs at top
+  # level. Without this condition the trigger rule below is bypassed by
+  # relabelling: declare a governance gate `library`, and it is declared, exempt,
+  # and never checked again. That is the cheaper mutation and the one worth
+  # blocking.
+  #
+  # `generator` exists because `release-tooling`'s discipline is its trigger
+  # rule, and that rule cannot reach a generator run by a branch-push workflow:
+  # scripts/sync-docs.mjs is executed by docs.yml on every push to main, so it is
+  # neither a library nor release-tooling, and before FR-158 widened
+  # WorkflowModel::SCRIPT_TOKEN to .mjs nothing here could see it at all. Its
+  # discipline is `verifiedBy` instead — a named ci-required gate that
+  # regenerates the artifact and compares — checked below rather than trusted,
+  # because a role whose only condition is a free-text field is not a condition.
   local support_rows support_path support_role
   support_rows="$(gate_jq_rows require-rows "$manifest" \
     '(.supportFiles // [])[] | [.path, .role] | @tsv')" || return 1
   while IFS=$'\t' read -r support_path support_role; do
     [[ -z "$support_path" ]] && continue
-    [[ "$support_role" == "release-tooling" ]] && continue
+    [[ "$support_role" == "release-tooling" || "$support_role" == "generator" ]] && continue
     while IFS=$'\t' read -r path workflow job; do
       [[ "$path" == "$support_path" ]] || continue
       echo "    $support_path: declared supportFiles role '$support_role', but $workflow" >&2
       echo "      job '$job' executes it directly. That role means the file is never" >&2
       echo "      invoked as a gate itself; a script a workflow runs is either a gate" >&2
-      echo "      in scripts[] or release-tooling" >&2
+      echo "      in scripts[] or release-tooling or generator" >&2
       rc=1
     done <<< "$records"
   done <<< "$support_rows"
+
+  # `generator` is only an exemption while its verifier is real. The field must
+  # name a path this manifest classifies as a ci-required gate: a missing field,
+  # a dangling path, or a verifier that is itself manual-runbook all collapse the
+  # role back into an unconditional amnesty. Checked for every generator entry,
+  # not only for the ones a workflow was observed running, because the role's
+  # claim is about the artifact and not about today's execution set.
+  local gen_rows gen_path gen_verifier ci_required
+  ci_required="$(gate_jq_rows require-rows "$manifest" \
+    '.scripts[] | select(.enforcement == "ci-required") | .path')" || return 1
+  gen_rows="$(gate_jq_rows allow-empty "$manifest" \
+    '(.supportFiles // [])[] | select(.role == "generator") | [.path, (.verifiedBy // "")] | @tsv')" || return 1
+  while IFS=$'\t' read -r gen_path gen_verifier; do
+    [[ -z "$gen_path" ]] && continue
+    if [[ -z "$gen_verifier" ]]; then
+      echo "    $gen_path: role 'generator' with no verifiedBy; the role asserts that a" >&2
+      echo "      ci-required gate proves this generator's output, and nothing names one" >&2
+      rc=1
+    elif ! grep -qxF "$gen_verifier" <<< "$ci_required"; then
+      echo "    $gen_path: verifiedBy names '$gen_verifier', which is not a ci-required" >&2
+      echo "      gate in this manifest; the generator would run on every push with" >&2
+      echo "      nothing on any push proving what it produced" >&2
+      rc=1
+    fi
+  done <<< "$gen_rows"
 
   # The exemption is conditional, and this is what makes it so. `release-tooling`
   # says "this runs only to build or publish an artifact", and that claim is
@@ -1124,10 +1171,15 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
   # actually failing for the fixture's own reason. Derived from the manifest
   # instead of typed, so classifying a fourth script outside scripts/qa needs no
   # edit here.
+  # `.mjs` is included for the same reason check 1 and SCRIPT_TOKEN now include
+  # it. Without it the coverage and sync-docs entries are declared but absent
+  # from the fixture tree, and check 1's reverse direction — "a manifest entry
+  # with no file on disk" — fails in every case, which reads as thirty working
+  # fixtures when it is thirty fixtures failing for the harness's own reason.
   MANIFEST_OUTSIDE_QA="$(jq -r '
     (.scripts[].path, (.supportFiles // [])[].path)
     | select(startswith("scripts/") and (startswith("scripts/qa/") | not))
-    | select(endswith(".sh") or endswith(".rb"))' \
+    | select(endswith(".sh") or endswith(".rb") or endswith(".mjs"))' \
     "$REPO_ROOT/$MANIFEST_REL" | LC_ALL=C sort -u)"
   if [[ -z "$MANIFEST_OUTSIDE_QA" ]]; then
     echo "the manifest named no scripts outside scripts/qa; the fixture tree would" >&2
@@ -1501,10 +1553,19 @@ BUNDLE
   # Recorded in DD-160 as a known limit of that gate.
 
   # 25. A gate ci.yml still runs, with its manifest entry deleted. The FR asked
-  #     for exactly this. The entry has to be one outside scripts/qa, otherwise
-  #     check_surface_complete catches the deletion first on the disk compare and
-  #     the fixture proves nothing about this check — which is also the reason
-  #     the hole existed: scripts/qa is the only tree check 1 can see.
+  #     for exactly this.
+  #
+  #     The mutation removes the file from disk as well, and that is not
+  #     cosmetic. Until FR-158 the entry only had to be one outside scripts/qa,
+  #     because scripts/qa was the only tree check 1 could see — which was also
+  #     the reason the hole existed. Check 1 now scans all of scripts, so
+  #     deleting a manifest entry alone leaves the file on disk unclassified and
+  #     trips check 1 too, and expect_fail rightly refuses a fixture that fails
+  #     two checks. Deleting both restores the isolation and states a sharper
+  #     case: the gate is gone from the repository and from the manifest, the
+  #     workflow still calls it by name, and only this check can say so. The
+  #     executed set is parsed out of the workflow, not read off the disk, which
+  #     is precisely why it still sees the call.
   d="$(new_case f25)"
   victim="$(jq -r '
     [.scripts[] | select(.enforcement == "ci-required")
@@ -1515,16 +1576,19 @@ BUNDLE
   else
     # `if fixture_mutate`, never `elif`: fixture-target-drift.rb recognises the
     # landing proof only at the head of a statement, and an elif reads to it as
-    # an unwrapped in-place rewrite.
+    # an unwrapped in-place rewrite. The landing proof is on the manifest; the
+    # file removal rides along in the same command so the two cannot separate.
     if fixture_mutate "fixture 25" "$d/$MANIFEST_REL" \
       ruby -rjson -e '
-        path, victim = ARGV
+        path, victim, root = ARGV
         data = JSON.parse(File.read(path))
         data["scripts"].reject! { |entry| entry["path"] == victim }
         File.write(path, JSON.pretty_generate(data) + "\n")
-      ' "$d/$MANIFEST_REL" "$victim"; then
+        script = File.join(root, victim)
+        File.delete(script) if File.file?(script)
+      ' "$d/$MANIFEST_REL" "$victim" "$d"; then
       expect_fail "fixture 25" "$d" check_workflow_execution_declared \
-        "a gate a workflow job still executes, with its manifest entry deleted, fails the completeness compare"
+        "a gate deleted from the repository and the manifest, still named by a workflow job, fails the completeness compare"
     fi
   fi
 
@@ -1583,6 +1647,67 @@ BUNDLE
       ' "$d/.github/workflows/ci.yml" "$exempt_victim"; then
       expect_fail "fixture 27" "$d" check_workflow_execution_declared \
         "a release-tooling script run by a branch-push workflow loses its exemption"
+    fi
+  fi
+
+  # 28. `generator` is the second role permitting direct execution, and its whole
+  #     discipline is one field. Deleting the entry, or relabelling it, are the
+  #     shapes fixtures 25 and 26 already cover. The mutation an author is least
+  #     likely to have in mind is the one that keeps everything looking correct:
+  #     leave the role, leave a verifiedBy, and point it at a gate that is not
+  #     ci-required. The entry still parses, still names a real script this
+  #     manifest classifies, and still reads as verified — and nothing on any
+  #     push proves the artifact any more. Downgrading the verifier is cheaper
+  #     than deleting the field and is what a reclassification would do by
+  #     accident.
+  d="$(new_case f28)"
+  gen_victim="$(jq -r '
+    [(.supportFiles // [])[] | select(.role == "generator") | .path][0] // empty' \
+    "$d/$MANIFEST_REL")"
+  manual_gate="$(jq -r '
+    [.scripts[] | select(.enforcement == "manual-runbook") | .path][0] // empty' \
+    "$d/$MANIFEST_REL")"
+  if [[ -z "$gen_victim" || -z "$manual_gate" ]]; then
+    fail "fixture 28: no generator entry or no manual-runbook gate exists to build the case from"
+  else
+    if fixture_mutate "fixture 28" "$d/$MANIFEST_REL" \
+      ruby -rjson -e '
+        path, victim, replacement = ARGV
+        data = JSON.parse(File.read(path))
+        data["supportFiles"].each do |entry|
+          entry["verifiedBy"] = replacement if entry["path"] == victim
+        end
+        File.write(path, JSON.pretty_generate(data) + "\n")
+      ' "$d/$MANIFEST_REL" "$gen_victim" "$manual_gate"; then
+      expect_fail "fixture 28" "$d" check_workflow_execution_declared \
+        "a generator whose verifiedBy names a manual-runbook gate is unverified on every push"
+    fi
+  fi
+
+  # 28b. The other direction, for the reason fixture 22b exists: "fails when I
+  #      break it" and "fails whatever I do to it" have the same green record.
+  #      Restoring a real ci-required verifier on the same entry must pass.
+  d="$(new_case f28b)"
+  ci_gate="$(jq -r '
+    [.scripts[] | select(.enforcement == "ci-required") | .path][0] // empty' \
+    "$d/$MANIFEST_REL")"
+  if [[ -z "$gen_victim" || -z "$ci_gate" ]]; then
+    fail "fixture 28b: no generator entry or no ci-required gate exists to build the control from"
+  else
+    if fixture_mutate "fixture 28b" "$d/$MANIFEST_REL" \
+      ruby -rjson -e '
+        path, victim, replacement = ARGV
+        data = JSON.parse(File.read(path))
+        data["supportFiles"].each do |entry|
+          entry["verifiedBy"] = replacement if entry["path"] == victim
+        end
+        File.write(path, JSON.pretty_generate(data) + "\n")
+      ' "$d/$MANIFEST_REL" "$gen_victim" "$ci_gate"; then
+      if check_workflow_execution_declared "$d" >/dev/null 2>&1; then
+        pass "fixture 28b: a generator pointed at a different ci-required gate still passes, so 28 is about the enforcement and not about the edit"
+      else
+        fail "fixture 28b: rewriting verifiedBy to another ci-required gate was rejected; the check is reacting to the edit rather than to the enforcement"
+      fi
     fi
   fi
 

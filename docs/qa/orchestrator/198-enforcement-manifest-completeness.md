@@ -167,11 +167,19 @@ The case deletes the first `ci-required` entry whose path is **outside**
 runs it.
 
 **Mutation targeted**: entry deletion, and specifically an entry outside
-`scripts/qa`. Deleting one *inside* `scripts/qa` is caught first by
+`scripts/qa`. Deleting one *inside* `scripts/qa` was caught first by
 `check_surface_complete`'s disk compare, which would make the fixture prove
-nothing about this check — and that is not incidental, it is the exact shape of
-the original defect: `scripts/qa` is the only tree check 1 can see, which is why
-three gates in `scripts/` were invisible.
+nothing about this check — and that was not incidental, it was the exact shape of
+the original defect: `scripts/qa` was the only tree check 1 could see, which is
+why three gates in `scripts/` were invisible.
+
+> **Updated by FR-158.** Check 1 now scans all of `scripts`, so *every* entry
+> deletion trips it and the "outside `scripts/qa`" qualifier no longer isolates
+> anything. Fixture 25 now deletes the file from disk as well as the manifest
+> entry: disk and manifest stay consistent, check 1 is satisfied, and the
+> workflow still names the path — because the executed set is parsed out of the
+> workflow rather than read off the disk. The case is sharper than it was, and
+> it is the same check under test.
 
 The target is derived from the manifest, never named. This check's subject is a
 set that is meant to grow; a fixture naming a path works only until the next gate

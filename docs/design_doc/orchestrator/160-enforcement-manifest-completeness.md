@@ -35,10 +35,18 @@ any of the three**. The most pointed instance:
 `invokedBy` — the callee was governed while its caller was not.
 
 The structural reason none of the existing checks could see this: check 1
-(`check_surface_complete`) derives its disk set from `find scripts/qa`, and all
+(`check_surface_complete`) derived its disk set from `find scripts/qa`, and all
 three live in `scripts/`, not `scripts/qa/`. Check 3 (`check_wiring_truth`) asks
 the opposite question — whether each *declared* entry is really executed — and
 says nothing about a script nobody declared.
+
+> **Updated by FR-158.** Check 1's root is now `scripts`, not `scripts/qa`, and
+> its extension set includes `.mjs`. FR-158 measured what the narrow root was
+> still hiding after this FR closed: 28 of 122 tracked scripts, among them every
+> shared library the ci-required gates source — `rust_source.rb`,
+> `workflow_model.rb`, `gate_jq.sh` and nine more. This FR's own reasoning
+> applies to that set unchanged; the gates were governed and the engine they run
+> on was not. The account above stands as the state at this FR's close.
 
 ## What the numbers actually are
 

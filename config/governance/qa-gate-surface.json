@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Explicit enforcement surface for every scripts/qa gate, plus every script outside scripts/qa that a GitHub Actions workflow job executes. Verified by scripts/qa/test-qa-gate-surface.sh, which runs in the ci.yml governance job. A script on disk under scripts/qa that is absent here fails the gate; so does an entry whose script no longer exists; and so does a script any workflow job runs that is declared neither as a gate in scripts[] nor as a non-gate in supportFiles[]. FR-147 added the third direction: the first two are satisfied by a manifest that has never heard of scripts/qa-doc-lint.sh, which ci.yml had been running for months while every scanner deriving its scope from this file read the gate that script invokes and skipped the script itself.",
+  "description": "Explicit enforcement surface for every tracked script under scripts/, at any depth, with a .sh, .rb or .mjs extension. Verified by scripts/qa/test-qa-gate-surface.sh, which runs in the ci.yml governance job. A script on disk that is absent here fails the gate; so does an entry whose script no longer exists; and so does a script any workflow job runs that is declared neither as a gate in scripts[] nor as a non-gate in supportFiles[]. FR-147 added the third direction: the first two are satisfied by a manifest that has never heard of scripts/qa-doc-lint.sh, which ci.yml had been running for months while every scanner deriving its scope from this file read the gate that script invokes and skipped the script itself. FR-158 widened the first direction from scripts/qa to scripts, which brought in 28 files — among them all twelve shared libraries under scripts/lib that the ci-required gates source. Until then the gates were governed and the engine they run on was not, and a defect in a library reaches every caller at once.",
   "enforcementKinds": {
     "ci-required": "Executed by a GitHub Actions workflow on every push/PR. Requires workflow, job, and providerIsolation. Must never be able to reach a real provider binary.",
     "manual-runbook": "Executed by a human following the owner QA document. Requires reason and owner.",
@@ -13,8 +13,11 @@
   },
   "supportFileRoles": {
     "fixture": "Input data or a fake executable consumed by a gate. Never invoked as a gate itself, so it has no enforcement of its own.",
-    "library": "Shared shell or ruby sourced by one or more gates. Runs only inside its callers, so it inherits their enforcement.",
-    "release-tooling": "Executed directly by a release workflow to build or publish an artifact, not to assert a governance property. Has no enforcement of its own because it makes no claim. Only valid for a script whose every executing workflow is tag- or dispatch-triggered: check_workflow_execution_declared rejects the role the moment such a script appears in a job of a workflow that runs on a branch push or a pull request, so this is not a place to park a governance gate."
+    "library": "Shared shell, ruby or node sourced or invoked by one or more gates. Runs only inside its callers, so it inherits their enforcement. This is where the gates' own engine lives — scripts/lib/rust_source.rb and workflow_model.rb decide what four ledgers count and what the workflow checks can see — so a defect here reaches every caller at once, which is the argument for classifying it rather than leaving it outside the scanned root.",
+    "release-tooling": "Executed directly by a release workflow to build or publish an artifact, not to assert a governance property. Has no enforcement of its own because it makes no claim. Only valid for a script whose every executing workflow is tag- or dispatch-triggered: check_workflow_execution_declared rejects the role the moment such a script appears in a job of a workflow that runs on a branch push or a pull request, so this is not a place to park a governance gate.",
+    "generator": "Executed directly by a workflow to produce an artifact, like release-tooling, but from a workflow that development activity can trigger — so the trigger rule that disciplines release-tooling cannot apply. What disciplines this role instead is `verifiedBy`: the entry must name a ci-required gate that regenerates the same artifact and compares, and check_workflow_execution_declared rejects the role if that gate is absent from this manifest or is not ci-required. The claim is therefore not 'this script is trustworthy' but 'something on every push proves its output'. Without that field the role would be release-tooling with its one condition removed, which is the amnesty §4.4 shape 8 describes.",
+    "developer-tool": "Run by a person at a terminal, never by a workflow and never by a gate. It asserts nothing about this repository's invariants, so there is no enforcement claim to make and a break shows up the next time someone runs it. Distinct from manual-runbook, which is a gate a human executes against a written procedure and whose freshness is tracked; these have no procedure and no claim. Not a parking space for a gate: anything that checks an invariant belongs in .scripts[] with an enforcement.",
+    "spike": "Throwaway prototype kept for the record, executed by nothing. It is not maintained, not run, and makes no claim; it is declared only so that it is visible to this manifest rather than sitting in an unscanned subtree. Declared per path — scripts/spikes is deliberately not a subtree exemption, because a directory-level ignore would go on absorbing files nobody has written yet and would never produce a line in any log."
   },
   "supportFiles": [
     {
@@ -61,6 +64,142 @@
       "path": "scripts/update-homebrew-formula.sh",
       "role": "release-tooling",
       "reason": "rewrites the Homebrew formula from a published tag in release.yml's homebrew job. It runs after the artifacts exist and reads their checksums; it makes no assertion a CI gate could enforce."
+    },
+    {
+      "path": "scripts/lib/rust_source.rb",
+      "role": "library",
+      "reason": "the Rust scan four ledgers count with: file discovery, cfg(test) stripping, and the masked/unmasked source the ratchets read. Sourced by core-boundary.rb, coordination-governance.rb, persistence-dependency.rb and persistence-api-boundary.rb, all ci-required, and each of those gates asserts it cannot run without this file."
+    },
+    {
+      "path": "scripts/lib/rust_lexer.rb",
+      "role": "library",
+      "reason": "masks comments, char literals and raw strings of any hash depth so a brace inside a literal does not end a cfg(test) module. Sourced through rust_source.rb by the same four ci-required ledger gates; test-ci-cost.sh case 8 pins its output directly."
+    },
+    {
+      "path": "scripts/lib/shell_lexer.rb",
+      "role": "library",
+      "reason": "the shell equivalent of rust_lexer, sourced by the pipefail-short-circuit and jq-status scanners; both are ci-required."
+    },
+    {
+      "path": "scripts/lib/workflow_model.rb",
+      "role": "library",
+      "reason": "parses .github/workflows into the facts the surface checks compare against: run-commands, executed-scripts, outcome-facts, triggers. test-qa-gate-surface.sh checks 11 and 14 are derivations over this file, so its reach is the reach of those checks."
+    },
+    {
+      "path": "scripts/lib/manifest_model.rb",
+      "role": "library",
+      "reason": "shared manifest parsing for the gates that read fixtures/manifests bundles; runs only inside its callers."
+    },
+    {
+      "path": "scripts/lib/gate_jq.sh",
+      "role": "library",
+      "reason": "the jq reader that makes a gate observe its own feed status. It exists because a loop fed by a process substitution reports success over input jq could not parse; every ci-required shell gate that reads a ledger goes through it."
+    },
+    {
+      "path": "scripts/lib/gate_preamble.sh",
+      "role": "library",
+      "reason": "derives the commands a gate checks for before it asserts anything; read by test-qa-gate-surface.sh and test-ci-environment-parity.sh to compare a gate's preamble against the job that runs it."
+    },
+    {
+      "path": "scripts/lib/gate_fixture.sh",
+      "role": "library",
+      "reason": "shared negative-fixture helpers, including the mutate-and-compare form fixture-target-drift.rb requires so a fixture whose target moved fails loudly instead of aborting the run."
+    },
+    {
+      "path": "scripts/lib/provider_isolation.sh",
+      "role": "library",
+      "reason": "detects whether a gate can reach a real provider binary; sourced by test-qa-gate-surface.sh's provider isolation check, which is the thing standing between a ci-required gate and someone's API quota."
+    },
+    {
+      "path": "scripts/lib/ci_env.rb",
+      "role": "library",
+      "reason": "decides whether a ledger emitter is running unattended, so --write refuses under CI instead of rewriting the reviewed half of a ledger inside a run. Sourced by every emitting gate."
+    },
+    {
+      "path": "scripts/lib/fr_registry.rb",
+      "role": "library",
+      "reason": "reads the FR registry for the gates that cross-check FR references in documents; runs only inside its callers."
+    },
+    {
+      "path": "scripts/lib/skill_docs.rb",
+      "role": "library",
+      "reason": "parses .claude/skills for the skill mirror and path-scope gates, both ci-required."
+    },
+    {
+      "path": "scripts/coverage/coverage-governance.mjs",
+      "role": "library",
+      "reason": "the implementation of the coverage governance gate; scripts/coverage-governance.sh is the declared ci-required entry point and invokes this with the summarize and check subcommands. It is not separately runnable as a gate — the wrapper supplies the llvm-cov invocation and the policy path."
+    },
+    {
+      "path": "scripts/coverage/test-coverage-governance.mjs",
+      "role": "library",
+      "reason": "the negative-fixture suite for coverage-governance.mjs, exec'd by scripts/coverage-governance.sh --fixture-test. It runs only inside that caller and inherits its enforcement."
+    },
+    {
+      "path": "scripts/sync-docs.mjs",
+      "role": "generator",
+      "verifiedBy": "scripts/qa/test-docs-publishing-integrity.sh",
+      "reason": "generates the published documentation set from config/governance/docs-publishing.json, and is executed directly by docs.yml's deploy job on push to main. Not release-tooling, because that role requires every executing workflow to be tag- or dispatch-triggered and docs.yml runs on a branch push; not library, because a library is never invoked as a gate itself and this one is invoked at top level. The verifier regenerates the whole set into a temporary directory and diffs it on every push and PR, so the generator and the gate cannot disagree about what is published."
+    },
+    {
+      "path": "scripts/regression/run-cli-probes.sh",
+      "role": "library",
+      "reason": "the CLI probe runner. It sources every file under scripts/regression/scenarios into one shell that has already set -euo pipefail, which is why those scenarios are governed by the pipefail scanner even though none of them sets the option itself. Human-run against a live daemon; it is not in .scripts[] because it exercises the CLI rather than asserting a repository invariant."
+    },
+    {
+      "path": "scripts/regression/lib/probe-runner-lib.sh",
+      "role": "library",
+      "reason": "shared probe helpers sourced by run-cli-probes.sh; runs only inside it."
+    },
+    {
+      "path": "scripts/regression/scenarios/probe-task-create.sh",
+      "role": "library",
+      "reason": "probe scenario sourced by run-cli-probes.sh, never executed on its own"
+    },
+    {
+      "path": "scripts/regression/scenarios/probe-runtime-control.sh",
+      "role": "library",
+      "reason": "probe scenario sourced by run-cli-probes.sh, never executed on its own"
+    },
+    {
+      "path": "scripts/regression/scenarios/probe-trace.sh",
+      "role": "library",
+      "reason": "probe scenario sourced by run-cli-probes.sh, never executed on its own"
+    },
+    {
+      "path": "scripts/regression/scenarios/probe-low-output.sh",
+      "role": "library",
+      "reason": "probe scenario sourced by run-cli-probes.sh, never executed on its own"
+    },
+    {
+      "path": "scripts/run-cli.sh",
+      "role": "developer-tool",
+      "reason": "runs the release CLI binary against the local daemon socket, building it first if absent. A convenience wrapper around a cargo target; it checks nothing."
+    },
+    {
+      "path": "scripts/run-full-qa.sh",
+      "role": "developer-tool",
+      "reason": "launches a full-QA regression task through a running daemon and polls its status. It drives the product rather than asserting anything about the repository, and it requires a daemon and a built binary that no workflow provides."
+    },
+    {
+      "path": "scripts/check-linux-x86-rlimit.sh",
+      "role": "developer-tool",
+      "reason": "reproduces the 32-bit i686 rlimit behaviour behind the cross-compile target's stack sizing, kept as a diagnostic for the decision recorded in DD-152. Referenced from core/README.md as a manual investigation aid; no workflow runs it."
+    },
+    {
+      "path": "scripts/spikes/streaming-agent-runner/driver.mjs",
+      "role": "spike",
+      "reason": "throwaway spike driving the claude CLI over bidirectional stream-json, kept as the evidence behind the streaming runner pivot. Executed by nothing."
+    },
+    {
+      "path": "scripts/spikes/streaming-agent-runner/driver2.mjs",
+      "role": "spike",
+      "reason": "second iteration of the same spike, retained for the same reason and equally unexecuted"
+    },
+    {
+      "path": "scripts/spikes/streaming-agent-runner/mcp_server.mjs",
+      "role": "spike",
+      "reason": "stub MCP server used by the streaming spike; executed by nothing"
     }
   ],
   "staleClaimExemptions": [],
@@ -866,6 +1005,12 @@
       "enforcement": "manual-runbook",
       "reason": "builds a release binary and drives multi-layer composition scenarios against a live CLI",
       "owner": "docs/qa/orchestrator/51-primitive-composition.md"
+    },
+    {
+      "path": "scripts/watchdog.sh",
+      "enforcement": "manual-runbook",
+      "reason": "Layer 4 of the self-bootstrap survival mechanism: it polls the binary on disk, health-checks it with `--help`, and copies the .stable snapshot back after WATCHDOG_MAX_FAILURES consecutive failures. It runs as an unbounded foreground loop that overwrites target/release/orchestratord, so no CI job can execute it; the runbook drives it with a two-second poll against a deliberately corrupted binary. Classified here rather than as a developer-tool because it does make a claim — that a corrupt build is repaired — and QA self-bootstrap/02 is the procedure that checks it.",
+      "owner": "docs/qa/self-bootstrap/02-survival-enforcement-watchdog.md"
     }
   ]
 }
