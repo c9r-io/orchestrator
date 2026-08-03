@@ -242,6 +242,24 @@ about, committed while implementing the warning:
   zero, and their reviewed `category` fields go with them; regenerating
   afterwards cannot reinvent them. Restore the ledger from git rather than by
   re-emitting. Found the hard way during this FR.
+- **A nested invocation records as a run, which is true of the script and not of
+  the runbook.** Seven ci-required call sites invoke a manual-runbook gate —
+  `certify-slack-managed-live.sh` reaches three, `test-qa-gate-surface.sh` three,
+  `test-agent-driver-execution-migration.sh` one. Under CI nothing is recorded,
+  so this only arises locally, and it is left in place deliberately: the ledger's
+  purpose is to distinguish a gate nobody has run in a year from one that ran
+  this morning, and a nested execution genuinely does prove the script still
+  runs, which is exactly the class of decay FR-148 and FR-149 found by hand. What
+  it does not prove is that a human followed the procedure around it. The
+  alternative — a list of invoking call sites — is the enumeration §4.4 shape 2
+  condemns, and the set is already seven and growing.
+
+  The consequence for **certification**: a local sweep of the derived ci-required
+  set must run with `CI=1`, or a nested manual gate writes the tracked ledger
+  mid-run and the sweep cannot end on a clean worktree as §4.6 requires. That is
+  also the more faithful environment, since CI is where these gates actually run.
+  FR-158's own second and third sweeps were voided this way before the
+  precondition was written down.
 - **The freshness ledger cannot see a gate run from a different checkout.** It
   records `git rev-parse HEAD` of the tree the gate ran in; a run against a
   worktree or a clone writes into that copy's ledger and is lost unless

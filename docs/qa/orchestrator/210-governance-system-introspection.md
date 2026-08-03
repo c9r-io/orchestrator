@@ -196,6 +196,12 @@ fails; fixture 32 adds a path that is not a ci-required gate and the check fails
   recencies appear as the 35 gates are next run by a human.
 - **Scenario 2's mutation edits tracked files.** Run it on a clean worktree and
   restore with `git checkout`, never by re-emitting the ledger.
+- **A bulk sweep of the ci-required set must run with `CI=1`.** Seven ci-required
+  call sites invoke a manual-runbook gate, and outside CI the invoked gate
+  records a run — writing a tracked file mid-sweep, so the run cannot end on the
+  clean worktree §4.6 requires. `CI=1` makes the recorder inert and is the
+  environment these gates actually run in. Two of FR-158's own certification
+  sweeps were voided before this precondition was written down.
 - **The `shape` field is prose and nothing validates its content.** A gate can
   name a shape that does not fit and the check accepts it; what it buys is that
   the question appeared in a reviewed diff.
