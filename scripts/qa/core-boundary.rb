@@ -31,7 +31,8 @@ CORE_ROOT = "core/src/".freeze
 # is deliberately not matched: it is not crate-external surface.
 PUBLIC_ITEM = /^\s*pub (?:async )?(?:fn|struct|enum|trait|type|const) /
 SCOPE = "non-test Rust source under core/src, excluding inline cfg(test) modules, " \
-  "files under a tests directory, and files named test*.rs".freeze
+  "files under a tests directory, and files named test*.rs, counted on the " \
+  "lexically masked source so that comments and string literals are not code".freeze
 
 options = {
   ledger: "config/governance/core-boundary-ledger.json",
@@ -54,14 +55,15 @@ def core_source_files(repo_root)
 end
 
 # `pub mod` in lib.rs is the crate's module surface; publicItems is every
-# exported item across core. Both are counted after stripping cfg(test) modules,
-# so a test helper marked `pub` does not read as public API.
+# exported item across core. Both are counted after stripping cfg(test) modules
+# and masking comments and string literals, so neither a test helper marked
+# `pub` nor a `pub fn` inside a doc-comment example reads as public API.
 def core_surface(repo_root, files)
-  lib = strip_test_modules(File.read(repo_root.join("core/src/lib.rs")))
+  lib = masked_scannable_source(repo_root.join("core/src/lib.rs"))
   {
     "files" => files.length,
     "pubMod" => lib.scan(/^pub mod /).length,
-    "publicItems" => files.sum { |path| scannable_source(path).scan(PUBLIC_ITEM).length }
+    "publicItems" => files.sum { |path| masked_scannable_source(path).scan(PUBLIC_ITEM).length }
   }
 end
 
@@ -69,10 +71,22 @@ end
 # own requirement 2 named fourteen files; the real inventory is this one, and
 # recording it per file means the extraction can be checked off against something
 # machine-readable rather than against prose.
+
+# Counted on the masked source, which is the same ruler
+# scripts/qa/persistence-dependency.rb uses for the same token. That agreement
+# is the whole reason the scanner is one library and not two lookalikes: two
+# ledgers counting one tree by two methods produce two reviewed states that both
+# look correct (DD-142, and the header of scripts/lib/rust_source.rb).
+#
+# Measured at FR-158, this moves nothing — core references the driver 0 times
+# now that the extraction has completed, and publicItems reads 611 either way.
+# It is converted anyway, because the number it would disagree on is the number
+# that appears the day the driver comes back, and a divergence introduced while
+# both sides read zero is a divergence nobody will be looking for.
 def rusqlite_touch_points(repo_root, files)
   per_file = {}
   files.each do |path|
-    count = scannable_source(path).scan(/rusqlite/).length
+    count = masked_scannable_source(path).scan(/rusqlite/).length
     next if count.zero?
     per_file[relative_path(repo_root, path)] = count
   end

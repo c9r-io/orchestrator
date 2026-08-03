@@ -53,7 +53,10 @@ include RustSource
 SCOPE = "every workspace member listed in the root Cargo.toml, its Cargo.toml " \
   "parsed by dependency section, and its non-test Rust source outside core — " \
   "its src tree and its Cargo build script — excluding inline cfg(test) " \
-  "modules, files under a tests directory, and files named test*.rs".freeze
+  "modules, files under a tests directory, and files named test*.rs; the " \
+  "driver token is counted on the lexically masked source, so a comment or doc " \
+  "comment naming it is not a reference, while SQL statements are counted on " \
+  "the unmasked source because the pattern anchors inside a string literal".freeze
 
 # rusqlite and tokio-rusqlite both carry the driver. Freezing only the former
 # leaves the async wrapper as an unguarded second door.
@@ -220,8 +223,31 @@ def member_references(repo_root, scanned_members, roots)
   files = rust_files_under(repo_root, roots)
 
   files.each_with_object({}) do |path, collected|
-    source = scannable_source(path)
-    driver = source.scan(/rusqlite/).length
+    # The two rulers read two different sources, and the difference is not an
+    # inconsistency — it is what each one measures.
+    #
+    # `rusqlite` is an identifier, so it is counted on the masked source. DD-142
+    # recorded the over-count as a known limit ("a comment mentioning rusqlite
+    # counts") and DD-148 recorded the instance: a doc comment explaining that
+    # the driver conversion had been *removed* named the impl and put the file
+    # back on the ledger, and the workaround was to stop spelling the type's
+    # path. Masking removes the cost instead of paying it.
+    #
+    # SQL_STATEMENT anchors on the opening quote — its whole subject is the
+    # string literal. Counting it on the masked source yields 0 for every file
+    # in the workspace, measured, and nothing in this gate would have failed:
+    # the ledger would simply have recorded that this crate executes no SQL.
+    # That is §4.4 shape 10 — the repair that fixes the under-reach opens the
+    # over-reach — so the two are separated rather than unified.
+    # Read once and mask once. Masking is the entire cost of these scans (13s
+    # across the workspace, FR-140), so the two views are derived from one
+    # masked copy rather than by calling the two `*_scannable_source` helpers,
+    # which would pay for it twice. `rust_files_under` yields only `.rs`, so
+    # there is no non-Rust branch to carry here.
+    raw = File.read(path)
+    masked = RustLexer.mask_literals(raw)
+    source = strip_test_modules(raw, masked)
+    driver = strip_test_modules(masked, masked).scan(/rusqlite/).length
     sql = source.scan(SQL_STATEMENT).length
     next if driver.zero? && sql.zero?
 

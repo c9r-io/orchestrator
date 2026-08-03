@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "scope": "every workspace member listed in the root Cargo.toml, its Cargo.toml parsed by dependency section, and its non-test Rust source outside core — its src tree and its Cargo build script — excluding inline cfg(test) modules, files under a tests directory, and files named test*.rs",
+  "scope": "every workspace member listed in the root Cargo.toml, its Cargo.toml parsed by dependency section, and its non-test Rust source outside core — its src tree and its Cargo build script — excluding inline cfg(test) modules, files under a tests directory, and files named test*.rs; the driver token is counted on the lexically masked source, so a comment or doc comment naming it is not a reference, while SQL statements are counted on the unmasked source because the pattern anchors inside a string literal",
   "scanRoots": [
     "crates/cli/build.rs",
     "crates/cli/src",
@@ -166,7 +166,7 @@
   "references": {
     "crates/orchestrator-persistence/src/async_database.rs": {
       "crate": "crates/orchestrator-persistence",
-      "rusqlite": 17,
+      "rusqlite": 14,
       "sql": 0,
       "category": "persistence-layer"
     },
@@ -196,7 +196,7 @@
     },
     "crates/orchestrator-persistence/src/db.rs": {
       "crate": "crates/orchestrator-persistence",
-      "rusqlite": 3,
+      "rusqlite": 1,
       "sql": 37,
       "category": "persistence-layer"
     },
@@ -208,7 +208,7 @@
     },
     "crates/orchestrator-persistence/src/event_retention.rs": {
       "crate": "crates/orchestrator-persistence",
-      "rusqlite": 6,
+      "rusqlite": 5,
       "sql": 9,
       "category": "persistence-layer"
     },
@@ -352,7 +352,7 @@
     },
     "crates/orchestrator-persistence/src/task_repository/write_ops.rs": {
       "crate": "crates/orchestrator-persistence",
-      "rusqlite": 4,
+      "rusqlite": 3,
       "sql": 10,
       "category": "persistence-layer"
     },
@@ -388,7 +388,7 @@
     },
     "crates/orchestrator-security/src/secret_store_session.rs": {
       "crate": "crates/orchestrator-security",
-      "rusqlite": 2,
+      "rusqlite": 1,
       "sql": 0,
       "category": "owned-connection"
     },
@@ -402,7 +402,7 @@
   "totals": {
     "members": 14,
     "referencedFiles": 39,
-    "rusqlite": 215,
+    "rusqlite": 207,
     "sql": 597
   }
 }

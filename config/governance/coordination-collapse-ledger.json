@@ -27,10 +27,10 @@
     }
   ],
   "sourceBaseline": {
-    "scope": "non-test Rust source under core/src and crates/*/src, excluding inline cfg(test) modules, plus member Cargo.toml manifests",
-    "capturesOrJsonPath": 23,
-    "pipelineVariables": 29,
-    "celInterpreter": 9,
+    "scope": "non-test Rust source under core/src and crates/*/src, excluding inline cfg(test) modules, plus member Cargo.toml manifests; Rust files are counted on the lexically masked source, so a coordinate named in a comment, doc comment or string literal is not a reference, and each coordinate counts occurrences rather than matching lines. Cargo.toml manifests are read unmasked because there is no TOML lexer here, so a `#` comment naming a coordinate in a manifest still counts.",
+    "capturesOrJsonPath": 12,
+    "pipelineVariables": 26,
+    "celInterpreter": 8,
     "legacyRunnerSelection": 0
   },
   "consumerInventory": {

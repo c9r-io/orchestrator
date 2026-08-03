@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "scope": "non-test Rust source under core/src, excluding inline cfg(test) modules, files under a tests directory, and files named test*.rs",
+  "scope": "non-test Rust source under core/src, excluding inline cfg(test) modules, files under a tests directory, and files named test*.rs, counted on the lexically masked source so that comments and string literals are not code",
   "coreSurface": {
     "files": 128,
     "pubMod": 49,

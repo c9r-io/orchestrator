@@ -309,21 +309,34 @@ def source_counts(files)
     "legacyRunnerSelection" => 0
   }
   files.each do |path|
-    scannable_source(path).each_line do |line|
-      # `output_json_path` is the session/step structured-output spill path — a
-      # live artifact location with no relation to the retired JSONPath
-      # extraction surface this coordinate exists to count. An unanchored
-      # `json_path` matched it anyway, and it was the majority of the number:
-      # 32 of 55 lines when FR-159 tripped the ratchet by referencing the field
-      # twice more. Anchoring drops the coordinate to 23 and makes the ratchet
-      # strictly tighter, because everything removed was never in scope.
-      counts["capturesOrJsonPath"] += 1 if line.match?(/captures|(?<!output_)json_path/)
-      counts["pipelineVariables"] += 1 if line.include?("PipelineVariables")
-      counts["celInterpreter"] += 1 if line.match?(/cel_interpreter|cel-interpreter/)
-      counts["legacyRunnerSelection"] += 1 if line.match?(
-        /RunnerExecutorKind|ShellRunnerExecutor|StreamingAgentRunner|spawn_with_runner(?:_and_capture)?_session|prepare_legacy_claude_streaming_command/
-      )
-    end
+    # Masked, so a coordinate is counted where it is *code*. Four of these
+    # numbers were part prose: the validator that rejects `behavior.captures`
+    # names it in the rejection message, so the code deleting the surface
+    # counted as code using it — DD-148's recorded shape, measured here at 23
+    # lines of which 11 were real. See RustSource.masked_scannable_source.
+    source = masked_scannable_source(path)
+
+    # Occurrences, not lines. A line-count ratchet cannot see a second reference
+    # added to a line that already has one, which is the cheapest way to grow a
+    # coupling past it; DD-140 recorded all four of these as line-count regexes
+    # and this is the half of that limit which masking does not address. The
+    # `rusqlite` ruler next door has always counted occurrences, so after this
+    # the two ledgers count the same tree the same way (DD-142's premise).
+    #
+    # `output_json_path` is the session/step structured-output spill path — a
+    # live artifact location with no relation to the retired JSONPath
+    # extraction surface this coordinate exists to count. An unanchored
+    # `json_path` matched it anyway, and it was the majority of the number:
+    # 32 of 55 lines when FR-159 tripped the ratchet by referencing the field
+    # twice more. The lookbehind stays after masking: `output_json_path` is an
+    # identifier, so masking never touched it and removing the anchor here
+    # would put that field straight back into the count.
+    counts["capturesOrJsonPath"] += source.scan(/captures|(?<!output_)json_path/).length
+    counts["pipelineVariables"] += source.scan(/PipelineVariables/).length
+    counts["celInterpreter"] += source.scan(/cel_interpreter|cel-interpreter/).length
+    counts["legacyRunnerSelection"] += source.scan(
+      /RunnerExecutorKind|ShellRunnerExecutor|StreamingAgentRunner|spawn_with_runner(?:_and_capture)?_session|prepare_legacy_claude_streaming_command/
+    ).length
   end
   counts
 end

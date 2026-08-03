@@ -793,5 +793,92 @@ else
 fi
 echo ""
 
+# --- Case 20: the driver named in prose is not a driver reference ------------
+# DD-142 recorded this as a known limit and DD-148 recorded the instance that
+# makes it concrete: a doc comment written to explain that the driver conversion
+# had been *removed* named the impl, and put the file back on the ledger. The
+# workaround at the time was to stop spelling the type's path — precision traded
+# for a metric. FR-158 masks comments and string literals instead, and this case
+# is that incident, reproduced.
+#
+# The mutation deliberately spells the driver three ways: a doc comment, a line
+# comment, and inside a string literal. Stripping `//` with a regex — the cheap
+# repair someone will reach for if this is ever "simplified" — still counts the
+# string, so the case fails on the version of the fix that only looks correct.
+#
+# The two halves are one case for the reason case 14 gives: "stayed green after
+# I added prose" is also satisfied by the file never being read, which is a
+# state this suite considers broken. The second half appends a real reference to
+# the SAME file and requires the count to move by exactly one.
+PROBE_DRIVER_BEFORE=$(ruby -rjson -e 'print JSON.parse(File.read(ARGV[0]))["references"][ARGV[1]]["rusqlite"]' "$LEDGER" "$PROBE_FILE")
+echo "Case 20: the driver named in prose is not counted, and the file it sits in is really scanned"
+DIR="$(new_case driver-prose)"
+cat >> "$DIR/$PROBE_FILE" <<'RUST'
+
+/// Converted away from the `rusqlite::Connection` this used to take; the
+/// statement now runs behind the async wrapper.
+// The rusqlite::Row conversion that lived here was deleted by FR-141.
+pub fn fr158_prose_probe() -> &'static str {
+    "no longer holds a rusqlite::Connection"
+}
+RUST
+run_gate "$DIR" case20a
+if [[ "$STATUS" -eq 0 ]]; then
+  cat >> "$DIR/$PROBE_FILE" <<'RUST'
+
+pub fn fr158_driver_control(conn: &rusqlite::Connection) -> bool {
+    conn.is_autocommit()
+}
+RUST
+  run_gate "$DIR" case20b
+  if [[ "$STATUS" -ne 0 ]] &&
+    grep -q "~ $PROBE_FILE rusqlite $PROBE_DRIVER_BEFORE -> $((PROBE_DRIVER_BEFORE + 1))" "$WORK/case20b.err"; then
+    pass "two comments and a string literal naming the driver count as zero references, in a file one real reference proves is scanned"
+  else
+    fail "the control reference did not move the count, so case 20's green proved nothing (exit $STATUS)"
+    cat "$WORK/case20b.err" >&2
+  fi
+else
+  fail "the driver named in a comment or a string was counted as a reference (exit $STATUS); masking has been dropped"
+  cat "$WORK/case20a.err" >&2
+fi
+echo ""
+
+# --- Case 21: masking the driver ruler did not blind the SQL ruler -----------
+# §4.4 shape 10: the repair that fixes the under-reach opens the over-reach, and
+# the obvious unification — read both rulers off the masked source, since one of
+# them needed it — is silent. SQL_STATEMENT anchors on the opening quote, so its
+# whole subject is the string literal that masking blanks. Measured at FR-158,
+# masking it reads 0 statements for every file in the workspace.
+#
+# The failure that produces is not loud in the way it looks. The gate compares
+# against a ledger, so an implementer who unified the rulers and then ran
+# --emit-baseline --write would commit a ledger of 0 SQL statements and a green
+# gate, having deleted the residual that condition 2 exists to hold down. This
+# case fails first, and names the direction.
+#
+# Distinct from cases 12-14, which assert the SQL ruler counts the right things.
+# This one asserts it is still reading an unmasked source, and it reports a
+# different number than case 20 does — sql moves, rusqlite does not — so the log
+# says which of the two rulers broke.
+echo "Case 21: a SQL statement in a string literal is still counted after the driver ruler was masked"
+DIR="$(new_case sql-survives-masking)"
+cat >> "$DIR/$PROBE_FILE" <<'RUST'
+
+pub fn fr158_sql_control(conn: &Connection) -> anyhow::Result<()> {
+    conn.execute("DELETE FROM audit_links WHERE request_id IS NULL", [])?;
+    Ok(())
+}
+RUST
+run_gate "$DIR" case21
+if [[ "$STATUS" -ne 0 ]] &&
+  grep -q "~ $PROBE_FILE sql $PROBE_SQL_BEFORE -> $((PROBE_SQL_BEFORE + 1))" "$WORK/case21.err"; then
+  pass "the SQL ruler still reads the unmasked source; a statement in a string literal moves the count"
+else
+  fail "a SQL statement in a string literal was not counted (exit $STATUS); the two rulers have been unified onto the masked source"
+  cat "$WORK/case21.err" >&2
+fi
+echo ""
+
 echo "FR-136 persistence dependency chokepoint: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]]

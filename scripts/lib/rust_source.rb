@@ -154,6 +154,39 @@ module RustSource
     path.extname == ".rs" ? strip_test_modules(source) : source
   end
 
+  # The same thing with everything that is not code blanked out: comments, doc
+  # comments, char literals and strings of every raw-hash depth become spaces,
+  # so line structure and offsets are preserved and only the code remains.
+  #
+  # This exists because a ratchet counting an identifier counted the identifier
+  # in prose too. DD-142 recorded it as a known limit of the `rusqlite` ruler
+  # ("a comment mentioning rusqlite counts") and DD-148 recorded the instance
+  # that makes it concrete: a doc comment written to explain that the driver
+  # conversion had been *removed* named the impl and put the file back on the
+  # ledger, and the workaround was to stop spelling the type's path — precision
+  # traded for a metric. Measured at FR-158, prose was 52% of one coordinate:
+  # capturesOrJsonPath read 23 lines and reads 11 masked, because the rejection
+  # diagnostics that *delete* the surface name it in their message strings.
+  #
+  # Masking is paid for once. `strip_test_modules(masked, masked)` strips the
+  # masked copy using itself for brace depth, which is the shape FR-141 added
+  # the second parameter for; masking is the entire cost of these scans (13s
+  # across the workspace, the largest item in the governance CI bill, FR-140).
+  #
+  # Not for every ruler. A pattern whose subject *is* a string literal must read
+  # the unmasked source or it measures nothing: persistence-dependency.rb's
+  # SQL_STATEMENT anchors on the opening quote, and counting it here would take
+  # 518 statements to 0 without failing anything. Mask what is an identifier;
+  # leave what is a literal. Non-Rust files are returned unchanged, so a `#`
+  # comment in a Cargo.toml is still counted — TOML has no lexer here.
+  def masked_scannable_source(path)
+    source = File.read(path)
+    return source unless path.extname == ".rs"
+
+    masked = RustLexer.mask_literals(source)
+    strip_test_modules(masked, masked)
+  end
+
   # Ruby's JSON.pretty_generate writes an empty array as "[\n\n]". The reviewed
   # ledgers use "[]", so a --write round trip would otherwise move lines that no
   # reviewer asked to change and bury the real edit.
