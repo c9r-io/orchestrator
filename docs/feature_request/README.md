@@ -6,7 +6,7 @@
 
 
 <!-- BEGIN GENERATED FR REGISTRY -->
-> 由 `scripts/lib/fr_registry.rb` 从完整 `HEAD` 祖先历史生成：141 个历史编号 / 146 条历史路径，另有 13 条无 FR 文件历史的审阅例外；5 个编号存在多路径碰撞。浅克隆拒绝生成。
+> 由 `scripts/lib/fr_registry.rb` 从完整 `HEAD` 祖先历史生成：142 个历史编号 / 147 条历史路径，另有 13 条无 FR 文件历史的审阅例外；5 个编号存在多路径碰撞。浅克隆拒绝生成。
 
 | ID | 标题 | 优先级 | 状态 | 来源 / 碰撞 |
 |----|------|--------|------|-------------|
@@ -164,6 +164,7 @@
 | FR-157 | Source 域分解与测试补强 | P3 | Closed | git history |
 | FR-158 | 治理体系自省 — 门禁的门禁、成本与新鲜度 | P3 | Closed | git history |
 | FR-159 | 交互会话进程回收 — 孤儿泄漏与 OS 层回收缺口 | P1 | Closed | git history |
+| FR-160 | QA harness 的守护进程拆解 —— `wait` 在 23 个门禁里是空操作 | P2 | Proposed | git history |
 <!-- END GENERATED FR REGISTRY -->
 
 ## 说明
