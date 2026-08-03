@@ -35,8 +35,24 @@ cleanup() {
   if [[ "$FAIL" -gt 0 || "${KEEP_FR124_QA:-0}" == "1" ]]; then
     echo "FR-124 QA retained at QA_ROOT=$QA_ROOT QA_HOME=$QA_HOME" >&2
   else
-    rm -rf "$QA_ROOT" "$QA_HOME"
+    # A cleanup failure must not overwrite the gate's verdict, and must not be
+    # silent either. Observed in run 30795701182: the assertions had already
+    # reported "11 passed, 0 failed" when this `rm` raced a session child still
+    # writing into $QA_ROOT/data, and `Directory not empty` turned the step red
+    # with nothing in the log connecting it to what the gate tests. `wait` above
+    # reaps the daemon, not the process group beneath it — FR-159's subject,
+    # surfacing here in the harness rather than the product.
+    #
+    # So: settle and retry once, then say plainly what leaked. The gate's
+    # subject is driver parity; a temp directory that outlives it is a fact
+    # worth printing, not a verdict.
+    if ! rm -rf "$QA_ROOT" "$QA_HOME" 2>/dev/null; then
+      sleep 1
+      rm -rf "$QA_ROOT" "$QA_HOME" 2>/dev/null ||
+        echo "warning: $QA_ROOT or $QA_HOME survived cleanup; a child process is still writing there" >&2
+    fi
   fi
+  return 0
 }
 trap cleanup EXIT
 
