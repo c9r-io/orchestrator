@@ -8,67 +8,63 @@
       "jobs": {
         "async-lock-governance": {
           "conclusion": "success",
-          "runId": "30792774882",
-          "headSha": "c1fd4dd5524d23b53f7d77accbab7c5d5271f253"
+          "runId": "30794311378",
+          "headSha": "9f94a89211f034d55cfabb60e69c878989514920"
         },
         "fmt": {
           "conclusion": "success",
-          "runId": "30792774882",
-          "headSha": "c1fd4dd5524d23b53f7d77accbab7c5d5271f253"
+          "runId": "30794311378",
+          "headSha": "9f94a89211f034d55cfabb60e69c878989514920"
         },
         "clippy": {
           "conclusion": "success",
-          "runId": "30792774882",
-          "headSha": "c1fd4dd5524d23b53f7d77accbab7c5d5271f253"
+          "runId": "30794311378",
+          "headSha": "9f94a89211f034d55cfabb60e69c878989514920"
         },
         "test": {
           "conclusion": "success",
-          "runId": "30792774882",
-          "headSha": "c1fd4dd5524d23b53f7d77accbab7c5d5271f253"
+          "runId": "30794311378",
+          "headSha": "9f94a89211f034d55cfabb60e69c878989514920"
         },
         "coordination-strangler": {
           "conclusion": "success",
-          "runId": "30792774882",
-          "headSha": "c1fd4dd5524d23b53f7d77accbab7c5d5271f253"
+          "runId": "30794311378",
+          "headSha": "9f94a89211f034d55cfabb60e69c878989514920"
         },
         "governance": {
-          "conclusion": "failure",
-          "runId": "30792774882",
-          "headSha": "c1fd4dd5524d23b53f7d77accbab7c5d5271f253",
-          "knownFailing": {
-            "reference": "docs/qa/orchestrator/210-governance-system-introspection.md",
-            "reason": "Run 30792774882 (c1fd4dd5) failed exclusively on the liveness gate own staleness rule: FR-158 edited ci.yml (the governance job gained the manual-gate-freshness step), which invalidated every record taken at 45fbf3c4. All other aggregated gates in the same run were green — 41 of 42 success in the Governance result log, including the new manual-gate-freshness step. This annotation retires automatically at the first refresh after a green governance run on this ledger."
-          }
+          "conclusion": "success",
+          "runId": "30794311378",
+          "headSha": "9f94a89211f034d55cfabb60e69c878989514920"
         },
         "ci-environment-parity": {
           "conclusion": "success",
-          "runId": "30792774882",
-          "headSha": "c1fd4dd5524d23b53f7d77accbab7c5d5271f253"
+          "runId": "30794311378",
+          "headSha": "9f94a89211f034d55cfabb60e69c878989514920"
         },
         "coverage-policy-fixtures": {
           "conclusion": "success",
-          "runId": "30792774882",
-          "headSha": "c1fd4dd5524d23b53f7d77accbab7c5d5271f253"
+          "runId": "30794311378",
+          "headSha": "9f94a89211f034d55cfabb60e69c878989514920"
         },
         "slack-certification-recorded": {
           "conclusion": "success",
-          "runId": "30792774882",
-          "headSha": "c1fd4dd5524d23b53f7d77accbab7c5d5271f253"
+          "runId": "30794311378",
+          "headSha": "9f94a89211f034d55cfabb60e69c878989514920"
         },
         "boundary-coverage": {
           "conclusion": "success",
-          "runId": "30792774882",
-          "headSha": "c1fd4dd5524d23b53f7d77accbab7c5d5271f253"
+          "runId": "30794311378",
+          "headSha": "9f94a89211f034d55cfabb60e69c878989514920"
         },
         "miri": {
           "conclusion": "success",
-          "runId": "30792774882",
-          "headSha": "c1fd4dd5524d23b53f7d77accbab7c5d5271f253"
+          "runId": "30794311378",
+          "headSha": "9f94a89211f034d55cfabb60e69c878989514920"
         },
         "cross-compile": {
           "conclusion": "success",
-          "runId": "30792774882",
-          "headSha": "c1fd4dd5524d23b53f7d77accbab7c5d5271f253"
+          "runId": "30794311378",
+          "headSha": "9f94a89211f034d55cfabb60e69c878989514920"
         }
       }
     },
@@ -89,13 +85,13 @@
       "jobs": {
         "cargo-audit": {
           "conclusion": "success",
-          "runId": "30792774890",
-          "headSha": "c1fd4dd5524d23b53f7d77accbab7c5d5271f253"
+          "runId": "30794311321",
+          "headSha": "9f94a89211f034d55cfabb60e69c878989514920"
         },
         "cargo-deny": {
           "conclusion": "success",
-          "runId": "30792774890",
-          "headSha": "c1fd4dd5524d23b53f7d77accbab7c5d5271f253"
+          "runId": "30794311321",
+          "headSha": "9f94a89211f034d55cfabb60e69c878989514920"
         }
       }
     },
