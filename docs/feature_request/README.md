@@ -162,6 +162,7 @@
 | FR-155 | 文档与仓库现实对齐 — AGENTS.md、幻觉基础设施、台账再生 | P2 | Closed | git history |
 | FR-156 | pipelineVariables 清单授权面退役 | P2 | Closed | git history |
 | FR-157 | Source 域分解与测试补强 | P3 | Closed | git history |
+| FR-158 | 治理体系自省 — 门禁的门禁、成本与新鲜度 | P3 | Closed | git history |
 | FR-159 | 交互会话进程回收 — 孤儿泄漏与 OS 层回收缺口 | P1 | Closed | git history |
 <!-- END GENERATED FR REGISTRY -->
 
