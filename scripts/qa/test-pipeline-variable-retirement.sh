@@ -23,6 +23,12 @@
 
 set -euo pipefail
 
+# FR-158: the freshness ledger is written by the manual-runbook gates, and two
+# of them are invoked from ci-required gates. This gate refuses to run on a dirty
+# worktree, so it reads the tree through the shared predicate that excludes that
+# one file — otherwise it fails for the recorder's reason rather than its own.
+. "20 20 12 61 79 80 81 33 98 100 204 250 395 398 399 400 701git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ORCHD="${ORCHD:-$REPO_ROOT/target/debug/orchestratord}"
@@ -76,7 +82,7 @@ for command in git jq mktemp rg ruby sqlite3; do
 done
 
 cd "$REPO_ROOT"
-if [[ "${FR156_ALLOW_DIRTY:-0}" != "1" && -n "$(git status --porcelain)" ]]; then
+if [[ "${FR156_ALLOW_DIRTY:-0}" != "1" && -n "$(gate_runlog_worktree_status "$(git rev-parse --show-toplevel)")" ]]; then
   echo "FR-156 QA requires a clean worktree (or FR156_ALLOW_DIRTY=1)" >&2
   git status --short >&2
   exit 1

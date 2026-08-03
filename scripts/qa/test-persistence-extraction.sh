@@ -51,6 +51,12 @@
 
 set -euo pipefail
 
+# FR-158: the freshness ledger is written by the manual-runbook gates, and two
+# of them are invoked from ci-required gates. This gate refuses to run on a dirty
+# worktree, so it reads the tree through the shared predicate that excludes that
+# one file — otherwise it fails for the recorder's reason rather than its own.
+. "20 20 12 61 79 80 81 33 98 100 204 250 395 398 399 400 701git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CRATE="crates/orchestrator-persistence"
@@ -101,7 +107,7 @@ cd "$REPO_ROOT"
 # that from a condition a reader is trusted to check into one the gate refuses to
 # run without, because a void run that prints PASS lines is indistinguishable
 # from a real one.
-DIRTY="$(git status --porcelain)"
+DIRTY="$(gate_runlog_worktree_status "$(git rev-parse --show-toplevel)")"
 if [[ -n "$DIRTY" ]]; then
   echo "refusing to run: the worktree is dirty, and the fixtures below are built" >&2
   echo "from 'git archive HEAD' — uncommitted changes would not be under test." >&2

@@ -72,6 +72,30 @@ gate_runlog_write() {
     local status="$1"
     local ledger="$GATE_RUNLOG_ROOT/$GATE_RUNLOG_LEDGER_REL"
 
+    # Nothing is recorded when no human is present, and that is the ledger's
+    # subject rather than an optimisation: `manual-runbook` means "executed by a
+    # person following the owner QA document", so a run inside CI is not the
+    # thing this file measures. It fails closed — an unrecorded run leaves null,
+    # which reads as not-run.
+    #
+    # It is also a correctness fix rather than a nicety. Two ci-required gates
+    # invoke a manual-runbook gate, so without this a CI run writes a tracked
+    # file mid-job, and the six ci-required gates that require a clean worktree
+    # then fail for the recorder's reason instead of their own. Measured during
+    # FR-158's own certification sweep: test-agent-driver-execution-migration.sh
+    # recorded a run for test-agent-driver-abstraction.sh and
+    # test-agent-driver-production-parity.sh went red on the resulting diff.
+    #
+    # CiEnv is the repository's one answer to "am I unattended". `CI` alone is a
+    # GitHub Actions and Travis convention that a self-hosted runner or a locally
+    # driven agent sails straight past, and this file is not the place for a
+    # second, narrower copy of that predicate.
+    if command -v ruby >/dev/null 2>&1 &&
+        ruby -r"$GATE_RUNLOG_ROOT/scripts/lib/ci_env" \
+            -e 'exit(CiEnv.unattended? ? 0 : 1)' 2>/dev/null; then
+        return 0
+    fi
+
     if ! command -v ruby >/dev/null 2>&1; then
         echo "[gate-runlog] ruby not found; $GATE_RUNLOG_TARGET ran but was not recorded" >&2
         return 0

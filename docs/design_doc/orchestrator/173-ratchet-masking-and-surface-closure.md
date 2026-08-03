@@ -182,6 +182,39 @@ recording:
   a line goes to stderr; the ledger is untouched. Freshness fails closed — an
   unrecorded run reads as not-run, never as fresh.
 
+### The scope predicate that was a fact about the set I looked at
+
+Six gates refuse to run on a dirty worktree and were repaired to read the tree
+through the shared predicate. The set was derived by scanning the
+**manual-runbook** gates for `git status --porcelain`, which found six — and
+"refuses to run on a dirty worktree" is not a property of that classification.
+Six *more* gates have it, all `ci-required`:
+`test-agent-driver-execution-migration.sh`,
+`test-agent-driver-production-parity.sh`, `test-coordination-strangler.sh`,
+`test-legacy-coordination-decommission.sh`, `test-persistence-extraction.sh`
+and `test-pipeline-variable-retirement.sh`.
+
+This is §4.4 shape 9's third premise — a scope predicate sufficient for the set
+in front of you is a fact about that set, not about the check — and it was found
+the way that premise says it usually is not: by running the thing. **FR-158's own
+first certification sweep was voided by it.** Two ci-required gates invoke a
+manual-runbook gate; the invoked gate recorded a run, wrote the tracked ledger
+mid-sweep, and `test-agent-driver-production-parity.sh` went red on the resulting
+diff — failing for the recorder's reason rather than its own, which is exactly
+the pathology the six manual gates were patched to avoid, landing on the six
+nobody had looked at.
+
+The repair has two independent halves, because either alone leaves a hole:
+
+- **`gate_runlog.sh` records nothing when no human is present**, via `CiEnv` —
+  the repository's single answer to "am I unattended", rather than a second and
+  narrower `ENV.key?("CI")`. This is the ledger's subject and not an
+  optimisation: `manual-runbook` means *executed by a person following the owner
+  QA document*, so a nested invocation inside CI is not the thing being measured.
+  It fails closed, leaving `null`, which reads as not-run.
+- **All twelve cleanliness checks now share one predicate.** The CI guard alone
+  would leave a developer running two gates locally in the same state.
+
 ### Three defects in this work, caught by the suite rather than by review
 
 Recorded because two of them are the shapes this repository's own skill warns
