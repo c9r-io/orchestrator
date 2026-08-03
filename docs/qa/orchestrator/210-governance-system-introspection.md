@@ -160,8 +160,8 @@ jq '.shapeRationale.exemptions | length' config/governance/qa-gate-surface.json
 **Expected result**
 
 `ci-cost.rb` exits 0. The budget covers `governance` and `ci-environment-parity`
-with a 2700s ceiling; the pair sums to **1589s**, so the ceiling binds with
-1111s of headroom. The all-job total is 2944s and is *not* what the ceiling
+with a 2700s ceiling; the pair sums to **1793s**, so the ceiling binds with
+907s of headroom. The all-job total is 3113s and is *not* what the ceiling
 covers — FR-158 originally compared those two numbers and reported a breach that
 had not happened.
 
@@ -182,7 +182,7 @@ fails; fixture 32 adds a path that is not a ci-required gate and the check fails
 - [ ] The `find scripts` versus manifest `comm` prints nothing
 - [ ] `manual-gate-freshness.rb` exits 0 and reports 35 of 35 stale
 - [ ] Removing a gate from the freshness ledger makes it exit 1
-- [ ] `ci-cost.rb` exits 0; budgeted pair is 1589s against 2700s
+- [ ] `ci-cost.rb` exits 0; budgeted pair is 1793s against 2700s
 - [ ] `shapeRationale.exemptions` has 52 entries
 
 ## Known limits

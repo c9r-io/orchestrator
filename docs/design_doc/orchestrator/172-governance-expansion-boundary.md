@@ -31,18 +31,24 @@ it needed to be named, because it was being read as a cost-control measure
 rather than as the thing that says how much governance this repository is
 willing to run.
 
-Measured at FR-158's close (run `30709873749`, ledger `ci-step-cost.json`):
+Measured at FR-158's close (run `30792774882`, `c1fd4dd5`, ledger
+`ci-step-cost.json` refreshed from that run):
 
 | | seconds |
 |---|---|
-| `governance` | 1132 |
-| `ci-environment-parity` | 457 |
-| **budgeted total** | **1589 / 2700** |
-| all twelve ci.yml jobs | 2944 |
+| `governance` | 1248 |
+| `ci-environment-parity` | 545 |
+| **budgeted total** | **1793 / 2700** |
+| all twelve ci.yml jobs | 3113 |
+
+FR-158's own step, `Manual-runbook gate freshness`, measures **0s** — it reads two
+JSON files and prints 35 lines, and disappears into the per-step overhead. That
+was the intent: a rule about the cost of governance should not arrive with a
+bill.
 
 FR-158's own filing claimed the 2700s figure had been breached, reading the
 all-job sum of 2709s against a ceiling that covers two jobs. It had not: the pair
-was at 1589s with 1111s of headroom, and the number to compare is the one the
+was at 1793s with 907s of headroom, and the number to compare is the one the
 ledger's own `budget.jobs` field names. The correction matters beyond
 arithmetic — the FR proposed a *new* cap on the strength of a breach that had not
 happened, and the honest finding is that the existing ceiling binds and is not
