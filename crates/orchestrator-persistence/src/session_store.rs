@@ -1599,6 +1599,25 @@ mod tests {
         assert_eq!(refusal, ReclaimRefusal::ProcessGone);
     }
 
+    /// A PID no operating system will have allocated, so `process_exists` is
+    /// answered by the kernel rather than by whatever happens to be running.
+    ///
+    /// The fixture used to say 100, chosen when nothing read the PID back. FR-159
+    /// gave `cleanup_stale_sessions` a liveness probe, and `process_exists`
+    /// treats `EPERM` as alive — correctly, since a process owned by another user
+    /// is still a process. On a macOS runner PID 100 is a root-owned system
+    /// process, so the sweep retained the record it was supposed to delete and
+    /// `cleanup_stale_sessions_removes_old_exited_keeps_recent` failed there
+    /// while passing on Linux CI and on a developer machine, where PID 100 does
+    /// not exist. The test was reading the host, not the code.
+    ///
+    /// `i32::MAX` is above every real `pid_max` (Linux's ceiling is 2^22,
+    /// macOS's is 99998) and is deliberately *not* one of the values
+    /// `process_exists` short-circuits: `kill(2, 0)` still runs and still returns
+    /// `ESRCH`, so a `process_exists` broken to report everything alive would
+    /// fail this test rather than slip past it on a sentinel.
+    const DEAD_PID: i64 = i32::MAX as i64;
+
     fn make_session<'a>(
         id: &'a str,
         task_id: &'a str,
@@ -1613,7 +1632,7 @@ mod tests {
             phase: "qa",
             agent_id: "agent-a",
             state,
-            pid: 100,
+            pid: DEAD_PID,
             pty_backend: "pty",
             cwd: "/tmp",
             command: "echo hi",
@@ -1641,7 +1660,12 @@ mod tests {
             Some("/tmp/output.json")
         );
         assert_eq!(inserted.state, "active");
-        assert_eq!(inserted.pid, 100);
+        // Reference the fixture constant rather than restate its value. This line
+        // said `100` and had to be edited when the fixture moved, which is the
+        // same restatement problem the governance fixtures hit: a test that
+        // hardcodes what another definition produces fails for a reason that has
+        // nothing to do with its subject, which here is round-tripping a session.
+        assert_eq!(inserted.pid, DEAD_PID);
         assert_eq!(inserted.ended_at, None);
         assert_eq!(inserted.exit_code, None);
 
@@ -1714,6 +1738,16 @@ mod tests {
 
     #[test]
     fn cleanup_stale_sessions_removes_old_exited_keeps_recent() {
+        // The premise, asserted rather than assumed. This test deletes a record
+        // only because its PID is dead, and the previous fixture PID was alive on
+        // one CI runner and dead everywhere else — which showed up as a bare
+        // `left == right` failure naming a count, three layers from the cause.
+        assert!(
+            !process_exists(DEAD_PID as u32),
+            "DEAD_PID {DEAD_PID} is live on this host; the sweep would retain the \
+             record this test expects it to delete"
+        );
+
         let (_dir, db_path) = make_db();
         let conn = open_conn(&db_path).expect("open conn");
 
