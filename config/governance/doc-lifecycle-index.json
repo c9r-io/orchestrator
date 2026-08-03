@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 453,
-    "active": 440,
+    "documents": 456,
+    "active": 443,
     "superseded": 13,
-    "withRelatedFr": 300
+    "withRelatedFr": 303
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -458,6 +458,18 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-159"
+      ]
+    },
+    "docs/design_doc/orchestrator/172-governance-expansion-boundary.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-158"
+      ]
+    },
+    "docs/design_doc/orchestrator/173-ratchet-masking-and-surface-closure.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-158"
       ]
     },
     "docs/design_doc/orchestrator/18-prompt-delivery-abstraction.md": {
@@ -1785,6 +1797,12 @@
     "docs/qa/orchestrator/21-runner-security-observability.md": {
       "lifecycle": "active"
     },
+    "docs/qa/orchestrator/210-governance-system-introspection.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-158"
+      ]
+    },
     "docs/qa/orchestrator/22-performance-io-queue-optimizations.md": {
       "lifecycle": "active"
     },
@@ -2879,6 +2897,11 @@
     "FR-157": [
       "docs/design_doc/orchestrator/170-source-domain-decomposition.md",
       "docs/qa/orchestrator/208-source-domain-decomposition.md"
+    ],
+    "FR-158": [
+      "docs/design_doc/orchestrator/172-governance-expansion-boundary.md",
+      "docs/design_doc/orchestrator/173-ratchet-masking-and-surface-closure.md",
+      "docs/qa/orchestrator/210-governance-system-introspection.md"
     ],
     "FR-159": [
       "docs/design_doc/orchestrator/171-interactive-session-process-reclamation.md",

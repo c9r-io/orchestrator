@@ -903,6 +903,63 @@ check_continue_on_error_aggregated() {
   return $rc
 }
 
+# Check 16: a new ci-required gate names the failure shape that requires it.
+#
+# This is FR-158's actual subject. FR-127 through FR-149 produced 23 FRs in six
+# days and most of them were governance work; the surface grew because each
+# individual gate was defensible and nothing ever asked what the whole thing
+# cost. A ci-required gate is paid on every push by everyone forever, and
+# "which recorded way of being wrong does this catch" is the cheapest filter
+# against adding one out of unease. A gate that cannot answer it is usually a
+# test, and a test belongs in cargo test at a fraction of the price.
+#
+# The 52 exemptions are the gates that existed when the rule was written. That
+# list may only shrink, which is what separates it from the enumeration §4.4
+# shape 2 condemns: a guard-list is wrong the moment something lands outside it,
+# while this one is a statement about a past commit and cannot go stale. It is
+# self-cleaning in the one direction that matters — an exemption naming a path
+# that is no longer a ci-required gate fails here, so it cannot outlive the gate
+# it excuses — and it grows only by someone editing the manifest, which is the
+# visible, reviewable act the rule exists to force.
+check_new_gates_name_their_shape() {
+  local root="$1"
+  local manifest="$root/$MANIFEST_REL"
+  local rc=0 gates exempt path shape
+
+  gates="$(gate_jq_rows require-rows "$manifest" \
+    '.scripts[] | select(.enforcement == "ci-required") | [.path, (.shape // "")] | @tsv')" || return 1
+  exempt="$(gate_jq_rows allow-empty "$manifest" \
+    '(.shapeRationale.exemptions // [])[]')" || return 1
+
+  while IFS=$'\t' read -r path shape; do
+    [[ -z "$path" ]] && continue
+    [[ -n "$shape" ]] && continue
+    if ! grep -qxF "$path" <<< "$exempt"; then
+      echo "    $path: ci-required with no 'shape' and no exemption" >&2
+      echo "      name the §4.4 failure shape this gate exists to catch, or make it" >&2
+      echo "      a cargo test — a gate is a permanent cost on every push" >&2
+      rc=1
+    fi
+  done <<< "$gates"
+
+  # The exemption list may not outlive what it excuses. Without this it would
+  # become a permanent amnesty by attrition: gates retire, the entries stay, and
+  # a future path colliding with a retired one inherits the exemption silently.
+  local ci_paths
+  ci_paths="$(gate_jq_rows require-rows "$manifest" \
+    '.scripts[] | select(.enforcement == "ci-required") | .path')" || return 1
+  while read -r path; do
+    [[ -z "$path" ]] && continue
+    if ! grep -qxF "$path" <<< "$ci_paths"; then
+      echo "    $path: named in shapeRationale.exemptions but is not a ci-required gate" >&2
+      echo "      the exemption has outlived the gate it excused; delete the entry" >&2
+      rc=1
+    fi
+  done <<< "$exempt"
+
+  return $rc
+}
+
 # Check 15: every manual-runbook gate records its own runs.
 #
 # 35 gates are executed by a person and nothing observed when that last happened.
@@ -1165,6 +1222,7 @@ ALL_CHECKS=(
   check_continue_on_error_aggregated
   check_workflow_execution_declared
   check_manual_gates_record_runs
+  check_new_gates_name_their_shape
 )
 
 run_all_checks() {
@@ -1182,6 +1240,8 @@ describe_check() {
       echo "every scripts file at any depth is classified and every classified path exists on disk|manifest and scripts disagree" ;;
     check_manual_gates_record_runs)
       echo "every manual-runbook gate sources the runlog library and arms it with its own path|a manual-runbook gate's executions are invisible to the freshness ledger" ;;
+    check_new_gates_name_their_shape)
+      echo "every ci-required gate added since FR-158 names the failure shape requiring it, and no exemption outlives its gate|a new ci-required gate was added without stating what it catches" ;;
     check_support_files_declared)
       echo "every support file declares a known role and a reason|a support file has an unknown role or no reason" ;;
     check_reason_and_owner)
@@ -1651,6 +1711,10 @@ BUNDLE
         path, victim, root = ARGV
         data = JSON.parse(File.read(path))
         data["scripts"].reject! { |entry| entry["path"] == victim }
+        # The shape exemption goes with the gate. Leaving it behind is a real
+        # defect, but it is fixture 32s defect, and a mutation that trips two
+        # checks isolates neither.
+        data["shapeRationale"]["exemptions"].delete(victim) if data["shapeRationale"]
         File.write(path, JSON.pretty_generate(data) + "\n")
         script = File.join(root, victim)
         File.delete(script) if File.file?(script)
@@ -1824,6 +1888,52 @@ BUNDLE
       expect_fail "fixture 30" "$d" check_manual_gates_record_runs \
         "a gate armed under another gate's path fails, because both ledger entries would then lie"
     fi
+  fi
+
+  # 31. A new ci-required gate with no shape and no exemption. This is the rule
+  #     working as intended rather than an exotic defect: the mutation is
+  #     literally "add a gate", which is the act the rule exists to slow down.
+  #     The state under test is "a ci-required gate carrying neither a shape nor
+  #     an exemption", and the mutation reaches it by dropping one exemption
+  #     rather than by inventing a gate. Inventing one was tried first and
+  #     cannot isolate: a fabricated entry has no file (check 1), and giving it
+  #     a file still leaves no ci.yml step executing it (check_wiring_truth), so
+  #     the case would fail three checks and prove nothing about this one. The
+  #     victim is a real, wired, executed gate; the only thing missing is the
+  #     answer to what it catches, which is exactly the rule.
+  d="$(new_case f31)"
+  if fixture_mutate "fixture 31" "$d/$MANIFEST_REL" \
+    ruby -rjson -e '
+      path = ARGV[0]
+      data = JSON.parse(File.read(path))
+      data["shapeRationale"]["exemptions"].shift
+      File.write(path, JSON.pretty_generate(data) + "\n")
+    ' "$d/$MANIFEST_REL"; then
+    expect_fail "fixture 31" "$d" check_new_gates_name_their_shape \
+      "a ci-required gate with neither a shape nor an exemption fails"
+  fi
+
+  # 32. The exemption list outliving what it excuses. The mutation adds a path
+  #     that is real, declared and on disk but is not a ci-required gate — the
+  #     state a retired gate leaves behind. Reclassifying a live gate would have
+  #     been the more literal mutation and it trips the stale-claim check as
+  #     well, because documents describe that gate as CI-enforced; this form
+  #     isolates the amnesty-by-attrition rule, which is the one that would
+  #     otherwise accumulate silently until a future path inherited an exemption
+  #     by colliding with a dead one.
+  d="$(new_case f32)"
+  if fixture_mutate "fixture 32" "$d/$MANIFEST_REL" \
+    ruby -rjson -e '
+      path = ARGV[0]
+      data = JSON.parse(File.read(path))
+      retired = data["scripts"]
+        .find { |entry| entry["enforcement"] == "manual-runbook" }["path"]
+      data["shapeRationale"]["exemptions"] << retired
+      data["shapeRationale"]["exemptions"].sort!
+      File.write(path, JSON.pretty_generate(data) + "\n")
+    ' "$d/$MANIFEST_REL"; then
+    expect_fail "fixture 32" "$d" check_new_gates_name_their_shape \
+      "an exemption naming a path that is not a ci-required gate fails"
   fi
 
   # ── Behavioural: arming a gate that already cleans up records the run,
