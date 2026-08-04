@@ -668,7 +668,7 @@ jobs:
           key: boundary-coverage
 
       - name: Install pinned cargo-llvm-cov
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@v2.85.6
         with:
           tool: cargo-llvm-cov@0.8.5
 
