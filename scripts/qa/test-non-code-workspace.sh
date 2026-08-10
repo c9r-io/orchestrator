@@ -5,6 +5,7 @@ set -euo pipefail
 # FR-158: record this run in config/governance/manual-gate-freshness.json.
 # Sourced before the gate's own trap so gate_runlog_arm can compose with it.
 . "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_daemon.sh"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -25,7 +26,8 @@ pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 
 cleanup() {
-  if [[ -n "$DAEMON_PID" ]]; then kill "$DAEMON_PID" 2>/dev/null || true; wait "$DAEMON_PID" 2>/dev/null || true; fi
+  gate_daemon_stop "$DAEMON_PID" || true
+  DAEMON_PID=""
   if [[ -n "$SLACK_PID" ]]; then kill "$SLACK_PID" 2>/dev/null || true; wait "$SLACK_PID" 2>/dev/null || true; fi
   if [[ "$FAIL" -gt 0 || "${KEEP_FR117_QA:-0}" == "1" ]]; then
     echo "FR-117 QA retained at QA_ROOT=$QA_ROOT QA_HOME=$QA_HOME" >&2
@@ -97,7 +99,7 @@ SLACK_PID=$!
   "$ORCHD" --foreground --bind "$GRPC_BIND" --webhook-bind "$WEBHOOK_BIND" --workers 1 --uds-max-role admin > "$QA_ROOT/daemon.log" 2>&1 &
   echo $! > "$QA_ROOT/daemon.pid"
 )
-DAEMON_PID="$(<"$QA_ROOT/daemon.pid")"
+DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
 for _ in {1..80}; do
   "$ORCH" task list -o json >/dev/null 2>&1 && break
   sleep 0.25
