@@ -1077,8 +1077,12 @@ check_daemon_teardown_shared() {
       echo "      \`wait\` on a pidfile PID is a no-op and the cleanup's rm -rf races a live writer" >&2
       rc=1
     fi
-    if grep -E '(^|[[:space:]])[A-Za-z_]*DAEMON[A-Za-z_]*PID=' <<<"$stripped" \
-      | grep -vE 'PID=""[[:space:]]*$' | grep -q .; then
+    # Captured, not piped into `grep -q`: an early-leaving reader under
+    # pipefail turns the producer's EPIPE into the condition's status — the
+    # scanner this repository runs against itself flagged the first draft.
+    assignments="$(grep -E '(^|[[:space:]])[A-Za-z_]*DAEMON[A-Za-z_]*PID=' <<<"$stripped" \
+      | grep -vE 'PID=""[[:space:]]*$' || true)"
+    if [[ -n "$assignments" ]]; then
       if ! grep -qE '^[[:space:]]*\.[[:space:]].*scripts/lib/gate_daemon\.sh' <<<"$stripped"; then
         echo "    $file: assigns a daemon PID but never sources scripts/lib/gate_daemon.sh" >&2
         rc=1
@@ -2018,14 +2022,20 @@ BUNDLE
   # not by manifest position — the alphabetically first manual gate is not
   # necessarily a daemon gate, and a victim chosen by position would make
   # fixture 35 pass vacuously the day the ordering changes (§4.4 shape 7).
+  # The jq read is a command substitution whose status is observed, not a
+  # process-substitution feed nobody checks (§4.4 shape 5; the jq-status gate
+  # flagged the first draft of this loop). A failed or empty read leaves no
+  # victim and the fixture fails through its named else-branch.
   daemon_victim=""
+  manual_paths="$(jq -r '.scripts[] | select(.enforcement == "manual-runbook") | .path' \
+    "$d/$MANIFEST_REL")" || manual_paths=""
   while IFS= read -r candidate; do
     [[ -z "$candidate" || ! -f "$d/$candidate" ]] && continue
     if grep -qE '^[[:space:]]*\.[[:space:]].*scripts/lib/gate_daemon\.sh' "$d/$candidate"; then
       daemon_victim="$candidate"
       break
     fi
-  done < <(jq -r '.scripts[] | select(.enforcement == "manual-runbook") | .path' "$d/$MANIFEST_REL")
+  done <<< "$manual_paths"
   if [[ -z "$daemon_victim" ]]; then
     fail "fixture 33: no manual-runbook gate sources gate_daemon.sh; nothing to attack"
   else
