@@ -195,6 +195,16 @@ else
   fail "overlap rejection or active-config rollback differs"
 fi
 
+# The audit assertion below requires a *succeeded* source.binding.apply, and
+# the flow above cannot produce one: the initial apply is a seven-kind bundle,
+# which single_builtin_apply_descriptor deliberately audits as the generic
+# resource.apply, and the only single-document binding apply so far is the
+# overlap scenario's intentionally failed one. Re-apply the binding as its own
+# document — idempotent, and audited under the domain action name.
+awk 'BEGIN{RS="---\n"} /kind: SourceTaskBinding/{printf "%s", $0}' "$FIXTURE" \
+  > "$QA_ROOT/binding-only.yaml"
+"$ORCH" apply --project "$PROJECT" -f "$QA_ROOT/binding-only.yaml" >/dev/null
+
 "$ORCH" source binding suspend slack-code-analysis --project "$PROJECT" > "$QA_ROOT/suspend.yaml"
 simulate > "$QA_ROOT/suspended.json"
 "$ORCH" source binding resume slack-code-analysis --project "$PROJECT" > "$QA_ROOT/resume.yaml"

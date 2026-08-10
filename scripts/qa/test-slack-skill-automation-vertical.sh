@@ -19,7 +19,7 @@ FAKE_SLACK_BIND="${FAKE_SLACK_BIND:-127.0.0.1:19315}"
 # schema-37 database answered the disabled-fixture webhook with 500), and the
 # rule recorded in QA 161 is to advance it to the prior release commit at each
 # release, qualified by running this gate.
-PREVIOUS_REF="${FR113_PREVIOUS_REF:-58166a9f52681878d4fd80c67b06a25e14a26c62}"
+PREVIOUS_REF="${FR113_PREVIOUS_REF:-58166a9f6172fa2ea77ea36677ed0db94184beba}"
 PROJECT="qa-slack-skill-release"
 FIXTURE="$REPO_ROOT/fixtures/manifests/bundles/slack-skill-automation-release-fixture.yaml"
 SIGNING_SECRET="qa-slack-release-signing-secret"

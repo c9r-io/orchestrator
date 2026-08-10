@@ -106,7 +106,7 @@ WHERE r.id = '{replayed_route_id}';
 ### Preconditions
 
 - Use only the file-backed migration tests and isolated vertical database.
-- The default previous ref is `58166a9f52681878d4fd80c67b06a25e14a26c62` (the
+- The default previous ref is `58166a9f6172fa2ea77ea36677ed0db94184beba` (the
   v0.5.0 release commit), or set an explicitly reviewed `FR113_PREVIOUS_REF`.
 - **Pin-advance rule** (added after the 0.3.1-era pin rotted): the pin is "the
   previous release", advanced to the prior release's commit at each release and
