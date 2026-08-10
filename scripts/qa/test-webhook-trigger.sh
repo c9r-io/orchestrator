@@ -9,6 +9,7 @@ set -euo pipefail
 # FR-158: record this run in config/governance/manual-gate-freshness.json.
 # Sourced before the gate's own trap so gate_runlog_arm can compose with it.
 . "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_daemon.sh"
 
 PASS=0
 FAIL=0
@@ -21,10 +22,8 @@ pass() { PASS=$((PASS + 1)); echo "  PASS: $1"; }
 fail() { FAIL=$((FAIL + 1)); echo "  FAIL: $1"; }
 
 cleanup() {
-  if [[ -n "$DAEMON_PID" ]]; then
-    kill "$DAEMON_PID" 2>/dev/null || true
-    wait "$DAEMON_PID" 2>/dev/null || true
-  fi
+  gate_daemon_stop "$DAEMON_PID" || true
+  DAEMON_PID=""
 }
 trap cleanup EXIT
 gate_runlog_arm "scripts/qa/test-webhook-trigger.sh"
@@ -94,8 +93,8 @@ else
   pass "no webhook server with --webhook-bind none"
 fi
 
-kill "$DAEMON_PID" 2>/dev/null || true
-wait "$DAEMON_PID" 2>/dev/null || true
+gate_daemon_stop "$DAEMON_PID"
+DAEMON_PID=""
 DAEMON_PID=""
 sleep 1
 
@@ -135,8 +134,8 @@ else
 fi
 
 # ── Scenario 7: Custom bind address override ─────────────────────────────────
-kill "$DAEMON_PID" 2>/dev/null || true
-wait "$DAEMON_PID" 2>/dev/null || true
+gate_daemon_stop "$DAEMON_PID"
+DAEMON_PID=""
 DAEMON_PID=""
 sleep 1
 
@@ -154,8 +153,8 @@ else
 fi
 
 # ── Scenario 4+5: HMAC signature verification ────────────────────────────────
-kill "$DAEMON_PID" 2>/dev/null || true
-wait "$DAEMON_PID" 2>/dev/null || true
+gate_daemon_stop "$DAEMON_PID"
+DAEMON_PID=""
 DAEMON_PID=""
 sleep 1
 
