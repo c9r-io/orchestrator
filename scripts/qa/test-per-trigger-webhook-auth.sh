@@ -17,20 +17,11 @@ ORCHESTRATOR="./target/release/orchestrator"
 WEBHOOK_PORT=19091
 DAEMON_PID=""
 
-# Isolation: without these, the daemons below run against the operator's real
-# ~/.orchestratord — measured during FR-160's residue audit. The webhook port
-# isolates the listener only; data directory isolation is separate.
+# Isolation scratch dirs; the HOME/data-dir overrides happen later, just
+# before the first daemon start — the cargo scenarios need the real HOME (see
+# test-webhook-trigger.sh for the nested-cargo mechanism).
 QA_ROOT="$(mktemp -d)"
 QA_HOME="$(mktemp -d)"
-# cargo/rustup live under the real HOME; pin them before overriding it, the
-# way test-agent-driver-production-parity.sh does.
-export CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
-export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
-export HOME="$QA_HOME"
-export ORCHESTRATORD_DATA_DIR="$QA_ROOT/data"
-# The daemon opens its UDS under the data directory; the CLI's default
-# discovery looks under $HOME/.orchestratord, which is now the empty QA_HOME.
-export ORCHESTRATOR_SOCKET="$ORCHESTRATORD_DATA_DIR/orchestrator.sock"
 
 pass() { PASS=$((PASS + 1)); echo "  PASS: $1"; }
 fail() { FAIL=$((FAIL + 1)); echo "  FAIL: $1"; }
@@ -79,6 +70,14 @@ if grep -q "^test result: ok" <<< "$CEL_TEST_OUT"; then
 else
   fail "CEL webhook filter unit tests"
 fi
+
+# Isolation: without these, the daemons below run against the operator's real
+# ~/.orchestratord — measured during FR-160's residue audit. The webhook port
+# isolates the listener only; the daemon's UDS lands under the data directory
+# while the CLI's default discovery looks under $HOME, hence all three.
+export HOME="$QA_HOME"
+export ORCHESTRATORD_DATA_DIR="$QA_ROOT/data"
+export ORCHESTRATOR_SOCKET="$ORCHESTRATORD_DATA_DIR/orchestrator.sock"
 
 # ── Scenario 6: Global secret fallback ───────────────────────────────────────
 echo ""
