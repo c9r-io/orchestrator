@@ -31,6 +31,9 @@ export CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
 export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
 export HOME="$QA_HOME"
 export ORCHESTRATORD_DATA_DIR="$QA_ROOT/data"
+# The daemon opens its UDS under the data directory; the CLI's default
+# discovery looks under $HOME/.orchestratord, which is now the empty QA_HOME.
+export ORCHESTRATOR_SOCKET="$ORCHESTRATORD_DATA_DIR/orchestrator.sock"
 
 pass() { PASS=$((PASS + 1)); echo "  PASS: $1"; }
 fail() { FAIL=$((FAIL + 1)); echo "  FAIL: $1"; }
@@ -54,6 +57,8 @@ echo "--- Scenario 9: Compilation and tests ---"
 if CARGO_TEST_OUT="$(cargo test --workspace 2>&1)"; then CARGO_TEST_STATUS=0; else CARGO_TEST_STATUS=$?; fi
 if [[ "$CARGO_TEST_STATUS" -ne 0 ]] || grep -q "^test result: FAILED" <<< "$CARGO_TEST_OUT"; then
   fail "cargo test --workspace"
+  # A swallowed diagnosis costs a whole re-run; print the tail of what failed.
+  tail -40 <<< "$CARGO_TEST_OUT" | sed 's/^/    /' >&2
 else
   pass "cargo test --workspace"
 fi
