@@ -152,11 +152,21 @@
     },
     "scripts/qa/test-slack-reaction-source.sh": {
       "owner": "docs/qa/orchestrator/155-slack-reaction-source-event-contract.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "fb889b9ba952656d22611e53ec35986b356d6cb7",
+        "exitStatus": 0,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-slack-reaction-task-routing.sh": {
       "owner": "docs/qa/orchestrator/158-slack-permalink-canonical-task-routing.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "fb889b9ba952656d22611e53ec35986b356d6cb7",
+        "exitStatus": 0,
+        "worktreeDirty": true
+      }
     },
     "scripts/qa/test-slack-skill-automation-release.sh": {
       "owner": "docs/qa/orchestrator/161-slack-reaction-skill-automation-release.md",
@@ -164,23 +174,48 @@
     },
     "scripts/qa/test-slack-skill-automation-vertical.sh": {
       "owner": "docs/qa/orchestrator/161-slack-reaction-skill-automation-release.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "fb889b9ba952656d22611e53ec35986b356d6cb7",
+        "exitStatus": 1,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-source-automation-operations.sh": {
       "owner": "docs/qa/orchestrator/159-source-automation-reliability-operations.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "fb889b9ba952656d22611e53ec35986b356d6cb7",
+        "exitStatus": 0,
+        "worktreeDirty": true
+      }
     },
     "scripts/qa/test-source-automation-ui.sh": {
       "owner": "docs/qa/orchestrator/160-process-console-source-automation-ui.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "fb889b9ba952656d22611e53ec35986b356d6cb7",
+        "exitStatus": 0,
+        "worktreeDirty": true
+      }
     },
     "scripts/qa/test-source-events-slack.sh": {
       "owner": "docs/qa/orchestrator/155-slack-reaction-source-event-contract.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "fb889b9ba952656d22611e53ec35986b356d6cb7",
+        "exitStatus": 0,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-source-task-binding.sh": {
       "owner": "docs/qa/orchestrator/157-source-task-binding-badge-matching.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "fb889b9ba952656d22611e53ec35986b356d6cb7",
+        "exitStatus": 1,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-source-task-template.sh": {
       "owner": "docs/qa/orchestrator/156-source-task-template-skill-invocation.md",
