@@ -9,11 +9,21 @@
     },
     "scripts/qa/test-agent-driver-abstraction.sh": {
       "owner": "docs/qa/orchestrator/164-agent-driver-abstraction.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "2ae4e8540ab79ee46a0a4efc201a3de225519678",
+        "exitStatus": 0,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-agent-session-control-plane.sh": {
       "owner": "docs/qa/orchestrator/149-agent-session-control-plane-hardening.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "2ae4e8540ab79ee46a0a4efc201a3de225519678",
+        "exitStatus": 0,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-attention-inbox.sh": {
       "owner": "docs/qa/orchestrator/143-attention-inbox.md",
@@ -21,7 +31,12 @@
     },
     "scripts/qa/test-control-plane-action-audit.sh": {
       "owner": "docs/qa/orchestrator/153-process-console-release-acceptance.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "2ae4e8540ab79ee46a0a4efc201a3de225519678",
+        "exitStatus": 0,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-coordination-collapse.sh": {
       "owner": "docs/qa/orchestrator/168-coordination-collapse-mcp-tools.md",
@@ -37,7 +52,12 @@
     },
     "scripts/qa/test-fr013-control-plane-protection.sh": {
       "owner": "docs/qa/orchestrator/65-grpc-control-plane-protection.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "2ae4e8540ab79ee46a0a4efc201a3de225519678",
+        "exitStatus": 1,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-handoff-safe-resume.sh": {
       "owner": "docs/qa/orchestrator/144-handoff-and-safe-resume.md",
@@ -73,7 +93,12 @@
     },
     "scripts/qa/test-process-timeline.sh": {
       "owner": "docs/qa/orchestrator/142-process-timeline-read-model.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "2ae4e8540ab79ee46a0a4efc201a3de225519678",
+        "exitStatus": 0,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-self-bootstrap-cycle2-regression.sh": {
       "owner": "docs/qa/self-bootstrap/04-cycle2-validation-and-runtime-timestamps.md",
@@ -81,7 +106,12 @@
     },
     "scripts/qa/test-session-process-reclamation.sh": {
       "owner": "docs/qa/orchestrator/209-interactive-session-process-reclamation.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "2ae4e8540ab79ee46a0a4efc201a3de225519678",
+        "exitStatus": 0,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-slack-dedicated-app-provisioning.sh": {
       "owner": "docs/qa/orchestrator/163-dedicated-slack-app-auto-provisioning.md",
