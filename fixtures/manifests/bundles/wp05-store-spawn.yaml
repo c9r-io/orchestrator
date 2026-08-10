@@ -1,6 +1,30 @@
 # WP05 Layer 1-A: Store + Spawning (WP01 x WP02)
 # Parent task writes to store, spawns child that reads from store.
 ---
+# Steps write and read the store through the CLI (FR-156 form), so the runner
+# must pass the daemon-discovery variables through to the step shell — the
+# same policy the fr156 parity fixture declares.
+apiVersion: orchestrator.dev/v2
+kind: RuntimePolicy
+metadata:
+  name: default
+spec:
+  runner:
+    shell: /bin/bash
+    shell_arg: -lc
+    policy: allowlist
+    env_allowlist:
+      - PATH
+      - HOME
+      - USER
+      - LANG
+      - TERM
+      - ORCHESTRATORD_DATA_DIR
+      - ORCHESTRATOR_CONTROL_PLANE_CONFIG
+      - ORCHESTRATOR_SOCKET
+  resume:
+    auto: false
+---
 apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
@@ -75,11 +99,9 @@ spec:
       scope: task
       enabled: true
       repeatable: false
-      command: "printf '%s' '{\"confidence\":0.9,\"quality_score\":0.85,\"artifacts\":[]}'"
-      store_inputs:
-        - store: context
-          key: parent_finding
-          as_var: inherited_context
+      # The store read happens from the step itself (FR-156 retired store_inputs);
+      # reading before emitting proves the child observes the parent's write.
+      command: "orchestrator store get context parent_finding --project {project_id} >/dev/null; printf '%s' '{\"confidence\":0.9,\"quality_score\":0.85,\"artifacts\":[]}'"
     - id: loop_guard
       type: loop_guard
       enabled: true

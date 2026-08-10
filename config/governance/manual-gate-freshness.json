@@ -249,9 +249,9 @@
       "owner": "docs/qa/orchestrator/51-primitive-composition.md",
       "lastRun": {
         "date": "2026-08-10",
-        "revision": "5390e0f62694dd4bafbc8542f9ebba67352001c7",
-        "exitStatus": 1,
-        "worktreeDirty": false
+        "revision": "58206b35ba34a96aa76352596f6a0d8de4b2b430",
+        "exitStatus": 0,
+        "worktreeDirty": true
       }
     },
     "scripts/watchdog.sh": {
