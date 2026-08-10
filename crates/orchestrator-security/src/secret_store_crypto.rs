@@ -361,10 +361,40 @@ pub fn secret_key_meta_path(data_dir: &Path) -> PathBuf {
 }
 
 /// Resolves the application root from a database path in either nested or flat layouts.
+/// The operator's explicit choice beats layout inference. The daemon opens the
+/// database as a direct child of the resolved data dir (`bootstrap.rs`), so
+/// when `ORCHESTRATORD_DATA_DIR` names the database's parent, a parent that
+/// happens to be called `data` is a name, not a layout. Measured before this
+/// rule existed: a QA gate exporting `ORCHESTRATORD_DATA_DIR=$ROOT/data` had
+/// its key seeded at `$ROOT/data/secrets/` by boot while this function sent
+/// every SecretStore write looking under `$ROOT/secrets/` — writes reported
+/// "no active encryption key" while `secret key list` said active.
 pub fn resolve_data_dir_from_db_path(db_path: &Path) -> Result<PathBuf> {
+    let env_dir = std::env::var_os("ORCHESTRATORD_DATA_DIR").map(PathBuf::from);
+    resolve_data_dir_from_db_path_with_override(db_path, env_dir.as_deref())
+}
+
+/// The env read is a parameter so tests exercise the precedence without
+/// touching the process environment (the `resolve_logging_config_with_env`
+/// shape). Comparison is raw first, then canonicalized, so a macOS
+/// `/var` → `/private/var` symlink difference does not defeat the override.
+fn resolve_data_dir_from_db_path_with_override(
+    db_path: &Path,
+    override_dir: Option<&Path>,
+) -> Result<PathBuf> {
     let parent = db_path
         .parent()
         .with_context(|| format!("db path has no parent: {}", db_path.display()))?;
+    if let Some(dir) = override_dir {
+        let matches = parent == dir
+            || match (std::fs::canonicalize(parent), std::fs::canonicalize(dir)) {
+                (Ok(canonical_parent), Ok(canonical_dir)) => canonical_parent == canonical_dir,
+                _ => false,
+            };
+        if matches {
+            return Ok(parent.to_path_buf());
+        }
+    }
     if parent.file_name().and_then(|s| s.to_str()) == Some("data") {
         parent
             .parent()
@@ -715,13 +745,62 @@ mod tests {
         let nested = temp.path().join("data/agent_orchestrator.db");
         let flat = temp.path().join("agent_orchestrator.db");
 
+        // Injected None rather than the env-reading wrapper: hermetic under a
+        // caller (e.g. a QA gate) that exports ORCHESTRATORD_DATA_DIR itself.
         assert_eq!(
-            resolve_data_dir_from_db_path(&nested).expect("nested root"),
+            resolve_data_dir_from_db_path_with_override(&nested, None).expect("nested root"),
             temp.path()
         );
         assert_eq!(
-            resolve_data_dir_from_db_path(&flat).expect("flat root"),
+            resolve_data_dir_from_db_path_with_override(&flat, None).expect("flat root"),
             temp.path()
+        );
+    }
+
+    #[test]
+    fn explicit_data_dir_override_beats_the_data_layout_heuristic() {
+        let temp = tempdir().expect("tempdir");
+        let data_dir = temp.path().join("data");
+        std::fs::create_dir_all(&data_dir).expect("data dir");
+        let db = data_dir.join("agent_orchestrator.db");
+
+        // The ticket's failing state: without the override this resolves to
+        // the grandparent and the keyring loads from a directory nothing
+        // seeded.
+        assert_eq!(
+            resolve_data_dir_from_db_path_with_override(&db, Some(&data_dir)).expect("override"),
+            data_dir
+        );
+    }
+
+    #[test]
+    fn an_override_naming_a_different_directory_leaves_the_heuristic_in_charge() {
+        let temp = tempdir().expect("tempdir");
+        let nested = temp.path().join("data/agent_orchestrator.db");
+        let elsewhere = temp.path().join("elsewhere");
+
+        // The override is a match condition, not a master key: an env value
+        // unrelated to this database changes nothing.
+        assert_eq!(
+            resolve_data_dir_from_db_path_with_override(&nested, Some(&elsewhere))
+                .expect("nested root"),
+            temp.path()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_canonically_equal_override_matches_through_symlinks() {
+        let temp = tempdir().expect("tempdir");
+        let data_dir = temp.path().join("data");
+        std::fs::create_dir_all(&data_dir).expect("data dir");
+        let link = temp.path().join("link");
+        std::os::unix::fs::symlink(&data_dir, &link).expect("symlink");
+        let db = data_dir.join("agent_orchestrator.db");
+
+        assert_eq!(
+            resolve_data_dir_from_db_path_with_override(&db, Some(&link)).expect("via symlink"),
+            data_dir
         );
     }
 }

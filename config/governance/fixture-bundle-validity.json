@@ -130,18 +130,6 @@
       ]
     },
     {
-      "path": "fixtures/manifests/bundles/qa50-store-io-test.yaml",
-      "status": "intentional",
-      "expect": [
-        "[legacy_pipeline_variables_removed] workflow 'qa50-store-inputs-required' step 'plan' uses store_inputs; read the store from the step instead, e.g. `orchestrator store get <store> <key> --project {project_id}`",
-        "[legacy_pipeline_variables_removed] workflow 'qa50-store-inputs-optional' step 'plan' uses store_inputs; read the store from the step instead, e.g. `orchestrator store get <store> <key> --project {project_id}`",
-        "[legacy_pipeline_variables_removed] workflow 'qa50-store-outputs' step 'plan' uses store_outputs; write from the step instead, e.g. `orchestrator store put <store> <key> <value> --project {project_id}`",
-        "[legacy_pipeline_variables_removed] workflow 'qa50-store-put-action' step 'plan' uses a store_put post-action; write from the step instead, e.g. `orchestrator store put <store> <key> <value> --project {project_id}`"
-      ],
-      "reason": "Written for QA-50 to exercise store_inputs, store_outputs and the store_put post-action, all four of which FR-156 retired. It has no consumer -- no script or document references it -- so it is kept only as rejection evidence for the shapes it was built from.",
-      "consumers": []
-    },
-    {
       "path": "fixtures/manifests/bundles/s4-invalid-cel.yaml",
       "status": "fragment",
       "expect": [
@@ -186,19 +174,6 @@
       "reason": "Points at an absolute path QA 01 creates before applying it. Contents are current.",
       "consumers": [
         "docs/qa/orchestrator/01-cli-agent-orchestration.md"
-      ]
-    },
-    {
-      "path": "fixtures/manifests/bundles/wp05-store-spawn.yaml",
-      "status": "intentional",
-      "expect": [
-        "[legacy_pipeline_variables_removed] workflow 'wp05-store-spawn-parent' step 'plan' uses a store_put post-action; write from the step instead, e.g. `orchestrator store put <store> <key> <value> --project {project_id}`",
-        "[legacy_pipeline_variables_removed] workflow 'wp05-store-spawn-child' step 'implement' uses store_inputs; read the store from the step instead, e.g. `orchestrator store get <store> <key> --project {project_id}`"
-      ],
-      "reason": "The WP05 store-plus-spawning composition fixture. Its spawning half is untouched; its store half used a store_put post-action and a store_inputs binding, both retired by FR-156, so the bundle is now rejected on whichever the merge reaches first. test-wp05-integration.sh is a manual runbook, not a ci-required gate, and QA-51 records the composition as no longer applicable.",
-      "consumers": [
-        "scripts/qa/test-wp05-integration.sh",
-        "docs/qa/orchestrator/51-primitive-composition.md"
       ]
     }
   ]
