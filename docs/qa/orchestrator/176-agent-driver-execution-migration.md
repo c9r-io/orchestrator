@@ -164,16 +164,15 @@ Prove the production `streamer` driver retains terminal, tool, convergence, and 
 - The workflow terminates after one cycle, matching the recorded legacy contract.
 - The provider session identifier is absent from persisted database evidence.
 
-> **Known limitation (FR-161)**: on a macOS machine with a real claude CLI
-> installed, this scenario reaches the real binary instead of the fake — the
-> runner spawns through `/bin/bash -lc`, and the login shell's `path_helper`
-> demotes the gate's PATH shadow below `/opt/homebrew/bin`. The streaming step
-> is the only command in this gate that resolves `claude` at all (the classic
-> objects run the `echo` builtin), so the shadow is never exercised by a
-> passing object. Not a false expectation and not a code defect the gate can
-> absorb: the isolation design does not cover login-shell resolution. Tracked
-> by [FR-161](../../feature_request/FR-161-provider-isolation-vs-login-shell-path.md);
-> CI (ubuntu, no real CLI, no path_helper) is unaffected.
+> **Resolution condition (FR-161, closed)**: the fixture's RuntimePolicy runs
+> provider commands under `/bin/bash -c` — a login shell (`-lc`) triggers
+> macOS `path_helper`, which demotes the gate's PATH shadow below
+> `/opt/homebrew/bin` and once sent this scenario to a real claude CLI. The
+> gate asserts the resolution under that same shell/arg
+> (`assert_provider_resolution /bin/bash -c ...`) beside the entry-level
+> shadow check; the two `-c` declarations must stay in sync. Mechanism and
+> decision record: [DD-175](../../design_doc/orchestrator/175-provider-isolation-login-shell.md),
+> assertions: [QA-212](212-provider-isolation-login-shell.md).
 
 ### Expected Data State
 

@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 458,
-    "active": 445,
+    "documents": 460,
+    "active": 447,
     "superseded": 13,
-    "withRelatedFr": 305
+    "withRelatedFr": 307
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -476,6 +476,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-160"
+      ]
+    },
+    "docs/design_doc/orchestrator/175-provider-isolation-login-shell.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-161"
       ]
     },
     "docs/design_doc/orchestrator/18-prompt-delivery-abstraction.md": {
@@ -1815,6 +1821,12 @@
         "FR-160"
       ]
     },
+    "docs/qa/orchestrator/212-provider-isolation-login-shell.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-161"
+      ]
+    },
     "docs/qa/orchestrator/22-performance-io-queue-optimizations.md": {
       "lifecycle": "active"
     },
@@ -2922,6 +2934,10 @@
     "FR-160": [
       "docs/design_doc/orchestrator/174-qa-harness-daemon-teardown.md",
       "docs/qa/orchestrator/211-qa-harness-daemon-teardown.md"
+    ],
+    "FR-161": [
+      "docs/design_doc/orchestrator/175-provider-isolation-login-shell.md",
+      "docs/qa/orchestrator/212-provider-isolation-login-shell.md"
     ]
   },
   "supersedes": {
