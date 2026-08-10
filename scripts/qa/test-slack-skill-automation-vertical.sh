@@ -14,7 +14,12 @@ ORCH="${ORCH:-$REPO_ROOT/target/debug/orchestrator}"
 GRPC_BIND="${GRPC_BIND:-127.0.0.1:19313}"
 WEBHOOK_BIND="${WEBHOOK_BIND:-127.0.0.1:19314}"
 FAKE_SLACK_BIND="${FAKE_SLACK_BIND:-127.0.0.1:19315}"
-PREVIOUS_REF="${FR113_PREVIOUS_REF:-7af91c661347c131c94115b23d835818760a165f}"
+# The pin is "the previous release", not a fixed point in history: the 0.3.1-era
+# pin outlived its schema-compatibility window (an old daemon against a
+# schema-37 database answered the disabled-fixture webhook with 500), and the
+# rule recorded in QA 161 is to advance it to the prior release commit at each
+# release, qualified by running this gate.
+PREVIOUS_REF="${FR113_PREVIOUS_REF:-58166a9f52681878d4fd80c67b06a25e14a26c62}"
 PROJECT="qa-slack-skill-release"
 FIXTURE="$REPO_ROOT/fixtures/manifests/bundles/slack-skill-automation-release-fixture.yaml"
 SIGNING_SECRET="qa-slack-release-signing-secret"

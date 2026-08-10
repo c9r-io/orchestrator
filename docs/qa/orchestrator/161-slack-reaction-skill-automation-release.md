@@ -106,7 +106,13 @@ WHERE r.id = '{replayed_route_id}';
 ### Preconditions
 
 - Use only the file-backed migration tests and isolated vertical database.
-- The default previous ref is `7af91c661347c131c94115b23d835818760a165f`, or set an explicitly reviewed `FR113_PREVIOUS_REF`.
+- The default previous ref is `58166a9f52681878d4fd80c67b06a25e14a26c62` (the
+  v0.5.0 release commit), or set an explicitly reviewed `FR113_PREVIOUS_REF`.
+- **Pin-advance rule** (added after the 0.3.1-era pin rotted): the pin is "the
+  previous release", advanced to the prior release's commit at each release and
+  qualified **by running this gate**, never by reading. A pin left behind fails
+  as a 500 from the old daemon once the schema moves past its window — measured
+  2026-08-10 against schema 37, rollback-disabled.code=500.
 
 ### Goal
 
