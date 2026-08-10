@@ -113,6 +113,11 @@ WHERE r.id = '{replayed_route_id}';
   qualified **by running this gate**, never by reading. A pin left behind fails
   as a 500 from the old daemon once the schema moves past its window — measured
   2026-08-10 against schema 37, rollback-disabled.code=500.
+- **When the pin advances, delete the predecessor's build cache**
+  (`target/fr113-previous-<old 12-hex>`): the gate keeps one per pin as a
+  deliberate cross-run cache (~3-4 GB each, ~20 min to rebuild), so the old
+  pin's directory becomes permanent dead weight the moment the default moves —
+  measured 3.8 GB after the 2026-08-11 advance, owned by no cleanup path.
 
 ### Goal
 
