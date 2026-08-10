@@ -189,6 +189,25 @@ pub fn resolve_logging_config(
     config: Option<&OrchestratorConfig>,
     overrides: CliLoggingOverrides,
 ) -> ResolvedLoggingConfig {
+    resolve_logging_config_with_env(
+        data_dir,
+        config,
+        overrides,
+        read_env_level(),
+        read_env_format(),
+    )
+}
+
+// The env reads are parameters so tests exercise the resolution order without
+// reading the host: a developer shell exporting RUST_LOG=warn turned the two
+// CLI-override tests red with no code change involved.
+fn resolve_logging_config_with_env(
+    data_dir: &Path,
+    config: Option<&OrchestratorConfig>,
+    overrides: CliLoggingOverrides,
+    env_level: Option<LogLevel>,
+    env_format: Option<LoggingFormat>,
+) -> ResolvedLoggingConfig {
     let logging = config
         .map(|cfg| cfg.global_runtime_policy().observability.logging.clone())
         .unwrap_or_default();
@@ -200,7 +219,7 @@ pub fn resolve_logging_config(
     if let Some(cli_level) = overrides.level {
         level = cli_level;
     }
-    if let Some(env_level) = read_env_level() {
+    if let Some(env_level) = env_level {
         level = env_level;
     }
 
@@ -208,7 +227,7 @@ pub fn resolve_logging_config(
     if let Some(cli_format) = overrides.format {
         console_format = cli_format;
     }
-    if let Some(env_format) = read_env_format() {
+    if let Some(env_format) = env_format {
         console_format = env_format;
     }
 
@@ -260,13 +279,15 @@ mod tests {
     #[test]
     fn verbose_raises_default_level_to_debug() {
         let cfg = sample_config();
-        let resolved = resolve_logging_config(
+        let resolved = resolve_logging_config_with_env(
             Path::new("/tmp/app"),
             Some(&cfg),
             CliLoggingOverrides {
                 verbose: true,
                 ..CliLoggingOverrides::default()
             },
+            None,
+            None,
         );
         assert_eq!(resolved.level, LogLevel::Debug);
     }
@@ -274,27 +295,47 @@ mod tests {
     #[test]
     fn cli_level_overrides_config() {
         let cfg = sample_config();
-        let resolved = resolve_logging_config(
+        let resolved = resolve_logging_config_with_env(
             Path::new("/tmp/app"),
             Some(&cfg),
             CliLoggingOverrides {
                 level: Some(LogLevel::Trace),
                 ..CliLoggingOverrides::default()
             },
+            None,
+            None,
         );
         assert_eq!(resolved.level, LogLevel::Trace);
     }
 
     #[test]
+    fn env_level_overrides_cli_level() {
+        let cfg = sample_config();
+        let resolved = resolve_logging_config_with_env(
+            Path::new("/tmp/app"),
+            Some(&cfg),
+            CliLoggingOverrides {
+                level: Some(LogLevel::Trace),
+                ..CliLoggingOverrides::default()
+            },
+            Some(LogLevel::Warn),
+            None,
+        );
+        assert_eq!(resolved.level, LogLevel::Warn);
+    }
+
+    #[test]
     fn cli_format_overrides_console_format() {
         let cfg = sample_config();
-        let resolved = resolve_logging_config(
+        let resolved = resolve_logging_config_with_env(
             Path::new("/tmp/app"),
             Some(&cfg),
             CliLoggingOverrides {
                 format: Some(LoggingFormat::Json),
                 ..CliLoggingOverrides::default()
             },
+            None,
+            None,
         );
         assert_eq!(resolved.console_format, LoggingFormat::Json);
     }
@@ -302,10 +343,12 @@ mod tests {
     #[test]
     fn relative_file_path_is_resolved_from_app_root() {
         let cfg = sample_config();
-        let resolved = resolve_logging_config(
+        let resolved = resolve_logging_config_with_env(
             Path::new("/tmp/app"),
             Some(&cfg),
             CliLoggingOverrides::default(),
+            None,
+            None,
         );
         assert_eq!(resolved.file_dir, Path::new("/tmp/app/logs/system"));
     }
