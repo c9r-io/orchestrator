@@ -54,11 +54,15 @@ export HOME="$QA_HOME"
 # The daemon must read the protection.yaml this gate writes below, and the CLI
 # must find the daemon: neither worked before — the gate wrote its config under
 # $QA_ROOT while the daemon's data dir defaulted to $HOME/.orchestratord, and a
-# daemon given --bind opens no UDS without --uds-max-role, so the first apply
-# died on discovery (ticket 20260810-fr013-gate-daemon-discovery-rot). Named
+# --bind (TCP) daemon opens no UDS at all (measured; --uds-max-role governs
+# only the UDS transport it doesn't have), so nothing the CLI could discover
+# existed (ticket 20260810-fr013-gate-daemon-discovery-rot). The TCP wiring is
+# test-control-plane-action-audit.sh's: the daemon writes a discovery config
+# under the isolated HOME and the CLI is pointed at it explicitly. Named
 # runtime/, never data/: see 20260811-data-dir-heuristic-splits-key-paths.
 export ORCHESTRATORD_DATA_DIR="$QA_ROOT/runtime"
-export ORCHESTRATOR_SOCKET="$ORCHESTRATORD_DATA_DIR/orchestrator.sock"
+unset ORCHESTRATOR_SOCKET
+export ORCHESTRATOR_CONTROL_PLANE_CONFIG="$QA_HOME/.orchestrator/control-plane/config.yaml"
 mkdir -p "$QA_ROOT/runtime/control-plane" "$QA_ROOT/fixtures/qa" "$QA_ROOT/fixtures/ticket"
 cat > "$QA_ROOT/fixtures/qa/watch-hold.md" <<'MD'
 # Watch Hold
@@ -91,14 +95,14 @@ YAML
 echo "[fr013] starting secure daemon in $QA_ROOT"
 (
   cd "$QA_ROOT"
-  "$ORCHD" --foreground --bind "$BIND_ADDR" --workers 1 --uds-max-role admin > daemon.log 2>&1 &
+  "$ORCHD" --foreground --bind "$BIND_ADDR" --workers 1 > daemon.log 2>&1 &
   echo $! > daemon.pid
 )
 DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
-# First boot on a fresh dir runs every migration; wait for the socket rather
-# than sleeping a fixed guess.
+# First boot on a fresh dir runs every migration; wait for the CLI to actually
+# reach the daemon rather than sleeping a fixed guess.
 for _ in {1..60}; do
-  [[ -S "$ORCHESTRATOR_SOCKET" ]] && "$ORCH" task list -o json >/dev/null 2>&1 && break
+  "$ORCH" task list -o json >/dev/null 2>&1 && break
   sleep 0.25
 done
 
@@ -156,9 +160,9 @@ sleep 1
 echo "[fr013] validating daemon health"
 "$ORCH" debug >/dev/null
 
-READ_REJECTIONS="$(sqlite3 "$QA_ROOT/data/agent_orchestrator.db" "SELECT COUNT(*) FROM control_plane_audit WHERE rpc='TaskList' AND decision='rejected' AND reason_code='rate_limited';")"
-STREAM_REJECTIONS="$(sqlite3 "$QA_ROOT/data/agent_orchestrator.db" "SELECT COUNT(*) FROM control_plane_audit WHERE rpc='TaskWatch' AND decision='rejected' AND reason_code='stream_limit_exceeded';")"
-WRITE_REJECTIONS="$(sqlite3 "$QA_ROOT/data/agent_orchestrator.db" "SELECT COUNT(*) FROM control_plane_audit WHERE rpc='Apply' AND decision='rejected' AND reason_code IN ('rate_limited','concurrency_limited');")"
+READ_REJECTIONS="$(sqlite3 "$ORCHESTRATORD_DATA_DIR/agent_orchestrator.db" "SELECT COUNT(*) FROM control_plane_audit WHERE rpc='TaskList' AND decision='rejected' AND reason_code='rate_limited';")"
+STREAM_REJECTIONS="$(sqlite3 "$ORCHESTRATORD_DATA_DIR/agent_orchestrator.db" "SELECT COUNT(*) FROM control_plane_audit WHERE rpc='TaskWatch' AND decision='rejected' AND reason_code='stream_limit_exceeded';")"
+WRITE_REJECTIONS="$(sqlite3 "$ORCHESTRATORD_DATA_DIR/agent_orchestrator.db" "SELECT COUNT(*) FROM control_plane_audit WHERE rpc='Apply' AND decision='rejected' AND reason_code IN ('rate_limited','concurrency_limited');")"
 
 if [[ "$READ_REJECTIONS" -lt 1 ]]; then
   echo "[fr013] expected TaskList rate-limited audit rows" >&2
@@ -174,7 +178,7 @@ if [[ "$WRITE_REJECTIONS" -lt 1 ]]; then
 fi
 
 echo "[fr013] recent control_plane_audit rows"
-sqlite3 "$QA_ROOT/data/agent_orchestrator.db" \
+sqlite3 "$ORCHESTRATORD_DATA_DIR/agent_orchestrator.db" \
   "SELECT rpc, traffic_class, limit_scope, decision, reason_code FROM control_plane_audit ORDER BY id DESC LIMIT 12;"
 
 echo "[fr013] protection pressure checks passed"

@@ -69,9 +69,9 @@
       "owner": "docs/qa/orchestrator/65-grpc-control-plane-protection.md",
       "lastRun": {
         "date": "2026-08-10",
-        "revision": "2ae4e8540ab79ee46a0a4efc201a3de225519678",
-        "exitStatus": 1,
-        "worktreeDirty": false
+        "revision": "800e46f2c5b268cbc1f20996cc422d32e0e10b39",
+        "exitStatus": 0,
+        "worktreeDirty": true
       }
     },
     "scripts/qa/test-handoff-safe-resume.sh": {
