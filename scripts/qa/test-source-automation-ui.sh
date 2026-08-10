@@ -5,6 +5,7 @@ set -euo pipefail
 # FR-158: record this run in config/governance/manual-gate-freshness.json.
 # Sourced before the gate's own trap so gate_runlog_arm can compose with it.
 . "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_daemon.sh"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -22,10 +23,8 @@ PASS=0
 
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 cleanup() {
-  if [[ -n "$DAEMON_PID" ]]; then
-    kill "$DAEMON_PID" 2>/dev/null || true
-    wait "$DAEMON_PID" 2>/dev/null || true
-  fi
+  gate_daemon_stop "$DAEMON_PID" || true
+  DAEMON_PID=""
   if [[ "${KEEP_QA:-0}" == "1" ]]; then
     echo "QA_ROOT=$QA_ROOT" >&2
     echo "QA_HOME=$QA_HOME" >&2
@@ -68,7 +67,7 @@ mkdir -p "$QA_ROOT/docs/qa/orchestrator" "$QA_ROOT/docs/ticket"
   "$ORCHD" --foreground --bind "$BIND_ADDR" --webhook-bind none --workers 1 > daemon.log 2>&1 &
   echo $! > daemon.pid
 )
-DAEMON_PID="$(<"$QA_ROOT/daemon.pid")"
+DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
 for _ in {1..80}; do
   "$ORCH" task list -o json >/dev/null 2>&1 && break
   sleep 0.25
@@ -135,8 +134,10 @@ if rg -n 'normalized_json|signing.secret|bot.token|message body' gui/src gui/tes
 fi
 pass "production frontend excludes raw Slack payload and credential fields"
 
-kill "$DAEMON_PID" 2>/dev/null || true
-wait "$DAEMON_PID" 2>/dev/null || true
+# Mid-script stop, deliberately without `|| true`: a daemon that will not die
+# here should fail the gate by name rather than let the dependency gates run
+# beside a live writer.
+gate_daemon_stop "$DAEMON_PID"
 DAEMON_PID=""
 
 if [[ "${SKIP_DEPENDENCY_GATES:-0}" != "1" ]]; then

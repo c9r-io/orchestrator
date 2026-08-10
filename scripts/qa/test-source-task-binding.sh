@@ -5,6 +5,7 @@ set -euo pipefail
 # FR-158: record this run in config/governance/manual-gate-freshness.json.
 # Sourced before the gate's own trap so gate_runlog_arm can compose with it.
 . "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_daemon.sh"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -34,10 +35,8 @@ fi
 QA_ROOT="$(mktemp -d)"
 QA_HOME="$(mktemp -d)"
 cleanup() {
-  if [[ -n "$DAEMON_PID" ]]; then
-    kill "$DAEMON_PID" 2>/dev/null || true
-    wait "$DAEMON_PID" 2>/dev/null || true
-  fi
+  gate_daemon_stop "$DAEMON_PID" || true
+  DAEMON_PID=""
   if [[ "${KEEP_QA:-0}" == "1" ]]; then
     echo "QA_ROOT=$QA_ROOT" >&2
     echo "QA_HOME=$QA_HOME" >&2
@@ -61,7 +60,7 @@ start_daemon() {
       --uds-max-role admin > daemon.log 2>&1 &
     echo $! > daemon.pid
   )
-  DAEMON_PID="$(<"$QA_ROOT/daemon.pid")"
+  DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
   for _ in {1..60}; do
     "$ORCH" task list -o json >/dev/null 2>&1 && return 0
     sleep 0.25
@@ -72,9 +71,10 @@ start_daemon() {
 }
 
 stop_daemon() {
-  kill "$DAEMON_PID" 2>/dev/null || true
-  wait "$DAEMON_PID" 2>/dev/null || true
+  local rc=0
+  gate_daemon_stop "$DAEMON_PID" "$ORCHESTRATORD_DATA_DIR/daemon.pid" || rc=$?
   DAEMON_PID=""
+  return "$rc"
 }
 
 wait_for_active_key() {

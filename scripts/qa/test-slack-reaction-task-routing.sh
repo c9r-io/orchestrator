@@ -5,6 +5,7 @@ set -euo pipefail
 # FR-158: record this run in config/governance/manual-gate-freshness.json.
 # Sourced before the gate's own trap so gate_runlog_arm can compose with it.
 . "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_daemon.sh"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -40,10 +41,8 @@ fi
 QA_ROOT="$(mktemp -d)"
 QA_HOME="$(mktemp -d)"
 cleanup() {
-  if [[ -n "$DAEMON_PID" ]]; then
-    kill "$DAEMON_PID" 2>/dev/null || true
-    wait "$DAEMON_PID" 2>/dev/null || true
-  fi
+  gate_daemon_stop "$DAEMON_PID" || true
+  DAEMON_PID=""
   if [[ -n "$SLACK_PID" ]]; then
     kill "$SLACK_PID" 2>/dev/null || true
     wait "$SLACK_PID" 2>/dev/null || true
@@ -126,7 +125,7 @@ start_daemon() {
       --uds-max-role "$max_role" > daemon.log 2>&1 &
     echo $! > daemon.pid
   )
-  DAEMON_PID="$(<"$QA_ROOT/daemon.pid")"
+  DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
   for _ in {1..80}; do
     "$ORCH" task list -o json >/dev/null 2>&1 && return 0
     sleep 0.25
@@ -137,9 +136,12 @@ start_daemon() {
 }
 
 stop_daemon() {
-  kill "$DAEMON_PID" 2>/dev/null || true
-  wait "$DAEMON_PID" 2>/dev/null || true
+  # Both daemons share ORCHESTRATORD_DATA_DIR, so the next start must observe
+  # a released directory: pass the daemon's own pidfile and wait for it.
+  local rc=0
+  gate_daemon_stop "$DAEMON_PID" "$ORCHESTRATORD_DATA_DIR/daemon.pid" || rc=$?
   DAEMON_PID=""
+  return "$rc"
 }
 
 start_read_only_daemon() {
@@ -149,7 +151,7 @@ start_read_only_daemon() {
       --uds-max-role read-only > daemon.log 2>&1 &
     echo $! > daemon.pid
   )
-  DAEMON_PID="$(<"$QA_ROOT/daemon.pid")"
+  DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
   for _ in {1..80}; do
     if env -u ORCHESTRATOR_CONTROL_PLANE_CONFIG \
         ORCHESTRATOR_SOCKET="$ORCHESTRATORD_DATA_DIR/orchestrator.sock" \

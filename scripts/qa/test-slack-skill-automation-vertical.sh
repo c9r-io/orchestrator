@@ -5,6 +5,7 @@ set -euo pipefail
 # FR-158: record this run in config/governance/manual-gate-freshness.json.
 # Sourced before the gate's own trap so gate_runlog_arm can compose with it.
 . "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_daemon.sh"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -51,10 +52,8 @@ DB="$QA_ROOT/runtime/agent_orchestrator.db"
 PREVIOUS_TARGET="$REPO_ROOT/target/fr113-previous-${PREVIOUS_REF:0:12}"
 
 cleanup() {
-  if [[ -n "$DAEMON_PID" ]]; then
-    kill "$DAEMON_PID" 2>/dev/null || true
-    wait "$DAEMON_PID" 2>/dev/null || true
-  fi
+  gate_daemon_stop "$DAEMON_PID" || true
+  DAEMON_PID=""
   if [[ -n "$SLACK_PID" ]]; then
     kill "$SLACK_PID" 2>/dev/null || true
     wait "$SLACK_PID" 2>/dev/null || true
@@ -160,7 +159,7 @@ start_daemon() {
       --workers 1 --uds-max-role admin > "$log_name" 2>&1 &
     echo $! > daemon.pid
   )
-  DAEMON_PID="$(<"$QA_ROOT/daemon.pid")"
+  DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
   for _ in {1..100}; do
     "$cli_bin" task list -o json >/dev/null 2>&1 && return 0
     sleep 0.25
@@ -170,11 +169,12 @@ start_daemon() {
 }
 
 stop_daemon() {
-  if [[ -n "$DAEMON_PID" ]]; then
-    kill "$DAEMON_PID" 2>/dev/null || true
-    wait "$DAEMON_PID" 2>/dev/null || true
-    DAEMON_PID=""
-  fi
+  # Restart site: the daemons share ORCHESTRATORD_DATA_DIR, so wait for the
+  # daemon's own pidfile to be released before the next start races it.
+  local rc=0
+  gate_daemon_stop "$DAEMON_PID" "$ORCHESTRATORD_DATA_DIR/daemon.pid" || rc=$?
+  DAEMON_PID=""
+  return "$rc"
 }
 
 wait_for_active_key() {
