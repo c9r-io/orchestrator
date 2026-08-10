@@ -205,6 +205,16 @@
       "path": "scripts/spikes/streaming-agent-runner/mcp_server.mjs",
       "role": "spike",
       "reason": "stub MCP server used by the streaming spike; executed by nothing"
+    },
+    {
+      "path": "scripts/lib/gate_daemon.sh",
+      "role": "library",
+      "reason": "the shared daemon teardown contract (FR-160): SIGTERM, poll kill -0 with zombie awareness, named escalation to SIGKILL, named failure. Sourced by every gate that stops a daemon it started, replacing 25 divergent copies of kill+wait in which `wait` on a pidfile PID was a no-op and `rm -rf` raced a live writer (run 30795701182)."
+    },
+    {
+      "path": "scripts/qa/probe-daemon-wait-shapes.sh",
+      "role": "developer-tool",
+      "reason": "the FR-160 reproduction probe: asserts side by side that `wait` on a pidfile PID returns immediately with the daemon still alive while `wait` on a $! child blocks until exit, then holds gate_daemon.sh to its stop contract. Asserts bash semantics and the library's behaviour, not a repository invariant; reclaims every process it starts."
     }
   ],
   "shapeRationale": {
