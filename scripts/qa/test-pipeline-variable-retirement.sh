@@ -31,6 +31,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# shellcheck source=../lib/gate_daemon.sh
+. "$REPO_ROOT/scripts/lib/gate_daemon.sh"
 ORCHD="${ORCHD:-$REPO_ROOT/target/debug/orchestratord}"
 ORCH="${ORCH:-$REPO_ROOT/target/debug/orchestrator}"
 BIND_ADDR="${BIND_ADDR:-127.0.0.1:19327}"
@@ -62,10 +64,8 @@ summary() {
 }
 
 cleanup() {
-  if [[ -n "$DAEMON_PID" ]]; then
-    kill "$DAEMON_PID" 2>/dev/null || true
-    wait "$DAEMON_PID" 2>/dev/null || true
-  fi
+  gate_daemon_stop "$DAEMON_PID" || true
+  DAEMON_PID=""
   if [[ "$FAIL" -gt 0 || "${KEEP_FR156_QA:-0}" == "1" ]]; then
     echo "FR-156 QA retained at QA_ROOT=$QA_ROOT QA_HOME=$QA_HOME" >&2
   else
@@ -73,13 +73,14 @@ cleanup() {
     # silent either. Observed in run 30795701182: the assertions had already
     # reported "11 passed, 0 failed" when this `rm` raced a session child still
     # writing into $QA_ROOT/data, and `Directory not empty` turned the step red
-    # with nothing in the log connecting it to what the gate tests. `wait` above
-    # reaps the daemon, not the process group beneath it — FR-159's subject,
-    # surfacing here in the harness rather than the product.
+    # with nothing in the log connecting it to what the gate tests.
+    # `gate_daemon_stop` above confirms the daemon exited, not the process
+    # group beneath it — FR-159's subject, surfacing here in the harness
+    # rather than the product.
     #
     # So: settle and retry once, then say plainly what leaked. The gate's
-    # subject is driver parity; a temp directory that outlives it is a fact
-    # worth printing, not a verdict.
+    # subject is pipeline variable retirement; a temp directory that outlives
+    # it is a fact worth printing, not a verdict.
     if ! rm -rf "$QA_ROOT" "$QA_HOME" 2>/dev/null; then
       sleep 1
       rm -rf "$QA_ROOT" "$QA_HOME" 2>/dev/null ||
@@ -179,7 +180,7 @@ export PATH="$QA_ROOT/bin:$PATH"
     --uds-max-role admin > "$QA_ROOT/daemon.log" 2>&1 &
   echo $! > "$QA_ROOT/daemon.pid"
 )
-DAEMON_PID="$(<"$QA_ROOT/daemon.pid")"
+DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
 for _ in {1..80}; do
   "$ORCH" task list -o json >/dev/null 2>&1 && break
   sleep 0.25

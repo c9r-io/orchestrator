@@ -30,12 +30,12 @@ fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 
 # shellcheck source=../lib/gate_fixture.sh
 . "$REPO_ROOT/scripts/lib/gate_fixture.sh"
+# shellcheck source=../lib/gate_daemon.sh
+. "$REPO_ROOT/scripts/lib/gate_daemon.sh"
 
 cleanup() {
-  if [[ -n "$DAEMON_PID" ]]; then
-    kill "$DAEMON_PID" 2>/dev/null || true
-    wait "$DAEMON_PID" 2>/dev/null || true
-  fi
+  gate_daemon_stop "$DAEMON_PID" || true
+  DAEMON_PID=""
   if [[ "$FAIL" -gt 0 || "${KEEP_FR126_QA:-0}" == "1" ]]; then
     echo "FR-126 production parity retained at QA_ROOT=$QA_ROOT QA_HOME=$QA_HOME" >&2
   else
@@ -43,9 +43,10 @@ cleanup() {
     # silent either. Observed in run 30795701182: the assertions had already
     # reported "11 passed, 0 failed" when this `rm` raced a session child still
     # writing into $QA_ROOT/data, and `Directory not empty` turned the step red
-    # with nothing in the log connecting it to what the gate tests. `wait` above
-    # reaps the daemon, not the process group beneath it — FR-159's subject,
-    # surfacing here in the harness rather than the product.
+    # with nothing in the log connecting it to what the gate tests.
+    # `gate_daemon_stop` above confirms the daemon exited, not the process
+    # group beneath it — FR-159's subject, surfacing here in the harness
+    # rather than the product.
     #
     # So: settle and retry once, then say plainly what leaked. The gate's
     # subject is driver parity; a temp directory that outlives it is a fact
@@ -200,7 +201,7 @@ assert_provider_shadow "$QA_ROOT/bin" claude
     --uds-max-role admin > "$QA_ROOT/daemon.log" 2>&1 &
   echo $! > "$QA_ROOT/daemon.pid"
 )
-DAEMON_PID="$(<"$QA_ROOT/daemon.pid")"
+DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
 for _ in {1..80}; do
   "$ORCH" task list -o json >/dev/null 2>&1 && break
   sleep 0.25
