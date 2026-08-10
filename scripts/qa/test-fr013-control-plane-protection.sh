@@ -5,6 +5,7 @@ set -euo pipefail
 # FR-158: record this run in config/governance/manual-gate-freshness.json.
 # Sourced before the gate's own trap so gate_runlog_arm can compose with it.
 . "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_daemon.sh"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -42,10 +43,8 @@ cleanup() {
       wait "$pid" 2>/dev/null || true
     done
   fi
-  if [[ -n "$DAEMON_PID" ]]; then
-    kill "$DAEMON_PID" 2>/dev/null || true
-    wait "$DAEMON_PID" 2>/dev/null || true
-  fi
+  gate_daemon_stop "$DAEMON_PID" || true
+  DAEMON_PID=""
   rm -rf "$QA_ROOT" "$QA_HOME"
 }
 trap cleanup EXIT
@@ -87,7 +86,7 @@ echo "[fr013] starting secure daemon in $QA_ROOT"
   "$ORCHD" --foreground --bind "$BIND_ADDR" --workers 1 > daemon.log 2>&1 &
   echo $! > daemon.pid
 )
-DAEMON_PID="$(cat "$QA_ROOT/daemon.pid")"
+DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
 sleep 3
 
 echo "[fr013] applying fixture project"

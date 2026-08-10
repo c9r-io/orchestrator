@@ -5,6 +5,7 @@ set -euo pipefail
 # FR-158: record this run in config/governance/manual-gate-freshness.json.
 # Sourced before the gate's own trap so gate_runlog_arm can compose with it.
 . "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_daemon.sh"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -118,37 +119,23 @@ PROJECT="qa-session-control"
 DB="$QA_ROOT/data/agent_orchestrator.db"
 
 stop_daemon() {
-  if [[ -n "$DAEMON_PID" ]]; then
-    kill "$DAEMON_PID" 2>/dev/null || true
-    # `wait` cannot be used here. The daemon is started inside a subshell, so it
-    # is that subshell's child and not this one's, and `wait` on a non-child
-    # returns immediately — it has never actually waited. Both daemons in this
-    # script share one ORCHESTRATORD_DATA_DIR and therefore one PID file, so
-    # starting the next one before this one has released it makes the instance
-    # guard refuse to start with "another orchestratord is already running".
-    # Poll the process instead.
-    local waited=0
-    while kill -0 "$DAEMON_PID" 2>/dev/null && (( waited < 100 )); do
-      sleep 0.1
-      waited=$((waited + 1))
-    done
-    if kill -0 "$DAEMON_PID" 2>/dev/null; then
-      kill -KILL "$DAEMON_PID" 2>/dev/null || true
-      sleep 0.2
-    fi
-    # The PID file is removed during shutdown; wait for it so the next start
-    # observes a released directory rather than racing its cleanup.
-    waited=0
-    while [[ -f "$ORCHESTRATORD_DATA_DIR/daemon.pid" ]] && (( waited < 50 )); do
-      sleep 0.1
-      waited=$((waited + 1))
-    done
-    DAEMON_PID=""
-  fi
+  # FR-159 wrote the poll-instead-of-wait handling here first; FR-160 extracted
+  # it into scripts/lib/gate_daemon.sh, and this wrapper is now a caller of the
+  # shared contract. Both daemons in this script share one
+  # ORCHESTRATORD_DATA_DIR and therefore one PID file, so the release argument
+  # matters: the next start must observe a released directory or the instance
+  # guard refuses with "another orchestratord is already running".
+  local rc=0
+  gate_daemon_stop "$DAEMON_PID" "$ORCHESTRATORD_DATA_DIR/daemon.pid" || rc=$?
+  DAEMON_PID=""
+  return "$rc"
 }
 
 cleanup() {
-  stop_daemon
+  # `|| true`: the library already printed any failure by name, and a stuck
+  # daemon must not stop this trap from reclaiming sessions or the verdict
+  # from surviving. Mid-script callers stay bare so a stuck daemon fails loudly.
+  stop_daemon || true
   # Reclaim the sessions this run created. The trap is kept, but it is no
   # longer the only line of defence: the PIDs are recorded as they appear, and
   # the next run's startup sweep collects whatever a SIGKILL'd trap missed.
@@ -245,7 +232,7 @@ start_tcp_daemon() {
       > daemon-tcp.log 2>&1 &
     echo $! > daemon.pid
   )
-  DAEMON_PID="$(cat "$QA_ROOT/daemon.pid")"
+  DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
   wait_for_daemon
 }
 
@@ -258,7 +245,7 @@ start_read_only_daemon() {
       > daemon-uds.log 2>&1 &
     echo $! > daemon.pid
   )
-  DAEMON_PID="$(cat "$QA_ROOT/daemon.pid")"
+  DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
   wait_for_daemon
 }
 

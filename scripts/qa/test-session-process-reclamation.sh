@@ -21,6 +21,7 @@ set -euo pipefail
 # FR-158: record this run in config/governance/manual-gate-freshness.json.
 # Sourced before the gate's own trap so gate_runlog_arm can compose with it.
 . "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_daemon.sh"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -73,26 +74,20 @@ process_alive() { kill -0 "$1" 2>/dev/null; }
 track_pid() { [[ -n "$1" && "$1" != "0" && "$1" != "null" ]] && TRACKED_PIDS="$TRACKED_PIDS $1"; return 0; }
 
 stop_daemon() {
-  if [[ -n "$DAEMON_PID" ]]; then
-    kill "$DAEMON_PID" 2>/dev/null || true
-    local waited=0
-    # `wait` is useless here: the daemon is a child of a subshell, not of this
-    # shell, so `wait` on it returns immediately. Poll instead, then wait for
-    # the PID file so the next start does not race this shutdown's cleanup.
-    while process_alive "$DAEMON_PID" && (( waited < 100 )); do
-      sleep 0.1; waited=$((waited + 1))
-    done
-    process_alive "$DAEMON_PID" && kill -KILL "$DAEMON_PID" 2>/dev/null || true
-    waited=0
-    while [[ -f "$QA_ROOT/data/daemon.pid" ]] && (( waited < 50 )); do
-      sleep 0.1; waited=$((waited + 1))
-    done
-    DAEMON_PID=""
-  fi
+  # A third divergent copy of the poll-instead-of-wait handling lived here;
+  # FR-160 routes it through the shared contract. The release argument names
+  # the daemon's own pidfile under data/, which is a different file from the
+  # harness-written runner.pid the PID was read from.
+  local rc=0
+  gate_daemon_stop "$DAEMON_PID" "$QA_ROOT/data/daemon.pid" || rc=$?
+  DAEMON_PID=""
+  return "$rc"
 }
 
 cleanup() {
-  stop_daemon
+  # `|| true`: a stuck daemon is already named by the library and must not
+  # keep this trap from reaping tracked session groups or the tree.
+  stop_daemon || true
   local pid
   for pid in $TRACKED_PIDS; do
     kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
@@ -139,7 +134,7 @@ start_daemon() {
       > daemon.log 2>&1 &
     echo $! > runner.pid
   )
-  DAEMON_PID="$(cat "$QA_ROOT/runner.pid")"
+  DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/runner.pid")"
   local attempt
   for attempt in {1..80}; do
     "$ORCH" task list -o json >/dev/null 2>&1 && return 0

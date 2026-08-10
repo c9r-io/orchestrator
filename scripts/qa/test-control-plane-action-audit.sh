@@ -5,6 +5,7 @@ set -euo pipefail
 # FR-158: record this run in config/governance/manual-gate-freshness.json.
 # Sourced before the gate's own trap so gate_runlog_arm can compose with it.
 . "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_daemon.sh"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -46,15 +47,20 @@ QA_ROOT="$(mktemp -d)"
 QA_HOME="$(mktemp -d)"
 
 stop_daemon() {
-  if [[ -n "$DAEMON_PID" ]]; then
-    kill "$DAEMON_PID" 2>/dev/null || true
-    wait "$DAEMON_PID" 2>/dev/null || true
-    DAEMON_PID=""
-  fi
+  # Both daemons in this script share one ORCHESTRATORD_DATA_DIR, so the next
+  # start must observe a released directory: pass the daemon's own pidfile and
+  # wait for it to vanish. The wrapper keeps the library's verdict while still
+  # resetting the variable, so a stuck daemon fails a mid-script call loudly.
+  local rc=0
+  gate_daemon_stop "$DAEMON_PID" "$ORCHESTRATORD_DATA_DIR/daemon.pid" || rc=$?
+  DAEMON_PID=""
+  return "$rc"
 }
 
 cleanup() {
-  stop_daemon
+  # `|| true`: the library prints any failure by name, and a stuck daemon must
+  # not keep this trap from printing the abort summary or reclaiming the tree.
+  stop_daemon || true
   # `set -e` can end this run at any unguarded command — sqlite3, jq, the CLI. Those cannot
   # route through abort_with_summary, so the trap is what guarantees that no exit path is
   # silent about having stopped early.
@@ -102,7 +108,7 @@ printf '# Canonical action audit deterministic target\n' > "$QA_ROOT/fixtures/qa
     > daemon-tcp.log 2>&1 &
   echo $! > daemon.pid
 )
-DAEMON_PID="$(cat "$QA_ROOT/daemon.pid")"
+DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
 if ! wait_for_daemon; then
   sed 's/^/  /' "$QA_ROOT/daemon-tcp.log" >&2
   abort_with_summary "isolated TCP daemon failed to start"
@@ -230,7 +236,7 @@ export ORCHESTRATOR_SOCKET="$ORCHESTRATORD_DATA_DIR/orchestrator.sock"
     > daemon-uds.log 2>&1 &
   echo $! > daemon.pid
 )
-DAEMON_PID="$(cat "$QA_ROOT/daemon.pid")"
+DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
 if ! wait_for_daemon; then
   sed 's/^/  /' "$QA_ROOT/daemon-uds.log" >&2
   abort_with_summary "isolated read-only UDS daemon failed to start"
