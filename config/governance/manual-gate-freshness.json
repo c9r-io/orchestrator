@@ -27,7 +27,12 @@
     },
     "scripts/qa/test-attention-inbox.sh": {
       "owner": "docs/qa/orchestrator/143-attention-inbox.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "04e5486dff97c7fdf60509f774c55b03a6f9eb61",
+        "exitStatus": 0,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-control-plane-action-audit.sh": {
       "owner": "docs/qa/orchestrator/153-process-console-release-acceptance.md",
@@ -44,7 +49,12 @@
     },
     "scripts/qa/test-expert-resources-governed-editing.sh": {
       "owner": "docs/qa/orchestrator/169-expert-resources-governed-editing.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "04e5486dff97c7fdf60509f774c55b03a6f9eb61",
+        "exitStatus": 0,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-fr001-sandbox-matrix.sh": {
       "owner": "docs/qa/orchestrator/57-sandbox-resource-limits-extended.md",
@@ -61,7 +71,12 @@
     },
     "scripts/qa/test-handoff-safe-resume.sh": {
       "owner": "docs/qa/orchestrator/144-handoff-and-safe-resume.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "04e5486dff97c7fdf60509f774c55b03a6f9eb61",
+        "exitStatus": 0,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-health-policy-check.sh": {
       "owner": "docs/qa/orchestrator/110b-agent-health-policy-advanced.md",
@@ -69,7 +84,12 @@
     },
     "scripts/qa/test-non-code-workspace.sh": {
       "owner": "docs/qa/orchestrator/165-non-code-workspace-and-global-file-sharing.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "04e5486dff97c7fdf60509f774c55b03a6f9eb61",
+        "exitStatus": 0,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-per-trigger-webhook-auth.sh": {
       "owner": "docs/qa/orchestrator/129-per-trigger-webhook-auth-cel-filter.md",
@@ -89,7 +109,12 @@
     },
     "scripts/qa/test-process-console-vertical-flow.sh": {
       "owner": "docs/qa/orchestrator/150-process-console-recovery-notifications-e2e.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "04e5486dff97c7fdf60509f774c55b03a6f9eb61",
+        "exitStatus": 0,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-process-timeline.sh": {
       "owner": "docs/qa/orchestrator/142-process-timeline-read-model.md",
