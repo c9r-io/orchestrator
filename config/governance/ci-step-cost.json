@@ -15,153 +15,153 @@
   "pendingMeasurement": {
   },
   "measurement": {
-    "runId": "30792774882",
-    "headSha": "c1fd4dd5524d23b53f7d77accbab7c5d5271f253"
+    "runId": "31398849814",
+    "headSha": "ab98d6ff24a7e358c463bf195ff005d891d560d5"
   },
   "jobs": {
     "async-lock-governance": {
-      "seconds": 6,
-      "unattributed": 4,
+      "seconds": 4,
+      "unattributed": 2,
       "steps": {
         "Checkout": 2,
         "Verify async lock governance": 0
       }
     },
     "fmt": {
-      "seconds": 20,
-      "unattributed": 3,
+      "seconds": 7,
+      "unattributed": 4,
       "steps": {
-        "Checkout": 11,
-        "Install Rust toolchain": 4,
+        "Checkout": 1,
+        "Install Rust toolchain": 0,
         "Check formatting": 2
       }
     },
     "clippy": {
-      "seconds": 129,
-      "unattributed": 7,
+      "seconds": 155,
+      "unattributed": 8,
       "steps": {
         "Checkout": 2,
-        "Install protobuf compiler": 10,
-        "Install GUI system dependencies": 39,
+        "Install protobuf compiler": 12,
+        "Install GUI system dependencies": 40,
         "Install Node.js": 3,
-        "Install frontend dependencies": 3,
+        "Install frontend dependencies": 5,
         "Build the frontend bundle the Tauri crate compiles against": 6,
         "Install Rust toolchain": 1,
-        "Cache Rust build artifacts": 12,
-        "Run clippy": 46
+        "Cache Rust build artifacts": 14,
+        "Run clippy": 64
       }
     },
     "test": {
-      "seconds": 288,
-      "unattributed": 5,
+      "seconds": 321,
+      "unattributed": 6,
       "steps": {
         "Checkout": 2,
         "Install protobuf compiler": 9,
-        "Install GUI system dependencies": 16,
-        "Install Node.js": 2,
+        "Install GUI system dependencies": 17,
+        "Install Node.js": 4,
         "Install frontend dependencies": 2,
         "Build the frontend bundle the Tauri crate compiles against": 6,
-        "Install Rust toolchain": 0,
-        "Cache Rust build artifacts": 18,
-        "Run tests": 228
+        "Install Rust toolchain": 1,
+        "Cache Rust build artifacts": 13,
+        "Run tests": 261
       }
     },
     "coordination-strangler": {
-      "seconds": 140,
-      "unattributed": 7,
+      "seconds": 126,
+      "unattributed": 3,
       "steps": {
-        "Checkout": 11,
+        "Checkout": 4,
         "Install system dependencies": 10,
         "Install Rust toolchain": 1,
-        "Cache Rust build artifacts": 12,
+        "Cache Rust build artifacts": 7,
         "Install failing provider stubs": 0,
-        "Verify production inventory, ratchet, and per-workflow parity": 97,
+        "Verify production inventory, ratchet, and per-workflow parity": 99,
         "Verify pipeline-variable retirement and per-object migration parity": 2
       }
     },
     "governance": {
-      "seconds": 1248,
-      "unattributed": 4,
+      "seconds": 1444,
+      "unattributed": 18,
       "steps": {
-        "Checkout": 2,
-        "Install system dependencies": 10,
-        "Install Rust toolchain": 0,
-        "Setup Node": 1,
-        "Cache Rust build artifacts": 10,
+        "Checkout": 3,
+        "Install system dependencies": 11,
+        "Install Rust toolchain": 1,
+        "Setup Node": 0,
+        "Cache Rust build artifacts": 1,
         "Install failing provider stubs": 0,
-        "Verify CI job liveness": 3,
-        "Verify CI job liveness negative fixtures": 1,
+        "Verify CI job liveness": 1,
+        "Verify CI job liveness negative fixtures": 2,
         "Verify gate enforcement surface": 6,
-        "Verify gate enforcement surface negative fixtures": 188,
+        "Verify gate enforcement surface negative fixtures": 241,
         "Verify skill mirror integrity": 1,
         "Verify skill mirror integrity negative fixtures": 23,
         "Verify docs publishing integrity": 4,
-        "Verify docs publishing integrity negative fixtures": 44,
+        "Verify docs publishing integrity negative fixtures": 45,
         "Verify release publish surface": 1,
         "Verify release publish surface negative fixtures": 1,
-        "Verify release tag liveness": 0,
+        "Verify release tag liveness": 1,
         "Verify release tag liveness negative fixtures": 0,
         "Verify markdown link integrity": 10,
-        "Verify markdown link integrity fixtures": 0,
+        "Verify markdown link integrity fixtures": 1,
         "QA documentation lint and Agent driver documentation alignment": 11,
         "QA doc lint workflow-ID scope negative fixtures": 16,
-        "Coordination governance inventory": 3,
-        "Governance ledger regeneration tooling": 43,
-        "Core crate boundary and schema snapshot": 119,
-        "Persistence dependency chokepoint": 62,
-        "Persistence API capability boundary": 36,
-        "Persistence crate extraction contracts": 146,
+        "Coordination governance inventory": 4,
+        "Governance ledger regeneration tooling": 44,
+        "Core crate boundary and schema snapshot": 179,
+        "Persistence dependency chokepoint": 64,
+        "Persistence API capability boundary": 37,
+        "Persistence crate extraction contracts": 155,
         "Design doc and QA lifecycle metadata": 5,
         "Manual-runbook gate freshness": 0,
         "CLI three-surface documentation parity": 1,
-        "CLI documentation parity fixtures": 2,
-        "bash 3.2 scanner lexical state": 1,
-        "Governance execution cost and budget": 1,
-        "Governance execution cost negative fixtures": 1,
+        "CLI documentation parity fixtures": 1,
+        "bash 3.2 scanner lexical state": 2,
+        "Governance execution cost and budget": 0,
+        "Governance execution cost negative fixtures": 2,
         "JSON reads observe their exit status": 0,
         "JSON read status negative fixtures": 11,
-        "Negative fixtures prove they applied a mutation": 0,
+        "Negative fixtures prove they applied a mutation": 1,
         "Fixture target drift negative fixtures": 3,
         "Dependency policy still binds": 1,
-        "Dependency policy negative fixtures": 29,
-        "No short-circuiting reader under pipefail": 0,
+        "Dependency policy negative fixtures": 28,
+        "No short-circuiting reader under pipefail": 1,
         "Pipefail short-circuit negative fixtures": 9,
-        "Legacy coordination decommission contracts": 136,
-        "Recorded Codex session resume contracts": 2,
+        "Legacy coordination decommission contracts": 186,
+        "Recorded Codex session resume contracts": 5,
         "Filesystem trigger contracts": 96,
-        "Agent driver production parity": 60,
-        "Agent driver execution migration contracts": 145,
+        "Agent driver production parity": 57,
+        "Agent driver execution migration contracts": 154,
         "Governance result": 0
       }
     },
     "ci-environment-parity": {
-      "seconds": 545,
-      "unattributed": 2,
+      "seconds": 580,
+      "unattributed": 4,
       "steps": {
-        "Checkout": 2,
-        "Install system dependencies": 12,
+        "Checkout": 20,
+        "Install system dependencies": 10,
         "Setup Node": 0,
-        "Install failing provider stubs": 0,
-        "Verify gates behave identically with and without CI set": 529,
+        "Install failing provider stubs": 1,
+        "Verify gates behave identically with and without CI set": 545,
         "Verify the comparison can fail": 0
       }
     },
     "coverage-policy-fixtures": {
-      "seconds": 17,
-      "unattributed": 5,
+      "seconds": 18,
+      "unattributed": 3,
       "steps": {
         "Checkout": 2,
-        "Install Node.js": 1,
-        "Install ruby (Linux)": 5,
+        "Install Node.js": 4,
+        "Install ruby (Linux)": 7,
         "Install failing provider stubs": 0,
         "Verify baseline, unsupported branch, and path fixtures": 0,
-        "Verify bash 3.2 compatibility": 4,
+        "Verify bash 3.2 compatibility": 2,
         "Verify the coverage governance main path": 0
       }
     },
     "slack-certification-recorded": {
-      "seconds": 18,
-      "unattributed": 5,
+      "seconds": 17,
+      "unattributed": 4,
       "steps": {
         "Checkout": 2,
         "Install ripgrep (Linux)": 10,
@@ -171,45 +171,45 @@
       }
     },
     "boundary-coverage": {
-      "seconds": 338,
-      "unattributed": 11,
+      "seconds": 393,
+      "unattributed": 8,
       "steps": {
-        "Checkout": 10,
-        "Install Rust toolchain": 6,
-        "Cache Rust build artifacts": 18,
+        "Checkout": 3,
+        "Install Rust toolchain": 7,
+        "Cache Rust build artifacts": 11,
         "Install pinned cargo-llvm-cov": 1,
         "Install failing provider stubs": 0,
-        "Install Node.js": 4,
-        "Install frontend dependencies": 2,
-        "Install Playwright browser": 7,
-        "Build the frontend bundle the Tauri crate compiles against": 5,
-        "Generate and enforce boundary coverage": 270,
-        "Upload auditable coverage artifacts": 4
+        "Install Node.js": 2,
+        "Install frontend dependencies": 3,
+        "Install Playwright browser": 13,
+        "Build the frontend bundle the Tauri crate compiles against": 8,
+        "Generate and enforce boundary coverage": 334,
+        "Upload auditable coverage artifacts": 3
       }
     },
     "miri": {
-      "seconds": 104,
-      "unattributed": 5,
+      "seconds": 73,
+      "unattributed": 3,
       "steps": {
         "Checkout": 1,
-        "Install protobuf compiler": 9,
+        "Install protobuf compiler": 10,
         "Install Rust nightly with Miri": 9,
-        "Cache Rust build artifacts": 6,
-        "Run Miri on core crate (resource_limits module)": 74
+        "Cache Rust build artifacts": 7,
+        "Run Miri on core crate (resource_limits module)": 43
       }
     },
     "cross-compile": {
-      "seconds": 66,
-      "unattributed": 6,
+      "seconds": 78,
+      "unattributed": 7,
       "steps": {
         "Checkout": 2,
-        "Install protobuf compiler (Linux)": 13,
+        "Install protobuf compiler (Linux)": 25,
         "Install protobuf compiler (macOS)": 0,
         "Install cross-compile tooling (musl)": 0,
         "Install cross-compile tooling (aarch64-linux)": 10,
         "Install Rust toolchain": 3,
-        "Cache Rust build artifacts": 8,
-        "Detect protoc path": 0,
+        "Cache Rust build artifacts": 6,
+        "Detect protoc path": 1,
         "Cargo check": 24
       }
     }

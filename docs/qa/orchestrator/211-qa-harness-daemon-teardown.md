@@ -127,6 +127,22 @@ wp05 夹具 legacy store_put）。每个失败运行都实际走过新拆解路�
 门禁允许在一次性 worktree 里以迁移前 commit 单跑一次分类，worktree 与其
 保留目录随即删除并计入残留清点。
 
+## 认证记录（闭环后补记）
+
+CI run **31398849814**（`ab98d6ff`，2026-08-10）全绿——这是 §4.6 意义上的派生
+ci-required 全量执行：53 个 ci-required 门禁按 manifest 声明的 workflow/job 以
+真实调用方式运行，含迁移后的三个守护进程门禁与带 check 16 的治理面门禁。
+
+预算变动量（验收标准第 6 条）：基线 run 30792774882 为 governance 1248s +
+parity 545s = 1793s；本次 run 为 **1444s + 580s = 2024s / 2700s**，余量 676s。
+变动含 check 16 本体（验证模式实测 +≈4s）、夹具 33–35 及既有夹具隔离环各多跑
+一个 check 的部分，其余为共享 runner 的运行间波动；无新增 step，
+`pendingMeasurement` 为空。台账已由 `ci-cost.rb --refresh --write` 钉到本次 run。
+
+前一次 run 31396123278 红在 jq-status 与 pipefail-short-circuit 上，两处都是
+check 16 初稿踩了它们执法的形状（§4.4 shape 5 与 FR-145 形状），修复见
+`ab98d6ff`——执法代码被同一套扫描器约束，是这套体系按设计工作的样子。
+
 ## Checklist
 
 - [ ] 探针 `8 passed, 0 failed`，exit 0，且两种形状的断言各自成对出现
