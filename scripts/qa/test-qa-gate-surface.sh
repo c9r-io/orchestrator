@@ -1025,6 +1025,73 @@ check_manual_gates_record_runs() {
   return $rc
 }
 
+# Check 16: daemon teardown goes through the shared library, nowhere else.
+#
+# FR-160 measured the shape this ratchets: 23 gates read a daemon PID from a
+# pidfile and called `wait` on it, which returns immediately for a non-child,
+# so every cleanup's `rm -rf` raced a live writer (run 30795701182). The repair
+# is scripts/lib/gate_daemon.sh; this check is what keeps the other 24 sites
+# true after the 25th is written by copying a neighbour — §4.4 shape 2, with
+# FR-159's local-repair-recorded-as-done as shape 9 beside it.
+#
+# Two conditions, mirroring check 15's structure. Scope is derived
+# (`git ls-files`, never a roster) and comments are stripped first — for an
+# absence condition, stripping prevents a commented-out example from reading
+# as a violation, the inverse of the check-15 `grep -F` lesson.
+#   A (absence): no live `kill`/`wait` — with or without a signal flag — aimed
+#     at a variable whose name contains DAEMON. The library is the one place
+#     allowed to signal a daemon PID, and it names its variables `pid`.
+#   B (pairing): a file that assigns a daemon PID (any non-empty
+#     `*DAEMON*PID=` right-hand side) must source the library and call
+#     gate_daemon_stop at least once.
+# What this cannot see, stated rather than papered over: whether
+# gate_daemon_stop is *reached* at runtime (the probe and the per-gate
+# execution records in QA 211 carry that half), and a gate that names its
+# variable SERVER_PID escapes the scope predicate — "DAEMON" is a fact about
+# today's tree (25/25 use it), recorded as a known limit in DD 174 rather
+# than widened into a regex that would start flagging the session PIDs the
+# FR's cross-check warning protects.
+check_daemon_teardown_shared() {
+  local root="$1"
+  local rc=0 files file stripped hits
+  files="$(git -C "$root" ls-files 'scripts/**/*.sh')" || {
+    echo "    git ls-files failed; the teardown scan read nothing" >&2
+    return 1
+  }
+  # Empty input fails closed (§4.4 shape 5): zero scanned files and a clean
+  # scan are different facts, and only one of them is evidence.
+  if [[ -z "$files" ]]; then
+    echo "    no tracked shell scripts under scripts/; the teardown scan read nothing" >&2
+    return 1
+  fi
+  while IFS= read -r file; do
+    [[ -z "$file" ]] && continue
+    [[ "$file" == "scripts/lib/gate_daemon.sh" ]] && continue
+    [[ -f "$root/$file" ]] || continue
+    stripped="$(sed -E 's/(^|[[:space:]])#.*$//' "$root/$file")"
+    hits="$(grep -nE '(^|[^A-Za-z_"])(kill|wait)( -[A-Za-z0-9]+)? "\$[A-Za-z_]*DAEMON[A-Za-z_]*"' <<<"$stripped" || true)"
+    if [[ -n "$hits" ]]; then
+      echo "    $file: signals or waits on a daemon PID directly:" >&2
+      sed 's/^/      /' <<<"$hits" >&2
+      echo "      route the stop through gate_daemon_stop (scripts/lib/gate_daemon.sh);" >&2
+      echo "      \`wait\` on a pidfile PID is a no-op and the cleanup's rm -rf races a live writer" >&2
+      rc=1
+    fi
+    if grep -E '(^|[[:space:]])[A-Za-z_]*DAEMON[A-Za-z_]*PID=' <<<"$stripped" \
+      | grep -vE 'PID=""[[:space:]]*$' | grep -q .; then
+      if ! grep -qE '^[[:space:]]*\.[[:space:]].*scripts/lib/gate_daemon\.sh' <<<"$stripped"; then
+        echo "    $file: assigns a daemon PID but never sources scripts/lib/gate_daemon.sh" >&2
+        rc=1
+      fi
+      if ! grep -q 'gate_daemon_stop' <<<"$stripped"; then
+        echo "    $file: assigns a daemon PID but never calls gate_daemon_stop" >&2
+        rc=1
+      fi
+    fi
+  done <<< "$files"
+  return $rc
+}
+
 # Check 14: every scripts/** executable a workflow job runs is declared here.
 #
 # Checks 1 and 3 together look like they cover this and do not. Check 1 compares
@@ -1223,6 +1290,7 @@ ALL_CHECKS=(
   check_workflow_execution_declared
   check_manual_gates_record_runs
   check_new_gates_name_their_shape
+  check_daemon_teardown_shared
 )
 
 run_all_checks() {
@@ -1242,6 +1310,8 @@ describe_check() {
       echo "every manual-runbook gate sources the runlog library and arms it with its own path|a manual-runbook gate's executions are invisible to the freshness ledger" ;;
     check_new_gates_name_their_shape)
       echo "every ci-required gate added since FR-158 names the failure shape requiring it, and no exemption outlives its gate|a new ci-required gate was added without stating what it catches" ;;
+    check_daemon_teardown_shared)
+      echo "every gate that assigns a daemon PID stops it through gate_daemon.sh, and nothing signals or waits on one directly|a script tears down its daemon outside the shared contract, where wait on a pidfile PID never waits" ;;
     check_support_files_declared)
       echo "every support file declares a known role and a reason|a support file has an unknown role or no reason" ;;
     check_reason_and_owner)
@@ -1934,6 +2004,92 @@ BUNDLE
     ' "$d/$MANIFEST_REL"; then
     expect_fail "fixture 32" "$d" check_new_gates_name_their_shape \
       "an exemption naming a path that is not a ci-required gate fails"
+  fi
+
+  # 33. A raw kill+wait on a daemon PID reappears in a migrated gate — the
+  #     26th-site mutation check 16's condition A exists for. Appended live
+  #     rather than inserted into the cleanup: the check's subject is the
+  #     spelling's presence anywhere outside the library, so position must not
+  #     matter. The diagnostic is asserted too (§4.4 shape 7): an exit code
+  #     cannot distinguish condition A from condition B.
+  d="$(new_case f33)"
+  # The victim must actually be a daemon gate: fixture 35 unhooks its library
+  # source line, which only exists in a gate that has one. Derived by content,
+  # not by manifest position — the alphabetically first manual gate is not
+  # necessarily a daemon gate, and a victim chosen by position would make
+  # fixture 35 pass vacuously the day the ordering changes (§4.4 shape 7).
+  daemon_victim=""
+  while IFS= read -r candidate; do
+    [[ -z "$candidate" || ! -f "$d/$candidate" ]] && continue
+    if grep -qE '^[[:space:]]*\.[[:space:]].*scripts/lib/gate_daemon\.sh' "$d/$candidate"; then
+      daemon_victim="$candidate"
+      break
+    fi
+  done < <(jq -r '.scripts[] | select(.enforcement == "manual-runbook") | .path' "$d/$MANIFEST_REL")
+  if [[ -z "$daemon_victim" ]]; then
+    fail "fixture 33: no manual-runbook gate sources gate_daemon.sh; nothing to attack"
+  else
+    # Assembled through %s so this file never contains the forbidden spelling
+    # itself — check 16 scans every tracked script, including this one.
+    printf 'kill "$%s" 2>/dev/null || true\nwait "$%s" 2>/dev/null || true\n' \
+      DAEMON_PID DAEMON_PID >> "$d/$daemon_victim"
+    expect_fail "fixture 33" "$d" check_daemon_teardown_shared \
+      "a raw kill+wait on a daemon PID outside the library fails the teardown check"
+    # Captured, not piped: the check exits 1 here by design, and under
+    # pipefail `failing_check | grep -q` reports the check's status even when
+    # grep matches — FR-145's shape, aimed at this fixture.
+    f33_diag="$(check_daemon_teardown_shared "$d" 2>&1 >/dev/null || true)"
+    if grep -q "$daemon_victim: signals or waits on a daemon PID directly" <<<"$f33_diag"; then
+      pass "fixture 33: the diagnostic names the file and the offending shape"
+    else
+      fail "fixture 33: the check failed without naming the file through condition A"
+    fi
+  fi
+
+  # 34. The same two lines, commented out — and the check must PASS. This is
+  #     the mutation the implementation is least likely to catch: an absence
+  #     condition that greps the raw file would flag prose and dead examples,
+  #     and a check that cries wolf on a comment gets an exemption added, which
+  #     is worse than no check. Comment-stripping is load-bearing; prove it.
+  d="$(new_case f34)"
+  if [[ -n "$daemon_victim" ]]; then
+    printf '# kill "$%s" 2>/dev/null || true\n# wait "$%s" 2>/dev/null || true\n' \
+      DAEMON_PID DAEMON_PID >> "$d/$daemon_victim"
+    if check_daemon_teardown_shared "$d" >/dev/null 2>&1; then
+      pass "fixture 34: a commented-out kill+wait is not a violation (comments are stripped)"
+    else
+      fail "fixture 34: the check flagged a commented-out kill+wait; it is reading raw text"
+    fi
+  else
+    fail "fixture 34: no manual-runbook gate exists to attack"
+  fi
+
+  # 35. A gate assigns a daemon PID but never sources the library — condition
+  #     B's subject, reached by unhooking a migrated gate rather than by
+  #     inventing a file (a new file trips check 1 and cannot isolate). The
+  #     stop calls are neutralised to `:` so condition A stays silent and the
+  #     fixture isolates the pairing condition alone.
+  d="$(new_case f35)"
+  if [[ -n "$daemon_victim" ]]; then
+    if fixture_mutate "fixture 35" "$d/$daemon_victim" \
+      ruby -e '
+        path = ARGV[0]
+        text = File.read(path)
+        text.gsub!(%r{^([[:space:]]*)\.[[:space:]].*scripts/lib/gate_daemon\.sh.*$}) { "#{Regexp.last_match(1)}: gate-daemon-source-removed" }
+        text.gsub!("gate_daemon_stop", ": neutralised_stop")
+        File.write(path, text)
+      ' "$d/$daemon_victim"; then
+      expect_fail "fixture 35" "$d" check_daemon_teardown_shared \
+        "a gate that assigns a daemon PID without sourcing the library fails the pairing condition"
+      f35_diag="$(check_daemon_teardown_shared "$d" 2>&1 >/dev/null || true)"
+      if grep -q "$daemon_victim: assigns a daemon PID but never sources" <<<"$f35_diag"; then
+        pass "fixture 35: the diagnostic names the file through condition B"
+      else
+        fail "fixture 35: the check failed without naming the missing source line"
+      fi
+    fi
+  else
+    fail "fixture 35: no manual-runbook gate exists to attack"
   fi
 
   # ── Behavioural: arming a gate that already cleans up records the run,
