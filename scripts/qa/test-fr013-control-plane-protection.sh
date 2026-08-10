@@ -51,12 +51,20 @@ trap cleanup EXIT
 gate_runlog_arm "scripts/qa/test-fr013-control-plane-protection.sh"
 
 export HOME="$QA_HOME"
-mkdir -p "$QA_ROOT/data/control-plane" "$QA_ROOT/fixtures/qa" "$QA_ROOT/fixtures/ticket"
+# The daemon must read the protection.yaml this gate writes below, and the CLI
+# must find the daemon: neither worked before — the gate wrote its config under
+# $QA_ROOT while the daemon's data dir defaulted to $HOME/.orchestratord, and a
+# daemon given --bind opens no UDS without --uds-max-role, so the first apply
+# died on discovery (ticket 20260810-fr013-gate-daemon-discovery-rot). Named
+# runtime/, never data/: see 20260811-data-dir-heuristic-splits-key-paths.
+export ORCHESTRATORD_DATA_DIR="$QA_ROOT/runtime"
+export ORCHESTRATOR_SOCKET="$ORCHESTRATORD_DATA_DIR/orchestrator.sock"
+mkdir -p "$QA_ROOT/runtime/control-plane" "$QA_ROOT/fixtures/qa" "$QA_ROOT/fixtures/ticket"
 cat > "$QA_ROOT/fixtures/qa/watch-hold.md" <<'MD'
 # Watch Hold
 MD
 
-cat > "$QA_ROOT/data/control-plane/protection.yaml" <<'YAML'
+cat > "$QA_ROOT/runtime/control-plane/protection.yaml" <<'YAML'
 defaults:
   read: { rate_per_sec: 2, burst: 2, max_in_flight: 4 }
   write: { rate_per_sec: 3, burst: 3, max_in_flight: 2 }
@@ -83,11 +91,16 @@ YAML
 echo "[fr013] starting secure daemon in $QA_ROOT"
 (
   cd "$QA_ROOT"
-  "$ORCHD" --foreground --bind "$BIND_ADDR" --workers 1 > daemon.log 2>&1 &
+  "$ORCHD" --foreground --bind "$BIND_ADDR" --workers 1 --uds-max-role admin > daemon.log 2>&1 &
   echo $! > daemon.pid
 )
 DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
-sleep 3
+# First boot on a fresh dir runs every migration; wait for the socket rather
+# than sleeping a fixed guess.
+for _ in {1..60}; do
+  [[ -S "$ORCHESTRATOR_SOCKET" ]] && "$ORCH" task list -o json >/dev/null 2>&1 && break
+  sleep 0.25
+done
 
 echo "[fr013] applying fixture project"
 "$ORCH" apply \
