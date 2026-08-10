@@ -76,7 +76,7 @@ fi
 # isolates the listener only; the daemon's UDS lands under the data directory
 # while the CLI's default discovery looks under $HOME, hence all three.
 export HOME="$QA_HOME"
-export ORCHESTRATORD_DATA_DIR="$QA_ROOT/data"
+export ORCHESTRATORD_DATA_DIR="$QA_ROOT/runtime"
 export ORCHESTRATOR_SOCKET="$ORCHESTRATORD_DATA_DIR/orchestrator.sock"
 
 # ── Scenario 6: Global secret fallback ───────────────────────────────────────
@@ -118,7 +118,17 @@ echo "--- Scenario 3+4+5: Per-trigger secret + multi-key rotation ---"
 "$ORCHESTRATORD" --foreground --workers 1 \
   --webhook-bind "127.0.0.1:${WEBHOOK_PORT}" >/dev/null 2>&1 &
 DAEMON_PID=$!
-sleep 2
+
+# A bare sleep raced first-boot initialization: on a fresh isolated data dir
+# the daemon runs every migration and seeds the SecretStore key after the
+# socket is up, and an apply at +2s hit "no active encryption key". The
+# shared real ~/.orchestratord used to mask this — it was initialized once,
+# by whichever gate wrote it first. Wait for the fact the applies depend on.
+for _ in {1..60}; do
+  [[ -f "$ORCHESTRATORD_DATA_DIR/secrets/secretstore.key" ]] &&
+    "$ORCHESTRATOR" secret key list -o json >/dev/null 2>&1 && break
+  sleep 0.25
+done
 
 # Apply resources one at a time via temp file
 TMP="$QA_ROOT/qa-wh-081.yaml"
@@ -133,7 +143,8 @@ spec:
     old_key: secret-old-value
     new_key: secret-new-value
 EOF
-"$ORCHESTRATOR" apply -f "$TMP" >/dev/null 2>&1
+"$ORCHESTRATOR" apply -f "$TMP" > "$QA_ROOT/apply.log" 2>&1 ||
+  { fail "apply $(head -1 "$TMP" >/dev/null; grep -m1 'kind:' "$TMP")"; sed 's/^/    /' "$QA_ROOT/apply.log" >&2; }
 
 cat > "$TMP" <<'EOF'
 apiVersion: orchestrator.dev/v2
@@ -151,7 +162,8 @@ spec:
     workflow: test-wf
     workspace: default
 EOF
-"$ORCHESTRATOR" apply -f "$TMP" >/dev/null 2>&1
+"$ORCHESTRATOR" apply -f "$TMP" > "$QA_ROOT/apply.log" 2>&1 ||
+  { fail "apply $(head -1 "$TMP" >/dev/null; grep -m1 'kind:' "$TMP")"; sed 's/^/    /' "$QA_ROOT/apply.log" >&2; }
 
 # Scenario 5: old key → accepted (404 = trigger fires but task creation may fail; auth passed)
 BODY='{"test":"rotation"}'

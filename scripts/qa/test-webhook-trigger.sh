@@ -98,7 +98,7 @@ rm -f "$WEBHOOK_MANIFEST"
 # The daemon opens its UDS under the data directory; the CLI's default
 # discovery looks under $HOME/.orchestratord, which is now the empty QA_HOME.
 export HOME="$QA_HOME"
-export ORCHESTRATORD_DATA_DIR="$QA_ROOT/data"
+export ORCHESTRATORD_DATA_DIR="$QA_ROOT/runtime"
 export ORCHESTRATOR_SOCKET="$ORCHESTRATORD_DATA_DIR/orchestrator.sock"
 
 # ── Scenario 6: Webhook server disabled with --webhook-bind none ─────────────
