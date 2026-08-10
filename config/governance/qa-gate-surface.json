@@ -9,7 +9,7 @@
   "providerIsolationModes": {
     "no-provider": "The script never applies a manifest bundle that declares an unpinned claude/codex agent driver.",
     "fixture-pinned": "Every claude/codex agent in the named fixture bundle also declares binary: fake-*.",
-    "path-shadow": "The script copies a fake provider into an isolated bin directory and prepends it to PATH before starting a daemon."
+    "path-shadow": "The script copies a fake provider into an isolated bin directory and prepends it to PATH before starting a daemon. Holds only when the governed manifest runs provider commands under a NON-login shell (runner shell_arg -c): a login shell (-lc) runs macOS path_helper, which reorders PATH so /etc/paths.d entries come first and the shadow is demoted below a real provider CLI (FR-161). Gates in this mode assert both the entry (assert_provider_shadow) and the resolution under the runner's declared shell (assert_provider_resolution)."
   },
   "supportFileRoles": {
     "fixture": "Input data or a fake executable consumed by a gate. Never invoked as a gate itself, so it has no enforcement of its own.",

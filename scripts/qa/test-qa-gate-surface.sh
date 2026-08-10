@@ -2248,6 +2248,51 @@ FAKE
     tail -20 "$FIXTURE_ROOT/diagnostics.log" >&2
   fi
 
+  # ── Behavioural: the resolution-level provider assertion sees what the
+  #    entry-level one cannot ──
+  #
+  # assert_provider_shadow resolves in the calling script's non-login shell and
+  # passed while the parity gate's streaming step reached a real claude through
+  # /bin/bash -lc (FR-161: path_helper reorders PATH in a login shell).
+  # assert_provider_resolution resolves under the runner's declared shell/arg.
+  # Prove both directions with a root-free reproduction of profile-based PATH
+  # mutation: a poisoned HOME whose .bash_profile prepends a decoy provider
+  # directory — chosen over deleting the shadow, because a missing shadow is
+  # the case the author had in mind and profile reordering is the one measured.
+  echo ""
+  echo "Behavioural: provider resolution under the runner's shell semantics"
+  . "$REPO_ROOT/scripts/lib/provider_isolation.sh"
+  presolution="$FIXTURE_ROOT/provider-resolution"
+  mkdir -p "$presolution/shadow" "$presolution/decoy" "$presolution/home"
+  printf '#!/bin/sh\nexit 0\n' > "$presolution/shadow/claude"
+  printf '#!/bin/sh\nexit 0\n' > "$presolution/decoy/claude"
+  chmod 755 "$presolution/shadow/claude" "$presolution/decoy/claude"
+  printf 'export PATH="%s:$PATH"\n' "$presolution/decoy" > "$presolution/home/.bash_profile"
+
+  if PATH="$presolution/shadow:$PATH" \
+    assert_provider_resolution /bin/bash -c "$presolution/shadow" claude >/dev/null 2>&1; then
+    pass "behavioural: under -c the shadow wins and the resolution assertion passes"
+  else
+    fail "behavioural: the resolution assertion rejected a shadow that -c genuinely resolves"
+  fi
+
+  # Captured, not piped (FR-145): the assertion exits 1 here by design.
+  presolution_diag="$(HOME="$presolution/home" PATH="$presolution/shadow:$PATH" \
+    assert_provider_resolution /bin/bash -lc "$presolution/shadow" claude 2>&1 >/dev/null || true)"
+  if grep -q "under /bin/bash -lc, claude resolves to $presolution/decoy/claude" <<<"$presolution_diag"; then
+    pass "behavioural: a login-shell profile escape fails the resolution assertion, naming the escapee"
+  else
+    fail "behavioural: the resolution assertion did not see the login-shell escape (or did not name it)"
+    printf '      %s\n' "$presolution_diag" >&2
+  fi
+
+  if PATH="$presolution/shadow:$PATH" \
+    assert_provider_shadow "$presolution/shadow" claude >/dev/null 2>&1; then
+    pass "behavioural: the entry-level assertion still holds in the gate's own shell (additional condition, not the only one)"
+  else
+    fail "behavioural: the entry-level assertion failed in the gate's own shell"
+  fi
+
   # ── Meta: the registry and the fixture set have to stay in step ──
   #
   # A check that exists but is not registered runs nowhere. A check that is

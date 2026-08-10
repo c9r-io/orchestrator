@@ -194,6 +194,12 @@ export PATH="$QA_ROOT/bin:$PATH"
 # surface gate cannot see that from the outside. FR-134 requirement 2.
 . "$REPO_ROOT/scripts/lib/provider_isolation.sh"
 assert_provider_shadow "$QA_ROOT/bin" claude
+# The entry-level check resolves in this script's non-login shell; the runner
+# resolves under the shell/arg the fixture's RuntimePolicy declares (-c). Both
+# must land in the shadow — the streaming step once reached a real claude
+# through the -lc/path_helper gap while the line above passed (FR-161). Keep
+# the shell/arg here in sync with the fixture's RuntimePolicy.
+assert_provider_resolution /bin/bash -c "$QA_ROOT/bin" claude
 
 (
   cd "$QA_ROOT/workspace"

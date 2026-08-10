@@ -36,9 +36,11 @@ ubuntu 无 `path_helper` 也无真实 CLI，CI 因此恒绿——隔离声明的
 
 ### 断言层缺口（§4.4 shape 1）
 
-`assert_provider_shadow`（`scripts/lib/provider_isolation.sh`）断言的是
-**PATH 条目**存在于首位，不是运行时将实际执行的解析。在 `-lc` 语义下，
-"PATH 里有影子"与"解析会命中影子"是两个命题；该断言对本缺口恒真。
+`assert_provider_shadow`（`scripts/lib/provider_isolation.sh`）确实执行
+`command -v` 做解析（治理时核验修正：原文"断言的是 PATH 条目"不准确），
+但解析发生在**门禁自己的非登录 shell** 里；runner 用 `-lc` 登录 shell。
+两种语义在 macOS 上对同一 PATH 给出不同答案，断言对本缺口因此恒真——
+它回答的是"门禁的 shell 会解析到哪"，不是"runner 的 shell 会解析到哪"。
 
 ## 需求
 

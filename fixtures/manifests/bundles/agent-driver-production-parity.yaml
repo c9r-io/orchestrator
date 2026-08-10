@@ -1,6 +1,25 @@
 # FR-126 offline production-contract parity fixture.
 # This bundle mirrors only deterministic execution contracts from production
 # manifests. It never invokes a real provider or applies docs/workflow directly.
+# Provider commands must run under a NON-login shell for the gate's PATH
+# shadow to hold: /bin/bash -lc triggers macOS path_helper, which reorders
+# PATH so /etc/paths.d entries (e.g. /opt/homebrew/bin, home of a real
+# claude CLI) come first and the mktemp shadow directory is demoted. -c is
+# in default_allowed_shell_args; the gate's resolution-level assertion runs
+# under the same shell/arg pair and the two must stay in sync (FR-161).
+apiVersion: orchestrator.dev/v2
+kind: RuntimePolicy
+metadata:
+  name: default
+spec:
+  runner:
+    shell: /bin/bash
+    shell_arg: -c
+    policy: allowlist
+    env_allowlist: [PATH, HOME, USER, LANG, TERM]
+  resume:
+    auto: false
+---
 apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
