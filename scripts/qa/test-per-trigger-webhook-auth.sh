@@ -17,13 +17,25 @@ ORCHESTRATOR="./target/release/orchestrator"
 WEBHOOK_PORT=19091
 DAEMON_PID=""
 
+# Isolation: without these, the daemons below run against the operator's real
+# ~/.orchestratord — measured during FR-160's residue audit. The webhook port
+# isolates the listener only; data directory isolation is separate.
+QA_ROOT="$(mktemp -d)"
+QA_HOME="$(mktemp -d)"
+# cargo/rustup live under the real HOME; pin them before overriding it, the
+# way test-agent-driver-production-parity.sh does.
+export CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
+export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
+export HOME="$QA_HOME"
+export ORCHESTRATORD_DATA_DIR="$QA_ROOT/data"
+
 pass() { PASS=$((PASS + 1)); echo "  PASS: $1"; }
 fail() { FAIL=$((FAIL + 1)); echo "  FAIL: $1"; }
 
 cleanup() {
   gate_daemon_stop "$DAEMON_PID" || true
   DAEMON_PID=""
-  rm -f /tmp/qa-wh-081.yaml
+  rm -rf "$QA_ROOT" "$QA_HOME"
 }
 trap cleanup EXIT
 gate_runlog_arm "scripts/qa/test-per-trigger-webhook-auth.sh"
@@ -105,7 +117,7 @@ DAEMON_PID=$!
 sleep 2
 
 # Apply resources one at a time via temp file
-TMP=/tmp/qa-wh-081.yaml
+TMP="$QA_ROOT/qa-wh-081.yaml"
 
 cat > "$TMP" <<'EOF'
 apiVersion: orchestrator.dev/v2
