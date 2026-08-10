@@ -136,14 +136,11 @@ spec:
       scope: task
       enabled: true
       repeatable: false
-      command: "echo '{\"confidence\":0.95,\"bench_result\":{\"test_count\":1419,\"pass_rate\":1.0}}'"
+      # The store write happens from the step itself (FR-156 retired the
+      # store_put post-action).
+      command: "echo '{\"confidence\":0.95,\"bench_result\":{\"test_count\":1419,\"pass_rate\":1.0}}'; orchestrator store put benchmarks latest_run '{\"test_count\":1419,\"pass_rate\":1.0}' --project {project_id}"
       behavior:
         collect_artifacts: true
-        post_actions:
-          - type: store_put
-            store: benchmarks
-            key: latest_run
-            from_var: bench_result
     - id: loop_guard
       type: loop_guard
       enabled: true

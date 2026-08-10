@@ -118,7 +118,17 @@ run_orch() {
   if $VERBOSE; then
     $ORCH "$@"
   else
-    $ORCH "$@" >/dev/null 2>&1
+    # Captured, not discarded: a failing CLI call under set -e used to end the
+    # gate between an info banner and its first assertion with nothing in the
+    # log — the FR-156 fixture rejection was only visible under --verbose
+    # (ticket 20260810-wp05-fixture-legacy-store-put). Failure prints, then
+    # propagates.
+    local out rc=0
+    out="$($ORCH "$@" 2>&1)" || rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+      printf '%s\n' "$out" | sed 's/^/  [orch] /' >&2
+      return "$rc"
+    fi
   fi
 }
 
@@ -242,6 +252,9 @@ printf '# WP05 QA target\n' > "$QA_ROOT/workspace/fixtures/wp05-qa/wp05-check.md
 # file, so exporting one — even a path that does not exist — routes the CLI down
 # the TLS branch and away from the daemon this script just started.
 export ORCHESTRATORD_DATA_DIR="$QA_ROOT/data"
+# The wp05 fixtures write their store keys from inside the step (FR-156 form:
+# `orchestrator store put ...`), so the step shell must resolve `orchestrator`.
+export PATH="$REPO_ROOT/target/debug:$PATH"
 unset ORCHESTRATOR_SOCKET
 unset ORCHESTRATOR_CONTROL_PLANE_CONFIG
 

@@ -38,13 +38,11 @@ spec:
       scope: task
       enabled: true
       repeatable: false
-      command: "printf '%s' '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"parent-finding\",\"description\":\"optimize parser\",\"severity\":\"info\"}]}]}'"
+      # The store write happens from the step itself (FR-156 retired the
+      # store_put post-action); the CLI resolves via the gate's PATH.
+      command: "printf '%s' '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"parent-finding\",\"description\":\"optimize parser\",\"severity\":\"info\"}]}]}'; orchestrator store put context parent_finding '{\"title\":\"parent-finding\",\"description\":\"optimize parser\"}' --project {project_id}"
       behavior:
         post_actions:
-          - type: store_put
-            store: context
-            key: parent_finding
-            from_var: plan_output
           - type: spawn_task
             goal: "child-verify-store-read"
             workflow: wp05-store-spawn-child
