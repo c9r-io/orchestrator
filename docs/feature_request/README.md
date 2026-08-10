@@ -164,7 +164,7 @@
 | FR-157 | Source 域分解与测试补强 | P3 | Closed | git history |
 | FR-158 | 治理体系自省 — 门禁的门禁、成本与新鲜度 | P3 | Closed | git history |
 | FR-159 | 交互会话进程回收 — 孤儿泄漏与 OS 层回收缺口 | P1 | Closed | git history |
-| FR-160 | QA harness 的守护进程拆解 —— `wait` 在 23 个门禁里是空操作 | P2 | Proposed | git history |
+| FR-160 | QA harness 的守护进程拆解 —— `wait` 在 23 个门禁里是空操作 | P2 | Closed | git history |
 <!-- END GENERATED FR REGISTRY -->
 
 ## 说明
