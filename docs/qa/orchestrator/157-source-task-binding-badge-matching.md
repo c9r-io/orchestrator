@@ -168,6 +168,13 @@ Verify lifecycle changes are immediate, complete-project validated, restart-safe
 - Resume is rejected if it would reintroduce an enabled overlap.
 - Resumed revision survives restart.
 - Audit has succeeded `source.binding.apply`, `.suspend`, and `.resume` entries with actor/role, target, request hash, and result ID.
+- The succeeded `source.binding.apply` comes from a **single-document** binding
+  apply (the gate re-applies the binding extracted from the bundle): a
+  multi-resource bundle apply is audited as the generic `resource.apply` by
+  design — `single_builtin_apply_descriptor` classifies only single-document
+  manifests — so a flow that only ever applies the bundle cannot produce this
+  row, which is exactly how the assertion once failed while every product
+  behaviour it names was correct.
 - Audit contains no message content, URL, token, or goal.
 
 ### Expected Data State

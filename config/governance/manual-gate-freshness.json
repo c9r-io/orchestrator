@@ -222,8 +222,8 @@
       "owner": "docs/qa/orchestrator/157-source-task-binding-badge-matching.md",
       "lastRun": {
         "date": "2026-08-10",
-        "revision": "fb889b9ba952656d22611e53ec35986b356d6cb7",
-        "exitStatus": 1,
+        "revision": "b432f443a6d7559ba109a237a77cb1ecff2d07c7",
+        "exitStatus": 0,
         "worktreeDirty": false
       }
     },
