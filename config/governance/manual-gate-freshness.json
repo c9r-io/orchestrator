@@ -45,7 +45,12 @@
     },
     "scripts/qa/test-coordination-collapse.sh": {
       "owner": "docs/qa/orchestrator/168-coordination-collapse-mcp-tools.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "adf2a26eb6d08d2b4e07bcac2b6249ce2eba5da9",
+        "exitStatus": 0,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-expert-resources-governed-editing.sh": {
       "owner": "docs/qa/orchestrator/169-expert-resources-governed-editing.md",
@@ -93,7 +98,12 @@
     },
     "scripts/qa/test-per-trigger-webhook-auth.sh": {
       "owner": "docs/qa/orchestrator/129-per-trigger-webhook-auth-cel-filter.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "5390e0f62694dd4bafbc8542f9ebba67352001c7",
+        "exitStatus": 0,
+        "worktreeDirty": true
+      }
     },
     "scripts/qa/test-process-console-metrics.sh": {
       "owner": "docs/qa/orchestrator/151-process-console-operational-metrics.md",
@@ -219,15 +229,30 @@
     },
     "scripts/qa/test-source-task-template.sh": {
       "owner": "docs/qa/orchestrator/156-source-task-template-skill-invocation.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "adf2a26eb6d08d2b4e07bcac2b6249ce2eba5da9",
+        "exitStatus": 0,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-webhook-trigger.sh": {
       "owner": "docs/qa/orchestrator/128-webhook-trigger-infrastructure.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "5390e0f62694dd4bafbc8542f9ebba67352001c7",
+        "exitStatus": 0,
+        "worktreeDirty": true
+      }
     },
     "scripts/qa/test-wp05-integration.sh": {
       "owner": "docs/qa/orchestrator/51-primitive-composition.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-10",
+        "revision": "5390e0f62694dd4bafbc8542f9ebba67352001c7",
+        "exitStatus": 1,
+        "worktreeDirty": false
+      }
     },
     "scripts/watchdog.sh": {
       "owner": "docs/qa/self-bootstrap/02-survival-enforcement-watchdog.md",
