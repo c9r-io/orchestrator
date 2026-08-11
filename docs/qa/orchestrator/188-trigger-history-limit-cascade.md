@@ -27,6 +27,17 @@ Each candidate now goes through `task_repository`'s existing cascade. Of the ten
 command runs and events, and the remaining seven still refuse — those tasks are skipped whole and
 named.
 
+**Known limitation, shared with the explicit operator path.** Being skipped and named is what
+*retention* does with those seven; `orchestrator task delete` has no such handling. It routes
+through the same `items.rs` cascade and simply propagates `FOREIGN KEY constraint failed`, without
+naming the table that held the task, even though `blocking_references()` in `trigger_state.rs`
+already computes exactly that attribution for this document's scenarios. So a task with a handoff,
+a resume plan, or source ingest cannot be deleted by either path today. DD-150 records this as a
+known limit and does not fix it; deciding what an operator's delete may destroy per table is now
+[FR-168](../../feature_request/FR-168-task-delete-reference-policy.md). The scenarios below stay
+valid regardless of that decision — they assert the retention behaviour, which FR-168 must not
+regress (see its acceptance criteria).
+
 Everything here runs against temporary SQLite files created by the test harness under `$TMPDIR`.
 No scenario starts a daemon, writes to `~/.orchestratord/agent_orchestrator.db`, or invokes a
 provider. The schema under test is built by `PersistenceBootstrap::ensure_current`, the same
