@@ -592,7 +592,7 @@ fn current_username() -> String {
 }
 
 fn client_home_dir(home: &Path, suffix: Option<&str>) -> PathBuf {
-    let base = home.join(".orchestrator/control-plane");
+    let base = agent_orchestrator::paths::client_control_plane_dir(home);
     match suffix {
         Some(value) => base.join(value),
         None => base,
