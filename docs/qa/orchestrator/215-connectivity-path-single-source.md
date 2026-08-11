@@ -117,16 +117,31 @@ error 即算落到 TLS"，而变异检查发现它在缺陷构建上照样通过
 `transport error`。该短语什么也没区分。现在的断言是 RPC 真的成功，
 这是错误传输上的失败无法伪装的唯一结果。
 
-## S5：派生点清单（只作为附加条件）
+## S5：布局名字单次拼写的账本门禁（只作为附加条件）
 
 **步骤**
 
 ```bash
+ruby scripts/qa/connectivity-path-single-source.rb
 bash scripts/qa/test-connectivity-path-single-source.sh
 ```
 
-**预期**：生产代码中 data_dir 的独立派生点集合等于具名白名单。
+**预期**：前者报 `7 layout names, each spelled only where permitted`；
+后者报 `6 passed, 0 failed`。
+
+门禁的主语是**布局名字的拼写**——data dir、socket、pidfile、db、control-plane 目录、
+client 目录、env 变量名，各只允许在具名位置出现。作用范围由 git 派生而非罗列，
+并带**镜像条件**：白名单里的位置扫不到东西也算失败，否则门禁可以靠"什么都没看见"变绿。
 这是计数类断言，按 §4.4 只能作为**附加**条件——S1~S4 承担行为验证。
+
+**主语选错过一次，记录在此**：最初的主语是"谁从环境读取状态"，结果标出 4 个为了展开
+用户路径里的 `~` 而读 `$HOME` 的文件——陈述属实，与 daemon 把 socket 放在哪儿无关。
+把匹配器加宽到覆盖你想要的东西，正是它开始覆盖你没想要的东西的方式（§4.4 shape 10）。
+
+**负夹具（`test-connectivity-path-single-source.sh`，已实测）**：注释里出现布局名字
+**不得**触发（否则门禁在数散文）；活代码里第二次拼写**必须**触发；把 `paths.rs` 移出
+扫描范围必须触发**镜像**条件而非存在条件；清空源码树必须 fail closed。
+另有 before/after 两条，使"因无关原因失败"不会被读成"抓住了变异"。
 
 ## 已知边界
 
@@ -134,3 +149,14 @@ bash scripts/qa/test-connectivity-path-single-source.sh
   （由 QA-58 承担）。
 - `discover_socket_path` 的 `ORCHESTRATOR_SOCKET` 分支是具名保留的第二个入口，
   按设计不做连接探测：显式指定传输方式的操作者不应该被静默改道。
+
+## 检查清单
+
+- [ ] S1 `cargo test -p orchestrator-config --lib paths` 与
+      `cargo test -p orchestrator-security --lib secret_store_crypto::tests` 全绿
+- [ ] S2 `cargo test -p orchestratord --bin orchestratord fs_watcher` 4 项全绿
+- [ ] S3 客户端 bundle 写入处与自动发现处一致的两条断言通过
+- [ ] S4 `bash scripts/qa/test-stale-socket-discovery.sh` 报 `7 passed, 0 failed`
+- [ ] S5 `bash scripts/qa/test-connectivity-path-single-source.sh` 报 `6 passed, 0 failed`
+- [ ] 每次改动 `orchestrator_config::paths` 后重跑 S5：新增一个布局名字而不加白名单
+      条目应当变红
