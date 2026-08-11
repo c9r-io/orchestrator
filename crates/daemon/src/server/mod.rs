@@ -7,6 +7,8 @@ mod handoff;
 mod mapping;
 pub(crate) mod process_metrics;
 mod resource;
+#[cfg(test)]
+mod resource_audit_tests;
 mod secret;
 mod session;
 mod source;

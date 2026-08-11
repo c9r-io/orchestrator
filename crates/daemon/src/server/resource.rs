@@ -43,42 +43,38 @@ pub(crate) async fn apply(
     let require_absent = request.get_ref().require_absent;
     let dry_run = request.get_ref().dry_run;
     let prune = request.get_ref().prune;
-    let audited_mutation = !dry_run
-        && (context.is_some()
-            || contains_driver_raw_args
-            || resource_descriptor.as_ref().is_some_and(|descriptor| {
-                matches!(
-                    descriptor.kind,
-                    agent_orchestrator::cli_types::ResourceKind::SourceTaskTemplate
-                        | agent_orchestrator::cli_types::ResourceKind::SourceTaskBinding
-                )
-            }));
+    // Every non-dry-run apply is audited. The condition this replaced also
+    // required an envelope, raw args, or one of two Source kinds, and its first
+    // disjunct was `context.is_some()` — so an envelope-less apply never reached
+    // `action_audit::begin`, and the `enforced` rejection inside `resolve_context`
+    // was unreachable precisely when it should fire. DD-111 makes the envelope the
+    // durable record of *every* process-console mutation; this restores that.
+    let audited_mutation = !dry_run;
+    let agent_raw_args_override = |descriptor: &ApplyResourceDescriptor| {
+        contains_driver_raw_args
+            && matches!(
+                descriptor.kind,
+                agent_orchestrator::cli_types::ResourceKind::Agent
+            )
+    };
     let target_type = resource_descriptor
         .as_ref()
-        .map(|descriptor| match descriptor.kind {
-            agent_orchestrator::cli_types::ResourceKind::SourceTaskTemplate => {
-                "source_task_template"
-            }
-            agent_orchestrator::cli_types::ResourceKind::SourceTaskBinding => "source_task_binding",
-            agent_orchestrator::cli_types::ResourceKind::Agent if contains_driver_raw_args => {
+        .map(|descriptor| {
+            if agent_raw_args_override(descriptor) {
                 "agent_driver"
+            } else {
+                apply_target_type(descriptor.kind)
             }
-            _ => "resource",
         })
         .unwrap_or("resource_manifest");
     let action = resource_descriptor
         .as_ref()
-        .map(|descriptor| match descriptor.kind {
-            agent_orchestrator::cli_types::ResourceKind::SourceTaskTemplate => {
-                "source.template.apply"
-            }
-            agent_orchestrator::cli_types::ResourceKind::SourceTaskBinding => {
-                "source.binding.apply"
-            }
-            agent_orchestrator::cli_types::ResourceKind::Agent if contains_driver_raw_args => {
+        .map(|descriptor| {
+            if agent_raw_args_override(descriptor) {
                 "agent.driver.raw_args.apply"
+            } else {
+                apply_action(descriptor.kind)
             }
-            _ => "resource.apply",
         })
         .unwrap_or("resource.apply");
     let target_id = resource_descriptor
@@ -243,6 +239,60 @@ fn validate_resource_revision(
         }
     }
     Ok(())
+}
+
+/// Canonical audit action for a builtin apply, one per `ResourceKind`.
+///
+/// The match is deliberately exhaustive with no `_` arm: a thirteenth variant
+/// must fail to compile here rather than silently inherit the generic
+/// `resource.apply` name, which is how eleven of these went unnamed. That
+/// compile-time obligation — not any runtime list — is what makes the covered
+/// set derived from the enum.
+///
+/// `source.template.apply` and `source.binding.apply` keep their shipped names.
+/// They already appear in DD-111, QA 157 and recorded audit rows, and renaming
+/// them for regularity would falsify those records. `Agent` maps to
+/// `resource.agent.apply` here; the caller substitutes
+/// `agent.driver.raw_args.apply` when raw args are present, since that is a
+/// property of the payload rather than of the kind.
+fn apply_action(kind: agent_orchestrator::cli_types::ResourceKind) -> &'static str {
+    use agent_orchestrator::cli_types::ResourceKind;
+    match kind {
+        ResourceKind::Workspace => "resource.workspace.apply",
+        ResourceKind::Agent => "resource.agent.apply",
+        ResourceKind::Workflow => "resource.workflow.apply",
+        ResourceKind::Project => "resource.project.apply",
+        ResourceKind::RuntimePolicy => "resource.runtime_policy.apply",
+        ResourceKind::StepTemplate => "resource.step_template.apply",
+        ResourceKind::SourceTaskTemplate => "source.template.apply",
+        ResourceKind::SourceTaskBinding => "source.binding.apply",
+        ResourceKind::ExecutionProfile => "resource.execution_profile.apply",
+        ResourceKind::EnvStore => "resource.env_store.apply",
+        ResourceKind::SecretStore => "resource.secret_store.apply",
+        ResourceKind::Trigger => "resource.trigger.apply",
+    }
+}
+
+/// Canonical audit `target_type` for a builtin apply, one per `ResourceKind`.
+///
+/// Exhaustive for the same reason as [`apply_action`]. The two Source kinds keep
+/// the `source_task_*` spellings already present in stored rows.
+fn apply_target_type(kind: agent_orchestrator::cli_types::ResourceKind) -> &'static str {
+    use agent_orchestrator::cli_types::ResourceKind;
+    match kind {
+        ResourceKind::Workspace => "workspace",
+        ResourceKind::Agent => "agent",
+        ResourceKind::Workflow => "workflow",
+        ResourceKind::Project => "project",
+        ResourceKind::RuntimePolicy => "runtime_policy",
+        ResourceKind::StepTemplate => "step_template",
+        ResourceKind::SourceTaskTemplate => "source_task_template",
+        ResourceKind::SourceTaskBinding => "source_task_binding",
+        ResourceKind::ExecutionProfile => "execution_profile",
+        ResourceKind::EnvStore => "env_store",
+        ResourceKind::SecretStore => "secret_store",
+        ResourceKind::Trigger => "trigger",
+    }
 }
 
 fn single_builtin_apply_descriptor(content: &str) -> Result<ApplyResourceDescriptor, Status> {
@@ -559,6 +609,131 @@ pub(crate) async fn manifest_export(
         content,
         format: req.output_format,
     }))
+}
+
+#[cfg(test)]
+mod apply_action_naming {
+    use super::{apply_action, apply_target_type};
+    use agent_orchestrator::cli_types::ResourceKind;
+
+    /// Every `ResourceKind`, listed once.
+    ///
+    /// Two independent gates keep this honest, and neither is this array on its
+    /// own. A thirteenth variant fails to compile in `apply_action` and
+    /// `apply_target_type`, which have no `_` arm — that is the real derivation
+    /// from the enum. `covers_every_variant` below then fails until the variant
+    /// is added here too, so the array cannot silently fall behind the enum it
+    /// claims to enumerate.
+    const ALL_KINDS: [ResourceKind; 12] = [
+        ResourceKind::Workspace,
+        ResourceKind::Agent,
+        ResourceKind::Workflow,
+        ResourceKind::Project,
+        ResourceKind::RuntimePolicy,
+        ResourceKind::StepTemplate,
+        ResourceKind::SourceTaskTemplate,
+        ResourceKind::SourceTaskBinding,
+        ResourceKind::ExecutionProfile,
+        ResourceKind::EnvStore,
+        ResourceKind::SecretStore,
+        ResourceKind::Trigger,
+    ];
+
+    /// Fails if a variant is added to `ResourceKind` without being added to
+    /// `ALL_KINDS`. The match is exhaustive and wildcard-free on purpose: it is
+    /// the compiler, not the assertion, that notices the new variant.
+    #[test]
+    fn covers_every_variant() {
+        fn discriminant_index(kind: ResourceKind) -> usize {
+            match kind {
+                ResourceKind::Workspace => 0,
+                ResourceKind::Agent => 1,
+                ResourceKind::Workflow => 2,
+                ResourceKind::Project => 3,
+                ResourceKind::RuntimePolicy => 4,
+                ResourceKind::StepTemplate => 5,
+                ResourceKind::SourceTaskTemplate => 6,
+                ResourceKind::SourceTaskBinding => 7,
+                ResourceKind::ExecutionProfile => 8,
+                ResourceKind::EnvStore => 9,
+                ResourceKind::SecretStore => 10,
+                ResourceKind::Trigger => 11,
+            }
+        }
+        let mut seen = [false; 12];
+        for kind in ALL_KINDS {
+            seen[discriminant_index(kind)] = true;
+        }
+        assert!(
+            seen.iter().all(|entry| *entry),
+            "ALL_KINDS is missing a ResourceKind variant"
+        );
+    }
+
+    /// The defect this FR closes: eleven kinds shared the generic
+    /// `resource.apply`, so an audit reader could not tell a SecretStore write
+    /// from a Workspace edit. Distinctness is the property that failed, so it is
+    /// the property asserted — a test that only checked "non-empty" would have
+    /// passed against the broken code.
+    #[test]
+    fn every_kind_has_a_distinct_named_action() {
+        let mut actions: Vec<&'static str> = ALL_KINDS.iter().copied().map(apply_action).collect();
+        actions.sort_unstable();
+        let total = actions.len();
+        actions.dedup();
+        assert_eq!(total, actions.len(), "two kinds share an audit action name");
+        for kind in ALL_KINDS {
+            let action = apply_action(kind);
+            assert_ne!(
+                action, "resource.apply",
+                "{kind:?} still falls back to the generic action name"
+            );
+            assert!(
+                action.ends_with(".apply"),
+                "{kind:?} action {action} breaks the <domain>.<kind>.apply convention"
+            );
+        }
+    }
+
+    #[test]
+    fn every_kind_has_a_distinct_target_type() {
+        let mut types: Vec<&'static str> =
+            ALL_KINDS.iter().copied().map(apply_target_type).collect();
+        types.sort_unstable();
+        let total = types.len();
+        types.dedup();
+        assert_eq!(total, types.len(), "two kinds share an audit target_type");
+        for kind in ALL_KINDS {
+            assert_ne!(
+                apply_target_type(kind),
+                "resource",
+                "{kind:?} still falls back to the generic target_type"
+            );
+        }
+    }
+
+    /// These two names predate the FR and appear in DD-111, QA 157 and stored
+    /// audit rows. Renaming them for regularity would falsify those records, so
+    /// the exception is pinned rather than left to judgement.
+    #[test]
+    fn shipped_source_action_names_are_unchanged() {
+        assert_eq!(
+            apply_action(ResourceKind::SourceTaskTemplate),
+            "source.template.apply"
+        );
+        assert_eq!(
+            apply_action(ResourceKind::SourceTaskBinding),
+            "source.binding.apply"
+        );
+        assert_eq!(
+            apply_target_type(ResourceKind::SourceTaskTemplate),
+            "source_task_template"
+        );
+        assert_eq!(
+            apply_target_type(ResourceKind::SourceTaskBinding),
+            "source_task_binding"
+        );
+    }
 }
 
 #[cfg(test)]

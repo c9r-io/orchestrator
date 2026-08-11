@@ -128,15 +128,7 @@ async fn secret_rotate_cmd(
     // Re-apply via gRPC
     let yaml_content = serde_yaml::to_string(&manifest)?;
     let apply_resp = client
-        .apply(orchestrator_proto::ApplyRequest {
-            content: yaml_content,
-            dry_run: false,
-            prune: false,
-            project: Some(project_id),
-            audit: None,
-            expected_revision: None,
-            require_absent: false,
-        })
+        .apply(secret_rotate_apply_request(yaml_content, project_id))
         .await?
         .into_inner();
 
@@ -144,4 +136,82 @@ async fn secret_rotate_cmd(
         println!("{}/{} {}", entry.kind, entry.name, entry.action);
     }
     Ok(())
+}
+
+/// Builds the apply request that rotates a SecretStore key.
+///
+/// Extracted so the envelope is assertable. Rotating a key rewrites a secret
+/// value, and without the envelope the mutation left no attributable record:
+/// the only trace was a `resource_versions` row whose author is the constant
+/// `"daemon-apply"`. Under `action_audit_mode: enforced` it also slipped past
+/// the rejection instead of being refused, because the daemon only consulted
+/// the audit layer when a context was already present.
+fn secret_rotate_apply_request(
+    yaml_content: String,
+    project_id: String,
+) -> orchestrator_proto::ApplyRequest {
+    orchestrator_proto::ApplyRequest {
+        content: yaml_content,
+        dry_run: false,
+        prune: false,
+        project: Some(project_id),
+        audit: Some(orchestrator_proto::ActionAuditContext {
+            reason_code: "operator_secret_rotate".to_string(),
+            operator_reason: None,
+            idempotency_key: Some(format!(
+                "cli-secret-rotate-{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|duration| duration.as_nanos())
+                    .unwrap_or_default()
+            )),
+        }),
+        expected_revision: None,
+        require_absent: false,
+    }
+}
+
+#[cfg(test)]
+mod secret_rotate_tests {
+    use super::secret_rotate_apply_request;
+
+    /// A secret rotation must be attributable. This asserts the envelope on the
+    /// request that is actually sent, rather than the presence of the text in
+    /// the source: a commented-out envelope satisfies a grep and would leave the
+    /// rotation unaudited exactly as before.
+    #[test]
+    fn rotation_carries_an_audit_envelope() {
+        let request = secret_rotate_apply_request("spec: {}\n".into(), "default".into());
+        let audit = request
+            .audit
+            .expect("secret rotation must carry an audit envelope");
+        assert_eq!(audit.reason_code, "operator_secret_rotate");
+        assert!(
+            audit
+                .idempotency_key
+                .as_deref()
+                .is_some_and(|key| key.starts_with("cli-secret-rotate-")),
+            "rotation needs a retry identity so a replayed rotation is recognised"
+        );
+        assert!(
+            !request.dry_run,
+            "a rotation is a mutation; a dry run would not be audited"
+        );
+    }
+
+    /// Two rotations must not collide on one retry identity, or the second would
+    /// be rejected as a replay of the first.
+    #[test]
+    fn successive_rotations_get_distinct_retry_identities() {
+        let first = secret_rotate_apply_request("spec: {}\n".into(), "default".into())
+            .audit
+            .and_then(|audit| audit.idempotency_key)
+            .expect("first key");
+        std::thread::sleep(std::time::Duration::from_nanos(1));
+        let second = secret_rotate_apply_request("spec: {}\n".into(), "default".into())
+            .audit
+            .and_then(|audit| audit.idempotency_key)
+            .expect("second key");
+        assert_ne!(first, second);
+    }
 }
