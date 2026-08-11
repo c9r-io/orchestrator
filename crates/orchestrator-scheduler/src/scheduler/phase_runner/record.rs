@@ -79,6 +79,15 @@ pub(super) async fn record_phase_results(
     {
         let mut events = Vec::with_capacity(2);
         if let Some(payload_json) = validation_event_payload_json {
+            // Carry step_id so the attention projector dedupes this with other
+            // failure evidence for the same step (FR-162 R5).
+            let payload_json = match serde_json::from_str::<serde_json::Value>(&payload_json) {
+                Ok(mut payload) => {
+                    payload["step_id"] = json!(step_id);
+                    serde_json::to_string(&payload)?
+                }
+                Err(_) => payload_json,
+            };
             events.push(agent_orchestrator::db_write::DbEventRecord {
                 task_id: task_id_owned.clone(),
                 task_item_id: Some(item_id_owned.clone()),

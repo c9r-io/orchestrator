@@ -158,6 +158,14 @@ pub(super) async fn apply_step_results(
                     validate_spawn_depth(task_ctx.spawn_depth, task_ctx.safety.max_spawn_depth)
                 {
                     warn!(error = %e, "spawn_task skipped: depth limit");
+                    insert_event(
+                        state,
+                        task_id,
+                        Some(item_id),
+                        "task_spawn_failed",
+                        json!({"reason_code": "depth_limit"}),
+                    )
+                    .await?;
                 } else {
                     let spawn_ctx = SpawnContext {
                         state,
@@ -179,7 +187,17 @@ pub(super) async fn apply_step_results(
                             )
                             .await?;
                         }
-                        Err(e) => warn!(error = %e, "spawn_task failed"),
+                        Err(e) => {
+                            warn!(error = %e, "spawn_task failed");
+                            insert_event(
+                                state,
+                                task_id,
+                                Some(item_id),
+                                "task_spawn_failed",
+                                json!({"reason_code": "spawn_error"}),
+                            )
+                            .await?;
+                        }
                     }
                 }
             }

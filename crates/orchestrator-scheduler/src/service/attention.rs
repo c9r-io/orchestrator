@@ -134,7 +134,7 @@ pub async fn reconcile_attention_once(state: &InnerState) -> Result<usize> {
 /// human review; the task-completion sweep must not clear them (FR-162).
 /// `resume_executed` still sweeps everything: resume is an operator action
 /// typically taken from the evidence item itself.
-const TASK_SWEEP_PRESERVED_KINDS: &[&str] = &["step_failed", "low_confidence"];
+const TASK_SWEEP_PRESERVED_KINDS: &[&str] = &["step_failed", "low_confidence", "task_spawn_failed"];
 
 fn policy_operations(event: &AttentionSourceEvent) -> Vec<AttentionProjectionOp> {
     if matches!(
@@ -202,7 +202,7 @@ fn policy_operations(event: &AttentionSourceEvent) -> Vec<AttentionProjectionOp>
             AttentionSeverity::Intervention,
             "Execution blocked by policy",
         )),
-        "sandbox_denied" => Some((
+        "sandbox_denied" | "sandbox_network_blocked" | "sandbox_resource_exceeded" => Some((
             "sandbox_denied",
             AttentionSeverity::Intervention,
             "Execution denied by sandbox",
@@ -222,15 +222,20 @@ fn policy_operations(event: &AttentionSourceEvent) -> Vec<AttentionProjectionOp>
             AttentionSeverity::Intervention,
             "Task failed",
         )),
-        "degenerate_loop" | "degenerate_cycle" => Some((
+        "degenerate_loop" | "degenerate_cycle" | "degenerate_cycle_detected" => Some((
             "degenerate_loop",
             AttentionSeverity::Intervention,
             "Workflow loop is not making progress",
         )),
-        "step_failed" => Some((
+        "step_failed" | "output_validation_failed" => Some((
             "step_failed",
             AttentionSeverity::Intervention,
             "Workflow step failed",
+        )),
+        "task_spawn_failed" => Some((
+            "task_spawn_failed",
+            AttentionSeverity::Intervention,
+            "Child task creation failed",
         )),
         "step_finished" | "chain_step_finished" | "dynamic_step_finished"
             if event.payload.get("success").and_then(Value::as_bool) == Some(false) =>
@@ -438,7 +443,10 @@ mod tests {
         else {
             panic!("expected resolve-task");
         };
-        assert_eq!(preserve_kinds, &["step_failed", "low_confidence"]);
+        assert_eq!(
+            preserve_kinds,
+            &["step_failed", "low_confidence", "task_spawn_failed"]
+        );
         assert_eq!(reason, "task_completed");
     }
 
@@ -465,6 +473,55 @@ mod tests {
             AttentionProjectionOp::ResolveTask { .. }
         ));
         assert!(policy_operations(&event("resume_planned", json!({}))).is_empty());
+    }
+
+    #[test]
+    fn degenerate_cycle_detected_routes_as_emitted() {
+        // The arm previously spelled only "degenerate_cycle" while the loop
+        // engine emits "degenerate_cycle_detected"; it never fired (FR-162).
+        let operations = policy_operations(&event("degenerate_cycle_detected", json!({})));
+        let AttentionProjectionOp::Upsert(candidate) = &operations[0] else {
+            panic!("expected upsert");
+        };
+        assert_eq!(candidate.kind, "degenerate_loop");
+    }
+
+    #[test]
+    fn sandbox_siblings_route_to_sandbox_denied() {
+        for event_type in ["sandbox_network_blocked", "sandbox_resource_exceeded"] {
+            let operations = policy_operations(&event(event_type, json!({})));
+            let AttentionProjectionOp::Upsert(candidate) = &operations[0] else {
+                panic!("expected upsert for {event_type}");
+            };
+            assert_eq!(candidate.kind, "sandbox_denied");
+        }
+    }
+
+    #[test]
+    fn output_validation_failure_materializes_step_failed() {
+        let operations = policy_operations(&event(
+            "output_validation_failed",
+            json!({"step_id": "build", "error": "token=secret"}),
+        ));
+        let AttentionProjectionOp::Upsert(candidate) = &operations[0] else {
+            panic!("expected upsert");
+        };
+        assert_eq!(candidate.kind, "step_failed");
+        assert_eq!(candidate.step_id.as_deref(), Some("build"));
+        assert!(!candidate.summary.contains("secret"));
+    }
+
+    #[test]
+    fn task_spawn_failure_routes_as_preserved_evidence() {
+        let operations = policy_operations(&event(
+            "task_spawn_failed",
+            json!({"reason_code": "depth_limit"}),
+        ));
+        let AttentionProjectionOp::Upsert(candidate) = &operations[0] else {
+            panic!("expected upsert");
+        };
+        assert_eq!(candidate.kind, "task_spawn_failed");
+        assert!(TASK_SWEEP_PRESERVED_KINDS.contains(&candidate.kind.as_str()));
     }
 
     #[test]
