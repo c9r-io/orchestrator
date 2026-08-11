@@ -360,6 +360,14 @@ jobs:
         continue-on-error: true
         run: ./scripts/qa/test-manual-gate-freshness.sh
 
+      # The readiness helper has one caller whose binary is, by construction,
+      # always older than the helper. Nothing running against the current build
+      # can observe that branch.
+      - name: Daemon readiness fallback fixtures
+        id: gate-daemon-readiness-fallback
+        continue-on-error: true
+        run: ./scripts/qa/test-gate-daemon-readiness-fallback.sh
+
       - name: CLI three-surface documentation parity
         id: cli-doc-parity
         continue-on-error: true
@@ -531,6 +539,7 @@ jobs:
             doc-lifecycle=${{ steps.doc-lifecycle.outcome }}
             manual-gate-freshness=${{ steps.manual-gate-freshness.outcome }}
             manual-gate-freshness-fixtures=${{ steps.manual-gate-freshness-fixtures.outcome }}
+            gate-daemon-readiness-fallback=${{ steps.gate-daemon-readiness-fallback.outcome }}
             cli-doc-parity=${{ steps.cli-doc-parity.outcome }}
             cli-doc-parity-fixtures=${{ steps.cli-doc-parity-fixtures.outcome }}
             bash32-lexer=${{ steps.bash32-lexer.outcome }}

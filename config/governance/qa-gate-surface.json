@@ -1149,6 +1149,17 @@
       "note": "Negative fixtures for connectivity-path-single-source.rb, run against a scratch copy of the working tree. Four mutations: a spelling in a comment (must NOT trip the gate, or it is counting prose), a spelling in live code (must), the canonical file moved out of scan range (must trip the mirror condition rather than the presence one), and an emptied tree (must fail closed)."
     },
     {
+      "path": "scripts/qa/test-gate-daemon-readiness-fallback.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "shape": "shape 2 — enumeration standing in for coverage, in the form where the enumeration is implicit. c1060338 migrated 24 readiness polls onto `daemon status --wait-ready` on the assumption that every caller starts the binary being built. One does not: test-slack-skill-automation-vertical.sh pins PREVIOUS_REF to the 0.5.0 cut because its subject IS backward compatibility, so its CLI predates the flag by ten days and answered `error: unexpected argument`, which the helper reported as `daemon not ready within 25s`. Four gates were red for a fortnight on daemons that had started fine. No gate running against the current binary can observe the fallback branch, so it would pass while the compatibility path was broken — which is exactly how the defect survived a 23-gate migration.",
+      "note": "Offline and hermetic: no daemon, no cargo, no network. Drives gate_daemon_wait_ready against stub CLIs whose two capabilities — whether `daemon status --help` advertises --wait-ready, and whether `task list` ever succeeds — are chosen per case, so the modern and legacy binaries differ in exactly one declared thing. Six cases: the probe in both directions, that a capable CLI still takes the Health RPC path (a fallback that swallowed every caller would silently undo FR-163's worker-registration guarantee), the regression itself, that the fallback fails closed after its budget rather than falling through like the pre-FR-163 `&& break`, and that an empty CLI path is still rejected by name. Each asserts the diagnostic rather than the exit code, since four of the cases exit non-zero and a code cannot say which branch produced it."
+    },
+    {
       "path": "scripts/qa/test-stale-socket-discovery.sh",
       "enforcement": "manual-runbook",
       "reason": "starts and hard-kills orchestratord instances and binds a TCP control-plane port, so it needs release binaries and a machine where a daemon may crash",

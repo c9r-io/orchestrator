@@ -15,7 +15,8 @@
   "pendingMeasurement": {
     "Runtime layout has one spelling per name": "Added by FR-163 and not yet run by CI, so it has no measured cost. Reads tracked Rust source twice per file (masked and raw) with cfg(test) modules stripped; locally 414 files in about 4s, the same scan four existing ledgers already pay for. Replaced by a number on the next refresh.",
     "Runtime layout ledger negative fixtures": "Added by FR-163 and not yet run by CI. Copies the tracked tree to a scratch directory and runs the ledger gate six times over it (before-run, four mutations, after-run), so expect roughly six times the gate above plus one tree copy. Replaced by a number on the next refresh.",
-    "Manual-gate freshness fixtures": "Added by FR-165 and not yet run by CI, so it has no measured cost. Builds a two-gate scratch ledger/manifest pair under $TMPDIR and runs the freshness gate against it twelve times, plus one YAML parse of release.yml; no cargo, no npm, no daemon. Locally 12 cases in under 2s. Replaced by a number on the next refresh."
+    "Manual-gate freshness fixtures": "Added by FR-165 and not yet run by CI, so it has no measured cost. Builds a two-gate scratch ledger/manifest pair under $TMPDIR and runs the freshness gate against it twelve times, plus one YAML parse of release.yml; no cargo, no npm, no daemon. Locally 12 cases in under 2s. Replaced by a number on the next refresh.",
+    "Daemon readiness fallback fixtures": "Added by FR-165 and not yet run by CI. Six cases against stub CLIs written into a scratch directory; no daemon, cargo or network. One case deliberately waits out a 2s budget to prove the fallback fails closed, which dominates its runtime. Locally under 3s. Replaced by a number on the next refresh."
   },
   "measurement": {
     "runId": "31398849814",

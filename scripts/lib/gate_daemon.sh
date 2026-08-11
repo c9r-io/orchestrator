@@ -112,12 +112,71 @@ gate_daemon_alive() {
 # have, so this cannot introduce a flake that was not already there.
 GATE_DAEMON_READY_TIMEOUT="${GATE_DAEMON_READY_TIMEOUT:-25}"
 
+# Does this CLI know `--wait-ready`?
+#
+# Not every binary a gate starts is the one being built. FR-113's vertical gate
+# pins PREVIOUS_REF to the 0.5.0 release cut *by design* — its subject is that
+# the previous binary still serves the current schema — and that binary predates
+# `--wait-ready` by ten days. Asking it for the flag produced
+# `error: unexpected argument '--wait-ready' found`, which the helper reported
+# as "daemon not ready within 25s". Four gates were red for a fortnight on a
+# daemon that had started perfectly well.
+#
+# The probe is the CLI's own help output, which is where clap declares the flags
+# it accepts, so this asks the binary rather than a table of which callers are
+# old. An opt-in `GATE_DAEMON_LEGACY_READINESS=1` was the obvious alternative
+# and is the enumeration failure §4.4 shape 2 names: it would guard exactly the
+# caller we already knew about, and the next old-binary caller would rediscover
+# this bug from scratch.
+#
+# Read into a variable, never `"$cli" ... | grep -q`. Under `set -o pipefail`
+# grep leaves on the first match, the producer dies of EPIPE, and a successful
+# match reports as a failed one (FR-145).
+gate_daemon_supports_wait_ready() {
+  local cli="$1" help
+  help="$("$cli" daemon status --help 2>&1)" || true
+  grep -q -- '--wait-ready' <<<"$help"
+}
+
+# The pre-FR-163 readiness poll, kept for binaries that cannot answer the Health
+# RPC. Weaker on purpose and only reachable when the flag is absent.
+#
+# `task list` succeeds as soon as the socket accepts a connection, which is
+# before the worker pool has registered — that imprecision is exactly why
+# FR-163 replaced it, and it is still the best a pre-Health binary can offer.
+# What is *not* carried over is the `&& break` that let an exhausted loop fall
+# through silently: this returns 1 and says so, so a gate never runs its body
+# against a daemon that never came up.
+gate_daemon_wait_ready_legacy() {
+  local cli="$1" timeout="$2" deadline
+
+  echo "[gate-daemon] ${cli} does not support --wait-ready; falling back to a" >&2
+  echo "[gate-daemon] socket probe, which cannot see worker registration" >&2
+
+  deadline=$(( SECONDS + timeout ))
+  while (( SECONDS < deadline )); do
+    if "$cli" task list -o json >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.25
+  done
+
+  echo "[gate-daemon] daemon did not accept a connection within ${timeout}s" >&2
+  echo "[gate-daemon] (legacy socket probe; this binary predates the Health RPC)" >&2
+  return 1
+}
+
 gate_daemon_wait_ready() {
   local cli="$1" timeout="${2:-$GATE_DAEMON_READY_TIMEOUT}" output rc
 
   if [[ -z "$cli" ]]; then
     echo "[gate-daemon] gate_daemon_wait_ready: no CLI path given" >&2
     return 1
+  fi
+
+  if ! gate_daemon_supports_wait_ready "$cli"; then
+    gate_daemon_wait_ready_legacy "$cli" "$timeout"
+    return $?
   fi
 
   # Status is observed, never discarded: a readiness wait whose own failure is
