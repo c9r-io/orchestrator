@@ -11,9 +11,9 @@
       "owner": "docs/qa/orchestrator/164-agent-driver-abstraction.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "4c13b90ac20eae5e1914ff8990f9ab5cf0ab8ed1",
-        "exitStatus": 1,
-        "worktreeDirty": true
+        "revision": "0ab2688f5d4b52788dfbb1a80052631cd590a1db",
+        "exitStatus": 0,
+        "worktreeDirty": false
       }
     },
     "scripts/qa/test-agent-session-control-plane.sh": {
@@ -29,9 +29,9 @@
       "owner": "docs/qa/orchestrator/143-attention-inbox.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "4c13b90ac20eae5e1914ff8990f9ab5cf0ab8ed1",
-        "exitStatus": 0,
-        "worktreeDirty": true
+        "revision": "0ab2688f5d4b52788dfbb1a80052631cd590a1db",
+        "exitStatus": 1,
+        "worktreeDirty": false
       }
     },
     "scripts/qa/test-control-plane-action-audit.sh": {
@@ -46,8 +46,8 @@
     "scripts/qa/test-coordination-collapse.sh": {
       "owner": "docs/qa/orchestrator/168-coordination-collapse-mcp-tools.md",
       "lastRun": {
-        "date": "2026-08-10",
-        "revision": "adf2a26eb6d08d2b4e07bcac2b6249ce2eba5da9",
+        "date": "2026-08-11",
+        "revision": "0ab2688f5d4b52788dfbb1a80052631cd590a1db",
         "exitStatus": 0,
         "worktreeDirty": false
       }
