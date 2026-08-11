@@ -170,6 +170,7 @@
 | FR-163 | 连接、路径与就绪的单源化 | P2 | Proposed | git history |
 | FR-165 | 账本与契约的驱动化 —— 从"有记录"到"有排程" | P2 | Proposed | git history |
 | FR-166 | 概念面收敛 —— 双词汇表、重叠 kind 与概念预算 | P2 | Proposed | git history |
+| FR-167 | Delete 路径的审计缺口——具名与信封双缺 | P1 | Proposed | git history |
 <!-- END GENERATED FR REGISTRY -->
 
 ## 说明

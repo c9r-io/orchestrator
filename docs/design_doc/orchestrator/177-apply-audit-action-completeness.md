@@ -132,6 +132,25 @@ sent envelopes; `orchestrator tool secret-rotate` — which rewrites a SecretSto
 - **`kind_as_str_covers_all_resource_kinds`** (`core/tests/integration_test.rs`)
   asserts three of twelve kinds despite its name — an instance of §4.4 shape 2 in
   existing tests. Left as found; recorded so it is not mistaken for coverage.
+- **`Delete` has the same defect and a worse form of it — filed as FR-167.**
+  Asking §5's question ("what state satisfies every criterion while the goal is
+  unmet?") of this FR's criteria answers: deletion. `delete` gates its envelope on
+  `force_references || is_source_task_binding`, so an ordinary delete of any of
+  the other eleven kinds records no `control_action_audit` row, and enforced mode
+  is unreachable for it exactly as it was here. It is worse than apply's
+  pre-FR-164 state in one specific way: that condition does not include
+  `context.is_some()`, so **even a client that correctly sends an envelope gets
+  no row** — the envelope is accepted and discarded. The residue is a tombstone
+  `resource_versions` row (`version = -1`, `spec_json = '"deleted"'`) whose author
+  is again the constant `"daemon-apply"`, and which does not retain the deleted
+  spec.
+
+  The shape generalises past both RPCs and is the reason this is recorded here
+  rather than only in the new FR: **a handler that gates entry to the audit layer
+  on a condition the audit layer itself exists to adjudicate satisfies neither
+  branch of the policy while appearing to implement both.** Two instances in one
+  file is not a coincidence, so every call site of `action_audit::begin` deserves
+  its guard read with that question in mind.
 
 ## Observability
 
