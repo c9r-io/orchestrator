@@ -28,10 +28,10 @@
     "scripts/qa/test-attention-inbox.sh": {
       "owner": "docs/qa/orchestrator/143-attention-inbox.md",
       "lastRun": {
-        "date": "2026-08-10",
-        "revision": "04e5486dff97c7fdf60509f774c55b03a6f9eb61",
+        "date": "2026-08-11",
+        "revision": "315f76acc59fa3cff0667bf13dd017bd6eeaac74",
         "exitStatus": 0,
-        "worktreeDirty": false
+        "worktreeDirty": true
       }
     },
     "scripts/qa/test-control-plane-action-audit.sh": {
@@ -59,6 +59,15 @@
         "revision": "04e5486dff97c7fdf60509f774c55b03a6f9eb61",
         "exitStatus": 0,
         "worktreeDirty": false
+      }
+    },
+    "scripts/qa/test-failure-visibility.sh": {
+      "owner": "docs/qa/orchestrator/213-failure-visibility-contract.md",
+      "lastRun": {
+        "date": "2026-08-11",
+        "revision": "315f76acc59fa3cff0667bf13dd017bd6eeaac74",
+        "exitStatus": 1,
+        "worktreeDirty": true
       }
     },
     "scripts/qa/test-fr001-sandbox-matrix.sh": {

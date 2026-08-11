@@ -745,6 +745,12 @@
       "note": "FR-155 source-derived onboarding and AGENTS path existence, independently identified root-Web/desktop-shell architecture, canonical proto, tracked-ticket, and retired-YAML checks plus seven isolated negative fixtures, registered-check target completeness, and a synthetic uncovered-check probe. It reads tracked files and temporary copies only; no daemon, database, network, or provider binary."
     },
     {
+      "path": "scripts/qa/test-failure-visibility.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance binding 127.0.0.1:19213 (gRPC) and 127.0.0.1:19214 (webhook), runs a real workflow, injects events via sqlite3, and delivers signed/unsigned webhook requests to exercise the FR-162 failure-visibility contract end to end",
+      "owner": "docs/qa/orchestrator/213-failure-visibility-contract.md"
+    },
+    {
       "path": "scripts/qa/test-attention-routing-doc.sh",
       "enforcement": "ci-required",
       "shape": "shape 2 — enumeration standing in for coverage. A hand-written inbox routing table documents exactly the arms its author remembered, and the next arm lands outside it silently; here the table, the resolution rules, and the external-kind list are all derived from the projector source and compared bidirectionally, so an undocumented arm or a documented phantom both fail. Fails closed on zero extracted arms (§4.4 shape 5).",

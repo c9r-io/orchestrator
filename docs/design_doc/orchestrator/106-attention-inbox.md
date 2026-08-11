@@ -70,7 +70,7 @@ Task status and the process timeline describe work, but neither answers the oper
 1. The daemon polls source events in bounded batches. Attention operations and cursor advancement commit in one SQLite transaction, making crash replay convergent.
 2. A built-in policy registry maps relevant events to severity, structured titles, stable dedupe keys, safe action descriptors, and clear conditions. Initial kinds include approval, question, failed/retry-exhausted, policy/sandbox denial, stalled, budget, low-confidence, and degenerate-loop conditions.
 3. Summaries are constructed only from validated identifiers such as task and step IDs. Arbitrary `error`, `message`, prompt, transcript, stdout, and stderr fields are never copied.
-4. Repeated active conditions increment `occurrence_count`. A cleared condition resolves the matching step/task; recurrence reopens the same row and increments `reopen_count`.
+4. Repeated active conditions increment `occurrence_count`. A cleared condition resolves the matching step/task; recurrence reopens the same row and increments `reopen_count`. Since FR-162 (DD-176) the task-completion sweep is kind-aware: `task_completed`/`task_finished` resolve *condition* items with reason `task_completed` but preserve *evidence* kinds (`step_failed`, `low_confidence`, `task_spawn_failed`) as open; `resume_executed` still sweeps everything, because resume is an operator action typically taken from the evidence item itself.
 5. Human mutations update by exact version and persist the authenticated actor in the same transaction.
 6. External actions use a two-phase database reservation. Exactly one caller receives `should_execute=true`; completion records success or failure. A replay of the same action key returns current state without repeating the external side effect.
 7. Follow clients consume `attention_changes` and reconcile by item ID. Existing rows remain readable when materialization is disabled.
@@ -106,7 +106,7 @@ Task status and the process timeline describe work, but neither answers the oper
 
 ## Operations / Release
 
-- Config: `RuntimePolicy.spec.attention_inbox_enabled` defaults to `true`. Setting it to `false` stops new materialization but does not delete or hide existing rows.
+- Config: `RuntimePolicy.spec.attention_inbox_enabled` defaults to `true`. Setting it to `false` stops new materialization but does not delete or hide existing rows. Since FR-162 (DD-176) the dropped range is recorded per project in `attention_projection_gaps` inside the cursor transaction, and re-enabling surfaces one `inbox_projection_gap` item stating the dropped count and event-id range — the window is named, never silent.
 - Migration: migration 27 runs through the normal migration kernel before the daemon starts reconciliation.
 - Rollback: disable materialization, revert clients/RPC handlers, and leave additive tables in place. No task/event rollback is needed.
 - Compatibility: proto additions are backward compatible; existing task, trace, timeline, and GUI progress flows remain available.

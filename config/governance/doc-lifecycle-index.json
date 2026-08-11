@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 460,
-    "active": 447,
+    "documents": 462,
+    "active": 449,
     "superseded": 13,
-    "withRelatedFr": 307
+    "withRelatedFr": 309
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -482,6 +482,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-161"
+      ]
+    },
+    "docs/design_doc/orchestrator/176-failure-visibility-contract.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-162"
       ]
     },
     "docs/design_doc/orchestrator/18-prompt-delivery-abstraction.md": {
@@ -1827,6 +1833,12 @@
         "FR-161"
       ]
     },
+    "docs/qa/orchestrator/213-failure-visibility-contract.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-162"
+      ]
+    },
     "docs/qa/orchestrator/22-performance-io-queue-optimizations.md": {
       "lifecycle": "active"
     },
@@ -2938,6 +2950,10 @@
     "FR-161": [
       "docs/design_doc/orchestrator/175-provider-isolation-login-shell.md",
       "docs/qa/orchestrator/212-provider-isolation-login-shell.md"
+    ],
+    "FR-162": [
+      "docs/design_doc/orchestrator/176-failure-visibility-contract.md",
+      "docs/qa/orchestrator/213-failure-visibility-contract.md"
     ]
   },
   "supersedes": {
