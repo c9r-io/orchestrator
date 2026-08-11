@@ -82,3 +82,39 @@ The process half of this question is clean: at the time of writing there were
 UDS socket files, after ~6 days of machine uptime and a 53-invocation sweep —
 so FR-159/FR-160's process-leak work is holding. This ticket is only about
 filesystem residue.
+
+## Addendum, 2026-08-12 (FR-165 R1 triage sweep)
+
+A second sweep found the same class two orders of magnitude larger, and it is
+not under `$TMPDIR`:
+
+| Path | Size | Owner | Verdict |
+|---|---|---|---|
+| `target/fr113-previous-58166a9f6172` | **5.0 GB** | `scripts/qa/test-slack-skill-automation-vertical.sh:57` | accumulates, one tree per distinct `PREVIOUS_REF`, forever |
+
+`PREVIOUS_TARGET="$REPO_ROOT/target/fr113-previous-${PREVIOUS_REF:0:12}"` is a
+whole second cargo target tree for building the previous release. The gate's
+`cleanup()` stops the daemon and removes `QA_ROOT`; it never touches
+`PREVIOUS_TARGET`.
+
+Reusing it across runs is the right call — rebuilding 5 GB per run would be
+brutal — so this is not a leak per run. It is an unbounded **cache keyed by
+ref**: nothing prunes trees whose `PREVIOUS_REF` has moved on. There is one
+today because `PREVIOUS_REF` has only had one value; the count grows by one per
+release the gate is pinned forward to, at 5 GB each. `target/` is currently
+88 GB.
+
+It never appears in `git status` (`.gitignore:16` ignores `target/`), which is
+why a leak this size went unremarked while a 41 MB one was noticed.
+
+Suggested treatment, in preference order: keep the newest N by mtime and remove
+the rest at gate start; or document it as a cache in the gate header and add it
+to whatever the repo uses for `cargo clean`-adjacent housekeeping. Do not simply
+`rm -rf` it in `cleanup()` — that reintroduces the 5 GB rebuild on every run.
+
+Also observed: four of the ten `$TMPDIR/tmp.*` roots surviving that sweep were
+**0 B**, created by the FR-113/114/115 Slack gates which print
+`... QA logs retained at: <dir>` and then exit early — in this case on their
+own clean-worktree precondition, before writing anything. An empty retained
+evidence directory is indistinguishable from a gate that ran and produced no
+findings.

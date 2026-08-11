@@ -2,7 +2,12 @@
 
 ## 优先级: P2
 
-## 状态: Proposed
+## 状态: In Progress
+
+> **需求 1 已闭环（2026-08-12 @ `55c0d766`）**，设计与验证由
+> `docs/design_doc/orchestrator/179-ledger-driven-manual-gate-freshness.md`
+> 与 `docs/qa/orchestrator/217-manual-gate-freshness-enforcement.md` 承载。
+> 需求 2/3/4 未开工。分诊过程中开出两张 ticket（见需求 1 小结）。
 
 ## 背景
 
@@ -94,7 +99,46 @@ limits、~150 条停放项、多本 ledger JSON），但除 CI 预算外，没�
 
 ## 需求
 
-### 1. manual 门禁的分诊与节律
+### 1. manual 门禁的分诊与节律 —— ✅ 已闭环 @ `55c0d766`
+
+**交付**：判据修复（`exitStatus == 0` 且非 dirty 方为 fresh，四态分别命名）；
+写死计数改为派生（连带修掉另外三处陈述，皆已陈旧）；`release.yml` 新增
+`manual-gate-freshness` job 跑 `--strict`，`build` 与 `gui-build` 均 `needs:`
+它；逐门禁豁免机制（禁止子树式，理由双向强制，豁免必打印）；
+`scripts/qa/test-manual-gate-freshness.sh` 12 例负夹具，ci-required，
+四次变异各由对应用例捕获。
+
+**分诊结论（12 个 never-run，三轮实跑，仅第三轮为证据）**：
+
+| 门禁 | 裁定 |
+|---|---|
+| `test-process-console-metrics.sh` | ✅ 绿（本批唯一） |
+| `test-process-console-ui.sh` | ❌ npm audit（dev-only）→ 按 owner 决定豁免 |
+| `test-process-console-release.sh` | ❌ 仅因包裹 console-ui；其余 11 个子门禁全绿 |
+| `test-slack-skill-automation-release.sh` | ❌ 仅因包裹 release-vertical |
+| `test-slack-dedicated-app-provisioning.sh` | ❌ 同上 |
+| `test-slack-managed-shared-oauth.sh` | ❌ 同上 |
+| `test-fr001-sandbox-matrix.sh` | 需常驻 daemon，自身不启动 |
+| `test-health-policy-check.sh` | 需常驻 daemon |
+| `test-self-bootstrap-cycle2-regression.sh` | 需常驻 daemon |
+| `certify-codex-session-resume.sh` | 豁免：真实 codex CLI + 配额；且钉版本已漂移 |
+| `test-slack-managed-live-smoke.sh` | 豁免：真实 Slack 凭据 |
+| `scripts/watchdog.sh` | 豁免：无界循环且覆写发布产物，绝不可裸跑 |
+
+六个失败只有**两个根因**，并开出两张 ticket：
+
+- `docs/ticket/20260812-wait-ready-breaks-previous-release-gates.md` ——
+  `c1060338` 把 readiness 收敛到 `--wait-ready`，而 FR-113 vertical 门禁按
+  设计钉 `PREVIOUS_REF` 到 0.5.0（早于该 flag），于是**回滚契约的行为半边
+  自 2026-08-11 起就是死的**。这正是本 FR 需求 2 的正题。
+- `docs/ticket/20260812-node-version-unpinned-locally.md` —— GUI 单测在
+  Node 26 下 12 红（原生 localStorage 遮蔽 jsdom），Node 24 全绿；且
+  `ci.yml` 根本不跑 vitest，`npm audit` 全仓只出现在这一个从未跑过的门禁里。
+
+**遗留**：13 个 release-blocking 门禁尚未 fresh（5 dirty / 3 never / 5 failed），
+下一次发版会被挡住——这是本需求的预期压力，不是缺陷。
+
+### 1'. 原需求描述（存档）
 
 12 个 never-run 逐一三分类：可无头运行的降级为 ci-required 或 scheduled
 （进 CI 预算核算，DD-172 规则适用）；确需人工的给 owner + 运行节律；

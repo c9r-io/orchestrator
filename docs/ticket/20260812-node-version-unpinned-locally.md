@@ -37,7 +37,21 @@ The two files that touch `localStorage` are exactly the two that fail; the other
 
 Two independent gaps, and either one alone would have caught it:
 
-1. **`ci.yml` never runs the GUI unit suite.** `rg 'test:coverage|npm test|npm run test|vitest' .github/workflows/ci.yml` returns nothing. CI runs `npm ci`, `npm run build` and `npx playwright install` in the GUI, and no vitest at all. The only things that execute `npm test` are three `manual-runbook` gates — `test-process-console-ui.sh`, `test-process-console-metrics.sh` and `test-slack-managed-shared-oauth.sh` — and all three were `lastRun: null`, never executed since the ledger was created.
+1. **`ci.yml` never runs the GUI unit suite.**
+   `rg 'test:coverage|npm test|npm run test|vitest' .github/workflows/ci.yml`
+   returns nothing — the GUI steps are `npm ci`, `npm run build` and
+   `npx playwright install`, and no vitest at all.
+
+   The only things that execute `npm test` are three `manual-runbook` gates,
+   none of them enforced anywhere:
+
+   ```text
+   scripts/qa/test-process-console-ui.sh
+   scripts/qa/test-process-console-metrics.sh
+   scripts/qa/test-slack-managed-shared-oauth.sh
+   ```
+
+   All three were `lastRun: null` — never executed since the ledger was created.
 
 2. **Nothing local declares the Node version.** All eight `node-version:` keys across the three workflows say `22`. There is no `.nvmrc`, no `engines` field in `gui/package.json`, and no check anywhere. A developer's Node is whatever their machine has; this one had 26.7.0. (Related: the 2026-08 dev-machine rebuild.)
 

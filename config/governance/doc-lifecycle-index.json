@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 467,
-    "active": 454,
+    "documents": 469,
+    "active": 456,
     "superseded": 13,
-    "withRelatedFr": 314
+    "withRelatedFr": 316
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -500,6 +500,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-163"
+      ]
+    },
+    "docs/design_doc/orchestrator/179-ledger-driven-manual-gate-freshness.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-165"
       ]
     },
     "docs/design_doc/orchestrator/18-prompt-delivery-abstraction.md": {
@@ -1869,6 +1875,12 @@
         "FR-163"
       ]
     },
+    "docs/qa/orchestrator/217-manual-gate-freshness-enforcement.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-165"
+      ]
+    },
     "docs/qa/orchestrator/22-performance-io-queue-optimizations.md": {
       "lifecycle": "active"
     },
@@ -2993,6 +3005,10 @@
     "FR-164": [
       "docs/design_doc/orchestrator/177-apply-audit-action-completeness.md",
       "docs/qa/orchestrator/214-apply-audit-action-completeness.md"
+    ],
+    "FR-165": [
+      "docs/design_doc/orchestrator/179-ledger-driven-manual-gate-freshness.md",
+      "docs/qa/orchestrator/217-manual-gate-freshness-enforcement.md"
     ]
   },
   "supersedes": {
