@@ -836,6 +836,7 @@ fn main() -> Result<()> {
             let wh_state = webhook::WebhookState {
                 inner: inner.clone(),
                 secret: webhook_secret,
+                ingest_failure_throttle: Default::default(),
             };
             let router = webhook::router(wh_state);
             let listener = tokio::net::TcpListener::bind(addr)

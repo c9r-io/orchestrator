@@ -6,6 +6,7 @@
 //! Accepts `POST /webhook/{trigger_name}` with a JSON body and fires
 //! the named trigger with the payload.
 
+use agent_orchestrator::attention::{AttentionCandidate, AttentionSeverity};
 use agent_orchestrator::config_ext::OrchestratorConfigExt as _;
 use agent_orchestrator::source::{
     AsyncSourceRepository, ConversationRef, ExternalActorRef, ExternalArtifactRef,
@@ -22,10 +23,18 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use hmac::{Hmac, KeyInit, Mac};
 use sha2::{Digest, Sha256};
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tracing::{info, warn};
 
 type HmacSha256 = Hmac<Sha256>;
+
+/// Minimum interval between persisted writes for one ingest-failure dedupe
+/// key. Repeated failures inside the window are counted in logs only, so a
+/// signature-spam storm costs at most one SQLite write per key per window and
+/// `occurrence_count` is a lower bound under attack (FR-162 R2).
+const INGEST_FAILURE_WRITE_INTERVAL: Duration = Duration::from_secs(30);
 
 /// Shared state for the webhook HTTP server.
 #[derive(Clone)]
@@ -34,6 +43,8 @@ pub struct WebhookState {
     pub inner: Arc<InnerState>,
     /// Optional shared secret for HMAC-SHA256 signature verification.
     pub secret: Option<String>,
+    /// Last persisted write per ingest-failure dedupe key.
+    pub ingest_failure_throttle: Arc<Mutex<HashMap<String, Instant>>>,
 }
 
 /// Build the axum router for webhook ingestion.
@@ -105,6 +116,17 @@ async fn handle_slack_source(
         .get(&project)
         .and_then(|value| value.triggers.get(&trigger_name));
     let Some(trigger) = trigger else {
+        if active.config.projects.contains_key(&project) {
+            record_ingest_failure(
+                &state,
+                IngestFailureClass::RouteMissing,
+                &project,
+                None,
+                "webhook_trigger_unknown",
+                Some(short_digest(&trigger_name)),
+            )
+            .await;
+        }
         return (StatusCode::NOT_FOUND, "source trigger not found").into_response();
     };
     let Some(webhook) = trigger
@@ -113,6 +135,15 @@ async fn handle_slack_source(
         .and_then(|value| value.webhook.as_ref())
         .filter(|value| value.provider.as_deref() == Some("slack"))
     else {
+        record_ingest_failure(
+            &state,
+            IngestFailureClass::RouteMissing,
+            &project,
+            None,
+            "webhook_trigger_unknown",
+            Some(short_digest(&trigger_name)),
+        )
+        .await;
         return (
             StatusCode::NOT_FOUND,
             "trigger is not a Slack source installation",
@@ -127,6 +158,15 @@ async fn handle_slack_source(
             .into_response();
     }
     let Some(secret_ref) = webhook.secret.as_ref() else {
+        record_ingest_failure(
+            &state,
+            IngestFailureClass::AuthFailed,
+            &project,
+            Some(&trigger_name),
+            "webhook_secret_unresolved",
+            None,
+        )
+        .await;
         return (
             StatusCode::UNAUTHORIZED,
             "Slack signing secret is not configured",
@@ -135,7 +175,18 @@ async fn handle_slack_source(
     };
     let secrets = match resolve_store_secret_values(&state.inner, &project, &secret_ref.from_ref) {
         Ok(values) => values,
-        Err(error) => return (StatusCode::UNAUTHORIZED, error).into_response(),
+        Err(error) => {
+            record_ingest_failure(
+                &state,
+                IngestFailureClass::AuthFailed,
+                &project,
+                Some(&trigger_name),
+                "webhook_secret_unresolved",
+                None,
+            )
+            .await;
+            return (StatusCode::UNAUTHORIZED, error).into_response();
+        }
     };
     if let Err(error) = verify_slack_signature(
         &secrets,
@@ -150,6 +201,15 @@ async fn handle_slack_source(
             reason = %error,
             "Slack source authentication failed"
         );
+        record_ingest_failure(
+            &state,
+            IngestFailureClass::AuthFailed,
+            &project,
+            Some(&trigger_name),
+            "webhook_signature_invalid",
+            None,
+        )
+        .await;
         return (StatusCode::UNAUTHORIZED, error).into_response();
     }
 
@@ -226,6 +286,7 @@ async fn handle_slack_source(
             &result.event.provider,
         );
     }
+    clear_ingest_auth_failure(&state, &project, &trigger_name, &result.event.id).await;
     info!(
         provider = "slack",
         installation_hash = %short_digest(installation_id),
@@ -337,6 +398,15 @@ async fn do_webhook(
                     reason = %e,
                     "CRD interceptor rejected webhook"
                 );
+                record_ingest_failure(
+                    &state,
+                    IngestFailureClass::AuthFailed,
+                    &project,
+                    Some(&trigger_name),
+                    "webhook_signature_invalid",
+                    None,
+                )
+                .await;
                 return (StatusCode::UNAUTHORIZED, e.to_string()).into_response();
             }
         }
@@ -371,6 +441,23 @@ async fn do_webhook(
                 reason = msg.as_str(),
                 "webhook auth failed"
             );
+            // Under the global secret the trigger name may not exist in
+            // config; keep unresolved names out of the dedupe key.
+            let project_known = active_config
+                .as_ref()
+                .is_some_and(|ac| ac.config.projects.contains_key(&project));
+            if project_known {
+                let config_trigger = trigger_webhook_cfg.map(|_| trigger_name.as_str());
+                record_ingest_failure(
+                    &state,
+                    IngestFailureClass::AuthFailed,
+                    &project,
+                    config_trigger,
+                    "webhook_signature_invalid",
+                    None,
+                )
+                .await;
+            }
             return (StatusCode::UNAUTHORIZED, msg).into_response();
         }
     }
@@ -439,6 +526,20 @@ async fn do_webhook(
             .and_then(|p| p.triggers.get(&trigger_name))
     });
     let Some(trigger_cfg) = trigger_cfg else {
+        let project_known = active_config
+            .as_ref()
+            .is_some_and(|ac| ac.config.projects.contains_key(&project));
+        if project_known {
+            record_ingest_failure(
+                &state,
+                IngestFailureClass::RouteMissing,
+                &project,
+                None,
+                "webhook_trigger_unknown",
+                Some(short_digest(&trigger_name)),
+            )
+            .await;
+        }
         let json = serde_json::json!({
             "error": format!("trigger '{}' not found in project '{}'", trigger_name, project),
             "trigger": trigger_name,
@@ -463,6 +564,7 @@ async fn do_webhook(
                 task_id = task_id.as_str(),
                 "webhook trigger fired"
             );
+            clear_ingest_auth_failure(&state, &project, &trigger_name, &task_id).await;
 
             // Broadcast for other event-driven triggers; exclude the one we just
             // fired to prevent duplicate task creation.
@@ -505,6 +607,146 @@ struct SlackActionToken {
     expected_version: i64,
     action: String,
     expires_at: i64,
+}
+
+/// Class of inbound delivery failure surfaced to the attention inbox.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IngestFailureClass {
+    /// Authentication failed for a configured trigger.
+    AuthFailed,
+    /// The delivery named a trigger the project does not have.
+    RouteMissing,
+}
+
+/// Builds the attention item for a webhook delivery failure.
+///
+/// Every identifier placed in the item was resolved against the loaded config;
+/// attacker-controlled request text (unknown trigger names, header values,
+/// signatures, error strings) never reaches the key, title, or summary — the
+/// unknown-name case carries only a digest. This caps item cardinality at the
+/// config's own cardinality and keeps QA 143's redaction contract true.
+fn ingest_failure_candidate(
+    class: IngestFailureClass,
+    project: &str,
+    trigger: Option<&str>,
+    safe_error_code: &str,
+    name_digest: Option<String>,
+) -> AttentionCandidate {
+    let (kind, severity, title, dedupe_key, summary) = match class {
+        IngestFailureClass::AuthFailed => (
+            "source_auth_failed",
+            AttentionSeverity::Intervention,
+            "Webhook deliveries are failing authentication",
+            format!("source-auth-failed:{project}:{}", trigger.unwrap_or("-")),
+            match trigger {
+                Some(trigger) => format!(
+                    "Webhook deliveries for trigger {trigger} in project {project} are \
+                     failing authentication. Verify the shared secret or signing \
+                     configuration."
+                ),
+                None => format!(
+                    "Webhook deliveries for project {project} are failing \
+                     authentication. Verify the shared secret or signing configuration."
+                ),
+            },
+        ),
+        IngestFailureClass::RouteMissing => (
+            "source_route_missing",
+            AttentionSeverity::Attention,
+            "Webhook deliveries name an unknown trigger",
+            format!("source-route-missing:{project}"),
+            format!(
+                "Webhook deliveries are naming a trigger that does not exist in \
+                 project {project} (name digest {}). Verify delivery URLs after \
+                 trigger renames or removals.",
+                name_digest.as_deref().unwrap_or("-")
+            ),
+        ),
+    };
+    let digest = hex::encode(Sha256::digest(dedupe_key.as_bytes()));
+    let occurred_at = agent_orchestrator::config_load::now_ts();
+    AttentionCandidate {
+        id: format!("attn-src-{}", &digest[..20]),
+        project_id: project.to_owned(),
+        task_id: String::new(),
+        task_item_id: None,
+        step_id: None,
+        session_id: None,
+        kind: kind.to_owned(),
+        severity,
+        title: title.to_owned(),
+        summary,
+        requested_decision: Some(serde_json::json!({"safe_error_code": safe_error_code})),
+        actions: vec![],
+        dedupe_key,
+        source_event_id: format!("webhook-ingest-failure:{occurred_at}"),
+        source_route_id: None,
+        source_binding_name: None,
+        occurred_at,
+        sla_deadline: None,
+    }
+}
+
+/// Records one webhook delivery failure as a durable, deduplicated attention
+/// item. Best-effort: persistence errors are logged, never surfaced to the
+/// sender, and the HTTP response is unchanged either way.
+///
+/// `trigger` must be `Some` only when the name was resolved against the loaded
+/// config; `project` must already be config-validated by the caller.
+async fn record_ingest_failure(
+    state: &WebhookState,
+    class: IngestFailureClass,
+    project: &str,
+    trigger: Option<&str>,
+    safe_error_code: &str,
+    name_digest: Option<String>,
+) {
+    let candidate = ingest_failure_candidate(class, project, trigger, safe_error_code, name_digest);
+    {
+        let mut throttle = state
+            .ingest_failure_throttle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let now = Instant::now();
+        if let Some(last) = throttle.get(&candidate.dedupe_key)
+            && now.duration_since(*last) < INGEST_FAILURE_WRITE_INTERVAL
+        {
+            warn!(
+                project = project,
+                kind = candidate.kind.as_str(),
+                "webhook ingest failure suppressed by write throttle"
+            );
+            return;
+        }
+        throttle.insert(candidate.dedupe_key.clone(), now);
+    }
+    if let Err(error) = state
+        .inner
+        .attention_repo
+        .upsert_external_candidate(candidate)
+        .await
+    {
+        warn!(project = project, error = %error, "failed to record webhook ingest failure");
+    }
+}
+
+/// Clears an open auth-failure item after the first successful delivery for
+/// the trigger — a rotated-secret incident closes itself.
+async fn clear_ingest_auth_failure(
+    state: &WebhookState,
+    project: &str,
+    trigger: &str,
+    source_event_id: &str,
+) {
+    let dedupe_key = format!("source-auth-failed:{project}:{trigger}");
+    if let Err(error) = state
+        .inner
+        .attention_repo
+        .resolve_external_candidate(project, &dedupe_key, source_event_id, "condition_cleared")
+        .await
+    {
+        warn!(project = project, error = %error, "failed to clear webhook auth-failure item");
+    }
 }
 
 fn resolve_store_secret_values(
@@ -1014,6 +1256,51 @@ mod tests {
             signature.parse().expect("signature header"),
         );
         headers
+    }
+
+    #[test]
+    fn auth_failure_candidate_is_keyed_per_trigger_with_safe_fields_only() {
+        let candidate = ingest_failure_candidate(
+            IngestFailureClass::AuthFailed,
+            "proj",
+            Some("deploy-hook"),
+            "webhook_signature_invalid",
+            None,
+        );
+        assert_eq!(candidate.kind, "source_auth_failed");
+        assert_eq!(candidate.dedupe_key, "source-auth-failed:proj:deploy-hook");
+        assert_eq!(candidate.task_id, "");
+        assert_eq!(
+            candidate.requested_decision.as_ref().unwrap()["safe_error_code"],
+            "webhook_signature_invalid"
+        );
+        // A trigger not resolved against config never enters the key.
+        let unresolved = ingest_failure_candidate(
+            IngestFailureClass::AuthFailed,
+            "proj",
+            None,
+            "webhook_signature_invalid",
+            None,
+        );
+        assert_eq!(unresolved.dedupe_key, "source-auth-failed:proj:-");
+    }
+
+    #[test]
+    fn route_missing_candidate_excludes_the_attacker_controlled_name() {
+        let hostile = "../../etc/passwd?token=secret";
+        let candidate = ingest_failure_candidate(
+            IngestFailureClass::RouteMissing,
+            "proj",
+            None,
+            "webhook_trigger_unknown",
+            Some(short_digest(hostile)),
+        );
+        assert_eq!(candidate.kind, "source_route_missing");
+        assert_eq!(candidate.dedupe_key, "source-route-missing:proj");
+        assert!(!candidate.dedupe_key.contains("etc"));
+        assert!(!candidate.summary.contains("etc"));
+        assert!(!candidate.summary.contains("secret"));
+        assert!(candidate.summary.contains(&short_digest(hostile)));
     }
 
     #[test]
