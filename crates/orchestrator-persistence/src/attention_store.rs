@@ -227,12 +227,16 @@ pub enum AttentionProjectionOp {
         /// Source event identifier.
         source_event_id: String,
     },
-    /// Resolve all active items for a terminal task.
+    /// Resolve active items for a terminal task, keeping evidence kinds open.
     ResolveTask {
         /// Task identifier.
         task_id: String,
         /// Source event identifier.
         source_event_id: String,
+        /// Kinds excluded from the sweep; they stay visible for review.
+        preserve_kinds: Vec<String>,
+        /// Resolution reason stamped on the swept items.
+        reason: String,
     },
 }
 
@@ -743,12 +747,24 @@ fn apply_projection_op(conn: &Connection, operation: AttentionProjectionOp) -> R
             &task_id,
             task_item_id.as_deref(),
             Some(&step_id),
+            &[],
+            "condition_cleared",
             &source_event_id,
         ),
         AttentionProjectionOp::ResolveTask {
             task_id,
             source_event_id,
-        } => resolve_matching(conn, &task_id, None, None, &source_event_id),
+            preserve_kinds,
+            reason,
+        } => resolve_matching(
+            conn,
+            &task_id,
+            None,
+            None,
+            &preserve_kinds,
+            &reason,
+            &source_event_id,
+        ),
     }
 }
 
@@ -895,6 +911,8 @@ fn resolve_matching(
     task_id: &str,
     item_id: Option<&str>,
     step_id: Option<&str>,
+    exclude_kinds: &[String],
+    reason: &str,
     source_event_id: &str,
 ) -> Result<()> {
     let mut stmt = conn.prepare(
@@ -913,6 +931,9 @@ fn resolve_matching(
         if step_id.is_some() && item.step_id.as_deref() != step_id {
             continue;
         }
+        if exclude_kinds.iter().any(|kind| kind == &item.kind) {
+            continue;
+        }
         let now = now_ts();
         conn.execute(
             "UPDATE attention_items SET state='resolved', assignee=NULL, version=version+1,
@@ -921,7 +942,7 @@ fn resolve_matching(
             params![
                 id,
                 now,
-                serde_json::json!({"reason":"condition_cleared"}).to_string(),
+                serde_json::json!({"reason": reason}).to_string(),
                 source_event_id
             ],
         )?;
@@ -1344,6 +1365,8 @@ mod tests {
             vec![AttentionProjectionOp::ResolveTask {
                 task_id: "t".into(),
                 source_event_id: "2".into(),
+                preserve_kinds: Vec::new(),
+                reason: "condition_cleared".into(),
             }],
             2,
         )
@@ -1371,6 +1394,47 @@ mod tests {
             changes.last().map(|change| change.change_kind.as_str()),
             Some("reopen")
         );
+    }
+
+    #[tokio::test]
+    async fn same_batch_completion_preserves_evidence() {
+        let (_temp, repo) = repo().await;
+        let mut approval = candidate("b");
+        approval.kind = "approval_required".into();
+        approval.dedupe_key = "approval_required:i:qa".into();
+        // step_failed evidence and task_completed sweep arrive in ONE batch —
+        // the FR-162 acceptance scenario where the item previously vanished
+        // before anyone could observe it.
+        repo.apply_projection_batch(
+            vec![
+                AttentionProjectionOp::Upsert(Box::new(candidate("a"))),
+                AttentionProjectionOp::Upsert(Box::new(approval)),
+                AttentionProjectionOp::ResolveTask {
+                    task_id: "t".into(),
+                    source_event_id: "9".into(),
+                    preserve_kinds: vec!["step_failed".into(), "low_confidence".into()],
+                    reason: "task_completed".into(),
+                },
+            ],
+            1,
+        )
+        .await
+        .expect("batch");
+        let evidence = repo.get("a").await.expect("get").expect("item");
+        assert_eq!(evidence.state, "open");
+        assert!(attention_filter_matches(
+            &evidence,
+            &AttentionFilter {
+                active_only: true,
+                limit: 10,
+                ..Default::default()
+            },
+            None
+        ));
+        let swept = repo.get("b").await.expect("get").expect("item");
+        assert_eq!(swept.state, "resolved");
+        let resolution = swept.resolution.expect("resolution");
+        assert_eq!(resolution["reason"], "task_completed");
     }
 
     #[tokio::test]

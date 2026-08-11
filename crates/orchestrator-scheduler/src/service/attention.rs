@@ -130,14 +130,33 @@ pub async fn reconcile_attention_once(state: &InnerState) -> Result<usize> {
     Ok(events.len())
 }
 
+/// Evidence kinds that record something which already happened and awaits
+/// human review; the task-completion sweep must not clear them (FR-162).
+/// `resume_executed` still sweeps everything: resume is an operator action
+/// typically taken from the evidence item itself.
+const TASK_SWEEP_PRESERVED_KINDS: &[&str] = &["step_failed", "low_confidence"];
+
 fn policy_operations(event: &AttentionSourceEvent) -> Vec<AttentionProjectionOp> {
     if matches!(
         event.event_type.as_str(),
-        "task_completed" | "task_finished" | "resume_executed"
+        "task_completed" | "task_finished"
     ) {
         return vec![AttentionProjectionOp::ResolveTask {
             task_id: event.task_id.clone(),
             source_event_id: event.id.to_string(),
+            preserve_kinds: TASK_SWEEP_PRESERVED_KINDS
+                .iter()
+                .map(|kind| kind.to_string())
+                .collect(),
+            reason: "task_completed".to_string(),
+        }];
+    }
+    if event.event_type == "resume_executed" {
+        return vec![AttentionProjectionOp::ResolveTask {
+            task_id: event.task_id.clone(),
+            source_event_id: event.id.to_string(),
+            preserve_kinds: Vec::new(),
+            reason: "condition_cleared".to_string(),
         }];
     }
 
@@ -409,11 +428,18 @@ mod tests {
     }
 
     #[test]
-    fn completed_task_resolves_active_items() {
-        assert!(matches!(
-            policy_operations(&event("task_completed", json!({})))[0],
-            AttentionProjectionOp::ResolveTask { .. }
-        ));
+    fn completed_task_preserves_failure_evidence() {
+        let operations = policy_operations(&event("task_completed", json!({})));
+        let AttentionProjectionOp::ResolveTask {
+            preserve_kinds,
+            reason,
+            ..
+        } = &operations[0]
+        else {
+            panic!("expected resolve-task");
+        };
+        assert_eq!(preserve_kinds, &["step_failed", "low_confidence"]);
+        assert_eq!(reason, "task_completed");
     }
 
     #[test]
@@ -439,5 +465,20 @@ mod tests {
             AttentionProjectionOp::ResolveTask { .. }
         ));
         assert!(policy_operations(&event("resume_planned", json!({}))).is_empty());
+    }
+
+    #[test]
+    fn resumed_task_sweeps_evidence() {
+        let operations = policy_operations(&event("resume_executed", json!({})));
+        let AttentionProjectionOp::ResolveTask {
+            preserve_kinds,
+            reason,
+            ..
+        } = &operations[0]
+        else {
+            panic!("expected resolve-task");
+        };
+        assert!(preserve_kinds.is_empty());
+        assert_eq!(reason, "condition_cleared");
     }
 }
