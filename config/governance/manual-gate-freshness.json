@@ -187,8 +187,8 @@
       "owner": "docs/qa/orchestrator/163-dedicated-slack-app-auto-provisioning.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
-        "exitStatus": 1,
+        "revision": "e131c0692e84776b953a72e49de16d8dde521393",
+        "exitStatus": 0,
         "worktreeDirty": false
       }
     },
@@ -202,8 +202,8 @@
       "owner": "docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
-        "exitStatus": 1,
+        "revision": "e131c0692e84776b953a72e49de16d8dde521393",
+        "exitStatus": 0,
         "worktreeDirty": false
       }
     },
@@ -211,7 +211,7 @@
       "owner": "docs/qa/orchestrator/155-slack-reaction-source-event-contract.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
+        "revision": "e131c0692e84776b953a72e49de16d8dde521393",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -220,7 +220,7 @@
       "owner": "docs/qa/orchestrator/158-slack-permalink-canonical-task-routing.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
+        "revision": "e131c0692e84776b953a72e49de16d8dde521393",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -229,8 +229,8 @@
       "owner": "docs/qa/orchestrator/161-slack-reaction-skill-automation-release.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
-        "exitStatus": 1,
+        "revision": "e131c0692e84776b953a72e49de16d8dde521393",
+        "exitStatus": 0,
         "worktreeDirty": false
       }
     },
@@ -238,7 +238,7 @@
       "owner": "docs/qa/orchestrator/161-slack-reaction-skill-automation-release.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "98a6ebeb6363b22dca0b14ad9b98f34d233c28a7",
+        "revision": "e131c0692e84776b953a72e49de16d8dde521393",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -247,7 +247,7 @@
       "owner": "docs/qa/orchestrator/159-source-automation-reliability-operations.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
+        "revision": "e131c0692e84776b953a72e49de16d8dde521393",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -256,7 +256,7 @@
       "owner": "docs/qa/orchestrator/160-process-console-source-automation-ui.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
+        "revision": "e131c0692e84776b953a72e49de16d8dde521393",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -274,7 +274,7 @@
       "owner": "docs/qa/orchestrator/157-source-task-binding-badge-matching.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
+        "revision": "e131c0692e84776b953a72e49de16d8dde521393",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -283,7 +283,7 @@
       "owner": "docs/qa/orchestrator/156-source-task-template-skill-invocation.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
+        "revision": "e131c0692e84776b953a72e49de16d8dde521393",
         "exitStatus": 0,
         "worktreeDirty": false
       }
