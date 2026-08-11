@@ -92,6 +92,60 @@ unless extra.empty?
             "manual-runbook:\n" + extra.map { |path| "  - #{path}" }.join("\n")
 end
 
+# Which gates can block a release.
+#
+# --strict runs in release.yml, and some manual gates cannot be a release
+# precondition however much one would like them to be. scripts/watchdog.sh is
+# the clearest: its own manifest entry describes an unbounded foreground loop
+# that overwrites target/release/orchestratord, so "run it before every release"
+# asks a human to start an infinite loop that clobbers the artifact being
+# released. A blocking gate nobody can satisfy is not enforcement, it is a
+# thing people learn to route around, and a routed-around gate is worse than an
+# advisory one because it still reads as enforcement.
+#
+# So: `releaseBlocking: false`, per gate, with a reason. The shape rules this
+# obeys, because exemption mechanisms are where §4.4 finds most of its material:
+#
+#   - Per-gate keys only. There is no pattern, prefix or subtree form, because
+#     shape 8 is exactly that: a `skip-tree` absorbs instances that do not exist
+#     yet and never produces a line in any log. An exemption here can only ever
+#     name one gate that already exists.
+#   - It cannot outlive what it excuses. These are keys in `gates`, and the
+#     set-agreement check above forces that map to equal the manifest's
+#     manual-runbook set — so a retired gate's exemption is a hard error rather
+#     than a line that lingers.
+#   - A reason is mandatory and an orphaned reason is an error. `--deny
+#     unmatched-skip` was measured at FR-133 to cover less than its name
+#     suggests; the lesson taken was that an exemption ratchet nobody has tried
+#     to trip is one whose reach you are guessing at. Both directions are
+#     asserted below and both have fixtures.
+#   - Exempt gates are printed, always, with their reason. An exemption that
+#     does not appear in the output is the enumeration failure wearing a
+#     different hat.
+release_exempt = {}
+(ledger["gates"] || {}).each do |path, entry|
+  blocking = entry["releaseBlocking"]
+  reason = entry["releaseBlockingReason"]
+
+  unless blocking.nil? || [true, false].include?(blocking)
+    errors << "#{path}: releaseBlocking must be true or false, got #{blocking.inspect}"
+    next
+  end
+
+  if blocking == false
+    if reason.nil? || reason.to_s.strip.empty?
+      errors << "#{path}: releaseBlocking is false with no releaseBlockingReason\n" \
+                "  an exemption without a reason is one nobody can ever retire"
+    else
+      release_exempt[path] = reason
+    end
+  elsif !(reason.nil? || reason.to_s.strip.empty?)
+    errors << "#{path}: carries releaseBlockingReason but is release-blocking\n" \
+              "  delete the reason with the exemption; a reason left behind is the\n" \
+              "  next reader's evidence for an exemption that is no longer there"
+  end
+end
+
 stale_after = ledger["staleAfterDays"] || 90
 today = Date.today
 
@@ -150,9 +204,16 @@ puts ""
 rows.sort_by { |path, age, _, _| [age.nil? ? 0 : 1, -(age || 0), path] }
     .each do |path, _age, note, reason|
   marker = reason.nil? ? "ok" : MARKERS.fetch(reason)
-  puts format("  %-6s %-58s %s", marker, path.sub("scripts/qa/", ""), note)
+  exempt = release_exempt.key?(path) ? "  [not release-blocking]" : ""
+  puts format("  %-6s %-58s %s%s", marker, path.sub("scripts/qa/", ""), note, exempt)
 end
 puts ""
+
+unless release_exempt.empty?
+  puts "#{release_exempt.length} gate(s) do not block a release:"
+  release_exempt.sort.each { |path, reason| puts "  - #{path}\n      #{reason}" }
+  puts ""
+end
 
 # `each_with_object` rather than `filter_map`: macOS ships Ruby 2.6 and
 # filter_map arrived in 2.7 (the same note persistence-dependency.rb carries).
@@ -172,12 +233,18 @@ unless errors.empty?
   exit 1
 end
 
-if strict && !stale.empty?
+blocking_stale = stale.reject { |path, _, _, _| release_exempt.key?(path) }
+
+if strict && !blocking_stale.empty?
   warn ""
-  warn "--strict: #{stale.length} gate(s) not fresh"
-  stale.sort_by { |path, _, _, _| path }.each do |path, _age, note, reason|
+  warn "--strict: #{blocking_stale.length} release-blocking gate(s) not fresh"
+  blocking_stale.sort_by { |path, _, _, _| path }.each do |path, _age, note, reason|
     warn format("  %-6s %-58s %s", MARKERS.fetch(reason), path, note)
   end
+  warn ""
+  warn "run the gate's owner runbook and commit the ledger, or — if it genuinely"
+  warn "cannot be a release precondition — give it releaseBlocking: false with a"
+  warn "releaseBlockingReason saying why."
   exit 1
 end
 

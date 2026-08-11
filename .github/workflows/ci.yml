@@ -338,15 +338,27 @@ jobs:
         continue-on-error: true
         run: ./scripts/qa/test-doc-lifecycle.sh
 
-      # Prints how long ago each of the 35 human-run gates was last executed.
-      # The staleness half is a report and never fails; what can fail is this
-      # manifest and the freshness ledger disagreeing about which gates are
-      # manual-runbook, because a gate missing from the ledger is missing from
-      # every report and that reads exactly like a gate that is fresh.
+      # Prints how long ago each human-run gate was last executed (38 today;
+      # the number is derived, and this comment deliberately does not restate
+      # it the way the script's own diagnostic used to).
+      # The staleness half is a report and never fails *here*; release.yml
+      # runs the same script with --strict, which does block. What can fail
+      # here is this manifest and the freshness ledger disagreeing about which
+      # gates are manual-runbook, because a gate missing from the ledger is
+      # missing from every report and that reads exactly like a gate that is
+      # fresh.
       - name: Manual-runbook gate freshness
         id: manual-gate-freshness
         continue-on-error: true
         run: ruby ./scripts/qa/manual-gate-freshness.rb
+
+      # FR-165. The criterion the step above applies, and the release edge that
+      # enforces it, both under negative fixtures. Nothing else can observe
+      # that release.yml still depends on the freshness job.
+      - name: Manual-gate freshness fixtures
+        id: manual-gate-freshness-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-manual-gate-freshness.sh
 
       - name: CLI three-surface documentation parity
         id: cli-doc-parity
@@ -518,6 +530,7 @@ jobs:
             persistence-extraction=${{ steps.persistence-extraction.outcome }}
             doc-lifecycle=${{ steps.doc-lifecycle.outcome }}
             manual-gate-freshness=${{ steps.manual-gate-freshness.outcome }}
+            manual-gate-freshness-fixtures=${{ steps.manual-gate-freshness-fixtures.outcome }}
             cli-doc-parity=${{ steps.cli-doc-parity.outcome }}
             cli-doc-parity-fixtures=${{ steps.cli-doc-parity-fixtures.outcome }}
             bash32-lexer=${{ steps.bash32-lexer.outcome }}

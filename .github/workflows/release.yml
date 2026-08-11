@@ -23,6 +23,35 @@ env:
   RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 jobs:
+  # The one place manual-gate freshness is enforced rather than reported.
+  #
+  # ci.yml runs the same script bare on every push, where it reports and never
+  # fails: FR-158's finding was that a gate going red because a human has not
+  # followed a runbook lately gets answered by whatever clears it fastest, which
+  # is not the same as running the runbook. Blocking a *release* asks the
+  # question at the only moment the answer changes what anyone does, and costs
+  # nothing on a normal day.
+  #
+  # `build` and `gui-build` both `needs:` this job. That edge is the enforcement
+  # — a job no other job depends on runs, goes red, and publishes the release
+  # anyway, which is §4.4 shape 1 (text presence standing in for execution)
+  # wearing a workflow's clothes. scripts/qa/test-manual-gate-freshness.sh
+  # asserts the edge, not the job's existence.
+  manual-gate-freshness:
+    name: Manual-runbook gate freshness
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # No `continue-on-error`, and no pipe. The exit status is the assertion;
+      # piping into tee or head would report the pager's status instead, which
+      # is the FR-145/FR-146 defect operating on the gate that exists to stop
+      # exactly this class of thing.
+      - name: Require fresh evidence for every release-blocking manual gate
+        shell: bash
+        run: ruby ./scripts/qa/manual-gate-freshness.rb --strict
+
   slack-certification-status:
     name: Display controlled Slack certification status
     runs-on: ubuntu-latest
@@ -47,7 +76,9 @@ jobs:
   build:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
-    needs: slack-certification-status
+    needs:
+      - manual-gate-freshness
+      - slack-certification-status
     strategy:
       fail-fast: false
       matrix:
@@ -109,7 +140,9 @@ jobs:
   gui-build:
     name: Build GUI (${{ matrix.label }})
     runs-on: ${{ matrix.runner }}
-    needs: slack-certification-status
+    needs:
+      - manual-gate-freshness
+      - slack-certification-status
     strategy:
       fail-fast: false
       matrix:

@@ -502,6 +502,17 @@
       "reason": "reads two committed JSON files and prints a table; no daemon, no compile, no working-tree write, so no provider binary is reachable. What it enforces is that this manifest and the freshness ledger agree about which gates are manual-runbook — staleness itself is reported and never fails, because a gate that goes red when a human has not run a runbook lately is one more thing to feed, which is the growth FR-158 exists to bound."
     },
     {
+      "path": "scripts/qa/test-manual-gate-freshness.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "shape": "shape 6 — a status field reporting something other than what you are asking. manual-gate-freshness.rb judged a gate fresh on recency alone while gate_runlog.sh had been writing exitStatus and worktreeDirty beside every record since the ledger existed; nothing read them, so a gate recorded as having failed printed `ok` and --strict passed it. Measured at FR-165: test-attention-inbox.sh, exit 1, one day old, reading ok. The fixtures mutate a record rather than deleting one, because deletion was the case the original criterion already handled.",
+      "note": "Offline: builds a scratch tree containing only the gate and a two-entry ledger/manifest pair, so the real repository is never mutated. Nine criterion cases (recorded failure, dirty worktree, aged, never recorded, exemption honoured, exemption not leaking to a neighbour, exemption without a reason, reason orphaned by a removed exemption, derived empty-read count) bracketed by a before-run and an after-run. A tenth parses .github/workflows/release.yml and asserts build and gui-build actually name the freshness job in needs: and that its step carries neither continue-on-error nor a pipe — the edge is the enforcement, and a job nothing depends on blocks nothing."
+    },
+    {
       "path": "scripts/qa/persistence-api-boundary.rb",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
