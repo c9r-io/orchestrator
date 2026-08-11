@@ -64,24 +64,54 @@ limits、~150 条停放项、多本 ledger JSON），但除 CI 预算外，没�
    与 `lib.rs:23` 已各带一行 "forward-only migrations" 文档注释，所以"代码里
    0 行"对整棵树不成立）。
 
-   **`forward-only` 在本树是三义重载词，需求 2 的任何 grep 式守护必须先分类**
-   ［原:"契约以散文复述于 8 份文档（DD-116:73、DD-111/121/122/124、guide ×2、
-   威胁模型 T12）"——**既漏计又混类**］：
+   **`forward-only` 在本树是四义重载词，需求 2 的任何 grep 式守护必须先分类**
+   ［原:"三义重载"，更早一版为"契约以散文复述于 8 份文档（DD-116:73、
+   DD-111/121/122/124、guide ×2、威胁模型 T12）"——**既漏计又混类**。全树派生：
+   **38 处 / 25 份文件**，`git ls-files -z` 全量文本扫描（1588 份文本文件，
+   9 份二进制跳过）配 `/forward[- ]only/i`，在 `e131c069` 逐行列举；限定到
+   `*.md` `*.rs` 得同一组 38 处，故此计数不依赖扩展名谓词］：
 
-   - **A 类·daemon 迁移回滚契约**（本 FR 的正题）：**14 份文档 / 17 处**——
-     DD-111:65、**DD-114:63**、DD-116:73、DD-121:158、DD-122:139、
-     DD-124:73+91、**DD-126:97**、guide/agent-process-console-v1-operations:11、
+   - **A 类·daemon 迁移回滚契约**（本 FR 的正题）：**15 份文档 / 18 处**
+     ［原:14 / 17——漏掉 `docs/security/README.md:101`（发布前置条件 11，
+     "forward-only compatible rollback"）。两条派生一致：逐行列举得 18；
+     `rg -c` 在这 15 份文件上求和得 19，减去威胁模型里唯一的非 A 类一处
+     （T8，见下）得 18］——DD-111:65、**DD-114:63**、DD-116:73、DD-121:158、
+     DD-122:139、DD-124:73+91、**DD-126:97**、
+     guide/agent-process-console-v1-operations:11、
      guide/slack-managed-connections:246、**guide/slack-reaction-skill-automation:469**
      （故 **guide ×3**，非 ×2）、威胁模型 T12:85、**QA 153:170**、**QA 161:189**、
-     CHANGELOG:229-231。FR 漏掉 DD-114、DD-126、第三份 guide 与两份 QA 文档。
+     **security/README.md:101**、CHANGELOG:**235-237**［原:229-231，行号已移］。
+     FR 漏掉 DD-114、DD-126、第三份 guide、两份 QA 文档与 security/README。
+
+     **其中 CHANGELOG 三处落在已发布区段 `## [0.4.0] - 2026-08-01` 的
+     `### Compatibility And Migrations` 内**（区段跨 118-258 行）。本仓库自述
+     遵循 Keep a Changelog，已发布区段是历史记录而非现行陈述，**不得改写**。
+     故验收标准中"A 类 17 处散文指向单源"按字面执行会篡改已发布的变更历史；
+     可加引用的**活体陈述是 15 处 / 14 份文档**，另 3 处 CHANGELOG 单列为
+     "历史记录"类，不要求引用，理由入台账。这是本轮修正中唯一一处改变了
+     验收标准**可满足性**的事实，其余各处只改变数字。
    - **B 类·Gateway 自有 schema**（另一个数据库，相关但非同一契约）：
      DD-125:47/112/185、architecture.md:192、slack-gateway/{store.rs:163,lib.rs:23}。
      FR 把 DD-125 计入了 A 类的语气里，但它讲的是 Gateway schema 1-2。
    - **C 类·完全无关**：`crates/orchestrator-collab/src/dag.rs:136`
      "Forward only the last `N` artifacts"——制品转发，与迁移无关。一道
      `rg 'forward-only'` 式的单源守护会把它算作契约引用。
+   - **D 类·单调状态变更，非 schema**（**Step 0 新发现的第四义**）：
+     威胁模型 `slack-gateway-threat-model.md:81`，T8 行的
+     "generation/version CAS, forward-only changes"——讲的是连接状态的单调
+     推进，与迁移毫无关系。**它与 A 类的 T12:85 在同一张 markdown 表格里，
+     只隔四行。** 这不是"再加一类"那么轻：它意味着任何**文件级或章节级的
+     作用域谓词都无法把 A 与 D 分开**。若台账按路径记账，威胁模型整份会被
+     判为 A，"引用单源"在文件层面即被满足，而四行之外的 T8 被静默放行——
+     正是 §4.4 shape 3（整文件合计冒充逐对象关联）。故**台账必须逐处记账，
+     不得按路径记账**，这是 FR 自己那条 §4.4 shape 4 警告的最坏形态。
    - 另有 2 处索引行（`docs/design_doc/README.md:115`、
      `docs/feature_request/README.md:275`），改指单源时应作为索引而非散文处理。
+   - **需求 1 自己的闭环又造出第五类·治理元陈述**：`DD-179:152` 与
+     `docs/ticket/20260812-wait-ready-breaks-previous-release-gates.md:4,51`
+     以及本 FR 自身 7 处，共 10 处，主语是"这份契约"而不是契约本身。这类
+     文件会随 FR/ticket 闭环被删除，故台账对它们的"陈旧条目即失效"镜像判据
+     必须逐条可标注为易逝并打印，而非按子树豁免（§4.4 shape 8）。
 
    vertical 门禁的钉过期事故（ticket 已闭环）即无人看守此窗口的直接后果。
 3. **覆盖率棘轮单边**：`coverage/boundary-baseline.json` 自己的 reapproval
@@ -135,12 +165,19 @@ limits、~150 条停放项、多本 ledger JSON），但除 CI 预算外，没�
   Node 26 下 12 红（原生 localStorage 遮蔽 jsdom），Node 24 全绿；且
   `ci.yml` 根本不跑 vitest，`npm audit` 全仓只出现在这一个从未跑过的门禁里。
 
-**遗留**：7 个 release-blocking 门禁尚未 fresh。台账由 23 not fresh 降到 **10**，
-**dirty 记录清零**（5 个只有脏树证据的门禁在干净树上重跑，全绿，含 FR-149 记录
-自 2026-03-26 起坏掉的 `test-wp05-integration.sh`）。剩下的不是跑一遍能清的：
-4 个 Slack 门禁同属 `--wait-ready` 一个根因，修好 ticket 会一起转绿；3 个
-never 需要常驻 daemon 而自身不启动，属于形态问题，需另行决定是让它们像其余
-33 个那样自起 daemon，还是写明 `releaseBlockingReason`。
+**遗留**：台账由 23 not fresh 降到 10，**dirty 记录清零**（5 个只有脏树证据的
+门禁在干净树上重跑，全绿，含 FR-149 记录自 2026-03-26 起坏掉的
+`test-wp05-integration.sh`）。
+
+**后续（2026-08-12 @ `81991404`）：`--wait-ready` 根因已由 `77cc351a` 修好，
+四个 Slack 门禁一起转绿**，三个父门禁在 `e131c069` 的干净树上实跑
+exit 0（skill-automation-release 359s、managed-shared-oauth 434s、
+dedicated-app-provisioning 527s），子门禁随之重记。台账 **10 → 6，
+再无 FAILED 记录，六条全是 `never`**，其中三条已是 not-release-blocking。
+**实际阻断发布的只剩 3 个**：`test-fr001-sandbox-matrix.sh`、
+`test-health-policy-check.sh`、`test-self-bootstrap-cycle2-regression.sh`——
+都需要常驻 daemon 而自身不启动，属形态问题，需另行决定是让它们像其余 33 个
+那样自起 daemon，还是写明 `releaseBlockingReason`。这条决定不属 FR-165。
 
 ### 1'. 原需求描述（存档）
 
@@ -175,16 +212,44 @@ never 需要常驻 daemon 而自身不启动，属于形态问题，需另行决
 
 契约("迁移前向-only；上一 release 二进制必须能服务当前 schema；restore
 仅限灾难")写入 `crates/orchestrator-persistence/src/migration.rs` 一处
-文档注释 + 一道守护（候选：迁移注册表的结构断言 / 现有 populated-upgrade
-测试的契约化命名与强制），**A 类 14 份文档 / 17 处**散文改为指向单源
-［原:"8 处散文"——见背景 2 的三类切分］。若判定不加 CI 门禁，理由按
-DD-172 成文（vertical 门禁的钉推进规则已覆盖行为半边，QA 161）。
+文档注释 + 一道守护，**A 类活体陈述 15 处 / 14 份文档**改为指向单源
+［原:"A 类 14 份文档 / 17 处"，更早为"8 处散文"——见背景 2 的分类切分；
+3 处 CHANGELOG 落在已发布区段，按历史记录单列不改写］。若判定不加 CI 门禁，
+理由按 DD-172 成文（vertical 门禁的钉推进规则已覆盖行为半边，QA 161）。
 
-**守护必须先分类再计数。** `forward-only` 三义重载：任何"散文皆指向单源"
+**守护取哪一道，Step 0 已定。** FR 原列的两个候选（迁移注册表的结构断言 /
+populated-upgrade 测试的契约化命名）都不够：`Migration`（migration.rs:6）
+只有 `up` 字段，全 crate 不存在任何 down 路径，所以"前向-only"在类型层面
+已是重言式，断言它等于什么也没断言；而
+`core/src/persistence/schema_snapshot.rs` 里
+`registered_versions_are_unique_and_ascending()` 与
+`full_chain_reproduces_the_reviewed_snapshot()` **已经存在**，重命名它们不
+新增任何保护。
+
+真正没人断言的是契约的第二句：**新 snapshot 必须是上一 release snapshot 的
+超集**。今天一次删列的迁移只要重新生成 `config/governance/schema-snapshot.sql`
+就能通过评审，全树无任何信号——而这条超集性质**就是**"上一 release 二进制
+必须能服务当前 schema"。故守护为：新增
+`config/governance/schema-snapshot-previous-release.sql`（记录取样 ref），
+配 `schema_snapshot.rs` 中一道把两份 snapshot 分别执行进 rusqlite 内存库、
+按 `sqlite_master`/`PRAGMA table_info` 比对表/列/索引的断言。**执行 SQL 而
+非解析 SQL**是刻意的：手写逐行列正则即 §4.4 shape 3，规划期试写的第一版正
+是静默解析出 0 张表。可行性已实测：`v0.5.0^{commit}` 即 58166a9f，与
+`test-slack-skill-automation-vertical.sh:22` 钉的 `FR113_PREVIOUS_REF` 是
+同一个 commit（本树只有一个"上一 release"，不是两个）；其 snapshot 46 张表
+对今天 47 张，唯一差量是迁移 38 的 `attention_projection_gaps`，无表被删。
+门禁落地即绿，在下一次删除时才咬。
+
+**守护必须先分类再计数。** `forward-only` 四义重载：任何"散文皆指向单源"
 的门禁若以字面量 grep 实现，会把 B 类（Gateway 自有 schema，另一个数据库）
-与 C 类（`dag.rs` 的制品转发）计为契约引用——§4.4 shape 4，文本模式冒充
-语义属性。守护的作用域谓词本身是一条断言，按 §4.4 shape 9 的第三个前提
-对待：它现在窄，是因为概念窄，还是因为今天的实例恰好落在里面？
+与 C 类（`dag.rs` 的制品转发）、D 类（威胁模型 T8 的单调状态变更）计为契约
+引用——§4.4 shape 4，文本模式冒充语义属性。守护的作用域谓词本身是一条断言，
+按 §4.4 shape 9 的第三个前提对待：它现在窄，是因为概念窄，还是因为今天的
+实例恰好落在里面？**Step 0 的答复是"不设谓词"**：扫描全部 tracked 文本文件
+（1588 份，二进制按内容判定跳过），实测与限定 `*.md` `*.rs` 得到同一组 38 处，
+所以最宽的作用域不要钱。58 个非常规文件全是 `.agents/skills/` 与
+`.cursor/skills/` 指向 `.claude/skills/`（90 份 tracked）的镜像符号链接，
+真实内容各被扫到一次——这是核过的已知边界，不是假设的。
 
 ### 3. 覆盖率棘轮双边化
 
@@ -192,11 +257,38 @@ DD-172 成文（vertical 门禁的钉推进规则已覆盖行为半边，QA 161�
 Tauri 9.42% 层给出提升计划或具名豁免（它是 5.45% 的 tauri/commands 所在，
 产品分析中最低的可测面）。
 
+**单边性已核实其确切位置**：`scripts/coverage/coverage-governance.mjs:300`
+的 `if (current.percent + tolerance < approved.percent)` 是全脚本唯一比较，
+改进方向无任何判据。**取值策略已定**（2026-08-12 决定）：**带声明宽容带，
+超带即红**——差距在声明带内放行，超出即阻断直到再基线。理由是避免重蹈
+"新鲜度门禁天天红"的反噬：任何"改进即红"的实现会让每个提升覆盖率的 PR 先
+变红再等人改基线。CLI 当前 52.86% 对基线 35.49%（17.37 点）应当落在带外。
+注：52.86% 这个数**仅来自基线自己的 reapproval 散文，单源未二次派生**，
+实施时须在 macOS 上实跑 `coverage-governance.sh` 复核。现成夹具面：
+`scripts/coverage/test-coverage-governance.mjs`（96 行，经
+`coverage-governance.sh --fixture-test` 由 `coverage-policy-fixtures` job 在
+ubuntu 与 macos 双跑）。
+
 ### 4. audit.toml 的 unmatched 棘轮
 
 对齐 deny.toml 的 `--deny unmatched-skip` 纪律：忽略项的 crate 离树即失效
 （实现方式 step 0 调研——cargo-audit 原生不支持则由治理脚本比对 ignore
 列表与 Cargo.lock）。
+
+**计数已二次派生**：**18** 条（`grep -c '^\s*"RUSTSEC'` = 18；
+`grep -o '"RUSTSEC-[0-9-]*"' | wc -l` = 18）。范式可照搬：
+`dependency-policy.rb` 的 `check_skips_live`（551-601 行）三个分支——crate
+不在 lock、版本不在 lock、只解析出一个版本——直读 `Cargo.lock`，不需要
+cargo 二进制；而同文件的 `check_audit`（604 行）目前只断言"每条 ignore 上方
+有注释"，确认不查在树性。退役主语可派生：18 条的注释块各含一句
+`cargo tree -i <crate>`，其中 17 条另有逐条的 `# <crate> — ` 前缀。
+
+**但反向实例在 audit 侧比 deny 侧难。** deny 的"仍在树内但已非重复"在
+audit 侧的对应物是"crate 仍在树内但已修补"——glib 升到 0.20 即退役
+RUSTSEC-2024-0429，而 glib 仍在 lock 里。**仅查在树性看不见这一半**，所以
+棘轮需要逐条声明版本界（RUSTSEC-2024-0429 的注释已写明 "patched in
+>=0.20.0"，可解析），而不只是 crate 名。这是需求 4 唯一比"照搬
+check_skips_live"更多的地方，也正是验收标准点名要的那条反向夹具。
 
 ## 验收标准
 
@@ -211,9 +303,19 @@ Tauri 9.42% 层给出提升计划或具名豁免（它是 5.45% 的 tauri/comman
       `test-attention-inbox.sh` 就是这条断言的现成正例
 - [ ] **freshness 门禁不再复述门禁总数**：manifest 增删一个 manual 门禁后
       诊断文案自动跟随（负夹具：改 manifest 不改脚本，不得出现陈旧数字）
-- [ ] 回滚契约单源 + 守护在位；**A 类 17 处**散文指向单源（rg 派生清单差集
-      为空），且 **B/C 类不被计入**——负夹具须含一条 B 类与一条 C 类实例，
-      守护对它们必须保持沉默
+- [ ] 回滚契约单源 + 守护在位；**A 类活体陈述 15 处 / 14 份文档**指向单源
+      （全树派生清单与台账的差集双向为空），3 处已发布 CHANGELOG 按历史记录
+      单列且**不改写**，且 **B/C/D 类不被计入**——负夹具须含 B、C、**D** 各
+      一条实例，守护对它们必须保持沉默。D 类那条须落在威胁模型表格里 T8 的
+      位置：它与 A 类的 T12 相隔四行，是唯一能证明台账逐处记账而非按路径
+      记账的用例
+- [ ] **台账陈旧即失效（镜像判据）有行为断言**：注释掉一条台账点名的 A 类
+      陈述 → 门禁须以"门禁失明"诊断报红，而非放行。只断言退出码不够
+      （§4.4 shape 7 第二条实践），须断言诊断文案指名该处
+- [ ] **schema 超集断言在位**：删一列 / 删一张表 / 删一个索引各须报红并指名
+      被删对象；**纯新增须放行**（门禁不得阻断向前的迁移）；任一份 snapshot
+      被清空须 fail closed 而非放行；每例前置一次 before-run 记录绿，使"本来
+      就在红"无法冒充"抓到了变异"
 - [ ] 基线更新至实测值且双边规则成文；下一次改进被自动收顶的行为断言
 - [ ] audit.toml 棘轮存在负夹具（虚构一条已离树 crate 的 ignore → 红），
       **且含一条"crate 仍在树内但已非重复/已修复"的反向实例**——deny.toml
@@ -236,10 +338,24 @@ Tauri 9.42% 层给出提升计划或具名豁免（它是 5.45% 的 tauri/comman
   该模式 0 命中，含三个 process-console 门禁与 `watchdog.sh`（48-81 行的小
   脚本）。此信号只说明"没写这些词"，不说明可无头运行——它正是 §4.4 shape 1
   所警告的形状，实跑才作数。
-- cargo-audit 对 unmatched-ignore 的原生支持程度**仍未调研**（step 0 未做）。
-  但离线比对范式已在树内：`dependency-policy.rb` 的 `skip-is-live`
-  （549-598 行）不依赖 cargo-deny 二进制即可判定 skip 是否仍是重复；
-  audit 侧可照搬 Cargo.lock 比对，原生支持与否不构成阻塞。
+- cargo-audit 对 unmatched-ignore 的原生支持程度**仍未调研**（step 0 未做；
+  本机 shell 无 cargo，`security.yml:40` 经 `taiki-e/install-action` 装、
+  以 `--deny unsound --deny unmaintained` 调用，命令行未出现任何
+  unmatched 相关 flag）。但离线比对范式已在树内：`dependency-policy.rb` 的
+  `skip-is-live`（**551-601 行**，原记 549-598 已移）不依赖 cargo-deny 二进制
+  即可判定 skip 是否仍是重复；audit 侧可照搬 Cargo.lock 比对，原生支持与否
+  不构成阻塞。
+- 需求 3 的 CLI 实测 52.86%**未二次派生**——它只出自
+  `coverage/boundary-baseline.json` 自己的 reapproval 散文。需在 macOS 上实跑
+  `./scripts/coverage-governance.sh` 复核后才能作为基线更新的依据；
+  `rustBranchCoverage` 自述 `unsupported-on-stable`，`platform` 仅
+  `macos-aarch64`，两者都还是原样。
+- 需求 1 新增的两道门禁**成本仍未测**：`ci-step-cost.json` 的
+  `pendingMeasurement` 已各记一条（"Manual-gate freshness fixtures"、
+  "Daemon readiness fallback fixtures"），下次刷新才换成数字。另注：
+  `manual-gate-freshness` 的 `--strict` 是 **release.yml 的 job**，而
+  `budget.jobs` 只含 `["governance", "ci-environment-parity"]`，故它按设计不计入
+  1793/2700；进预算的只有 ci.yml governance job 里的那道 fixtures 步骤。
 - ~~release 工作流当前是否有可挂前置检查的结构未核验。~~ **已核验：有。**
   `release.yml:26` 的 `slack-certification-status` 是同形先例，`build`
   （:50）与 `gui-build`（:112）均 `needs:` 它。挂点存在且已被依赖。

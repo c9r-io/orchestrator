@@ -200,21 +200,38 @@ repository, inside one of the never-run gates. Both are in
   driving these gates locally is detected as *attended* and does record. The
   ledger's premise is "executed by a person following the owner QA document".
   Whether an agent's run satisfies that premise is not decided anywhere.
-- **Seven release-blocking gates are not fresh as this ships**, so the next
-  release is blocked until they are worked. The backlog was worked down rather
-  than declared acceptable — 23 not fresh at the start, 10 now, and **no dirty
-  records at all** — but what remains is not clearable by running things:
+- **Seven release-blocking gates were not fresh as this shipped**, so the next
+  release was blocked until they were worked. The backlog was worked down rather
+  than declared acceptable — 23 not fresh at the start, 10 at this document's
+  first version, and **no dirty records at all** — but what remained was not
+  clearable by running things:
 
   | Remaining | Why |
   |---|---|
   | 4 × Slack gates, `FAILED` | one root cause, the `--wait-ready` ticket |
   | 3 × `never` | each needs an ambient daemon that none of them starts |
 
-  The four Slack gates go green together when the `--wait-ready` ticket is
-  fixed; they are one defect, not four. The three never-run gates need a
-  decision that is not FR-165's to make: either they learn to start their own
-  daemon like the other 33, or they are the wrong shape for a release
-  precondition and should say so in a `releaseBlockingReason`.
+  **Resolved for the first row, 2026-08-12 at `81991404`.** `77cc351a` made
+  readiness degrade for binaries that predate the Health RPC, and the three
+  parent gates then passed on a clean tree at `e131c069` — 359s, 434s and 527s,
+  exit 0 each — re-recording their sub-gates with them. The prediction above
+  held exactly: they were one defect, not four. The ledger goes **10 → 6, with
+  no `FAILED` record left**; all six remaining are `never`, and three of those
+  already carry a `releaseBlockingReason`. **Three gates actually block a
+  release**: `test-fr001-sandbox-matrix.sh`, `test-health-policy-check.sh`,
+  `test-self-bootstrap-cycle2-regression.sh`.
+
+  Those three still need a decision that is not FR-165's to make: either they
+  learn to start their own daemon like the other 33, or they are the wrong shape
+  for a release precondition and should say so in a `releaseBlockingReason`.
+
+  Worth recording about the row above rather than only correcting it: this
+  document asserted a number that was *designed* to move, and the sentence went
+  stale within a day of shipping — the §4.4 shape 7 hazard operating on a design
+  record instead of on a fixture. What kept it honest was that the count is
+  derived from the ledger on every run, so the gate's output and the prose could
+  be compared at all. A DD that had restated the figure without naming its
+  derivation would have read as current indefinitely.
 - `npm audit` appears exactly once in the repository, inside this gate, so the
   npm supply chain has no other enforced check. It is now scoped `--omit=dev`
   (see below); dev-tree advisories are owned by Dependabot rather than by a
