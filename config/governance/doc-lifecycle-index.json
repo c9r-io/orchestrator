@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 469,
-    "active": 456,
+    "documents": 471,
+    "active": 458,
     "superseded": 13,
-    "withRelatedFr": 316
+    "withRelatedFr": 318
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -510,6 +510,12 @@
     },
     "docs/design_doc/orchestrator/18-prompt-delivery-abstraction.md": {
       "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/180-forward-only-rollback-contract.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-165"
+      ]
     },
     "docs/design_doc/orchestrator/19-parallel-item-execution.md": {
       "lifecycle": "active"
@@ -1881,6 +1887,12 @@
         "FR-165"
       ]
     },
+    "docs/qa/orchestrator/218-forward-only-rollback-contract.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-165"
+      ]
+    },
     "docs/qa/orchestrator/22-performance-io-queue-optimizations.md": {
       "lifecycle": "active"
     },
@@ -3008,7 +3020,9 @@
     ],
     "FR-165": [
       "docs/design_doc/orchestrator/179-ledger-driven-manual-gate-freshness.md",
-      "docs/qa/orchestrator/217-manual-gate-freshness-enforcement.md"
+      "docs/design_doc/orchestrator/180-forward-only-rollback-contract.md",
+      "docs/qa/orchestrator/217-manual-gate-freshness-enforcement.md",
+      "docs/qa/orchestrator/218-forward-only-rollback-contract.md"
     ]
   },
   "supersedes": {

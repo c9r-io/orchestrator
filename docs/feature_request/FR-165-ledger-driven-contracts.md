@@ -7,7 +7,21 @@
 > **需求 1 已闭环（2026-08-12 @ `55c0d766`）**，设计与验证由
 > `docs/design_doc/orchestrator/179-ledger-driven-manual-gate-freshness.md`
 > 与 `docs/qa/orchestrator/217-manual-gate-freshness-enforcement.md` 承载。
-> 需求 2/3/4 未开工。分诊过程中开出两张 ticket（见需求 1 小结）。
+> 分诊过程中开出两张 ticket（见需求 1 小结），其中 `--wait-ready` 那张已由
+> `77cc351a` 修好，四个 Slack 门禁一并转绿。
+>
+> **需求 2 已闭环（2026-08-12）**，设计与验证由
+> `docs/design_doc/orchestrator/180-forward-only-rollback-contract.md`
+> 与 `docs/qa/orchestrator/218-forward-only-rollback-contract.md` 承载。
+> 单源落在 `crates/orchestrator-persistence/src/migration.rs` 的模块文档；
+> 第二句子契约由 `previous_release_schema_is_a_subset_of_current` 断言
+> （执行两份 snapshot 进内存 SQLite 比对表/列/索引，纯新增放行）；散文由
+> `scripts/qa/rollback-contract-single-source.rb` 逐处记账（`forward-only`
+> 实为**四义**，T8 与 T12 同表相隔四行，故台账逐处而非按路径）；24 条负夹具。
+> 顺带修掉两个自需求 1 起就红着的 ci-required 门禁（见下），并开出一张
+> 本机 bash 3.2 的 ticket。
+>
+> **需求 3/4 未开工**，两者的 step 0 事实已在下文核验并标注。
 
 ## 背景
 
@@ -16,7 +30,8 @@
 > 已补入需求。修正逐条标注 `[原:…]`，方法与二次派生随号写明。核心结论未变
 > ——四个面确实失驱动——但需求 1 的工作量比 FR 设想的小（强制机制已存在，
 > 只是没接线），需求 2 的散文面比 FR 设想的大一倍，且 `forward-only` 在本
-> 树是**三义重载**词，直接 grep 会把无关构造计入。
+> 树是**四义重载**词（第四义 T8 与 A 类 T12 同表相隔四行），直接 grep 会把
+> 无关构造计入。
 
 产品分析的核心诊断之一：本仓库的债务全部有记录（36 个 DD 携带 Known
 limits、~150 条停放项、多本 ledger JSON），但除 CI 预算外，没有任何账本
@@ -124,7 +139,7 @@ limits、~150 条停放项、多本 ledger JSON），但除 CI 预算外，没�
    "grep -c 数的是行不是出现"］的退役条件写成给人看的 `cargo tree -i` 单行
    （`.cargo/audit.toml`），**无退役棘轮 ✓**——`scripts/qa/dependency-policy.rb`
    的 `check_audit` 只断言"每条 ignore 上方有注释"，不断言 crate 仍在树内；
-   deny.toml 一侧的 `skip-is-live`（同文件 549-598 行）正是本需求要对齐的既有
+   deny.toml 一侧的 `skip-is-live`（同文件 **551-601** 行）正是本需求要对齐的既有
    范式。RUSTSEC-2024-0429 "Nothing reminds anyone to re-check"（deny.toml 自注）。
 
 ## 需求
@@ -208,7 +223,7 @@ dedicated-app-provisioning 527s），子门禁随之重记。台账 **10 → 6�
     manifest 已是 38。期望值从 manifest 派生（或至少与 ledger 交叉核对），
     §4.4 shape 7 第三条实践。
 
-### 2. 回滚契约代码化
+### 2. 回滚契约代码化 —— ✅ 已闭环 @ 2026-08-12
 
 契约("迁移前向-only；上一 release 二进制必须能服务当前 schema；restore
 仅限灾难")写入 `crates/orchestrator-persistence/src/migration.rs` 一处
@@ -303,16 +318,16 @@ check_skips_live"更多的地方，也正是验收标准点名要的那条反向
       `test-attention-inbox.sh` 就是这条断言的现成正例
 - [ ] **freshness 门禁不再复述门禁总数**：manifest 增删一个 manual 门禁后
       诊断文案自动跟随（负夹具：改 manifest 不改脚本，不得出现陈旧数字）
-- [ ] 回滚契约单源 + 守护在位；**A 类活体陈述 15 处 / 14 份文档**指向单源
+- [x] 回滚契约单源 + 守护在位；**A 类活体陈述 15 处 / 14 份文档**指向单源
       （全树派生清单与台账的差集双向为空），3 处已发布 CHANGELOG 按历史记录
       单列且**不改写**，且 **B/C/D 类不被计入**——负夹具须含 B、C、**D** 各
       一条实例，守护对它们必须保持沉默。D 类那条须落在威胁模型表格里 T8 的
       位置：它与 A 类的 T12 相隔四行，是唯一能证明台账逐处记账而非按路径
       记账的用例
-- [ ] **台账陈旧即失效（镜像判据）有行为断言**：注释掉一条台账点名的 A 类
+- [x] **台账陈旧即失效（镜像判据）有行为断言**：注释掉一条台账点名的 A 类
       陈述 → 门禁须以"门禁失明"诊断报红，而非放行。只断言退出码不够
       （§4.4 shape 7 第二条实践），须断言诊断文案指名该处
-- [ ] **schema 超集断言在位**：删一列 / 删一张表 / 删一个索引各须报红并指名
+- [x] **schema 超集断言在位**：删一列 / 删一张表 / 删一个索引各须报红并指名
       被删对象；**纯新增须放行**（门禁不得阻断向前的迁移）；任一份 snapshot
       被清空须 fail closed 而非放行；每例前置一次 before-run 记录绿，使"本来
       就在红"无法冒充"抓到了变异"
@@ -321,7 +336,9 @@ check_skips_live"更多的地方，也正是验收标准点名要的那条反向
       **且含一条"crate 仍在树内但已非重复/已修复"的反向实例**——deny.toml
       一侧记录过 `--deny unmatched-skip` 覆盖不到这一半（CHANGELOG:154 案例 15b），
       同样的缺口不应在 audit 侧重演
-- [ ] 治理预算仍 ≤2700s，变动量记录（当前 1793/2700，DD-172）
+- [ ] 治理预算仍 ≤2700s，变动量记录（**当前 2024/2700**，676s 余量；
+      DD-172 记的 1793 钉在 run 30792774882，此后已涨。六条 pendingMeasurement
+      未计入，其中四条属本 FR，下次刷新才重新咬合）
 
 ## 依赖与关联
 

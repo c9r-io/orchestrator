@@ -515,6 +515,7 @@
     {
       "path": "scripts/qa/rollback-contract-single-source.rb",
       "enforcement": "ci-required",
+      "shape": "shape 4 — a text pattern standing in for a semantic property, in the form where the pattern is genuinely ambiguous. `forward-only` names four different things in this tree: the daemon migration rollback contract, the Slack Gateway's own schema in another database, artifact forwarding in orchestrator-collab, and monotonic connection-state CAS. A grep-shaped single-source gate counts all four as contract references. Two of them share a markdown table: threat-model row T8 is the state sense and sits four rows above the A-class row T12, so no file-level or section-level scope predicate separates them, and a path-keyed ledger would satisfy the citation requirement file-wide and bless T8 in silence (shape 3, a whole-file total standing in for a per-object association). Sites are therefore keyed by a digest of the matched line, classification is required rather than inferred from the text, and the scope is every tracked non-binary file rather than two extensions, because a scope sufficient for today's 38 sites is a fact about the tree and not about the check (shape 9). The mirror condition fails when a booked statement stops matching, so the gate cannot go green by going blind.",
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
       "providerIsolation": {
@@ -525,6 +526,7 @@
     {
       "path": "scripts/qa/test-rollback-contract.sh",
       "enforcement": "ci-required",
+      "shape": "shape 7 — a negative fixture that cannot show it applied its mutation, over two guards that were both new and therefore both unexercised. Every case brackets itself with a before-run and asserts the diagnostic rather than the exit code, because the schema guard has three distinct failure branches — a removed object, an unapplicable snapshot, and an empty read — that an exit code cannot tell apart. Writing them contradicted the design twice, which is the argument for having them: a table commented out without its indexes reaches the unapplicable-statement branch and not the removal branch, and a self-citing statement cannot shed its citation without the mirror condition firing first, so reaching the citation-content branch needs a ledger entry repointed at a real line that names nothing.",
       "workflow": ".github/workflows/ci.yml",
       "job": "governance",
       "providerIsolation": {
