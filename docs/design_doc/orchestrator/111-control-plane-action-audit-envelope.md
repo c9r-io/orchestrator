@@ -90,6 +90,7 @@ Migration is forward-only and preserves populated databases. Rollback disables e
   - Only the request ID is accepted after validation; actor and role are transport-derived.
 - Legacy clients silently bypass required semantics.
   - Compatibility mode generates `legacy_client` and request-scoped retry identity; enforced mode rejects missing context before mutation.
+  - The `Apply` RPC did not conform to this until FR-164. It consulted the audit layer only when a context was already present, so an envelope-less apply was neither recorded under `legacy_client` nor rejected under `enforced` — the mitigation was unreachable in precisely the case it names. Every non-dry-run apply now reserves an envelope. The lesson generalises: a mitigation stated here is a claim about every handler, and a handler that gates entry to the audit layer on the very condition the mitigation covers will satisfy neither branch while appearing to implement both.
 
 ## Observability
 

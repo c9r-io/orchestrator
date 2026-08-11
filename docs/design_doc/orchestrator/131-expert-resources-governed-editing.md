@@ -81,7 +81,7 @@ ResourceSummary {
 
 1. The frontend never parses YAML to discover identity. It selects a `ResourceSummary` and passes its canonical resource path and revision back to the daemon.
 2. Apply requires exactly one builtin manifest when an optimistic fence is present. The daemon resolves the manifest identity, locks configuration mutation, compares the authoritative revision, then validates and persists.
-3. Both successful and rejected reviewed mutations use `resource.apply` audit evidence. Validation and stale-revision failures therefore remain traceable.
+3. Both successful and rejected reviewed mutations use per-kind apply audit evidence — `resource.workspace.apply` for a Workspace, and so on per `ResourceKind` (FR-164; before that every kind but three shared the generic `resource.apply`). Validation and stale-revision failures therefore remain traceable. A manifest that fails to parse has no resolvable identity and still records the generic `resource.apply` against `resource_manifest`.
 4. A successful mutation triggers a fresh describe. A conflict also refreshes authoritative content and revision, while the editor keeps the user's draft for manual reconciliation.
 5. Native buttons, visible focus rings, dialog focus trapping/return, reduced-transparency fallback, and automated Axe checks preserve accessibility.
 
@@ -105,8 +105,8 @@ ResourceSummary {
 
 ## Observability
 
-- Action: `resource.apply`.
-- Target: `resource` and canonical `Kind/name`.
+- Action: `resource.<kind>.apply` — `resource.workspace.apply` for the Workspace edits this document covers (FR-164). Unparseable manifests fall back to `resource.apply`.
+- Target: the per-kind `target_type` (`workspace` here) and canonical `Kind/name`.
 - Correlation: `x-request-id` is returned through Tauri and shown after Apply; failures include the same request-ID diagnostic.
 - Durable evidence: Action Audit status, expected revision, reason code, operator reason, request hash, and result/error code.
 - Metrics: no new metric family; existing control-plane request and Action Audit health provide the operational signal.

@@ -616,6 +616,30 @@ orchestrator audit get req-123 --project demo              # one record by reque
 | `-l, --limit` | 最大记录数（默认：100） |
 | `-o, --output` | 输出格式：table（默认）、json、yaml |
 
+### Apply 动作名
+
+每次非 dry-run 的 `apply` 都会记录一行，无论客户端是否携带审计信封；未携带信封的
+客户端以 `reason_code` `legacy_client` 记录。单文档 apply 按其 kind 具名：
+
+```bash
+orchestrator audit list --project demo --action resource.secret_store.apply
+orchestrator audit list --project demo --target-type workflow
+```
+
+`resource.<kind>.apply` 覆盖全部 kind——`resource.workspace.apply`、
+`resource.agent.apply`、`resource.workflow.apply`、`resource.project.apply`、
+`resource.runtime_policy.apply`、`resource.step_template.apply`、
+`resource.execution_profile.apply`、`resource.env_store.apply`、
+`resource.secret_store.apply`、`resource.trigger.apply`——另有两个早于该约定、
+保持原拼写的名字：`source.template.apply`（SourceTaskTemplate）与
+`source.binding.apply`（SourceTaskBinding）。携带 `driver.rawArgs` 的 Agent
+清单记为 `agent.driver.raw_args.apply`。
+
+有两种情况记通用的 `resource.apply`、`target_type` 为 `resource_manifest`：
+多文档 bundle，以及解析失败的清单。二者都没有单一可解析身份，因此按具名动作
+过滤不会返回它们——需要完整序列时请不加 `--action` 列出。bundle 不携带逐文档
+kind 清单；如需还原其触及的资源，请按时间戳关联 `resource_versions`。
+
 ## 触发器生命周期
 
 ```bash

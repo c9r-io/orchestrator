@@ -182,14 +182,21 @@ else
   fail "invalid manifest unexpectedly applied"
 fi
 
-"$ORCH" audit list --project "$PROJECT" --action resource.apply -o json > "$QA_ROOT/audit.json"
+# Listed without an --action filter on purpose. Since FR-164 a single-document
+# Workspace apply records `resource.workspace.apply` / target_type `workspace`,
+# while the unparseable manifest has no resolvable descriptor and still records
+# the generic `resource.apply` / `resource_manifest`. Filtering on one action
+# would silently drop the other half of the sequence and leave the count
+# assertions passing over a partial set.
+"$ORCH" audit list --project "$PROJECT" -o json > "$QA_ROOT/audit.json"
 if jq -e '
-  ([.[] | select(.target_type == "resource" and .target_id == "Workspace/fr119-workspace" and .status == "succeeded")] | length) == 1 and
-  ([.[] | select(.target_type == "resource" and .target_id == "Workspace/fr119-workspace" and .status == "failed")] | length) == 1 and
+  ([.[] | select(.action == "resource.workspace.apply" and .target_type == "workspace" and .target_id == "Workspace/fr119-workspace" and .status == "succeeded")] | length) == 1 and
+  ([.[] | select(.action == "resource.workspace.apply" and .target_type == "workspace" and .target_id == "Workspace/fr119-workspace" and .status == "failed")] | length) == 1 and
+  ([.[] | select(.action == "resource.apply" and .target_type == "resource_manifest" and .status == "failed")] | length) >= 1 and
   ([.[] | select(.status == "failed")] | length) >= 2 and
   ([.[] | select(.target_id == "Workspace/fr119-workspace") | .request_id] | all(length > 0))
 ' "$QA_ROOT/audit.json" >/dev/null; then
-  pass "successful, stale, and invalid applies retain canonical audit evidence"
+  pass "successful, stale, and invalid applies retain canonical audit evidence under per-kind action names"
 else
   fail "resource apply action audit sequence is incomplete"
 fi

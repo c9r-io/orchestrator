@@ -617,6 +617,33 @@ orchestrator audit get req-123 --project demo              # one record by reque
 | `-l, --limit` | Maximum records (default: 100) |
 | `-o, --output` | Output format: table (default), json, yaml |
 
+### Apply Action Names
+
+Every non-dry-run `apply` records one row, whether or not the client sent an
+audit envelope; an envelope-less client is recorded with `reason_code`
+`legacy_client`. A single-document apply is named after its kind:
+
+```bash
+orchestrator audit list --project demo --action resource.secret_store.apply
+orchestrator audit list --project demo --target-type workflow
+```
+
+`resource.<kind>.apply` covers every kind — `resource.workspace.apply`,
+`resource.agent.apply`, `resource.workflow.apply`, `resource.project.apply`,
+`resource.runtime_policy.apply`, `resource.step_template.apply`,
+`resource.execution_profile.apply`, `resource.env_store.apply`,
+`resource.secret_store.apply`, `resource.trigger.apply` — with two names that
+predate the convention and keep their spelling: `source.template.apply`
+(SourceTaskTemplate) and `source.binding.apply` (SourceTaskBinding). An Agent
+manifest carrying `driver.rawArgs` is recorded as `agent.driver.raw_args.apply`.
+
+Two cases record the generic `resource.apply` against `target_type`
+`resource_manifest`: a multi-document bundle, and a manifest that fails to
+parse. Neither has a single resolvable identity, so filtering on a per-kind
+action name will not return them — list without `--action` when you need the
+whole sequence. A bundle carries no per-document kind list; correlate
+`resource_versions` by timestamp to recover what it touched.
+
 ## Trigger Lifecycle
 
 ```bash

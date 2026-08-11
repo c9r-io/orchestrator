@@ -175,6 +175,15 @@ Verify lifecycle changes are immediate, complete-project validated, restart-safe
   manifests — so a flow that only ever applies the bundle cannot produce this
   row, which is exactly how the assertion once failed while every product
   behaviour it names was correct.
+- Since FR-164 the bundle/single-document split is the *only* remaining reason a
+  named row can be missing. Every other single-document kind now has its own
+  `resource.<kind>.apply` name, and every non-dry-run apply is audited whether or
+  not the client sent an envelope. `source.binding.apply` and
+  `source.template.apply` deliberately keep their pre-FR-164 spellings, so the
+  assertions above are unchanged. Bundles still carry no per-document kind list:
+  `canonical_request` is never persisted, only hashed, so the kinds a bundle
+  touched remain recoverable only by correlating `resource_versions.created_at`
+  with `control_action_audit.created_at`.
 - Audit contains no message content, URL, token, or goal.
 
 ### Expected Data State

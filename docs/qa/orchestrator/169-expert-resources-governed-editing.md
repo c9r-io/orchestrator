@@ -101,7 +101,11 @@ Prove a reviewed edit crosses the real Tauri/gRPC boundary, is audited, and relo
 - Apply sends the selected revision, project, non-empty reason, and idempotency key.
 - Escape closes the review dialog and returns focus; confirmed Apply succeeds.
 - The detail is refreshed through Describe and displays the returned request ID.
-- The real daemon records one succeeded `resource.apply` for `Workspace/fr119-workspace`.
+- The real daemon records one succeeded `resource.workspace.apply` for
+  `Workspace/fr119-workspace` with `target_type` `workspace`. The unparseable
+  manifest in the same gate has no resolvable descriptor and still records the
+  generic `resource.apply` / `resource_manifest`, so the gate lists without an
+  `--action` filter rather than dropping half the sequence (FR-164).
 
 ---
 
