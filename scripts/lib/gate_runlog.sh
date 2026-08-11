@@ -32,9 +32,11 @@
 GATE_RUNLOG_LEDGER_REL="config/governance/manual-gate-freshness.json"
 
 # Composes with the EXIT trap the caller already installed rather than replacing
-# it. 30 of the 35 gates run `trap cleanup EXIT`, and a second bare `trap ... EXIT`
-# silently discards the first — which in these scripts means a leaked daemon on a
-# bound port, a leaked temp directory, or a leaked ORCHESTRATORD_DATA_DIR. The
+# it. Most of these gates — 33 of 38 when this line was last derived, and the
+# derivation is one `rg -c '^\s*trap .*EXIT'` over the manifest's manual-runbook
+# paths — run `trap cleanup EXIT`, and a second bare `trap ... EXIT` silently
+# discards the first, which in these scripts means a leaked daemon on a bound
+# port, a leaked temp directory, or a leaked ORCHESTRATORD_DATA_DIR. The
 # recording is the least important thing either handler does, so it is the one
 # that adapts.
 #

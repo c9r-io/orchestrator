@@ -970,7 +970,9 @@ check_new_gates_name_their_shape() {
 #
 # The required set is derived from the manifest, never listed: the next gate
 # classified manual-runbook is covered the moment it is classified, and a list
-# here would guard exactly the 35 that existed today.
+# here would guard exactly the set that existed on the day it was written. The
+# count is deliberately not named — it read 35 while the manifest said 38, in
+# four other places, until FR-165 went looking.
 #
 # Both conditions are structural, and neither is sufficient alone:
 #

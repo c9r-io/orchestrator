@@ -130,9 +130,26 @@ cp /tmp/fresh-backup.json config/governance/manual-gate-freshness.json
 
 **Expected result**
 
-Unmodified: exit 0, a 35-row table, `35 of 35 gate(s) stale or never recorded`,
-and the closing line `freshness report only; staleness does not fail this check`.
-Staleness must **not** change the exit status — that is the design, not a gap.
+Unmodified: exit 0, one row per manual-runbook gate, a summary of the form
+`N of M gate(s) not fresh (A never, B failed, C dirty)`, and the closing line
+`freshness report only; staleness does not fail this check`.
+
+`M` is derived, never restated here — this document said "a 35-row table,
+`35 of 35 gate(s) stale or never recorded`" while the manifest had moved to 38,
+which is the same defect FR-165 found in the gate's own diagnostic. Derive it:
+
+```bash
+jq '[.scripts[] | select(.enforcement == "manual-runbook")] | length' \
+  config/governance/qa-gate-surface.json
+```
+
+Staleness must **not** change the exit status of the *bare* invocation — that is
+the design, not a gap. Since FR-165 there is exactly one enforcement point:
+`manual-gate-freshness.rb --strict`, run by `release.yml`, which exits 1 when a
+release-blocking gate is not fresh. A gate is fresh only if its last recorded
+run exited 0 on a clean worktree, so `exitStatus` and `worktreeDirty` now change
+the answer where they used to be printed and ignored. See
+[QA 217](217-manual-gate-freshness-enforcement.md).
 
 With a gate removed from the ledger: exit **1**, naming the missing path and
 stating that a gate missing here is missing from every report, which reads

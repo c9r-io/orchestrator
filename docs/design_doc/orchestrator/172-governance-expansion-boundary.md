@@ -108,6 +108,15 @@ Staleness itself is reported and never fails the build — a gate that goes red
 because a human has not followed a runbook lately gets answered by running the
 cheapest thing that clears it, which is not the same as running the runbook.
 
+> **Amended by FR-165 (2026-08-12).** The paragraph above is still the rule for
+> `ci.yml`, and the reasoning is unchanged. It is no longer true of the
+> repository as a whole: `release.yml` runs the same script with `--strict`, so
+> stale evidence blocks a *release* while still never blocking a push. FR-165
+> also found that "staleness" was measuring less than this paragraph assumes —
+> the criterion was recency alone, so a gate whose last run *failed* reported
+> `ok`. See
+> [DD-179](179-ledger-driven-manual-gate-freshness.md).
+
 ## What this does not do
 
 - It does not cap the number of gates. The cost ceiling is time, because time is
