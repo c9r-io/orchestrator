@@ -274,10 +274,7 @@ info "Starting an isolated daemon over UDS (data dir: $ORCHESTRATORD_DATA_DIR)"
   echo $! > "$QA_ROOT/daemon.pid"
 )
 DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
-for _ in {1..80}; do
-  "$ORCH" task list -o json >/dev/null 2>&1 && break
-  sleep 0.25
-done
+gate_daemon_wait_ready "$ORCH" || true
 if ! "$ORCH" task list -o json >/dev/null 2>&1; then
   # The client's error, not only the daemon's log. The daemon can be listening
   # happily while the CLI is dialling somewhere else entirely, and the daemon

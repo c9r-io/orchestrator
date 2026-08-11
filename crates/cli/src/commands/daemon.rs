@@ -17,7 +17,13 @@ pub async fn dispatch(cmd: DaemonCommands) -> Result<()> {
 
     match cmd {
         DaemonCommands::Stop => stop(&pid_path).await,
-        DaemonCommands::Status => status(&pid_path),
+        DaemonCommands::Status {
+            wait_ready: false, ..
+        } => status(&pid_path),
+        DaemonCommands::Status {
+            wait_ready: true,
+            timeout,
+        } => wait_ready(timeout).await,
         DaemonCommands::Maintenance { enable, disable } => {
             let flag = if enable {
                 true
@@ -146,6 +152,65 @@ fn get_ppid(pid: u32) -> Option<u32> {
     let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
     let after_comm = stat.rsplit_once(')')?.1;
     after_comm.split_whitespace().nth(1)?.parse().ok()
+}
+
+/// Poll `Health` until every subsystem is ready, or fail naming what was not.
+///
+/// Connection errors are retried rather than returned: the whole point is to be
+/// callable *before* the daemon is up, so "nothing is listening yet" is the
+/// expected early state, not a failure. Only the deadline is a failure — and it
+/// reports the last observed subsystem detail, because "timed out" alone sends
+/// the reader back to do this diagnosis by hand.
+async fn wait_ready(timeout_secs: u64) -> Result<()> {
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
+    // Assigned on every path through the loop below before it can be read, so
+    // the deadline message never carries a placeholder nobody measured.
+    let mut last_report: String;
+
+    loop {
+        match probe_health().await {
+            Ok((true, report)) => {
+                println!("orchestratord is ready ({report})");
+                return Ok(());
+            }
+            Ok((false, report)) => last_report = report,
+            Err(e) => last_report = format!("no connection to the daemon yet: {e}"),
+        }
+
+        if tokio::time::Instant::now() >= deadline {
+            anyhow::bail!(
+                "orchestratord was not ready within {timeout_secs}s; last status: {last_report}"
+            );
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    }
+}
+
+/// One Health call, flattened to `(serving, human-readable report)`.
+async fn probe_health() -> Result<(bool, String)> {
+    let mut client = crate::client::connect(None).await?;
+    let response = client
+        .health(orchestrator_proto::HealthRequest {})
+        .await?
+        .into_inner();
+
+    // Every subsystem is named whether ready or not. A report that lists only
+    // the failures reads as complete when the list is empty, and "ready" then
+    // looks identical to "nothing was measured".
+    let report = response
+        .subsystems
+        .iter()
+        .map(|s| {
+            format!(
+                "{}={} ({})",
+                s.name,
+                if s.ready { "ready" } else { "NOT ready" },
+                s.detail
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    Ok((response.serving, report))
 }
 
 /// Print the current daemon status.

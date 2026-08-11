@@ -100,6 +100,11 @@ service OrchestratorService {
 
   // System
   rpc Ping(PingRequest)               returns (PingResponse);
+  // Readiness, as distinct from liveness. Ping answers "the daemon is up";
+  // Health answers "the daemon can serve", and names the subsystem when it
+  // cannot. It aggregates the three status RPCs below rather than measuring
+  // anything itself, so there is one answer per subsystem, not two.
+  rpc Health(HealthRequest)           returns (HealthResponse);
   rpc Shutdown(ShutdownRequest)       returns (ShutdownResponse);
   rpc MaintenanceMode(MaintenanceModeRequest) returns (MaintenanceModeResponse);
   rpc ConfigDebug(ConfigDebugRequest) returns (ConfigDebugResponse);
@@ -1390,6 +1395,26 @@ message StorePruneResponse {
 }
 
 // ─── System ───────────────────────────────────────────────────
+
+message HealthRequest {}
+
+// One subsystem's contribution to readiness.
+//
+// `detail` is for a human reading a failed wait; it is never parsed. `name` is
+// the stable key a caller may match on — `migrations`, `keyring`, `workers`.
+message HealthSubsystem {
+  string name = 1;
+  bool ready = 2;
+  string detail = 3;
+}
+
+message HealthResponse {
+  // True only when every subsystem is ready. A caller waiting for readiness
+  // should test this rather than re-deriving it from the list, so that a
+  // subsystem added later is accounted for without changing the caller.
+  bool serving = 1;
+  repeated HealthSubsystem subsystems = 2;
+}
 
 message PingRequest {}
 

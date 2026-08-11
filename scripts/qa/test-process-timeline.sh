@@ -54,12 +54,7 @@ printf '# Deterministic process timeline target\n' > "$QA_ROOT/fixtures/qa/timel
 )
 DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
 
-for _ in {1..30}; do
-  if "$ORCH" task list -o json >/dev/null 2>&1; then
-    break
-  fi
-  sleep 0.25
-done
+gate_daemon_wait_ready "$ORCH" || true
 if ! "$ORCH" task list -o json >/dev/null 2>&1; then
   echo "isolated daemon failed to start" >&2
   "$ORCH" task list -o json >&2 || true

@@ -165,10 +165,7 @@ start_daemon() {
     echo $! > daemon.pid
   )
   DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
-  for _ in {1..100}; do
-    "$cli_bin" task list -o json >/dev/null 2>&1 && return 0
-    sleep 0.25
-  done
+  gate_daemon_wait_ready "$cli_bin" && return 0
   sed -n '1,200p' "$QA_ROOT/$log_name" >&2
   fail "isolated daemon failed readiness"
 }

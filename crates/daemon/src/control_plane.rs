@@ -727,7 +727,11 @@ fn server_sans(bind_addr: &SocketAddr) -> Result<Vec<SanType>> {
 pub(crate) fn required_role_for_rpc(rpc: &str) -> Role {
     match rpc {
         // ReadOnly: informational queries with no side effects.
-        "Ping" | "TaskList" | "TaskInfo" | "TaskTimeline" | "TaskLogs" | "TaskFollow"
+        // `Health` belongs here and the classification matters more than most:
+        // the unmapped arm below defaults to Admin, and a readiness probe that
+        // needs Admin is a readiness probe no QA gate or operator can call.
+        "Health"
+        | "Ping" | "TaskList" | "TaskInfo" | "TaskTimeline" | "TaskLogs" | "TaskFollow"
         | "TaskWatch" | "TaskTimelineFollow" | "Get" | "ResourceCatalogList"
         | "AttentionList" | "AttentionGet" | "AttentionFollow"
         | "ActionAuditList" | "ActionAuditGet"
@@ -889,6 +893,15 @@ mod tests {
     fn required_role_mapping_is_stable() {
         // ReadOnly
         assert_eq!(required_role_for_rpc("Ping"), Role::ReadOnly);
+        // Not decoration: the unmapped arm defaults to Admin, so an RPC left
+        // off the list above still answers this function — with the one role
+        // that makes a readiness probe useless to the callers who need it.
+        assert_eq!(required_role_for_rpc("Health"), Role::ReadOnly);
+        assert_ne!(
+            required_role_for_rpc("Health"),
+            required_role_for_rpc("ThisRpcDoesNotExist"),
+            "Health must be classified, not falling through to the Admin default"
+        );
         assert_eq!(required_role_for_rpc("DbStatus"), Role::ReadOnly);
         assert_eq!(required_role_for_rpc("AgentList"), Role::ReadOnly);
         assert_eq!(required_role_for_rpc("SecretKeyStatus"), Role::ReadOnly);

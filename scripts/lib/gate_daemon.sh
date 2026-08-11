@@ -84,6 +84,54 @@ gate_daemon_alive() {
   return 0
 }
 
+# Wait until the daemon can actually serve, not merely until it answers.
+#
+# This replaces 24 hand-copied loops across 23 gates (FR-163). Every one of them
+# spelled the same thing — `for _ in {1..N}; do "$ORCH" task list -o json
+# >/dev/null 2>&1 && break; sleep 0.25; done` — and they disagreed about N:
+# five different budgets, 7.5s, 10s, 15s, 20s and 25s, none of them derived
+# from anything. A gate that waited 7.5s on a loaded CI runner failed for a
+# reason that had nothing to do with what it was testing.
+#
+# Two things the copies got wrong beyond the budget:
+#
+#   * `task list` is a proxy. It succeeds the moment the socket accepts a
+#     connection, which is before the worker pool has registered — so a gate
+#     could create a task and watch nothing pick it up. `daemon status
+#     --wait-ready` polls the Health RPC, which reports migrations, keyring and
+#     workers separately and only says ready when all three are.
+#   * `&& break` silently continues when the loop is exhausted. The gate then
+#     runs its whole body against a daemon that never came up and fails
+#     somewhere further down, naming the wrong thing. This returns 1 with the
+#     daemon's own last subsystem report, so the failure names itself.
+#
+# Usage, replacing the hand-written loop after a daemon start:
+#   gate_daemon_wait_ready "$ORCH" || abort_with_summary "daemon never became ready"
+# The timeout is the second argument, in seconds, defaulting to the widest of
+# the five budgets it replaces — no gate gets a shorter wait than it used to
+# have, so this cannot introduce a flake that was not already there.
+GATE_DAEMON_READY_TIMEOUT="${GATE_DAEMON_READY_TIMEOUT:-25}"
+
+gate_daemon_wait_ready() {
+  local cli="$1" timeout="${2:-$GATE_DAEMON_READY_TIMEOUT}" output rc
+
+  if [[ -z "$cli" ]]; then
+    echo "[gate-daemon] gate_daemon_wait_ready: no CLI path given" >&2
+    return 1
+  fi
+
+  # Status is observed, never discarded: a readiness wait whose own failure is
+  # invisible is the thing this function replaces (§4.4 shape 5).
+  output="$("$cli" daemon status --wait-ready --timeout "$timeout" 2>&1)"
+  rc=$?
+  if (( rc != 0 )); then
+    echo "[gate-daemon] daemon not ready within ${timeout}s:" >&2
+    sed 's/^/  /' <<<"$output" >&2
+    return 1
+  fi
+  return 0
+}
+
 # Kill a daemon outright, for gates whose subject is what an *unclean* exit
 # leaves behind. SIGKILL only: no SIGTERM first, because a daemon that handles
 # SIGTERM unlinks its socket and pidfile on the way out, which is precisely the

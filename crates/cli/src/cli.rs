@@ -1222,7 +1222,19 @@ pub enum DaemonCommands {
     /// Stop the running daemon by sending SIGTERM
     Stop,
     /// Show whether the daemon is running and its PID
-    Status,
+    Status {
+        /// Block until the daemon reports every subsystem ready, then exit 0.
+        ///
+        /// Without this flag `status` answers liveness from the PID file and
+        /// never opens a connection. With it, it polls the Health RPC — a
+        /// bound socket is not the same fact as a daemon that can serve, and
+        /// waiting for the first is what left QA gates racing worker startup.
+        #[arg(long)]
+        wait_ready: bool,
+        /// Seconds to wait for readiness before failing (with `--wait-ready`).
+        #[arg(long, default_value = "30", requires = "wait_ready")]
+        timeout: u64,
+    },
     /// Enable or disable maintenance mode (blocks new task creation)
     Maintenance {
         /// Enable maintenance mode

@@ -70,11 +70,12 @@ printf '# Failure visibility deterministic target\n' > "$QA_ROOT/fixtures/qa/vis
 )
 DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
 
-for _ in {1..60}; do
-  if "$ORCH" task list -o json >/dev/null 2>&1 &&
-    [[ -f "$ORCHESTRATORD_DATA_DIR/secrets/secretstore.key" ]]; then
-    break
-  fi
+gate_daemon_wait_ready "$ORCH" || true
+# The key file is a second fact and stays a second wait. Readiness reports the
+# keyring as loaded from the database; this gate needs the file on disk, which
+# is what its later assertions read.
+for _ in {1..20}; do
+  [[ -f "$ORCHESTRATORD_DATA_DIR/secrets/secretstore.key" ]] && break
   sleep 0.25
 done
 if ! "$ORCH" task list -o json >/dev/null 2>&1; then

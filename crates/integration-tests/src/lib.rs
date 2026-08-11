@@ -1476,6 +1476,19 @@ impl OrchestratorService for TestOrchestratorServer {
         }))
     }
 
+    /// Deliberately not modelled.
+    ///
+    /// A double that answered this would answer "ready" by construction, and a
+    /// readiness contract asserted against a stand-in that cannot be unready is
+    /// asserted against nothing. Readiness is exercised against the real
+    /// `OrchestratorServer` (QA 216 / `test-daemon-readiness.sh`), the same
+    /// reason FR-164's audit assertions could not live here.
+    async fn health(&self, _: Request<HealthRequest>) -> Result<Response<HealthResponse>, Status> {
+        Err(Status::unimplemented(
+            "readiness is asserted against the production daemon, not this fixture",
+        ))
+    }
+
     async fn ping(&self, _request: Request<PingRequest>) -> Result<Response<PingResponse>, Status> {
         let runtime = agent_orchestrator::service::daemon::runtime_snapshot(&self.state);
         Ok(Response::new(PingResponse {

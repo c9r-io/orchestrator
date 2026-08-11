@@ -126,10 +126,7 @@ start_daemon() {
     echo $! > daemon.pid
   )
   DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
-  for _ in {1..80}; do
-    "$ORCH" task list -o json >/dev/null 2>&1 && return 0
-    sleep 0.25
-  done
+  gate_daemon_wait_ready "$ORCH" && return 0
   echo "isolated daemon failed to start" >&2
   sed -n '1,240p' "$QA_ROOT/daemon.log" >&2
   return 1
@@ -152,14 +149,14 @@ start_read_only_daemon() {
     echo $! > daemon.pid
   )
   DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
-  for _ in {1..80}; do
-    if env -u ORCHESTRATOR_CONTROL_PLANE_CONFIG \
-        ORCHESTRATOR_SOCKET="$ORCHESTRATORD_DATA_DIR/orchestrator.sock" \
-        "$ORCH" task list -o json >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep 0.25
-  done
+  # The transport override is the point of this wait: the TCP daemon's
+  # control-plane config would otherwise send the probe to the wrong instance.
+  # It is carried through to the readiness call rather than dropped.
+  if env -u ORCHESTRATOR_CONTROL_PLANE_CONFIG \
+      ORCHESTRATOR_SOCKET="$ORCHESTRATORD_DATA_DIR/orchestrator.sock" \
+      "$ORCH" daemon status --wait-ready --timeout 20 >/dev/null 2>&1; then
+    return 0
+  fi
   echo "isolated read-only UDS daemon failed to start" >&2
   sed -n '1,240p' "$QA_ROOT/daemon.log" >&2
   return 1

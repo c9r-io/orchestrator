@@ -837,6 +837,13 @@ impl OrchestratorService for OrchestratorServer {
         system::worker_status(self, request).await
     }
 
+    async fn health(
+        &self,
+        request: Request<HealthRequest>,
+    ) -> Result<Response<HealthResponse>, Status> {
+        system::health(self, request).await
+    }
+
     async fn check(
         &self,
         request: Request<CheckRequest>,

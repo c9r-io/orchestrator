@@ -1409,7 +1409,30 @@
     {
       "about": "Show whether the daemon is running and its PID",
       "aliases": [],
-      "args": [],
+      "args": [
+        {
+          "default": "false",
+          "hidden": false,
+          "long": "wait-ready",
+          "name": "wait_ready",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "WAIT_READY"
+        },
+        {
+          "default": "30",
+          "hidden": false,
+          "long": "timeout",
+          "name": "timeout",
+          "positional": false,
+          "possible_values": [],
+          "required": false,
+          "short": null,
+          "value_name": "TIMEOUT"
+        }
+      ],
       "bare_invocable": false,
       "hidden": false,
       "leaf": true,

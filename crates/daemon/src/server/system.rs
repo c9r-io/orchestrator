@@ -77,6 +77,90 @@ pub(crate) async fn worker_status(
     Ok(Response::new(status))
 }
 
+/// Readiness across the three subsystems a caller can be blocked by.
+///
+/// Reads the same sources as `DbStatus`, `SecretKeyStatus` and `WorkerStatus`
+/// rather than measuring anything itself: a second opinion about whether
+/// migrations are current is exactly the shape FR-163 spent its first pass
+/// removing.
+///
+/// A subsystem that cannot be *read* is reported as not-ready with the error as
+/// its detail, never as an RPC failure. The caller is asking "can you serve
+/// yet", and a transport error would make "the keyring is unreadable"
+/// indistinguishable from "the daemon is gone" — which is the distinction this
+/// whole endpoint exists to draw.
+pub(crate) async fn health(
+    server: &OrchestratorServer,
+    request: Request<HealthRequest>,
+) -> Result<Response<HealthResponse>, Status> {
+    super::authorize(server, &request, "Health").map_err(Status::from)?;
+
+    let migrations = match agent_orchestrator::service::system::db_status(&server.state) {
+        Ok(status) => HealthSubsystem {
+            name: "migrations".to_string(),
+            ready: status.is_current,
+            detail: format!("{}/{}", status.current_version, status.target_version),
+        },
+        Err(e) => HealthSubsystem {
+            name: "migrations".to_string(),
+            ready: false,
+            detail: format!("unreadable: {e}"),
+        },
+    };
+
+    let keyring = match agent_orchestrator::secret_key_lifecycle::load_keyring(
+        &server.state.data_dir,
+        &server.state.db_path,
+    ) {
+        Ok(keyring) => {
+            let active = keyring.active_record().map(|record| record.key_id.clone());
+            HealthSubsystem {
+                name: "keyring".to_string(),
+                ready: active.is_some(),
+                detail: match active {
+                    Some(key_id) => format!("active key {key_id}"),
+                    None => "no active key".to_string(),
+                },
+            }
+        }
+        Err(e) => HealthSubsystem {
+            name: "keyring".to_string(),
+            ready: false,
+            detail: format!("unreadable: {e}"),
+        },
+    };
+
+    // The window this endpoint exists for. The worker supervisor is spawned
+    // several hundred lines before the socket binds, but each worker registers
+    // itself asynchronously, so a client that connects the instant the socket
+    // appears can find zero workers and a queue that nothing will drain.
+    // `configured == 0` is a deliberate operator choice (a daemon serving reads
+    // only), so it is ready by definition rather than a wait that never ends.
+    let workers = match agent_orchestrator::service::system::worker_status(&server.state).await {
+        Ok(status) => HealthSubsystem {
+            name: "workers".to_string(),
+            ready: status.configured_workers == 0
+                || status.active_workers + status.idle_workers > 0,
+            detail: format!(
+                "{}/{} started",
+                status.active_workers + status.idle_workers,
+                status.configured_workers
+            ),
+        },
+        Err(e) => HealthSubsystem {
+            name: "workers".to_string(),
+            ready: false,
+            detail: format!("unreadable: {e}"),
+        },
+    };
+
+    let subsystems = vec![migrations, keyring, workers];
+    Ok(Response::new(HealthResponse {
+        serving: subsystems.iter().all(|s| s.ready),
+        subsystems,
+    }))
+}
+
 pub(crate) async fn check(
     server: &OrchestratorServer,
     request: Request<CheckRequest>,

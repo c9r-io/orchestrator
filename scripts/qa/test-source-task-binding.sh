@@ -61,10 +61,7 @@ start_daemon() {
     echo $! > daemon.pid
   )
   DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
-  for _ in {1..60}; do
-    "$ORCH" task list -o json >/dev/null 2>&1 && return 0
-    sleep 0.25
-  done
+  gate_daemon_wait_ready "$ORCH" && return 0
   echo "isolated daemon failed to start" >&2
   sed -n '1,240p' "$QA_ROOT/daemon.log" >&2
   return 1

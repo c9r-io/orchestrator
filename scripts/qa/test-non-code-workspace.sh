@@ -100,10 +100,7 @@ SLACK_PID=$!
   echo $! > "$QA_ROOT/daemon.pid"
 )
 DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
-for _ in {1..80}; do
-  "$ORCH" task list -o json >/dev/null 2>&1 && break
-  sleep 0.25
-done
+gate_daemon_wait_ready "$ORCH" || true
 if ! "$ORCH" task list -o json >/dev/null 2>&1; then
   sed -n '1,240p' "$QA_ROOT/daemon.log" >&2
   exit 1

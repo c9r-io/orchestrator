@@ -78,11 +78,7 @@ trap cleanup EXIT
 gate_runlog_arm "scripts/qa/test-control-plane-action-audit.sh"
 
 wait_for_daemon() {
-  for _ in {1..60}; do
-    "$ORCH" task list -o json >/dev/null 2>&1 && return 0
-    sleep 0.25
-  done
-  return 1
+  gate_daemon_wait_ready "$ORCH"
 }
 
 has_action_audit_migration() {

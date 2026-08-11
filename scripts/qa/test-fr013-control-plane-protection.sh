@@ -101,10 +101,7 @@ echo "[fr013] starting secure daemon in $QA_ROOT"
 DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
 # First boot on a fresh dir runs every migration; wait for the CLI to actually
 # reach the daemon rather than sleeping a fixed guess.
-for _ in {1..60}; do
-  "$ORCH" task list -o json >/dev/null 2>&1 && break
-  sleep 0.25
-done
+gate_daemon_wait_ready "$ORCH" || true
 
 echo "[fr013] applying fixture project"
 "$ORCH" apply \

@@ -158,11 +158,7 @@ gate_runlog_arm "scripts/qa/test-agent-session-control-plane.sh"
 reclaim_previous_run_residue
 
 wait_for_daemon() {
-  for _ in {1..80}; do
-    "$ORCH" task list -o json >/dev/null 2>&1 && return 0
-    sleep 0.25
-  done
-  return 1
+  gate_daemon_wait_ready "$ORCH"
 }
 
 run_with_retry() {
