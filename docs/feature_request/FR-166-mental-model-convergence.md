@@ -50,6 +50,14 @@ Process↔Task 择一为准（GUI 改词或 CLI/文档改词——后者波及 1
 - magic-by-id：显式 `type:` 必填化评估或 lint 警告；
 - `05-advanced-features.md:7` 的 kinds 列表与枚举对齐（这条是纯缺陷，直接修）。
 
+**下游消费者（治理本需求时必须一并裁决）**：审计动作词汇按 kind 派生——
+FR-164 已为 apply 建立 `resource.<snake_kind>.apply`（DD-177），FR-167 需求 2
+将为 delete 建立对应面。**动作名一旦写入 `control_action_audit` 即不可更改**：
+FR-164 正因此被迫保留 `source.template.apply` / `source.binding.apply` 的原
+拼写，重命名会使已记录的审计历史失真。故本需求对 EnvStore/SecretStore 合并
+与 Trigger 拆分的任何裁决，都等于永久固化相应的审计动作名——裁决产出中须
+显式写明这一后果。FR-167 需求 2 已排在本 FR 之后，正是为此。
+
 ### 4. 概念预算规则
 
 新 kind / 新顶级命令组的提案须自证"为什么不是现有概念的参数或子命令"——

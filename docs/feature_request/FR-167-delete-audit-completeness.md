@@ -78,10 +78,31 @@ dry-run delete 不审计，与 FR-164 的 `!dry_run` 语义一致，并单独断
 - [ ] 既有 `source.binding.delete` 与 `delete_references` 断言不回归
       （`scripts/qa/test-source-task-binding.sh` 断言前者）
 
+## 治理顺序（与 FR-166 的依赖，2026-08-11 裁决）
+
+**需求 1 与需求 3 可立即治理；需求 2 应排在 FR-166 之后。**
+
+FR-166 需求 3 把 **EnvStore 与 SecretStore 的合并**与 **Trigger 三职拆分**列为
+待裁决项，两者都可能改动 `ResourceKind` 集合。而需求 2 的产出是"每 kind 一个
+`resource.<kind>.delete`"——**动作名一旦写入审计行即不可更改**：这正是 FR-164
+被迫保留 `source.template.apply` / `source.binding.apply` 原拼写的原因（重命名
+会使已记录的审计历史失真，见 DD-177 Key Design 3）。若需求 2 先落地、FR-166
+再合并掉 EnvStore，就会凭空制造一个永久遗留例外——与 FR-164 继承的那种债务
+同形，且这次是自己造的。
+
+需求 1 不依赖 kind 命名（只是让 `attempt` 对非 dry-run 恒有），需求 3 同理。
+两者关闭的是安全缺口——**带信封的普通删除同样零审计行**，且 `enforced` 模式
+对删除不可达——不应被一个 P2 的词汇 FR 阻塞。故切分治理，避免优先级倒置。
+
+**反向要求**：FR-166 需求 3 做 kind 裁决时须显式记录"审计动作词汇是其下游
+消费者"——合并或拆分一个 kind 等于永久固化其动作名。该条应写进 FR-166 的
+裁决产出，否则这个依赖只存在于本文件，FR-166 的治理者看不到。
+
 ## 依赖与关联
 
 - 直接承接 FR-164（DD-177、QA 214）的机制与命名规范；同一 `resolve_context`
   可达性问题的第二处实例。
+- 需求 2 依赖 FR-166 对 `ResourceKind` 集合的裁决，见上节。
 - 关联 DD-111：其"每一次 process-console mutation"的目标对 delete 路径仍不成立，
   FR-164 已为 apply 补记一条 conformance 注，delete 闭环时应一并更新该注。
 
