@@ -7,14 +7,28 @@
 
 ## Mechanism (at 6678144d, re-verify)
 
-`crates/orchestrator-client/src/connect.rs:61-66` — transport step 3 probes
+`crates/orchestrator-client/src/connect.rs:63-66` — transport step 3 probes
 only `socket.exists()`. The daemon removes a stale socket **at bind time**
-(`crates/daemon/src/main.rs:990`), so after a crash the inode survives; the
+(`crates/daemon/src/main.rs:991`), so after a crash the inode survives; the
 CLI then commits to UDS and never falls through to step 4 (control-plane
 config discovery). DD-62 fixed the mirror-image direction; this is the
-recorded residual. Bonus defect in the same function: `discover_socket_path`
-falls back to `.`/cwd when `dirs::home_dir()` is None (`connect.rs:31`) — a
-CWD-dependent path never surfaced to the user.
+recorded residual.
+
+Two corrections from FR-163's step 0 (re-derived at `70c85cba`):
+
+- **Scope is narrower than recorded.** The daemon also removes the socket on
+  clean shutdown (`lifecycle::cleanup`, `main.rs:1170`), so the trap needs a
+  crash or `SIGKILL` — not any stop.
+- **The "bonus defect" as written is wrong.** It claimed `discover_socket_path`
+  diverges from the canonical resolver by falling back to cwd when
+  `dirs::home_dir()` is None. Both fall back to a cwd-relative `.orchestratord`:
+  `config_load::data_dir()` yields `.orchestratord`, `discover_socket_path`
+  yields `./.orchestratord/orchestrator.sock`. Semantically identical — there is
+  no divergence. What remains true is only that the fallback is a CWD-dependent
+  path never surfaced to the user. The real duplication in that function is
+  different: it spells `orchestrator.sock` inline instead of calling
+  `lifecycle::socket_path`, so the filename lives in two places
+  (`connect.rs:28` and `lifecycle.rs:115`).
 
 ## For ticket-fix
 
