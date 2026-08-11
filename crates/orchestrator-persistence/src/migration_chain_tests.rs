@@ -177,7 +177,7 @@ fn populated_v30_database_upgrades_with_action_audit_links() {
     )
     .expect("populate audit row");
 
-    assert_eq!(run_pending(&conn, &migrations).expect("upgrade").count(), 7);
+    assert_eq!(run_pending(&conn, &migrations).expect("upgrade").count(), 8);
     let preserved: i64 = conn
         .query_row("SELECT COUNT(*) FROM control_plane_audit", [], |row| {
             row.get(0)
@@ -326,9 +326,9 @@ async fn populated_v26_process_console_upgrade_preserves_entities_and_rebuilds_m
         run_pending(&conn, &migrations)
             .expect("upgrade to latest")
             .count(),
-        6
+        7
     );
-    assert_eq!(current_version(&conn).expect("latest version"), 37);
+    assert_eq!(current_version(&conn).expect("latest version"), 38);
     for (table, id) in [
         ("tasks", "console-task"),
         ("agent_sessions", "console-session"),
@@ -485,11 +485,11 @@ fn populated_v33_source_automation_upgrade_preserves_route_and_provenance() {
 
     assert_eq!(
         run_pending(&conn, &migrations)
-            .expect("upgrade to v37")
+            .expect("upgrade to v38")
             .count(),
-        4
+        5
     );
-    assert_eq!(current_version(&conn).expect("latest version"), 37);
+    assert_eq!(current_version(&conn).expect("latest version"), 38);
     let route: (String, i64, i64, i64, i64) = conn
         .query_row(
             "SELECT status,generation,version,attempt_count,max_attempts
@@ -568,11 +568,11 @@ fn populated_v34_upgrade_adds_source_connections_and_dedicated_checkpoints() {
 
     assert_eq!(
         run_pending(&conn, &migrations)
-            .expect("upgrade to v37")
+            .expect("upgrade to v38")
             .count(),
-        3
+        4
     );
-    assert_eq!(current_version(&conn).expect("latest version"), 37);
+    assert_eq!(current_version(&conn).expect("latest version"), 38);
     let task: (String, String) = conn
         .query_row(
             "SELECT project_id,status FROM tasks WHERE id='pre-connection-task'",
@@ -1257,8 +1257,8 @@ fn all_migrations_count_matches_expected() {
     let migrations = all_migrations();
     assert_eq!(
         migrations.len(),
-        37,
-        "expected 37 migrations, got {}",
+        38,
+        "expected 38 migrations, got {}",
         migrations.len()
     );
 }

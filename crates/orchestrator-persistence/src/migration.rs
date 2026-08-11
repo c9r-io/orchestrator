@@ -288,6 +288,11 @@ pub fn registered_migrations() -> Vec<Migration> {
             name: "m0037_dedicated_slack_app_lifecycle",
             up: crate::migration_steps::m0037_dedicated_slack_app_lifecycle,
         },
+        Migration {
+            version: 38,
+            name: "m0038_attention_projection_gaps",
+            up: crate::migration_steps::m0038_attention_projection_gaps,
+        },
     ]
 }
 
@@ -497,7 +502,7 @@ mod tests {
 
         let summary = run_pending(&conn, &migrations).expect("upgrade populated database");
         assert_eq!(summary.applied.first().map(|item| item.version), Some(29));
-        assert_eq!(current_version(&conn).unwrap(), 37);
+        assert_eq!(current_version(&conn).unwrap(), 38);
         let rows: Vec<(String, String, i64)> = conn
             .prepare(
                 "SELECT id,state,state_version FROM agent_sessions

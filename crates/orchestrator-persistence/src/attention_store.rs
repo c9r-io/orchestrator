@@ -240,6 +240,28 @@ pub enum AttentionProjectionOp {
     },
 }
 
+/// Per-project accounting of task events the projector dropped while the
+/// project's attention inbox was disabled (FR-162).
+///
+/// Deltas fold into one `attention_projection_gaps` row per project inside the
+/// same transaction that advances the projector cursor; re-enabling the inbox
+/// flushes the row into a visible `inbox_projection_gap` item.
+#[derive(Debug, Clone)]
+pub struct AttentionProjectionGap {
+    /// Project whose inbox was disabled while these events arrived.
+    pub project_id: String,
+    /// Oldest dropped event id.
+    pub first_event_id: i64,
+    /// Newest dropped event id.
+    pub last_event_id: i64,
+    /// Creation time of the oldest dropped event.
+    pub first_occurred_at: String,
+    /// Creation time of the newest dropped event.
+    pub last_occurred_at: String,
+    /// Number of dropped events.
+    pub dropped_count: i64,
+}
+
 /// Mutation requested by an authenticated operator.
 #[derive(Debug, Clone)]
 pub enum AttentionMutation {
@@ -425,6 +447,19 @@ impl AsyncAttentionRepository {
         operations: Vec<AttentionProjectionOp>,
         last_event_id: i64,
     ) -> Result<()> {
+        self.apply_projection_batch_with_gaps(operations, Vec::new(), last_event_id)
+            .await
+    }
+
+    /// Applies materialization operations, folds dropped-event accounting into
+    /// the per-project gap rows, and advances the cursor — all atomically, so a
+    /// crash either replays the whole batch or observes all of it.
+    pub async fn apply_projection_batch_with_gaps(
+        &self,
+        operations: Vec<AttentionProjectionOp>,
+        gaps: Vec<AttentionProjectionGap>,
+        last_event_id: i64,
+    ) -> Result<()> {
         self.db
             .writer()
             .call(move |conn| {
@@ -432,12 +467,98 @@ impl AsyncAttentionRepository {
                 for operation in operations {
                     apply_projection_op(&tx, operation).map_err(other)?;
                 }
+                for gap in gaps {
+                    tx.execute(
+                        "INSERT INTO attention_projection_gaps
+                             (project_id, first_event_id, last_event_id,
+                              first_occurred_at, last_occurred_at, dropped_count, updated_at)
+                         VALUES (?1,?2,?3,?4,?5,?6,?7)
+                         ON CONFLICT(project_id) DO UPDATE SET
+                             first_event_id=MIN(first_event_id, excluded.first_event_id),
+                             last_event_id=MAX(last_event_id, excluded.last_event_id),
+                             first_occurred_at=MIN(first_occurred_at, excluded.first_occurred_at),
+                             last_occurred_at=MAX(last_occurred_at, excluded.last_occurred_at),
+                             dropped_count=dropped_count+excluded.dropped_count,
+                             updated_at=excluded.updated_at",
+                        params![
+                            gap.project_id,
+                            gap.first_event_id,
+                            gap.last_event_id,
+                            gap.first_occurred_at,
+                            gap.last_occurred_at,
+                            gap.dropped_count,
+                            now_ts(),
+                        ],
+                    )?;
+                }
                 tx.execute(
                     "UPDATE attention_projector_state SET last_event_id=?1, updated_at=?2 WHERE projector='builtin'",
                     params![last_event_id, now_ts()],
                 )?;
                 tx.commit()?;
                 Ok(())
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    /// Returns every project with unflushed dropped-event accounting.
+    pub async fn pending_projection_gaps(&self) -> Result<Vec<AttentionProjectionGap>> {
+        self.db
+            .reader()
+            .call(|conn| {
+                let mut stmt = conn.prepare(
+                    "SELECT project_id, first_event_id, last_event_id,
+                            first_occurred_at, last_occurred_at, dropped_count
+                     FROM attention_projection_gaps ORDER BY project_id",
+                )?;
+                let gaps = stmt
+                    .query_map([], |row| {
+                        Ok(AttentionProjectionGap {
+                            project_id: row.get(0)?,
+                            first_event_id: row.get(1)?,
+                            last_event_id: row.get(2)?,
+                            first_occurred_at: row.get(3)?,
+                            last_occurred_at: row.get(4)?,
+                            dropped_count: row.get(5)?,
+                        })
+                    })?
+                    .collect::<std::result::Result<Vec<_>, _>>()?;
+                Ok(gaps)
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    /// Surfaces one project's gap accounting as a visible attention item and
+    /// clears the row, atomically.
+    ///
+    /// The delete is fenced on `up_to_event_id`: if another batch folded more
+    /// dropped events in after the caller read the row, nothing is flushed and
+    /// the next reconcile pass rebuilds the candidate over the fuller range.
+    pub async fn flush_projection_gap(
+        &self,
+        project_id: &str,
+        up_to_event_id: i64,
+        candidate: AttentionCandidate,
+    ) -> Result<bool> {
+        let project_id = project_id.to_owned();
+        self.db
+            .writer()
+            .call(move |conn| {
+                let tx = conn.unchecked_transaction()?;
+                let deleted = tx.execute(
+                    "DELETE FROM attention_projection_gaps
+                     WHERE project_id=?1 AND last_event_id<=?2",
+                    params![project_id, up_to_event_id],
+                )?;
+                if deleted == 0 {
+                    return Ok(false);
+                }
+                apply_projection_op(&tx, AttentionProjectionOp::Upsert(Box::new(candidate)))
+                    .map_err(other)?;
+                tx.commit()?;
+                Ok(true)
             })
             .await
             .map_err(flatten_err)
@@ -1435,6 +1556,95 @@ mod tests {
         assert_eq!(swept.state, "resolved");
         let resolution = swept.resolution.expect("resolution");
         assert_eq!(resolution["reason"], "task_completed");
+    }
+
+    fn gap(project_id: &str, first: i64, last: i64, count: i64) -> AttentionProjectionGap {
+        AttentionProjectionGap {
+            project_id: project_id.into(),
+            first_event_id: first,
+            last_event_id: last,
+            first_occurred_at: format!("2026-01-01T00:00:{first:02}Z"),
+            last_occurred_at: format!("2026-01-01T00:00:{last:02}Z"),
+            dropped_count: count,
+        }
+    }
+
+    fn gap_item(project_id: &str, gap: &AttentionProjectionGap) -> AttentionCandidate {
+        let mut item = candidate("gap-item");
+        item.project_id = project_id.into();
+        item.task_id = String::new();
+        item.task_item_id = None;
+        item.step_id = None;
+        item.kind = "inbox_projection_gap".into();
+        item.dedupe_key = format!("inbox-projection-gap:{project_id}");
+        item.summary = format!("{} events not projected", gap.dropped_count);
+        item
+    }
+
+    #[tokio::test]
+    async fn projection_gaps_accumulate_flush_once_and_reopen() {
+        let (_temp, repo) = repo().await;
+        // Two batches of dropped events fold into one row per project.
+        repo.apply_projection_batch_with_gaps(vec![], vec![gap("p", 3, 5, 3)], 5)
+            .await
+            .expect("first batch");
+        repo.apply_projection_batch_with_gaps(vec![], vec![gap("p", 6, 9, 4)], 9)
+            .await
+            .expect("second batch");
+        let pending = repo.pending_projection_gaps().await.expect("pending");
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].first_event_id, 3);
+        assert_eq!(pending[0].last_event_id, 9);
+        assert_eq!(pending[0].dropped_count, 7);
+
+        // A fenced flush behind the row's watermark is a no-op.
+        let stale = repo
+            .flush_projection_gap("p", 5, gap_item("p", &pending[0]))
+            .await
+            .expect("stale flush");
+        assert!(!stale);
+        assert!(repo.get("gap-item").await.expect("get").is_none());
+
+        // The current watermark flushes: one open item, row cleared.
+        let flushed = repo
+            .flush_projection_gap("p", 9, gap_item("p", &pending[0]))
+            .await
+            .expect("flush");
+        assert!(flushed);
+        let item = repo.get("gap-item").await.expect("get").expect("item");
+        assert_eq!(item.state, "open");
+        assert_eq!(item.kind, "inbox_projection_gap");
+        assert!(
+            repo.pending_projection_gaps()
+                .await
+                .expect("empty")
+                .is_empty()
+        );
+
+        // A later disable window reopens the same item instead of a second row.
+        repo.mutate(
+            "gap-item",
+            item.version,
+            "ack-1",
+            "operator",
+            AttentionMutation::Resolve {
+                reason: r#"{"reason":"acknowledged"}"#.to_string(),
+            },
+        )
+        .await
+        .expect("ack");
+        repo.apply_projection_batch_with_gaps(vec![], vec![gap("p", 12, 14, 2)], 14)
+            .await
+            .expect("third batch");
+        let pending = repo.pending_projection_gaps().await.expect("pending again");
+        let reflushed = repo
+            .flush_projection_gap("p", 14, gap_item("p", &pending[0]))
+            .await
+            .expect("reflush");
+        assert!(reflushed);
+        let reopened = repo.get("gap-item").await.expect("get").expect("item");
+        assert_eq!(reopened.state, "open");
+        assert_eq!(reopened.reopen_count, 1);
     }
 
     #[tokio::test]

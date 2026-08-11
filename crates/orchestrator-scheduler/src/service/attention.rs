@@ -1,8 +1,8 @@
 //! Built-in policies that project durable task events into the attention queue.
 
 use agent_orchestrator::attention::{
-    AttentionActionDescriptor, AttentionCandidate, AttentionProjectionOp, AttentionSeverity,
-    AttentionSourceEvent,
+    AttentionActionDescriptor, AttentionCandidate, AttentionProjectionGap, AttentionProjectionOp,
+    AttentionSeverity, AttentionSourceEvent,
 };
 use agent_orchestrator::config_ext::OrchestratorConfigExt as _;
 use agent_orchestrator::config_load::now_ts;
@@ -98,6 +98,25 @@ pub async fn execute_allowlisted_action(
 /// daemon restart either replays the complete batch or observes all of it.
 pub async fn reconcile_attention_once(state: &InnerState) -> Result<usize> {
     state.attention_repo.wake_expired_snoozes(&now_ts()).await?;
+    let config = agent_orchestrator::config_load::read_loaded_config(state)?;
+    let inbox_enabled = |project_id: &str| {
+        config
+            .config
+            .runtime_policy_for_project(project_id)
+            .attention_inbox_enabled
+    };
+
+    // Surface gap accounting for projects whose inbox came back on. This runs
+    // before the batch load so a re-enable is visible even on a quiet system.
+    for gap in state.attention_repo.pending_projection_gaps().await? {
+        if inbox_enabled(&gap.project_id) {
+            state
+                .attention_repo
+                .flush_projection_gap(&gap.project_id, gap.last_event_id, gap_candidate(&gap))
+                .await?;
+        }
+    }
+
     let cursor = state.attention_repo.projector_cursor().await?;
     let events = state
         .attention_repo
@@ -107,20 +126,32 @@ pub async fn reconcile_attention_once(state: &InnerState) -> Result<usize> {
         return Ok(0);
     };
     let last_event_id = last.id;
-    let config = agent_orchestrator::config_load::read_loaded_config(state)?;
-    let operations = events
-        .iter()
-        .filter(|event| {
-            config
-                .config
-                .runtime_policy_for_project(&event.project_id)
-                .attention_inbox_enabled
-        })
-        .flat_map(policy_operations)
-        .collect();
+    let mut operations = Vec::new();
+    let mut gaps: Vec<AttentionProjectionGap> = Vec::new();
+    for event in &events {
+        if inbox_enabled(&event.project_id) {
+            operations.extend(policy_operations(event));
+        } else if let Some(gap) = gaps
+            .iter_mut()
+            .find(|gap| gap.project_id == event.project_id)
+        {
+            gap.last_event_id = event.id;
+            gap.last_occurred_at = event.created_at.clone();
+            gap.dropped_count += 1;
+        } else {
+            gaps.push(AttentionProjectionGap {
+                project_id: event.project_id.clone(),
+                first_event_id: event.id,
+                last_event_id: event.id,
+                first_occurred_at: event.created_at.clone(),
+                last_occurred_at: event.created_at.clone(),
+                dropped_count: 1,
+            });
+        }
+    }
     state
         .attention_repo
-        .apply_projection_batch(operations, last_event_id)
+        .apply_projection_batch_with_gaps(operations, gaps, last_event_id)
         .await?;
     tracing::info!(
         source_events = events.len(),
@@ -128,6 +159,42 @@ pub async fn reconcile_attention_once(state: &InnerState) -> Result<usize> {
         "attention inbox projection batch committed"
     );
     Ok(events.len())
+}
+
+/// Builds the visible item that documents a projection gap: only event ids,
+/// counts, and timestamps — never event payload content.
+fn gap_candidate(gap: &AttentionProjectionGap) -> AttentionCandidate {
+    let dedupe_key = format!("inbox-projection-gap:{}", gap.project_id);
+    let id = digest(&dedupe_key);
+    AttentionCandidate {
+        id: format!("attn-gap-{}", &id[..20]),
+        project_id: gap.project_id.clone(),
+        task_id: String::new(),
+        task_item_id: None,
+        step_id: None,
+        session_id: None,
+        kind: "inbox_projection_gap".to_owned(),
+        severity: AttentionSeverity::Attention,
+        title: "Events were not projected while the inbox was disabled".to_owned(),
+        summary: format!(
+            "{} task events (ids {}..{}, {}..{}) were not projected while the \
+             attention inbox was disabled for this project. Review task history \
+             for missed conditions.",
+            gap.dropped_count,
+            gap.first_event_id,
+            gap.last_event_id,
+            gap.first_occurred_at,
+            gap.last_occurred_at,
+        ),
+        requested_decision: None,
+        actions: actions_for("inbox_projection_gap", false),
+        dedupe_key,
+        source_event_id: gap.last_event_id.to_string(),
+        source_route_id: None,
+        source_binding_name: None,
+        occurred_at: gap.last_occurred_at.clone(),
+        sla_deadline: None,
+    }
 }
 
 /// Evidence kinds that record something which already happened and awaits

@@ -1762,3 +1762,27 @@ pub(crate) fn m0037_dedicated_slack_app_lifecycle(conn: &Connection) -> Result<(
     .context("m0037_dedicated_slack_app_lifecycle")?;
     Ok(())
 }
+
+/// Records the ranges of task events the attention projector skipped while a
+/// project's inbox was disabled (FR-162).
+///
+/// The projector cursor is global, so a disabled project cannot hold it back;
+/// instead each dropped batch folds into one row per project, and re-enabling
+/// the inbox flushes the row into a visible `inbox_projection_gap` item.
+pub(crate) fn m0038_attention_projection_gaps(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS attention_projection_gaps (
+            project_id TEXT PRIMARY KEY,
+            first_event_id INTEGER NOT NULL,
+            last_event_id INTEGER NOT NULL,
+            first_occurred_at TEXT NOT NULL,
+            last_occurred_at TEXT NOT NULL,
+            dropped_count INTEGER NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        "#,
+    )
+    .context("m0038_attention_projection_gaps")?;
+    Ok(())
+}
