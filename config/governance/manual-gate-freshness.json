@@ -5,7 +5,9 @@
   "gates": {
     "scripts/qa/certify-codex-session-resume.sh": {
       "owner": "docs/qa/orchestrator/166-codex-session-resume-conformance.md",
-      "lastRun": null
+      "lastRun": null,
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Consumes real provider credentials and quota: invokes the live codex CLI, pinned to 0.144.5, against a recorded fixture. A release cannot wait on third-party CLI availability and quota. FR-165 triage measured it refusing to run at all - installed codex-cli is 0.146.0, and the gate correctly declines rather than recertify its fixture silently. That version drift is a separate matter from release blocking."
     },
     "scripts/qa/test-agent-driver-abstraction.sh": {
       "owner": "docs/qa/orchestrator/164-agent-driver-abstraction.md",
@@ -19,8 +21,8 @@
     "scripts/qa/test-agent-session-control-plane.sh": {
       "owner": "docs/qa/orchestrator/149-agent-session-control-plane-hardening.md",
       "lastRun": {
-        "date": "2026-08-10",
-        "revision": "2ae4e8540ab79ee46a0a4efc201a3de225519678",
+        "date": "2026-08-11",
+        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -29,16 +31,16 @@
       "owner": "docs/qa/orchestrator/143-attention-inbox.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "0ab2688f5d4b52788dfbb1a80052631cd590a1db",
-        "exitStatus": 1,
+        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
+        "exitStatus": 0,
         "worktreeDirty": false
       }
     },
     "scripts/qa/test-control-plane-action-audit.sh": {
       "owner": "docs/qa/orchestrator/153-process-console-release-acceptance.md",
       "lastRun": {
-        "date": "2026-08-10",
-        "revision": "2ae4e8540ab79ee46a0a4efc201a3de225519678",
+        "date": "2026-08-11",
+        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -95,8 +97,8 @@
     "scripts/qa/test-handoff-safe-resume.sh": {
       "owner": "docs/qa/orchestrator/144-handoff-and-safe-resume.md",
       "lastRun": {
-        "date": "2026-08-10",
-        "revision": "04e5486dff97c7fdf60509f774c55b03a6f9eb61",
+        "date": "2026-08-11",
+        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -125,15 +127,32 @@
     },
     "scripts/qa/test-process-console-metrics.sh": {
       "owner": "docs/qa/orchestrator/151-process-console-operational-metrics.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-11",
+        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
+        "exitStatus": 0,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-process-console-release.sh": {
       "owner": "docs/qa/orchestrator/153-process-console-release-acceptance.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-11",
+        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
+        "exitStatus": 1,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-process-console-ui.sh": {
       "owner": "docs/qa/orchestrator/154-process-console-functional-ui-regression.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-11",
+        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
+        "exitStatus": 1,
+        "worktreeDirty": false
+      },
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Exempted by owner decision, 2026-08-12: its npm audit step fails on advisories in devDependencies (currently 3 in undici via jsdom; npm audit --omit=dev reports 0, so nothing vulnerable ships), and dev-only advisories recur on a schedule unrelated to any release. COST, recorded deliberately: this gate is `npm run test:coverage && npm run test:e2e && npm run build && npm audit`, so exempting it also removes the GUI vitest suite and Playwright e2e from release blocking - and ci.yml runs no vitest at all, leaving 120 GUI unit tests with no automated enforcement anywhere. Re-arm by scoping line 27 to `npm audit --omit=dev`, which gates what ships and passes today. See docs/ticket/20260812-node-version-unpinned-locally.md."
     },
     "scripts/qa/test-process-console-vertical-flow.sh": {
       "owner": "docs/qa/orchestrator/150-process-console-recovery-notifications-e2e.md",
@@ -148,9 +167,9 @@
       "owner": "docs/qa/orchestrator/142-process-timeline-read-model.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "4c13b90ac20eae5e1914ff8990f9ab5cf0ab8ed1",
+        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
         "exitStatus": 0,
-        "worktreeDirty": true
+        "worktreeDirty": false
       }
     },
     "scripts/qa/test-self-bootstrap-cycle2-regression.sh": {
@@ -168,21 +187,33 @@
     },
     "scripts/qa/test-slack-dedicated-app-provisioning.sh": {
       "owner": "docs/qa/orchestrator/163-dedicated-slack-app-auto-provisioning.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-11",
+        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
+        "exitStatus": 1,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-slack-managed-live-smoke.sh": {
       "owner": "docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md",
-      "lastRun": null
+      "lastRun": null,
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Consumes real provider credentials and quota: posts to a live Slack workspace using SLACK_LIVE_* driver bot tokens, and requires ORCHESTRATOR_BIN. release.yml already reports controlled Slack evidence freshness in the slack-certification-status job, which is the right instrument for credentialed evidence - it states expiry without asserting a product regression."
     },
     "scripts/qa/test-slack-managed-shared-oauth.sh": {
       "owner": "docs/qa/orchestrator/162-managed-slack-connection-shared-oauth.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-11",
+        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
+        "exitStatus": 1,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-slack-reaction-source.sh": {
       "owner": "docs/qa/orchestrator/155-slack-reaction-source-event-contract.md",
       "lastRun": {
-        "date": "2026-08-10",
-        "revision": "fb889b9ba952656d22611e53ec35986b356d6cb7",
+        "date": "2026-08-11",
+        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -190,48 +221,53 @@
     "scripts/qa/test-slack-reaction-task-routing.sh": {
       "owner": "docs/qa/orchestrator/158-slack-permalink-canonical-task-routing.md",
       "lastRun": {
-        "date": "2026-08-10",
-        "revision": "fb889b9ba952656d22611e53ec35986b356d6cb7",
+        "date": "2026-08-11",
+        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
         "exitStatus": 0,
-        "worktreeDirty": true
+        "worktreeDirty": false
       }
     },
     "scripts/qa/test-slack-skill-automation-release.sh": {
       "owner": "docs/qa/orchestrator/161-slack-reaction-skill-automation-release.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-11",
+        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
+        "exitStatus": 1,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-slack-skill-automation-vertical.sh": {
       "owner": "docs/qa/orchestrator/161-slack-reaction-skill-automation-release.md",
       "lastRun": {
-        "date": "2026-08-10",
-        "revision": "685525afa8737db858baf452b4ea7445bf2e4140",
-        "exitStatus": 0,
+        "date": "2026-08-11",
+        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
+        "exitStatus": 1,
         "worktreeDirty": false
       }
     },
     "scripts/qa/test-source-automation-operations.sh": {
       "owner": "docs/qa/orchestrator/159-source-automation-reliability-operations.md",
       "lastRun": {
-        "date": "2026-08-10",
-        "revision": "fb889b9ba952656d22611e53ec35986b356d6cb7",
+        "date": "2026-08-11",
+        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
         "exitStatus": 0,
-        "worktreeDirty": true
+        "worktreeDirty": false
       }
     },
     "scripts/qa/test-source-automation-ui.sh": {
       "owner": "docs/qa/orchestrator/160-process-console-source-automation-ui.md",
       "lastRun": {
-        "date": "2026-08-10",
-        "revision": "fb889b9ba952656d22611e53ec35986b356d6cb7",
+        "date": "2026-08-11",
+        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
         "exitStatus": 0,
-        "worktreeDirty": true
+        "worktreeDirty": false
       }
     },
     "scripts/qa/test-source-events-slack.sh": {
       "owner": "docs/qa/orchestrator/155-slack-reaction-source-event-contract.md",
       "lastRun": {
-        "date": "2026-08-10",
-        "revision": "fb889b9ba952656d22611e53ec35986b356d6cb7",
+        "date": "2026-08-11",
+        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -240,16 +276,16 @@
       "owner": "docs/qa/orchestrator/157-source-task-binding-badge-matching.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "69b1812e7e33b37eb5af00bf52fa6d397944fa91",
+        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
         "exitStatus": 0,
-        "worktreeDirty": true
+        "worktreeDirty": false
       }
     },
     "scripts/qa/test-source-task-template.sh": {
       "owner": "docs/qa/orchestrator/156-source-task-template-skill-invocation.md",
       "lastRun": {
-        "date": "2026-08-10",
-        "revision": "adf2a26eb6d08d2b4e07bcac2b6249ce2eba5da9",
+        "date": "2026-08-11",
+        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -283,7 +319,9 @@
     },
     "scripts/watchdog.sh": {
       "owner": "docs/qa/self-bootstrap/02-survival-enforcement-watchdog.md",
-      "lastRun": null
+      "lastRun": null,
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Not a test: an unbounded foreground loop that health-checks the binary on disk and copies .stable back over target/release/orchestratord after WATCHDOG_MAX_FAILURES failures. Requiring it before a release would ask a human to start an infinite loop that overwrites the artifact being released. Driven by docs/qa/self-bootstrap/02-survival-enforcement-watchdog.md with a two-second poll against a deliberately corrupted binary. FR-165 triage: never run bare, and must not be."
     }
   }
 }
