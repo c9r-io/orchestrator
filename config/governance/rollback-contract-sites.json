@@ -241,6 +241,12 @@
       "note": "FR-106's closure note, pointing at the documents that carry its evidence."
     },
     {
+      "path": ".github/workflows/ci.yml",
+      "digest": "3a880d69d7e6",
+      "class": "meta",
+      "note": "The comment on the governance step that runs this gate, explaining why it exists. Caught by the gate itself on its first run after the step was added, which is the behaviour working: a new mention is unclassified until someone decides what it is."
+    },
+    {
       "path": "docs/design_doc/orchestrator/179-ledger-driven-manual-gate-freshness.md",
       "digest": "e56c5d306f87",
       "class": "meta",
