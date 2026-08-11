@@ -24,7 +24,19 @@ echo "Process Console UI QA"
   npm run test:coverage
   npm run test:e2e
   npm run build
-  npm audit
+  # --omit=dev, deliberately. This is the only npm audit in the repository, and
+  # it gates a release: `build` and `gui-build` reach this gate through
+  # release.yml's manual-gate-freshness job. Unscoped, it fails on advisories in
+  # devDependencies — measured at FR-165, three in undici reached only as
+  # jsdom -> undici, a test-time dependency that is not in the bundle. Those
+  # recur on upstream's schedule, which has nothing to do with whether this
+  # release is safe to cut, and a gate that is red for reasons unrelated to its
+  # subject is one people learn to route around.
+  #
+  # What ships is what this now asks about: `npm audit --omit=dev` reports 0
+  # today. Dev-tree advisories are not thereby unowned — .github/dependabot.yml
+  # covers /gui, so jsdom bumps arrive as PRs.
+  npm audit --omit=dev
 )
 
 (

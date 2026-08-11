@@ -150,9 +150,7 @@
         "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
         "exitStatus": 1,
         "worktreeDirty": false
-      },
-      "releaseBlocking": false,
-      "releaseBlockingReason": "Exempted by owner decision, 2026-08-12: its npm audit step fails on advisories in devDependencies (currently 3 in undici via jsdom; npm audit --omit=dev reports 0, so nothing vulnerable ships), and dev-only advisories recur on a schedule unrelated to any release. COST, recorded deliberately: this gate is `npm run test:coverage && npm run test:e2e && npm run build && npm audit`, so exempting it also removes the GUI vitest suite and Playwright e2e from release blocking - and ci.yml runs no vitest at all, leaving 120 GUI unit tests with no automated enforcement anywhere. Re-arm by scoping line 27 to `npm audit --omit=dev`, which gates what ships and passes today. See docs/ticket/20260812-node-version-unpinned-locally.md."
+      }
     },
     "scripts/qa/test-process-console-vertical-flow.sh": {
       "owner": "docs/qa/orchestrator/150-process-console-recovery-notifications-e2e.md",

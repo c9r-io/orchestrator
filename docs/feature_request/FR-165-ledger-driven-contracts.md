@@ -113,8 +113,8 @@ limits、~150 条停放项、多本 ledger JSON），但除 CI 预算外，没�
 | 门禁 | 裁定 |
 |---|---|
 | `test-process-console-metrics.sh` | ✅ 绿（本批唯一） |
-| `test-process-console-ui.sh` | ❌ npm audit（dev-only）→ 按 owner 决定豁免 |
-| `test-process-console-release.sh` | ❌ 仅因包裹 console-ui；其余 11 个子门禁全绿 |
+| `test-process-console-ui.sh` | ❌ npm audit（dev-only）→ 改为 `--omit=dev` 后重新武装，非豁免 |
+| `test-process-console-release.sh` | ❌ 仅因包裹 console-ui；其余 11 个子门禁全绿（随 console-ui 一并转绿） |
 | `test-slack-skill-automation-release.sh` | ❌ 仅因包裹 release-vertical |
 | `test-slack-dedicated-app-provisioning.sh` | ❌ 同上 |
 | `test-slack-managed-shared-oauth.sh` | ❌ 同上 |

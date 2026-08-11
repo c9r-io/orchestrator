@@ -145,6 +145,26 @@ The six failures have **two** root causes:
 - **`npm audit`, two gates.** Dev-only advisories (jsdom → undici);
   `--omit=dev` reports zero, so nothing vulnerable ships.
 
+  **Resolved rather than exempted.** The first pass took the cheap route and
+  gave `test-process-console-ui.sh` a `releaseBlocking: false`, which would have
+  worked and cost more than it looked: that gate is
+  `test:coverage && test:e2e && build && audit`, so exempting it to dodge one
+  step also removes the GUI vitest suite and Playwright e2e from release
+  blocking — and `ci.yml` runs no vitest, so nothing else covers them at all.
+  An exemption sized to a whole gate when the objection is to one line inside it
+  is the enumeration mistake in miniature: it takes out everything it happens to
+  contain.
+
+  Scoping line 27 to `npm audit --omit=dev` asks the question the gate is
+  actually for — is anything *shipping* vulnerable — and answers it green today,
+  so the gate re-arms and the four assertions around it go on blocking a
+  release. Dev-tree advisories keep an owner: `dependabot.yml` covers `/gui`.
+
+  The general form is worth keeping: when a composite gate is red for one
+  reason, fix the reason's scope, not the gate's blocking status. The exemption
+  mechanism exists for gates that *cannot* run before a release, not for gates
+  that are inconvenient.
+
 The first of those is the change justifying itself on a real object.
 `test-slack-skill-automation-vertical.sh` has a recorded green run at `685525af`
 dated 2026-08-10, and `c1060338` broke it on 08-11. Under the recency-only
@@ -176,11 +196,10 @@ repository, inside one of the never-run gates. Both are in
   starts), and 5 failed on the two causes above. That is the intended pressure
   rather than an oversight, but it is a real cost and it lands on whoever cuts
   the next tag.
-- The exemption for `test-process-console-ui.sh` is an owner decision recorded
-  with its price: it removes the GUI vitest suite and Playwright e2e from
-  release blocking to avoid dev-only `npm audit` noise, and `ci.yml` covers
-  neither. `npm audit --omit=dev` on line 27 would re-arm the gate and pass
-  today; that path is left open deliberately.
+- `npm audit` appears exactly once in the repository, inside this gate, so the
+  npm supply chain has no other enforced check. It is now scoped `--omit=dev`
+  (see below); dev-tree advisories are owned by Dependabot rather than by a
+  release gate.
 - Nothing yet asserts that a *non*-manual gate does not arm the runlog.
   `test-qa-gate-surface.sh` asserts the forward direction — every manual gate
   arms it — and FR-165 removed one ci-required gate that had picked up the
