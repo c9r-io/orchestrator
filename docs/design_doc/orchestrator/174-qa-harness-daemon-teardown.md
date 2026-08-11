@@ -18,6 +18,20 @@ related_fr: FR-160
 pidfile 释放，仅重启站点传入）。超时数值**引自 FR-159/DD-171，未重新推导**。
 库不装任何 trap，与 `gate_runlog_arm` 的 trap 链任意次序组合。
 
+> **FR-163 追加了两个函数**（设计见 [DD-178](178-runtime-layout-single-source.md)，
+> 验证见 [QA 215](../../qa/orchestrator/215-connectivity-path-single-source.md) S4 与
+> [QA 216](../../qa/orchestrator/216-daemon-readiness-and-connection-semantics.md) S1/S2）：
+>
+> - `gate_daemon_wait_ready`（CLI 路径 [, 超时秒数]）——等到守护进程**能服务**为止，
+>   而不只是"能应答"。它替换了 24 处手抄的 `task list` 轮询；默认超时取被替换的
+>   五种预算里最宽的一个，所以没有门禁的等待因此变短。
+> - `gate_daemon_kill_hard`（PID）——**受控的崩溃停机**，只发 SIGKILL。给那些以
+>   "不干净退出留下什么"为主语的门禁用；`gate_daemon_stop` 的 SIGTERM 会让守护进程
+>   自行清理 socket 与 pidfile，正是这类门禁需要留下的残骸。它放在库里而不是调用方
+>   里，是因为本文档所记的强制面（check 16）禁止在库外对守护进程 PID 发信号，
+>   而那条规则是对的：缺少契约里的某个信号时，正确的反应是把它加进契约，
+>   而不是把变量改名改到扫描器看不见为止。
+
 两条机制在实现过程中被测出，写进库的头部以防后人"简化"掉：
 
 1. **`kill -0` 对僵尸成功**。`$!` 形状的直接子进程死后在被收割前仍可被信号探测；

@@ -113,8 +113,7 @@ EOF
   echo $! > daemon.pid
 )
 DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
-gate_daemon_wait_ready "$ORCH" || true
-if ! "$ORCH" task list -o json >/dev/null 2>&1; then
+if ! gate_daemon_wait_ready "$ORCH"; then
   echo "isolated daemon failed to start" >&2
   sed 's/^/  /' "$QA_ROOT/daemon.log" >&2
   exit 1

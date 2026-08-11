@@ -11,9 +11,9 @@
       "owner": "docs/qa/orchestrator/164-agent-driver-abstraction.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "549c0b67f6b97711b6deef39538057987d574116",
-        "exitStatus": 0,
-        "worktreeDirty": false
+        "revision": "4c13b90ac20eae5e1914ff8990f9ab5cf0ab8ed1",
+        "exitStatus": 1,
+        "worktreeDirty": true
       }
     },
     "scripts/qa/test-agent-session-control-plane.sh": {
@@ -29,7 +29,7 @@
       "owner": "docs/qa/orchestrator/143-attention-inbox.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "69b1812e7e33b37eb5af00bf52fa6d397944fa91",
+        "revision": "4c13b90ac20eae5e1914ff8990f9ab5cf0ab8ed1",
         "exitStatus": 0,
         "worktreeDirty": true
       }
@@ -74,7 +74,7 @@
       "owner": "docs/qa/orchestrator/213-failure-visibility-contract.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "69b1812e7e33b37eb5af00bf52fa6d397944fa91",
+        "revision": "4c13b90ac20eae5e1914ff8990f9ab5cf0ab8ed1",
         "exitStatus": 0,
         "worktreeDirty": true
       }
@@ -148,7 +148,7 @@
       "owner": "docs/qa/orchestrator/142-process-timeline-read-model.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "69b1812e7e33b37eb5af00bf52fa6d397944fa91",
+        "revision": "4c13b90ac20eae5e1914ff8990f9ab5cf0ab8ed1",
         "exitStatus": 0,
         "worktreeDirty": true
       }

@@ -101,7 +101,10 @@ echo "[fr013] starting secure daemon in $QA_ROOT"
 DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
 # First boot on a fresh dir runs every migration; wait for the CLI to actually
 # reach the daemon rather than sleeping a fixed guess.
-gate_daemon_wait_ready "$ORCH" || true
+# No `|| true`: this gate had no readiness guard at all before FR-163 — the old
+# loop fell through silently and the body ran against whatever was there. The
+# helper reports why, and `set -e` makes it stop.
+gate_daemon_wait_ready "$ORCH"
 
 echo "[fr013] applying fixture project"
 "$ORCH" apply \

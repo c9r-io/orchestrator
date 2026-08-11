@@ -70,7 +70,11 @@ printf '# Failure visibility deterministic target\n' > "$QA_ROOT/fixtures/qa/vis
 )
 DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
 
-gate_daemon_wait_ready "$ORCH" || true
+if ! gate_daemon_wait_ready "$ORCH"; then
+  echo "isolated daemon failed to start" >&2
+  cat "$QA_ROOT/daemon.log" >&2
+  exit 1
+fi
 # The key file is a second fact and stays a second wait. Readiness reports the
 # keyring as loaded from the database; this gate needs the file on disk, which
 # is what its later assertions read.
@@ -78,11 +82,6 @@ for _ in {1..20}; do
   [[ -f "$ORCHESTRATORD_DATA_DIR/secrets/secretstore.key" ]] && break
   sleep 0.25
 done
-if ! "$ORCH" task list -o json >/dev/null 2>&1; then
-  echo "isolated daemon failed to start" >&2
-  cat "$QA_ROOT/daemon.log" >&2
-  exit 1
-fi
 
 PROJECT="qa-fr162"
 DB="$QA_ROOT/data/agent_orchestrator.db"
