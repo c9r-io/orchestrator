@@ -27,7 +27,14 @@ related_fr: FR-050
 5. 回退 → UDS
 ```
 
-核心变化：步骤 3 在自动发现 home-dir 配置之前检查本地 socket 文件是否存在，避免在 daemon 明确在本地运行时还去尝试 TCP。
+核心变化：步骤 3 在自动发现 home-dir 配置之前检查本地 socket，避免在 daemon 明确在本地运行时还去尝试 TCP。
+
+> **FR-163 更新（见 [DD-178](178-runtime-layout-single-source.md)）**：步骤 3 原文为
+> "检查本地 socket **文件是否存在**"，现已改为**连接探测**。存在性判据会把崩溃的
+> daemon 留下的 inode 认作活着的 daemon，从而截住发现链——本文档修的是镜像方向，
+> 这是残余。步骤 4 的路径本文档一直写对（`~/.orchestrator/control-plane/config.yaml`）；
+> 走偏的是代码，它去找的是 `~/.orchestratord/...`，差一个字符，该分支从未生效过。
+> 两处均已在 FR-163 第一轮修复，本文档的其余部分依然是活的路径。
 
 ### 实现细节
 

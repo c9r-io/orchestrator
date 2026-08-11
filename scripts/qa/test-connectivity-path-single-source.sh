@@ -108,6 +108,55 @@ else
 fi
 restore "$VICTIM"
 
+# ── 2b. A name carrying a trailing path segment must be named too ────────────
+# The miss that the FR-163 closure self-check found *after* this gate had
+# reported the tree clean: an exact-literal ruler sees join("control-plane") and
+# not join("control-plane/uds-policy.yaml"), though they are the same
+# duplication. Without this case the widening that fixed it is untested.
+cat >>"$TREE/$VICTIM" <<'RUST'
+
+pub fn fixture_composite_spelling(data_dir: &Path) -> PathBuf {
+    data_dir.join("control-plane/uds-policy.yaml")
+}
+RUST
+if run_gate "$WORK/composite.log"; then
+  fail "a spelling of control-plane carrying a trailing path segment did not trip the gate"
+elif grep -qF "$VICTIM" "$WORK/composite.log" &&
+  grep -qF "control-plane dir name" "$WORK/composite.log"; then
+  pass "a layout name carrying a trailing path segment is named as a second spelling"
+else
+  fail "the gate failed, but not with the control-plane diagnostic naming $VICTIM:"
+  sed 's/^/    /' "$WORK/composite.log" >&2
+fi
+restore "$VICTIM"
+
+# ── 2c. A near-miss sibling must NOT be named ────────────────────────────────
+# The other half of the same repair, and the half that costs nothing until
+# someone writes the file that trips it. `.orchestrator/artifacts` is the agent
+# artifacts directory under a workspace root — a different concept sharing a
+# prefix with the client bundle directory under $HOME. Widening the client-dir
+# matcher the way control-plane was widened swept in three real sites. A fixture
+# that only proves the under-reach is fixed cannot see the over-reach at all.
+#
+# Measured, so the record says which guard actually fires: applying that naive
+# widening today fails the **before-run** above, because those three sites are
+# in the tree right now. This case is the guard for the day they are not — the
+# before-run would go green again and only this would notice. Both are kept;
+# neither is redundant, and it matters which one reports.
+cat >>"$TREE/$VICTIM" <<'RUST'
+
+pub fn fixture_near_miss_sibling(root: &Path) -> PathBuf {
+    root.join(".orchestrator/artifacts")
+}
+RUST
+if run_gate "$WORK/sibling.log"; then
+  pass "a near-miss sibling of the client directory is not counted as a spelling"
+else
+  fail "an unrelated .orchestrator/artifacts path tripped the gate — the client-dir matcher over-reaches:"
+  sed 's/^/    /' "$WORK/sibling.log" >&2
+fi
+restore "$VICTIM"
+
 # ── 3. The canonical definition going out of scope must trip the mirror ──────
 # The failure mode a presence-only gate cannot see: nothing spells the name
 # twice, because nothing spells it at all any more. Moving the file out of the

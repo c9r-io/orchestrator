@@ -69,13 +69,28 @@ REPO_ROOT = Pathname.new(File.expand_path("../..", __dir__))
 
 # One entry per fact about the layout. Each pattern is matched against raw source
 # at a position the masked copy has established is code.
+#
+# Each allows the name to carry a trailing path segment inside the same literal,
+# because `join("control-plane/uds-policy.yaml")` is the same duplication as
+# `join("control-plane")` and the exact-literal form of this ruler missed it —
+# found by the FR-163 closure self-check, in `crates/daemon/src/main.rs`, after
+# this gate had already reported the tree clean.
+#
+# `client dir name` is the exception and is deliberately *not* widened the same
+# way. Widening it swept in three `join(".orchestrator/artifacts")` sites, which
+# are the agent artifacts directory under a *workspace root* — a different
+# concept that merely shares a prefix with the client bundle directory under
+# `$HOME`. So this one matches the bare constant, or the control-plane bundle
+# specifically. Both errors are silent and the second is created by curing the
+# first (§4.4 shape 10): after widening a matcher to include what it was
+# missing, ask what it now includes that you did not name.
 LAYOUT_NAMES = {
-  "data dir name" => /"\.orchestratord"/,
-  "socket file name" => /"orchestrator\.sock"/,
-  "database file name" => /"agent_orchestrator\.db"/,
-  "pid file name" => /"daemon\.pid"/,
-  "control-plane dir name" => /"control-plane"/,
-  "client dir name" => /"\.orchestrator"/,
+  "data dir name" => %r{"\.orchestratord(/[^"]*)?"},
+  "socket file name" => %r{"([^"]*/)?orchestrator\.sock"},
+  "database file name" => %r{"([^"]*/)?agent_orchestrator\.db"},
+  "pid file name" => %r{"([^"]*/)?daemon\.pid"},
+  "control-plane dir name" => %r{"control-plane(/[^"]*)?"},
+  "client dir name" => %r{"\.orchestrator"|"\.orchestrator/control-plane(/[^"]*)?"},
   "data dir env var" => /"ORCHESTRATORD_DATA_DIR"/,
 }.freeze
 

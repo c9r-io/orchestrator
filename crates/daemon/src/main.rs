@@ -877,11 +877,11 @@ fn main() -> Result<()> {
         let uds_policy = match uds_policy {
             Some(p) => Some(p),
             None => {
-                let policy_path = args
-                    .control_plane_dir
-                    .as_deref()
-                    .map(|d| d.join("uds-policy.yaml"))
-                    .unwrap_or_else(|| inner.data_dir.join("control-plane/uds-policy.yaml"));
+                let policy_path = agent_orchestrator::paths::control_plane_dir(
+                    &inner.data_dir,
+                    args.control_plane_dir.as_deref(),
+                )
+                .join("uds-policy.yaml");
                 info!(
                     role = %args.uds_max_role.as_str(),
                     "UDS policy: no uds-policy.yaml found; using --uds-max-role default. \
