@@ -33,13 +33,27 @@ Use `orchestratord` + `orchestrator` as the only supported runtime model.
 
 The daemon owns the SQLite database, task queue, and worker pool. Keep it running in one terminal and use the CLI client from another terminal.
 
-## Step 3: Initialize the Database
+Starting the daemon is what creates the SQLite schema at
+`~/.orchestratord/agent_orchestrator.db` (override the location with
+`ORCHESTRATORD_DATA_DIR`). It runs every pending migration before it accepts a
+single connection, so there is nothing to initialize by hand.
+
+## Step 3: Wait Until the Daemon Can Serve
 
 ```bash
-./target/release/orchestrator init
+./target/release/orchestrator daemon status --wait-ready
+# orchestratord is ready (migrations=ready (38/38), keyring=ready (active key primary), workers=ready (2/2 started))
 ```
 
-This creates the SQLite schema at `~/.orchestratord/agent_orchestrator.db` (override with `ORCHESTRATORD_DATA_DIR`). It does **not** load any configuration; that comes next.
+Optional when you are typing commands yourself — by the time you have switched
+terminals the daemon is ready. Worth knowing for scripts: the socket accepts
+connections slightly before the worker pool has registered, so a script that
+starts the daemon and immediately creates a task can watch nothing pick it up.
+
+> **Earlier versions of this guide ran `orchestrator init` here** and said it
+> created the schema. It did not: `init` is an RPC to a running daemon, so it
+> could not run before one existed, and a running daemon had already migrated.
+> The command still exists and is harmless; it is simply not a setup step.
 
 ## Step 4: Read the Manifest
 

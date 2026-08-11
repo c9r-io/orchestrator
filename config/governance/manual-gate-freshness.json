@@ -52,6 +52,10 @@
         "worktreeDirty": false
       }
     },
+    "scripts/qa/test-daemon-readiness.sh": {
+      "owner": "docs/qa/orchestrator/216-daemon-readiness-and-connection-semantics.md",
+      "lastRun": null
+    },
     "scripts/qa/test-expert-resources-governed-editing.sh": {
       "owner": "docs/qa/orchestrator/169-expert-resources-governed-editing.md",
       "lastRun": {

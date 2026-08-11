@@ -5,7 +5,7 @@ related_fr: FR-163
 
 # DD-178: 运行时布局的单一派生，与陈旧 socket 的连接级探测
 
-**Status**: Released（FR-163 需求 1、2；需求 3、4 待第二轮）
+**Status**: Released（FR-163 全部四项需求；需求 3、4 见文末"第二轮"）
 
 ## 问题
 
@@ -136,6 +136,73 @@ e5977135 加的 env 压制**一并删除**——那个 env 读的存在只是为
 不在了的那一天——那时 before-run 会重新变绿，只剩这条能发现。两条都留着，
 谁报出来是不一样的信息。
 
+## 第二轮：就绪信号与连接语义（需求 3、4）
+
+### 就绪不是存活，`task list` 是代理指标
+
+治理前实测：**24 处轮询散在 23 个门禁**里，全是同样五行的手抄件，
+超时预算各执一词——7.5s×1、10s×4、15s×6、20s×12、25s×1，没有一个是推导出来的。
+比数字更重的是两点：
+
+1. `task list` 在**套接字接受连接的那一刻**就成功。worker supervisor 虽然在 bind
+   前约 560 行就已 spawn（`main.rs:431` vs `main.rs:992`），每个 worker 却是**异步注册**
+   的——门禁可以创建出任务，然后眼看着没有人来领。这是套接字探测**看不见**的窗口。
+2. `&& break` 在循环耗尽时**静默继续**，门禁于是拿一个没起来的 daemon 跑完整个正文，
+   在更下游失败，指认错误的对象。
+
+### 决策：`Health` RPC + `daemon status --wait-ready` + `gate_daemon_wait_ready`
+
+`Health` **聚合既有的** `DbStatus`/`SecretKeyStatus`/`WorkerStatus`，自身不测量任何东西
+——关于"迁移是否已到位"的第二种意见，正是第一轮花力气消除的东西。
+子系统读不出来时报告为未就绪并把错误放进 detail，**不变成 RPC 失败**：
+调用方问的是"你能服务了吗"，用传输错误回答会让"keyring 读不出来"与"daemon 没了"
+无法区分——而这恰恰是本端点存在的意义。
+
+`configured_workers == 0` 按定义即就绪：只读 daemon 是操作者的正当选择，
+否则那会变成一个永远等不到头的等待。
+
+角色定为 **ReadOnly**，且单测说明了为什么这件事重要而不只是断言它：
+角色表的**未映射分支默认 Admin**，漏登记的 RPC 不会报错，它会拿到那个让就绪探针
+对所有需要它的调用方都失效的角色。测试因此同时断言 `Health` 与一个不存在的 RPC
+**角色不同**——否则"等于 ReadOnly"在默认值恰好是 ReadOnly 的那天也会通过。
+
+helper 的默认超时取它所替代的**五种预算里最宽的那个**，所以没有任何门禁的等待
+变短了，这次迁移不可能引入原本不存在的 flake。
+
+`crates/integration-tests` 的服务替身**刻意返回 Unimplemented**：会作答的替身按构造
+永远"就绪"，而对着一个不可能不就绪的替身断言就绪契约，等于什么都没断言
+（与 FR-164 的审计断言不能写在那里是同一个理由）。
+
+### 24 处收编，两处刻意保留差异
+
+23 处走 `gate_daemon_wait_ready`，1 处直接调用 `daemon status --wait-ready`：
+`test-slack-reaction-task-routing.sh` 需要携带传输覆盖，去探测与 TCP daemon
+共用数据目录的那个 UDS 实例，覆盖被**带进**了就绪调用而不是丢掉。
+`test-failure-visibility.sh` 另外等待磁盘上的密钥文件——就绪报告的是从数据库加载的
+keyring，而该门禁后续断言读的是文件，这是**第二个事实**，保留为第二个等待。
+
+### 需求 4：三个主题进用户指南（EN+ZH）
+
+`ORCHESTRATOR_SOCKET` 治理前在 `docs/guide/` 出现 **0 次**；`--bind` 只有一行
+"默认：Unix 套接字"，读起来像叠加。现在 EN/ZH 各有：发现顺序 1–5 表格、
+`ORCHESTRATOR_SOCKET` 的含义与**第 1 步刻意不做连接探测**的理由
+（显式指定传输方式是操作者的选择，因为它恰好没起来就静默改道，等于把配置藏起来）、
+`--bind` 与 UDS **互斥**（标志表那一行也已改写）、以及陈旧 socket 的自救。
+
+quickstart 的假陈述已订正：**创建表结构的是第 2 步启动 daemon**，
+原第 3 步 `init` 替换为 `daemon status --wait-ready`，并保留一段说明**为什么旧写法是错的**
+——`init` 是发往运行中 daemon 的 RPC，daemon 不存在时跑不起来，存在时早已迁移完。
+命令本身仍在且无害，它只是从来不是一个安装步骤。
+
+### 第二轮自己踩到的一个坑
+
+抽样验证迁移后的门禁时，用了
+`echo "$(basename $g): rc=$?"`——`$(basename …)` 的命令替换会**先执行并重置 `$?`**，
+于是读到的永远是 0，四个门禁全部"通过"。这正是 skill §4.6.4"直接捕获退出码"
+所防的东西，而它当时正作用在认证者自己身上。同一次误读还掩盖了另一件事：
+门禁用的是 `target/debug` 而我只重建了 `target/release`，真实状态是"命令行旗标不存在"。
+**退出码必须在命令之后立即捕获到变量里**，不能放进任何命令替换的同一行。
+
 ## 已知边界
 
 - `discover_socket_path` 的 `ORCHESTRATOR_SOCKET` 分支是**具名保留**的第二个入口。
@@ -148,9 +215,8 @@ e5977135 加的 env 压制**一并删除**——那个 env 读的存在只是为
   门禁最后一项检查会在排除被解除后重扫，若有拼写被藏住即失败。首次运行时它确实
   报出了 `core/src/test_utils.rs`——该文件已改为调用 helper，而不是被豁免。
 - 门禁只覆盖 UDS 与 TLS 两条发现分支的落点，不验证 TLS 之后的 RBAC 语义（QA-58 承担）。
-- 需求 3（就绪信号）与需求 4（连接语义文档）未做。就绪信号的形状已定：一个聚合
-  `DbStatus`/`SecretKeyStatus`/`WorkerStatus` 的 gRPC `Health` RPC，加
-  `orchestrator daemon status --wait-ready` 与 `gate_daemon_wait_ready`，
-  用于收编 24 处手抄轮询（23 个门禁、5 种超时预算 7.5s–25s）。
-  step 0 已澄清 `daemon status` **不走 gRPC**（读 pidfile + `kill -0`），
-  FR 原稿列为未核验项的"鸡蛋问题"不存在。
+- `Health` 的 RBAC 层级由角色表单测钉住，不由门禁验证：门禁级检查需要 control-plane
+  材料，绕更远的路证明同一件事。未映射分支默认 Admin 是这条的要害。
+- 就绪只覆盖 migrations / keyring / workers 三项。Slack gateway、fs_watcher、
+  trigger engine 未入列——它们不是"任务能否被领走"的前置条件，把它们加进来会让
+  就绪等待被无关子系统卡住。新增子系统时，`serving` 由服务端聚合，调用方不必改。

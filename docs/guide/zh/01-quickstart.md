@@ -33,13 +33,25 @@ cargo build --workspace --release
 
 daemon 负责持有 SQLite、任务队列和 worker 池。保持它在一个终端中运行，再在另一个终端中使用 CLI 客户端。
 
-## 第三步：初始化数据库
+**创建 SQLite 表结构的正是启动 daemon 这一步**（位置为
+`~/.orchestratord/agent_orchestrator.db`，可通过 `ORCHESTRATORD_DATA_DIR` 覆盖）。
+daemon 在接受任何一个连接之前就已经跑完全部待执行迁移，因此没有需要手工初始化的东西。
+
+## 第三步：等待 daemon 可以服务
 
 ```bash
-./target/release/orchestrator init
+./target/release/orchestrator daemon status --wait-ready
+# orchestratord is ready (migrations=ready (38/38), keyring=ready (active key primary), workers=ready (2/2 started))
 ```
 
-这会在 `~/.orchestratord/agent_orchestrator.db` 创建 SQLite 表结构（可通过 `ORCHESTRATORD_DATA_DIR` 覆盖）。注意：此命令不会加载任何配置，配置在下一步完成。
+手动敲命令时这步可省略——等你切换完终端，daemon 早就绪了。写脚本时值得知道：
+套接字接受连接的时刻略早于 worker 池注册完成，所以"启动 daemon 后立刻创建任务"
+的脚本可能会看着任务没有人领。
+
+> **本指南早期版本在这里放的是 `orchestrator init`**，并声称它创建表结构。
+> 事实并非如此：`init` 是一次发往运行中 daemon 的 RPC，因此在 daemon 存在之前
+> 根本跑不起来，而运行中的 daemon 早已完成迁移。该命令仍然存在且无害，
+> 只是它不是一个安装步骤。
 
 ## 第四步：阅读清单文件
 

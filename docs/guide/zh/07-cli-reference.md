@@ -571,10 +571,78 @@ orchestrator agent session resolve --pid 1234 -o json      # diagnostic PID -> s
 
 ```bash
 orchestrator daemon status                    # 显示守护进程 PID 和状态
+orchestrator daemon status --wait-ready       # 阻塞直到守护进程可以服务
 orchestrator daemon stop                      # 向守护进程发送 SIGTERM
 orchestrator daemon maintenance --enable      # 阻止新任务创建
 orchestrator daemon maintenance --disable     # 恢复任务创建
 ```
+
+### 存活与就绪是两个问题
+
+`daemon status` 单独使用时读取 PID 文件并探测进程，**不建立任何连接**，
+因此即使守护进程已经无法服务它也答得出来——这正是它在诊断卡死实例时有用的原因。
+
+`--wait-ready` 问的是另一个问题：轮询直到每个子系统都报告就绪，然后以 0 退出。
+
+```bash
+orchestrator daemon status --wait-ready --timeout 30
+# orchestratord is ready (migrations=ready (38/38), keyring=ready (active key primary), workers=ready (2/2 started))
+```
+
+脚本里先启动守护进程、随后要干活的场合请用它。**套接字绑上了不等于守护进程能服务**：
+套接字在工作器池注册完成之前就已经接受连接，所以只等套接字的脚本可能创建了任务
+却看着没有任何人来领。报告的三个子系统是 migrations、keyring、workers，
+且**无论就绪与否都会逐个具名**。
+
+超时时命令以非零退出并打印它最后看到的状态，因此失败会说出是哪个子系统卡住了，
+而不只是"超时了"。
+
+## 连接到守护进程
+
+CLI 按以下顺序尝试传输方式，命中第一个可用的即停止：
+
+| 顺序 | 条件 | 传输 |
+|------|------|------|
+| 1 | 设置了 `ORCHESTRATOR_SOCKET` | 该路径的 Unix 套接字 |
+| 2 | 设置了 `--control-plane-config` 或 `ORCHESTRATOR_CONTROL_PLANE_CONFIG` | TCP/TLS |
+| 3 | 默认套接字**正在接受连接** | Unix 套接字 |
+| 4 | 存在 `~/.orchestrator/control-plane/config.yaml` | TCP/TLS |
+| 5 | 兜底 | Unix 套接字 |
+
+### `ORCHESTRATOR_SOCKET`
+
+直接指定守护进程套接字，覆盖默认位置。设置它是**对传输方式的显式选择**：
+第 1 步在该套接字不可用时**不会**继续落到 TLS——把操作者自己的配置静默改道，
+等于把它藏起来。想让发现流程正常运行，就不要设置它。
+
+不设置时，套接字路径由数据目录推出——`$ORCHESTRATORD_DATA_DIR/orchestrator.sock`，
+该变量未设时为 `~/.orchestratord/orchestrator.sock`。
+
+### `--bind` 会**关闭** Unix 套接字
+
+`orchestratord --bind <addr>` 与 Unix 套接字**互斥**，不是叠加。带 `--bind` 启动的
+守护进程只提供 TCP/TLS，**不会绑定任何套接字**，本地 CLI 找不到它，必须通过
+control-plane 配置（第 2 或第 4 步）才能连上。本地使用 Unix 套接字时请不要加 `--bind`。
+
+### 陈旧套接字的自救
+
+守护进程在 bind 时会清理套接字，正常关停时也会清理；但崩溃或 `kill -9` 会把文件留下。
+CLI **以连接探测**而非"文件是否存在"来判断，因此残留的套接字不会截住发现链——
+它会继续落到第 4 步，去找已配置的 TLS 控制面。
+
+当没有其他可用传输时，错误会指名实际情况，而不是笼统地怪守护进程没在跑：
+
+```
+failed to connect to daemon at ~/.orchestratord/orchestrator.sock after 3 attempts.
+The socket exists but nothing is listening at ~/.orchestratord/orchestrator.sock —
+the daemon that created it exited without cleaning up, which is what a crash or
+SIGKILL leaves behind.
+  Start it with: orchestratord --foreground --workers 2
+  Or remove the stale socket: rm ~/.orchestratord/orchestrator.sock
+```
+
+启动一个新的守护进程就够了——它 bind 时会自行清理这个陈旧文件。
+只有在你不打算再启动守护进程时，才需要手动删除。
 
 ## 事件生命周期
 
@@ -895,7 +963,7 @@ orchestrator tool secret-rotate <store> <key> --value <new_value> [--project <id
 | 标志 | 说明 |
 |------|------|
 | `--foreground`, `-f` | 前台运行（不后台化） |
-| `--bind <addr>` | TCP 绑定地址（默认：Unix 套接字） |
+| `--bind <addr>` | TCP 绑定地址。**与 Unix 套接字互斥**——带 `--bind` 启动的守护进程只提供 TCP/TLS，不绑定任何套接字。本地使用 Unix 套接字时请省略它。参见[连接到守护进程](#连接到守护进程)。 |
 | `--workers <N>` | 后台工作器数量（默认：1） |
 | `--insecure-bind <addr>` | 用于开发的不安全 TCP 绑定（feature-gated：`dev-insecure`） |
 | `--control-plane-dir <DIR>` | 控制面板证书目录 |
@@ -1041,7 +1109,7 @@ orchestrator metrics prune [--retention-days <n>]
 orchestrator metrics rebuild --project <id>
 
 # 守护进程生命周期
-orchestrator daemon status|stop
+orchestrator daemon status [--wait-ready [--timeout <secs>]]|stop
 orchestrator daemon maintenance --enable|--disable
 
 # QA 与工具

@@ -572,10 +572,89 @@ orchestrator agent session resolve --pid 1234 -o json      # diagnostic PID -> s
 
 ```bash
 orchestrator daemon status                    # show daemon PID and status
+orchestrator daemon status --wait-ready       # block until the daemon can serve
 orchestrator daemon stop                      # send SIGTERM to daemon
 orchestrator daemon maintenance --enable      # block new task creation
 orchestrator daemon maintenance --disable     # allow task creation again
 ```
+
+### Liveness and readiness are different questions
+
+`daemon status` on its own reads the PID file and probes the process. It never
+opens a connection, so it answers even when the daemon cannot serve — which is
+what makes it useful for diagnosing one that is stuck.
+
+`--wait-ready` asks the other question. It polls the daemon until every
+subsystem reports ready and then exits 0:
+
+```bash
+orchestrator daemon status --wait-ready --timeout 30
+# orchestratord is ready (migrations=ready (38/38), keyring=ready (active key primary), workers=ready (2/2 started))
+```
+
+Use it in scripts that start the daemon and then do work. **A bound socket is
+not a daemon that can serve**: the socket accepts connections before the worker
+pool has finished registering, so a script that waits for the socket can create
+a task and watch nothing pick it up. The three subsystems reported are
+migrations, keyring and workers, and each is named whether it is ready or not.
+
+On timeout the command exits non-zero and prints the last thing it saw, so a
+failed wait says which subsystem was holding it up rather than only that time
+ran out.
+
+## Connecting to the daemon
+
+The CLI picks a transport by trying these in order, and stops at the first that
+works:
+
+| Order | Condition | Transport |
+|-------|-----------|-----------|
+| 1 | `ORCHESTRATOR_SOCKET` is set | Unix socket at that path |
+| 2 | `--control-plane-config` or `ORCHESTRATOR_CONTROL_PLANE_CONFIG` is set | TCP/TLS |
+| 3 | The default socket is **accepting connections** | Unix socket |
+| 4 | `~/.orchestrator/control-plane/config.yaml` exists | TCP/TLS |
+| 5 | Fallback | Unix socket |
+
+### `ORCHESTRATOR_SOCKET`
+
+Names the daemon socket outright, overriding the default location. Setting it is
+an explicit choice of transport: step 1 does not fall through to TLS if that
+socket is down, because silently rerouting an operator's own configuration hides
+it from them. Unset it to let discovery run normally.
+
+Without it, the socket path is derived from the data directory —
+`$ORCHESTRATORD_DATA_DIR/orchestrator.sock`, or `~/.orchestratord/orchestrator.sock`
+when that variable is unset.
+
+### `--bind` turns the Unix socket **off**
+
+`orchestratord --bind <addr>` and the Unix socket are **mutually exclusive**, not
+additive. A daemon started with `--bind` serves TCP/TLS only; there is no socket
+for a local CLI to find, and the CLI needs a control-plane config (step 2 or 4)
+to reach it. Start the daemon without `--bind` for local Unix-socket use.
+
+### Recovering from a stale socket
+
+The daemon removes its socket when it binds and again on a clean shutdown, but a
+crash or `kill -9` leaves the file behind. The CLI probes by connecting rather
+than by checking that the file exists, so a leftover socket does not capture the
+discovery chain — it falls through to step 4 and a TLS control plane, if one is
+configured.
+
+If nothing else can serve, the error names the situation rather than blaming a
+missing daemon:
+
+```
+failed to connect to daemon at ~/.orchestratord/orchestrator.sock after 3 attempts.
+The socket exists but nothing is listening at ~/.orchestratord/orchestrator.sock —
+the daemon that created it exited without cleaning up, which is what a crash or
+SIGKILL leaves behind.
+  Start it with: orchestratord --foreground --workers 2
+  Or remove the stale socket: rm ~/.orchestratord/orchestrator.sock
+```
+
+Starting a new daemon is enough — it removes the stale file when it binds.
+Deleting it by hand is only needed if you do not intend to start one.
 
 ## Event Lifecycle
 
@@ -900,7 +979,7 @@ The daemon binary that runs the gRPC server and embedded background workers.
 | Flag | Description |
 |------|-------------|
 | `--foreground`, `-f` | Run in foreground (don't daemonize) |
-| `--bind <addr>` | TCP bind address (default: Unix socket) |
+| `--bind <addr>` | TCP bind address. **Mutually exclusive with the Unix socket** — a daemon started with `--bind` serves TCP/TLS only and binds no socket. Omit it for local Unix-socket use. See [Connecting to the daemon](#connecting-to-the-daemon). |
 | `--workers <N>` | Number of background workers (default: 1) |
 | `--insecure-bind <addr>` | Insecure TCP bind for development (feature-gated: `dev-insecure`) |
 | `--control-plane-dir <DIR>` | Control plane certificate directory |
@@ -1050,7 +1129,7 @@ orchestrator metrics prune [--retention-days <n>]
 orchestrator metrics rebuild --project <id>
 
 # Daemon lifecycle
-orchestrator daemon status|stop
+orchestrator daemon status [--wait-ready [--timeout <secs>]]|stop
 orchestrator daemon maintenance --enable|--disable
 
 # QA & tools

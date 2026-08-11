@@ -1142,6 +1142,12 @@
       "enforcement": "manual-runbook",
       "reason": "starts and hard-kills orchestratord instances and binds a TCP control-plane port, so it needs release binaries and a machine where a daemon may crash",
       "owner": "docs/qa/orchestrator/215-connectivity-path-single-source.md"
+    },
+    {
+      "path": "scripts/qa/test-daemon-readiness.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance and races a waiter against it, so it needs built binaries and a machine where a daemon may be started and stopped",
+      "owner": "docs/qa/orchestrator/216-daemon-readiness-and-connection-semantics.md"
     }
   ]
 }

@@ -1667,9 +1667,22 @@ fn daemon_entries() -> Vec<GuideEntry> {
             command: "daemon status",
             alias: None,
             category: GuideCategory::SystemAdmin,
-            summary: "Show daemon status",
-            description: "Check whether the daemon is running and display its PID.",
-            examples: &[("orchestrator daemon status", "Check daemon status")],
+            summary: "Show daemon status, or wait until it can serve",
+            description: "Without flags, reads the PID file and probes the process — no \
+                          connection, so it answers even for a daemon that cannot serve. \
+                          With --wait-ready, polls until migrations, keyring and workers all \
+                          report ready. A bound socket is not a daemon that can serve: the \
+                          socket accepts connections before the worker pool has registered.",
+            examples: &[
+                (
+                    "orchestrator daemon status",
+                    "Check whether the daemon is running",
+                ),
+                (
+                    "orchestrator daemon status --wait-ready --timeout 30",
+                    "Block until the daemon can serve, for scripts that start it",
+                ),
+            ],
         },
         GuideEntry {
             command: "daemon maintenance",
