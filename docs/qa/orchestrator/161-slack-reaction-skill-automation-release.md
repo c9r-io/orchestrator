@@ -186,7 +186,7 @@ The feature is reachable from visible primary navigation through "Sources" → "
 ### Expected
 
 - A new operator can configure two badge automations and identify every normal/error state from the guide alone.
-- Normal rollback is forward-only and never deletes created tasks or additive source data.
+- Normal rollback is forward-only and never deletes created tasks or additive source data, per the contract in `crates/orchestrator-persistence/src/migration.rs`.
 - Logs contain stable gate/state diagnostics only; failure retention does not weaken the privacy boundary.
 - Documentation lint and the CLI guide-contract gate pass.
 

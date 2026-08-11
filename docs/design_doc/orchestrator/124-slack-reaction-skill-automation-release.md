@@ -70,7 +70,7 @@ The governed release interfaces are:
 - `KEEP_QA=1` — retain the isolated vertical fixture for diagnosis;
 - the existing `/source/slack/{project}/{trigger}` signed Slack endpoint and existing source automation CLI/Tauri contracts.
 
-Migrations 33 and 34 remain additive and forward-only. Migration 33 adds the durable route identity and frozen template/binding evidence. Migration 34 adds generation, optimistic version, retry/lease state, attempt/change history, and Attention correlation. The release regression seeds a populated migration-33 route, applies migration 34, and verifies status normalization plus generation/change backfill.
+Migrations 33 and 34 remain additive and forward-only, under the contract in `crates/orchestrator-persistence/src/migration.rs`. Migration 33 adds the durable route identity and frozen template/binding evidence. Migration 34 adds generation, optimistic version, retry/lease state, attempt/change history, and Attention correlation. The release regression seeds a populated migration-33 route, applies migration 34, and verifies status normalization plus generation/change backfill.
 
 ## Key Design
 
@@ -88,7 +88,7 @@ Migrations 33 and 34 remain additive and forward-only. Migration 33 adds the dur
 - A single monolithic release script would be easier to invoke but would hide slice ownership and duplicate mature assertions. A small coordinator plus a dedicated vertical fixture keeps failure attribution explicit.
 - Mock-only GUI coverage would be faster but would not prove Tauri serialization or gRPC role projections. The release includes both fast Playwright mocks and one real Tauri boundary.
 - Simulating rollback with only a migration prefix would avoid an extra build but would not prove an actual compatible old executable can open retained additive data. The release builds a pinned repository commit in an isolated worktree.
-- Restoring a database backup for normal rollback would reduce version mismatch concerns but would discard post-backup tasks and source evidence. Normal rollback is therefore forward-only; restore is reserved for migration failure or corruption.
+- Restoring a database backup for normal rollback would reduce version mismatch concerns but would discard post-backup tasks and source evidence. Normal rollback is therefore forward-only; restore is reserved for migration failure or corruption. This is clause 3 of the contract in `crates/orchestrator-persistence/src/migration.rs`, and this bullet records the tradeoff it was chosen over.
 
 ## Risks And Mitigations
 

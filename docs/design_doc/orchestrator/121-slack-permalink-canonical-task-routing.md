@@ -155,7 +155,7 @@ Recommended rollout:
 3. Validate template preview and binding simulation.
 4. Set `reactionRouting: bindings` and observe one test badge through Sources and `source route`.
 
-Rollback sets `reactionRouting: disabled`. Existing tasks, route evidence, and protected links remain inspectable; new reactions stop before reservation/provider/task work. Migration 33 is additive and forward-only, so binary rollback must retain the upgraded database.
+Rollback sets `reactionRouting: disabled`. Existing tasks, route evidence, and protected links remain inspectable; new reactions stop before reservation/provider/task work. Migration 33 is additive and forward-only, so binary rollback must retain the upgraded database — the general rule, and the reason the retained database still serves the older binary, is in `crates/orchestrator-persistence/src/migration.rs`.
 
 ## Test Plan And Acceptance
 

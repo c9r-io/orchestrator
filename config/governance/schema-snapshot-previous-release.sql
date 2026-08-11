@@ -1,0 +1,158 @@
+-- The schema the previous release shipped, for the forward-only rollback
+-- contract's clause 2. The contract is stated in
+-- crates/orchestrator-persistence/src/migration.rs.
+--
+-- This is not a second baseline to keep in step with the chain; it is a frozen
+-- record of what the *older binary* knows how to read.
+-- previous_release_schema_is_a_subset_of_current asserts that every table,
+-- column and index named below still exists in
+-- config/governance/schema-snapshot.sql. Adding to the current schema is
+-- always allowed; removing anything the previous release knew about is what
+-- breaks a binary rollback, and is what that test fails on.
+--
+-- release: v0.5.0
+-- revision: 58166a9f6172fa2ea77ea36677ed0db94184beba
+-- taken: 2026-08-12
+--
+-- Refresh this at a release cut, never to make a failing test pass: rewriting
+-- it to match a removal is how the contract is lost. Regenerate with
+--   git show 'v<tag>^{commit}':config/governance/schema-snapshot.sql
+-- and update the three fields above in the same commit.
+CREATE INDEX idx_agent_sessions_pid_state ON agent_sessions(pid, state);
+CREATE INDEX idx_agent_sessions_state_updated ON agent_sessions(state, updated_at DESC);
+CREATE INDEX idx_agent_sessions_task_step_state ON agent_sessions(task_id, step_id, state);
+CREATE INDEX idx_attention_actions_item_created ON attention_actions(attention_item_id, created_at DESC);
+CREATE INDEX idx_attention_active_order ON attention_items(state, severity, updated_at DESC);
+CREATE INDEX idx_attention_changes_id ON attention_changes(id);
+CREATE INDEX idx_attention_changes_project_created ON attention_changes(project_id, created_at, id);
+CREATE INDEX idx_attention_project_state ON attention_items(project_id, state, updated_at DESC);
+CREATE INDEX idx_attention_source_route ON attention_items(source_route_id) WHERE source_route_id IS NOT NULL;
+CREATE INDEX idx_attention_task ON attention_items(task_id, updated_at DESC);
+CREATE INDEX idx_cfg_versions_version ON orchestrator_config_versions(version DESC);
+CREATE INDEX idx_command_runs_task_item_phase ON command_runs(task_item_id, phase);
+CREATE INDEX idx_command_runs_task_item_phase_started ON command_runs(task_item_id, phase, started_at DESC);
+CREATE INDEX idx_command_runs_validation_status ON command_runs(validation_status);
+CREATE INDEX idx_config_heal_log_version ON config_heal_log(version DESC);
+CREATE INDEX idx_control_action_audit_action_status ON control_action_audit(action, status, created_at DESC);
+CREATE INDEX idx_control_action_audit_actor_created ON control_action_audit(actor, created_at DESC);
+CREATE INDEX idx_control_action_audit_project_created ON control_action_audit(project_id, created_at DESC, request_id DESC);
+CREATE INDEX idx_control_action_audit_target_created ON control_action_audit(target_type, target_id, created_at DESC);
+CREATE INDEX idx_control_plane_audit_created_at ON control_plane_audit(created_at);
+CREATE INDEX idx_control_plane_audit_decision ON control_plane_audit(decision, created_at);
+CREATE INDEX idx_control_plane_audit_reason_code ON control_plane_audit(reason_code, created_at);
+CREATE INDEX idx_control_plane_audit_rejection_stage ON control_plane_audit(rejection_stage, created_at);
+CREATE INDEX idx_control_plane_audit_request_id ON control_plane_audit(request_id);
+CREATE INDEX idx_control_plane_audit_rpc ON control_plane_audit(rpc, created_at);
+CREATE INDEX idx_events_request_id ON events(request_id) WHERE request_id IS NOT NULL;
+CREATE INDEX idx_events_task_created_at ON events(task_id, created_at);
+CREATE INDEX idx_events_task_type_step ON events(task_id, event_type, step);
+CREATE INDEX idx_handoff_snapshots_task_cursor ON handoff_snapshots(task_id, source_event_cursor DESC, created_at DESC);
+CREATE INDEX idx_plugin_audit_crd_kind ON plugin_audit(crd_kind);
+CREATE INDEX idx_plugin_audit_created_at ON plugin_audit(created_at);
+CREATE INDEX idx_process_metric_observation_retention ON process_metric_observations(occurred_at);
+CREATE INDEX idx_process_metric_observation_window ON process_metric_observations(project_id, metric_name, occurred_at);
+CREATE INDEX idx_process_metric_projector_updated ON process_metric_projector_state(updated_at);
+CREATE INDEX idx_process_metric_rollup_window ON process_metric_rollups(project_id, bucket_seconds, bucket_start, metric_name);
+CREATE INDEX idx_resource_versions_lookup ON resource_versions(kind, project, name, version DESC);
+CREATE INDEX idx_resources_project ON resources(project);
+CREATE INDEX idx_resume_executions_plan_created ON resume_executions(plan_id, created_at DESC);
+CREATE INDEX idx_resume_plans_task_created ON resume_plans(task_id, created_at DESC);
+CREATE INDEX idx_secret_key_audit_created ON secret_key_audit(created_at);
+CREATE INDEX idx_secret_key_audit_key_id ON secret_key_audit(key_id, created_at);
+CREATE INDEX idx_secret_keys_state ON secret_keys(state);
+CREATE INDEX idx_session_attachments_session_attached ON session_attachments(session_id, attached_at DESC);
+CREATE INDEX idx_session_control_actions_session_created ON session_control_actions(session_id, created_at DESC);
+CREATE INDEX idx_source_automation_attempts_retention ON source_automation_route_attempts(completed_at) WHERE completed_at IS NOT NULL;
+CREATE INDEX idx_source_automation_attempts_route ON source_automation_route_attempts(route_id,generation,attempt_no DESC);
+CREATE INDEX idx_source_automation_changes_retention ON source_automation_route_changes(created_at);
+CREATE INDEX idx_source_automation_changes_route ON source_automation_route_changes(route_id,id DESC);
+CREATE INDEX idx_source_automation_routes_due ON source_automation_routes(status,next_attempt_at,lease_expires_at,created_at);
+CREATE INDEX idx_source_automation_routes_event ON source_automation_routes(source_event_id, created_at DESC);
+CREATE INDEX idx_source_automation_routes_filters ON source_automation_routes(project_id,provider,status,binding_name,created_at DESC,id DESC);
+CREATE INDEX idx_source_automation_routes_installation_lease ON source_automation_routes(installation_id,lease_expires_at) WHERE lease_token IS NOT NULL;
+CREATE INDEX idx_source_automation_routes_status ON source_automation_routes(status, lease_claimed_at);
+CREATE INDEX idx_source_automation_routes_task ON source_automation_routes(task_id) WHERE task_id IS NOT NULL;
+CREATE INDEX idx_source_bindings_lookup ON source_bindings(provider, installation_id, conversation_id, thread_id);
+CREATE INDEX idx_source_bindings_request_id ON source_bindings(request_id) WHERE request_id IS NOT NULL;
+CREATE INDEX idx_source_bindings_task ON source_bindings(task_id, created_at DESC);
+CREATE INDEX idx_source_command_actions_target ON source_command_actions(target_type, target_id, created_at DESC);
+CREATE INDEX idx_source_connection_changes_project ON source_connection_changes(project_id,id);
+CREATE INDEX idx_source_connection_changes_retention ON source_connection_changes(created_at);
+CREATE INDEX idx_source_connection_intents_project ON source_connection_intents(project_id,status,created_at DESC);
+CREATE INDEX idx_source_connection_provisioning_expiry ON source_connection_provisioning(status,expires_at);
+CREATE INDEX idx_source_connection_provisioning_project ON source_connection_provisioning(project_id,status,updated_at DESC,id DESC);
+CREATE INDEX idx_source_connection_provisioning_target ON source_connection_provisioning(project_id,target_connection_id,status);
+CREATE INDEX idx_source_connections_owner ON source_connections(owner_daemon_id,state);
+CREATE INDEX idx_source_connections_project ON source_connections(project_id,provider,state,updated_at DESC,id DESC);
+CREATE INDEX idx_source_events_automation_route ON source_events(automation_route_id) WHERE automation_route_id IS NOT NULL;
+CREATE INDEX idx_source_events_project_received ON source_events(project_id, received_at DESC);
+CREATE INDEX idx_source_events_request_id ON source_events(request_id) WHERE request_id IS NOT NULL;
+CREATE INDEX idx_source_events_route_queue ON source_events(routing_state, next_attempt_at, received_at);
+CREATE INDEX idx_source_events_task ON source_events(routed_task_id, received_at DESC);
+CREATE INDEX idx_source_routing_attempts_automation_route ON source_routing_attempts(automation_route_id) WHERE automation_route_id IS NOT NULL;
+CREATE INDEX idx_source_routing_attempts_event ON source_routing_attempts(source_event_id, attempt_no DESC);
+CREATE INDEX idx_task_exec_metrics_task_created ON task_execution_metrics(task_id, created_at DESC);
+CREATE INDEX idx_task_graph_runs_task_cycle ON task_graph_runs(task_id, cycle DESC, created_at DESC);
+CREATE INDEX idx_task_graph_snapshots_task ON task_graph_snapshots(task_id, graph_run_id);
+CREATE INDEX idx_task_items_status ON task_items(status);
+CREATE INDEX idx_task_items_task_order ON task_items(task_id, order_no);
+CREATE INDEX idx_tasks_parent_id ON tasks(parent_task_id);
+CREATE INDEX idx_tasks_project_id ON tasks(project_id);
+CREATE INDEX idx_tasks_status ON tasks(status);
+CREATE INDEX idx_tasks_workflow_id ON tasks(workflow_id);
+CREATE INDEX idx_tasks_workspace_id ON tasks(workspace_id);
+CREATE INDEX idx_wse_store_project ON workflow_store_entries(store_name, project_id);
+CREATE INDEX idx_wse_updated_at ON workflow_store_entries(store_name, project_id, updated_at DESC);
+CREATE TABLE agent_sessions ( id TEXT PRIMARY KEY, task_id TEXT NOT NULL, task_item_id TEXT, step_id TEXT NOT NULL, phase TEXT NOT NULL, agent_id TEXT NOT NULL, state TEXT NOT NULL, pid INTEGER NOT NULL, pty_backend TEXT NOT NULL, cwd TEXT NOT NULL, command TEXT NOT NULL, input_fifo_path TEXT NOT NULL, stdout_path TEXT NOT NULL, stderr_path TEXT NOT NULL, transcript_path TEXT NOT NULL, output_json_path TEXT, writer_client_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, ended_at TEXT, exit_code INTEGER , state_version INTEGER NOT NULL DEFAULT 1, writer_actor TEXT, writer_lease_expires_at TEXT, writer_last_heartbeat_at TEXT, writer_fencing_token INTEGER NOT NULL DEFAULT 0, process_fingerprint TEXT);
+CREATE TABLE attention_actions ( id INTEGER PRIMARY KEY AUTOINCREMENT, attention_item_id TEXT NOT NULL, actor TEXT NOT NULL, mutation_kind TEXT NOT NULL, action_id TEXT, idempotency_key TEXT NOT NULL, request_hash TEXT NOT NULL, target_version INTEGER NOT NULL, status TEXT NOT NULL, request_json TEXT NOT NULL DEFAULT '{}', result_json TEXT, error_code TEXT, created_at TEXT NOT NULL, completed_at TEXT, request_id TEXT, UNIQUE(attention_item_id, idempotency_key), FOREIGN KEY(attention_item_id) REFERENCES attention_items(id) );
+CREATE TABLE attention_changes ( id INTEGER PRIMARY KEY AUTOINCREMENT, attention_item_id TEXT NOT NULL, change_kind TEXT NOT NULL, item_version INTEGER NOT NULL, created_at TEXT NOT NULL, project_id TEXT, resulting_state TEXT, FOREIGN KEY(attention_item_id) REFERENCES attention_items(id) );
+CREATE TABLE attention_items ( id TEXT PRIMARY KEY, project_id TEXT NOT NULL, task_id TEXT NOT NULL, task_item_id TEXT, step_id TEXT, session_id TEXT, kind TEXT NOT NULL, severity TEXT NOT NULL, state TEXT NOT NULL, title TEXT NOT NULL, summary TEXT NOT NULL, requested_decision_json TEXT, actions_json TEXT NOT NULL DEFAULT '[]', dedupe_key TEXT NOT NULL, assignee TEXT, source_event_id TEXT NOT NULL, occurrence_count INTEGER NOT NULL DEFAULT 1, reopen_count INTEGER NOT NULL DEFAULT 0, version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, last_occurred_at TEXT NOT NULL, snoozed_until TEXT, sla_deadline TEXT, resolved_at TEXT, resolution_json TEXT , source_route_id TEXT, source_binding_name TEXT);
+CREATE TABLE attention_projector_state ( projector TEXT PRIMARY KEY, last_event_id INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL );
+CREATE TABLE command_runs ( id TEXT PRIMARY KEY, task_item_id TEXT NOT NULL, phase TEXT NOT NULL, command TEXT NOT NULL, cwd TEXT NOT NULL, workspace_id TEXT NOT NULL DEFAULT '', agent_id TEXT NOT NULL DEFAULT '', project_id TEXT NOT NULL DEFAULT '', exit_code INTEGER, stdout_path TEXT NOT NULL, stderr_path TEXT NOT NULL, output_json TEXT NOT NULL DEFAULT '{}', artifacts_json TEXT NOT NULL DEFAULT '[]', confidence REAL, quality_score REAL, validation_status TEXT NOT NULL DEFAULT 'unknown', started_at TEXT NOT NULL, ended_at TEXT, interrupted INTEGER NOT NULL DEFAULT 0, session_id TEXT, machine_output_source TEXT NOT NULL DEFAULT 'stdout', output_json_path TEXT, pid INTEGER, command_template TEXT, command_rule_index INTEGER, FOREIGN KEY(task_item_id) REFERENCES task_items(id) );
+CREATE TABLE config_heal_log ( id INTEGER PRIMARY KEY AUTOINCREMENT, version INTEGER NOT NULL, original_error TEXT NOT NULL, workflow_id TEXT NOT NULL, step_id TEXT NOT NULL, rule TEXT NOT NULL, detail TEXT NOT NULL, created_at TEXT NOT NULL );
+CREATE TABLE control_action_audit ( request_id TEXT PRIMARY KEY, schema_version INTEGER NOT NULL DEFAULT 1, project_id TEXT NOT NULL, actor TEXT, resolved_role TEXT, transport TEXT NOT NULL, target_type TEXT NOT NULL, target_id TEXT NOT NULL, action TEXT NOT NULL, reason_code TEXT NOT NULL, operator_reason TEXT, idempotency_key TEXT, expected_version TEXT, fencing_token INTEGER, request_hash TEXT NOT NULL, status TEXT NOT NULL, error_code TEXT, result_type TEXT, result_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT );
+CREATE TABLE control_plane_audit ( id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, transport TEXT NOT NULL, remote_addr TEXT, rpc TEXT NOT NULL, subject_id TEXT, authn_result TEXT NOT NULL, authz_result TEXT NOT NULL, role TEXT, reason TEXT, tls_fingerprint TEXT , rejection_stage TEXT, traffic_class TEXT, limit_scope TEXT, decision TEXT, reason_code TEXT, peer_exe TEXT, request_id TEXT);
+CREATE TABLE daemon_meta ( key TEXT PRIMARY KEY, value TEXT NOT NULL );
+CREATE TABLE events ( id INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL, task_item_id TEXT, event_type TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL , step TEXT, step_scope TEXT, cycle INTEGER, request_id TEXT);
+CREATE TABLE handoff_snapshots ( id TEXT PRIMARY KEY, project_id TEXT NOT NULL, task_id TEXT NOT NULL, task_item_id TEXT, step_id TEXT, session_id TEXT, checkpoint_id TEXT, source_event_cursor INTEGER NOT NULL, projection_version INTEGER NOT NULL, briefing_json TEXT NOT NULL, content_hash TEXT NOT NULL, state_version TEXT NOT NULL, generated_by TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(task_id, source_event_cursor, content_hash), FOREIGN KEY(task_id) REFERENCES tasks(id) );
+CREATE TABLE orchestrator_config_versions ( id INTEGER PRIMARY KEY AUTOINCREMENT, version INTEGER NOT NULL, config_yaml TEXT NOT NULL, config_json TEXT NOT NULL, created_at TEXT NOT NULL, author TEXT NOT NULL DEFAULT 'system' );
+CREATE TABLE plugin_audit ( id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, action TEXT NOT NULL, crd_kind TEXT NOT NULL, plugin_name TEXT, plugin_type TEXT, command TEXT NOT NULL, applied_by TEXT, transport TEXT, peer_pid INTEGER, result TEXT NOT NULL, policy_mode TEXT , sandbox_profile TEXT, policy_verdict TEXT);
+CREATE TABLE process_metric_observations ( id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT NOT NULL, metric_name TEXT NOT NULL, dimension_key TEXT NOT NULL DEFAULT '', dimensions_json TEXT NOT NULL DEFAULT '{}', value REAL NOT NULL, occurred_at TEXT NOT NULL, source_kind TEXT NOT NULL, source_key TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(project_id, metric_name, dimension_key, source_kind, source_key) );
+CREATE TABLE process_metric_projector_state ( projector TEXT NOT NULL, project_id TEXT NOT NULL DEFAULT '', cursor TEXT NOT NULL DEFAULT '', lag_count INTEGER NOT NULL DEFAULT 0, failure_count INTEGER NOT NULL DEFAULT 0, last_error_code TEXT, last_success_at TEXT, updated_at TEXT NOT NULL, PRIMARY KEY(projector, project_id) );
+CREATE TABLE process_metric_rollups ( project_id TEXT NOT NULL, metric_name TEXT NOT NULL, dimension_key TEXT NOT NULL DEFAULT '', dimensions_json TEXT NOT NULL DEFAULT '{}', bucket_start TEXT NOT NULL, bucket_seconds INTEGER NOT NULL, sample_count INTEGER NOT NULL, sum_value REAL NOT NULL, min_value REAL NOT NULL, max_value REAL NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(project_id, metric_name, dimension_key, bucket_start, bucket_seconds) );
+CREATE TABLE resource_versions ( id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, project TEXT NOT NULL, name TEXT NOT NULL, spec_json TEXT NOT NULL, metadata_json TEXT NOT NULL, version INTEGER NOT NULL, author TEXT NOT NULL DEFAULT 'system', created_at TEXT NOT NULL );
+CREATE TABLE resources ( kind TEXT NOT NULL, project TEXT NOT NULL, name TEXT NOT NULL, api_version TEXT NOT NULL, spec_json TEXT NOT NULL, metadata_json TEXT NOT NULL, generation INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (kind, project, name) );
+CREATE TABLE resume_executions ( id TEXT PRIMARY KEY, plan_id TEXT NOT NULL, actor TEXT NOT NULL, operator_reason TEXT NOT NULL, idempotency_key TEXT NOT NULL, request_hash TEXT NOT NULL, status TEXT NOT NULL, child_task_id TEXT, error_code TEXT, created_at TEXT NOT NULL, completed_at TEXT, request_id TEXT, UNIQUE(plan_id, idempotency_key), FOREIGN KEY(plan_id) REFERENCES resume_plans(id), FOREIGN KEY(child_task_id) REFERENCES tasks(id) );
+CREATE TABLE resume_plans ( id TEXT PRIMARY KEY, project_id TEXT NOT NULL, task_id TEXT NOT NULL, attention_item_id TEXT, boundary_id TEXT NOT NULL, mode TEXT NOT NULL, expected_state_version TEXT NOT NULL, side_effect_class TEXT NOT NULL, replay_safe INTEGER NOT NULL, elevated_confirmation_required INTEGER NOT NULL, consequence_json TEXT NOT NULL, execution_input_json TEXT NOT NULL DEFAULT '{}', provider_command_run_id TEXT, status TEXT NOT NULL, expires_at TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL, executed_at TEXT, FOREIGN KEY(task_id) REFERENCES tasks(id), FOREIGN KEY(attention_item_id) REFERENCES attention_items(id), FOREIGN KEY(provider_command_run_id) REFERENCES command_runs(id) );
+CREATE TABLE schema_migrations ( version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL );
+CREATE TABLE secret_key_audit ( id INTEGER PRIMARY KEY AUTOINCREMENT, event_kind TEXT NOT NULL, key_id TEXT NOT NULL, key_fingerprint TEXT NOT NULL, actor TEXT NOT NULL, detail_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL );
+CREATE TABLE secret_keys ( key_id TEXT PRIMARY KEY, state TEXT NOT NULL, fingerprint TEXT NOT NULL, file_path TEXT NOT NULL, created_at TEXT NOT NULL, activated_at TEXT, rotated_out_at TEXT, retired_at TEXT, revoked_at TEXT );
+CREATE TABLE session_attachments ( id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, client_id TEXT NOT NULL, mode TEXT NOT NULL, attached_at TEXT NOT NULL, detached_at TEXT, reason TEXT );
+CREATE TABLE session_control_actions ( id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, actor TEXT NOT NULL, client_id TEXT, action TEXT NOT NULL, idempotency_key TEXT NOT NULL, request_hash TEXT NOT NULL DEFAULT '', result TEXT NOT NULL, reason TEXT, fencing_token INTEGER, created_at TEXT NOT NULL, request_id TEXT, UNIQUE(session_id, idempotency_key), FOREIGN KEY(session_id) REFERENCES agent_sessions(id) );
+CREATE TABLE source_automation_route_attempts ( id INTEGER PRIMARY KEY AUTOINCREMENT, route_id TEXT NOT NULL, generation INTEGER NOT NULL, attempt_no INTEGER NOT NULL, lease_token TEXT NOT NULL, started_at TEXT NOT NULL, completed_at TEXT, result_state TEXT, error_code TEXT, error_category TEXT, retry_after_seconds INTEGER, UNIQUE(route_id, generation, attempt_no), FOREIGN KEY(route_id) REFERENCES source_automation_routes(id) );
+CREATE TABLE source_automation_route_changes ( id INTEGER PRIMARY KEY AUTOINCREMENT, route_id TEXT NOT NULL, route_version INTEGER NOT NULL, state TEXT NOT NULL, error_code TEXT, created_at TEXT NOT NULL, FOREIGN KEY(route_id) REFERENCES source_automation_routes(id) );
+CREATE TABLE source_automation_route_generations ( route_id TEXT NOT NULL, generation INTEGER NOT NULL, binding_name TEXT NOT NULL, binding_revision TEXT NOT NULL, template_name TEXT NOT NULL, template_hash TEXT NOT NULL, binding_snapshot_json TEXT NOT NULL, template_snapshot_json TEXT NOT NULL, credential_store TEXT NOT NULL, credential_key TEXT NOT NULL, request_id TEXT NOT NULL, deterministic_task_id TEXT NOT NULL, created_by_request_id TEXT, created_at TEXT NOT NULL, PRIMARY KEY(route_id, generation), FOREIGN KEY(route_id) REFERENCES source_automation_routes(id) );
+CREATE TABLE source_automation_routes ( id TEXT PRIMARY KEY, project_id TEXT NOT NULL, automation_key TEXT NOT NULL UNIQUE, source_event_id TEXT NOT NULL, provider TEXT NOT NULL, installation_id TEXT NOT NULL, message_identity TEXT NOT NULL, channel_id TEXT NOT NULL, message_ts TEXT NOT NULL, reaction TEXT NOT NULL, resolved_role TEXT NOT NULL, binding_name TEXT NOT NULL, binding_revision TEXT NOT NULL, template_name TEXT NOT NULL, template_hash TEXT NOT NULL, binding_snapshot_json TEXT NOT NULL, template_snapshot_json TEXT NOT NULL, credential_store TEXT NOT NULL, credential_key TEXT NOT NULL, permalink_status TEXT NOT NULL DEFAULT 'pending', permalink TEXT, request_id TEXT NOT NULL UNIQUE, deterministic_task_id TEXT NOT NULL UNIQUE, task_id TEXT, status TEXT NOT NULL, error_code TEXT, retry_after TEXT, lease_claimed_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT, generation INTEGER NOT NULL DEFAULT 1, version INTEGER NOT NULL DEFAULT 1, attempt_count INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 5, next_attempt_at TEXT, error_category TEXT, lease_owner TEXT, lease_token TEXT, lease_expires_at TEXT, suspended_scope TEXT, last_attempt_at TEXT, FOREIGN KEY(source_event_id) REFERENCES source_events(id), FOREIGN KEY(task_id) REFERENCES tasks(id) );
+CREATE TABLE source_bindings ( id TEXT PRIMARY KEY, project_id TEXT NOT NULL, task_id TEXT NOT NULL, provider TEXT NOT NULL, installation_id TEXT NOT NULL, conversation_id TEXT, thread_id TEXT, correlation_key TEXT NOT NULL, binding_type TEXT NOT NULL, created_by_event_id TEXT NOT NULL, created_at TEXT NOT NULL, request_id TEXT, UNIQUE(provider, installation_id, correlation_key, binding_type), FOREIGN KEY(task_id) REFERENCES tasks(id), FOREIGN KEY(created_by_event_id) REFERENCES source_events(id) );
+CREATE TABLE source_command_actions ( id TEXT PRIMARY KEY, source_event_id TEXT NOT NULL, actor TEXT NOT NULL, resolved_role TEXT NOT NULL, target_type TEXT NOT NULL, target_id TEXT NOT NULL, action TEXT NOT NULL, idempotency_key TEXT NOT NULL, request_hash TEXT NOT NULL, status TEXT NOT NULL, result_json TEXT, error_code TEXT, created_at TEXT NOT NULL, completed_at TEXT, request_id TEXT, UNIQUE(source_event_id, idempotency_key), FOREIGN KEY(source_event_id) REFERENCES source_events(id) );
+CREATE TABLE source_connection_changes ( id INTEGER PRIMARY KEY AUTOINCREMENT, connection_id TEXT NOT NULL, project_id TEXT NOT NULL, connection_version INTEGER NOT NULL, state TEXT NOT NULL, error_code TEXT, request_id TEXT, created_at TEXT NOT NULL, FOREIGN KEY(connection_id) REFERENCES source_connections(id) );
+CREATE TABLE source_connection_intents ( id TEXT PRIMARY KEY, project_id TEXT NOT NULL, provider TEXT NOT NULL, display_label TEXT NOT NULL, provisioning_mode TEXT NOT NULL, owner_daemon_id TEXT NOT NULL, actor_digest TEXT NOT NULL, gateway_intent_id TEXT NOT NULL UNIQUE, authorize_url_ciphertext TEXT NOT NULL, poll_secret_ciphertext TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('pending','completed','cancelled','expired','failed')), connection_id TEXT, error_code TEXT, expires_at TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, FOREIGN KEY(connection_id) REFERENCES source_connections(id) );
+CREATE TABLE source_connection_provisioning ( id TEXT PRIMARY KEY, project_id TEXT NOT NULL, display_label TEXT NOT NULL, owner_daemon_id TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('awaiting_approval','creating','handoff_pending','oauth_pending', 'attention','abandoned','completed')), manifest_version TEXT NOT NULL, manifest_digest TEXT NOT NULL, app_id_ciphertext TEXT, app_id_digest TEXT, oauth_intent_id TEXT, error_code TEXT, expires_at TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, target_connection_id TEXT, FOREIGN KEY(oauth_intent_id) REFERENCES source_connection_intents(id) );
+CREATE TABLE source_connections ( id TEXT PRIMARY KEY, project_id TEXT NOT NULL, provider TEXT NOT NULL, display_label TEXT NOT NULL, provisioning_mode TEXT NOT NULL CHECK(provisioning_mode IN ('managed_shared','managed_dedicated','manual')), installation_id TEXT NOT NULL, installation_id_digest TEXT NOT NULL, enterprise_id_digest TEXT, owner_daemon_id TEXT NOT NULL, generation INTEGER NOT NULL DEFAULT 1 CHECK(generation >= 1), version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1), state TEXT NOT NULL CHECK(state IN ('connecting','active','attention','suspended','revoked','disconnected')), capabilities_json TEXT NOT NULL DEFAULT '[]', scopes_json TEXT NOT NULL DEFAULT '[]', trigger_name TEXT, gateway_origin TEXT, pairing_secret_ciphertext TEXT, last_delivery_at TEXT, last_acked_cursor INTEGER NOT NULL DEFAULT 0 CHECK(last_acked_cursor >= 0), delivery_lag INTEGER NOT NULL DEFAULT 0 CHECK(delivery_lag >= 0), last_error_code TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, reauthorized_at TEXT, disconnected_at TEXT , app_ownership TEXT NOT NULL DEFAULT 'orchestrator' CHECK(app_ownership IN ('orchestrator','workspace','external')), app_id_digest TEXT, manifest_version TEXT, provision_state TEXT, provision_error_code TEXT);
+CREATE TABLE source_daemon_identity ( singleton INTEGER PRIMARY KEY CHECK(singleton=1), daemon_id TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL );
+CREATE TABLE source_events ( id TEXT PRIMARY KEY, project_id TEXT NOT NULL, provider TEXT NOT NULL, installation_id TEXT NOT NULL, external_event_id TEXT NOT NULL, event_type TEXT NOT NULL, external_actor_id TEXT, conversation_id TEXT, thread_id TEXT, occurred_at TEXT NOT NULL, received_at TEXT NOT NULL, normalized_payload_json TEXT NOT NULL, raw_payload_ref TEXT, payload_hash TEXT NOT NULL, routing_state TEXT NOT NULL, routing_attempts INTEGER NOT NULL DEFAULT 0, routing_claimed_at TEXT, routed_task_id TEXT, last_error_code TEXT, next_attempt_at TEXT, routed_at TEXT, request_id TEXT, automation_route_id TEXT, UNIQUE(provider, installation_id, external_event_id), FOREIGN KEY(routed_task_id) REFERENCES tasks(id) );
+CREATE TABLE source_routing_attempts ( id INTEGER PRIMARY KEY AUTOINCREMENT, source_event_id TEXT NOT NULL, attempt_no INTEGER NOT NULL, result TEXT NOT NULL, task_id TEXT, error_code TEXT, created_at TEXT NOT NULL, completed_at TEXT, automation_route_id TEXT, UNIQUE(source_event_id, attempt_no), FOREIGN KEY(source_event_id) REFERENCES source_events(id), FOREIGN KEY(task_id) REFERENCES tasks(id) );
+CREATE TABLE task_execution_metrics ( id INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL, status TEXT NOT NULL, current_cycle INTEGER NOT NULL, unresolved_items INTEGER NOT NULL, total_items INTEGER NOT NULL, failed_items INTEGER NOT NULL, command_runs INTEGER NOT NULL, created_at TEXT NOT NULL );
+CREATE TABLE task_graph_runs ( graph_run_id TEXT PRIMARY KEY, task_id TEXT NOT NULL, cycle INTEGER NOT NULL DEFAULT 0, mode TEXT NOT NULL DEFAULT 'dynamic_dag', source TEXT NOT NULL DEFAULT 'unknown', status TEXT NOT NULL DEFAULT 'materialized', fallback_mode TEXT, planner_failure_class TEXT, planner_failure_message TEXT, entry_node_id TEXT, node_count INTEGER NOT NULL DEFAULT 0, edge_count INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE );
+CREATE TABLE task_graph_snapshots ( graph_run_id TEXT NOT NULL, task_id TEXT NOT NULL, snapshot_kind TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(graph_run_id, snapshot_kind), FOREIGN KEY(graph_run_id) REFERENCES task_graph_runs(graph_run_id) ON DELETE CASCADE, FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE );
+CREATE TABLE task_items ( id TEXT PRIMARY KEY, task_id TEXT NOT NULL, order_no INTEGER NOT NULL, qa_file_path TEXT NOT NULL, status TEXT NOT NULL, ticket_files_json TEXT NOT NULL, ticket_content_json TEXT NOT NULL, fix_required INTEGER NOT NULL DEFAULT 0, fixed INTEGER NOT NULL DEFAULT 0, last_error TEXT NOT NULL DEFAULT '', started_at TEXT, completed_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, dynamic_vars_json TEXT, label TEXT, source TEXT NOT NULL DEFAULT 'static', FOREIGN KEY(task_id) REFERENCES tasks(id) );
+CREATE TABLE tasks ( id TEXT PRIMARY KEY, name TEXT NOT NULL, status TEXT NOT NULL, started_at TEXT, completed_at TEXT, goal TEXT NOT NULL, target_files_json TEXT NOT NULL, mode TEXT NOT NULL, workspace_id TEXT NOT NULL, workflow_id TEXT NOT NULL, project_id TEXT NOT NULL DEFAULT '', workspace_root TEXT NOT NULL, qa_targets_json TEXT NOT NULL, ticket_dir TEXT NOT NULL, execution_plan_json TEXT NOT NULL DEFAULT '{}', loop_mode TEXT NOT NULL DEFAULT 'once', current_cycle INTEGER NOT NULL DEFAULT 0, init_done INTEGER NOT NULL DEFAULT 0, resume_token TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL , pipeline_vars_json TEXT, parent_task_id TEXT, spawn_reason TEXT, spawn_depth INTEGER NOT NULL DEFAULT 0, step_filter_json TEXT NOT NULL DEFAULT '', initial_vars_json TEXT NOT NULL DEFAULT '', artifacts_dir TEXT NOT NULL DEFAULT '');
+CREATE TABLE trigger_state ( trigger_name TEXT NOT NULL, project TEXT NOT NULL, last_fired_at TEXT, next_fire_at TEXT, fire_count INTEGER DEFAULT 0, last_task_id TEXT, last_status TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (trigger_name, project) );
+CREATE TABLE workflow_store_entries ( store_name TEXT NOT NULL, project_id TEXT NOT NULL DEFAULT '', key TEXT NOT NULL, value_json TEXT NOT NULL, task_id TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (store_name, project_id, key) );
+CREATE UNIQUE INDEX idx_attention_actions_request_id ON attention_actions(request_id) WHERE request_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_attention_open_dedupe ON attention_items(project_id, dedupe_key) WHERE state IN ('open', 'claimed', 'snoozed');
+CREATE UNIQUE INDEX idx_control_action_audit_retry_identity ON control_action_audit(project_id, target_type, target_id, action, idempotency_key) WHERE idempotency_key IS NOT NULL AND status IN ('reserved','succeeded');
+CREATE UNIQUE INDEX idx_resume_executions_request_id ON resume_executions(request_id) WHERE request_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_session_control_actions_request_id ON session_control_actions(request_id) WHERE request_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_source_command_actions_request_id ON source_command_actions(request_id) WHERE request_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_source_connections_active_installation ON source_connections(provider,installation_id) WHERE state NOT IN ('disconnected');

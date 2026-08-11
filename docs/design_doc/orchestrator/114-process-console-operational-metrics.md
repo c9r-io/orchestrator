@@ -60,7 +60,7 @@ Queries require a 1-128 character project ID. Durations accept positive `m`, `h`
 
 ## Database Changes
 
-Forward-only migration 32 adds:
+Forward-only migration 32 adds — "forward-only" here meaning the contract in `crates/orchestrator-persistence/src/migration.rs`:
 
 - `process_metric_observations`: idempotent optional samples keyed by source family and internal correlation key.
 - `process_metric_rollups`: materialized fixed-width buckets for accepted observations.

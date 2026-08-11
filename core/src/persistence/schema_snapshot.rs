@@ -27,6 +27,7 @@ mod tests {
     use orchestrator_persistence::test_support::open_conn;
     use orchestrator_persistence::test_support::run_pending;
     use rusqlite::Connection;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::path::{Path, PathBuf};
 
     /// Overriding the path is what makes the negative fixture in
@@ -164,6 +165,214 @@ mod tests {
             after_first,
             render_schema(&conn),
             "a second run left the schema different"
+        );
+    }
+
+    /// Where the previous release's frozen schema lives. Overridable for the
+    /// same reason [`snapshot_path`] is: the negative fixtures point it at a
+    /// doctored copy rather than writing to the working tree.
+    fn previous_release_snapshot_path() -> PathBuf {
+        match std::env::var_os("PREVIOUS_RELEASE_SCHEMA_SNAPSHOT_PATH") {
+            Some(value) => PathBuf::from(value),
+            None => Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../config/governance/schema-snapshot-previous-release.sql"),
+        }
+    }
+
+    /// Executes a rendered snapshot into a fresh in-memory database.
+    ///
+    /// The snapshot is sorted by object type and then name, so every
+    /// `CREATE INDEX` precedes every `CREATE TABLE` and executing the file in
+    /// order fails on the first index. Rather than partition the statements by
+    /// their text — which would be a lexical guess about SQL — this applies what
+    /// it can and retries the rest until a pass makes no progress. Nothing here
+    /// depends on recognising a statement: a dependency order this cannot
+    /// resolve ends as a panic naming the statements left over, so a wrong guess
+    /// about SQLite's ordering cannot pass quietly.
+    fn execute_snapshot(sql: &str, label: &str) -> Connection {
+        let conn = Connection::open_in_memory().expect("open in-memory database");
+        let mut pending: Vec<&str> = sql
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty() && !line.starts_with("--"))
+            .collect();
+
+        while !pending.is_empty() {
+            let mut deferred = Vec::new();
+            let mut errors = Vec::new();
+            for statement in &pending {
+                match conn.execute_batch(statement) {
+                    Ok(()) => {}
+                    Err(error) => {
+                        deferred.push(*statement);
+                        errors.push(format!("  {statement}\n    {error}"));
+                    }
+                }
+            }
+            assert!(
+                deferred.len() < pending.len(),
+                "{label} has {} statement(s) that cannot be applied in any order:\n{}",
+                deferred.len(),
+                errors.join("\n")
+            );
+            pending = deferred;
+        }
+        conn
+    }
+
+    /// Every table, and every column of every table, that a database has.
+    ///
+    /// Read back through `sqlite_master` and `PRAGMA table_info` rather than
+    /// parsed out of the snapshot text. A per-line regex over `CREATE TABLE x (
+    /// ... )` is the cheap version and it is a §4.4 shape 3 proxy — counting or
+    /// matching standing in for parsing. The first draft of this comparison did
+    /// exactly that and silently found zero tables, because it required no space
+    /// before the opening parenthesis. SQLite is already a dependency here; let
+    /// it do the parsing.
+    fn tables_and_columns(conn: &Connection) -> BTreeMap<String, BTreeSet<String>> {
+        let names: Vec<String> = {
+            let mut statement = conn
+                .prepare(
+                    "SELECT name FROM sqlite_master \
+                     WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+                )
+                .expect("prepare table query");
+            statement
+                .query_map([], |row| row.get::<_, String>(0))
+                .expect("query tables")
+                .map(|name| name.expect("read table name"))
+                .collect()
+        };
+
+        names
+            .into_iter()
+            .map(|table| {
+                let mut statement = conn
+                    .prepare(&format!("PRAGMA table_info(\"{table}\")"))
+                    .expect("prepare table_info");
+                let columns = statement
+                    .query_map([], |row| row.get::<_, String>(1))
+                    .expect("query table_info")
+                    .map(|column| column.expect("read column name"))
+                    .collect::<BTreeSet<String>>();
+                (table, columns)
+            })
+            .collect()
+    }
+
+    /// Every index a database has, by name.
+    fn index_names(conn: &Connection) -> BTreeSet<String> {
+        let mut statement = conn
+            .prepare(
+                "SELECT name FROM sqlite_master \
+                 WHERE type = 'index' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+            )
+            .expect("prepare index query");
+        statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .expect("query indexes")
+            .map(|name| name.expect("read index name"))
+            .collect()
+    }
+
+    /// Clause 2 of the forward-only rollback contract, mechanically.
+    ///
+    /// The contract is stated in `crates/orchestrator-persistence/src/migration.rs`:
+    /// the previous release binary must be able to serve the current schema.
+    /// Mechanically that is a superset property — every table, column and index
+    /// the previous release knew about must still be there. Adding is always
+    /// allowed; this test says nothing about additions and must not, or it would
+    /// block the forward motion the contract exists to permit.
+    ///
+    /// Before FR-165 nothing asserted this. A migration that dropped a column
+    /// would regenerate `schema-snapshot.sql`, arrive in a reviewable diff, and
+    /// pass every test in this file — the diff was the only guard, and a diff is
+    /// only a guard if someone reads it knowing what to look for.
+    ///
+    /// What this cannot see: a column that is kept but changes type or loses a
+    /// constraint, and a data remap like migration 29's `exited` -> `closed`.
+    /// The first is covered by `full_chain_reproduces_the_reviewed_snapshot`,
+    /// which compares whole normalised statements. The second is deliberately
+    /// outside the contract — see clause 2's note in `migration.rs`.
+    #[test]
+    fn previous_release_schema_is_a_subset_of_current() {
+        let previous_path = previous_release_snapshot_path();
+        let current_path = snapshot_path();
+        let previous_sql = std::fs::read_to_string(&previous_path).unwrap_or_else(|error| {
+            panic!(
+                "cannot read the previous release schema at {}: {error}",
+                previous_path.display()
+            )
+        });
+        let current_sql = std::fs::read_to_string(&current_path).unwrap_or_else(|error| {
+            panic!(
+                "cannot read the reviewed schema snapshot at {}: {error}",
+                current_path.display()
+            )
+        });
+
+        let previous = execute_snapshot(&previous_sql, "the previous release schema");
+        let current = execute_snapshot(&current_sql, "the reviewed schema snapshot");
+
+        let previous_tables = tables_and_columns(&previous);
+        let current_tables = tables_and_columns(&current);
+        let previous_indexes = index_names(&previous);
+        let current_indexes = index_names(&current);
+
+        // Either side reading empty is a broken read, not a clean comparison,
+        // and only one of those is evidence (§4.4 shape 5). Without this the
+        // subset assertion below is vacuously true against an empty previous
+        // side — which is exactly the state a truncated or unparseable artifact
+        // produces.
+        assert!(
+            !previous_tables.is_empty(),
+            "the previous release schema at {} yielded no tables; \
+             the comparison read nothing and every check below would pass vacuously",
+            previous_path.display()
+        );
+        assert!(
+            !current_tables.is_empty(),
+            "the reviewed schema snapshot at {} yielded no tables; \
+             the comparison read nothing",
+            current_path.display()
+        );
+
+        let mut removals = Vec::new();
+        for (table, columns) in &previous_tables {
+            match current_tables.get(table) {
+                None => removals.push(format!(
+                    "  table {table} existed in the previous release and is gone"
+                )),
+                Some(current_columns) => {
+                    for column in columns.difference(current_columns) {
+                        removals.push(format!(
+                            "  column {table}.{column} existed in the previous release and is gone"
+                        ));
+                    }
+                }
+            }
+        }
+        for index in previous_indexes.difference(&current_indexes) {
+            removals.push(format!(
+                "  index {index} existed in the previous release and is gone"
+            ));
+        }
+
+        assert!(
+            removals.is_empty(),
+            "the previous release binary can no longer serve this schema, which breaks clause 2 \
+             of the forward-only rollback contract in \
+             crates/orchestrator-persistence/src/migration.rs:\n{}\n\
+             {} table(s) and {} index(es) in {}, {} and {} now.\n\
+             A normal binary rollback keeps the upgraded database, so anything the previous \
+             release reads must still exist. If the removal is intended, it is a breaking \
+             change: it needs a release boundary, not a snapshot refresh.",
+            removals.join("\n"),
+            previous_tables.len(),
+            previous_indexes.len(),
+            previous_path.display(),
+            current_tables.len(),
+            current_indexes.len(),
         );
     }
 

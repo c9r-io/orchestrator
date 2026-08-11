@@ -64,6 +64,8 @@ The table is the durable source of truth. `control_plane_audit`, `attention_acti
 
 Migration is forward-only and preserves populated databases. Rollback disables enforcement and deploys the previous binary; migration 31 remains in place.
 
+The contract those two sentences depend on is defined in `crates/orchestrator-persistence/src/migration.rs`, not here; this paragraph names what migration 31 does under it.
+
 ## Key Design
 
 1. A handler installs the request ID and reserves the canonical envelope before business side effects. Authorization denial is inserted directly as terminal `denied`; authorized attempts transition `reserved` to `succeeded` or `failed` after the durable outcome.

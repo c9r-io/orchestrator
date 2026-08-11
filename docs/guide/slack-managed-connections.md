@@ -243,7 +243,7 @@ orchestrator source connection watch --project default --after {cursor}
 4. 逐台升级 daemon；
 5. 先用 staging workspace smoke，再扩大 rollout。
 
-止损时暂停新的 managed connection 和 delivery 消费，但保留 Gateway queue 与 daemon 的 source/task/audit。正常 rollback 保留 forward-only schema，不删除 migration row；只有 migration 失败或确认损坏才恢复备份。
+止损时暂停新的 managed connection 和 delivery 消费，但保留 Gateway queue 与 daemon 的 source/task/audit。正常 rollback 保留 forward-only schema，不删除 migration row；只有 migration 失败或确认损坏才恢复备份。此处 daemon 侧的规则以 `crates/orchestrator-persistence/src/migration.rs` 为准，本节只是把它落到这条运维步骤上；Gateway 自有 schema 在另一个数据库里，另行陈述。
 
 发布前运行：
 

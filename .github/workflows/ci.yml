@@ -360,6 +360,25 @@ jobs:
         continue-on-error: true
         run: ./scripts/qa/test-manual-gate-freshness.sh
 
+      # FR-165 requirement 2. The forward-only rollback contract was stated in
+      # fifteen documents and asserted nowhere, and c1060338 killed the
+      # behavioural half of its second clause for a day with no CI signal at all.
+      # This step keeps the documents pointing at the code that defines the rule;
+      # the schema superset half is a unit test and rides in the `test` job.
+      - name: Rollback contract single source
+        id: rollback-contract
+        continue-on-error: true
+        run: ruby ./scripts/qa/rollback-contract-single-source.rb
+
+      # Both guards under negative fixtures, including the one case that proves
+      # the site ledger is keyed per statement and not per file: the threat model
+      # holds a class-A row and a class-D row four rows apart, and a path-keyed
+      # ledger would stop checking the first.
+      - name: Rollback contract fixtures
+        id: rollback-contract-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-rollback-contract.sh
+
       # The readiness helper has one caller whose binary is, by construction,
       # always older than the helper. Nothing running against the current build
       # can observe that branch.
@@ -539,6 +558,8 @@ jobs:
             doc-lifecycle=${{ steps.doc-lifecycle.outcome }}
             manual-gate-freshness=${{ steps.manual-gate-freshness.outcome }}
             manual-gate-freshness-fixtures=${{ steps.manual-gate-freshness-fixtures.outcome }}
+            rollback-contract=${{ steps.rollback-contract.outcome }}
+            rollback-contract-fixtures=${{ steps.rollback-contract-fixtures.outcome }}
             gate-daemon-readiness-fallback=${{ steps.gate-daemon-readiness-fallback.outcome }}
             cli-doc-parity=${{ steps.cli-doc-parity.outcome }}
             cli-doc-parity-fixtures=${{ steps.cli-doc-parity-fixtures.outcome }}

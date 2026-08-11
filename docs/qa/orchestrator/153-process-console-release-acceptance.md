@@ -168,3 +168,5 @@ Ensure operators can upgrade, stop one failing domain, or roll back without dest
 | 3 | Clean current-HEAD aggregate gate preserves slice ownership | PASS | 2026-07-15 | Codex | 14/14 gates passed in 399 seconds from a clean worktree |
 | 4 | Integrated recovery, UI, privacy, and performance | PASS | 2026-07-16 | Codex | Real Tauri/gRPC flow, 21 Vitest, 15 Playwright, builds, accessibility, and both release fixtures passed |
 | 5 | Release notes and rollback contract are complete | PASS | 2026-07-15 | Codex | Forward-only runbook separates normal binary rollback from disaster restore |
+
+The contract scenario 5 checks is the one in `crates/orchestrator-persistence/src/migration.rs`; that module also names the tests and gates that enforce each of its clauses, which is what a re-run of this scenario should be read against.

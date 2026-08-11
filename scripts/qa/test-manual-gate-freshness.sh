@@ -37,6 +37,15 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/fr165-freshness.XXXXXX")"
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
 
+# Added while closing FR-165 requirement 2, which found this file failing the
+# ci-required scripts/qa/fixture-target-drift.rb — three ledger rewrites that
+# proved nothing about whether they landed, and one block whose premise aborted.
+# Requirement 1's certification ran a hand-listed sweep and did not include the
+# drift scanner, so a gate this file breaks was red from the moment it shipped:
+# §4.6 condition 6 exactly, inside the FR that wrote condition 6's own fixtures.
+# shellcheck source=../lib/gate_fixture.sh
+. "$REPO_ROOT/scripts/lib/gate_fixture.sh"
+
 # A scratch tree the real script can run against unmodified: it derives repo_root
 # as ../.. from its own location, so scripts/qa/ plus config/governance/ is the
 # whole world it needs.
@@ -167,16 +176,16 @@ fi
 # exemption. If exemption were applied set-wide rather than per gate this passes
 # and nothing else would have caught it.
 build_tree "$TREE"
-ruby -rjson -rdate -e '
-  path = File.join(ARGV[0], "config/governance/manual-gate-freshness.json")
-' "$TREE" 2>/dev/null || true
 write_fixture "$TREE" '{"owner":"docs/qa/subject.md","lastRun":null,"releaseBlocking":false,"releaseBlockingReason":"exempt"}'
-ruby -rjson -e '
-  path = File.join(ARGV[0], "config/governance/manual-gate-freshness.json")
-  data = JSON.parse(File.read(path))
-  data["gates"]["scripts/qa/gate-control.sh"]["lastRun"] = nil
-  File.write(path, JSON.pretty_generate(data) + "\n")
-' "$TREE"
+fixture_mutate "control gate made never-run" "$TREE/config/governance/manual-gate-freshness.json" \
+  ruby -rjson -e '
+    path = File.join(ARGV[0], "config/governance/manual-gate-freshness.json")
+    data = JSON.parse(File.read(path))
+    gate = data["gates"]["scripts/qa/gate-control.sh"]
+    raise "the control gate is not in the fixture ledger" if gate.nil?
+    gate["lastRun"] = nil
+    File.write(path, JSON.pretty_generate(data) + "\n")
+  ' "$TREE"
 expect_strict_red "$TREE" "one gate's exemption does not excuse another gate" "gate-control.sh"
 
 # ── 7. an exemption without a reason is an error ──────────────────────────────
@@ -218,10 +227,11 @@ fi
 # expectation is a number, and it is read out of the fixture rather than typed.
 build_tree "$TREE"
 write_fixture "$TREE" "$(fresh_record)"
-ruby -rjson -e '
-  path = File.join(ARGV[0], "config/governance/qa-gate-surface.json")
-  File.write(path, JSON.pretty_generate({ "scripts" => [] }) + "\n")
-' "$TREE"
+fixture_mutate "manual-runbook set emptied" "$TREE/config/governance/qa-gate-surface.json" \
+  ruby -rjson -e '
+    path = File.join(ARGV[0], "config/governance/qa-gate-surface.json")
+    File.write(path, JSON.pretty_generate({ "scripts" => [] }) + "\n")
+  ' "$TREE"
 EXPECTED_N="$(ruby -rjson -e 'puts JSON.parse(File.read(File.join(ARGV[0], "config/governance/manual-gate-freshness.json")))["gates"].length' "$TREE")"
 if run_gate "$TREE"; then
   fail "an empty manual-runbook set was accepted as a clean result"
@@ -240,32 +250,63 @@ fi
 if [[ ! -f "$WORKFLOW" ]]; then
   fail "release.yml not found at $WORKFLOW"
 else
+  # Every objection is collected and printed rather than aborted on. An abort
+  # here would have been caught by the shell below, but fixture-target-drift.rb
+  # is right to refuse the shape on sight: the reader cannot know its caller
+  # checks, and the same block copied into a context without the `|| status=$?`
+  # would take the run down before the summary line printed. Reporting all
+  # objections at once is also strictly more useful than reporting the first.
   edge_report="$(ruby -ryaml -e '
     y = YAML.load_file(ARGV[0])
     jobs = y["jobs"] || {}
+    problems = []
+    dependents = []
+
     job = jobs["manual-gate-freshness"]
-    abort "no manual-gate-freshness job" if job.nil?
+    if job.nil?
+      problems << "no manual-gate-freshness job"
+    else
+      steps = job["steps"] || []
+      strict = steps.find { |s| s["run"].to_s.include?("manual-gate-freshness.rb") }
+      if strict.nil?
+        problems << "no step runs manual-gate-freshness.rb"
+      else
+        run = strict["run"].to_s
+        problems << "the strict step is missing --strict" unless run.include?("--strict")
+        problems << "the strict step carries continue-on-error" if strict["continue-on-error"]
+        problems << "the strict step pipes its output, which reports the pager status" if run.include?("|")
+      end
 
-    steps = job["steps"] || []
-    strict = steps.find { |s| s["run"].to_s.include?("manual-gate-freshness.rb") }
-    abort "no step runs manual-gate-freshness.rb" if strict.nil?
-    abort "the strict step is missing --strict" unless strict["run"].to_s.include?("--strict")
-    abort "the strict step carries continue-on-error" if strict["continue-on-error"]
-    abort "the strict step pipes its output, which reports the pager status" if strict["run"].to_s.include?("|")
-
-    dependents = jobs.select { |_, spec| Array(spec["needs"]).include?("manual-gate-freshness") }.keys
-    abort "no job needs manual-gate-freshness" if dependents.empty?
-    %w[build gui-build].each do |required|
-      abort "#{required} does not need manual-gate-freshness" unless dependents.include?(required)
+      dependents = jobs.select { |_, spec| Array(spec["needs"]).include?("manual-gate-freshness") }.keys
+      if dependents.empty?
+        problems << "no job needs manual-gate-freshness"
+      else
+        %w[build gui-build].each do |required|
+          problems << "#{required} does not need manual-gate-freshness" unless dependents.include?(required)
+        end
+      end
     end
-    puts dependents.sort.join(",")
-  ' "$WORKFLOW" 2>&1)" && edge_status=0 || edge_status=$?
 
-  if [[ "$edge_status" -eq 0 ]]; then
-    pass "release.yml: the strict job exists, does not swallow its status, and gates $edge_report"
-  else
-    fail "release.yml enforcement edge: $edge_report"
-  fi
+    if problems.empty?
+      puts "OK " + dependents.sort.join(",")
+    else
+      puts "BROKEN " + problems.join("; ")
+    end
+  ' "$WORKFLOW" 2>&1)"
+
+  # The marker is asserted, not the exit code: the reader now exits 0 whatever it
+  # finds, so an exit code would say only that ruby ran.
+  case "$edge_report" in
+  "OK "*)
+    pass "release.yml: the strict job exists, does not swallow its status, and gates ${edge_report#OK }"
+    ;;
+  "BROKEN "*)
+    fail "release.yml enforcement edge: ${edge_report#BROKEN }"
+    ;;
+  *)
+    fail "release.yml enforcement edge: the reader produced neither verdict: $edge_report"
+    ;;
+  esac
 fi
 
 # ── after-run ─────────────────────────────────────────────────────────────────

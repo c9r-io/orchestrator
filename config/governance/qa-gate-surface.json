@@ -513,6 +513,26 @@
       "note": "Offline: builds a scratch tree containing only the gate and a two-entry ledger/manifest pair, so the real repository is never mutated. Nine criterion cases (recorded failure, dirty worktree, aged, never recorded, exemption honoured, exemption not leaking to a neighbour, exemption without a reason, reason orphaned by a removed exemption, derived empty-read count) bracketed by a before-run and an after-run. A tenth parses .github/workflows/release.yml and asserts build and gui-build actually name the freshness job in needs: and that its step carries neither continue-on-error nor a pipe — the edge is the enforcement, and a job nothing depends on blocks nothing."
     },
     {
+      "path": "scripts/qa/rollback-contract-single-source.rb",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "reads tracked text files and config/governance/rollback-contract-sites.json; it starts no daemon, compiles nothing, and never writes the working tree, so no provider binary is reachable."
+    },
+    {
+      "path": "scripts/qa/test-rollback-contract.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "mutates copies of the two schema snapshots and a scratch copy of the tree under a temporary directory, and runs one cargo unit test against them. It starts no daemon and never writes the working tree, so no provider binary is reachable."
+    },
+    {
       "path": "scripts/qa/persistence-api-boundary.rb",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",

@@ -70,7 +70,7 @@ The historical fixture preserves:
 - canonical action-audit identity joined to domain and event projections;
 - migration-32 metric observation and all supported rebuilt rollups.
 
-The migration kernel remains forward-only. A normal binary rollback keeps migrations 27-32 and their tables. A database restore is a separate disaster action used only for failed migration or corruption.
+The migration kernel remains forward-only. A normal binary rollback keeps migrations 27-32 and their tables. A database restore is a separate disaster action used only for failed migration or corruption. All three of those sentences are the contract stated in `crates/orchestrator-persistence/src/migration.rs`, applied to this release; that module is where the rule lives and where the guards that enforce it are named.
 
 ## Alternatives And Tradeoffs
 

@@ -8,7 +8,7 @@ This document retains the original Console-specific migrations 27-32 boundary. D
 
 - The release gate proves a populated schema 26 database upgrades through migrations 27-32 without losing task, Session, Attention, handoff, source binding, or action-audit identity.
 - Databases older than schema 26 must first be upgraded by an intermediate supported release.
-- Console migrations are additive and forward-only. A normal rollback keeps migrations 27-32 and their tables.
+- Console migrations are additive and forward-only. A normal rollback keeps migrations 27-32 and their tables. The rule this relies on — and what "normal rollback" excludes — is stated in `crates/orchestrator-persistence/src/migration.rs`.
 - CLI, daemon, and GUI should be deployed from the same release. Additive gRPC fields and retained tables permit a short rolling mismatch, but mutations should wait until all clients are current.
 - Desktop packages ship with releases since v0.5.0 (FR-076): a signed, notarized universal macOS `.dmg` and Linux `.AppImage`/`.deb` as `orchestrator-gui-{tag}-{platform}.{ext}` on each GitHub Release. This runbook covers the local daemon, CLI, and the Tauri development/runtime surface.
 

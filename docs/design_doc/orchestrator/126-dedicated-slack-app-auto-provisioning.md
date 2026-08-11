@@ -94,7 +94,7 @@ Daemon migration 36 adds safe App/provision fields to `source_connections` and `
 
 Gateway schema 3 adds mode/App metadata to intents/installations plus `dedicated_import_slots` and `dedicated_apps`. Schema 4 adds `migration_installation_id`, `migration_expected_version`, and `migration_source_mode` to OAuth intents. Client ID, Client Secret, and Signing Secret are encrypted under `dedicated-app:{connection_id}:generation:{n}:{field}` contexts. Import secret and App/team identities are stored as purpose-scoped digests where plaintext is unnecessary.
 
-Both migrations are additive and forward-only. Populated daemon v34 and Gateway v2 upgrades preserve existing shared/manual connections; older binaries may continue delivery but cannot create new dedicated Apps.
+Both migrations are additive and forward-only. Populated daemon v34 and Gateway v2 upgrades preserve existing shared/manual connections; older binaries may continue delivery but cannot create new dedicated Apps. For the daemon side that is the contract in `crates/orchestrator-persistence/src/migration.rs`; the Gateway keeps its own schema in its own database and states the equivalent rule separately.
 
 ## Key Design
 

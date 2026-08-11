@@ -1,0 +1,250 @@
+{
+  "version": 1,
+  "description": "Every mention of forward-only in the tree, classified. Read by scripts/qa/rollback-contract-single-source.rb. The word names four different concepts here and only one of them is the daemon migration rollback contract; the classification is the judgement a text search cannot make, so it is recorded rather than inferred. Sites are keyed by a digest of the matched line, never by line number and never by path: threat-model rows T8 and T12 are four rows apart in one table and belong to different classes, so a path-keyed ledger would bless T8 with T12's citation. Regenerate the candidate list with --emit-baseline; classifying is still a decision.",
+  "singleSource": "crates/orchestrator-persistence/src/migration.rs",
+  "classes": {
+    "source": "The single source itself. Booked whole-file: the module doc comment states the contract at length and rewording it must not break the gate that depends on it.",
+    "A": "A live statement of the daemon migration rollback contract. Must name the single source on a line this entry points at. Fifteen of these existed with no code behind them when FR-165 was filed.",
+    "record": "Released changelog history. True when written, and under Keep a Changelog a released section is not rewritten, so these carry no citation. This is why FR-165's original criterion of 'all 17 A-class sites cite the single source' could not be met honestly.",
+    "B": "The Slack Gateway's own schema, in its own database. Related rule, different subject, different store. Must stay outside the daemon contract's guard.",
+    "C": "Unrelated to schema migration. Artifact forwarding in orchestrator-collab shares only the adjective.",
+    "D": "Monotonic state change rather than schema: connection generation/version CAS. The fourth sense, and the one that proves per-site keying is required.",
+    "index": "An index or table-of-contents row that mentions the contract while pointing at a document, not stating a rule.",
+    "meta": "Governance prose whose subject is the contract or its guards, rather than prose that states the contract. Feature requests and tickets in this class are marked ephemeral because closing them deletes the file."
+  },
+  "wholeFile": [
+    {
+      "path": "crates/orchestrator-persistence/src/migration.rs",
+      "class": "source",
+      "reason": "The single source. Its module doc states all three clauses, so it mentions the contract several times by construction; per-site entries here would break on every reword of the definition itself."
+    },
+    {
+      "path": "core/src/persistence/schema_snapshot.rs",
+      "class": "meta",
+      "reason": "Holds previous_release_schema_is_a_subset_of_current, the guard for clause 2. Its doc comment and its failure message both name the contract; the file's subject is enforcing the rule, not restating it."
+    },
+    {
+      "path": "scripts/qa/rollback-contract-single-source.rb",
+      "class": "meta",
+      "reason": "This gate. Its header explains the four-way overload and its output prints the contract's name, so it necessarily matches its own pattern. Booked whole-file rather than excluded: an exclusion list is a second mechanism to keep honest, while a whole-file entry still fails if the file stops mentioning the contract at all."
+    },
+    {
+      "path": "scripts/qa/test-rollback-contract.sh",
+      "class": "meta",
+      "reason": "The negative fixtures for both guards. Its mutation strings are statements of the contract by construction — they have to be, or they would not exercise the gate."
+    },
+    {
+      "path": "config/governance/rollback-contract-sites.json",
+      "class": "meta",
+      "reason": "This ledger. Its own description and notes name the contract; a ledger cannot be keyed against itself per site without every reword of a note breaking it."
+    },
+    {
+      "path": "config/governance/schema-snapshot-previous-release.sql",
+      "class": "meta",
+      "reason": "The frozen previous-release schema. Its header explains which clause it serves and how to refresh it, and it is the artifact the clause-2 guard reads."
+    },
+    {
+      "path": "docs/feature_request/FR-165-ledger-driven-contracts.md",
+      "class": "meta",
+      "reason": "The feature request that produced this ledger. Its whole requirement 2 is about the classification, so it names the word many times.",
+      "ephemeral": true
+    },
+    {
+      "path": "docs/ticket/20260812-wait-ready-breaks-previous-release-gates.md",
+      "class": "meta",
+      "reason": "The ticket for the --wait-ready defect that killed clause 2's behavioural half. Describes the contract's failure, does not state the contract.",
+      "ephemeral": true
+    }
+  ],
+  "sites": [
+    {
+      "path": "docs/design_doc/orchestrator/111-control-plane-action-audit-envelope.md",
+      "digest": "188979330c52",
+      "class": "A",
+      "citedBy": "73e1103974e8",
+      "note": "Migration 31 under the contract. The citation is the paragraph below it."
+    },
+    {
+      "path": "docs/design_doc/orchestrator/114-process-console-operational-metrics.md",
+      "digest": "2e4f8e02eb3a",
+      "class": "A",
+      "citedBy": "2e4f8e02eb3a",
+      "note": "Migration 32. Self-citing: the statement names the single source inline."
+    },
+    {
+      "path": "docs/design_doc/orchestrator/116-process-console-release-acceptance.md",
+      "digest": "894fe406dec2",
+      "class": "A",
+      "citedBy": "894fe406dec2",
+      "note": "States all three clauses in one paragraph, self-citing."
+    },
+    {
+      "path": "docs/design_doc/orchestrator/121-slack-permalink-canonical-task-routing.md",
+      "digest": "4c642962ce3b",
+      "class": "A",
+      "citedBy": "4c642962ce3b",
+      "note": "Migration 33; clause 2 as an operational consequence."
+    },
+    {
+      "path": "docs/design_doc/orchestrator/122-source-automation-reliability-operations.md",
+      "digest": "3e23d5bfd110",
+      "class": "A",
+      "citedBy": "f62d707a602b",
+      "note": "Migration 34 remaps route statuses in place. The citation paragraph below explains why an in-place remap satisfies the contract."
+    },
+    {
+      "path": "docs/design_doc/orchestrator/124-slack-reaction-skill-automation-release.md",
+      "digest": "f3f0097db9f4",
+      "class": "A",
+      "citedBy": "f3f0097db9f4",
+      "note": "Migrations 33 and 34, self-citing."
+    },
+    {
+      "path": "docs/design_doc/orchestrator/124-slack-reaction-skill-automation-release.md",
+      "digest": "1b8ab8b2d8c3",
+      "class": "A",
+      "citedBy": "1b8ab8b2d8c3",
+      "note": "Clause 3, recorded as the tradeoff restore-based rollback lost to. Second A-class site in this document and separately keyed."
+    },
+    {
+      "path": "docs/design_doc/orchestrator/126-dedicated-slack-app-auto-provisioning.md",
+      "digest": "373966ddf875",
+      "class": "A",
+      "citedBy": "373966ddf875",
+      "note": "Covers daemon v34 and Gateway v2 in one sentence; the citation separates which half the daemon contract owns."
+    },
+    {
+      "path": "docs/guide/agent-process-console-v1-operations.md",
+      "digest": "8e7632abaed9",
+      "class": "A",
+      "citedBy": "8e7632abaed9",
+      "note": "Operator runbook, self-citing."
+    },
+    {
+      "path": "docs/guide/slack-managed-connections.md",
+      "digest": "46a9924f8ea3",
+      "class": "A",
+      "citedBy": "46a9924f8ea3",
+      "note": "Stop-loss runbook. Names the daemon contract and points the Gateway half elsewhere."
+    },
+    {
+      "path": "docs/guide/slack-reaction-skill-automation.md",
+      "digest": "3a5faf12bbde",
+      "class": "A",
+      "citedBy": "c0dd81ee780e",
+      "note": "A section heading, which cannot carry the citation itself; the line below it does. This is the case that made citedBy a separate field rather than a same-line requirement."
+    },
+    {
+      "path": "docs/qa/orchestrator/153-process-console-release-acceptance.md",
+      "digest": "7ddef5c01637",
+      "class": "A",
+      "citedBy": "eb491b68378e",
+      "note": "A recorded scenario result inside a table. The citation is the paragraph after the table; the row itself is evidence and is left as it was recorded."
+    },
+    {
+      "path": "docs/qa/orchestrator/161-slack-reaction-skill-automation-release.md",
+      "digest": "85290bbfc90c",
+      "class": "A",
+      "citedBy": "85290bbfc90c",
+      "note": "Expected-result bullet, self-citing."
+    },
+    {
+      "path": "docs/security/README.md",
+      "digest": "80626a3874d3",
+      "class": "A",
+      "citedBy": "80626a3874d3",
+      "note": "Release precondition 11. The site FR-165 originally missed, which is why its A-class count was 17 rather than 18."
+    },
+    {
+      "path": "docs/security/slack-gateway-threat-model.md",
+      "digest": "7a4006b7d81d",
+      "class": "A",
+      "citedBy": "7a4006b7d81d",
+      "note": "T12. Self-citing inside the mitigation cell, deliberately: a citation anywhere else in this file would also appear to cover T8 four rows above."
+    },
+    {
+      "path": "docs/security/slack-gateway-threat-model.md",
+      "digest": "e8e058009d14",
+      "class": "D",
+      "note": "T8. Monotonic connection-state changes, not migrations. Four rows above T12 in the same table, which is the whole reason this ledger is keyed per site. The row now says so in words as well, so a human reader is not left to infer it."
+    },
+    {
+      "path": "CHANGELOG.md",
+      "digest": "e25e73736984",
+      "class": "record",
+      "note": "Released [0.4.0]: migrations 27-32."
+    },
+    {
+      "path": "CHANGELOG.md",
+      "digest": "6ffccb2da0f9",
+      "class": "record",
+      "note": "Released [0.4.0]: migrations 33-34."
+    },
+    {
+      "path": "CHANGELOG.md",
+      "digest": "32b25fdcd333",
+      "class": "record",
+      "note": "Released [0.4.0]: migration 35 and Gateway schema 1-2."
+    },
+    {
+      "path": "docs/architecture.md",
+      "digest": "bd5d4c7a0880",
+      "class": "B",
+      "note": "The Gateway's separate forward-only schema, stated as an architectural boundary."
+    },
+    {
+      "path": "docs/design_doc/orchestrator/125-managed-slack-connection-shared-oauth.md",
+      "digest": "e40ebbc25a5c",
+      "class": "B",
+      "note": "Gateway schema versions 1-2. FR-165 read this document as A class; it is about the other database."
+    },
+    {
+      "path": "docs/design_doc/orchestrator/125-managed-slack-connection-shared-oauth.md",
+      "digest": "3d0977edccb7",
+      "class": "B",
+      "note": "Gateway schema version 1 and 2 contents."
+    },
+    {
+      "path": "docs/design_doc/orchestrator/125-managed-slack-connection-shared-oauth.md",
+      "digest": "3e1f38c03874",
+      "class": "B",
+      "note": "Gateway deployment and rollback, with its own backups and keys."
+    },
+    {
+      "path": "crates/slack-gateway/src/lib.rs",
+      "digest": "e6d1833cecc1",
+      "class": "B",
+      "note": "Gateway crate doc. One of the two lines that make 'zero lines in code' false for the tree while true for the daemon migration kernel."
+    },
+    {
+      "path": "crates/slack-gateway/src/store.rs",
+      "digest": "de3c42995a21",
+      "class": "B",
+      "note": "Gateway store opens its own database and applies its own migrations."
+    },
+    {
+      "path": "crates/orchestrator-collab/src/dag.rs",
+      "digest": "fc840bd0c7ce",
+      "class": "C",
+      "note": "Forwarding the last N artifacts. Nothing to do with schema; a literal grep counts it as a contract reference."
+    },
+    {
+      "path": "docs/design_doc/README.md",
+      "digest": "4b118932e083",
+      "class": "index",
+      "note": "The design-doc index row for DD-116."
+    },
+    {
+      "path": "docs/feature_request/README.md",
+      "digest": "e9924075eab9",
+      "class": "index",
+      "note": "FR-106's closure note, pointing at the documents that carry its evidence."
+    },
+    {
+      "path": "docs/design_doc/orchestrator/179-ledger-driven-manual-gate-freshness.md",
+      "digest": "e56c5d306f87",
+      "class": "meta",
+      "note": "FR-165 requirement 1's design record, naming the contract as the thing the --wait-ready defect broke. Not ephemeral: design records are kept."
+    }
+  ]
+}

@@ -1,3 +1,56 @@
+//! Public schema migration model and execution helpers.
+//!
+//! # The forward-only rollback contract
+//!
+//! This module is the single source for that contract. Before FR-165 the
+//! contract was stated in fifteen documents and asserted in none, and the shape
+//! of that failure is worth keeping next to the rule: `c1060338` centralised
+//! daemon readiness on a `--wait-ready` flag the previous release binary cannot
+//! accept, which killed the *behavioural* half of clause 2 for a day without
+//! producing a single CI signal. Four manual gates went red; nothing else
+//! noticed. Prose restated fifteen times did not survive one flag.
+//!
+//! Three clauses, each with the surface that enforces it:
+//!
+//! 1. **Migrations are forward-only.** There is no down migration and no
+//!    mechanism for one: [`Migration`] carries `up` and nothing else. This is
+//!    structural rather than checked, and deliberately so — a test asserting it
+//!    would be a tautology over the type's own shape, which is why FR-165 did
+//!    not write one. What is checked is that the chain is well formed:
+//!    `registered_versions_are_unique_and_ascending` in
+//!    `core/src/persistence/schema_snapshot.rs`.
+//!
+//! 2. **The previous release binary must be able to serve the current schema.**
+//!    Mechanically, that is a superset property: every table, column and index
+//!    the previous release knew about must still exist. Enforced by
+//!    `previous_release_schema_is_a_subset_of_current` in
+//!    `core/src/persistence/schema_snapshot.rs`, which compares
+//!    `config/governance/schema-snapshot.sql` against
+//!    `config/governance/schema-snapshot-previous-release.sql`. End to end, the
+//!    old binary is actually run against the new database by
+//!    `scripts/qa/test-slack-skill-automation-vertical.sh`, which pins
+//!    `FR113_PREVIOUS_REF`.
+//!
+//!    Note what this clause does *not* forbid. Data may be remapped in place:
+//!    migration 29 relabelled the terminal Session state `exited` to `closed`,
+//!    and migration 34 remapped route statuses. Both keep every column, so both
+//!    satisfy the contract while changing what the rows say. A binary rollback
+//!    across such a migration keeps its tables and reads the new spelling.
+//!
+//! 3. **Restore is for disaster only.** A normal binary rollback retains the
+//!    upgraded database; restoring a backup is reserved for a failed migration
+//!    or confirmed corruption, because a restore discards every task and every
+//!    piece of source evidence recorded after the backup. This clause is
+//!    operational and has no code to point at — it constrains the runbook, not
+//!    the chain, and `scripts/qa/rollback-contract-single-source.rb` is what
+//!    keeps the runbooks that state it pointing here.
+//!
+//! Prose elsewhere in the repository may restate any of this, but it must cite
+//! this path when it does; that gate derives the set of restatements from the
+//! tree rather than from a list, and classifies each one, because `forward-only`
+//! is four different concepts in this repository and only one of them is this
+//! contract.
+
 use anyhow::{Context, Result};
 use rusqlite::Connection;
 use std::collections::HashSet;

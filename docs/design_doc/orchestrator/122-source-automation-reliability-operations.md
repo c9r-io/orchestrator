@@ -138,6 +138,8 @@ The daemon reuses the configured event-retention window. For old terminal routes
 
 Migration 34 is additive and forward-only. Operational rollback is to suspend the binding/Trigger or set `reactionRouting: disabled`; existing routes, tasks, audits, and Attention remain inspectable. A binary rollback must retain a schema-34-capable database because old route-state spelling is not restored.
 
+That last sentence is worth reading against the contract in `crates/orchestrator-persistence/src/migration.rs`: migration 34 remaps route statuses in place, which the contract permits precisely because it removes no column. The older binary can still open the database; it reads the new spelling.
+
 ## Verification
 
 Automated coverage includes migration upgrades, retry/Retry-After, lease expiry, installation occupancy, replay/ignore optimistic versions, suspension, simulation equivalence, Attention dedupe/resolve/reopen, Slack error classification, duplicate-task convergence, privacy-safe metrics, CLI parsing, and the FR-110 signed Slack vertical flow.

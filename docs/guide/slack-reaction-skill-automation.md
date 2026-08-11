@@ -468,7 +468,7 @@ orchestrator daemon maintenance --disable
 
 ## 14. Forward-only Rollback
 
-普通二进制 rollback 不是数据库 rollback：
+普通二进制 rollback 不是数据库 rollback。本节是运维步骤，规则本身定义在 `crates/orchestrator-persistence/src/migration.rs`：
 
 1. 开启 maintenance。
 2. suspend Slack Trigger，并设置 `reactionRouting: disabled`。
