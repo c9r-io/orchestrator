@@ -375,7 +375,17 @@ fi
 # Only a commit titled `… (FR-130 A1)` is an extraction commit; a revert of one
 # carries the token too but is necessarily newer, so taking the oldest still
 # lands on the original.
-BASELINE_COMMIT="$(git log --format=%H -1 -- "$SNAPSHOT")"
+#
+# Both reads below want the *oldest* commit, and `-1` is wrong for both: it returns
+# the newest. The baseline's introducing commit is the subject here, not the last
+# commit that touched the file — the snapshot legitimately gains a statement with
+# every migration (see `core/src/persistence/schema_snapshot.rs`), so `-1` drifts
+# to the newest migration and stops being an ancestor of the extraction. Measured:
+# it returned ea370d0d (FR-162 R3, 2026-08-11) instead of 9ca1ea75 (2026-07-25),
+# failing this assertion at 4acb86dc. That is the same defect the paragraph above
+# describes for FIRST_MOVE, which was fixed while this line was not. Keep them
+# fixed together.
+BASELINE_COMMIT="$(git log --format=%H -- "$SNAPSHOT" | tail -1)"
 FIRST_MOVE="$(git log --format=%H --fixed-strings --grep='(FR-130 A1)' | tail -1)"
 if [[ -z "$FIRST_MOVE" ]]; then
   # Absent subject, and the two reasons are not the same fact. A shallow clone

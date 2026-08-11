@@ -173,7 +173,7 @@
     "crates/orchestrator-persistence/src/attention_store.rs": {
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 3,
-      "sql": 34,
+      "sql": 37,
       "category": "persistence-layer"
     },
     "crates/orchestrator-persistence/src/audit_links.rs": {
@@ -233,7 +233,7 @@
     "crates/orchestrator-persistence/src/migration_steps.rs": {
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 3,
-      "sql": 111,
+      "sql": 112,
       "category": "persistence-layer"
     },
     "crates/orchestrator-persistence/src/process_metrics_store.rs": {
@@ -403,6 +403,6 @@
     "members": 14,
     "referencedFiles": 39,
     "rusqlite": 207,
-    "sql": 597
+    "sql": 601
   }
 }

@@ -358,7 +358,14 @@ if [[ "$MODE" == "--fixture-test" ]]; then
   # Fixture 2: one routing row commented out in a private copy of the guide.
   # Commenting out keeps the kind's name on the page; only the anchored row
   # extraction may see the difference.
-  victim_kind="$(grep '^route|' "$DERIVED" | head -1 | cut -d'|' -f4)"
+  # `grep … | head -1` is the shape FR-146 forbids: `head` leaves before end of
+  # input, `grep`'s EPIPE becomes the pipeline's status under `pipefail`, and in an
+  # assignment that reaches `set -e` and ends the run with no summary line. `grep`
+  # reads to EOF here and the first row comes off by expansion; the here-string is
+  # not a pipe, so `cut` has no producer to kill. Do not restore the `head`.
+  route_rows="$(grep '^route|' "$DERIVED")"
+  victim_row="${route_rows%%$'\n'*}"
+  victim_kind="$(cut -d'|' -f4 <<<"$victim_row")"
   cp "$EN_DOC" "$WORK/en_mutated.md"
   if fixture_mutate "fixture 2" "$WORK/en_mutated.md" \
       ruby -e 'path, kind = ARGV; text = File.read(path); row = text.each_line.find { |l| l.start_with?("|") && l.include?("`#{kind}`") } or abort "row for #{kind} not found"; File.write(path, text.sub(row, "<!-- #{row.chomp} -->\n"))' "$WORK/en_mutated.md" "$victim_kind"; then
