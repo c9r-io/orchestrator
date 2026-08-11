@@ -167,6 +167,7 @@
 | FR-160 | QA harness 的守护进程拆解 —— `wait` 在 23 个门禁里是空操作 | P2 | Closed | git history |
 | FR-161 | path-shadow 隔离对登录 shell 下的 provider 解析不成立 | P2 | Closed | git history |
 | FR-162 | 失败可见性契约 —— 步骤失败、任务状态与收件箱的三方矛盾 | P1 | Closed | git history |
+| FR-163 | 连接、路径与就绪的单源化 | P2 | Closed | git history |
 | FR-164 | 审计动作具名化与无信封缺口 | P1 | Closed | git history |
 | FR-165 | 账本与契约的驱动化 —— 从"有记录"到"有排程" | P2 | Proposed | git history |
 | FR-166 | 概念面收敛 —— 双词汇表、重叠 kind 与概念预算 | P2 | Proposed | git history |
