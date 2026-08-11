@@ -132,6 +132,16 @@ Running six parent gates also refreshed their sub-gates, taking the ledger from
 23 not fresh to 17. `test-process-console-metrics.sh` passed — the first green
 run on record for any of the twelve.
 
+Two later sweeps at `b778c86b` took it to **10, with no dirty records left**.
+The five gates whose only evidence was a dirty-worktree run were re-run on a
+clean tree and all five passed, among them `test-wp05-integration.sh` — the
+gate FR-149 found broken from 2026-03-26, four months, whose last record was
+made against uncommitted edits. `test-attention-inbox.sh`, the `exitStatus: 1`
+record that motivated this whole requirement, also passed at the new revision,
+so its failure was environmental rather than a live defect. That is worth
+stating plainly: the criterion's value is not that the gate was broken, it is
+that nothing could tell the difference.
+
 The six failures have **two** root causes:
 
 - **`--wait-ready`, four gates.** `c1060338` centralised daemon readiness in
@@ -190,12 +200,21 @@ repository, inside one of the never-run gates. Both are in
   driving these gates locally is detected as *attended* and does record. The
   ledger's premise is "executed by a person following the owner QA document".
   Whether an agent's run satisfies that premise is not decided anywhere.
-- **Thirteen release-blocking gates are not fresh as this ships**, so the next
-  release is blocked until they are worked: 5 dirty records from the FR-160
-  sweep, 3 never run (all three need an ambient daemon, which none of them
-  starts), and 5 failed on the two causes above. That is the intended pressure
-  rather than an oversight, but it is a real cost and it lands on whoever cuts
-  the next tag.
+- **Seven release-blocking gates are not fresh as this ships**, so the next
+  release is blocked until they are worked. The backlog was worked down rather
+  than declared acceptable — 23 not fresh at the start, 10 now, and **no dirty
+  records at all** — but what remains is not clearable by running things:
+
+  | Remaining | Why |
+  |---|---|
+  | 4 × Slack gates, `FAILED` | one root cause, the `--wait-ready` ticket |
+  | 3 × `never` | each needs an ambient daemon that none of them starts |
+
+  The four Slack gates go green together when the `--wait-ready` ticket is
+  fixed; they are one defect, not four. The three never-run gates need a
+  decision that is not FR-165's to make: either they learn to start their own
+  daemon like the other 33, or they are the wrong shape for a release
+  precondition and should say so in a `releaseBlockingReason`.
 - `npm audit` appears exactly once in the repository, inside this gate, so the
   npm supply chain has no other enforced check. It is now scoped `--omit=dev`
   (see below); dev-tree advisories are owned by Dependabot rather than by a

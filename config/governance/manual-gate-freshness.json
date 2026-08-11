@@ -22,7 +22,7 @@
       "owner": "docs/qa/orchestrator/149-agent-session-control-plane-hardening.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
+        "revision": "b778c86bf56cdb9ff5fc5a2c0a521e1c9a8244e8",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -31,7 +31,7 @@
       "owner": "docs/qa/orchestrator/143-attention-inbox.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
+        "revision": "b778c86bf56cdb9ff5fc5a2c0a521e1c9a8244e8",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -40,7 +40,7 @@
       "owner": "docs/qa/orchestrator/153-process-console-release-acceptance.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
+        "revision": "b778c86bf56cdb9ff5fc5a2c0a521e1c9a8244e8",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -76,9 +76,9 @@
       "owner": "docs/qa/orchestrator/213-failure-visibility-contract.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "4c13b90ac20eae5e1914ff8990f9ab5cf0ab8ed1",
+        "revision": "b778c86bf56cdb9ff5fc5a2c0a521e1c9a8244e8",
         "exitStatus": 0,
-        "worktreeDirty": true
+        "worktreeDirty": false
       }
     },
     "scripts/qa/test-fr001-sandbox-matrix.sh": {
@@ -88,17 +88,17 @@
     "scripts/qa/test-fr013-control-plane-protection.sh": {
       "owner": "docs/qa/orchestrator/65-grpc-control-plane-protection.md",
       "lastRun": {
-        "date": "2026-08-10",
-        "revision": "800e46f2c5b268cbc1f20996cc422d32e0e10b39",
+        "date": "2026-08-11",
+        "revision": "b778c86bf56cdb9ff5fc5a2c0a521e1c9a8244e8",
         "exitStatus": 0,
-        "worktreeDirty": true
+        "worktreeDirty": false
       }
     },
     "scripts/qa/test-handoff-safe-resume.sh": {
       "owner": "docs/qa/orchestrator/144-handoff-and-safe-resume.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
+        "revision": "b778c86bf56cdb9ff5fc5a2c0a521e1c9a8244e8",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -119,17 +119,17 @@
     "scripts/qa/test-per-trigger-webhook-auth.sh": {
       "owner": "docs/qa/orchestrator/129-per-trigger-webhook-auth-cel-filter.md",
       "lastRun": {
-        "date": "2026-08-10",
-        "revision": "28cf8cb90a6c6cdc4c6eaf5e514c4e2ca59493d1",
+        "date": "2026-08-11",
+        "revision": "b778c86bf56cdb9ff5fc5a2c0a521e1c9a8244e8",
         "exitStatus": 0,
-        "worktreeDirty": true
+        "worktreeDirty": false
       }
     },
     "scripts/qa/test-process-console-metrics.sh": {
       "owner": "docs/qa/orchestrator/151-process-console-operational-metrics.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
+        "revision": "b778c86bf56cdb9ff5fc5a2c0a521e1c9a8244e8",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -138,8 +138,8 @@
       "owner": "docs/qa/orchestrator/153-process-console-release-acceptance.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
-        "exitStatus": 1,
+        "revision": "b778c86bf56cdb9ff5fc5a2c0a521e1c9a8244e8",
+        "exitStatus": 0,
         "worktreeDirty": false
       }
     },
@@ -147,16 +147,16 @@
       "owner": "docs/qa/orchestrator/154-process-console-functional-ui-regression.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
-        "exitStatus": 1,
+        "revision": "b778c86bf56cdb9ff5fc5a2c0a521e1c9a8244e8",
+        "exitStatus": 0,
         "worktreeDirty": false
       }
     },
     "scripts/qa/test-process-console-vertical-flow.sh": {
       "owner": "docs/qa/orchestrator/150-process-console-recovery-notifications-e2e.md",
       "lastRun": {
-        "date": "2026-08-10",
-        "revision": "04e5486dff97c7fdf60509f774c55b03a6f9eb61",
+        "date": "2026-08-11",
+        "revision": "b778c86bf56cdb9ff5fc5a2c0a521e1c9a8244e8",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -165,7 +165,7 @@
       "owner": "docs/qa/orchestrator/142-process-timeline-read-model.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
+        "revision": "b778c86bf56cdb9ff5fc5a2c0a521e1c9a8244e8",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -265,7 +265,7 @@
       "owner": "docs/qa/orchestrator/155-slack-reaction-source-event-contract.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "bd0e238960a4b4fc14f9395b8252b98df44aa750",
+        "revision": "b778c86bf56cdb9ff5fc5a2c0a521e1c9a8244e8",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -300,19 +300,19 @@
     "scripts/qa/test-webhook-trigger.sh": {
       "owner": "docs/qa/orchestrator/128-webhook-trigger-infrastructure.md",
       "lastRun": {
-        "date": "2026-08-10",
-        "revision": "28cf8cb90a6c6cdc4c6eaf5e514c4e2ca59493d1",
+        "date": "2026-08-11",
+        "revision": "b778c86bf56cdb9ff5fc5a2c0a521e1c9a8244e8",
         "exitStatus": 0,
-        "worktreeDirty": true
+        "worktreeDirty": false
       }
     },
     "scripts/qa/test-wp05-integration.sh": {
       "owner": "docs/qa/orchestrator/51-primitive-composition.md",
       "lastRun": {
-        "date": "2026-08-10",
-        "revision": "58206b35ba34a96aa76352596f6a0d8de4b2b430",
+        "date": "2026-08-11",
+        "revision": "b778c86bf56cdb9ff5fc5a2c0a521e1c9a8244e8",
         "exitStatus": 0,
-        "worktreeDirty": true
+        "worktreeDirty": false
       }
     },
     "scripts/watchdog.sh": {

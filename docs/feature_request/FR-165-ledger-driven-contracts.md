@@ -135,8 +135,12 @@ limits、~150 条停放项、多本 ledger JSON），但除 CI 预算外，没�
   Node 26 下 12 红（原生 localStorage 遮蔽 jsdom），Node 24 全绿；且
   `ci.yml` 根本不跑 vitest，`npm audit` 全仓只出现在这一个从未跑过的门禁里。
 
-**遗留**：13 个 release-blocking 门禁尚未 fresh（5 dirty / 3 never / 5 failed），
-下一次发版会被挡住——这是本需求的预期压力，不是缺陷。
+**遗留**：7 个 release-blocking 门禁尚未 fresh。台账由 23 not fresh 降到 **10**，
+**dirty 记录清零**（5 个只有脏树证据的门禁在干净树上重跑，全绿，含 FR-149 记录
+自 2026-03-26 起坏掉的 `test-wp05-integration.sh`）。剩下的不是跑一遍能清的：
+4 个 Slack 门禁同属 `--wait-ready` 一个根因，修好 ticket 会一起转绿；3 个
+never 需要常驻 daemon 而自身不启动，属于形态问题，需另行决定是让它们像其余
+33 个那样自起 daemon，还是写明 `releaseBlockingReason`。
 
 ### 1'. 原需求描述（存档）
 
