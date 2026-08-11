@@ -377,7 +377,7 @@ orchestrator attention follow --after 42                   # stream inbox deltas
 
 | Subcommand | Description |
 |------------|-------------|
-| `list` | List attention items with optional filters (`--project`, `--state`, `--kind`, `--severity`, `--assignee`, `--task`, `--limit`) |
+| `list` | List attention items with optional filters (`--project`, `--state`, `--kind`, `--severity`, `--assignee`, `--task`, `--limit`). The full `--kind` vocabulary is the generated routing table in [Where Failures Go](03-workflow-configuration.md#where-failures-go) |
 | `get` | Show the redacted condition, optimistic version, task context, and safe allowlisted actions |
 | `claim` | Take ownership of an open item |
 | `snooze` | Defer an open or claimed item until an RFC3339 deadline (`--until`) |

@@ -155,7 +155,7 @@ gui/                       # React/TypeScript/Vite Web frontend embedded by crat
         *   `source_events`: Provider-neutral external deliveries and routing state.
         *   `source_bindings`: External conversation/artifact to task correlation.
         *   `source_routing_attempts` and `source_command_actions`: Replay and command audit evidence.
-        *   `source_connections`, `source_connection_intents`, and `source_connection_changes`: Safe managed/manual connection lifecycle, resumable OAuth intent projection, monotonic watch changes, encrypted internal pairing envelope, generation/version fence, and delivery cursor. The registered migration chain currently contains 37 migrations.
+        *   `source_connections`, `source_connection_intents`, and `source_connection_changes`: Safe managed/manual connection lifecycle, resumable OAuth intent projection, monotonic watch changes, encrypted internal pairing envelope, generation/version fence, and delivery cursor. The registered migration chain currently contains 38 migrations.
         *   `control_action_audit`: Canonical bounded mutation envelope joined to transport, domain, and event evidence by `request_id`.
         *   `process_metric_observations` and `process_metric_rollups`: Optional privacy-safe Process Console samples and rebuildable fixed-window aggregates.
         *   `process_metric_projector_state`: Non-authoritative projector cursor, lag, failure category, and freshness.

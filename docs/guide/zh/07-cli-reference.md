@@ -377,7 +377,7 @@ orchestrator attention follow --after 42                   # stream inbox deltas
 
 | 子命令 | 说明 |
 |--------|------|
-| `list` | 列出注意力条目，支持可选筛选（`--project`、`--state`、`--kind`、`--severity`、`--assignee`、`--task`、`--limit`） |
+| `list` | 列出注意力条目，支持可选筛选（`--project`、`--state`、`--kind`、`--severity`、`--assignee`、`--task`、`--limit`）。`--kind` 的完整取值集合见[失败去了哪里](03-workflow-configuration.md#失败去了哪里)中的生成路由表 |
 | `get` | 显示脱敏后的状况、乐观版本号、任务上下文和安全的白名单动作 |
 | `claim` | 认领一个 open 状态的条目 |
 | `snooze` | 将 open 或 claimed 条目推迟到某个 RFC3339 截止时间（`--until`） |

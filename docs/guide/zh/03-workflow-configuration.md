@@ -238,6 +238,111 @@ behavior:
       from_var: candidates
 ```
 
+## 失败去了哪里
+
+步骤失败并不必然导致任务失败，任务完成也不代表一切正常。本节完整陈述这条链：
+非零退出码会发生什么、任务终态如何推导、以及哪些事件会进入 attention 收件箱。
+
+### 非零退出码会发生什么
+
+两条执行路径的失败语义不同：
+
+- **Agent（驱动器）步骤** —— 所有由带类型驱动器的 Agent 执行的步骤。非零退出码
+  直接使输出校验失败，工作项变为 `unresolved`，任务以 `failed` 结束。此行为不可配置。
+- **Builtin 与直连命令步骤**（`agent: builtin`、引擎自有命令）—— 只要输出本身
+  有效，*即使退出码非零*，输出校验也会通过。后续行为由 `on_failure` 决定，而默认的
+  `continue` 什么都不改变：项状态不动，任务可以 `completed` 结束，唯一的痕迹是一条
+  `success: false` 的 `step_finished` 事件 —— attention 收件箱会将其投影为
+  `step_failed` 项（见下方路由表）。
+
+对退出码非零的 builtin/直连步骤，`on_failure` 三个动作的后果：
+
+| 动作 | 效果 |
+|---|---|
+| `continue`（默认） | 状态不变。步骤失败仅记录为事件与收件项，别无其他。 |
+| `set_status` | 项状态被 `status:` 覆盖，段继续执行。状态为 `unresolved` 或 `qa_failed` 时任务将在循环结束时失败。 |
+| `early_return` | 设置项状态并立即终止当前段。 |
+
+### 任务如何结束
+
+每个调度循环结束时，任务终态由其项推导，从不直接读取退出码：
+
+- `failed` —— 当 `unresolved + stale_pending > 0`（状态为 `unresolved` 或
+  `qa_failed` 的项，加上过期的 pending 项）。
+- `completed` —— 其余情况。
+
+退出码只通过项状态到达这条推导：驱动器步骤是直接路径，builtin 步骤经由
+`on_failure` 或 finalize 规则。
+
+### 哪些事件进入 attention 收件箱
+
+attention 投影器把持久化任务事件转化为收件项。下表由投影器源码
+（`crates/orchestrator-scheduler/src/service/attention.rs`）生成，并由
+`scripts/qa/test-attention-routing-doc.sh` 校验：表中存在而代码未声明的行 ——
+或表格漏掉的路由臂 —— 都会使 CI 失败。没有行的事件类型是刻意不路由的。
+
+<!-- attention-routing:begin -->
+| Source event(s) | Condition | Inbox kind | Severity |
+|---|---|---|---|
+| approval_required, approval_requested | - | `approval_required` | intervention |
+| agent_question, decision_required | - | `agent_question` | intervention |
+| retry_exhausted | - | `retry_exhausted` | intervention |
+| policy_blocked | - | `policy_blocked` | intervention |
+| sandbox_denied, sandbox_network_blocked, sandbox_resource_exceeded | - | `sandbox_denied` | intervention |
+| budget_threshold, budget_exhausted | - | `budget_threshold` | attention |
+| step_timeout, task_stalled | - | `stalled` | intervention |
+| task_failed | - | `task_failed` | intervention |
+| degenerate_loop, degenerate_cycle, degenerate_cycle_detected | - | `degenerate_loop` | intervention |
+| step_failed, output_validation_failed | - | `step_failed` | intervention |
+| task_spawn_failed | - | `task_spawn_failed` | intervention |
+| step_finished, chain_step_finished, dynamic_step_finished | payload.success == false | `step_failed` | intervention |
+| step_finished, chain_step_finished, dynamic_step_finished | confidence < 0.5 | `low_confidence` | attention |
+<!-- attention-routing:end -->
+
+### 任务完成会清除什么、保留什么
+
+终态与恢复事件会解决打开的收件项：
+
+<!-- attention-resolution:begin -->
+| Trigger event(s) | Scope | Preserved kinds | Resolution reason |
+|---|---|---|---|
+| task_completed, task_finished | whole task | low_confidence, step_failed, task_spawn_failed | task_completed |
+| resume_executed | whole task | (none) | condition_cleared |
+| step_finished, chain_step_finished, dynamic_step_finished (success != false) | matching step | n/a | condition_cleared |
+<!-- attention-resolution:end -->
+
+任务完成会清扫*条件*类项（审批、停滞、提问）：已经结束的任务不可能仍在等待。
+但它**不会**清扫*证据*类项 —— `step_failed`、`low_confidence` 与
+`task_spawn_failed` 记录的是已经发生的事实，会一直可见，直到人工解决、该步骤
+重试成功、或任务被显式恢复。因此一个带失败 builtin 步骤的绿色任务，其失败仍会
+出现在收件箱里。
+
+### 来源侧（无任务）收件项
+
+有些收件项完全不经任务事件投影：webhook 与 source 侧的失败直接物化，不携带
+任务 ID，也永远不会被任务完成清扫。当前的 kind 集合（同样由代码生成并做漂移
+检查）：
+
+<!-- attention-external-kinds:begin -->
+- `inbox_projection_gap` —— 收件箱关闭期间未投影的事件；每项目一条合并项，重开时写入。
+- `source_auth_failed` —— 某个已配置 trigger 的 webhook 投递持续签名/密钥校验失败；按 trigger 合并，首次成功投递自动解决。
+- `source_automation_binding_ambiguous` —— source 反应无法唯一选中一个 binding。
+- `source_automation_configuration_invalid` —— 匹配到的 source 反应无法完成预约。
+- `source_automation_needs_attention` —— source automation 路由被阻塞，需要操作员。
+- `source_connection_provisioning_attention` —— 专属 Slack 应用的 provisioning 需要操作员。
+- `source_connection_reauthorization_required` —— 托管 source 连接需要重新授权。
+- `source_connection_revoked` —— 提供方吊销了托管连接。
+- `source_route_missing` —— webhook 投递命名了项目中不存在的 trigger；按项目合并，未知名称只以摘要形式出现。
+- `source_routing_ambiguous` —— 一条 source 事件匹配到多个路由目标。
+<!-- attention-external-kinds:end -->
+
+### 收件箱关闭时
+
+在项目的 RuntimePolicy 中设置 `attention_inbox_enabled: false` 会停止新的
+物化，但不会停住投影游标：关闭窗口内到达的事件按项目计数，重开收件箱时会浮出
+一条 `inbox_projection_gap` 项，说明有多少事件（及其 id 区间）从未被投影。
+静默丢失不再是选项；若计数非零，请回查该窗口的任务历史。
+
 ## 循环策略
 
 循环策略控制工作流运行多少个循环。

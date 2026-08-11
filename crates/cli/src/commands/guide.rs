@@ -513,7 +513,7 @@ fn attention_entries() -> Vec<GuideEntry> {
             alias: Some("attn ls"),
             category: GuideCategory::TaskLifecycle,
             summary: "List cross-task decisions and blockers",
-            description: "Show only workflow conditions that need human attention, ordered by severity and ownership.",
+            description: "Show only workflow conditions that need human attention, ordered by severity and ownership. The full --kind vocabulary is the generated routing table in docs/guide/03-workflow-configuration.md (Where Failures Go).",
             examples: &[
                 ("orchestrator attention list", "List the active inbox"),
                 (

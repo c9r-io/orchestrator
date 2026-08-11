@@ -233,6 +233,123 @@ behavior:
       from_var: candidates
 ```
 
+## Where Failures Go
+
+A step that fails does not necessarily fail its task, and a task that completes
+does not necessarily mean nothing went wrong. This section states the full
+chain: what a nonzero exit code does, how a task's terminal status is derived,
+and which events reach the attention inbox.
+
+### What a nonzero exit code does
+
+There are two execution paths with different failure semantics:
+
+- **Agent (driver) steps** — every step executed by an Agent with a typed
+  driver. A nonzero exit code fails output validation directly, the work item
+  becomes `unresolved`, and the task ends `failed`. This is not configurable.
+- **Builtin and direct-command steps** (`agent: builtin`, engine-owned
+  commands) — output validation passes as long as the output itself is valid,
+  *even when the exit code is nonzero*. What happens next is decided by
+  `on_failure`, and the default `continue` changes nothing: the item's status
+  is untouched, the task can end `completed`, and the only trace is a
+  `step_finished` event with `success: false` — which the attention inbox
+  turns into a `step_failed` item (see the routing table below).
+
+The three `on_failure` actions, for builtin/direct steps whose exit code is
+nonzero:
+
+| Action | Effect |
+|---|---|
+| `continue` (default) | No status change. The step's failure is recorded as an event and an inbox item, nothing else. |
+| `set_status` | The item's status is overwritten with `status:` and the segment continues. A status of `unresolved` or `qa_failed` will fail the task at loop end. |
+| `early_return` | The item's status is set and the current segment terminates immediately. |
+
+### How a task ends
+
+At the end of each scheduling loop the task's terminal status is derived from
+its items, never from exit codes directly:
+
+- `failed` — if `unresolved + stale_pending > 0` (items in status
+  `unresolved` or `qa_failed`, plus stale pending items).
+- `completed` — otherwise.
+
+Exit codes reach this derivation only through item status: directly for driver
+steps, through `on_failure` or finalize rules for builtin steps.
+
+### What reaches the attention inbox
+
+The attention projector turns durable task events into inbox items. The table
+below is generated from the projector source
+(`crates/orchestrator-scheduler/src/service/attention.rs`) and checked by
+`scripts/qa/test-attention-routing-doc.sh`; a row here that the code does not
+declare — or an arm the table misses — fails CI. Event types with no row are
+deliberately not routed.
+
+<!-- attention-routing:begin -->
+| Source event(s) | Condition | Inbox kind | Severity |
+|---|---|---|---|
+| approval_required, approval_requested | - | `approval_required` | intervention |
+| agent_question, decision_required | - | `agent_question` | intervention |
+| retry_exhausted | - | `retry_exhausted` | intervention |
+| policy_blocked | - | `policy_blocked` | intervention |
+| sandbox_denied, sandbox_network_blocked, sandbox_resource_exceeded | - | `sandbox_denied` | intervention |
+| budget_threshold, budget_exhausted | - | `budget_threshold` | attention |
+| step_timeout, task_stalled | - | `stalled` | intervention |
+| task_failed | - | `task_failed` | intervention |
+| degenerate_loop, degenerate_cycle, degenerate_cycle_detected | - | `degenerate_loop` | intervention |
+| step_failed, output_validation_failed | - | `step_failed` | intervention |
+| task_spawn_failed | - | `task_spawn_failed` | intervention |
+| step_finished, chain_step_finished, dynamic_step_finished | payload.success == false | `step_failed` | intervention |
+| step_finished, chain_step_finished, dynamic_step_finished | confidence < 0.5 | `low_confidence` | attention |
+<!-- attention-routing:end -->
+
+### What task completion clears — and what it preserves
+
+Terminal and resolution events resolve open inbox items:
+
+<!-- attention-resolution:begin -->
+| Trigger event(s) | Scope | Preserved kinds | Resolution reason |
+|---|---|---|---|
+| task_completed, task_finished | whole task | low_confidence, step_failed, task_spawn_failed | task_completed |
+| resume_executed | whole task | (none) | condition_cleared |
+| step_finished, chain_step_finished, dynamic_step_finished (success != false) | matching step | n/a | condition_cleared |
+<!-- attention-resolution:end -->
+
+Task completion sweeps *condition* items (approvals, stalls, questions): a
+task that ended cannot still be waiting. It does **not** sweep *evidence*
+items — `step_failed`, `low_confidence`, and `task_spawn_failed` record
+something that already happened and stay visible until a human resolves them,
+a retry of the step succeeds, or the task is explicitly resumed. A green task
+with a failed builtin step therefore still shows the failure in the inbox.
+
+### Source-side inbox items
+
+Some items are not projected from task events at all: webhook and source
+failures materialize directly, carry no task id, and are never swept by task
+completion. The current kinds (also generated and drift-checked):
+
+<!-- attention-external-kinds:begin -->
+- `inbox_projection_gap` — events were not projected while the inbox was disabled for the project; one merged item per project, written when the inbox is re-enabled.
+- `source_auth_failed` — webhook deliveries for a configured trigger are failing signature or secret verification; merged per trigger, auto-resolved by the first successful delivery.
+- `source_automation_binding_ambiguous` — a source reaction could not select exactly one binding.
+- `source_automation_configuration_invalid` — a matched source reaction could not be reserved.
+- `source_automation_needs_attention` — a source automation route is blocked and needs an operator.
+- `source_connection_provisioning_attention` — dedicated Slack app provisioning needs an operator.
+- `source_connection_reauthorization_required` — a managed source connection must be reauthorized.
+- `source_connection_revoked` — the provider revoked a managed connection.
+- `source_route_missing` — webhook deliveries name a trigger the project does not have; merged per project, the unknown name appears only as a digest.
+- `source_routing_ambiguous` — a source event matched more than one routing target.
+<!-- attention-external-kinds:end -->
+
+### When the inbox is disabled
+
+Setting `attention_inbox_enabled: false` in a project's RuntimePolicy stops
+new materialization but does not stop the projector cursor: events arriving
+during the disabled window are counted per project, and re-enabling the inbox
+surfaces one `inbox_projection_gap` item stating how many events (and which id
+range) were never projected. Silent loss is not an option; review the task
+history for the gap window if the count is nonzero.
+
 ## Loop Policy
 
 The loop policy controls how many cycles a workflow runs.

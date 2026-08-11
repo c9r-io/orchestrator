@@ -37,6 +37,11 @@ if ! ./scripts/qa/test-error-code-glossary.sh --fixture-test; then
   fail=1
 fi
 
+echo "[qa-doc-lint] Checking attention routing documentation parity..."
+if ! ./scripts/qa/test-attention-routing-doc.sh --fixture-test; then
+  fail=1
+fi
+
 echo "[qa-doc-lint] Checking docs/repository reality alignment..."
 if ! ./scripts/qa/test-docs-reality-alignment.sh --fixture-test; then
   fail=1
